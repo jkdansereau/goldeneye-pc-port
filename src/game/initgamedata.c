@@ -23,8 +23,8 @@ void initGameData(void) {
     maybe_is_in_menu = TRUE;
     slider_007_mode_reaction = 0.0f;
     slider_007_mode_health = 1.0f;
-    slider_007_mode_accuracy = 1.0f;
     slider_007_mode_damage = 1.0f;
+    slider_007_mode_accuracy = 1.0f;
     intro_character_index = 0;
     randomly_selected_intro_animation = ANIM_idle;
     intro_animation_count = 0;

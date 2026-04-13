@@ -140,7 +140,7 @@
 // bss - TLB section
 
 OSThread g_tlbThread;
-u8 g_CrashMessage[0x500];
+u8 g_CrashMessage[0x500]; // unused/unreferenced (waste of space)
 char g_tlbStack[0x2300];
 OSMesgQueue g_faultMesgQ;
 OSMesg *g_faultMesgBuf;
@@ -275,7 +275,7 @@ void *g_StackPtrs2[STACK_POINTER_COUNT] = {&sp_idle, &sp_shed, &sp_main, &sp_aud
 void *g_StackPtrs3[STACK_POINTER_COUNT] = {&sp_rmon, &sp_idle, &sp_shed, &sp_main, &sp_audi};
 
 // 71 x 32 text buffer (32th line is not drawn)
-unsigned char g_DebugOutputTextBuffer[32][71] = {0};
+unsigned char g_DebugOutputTextBuffer[32][71] = {0}; // unused in the final game (waste of space)
 
 static s32 g_DebugOutputCurrentPosX = 0;
 static s32 g_DebugOutputCurrentPosY = 0;

@@ -1739,7 +1739,7 @@ Gfx *viSetupScreensForNumPlayers(Gfx *gdl)
 
     if (viGetViewTop() > 0)
     {
-        if (sub_GAME_7F09B4D8(get_cur_playernum()) == 0)
+        if (get_player_position_in_shuffled(get_cur_playernum()) == 0)
         {
             gDPFillRectangle(gdl++, 0, 0, (viGetX() - 1), (viGetViewTop() - 1));
             gDPPipeSync(gdl++);
@@ -1756,7 +1756,7 @@ Gfx *viSetupScreensForNumPlayers(Gfx *gdl)
     }
     else
     {
-        if (sub_GAME_7F09B4D8(get_cur_playernum()) == 0)
+        if (get_player_position_in_shuffled(get_cur_playernum()) == 0)
         {
             if ((viGetViewTop() + viGetViewHeight() + viGetViewHeight()) < viGetY())
             {

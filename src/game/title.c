@@ -24,6 +24,7 @@
 #include "chr_b.h"
 #include "initanitable.h"
 #include "chrobjdata.h"
+#include "model.h"
 
 
 
@@ -719,7 +720,7 @@ Gfx *insert_bond_eye_intro(Gfx *gdl) {
     gSPMatrix(gdl++, osVirtualToPhysical(&matrixBufferIntroBond[D_8002A7D0]), (G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION));
     gSPMatrix(gdl++, osVirtualToPhysical(&matrixBufferIntroBackdrop[D_8002A7D0]), (G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW));
     
-    matrix_4x4_7F059694(&matrix, gunbarrelPosition1[0], gunbarrelPosition1[1], gunbarrelPosition1[2], (gunbarrelPosition1[0] + gunbarrelPosition2[0]), (gunbarrelPosition1[1] + gunbarrelPosition2[1]), (gunbarrelPosition1[2] + gunbarrelPosition2[2]), gunbarrelPosition3[0], gunbarrelPosition3[1], gunbarrelPosition3[2]);
+    matrix_4x4_set_lookat_target(&matrix, gunbarrelPosition1[0], gunbarrelPosition1[1], gunbarrelPosition1[2], (gunbarrelPosition1[0] + gunbarrelPosition2[0]), (gunbarrelPosition1[1] + gunbarrelPosition2[1]), (gunbarrelPosition1[2] + gunbarrelPosition2[2]), gunbarrelPosition3[0], gunbarrelPosition3[1], gunbarrelPosition3[2]);
 
 #if defined REFRESH_PAL
     return sub_GAME_7F007F30(gdl, 1, &matrix);
@@ -782,7 +783,7 @@ Gfx *load_display_rare_logo(Gfx *gdl, s32 arg1, s32 arg2, s32 arg3, s32 arg4) {
 extern void *_rarewarelogoSegmentRomStart;
 extern void *_rarewarelogoSegmentStart;
 extern void *_rarewarelogoSegmentEnd; 
-void sub_GAME_7F008B58(s32 address, s32 size) {
+void setupRarewareLogoData(s32 address, s32 size) {
     gunbarrel_mode = 0;
     g_TitleX = 880.0f;
     D_8002A89C = -40.0f;
@@ -842,9 +843,7 @@ s32 isGunBarrelInMode2(void) {
     return (gunbarrel_mode == 2);
 }
 
-#ifdef NONMATCHING
-// Minor reordering + regalloc
-void sub_GAME_7F01B0E0(s32, s32);
+void rle_expand_8bit(s32, s32);
 extern void *unknown2;
 extern void *unknown2_end;
 void sub_GAME_7F008DE4(u8 **addr, s32 *size) {
@@ -852,54 +851,11 @@ void sub_GAME_7F008DE4(u8 **addr, s32 *size) {
     *size -= 0x40400;
     *addr += 0x40400;
     dword_CODE_bss_80069588 = *addr;
-    romCopy(dword_CODE_bss_80069588, &unknown2, ALIGN64_V2(((u32)&unknown2_end - (u32)&unknown2)));
-    sub_GAME_7F01B0E0(dword_CODE_bss_80069588, dword_CODE_bss_8006958C);
+    romCopy(dword_CODE_bss_80069588, (void *)(s32)&unknown2, ALIGN64_V2(((u32)&unknown2_end - (u32)&unknown2)));
+    rle_expand_8bit(dword_CODE_bss_80069588, dword_CODE_bss_8006958C);
 }
-#else
-GLOBAL_ASM(
-.text
-glabel sub_GAME_7F008DE4
-/* 03D914 7F008DE4 27BDFFE8 */  addiu $sp, $sp, -0x18
-/* 03D918 7F008DE8 AFBF0014 */  sw    $ra, 0x14($sp)
-/* 03D91C 7F008DEC AFA5001C */  sw    $a1, 0x1c($sp)
-/* 03D920 7F008DF0 8C8E0000 */  lw    $t6, ($a0)
-/* 03D924 7F008DF4 3C018007 */  lui   $at, %hi(dword_CODE_bss_8006958C)
-/* 03D928 7F008DF8 3C03002A */  lui   $v1, %hi(unknown2) # $v1, 0x2a
-/* 03D92C 7F008DFC AC2E958C */  sw    $t6, %lo(dword_CODE_bss_8006958C)($at)
-/* 03D930 7F008E00 8CB80000 */  lw    $t8, ($a1)
-/* 03D934 7F008E04 3C01FFFB */  lui   $at, (0xFFFBFC00 >> 16) # lui $at, 0xfffb
-/* 03D938 7F008E08 3421FC00 */  ori   $at, (0xFFFBFC00 & 0xFFFF) # ori $at, $at, 0xfc00
-/* 03D93C 7F008E0C 0301C821 */  addu  $t9, $t8, $at
-/* 03D940 7F008E10 ACB90000 */  sw    $t9, ($a1)
-/* 03D944 7F008E14 8C880000 */  lw    $t0, ($a0)
-/* 03D948 7F008E18 3C0B002C */  lui   $t3, %hi(_ramromDam1SegmentRomStart) # $t3, 0x2c
-/* 03D94C 7F008E1C 24634D50 */  addiu $v1, %lo(unknown2) # addiu $v1, $v1, 0x4d50
-/* 03D950 7F008E20 3C010004 */  lui   $at, (0x00040400 >> 16) # lui $at, 4
-/* 03D954 7F008E24 256BF2D0 */  addiu $t3, %lo(_ramromDam1SegmentRomStart) # addiu $t3, $t3, -0xd30
-/* 03D958 7F008E28 34210400 */  ori   $at, (0x00040400 & 0xFFFF) # ori $at, $at, 0x400
-/* 03D95C 7F008E2C 01633023 */  subu  $a2, $t3, $v1
-/* 03D960 7F008E30 3C028007 */  lui   $v0, %hi(dword_CODE_bss_80069588)
-/* 03D964 7F008E34 24C6003F */  addiu $a2, $a2, 0x3f
-/* 03D968 7F008E38 01014821 */  addu  $t1, $t0, $at
-/* 03D96C 7F008E3C 24429588 */  addiu $v0, %lo(dword_CODE_bss_80069588) # addiu $v0, $v0, -0x6a78
-/* 03D970 7F008E40 AC890000 */  sw    $t1, ($a0)
-/* 03D974 7F008E44 34CC003F */  ori   $t4, $a2, 0x3f
-/* 03D978 7F008E48 AC490000 */  sw    $t1, ($v0)
-/* 03D97C 7F008E4C 3986003F */  xori  $a2, $t4, 0x3f
-/* 03D980 7F008E50 01202025 */  move  $a0, $t1
-/* 03D984 7F008E54 0C001707 */  jal   romCopy
-/* 03D988 7F008E58 00602825 */   move  $a1, $v1
-/* 03D98C 7F008E5C 3C048007 */  lui   $a0, %hi(dword_CODE_bss_80069588)
-/* 03D990 7F008E60 3C058007 */  lui   $a1, %hi(dword_CODE_bss_8006958C)
-/* 03D994 7F008E64 8CA5958C */  lw    $a1, %lo(dword_CODE_bss_8006958C)($a1)
-/* 03D998 7F008E68 0FC06C38 */  jal   sub_GAME_7F01B0E0
-/* 03D99C 7F008E6C 8C849588 */   lw    $a0, %lo(dword_CODE_bss_80069588)($a0)
-/* 03D9A0 7F008E70 8FBF0014 */  lw    $ra, 0x14($sp)
-/* 03D9A4 7F008E74 27BD0018 */  addiu $sp, $sp, 0x18
-/* 03D9A8 7F008E78 03E00008 */  jr    $ra
-/* 03D9AC 7F008E7C 00000000 */   nop   
-)
-#endif
+
+
 
 
 
@@ -995,7 +951,7 @@ void initializeGunBarrelIntro(u8 *gfxBuffer, s32 bufferSize)
 }
 
 
-void sub_GAME_7F00920C(void)
+void clearChrGunModelInstances(void)
 {
     if (chrModelInstance)
     {
@@ -1029,7 +985,10 @@ void sub_GAME_7F00920C(void)
 #endif
 
 
-Gfx *sub_GAME_7F009254(Gfx *gdl) {
+/*
+ * Address: 0x7F009254
+*/
+Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
     D_8002A7D0 = (1 - D_8002A7D0);
     switch (gunbarrel_mode - 2)
     {

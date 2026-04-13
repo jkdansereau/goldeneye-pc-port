@@ -14,6 +14,8 @@ struct levelentry
     f32 visibility;
     f32 unknownfloat;
 };
+// cannon definition
+#define MAXPORTALSPERROOM 20
 
 typedef struct s_room_info {
     // is room being rendered? boolean
@@ -47,7 +49,7 @@ typedef struct s_room_info {
     coord3d maxbounds;
 } s_room_info;
 
-typedef struct s_bound_info 
+typedef struct s_bound_info
 {
     #if defined(VERSION_EU)
     //eu is 0x18 total len
@@ -55,9 +57,10 @@ typedef struct s_bound_info
     u8 pad1;
     // could be draw order?
     s16 unk1;
-    void* next;
+    u8 next;
+    u8 pad2[3];
     struct bbox2d bbox;
-    
+
     #else
     //us is 0x1C total len
     s32 roomid;
@@ -67,7 +70,7 @@ typedef struct s_bound_info
     void* next;
     #endif
 
-    
+
 } s_bound_info;
 
 typedef struct bg_portal_entry
@@ -94,13 +97,13 @@ typedef struct bg_room_data
     coord3d pos;
 } bg_room_data;
 
-typedef struct s_specialportal 
+typedef struct s_specialportal
 {
     u8 levelid;
     u8 portallist[];
 } s_specialportal;
 
-typedef struct unk_portalstruct 
+typedef struct unk_portalstruct
 {
     s32 unk0;
     s32 unk4;
@@ -122,7 +125,7 @@ extern Gfx DL_LUT_PRIMARY_ADDFOG[];
 void bgInit(void);
 
 // sub_GAME_7F033B38 requres arg be s32
-s32 sub_GAME_7F0B8FD0(s32 roomA, u8 roomB);
+s32 sub_GAME_7F0B8FD0(s32 roomA, s32 roomB);
 
 //f32 sub_GAME_7F0B4F9C(s32 room); // u8 not s32 for sub_GAME_7F0B2FE0
 u32 bgDecompress(u8* source, u8 *target);
@@ -152,6 +155,6 @@ void sub_GAME_7F0B5CC0(struct bbox2d *a, struct bbox2d *b);
 f32 get_room_data_float2(void);
 s32 sub_GAME_7F0B9CC8(s32 arg0, s32 arg1, struct coord3d *arg2, struct coord3d *arg3);
 void sub_GAME_7F0B96CC(s32 arg0, struct PortalMetric *arg1);
-void bgLoadFromDynamicCCRMLUT(Gfx *arg0, Gfx *arg1, enum CCRMLUT arg2);
+void bgApplyDynamicCCRMLUT(Gfx *arg0, Gfx *arg1, enum CCRMLUT arg2);
 
 #endif

@@ -1,6 +1,7 @@
 #include <ultra64.h>
 #include <memp.h>
 #include "objecthandler.h"
+#include "model.h"
 
 // bss
 //CODE.bss:80076A50
@@ -294,10 +295,78 @@ s32 D_8003641C =  0;
 
 
 #ifdef NONMATCHING
-void sub_GAME_7F06B120(void) {
-
+*makejointlist * /
+    void sub_GAME_7F06B120(void)
+{
+    local_20 = **(param_2 + 8);
+    local_1c = freedist;
+    do
+    {
+        while (true)
+        {
+            if ((local_20 == NULL) || (local_1c == NULL))
+            {
+                param_11 = param_1;
+                if (local_1c != freedist)
+                {
+                    piStack_14 = param_1;
+                    if (param_1 == NULL)
+                    {
+                        param_11 = freedist;
+                    }
+                    else
+                    {
+                        for (; piStack_14[3] != 0; piStack_14 = piStack_14[3])
+                        {
+                        }
+                        piStack_14[3] = freedist;
+                        freedist[4]   = piStack_14;
+                    }
+                    if ((local_1c != NULL) && (local_1c[4] != 0))
+                    {
+                        *(local_1c[4] + 0xc) = 0;
+                        local_1c[4]          = 0;
+                    }
+                    freedist = local_1c;
+                }
+                if (freedist == NULL)
+                {
+                    piVar1 = osSyncPrintf("makejointlist: freedist is NULL!\n", param_2, param_3, param_4, param_5, param_6, param_7);
+                    return piVar1;
+                }
+                return param_11;
+            }
+            switch (*local_20 & 0xff)
+            {
+                case 1:
+                case 2:
+                case 3:
+                case 0xb:
+                case 0xc:
+                case 0xd:
+                case 0xe:
+                case 0xf:
+                case 0x10:
+                case 0x15:
+                    *local_1c   = param_2;
+                    local_1c[1] = local_20;
+                    local_1c    = local_1c[3];
+            }
+            if (*(local_20 + 10) == 0) break;
+            local_20 = *(local_20 + 10);
+        }
+        for (; local_20 != NULL; local_20 = *(local_20 + 4))
+        {
+            if (*(local_20 + 6) != 0)
+            {
+                local_20 = *(local_20 + 6);
+                break;
+            }
+        }
+    } while (true);
 }
 #else
+
 GLOBAL_ASM(
 .late_rodata
 /*D:80054490*/
@@ -422,8 +491,23 @@ def_7F06B16C:
 
 
 #ifdef NONMATCHING
-void sub_GAME_7F06B248(void) {
+void sub_GAME_7F06B248(void)
+{
+    int iVar1;
+    int local_10;
 
+    iVar1 = freedist;
+    if ((param_1 != 0) && (iVar1 = param_1, local_10 = param_1, freedist != 0))
+    {
+        for (; *(local_10 + 0xc) != 0; local_10 = *(local_10 + 0xc))
+        {
+        }
+        *(local_10 + 0xc)  = freedist;
+        *(freedist + 0x10) = local_10;
+        iVar1              = param_1;
+    }
+    freedist = iVar1;
+    return;
 }
 #else
 GLOBAL_ASM(
@@ -461,8 +545,211 @@ glabel sub_GAME_7F06B248
 
 
 #ifdef NONMATCHING
-void sub_GAME_7F06B29C(void) {
-
+void sub_GAME_7F06B29C(void)
+{
+    local_10c  = NULL;
+    piStack_34 = param_1;
+    for (param_11 = piStack_34; param_11 != NULL; param_11 = param_11[3])
+    {
+        puVar5 = param_11[1];
+        switch (*puVar5 & 0xff)
+        {
+            case 1:
+                iVar14 = *(*(puVar5 + 2) + 4);
+                lVar13 = modelFindNodeMtx(*param_11, puVar5, 0);
+                if (iVar14 == 0)
+                {
+                    param_11[2] = -*(lVar13 + 0x38);
+                }
+                else
+                {
+                    lVar12      = modelFindNodeMtx(*param_11, iVar14, 0);
+                    param_11[2] = -(*(lVar13 + 0x38) + *(lVar12 + 0x38)) * 0.5;
+                }
+                break;
+            case 2:
+                iVar14 = *(*(puVar5 + 2) + 0x14);
+                lVar13 = modelFindNodeMtx(*param_11, puVar5, 0);
+                if (iVar14 == 0)
+                {
+                    param_11[2] = -*(lVar13 + 0x38);
+                }
+                else
+                {
+                    lVar12      = modelFindNodeMtx(*param_11, iVar14, 0);
+                    param_11[2] = -(*(lVar13 + 0x38) + *(lVar12 + 0x38)) * 0.5;
+                }
+                break;
+            case 3:
+                iVar14 = *(*(puVar5 + 2) + 0x14);
+                lVar13 = modelFindNodeMtx(*param_11, puVar5, 0);
+                if (iVar14 == 0)
+                {
+                    param_11[2] = -*(lVar13 + 0x38);
+                }
+                else
+                {
+                    lVar12      = modelFindNodeMtx(*param_11, iVar14, 0);
+                    param_11[2] = -(*(lVar13 + 0x38) + *(lVar12 + 0x38)) * 0.5;
+                }
+                break;
+            case 0xb:
+                lVar13      = modelFindNodeMtx(*param_11, puVar5, 0);
+                iVar14      = lVar13;
+                pfVar6      = *(puVar5 + 2);
+                param_11[2] = -(*pfVar6 * *(iVar14 + 8) + pfVar6[1] * *(iVar14 + 0x18) +
+                                pfVar6[2] * *(iVar14 + 0x28) + *(iVar14 + 0x38));
+                break;
+            case 0xc:
+                lVar13      = modelFindNodeMtx(*param_11, puVar5, 0);
+                iVar14      = lVar13;
+                pfVar6      = *(puVar5 + 2);
+                param_11[2] = -(*pfVar6 * *(iVar14 + 8) + pfVar6[1] * *(iVar14 + 0x18) +
+                                pfVar6[2] * *(iVar14 + 0x28) + *(iVar14 + 0x38));
+                break;
+            case 0xd:
+                lVar13      = modelFindNodeMtx(*param_11, puVar5, 0);
+                iVar14      = lVar13;
+                pfVar6      = *(puVar5 + 2);
+                lVar13      = modelGetNodeRwData(*param_11, pfVar6[4]);
+                param_11[2] = -(*pfVar6 * *(iVar14 + 8) + (*(lVar13 + 4) - *(lVar13 + 0xc)) * *(iVar14 + 0x18) + pfVar6[1] * *(iVar14 + 0x28) + *(iVar14 + 0x38));
+                break;
+            case 0xe:
+                lVar13      = modelFindNodeMtx(*param_11, puVar5, 0);
+                iVar14      = lVar13;
+                pfVar6      = *(puVar5 + 2);
+                param_11[2] = -(*pfVar6 * *(iVar14 + 8) + pfVar6[1] * *(iVar14 + 0x18) +
+                                pfVar6[2] * *(iVar14 + 0x28) + *(iVar14 + 0x38));
+                break;
+            case 0xf:
+                lVar13    = modelFindNodeMtx(*param_11, puVar5, 0);
+                iVar14    = lVar13;
+                pfVar6    = *(puVar5 + 2);
+                fVar1     = -(*pfVar6 * *(iVar14 + 8) + pfVar6[1] * *(iVar14 + 0x18) +
+                          pfVar6[2] * *(iVar14 + 0x28) + *(iVar14 + 0x38));
+                fStack_18 = -(pfVar6[3] * *(iVar14 + 8) + pfVar6[4] * *(iVar14 + 0x18) +
+                              pfVar6[5] * *(iVar14 + 0x28) + *(iVar14 + 0x38));
+                if (fVar1 < fStack_18)
+                {
+                    fStack_18 = fVar1;
+                }
+                param_11[2] = fStack_18;
+                break;
+            case 0x10:
+                lVar13      = modelFindNodeMtx(*param_11, puVar5, 0);
+                iVar14      = lVar13;
+                pfVar6      = *(puVar5 + 2);
+                param_11[2] = -(*pfVar6 * *(iVar14 + 8) + pfVar6[1] * *(iVar14 + 0x18) +
+                                pfVar6[2] * *(iVar14 + 0x28) + *(iVar14 + 0x38));
+                local_10c   = param_11;
+                break;
+            case 0x15:
+                lVar13      = modelFindNodeMtx(*param_11, puVar5, 0);
+                param_11[2] = -*(lVar13 + 0x38);
+        }
+    }
+    if ((local_10c != NULL) && (iVar14 = *local_10c, *(iVar14 + 0x18) != 0))
+    {
+        fVar1      = local_10c[2];
+        pfVar6     = *(local_10c[1] + 4);
+        iVar7      = *(*(*(*(iVar14 + 0x18) + 8) + 8) + *(pfVar6 + 0xe) * 4);
+        iVar8      = *(*(*(*(iVar14 + 0x18) + 8) + 8) + *(pfVar6 + 3) * 4);
+        iVar9      = *(*(*(*(iVar14 + 0x18) + 8) + 8) + *(pfVar6 + 4) * 4);
+        piStack_64 = NULL;
+        piStack_2c = NULL;
+        piStack_30 = NULL;
+        lVar13     = modelFindNodeMtx(iVar14, local_10c[1], 0);
+        pfVar15    = lVar13;
+        for (; piStack_34 != NULL; piStack_34 = piStack_34[3])
+        {
+            if (piStack_34[1] == iVar7)
+            {
+                piStack_64 = piStack_34;
+            }
+            if (piStack_34[1] == iVar8)
+            {
+                piStack_2c = piStack_34;
+            }
+            if (piStack_34[1] == iVar9)
+            {
+                piStack_30 = piStack_34;
+            }
+        }
+        fVar2  = *pfVar6 * *pfVar15 + pfVar6[1] * pfVar15[4] + pfVar6[2] * pfVar15[8] + pfVar15[0xc];
+        fVar3  = *pfVar6 * pfVar15[1] + pfVar6[1] * pfVar15[5] + pfVar6[2] * pfVar15[9] + pfVar15[0xd];
+        fVar4  = *pfVar6 * pfVar15[2] + pfVar6[1] * pfVar15[6] + pfVar6[2] * pfVar15[10] + pfVar15[0xe];
+        fVar10 = pfVar15[8] * fVar2 + pfVar15[9] * fVar3 + pfVar15[10] * fVar4;
+        fVar11 = pfVar15[4] * fVar2 + pfVar15[5] * fVar3 + pfVar15[6] * fVar4;
+        fVar2  = piStack_64[2];
+        fVar3  = piStack_2c[2];
+        fVar4  = piStack_30[2];
+        if (0.0 <= fVar10)
+        {
+            if (0.0 <= fVar10)
+            {
+                if (fVar1 < fVar2)
+                {
+                    piStack_64[2] = fVar1 - 6.103516e-05;
+                }
+                if (fVar1 < fVar4)
+                {
+                    if (fVar2 <= fVar4)
+                    {
+                        piStack_30[2] = fVar1 - 3.051758e-05;
+                    }
+                    else
+                    {
+                        piStack_30[2] = fVar1 - 9.155273e-05;
+                    }
+                }
+            }
+        }
+        else if (fVar2 <= fVar4)
+        {
+            if (fVar2 < fVar1)
+            {
+                local_10c[2] = fVar2 - 3.051758e-05;
+            }
+        }
+        else if (fVar4 < fVar1)
+        {
+            local_10c[2] = fVar4 - 3.051758e-05;
+        }
+        if (0.0 <= fVar11)
+        {
+            if ((0.0 <= fVar11) && (local_10c[2] < fVar3))
+            {
+                piStack_2c[2] = local_10c[2] - 1.525879e-05;
+                if ((fVar3 < fVar2) && (piStack_64[2] < piStack_2c[2]))
+                {
+                    piStack_2c[2] = piStack_64[2] - 1.525879e-05;
+                }
+                if ((fVar3 < fVar4) && (piStack_30[2] < piStack_2c[2]))
+                {
+                    piStack_2c[2] = piStack_30[2] - 1.525879e-05;
+                }
+            }
+        }
+        else if (fVar3 < local_10c[2])
+        {
+            if ((piStack_64[2] < local_10c[2]) && (fVar3 < piStack_64[2]))
+            {
+                piStack_64[2] = fVar3 - 6.103516e-05;
+            }
+            if ((piStack_30[2] < local_10c[2]) && (fVar3 < piStack_30[2]))
+            {
+                if (fVar2 <= fVar4)
+                {
+                    piStack_30[2] = fVar3 - 3.051758e-05;
+                }
+                else
+                {
+                    piStack_30[2] = fVar3 - 9.155273e-05;
+                }
+            }
+            local_10c[2] = fVar3 - 1.525879e-05;
+        }
+    }
 }
 #else
 GLOBAL_ASM(
@@ -1088,8 +1375,34 @@ def_7F06B2F4:
 
 
 #ifdef NONMATCHING
-void sub_GAME_7F06BB28(void) {
+int sub_GAME_7F06BB28(double param_1, undefined param_2, undefined param_3, ModelNode *param_4, ModelNode *param_5, ModelNode *param_6, ModelNode *param_7, ModelNode *param_8, ModelNode *param_9, undefined4 param_10, undefined4 param_11)
 
+{
+    while (param_6 = param_6->Next, param_6 != &param_3)
+    {
+        param_7 = NULL;
+        param_9 = 0xcf800000;
+        for (param_8 = param_6->Next; param_8 != &param_3; param_8 = param_8->Next)
+        {
+            if (param_9 < param_8->Parent)
+            {
+                param_9 = param_8->Parent;
+                param_7 = param_8;
+            }
+        }
+        if (param_7 != NULL)
+        {
+            *(param_7->Next + 0x10) = param_7->Prev;
+            *(param_7->Prev + 0xc)  = param_7->Next;
+            param_7->Prev           = param_6;
+            param_7->Next           = param_6->Next;
+            *(param_6->Next + 0x10) = param_7;
+            param_6->Next           = param_7;
+        }
+    }
+    param_5->Prev = NULL;
+    param_4->Next = NULL;
+    return param_5;
 }
 #else
 GLOBAL_ASM(
@@ -1627,10 +1940,117 @@ glabel drawjointlist
 
 
 
-
+f32 probably_damage_detail_blood_effect_related(ModelFileHeader *head, s32 unused, s32 unused2, s32 *arg3, s32 *arg4);
 #ifdef NONMATCHING
-void probably_damage_detail_blood_effect_related(void) {
+/* DISPLAY WARNING: Type casts are NOT being printed */
 
+void *probably_damage_detail_blood_effect_related(ModelFileHeader *node, Coord3d *param_2, Coord3d *param_3, ulonglong param_4, ModelFileHeader *param_5)
+
+{
+    bool       bVar1;
+    void      *pvVar4;
+    undefined8 uVar2;
+    double     dVar3;
+    ModelNode *rootNode;
+    ModelNode *chrNode;
+    ModelNode *chr;
+
+    rootNode = node->RootNode;
+    do
+    {
+        if (rootNode == NULL)
+        {
+            node->RootNode = NULL;
+            dVar3          = 0.0;
+LAB_8239ec34:
+            return dVar3;
+        }
+        bVar1   = true;
+        chr     = rootNode->Data;
+        chrNode = chr;
+        if (param_5->RootNode != NULL)
+        {
+            chrNode           = param_5->RootNode;
+            param_5->RootNode = NULL;
+        }
+        while (chrNode != NULL)
+        {
+            if ((bVar1) && (chrNode->Child != NULL))
+            {
+                chrNode = chrNode->Child;
+            }
+            else
+            {
+                for (; chrNode != NULL; chrNode = chrNode->Parent)
+                {
+                    if (chrNode == chr)
+                    {
+                        chrNode = NULL;
+                        break;
+                    }
+                    if (chrNode->Next != NULL)
+                    {
+                        chrNode = chrNode->Next;
+                        break;
+                    }
+                }
+                if (chrNode == NULL) break;
+            }
+            bVar1 = true;
+            switch (*&chrNode->Opcode & 0xff)
+            {
+                case 1:
+                case 2:
+                case 3:
+                case 0x15:
+                    bVar1 = false;
+                    break;
+                case 8:
+                    modelApplyDistanceRelations(rootNode->Opcode, chrNode);
+                    break;
+                case 10:
+                    pvVar4 = sub_GAME_7F074C68(rootNode->Opcode, chrNode, param_2, param_3);
+                    if (pvVar4 != NULL)
+                    {
+                        *param_4          = rootNode->Opcode;
+                        param_5->RootNode = chrNode;
+                        node->RootNode    = rootNode;
+                        /* WARNING: Load size is inaccurate */
+                        dVar3             = *chrNode->Data;
+                        goto LAB_8239ec34;
+                    }
+                    bVar1 = false;
+                    break;
+                case 0xb:
+                case 0xc:
+                case 0xd:
+                case 0xe:
+                case 0xf:
+                case 0x10:
+                    bVar1 = false;
+                    break;
+                case 0x11:
+                    uVar2 = sub_GAME_7F074CAC(rootNode->Opcode, chrNode, &param_2->x, &param_3->x);
+                    if (uVar2 != 0)
+                    {
+                        *param_4          = rootNode->Opcode;
+                        param_5->RootNode = chrNode;
+                        node->RootNode    = rootNode;
+                        /* WARNING: Load size is inaccurate */
+                        dVar3             = *chrNode->Data;
+                        goto LAB_8239ec34;
+                    }
+                    bVar1 = false;
+                    break;
+                case 0x12:
+                    modelApplyToggleRelations(rootNode->Opcode, chrNode);
+                    break;
+                case 0x17:
+                    modelApplyHeadRelations(rootNode->Opcode, chrNode);
+            }
+        }
+        rootNode = rootNode->Prev;
+    } while (true);
 }
 #else
 GLOBAL_ASM(
@@ -1832,13 +2252,25 @@ def_7F06BEEC:
 
 
 
-#ifdef NONMATCHING
+#if 1
 /*
 * Address: 0x7F06C010
 * https://decomp.me/scratch/IDiXU
-*/
-void sub_GAME_7F06C010(ModelNode **head, /*s32 unused, s32 unused2,*/ s32 *arg3, s32 *arg4) {
+ * #MATCH! Unlikley match, not sure why we are setting the root node to the last node.
+ */
+f32 sub_GAME_7F06C010(ModelFileHeader *head, s32 unused, s32 unused2, s32 *arg3, s32 *arg4)
+{
+    ModelNode *lastnode = head->RootNode;
 
+    while (lastnode->Next != NULL)
+    {
+        lastnode = lastnode->Next;
+    }
+
+    head->RootNode = lastnode;
+    *arg3          = 0;
+    *arg4          = 0;
+    return probably_damage_detail_blood_effect_related(head, unused, unused2, arg3, arg4);
 }
 #else
 GLOBAL_ASM(

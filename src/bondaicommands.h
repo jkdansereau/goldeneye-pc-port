@@ -416,6 +416,29 @@ typedef enum GAILISTID
     GAILIST_REMOVE_CHR
 } GAILISTID;
 
+#ifdef AIPARSE
+char *GAILIST_ToString[] = {
+    "GAILIST_AIM_AT_BOND",
+    "GAILIST_DEAD_AI",
+    "GAILIST_STANDARD_GUARD",
+    "GAILIST_PLAY_IDLE_ANIMATION",
+    "GAILIST_BASH_KEYBOARD",
+    "GAILIST_SIMPLE_GUARD_DEAF",
+    "GAILIST_ATTACK_BOND",
+    "GAILIST_SIMPLE_GUARD",
+    "GAILIST_RUN_TO_BOND",
+    "GAILIST_SIMPLE_GUARD_ALARM_RAISER",
+    "GAILIST_STARTLE_AND_RUN_TO_BOND",
+    "GAILIST_TRY_CLONE_SEND_OR_RUN_TO_BOND",
+    "GAILIST_STANDARD_CLONE",
+    "GAILIST_PERSISTENTLY_CHASE_AND_ATTACK_BOND",
+    "GAILIST_WAIT_ONE_SECOND",
+    "GAILIST_END_LEVEL",
+    "GAILIST_DRAW_TT33_AND_ATTCK_BOND",
+    "GAILIST_REMOVE_CHR"};
+
+#endif
+
 
 /*===========================================================================*/
 
@@ -469,12 +492,236 @@ typedef enum HITTARGET
     HIT_GENERALHALF = 0xC9
 } HITTARGET;
 
-// command 68 - door states
-#define AI_DOOR_STATE_CLOSED               0x01 /* Closed*/
-#define AI_DOOR_STATE_OPEN                 0x02 /* Opened*/
-#define AI_DOOR_STATE_CLOSING              0x04 /* Closing*/
-#define AI_DOOR_STATE_OPENING              0x08 /* Opening*/
+#ifdef AIPARSE
+char *HITTARGET_ToString[] = {
+    "HIT_NULL_PART",      /* Null part, no reaction - 1x damage*/
+    "HIT_LEFT_FOOT",      /* Left foot              - 1x damage*/
+    "HIT_LEFT_LEG",       /* Left leg               - 1x damage*/
+    "HIT_LEFT_THIGH",     /* Left thigh             - 1x damage*/
+    "HIT_RIGHT_FOOT",     /* Right foot             - 1x damage*/
+    "HIT_RIGHT_LEG",      /* Right leg              - 1x damage*/
+    "HIT_RIGHT_THIGH",    /* Right thigh            - 1x damage*/
+    "HIT_PELVIS",         /* Pelvis                 - 1x damage*/
+    "HIT_HEAD",           /* Head                   - 4x damage*/
+    "HIT_LEFT_HAND",      /* Left hand              - 1x damage*/
+    "HIT_LEFT_ARM",       /* Left arm               - 1x damage*/
+    "HIT_LEFT_SHOULDER",  /* Left shoulder          - 1x damage*/
+    "HIT_RIGHT_HAND",     /* Right hand             - 1x damage*/
+    "HIT_RIGHT_ARM",      /* Right arm              - 1x damage*/
+    "HIT_RIGHT_SHOULDER", /* Right shoulder         - 1x damage*/
+    "HIT_CHEST",
+    "16",
+    "17",
+    "18",
+    "19",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "25",
+    "26",
+    "27",
+    "28",
+    "29",
+    "30",
+    "31",
+    "32",
+    "33",
+    "34",
+    "35",
+    "36",
+    "37",
+    "38",
+    "39",
+    "40",
+    "41",
+    "42",
+    "43",
+    "44",
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50",
+    "51",
+    "52",
+    "53",
+    "54",
+    "55",
+    "56",
+    "57",
+    "58",
+    "59",
+    "60",
+    "61",
+    "62",
+    "63",
+    "64",
+    "65",
+    "66",
+    "67",
+    "68",
+    "69",
+    "70",
+    "71",
+    "72",
+    "73",
+    "74",
+    "75",
+    "76",
+    "77",
+    "78",
+    "79",
+    "80",
+    "81",
+    "82",
+    "83",
+    "84",
+    "85",
+    "86",
+    "87",
+    "88",
+    "89",
+    "90",
+    "91",
+    "92",
+    "93",
+    "94",
+    "95",
+    "96",
+    "97",
+    "98",
+    "99",
+    "HIT_GUN", /* GUN                    - 0x damage*/
+    "101",
+    "102",
+    "103",
+    "104",
+    "105",
+    "106",
+    "107",
+    "108",
+    "109",
+    "HIT_HAT", /* HAT                    - 0x damage*/
+    "111",
+    "112",
+    "113",
+    "114",
+    "115",
+    "116",
+    "117",
+    "118",
+    "119",
+    "120",
+    "121",
+    "122",
+    "123",
+    "124",
+    "125",
+    "126",
+    "127",
+    "128",
+    "129",
+    "130",
+    "131",
+    "132",
+    "133",
+    "134",
+    "135",
+    "136",
+    "137",
+    "138",
+    "139",
+    "140",
+    "141",
+    "142",
+    "143",
+    "144",
+    "145",
+    "146",
+    "147",
+    "148",
+    "149",
+    "150",
+    "151",
+    "152",
+    "153",
+    "154",
+    "155",
+    "156",
+    "157",
+    "158",
+    "159",
+    "160",
+    "161",
+    "162",
+    "163",
+    "164",
+    "165",
+    "166",
+    "167",
+    "168",
+    "169",
+    "170",
+    "171",
+    "172",
+    "173",
+    "174",
+    "175",
+    "176",
+    "177",
+    "178",
+    "179",
+    "180",
+    "181",
+    "182",
+    "183",
+    "184",
+    "185",
+    "186",
+    "187",
+    "188",
+    "189",
+    "190",
+    "191",
+    "192",
+    "193",
+    "194",
+    "195",
+    "196",
+    "197",
+    "198",
+    "199",
+    "HIT_GENERAL",
+    "HIT_GENERALHALF"};
 
+#endif
+// command 68 - door states
+#define AI_DOOR_STATE_CLOSED  0x01 /* Closed*/
+#define AI_DOOR_STATE_OPEN    0x02 /* Opened*/
+#define AI_DOOR_STATE_CLOSING 0x04 /* Closing*/
+#define AI_DOOR_STATE_OPENING 0x08 /* Opening*/
+#ifdef AIPARSE
+char *DOORSTATE_ToString[] = {
+    " 0",                    // undefined
+    " AI_DOOR_STATE_CLOSED", /* Closed*/
+    " AI_DOOR_STATE_OPEN",   /* Opened*/
+    " AI_DOOR_STATE_CLOSED | AI_DOOR_STATE_OPEN",
+    " AI_DOOR_STATE_CLOSING", /* Closing*/
+    " AI_DOOR_STATE_CLOSING | AI_DOOR_STATE_CLOSED ",
+    " AI_DOOR_STATE_CLOSING | AI_DOOR_STATE_OPEN",
+    " AI_DOOR_STATE_CLOSING | AI_DOOR_STATE_CLOSED | AI_DOOR_STATE_OPEN",
+    " AI_DOOR_STATE_OPENING", /* Opening*/
+    " AI_DOOR_STATE_OPENING | AI_DOOR_STATE_CLOSED",
+    " AI_DOOR_STATE_OPENING | AI_DOOR_STATE_OPEN",
+    " AI_DOOR_STATE_OPENING | AI_DOOR_STATE_CLOSED | AI_DOOR_STATE_OPEN",
+    " AI_DOOR_STATE_OPENING | AI_DOOR_STATE_CLOSING",
+    " AI_DOOR_STATE_OPENING | AI_DOOR_STATE_CLOSING AI_DOOR_STATE_OPEN",
+    " AI_DOOR_STATE_OPENING | AI_DOOR_STATE_CLOSING | AI_DOOR_STATE_CLOSED",
+    " AI_DOOR_STATE_OPENING | AI_DOOR_STATE_CLOSING | AI_DOOR_STATE_CLOSED | AI_DOOR_STATE_OPEN"};
+#endif
 // command BD/BE - spawn flags
 #define SPAWN_SUNGLASSES                0x00000001 /* Sunglasses*/
 #define SPAWN_SUNGLASSES_RANDOM         0x00000002 /* Sunglasses (random, 50% of the time)*/

@@ -2,7 +2,8 @@
 #include <memp.h>
 #include "bondtypes.h"
 #include "unk_09B7A0.h"
-#include "chrobjhandler.h"
+#include "propobj.h"
+#include "model.h"
 
 // unsure if these structs are defined as something else, elsewhere
 struct unk_09B7A0_struct_child {

@@ -8,6 +8,7 @@
 #include "objecthandler.h"
 #include "player.h"
 #include "bondhead.h"
+#include "model.h"
 
 
 //data
@@ -85,8 +86,8 @@ void sets_a_bunch_of_BONDdata_values_to_default(void)
 {
     s32 i;
     s32 spD0[3];
-    ModelRenderData sp90;
-    Mtxf sp50;
+    ModelRenderData renderData;
+    Mtxf identityMatrix;
 
 #ifdef LEFTOVERDEBUG
     if ((s32) player_gait_object_header.numRecords >= 0x1F)
@@ -166,17 +167,17 @@ void sets_a_bunch_of_BONDdata_values_to_default(void)
         g_BondMoveAnimationSetup[i].speedMultiplier = (f32) (((f32) spD0[2] * IDO_POINT_ONE) / (g_BondMoveAnimationSetup[i].endframe - g_BondMoveAnimationSetup[i].loopframe));
     }
 
-    sp90 = D_8002A790;
+    renderData = D_8002A790;
 
     modelSetAnimation(&g_CurrentPlayer->model, (struct ModelAnimation *)&ptr_animation_table->data[(s32)&ANIM_DATA_idle], 0, 0.0f, 0.5f, 0.0f);
 
     subcalcpos(&g_CurrentPlayer->model);
-    matrix_4x4_set_identity(&sp50);
+    matrix_4x4_set_identity(&identityMatrix);
 
-    sp90.unk_matrix = &sp50;
-    sp90.mtxlist = &g_CurrentPlayer->bondheadmatrices[0];
+    renderData.unk_matrix = &identityMatrix;
+    renderData.mtxlist = &g_CurrentPlayer->bondheadmatrices[0];
 
-    subcalcmatrices(&sp90, &g_CurrentPlayer->model);
+    subcalcmatrices(&renderData, &g_CurrentPlayer->model);
 
     g_CurrentPlayer->standheight = g_CurrentPlayer->bondheadmatrices[0].m[3][1];
     g_CurrentPlayer->standbodyoffset.x = 0.0f;

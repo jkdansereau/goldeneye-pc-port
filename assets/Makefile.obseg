@@ -2,6 +2,7 @@
 OBSEGMENT := obsegment.o
 OBSEG_DIR := assets/obseg
 
+include assets/obseg/Makefile.filelist
 
 include assets/obseg/Makefile.bg
 include assets/obseg/Makefile.chr

@@ -1,7 +1,7 @@
 #include "token.h"
 #include "pi.h"
 #include "snd.h"
-#include "game/lvl_text.h"
+#include "game/language.h"
 #include "rmon.h" /*<PR/rmon.h>*/
 #include "str.h"
 

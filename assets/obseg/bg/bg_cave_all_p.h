@@ -1,5 +1,7 @@
+#ifndef _BG_CAVE_ALL_P_H_
+#define _BG_CAVE_ALL_P_H_
 
- #include <ultra64.h>
+#include "bg_all_p.h"
 
 extern u32 point_table_binary_1[];
 extern u32 point_table_binary_2[];
@@ -74,20 +76,14 @@ extern u32 pri_mapping_binary_5[];
 extern u32 pri_mapping_binary_6[];
 extern u32 pri_mapping_binary_7[];
 extern u32 pri_mapping_binary_8[];
-extern u32 sec_mapping_binary_8[];
 extern u32 pri_mapping_binary_9[];
-extern u32 sec_mapping_binary_9[];
 extern u32 pri_mapping_binary_10[];
-extern u32 sec_mapping_binary_10[];
 extern u32 pri_mapping_binary_11[];
 extern u32 pri_mapping_binary_12[];
-extern u32 sec_mapping_binary_12[];
 extern u32 pri_mapping_binary_13[];
-extern u32 sec_mapping_binary_13[];
 extern u32 pri_mapping_binary_14[];
 extern u32 pri_mapping_binary_15[];
 extern u32 pri_mapping_binary_16[];
-extern u32 sec_mapping_binary_16[];
 extern u32 pri_mapping_binary_17[];
 extern u32 pri_mapping_binary_18[];
 extern u32 pri_mapping_binary_19[];
@@ -98,25 +94,15 @@ extern u32 pri_mapping_binary_23[];
 extern u32 pri_mapping_binary_24[];
 extern u32 pri_mapping_binary_25[];
 extern u32 pri_mapping_binary_26[];
-extern u32 sec_mapping_binary_26[];
 extern u32 pri_mapping_binary_27[];
-extern u32 sec_mapping_binary_27[];
 extern u32 pri_mapping_binary_28[];
-extern u32 sec_mapping_binary_28[];
 extern u32 pri_mapping_binary_29[];
-extern u32 sec_mapping_binary_29[];
 extern u32 pri_mapping_binary_30[];
-extern u32 sec_mapping_binary_30[];
 extern u32 pri_mapping_binary_31[];
-extern u32 sec_mapping_binary_31[];
 extern u32 pri_mapping_binary_32[];
-extern u32 sec_mapping_binary_32[];
 extern u32 pri_mapping_binary_33[];
-extern u32 sec_mapping_binary_33[];
 extern u32 pri_mapping_binary_34[];
-extern u32 sec_mapping_binary_34[];
 extern u32 pri_mapping_binary_35[];
-extern u32 sec_mapping_binary_35[];
 extern u32 pri_mapping_binary_36[];
 extern u32 pri_mapping_binary_37[];
 extern u32 pri_mapping_binary_38[];
@@ -144,10 +130,27 @@ extern u32 pri_mapping_binary_59[];
 extern u32 pri_mapping_binary_60[];
 extern u32 pri_mapping_binary_61[];
 extern u32 pri_mapping_binary_62[];
-extern u32 sec_mapping_binary_62[];
 extern u32 pri_mapping_binary_63[];
-extern u32 sec_mapping_binary_63[];
 extern u32 pri_mapping_binary_64[];
+
+extern u32 sec_mapping_binary_8[];
+extern u32 sec_mapping_binary_9[];
+extern u32 sec_mapping_binary_10[];
+extern u32 sec_mapping_binary_12[];
+extern u32 sec_mapping_binary_13[];
+extern u32 sec_mapping_binary_16[];
+extern u32 sec_mapping_binary_26[];
+extern u32 sec_mapping_binary_27[];
+extern u32 sec_mapping_binary_28[];
+extern u32 sec_mapping_binary_29[];
+extern u32 sec_mapping_binary_30[];
+extern u32 sec_mapping_binary_31[];
+extern u32 sec_mapping_binary_32[];
+extern u32 sec_mapping_binary_33[];
+extern u32 sec_mapping_binary_34[];
+extern u32 sec_mapping_binary_35[];
+extern u32 sec_mapping_binary_62[];
+extern u32 sec_mapping_binary_63[];
 
 extern struct portal_4_point portal_0;
 extern struct portal_4_point portal_1;
@@ -211,17 +214,19 @@ extern struct portal_4_point portal_58;
 extern struct portal_4_point portal_59;
 extern struct portal_4_point portal_60;
 extern struct portal_4_point portal_61;
-extern struct portal_4_point portal_62;
-extern struct portal_4_point portal_63;
+extern struct portal_6_point portal_62;
+extern struct portal_6_point portal_63;
 extern struct portal_4_point portal_64;
-extern struct portal_4_point portal_65;
-extern struct portal_6_point portal_66;
+extern struct portal_6_point portal_65;
+extern struct portal_4_point portal_66;
 extern struct portal_6_point portal_67;
-extern struct portal_4_point portal_68;
+extern struct portal_6_point portal_68;
 extern struct portal_6_point portal_69;
 extern struct portal_4_point portal_70;
-extern struct portal_6_point portal_71;
-extern struct portal_6_point portal_72;
-extern struct portal_6_point portal_73;
+extern struct portal_4_point portal_71;
+extern struct portal_4_point portal_72;
+extern struct portal_4_point portal_73;
 extern struct portal_4_point portal_74;
 extern struct portal_4_point portal_75;
+
+#endif // _BG_CAVE_ALL_P_H_

@@ -1,10 +1,11 @@
 #include <ultra64.h>
 #include <bondtypes.h>
-#include "cheat_buttons.h"
+#include "cheat.h"
 #include "chr.h"
 #include "chr_b.h"
 #include "chrobjdata.h"
 #include "objecthandler.h"
+#include "model.h"
 
 s32 load_body_head_if_not_loaded(s32 model)
 {
@@ -16,6 +17,7 @@ s32 load_body_head_if_not_loaded(s32 model)
     return 0;
 }
 
+// # This file is chrlv.c
 
 /**
  * Address 0x7F0232E8 (VERSION_US)
@@ -62,7 +64,7 @@ struct Model *makeonebody(s32 body, s32 head, struct ModelFileHeader *bodyHeader
                 fileLoad(headHeader, c_item_entries[head].filename);
 #ifdef XBLADEBUG
     #error fix XBLADEBUG
-      //sprintf("makeonebody: no head attachment for body number %d!\n",lVar3);
+      //osSyncPrintf("makeonebody: no head attachment for body number %d!\n",lVar3);
 #endif
             }
 

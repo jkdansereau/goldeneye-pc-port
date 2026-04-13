@@ -2,35 +2,36 @@
 #include <bondtypes.h>
 #include "chrai.h"
 #include "chrobjdata.h"
-#include "chrobjhandler.h"
+#include "propobj.h"
 #include "loadobjectmodel.h"
 #include "stan.h"
+#include "model.h"
 
 /**
  * Address 0x7F056850.
  * @brief getposstan
 */
-s32 sub_GAME_7F056850(struct coord3d *arg0, StandTile *arg1, f32 arg2, struct coord3d *arg3, StandTile **arg4)
+s32 sub_GAME_7F056850(struct coord3d *pos, StandTile *stan, f32 radius, struct coord3d *posReturn, StandTile **stanReturn)
 {
-    arg3->f[0] = arg0->f[0];
-    arg3->f[1] = arg0->f[1];
-    arg3->f[2] = arg0->f[2];
+    posReturn->f[0] = pos->f[0];
+    posReturn->f[1] = pos->f[1];
+    posReturn->f[2] = pos->f[2];
 
-    *arg4 = arg1;
+    *stanReturn = stan;
 
-    if (arg1 == 0)
+    if (stan == 0)
     {
-        #ifdef DEBUG
+#ifdef DEBUG
         osSyncPrintf("getposstan: no stan!\n");
-        #endif
+#endif
         return 0;
     }
 
-    if ((arg2 > 0.0f) && (stanTestVolume(arg4, arg3->f[0], arg3->f[2], arg2, CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PLAYERS | CDTYPE_CHRS | CDTYPE_PATHBLOCKER, 0.0f, 1.0f) >= 0))
+    if ((radius > 0.0f) && (stanTestVolume(stanReturn, posReturn->f[0], posReturn->f[2], radius, CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PLAYERS | CDTYPE_CHRS | CDTYPE_PATHBLOCKER, 0.0f, 1.0f) >= 0))
     {
-        #ifdef DEBUG
+#ifdef DEBUG
         osSyncPrintf("getposstan: circle not legal!\n");
-        #endif
+#endif
         return 0;
     }
 

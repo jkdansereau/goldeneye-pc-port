@@ -69,6 +69,15 @@ struct portal_6_point
     coord3d points[6];
 };
 
+struct portal_7_point
+{
+    char numpoints;
+    char padding1;
+    char padding2;
+    char padding3;
+    coord3d points[7];
+};
+
 extern struct room_data_table_entry room_data_table[];
 extern struct portal_data_table_entry portal_data_table[];
 extern u32 global_visibility_commands[];

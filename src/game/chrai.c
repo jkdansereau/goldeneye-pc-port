@@ -1,70 +1,61 @@
-#include <ultra64.h>
+#include "chrai.h"
+#include "bg.h"
+#include "bgfog.h"
+#include "bondinv.h"
+#include "bondview.h"
+#include "cheat.h"
+#include "chr.h"
+#include "chraction.h"
+#include "chraidata.h"
+#include "file.h"
+#include "gun.h"
+#include "initanitable.h"
+#include "language.h"
+#include "loadobjectmodel.h"
+#include "lv.h"
+#include "math_atan2f.h"
+#include "math_ceil.h"
+#include "math_floor.h"
+#include "model.h"
+#include "mp_music.h"
+#include "objecthandler.h"
+#include "objective_status.h"
+#include "player.h"
+#include "propobj.h"
+#include "stan.h"
+#include <assert.h>
+#include <bondaicommands.h>
 #include <bondgame.h>
 #include <bondtypes.h>
-#include <bondaicommands.h>
 #include <boss.h>
-#include <snd.h>
-#include <music.h>
-#include "bg.h"
-#include "bondview.h"
-#include "chr.h"
-#include "chrai.h"
-#include "chrlv.h"
-#include "chrobjhandler.h"
-#include "gun.h"
-#include "lvl_text.h"
-#include "math_floor.h"
-#include "math_ceil.h"
-#include "math_atan2f.h"
-#include "player.h"
-#include "chraidata.h"
 #include <limits.h>
-#include "objecthandler.h"
-#include "chrobjhandler.h"
-#include "initanitable.h"
+#include <music.h>
 #include <random.h>
-#include "lvl.h"
-#include "stan.h"
-#include "chr.h"
-#include "mp_music.h"
-#include "objective_status.h"
-#include "bondinv.h"
-#include <assert.h>
-#include "loadobjectmodel.h"
-#include "cheat_buttons.h"
-#include "player.h"
-#include "file.h"
-#include "fog.h"
+#include <snd.h>
+#include <ultra64.h>
 
-
-
-
-//hack? used to match as called with 2 args, but decompiled code takes 1
+// hack? used to match as called with 2 args, but decompiled code takes 1
 extern s32 objectiveGetStatus_WEAK(s32 objectiveNum, s32);
 
-
-//bss
+// bss
 /**
  * Address 0x80069B70.
-*/
-sfxRecord sfx_related[SFX_RELATED_LEN];
-
-
+ */
+sfxRecord  sfx_related[SFX_RELATED_LEN];
 
 /**
  * Play Audio in slot X from Prop or Pad
  * @param slot: Where audio is loaded
-*/
-void audioPlayFromProp2(s32 slot)
+ */
+void       audioPlayFromProp2(s32 slot)
 {
-    int tempvol;
-    sfxRecord *sfx= &sfx_related[slot]; //always added to stack anyway, cleaner to use
-    int clock_timer;
+    int        tempvol;
+    sfxRecord *sfx = &sfx_related[slot]; // always added to stack anyway, cleaner to use
+    int        clock_timer;
 
-    if ((sfx->state ) && (sndGetPlayingState(sfx->state) ))
+    if ((sfx->state) && (sndGetPlayingState(sfx->state)))
     {
-
-        if (sfx->pos )
+        if (sfx->pos)
         {
             sfx->Volume = sub_GAME_7F0539E4(sfx->pos);
         }
@@ -101,8 +92,6 @@ void audioPlayFromProp2(s32 slot)
     sfx->Volume2 = 0;
 }
 
-
-
 /**
  Play All Sounds in all slots
 */
@@ -115,15 +104,14 @@ void loop_set_sound_effect_all_slots(void)
     }
 }
 
-
 /**
  * Load Audio Slot with sound and Play
  * @param slot: where to load sound
  * @param soundIndex: SFX_ID
-*/
+ */
 void audioPlayFromProp(s32 slot, s16 soundIndex)
 {
-    sfxRecord *sfx = NULL; //always added to stack anyway, cleaner to use
+    sfxRecord *sfx = NULL; // always added to stack anyway, cleaner to use
     //"Existing ai sound number %d!\n"
     if (slot >= 0 && slot < SFX_RELATED_LEN)
     {
@@ -137,16 +125,15 @@ void audioPlayFromProp(s32 slot, s16 soundIndex)
             sfx->pos     = NULL;
             sfx->Obj     = NULL;
         }
-        #ifdef DEBUG
+#ifdef DEBUG
         else
         {
             osSyncPrintf("Existing ai sound number %d!\n", slot);
         }
-        #endif
+#endif
     }
     sndPlaySfx(g_musicSfxBufferPtr, soundIndex, sfx);
 }
-
 
 /**
  Stop All Sounds in all slots
@@ -159,10 +146,6 @@ void sub_GAME_7F0349BC(s32 slot)
     }
 }
 
-
-
-
-
 /**
  * Get AI Command Size in bytes
  * @param AIList: u8 Pointer to The AI list containing the command
@@ -172,527 +155,527 @@ void sub_GAME_7F0349BC(s32 slot)
  */
 s32 chraiitemsize(u8 *AIList, s32 offset)
 {
-    //matches only as u8* despite text evidence of ai->val structs
+    // matches only as u8* despite text evidence of ai->val structs
     switch (AIList[offset])
     {
-        //Cant Use CMD Builder due to different order...
+        // Cant Use CMD Builder due to different order...
 #if defined(USECMDBUILDER)
-#    ifndef _SYNHILITE
-#        define _AI_CMD(CMD)                                             /*  \
-                                                                          */ \
-            case CAT(AI_, CMDNAME):                                      /*  \
-                                                                          */ \
+    #ifndef _SYNHILITE
+        #define _AI_CMD(CMD)        /*  \
+                                     */ \
+            case CAT(AI_, CMDNAME): /*  \
+                                     */ \
                 return CAT(CAT(AI_, CMDNAME), _LENGTH);
-#        define _AI_DEBUG()
-#        define _AI_CMD_POLYMORPH(CMD, A, P, Q, D)
-#        define DEFINE(x)
-#        include <aicommands.def>
-#    endif
+        #define _AI_DEBUG()
+        #define _AI_CMD_POLYMORPH(CMD, A, P, Q, D)
+        #define DEFINE(x)
+        #include <aicommands.def>
+    #endif
 #endif
         case AI_GotoNext:
-            return AI_GotoNext_LENGTH;
+            return sizeof(AiGotoNextRecord);
         case AI_GotoFirst:
-            return AI_GotoFirst_LENGTH;
+            return sizeof(AiGotoFirstRecord);
         case AI_Label:
-            return AI_Label_LENGTH;
+            return sizeof(AiLabelRecord);
         case AI_Yield:
-            return AI_Yield_LENGTH;
+            return sizeof(AiYieldRecord);
         case AI_EndList:
-            return AI_EndList_LENGTH;
+            return sizeof(AiEndListRecord);
         case AI_SetChrAiList:
-            return AI_SetChrAiList_LENGTH;
+            return sizeof(AiSetChrAiListRecord);
         case AI_SetReturnAiList:
-            return AI_SetReturnAiList_LENGTH;
+            return sizeof(AiSetReturnAiListRecord);
         case AI_Return:
-            return AI_Return_LENGTH;
+            return sizeof(AiReturnRecord);
         case AI_Stop:
-            return AI_Stop_LENGTH;
+            return sizeof(AiStopRecord);
         case AI_Kneel:
-            return AI_Kneel_LENGTH;
+            return sizeof(AiKneelRecord);
         case AI_PlayAnimation:
-            return AI_PlayAnimation_LENGTH;
+            return sizeof(AiPlayAnimationRecord);
         case AI_IFPlayingAnimation:
-            return AI_IFPlayingAnimation_LENGTH;
+            return sizeof(AiIFPlayingAnimationRecord);
         case AI_PointAtBond:
-            return AI_PointAtBond_LENGTH;
+            return sizeof(AiPointAtBondRecord);
         case AI_LookSurprised:
-            return AI_LookSurprised_LENGTH;
+            return sizeof(AiLookSurprisedRecord);
         case AI_TRYSidestepping:
-            return AI_TRYSidestepping_LENGTH;
+            return sizeof(AiTRYSidesteppingRecord);
         case AI_TRYSideHopping:
-            return AI_TRYSideHopping_LENGTH;
+            return sizeof(AiTRYSideHoppingRecord);
         case AI_TRYSideRunning:
-            return AI_TRYSideRunning_LENGTH;
+            return sizeof(AiTRYSideRunningRecord);
         case AI_TRYFiringWalk:
-            return AI_TRYFiringWalk_LENGTH;
+            return sizeof(AiTRYFiringWalkRecord);
         case AI_TRYFiringRun:
-            return AI_TRYFiringRun_LENGTH;
+            return sizeof(AiTRYFiringRunRecord);
         case AI_TRYFiringRoll:
-            return AI_TRYFiringRoll_LENGTH;
+            return sizeof(AiTRYFiringRollRecord);
         case AI_TRYFireOrAimAtTarget:
-            return AI_TRYFireOrAimAtTarget_LENGTH;
+            return sizeof(AiTRYFireOrAimAtTargetRecord);
         case AI_TRYFireOrAimAtTargetKneel:
-            return AI_TRYFireOrAimAtTargetKneel_LENGTH;
+            return sizeof(AiTRYFireOrAimAtTargetKneelRecord);
         case AI_IFImFiring: /* enum = 232 despite following enum = 21 in the list */
-            return AI_IFImFiring_LENGTH;
+            return sizeof(AiIFImFiringRecord);
         case AI_IFImFiringAndLockedForward: /* enum = 231 despite being followed by enum = 22 in the list */
-            return AI_IFImFiringAndLockedForward_LENGTH;
+            return sizeof(AiIFImFiringAndLockedForwardRecord);
         case AI_TRYFireOrAimAtTargetUpdate:
-            return AI_TRYFireOrAimAtTargetUpdate_LENGTH;
+            return sizeof(AiTRYFireOrAimAtTargetUpdateRecord);
         case AI_TRYFacingTarget:
-            return AI_TRYFacingTarget_LENGTH;
+            return sizeof(AiTRYFacingTargetRecord);
         case AI_HitChrWithItem:
-            return AI_HitChrWithItem_LENGTH;
+            return sizeof(AiHitChrWithItemRecord);
         case AI_ChrHitChr:
-            return AI_ChrHitChr_LENGTH;
+            return sizeof(AiChrHitChrRecord);
         case AI_TRYThrowingGrenade:
-            return AI_TRYThrowingGrenade_LENGTH;
+            return sizeof(AiTRYThrowingGrenadeRecord);
         case AI_TRYDroppingItem:
-            return AI_TRYDroppingItem_LENGTH;
+            return sizeof(AiTRYDroppingItemRecord);
         case AI_RunToPad:
-            return AI_RunToPad_LENGTH;
+            return sizeof(AiRunToPadRecord);
         case AI_RunToPadPreset:
-            return AI_RunToPadPreset_LENGTH;
+            return sizeof(AiRunToPadPresetRecord);
         case AI_WalkToPad:
-            return AI_WalkToPad_LENGTH;
+            return sizeof(AiWalkToPadRecord);
         case AI_SprintToPad:
-            return AI_SprintToPad_LENGTH;
+            return sizeof(AiSprintToPadRecord);
         case AI_StartPatrol:
-            return AI_StartPatrol_LENGTH;
+            return sizeof(AiStartPatrolRecord);
         case AI_Surrender:
-            return AI_Surrender_LENGTH;
+            return sizeof(AiSurrenderRecord);
         case AI_RemoveMe:
-            return AI_RemoveMe_LENGTH;
+            return sizeof(AiRemoveMeRecord);
         case AI_ChrRemoveInstant:
-            return AI_ChrRemoveInstant_LENGTH;
+            return sizeof(AiChrRemoveInstantRecord);
         case AI_TRYTriggeringAlarmAtPad:
-            return AI_TRYTriggeringAlarmAtPad_LENGTH;
+            return sizeof(AiTRYTriggeringAlarmAtPadRecord);
         case AI_AlarmOn:
-            return AI_AlarmOn_LENGTH;
+            return sizeof(AiAlarmOnRecord);
         case AI_AlarmOff:
-            return AI_AlarmOff_LENGTH;
+            return sizeof(AiAlarmOffRecord);
         case AI_TRYRunFromBond:
-            return AI_TRYRunFromBond_LENGTH;
+            return sizeof(AiTRYRunFromBondRecord);
         case AI_TRYRunToBond:
-            return AI_TRYRunToBond_LENGTH;
+            return sizeof(AiTRYRunToBondRecord);
         case AI_TRYWalkToBond:
-            return AI_TRYWalkToBond_LENGTH;
+            return sizeof(AiTRYWalkToBondRecord);
         case AI_TRYSprintToBond:
-            return AI_TRYSprintToBond_LENGTH;
+            return sizeof(AiTRYSprintToBondRecord);
         case AI_TRYFindCover:
-            return AI_TRYFindCover_LENGTH;
+            return sizeof(AiTRYFindCoverRecord);
         case AI_TRYRunToChr:
-            return AI_TRYRunToChr_LENGTH;
+            return sizeof(AiTRYRunToChrRecord);
         case AI_TRYWalkToChr:
-            return AI_TRYWalkToChr_LENGTH;
+            return sizeof(AiTRYWalkToChrRecord);
         case AI_TRYSprintToChr:
-            return AI_TRYSprintToChr_LENGTH;
+            return sizeof(AiTRYSprintToChrRecord);
         case AI_IFImOnPatrolOrStopped:
-            return AI_IFImOnPatrolOrStopped_LENGTH;
+            return sizeof(AiIFImOnPatrolOrStoppedRecord);
         case AI_IFChrDyingOrDead:
-            return AI_IFChrDyingOrDead_LENGTH;
+            return sizeof(AiIFChrDyingOrDeadRecord);
         case AI_IFChrDoesNotExist:
-            return AI_IFChrDoesNotExist_LENGTH;
+            return sizeof(AiIFChrDoesNotExistRecord);
         case AI_IFISeeBond:
-            return AI_IFISeeBond_LENGTH;
+            return sizeof(AiIFISeeBondRecord);
         case AI_SetNewRandom:
-            return AI_SetNewRandom_LENGTH;
+            return sizeof(AiSetNewRandomRecord);
         case AI_IFRandomLessThan:
-            return AI_IFRandomLessThan_LENGTH;
+            return sizeof(AiIFRandomLessThanRecord);
         case AI_IFRandomGreaterThan:
-            return AI_IFRandomGreaterThan_LENGTH;
+            return sizeof(AiIFRandomGreaterThanRecord);
         case AI_IFICanHearAlarm:
-            return AI_IFICanHearAlarm_LENGTH;
+            return sizeof(AiIFICanHearAlarmRecord);
         case AI_IFAlarmIsOn:
-            return AI_IFAlarmIsOn_LENGTH;
+            return sizeof(AiIFAlarmIsOnRecord);
         case AI_IFGasIsLeaking:
-            return AI_IFGasIsLeaking_LENGTH;
+            return sizeof(AiIFGasIsLeakingRecord);
         case AI_IFIHeardBond:
-            return AI_IFIHeardBond_LENGTH;
+            return sizeof(AiIFIHeardBondRecord);
         case AI_IFISeeSomeoneShot:
-            return AI_IFISeeSomeoneShot_LENGTH;
+            return sizeof(AiIFISeeSomeoneShotRecord);
         case AI_IFISeeSomeoneDie:
-            return AI_IFISeeSomeoneDie_LENGTH;
+            return sizeof(AiIFISeeSomeoneDieRecord);
         case AI_IFICouldSeeBond:
-            return AI_IFICouldSeeBond_LENGTH;
+            return sizeof(AiIFICouldSeeBondRecord);
         case AI_IFICouldSeeBondsStan:
-            return AI_IFICouldSeeBondsStan_LENGTH;
+            return sizeof(AiIFICouldSeeBondsStanRecord);
         case AI_IFIWasShotRecently:
-            return AI_IFIWasShotRecently_LENGTH;
+            return sizeof(AiIFIWasShotRecentlyRecord);
         case AI_IFIHeardBondRecently:
-            return AI_IFIHeardBondRecently_LENGTH;
+            return sizeof(AiIFIHeardBondRecentlyRecord);
         case AI_IFImInRoomWithChr:
-            return AI_IFImInRoomWithChr_LENGTH;
+            return sizeof(AiIFImInRoomWithChrRecord);
         case AI_IFIveNotBeenSeen:
-            return AI_IFIveNotBeenSeen_LENGTH;
+            return sizeof(AiIFIveNotBeenSeenRecord);
         case AI_IFImOnScreen:
-            return AI_IFImOnScreen_LENGTH;
+            return sizeof(AiIFImOnScreenRecord);
         case AI_IFMyRoomIsOnScreen:
-            return AI_IFMyRoomIsOnScreen_LENGTH;
+            return sizeof(AiIFMyRoomIsOnScreenRecord);
         case AI_IFRoomWithPadIsOnScreen:
-            return AI_IFRoomWithPadIsOnScreen_LENGTH;
+            return sizeof(AiIFRoomWithPadIsOnScreenRecord);
         case AI_IFImTargetedByBond:
-            return AI_IFImTargetedByBond_LENGTH;
+            return sizeof(AiIFImTargetedByBondRecord);
         case AI_IFBondMissedMe:
-            return AI_IFBondMissedMe_LENGTH;
+            return sizeof(AiIFBondMissedMeRecord);
         case AI_IFMyAngleToBondLessThan:
-            return AI_IFMyAngleToBondLessThan_LENGTH;
+            return sizeof(AiIFMyAngleToBondLessThanRecord);
         case AI_IFMyAngleToBondGreaterThan:
-            return AI_IFMyAngleToBondGreaterThan_LENGTH;
+            return sizeof(AiIFMyAngleToBondGreaterThanRecord);
         case AI_IFMyAngleFromBondLessThan:
-            return AI_IFMyAngleFromBondLessThan_LENGTH;
+            return sizeof(AiIFMyAngleFromBondLessThanRecord);
         case AI_IFMyAngleFromBondGreaterThan:
-            return AI_IFMyAngleFromBondGreaterThan_LENGTH;
+            return sizeof(AiIFMyAngleFromBondGreaterThanRecord);
         case AI_IFMyDistanceToBondLessThanDecimeter:
-            return AI_IFMyDistanceToBondLessThanDecimeter_LENGTH;
+            return sizeof(AiIFMyDistanceToBondLessThanDecimeterRecord);
         case AI_IFMyDistanceToBondGreaterThanDecimeter:
-            return AI_IFMyDistanceToBondGreaterThanDecimeter_LENGTH;
+            return sizeof(AiIFMyDistanceToBondGreaterThanDecimeterRecord);
         case AI_IFChrDistanceToPadLessThanDecimeter:
-            return AI_IFChrDistanceToPadLessThanDecimeter_LENGTH;
+            return sizeof(AiIFChrDistanceToPadLessThanDecimeterRecord);
         case AI_IFChrDistanceToPadGreaterThanDecimeter:
-            return AI_IFChrDistanceToPadGreaterThanDecimeter_LENGTH;
+            return sizeof(AiIFChrDistanceToPadGreaterThanDecimeterRecord);
         case AI_IFMyDistanceToChrLessThanDecimeter:
-            return AI_IFMyDistanceToChrLessThanDecimeter_LENGTH;
+            return sizeof(AiIFMyDistanceToChrLessThanDecimeterRecord);
         case AI_IFMyDistanceToChrGreaterThanDecimeter:
-            return AI_IFMyDistanceToChrGreaterThanDecimeter_LENGTH;
+            return sizeof(AiIFMyDistanceToChrGreaterThanDecimeterRecord);
         case AI_TRYSettingMyPresetToChrWithinDistanceDecimeter:
-            return AI_TRYSettingMyPresetToChrWithinDistanceDecimeter_LENGTH;
+            return sizeof(AiTRYSettingMyPresetToChrWithinDistanceDecimeterRecord);
         case AI_IFBondDistanceToPadLessThanDecimeter:
-            return AI_IFBondDistanceToPadLessThanDecimeter_LENGTH;
+            return sizeof(AiIFBondDistanceToPadLessThanDecimeterRecord);
         case AI_IFBondDistanceToPadGreaterThanDecimeter:
-            return AI_IFBondDistanceToPadGreaterThanDecimeter_LENGTH;
+            return sizeof(AiIFBondDistanceToPadGreaterThanDecimeterRecord);
         case AI_IFChrInRoomWithPad:
-            return AI_IFChrInRoomWithPad_LENGTH;
+            return sizeof(AiIFChrInRoomWithPadRecord);
         case AI_IFBondInRoomWithPad:
-            return AI_IFBondInRoomWithPad_LENGTH;
+            return sizeof(AiIFBondInRoomWithPadRecord);
         case AI_IFBondCollectedObject:
-            return AI_IFBondCollectedObject_LENGTH;
+            return sizeof(AiIFBondCollectedObjectRecord);
         case AI_IFKeyDropped:
-            return AI_IFKeyDropped_LENGTH;
+            return sizeof(AiIFKeyDroppedRecord);
         case AI_IFItemIsAttachedToObject:
-            return AI_IFItemIsAttachedToObject_LENGTH;
+            return sizeof(AiIFItemIsAttachedToObjectRecord);
         case AI_IFBondHasItemEquipped:
-            return AI_IFBondHasItemEquipped_LENGTH;
+            return sizeof(AiIFBondHasItemEquippedRecord);
         case AI_IFObjectExists:
-            return AI_IFObjectExists_LENGTH;
+            return sizeof(AiIFObjectExistsRecord);
         case AI_IFObjectNotDestroyed:
-            return AI_IFObjectNotDestroyed_LENGTH;
+            return sizeof(AiIFObjectNotDestroyedRecord);
         case AI_IFObjectWasActivated:
-            return AI_IFObjectWasActivated_LENGTH;
+            return sizeof(AiIFObjectWasActivatedRecord);
         case AI_IFBondUsedGadgetOnObject:
-            return AI_IFBondUsedGadgetOnObject_LENGTH;
+            return sizeof(AiIFBondUsedGadgetOnObjectRecord);
         case AI_ActivateObject:
-            return AI_ActivateObject_LENGTH;
+            return sizeof(AiActivateObjectRecord);
         case AI_DestroyObject:
-            return AI_DestroyObject_LENGTH;
+            return sizeof(AiDestroyObjectRecord);
         case AI_DropObject:
-            return AI_DropObject_LENGTH;
+            return sizeof(AiDropObjectRecord);
         case AI_ChrDropAllConcealedItems:
-            return AI_ChrDropAllConcealedItems_LENGTH;
+            return sizeof(AiChrDropAllConcealedItemsRecord);
         case AI_ChrDropAllHeldItems:
-            return AI_ChrDropAllHeldItems_LENGTH;
+            return sizeof(AiChrDropAllHeldItemsRecord);
         case AI_BondCollectObject:
-            return AI_BondCollectObject_LENGTH;
+            return sizeof(AiBondCollectObjectRecord);
         case AI_ChrEquipObject:
-            return AI_ChrEquipObject_LENGTH;
+            return sizeof(AiChrEquipObjectRecord);
         case AI_MoveObject:
-            return AI_MoveObject_LENGTH;
+            return sizeof(AiMoveObjectRecord);
         case AI_DoorOpen:
-            return AI_DoorOpen_LENGTH;
+            return sizeof(AiDoorOpenRecord);
         case AI_DoorClose:
-            return AI_DoorClose_LENGTH;
+            return sizeof(AiDoorCloseRecord);
         case AI_IFDoorStateEqual:
-            return AI_IFDoorStateEqual_LENGTH;
+            return sizeof(AiIFDoorStateEqualRecord);
         case AI_IFDoorHasBeenOpenedBefore:
-            return AI_IFDoorHasBeenOpenedBefore_LENGTH;
+            return sizeof(AiIFDoorHasBeenOpenedBeforeRecord);
         case AI_DoorSetLock:
-            return AI_DoorSetLock_LENGTH;
+            return sizeof(AiDoorSetLockRecord);
         case AI_DoorUnsetLock:
-            return AI_DoorUnsetLock_LENGTH;
+            return sizeof(AiDoorUnsetLockRecord);
         case AI_IFDoorLockEqual:
-            return AI_IFDoorLockEqual_LENGTH;
+            return sizeof(AiIFDoorLockEqualRecord);
         case AI_IFObjectiveNumComplete:
-            return AI_IFObjectiveNumComplete_LENGTH;
+            return sizeof(AiIFObjectiveNumCompleteRecord);
         case AI_TRYUnknown6e:
-            return AI_TRYUnknown6e_LENGTH;
+            return sizeof(AiTRYUnknown6eRecord);
         case AI_TRYUnknown6f:
-            return AI_TRYUnknown6f_LENGTH;
+            return sizeof(AiTRYUnknown6fRecord);
         case AI_IFGameDifficultyLessThan:
-            return AI_IFGameDifficultyLessThan_LENGTH;
+            return sizeof(AiIFGameDifficultyLessThanRecord);
         case AI_IFGameDifficultyGreaterThan:
-            return AI_IFGameDifficultyGreaterThan_LENGTH;
+            return sizeof(AiIFGameDifficultyGreaterThanRecord);
         case AI_IFMissionTimeLessThan:
-            return AI_IFMissionTimeLessThan_LENGTH;
+            return sizeof(AiIFMissionTimeLessThanRecord);
         case AI_IFMissionTimeGreaterThan:
-            return AI_IFMissionTimeGreaterThan_LENGTH;
+            return sizeof(AiIFMissionTimeGreaterThanRecord);
         case AI_IFSystemPowerTimeLessThan:
-            return AI_IFSystemPowerTimeLessThan_LENGTH;
+            return sizeof(AiIFSystemPowerTimeLessThanRecord);
         case AI_IFSystemPowerTimeGreaterThan:
-            return AI_IFSystemPowerTimeGreaterThan_LENGTH;
+            return sizeof(AiIFSystemPowerTimeGreaterThanRecord);
         case AI_IFLevelIdLessThan:
-            return AI_IFLevelIdLessThan_LENGTH;
+            return sizeof(AiIFLevelIdLessThanRecord);
         case AI_IFLevelIdGreaterThan:
-            return AI_IFLevelIdGreaterThan_LENGTH;
+            return sizeof(AiIFLevelIdGreaterThanRecord);
         case AI_IFMyNumArghsLessThan:
-            return AI_IFMyNumArghsLessThan_LENGTH;
+            return sizeof(AiIFMyNumArghsLessThanRecord);
         case AI_IFMyNumArghsGreaterThan:
-            return AI_IFMyNumArghsGreaterThan_LENGTH;
+            return sizeof(AiIFMyNumArghsGreaterThanRecord);
         case AI_IFMyNumCloseArghsLessThan:
-            return AI_IFMyNumCloseArghsLessThan_LENGTH;
+            return sizeof(AiIFMyNumCloseArghsLessThanRecord);
         case AI_IFMyNumCloseArghsGreaterThan:
-            return AI_IFMyNumCloseArghsGreaterThan_LENGTH;
+            return sizeof(AiIFMyNumCloseArghsGreaterThanRecord);
         case AI_IFChrHealthLessThan:
-            return AI_IFChrHealthLessThan_LENGTH;
+            return sizeof(AiIFChrHealthLessThanRecord);
         case AI_IFChrHealthGreaterThan:
-            return AI_IFChrHealthGreaterThan_LENGTH;
+            return sizeof(AiIFChrHealthGreaterThanRecord);
         case AI_IFChrWasDamagedSinceLastCheck:
-            return AI_IFChrWasDamagedSinceLastCheck_LENGTH;
+            return sizeof(AiIFChrWasDamagedSinceLastCheckRecord);
         case AI_IFBondHealthLessThan:
-            return AI_IFBondHealthLessThan_LENGTH;
+            return sizeof(AiIFBondHealthLessThanRecord);
         case AI_IFBondHealthGreaterThan:
-            return AI_IFBondHealthGreaterThan_LENGTH;
+            return sizeof(AiIFBondHealthGreaterThanRecord);
         case AI_SetMyMorale:
-            return AI_SetMyMorale_LENGTH;
+            return sizeof(AiSetMyMoraleRecord);
         case AI_AddToMyMorale:
-            return AI_AddToMyMorale_LENGTH;
+            return sizeof(AiAddToMyMoraleRecord);
         case AI_SubtractFromMyMorale:
-            return AI_SubtractFromMyMorale_LENGTH;
+            return sizeof(AiSubtractFromMyMoraleRecord);
         case AI_IFMyMoraleLessThan:
-            return AI_IFMyMoraleLessThan_LENGTH;
+            return sizeof(AiIFMyMoraleLessThanRecord);
         case AI_IFMyMoraleLessThanRandom:
-            return AI_IFMyMoraleLessThanRandom_LENGTH;
+            return sizeof(AiIFMyMoraleLessThanRandomRecord);
         case AI_SetMyAlertness:
-            return AI_SetMyAlertness_LENGTH;
+            return sizeof(AiSetMyAlertnessRecord);
         case AI_AddToMyAlertness:
-            return AI_AddToMyAlertness_LENGTH;
+            return sizeof(AiAddToMyAlertnessRecord);
         case AI_SubtractFromMyAlertness:
-            return AI_SubtractFromMyAlertness_LENGTH;
+            return sizeof(AiSubtractFromMyAlertnessRecord);
         case AI_IFMyAlertnessLessThan:
-            return AI_IFMyAlertnessLessThan_LENGTH;
+            return sizeof(AiIFMyAlertnessLessThanRecord);
         case AI_IFMyAlertnessLessThanRandom:
-            return AI_IFMyAlertnessLessThanRandom_LENGTH;
+            return sizeof(AiIFMyAlertnessLessThanRandomRecord);
         case AI_SetMyHearingScale:
-            return AI_SetMyHearingScale_LENGTH;
+            return sizeof(AiSetMyHearingScaleRecord);
         case AI_SetMyVisionRange:
-            return AI_SetMyVisionRange_LENGTH;
+            return sizeof(AiSetMyVisionRangeRecord);
         case AI_SetMyGrenadeProbability:
-            return AI_SetMyGrenadeProbability_LENGTH;
+            return sizeof(AiSetMyGrenadeProbabilityRecord);
         case AI_SetMyChrNum:
-            return AI_SetMyChrNum_LENGTH;
+            return sizeof(AiSetMyChrNumRecord);
         case AI_SetMyHealthTotal:
-            return AI_SetMyHealthTotal_LENGTH;
+            return sizeof(AiSetMyHealthTotalRecord);
         case AI_SetMyArmour:
-            return AI_SetMyArmour_LENGTH;
+            return sizeof(AiSetMyArmourRecord);
         case AI_SetMySpeedRating:
-            return AI_SetMySpeedRating_LENGTH;
+            return sizeof(AiSetMySpeedRatingRecord);
         case AI_SetMyArghRating:
-            return AI_SetMyArghRating_LENGTH;
+            return sizeof(AiSetMyArghRatingRecord);
         case AI_SetMyAccuracyRating:
-            return AI_SetMyAccuracyRating_LENGTH;
+            return sizeof(AiSetMyAccuracyRatingRecord);
         case AI_SetMyFlags2:
-            return AI_SetMyFlags2_LENGTH;
+            return sizeof(AiSetMyFlags2Record);
         case AI_UnsetMyFlags2:
-            return AI_UnsetMyFlags2_LENGTH;
+            return sizeof(AiUnsetMyFlags2Record);
         case AI_IFMyFlags2Has:
-            return AI_IFMyFlags2Has_LENGTH;
+            return sizeof(AiIFMyFlags2HasRecord);
         case AI_SetChrBitfield:
-            return AI_SetChrBitfield_LENGTH;
+            return sizeof(AiSetChrBitfieldRecord);
         case AI_UnsetChrBitfield:
-            return AI_UnsetChrBitfield_LENGTH;
+            return sizeof(AiUnsetChrBitfieldRecord);
         case AI_IFChrBitfieldHas:
-            return AI_IFChrBitfieldHas_LENGTH;
+            return sizeof(AiIFChrBitfieldHasRecord);
         case AI_SetObjectiveBitfield:
-            return AI_SetObjectiveBitfield_LENGTH;
+            return sizeof(AiSetObjectiveBitfieldRecord);
         case AI_UnsetObjectiveBitfield:
-            return AI_UnsetObjectiveBitfield_LENGTH;
+            return sizeof(AiUnsetObjectiveBitfieldRecord);
         case AI_IFObjectiveBitfieldHas:
-            return AI_IFObjectiveBitfieldHas_LENGTH;
+            return sizeof(AiIFObjectiveBitfieldHasRecord);
         case AI_SetMychrflags:
-            return AI_SetMychrflags_LENGTH;
+            return sizeof(AiSetMychrflagsRecord);
         case AI_UnsetMychrflags:
-            return AI_UnsetMychrflags_LENGTH;
+            return sizeof(AiUnsetMychrflagsRecord);
         case AI_IFMychrflagsHas:
-            return AI_IFMychrflagsHas_LENGTH;
+            return sizeof(AiIFMychrflagsHasRecord);
         case AI_SetChrchrflags:
-            return AI_SetChrchrflags_LENGTH;
+            return sizeof(AiSetChrchrflagsRecord);
         case AI_UnsetChrchrflags:
-            return AI_UnsetChrchrflags_LENGTH;
+            return sizeof(AiUnsetChrchrflagsRecord);
         case AI_IFChrchrflagsHas:
-            return AI_IFChrchrflagsHas_LENGTH;
+            return sizeof(AiIFChrchrflagsHasRecord);
         case AI_SetObjectFlags:
-            return AI_SetObjectFlags_LENGTH;
+            return sizeof(AiSetObjectFlagsRecord);
         case AI_UnsetObjectFlags:
-            return AI_UnsetObjectFlags_LENGTH;
+            return sizeof(AiUnsetObjectFlagsRecord);
         case AI_IFObjectFlagsHas:
-            return AI_IFObjectFlagsHas_LENGTH;
+            return sizeof(AiIFObjectFlagsHasRecord);
         case AI_SetObjectFlags2:
-            return AI_SetObjectFlags2_LENGTH;
+            return sizeof(AiSetObjectFlags2Record);
         case AI_UnsetObjectFlags2:
-            return AI_UnsetObjectFlags2_LENGTH;
+            return sizeof(AiUnsetObjectFlags2Record);
         case AI_IFObjectFlags2Has:
-            return AI_IFObjectFlags2Has_LENGTH;
+            return sizeof(AiIFObjectFlags2HasRecord);
         case AI_SetMyChrPreset:
-            return AI_SetMyChrPreset_LENGTH;
+            return sizeof(AiSetMyChrPresetRecord);
         case AI_SetChrChrPreset:
-            return AI_SetChrChrPreset_LENGTH;
+            return sizeof(AiSetChrChrPresetRecord);
         case AI_SetMyPadPreset:
-            return AI_SetMyPadPreset_LENGTH;
+            return sizeof(AiSetMyPadPresetRecord);
         case AI_SetChrPadPreset:
-            return AI_SetChrPadPreset_LENGTH;
+            return sizeof(AiSetChrPadPresetRecord);
         case AI_MyTimerStart:
-            return AI_MyTimerStart_LENGTH;
+            return sizeof(AiMyTimerStartRecord);
         case AI_MyTimerReset:
-            return AI_MyTimerReset_LENGTH;
+            return sizeof(AiMyTimerResetRecord);
         case AI_MyTimerPause:
-            return AI_MyTimerPause_LENGTH;
+            return sizeof(AiMyTimerPauseRecord);
         case AI_MyTimerResume:
-            return AI_MyTimerResume_LENGTH;
+            return sizeof(AiMyTimerResumeRecord);
         case AI_IFMyTimerIsNotRunning:
-            return AI_IFMyTimerIsNotRunning_LENGTH;
+            return sizeof(AiIFMyTimerIsNotRunningRecord);
         case AI_IFMyTimerLessThanTicks:
-            return AI_IFMyTimerLessThanTicks_LENGTH;
+            return sizeof(AiIFMyTimerLessThanTicksRecord);
         case AI_IFMyTimerGreaterThanTicks:
-            return AI_IFMyTimerGreaterThanTicks_LENGTH;
+            return sizeof(AiIFMyTimerGreaterThanTicksRecord);
         case AI_HudCountdownShow:
-            return AI_HudCountdownShow_LENGTH;
+            return sizeof(AiHudCountdownShowRecord);
         case AI_HudCountdownHide:
-            return AI_HudCountdownHide_LENGTH;
+            return sizeof(AiHudCountdownHideRecord);
         case AI_HudCountdownSet:
-            return AI_HudCountdownSet_LENGTH;
+            return sizeof(AiHudCountdownSetRecord);
         case AI_HudCountdownStop:
-            return AI_HudCountdownStop_LENGTH;
+            return sizeof(AiHudCountdownStopRecord);
         case AI_HudCountdownStart:
-            return AI_HudCountdownStart_LENGTH;
+            return sizeof(AiHudCountdownStartRecord);
         case AI_IFHudCountdownIsNotRunning:
-            return AI_IFHudCountdownIsNotRunning_LENGTH;
+            return sizeof(AiIFHudCountdownIsNotRunningRecord);
         case AI_IFHudCountdownLessThan:
-            return AI_IFHudCountdownLessThan_LENGTH;
+            return sizeof(AiIFHudCountdownLessThanRecord);
         case AI_IFHudCountdownGreaterThan:
-            return AI_IFHudCountdownGreaterThan_LENGTH;
+            return sizeof(AiIFHudCountdownGreaterThanRecord);
         case AI_TRYSpawningChrAtPad:
-            return AI_TRYSpawningChrAtPad_LENGTH;
+            return sizeof(AiTRYSpawningChrAtPadRecord);
         case AI_TRYSpawningChrNextToChr:
-            return AI_TRYSpawningChrNextToChr_LENGTH;
+            return sizeof(AiTRYSpawningChrNextToChrRecord);
         case AI_TRYGiveMeItem:
-            return AI_TRYGiveMeItem_LENGTH;
+            return sizeof(AiTRYGiveMeItemRecord);
         case AI_TRYGiveMeHat:
-            return AI_TRYGiveMeHat_LENGTH;
+            return sizeof(AiTRYGiveMeHatRecord);
         case AI_TRYCloningChr:
-            return AI_TRYCloningChr_LENGTH;
+            return sizeof(AiTRYCloningChrRecord);
         case AI_TextPrintBottom:
-            return AI_TextPrintBottom_LENGTH;
+            return sizeof(AiTextPrintBottomRecord);
         case AI_TextPrintTop:
-            return AI_TextPrintTop_LENGTH;
+            return sizeof(AiTextPrintTopRecord);
         case AI_SfxPlay:
-            return AI_SfxPlay_LENGTH;
+            return sizeof(AiSfxPlayRecord);
         case AI_SfxEmitFromObject:
-            return AI_SfxEmitFromObject_LENGTH;
+            return sizeof(AiSfxEmitFromObjectRecord);
         case AI_SfxEmitFromPad:
-            return AI_SfxEmitFromPad_LENGTH;
+            return sizeof(AiSfxEmitFromPadRecord);
         case AI_SfxSetChannelVolume:
-            return AI_SfxSetChannelVolume_LENGTH;
+            return sizeof(AiSfxSetChannelVolumeRecord);
         case AI_SfxFadeChannelVolume:
-            return AI_SfxFadeChannelVolume_LENGTH;
+            return sizeof(AiSfxFadeChannelVolumeRecord);
         case AI_SfxStopChannel:
-            return AI_SfxStopChannel_LENGTH;
+            return sizeof(AiSfxStopChannelRecord);
         case AI_IFSfxChannelVolumeLessThan:
-            return AI_IFSfxChannelVolumeLessThan_LENGTH;
+            return sizeof(AiIFSfxChannelVolumeLessThanRecord);
         case AI_VehicleStartPath:
-            return AI_VehicleStartPath_LENGTH;
+            return sizeof(AiVehicleStartPathRecord);
         case AI_VehicleSpeed:
-            return AI_VehicleSpeed_LENGTH;
+            return sizeof(AiVehicleSpeedRecord);
         case AI_AircraftRotorSpeed:
-            return AI_AircraftRotorSpeed_LENGTH;
+            return sizeof(AiAircraftRotorSpeedRecord);
         case AI_IFCameraIsInIntro:
-            return AI_IFCameraIsInIntro_LENGTH;
+            return sizeof(AiIFCameraIsInIntroRecord);
         case AI_IFCameraIsInBondSwirl:
-            return AI_IFCameraIsInBondSwirl_LENGTH;
+            return sizeof(AiIFCameraIsInBondSwirlRecord);
         case AI_TvChangeScreenBank:
-            return AI_TvChangeScreenBank_LENGTH;
+            return sizeof(AiTvChangeScreenBankRecord);
         case AI_IFBondInTank:
-            return AI_IFBondInTank_LENGTH;
+            return sizeof(AiIFBondInTankRecord);
         case AI_EndLevel:
-            return AI_EndLevel_LENGTH;
+            return sizeof(AiEndLevelRecord);
         case AI_CameraReturnToBond:
-            return AI_CameraReturnToBond_LENGTH;
+            return sizeof(AiCameraReturnToBondRecord);
         case AI_CameraLookAtBondFromPad:
-            return AI_CameraLookAtBondFromPad_LENGTH;
+            return sizeof(AiCameraLookAtBondFromPadRecord);
         case AI_CameraSwitch:
-            return AI_CameraSwitch_LENGTH;
+            return sizeof(AiCameraSwitchRecord);
         case AI_IFBondYPosLessThan:
-            return AI_IFBondYPosLessThan_LENGTH;
+            return sizeof(AiIFBondYPosLessThanRecord);
         case AI_BondDisableControl:
-            return AI_BondDisableControl_LENGTH;
+            return sizeof(AiBondDisableControlRecord);
         case AI_BondEnableControl:
-            return AI_BondEnableControl_LENGTH;
+            return sizeof(AiBondEnableControlRecord);
         case AI_TRYTeleportingChrToPad:
-            return AI_TRYTeleportingChrToPad_LENGTH;
+            return sizeof(AiTRYTeleportingChrToPadRecord);
         case AI_ScreenFadeToBlack:
-            return AI_ScreenFadeToBlack_LENGTH;
+            return sizeof(AiScreenFadeToBlackRecord);
         case AI_ScreenFadeFromBlack:
-            return AI_ScreenFadeFromBlack_LENGTH;
+            return sizeof(AiScreenFadeFromBlackRecord);
         case AI_IFScreenFadeCompleted:
-            return AI_IFScreenFadeCompleted_LENGTH;
+            return sizeof(AiIFScreenFadeCompletedRecord);
         case AI_HideAllChrs:
-            return AI_HideAllChrs_LENGTH;
+            return sizeof(AiHideAllChrsRecord);
         case AI_ShowAllChrs:
-            return AI_ShowAllChrs_LENGTH;
+            return sizeof(AiShowAllChrsRecord);
         case AI_DoorOpenInstant:
-            return AI_DoorOpenInstant_LENGTH;
+            return sizeof(AiDoorOpenInstantRecord);
         case AI_ChrRemoveItemInHand:
-            return AI_ChrRemoveItemInHand_LENGTH;
+            return sizeof(AiChrRemoveItemInHandRecord);
         case AI_IfNumberOfActivePlayersLessThan:
-            return AI_IfNumberOfActivePlayersLessThan_LENGTH;
+            return sizeof(AiIfNumberOfActivePlayersLessThanRecord);
         case AI_IFBondItemTotalAmmoLessThan:
-            return AI_IFBondItemTotalAmmoLessThan_LENGTH;
+            return sizeof(AiIFBondItemTotalAmmoLessThanRecord);
         case AI_BondEquipItem:
-            return AI_BondEquipItem_LENGTH;
+            return sizeof(AiBondEquipItemRecord);
         case AI_BondEquipItemCinema:
-            return AI_BondEquipItemCinema_LENGTH;
+            return sizeof(AiBondEquipItemCinemaRecord);
         case AI_BondSetLockedVelocity:
-            return AI_BondSetLockedVelocity_LENGTH;
+            return sizeof(AiBondSetLockedVelocityRecord);
         case AI_IFObjectInRoomWithPad:
-            return AI_IFObjectInRoomWithPad_LENGTH;
+            return sizeof(AiIFObjectInRoomWithPadRecord);
         case AI_SwitchSky:
-            return AI_SwitchSky_LENGTH;
+            return sizeof(AiSwitchSkyRecord);
         case AI_TriggerFadeAndExitLevelOnButtonPress:
-            return AI_TriggerFadeAndExitLevelOnButtonPress_LENGTH;
+            return sizeof(AiTriggerFadeAndExitLevelOnButtonPressRecord);
         case AI_IFBondIsDead:
-            return AI_IFBondIsDead_LENGTH;
+            return sizeof(AiIFBondIsDeadRecord);
         case AI_BondDisableDamageAndPickups:
-            return AI_BondDisableDamageAndPickups_LENGTH;
+            return sizeof(AiBondDisableDamageAndPickupsRecord);
         case AI_BondHideWeapons:
-            return AI_BondHideWeapons_LENGTH;
+            return sizeof(AiBondHideWeaponsRecord);
         case AI_CameraOrbitPad:
-            return AI_CameraOrbitPad_LENGTH;
+            return sizeof(AiCameraOrbitPadRecord);
         case AI_CreditsRoll:
-            return AI_CreditsRoll_LENGTH;
+            return sizeof(AiCreditsRollRecord);
         case AI_IFCreditsHasCompleted:
-            return AI_IFCreditsHasCompleted_LENGTH;
+            return sizeof(AiIFCreditsHasCompletedRecord);
         case AI_IFObjectiveAllCompleted:
-            return AI_IFObjectiveAllCompleted_LENGTH;
+            return sizeof(AiIFObjectiveAllCompletedRecord);
         case AI_IFFolderActorIsEqual:
-            return AI_IFFolderActorIsEqual_LENGTH;
+            return sizeof(AiIFFolderActorIsEqualRecord);
         case AI_IFBondDamageAndPickupsDisabled:
-            return AI_IFBondDamageAndPickupsDisabled_LENGTH;
+            return sizeof(AiIFBondDamageAndPickupsDisabledRecord);
         case AI_MusicPlaySlot:
-            return AI_MusicPlaySlot_LENGTH;
+            return sizeof(AiMusicPlaySlotRecord);
         case AI_MusicStopSlot:
-            return AI_MusicStopSlot_LENGTH;
+            return sizeof(AiMusicStopSlotRecord);
         case AI_TriggerExplosionsAroundBond:
-            return AI_TriggerExplosionsAroundBond_LENGTH;
+            return sizeof(AiTriggerExplosionsAroundBondRecord);
         case AI_IFKilledCiviliansGreaterThan:
-            return AI_IFKilledCiviliansGreaterThan_LENGTH;
+            return sizeof(AiIFKilledCiviliansGreaterThanRecord);
         case AI_IFChrWasShotSinceLastCheck:
-            return AI_IFChrWasShotSinceLastCheck_LENGTH;
+            return sizeof(AiIFChrWasShotSinceLastCheckRecord);
         case AI_BondKilledInAction:
-            return AI_BondKilledInAction_LENGTH;
+            return sizeof(AiBondKilledInActionRecord);
         case AI_RaiseArms:
-            return AI_RaiseArms_LENGTH;
+            return sizeof(AiRaiseArmsRecord);
         case AI_GasLeakAndFadeFog:
-            return AI_GasLeakAndFadeFog_LENGTH;
+            return sizeof(AiGasLeakAndFadeFogRecord);
         case AI_ObjectRocketLaunch:
-            return AI_ObjectRocketLaunch_LENGTH;
+            return sizeof(AiObjectRocketLaunchRecord);
         case AI_PRINT:
         {
             s32 pos = offset + 1;
@@ -703,13 +686,12 @@ s32 chraiitemsize(u8 *AIList, s32 offset)
             return (pos - offset) + 1;
         }
         default:
-#       if defined(ENABLE_LOG)
+#if defined(ENABLE_LOG)
             osSyncPrintf("chraiitemsize: unknown type %d!\n", *AIList);
-#       endif
+#endif
             return 1;
     }
 }
-
 
 /**
  * Get ID of AIList
@@ -744,10 +726,6 @@ s32 chraiGetAIListID(AIRecord *AIList, bool *isGlobalAIList)
     return -1;
 }
 
-
-
-
-
 /**
  * GoTo Label
  * @param AIlist: AIList containing label
@@ -774,7 +752,7 @@ s32 chraiGoToLabel(AIRecord *AIList, s32 Offset, u8 LabelNum)
         {
             // restart ai list PC if next label not found - causes infinite loop outside of debug
             listID = chraiGetAIListID(AIList, &isGlobalAIList);
-#    ifdef DEBUG
+#ifdef DEBUG
             if (isGlobalAIList)
             {
                 debAIListTypeString = "global";
@@ -784,16 +762,13 @@ s32 chraiGoToLabel(AIRecord *AIList, s32 Offset, u8 LabelNum)
                 debAIListTypeString = "local";
             }
             osSyncPrintf("AI error: endlist reached jump label=%d %s list=%d!\n", LabelNum, debAIListTypeString, listID);
-#    endif
+#endif
             return 0;
         }
 
         Offset += chraiitemsize(AIList, Offset);
     }
 }
-
-
-
 
 AIRecord *ailistFindById(s32 ID)
 {
@@ -825,54 +800,42 @@ AIRecord *ailistFindById(s32 ID)
     return NULL;
 }
 
-
-
-
-
 PathRecord *pathFindById(s32 ID)
 {
     int i;
 
-        for  (i=0;g_CurrentSetup.patrolpaths[i].waypoints;i++)
+    for (i = 0; g_CurrentSetup.patrolpaths[i].waypoints; i++)
+    {
+        if (ID == g_CurrentSetup.patrolpaths[i].ID)
         {
-            if ( ID == g_CurrentSetup.patrolpaths[i].ID )
-            {
-                return &g_CurrentSetup.patrolpaths[i];
-            }
-
+            return &g_CurrentSetup.patrolpaths[i];
         }
+    }
 
     return NULL;
 }
 
-
-
-
-
-//forward
-extern void chrpropDelist(PropRecord *prop);
-extern PadRecord * dword_CODE_bss_800799F8;
+// forward
+extern void            chrpropDelist(PropRecord *prop);
+extern PadRecord      *dword_CODE_bss_800799F8;
 extern CutsceneRecord *gBondViewCutscene;
 extern enum CAMERAMODE dword_CODE_bss_80079A18;
-extern s32 dword_CODE_bss_80079A1C;
-extern vec3d g_ForceBondMoveOffset;
-//CODE.bss:80079A00
-extern f32 flt_CODE_bss_80079A00;
-//CODE.bss:80079A04
-extern f32 flt_CODE_bss_80079A04;
-//CODE.bss:80079A08
-extern f32 flt_CODE_bss_80079A08;
-//CODE.bss:80079A0C
-extern f32 flt_CODE_bss_80079A0C;
-//CODE.bss:80079A10
-extern f32 flt_CODE_bss_80079A10;
-//CODE.bss:80079A14
-extern s32 dword_CODE_bss_80079A14;
-extern bool g_isBondKIA;
-//end forward
-
-
-
+extern s32             dword_CODE_bss_80079A1C;
+extern vec3d           g_ForceBondMoveOffset;
+// CODE.bss:80079A00
+extern f32             flt_CODE_bss_80079A00;
+// CODE.bss:80079A04
+extern f32             flt_CODE_bss_80079A04;
+// CODE.bss:80079A08
+extern f32             flt_CODE_bss_80079A08;
+// CODE.bss:80079A0C
+extern f32             flt_CODE_bss_80079A0C;
+// CODE.bss:80079A10
+extern f32             flt_CODE_bss_80079A10;
+// CODE.bss:80079A14
+extern s32             dword_CODE_bss_80079A14;
+extern bool            g_isBondKIA;
+// end forward
 
 /**
  Execute AI List from Character, Stage, Vehichle(truck) or Aircraft(heli)
@@ -883,7 +846,7 @@ extern bool g_isBondKIA;
  @param         PROPTYPE_OBJ = Object (Vehichle or Aircraft)
  @canonical name ~ maybe
 */
-void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
+void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
 {
     /*
      * (void *Param, int ParamType) is the correct way to pass a variable
@@ -947,42 +910,42 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
              */
             switch ((AiListp + Offset)->cmd)
             {
-                //unfortunately we cannot use the cmdbuilder in matching rom as the ordering is not sequential
+                // unfortunately we cannot use the cmdbuilder in matching rom as the ordering is not sequential
 #ifdef USECMDBUILDER
     #define _AI_DEBUG_ID(CMD, AI_NUMBER_OF_PARAMS, PARAM, DESC)
     #define _AI_CMD_POLYMORPH(C, N, P1, P2, D)
     #define _AI_CMD_ID(CMD, AI_NUMBER_OF_PARAMS, PARAM, DESC, CODE) /*  HACK: Multiline Comments make Newlines in macro */ \
-                    case CAT(CAT(AI_, CMD), ):                      /*                                                     \
-                                                                    */                                                     \
-                        CODE
+        case CAT(CAT(AI_, CMD), ):                                  /*                                                     \
+                                                                     */                                                    \
+            CODE
     #include "aicommands.def"
 #else
                 case AI_GotoNext:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
-                    Offset        = chraiGoToLabel(AiListp, Offset, ai->val);
-#ifdef ENABLE_LOG
-                    osSyncPrintf("GOTO Next (%d)\n", ai->val);
-#endif
+                    AiGotoNextRecord *ai = AiListp + Offset;
+                    Offset               = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
+    #ifdef ENABLE_LOG
+                    osSyncPrintf("GOTO Next (%d)\n", ai->GOTOLABEL);
+    #endif
                     break;
                 }
                 case AI_GotoFirst:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
-                    Offset        = chraiGoToLabel(AiListp, 0, ai->val);
-#ifdef ENABLE_LOG
-                    osSyncPrintf("GOTO First (%d)\n", ai->val);
-#endif
+                    AiGotoFirstRecord *ai = AiListp + Offset;
+                    Offset                = chraiGoToLabel(AiListp, 0, ai->GOTOLABEL);
+    #ifdef ENABLE_LOG
+                    osSyncPrintf("GOTO First (%d)\n", ai->GOTOLABEL);
+    #endif
                     break;
                 }
                 case AI_Label:
                 {
-                    Offset += AI_Label_LENGTH;
+                    Offset += sizeof(AiLabelRecord);
                     break;
                 }
                 case AI_Yield:
                 {
-                    Offset += AI_Yield_LENGTH;
+                    Offset += sizeof(AiYieldRecord);
                     if (ChrEntityp)
                     {
                         ChrEntityp->ailist   = AiListp;
@@ -1002,9 +965,9 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 }
                 case AI_EndList:
                 {
-                    //Not an error to be here, same as yield except without pushing offset past it. (just keeps looping)
-#    ifdef ENABLE_LOG
-#        ifdef IS_PD
+                    // Not an error to be here, same as yield except without pushing offset past it. (just keeps looping)
+    #ifdef ENABLE_LOG
+        #ifdef IS_PD
                     listID = chraiGetAIListID(AIList, &isGlobalAIList);
                     if (isGlobalAIList)
                     {
@@ -1015,18 +978,18 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         debAIListTypeString = "local";
                     }
                     osSyncPrintf("AI error: endlist reached %s list=%d!\n", debAIListTypeString, listID);
-#        endif
+        #endif
                     osSyncPrintf("AI error: endlist reached!\n");
-#    endif
+    #endif
 
                     return;
                 }
                 case AI_SetChrAiList:
                 {
-                    AIRecord  *ai         = AiListp + Offset;         /* needed for stack count inflation */
-                    ChrRecord *chr;                                   //ok, so mips does not hoist vars in stack, they are in order so must be declaired here
-                    u16        AI_LIST_ID = CharArrayTo16(ai->val,1); /* This is the only way to match despite assetrs below */
-                    u8         CHR_NUM    = ai->val[0];
+                    AiSetChrAiListRecord *ai = AiListp + Offset;              /* needed for stack count inflation */
+                    ChrRecord            *chr;                                // ok, so mips does not hoist vars in stack, they are in order so must be declaired here
+                    u16                   AI_LIST_ID = ntohs(ai->AI_LIST_ID); /* This is the only way to match despite assetrs below */
+                    u8                    CHR_NUM    = ai->CHR_NUM;
 
                     if (CHR_NUM == ((u8)CHR_SELF))
                     {
@@ -1042,14 +1005,14 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             chr->aioffset = 0;
                             chr->sleep    = 0;
                         }
-                        Offset += AI_SetChrAiList_LENGTH;
+                        Offset += sizeof(AiSetChrAiListRecord);
                     }
                     break;
                 }
                 case AI_SetReturnAiList:
                 {
-                    AIRecord *ai         = AiListp + Offset;
-                    u16       AI_LIST_ID = CharArrayTo16(ai->val,0);
+                    AiSetReturnAiListRecord *ai         = AiListp + Offset;
+                    u16                      AI_LIST_ID = ntohs(ai->AI_LIST_ID);
 
                     if (ChrEntityp)
                     {
@@ -1064,7 +1027,7 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         AircraftEntityp->aireturnlist = AI_LIST_ID;
                     }
 
-                    Offset += AI_SetReturnAiList_LENGTH;
+                    Offset += sizeof(AiSetReturnAiListRecord);
                     break;
                 }
                 case AI_Return:
@@ -1087,23 +1050,23 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 case AI_Stop:
                 {
                     chraiStopAnimation(ChrEntityp);
-                    Offset += AI_Stop_LENGTH;
+                    Offset += sizeof(AiStopRecord);
                     break;
                 }
                 case AI_Kneel:
                 {
                     check_if_able_to_then_kneel(ChrEntityp);
-                    Offset += AI_Kneel_LENGTH;
+                    Offset += sizeof(AiKneelRecord);
                     break;
                 }
                 case AI_PlayAnimation:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    s32       startframe, anim_id, zero, endframe;
+                    AiPlayAnimationRecord *ai = AiListp + Offset;
+                    s32                    startframe, anim_id, zero, endframe;
 
-                    anim_id    = CharArrayTo16(ai->val,0);
-                    startframe = CharArrayTo16(ai->val,2);
-                    endframe   = CharArrayTo16(ai->val,4);
+                    anim_id    = ntohs(ai->ANIMATION_ID);
+                    startframe = ntohs(ai->START_TIME30);
+                    endframe   = ntohs(ai->END_TIME30);
 
                     if (startframe == (u16)-1)
                     {
@@ -1116,298 +1079,298 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
 
                     if (ChrEntityp)
                     {
-                        check_if_able_to_then_perform_animation(ChrEntityp, anim_id, startframe, endframe, ai->val[6], ai->val[7]);
+                        check_if_able_to_then_perform_animation(ChrEntityp, anim_id, startframe, endframe, ai->BITFIELD, ai->INTERPOL_TIME60);
                     }
                     else if (AircraftEntityp)
                     {
-                        zero = 0; //debug value maybe?
-                        modelSetAnimation(AircraftEntityp->model, animation_table_ptrs2[anim_id], zero, startframe, 0.5f, (s32)ai->val[7]);
+                        zero = 0; // debug value maybe?
+                        modelSetAnimation(AircraftEntityp->model, animation_table_ptrs2[anim_id], zero, startframe, 0.5f, (s32)ai->INTERPOL_TIME60);
                         if (endframe >= 0)
                         {
                             modelSetAnimEndFrame(AircraftEntityp->model, endframe);
                         }
                     }
-                    Offset += AI_PlayAnimation_LENGTH;
+                    Offset += sizeof(AiPlayAnimationRecord);
                     break;
                 }
                 case AI_IFPlayingAnimation:
                 {
-                    AIRecord1 *ai = (AiListp + Offset);
+                    AiIFPlayingAnimationRecord *ai = (AiListp + Offset);
 
                     if (ChrEntityp->actiontype == ACT_ANIM)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFPlayingAnimation_LENGTH;
+                        Offset += sizeof(AiIFPlayingAnimationRecord);
                     }
                     break;
                 }
                 case AI_PointAtBond:
                 {
                     chrTrySurprisedOneHand(ChrEntityp);
-                    Offset += AI_PointAtBond_LENGTH;
+                    Offset += sizeof(AiPointAtBondRecord);
                     break;
                 }
                 case AI_LookSurprised:
                 {
                     chrTrySurprisedLookAround(ChrEntityp);
-                    Offset += AI_LookSurprised_LENGTH;
+                    Offset += sizeof(AiLookSurprisedRecord);
                     break;
                 }
                 case AI_IFImOnPatrolOrStopped:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiIFImOnPatrolOrStoppedRecord *ai = AiListp + Offset;
                     if (chrHasStoppedOrPatroling(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFImOnPatrolOrStopped_LENGTH;
+                        Offset += sizeof(AiIFImOnPatrolOrStoppedRecord);
                     }
                     break;
                 }
                 case AI_IFChrDyingOrDead:
                 {
-                    AIRecord  *ai  = AiListp + Offset;
-                    ChrRecord *chr = chrFindById(ChrEntityp, ai->val[0]);
+                    AiIFChrDyingOrDeadRecord *ai  = AiListp + Offset;
+                    ChrRecord                *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
 
                     if (!chr || chrIsDead(chr))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrDyingOrDead_LENGTH;
+                        Offset += sizeof(AiIFChrDyingOrDeadRecord);
                     }
                     break;
                 }
                 case AI_IFChrDoesNotExist:
                 {
-                    AIRecord  *ai  = AiListp + Offset;
-                    ChrRecord *chr = chrFindById(ChrEntityp, ai->val[0]);
+                    AiIFChrDoesNotExistRecord *ai  = AiListp + Offset;
+                    ChrRecord                 *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
 
                     if (!chr || !chr->model)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrDoesNotExist_LENGTH;
+                        Offset += sizeof(AiIFChrDoesNotExistRecord);
                     }
                     break;
                 }
                 case AI_IFISeeBond:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiIFISeeBondRecord *ai = AiListp + Offset;
 
                     if (chrCheckTargetInSight(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFISeeBond_LENGTH;
+                        Offset += sizeof(AiIFISeeBondRecord);
                     }
                     break;
                 }
 
                 case AI_TRYSidestepping:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiTRYSidesteppingRecord *ai = AiListp + Offset;
 
                     if (actor_steps_sideways(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYSidestepping_LENGTH;
+                        Offset += sizeof(AiTRYSidesteppingRecord);
                     }
                     break;
                 }
                 case AI_TRYSideHopping:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiTRYSideHoppingRecord *ai = AiListp + Offset;
 
                     if (actor_hops_sideways(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYSideHopping_LENGTH;
+                        Offset += sizeof(AiTRYSideHoppingRecord);
                     }
                     break;
                 }
                 case AI_TRYSideRunning:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiTRYSideRunningRecord *ai = AiListp + Offset;
 
                     if (actor_jogs_sideways(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYSideRunning_LENGTH;
+                        Offset += sizeof(AiTRYSideRunningRecord);
                     }
                     break;
                 }
                 case AI_TRYFiringWalk:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiTRYFiringWalkRecord *ai = AiListp + Offset;
 
                     if (actor_walks_and_fires(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYFiringWalk_LENGTH;
+                        Offset += sizeof(AiTRYFiringWalkRecord);
                     }
                     break;
                 }
                 case AI_TRYFiringRun:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiTRYFiringRunRecord *ai = AiListp + Offset;
 
                     if (actor_runs_and_fires(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYFiringRun_LENGTH;
+                        Offset += sizeof(AiTRYFiringRunRecord);
                     }
                     break;
                 }
                 case AI_TRYFiringRoll:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiTRYFiringRollRecord *ai = AiListp + Offset;
 
                     if (actor_rolls_fires_crouched(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYFiringRoll_LENGTH;
+                        Offset += sizeof(AiTRYFiringRollRecord);
                     }
                     break;
                 }
                 case AI_TRYFireOrAimAtTarget:
                 {
-                    AIRecord *ai         = AiListp + Offset;
-                    s32       targetid   = CharArrayTo16(ai->val,2);
-                    s32       targettype = CharArrayTo16(ai->val,0);
+                    AiTRYFireOrAimAtTargetRecord *ai         = AiListp + Offset;
+                    s32                           targetid   = ntohs(ai->TARGET);
+                    s32                           targettype = ntohs(ai->BITFIELD);
                     if (actor_aim_at_actor(ChrEntityp, targettype, targetid))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[4]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYFireOrAimAtTarget_LENGTH;
+                        Offset += sizeof(AiTRYFireOrAimAtTargetRecord);
                     }
                     break;
                 }
                 case AI_TRYFireOrAimAtTargetKneel:
                 {
-                    AIRecord *ai         = AiListp + Offset;
-                    s32       targetid   = CharArrayTo16(ai->val,2);
-                    s32       targettype = CharArrayTo16(ai->val,0);
+                    AiTRYFireOrAimAtTargetKneelRecord *ai         = AiListp + Offset;
+                    s32                                targetid   = ntohs(ai->TARGET);
+                    s32                                targettype = ntohs(ai->BITFIELD);
                     if (actor_kneel_aim_at_actor(ChrEntityp, targettype, targetid))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[4]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYFireOrAimAtTargetKneel_LENGTH;
+                        Offset += sizeof(AiTRYFireOrAimAtTargetKneelRecord);
                     }
                     break;
                 }
                 case AI_IFImFiringAndLockedForward:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiIFImFiringAndLockedForwardRecord *ai = AiListp + Offset;
 
                     if (ChrEntityp->actiontype == ACT_ATTACK &&
                         !ChrEntityp->act_attack.type_of_motion &&
-                         ChrEntityp->act_attack.attacktype & ATTACKTYPE_DONTTURN)
+                        ChrEntityp->act_attack.attacktype & ATTACKTYPE_DONTTURN)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFImFiringAndLockedForward_LENGTH;
+                        Offset += sizeof(AiIFImFiringAndLockedForwardRecord);
                     }
                     break;
                 }
                 case AI_IFImFiring:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiIFImFiringRecord *ai = AiListp + Offset;
 
                     if (ChrEntityp->actiontype == ACT_ATTACK)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFImFiring_LENGTH;
+                        Offset += sizeof(AiIFImFiringRecord);
                     }
                     break;
                 }
 
                 case AI_TRYFireOrAimAtTargetUpdate:
                 {
-                    AIRecord *ai         = AiListp + Offset;
-                    s32       targetid   = CharArrayTo16(ai->val,2);
-                    s32       targettype = CharArrayTo16(ai->val,0);
+                    AiTRYFireOrAimAtTargetUpdateRecord *ai         = AiListp + Offset;
+                    s32                                 targetid   = ntohs(ai->TARGET);
+                    s32                                 targettype = ntohs(ai->BITFIELD);
                     if (actor_fire_or_aim_at_target_update(ChrEntityp, targettype, targetid))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[4]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYFireOrAimAtTargetUpdate_LENGTH;
+                        Offset += sizeof(AiTRYFireOrAimAtTargetUpdateRecord);
                     }
                     break;
                 }
                 case AI_TRYFacingTarget:
                 {
-                    AIRecord *ai         = AiListp + Offset;
-                    s32       targetid   = CharArrayTo16(ai->val,2);
-                    s32       targettype = CharArrayTo16(ai->val,0);
+                    AiTRYFacingTargetRecord *ai         = AiListp + Offset;
+                    s32                      targetid   = ntohs(ai->TARGET);
+                    s32                      targettype = ntohs(ai->BITFIELD);
                     if (check_set_actor_standing_still(ChrEntityp, targettype, targetid))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[4]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYFacingTarget_LENGTH;
+                        Offset += sizeof(AiTRYFacingTargetRecord);
                     }
                     break;
                 }
                 case AI_HitChrWithItem:
                 {
-                    AIRecord  *ai  = AiListp + Offset;
-                    ChrRecord *chr = chrFindById(ChrEntityp, ai->val[0]);
-                    vec3d      vec = New_Vector();
+                    AiHitChrWithItemRecord *ai  = AiListp + Offset;
+                    ChrRecord              *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
+                    vec3d                   vec = New_Vector();
 
                     if (chr && chr->prop)
                     {
-                        handles_shot_actors(chr, (s8)ai->val[1], &vec, ai->val[2], FALSE);
+                        handles_shot_actors(chr, ai->PART_NUM, &vec, ai->ITEM_NUM, FALSE);
                     }
 
-                    Offset += AI_HitChrWithItem_LENGTH;
+                    Offset += sizeof(AiHitChrWithItemRecord);
                     break;
                 }
                 case AI_ChrHitChr:
                 {
-                    AIRecord  *ai   = AiListp + Offset;
-                    ChrRecord *chr1 = chrFindById(ChrEntityp, ai->val[0]);
-                    ChrRecord *chr2 = chrFindById(ChrEntityp, ai->val[1]);
+                    AiChrHitChrRecord *ai   = AiListp + Offset;
+                    ChrRecord         *chr1 = chrFindById(ChrEntityp, ai->CHR_NUM);
+                    ChrRecord         *chr2 = chrFindById(ChrEntityp, ai->CHR_NUM_TARGET);
 
                     if (chr1 && chr2 && chr1->prop && chr2->prop)
                     {
@@ -1415,12 +1378,12 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         WeaponObjRecord *weapon;
                         vec3d            vec = New_Vector();
 
-                        if (!prop) //not Right hand? try left
+                        if (!prop) // not Right hand? try left
                         {
                             prop = chrGetEquippedWeaponPropWithCheck(chr1, GUNLEFT);
                         }
 
-                        if (prop) //hopefully have gun else exit
+                        if (prop) // hopefully have gun else exit
                         {
                             vec.x = chr2->prop->pos.x - chr1->prop->pos.x;
                             vec.y = chr2->prop->pos.y - chr1->prop->pos.y;
@@ -1428,39 +1391,39 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             guNormalize(&vec.x, &vec.y, &vec.z);
                             if (prop)
                             {
-                            } //prop needs upgrading to v1 instead of t
+                            } // prop needs upgrading to v1 instead of t
                             weapon = prop->weapon;
-                            handles_shot_actors(chr2, (s8)ai->val[2], &vec, weapon->weaponnum, 0);
+                            handles_shot_actors(chr2, ai->PART_NUM, &vec, weapon->weaponnum, 0);
                         }
                     }
-                    Offset += AI_ChrHitChr_LENGTH;
+                    Offset += sizeof(AiChrHitChrRecord);
                     break;
                 }
                 case AI_TRYThrowingGrenade:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiTRYThrowingGrenadeRecord *ai = AiListp + Offset;
 
                     if (actor_draws_throws_grenade_at_player_if_possible(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYThrowingGrenade_LENGTH;
+                        Offset += sizeof(AiTRYThrowingGrenadeRecord);
                     }
                     break;
                 }
                 case AI_TRYDroppingItem:
                 {
-                    AIRecord *ai       = AiListp + Offset;
-                    u16       modelnum = CharArrayTo16(ai->val,0);
-                    if (chrDropItem(ChrEntityp, modelnum, ai->val[2]))
+                    AiTRYDroppingItemRecord *ai       = AiListp + Offset;
+                    u16                      modelnum = ntohs(ai->PROP_NUM);
+                    if (chrDropItem(ChrEntityp, modelnum, ai->ITEM_NUM))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[3]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYDroppingItem_LENGTH;
+                        Offset += sizeof(AiTRYDroppingItemRecord);
                     }
                     break;
                 }
@@ -1468,154 +1431,154 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 case AI_Surrender:
                 {
                     chrTrySurrender(ChrEntityp);
-                    Offset += AI_Surrender_LENGTH;
+                    Offset += sizeof(AiSurrenderRecord);
                     break;
                 }
                 case AI_RemoveMe:
                 {
                     chrFadeOut(ChrEntityp);
-                    Offset += AI_RemoveMe_LENGTH;
+                    Offset += sizeof(AiRemoveMeRecord);
                     break;
                 }
                 case AI_ChrRemoveInstant:
                 {
-                    AIRecord  *ai  = AiListp + Offset;
-                    ChrRecord *chr = chrFindById(ChrEntityp, ai->val[0]);
+                    AiChrRemoveInstantRecord *ai  = AiListp + Offset;
+                    ChrRecord                *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (chr && chr->prop)
                     {
                         chr->hidden |= CHRHIDDEN_REMOVE;
                     }
-                    Offset += AI_ChrRemoveInstant_LENGTH;
+                    Offset += sizeof(AiChrRemoveInstantRecord);
                     break;
                 }
                 case AI_TRYTriggeringAlarmAtPad:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    u16       pad_id = CharArrayTo16(ai->val,0);
+                    AiTRYTriggeringAlarmAtPadRecord *ai     = AiListp + Offset;
+                    u16                              pad_id = ntohs(ai->PAD);
                     if (chrTryStartAlarm(ChrEntityp, pad_id))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYTriggeringAlarmAtPad_LENGTH;
+                        Offset += sizeof(AiTRYTriggeringAlarmAtPadRecord);
                     }
                     break;
                 }
                 case AI_AlarmOn:
                 {
                     alarmActivate();
-                    Offset += AI_AlarmOn_LENGTH;
+                    Offset += sizeof(AiAlarmOnRecord);
                     break;
                 }
                 case AI_AlarmOff:
                 {
                     alarmDeactivate();
-                    Offset += AI_AlarmOff_LENGTH;
+                    Offset += sizeof(AiAlarmOffRecord);
                     break;
                 }
                 case AI_TRYRunFromBond:
                 { // run from bond
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiTRYRunFromBondRecord *ai = AiListp + Offset;
                     if (removed_animation_routine_27(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYRunFromBond_LENGTH;
+                        Offset += sizeof(AiTRYRunFromBondRecord);
                     }
                     break;
                 }
                 case AI_TRYRunToBond:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiTRYRunToBondRecord *ai = AiListp + Offset;
                     if (chrGoToBond(ChrEntityp, SPEED_RUN))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYRunToBond_LENGTH;
+                        Offset += sizeof(AiTRYRunToBondRecord);
                     }
                     break;
                 }
                 case AI_TRYWalkToBond:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiTRYWalkToBondRecord *ai = AiListp + Offset;
                     if (chrGoToBond(ChrEntityp, SPEED_WALK))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYWalkToBond_LENGTH;
+                        Offset += sizeof(AiTRYWalkToBondRecord);
                     }
                     break;
                 }
                 case AI_TRYSprintToBond:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiTRYSprintToBondRecord *ai = AiListp + Offset;
                     if (chrGoToBond(ChrEntityp, SPEED_SPRINT))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYSprintToBond_LENGTH;
+                        Offset += sizeof(AiTRYSprintToBondRecord);
                     }
                     break;
                 }
                 case AI_TRYFindCover:
-                { //Find Cover
-                    AIRecord *ai = AiListp + Offset;
+                { // Find Cover
+                    AiTRYFindCoverRecord *ai = AiListp + Offset;
                     if (removed_animation_routine_2B(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYFindCover_LENGTH;
+                        Offset += sizeof(AiTRYFindCoverRecord);
                     }
                     break;
                 }
                 case AI_TRYRunToChr:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (chrGoToChr(ChrEntityp, ai->val[0], SPEED_RUN))
+                    AiTRYRunToChrRecord *ai = AiListp + Offset;
+                    if (chrGoToChr(ChrEntityp, ai->CHR_NUM, SPEED_RUN))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYRunToChr_LENGTH;
+                        Offset += sizeof(AiTRYRunToChrRecord);
                     }
                     break;
                 }
                 case AI_TRYWalkToChr:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (chrGoToChr(ChrEntityp, ai->val[0], SPEED_WALK))
+                    AiTRYWalkToChrRecord *ai = AiListp + Offset;
+                    if (chrGoToChr(ChrEntityp, ai->CHR_NUM, SPEED_WALK))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYWalkToChr_LENGTH;
+                        Offset += sizeof(AiTRYWalkToChrRecord);
                     }
                     break;
                 }
                 case AI_TRYSprintToChr:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiTRYSprintToChrRecord *ai = AiListp + Offset;
 
-                    if (chrGoToChr(ChrEntityp, ai->val[0] & 0xff, SPEED_SPRINT)) // &0xff is here to increase t reg by 1
+                    if (chrGoToChr(ChrEntityp, ai->CHR_NUM & 0xff, SPEED_SPRINT)) // &0xff is here to increase t reg by 1
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYSprintToChr_LENGTH;
+                        Offset += sizeof(AiTRYSprintToChrRecord);
                     }
                     break;
                 }
@@ -1623,43 +1586,43 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 case AI_SetNewRandom:
                 {
                     ChrEntityp->random = randomGetNext();
-                    Offset += AI_SetNewRandom_LENGTH;
+                    Offset += sizeof(AiSetNewRandomRecord);
                     break;
                 }
                 case AI_IFRandomLessThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFRandomLessThanRecord *ai = AiListp + Offset;
 
-                    if (ai->val[0] > ChrEntityp->random)
+                    if (ai->BYTE > ChrEntityp->random)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFRandomLessThan_LENGTH;
+                        Offset += sizeof(AiIFRandomLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFRandomGreaterThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] < ChrEntityp->random)
+                    AiIFRandomGreaterThanRecord *ai = AiListp + Offset;
+                    if (ai->BYTE < ChrEntityp->random)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFRandomGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFRandomGreaterThanRecord);
                     }
                     break;
                 }
 
                 case AI_RunToPad:
                 {
-                    AIRecord *ai  = AiListp + Offset;
-                    u16       pad = CharArrayTo16(ai->val,0);
+                    AiRunToPadRecord *ai  = AiListp + Offset;
+                    u16               pad = ntohs(ai->PAD);
                     chrGoToPad(ChrEntityp, pad, SPEED_RUN);
-                    Offset += AI_RunToPad_LENGTH;
+                    Offset += sizeof(AiRunToPadRecord);
                     break;
                 }
                 case AI_RunToPadPreset:
@@ -1674,254 +1637,254 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             etc...
                      */
                     chrGoToPad(ChrEntityp, ChrEntityp->padpreset1, SPEED_RUN);
-                    Offset += AI_RunToPadPreset_LENGTH;
+                    Offset += sizeof(AiRunToPadPresetRecord);
                     break;
                 }
                 case AI_WalkToPad:
                 {
-                    AIRecord *ai  = AiListp + Offset;
-                    u16       pad = CharArrayTo16(ai->val,0);
+                    AiWalkToPadRecord *ai  = AiListp + Offset;
+                    u16                pad = ntohs(ai->PAD);
                     chrGoToPad(ChrEntityp, pad, SPEED_WALK);
-                    Offset += AI_WalkToPad_LENGTH;
+                    Offset += sizeof(AiWalkToPadRecord);
                     break;
                 }
                 case AI_SprintToPad:
                 {
-                    AIRecord *ai  = AiListp + Offset;
-                    u16       pad = CharArrayTo16(ai->val,0);
+                    AiSprintToPadRecord *ai  = AiListp + Offset;
+                    u16                  pad = ntohs(ai->PAD);
                     chrGoToPad(ChrEntityp, pad, SPEED_SPRINT);
-                    Offset += AI_SprintToPad_LENGTH;
+                    Offset += sizeof(AiSprintToPadRecord);
                     break;
                 }
                 case AI_StartPatrol:
                 {
-                    AIRecord   *ai   = AiListp + Offset;
-                    PathRecord *path = pathFindById(ai->val[0]);
+                    AiStartPatrolRecord *ai   = AiListp + Offset;
+                    PathRecord          *path = pathFindById(ai->PATH_NUM);
                     if_actor_able_set_on_path(ChrEntityp, path);
-                    Offset += AI_StartPatrol_LENGTH;
+                    Offset += sizeof(AiStartPatrolRecord);
                     break;
                 }
                 case AI_IFICanHearAlarm:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFICanHearAlarmRecord *ai = AiListp + Offset;
                     if (chrCanHearAlarm(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFICanHearAlarm_LENGTH;
+                        Offset += sizeof(AiIFICanHearAlarmRecord);
                     }
                     break;
                 }
                 case AI_IFAlarmIsOn:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFAlarmIsOnRecord *ai = AiListp + Offset;
                     if (alarmIsActive())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFAlarmIsOn_LENGTH;
+                        Offset += sizeof(AiIFAlarmIsOnRecord);
                     }
                     break;
                 }
                 case AI_IFGasIsLeaking:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFGasIsLeakingRecord *ai = AiListp + Offset;
                     if (check_if_toxic_gas_activated())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFGasIsLeaking_LENGTH;
+                        Offset += sizeof(AiIFGasIsLeakingRecord);
                     }
                     break;
                 }
                 case AI_IFIHeardBond:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFIHeardBondRecord *ai = AiListp + Offset;
                     if (chrIsHearingBond(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFIHeardBond_LENGTH;
+                        Offset += sizeof(AiIFIHeardBondRecord);
                     }
                     break;
                 }
                 case AI_IFISeeSomeoneShot:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFISeeSomeoneShotRecord *ai = AiListp + Offset;
                     if (chrSawInjury(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFISeeSomeoneShot_LENGTH;
+                        Offset += sizeof(AiIFISeeSomeoneShotRecord);
                     }
                     break;
                 }
                 case AI_IFISeeSomeoneDie:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFISeeSomeoneDieRecord *ai = AiListp + Offset;
                     if (chrSawDeath(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFISeeSomeoneDie_LENGTH;
+                        Offset += sizeof(AiIFISeeSomeoneDieRecord);
                     }
                     break;
                 }
                 case AI_IFICouldSeeBond:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFICouldSeeBondRecord *ai = AiListp + Offset;
                     if (chrCanSeeBond(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFICouldSeeBond_LENGTH;
+                        Offset += sizeof(AiIFICouldSeeBondRecord);
                     }
                     break;
                 }
                 case AI_IFICouldSeeBondsStan:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFICouldSeeBondsStanRecord *ai = AiListp + Offset;
                     if (chrIsTargetNearlyInSight(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFICouldSeeBondsStan_LENGTH;
+                        Offset += sizeof(AiIFICouldSeeBondsStanRecord);
                     }
                     break;
                 }
                 case AI_IFIWasShotRecently:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFIWasShotRecentlyRecord *ai = AiListp + Offset;
                     if (chrSawTargetRecently(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFIWasShotRecently_LENGTH;
+                        Offset += sizeof(AiIFIWasShotRecentlyRecord);
                     }
                     break;
                 }
                 case AI_IFIHeardBondRecently:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFIHeardBondRecentlyRecord *ai = AiListp + Offset;
                     if (chrHeardTargetRecently(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFIHeardBondRecently_LENGTH;
+                        Offset += sizeof(AiIFIHeardBondRecentlyRecord);
                     }
                     break;
                 }
                 case AI_IFImInRoomWithChr:
                 {
-                    AIRecord  *ai  = AiListp + Offset;
-                    ChrRecord *chr = chrFindById(ChrEntityp, *ai->val);
+                    AiIFImInRoomWithChrRecord *ai  = AiListp + Offset;
+                    ChrRecord                 *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (chr && chr->prop && check_if_position_in_same_room(ChrEntityp, &chr->prop->pos, chr->prop->stan))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFImInRoomWithChr_LENGTH;
+                        Offset += sizeof(AiIFImInRoomWithChrRecord);
                     }
                     break;
                 }
                 case AI_IFIveNotBeenSeen:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFIveNotBeenSeenRecord *ai = AiListp + Offset;
                     if (!(ChrEntityp->chrflags & CHRFLAG_HAS_BEEN_ON_SCREEN))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFIveNotBeenSeen_LENGTH;
+                        Offset += sizeof(AiIFIveNotBeenSeenRecord);
                     }
                     break;
                 }
                 case AI_IFImOnScreen:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFImOnScreenRecord *ai = AiListp + Offset;
                     if ((ChrEntityp->prop->flags & PROPFLAG_ONSCREEN))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFImOnScreen_LENGTH;
+                        Offset += sizeof(AiIFImOnScreenRecord);
                     }
                     break;
                 }
                 case AI_IFMyRoomIsOnScreen:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFMyRoomIsOnScreenRecord *ai = AiListp + Offset;
 
-                    if (getROOMID_isRendered(getTileRoom(ChrEntityp->prop->stan))) //embedded func to match, must be s32 not u8
+                    if (getROOMID_isRendered(getTileRoom(ChrEntityp->prop->stan))) // embedded func to match, must be s32 not u8
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyRoomIsOnScreen_LENGTH;
+                        Offset += sizeof(AiIFMyRoomIsOnScreenRecord);
                     }
                     break;
                 }
                 case AI_IFRoomWithPadIsOnScreen:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    u16       pad_id = CharArrayTo16(ai->val,0);
+                    AiIFRoomWithPadIsOnScreenRecord *ai     = AiListp + Offset;
+                    u16                              pad_id = ntohs(ai->PAD);
                     if (check_if_room_for_preset_loaded(ChrEntityp, pad_id))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFRoomWithPadIsOnScreen_LENGTH;
+                        Offset += sizeof(AiIFRoomWithPadIsOnScreenRecord);
                     }
                     break;
                 }
                 case AI_IFImTargetedByBond:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFImTargetedByBondRecord *ai = AiListp + Offset;
                     if (sub_GAME_7F0333F8(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFImTargetedByBond_LENGTH;
+                        Offset += sizeof(AiIFImTargetedByBondRecord);
                     }
                     break;
                 }
                 case AI_IFBondMissedMe:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFBondMissedMeRecord *ai = AiListp + Offset;
                     if (chrIfNearMiss(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondMissedMe_LENGTH;
+                        Offset += sizeof(AiIFBondMissedMeRecord);
                     }
                     break;
                 }
@@ -1929,264 +1892,258 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 {
                     // Alternative Names?
                     // aiIfTargetInFovLeft or aiIfBondOutOfFov
-                    AIRecord *ai  = AiListp + Offset;
-                    float     rad = chrGetAngleToBond(ChrEntityp); //must use float to save "hidden var"
-                    if (ByteToRadian((ai->val[0])) > rad)
+                    AiIFMyAngleToBondLessThanRecord *ai  = AiListp + Offset;
+                    float                            rad = chrGetAngleToBond(ChrEntityp); // must use float to save "hidden var"
+                    if (ByteToRadian((ai->ANGLE)) > rad)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyAngleToBondLessThan_LENGTH;
+                        Offset += sizeof(AiIFMyAngleToBondLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFMyAngleToBondGreaterThan:
                 {
-                    AIRecord *ai  = AiListp + Offset;
-                    float     rad = chrGetAngleToBond(ChrEntityp);
-                    if (ByteToRadian((ai->val[0])) < rad)
+                    AiIFMyAngleToBondGreaterThanRecord *ai  = AiListp + Offset;
+                    float                               rad = chrGetAngleToBond(ChrEntityp);
+                    if (ByteToRadian((ai->ANGLE)) < rad)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyAngleToBondGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFMyAngleToBondGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_IFMyAngleFromBondLessThan:
                 {
-                    AIRecord *ai  = AiListp + Offset;
-                    float     rad = chrGetAngleFromBond(ChrEntityp);
-                    if (ByteToRadian((ai->val[0])) > rad)
+                    AiIFMyAngleFromBondLessThanRecord *ai  = AiListp + Offset;
+                    float                              rad = chrGetAngleFromBond(ChrEntityp);
+                    if (ByteToRadian((ai->ANGLE)) > rad)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyAngleFromBondLessThan_LENGTH;
+                        Offset += sizeof(AiIFMyAngleFromBondLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFMyAngleFromBondGreaterThan:
                 {
-                    AIRecord *ai  = AiListp + Offset;
-                    float     rad = chrGetAngleFromBond(ChrEntityp);
-                    if (ByteToRadian((ai->val[0])) < rad)
+                    AiIFMyAngleFromBondGreaterThanRecord *ai  = AiListp + Offset;
+                    float                                 rad = chrGetAngleFromBond(ChrEntityp);
+                    if (ByteToRadian((ai->ANGLE)) < rad)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyAngleFromBondGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFMyAngleFromBondGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_IFMyDistanceToBondLessThanDecimeter:
                 {
-                    AIRecord *ai       = AiListp + Offset;
-                    f32       distance = CharArrayTo16(ai->val,0) * 10.0f;
+                    AiIFMyDistanceToBondLessThanDecimeterRecord *ai       = AiListp + Offset;
+                    f32                                          distance = ntohs(ai->DISTANCE) * 10.0f;
                     if (distance > chrGetDistanceToBond(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyDistanceToBondLessThanDecimeter_LENGTH;
+                        Offset += sizeof(AiIFMyDistanceToBondLessThanDecimeterRecord);
                     }
                     break;
                 }
                 case AI_IFMyDistanceToBondGreaterThanDecimeter:
                 {
-                    AIRecord *ai       = AiListp + Offset;
-                    f32       distance = CharArrayTo16(ai->val,0) * 10.0f;
+                    AiIFMyDistanceToBondGreaterThanDecimeterRecord *ai       = AiListp + Offset;
+                    f32                                             distance = ntohs(ai->DISTANCE) * 10.0f;
                     if (distance < chrGetDistanceToBond(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyDistanceToBondGreaterThanDecimeter_LENGTH;
+                        Offset += sizeof(AiIFMyDistanceToBondGreaterThanDecimeterRecord);
                     }
                     break;
                 }
                 case AI_IFChrDistanceToPadLessThanDecimeter:
                 {
-                    AIRecord  *ai     = AiListp + Offset;
-                    ChrRecord *chr    = chrFindById(ChrEntityp, ai->val[0]);
-                    u16        padnum = CharArrayTo16(ai->val,3);
-                    f32        value  = CharArrayTo16(ai->val,1) * 10.0f;
+                    AiIFChrDistanceToPadLessThanDecimeterRecord *ai     = AiListp + Offset;
+                    ChrRecord                                   *chr    = chrFindById(ChrEntityp, ai->CHR_NUM);
+                    u16                                          padnum = ntohs(ai->PAD);
+                    f32                                          value  = ntohs(ai->DISTANCE) * 10.0f;
                     if (chr && (value > chrGetDistanceToPad(chr, padnum)))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[5]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrDistanceToPadLessThanDecimeter_LENGTH;
+                        Offset += sizeof(AiIFChrDistanceToPadLessThanDecimeterRecord);
                     }
                     break;
                 }
                 case AI_IFChrDistanceToPadGreaterThanDecimeter:
                 {
-                    AIRecord  *ai     = AiListp + Offset;
-                    ChrRecord *chr    = chrFindById(ChrEntityp, ai->val[0]);
-                    u16        padnum = CharArrayTo16(ai->val,3);
-                    f32        value  = CharArrayTo16(ai->val,1) * 10.0f;
+                    AiIFChrDistanceToPadGreaterThanDecimeterRecord *ai     = AiListp + Offset;
+                    ChrRecord                                      *chr    = chrFindById(ChrEntityp, ai->CHR_NUM);
+                    u16                                             padnum = ntohs(ai->PAD);
+                    f32                                             value  = ntohs(ai->DISTANCE) * 10.0f;
                     if (chr && (value < chrGetDistanceToPad(chr, padnum)))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[5]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrDistanceToPadGreaterThanDecimeter_LENGTH;
+                        Offset += sizeof(AiIFChrDistanceToPadGreaterThanDecimeterRecord);
                     }
                     break;
                 }
                 case AI_IFMyDistanceToChrLessThanDecimeter:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    f32       cutoff = CharArrayTo16(ai->val,0) * 10.0f;
-                    if (cutoff > chrGetDistanceToChr(ChrEntityp, ai->val[2]))
+                    AiIFMyDistanceToChrLessThanDecimeterRecord *ai     = AiListp + Offset;
+                    f32                                         cutoff = ntohs(ai->DISTANCE) * 10.0f;
+                    if (cutoff > chrGetDistanceToChr(ChrEntityp, ai->CHR_NUM))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[3]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyDistanceToChrLessThanDecimeter_LENGTH;
+                        Offset += sizeof(AiIFMyDistanceToChrLessThanDecimeterRecord);
                     }
                     break;
                 }
                 case AI_IFMyDistanceToChrGreaterThanDecimeter:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    f32       cutoff = CharArrayTo16(ai->val,0) * 10.0f;
-                    if (cutoff < chrGetDistanceToChr(ChrEntityp, ai->val[2]))
+                    AiIFMyDistanceToChrGreaterThanDecimeterRecord *ai     = AiListp + Offset;
+                    f32                                            cutoff = ntohs(ai->DISTANCE) * 10.0f;
+                    if (cutoff < chrGetDistanceToChr(ChrEntityp, ai->CHR_NUM))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[3]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyDistanceToChrGreaterThanDecimeter_LENGTH;
+                        Offset += sizeof(AiIFMyDistanceToChrGreaterThanDecimeterRecord);
                     }
                     break;
                 }
                 case AI_TRYSettingMyPresetToChrWithinDistanceDecimeter:
                 {
-                    AIRecord *ai       = AiListp + Offset;
-                    f32       distance = CharArrayTo16(ai->val,0) * 10.0f;
+                    AiTRYSettingMyPresetToChrWithinDistanceDecimeterRecord *ai       = AiListp + Offset;
+                    f32                                                     distance = ntohs(ai->DISTANCE) * 10.0f;
                     if (sub_GAME_7F033B38(ChrEntityp, distance))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYSettingMyPresetToChrWithinDistanceDecimeter_LENGTH;
+                        Offset += sizeof(AiTRYSettingMyPresetToChrWithinDistanceDecimeterRecord);
                     }
                     break;
                 }
                 case AI_IFBondDistanceToPadLessThanDecimeter:
                 {
-                    AIRecord *ai    = AiListp + Offset;
-                    u16       pad   = CharArrayTo16(ai->val,2);
-                    f32       value = CharArrayTo16(ai->val,0) * 10.0f;
+                    AiIFBondDistanceToPadLessThanDecimeterRecord *ai    = AiListp + Offset;
+                    u16                                           pad   = ntohs(ai->PAD);
+                    f32                                           value = ntohs(ai->DISTANCE) * 10.0f;
                     if (value > chrGetDistanceFromBondToPad(ChrEntityp, pad))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[4]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondDistanceToPadLessThanDecimeter_LENGTH;
+                        Offset += sizeof(AiIFBondDistanceToPadLessThanDecimeterRecord);
                     }
                     break;
                 }
                 case AI_IFBondDistanceToPadGreaterThanDecimeter:
                 {
-                    AIRecord *ai    = AiListp + Offset;
-                    u16       pad   = CharArrayTo16(ai->val,2);
-                    f32       value = CharArrayTo16(ai->val,0) * 10.0f;
+                    AiIFBondDistanceToPadGreaterThanDecimeterRecord *ai    = AiListp + Offset;
+                    u16                                              pad   = ntohs(ai->PAD);
+                    f32                                              value = ntohs(ai->DISTANCE) * 10.0f;
                     if (value < chrGetDistanceFromBondToPad(ChrEntityp, pad))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[4]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondDistanceToPadGreaterThanDecimeter_LENGTH;
+                        Offset += sizeof(AiIFBondDistanceToPadGreaterThanDecimeterRecord);
                     }
                     break;
                 }
                 case AI_IFChrInRoomWithPad:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    u16       pad_id = CharArrayTo16(ai->val,1);
-                    if (chrIfInPadRoom(ChrEntityp, ai->val[0], pad_id))
+                    AiIFChrInRoomWithPadRecord *ai     = AiListp + Offset;
+                    u16                         pad_id = ntohs(ai->PAD);
+                    if (chrIfInPadRoom(ChrEntityp, ai->CHR_NUM, pad_id))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[3]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrInRoomWithPad_LENGTH;
+                        Offset += sizeof(AiIFChrInRoomWithPadRecord);
                     }
                     break;
                 }
                 case AI_IFBondInRoomWithPad:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    u16       pad_id = CharArrayTo16(ai->val,0);
+                    AiIFBondInRoomWithPadRecord *ai     = AiListp + Offset;
+                    u16                          pad_id = ntohs(ai->PAD);
                     if (check_if_actor_is_at_preset(ChrEntityp, pad_id))
                     {
-#ifdef ENABLE_LOG
+    #ifdef ENABLE_LOG
                         osSyncPrintf("BOND IN ROOM\n");
-#endif
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+    #endif
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-#ifdef ENABLE_LOG
+    #ifdef ENABLE_LOG
                         osSyncPrintf("bond not in room\n");
-#endif
-                        Offset += AI_IFBondInRoomWithPad_LENGTH;
+    #endif
+                        Offset += sizeof(AiIFBondInRoomWithPadRecord);
                     }
                     break;
                 }
                 case AI_IFBondCollectedObject:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiIFBondCollectedObjectRecord *ai  = AiListp + Offset;
+                    ObjectRecord                  *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && bondinvHasPropInInv(obj->prop))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondCollectedObject_LENGTH;
+                        Offset += sizeof(AiIFBondCollectedObjectRecord);
                     }
                     break;
                 }
                 case AI_IFKeyDropped:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (weaponFindThrown(ai->val[0]))
+                    AiIFKeyDroppedRecord *ai = AiListp + Offset;
+                    if (weaponFindThrown(ai->KEY_ID))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFKeyDropped_LENGTH;
+                        Offset += sizeof(AiIFKeyDroppedRecord);
                     }
                     break;
                 }
                 case AI_IFItemIsAttachedToObject:
                 {
-                    struct
-                    {
-                        u8 cmd;
-                        u8 val;
-                        u8 val1;
-                        u8 val2;
-                    } *ai              = AiListp + Offset;
-                    ObjectRecord *obj  = objFindByTagId(ai->val1);
-                    bool          pass = FALSE;
+                    AiIFItemIsAttachedToObjectRecord *ai   = AiListp + Offset;
+                    ObjectRecord                     *obj  = objFindByTagId(ai->OBJECT_TAG);
+                    bool                              pass = FALSE;
                     if (obj && obj->prop)
                     {
                         PropRecord *prop = obj->prop->child;
@@ -2195,7 +2152,7 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             if (prop->type == PROP_TYPE_WEAPON)
                             {
                                 WeaponObjRecord *weapon = prop->weapon;
-                                if (weapon->weaponnum == ai->val)
+                                if (weapon->weaponnum == ai->ITEM_NUM)
                                 {
                                     pass = TRUE;
                                     break;
@@ -2206,89 +2163,89 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     }
                     if (pass)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val2);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFItemIsAttachedToObject_LENGTH;
+                        Offset += sizeof(AiIFItemIsAttachedToObjectRecord);
                     }
                     break;
                 }
                 case AI_IFBondHasItemEquipped:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] == getCurrentPlayerWeaponId(GUNRIGHT) || ai->val[0] == getCurrentPlayerWeaponId(GUNLEFT)) //order matters
+                    AiIFBondHasItemEquippedRecord *ai = AiListp + Offset;
+                    if (ai->ITEM_NUM == getCurrentPlayerWeaponId(GUNRIGHT) || ai->ITEM_NUM == getCurrentPlayerWeaponId(GUNLEFT)) // order matters
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondHasItemEquipped_LENGTH;
+                        Offset += sizeof(AiIFBondHasItemEquippedRecord);
                     }
                     break;
                 }
                 case AI_IFObjectExists:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiIFObjectExistsRecord *ai  = AiListp + Offset;
+                    ObjectRecord           *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFObjectExists_LENGTH;
+                        Offset += sizeof(AiIFObjectExistsRecord);
                     }
                     break;
                 }
                 case AI_IFObjectNotDestroyed:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiIFObjectNotDestroyedRecord *ai  = AiListp + Offset;
+                    ObjectRecord                 *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && objIsHealthy(obj))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFObjectNotDestroyed_LENGTH;
+                        Offset += sizeof(AiIFObjectNotDestroyedRecord);
                     }
                     break;
                 }
                 case AI_IFObjectWasActivated:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiIFObjectWasActivatedRecord *ai  = AiListp + Offset;
+                    ObjectRecord                 *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && (obj->runtime_bitflags & RUNTIMEBITFLAG_ACTIVATED))
                     {
                         obj->runtime_bitflags &= ~RUNTIMEBITFLAG_ACTIVATED;
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFObjectWasActivated_LENGTH;
+                        Offset += sizeof(AiIFObjectWasActivatedRecord);
                     }
                     break;
                 }
                 case AI_IFBondUsedGadgetOnObject:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiIFBondUsedGadgetOnObjectRecord *ai  = AiListp + Offset;
+                    ObjectRecord                     *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && (obj->state & PROPSTATE_ACTIVATED))
                     {
                         obj->state &= ~PROPSTATE_ACTIVATED;
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondUsedGadgetOnObject_LENGTH;
+                        Offset += sizeof(AiIFBondUsedGadgetOnObjectRecord);
                     }
                     break;
                 }
                 case AI_ActivateObject:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiActivateObjectRecord *ai  = AiListp + Offset;
+                    ObjectRecord           *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop)
                     {
                         if (obj->prop->type == PROP_TYPE_DOOR)
@@ -2300,63 +2257,63 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             propobjInteract(obj->prop);
                         }
                     }
-                    Offset += AI_ActivateObject_LENGTH;
+                    Offset += sizeof(AiActivateObjectRecord);
                     break;
                 }
-                case AI_DestroyObject: //canonicly destroyobj
+                case AI_DestroyObject: // canonicly destroyobj
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
-#ifdef ENABLE_LOG
+                    AiDestroyObjectRecord *ai  = AiListp + Offset;
+                    ObjectRecord          *obj = objFindByTagId(ai->OBJECT_TAG);
+    #ifdef ENABLE_LOG
                     osSyncPrintf("ai_destroyobj 1 : \n");
-#endif
+    #endif
                     if (obj && obj->prop)
                     {
                         if (!objGetDestroyedLevel(obj))
                         {
                             f32 damage = ((obj->damage - obj->maxdamage) + 1) / 250.0f;
                             /*
-	                        osSyncPrintf("ai_destroyobj 2 : (def->obj == PROP_ELVIS_SAUCER)\n");
+                            osSyncPrintf("ai_destroyobj 2 : (def->obj == PROP_ELVIS_SAUCER)\n");
                             osSyncPrintf("Elvis BOOM\n");
                             */
-#ifdef ENABLE_LOG
+    #ifdef ENABLE_LOG
                             osSyncPrintf("ai_destroyobj 3 : adddamageobj\n");
-#endif
+    #endif
 
                             maybe_detonate_object(obj, damage, &obj->runtime_pos, 0x1D, -1);
                         }
                     }
-                    Offset += AI_DestroyObject_LENGTH;
+                    Offset += sizeof(AiDestroyObjectRecord);
                     break;
                 }
                 case AI_DropObject:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiDropObjectRecord *ai  = AiListp + Offset;
+                    ObjectRecord       *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && obj->prop->parent && obj->prop->parent->type == PROP_TYPE_CHR)
                     {
                         ChrRecord *chr = obj->prop->parent->chr;
                         propobjSetDropped(obj->prop, 2);
                         chr->hidden |= CHRHIDDEN_DROP_HELD_ITEMS;
                     }
-                    Offset += AI_DropObject_LENGTH;
+                    Offset += sizeof(AiDropObjectRecord);
                     break;
                 }
                 case AI_ChrDropAllConcealedItems:
                 {
-                    AIRecord  *ai  = AiListp + Offset;
-                    ChrRecord *chr = chrFindById(ChrEntityp, ai->val[0]);
+                    AiChrDropAllConcealedItemsRecord *ai  = AiListp + Offset;
+                    ChrRecord                        *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (chr && chr->prop)
                     {
                         chrDropItems(chr);
                     }
-                    Offset += AI_ChrDropAllConcealedItems_LENGTH;
+                    Offset += sizeof(AiChrDropAllConcealedItemsRecord);
                     break;
                 }
                 case AI_ChrDropAllHeldItems:
                 {
-                    AIRecord  *ai  = AiListp + Offset;
-                    ChrRecord *chr = chrFindById(ChrEntityp, ai->val[0]);
+                    AiChrDropAllHeldItemsRecord *ai  = AiListp + Offset;
+                    ChrRecord                   *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (chr && chr->prop)
                     {
                         if (chr->weapons_held[GUNRIGHT])
@@ -2370,26 +2327,26 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             chr->hidden |= CHRHIDDEN_DROP_HELD_ITEMS;
                         }
                     }
-                    Offset += AI_ChrDropAllHeldItems_LENGTH;
+                    Offset += sizeof(AiChrDropAllHeldItemsRecord);
                     break;
                 }
                 case AI_BondCollectObject:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiBondCollectObjectRecord *ai  = AiListp + Offset;
+                    ObjectRecord              *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop)
                     {
                         INV_ITEM_TYPE iType = collect_or_interact_object(obj->prop, FALSE);
                         propExecuteTickOperation(obj->prop, iType);
                     }
-                    Offset += AI_BondCollectObject_LENGTH;
+                    Offset += sizeof(AiBondCollectObjectRecord);
                     break;
                 }
                 case AI_ChrEquipObject:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
-                    ChrRecord    *chr = chrFindById(ChrEntityp, ai->val[1]);
+                    AiChrEquipObjectRecord *ai  = AiListp + Offset;
+                    ObjectRecord           *obj = objFindByTagId(ai->OBJECT_TAG);
+                    ChrRecord              *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (obj && obj->prop && chr)
                     {
                         if (obj->prop->parent)
@@ -2407,15 +2364,15 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             chrpropReparent(obj->prop, chr->prop);
                         }
                     }
-                    Offset += AI_ChrEquipObject_LENGTH;
+                    Offset += sizeof(AiChrEquipObjectRecord);
                     break;
                 }
-                case AI_MoveObject: //canonicly aiMoveObj
+                case AI_MoveObject: // canonicly aiMoveObj
                 {
-                    AIRecord           *ai  = AiListp + Offset;
-                    ObjectRecord       *obj = objFindByTagId(ai->val[0]);
+                    AiMoveObjectRecord *ai  = AiListp + Offset;
+                    ObjectRecord       *obj = objFindByTagId(ai->OBJECT_TAG);
                     volatile PadRecord *pad;
-                    u16                 padnum = CharArrayTo16(ai->val,1);
+                    u16                 padnum = ntohs(ai->PAD);
                     Mtxf                matrix;
 
                     if (obj && obj->prop)
@@ -2428,10 +2385,11 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         {
                             pad = (PadRecord *)&g_CurrentSetup.boundpads[getBoundPadNum(padnum)];
                         }
-#ifdef ENABLE_LOG
-                            osSyncPrintf("aiMoveObj: moving object to pad %d\n", pad);
-#endif
-                        matrix_4x4_7F059908(&matrix, 0, 0, 0, -pad->look.x, -pad->look.y, -pad->look.z, pad->up.x, pad->up.y, pad->up.z);
+    #ifdef ENABLE_LOG
+                        osSyncPrintf("aiMoveObj: moving object to pad %d\n", pad);
+    #endif
+                        matrix_4x4_set_basis_and_position_target(&matrix, 0, 0, 0, -pad->look.x, -pad->look.y, -pad->look.z, pad->up.x, pad->up.y, pad->up.z);
+
                         if (obj->model)
                         {
                             matrix_scalar_multiply(obj->model->scale, &matrix);
@@ -2439,38 +2397,38 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         sub_GAME_7F04088C(obj, &pad->pos, &matrix, pad->stan, &pad->pos);
                         setupUpdateObjectRoomPosition(obj);
                     }
-                    Offset += AI_MoveObject_LENGTH;
+                    Offset += sizeof(AiMoveObjectRecord);
                     break;
                 }
                 case AI_DoorOpen:
                 {
-                    AIRecord   *ai  = AiListp + Offset;
-                    DoorRecord *obj = objFindByTagId(ai->val[0]);
+                    AiDoorOpenRecord *ai  = AiListp + Offset;
+                    DoorRecord       *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && obj->prop->type == PROP_TYPE_DOOR)
                     {
                         // DoorRecord *door = (DoorRecord *)obj;
                         doorActivate(obj, DOORSTATE_OPENING);
                     }
-                    Offset += AI_DoorOpen_LENGTH;
+                    Offset += sizeof(AiDoorOpenRecord);
                     break;
                 }
                 case AI_DoorClose:
                 {
-                    AIRecord   *ai  = AiListp + Offset;
-                    DoorRecord *obj = objFindByTagId(ai->val[0]);
+                    AiDoorCloseRecord *ai  = AiListp + Offset;
+                    DoorRecord        *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && obj->prop->type == PROP_TYPE_DOOR)
                     {
-                        //DoorRecord *door = (DoorRecord *)obj;
+                        // DoorRecord *door = (DoorRecord *)obj;
                         doorActivate(obj, DOORSTATE_CLOSING);
                     }
-                    Offset += AI_DoorClose_LENGTH;
+                    Offset += sizeof(AiDoorCloseRecord);
                     break;
                 }
                 case AI_IFDoorStateEqual:
                 {
-                    AIRecord     *ai   = AiListp + Offset;
-                    ObjectRecord *obj  = objFindByTagId(ai->val[0]);
-                    bool          pass = FALSE;
+                    AiIFDoorStateEqualRecord *ai   = AiListp + Offset;
+                    ObjectRecord             *obj  = objFindByTagId(ai->OBJECT_TAG);
+                    bool                      pass = FALSE;
                     if (obj && obj->prop && obj->type == PROPDEF_DOOR)
                     {
                         DoorRecord *door = (DoorRecord *)obj;
@@ -2478,81 +2436,81 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         {
                             if (door->openPosition <= 0)
                             {
-                                pass = (ai->val[1] & AI_DOOR_STATE_CLOSED) != 0;
+                                pass = (ai->DOOR_STATE & AI_DOOR_STATE_CLOSED) != 0;
                             }
                             else
                             {
-                                pass = (ai->val[1] & AI_DOOR_STATE_OPEN) != 0;
+                                pass = (ai->DOOR_STATE & AI_DOOR_STATE_OPEN) != 0;
                             }
                         }
                         else if (door->openstate == DOORSTATE_OPENING || door->openstate == DOORSTATE_WAITING)
                         {
-                            pass = (ai->val[1] & AI_DOOR_STATE_OPENING) != 0;
+                            pass = (ai->DOOR_STATE & AI_DOOR_STATE_OPENING) != 0;
                         }
                         else if (door->openstate == DOORSTATE_CLOSING)
                         {
-                            pass = (ai->val[1] & AI_DOOR_STATE_CLOSING) != 0;
+                            pass = (ai->DOOR_STATE & AI_DOOR_STATE_CLOSING) != 0;
                         }
                     }
                     if (pass)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFDoorStateEqual_LENGTH;
+                        Offset += sizeof(AiIFDoorStateEqualRecord);
                     }
                     break;
                 }
                 case AI_IFDoorHasBeenOpenedBefore:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiIFDoorHasBeenOpenedBeforeRecord *ai  = AiListp + Offset;
+                    ObjectRecord                      *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && obj->type == PROPDEF_DOOR && (obj->runtime_bitflags & RUNTIMEBITFLAG_BEENOPENED))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFDoorHasBeenOpenedBefore_LENGTH;
+                        Offset += sizeof(AiIFDoorHasBeenOpenedBeforeRecord);
                     }
                     break;
                 }
                 case AI_DoorSetLock:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiDoorSetLockRecord *ai  = AiListp + Offset;
+                    ObjectRecord        *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && obj->prop->type == PROP_TYPE_DOOR)
                     {
                         DoorRecord *door = (DoorRecord *)obj;
-                        u8          bits = ai->val[1];
+                        u8          bits = ai->LOCK_FLAG;
                         door->keyflags   = door->keyflags | bits;
                     }
-                    Offset += AI_DoorSetLock_LENGTH;
+                    Offset += sizeof(AiDoorSetLockRecord);
                     break;
                 }
                 case AI_DoorUnsetLock:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiDoorUnsetLockRecord *ai  = AiListp + Offset;
+                    ObjectRecord          *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && obj->prop->type == PROP_TYPE_DOOR)
                     {
                         DoorRecord *door = (DoorRecord *)obj;
-                        u8          bits = ai->val[1];
+                        u8          bits = ai->LOCK_FLAG;
                         door->keyflags &= ~bits;
                     }
-                    Offset += AI_DoorUnsetLock_LENGTH;
+                    Offset += sizeof(AiDoorUnsetLockRecord);
                     break;
                 }
                 case AI_IFDoorLockEqual:
                 {
-                    AIRecord     *ai   = AiListp + Offset;
-                    ObjectRecord *obj  = objFindByTagId(ai->val[0]);
-                    bool          pass = FALSE;
+                    AiIFDoorLockEqualRecord *ai   = AiListp + Offset;
+                    ObjectRecord            *obj  = objFindByTagId(ai->OBJECT_TAG);
+                    bool                     pass = FALSE;
                     if (obj && obj->prop && obj->prop->type == PROP_TYPE_DOOR)
                     {
                         DoorRecord *door = (DoorRecord *)obj;
-                        s32         bits = ai->val[1];
+                        s32         bits = ai->LOCK_FLAG;
                         if ((door->keyflags & bits) == bits)
                         {
                             pass = TRUE;
@@ -2560,329 +2518,324 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     }
                     if (pass)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFDoorLockEqual_LENGTH;
+                        Offset += sizeof(AiIFDoorLockEqualRecord);
                     }
                     break;
                 }
                 case AI_IFObjectiveNumComplete:
                 {
-                    struct
-                    {
-                        u8 cmd;
-                        u8 val;
-                        u8 label;
-                    } *ai = AiListp + Offset;
+                    AiIFObjectiveNumCompleteRecord *ai = AiListp + Offset;
                     /*  additional PD code for dificulty filtering
                      == OBJECTIVE_COMPLETE && objectivelvlGetSelectedDifficultyBits(ai->val[0]) & (1 << lvlGetSelectedDifficulty()))  *
                     */
-                    if (objectiveGetCount() > ai->val && OBJECTIVESTATUS_COMPLETE == objectiveGetStatus_WEAK(ai->val * 1, ai->val ))
+                    if (objectiveGetCount() > ai->OBJ_NUM && OBJECTIVESTATUS_COMPLETE == objectiveGetStatus_WEAK(ai->OBJ_NUM * 1, ai->OBJ_NUM))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->label);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFObjectiveNumComplete_LENGTH;
+                        Offset += sizeof(AiIFObjectiveNumCompleteRecord);
                     }
                     break;
                 }
                 case AI_TRYUnknown6e:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (check_2328_preset_set_with_method(ChrEntityp, ai->val[0]))
+                    AiTRYUnknown6eRecord *ai = AiListp + Offset;
+                    if (check_2328_preset_set_with_method(ChrEntityp, ai->val))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYUnknown6e_LENGTH;
+                        Offset += sizeof(AiTRYUnknown6eRecord);
                     }
                     break;
                 }
                 case AI_TRYUnknown6f:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (sub_GAME_7F033AAC(ChrEntityp, ai->val[0]))
+                    AiTRYUnknown6fRecord *ai = AiListp + Offset;
+                    if (sub_GAME_7F033AAC(ChrEntityp, ai->val))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYUnknown6f_LENGTH;
+                        Offset += sizeof(AiTRYUnknown6fRecord);
                     }
                     break;
                 }
 
                 case AI_IFMyNumArghsLessThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] > chrGetNumArghs(ChrEntityp)) //order matter
+                    AiIFMyNumArghsLessThanRecord *ai = AiListp + Offset;
+                    if (ai->val > chrGetNumArghs(ChrEntityp)) // order matter
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyNumArghsLessThan_LENGTH;
+                        Offset += sizeof(AiIFMyNumArghsLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFMyNumArghsGreaterThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] < chrGetNumArghs(ChrEntityp)) //order matter
+                    AiIFMyNumArghsGreaterThanRecord *ai = AiListp + Offset;
+                    if (ai->val < chrGetNumArghs(ChrEntityp)) // order matter
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyNumArghsGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFMyNumArghsGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_IFMyNumCloseArghsLessThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] > chrGetNumCloseArghs(ChrEntityp))
+                    AiIFMyNumCloseArghsLessThanRecord *ai = AiListp + Offset;
+                    if (ai->val > chrGetNumCloseArghs(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyNumCloseArghsLessThan_LENGTH;
+                        Offset += sizeof(AiIFMyNumCloseArghsLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFMyNumCloseArghsGreaterThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] < chrGetNumCloseArghs(ChrEntityp))
+                    AiIFMyNumCloseArghsGreaterThanRecord *ai = AiListp + Offset;
+                    if (ai->val < chrGetNumCloseArghs(ChrEntityp))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyNumCloseArghsGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFMyNumCloseArghsGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_IFChrHealthLessThan:
                 {
-                    AIRecord  *ai    = AiListp + Offset;
-                    f32        value = (ai->val[1]) * 0.1f;
-                    ChrRecord *chr   = chrFindById(ChrEntityp, ai->val[0]);
+                    AiIFChrHealthLessThanRecord *ai    = AiListp + Offset;
+                    f32                          value = (ai->HEALTH) * 0.1f;
+                    ChrRecord                   *chr   = chrFindById(ChrEntityp, ai->CHR_NUM);
 
                     if (chr && ((chr->maxdamage - chr->damage) < value))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrHealthLessThan_LENGTH;
+                        Offset += sizeof(AiIFChrHealthLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFChrHealthGreaterThan:
                 {
-                    AIRecord  *ai    = AiListp + Offset;
-                    f32        value = (ai->val[1]) * 0.1f;
-                    ChrRecord *chr   = chrFindById(ChrEntityp, ai->val[0]);
+                    AiIFChrHealthGreaterThanRecord *ai    = AiListp + Offset;
+                    f32                             value = (ai->HEALTH) * 0.1f;
+                    ChrRecord                      *chr   = chrFindById(ChrEntityp, ai->CHR_NUM);
 
                     if (chr && ((chr->maxdamage - chr->damage) > value))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrHealthGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFChrHealthGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_IFChrWasDamagedSinceLastCheck:
                 {
-                    AIRecord  *ai  = AiListp + Offset;
-                    ChrRecord *chr = chrFindById(ChrEntityp, ai->val[0]);
+                    AiIFChrWasDamagedSinceLastCheckRecord *ai  = AiListp + Offset;
+                    ChrRecord                             *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (chr && (chr->chrflags & CHRFLAG_WAS_DAMAGED))
                     {
                         chr->chrflags &= ~CHRFLAG_WAS_DAMAGED; // disable flag
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrWasDamagedSinceLastCheck_LENGTH;
+                        Offset += sizeof(AiIFChrWasDamagedSinceLastCheckRecord);
                     }
                     break;
                 }
                 case AI_IFBondHealthLessThan:
                 {
-                    AIRecord *ai  = AiListp + Offset;
-                    float     val = (ai->val[0]) / 255.0f;
+                    AiIFBondHealthLessThanRecord *ai  = AiListp + Offset;
+                    float                         val = (ai->HEALTH) / 255.0f;
                     if (val > bondviewGetCurrentPlayerHealth())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondHealthLessThan_LENGTH;
+                        Offset += sizeof(AiIFBondHealthLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFBondHealthGreaterThan:
                 {
-                    AIRecord *ai  = AiListp + Offset;
-                    float     val = (ai->val[0]) / 255.0f;
+                    AiIFBondHealthGreaterThanRecord *ai  = AiListp + Offset;
+                    float                            val = (ai->HEALTH) / 255.0f;
                     if (val < bondviewGetCurrentPlayerHealth())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondHealthGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFBondHealthGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_IFGameDifficultyLessThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] > lvlGetSelectedDifficulty())
+                    AiIFGameDifficultyLessThanRecord *ai = AiListp + Offset;
+                    if (ai->DIFICULTY_ID > lvlGetSelectedDifficulty())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFGameDifficultyLessThan_LENGTH;
+                        Offset += sizeof(AiIFGameDifficultyLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFGameDifficultyGreaterThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] < lvlGetSelectedDifficulty())
+                    AiIFGameDifficultyGreaterThanRecord *ai = AiListp + Offset;
+                    if (ai->DIFICULTY_ID < lvlGetSelectedDifficulty())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFGameDifficultyGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFGameDifficultyGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_IFMissionTimeLessThan:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    f32       target = CharArrayTo16(ai->val,0);
+                    AiIFMissionTimeLessThanRecord *ai     = AiListp + Offset;
+                    f32                            target = ntohs(ai->SECONDS);
                     if (target > lvlGetCurrentMultiPlayerSec())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMissionTimeLessThan_LENGTH;
+                        Offset += sizeof(AiIFMissionTimeLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFMissionTimeGreaterThan:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    f32       target = CharArrayTo16(ai->val,0);
+                    AiIFMissionTimeGreaterThanRecord *ai     = AiListp + Offset;
+                    f32                               target = ntohs(ai->SECONDS);
                     if (target < lvlGetCurrentMultiPlayerSec())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMissionTimeGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFMissionTimeGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_IFSystemPowerTimeLessThan:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    f32       target = CharArrayTo16(ai->val,0) * CHRAI_TICKRATE_F;
+                    AiIFSystemPowerTimeLessThanRecord *ai     = AiListp + Offset;
+                    f32                                target = ntohs(ai->MINUTES) * CHRAI_TICKRATE_F;
                     if (target > lvlGetCurrentMultiPlayerMin())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFSystemPowerTimeLessThan_LENGTH;
+                        Offset += sizeof(AiIFSystemPowerTimeLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFSystemPowerTimeGreaterThan:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    f32       target = CharArrayTo16(ai->val,0) * CHRAI_TICKRATE_F;
+                    AiIFSystemPowerTimeGreaterThanRecord *ai     = AiListp + Offset;
+                    f32                                   target = ntohs(ai->MINUTES) * CHRAI_TICKRATE_F;
                     if (target < lvlGetCurrentMultiPlayerMin())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFSystemPowerTimeGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFSystemPowerTimeGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_IFLevelIdLessThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] > bossGetStageNum())
+                    AiIFLevelIdLessThanRecord *ai = AiListp + Offset;
+                    if (ai->LEVEL_ID > bossGetStageNum())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFLevelIdLessThan_LENGTH;
+                        Offset += sizeof(AiIFLevelIdLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFLevelIdGreaterThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] < bossGetStageNum())
+                    AiIFLevelIdGreaterThanRecord *ai = AiListp + Offset;
+                    if (ai->LEVEL_ID < bossGetStageNum())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFLevelIdGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFLevelIdGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_SetMyMorale:
                 {
-                    AIRecord1 *ai      = AiListp + Offset;
-                    ChrEntityp->morale = ai->val;
-#ifdef ENABLE_LOG
-                    osSyncPrintf("MORALE IS NOW %d \n",ChrEntityp->morale);
-#endif
-                    Offset += AI_SetMyMorale_LENGTH;
+                    AiSetMyMoraleRecord *ai = AiListp + Offset;
+                    ChrEntityp->morale      = ai->val;
+    #ifdef ENABLE_LOG
+                    osSyncPrintf("MORALE IS NOW %d \n", ChrEntityp->morale);
+    #endif
+                    Offset += sizeof(AiSetMyMoraleRecord);
                     break;
                 }
                 case AI_AddToMyMorale:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
-                    if (255 - ai->val < ChrEntityp->morale) //clamp to 255
+                    AiAddToMyMoraleRecord *ai = AiListp + Offset;
+                    if (255 - ai->val < ChrEntityp->morale) // clamp to 255
                     {
-                        ChrEntityp->morale = 255; //max
+                        ChrEntityp->morale = 255; // max
                     }
                     else
                     {
                         ChrEntityp->morale += ai->val;
                     }
-#ifdef ENABLE_LOG
-                    osSyncPrintf("MORALE IS NOW %d \n",ChrEntityp->morale);
-#endif
+    #ifdef ENABLE_LOG
+                    osSyncPrintf("MORALE IS NOW %d \n", ChrEntityp->morale);
+    #endif
 
-                    Offset += AI_AddToMyMorale_LENGTH;
+                    Offset += sizeof(AiAddToMyMoraleRecord);
                     break;
                 }
                 case AI_SubtractFromMyMorale:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
-                    if (ai->val > ChrEntityp->morale) //clamp to 0
+                    AiSubtractFromMyMoraleRecord *ai = AiListp + Offset;
+                    if (ai->val > ChrEntityp->morale) // clamp to 0
                     {
                         ChrEntityp->morale = 0;
                     }
@@ -2890,66 +2843,66 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     {
                         ChrEntityp->morale -= ai->val;
                     }
-#ifdef ENABLE_LOG
+    #ifdef ENABLE_LOG
                     osSyncPrintf("MORALE IS NOW %d \n", ChrEntityp->morale);
-#endif
-                    Offset += AI_SubtractFromMyMorale_LENGTH;
+    #endif
+                    Offset += sizeof(AiSubtractFromMyMoraleRecord);
                     break;
                 }
                 case AI_IFMyMoraleLessThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] > ChrEntityp->morale)
+                    AiIFMyMoraleLessThanRecord *ai = AiListp + Offset;
+                    if (ai->val > ChrEntityp->morale)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyMoraleLessThan_LENGTH;
+                        Offset += sizeof(AiIFMyMoraleLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFMyMoraleLessThanRandom:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFMyMoraleLessThanRandomRecord *ai = AiListp + Offset;
                     if (ChrEntityp->morale < ChrEntityp->random)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyMoraleLessThanRandom_LENGTH;
+                        Offset += sizeof(AiIFMyMoraleLessThanRandomRecord);
                     }
                     break;
                 }
                 case AI_SetMyAlertness:
                 {
-                    AIRecord1 *ai         = AiListp + Offset;
-                    ChrEntityp->alertness = ai->val;
-#ifdef ENABLE_LOG
+                    AiSetMyAlertnessRecord *ai = AiListp + Offset;
+                    ChrEntityp->alertness      = ai->val;
+    #ifdef ENABLE_LOG
                     osSyncPrintf("AI_PRINT(void) Alertness =  %d!\n", ChrEntityp->alertness);
-#endif
-                    Offset += AI_SetMyAlertness_LENGTH;
+    #endif
+                    Offset += sizeof(AiSetMyAlertnessRecord);
                     break;
                 }
                 case AI_AddToMyAlertness:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
-                    if (255 - ai->val < ChrEntityp->alertness) //clamp to 255
+                    AiAddToMyAlertnessRecord *ai = AiListp + Offset;
+                    if (255 - ai->val < ChrEntityp->alertness) // clamp to 255
                     {
-                        ChrEntityp->alertness = 255; //max
+                        ChrEntityp->alertness = 255; // max
                     }
                     else
                     {
                         ChrEntityp->alertness += ai->val;
                     }
-                    Offset += AI_AddToMyAlertness_LENGTH;
+                    Offset += sizeof(AiAddToMyAlertnessRecord);
                     break;
                 }
                 case AI_SubtractFromMyAlertness:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
-                    if (ai->val > ChrEntityp->alertness) //clamp to 0
+                    AiSubtractFromMyAlertnessRecord *ai = AiListp + Offset;
+                    if (ai->val > ChrEntityp->alertness) // clamp to 0
                     {
                         ChrEntityp->alertness = 0;
                     }
@@ -2957,596 +2910,594 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     {
                         ChrEntityp->alertness -= ai->val;
                     }
-                    Offset += AI_SubtractFromMyAlertness_LENGTH;
+                    Offset += sizeof(AiSubtractFromMyAlertnessRecord);
                     break;
                 }
                 case AI_IFMyAlertnessLessThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] > ChrEntityp->alertness)
+                    AiIFMyAlertnessLessThanRecord *ai = AiListp + Offset;
+                    if (ai->CHRBYTE > ChrEntityp->alertness)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyAlertnessLessThan_LENGTH;
+                        Offset += sizeof(AiIFMyAlertnessLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFMyAlertnessLessThanRandom:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFMyAlertnessLessThanRandomRecord *ai = AiListp + Offset;
                     if (ChrEntityp->alertness < ChrEntityp->random)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyAlertnessLessThanRandom_LENGTH;
+                        Offset += sizeof(AiIFMyAlertnessLessThanRandomRecord);
                     }
                     break;
                 }
                 case AI_SetMyHearingScale:
                 {
-                    AIRecord *ai             = AiListp + Offset;
-                    f32       distance       = CharArrayTo16(ai->val,0) / 1000.0f;
-                    ChrEntityp->hearingscale = distance;
-                    Offset += AI_SetMyHearingScale_LENGTH;
+                    AiSetMyHearingScaleRecord *ai       = AiListp + Offset;
+                    f32                        distance = ntohs(ai->HEARING_SCALE) / 1000.0f;
+                    ChrEntityp->hearingscale            = distance;
+                    Offset += sizeof(AiSetMyHearingScaleRecord);
                     break;
                 }
                 case AI_SetMyVisionRange:
                 {
-                    AIRecord *ai            = AiListp + Offset;
-                    ChrEntityp->visionrange = (ai->val[0]);
-                    Offset += AI_SetMyVisionRange_LENGTH;
+                    AiSetMyVisionRangeRecord *ai = AiListp + Offset;
+                    ChrEntityp->visionrange      = (ai->VISION_RANGE);
+                    Offset += sizeof(AiSetMyVisionRangeRecord);
                     break;
                 }
                 case AI_SetMyGrenadeProbability:
                 {
-                    AIRecord *ai            = AiListp + Offset;
-                    ChrEntityp->grenadeprob = ai->val[0];
-                    Offset += AI_SetMyGrenadeProbability_LENGTH;
+                    AiSetMyGrenadeProbabilityRecord *ai = AiListp + Offset;
+                    ChrEntityp->grenadeprob             = ai->GRENADE_PROB;
+                    Offset += sizeof(AiSetMyGrenadeProbabilityRecord);
                     break;
                 }
                 case AI_SetMyChrNum:
                 {
-                    AIRecord *ai       = AiListp + Offset;
-                    ChrEntityp->chrnum = ai->val[0];
-                    Offset += AI_SetMyChrNum_LENGTH;
+                    AiSetMyChrNumRecord *ai = AiListp + Offset;
+                    ChrEntityp->chrnum      = ai->CHR_NUM;
+                    Offset += sizeof(AiSetMyChrNumRecord);
                     break;
                 }
                 case AI_SetMyHealthTotal:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    f32       amount = CharArrayTo16(ai->val,0) * 0.1f;
+                    AiSetMyHealthTotalRecord *ai     = AiListp + Offset;
+                    f32                       amount = ntohs(ai->HEALTH) * 0.1f;
                     chrSetMaxDamage(ChrEntityp, amount);
-                    Offset += AI_SetMyHealthTotal_LENGTH;
+                    Offset += sizeof(AiSetMyHealthTotalRecord);
                     break;
                 }
                 case AI_SetMyArmour:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    f32       amount = CharArrayTo16(ai->val,0) * 0.1f; /*if (cheatIsActive(CHEAT_ENEMYSHIELDS)) { amount = amount < 8 ? 8 : amount; } */
+                    AiSetMyArmourRecord *ai     = AiListp + Offset;
+                    f32                  amount = ntohs(ai->AMOUNT) * 0.1f; /*if (cheatIsActive(CHEAT_ENEMYSHIELDS)) { amount = amount < 8 ? 8 : amount; } */
                     chrAddHealth(ChrEntityp, amount);
-                    Offset += AI_SetMyArmour_LENGTH;
+                    Offset += sizeof(AiSetMyArmourRecord);
                     break;
                 }
                 case AI_SetMySpeedRating:
-                {   AIRecord1s *ai = AiListp + Offset;
-#ifdef DEBUG
+                {
+                    AiSetMySpeedRatingRecord *ai = AiListp + Offset;
+    #ifdef DEBUG
                     /*
                         ".\\ported\\chrai.c", 2258, "Assertion failed: ai->val>=0"
                         ".\\ported\\chrai.c", 2259, "Assertion failed: ai->val<=100"
                      */
                     assert(ai->val >= 0);
                     assert(ai->val <= 100);
-#endif
+    #endif
                     ChrEntityp->speedrating = ai->val;
-                    Offset += AI_SetMySpeedRating_LENGTH;
+                    Offset += sizeof(AiSetMySpeedRatingRecord);
                     break;
                 }
                 case AI_SetMyArghRating:
-                {   AIRecord1s *ai = AiListp + Offset;
-#ifdef DEBUG
+                {
+                    AiSetMyArghRatingRecord *ai = AiListp + Offset;
+    #ifdef DEBUG
                     /*
                         ".\\ported\\chrai.c", 2268, "Assertion failed: ai->val>=0"
                         ".\\ported\\chrai.c", 2269, "Assertion failed: ai->val<=100"
                     */
                     assert(ai->val >= 0);
                     assert(ai->val <= 100);
-#endif
+    #endif
                     ChrEntityp->arghrating = ai->val;
-                    Offset += AI_SetMyArghRating_LENGTH;
+                    Offset += sizeof(AiSetMyArghRatingRecord);
                     break;
                 }
                 case AI_SetMyAccuracyRating:
                 {
-                    struct
-                    {
-                        u8 cmd;
-                        s8 val;
-                    } *ai                      = AiListp + Offset;
-                    ChrEntityp->accuracyrating = ai->val;
-                    Offset += AI_SetMyAccuracyRating_LENGTH;
+                    AiSetMyAccuracyRatingRecord *ai = AiListp + Offset;
+                    ChrEntityp->accuracyrating      = ai->val;
+                    Offset += sizeof(AiSetMyAccuracyRatingRecord);
                     break;
                 }
                 case AI_SetMyFlags2:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    chrSetFlags2(ChrEntityp, ai->val[0]);
-                    Offset += AI_SetMyFlags2_LENGTH;
+                    AiSetMyFlags2Record *ai = AiListp + Offset;
+                    chrSetFlags2(ChrEntityp, ai->BITS);
+                    Offset += sizeof(AiSetMyFlags2Record);
                     break;
                 }
                 case AI_UnsetMyFlags2:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    chrUnsetFlags2(ChrEntityp, ai->val[0]);
-                    Offset += AI_UnsetMyFlags2_LENGTH;
+                    AiUnsetMyFlags2Record *ai = AiListp + Offset;
+                    chrUnsetFlags2(ChrEntityp, ai->BITS);
+                    Offset += sizeof(AiUnsetMyFlags2Record);
                     break;
                 }
                 case AI_IFMyFlags2Has:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (chrHasFlags2(ChrEntityp, ai->val[0]))
+                    AiIFMyFlags2HasRecord *ai = AiListp + Offset;
+                    if (chrHasFlags2(ChrEntityp, ai->BITS))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyFlags2Has_LENGTH;
+                        Offset += sizeof(AiIFMyFlags2HasRecord);
                     }
                     break;
                 }
                 case AI_SetChrBitfield:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    chrSetFlags2ById(ChrEntityp, ai->val[0], ai->val[1]);
-                    Offset += AI_SetChrBitfield_LENGTH;
+                    AiSetChrBitfieldRecord *ai = AiListp + Offset;
+                    chrSetFlags2ById(ChrEntityp, ai->CHR_NUM, ai->BITS);
+                    Offset += sizeof(AiSetChrBitfieldRecord);
                     break;
                 }
                 case AI_UnsetChrBitfield:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    chrUnsetFlags2ById(ChrEntityp, ai->val[0], ai->val[1]);
-                    Offset += AI_UnsetChrBitfield_LENGTH;
+                    AiUnsetChrBitfieldRecord *ai = AiListp + Offset;
+                    chrUnsetFlags2ById(ChrEntityp, ai->CHR_NUM, ai->BITS);
+                    Offset += sizeof(AiUnsetChrBitfieldRecord);
                     break;
                 }
                 case AI_IFChrBitfieldHas:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (chrHasFlags2ById(ChrEntityp, ai->val[0], ai->val[1]))
+                    AiIFChrBitfieldHasRecord *ai = AiListp + Offset;
+                    if (chrHasFlags2ById(ChrEntityp, ai->CHR_NUM, ai->BITS))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrBitfieldHas_LENGTH;
+                        Offset += sizeof(AiIFChrBitfieldHasRecord);
                     }
                     break;
                 }
                 case AI_SetObjectiveBitfield:
                 {
-                    AIRecord *ai    = AiListp + Offset;
-                    s32       flags = CharArrayTo32(ai->val,0);
+                    AiSetObjectiveBitfieldRecord *ai    = AiListp + Offset;
+                    s32                           flags = ntohl(ai->BITFIELD);
                     chrSetStageFlags(ChrEntityp, flags);
-                    Offset += AI_SetObjectiveBitfield_LENGTH;
+                    Offset += sizeof(AiSetObjectiveBitfieldRecord);
                     break;
                 }
                 case AI_UnsetObjectiveBitfield:
                 {
-                    AIRecord *ai    = AiListp + Offset;
-                    s32       flags = CharArrayTo32(ai->val,0);
+                    AiUnsetObjectiveBitfieldRecord *ai    = AiListp + Offset;
+                    s32                             flags = ntohl(ai->BITFIELD);
                     chrUnsetStageFlags(ChrEntityp, flags);
-                    Offset += AI_UnsetObjectiveBitfield_LENGTH;
+                    Offset += sizeof(AiUnsetObjectiveBitfieldRecord);
                     break;
                 }
                 case AI_IFObjectiveBitfieldHas:
                 {
-                    AIRecord *ai    = AiListp + Offset;
-                    s32       flags = CharArrayTo32(ai->val,0);
+                    AiIFObjectiveBitfieldHasRecord *ai    = AiListp + Offset;
+                    s32                             flags = ntohl(ai->BITS);
                     if (chrHasStageFlag(ChrEntityp, flags)) /* PD && ai->val[4] == 1) || (!chrHasStageFlag(ChrEntityp, flags) && ai->val[4] == 0  * */
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[4]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFObjectiveBitfieldHas_LENGTH;
+                        Offset += sizeof(AiIFObjectiveBitfieldHasRecord);
                     }
                     break;
                 }
                 case AI_SetMychrflags:
                 {
-                    AIRecord *ai    = AiListp + Offset;
-                    CHRFLAG   flags = CharArrayTo32(ai->val,0);
+                    AiSetMychrflagsRecord *ai    = AiListp + Offset;
+                    CHRFLAG                flags = ntohl(ai->CHRFLAGS);
                     ChrEntityp->chrflags |= flags;
-                    Offset += AI_SetMychrflags_LENGTH;
+                    Offset += sizeof(AiSetMychrflagsRecord);
                     break;
                 }
                 case AI_UnsetMychrflags:
                 {
-                    AIRecord *ai    = AiListp + Offset;
-                    CHRFLAG   flags = CharArrayTo32(ai->val,0);
+                    AiUnsetMychrflagsRecord *ai    = AiListp + Offset;
+                    CHRFLAG                  flags = ntohl(ai->CHRFLAGS);
                     ChrEntityp->chrflags &= ~flags;
-                    Offset += AI_UnsetMychrflags_LENGTH;
+                    Offset += sizeof(AiUnsetMychrflagsRecord);
                     break;
                 }
                 case AI_IFMychrflagsHas:
                 {
-                    AIRecord *ai    = AiListp + Offset;
-                    CHRFLAG   flags = CharArrayTo32(ai->val,0);
+                    AiIFMychrflagsHasRecord *ai    = AiListp + Offset;
+                    CHRFLAG                  flags = ntohl(ai->CHRFLAGS);
                     if ((ChrEntityp->chrflags & flags) == flags)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[4]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMychrflagsHas_LENGTH;
+                        Offset += sizeof(AiIFMychrflagsHasRecord);
                     }
                     break;
                 }
                 case AI_SetChrchrflags:
                 {
-                    AIRecord  *ai    = AiListp + Offset;
-                    CHRFLAG    flags = CharArrayTo32(ai->val,1);
-                    ChrRecord *chr   = chrFindById(ChrEntityp, ai->val[0]);
+                    AiSetChrchrflagsRecord *ai    = AiListp + Offset;
+                    CHRFLAG                 flags = ntohl(ai->CHRFLAGS);
+                    ChrRecord              *chr   = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (chr)
                     {
                         chr->chrflags |= flags;
                     }
-                    Offset += AI_SetChrchrflags_LENGTH;
+                    Offset += sizeof(AiSetChrchrflagsRecord);
                     break;
                 }
                 case AI_UnsetChrchrflags:
                 {
-                    AIRecord  *ai    = AiListp + Offset;
-                    CHRFLAG    flags = CharArrayTo32(ai->val,1);
-                    ChrRecord *chr   = chrFindById(ChrEntityp, ai->val[0]);
+                    AiUnsetChrchrflagsRecord *ai    = AiListp + Offset;
+                    CHRFLAG                   flags = ntohl(ai->CHRFLAGS);
+                    ChrRecord                *chr   = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (chr)
                     {
                         chr->chrflags &= ~flags;
                     }
-                    Offset += AI_UnsetChrchrflags_LENGTH;
+                    Offset += sizeof(AiUnsetChrchrflagsRecord);
                     break;
                 }
                 case AI_IFChrchrflagsHas:
                 {
-                    AIRecord  *ai    = AiListp + Offset;
-                    CHRFLAG    flags = CharArrayTo32(ai->val,1);
-                    ChrRecord *chr   = chrFindById(ChrEntityp, ai->val[0]);
+                    AiIFChrchrflagsHasRecord *ai    = AiListp + Offset;
+                    CHRFLAG                   flags = ntohl(ai->CHRFLAGS);
+                    ChrRecord                *chr   = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (chr && (chr->chrflags & flags) == flags)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[5]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrchrflagsHas_LENGTH;
+                        Offset += sizeof(AiIFChrchrflagsHasRecord);
                     }
                     break;
                 }
                 case AI_SetObjectFlags:
                 {
-                    AIRecord     *ai    = AiListp + Offset;
-                    s32           flags = CharArrayTo32(ai->val,1);
-                    ObjectRecord *obj   = objFindByTagId(ai->val[0]);
+                    AiSetObjectFlagsRecord *ai    = AiListp + Offset;
+                    s32                     flags = ntohl(ai->BITFIELD);
+                    ObjectRecord           *obj   = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop)
                     {
                         obj->flags |= flags;
                     }
-                    Offset += AI_SetObjectFlags_LENGTH;
+                    Offset += sizeof(AiSetObjectFlagsRecord);
                     break;
                 }
                 case AI_UnsetObjectFlags:
                 {
-                    AIRecord     *ai    = AiListp + Offset;
-                    s32           flags = CharArrayTo32(ai->val,1);
-                    ObjectRecord *obj   = objFindByTagId(ai->val[0]);
+                    AiUnsetObjectFlagsRecord *ai    = AiListp + Offset;
+                    s32                       flags = ntohl(ai->BITFIELD);
+                    ObjectRecord             *obj   = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop)
                     {
                         obj->flags &= ~flags;
                     }
-                    Offset += AI_UnsetObjectFlags_LENGTH;
+                    Offset += sizeof(AiUnsetObjectFlagsRecord);
                     break;
                 }
                 case AI_IFObjectFlagsHas:
                 {
-                    AIRecord     *ai    = AiListp + Offset;
-                    s32           flags = CharArrayTo32(ai->val,1);
-                    ObjectRecord *obj   = objFindByTagId(ai->val[0]);
+                    AiIFObjectFlagsHasRecord *ai    = AiListp + Offset;
+                    s32                       flags = ntohl(ai->BITS);
+                    ObjectRecord             *obj   = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && (obj->flags & flags) == flags)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[5]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFObjectFlagsHas_LENGTH;
+                        Offset += sizeof(AiIFObjectFlagsHasRecord);
                     }
                     break;
                 }
                 case AI_SetObjectFlags2:
                 {
-                    AIRecord     *ai    = AiListp + Offset;
-                    s32           flags = CharArrayTo32(ai->val,1);
-                    ObjectRecord *obj   = objFindByTagId(ai->val[0]);
+                    AiSetObjectFlags2Record *ai    = AiListp + Offset;
+                    s32                      flags = ntohl(ai->BITS);
+                    ObjectRecord            *obj   = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop)
                     {
                         obj->flags2 |= flags;
                     }
-                    Offset += AI_SetObjectFlags2_LENGTH;
+                    Offset += sizeof(AiSetObjectFlags2Record);
                     break;
                 }
                 case AI_UnsetObjectFlags2:
                 {
-                    AIRecord     *ai    = AiListp + Offset;
-                    s32           flags = CharArrayTo32(ai->val,1);
-                    ObjectRecord *obj   = objFindByTagId(ai->val[0]);
+                    AiUnsetObjectFlags2Record *ai    = AiListp + Offset;
+                    s32                        flags = ntohl(ai->BITS);
+                    ObjectRecord              *obj   = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop)
                     {
                         obj->flags2 &= ~flags;
                     }
-                    Offset += AI_UnsetObjectFlags2_LENGTH;
+                    Offset += sizeof(AiUnsetObjectFlags2Record);
                     break;
                 }
                 case AI_IFObjectFlags2Has:
                 {
-                    AIRecord     *ai    = AiListp + Offset;
-                    s32           flags = CharArrayTo32(ai->val,1);
-                    ObjectRecord *obj   = objFindByTagId(ai->val[0]);
+                    AiIFObjectFlags2HasRecord *ai    = AiListp + Offset;
+                    s32                        flags = ntohl(ai->BITFIELD);
+                    ObjectRecord              *obj   = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop && ((obj->flags2 & flags) == flags))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[5]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFObjectFlags2Has_LENGTH;
+                        Offset += sizeof(AiIFObjectFlags2HasRecord);
                     }
                     break;
                 }
                 case AI_SetMyChrPreset:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    chrSetChrPreset(ChrEntityp, ai->val[0]);
-                    Offset += AI_SetMyChrPreset_LENGTH;
+                    AiSetMyChrPresetRecord *ai = AiListp + Offset;
+                    chrSetChrPreset(ChrEntityp, ai->PRESET);
+                    Offset += sizeof(AiSetMyChrPresetRecord);
                     break;
                 }
                 case AI_SetChrChrPreset:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    chrSetChrPreset2(ChrEntityp, ai->val[0], ai->val[1]);
-                    Offset += AI_SetChrChrPreset_LENGTH;
+                    AiSetChrChrPresetRecord *ai = AiListp + Offset;
+                    chrSetChrPreset2(ChrEntityp, ai->CHR_NUM, ai->PRESET);
+                    Offset += sizeof(AiSetChrChrPresetRecord);
                     break;
                 }
                 case AI_SetMyPadPreset:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    u16       pad_id = CharArrayTo16(ai->val,0);
+                    AiSetMyPadPresetRecord *ai     = AiListp + Offset;
+                    u16                     pad_id = ntohs(ai->PAD_PRESET);
                     if (ChrEntityp)
                     {
-#ifdef ENABLE_LOG
+    #ifdef ENABLE_LOG
                         if (pad_id == PAD_PRESET1 && ChrEntityp->padpreset1 == PAD_PRESET1)
                         {
                             osSyncPrintf("RUSS : Pad is bollox -> Num=%d (%d) - PAD_PRESET1=%d\n", pad_id, ChrEntityp->padpreset1, PAD_PRESET1);
                         }
-#endif
+    #endif
                         chrSetPadPreset(ChrEntityp, pad_id);
                     }
                     else if (AircraftEntityp)
                     {
                         AircraftEntityp->pad = pad_id;
                     }
-                    Offset += AI_SetMyPadPreset_LENGTH;
+                    Offset += sizeof(AiSetMyPadPresetRecord);
                     break;
                 }
                 case AI_SetChrPadPreset:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    u16       pad_id = CharArrayTo16(ai->val,1);
-                    chrSetPadPresetByChrnum(ChrEntityp, ai->val[0], pad_id);
-                    Offset += AI_SetChrPadPreset_LENGTH;
+                    AiSetChrPadPresetRecord *ai     = AiListp + Offset;
+                    u16                      pad_id = ntohs(ai->PAD_PRESET);
+                    chrSetPadPresetByChrnum(ChrEntityp, ai->CHR_NUM, pad_id);
+                    Offset += sizeof(AiSetChrPadPresetRecord);
                     break;
                 }
                 case AI_PRINT:
                 {
-#ifdef ENABLE_LOG
+    #ifdef ENABLE_LOG
                     AIRecord *ai = AiListp + Offset;
                     osSyncPrintf("AI_PRINT: %s\n", ai->val);
-                    #ifdef IS_PD
+        #ifdef IS_PD
                     if (ChrEntityp)
                     {
                         osSyncPrintf("AI_PRINT(void) [%d] %s\n", ChrEntityp->chrnum, ai->val);
                     }
-                    else if(VehichleEntityp)
+                    else if (VehichleEntityp)
                     {
                         osSyncPrintf("AI_PRINT(void) [hover vehicle] %s\n", ai->val);
                     }
-                    #endif
-#endif
+        #endif
+    #endif
                     Offset += chraiitemsize(AiListp, Offset);
                     break;
                 }
                 case AI_MyTimerStart:
                 {
-                    chrRestartTimer(ChrEntityp); //Set timer60 to 0 and set flag
-                    Offset += AI_MyTimerStart_LENGTH;
+                    chrRestartTimer(ChrEntityp); // Set timer60 to 0 and set flag
+                    Offset += sizeof(AiMyTimerStartRecord);
                     break;
                 }
                 case AI_MyTimerReset:
                 {
                     ChrEntityp->timer60 = 0;
-                    Offset += AI_MyTimerReset_LENGTH;
+                    Offset += sizeof(AiMyTimerResetRecord);
                     break;
                 }
                 case AI_MyTimerPause:
                 {
                     ChrEntityp->hidden &= ~CHRHIDDEN_TIMER_ACTIVE;
-                    Offset += AI_MyTimerPause_LENGTH;
+                    Offset += sizeof(AiMyTimerPauseRecord);
                     break;
                 }
                 case AI_MyTimerResume:
                 {
                     ChrEntityp->hidden |= CHRHIDDEN_TIMER_ACTIVE;
-                    Offset += AI_MyTimerResume_LENGTH;
+                    Offset += sizeof(AiMyTimerResumeRecord);
                     break;
                 }
                 case AI_IFMyTimerIsNotRunning:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFMyTimerIsNotRunningRecord *ai = AiListp + Offset;
                     if (((ChrEntityp->hidden & CHRHIDDEN_TIMER_ACTIVE) == 0))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyTimerIsNotRunning_LENGTH;
+                        Offset += sizeof(AiIFMyTimerIsNotRunningRecord);
                     }
                     break;
                 }
                 case AI_IFMyTimerLessThanTicks:
                 {
-                    AIRecord *ai   = AiListp + Offset;
-                    f32       valf = ((unsigned)CharArrayTo24(ai->val,0)) / CHRAI_TICKRATE_F;
+                    AiIFMyTimerLessThanTicksRecord *ai   = AiListp + Offset;
+                    f32                             valf = ((unsigned)CharArrayTo24(((unsigned char *)(&(ai->TICKS))), 0)) / CHRAI_TICKRATE_F;
 
                     if (chrGetTimer(ChrEntityp) < valf)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[3]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyTimerLessThanTicks_LENGTH;
+                        Offset += sizeof(AiIFMyTimerLessThanTicksRecord);
                     }
                     break;
                 }
                 case AI_IFMyTimerGreaterThanTicks:
                 {
-                    AIRecord *ai   = AiListp + Offset;
-                    f32       valf = ((unsigned)CharArrayTo24(ai->val,0)) / CHRAI_TICKRATE_F;
+                    AiIFMyTimerGreaterThanTicksRecord *ai   = AiListp + Offset;
+                    f32                                valf = ((unsigned)CharArrayTo24(((unsigned char *)(&(ai->TICKS))), 0)) / CHRAI_TICKRATE_F;
                     if (chrGetTimer(ChrEntityp) > valf)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[3]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFMyTimerGreaterThanTicks_LENGTH;
+                        Offset += sizeof(AiIFMyTimerGreaterThanTicksRecord);
                     }
                     break;
                 }
                 case AI_HudCountdownShow:
                 {
                     countdownTimerSetVisible(1, TRUE);
-                    Offset += AI_HudCountdownShow_LENGTH;
+                    Offset += sizeof(AiHudCountdownShowRecord);
                     break;
                 }
                 case AI_HudCountdownHide:
                 {
                     countdownTimerSetVisible(1, FALSE);
-                    Offset += AI_HudCountdownHide_LENGTH;
+                    Offset += sizeof(AiHudCountdownHideRecord);
                     break;
                 }
                 case AI_HudCountdownSet:
                 {
-                    AIRecord *ai      = AiListp + Offset;
-                    f32       seconds = CharArrayTo16(ai->val,0);
+                    AiHudCountdownSetRecord *ai      = AiListp + Offset;
+                    f32                      seconds = ntohs(ai->SECONDS);
                     countdownTimerSetValue(seconds * CHRAI_TICKRATE_F);
-                    Offset += AI_HudCountdownSet_LENGTH;
+                    Offset += sizeof(AiHudCountdownSetRecord);
                     break;
                 }
                 case AI_HudCountdownStop:
                 {
                     countdownTimerSetRunning(FALSE);
-                    Offset += AI_HudCountdownStop_LENGTH;
+                    Offset += sizeof(AiHudCountdownStopRecord);
                     break;
                 }
                 case AI_HudCountdownStart:
                 {
                     countdownTimerSetRunning(TRUE);
-                    Offset += AI_HudCountdownStart_LENGTH;
+                    Offset += sizeof(AiHudCountdownStartRecord);
                     break;
                 }
                 case AI_IFHudCountdownIsNotRunning:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFHudCountdownIsNotRunningRecord *ai = AiListp + Offset;
                     if (!countdownTimerIsRunning())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFHudCountdownIsNotRunning_LENGTH;
+                        Offset += sizeof(AiIFHudCountdownIsNotRunningRecord);
                     }
                     break;
                 }
                 case AI_IFHudCountdownLessThan:
                 {
-                    AIRecord *ai    = AiListp + Offset;
-                    f32       value = CharArrayTo16(ai->val,0);
+                    AiIFHudCountdownLessThanRecord *ai    = AiListp + Offset;
+                    f32                             value = ntohs(ai->SECONDS);
                     if (countdownTimerGetValue() < value * CHRAI_TICKRATE_F)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFHudCountdownLessThan_LENGTH;
+                        Offset += sizeof(AiIFHudCountdownLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFHudCountdownGreaterThan:
                 {
-                    AIRecord *ai    = AiListp + Offset;
-                    f32       value = CharArrayTo16(ai->val,0);
+                    AiIFHudCountdownGreaterThanRecord *ai    = AiListp + Offset;
+                    f32                                value = ntohs(ai->SECONDS);
                     if (countdownTimerGetValue() > value * CHRAI_TICKRATE_F)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFHudCountdownGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFHudCountdownGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_TRYSpawningChrAtPad:
                 {
-                    AIRecord *ai       = AiListp + Offset;
-                    u16       pad      = CharArrayTo16(ai->val,2);
-                    CHRFLAG   flags    = CharArrayTo32(ai->val,6);
-                    u16       ailistid = CharArrayTo16(ai->val,4);
-                    AIRecord *ailist   = ailistFindById(ailistid);
-#ifdef ENABLE_LOG
+                    AiTRYSpawningChrAtPadRecord *ai       = AiListp + Offset;
+                    u16                          pad      = ntohs(ai->PAD);
+                    CHRFLAG                      flags    = ntohl(ai->BITFIELD);
+                    u16                          ailistid = ntohs(ai->AI_LIST_ID);
+                    AIRecord                    *ailist   = ailistFindById(ailistid);
+    #ifdef ENABLE_LOG
                     if (flags & 32)
                     {
                         osSyncPrintf("ai_createchrheadthenjumpf : Flag set CHRSTART_FORCENOBLOOD\n");
                     }
-#endif
-                    if (chrSpawnAtPad(ChrEntityp, ai->val[0], (s8)ai->val[1], pad, ailist, flags))
+    #endif
+                    if (chrSpawnAtPad(ChrEntityp, ai->BODY_NUM, ai->HEAD_NUM, pad, ailist, flags))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[10]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYSpawningChrAtPad_LENGTH;
+                        Offset += sizeof(AiTRYSpawningChrAtPadRecord);
                     }
                     break;
                 }
                 case AI_TRYSpawningChrNextToChr:
                 {
-                    AIRecord *ai       = AiListp + Offset;
-                    CHRFLAG   flags    = CharArrayTo32(ai->val,5);
-                    u16       ailistid = CharArrayTo16(ai->val,3);
-                    AIRecord *ailist   = ailistFindById(ailistid);
-                    if (chrSpawnAtChr(ChrEntityp, ai->val[0], (s8)ai->val[1], ai->val[2], ailist, flags))
+                    AiTRYSpawningChrNextToChrRecord *ai       = AiListp + Offset;
+                    CHRFLAG                          flags    = ntohl(ai->BITFIELD);
+                    u16                              ailistid = ntohs(ai->AI_LIST_ID);
+                    AIRecord                        *ailist   = ailistFindById(ailistid);
+                    if (chrSpawnAtChr(ChrEntityp, ai->BODY_NUM, ai->HEAD_NUM, ai->CHR_NUM_TARGET, ailist, flags))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[9]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYSpawningChrNextToChr_LENGTH;
+                        Offset += sizeof(AiTRYSpawningChrNextToChrRecord);
                     }
                     break;
                 }
                 case AI_TRYGiveMeItem:
                 {
-                    AIRecord   *ai    = AiListp + Offset;
-                    s32         flags = CharArrayTo32(ai->val,3);
-                    s32         model = CharArrayTo16(ai->val,0);
-                    PropRecord *prop  = NULL;
+                    AiTRYGiveMeItemRecord *ai    = AiListp + Offset;
+                    s32                    flags = ntohl(ai->PROPFLAG);
+                    s32                    model = ntohs(ai->PROP_NUM);
+                    PropRecord            *prop  = NULL;
 
                     if (ChrEntityp && ChrEntityp->prop && ChrEntityp->model)
                     {
@@ -3561,7 +3512,7 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         */
                         if (cheatIsActive(28)) // CHEAT_ENEMYROCKETS
                         {
-                            switch (ai->val[2]) // ITEM_IDS
+                            switch (ai->ITEM_NUM) // ITEM_IDS
                             {
                                 case ITEM_KNIFE:
                                 case ITEM_THROWKNIFE:
@@ -3590,71 +3541,71 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                                 case ITEM_TASER:
 
                                     prop = chrGiveWeapon(ChrEntityp, PROP_CHRROCKETLAUNCH, ITEM_ROCKETLAUNCH, flags);
-                                    //!Bug, No Break! relying on chrGiveWeapon checking weapon already given
+                                    //! Bug, No Break! relying on chrGiveWeapon checking weapon already given
                                 case ITEM_TIMEDMINE:
                                 case ITEM_PROXIMITYMINE:
                                 default:
-                                    prop = chrGiveWeapon(ChrEntityp, model, ai->val[2], flags);
+                                    prop = chrGiveWeapon(ChrEntityp, model, ai->ITEM_NUM, flags);
                                     break;
                             }
                         }
                         else
                         {
-                            prop = chrGiveWeapon(ChrEntityp, model, ai->val[2], flags);
+                            prop = chrGiveWeapon(ChrEntityp, model, ai->ITEM_NUM, flags);
                         }
                     }
                     if (prop)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[7]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYGiveMeItem_LENGTH;
+                        Offset += sizeof(AiTRYGiveMeItemRecord);
                     }
                     break;
                 }
                 case AI_TRYGiveMeHat:
                 {
-                    AIRecord *ai       = AiListp + Offset;
-                    s32       flags    = CharArrayTo32(ai->val,2);
-                    s32       modelnum = CharArrayTo16(ai->val,0);
-                    bool      ok       = FALSE;
+                    AiTRYGiveMeHatRecord *ai       = AiListp + Offset;
+                    s32                   flags    = ntohl(ai->PROP_BITFIELD);
+                    s32                   modelnum = ntohs(ai->PROP_NUM);
+                    bool                  ok       = FALSE;
                     if (ChrEntityp && ChrEntityp->prop && ChrEntityp->model)
                     {
                         ok = hatCreateForChr(ChrEntityp, modelnum, flags);
                     }
                     if (ok)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[6]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYGiveMeHat_LENGTH;
+                        Offset += sizeof(AiTRYGiveMeHatRecord);
                     }
                     break;
                 }
                 case AI_TRYCloningChr:
                 {
-                    AIRecord        *ai               = AiListp + Offset;
-                    //int zero                        = 0; //on stack in xbla, but matches without
-                    u16              ailistid         = CharArrayTo16(ai->val,1);
-                    u8              *ailist           = ailistFindById((u16)ailistid);
-                    ChrRecord       *chr              = chrFindById(ChrEntityp, ai->val[0]);
-                    bool             pass             = FALSE; //564
-                    int              chrnum;
-                    PropRecord      *srcweaponLprop   = NULL;
-                    PropRecord      *srcweaponRprop   = NULL;
-                    PropRecord      *cloneweaponRprop = NULL;
-                    PropRecord      *cloneweaponLprop = NULL;
-                    PropRecord      *cloneprop        = NULL;
-                    ChrRecord       *clone            = NULL; //536
-                    WeaponObjRecord *srcweaponL       = NULL;
-                    WeaponObjRecord *cloneweaponL     = NULL; //528
-                    WeaponObjRecord *cloneweaponR     = NULL; //524
-                    WeaponObjRecord *srcweaponR       = NULL;
-                    PropRecord      *hatprop;
-                    ObjectRecord    *hatobj;
-                    //bool tryhat;
+                    AiTRYCloningChrRecord *ai       = AiListp + Offset;
+                    // int zero                        = 0; //on stack in xbla, but matches without
+                    u16                    ailistid = ntohs(ai->AI_LIST_ID);
+                    u8                    *ailist   = ailistFindById((u16)ailistid);
+                    ChrRecord             *chr      = chrFindById(ChrEntityp, ai->CHR_NUM);
+                    bool                   pass     = FALSE; // 564
+                    int                    chrnum;
+                    PropRecord            *srcweaponLprop   = NULL;
+                    PropRecord            *srcweaponRprop   = NULL;
+                    PropRecord            *cloneweaponRprop = NULL;
+                    PropRecord            *cloneweaponLprop = NULL;
+                    PropRecord            *cloneprop        = NULL;
+                    ChrRecord             *clone            = NULL; // 536
+                    WeaponObjRecord       *srcweaponL       = NULL;
+                    WeaponObjRecord       *cloneweaponL     = NULL; // 528
+                    WeaponObjRecord       *cloneweaponR     = NULL; // 524
+                    WeaponObjRecord       *srcweaponR       = NULL;
+                    PropRecord            *hatprop;
+                    ObjectRecord          *hatobj;
+                    // bool tryhat;
                     if (chr && (chr->chrflags & CHRFLAG_CLONE))
                     {
                         cloneprop = chrSpawnAtChr(ChrEntityp, chr->bodynum, -1, chr->chrnum, ailist, 0);
@@ -3704,85 +3655,80 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                                 }
                             }
                             /* PD extras */
-                            //clone->morale     = chr->morale;
-                            //clone->alertness  = chr->alertness;
-                            //clone->padpreset1 = chr->padpreset1;
+                            // clone->morale     = chr->morale;
+                            // clone->alertness  = chr->alertness;
+                            // clone->padpreset1 = chr->padpreset1;
                             pass = TRUE;
                         }
                     }
                     if (pass)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[3]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYCloningChr_LENGTH;
+                        Offset += sizeof(AiTRYCloningChrRecord);
                     }
                     break;
                 }
                 case AI_TextPrintBottom:
                 {
-                    AIRecord *ai   = AiListp + Offset;
-                    char     *text = langGet(CharArrayTo16(ai->val,0));
-#ifdef ENABLE_LOG
-                    osSyncPrintf("USING HUD MESSAGE Stringy = %d, ai->txt = %d\n", CharArrayTo16(ai->val,0), text);
-#endif
-#ifdef BUGFIX_R1
+                    AiTextPrintBottomRecord *ai   = AiListp + Offset;
+                    char                    *text = langGet(ntohs(ai->txt));
+    #ifdef ENABLE_LOG
+                    osSyncPrintf("USING HUD MESSAGE Stringy = %d, ai->txt = %d\n", text, ntohs(ai->txt));
+    #endif
+    #ifdef BUGFIX_R1
                     jp_hudmsgBottomShow(text);
-#else
+    #else
                     hudmsgBottomShow(text);
-#endif
-                    Offset += AI_TextPrintBottom_LENGTH;
+    #endif
+                    Offset += sizeof(AiTextPrintBottomRecord);
                     break;
                 }
                 case AI_TextPrintTop:
                 {
-                    AIRecord *ai   = AiListp + Offset;
-                    char     *text = langGet(CharArrayTo16(ai->val,0));
+                    AiTextPrintTopRecord *ai   = AiListp + Offset;
+                    char                 *text = langGet(ntohs(ai->txt));
 
-#ifdef ENABLE_LOG
+    #ifdef ENABLE_LOG
                     osSyncPrintf("ptop =  %f \n", text);
-                    osSyncPrintf("USING HUD MESSAGE Stringy = %d, ai->txt = %d\n", CharArrayTo16(ai->val,0), text);
+                    osSyncPrintf("USING HUD MESSAGE Stringy = %d, ai->txt = %d\n", text, ntohs(ai->txt));
 
-#endif
+    #endif
 
                     hudmsgTopShow(text);
-                    Offset += AI_TextPrintTop_LENGTH;
+                    Offset += sizeof(AiTextPrintTopRecord);
                     break;
                 }
                 case AI_SfxPlay:
                 {
-                    AIRecord *ai       = AiListp + Offset;
-                    s16       audio_id = CharArrayTo16(ai->val,0);
-                    audioPlayFromProp((s8)ai->val[2], audio_id);
-                    Offset += AI_SfxPlay_LENGTH;
+                    AiSfxPlayRecord *ai       = AiListp + Offset;
+                    s16              audio_id = ntohs(ai->SOUND_NUM);
+                    audioPlayFromProp((s8)ai->CHANNEL_NUM, audio_id);
+                    Offset += sizeof(AiSfxPlayRecord);
                     break;
                 }
 
                 case AI_SfxStopChannel:
                 {
-                    AIRecord1s *ai = AiListp + Offset;
-                    sub_GAME_7F0349BC(ai->val);
-                    Offset += AI_SfxStopChannel_LENGTH;
+                    AiSfxStopChannelRecord *ai = AiListp + Offset;
+                    sub_GAME_7F0349BC(ai->CHANNEL_NUM);
+                    Offset += sizeof(AiSfxStopChannelRecord);
                     break;
                 }
                 case AI_SfxSetChannelVolume:
                 {
-                    struct
-                    {
-                        u8 cmd;
-                        s8 slotID;
-                        u8 val[];
-                    } *ai     = AiListp + Offset;
-                    s16 vol   = CharArrayTo16(ai->val,0);
-                    u16 sfxID = CharArrayTo16(ai->val,2);
+                    AiSfxSetChannelVolumeRecord *ai    = AiListp + Offset;
+                    s16                          vol   = ntohs(ai->TARGET_VOLUME);
+                    u16                          sfxID = ntohs(ai->sfxID);
                     if (ai->slotID >= 0 && ai->slotID < 8)
                     {
-#ifdef VERSION_EU
-                        sfx_related[ai->slotID].sfxID  = (sfxID * 50) / 60;
-#else
-                        sfx_related[ai->slotID].sfxID  = sfxID;
-#endif
+    #ifdef VERSION_EU
+                        sfx_related[ai->slotID].sfxID = (sfxID * 50) / 60;
+    #else
+                        sfx_related[ai->slotID].sfxID = sfxID;
+    #endif
                         sfx_related[ai->slotID].Volume = vol;
                         sfx_related[ai->slotID].pos    = NULL;
                         sfx_related[ai->slotID].Obj    = NULL;
@@ -3794,29 +3740,24 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     /*
                       "AI : Bad sound setup command\n"
                     */
-                    Offset += AI_SfxSetChannelVolume_LENGTH;
+                    Offset += sizeof(AiSfxSetChannelVolumeRecord);
                     break;
                 }
                 case AI_SfxFadeChannelVolume:
                 {
-                    struct
-                    {
-                        u8 cmd;
-                        s8 slotID;
-                        u8 val[];
-                    } *ai     = AiListp + Offset;
-                    f32 vol   = CharArrayTo16(ai->val,0);
-                    u16 sfxID = CharArrayTo16(ai->val,2);
+                    AiSfxFadeChannelVolumeRecord *ai    = AiListp + Offset;
+                    f32                           vol   = ntohs(ai->TARGET_VOLUME);
+                    u16                           sfxID = ntohs(ai->sfxID);
                     /*
                         "fadeTo\n"
                      */
                     if (ai->slotID >= 0 && ai->slotID < 8)
                     {
-#ifdef VERSION_EU
-                        sfx_related[ai->slotID].sfxID  = (sfxID * 50) / 60;
-#else
-                        sfx_related[ai->slotID].sfxID  = sfxID;
-#endif
+    #ifdef VERSION_EU
+                        sfx_related[ai->slotID].sfxID = (sfxID * 50) / 60;
+    #else
+                        sfx_related[ai->slotID].sfxID = sfxID;
+    #endif
                         sfx_related[ai->slotID].Volume = sub_GAME_7F0539B8(vol);
                         sfx_related[ai->slotID].pos    = NULL;
                         sfx_related[ai->slotID].Obj    = NULL;
@@ -3825,47 +3766,37 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             audioPlayFromProp2(ai->slotID);
                         }
                     }
-                    Offset += AI_SfxFadeChannelVolume_LENGTH;
+                    Offset += sizeof(AiSfxFadeChannelVolumeRecord);
                     break;
                 }
                 case AI_SfxEmitFromObject:
                 {
-                    struct
-                    {
-                        u8 cmd;
-                        s8 slotID;
-                        u8 val[];
-                    } *ai               = AiListp + Offset;
-                    ObjectRecord *obj   = objFindByTagId(ai->val[0]);
-                    u16           sfxID = CharArrayTo16(ai->val,1);
+                    AiSfxEmitFromObjectRecord *ai    = AiListp + Offset;
+                    ObjectRecord              *obj   = objFindByTagId(ai->OBJECT_TAG);
+                    u16                        sfxID = ntohs(ai->sfxID);
                     if (ai->slotID >= 0 && ai->slotID < 8 && obj)
                     {
-#ifdef VERSION_EU
-                        sfx_related[ai->slotID].sfxID  = (sfxID * 50) / 60;
-#else
-                        sfx_related[ai->slotID].sfxID  = sfxID;
-#endif
-                        sfx_related[ai->slotID].pos   = NULL;
-                        sfx_related[ai->slotID].Obj   = obj;
+    #ifdef VERSION_EU
+                        sfx_related[ai->slotID].sfxID = (sfxID * 50) / 60;
+    #else
+                        sfx_related[ai->slotID].sfxID = sfxID;
+    #endif
+                        sfx_related[ai->slotID].pos = NULL;
+                        sfx_related[ai->slotID].Obj = obj;
                         if (sfxID == 0)
                         {
                             audioPlayFromProp2(ai->slotID);
                         }
                     }
-                    Offset += AI_SfxEmitFromObject_LENGTH;
+                    Offset += sizeof(AiSfxEmitFromObjectRecord);
                     break;
                 }
                 case AI_SfxEmitFromPad:
                 {
-                    struct
-                    {
-                        u8 cmd;
-                        s8 slotID;
-                        u8 val[];
-                    } *ai             = AiListp + Offset;
-                    u16        padnum = CharArrayTo16(ai->val,0);
-                    PadRecord *pad;
-                    u16        sfxID = CharArrayTo16(ai->val,2);
+                    AiSfxEmitFromPadRecord *ai     = AiListp + Offset;
+                    u16                     padnum = ntohs(ai->PAD);
+                    PadRecord              *pad;
+                    u16                     sfxID = ntohs(ai->sfxID);
                     if (isNotBoundPad(padnum))
                     {
                         pad = &g_CurrentSetup.pads[padnum];
@@ -3876,146 +3807,141 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     }
                     if (ai->slotID >= 0 && ai->slotID < 8 && pad)
                     {
-#        ifdef VERSION_EU
+    #ifdef VERSION_EU
                         sfx_related[ai->slotID].sfxID = (sfxID * 50) / 60;
-#        else
-                        sfx_related[ai->slotID].sfxID  = sfxID;
-#        endif
-                        sfx_related[ai->slotID].pos   = pad;
-                        sfx_related[ai->slotID].Obj   = NULL;
+    #else
+                        sfx_related[ai->slotID].sfxID = sfxID;
+    #endif
+                        sfx_related[ai->slotID].pos = pad;
+                        sfx_related[ai->slotID].Obj = NULL;
                         if (sfxID == 0)
                         {
                             audioPlayFromProp2(ai->slotID);
                         }
                     }
-                    Offset += AI_SfxEmitFromPad_LENGTH;
+                    Offset += sizeof(AiSfxEmitFromPadRecord);
                     break;
                 }
 
                 case AI_IFSfxChannelVolumeLessThan:
                 {
-                    struct
-                    {
-                        u8 cmd;
-                        s8 slotID;
-                        u8 val[];
-                    } *ai   = AiListp + Offset;
-                    s16 vol = CharArrayTo16(ai->val,0);
+                    AiIFSfxChannelVolumeLessThanRecord *ai  = AiListp + Offset;
+                    s16                                 vol = ntohs(ai->VOLUME);
                     /*
                      * "ai_ifmusicqueueemptyjumpf : %s, State=%x (getlvleveltime60=%f)\n"
                      */
 
                     if ((ai->slotID >= 0) && (ai->slotID < 8) && (sfx_related[ai->slotID].Volume2 < vol))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFSfxChannelVolumeLessThan_LENGTH;
+                        Offset += sizeof(AiIFSfxChannelVolumeLessThanRecord);
                     }
                     break;
                 }
                 case AI_VehicleStartPath:
                 {
-                    AIRecord   *ai   = AiListp + Offset;
-                    PathRecord *path = pathFindById(ai->val[0]);
+                    AiVehicleStartPathRecord *ai   = AiListp + Offset;
+                    PathRecord               *path = pathFindById(ai->PATH_NUM);
                     if (VehichleEntityp)
                     {
                         VehichleEntityp->path     = path;
                         VehichleEntityp->nextstep = 0;
                     }
-                    Offset += AI_VehicleStartPath_LENGTH;
+                    Offset += sizeof(AiVehicleStartPathRecord);
                     break;
                 }
                 case AI_VehicleSpeed:
                 {
-                    AIRecord *ai        = AiListp + Offset;
-                    f32       speedtime = CharArrayTo16(ai->val,2);
-                    f32       speedaim  = CharArrayTo16(ai->val,0) * 100.0f / 15360.0f;
+                    AiVehicleSpeedRecord *ai        = AiListp + Offset;
+                    f32                   speedtime = ntohs(ai->ACCELERATION_TIME60);
+                    f32                   speedaim  = ntohs(ai->TOP_SPEED) * 100.0f / 15360.0f;
                     if (VehichleEntityp)
                     {
                         VehichleEntityp->speedaim    = speedaim;
                         VehichleEntityp->speedtime60 = speedtime;
                     }
-                    Offset += AI_VehicleSpeed_LENGTH;
+                    Offset += sizeof(AiVehicleSpeedRecord);
                     break;
                 }
                 case AI_AircraftRotorSpeed:
                 {
-                    AIRecord *ai        = AiListp + Offset;
-                    f32       speedtime = CharArrayTo16(ai->val,2);
-                    f32       speedaim  = CharArrayTo16(ai->val,0) * M_TAU_F / 3600.0f;
+                    AiAircraftRotorSpeedRecord *ai        = AiListp + Offset;
+                    f32                         speedtime = ntohs(ai->ACCELERATION_TIME60);
+                    f32                         speedaim  = ntohs(ai->ROTOR_SPEED) * M_TAU_F / 3600.0f;
                     if (AircraftEntityp)
                     {
                         AircraftEntityp->rotaryspeedaim  = speedaim;
                         AircraftEntityp->rotaryspeedtime = speedtime;
                     }
-                    Offset += AI_AircraftRotorSpeed_LENGTH;
+                    Offset += sizeof(AiAircraftRotorSpeedRecord);
                     break;
                 }
                 case AI_IFCameraIsInIntro:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFCameraIsInIntroRecord *ai = AiListp + Offset;
                     if ((bondviewGetCameraMode() == 1) || (bondviewGetCameraMode() == 2))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFCameraIsInIntro_LENGTH;
+                        Offset += sizeof(AiIFCameraIsInIntroRecord);
                     }
                     break;
                 }
                 case AI_IFCameraIsInBondSwirl:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFCameraIsInBondSwirlRecord *ai = AiListp + Offset;
                     if (bondviewGetCameraMode() == 3)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFCameraIsInBondSwirl_LENGTH;
+                        Offset += sizeof(AiIFCameraIsInBondSwirlRecord);
                     }
                     break;
                 }
                 case AI_TvChangeScreenBank:
                 {
-                    AIRecord     *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiTvChangeScreenBankRecord *ai  = AiListp + Offset;
+                    ObjectRecord               *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop)
                     {
                         if (obj->type == PROPDEF_MONITOR)
                         {
                             MonitorObjRecord *sm = (MonitorObjRecord *)obj;
-                            monitorSetImageByNum(&sm->Monitor.cmdlist, ai->val[2]);
+                            monitorSetImageByNum(&sm->Monitor.cmdlist, ai->SCREEN_BANK);
                         }
                         else if (obj->type == PROPDEF_MULTI_MONITOR)
                         {
-                            u8 slot = ai->val[1];
+                            u8 slot = ai->SCREEN_INDEX;
                             if (slot < 4)
                             {
-                                MultiMonitorObjRecord *mm = (MultiMonitorObjRecord *)obj; //need new size here 0x74 (116) + 0x80 (so monitor is obj + 74)
-                                monitorSetImageByNum(&mm->Monitor[slot].cmdlist, ai->val[2]);
+                                MultiMonitorObjRecord *mm = (MultiMonitorObjRecord *)obj; // need new size here 0x74 (116) + 0x80 (so monitor is obj + 74)
+                                monitorSetImageByNum(&mm->Monitor[slot].cmdlist, ai->SCREEN_BANK);
                             }
                         }
                     }
-                    Offset += AI_TvChangeScreenBank_LENGTH;
+                    Offset += sizeof(AiTvChangeScreenBankRecord);
                     break;
                 }
-                case AI_IFBondInTank: //canonical name
+                case AI_IFBondInTank: // canonical name
                 {
-                    AIRecord *ai = AiListp + Offset;
-#ifdef ENABLE_LOG
+                    AiIFBondInTankRecord *ai = AiListp + Offset;
+    #ifdef ENABLE_LOG
                     osSyncPrintf("ai_ifbondintank\n");
-#endif
+    #endif
                     if (isBondInTank() == TRUE)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondInTank_LENGTH;
+                        Offset += sizeof(AiIFBondInTankRecord);
                     }
                     break;
                 }
@@ -4033,19 +3959,19 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     {
                         bossReturnTitleStage();
                     }
-                    Offset += AI_EndLevel_LENGTH;
+                    Offset += sizeof(AiEndLevelRecord);
                     break;
                 }
                 case AI_CameraReturnToBond:
                 {
                     bondviewSetCameraMode(CAMERAMODE_FP_NOINPUT);
-                    Offset += AI_CameraReturnToBond_LENGTH;
+                    Offset += sizeof(AiCameraReturnToBondRecord);
                     break;
                 }
                 case AI_CameraLookAtBondFromPad:
                 {
-                    AIRecord *ai     = AiListp + Offset;
-                    u16       padnum = CharArrayTo16(ai->val,0);
+                    AiCameraLookAtBondFromPadRecord *ai     = AiListp + Offset;
+                    u16                              padnum = ntohs(ai->PAD);
                     if (isNotBoundPad(padnum))
                     {
                         dword_CODE_bss_800799F8 = &g_CurrentSetup.pads[padnum];
@@ -4055,28 +3981,28 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         dword_CODE_bss_800799F8 = (PadRecord *)&g_CurrentSetup.boundpads[getBoundPadNum(padnum)];
                     }
                     bondviewSetCameraMode(CAMERAMODE_POSEND);
-                    Offset += AI_CameraLookAtBondFromPad_LENGTH;
+                    Offset += sizeof(AiCameraLookAtBondFromPadRecord);
                     break;
                 }
                 case AI_CameraSwitch:
                 {
-                    AIRecord        *ai  = AiListp + Offset;
-                    TagObjectRecord *tag = sub_GAME_7F057080(ai->val[0]);
+                    AiCameraSwitchRecord *ai  = AiListp + Offset;
+                    TagObjectRecord      *tag = sub_GAME_7F057080(ai->OBJECT_TAG);
                     if (tag)
                     {
-                        int TagIndex = tagGetCommandIndex(tag); //get index
+                        int TagIndex = tagGetCommandIndex(tag); // get index
                         if (TagIndex >= 0)
                         {
-                            CutsceneRecord *cdef = setupGetPtrToCommandByIndex(tag->OffsetToObj + TagIndex); //get obj
+                            CutsceneRecord *cdef = setupGetPtrToCommandByIndex(tag->OffsetToObj + TagIndex); // get obj
 
-#ifdef ENABLE_LOG
+    #ifdef ENABLE_LOG
                             /*".\\ported\\chrai.c", 0xc2b, "Assertion failed: cdef->type==PROPDEF_CAMERAPOS") */
                             assert(cdef->type == PROPDEF_CAMERAPOS);
-#endif
+    #endif
                             dword_CODE_bss_800799F8 = NULL;
                             gBondViewCutscene       = cdef;
-                            dword_CODE_bss_80079A18 = CharArrayTo16(ai->val,1);
-                            dword_CODE_bss_80079A1C = CharArrayTo16(ai->val,3);
+                            dword_CODE_bss_80079A18 = ntohs(ai->LOOK_AT_BOND_FLAG);
+                            dword_CODE_bss_80079A1C = ntohs(ai->UNUSED_FLAG);
                             bondviewSetCameraMode(CAMERAMODE_POSEND);
                         }
                     }
@@ -4085,21 +4011,21 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 }
                 case AI_IFBondYPosLessThan:
                 {
-                    AIRecord *ai      = AiListp + Offset;
-                    f32       bondpos = (s16)CharArrayTo16(ai->val,0);
+                    AiIFBondYPosLessThanRecord *ai      = AiListp + Offset;
+                    f32                         bondpos = (s16)ntohs(ai->Y_POS);
                     if (get_curplayer_positiondata()->pos.y < bondpos)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondYPosLessThan_LENGTH;
+                        Offset += sizeof(AiIFBondYPosLessThanRecord);
                     }
                     break;
                 }
                 case AI_BondDisableControl:
                 {
-                    AIRecord1 *ai = AiListp + Offset;
+                    AiBondDisableControlRecord *ai = AiListp + Offset;
                     gunSetSightVisible(GUNSIGHTREASON_NOCONTROL, FALSE);
                     gunSetGunAmmoVisible(GUNAMMOREASON_NOCONTROL, FALSE);
                     if (!(PLAYERFLAG_NOCONTROL & ai->val))
@@ -4115,33 +4041,33 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         countdownTimerSetVisible(16, FALSE);
                     }
                     is_timer_active = FALSE;
-                    Offset += AI_BondDisableControl_LENGTH;
+                    Offset += sizeof(AiBondDisableControlRecord);
                     break;
                 }
                 case AI_BondEnableControl:
                 {
-#ifdef ENABLE_LOG
+    #ifdef ENABLE_LOG
                     osSyncPrintf("AI_BONDENABLECONTROL\n");
-#endif
+    #endif
                     gunSetSightVisible(GUNSIGHTREASON_NOCONTROL, TRUE);
                     gunSetGunAmmoVisible(GUNAMMOREASON_NOCONTROL, TRUE);
                     hudmsgsSetOn(PLAYERFLAG_NOCONTROL);
                     bondviewClearUpperTextDisplayFlag(2);
                     countdownTimerSetVisible(16, TRUE);
                     is_timer_active = TRUE;
-                    Offset += AI_BondEnableControl_LENGTH;
+                    Offset += sizeof(AiBondEnableControlRecord);
                     break;
                 }
                 case AI_TRYTeleportingChrToPad:
                 {
-                    AIRecord  *ai     = AiListp + Offset;
-                    s32        padnum = CharArrayTo16(ai->val,1);
-                    ChrRecord *chr    = chrFindById(ChrEntityp, ai->val[0]);
-                    bool       pass   = FALSE;
-                    PadRecord *pad;
-                    f32        FacingDirection;
-                    coord3d    pos;
-                    StandTile *stan;
+                    AiTRYTeleportingChrToPadRecord *ai     = AiListp + Offset;
+                    s32                             padnum = ntohs(ai->PAD);
+                    ChrRecord                      *chr    = chrFindById(ChrEntityp, ai->CHR_NUM);
+                    bool                            pass   = FALSE;
+                    PadRecord                      *pad;
+                    f32                             FacingDirection;
+                    coord3d                         pos;
+                    StandTile                      *stan;
 
                     if (chr)
                     {
@@ -4159,7 +4085,7 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         pos.x           = pad->pos.x;
                         pos.y           = pad->pos.y;
                         pos.z           = pad->pos.z;
-                        //pos  = pad->pos; <-uses lw instead of lwc1
+                        // pos  = pad->pos; <-uses lw instead of lwc1
                         stan            = pad->stan;
                         sub_GAME_7F03D058(chr->prop, FALSE);
 
@@ -4170,7 +4096,7 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                                 chr->prop->pos.y = pos.y;
                                 chr->prop->pos.z = pos.z;
                             }
-                            //chr->prop->pos  = pos;
+                            // chr->prop->pos  = pos;
                             chr->prop->stan = stan;
                             chr->chrflags   = chr->chrflags | CHRFLAG_INIT;
                             setsubroty(chr->model, FacingDirection);
@@ -4182,7 +4108,7 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                                 g_CurrentPlayer->field_488.collision_position.y = pos.y;
                                 g_CurrentPlayer->field_488.collision_position.z = pos.z;
 
-                                //g_CurrentPlayer->pos = pos;
+                                // g_CurrentPlayer->pos = pos;
                                 g_CurrentPlayer->field_488.current_tile_ptr = stan;
                             }
                             pass = TRUE;
@@ -4191,11 +4117,11 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     }
                     if (pass)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[3]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_TRYTeleportingChrToPad_LENGTH;
+                        Offset += sizeof(AiTRYTeleportingChrToPadRecord);
                     }
                     break;
                 }
@@ -4206,7 +4132,7 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         currentPlayerSetFadeColour(0, 0, 0, 0);
                         currentPlayerSetFadeFrac(CHRAI_TICKRATE_F, 1);
                     }
-                    Offset += AI_ScreenFadeToBlack_LENGTH;
+                    Offset += sizeof(AiScreenFadeToBlackRecord);
                     break;
                 }
                 case AI_ScreenFadeFromBlack:
@@ -4216,19 +4142,19 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         currentPlayerSetFadeColour(0, 0, 0, 1);
                         currentPlayerSetFadeFrac(CHRAI_TICKRATE_F, 0);
                     }
-                    Offset += AI_ScreenFadeFromBlack_LENGTH;
+                    Offset += sizeof(AiScreenFadeFromBlackRecord);
                     break;
                 }
                 case AI_IFScreenFadeCompleted:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFScreenFadeCompletedRecord *ai = AiListp + Offset;
                     if (g_CurrentPlayer->colourfadetimemax60 < 0)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFScreenFadeCompleted_LENGTH;
+                        Offset += sizeof(AiIFScreenFadeCompletedRecord);
                     }
                     break;
                 }
@@ -4242,7 +4168,7 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             g_ChrSlots[num].chrflags |= CHRFLAG_HIDDEN;
                         }
                     }
-                    Offset += AI_HideAllChrs_LENGTH;
+                    Offset += sizeof(AiHideAllChrsRecord);
                     break;
                 }
                 case AI_ShowAllChrs:
@@ -4253,16 +4179,16 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         g_ChrSlots[num].chrflags &= ~CHRFLAG_HIDDEN;
                     }
 
-                    Offset += AI_ShowAllChrs_LENGTH;
+                    Offset += sizeof(AiShowAllChrsRecord);
                     break;
                 }
                 case AI_DoorOpenInstant:
                 {
-                    AIRecord   *ai   = AiListp + Offset;
-                    DoorRecord *door = objFindByTagId(ai->val[0]);
+                    AiDoorOpenInstantRecord *ai   = AiListp + Offset;
+                    DoorRecord              *door = objFindByTagId(ai->OBJECT_TAG);
                     if (door && door->prop)
                     {
-                        //DoorRecord *door   = (DoorRecord *)obj;
+                        // DoorRecord *door   = (DoorRecord *)obj;
                         door->speed        = 0;
                         door->openPosition = door->maxFrac;
                         door->openedTime   = g_GlobalTimer;
@@ -4271,65 +4197,60 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         doorActivatePortal(door); // doorActivatePortal
                         door7F053B10(door);
                     }
-                    Offset += AI_DoorOpenInstant_LENGTH;
+                    Offset += sizeof(AiDoorOpenInstantRecord);
                     break;
                 }
                 case AI_ChrRemoveItemInHand:
                 {
-                    AIRecord  *ai  = AiListp + Offset;
-                    ChrRecord *chr = chrFindById(ChrEntityp, ai->val[0]);
+                    AiChrRemoveItemInHandRecord *ai  = AiListp + Offset;
+                    ChrRecord                   *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (chr)
                     {
-                        chrSetWeaponFlag4(chr, ai->val[1]);
+                        chrSetWeaponFlag4(chr, ai->HAND_INDEX);
                     }
-                    Offset += AI_ChrRemoveItemInHand_LENGTH;
+                    Offset += sizeof(AiChrRemoveItemInHandRecord);
                     break;
                 }
                 case AI_IfNumberOfActivePlayersLessThan:
                 {
-                    struct
+                    AiIfNumberOfActivePlayersLessThanRecord *ai = AiListp + Offset;
+                    if (getPlayerCount() < ai->NUMBER)
                     {
-                        u8 cmd;
-                        s8 val;
-                        u8 label;
-                    } *ai = AiListp + Offset;
-                    if (getPlayerCount() < ai->val)
-                    {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->label);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IfNumberOfActivePlayersLessThan_LENGTH;
+                        Offset += sizeof(AiIfNumberOfActivePlayersLessThanRecord);
                     }
                     break;
                 }
                 case AI_IFBondItemTotalAmmoLessThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (currentPlayerGetAmmoCount((s8)ai->val[0]) < (s8)ai->val[1])
+                    AiIFBondItemTotalAmmoLessThanRecord *ai = AiListp + Offset;
+                    if (currentPlayerGetAmmoCount(ai->ITEM_NUM) < ai->AMMO_TOTAL)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondItemTotalAmmoLessThan_LENGTH;
+                        Offset += sizeof(AiIFBondItemTotalAmmoLessThanRecord);
                     }
                     break;
                 }
                 case AI_BondEquipItem:
                 {
-                    AIRecord1s *ai = AiListp + Offset;
-                    currentPlayerEquipWeaponWrapper(GUNRIGHT, ai->val);
+                    AiBondEquipItemRecord *ai = AiListp + Offset;
+                    currentPlayerEquipWeaponWrapper(GUNRIGHT, ai->ITEM_NUM);
                     currentPlayerEquipWeaponWrapper(GUNLEFT, 0);
-                    Offset += AI_BondEquipItem_LENGTH;
+                    Offset += sizeof(AiBondEquipItemRecord);
                     break;
                 }
                 case AI_BondEquipItemCinema:
                 {
-                    AIRecord1s *ai = AiListp + Offset;
-                    currentPlayerUnEquipWeaponWrapper(GUNRIGHT, ai->val);
+                    AiBondEquipItemCinemaRecord *ai = AiListp + Offset;
+                    currentPlayerUnEquipWeaponWrapper(GUNRIGHT, ai->ITEM_NUM);
                     currentPlayerUnEquipWeaponWrapper(GUNLEFT, 0);
-                    Offset += AI_BondEquipItemCinema_LENGTH;
+                    Offset += sizeof(AiBondEquipItemCinemaRecord);
                     break;
                 }
                 case AI_BondSetLockedVelocity:
@@ -4339,23 +4260,23 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     g_Vars.currentplayer->bondforcespeed.y = 0;
                     g_Vars.currentplayer->bondforcespeed.z = (s8)ai->val[2];
                     */
-                    AIRecord *ai            = AiListp + Offset;
-                    g_ForceBondMoveOffset.x = (s8)ai->val[0];
-                    g_ForceBondMoveOffset.y = 0;
-                    g_ForceBondMoveOffset.z = (s8)ai->val[1];
-                    Offset += AI_BondSetLockedVelocity_LENGTH;
+                    AiBondSetLockedVelocityRecord *ai = AiListp + Offset;
+                    g_ForceBondMoveOffset.x           = ai->X_SPEED60;
+                    g_ForceBondMoveOffset.y           = 0;
+                    g_ForceBondMoveOffset.z           = ai->Z_SPEED60;
+                    Offset += sizeof(AiBondSetLockedVelocityRecord);
                     break;
                 }
                 case AI_IFObjectInRoomWithPad:
                 {
-                    AIRecord     *ai     = AiListp + Offset;
-                    u16           padnum = CharArrayTo16(ai->val,1);
-                    PadRecord    *pad;
-                    ObjectRecord *obj = objFindByTagId(ai->val[0]);
+                    AiIFObjectInRoomWithPadRecord *ai     = AiListp + Offset;
+                    u16                            padnum = ntohs(ai->PAD);
+                    PadRecord                     *pad;
+                    ObjectRecord                  *obj = objFindByTagId(ai->OBJECT_TAG);
 
                     if (isNotBoundPad(padnum))
                     {
-                        pad = &g_CurrentSetup.pads[padnum * 1]; //needs a mult by 1 to correct s0/v1
+                        pad = &g_CurrentSetup.pads[padnum * 1]; // needs a mult by 1 to correct s0/v1
                     }
                     else
                     {
@@ -4364,18 +4285,18 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
 
                     if (pad->stan && obj && obj->prop && (pad->stan->room == obj->prop->stan->room))
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[3]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFObjectInRoomWithPad_LENGTH;
+                        Offset += sizeof(AiIFObjectInRoomWithPadRecord);
                     }
                     break;
                 }
                 case AI_SwitchSky:
                 { // SWITCHENVIRONMENT
                     fogSwitchToSolosky2(1.0);
-                    Offset += AI_SwitchSky_LENGTH;
+                    Offset += sizeof(AiSwitchSkyRecord);
                     break;
                 }
                 case AI_TriggerFadeAndExitLevelOnButtonPress:
@@ -4384,26 +4305,26 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     {
                         stop_time_flag = TRUE;
                     }
-                    Offset += AI_TriggerFadeAndExitLevelOnButtonPress_LENGTH;
+                    Offset += sizeof(AiTriggerFadeAndExitLevelOnButtonPressRecord);
                     break;
                 }
                 case AI_IFBondIsDead:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFBondIsDeadRecord *ai = AiListp + Offset;
                     if (g_CurrentPlayer->bonddead)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondIsDead_LENGTH;
+                        Offset += sizeof(AiIFBondIsDeadRecord);
                     }
                     break;
                 }
                 case AI_BondDisableDamageAndPickups:
                 {
                     g_PlayerInvincible = TRUE;
-                    Offset += AI_BondDisableDamageAndPickups_LENGTH;
+                    Offset += sizeof(AiBondDisableDamageAndPickupsRecord);
                     break;
                 }
                 case AI_BondHideWeapons:
@@ -4411,24 +4332,24 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     /*"remove guntype %d\n" */
                     remove_item_in_hand(GUNRIGHT);
                     remove_item_in_hand(GUNLEFT);
-                    Offset += AI_BondHideWeapons_LENGTH;
+                    Offset += sizeof(AiBondHideWeaponsRecord);
                     break;
                 }
-                case AI_CameraOrbitPad: //sp order from xbla
+                case AI_CameraOrbitPad: // sp order from xbla
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    s32       padnum;
-                    s32       speed60;
-                    s32       camDististance;
-                    s32       targetHeight;
-                    s32       camHeight;
-                    s32       start;
-                    camDististance          = CharArrayTo16(ai->val, 0);
-                    camHeight               = (s16)CharArrayTo16(ai->val, 2);
-                    speed60                 = (s16)CharArrayTo16(ai->val, 4);
-                    padnum                  = CharArrayTo16(ai->val, 6);
-                    targetHeight            = (s16)CharArrayTo16(ai->val, 8);
-                    start                   = CharArrayTo16(ai->val, 10);
+                    AiCameraOrbitPadRecord *ai = AiListp + Offset;
+                    s32                     padnum;
+                    s32                     speed60;
+                    s32                     camDististance;
+                    s32                     targetHeight;
+                    s32                     camHeight;
+                    s32                     start;
+                    camDististance          = ntohs(ai->LAT_DISTANCE);
+                    camHeight               = (s16)ntohs(ai->VERT_DISTANCE);
+                    speed60                 = (s16)ntohs(ai->ORBIT_SPEED60);
+                    padnum                  = ntohs(ai->PAD);
+                    targetHeight            = (s16)ntohs(ai->Y_POS_OFFSET);
+                    start                   = ntohs(ai->INITIAL_ROTATION);
                     dword_CODE_bss_800799F8 = NULL;
                     gBondViewCutscene       = NULL;
                     flt_CODE_bss_80079A00   = (start * M_TAU_F) / M_U16_MAX_VALUE_F;   /*unit direction 0 - 1 (increments are 0.000001) */
@@ -4438,145 +4359,145 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     flt_CODE_bss_80079A10   = targetHeight;
                     dword_CODE_bss_80079A14 = padnum;
                     bondviewSetCameraMode(CAMERAMODE_POSEND);
-                    Offset += AI_CameraOrbitPad_LENGTH;
+                    Offset += sizeof(AiCameraOrbitPadRecord);
                     break;
                 }
                 case AI_CreditsRoll:
                 {
                     credits_state = TRUE;
-                    Offset += AI_CreditsRoll_LENGTH;
+                    Offset += sizeof(AiCreditsRollRecord);
                     break;
                 }
                 case AI_IFCreditsHasCompleted:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFCreditsHasCompletedRecord *ai = AiListp + Offset;
                     if (credits_state == 2)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFCreditsHasCompleted_LENGTH;
+                        Offset += sizeof(AiIFCreditsHasCompletedRecord);
                     }
                     break;
                 }
                 case AI_IFObjectiveAllCompleted:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    //bool a = objectiveIsAllComplete();
+                    AiIFObjectiveAllCompletedRecord *ai = AiListp + Offset;
+                    // bool a = objectiveIsAllComplete();
                     if (objectiveIsAllComplete())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFObjectiveAllCompleted_LENGTH;
+                        Offset += sizeof(AiIFObjectiveAllCompletedRecord);
                     }
                     break;
                 }
                 case AI_IFFolderActorIsEqual:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (fileGetBondForCurrentFolder() == (s8)ai->val[0])
+                    AiIFFolderActorIsEqualRecord *ai = AiListp + Offset;
+                    if (fileGetBondForCurrentFolder() == ai->BOND_ACTOR_INDEX)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFFolderActorIsEqual_LENGTH;
+                        Offset += sizeof(AiIFFolderActorIsEqualRecord);
                     }
                     break;
                 }
                 case AI_IFBondDamageAndPickupsDisabled:
                 {
-                    AIRecord *ai = AiListp + Offset;
+                    AiIFBondDamageAndPickupsDisabledRecord *ai = AiListp + Offset;
                     if (g_PlayerInvincible)
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[0]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFBondDamageAndPickupsDisabled_LENGTH;
+                        Offset += sizeof(AiIFBondDamageAndPickupsDisabledRecord);
                     }
                     break;
                 }
                 case AI_MusicPlaySlot:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    Offset += AI_MusicPlaySlot_LENGTH;
-                    musicPlaySlot((s8)ai->val[0], ai->val[1], ai->val[2]);
-#ifdef ENABLE_LOG
-                    osSyncPrintf("ai: enery tune on (%d, %d, %d)\n", ai->val[0], ai->val[1], ai->val[2]);
-#endif
+                    AiMusicPlaySlotRecord *ai = AiListp + Offset;
+                    Offset += sizeof(AiMusicPlaySlotRecord);
+                    musicPlaySlot(ai->MUSIC_SLOT, ai->SECONDS_STOPPED_DURATION, ai->SECONDS_TOTAL_DURATION);
+    #ifdef ENABLE_LOG
+                    osSyncPrintf("ai: enery tune on (%d, %d, %d)\n", ai->MUSIC_SLOT, ai->SECONDS_STOPPED_DURATION, ai->SECONDS_TOTAL_DURATION);
+    #endif
                     break;
                 }
                 case AI_MusicStopSlot:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    Offset += AI_MusicStopSlot_LENGTH;
-                    musicStopSlot((s8)ai->val[0]);
-#ifdef ENABLE_LOG
-                    osSyncPrintf("ai: enery tune off (%d)\n", ai->val[0]);
-#endif
+                    AiMusicStopSlotRecord *ai = AiListp + Offset;
+                    Offset += sizeof(AiMusicStopSlotRecord);
+                    musicStopSlot(ai->MUSIC_SLOT);
+    #ifdef ENABLE_LOG
+                    osSyncPrintf("ai: enery tune off (%d)\n", ai->MUSIC_SLOT);
+    #endif
                     break;
                 }
                 case AI_TriggerExplosionsAroundBond:
                 {
                     SurroundWithExplosions(0);
-                    Offset += AI_TriggerExplosionsAroundBond_LENGTH;
+                    Offset += sizeof(AiTriggerExplosionsAroundBondRecord);
                     break;
                 }
                 case AI_IFKilledCiviliansGreaterThan:
                 {
-                    AIRecord *ai = AiListp + Offset;
-                    if (ai->val[0] < get_civilian_casualties())
+                    AiIFKilledCiviliansGreaterThanRecord *ai = AiListp + Offset;
+                    if (ai->CIVILIANS_KILLED < get_civilian_casualties())
                     {
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFKilledCiviliansGreaterThan_LENGTH;
+                        Offset += sizeof(AiIFKilledCiviliansGreaterThanRecord);
                     }
                     break;
                 }
                 case AI_IFChrWasShotSinceLastCheck:
                 {
-                    AIRecord  *ai  = AiListp + Offset;
-                    ChrRecord *chr = chrFindById(ChrEntityp, ai->val[0]);
+                    AiIFChrWasShotSinceLastCheckRecord *ai  = AiListp + Offset;
+                    ChrRecord                          *chr = chrFindById(ChrEntityp, ai->CHR_NUM);
                     if (chr && chr->chrflags & CHRFLAG_WAS_HIT)
                     {
                         chr->chrflags &= ~CHRFLAG_WAS_HIT;
-                        Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
+                        Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
                     else
                     {
-                        Offset += AI_IFChrWasShotSinceLastCheck_LENGTH;
+                        Offset += sizeof(AiIFChrWasShotSinceLastCheckRecord);
                     }
                     break;
                 }
                 case AI_BondKilledInAction:
                 {
                     g_isBondKIA = TRUE;
-                    Offset += AI_BondKilledInAction_LENGTH;
+                    Offset += sizeof(AiBondKilledInActionRecord);
                     break;
                 }
                 case AI_RaiseArms:
                 {
                     chrTrySurprisedSurrender(ChrEntityp);
-                    Offset += AI_RaiseArms_LENGTH;
+                    Offset += sizeof(AiRaiseArmsRecord);
                     break;
                 }
                 case AI_GasLeakAndFadeFog:
                 {
                     coord3d emitPos = New_Coord3d();
                     init_trigger_toxic_gas_effect(&emitPos);
-                    Offset += AI_GasLeakAndFadeFog_LENGTH;
+                    Offset += sizeof(AiGasLeakAndFadeFogRecord);
                     break;
                 }
                 case AI_ObjectRocketLaunch:
                 {
-                    AIRecord1    *ai  = AiListp + Offset;
-                    ObjectRecord *obj = objFindByTagId(ai->val);
+                    AiObjectRocketLaunchRecord *ai  = AiListp + Offset;
+                    ObjectRecord               *obj = objFindByTagId(ai->OBJECT_TAG);
 
                     if (obj && obj->prop)
                     {
@@ -4588,14 +4509,14 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             projectileSetSticky(obj->prop);
                             matrix_4x4_set_identity(&obj->projectile->mtx);
                             obj->projectile->speed.x = 0;
-                            obj->projectile->speed.y = 0.016666666f; //step height?
+                            obj->projectile->speed.y = 0.016666666f; // step height?
                             obj->projectile->speed.z = 0;
                             obj->projectile->unk10.x = 0;
-                            obj->projectile->unk10.y = 0.29166666f; //direction to move?
+                            obj->projectile->unk10.y = 0.29166666f; // direction to move?
                             obj->projectile->unk10.z = 0;
                         }
                     }
-                    Offset += AI_ObjectRocketLaunch_LENGTH;
+                    Offset += sizeof(AiObjectRocketLaunchRecord);
                     break;
                 } //============================================================================================================
 #endif
@@ -4614,9 +4535,9 @@ void ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         Offset += chraiitemsize(AiListp, Offset);
                     }
             } // switch
-        }     // for
-    }         // Has ailist
+        } // for
+    } // Has ailist
 #ifdef ENABLE_LOG
     osSyncPrintf("SERIOUS AI ERROR!!!!!! Null ailist!\n");
 #endif
-}             //ai()
+} // ai()

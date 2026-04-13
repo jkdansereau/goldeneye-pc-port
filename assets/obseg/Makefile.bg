@@ -1,6 +1,6 @@
-#bg
+# bg
 
-# COUNTRYCODE specific needs to be above the base directory in this makefile
+# Pattern rules for building .seg files from .bin files
 $(BUILD_DIR)/$(OBSEG_DIR)/bg/%.seg: $(OBSEG_DIR)/bg/$(COUNTRYCODE)/%.bin
 	@cp -f $< $@
 
@@ -10,53 +10,33 @@ $(BUILD_DIR)/$(OBSEG_DIR)/bg/%.seg: $(OBSEG_DIR)/bg/%.bin
 $(BUILD_DIR)/$(OBSEG_DIR)/bg/%.seg: $(BUILD_DIR)/$(OBSEG_DIR)/bg/%.bin
 	@cp -f $< $@
 
+# Build .bin from .elf
 $(BUILD_DIR)/$(OBSEG_DIR)/bg/%.bin: $(BUILD_DIR)/$(OBSEG_DIR)/bg/%.elf
 	$(OBJCOPY) $< $@ -O binary
 
+# Build .elf from .o
 $(BUILD_DIR)/$(OBSEG_DIR)/bg/%.elf: $(BUILD_DIR)/$(OBSEG_DIR)/bg/%.o
 	$(LD) -T assets/obseg/bg/bg_all_p.ld -o $@ $<
 
+# Build .o from .c (country-specific and generic)
 $(BUILD_DIR)/$(OBSEG_DIR)/bg/%.o: $(OBSEG_DIR)/bg/%.c
 	$(CC) -c $(CFLAGS) -o $@ -O2 $<
 
 $(BUILD_DIR)/$(OBSEG_DIR)/bg/%.o: $(OBSEG_DIR)/bg/$(COUNTRYCODE)/%.c
 	$(CC) -c $(CFLAGS) -o $@ -O2 $<
 
+# List of segment names (from LEVELNAMELIST)
+BG_SEG_NAMES = $(foreach lvl,$(LEVELNAMELIST),bg_$(lvl)_all_p)
 
+# Generate all file targets
+BG_O_FILES := $(foreach name,$(BG_SEG_NAMES),$(BUILD_DIR)/$(OBSEG_DIR)/bg/$(name).o)
+BG_BIN_FILES := $(foreach name,$(BG_SEG_NAMES),$(BUILD_DIR)/$(OBSEG_DIR)/bg/$(name).bin)
+BG_ELF_FILES := $(foreach name,$(BG_SEG_NAMES),$(BUILD_DIR)/$(OBSEG_DIR)/bg/$(name).elf)
+BG_SEG_FILES := $(foreach name,$(BG_SEG_NAMES),$(BUILD_DIR)/$(OBSEG_DIR)/bg/$(name).seg)
 
-BG_SEG_FILES = \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_sev_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_silo_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_stat_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_arec_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_arch_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_tra_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_dest_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_sevb_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_azt_all_p.seg \
-    $(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_pete_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_depo_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_ref_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_cryp_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_dam_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_ark_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_run_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_sevx_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_jun_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_dish_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_cave_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_cat_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_crad_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_imp_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_ash_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_sho_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_ame_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_rit_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_oat_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_lip_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_lee_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_ear_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_len_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_pam_all_p.seg \
-	$(BUILD_DIR)/$(OBSEG_DIR)/bg/bg_wax_all_p.seg 
-	
+BG_BUILD_FILES := $(BG_O_FILES) $(BG_BIN_FILES) $(BG_ELF_FILES) $(BG_SEG_FILES)
+
+# Default target
+all: $(BG_SEG_FILES)
+
+.PHONY: all

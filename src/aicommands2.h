@@ -6868,3 +6868,1663 @@ r*******************************************************************************
 # 11846 "src/aicommands.def"
 //UNDEF CMDS
 # 195 "tools/cmdbuilder.c"
+
+#pragma pack(1)
+
+typedef struct AiGotoNextRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiGotoNextRecord;
+
+typedef struct AiGotoFirstRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiGotoFirstRecord;
+
+typedef struct AiLabelRecord
+{
+    u8 cmd;
+    u8 ID;
+} AiLabelRecord;
+
+typedef struct AiYieldRecord
+{
+    u8 cmd;
+} AiYieldRecord;
+
+typedef struct AiEndListRecord
+{
+    u8 cmd;
+} AiEndListRecord;
+
+typedef struct AiSetChrAiListRecord
+{
+    u8  cmd;
+    s8  CHR_NUM;
+    s16 AI_LIST_ID;
+} AiSetChrAiListRecord;
+
+typedef struct AiSetReturnAiListRecord
+{
+    u8  cmd;
+    s16 AI_LIST_ID;
+
+} AiSetReturnAiListRecord;
+
+typedef struct AiReturnRecord
+{
+    u8 cmd;
+} AiReturnRecord;
+
+typedef struct AiStopRecord
+{
+    u8 cmd;
+} AiStopRecord;
+
+typedef struct AiKneelRecord
+{
+    u8 cmd;
+} AiKneelRecord;
+
+typedef struct AiPlayAnimationRecord
+{
+    u8  cmd;
+    s16 ANIMATION_ID;
+    s16 START_TIME30;
+    s16 END_TIME30;
+    u8  BITFIELD;
+    u8  INTERPOL_TIME60;
+} AiPlayAnimationRecord;
+
+typedef struct AiIFPlayingAnimationRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFPlayingAnimationRecord;
+
+typedef struct AiPointAtBondRecord
+{
+    u8 cmd;
+} AiPointAtBondRecord;
+
+typedef struct AiLookSurprisedRecord
+{
+    u8 cmd;
+} AiLookSurprisedRecord;
+
+typedef struct AiTRYSidesteppingRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYSidesteppingRecord;
+
+typedef struct AiTRYSideHoppingRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYSideHoppingRecord;
+
+typedef struct AiTRYSideRunningRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYSideRunningRecord;
+
+typedef struct AiTRYFiringWalkRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYFiringWalkRecord;
+
+typedef struct AiTRYFiringRunRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYFiringRunRecord;
+
+typedef struct AiTRYFiringRollRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYFiringRollRecord;
+
+typedef struct AiTRYFireOrAimAtTargetRecord
+{
+    u8  cmd;
+    s16 BITFIELD;
+    s16 TARGET;
+    u8  GOTOLABEL;
+} AiTRYFireOrAimAtTargetRecord;
+
+typedef struct AiTRYFireOrAimAtTargetKneelRecord
+{
+    u8  cmd;
+    s16 BITFIELD;
+    s16 TARGET;
+    u8  GOTOLABEL;
+} AiTRYFireOrAimAtTargetKneelRecord;
+
+typedef struct AiTRYFireOrAimAtTargetUpdateRecord
+{
+    u8  cmd;
+    s16 BITFIELD;
+    s16 TARGET;
+    u8  GOTOLABEL;
+} AiTRYFireOrAimAtTargetUpdateRecord;
+
+typedef struct AiTRYFacingTargetRecord
+{
+    u8  cmd;
+    s16 BITFIELD;
+    s16 TARGET;
+    u8  GOTOLABEL;
+} AiTRYFacingTargetRecord;
+
+typedef struct AiHitChrWithItemRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    s8 PART_NUM;
+    u8 ITEM_NUM;
+} AiHitChrWithItemRecord;
+
+typedef struct AiChrHitChrRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 CHR_NUM_TARGET;
+    s8 PART_NUM;
+} AiChrHitChrRecord;
+
+typedef struct AiTRYThrowingGrenadeRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYThrowingGrenadeRecord;
+
+typedef struct AiTRYDroppingItemRecord
+{
+    u8  cmd;
+    s16 PROP_NUM;
+    u8  ITEM_NUM;
+    u8  GOTOLABEL;
+} AiTRYDroppingItemRecord;
+
+typedef struct AiRunToPadRecord
+{
+    u8  cmd;
+    s16 PAD;
+} AiRunToPadRecord;
+
+typedef struct AiRunToPadPresetRecord
+{
+    u8 cmd;
+} AiRunToPadPresetRecord;
+
+typedef struct AiWalkToPadRecord
+{
+    u8  cmd;
+    s16 PAD;
+} AiWalkToPadRecord;
+
+typedef struct AiSprintToPadRecord
+{
+    u8  cmd;
+    s16 PAD;
+} AiSprintToPadRecord;
+
+typedef struct AiStartPatrolRecord
+{
+    u8 cmd;
+    u8 PATH_NUM;
+} AiStartPatrolRecord;
+
+typedef struct AiSurrenderRecord
+{
+    u8 cmd;
+} AiSurrenderRecord;
+
+typedef struct AiRemoveMeRecord
+{
+    u8 cmd;
+} AiRemoveMeRecord;
+
+typedef struct AiChrRemoveInstantRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+} AiChrRemoveInstantRecord;
+
+typedef struct AiTRYTriggeringAlarmAtPadRecord
+{
+    u8  cmd;
+    s16 PAD;
+    u8  GOTOLABEL;
+} AiTRYTriggeringAlarmAtPadRecord;
+
+typedef struct AiAlarmOnRecord
+{
+    u8 cmd;
+} AiAlarmOnRecord;
+
+typedef struct AiAlarmOffRecord
+{
+    u8 cmd;
+} AiAlarmOffRecord;
+
+typedef struct AiTRYRunFromBondRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYRunFromBondRecord;
+
+typedef struct AiTRYRunToBondRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYRunToBondRecord;
+
+typedef struct AiTRYWalkToBondRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYWalkToBondRecord;
+
+typedef struct AiTRYSprintToBondRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYSprintToBondRecord;
+
+typedef struct AiTRYFindCoverRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiTRYFindCoverRecord;
+
+typedef struct AiTRYRunToChrRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 GOTOLABEL;
+} AiTRYRunToChrRecord;
+
+typedef struct AiTRYWalkToChrRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 GOTOLABEL;
+} AiTRYWalkToChrRecord;
+
+typedef struct AiTRYSprintToChrRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 GOTOLABEL;
+} AiTRYSprintToChrRecord;
+
+typedef struct AiIFImOnPatrolOrStoppedRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFImOnPatrolOrStoppedRecord;
+
+typedef struct AiIFChrDyingOrDeadRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 GOTOLABEL;
+} AiIFChrDyingOrDeadRecord;
+
+typedef struct AiIFChrDoesNotExistRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 GOTOLABEL;
+} AiIFChrDoesNotExistRecord;
+
+typedef struct AiIFISeeBondRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFISeeBondRecord;
+
+typedef struct AiSetNewRandomRecord
+{
+    u8 cmd;
+} AiSetNewRandomRecord;
+
+typedef struct AiIFRandomLessThanRecord
+{
+    u8 cmd;
+    u8 BYTE;
+    u8 GOTOLABEL;
+} AiIFRandomLessThanRecord;
+
+typedef struct AiIFRandomGreaterThanRecord
+{
+    u8 cmd;
+    u8 BYTE;
+    u8 GOTOLABEL;
+} AiIFRandomGreaterThanRecord;
+
+typedef struct AiIFICanHearAlarmRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFICanHearAlarmRecord;
+
+typedef struct AiIFAlarmIsOnRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFAlarmIsOnRecord;
+
+typedef struct AiIFGasIsLeakingRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFGasIsLeakingRecord;
+
+typedef struct AiIFIHeardBondRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFIHeardBondRecord;
+
+typedef struct AiIFISeeSomeoneShotRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFISeeSomeoneShotRecord;
+
+typedef struct AiIFISeeSomeoneDieRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFISeeSomeoneDieRecord;
+
+typedef struct AiIFICouldSeeBondRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFICouldSeeBondRecord;
+
+typedef struct AiIFICouldSeeBondsStanRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFICouldSeeBondsStanRecord;
+
+typedef struct AiIFIWasShotRecentlyRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFIWasShotRecentlyRecord;
+
+typedef struct AiIFIHeardBondRecentlyRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFIHeardBondRecentlyRecord;
+
+typedef struct AiIFImInRoomWithChrRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 GOTOLABEL;
+} AiIFImInRoomWithChrRecord;
+
+typedef struct AiIFIveNotBeenSeenRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFIveNotBeenSeenRecord;
+
+typedef struct AiIFImOnScreenRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFImOnScreenRecord;
+
+typedef struct AiIFMyRoomIsOnScreenRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFMyRoomIsOnScreenRecord;
+
+typedef struct AiIFRoomWithPadIsOnScreenRecord
+{
+    u8  cmd;
+    s16 PAD;
+    u8  GOTOLABEL;
+} AiIFRoomWithPadIsOnScreenRecord;
+
+typedef struct AiIFImTargetedByBondRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFImTargetedByBondRecord;
+
+typedef struct AiIFBondMissedMeRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFBondMissedMeRecord;
+
+typedef struct AiIFMyAngleToBondLessThanRecord
+{
+    u8 cmd;
+    u8 ANGLE;
+    u8 GOTOLABEL;
+} AiIFMyAngleToBondLessThanRecord;
+
+typedef struct AiIFMyAngleToBondGreaterThanRecord
+{
+    u8 cmd;
+    u8 ANGLE;
+    u8 GOTOLABEL;
+} AiIFMyAngleToBondGreaterThanRecord;
+
+typedef struct AiIFMyAngleFromBondLessThanRecord
+{
+    u8 cmd;
+    u8 ANGLE;
+    u8 GOTOLABEL;
+} AiIFMyAngleFromBondLessThanRecord;
+
+typedef struct AiIFMyAngleFromBondGreaterThanRecord
+{
+    u8 cmd;
+    u8 ANGLE;
+    u8 GOTOLABEL;
+} AiIFMyAngleFromBondGreaterThanRecord;
+
+typedef struct AiIFMyDistanceToBondLessThanDecimeterRecord
+{
+    u8  cmd;
+    s16 DISTANCE;
+    u8  GOTOLABEL;
+} AiIFMyDistanceToBondLessThanDecimeterRecord;
+
+typedef struct AiIFMyDistanceToBondGreaterThanDecimeterRecord
+{
+    u8  cmd;
+    s16 DISTANCE;
+    u8  GOTOLABEL;
+} AiIFMyDistanceToBondGreaterThanDecimeterRecord;
+
+typedef struct AiIFChrDistanceToPadLessThanDecimeterRecord
+{
+    u8  cmd;
+    u8  CHR_NUM;
+    s16 DISTANCE;
+    s16 PAD;
+    u8  GOTOLABEL;
+} AiIFChrDistanceToPadLessThanDecimeterRecord;
+
+typedef struct AiIFChrDistanceToPadGreaterThanDecimeterRecord
+{
+    u8  cmd;
+    u8  CHR_NUM;
+    s16 DISTANCE;
+    s16 PAD;
+    u8  GOTOLABEL;
+} AiIFChrDistanceToPadGreaterThanDecimeterRecord;
+
+typedef struct AiIFMyDistanceToChrLessThanDecimeterRecord
+{
+    u8  cmd;
+    s16 DISTANCE;
+    u8  CHR_NUM;
+    u8  GOTOLABEL;
+} AiIFMyDistanceToChrLessThanDecimeterRecord;
+
+typedef struct AiIFMyDistanceToChrGreaterThanDecimeterRecord
+{
+    u8  cmd;
+    s16 DISTANCE;
+    u8  CHR_NUM;
+    u8  GOTOLABEL;
+} AiIFMyDistanceToChrGreaterThanDecimeterRecord;
+
+typedef struct AiTRYSettingMyPresetToChrWithinDistanceDecimeterRecord
+{
+    u8  cmd;
+    s16 DISTANCE;
+    u8  GOTOLABEL;
+} AiTRYSettingMyPresetToChrWithinDistanceDecimeterRecord;
+
+typedef struct AiIFBondDistanceToPadLessThanDecimeterRecord
+{
+    u8  cmd;
+    s16 DISTANCE;
+    s16 PAD;
+    u8  GOTOLABEL;
+} AiIFBondDistanceToPadLessThanDecimeterRecord;
+
+typedef struct AiIFBondDistanceToPadGreaterThanDecimeterRecord
+{
+    u8  cmd;
+    s16 DISTANCE;
+    s16 PAD;
+    u8  GOTOLABEL;
+} AiIFBondDistanceToPadGreaterThanDecimeterRecord;
+
+typedef struct AiIFChrInRoomWithPadRecord
+{
+    u8  cmd;
+    u8  CHR_NUM;
+    s16 PAD;
+    u8  GOTOLABEL;
+} AiIFChrInRoomWithPadRecord;
+
+typedef struct AiIFBondInRoomWithPadRecord
+{
+    u8  cmd;
+    s16 PAD;
+    u8  GOTOLABEL;
+} AiIFBondInRoomWithPadRecord;
+
+typedef struct AiIFBondCollectedObjectRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 GOTOLABEL;
+} AiIFBondCollectedObjectRecord;
+
+typedef struct AiIFKeyDroppedRecord
+{
+    u8 cmd;
+    u8 KEY_ID;
+    u8 GOTOLABEL;
+} AiIFKeyDroppedRecord;
+
+typedef struct AiIFItemIsAttachedToObjectRecord
+{
+    u8 cmd;
+    u8 ITEM_NUM;
+    u8 OBJECT_TAG;
+    u8 GOTOLABEL;
+} AiIFItemIsAttachedToObjectRecord;
+
+typedef struct AiIFBondHasItemEquippedRecord
+{
+    u8 cmd;
+    u8 ITEM_NUM;
+    u8 GOTOLABEL;
+} AiIFBondHasItemEquippedRecord;
+
+typedef struct AiIFObjectExistsRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 GOTOLABEL;
+} AiIFObjectExistsRecord;
+
+typedef struct AiIFObjectNotDestroyedRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 GOTOLABEL;
+} AiIFObjectNotDestroyedRecord;
+
+typedef struct AiIFObjectWasActivatedRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 GOTOLABEL;
+} AiIFObjectWasActivatedRecord;
+
+typedef struct AiIFBondUsedGadgetOnObjectRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 GOTOLABEL;
+} AiIFBondUsedGadgetOnObjectRecord;
+
+typedef struct AiActivateObjectRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+} AiActivateObjectRecord;
+
+typedef struct AiDestroyObjectRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+} AiDestroyObjectRecord;
+
+typedef struct AiDropObjectRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+} AiDropObjectRecord;
+
+typedef struct AiChrDropAllConcealedItemsRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+} AiChrDropAllConcealedItemsRecord;
+
+typedef struct AiChrDropAllHeldItemsRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+} AiChrDropAllHeldItemsRecord;
+
+typedef struct AiBondCollectObjectRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+} AiBondCollectObjectRecord;
+
+typedef struct AiChrEquipObjectRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 CHR_NUM;
+} AiChrEquipObjectRecord;
+
+typedef struct AiMoveObjectRecord
+{
+    u8  cmd;
+    u8  OBJECT_TAG;
+    s16 PAD;
+} AiMoveObjectRecord;
+
+typedef struct AiDoorOpenRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+} AiDoorOpenRecord;
+
+typedef struct AiDoorCloseRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+} AiDoorCloseRecord;
+
+typedef struct AiIFDoorStateEqualRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 DOOR_STATE;
+    u8 GOTOLABEL;
+} AiIFDoorStateEqualRecord;
+
+typedef struct AiIFDoorHasBeenOpenedBeforeRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 GOTOLABEL;
+} AiIFDoorHasBeenOpenedBeforeRecord;
+
+typedef struct AiDoorSetLockRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 LOCK_FLAG;
+} AiDoorSetLockRecord;
+
+typedef struct AiDoorUnsetLockRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 LOCK_FLAG;
+} AiDoorUnsetLockRecord;
+
+typedef struct AiIFDoorLockEqualRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 LOCK_FLAG;
+    u8 GOTOLABEL;
+} AiIFDoorLockEqualRecord;
+
+typedef struct AiIFObjectiveNumCompleteRecord
+{
+    u8 cmd;
+    u8 OBJ_NUM;
+    u8 GOTOLABEL;
+} AiIFObjectiveNumCompleteRecord;
+
+typedef struct AiTRYUnknown6eRecord
+{
+    u8 cmd;
+    u8 val;
+    u8 GOTOLABEL;
+} AiTRYUnknown6eRecord;
+
+typedef struct AiTRYUnknown6fRecord
+{
+    u8 cmd;
+    u8 val;
+    u8 GOTOLABEL;
+} AiTRYUnknown6fRecord;
+
+typedef struct AiIFGameDifficultyLessThanRecord
+{
+    u8 cmd;
+    u8 DIFICULTY_ID;
+    u8 GOTOLABEL;
+} AiIFGameDifficultyLessThanRecord;
+
+typedef struct AiIFGameDifficultyGreaterThanRecord
+{
+    u8 cmd;
+    u8 DIFICULTY_ID;
+    u8 GOTOLABEL;
+} AiIFGameDifficultyGreaterThanRecord;
+
+typedef struct AiIFMissionTimeLessThanRecord
+{
+    u8  cmd;
+    s16 SECONDS;
+    u8  GOTOLABEL;
+} AiIFMissionTimeLessThanRecord;
+
+typedef struct AiIFMissionTimeGreaterThanRecord
+{
+    u8  cmd;
+    s16 SECONDS;
+    u8  GOTOLABEL;
+} AiIFMissionTimeGreaterThanRecord;
+
+typedef struct AiIFSystemPowerTimeLessThanRecord
+{
+    u8  cmd;
+    s16 MINUTES;
+    u8  GOTOLABEL;
+} AiIFSystemPowerTimeLessThanRecord;
+
+typedef struct AiIFSystemPowerTimeGreaterThanRecord
+{
+    u8  cmd;
+    s16 MINUTES;
+    u8  GOTOLABEL;
+} AiIFSystemPowerTimeGreaterThanRecord;
+
+typedef struct AiIFLevelIdLessThanRecord
+{
+    u8 cmd;
+    u8 LEVEL_ID;
+    u8 GOTOLABEL;
+} AiIFLevelIdLessThanRecord;
+
+typedef struct AiIFLevelIdGreaterThanRecord
+{
+    u8 cmd;
+    u8 LEVEL_ID;
+    u8 GOTOLABEL;
+} AiIFLevelIdGreaterThanRecord;
+
+typedef struct AiIFMyNumArghsLessThanRecord
+{
+    u8 cmd;
+    u8 val;
+    u8 GOTOLABEL;
+} AiIFMyNumArghsLessThanRecord;
+
+typedef struct AiIFMyNumArghsGreaterThanRecord
+{
+    u8 cmd;
+    u8 val;
+    u8 GOTOLABEL;
+} AiIFMyNumArghsGreaterThanRecord;
+
+typedef struct AiIFMyNumCloseArghsLessThanRecord
+{
+    u8 cmd;
+    u8 val;
+    u8 GOTOLABEL;
+} AiIFMyNumCloseArghsLessThanRecord;
+
+typedef struct AiIFMyNumCloseArghsGreaterThanRecord
+{
+    u8 cmd;
+    u8 val;
+    u8 GOTOLABEL;
+} AiIFMyNumCloseArghsGreaterThanRecord;
+
+typedef struct AiIFChrHealthLessThanRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 HEALTH;
+    u8 GOTOLABEL;
+} AiIFChrHealthLessThanRecord;
+
+typedef struct AiIFChrHealthGreaterThanRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 HEALTH;
+    u8 GOTOLABEL;
+} AiIFChrHealthGreaterThanRecord;
+
+typedef struct AiIFChrWasDamagedSinceLastCheckRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 GOTOLABEL;
+} AiIFChrWasDamagedSinceLastCheckRecord;
+
+typedef struct AiIFBondHealthLessThanRecord
+{
+    u8 cmd;
+    u8 HEALTH;
+    u8 GOTOLABEL;
+} AiIFBondHealthLessThanRecord;
+
+typedef struct AiIFBondHealthGreaterThanRecord
+{
+    u8 cmd;
+    u8 HEALTH;
+    u8 GOTOLABEL;
+} AiIFBondHealthGreaterThanRecord;
+
+typedef struct AiSetMyMoraleRecord
+{
+    u8 cmd;
+    u8 val;
+} AiSetMyMoraleRecord;
+
+typedef struct AiAddToMyMoraleRecord
+{
+    u8 cmd;
+    u8 val;
+} AiAddToMyMoraleRecord;
+
+typedef struct AiSubtractFromMyMoraleRecord
+{
+    u8 cmd;
+    u8 val;
+} AiSubtractFromMyMoraleRecord;
+
+typedef struct AiIFMyMoraleLessThanRecord
+{
+    u8 cmd;
+    u8 val;
+    u8 GOTOLABEL;
+} AiIFMyMoraleLessThanRecord;
+
+typedef struct AiIFMyMoraleLessThanRandomRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFMyMoraleLessThanRandomRecord;
+
+typedef struct AiSetMyAlertnessRecord
+{
+    u8 cmd;
+    u8 val;
+} AiSetMyAlertnessRecord;
+
+typedef struct AiAddToMyAlertnessRecord
+{
+    u8 cmd;
+    u8 val;
+} AiAddToMyAlertnessRecord;
+
+typedef struct AiSubtractFromMyAlertnessRecord
+{
+    u8 cmd;
+    u8 val;
+} AiSubtractFromMyAlertnessRecord;
+
+typedef struct AiIFMyAlertnessLessThanRecord
+{
+    u8 cmd;
+    u8 CHRBYTE;
+    u8 GOTOLABEL;
+} AiIFMyAlertnessLessThanRecord;
+
+typedef struct AiIFMyAlertnessLessThanRandomRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFMyAlertnessLessThanRandomRecord;
+
+typedef struct AiSetMyHearingScaleRecord
+{
+    u8  cmd;
+    s16 HEARING_SCALE;
+} AiSetMyHearingScaleRecord;
+
+typedef struct AiSetMyVisionRangeRecord
+{
+    u8 cmd;
+    u8 VISION_RANGE;
+} AiSetMyVisionRangeRecord;
+
+typedef struct AiSetMyGrenadeProbabilityRecord
+{
+    u8 cmd;
+    u8 GRENADE_PROB;
+} AiSetMyGrenadeProbabilityRecord;
+
+typedef struct AiSetMyChrNumRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+} AiSetMyChrNumRecord;
+
+typedef struct AiSetMyHealthTotalRecord
+{
+    u8  cmd;
+    s16 HEALTH;
+} AiSetMyHealthTotalRecord;
+
+typedef struct AiSetMyArmourRecord
+{
+    u8  cmd;
+    s16 AMOUNT;
+} AiSetMyArmourRecord;
+
+typedef struct AiSetMySpeedRatingRecord
+{
+    u8 cmd;
+    s8 val;
+} AiSetMySpeedRatingRecord;
+
+typedef struct AiSetMyArghRatingRecord
+{
+    u8 cmd;
+    s8 val;
+} AiSetMyArghRatingRecord;
+
+typedef struct AiSetMyAccuracyRatingRecord
+{
+    u8 cmd;
+    s8 val;
+} AiSetMyAccuracyRatingRecord;
+
+typedef struct AiSetMyFlags2Record
+{
+    u8 cmd;
+    u8 BITS;
+} AiSetMyFlags2Record;
+
+typedef struct AiUnsetMyFlags2Record
+{
+    u8 cmd;
+    u8 BITS;
+} AiUnsetMyFlags2Record;
+
+typedef struct AiIFMyFlags2HasRecord
+{
+    u8 cmd;
+    u8 BITS;
+    u8 GOTOLABEL;
+} AiIFMyFlags2HasRecord;
+
+typedef struct AiSetChrBitfieldRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 BITS;
+} AiSetChrBitfieldRecord;
+
+typedef struct AiUnsetChrBitfieldRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 BITS;
+} AiUnsetChrBitfieldRecord;
+
+typedef struct AiIFChrBitfieldHasRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 BITS;
+    u8 GOTOLABEL;
+} AiIFChrBitfieldHasRecord;
+
+typedef struct AiSetObjectiveBitfieldRecord
+{
+    u8  cmd;
+    s32 BITFIELD;
+} AiSetObjectiveBitfieldRecord;
+
+typedef struct AiUnsetObjectiveBitfieldRecord
+{
+    u8  cmd;
+    s32 BITFIELD;
+} AiUnsetObjectiveBitfieldRecord;
+
+typedef struct AiIFObjectiveBitfieldHasRecord
+{
+    u8  cmd;
+    s32 BITS;
+    u8  GOTOLABEL;
+} AiIFObjectiveBitfieldHasRecord;
+
+typedef struct AiSetMychrflagsRecord
+{
+    u8  cmd;
+    s32 CHRFLAGS;
+} AiSetMychrflagsRecord;
+
+typedef struct AiUnsetMychrflagsRecord
+{
+    u8  cmd;
+    s32 CHRFLAGS;
+} AiUnsetMychrflagsRecord;
+
+typedef struct AiIFMychrflagsHasRecord
+{
+    u8  cmd;
+    s32 CHRFLAGS;
+    u8  GOTOLABEL;
+} AiIFMychrflagsHasRecord;
+
+typedef struct AiSetChrchrflagsRecord
+{
+    u8  cmd;
+    u8  CHR_NUM;
+    s32 CHRFLAGS;
+} AiSetChrchrflagsRecord;
+
+typedef struct AiUnsetChrchrflagsRecord
+{
+    u8  cmd;
+    u8  CHR_NUM;
+    s32 CHRFLAGS;
+} AiUnsetChrchrflagsRecord;
+
+typedef struct AiIFChrchrflagsHasRecord
+{
+    u8  cmd;
+    u8  CHR_NUM;
+    s32 CHRFLAGS;
+    u8  GOTOLABEL;
+} AiIFChrchrflagsHasRecord;
+
+typedef struct AiSetObjectFlagsRecord
+{
+    u8  cmd;
+    u8  OBJECT_TAG;
+    s32 BITFIELD;
+} AiSetObjectFlagsRecord;
+
+typedef struct AiUnsetObjectFlagsRecord
+{
+    u8  cmd;
+    u8  OBJECT_TAG;
+    s32 BITFIELD;
+} AiUnsetObjectFlagsRecord;
+
+typedef struct AiIFObjectFlagsHasRecord
+{
+    u8  cmd;
+    u8  OBJECT_TAG;
+    s32 BITS;
+    u8  GOTOLABEL;
+} AiIFObjectFlagsHasRecord;
+
+typedef struct AiSetObjectFlags2Record
+{
+    u8  cmd;
+    u8  OBJECT_TAG;
+    s32 BITS;
+} AiSetObjectFlags2Record;
+
+typedef struct AiUnsetObjectFlags2Record
+{
+    u8  cmd;
+    u8  OBJECT_TAG;
+    s32 BITS;
+} AiUnsetObjectFlags2Record;
+
+typedef struct AiIFObjectFlags2HasRecord
+{
+    u8  cmd;
+    u8  OBJECT_TAG;
+    s32 BITFIELD;
+    u8  GOTOLABEL;
+} AiIFObjectFlags2HasRecord;
+
+typedef struct AiSetMyChrPresetRecord
+{
+    u8 cmd;
+    u8 PRESET;
+} AiSetMyChrPresetRecord;
+
+typedef struct AiSetChrChrPresetRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 PRESET;
+} AiSetChrChrPresetRecord;
+
+typedef struct AiSetMyPadPresetRecord
+{
+    u8  cmd;
+    s16 PAD_PRESET;
+} AiSetMyPadPresetRecord;
+
+typedef struct AiSetChrPadPresetRecord
+{
+    u8  cmd;
+    u8  CHR_NUM;
+    s16 PAD_PRESET;
+} AiSetChrPadPresetRecord;
+
+typedef struct AiPRINTRecord
+{
+    u8 cmd;
+    u8 val[];
+} AiPRINTRecord;
+
+typedef struct AiMyTimerStartRecord
+{
+    u8 cmd;
+} AiMyTimerStartRecord;
+
+typedef struct AiMyTimerResetRecord
+{
+    u8 cmd;
+} AiMyTimerResetRecord;
+
+typedef struct AiMyTimerPauseRecord
+{
+    u8 cmd;
+} AiMyTimerPauseRecord;
+
+typedef struct AiMyTimerResumeRecord
+{
+    u8 cmd;
+} AiMyTimerResumeRecord;
+
+typedef struct AiIFMyTimerIsNotRunningRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFMyTimerIsNotRunningRecord;
+
+typedef struct AiIFMyTimerLessThanTicksRecord
+{
+    u8 cmd;
+    u8 TICKS[3];
+    u8 GOTOLABEL;
+} AiIFMyTimerLessThanTicksRecord;
+
+typedef struct AiIFMyTimerGreaterThanTicksRecord
+{
+    u8 cmd;
+    u8 TICKS[3];
+    u8 GOTOLABEL;
+} AiIFMyTimerGreaterThanTicksRecord;
+
+typedef struct AiHudCountdownShowRecord
+{
+    u8 cmd;
+} AiHudCountdownShowRecord;
+
+typedef struct AiHudCountdownHideRecord
+{
+    u8 cmd;
+} AiHudCountdownHideRecord;
+
+typedef struct AiHudCountdownSetRecord
+{
+    u8  cmd;
+    s16 SECONDS;
+} AiHudCountdownSetRecord;
+
+typedef struct AiHudCountdownStopRecord
+{
+    u8 cmd;
+} AiHudCountdownStopRecord;
+
+typedef struct AiHudCountdownStartRecord
+{
+    u8 cmd;
+} AiHudCountdownStartRecord;
+
+typedef struct AiIFHudCountdownIsNotRunningRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFHudCountdownIsNotRunningRecord;
+
+typedef struct AiIFHudCountdownLessThanRecord
+{
+    u8  cmd;
+    s16 SECONDS;
+    u8  GOTOLABEL;
+} AiIFHudCountdownLessThanRecord;
+
+typedef struct AiIFHudCountdownGreaterThanRecord
+{
+    u8  cmd;
+    s16 SECONDS;
+    u8  GOTOLABEL;
+} AiIFHudCountdownGreaterThanRecord;
+
+typedef struct AiTRYSpawningChrAtPadRecord
+{
+    u8  cmd;
+    u8  BODY_NUM;
+    s8  HEAD_NUM;
+    s16 PAD;
+    s16 AI_LIST_ID;
+    s32 BITFIELD;
+    u8  GOTOLABEL;
+} AiTRYSpawningChrAtPadRecord;
+
+typedef struct AiTRYSpawningChrNextToChrRecord
+{
+    u8  cmd;
+    u8  BODY_NUM;
+    s8  HEAD_NUM;
+    u8  CHR_NUM_TARGET;
+    s16 AI_LIST_ID;
+    s32 BITFIELD;
+    u8  GOTOLABEL;
+} AiTRYSpawningChrNextToChrRecord;
+
+typedef struct AiTRYGiveMeItemRecord
+{
+    u8  cmd;
+    s16 PROP_NUM;
+    u8  ITEM_NUM;
+    s32 PROPFLAG;
+    u8  GOTOLABEL;
+} AiTRYGiveMeItemRecord;
+
+typedef struct AiTRYGiveMeHatRecord
+{
+    u8  cmd;
+    s16 PROP_NUM;
+    s32 PROP_BITFIELD;
+    u8  GOTOLABEL;
+} AiTRYGiveMeHatRecord;
+
+typedef struct AiTRYCloningChrRecord
+{
+    u8  cmd;
+    u8  CHR_NUM;
+    s16 AI_LIST_ID;
+    u8  GOTOLABEL;
+} AiTRYCloningChrRecord;
+
+typedef struct AiTextPrintBottomRecord
+{
+    u8  cmd;
+    s16 txt;
+} AiTextPrintBottomRecord;
+
+typedef struct AiTextPrintTopRecord
+{
+    u8  cmd;
+    s16 txt;
+} AiTextPrintTopRecord;
+
+typedef struct AiSfxPlayRecord
+{
+    u8  cmd;
+    s16 SOUND_NUM;
+    s8  CHANNEL_NUM;
+} AiSfxPlayRecord;
+
+typedef struct AiSfxEmitFromObjectRecord
+{
+    u8  cmd;
+    s8  slotID;
+    u8  OBJECT_TAG;
+    s16 sfxID;
+} AiSfxEmitFromObjectRecord;
+
+typedef struct AiSfxEmitFromPadRecord
+{
+    u8  cmd;
+    s8  slotID;
+    s16 PAD;
+    s16 sfxID;
+} AiSfxEmitFromPadRecord;
+
+typedef struct AiSfxSetChannelVolumeRecord
+{
+    u8  cmd;
+    s8  slotID;
+    s16 TARGET_VOLUME;
+    s16 sfxID;
+} AiSfxSetChannelVolumeRecord;
+
+typedef struct AiSfxFadeChannelVolumeRecord
+{
+    u8  cmd;
+    s8  slotID;
+    s16 TARGET_VOLUME;
+    s16 sfxID;
+} AiSfxFadeChannelVolumeRecord;
+
+typedef struct AiSfxStopChannelRecord
+{
+    u8 cmd;
+    s8 CHANNEL_NUM;
+} AiSfxStopChannelRecord;
+
+typedef struct AiIFSfxChannelVolumeLessThanRecord
+{
+    u8  cmd;
+    s8  slotID;
+    s16 VOLUME;
+    u8  GOTOLABEL;
+} AiIFSfxChannelVolumeLessThanRecord;
+
+typedef struct AiVehicleStartPathRecord
+{
+    u8 cmd;
+    u8 PATH_NUM;
+} AiVehicleStartPathRecord;
+
+typedef struct AiVehicleSpeedRecord
+{
+    u8  cmd;
+    s16 TOP_SPEED;
+    s16 ACCELERATION_TIME60;
+} AiVehicleSpeedRecord;
+
+typedef struct AiAircraftRotorSpeedRecord
+{
+    u8  cmd;
+    s16 ROTOR_SPEED;
+    s16 ACCELERATION_TIME60;
+} AiAircraftRotorSpeedRecord;
+
+typedef struct AiIFCameraIsInIntroRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFCameraIsInIntroRecord;
+
+typedef struct AiIFCameraIsInBondSwirlRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFCameraIsInBondSwirlRecord;
+
+typedef struct AiTvChangeScreenBankRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+    u8 SCREEN_INDEX;
+    u8 SCREEN_BANK;
+} AiTvChangeScreenBankRecord;
+
+typedef struct AiIFBondInTankRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFBondInTankRecord;
+
+typedef struct AiEndLevelRecord
+{
+    u8 cmd;
+} AiEndLevelRecord;
+
+typedef struct AiCameraReturnToBondRecord
+{
+    u8 cmd;
+} AiCameraReturnToBondRecord;
+
+typedef struct AiCameraLookAtBondFromPadRecord
+{
+    u8  cmd;
+    s16 PAD;
+} AiCameraLookAtBondFromPadRecord;
+
+typedef struct AiCameraSwitchRecord
+{
+    u8  cmd;
+    u8  OBJECT_TAG;
+    s16 LOOK_AT_BOND_FLAG;
+    s16 UNUSED_FLAG;
+} AiCameraSwitchRecord;
+
+typedef struct AiIFBondYPosLessThanRecord
+{
+    u8  cmd;
+    s16 Y_POS;
+    u8  GOTOLABEL;
+} AiIFBondYPosLessThanRecord;
+
+typedef struct AiBondDisableControlRecord
+{
+    u8 cmd;
+    u8 val;
+} AiBondDisableControlRecord;
+
+typedef struct AiBondEnableControlRecord
+{
+    u8 cmd;
+} AiBondEnableControlRecord;
+
+typedef struct AiTRYTeleportingChrToPadRecord
+{
+    u8  cmd;
+    u8  CHR_NUM;
+    s16 PAD;
+    u8  GOTOLABEL;
+} AiTRYTeleportingChrToPadRecord;
+
+typedef struct AiScreenFadeToBlackRecord
+{
+    u8 cmd;
+} AiScreenFadeToBlackRecord;
+
+typedef struct AiScreenFadeFromBlackRecord
+{
+    u8 cmd;
+} AiScreenFadeFromBlackRecord;
+
+typedef struct AiIFScreenFadeCompletedRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFScreenFadeCompletedRecord;
+
+typedef struct AiHideAllChrsRecord
+{
+    u8 cmd;
+} AiHideAllChrsRecord;
+
+typedef struct AiShowAllChrsRecord
+{
+    u8 cmd;
+} AiShowAllChrsRecord;
+
+typedef struct AiDoorOpenInstantRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+} AiDoorOpenInstantRecord;
+
+typedef struct AiChrRemoveItemInHandRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 HAND_INDEX;
+} AiChrRemoveItemInHandRecord;
+
+typedef struct AiIfNumberOfActivePlayersLessThanRecord
+{
+    u8 cmd;
+    s8 NUMBER;
+    u8 GOTOLABEL;
+} AiIfNumberOfActivePlayersLessThanRecord;
+
+typedef struct AiIFBondItemTotalAmmoLessThanRecord
+{
+    u8 cmd;
+    s8 ITEM_NUM;
+    s8 AMMO_TOTAL;
+    u8 GOTOLABEL;
+} AiIFBondItemTotalAmmoLessThanRecord;
+
+typedef struct AiBondEquipItemRecord
+{
+    u8 cmd;
+    s8 ITEM_NUM;
+} AiBondEquipItemRecord;
+
+typedef struct AiBondEquipItemCinemaRecord
+{
+    u8 cmd;
+    s8 ITEM_NUM;
+} AiBondEquipItemCinemaRecord;
+
+typedef struct AiBondSetLockedVelocityRecord
+{
+    u8 cmd;
+    s8 X_SPEED60;
+    s8 Z_SPEED60;
+} AiBondSetLockedVelocityRecord;
+
+typedef struct AiIFObjectInRoomWithPadRecord
+{
+    u8  cmd;
+    u8  OBJECT_TAG;
+    s16 PAD;
+    u8  GOTOLABEL;
+} AiIFObjectInRoomWithPadRecord;
+
+typedef struct AiIFImFiringAndLockedForwardRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFImFiringAndLockedForwardRecord;
+
+typedef struct AiIFImFiringRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFImFiringRecord;
+
+typedef struct AiSwitchSkyRecord
+{
+    u8 cmd;
+} AiSwitchSkyRecord;
+
+typedef struct AiTriggerFadeAndExitLevelOnButtonPressRecord
+{
+    u8 cmd;
+} AiTriggerFadeAndExitLevelOnButtonPressRecord;
+
+typedef struct AiIFBondIsDeadRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFBondIsDeadRecord;
+
+typedef struct AiBondDisableDamageAndPickupsRecord
+{
+    u8 cmd;
+} AiBondDisableDamageAndPickupsRecord;
+
+typedef struct AiBondHideWeaponsRecord
+{
+    u8 cmd;
+} AiBondHideWeaponsRecord;
+
+typedef struct AiCameraOrbitPadRecord
+{
+    u8  cmd;
+    s16 LAT_DISTANCE;
+    s16 VERT_DISTANCE;
+    s16 ORBIT_SPEED60;
+    s16 PAD;
+    s16 Y_POS_OFFSET;
+    s16 INITIAL_ROTATION;
+} AiCameraOrbitPadRecord;
+
+typedef struct AiCreditsRollRecord
+{
+    u8 cmd;
+} AiCreditsRollRecord;
+
+typedef struct AiIFCreditsHasCompletedRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFCreditsHasCompletedRecord;
+
+typedef struct AiIFObjectiveAllCompletedRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFObjectiveAllCompletedRecord;
+
+typedef struct AiIFFolderActorIsEqualRecord
+{
+    u8 cmd;
+    s8 BOND_ACTOR_INDEX;
+    u8 GOTOLABEL;
+} AiIFFolderActorIsEqualRecord;
+
+typedef struct AiIFBondDamageAndPickupsDisabledRecord
+{
+    u8 cmd;
+    u8 GOTOLABEL;
+} AiIFBondDamageAndPickupsDisabledRecord;
+
+typedef struct AiMusicPlaySlotRecord
+{
+    u8 cmd;
+    s8 MUSIC_SLOT;
+    u8 SECONDS_STOPPED_DURATION;
+    u8 SECONDS_TOTAL_DURATION;
+} AiMusicPlaySlotRecord;
+
+typedef struct AiMusicStopSlotRecord
+{
+    u8 cmd;
+    s8 MUSIC_SLOT;
+} AiMusicStopSlotRecord;
+
+typedef struct AiTriggerExplosionsAroundBondRecord
+{
+    u8 cmd;
+} AiTriggerExplosionsAroundBondRecord;
+
+typedef struct AiIFKilledCiviliansGreaterThanRecord
+{
+    u8 cmd;
+    u8 CIVILIANS_KILLED;
+    u8 GOTOLABEL;
+} AiIFKilledCiviliansGreaterThanRecord;
+
+typedef struct AiIFChrWasShotSinceLastCheckRecord
+{
+    u8 cmd;
+    u8 CHR_NUM;
+    u8 GOTOLABEL;
+} AiIFChrWasShotSinceLastCheckRecord;
+
+typedef struct AiBondKilledInActionRecord
+{
+    u8 cmd;
+} AiBondKilledInActionRecord;
+
+typedef struct AiRaiseArmsRecord
+{
+    u8 cmd;
+} AiRaiseArmsRecord;
+
+typedef struct AiGasLeakAndFadeFogRecord
+{
+    u8 cmd;
+} AiGasLeakAndFadeFogRecord;
+
+typedef struct AiObjectRocketLaunchRecord
+{
+    u8 cmd;
+    u8 OBJECT_TAG;
+} AiObjectRocketLaunchRecord;
+
+#pragma pack(0)

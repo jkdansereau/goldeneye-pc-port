@@ -1,7 +1,7 @@
 #include <ultra64.h>
 #include "initcheattext.h"
 #include "player.h"
-#include "cheat_buttons.h"
+#include "cheat.h"
 
 void initCheatTextBuffer(void) {
     int i;
@@ -16,7 +16,7 @@ void initCheatTextBuffer(void) {
 
 void disableOnscreenCheatText(void)
 {
-  g_CurrentPlayer->something_with_cheat_text = 0;
-  g_CurrentPlayer->can_display_cheat_text = 0;
+  g_CurrentPlayer->cheatInputBufferIndex = 0;
+  g_CurrentPlayer->cheatInputCount = 0;
 }
 

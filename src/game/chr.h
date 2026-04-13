@@ -60,50 +60,50 @@ struct explosion_anim_group_info
 
 struct weapon_firing_animation_table
 {
-    s32 anonymous_0;
-    f32 anonymous_1;
-    f32 anonymous_2;
-    f32 anonymous_3;
+    s32 anim_num;
+    f32 unk04;
+    f32 turn_angle_per_frame;
+    f32 angle_offset;
 
     /**
      * Offset 0x10.
     */
-    f32 anonymous_4;
-    f32 anonymous_5;
-    f32 anonymous_6;
-    f32 anonymous_7;
+    f32 start_frame;
+    f32 end_frame;
+    f32 shoot_start_frame;
+    f32 shoot_end_frame;
 
     /**
      * Offset 0x20.
     */
-    f32 anonymous_8;
-    f32 anonymous_9;
-    f32 anonymous_10;
-    f32 anonymous_11;
+    f32 recoil_start_frame;
+    f32 recoil_end_frame;
+    f32 aim_start_frame;
+    f32 aim_end_frame;
 
     /**
      * Offset 0x30.
     */
-    f32 anonymous_12;
-    f32 anonymous_13;
+    f32 max_up;
+    f32 max_down;
 
     /**
      * Some kind of minimum. See chrlvUpdateAimendsideback.
      * Offset 0x38.
     */
-    f32 anonymous_14;
+    f32 max_left;
 
     /**
      * Some kind of maximum. See chrlvUpdateAimendsideback.
      * Offset 0x3c.
     */
-    f32 anonymous_15;
+    f32 max_right;
 
     /**
      * Offset 0x40.
     */
-    f32 anonymous_16;
-    f32 anonymous_17;
+    f32 free_arm_frac_up;
+    f32 free_arm_frac_down;
 };
 
 struct anim_group_info

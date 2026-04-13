@@ -42,7 +42,21 @@ extern "C" {
 extern void		osSyncPrintf(const char *fmt, ...);
 #define assert(EX)  if(!(EX))osSyncPrintf("\n--- ASSERTION FAULT - %s - %s, line %d\n\n", # EX , __FILE__, __LINE__)
 
+//  Test EX and print MSG if fail - possibly cannonically "Debug" from rmon
 #define assertmsg(EX, MSG) if (!(EX)) osSyncPrintf(MSG)
+
+// rmon Debug copied temporarelly below would leave object accesses in assembly without using or printing them
+// eg Debug("some message %f\n", sin(x));
+// would result in sin(x) being calculated but not printed or used
+#if defined(RMONDEBUG)
+    #define Debug rmonPrintf
+#else /* not RMONDEBUG, do nothing */
+     #define Debug
+#endif
+
+// Test EX and print MSG and file info if fail
+#define assertmsg2(EX, MSG) \
+    if (!(EX)) osSyncPrintf("%s, file %s, line %d\n", MSG, __FILE__, __LINE__)
 
 // extern void __assert(const char *, const char *, int);
 // #ifdef __ANSI_CPP__

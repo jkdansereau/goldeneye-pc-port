@@ -4,20 +4,26 @@
 #include <PR/os.h>
 #include <PR/gbi.h>
 #include <macro.h>
-#include "player_2.h"
+#include "player.h"
 #include <fr.h>
 
 // bss
-s32 z_buffer_width;
-s32 z_buffer_height;
+s32 z_buffer_width; // 0x8008e8f0
+s32 z_buffer_height; // 0x8008e8f4
 
 // data
-s32 z_buffer = 0;
+s32 z_buffer = 0; // 0x8004f010
 
+/*
+ * Address: 0x7f0d2870
+*/
 void zbufDeallocate(void) {
     z_buffer = 0;
 }
 
+/*
+ * Address: 0x7f0d287c
+*/
 void zbufAllocate(void)
 {
     if (resolution != 0)
@@ -43,12 +49,18 @@ void zbufAllocate(void)
     z_buffer = ALIGN64_V1(z_buffer);
 }
 
+/*
+ * Address: 0x7f0d2938
+*/
 void zbufSetBuffer(s32 buffer, s32 width, s32 height) {
     z_buffer = buffer;
     z_buffer_width = width;
     z_buffer_height = height;
 }
 
+/*
+ * Address: 0x7f0d2954
+*/
 Gfx *zbufInit(Gfx *gdl) {
     s32 phi_a3;
     s32 test;
@@ -67,6 +79,9 @@ Gfx *zbufInit(Gfx *gdl) {
     return gdl;
 }
 
+/*
+ * Address: 0x7f0d2a08
+*/
 Gfx *zbufClearCurrentPlayer(Gfx *gdl) {
     s32 start_x;
     s32 end_x;

@@ -5,7 +5,7 @@
 #include <bondtypes.h>
 #include "chr.h"
 #include "matrixmath.h"
-#include "watch.h"
+#include "options.h"
 #include "image.h"
 
 typedef struct invitem_weap
@@ -123,18 +123,18 @@ struct hand
   s32 field_8B0;
   s32 weapon_animation_trigger;
   s32 field_8B8;
-  s32 field_8BC;
-  s32 field_8C0;
-  s32 field_8C4;
-  s32 field_8C8;
-  s32 field_8CC;
-  s32 field_8D0;
-  s32 field_8D4;
-  s32 field_8D8;
-  s32 field_8DC;
-  s32 field_8E0;
-  s32 field_8E4;
-  s32 field_8E8;
+  f32 field_8BC;
+  f32 field_8C0;
+  f32 field_8C4;
+  f32 field_8C8;
+  f32 field_8CC;
+  f32 field_8D0;
+  f32 field_8D4;
+  f32 field_8D8;
+  f32 field_8DC;
+  f32 field_8E0;
+  f32 field_8E4;
+  f32 field_8E8;
   Mtxf field_8EC;
   s32 field_92C;
   s32 field_930;
@@ -813,18 +813,18 @@ struct player
   s32 headwalkingtime60; //0x4f0
   f32 headamplitude; //0x4f4
   f32 sideamplitude; //0x4f8
-  struct coord3d headpos;
-  struct coord3d headlook;
+  coord3d headpos;
+  vec3d headlook;
 
-  struct coord3d headup;
-  struct coord3d headpossum;
+  vec3d headup;
+  coord3d headpossum;
 
   // headlooksum[2] has NTSC->PAL conversion rate (5/6)
-  struct coord3d headlooksum;
+  coord3d headlooksum;
 
   // headupsum[1] has NTSC->PAL conversion rate (5/6)
-  struct coord3d headupsum;
-  struct coord3d headbodyoffset; //0x544
+  vec3d headupsum;
+  coord3d headbodyoffset; //0x544
   f32 standheight; // old name stationary_ground_offset
 
   // f32[4] ?? or 2 x f32[2] ??
@@ -832,10 +832,10 @@ struct player
   f32 standfrac; //0x560
 
   // offset 0x564
-  struct coord3d standlook[2];
+  vec3d standlook[2];
 
   // offset 0x57C
-  struct coord3d standup[2];
+  vec3d standup[2];
 
   // offset 0x594
   s32 standcnt;
@@ -964,20 +964,24 @@ struct player
   struct hand hands[2];
   f32 gunposamplitude;
   f32 gunxamplitude;
-  s32 field_FC8;
+
+  // Whether the trigger was released this frame.
+  s32 trigger_released;
 
   /**
-   * Used in lvlRender method, in VERSION_JP build.
-   * Set to one when holding a grenade (primed to explode).
+   * Whether player is currently holding the trigger button.
    * Offset 0xfcc.
    */
-  s32 field_FCC;
+  s32 trigger_down;
 
-  // Seems to be copy of field_FCC
-  s32 field_FD0;
+  // Whether player was holding the trigger button on the previous frame.
+  s32 prev_trigger_down;
 
   s32 z_trigger_timer;
-  s32 field_FD8;
+
+  // Which hand will fire when the Z trigger is pressed.
+  s32 current_trigger_hand;
+  
   struct rgba_u8 tileColor;
   s32 resetshadecol;
 
@@ -1097,22 +1101,7 @@ struct player
   /**
    * Offset 0x1118.
    */
-  f32 screenxminf;
-
-  /**
-   * Offset 0x111c.
-   */
-  f32 screenyminf;
-
-  /**
-   * Offset 0x1120.
-   */
-  f32 screenxmaxf;
-
-  /**
-   * Offset 0x1124.
-   */
-  f32 screenymaxf;
+  struct bbox2d screensize;
 
   /**
    * Used during level.
@@ -1144,7 +1133,10 @@ struct player
   s32 equipcuritem;
   textoverride *textoverrides;
   gunheld gunheldarr[10];
+
+  // -1 for inactive, 0 or greater for active.
   s32 magnetattracttime;
+
   f32 swaytarget;
   f32 swayoffset0;
   f32 swayoffset2;
@@ -1158,13 +1150,13 @@ struct player
    * Entry seems to be added only on other button presses.
    * Offset 0x128c.
    */
-  u16 cheat_display_text_related[20];
+  u16 cheatInputBuffer[20];
 
   /**
    * Offset 0x12b4.
    */
-  /* 0x12B4 */ u8 something_with_cheat_text;
-  /* 0x12B5 */ u8 can_display_cheat_text;
+  /* 0x12B4 */ u8 cheatInputBufferIndex;
+  /* 0x12B5 */ u8 cheatInputCount;
   /* 0x12B6 */ u8 bondinvincible;
   /* 0x12B7 */ u8 field_12B7;
   /* 0x12B8 */ struct damage_display_parent armor_display_values[23];
@@ -2325,13 +2317,16 @@ typedef struct HealthDamageType { // time related idk
     s32 otherEndFrame;
 } HealthDamageType;
 
-typedef struct bondstruct_unk_80035904 {
-    u32 unk00;
-    coord3d unk04;
-    coord3d unk10;
-    f32 unk1C;
-    f32 unk20;
-} bondstruct_unk_80035904;
+/**
+ * First person weapon animation keyframe. Used for special weapons like the Throwing Knife and Taser.
+ */
+typedef struct Weapon1PTransformKeyframe {
+    u32 isFinalKey;
+    coord3d pos; // local space (+right/-left, +up/-down, +backward/-forward)
+    coord3d rot;
+    f32 interpParam; // Not sure, maybe some kind of interpolation between frames.
+    f32 duration;
+} Weapon1PTransformKeyframe;
 
 // placeholder while matching
 struct move_bond_temp_struct {
@@ -2763,5 +2758,7 @@ int redirect_get_BONDdata_autoaim_x(void);
 int redirect_get_BONDdata_autoaim_y(void);
 void transform3Dto2DCoords(coord3d *in, coord2d *out);
 void maybe_solo_intro_camera_handler(void);
+s32 get_BONDdata_is_aiming(void);
+void currentPlayerAdjustFade(f32 maxfadetime, s32 r, s32 g, s32 b, f32 frac);
 
 #endif

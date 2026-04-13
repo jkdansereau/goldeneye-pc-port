@@ -4,7 +4,6 @@
 #include "front.h"
 #include "fr.h"
 #include "player.h"
-#include "player_2.h"
 #include "othermodemicrocode.h"
 #include "image_bank.h"
 

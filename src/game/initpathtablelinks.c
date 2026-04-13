@@ -22,14 +22,14 @@
  * https://decomp.me/scratch/nSCDd 40.03%
 */
 void init_path_table_links(void)
-{    
+{
     waypoint *spA0;
     waypoint *sp9C;
-    
+
     s32 var_s6;
     waypoint *temp_s0;
     waygroup *spD8;
-    
+
     waypoint *var_t5;
     s32 var_v0_2;
     s32 var_s3;
@@ -66,7 +66,7 @@ void init_path_table_links(void)
     if (temp_s0 != NULL)
     {
         var_a3 = 0;
-        
+
         var_t5 = temp_s0;
         while (var_t5->padID >= 0)
         {
@@ -80,6 +80,13 @@ void init_path_table_links(void)
                     if (g_CurrentSetup.padnames != NULL)
                     {
                         // removed
+    #ifdef DEBUG
+                        osSyncPrintf("loc \'%s\' has a link to itself!\n", g_CurrentSetup.padnames[i]);
+                    }
+                    else
+                    {
+                        osSyncPrintf("loc number %d has a link to itself!\n", i);
+    #endif
                     }
                 }
                 else
@@ -91,7 +98,7 @@ void init_path_table_links(void)
                     while (*temp_v1 >= 0)
                     {
                         var_a0++;
-                        
+
                         if (var_a3 != *temp_v1)
                         {
                             continue;
@@ -102,13 +109,24 @@ void init_path_table_links(void)
 
                     if (var_a3 != temp_s0[*temp_v0].neighbours[var_a0])
                     {
+#ifdef DEBUG
+                        if (g_CurrentSetup.padnames == NULL)
+                        {
+                            osSyncPrintf("loc number %d has link to number %d but not back again!\n", someting, something2);
+                        }
+                        else
+                        {
+                            osSyncPrintf("loc \'%s\' has link to \'%s\' but not back again!\n",something->padname, g_CurrentSetup.padnames[i]));
+                        }
+#endif
+
                         var_s6 = 1;
                     }
                 }
 
                 temp_v0++;
             }
-            
+
             var_a3++;
             var_t5 = &temp_s0[var_a3];
         }
@@ -117,10 +135,10 @@ void init_path_table_links(void)
     if (spD8 != NULL)
     {
         var_s1 = 0;
-        
+
         var_s3 = 0;
         var_v0_2 = spD8->neighbours[var_s3];
-        
+
         while (var_v0_2 >= 0)
         {
             if (var_v0_2 == var_s1)
@@ -129,6 +147,13 @@ void init_path_table_links(void)
                 if (g_CurrentSetup.boundpadnames != NULL)
                 {
                     // removed
+    #ifdef DEBUG
+                    osSyncPrintf("hall \'%s\' has a link to itself!\n", g_CurrentSetup.boundpadnames[i]);
+                }
+                else
+                {
+                    osSyncPrintf("hall number %d has a link to itself!\n", i);
+    #endif
                 }
             }
             else
@@ -139,7 +164,7 @@ void init_path_table_links(void)
                 while (*temp_a2 >= 0)
                 {
                     var_a1++;
-                    
+
                     if (var_s1 != *temp_a2)
                     {
                         temp_a2++;
@@ -155,19 +180,38 @@ void init_path_table_links(void)
                     if (g_CurrentSetup.boundpadnames != NULL)
                     {
                         // removed
+    #ifdef DEBUG
+                        osSyncPrintf("hall \'%s\' has link to \'%s\' but not connected locs!\n", g_CurrentSetup.boundpadnames[i]);
                     }
+                    else
+                    {
+                        osSyncPrintf("hall number %d has link to number %d but not connected locs! \n", i);
+    #endif
+                    }
+
+
                 }
                 else if (g_CurrentSetup.pathwaypoints != NULL)
                 {
                     sub_GAME_7F08F438(spD8, &spD8[var_v0_2], &spA0, &sp9C);
-                    
+
                     if (spA0 == NULL || sp9C == NULL)
                     {
-                        var_s6 = 1;                    
+    #ifdef DEBUG
+                        if (g_CurrentSetup.padnames == NULL)
+                        {
+                            osSyncPrintf("hall number %d has link to number %d but not back again!\n", someting, something2);
+                        }
+                        else
+                        {
+                            osSyncPrintf("hall \'%s\' has link to \'%s\' but not back again!\n",something->padname, g_CurrentSetup.padnames[i]));
+                        }
+    #endif
+                        var_s6 = 1;
                     }
                 }
             }
-            
+
             var_s3++;
             var_v0_2 = spD8->neighbours[var_s3];
         }
@@ -188,7 +232,7 @@ void init_path_table_links(void)
                 {
                     temp_a1_2 = &temp_s0[*var_v1_3];
                     temp_a2_2 = temp_a1_2->groupNum;
-    
+
                     if (temp_a2_2 < 0)
                     {
                         temp_a1_2->groupNum = var_t1;
@@ -199,15 +243,26 @@ void init_path_table_links(void)
                         var_v0_4 = &var_t3->waypoints[var_a3_2];
                         if (var_t1 != temp_a2_2)
                         {
+    #ifdef DEBUG
+                            if (g_CurrentSetup.padnames == NULL || (g_chraiCurrentSetup.volnames == NULL))
+                            {
+                                osSyncPrintf("hall number %d contains loc number %d which thinks it is in hall n umber %d!\n", someting, something2);
+                            }
+                            else
+                            {
+                                osSyncPrintf("hall \'%s\' contains loc \'%s\' which thinks it is in hall \'%s\'! \n", something->padname, g_CurrentSetup.padnames[i], xxx);
+                            }
+    #endif
+
                             var_s6 = 1;
                         }
                     }
 
-                    var_a3_2++;         
-                    
+                    var_a3_2++;
+
                     var_v1_3 = var_v0_4 + 1;
                 }
-    
+
                 var_t1 = 0;
             }
 
@@ -220,6 +275,17 @@ void init_path_table_links(void)
             var_a2_2 = &temp_s0[var_t1];
             if (var_a2_2->groupNum < 0)
             {
+    #ifdef DEBUG
+                if (g_CurrentSetup.padnames != NULL)
+                {
+                    osSyncPrintf("loc \'%s\' is not in a hall!\n", someting);
+                }
+                else
+                {
+                    osSyncPrintf("loc number %d is not in a hall!\n", i);
+                }
+    #endif
+
                 var_s6 = 1;
             }
             var_t1++;
@@ -229,7 +295,7 @@ void init_path_table_links(void)
         {
             var_t3 = spD8;
 
-            
+
             while (var_t3 != NULL)
             {
                 var_v1_4 = 0;
@@ -271,15 +337,15 @@ void init_path_table_links(void)
                                 temp_s0[var_v0_6].dist = 1;
                                 var_t0_2 = 1;
                             }
-                            
+
                             var_v1_5++;
                             var_v0_6 = temp_a2_3->neighbours[var_v1_5];
                         }
                     }
-                    
+
                     var_v0_5 = var_t3->waypoints[var_t1_3];
                 }
-                
+
                 // loop_67
                 var_v0_5 = *var_t3->waypoints;
                 while (var_v0_5 >= 0) // var_v0_5 >= 0
@@ -302,7 +368,7 @@ void init_path_table_links(void)
                     {
                         //var_t0_2 = 0;
                         //var_t4 = 0;
-                        
+
                         continue;
                     }
                 }
@@ -310,13 +376,18 @@ void init_path_table_links(void)
                 if (var_t4 != 0)
                 {
                     var_s6 = 1;
-                    
+
                     if (g_CurrentSetup.boundpadnames != NULL)
                     {
-                        //
+    #ifdef DEBUG
+                        osSyncPrintf("not all locs in hall number %d are connected!\n", i);
+                    }
+                    else
+                    {
+                        osSyncPrintf("not all locs in hall \'%s\' are connected!\n", g_CurrentSetup.boundpadnames[i]);
+    #endif
                     }
                 }
-                
                 var_t3++;
             }
         }
@@ -324,6 +395,9 @@ void init_path_table_links(void)
 
     if (var_s6 != 0)
     {
+    #ifdef DEBUG
+        osSyncPrintf("PLEASE FIX THE ABOVE LOC ERRORS NOW! ");
+    #endif
         while(1);
     }
 }
@@ -403,7 +477,7 @@ glabel init_path_table_links
 .L7F006988:
 /* 03B4B8 7F006988 25080004 */  addiu $t0, $t0, 4
 /* 03B4BC 7F00698C 04C1FFDC */  bgez  $a2, .L7F006900
-/* 03B4C0 7F006990 00000000 */   nop   
+/* 03B4C0 7F006990 00000000 */   nop
 /* 03B4C4 7F006994 24E70001 */  addiu $a3, $a3, 1
 .L7F006998:
 /* 03B4C8 7F006998 0007C100 */  sll   $t8, $a3, 4
@@ -415,7 +489,7 @@ glabel init_path_table_links
 /* 03B4DC 7F0069AC 8FAE00D8 */  lw    $t6, 0xd8($sp)
 .L7F0069B0:
 /* 03B4E0 7F0069B0 11C00054 */  beqz  $t6, .L7F006B04
-/* 03B4E4 7F0069B4 00000000 */   nop   
+/* 03B4E4 7F0069B4 00000000 */   nop
 /* 03B4E8 7F0069B8 8DCF0000 */  lw    $t7, ($t6)
 /* 03B4EC 7F0069BC 00008825 */  move  $s1, $zero
 /* 03B4F0 7F0069C0 01C0A825 */  move  $s5, $t6
@@ -431,7 +505,7 @@ glabel init_path_table_links
 /* 03B514 7F0069E4 8FAE0048 */   lw    $t6, 0x48($sp)
 .L7F0069E8:
 /* 03B518 7F0069E8 14510007 */  bne   $v0, $s1, .L7F006A08
-/* 03B51C 7F0069EC 00000000 */   nop   
+/* 03B51C 7F0069EC 00000000 */   nop
 /* 03B520 7F0069F0 8E990024 */  lw    $t9, 0x24($s4)
 /* 03B524 7F0069F4 24160001 */  li    $s6, 1
 /* 03B528 7F0069F8 53200036 */  beql  $t9, $zero, .L7F006AD4
@@ -500,7 +574,7 @@ glabel init_path_table_links
 /* 03B608 7F006AD8 03337821 */  addu  $t7, $t9, $s3
 /* 03B60C 7F006ADC 8DE20000 */  lw    $v0, ($t7)
 /* 03B610 7F006AE0 0441FFC1 */  bgez  $v0, .L7F0069E8
-/* 03B614 7F006AE4 00000000 */   nop   
+/* 03B614 7F006AE4 00000000 */   nop
 /* 03B618 7F006AE8 8FAE0048 */  lw    $t6, 0x48($sp)
 .L7F006AEC:
 /* 03B61C 7F006AEC 26310001 */  addiu $s1, $s1, 1
@@ -513,7 +587,7 @@ glabel init_path_table_links
 /* 03B634 7F006B04 12000091 */  beqz  $s0, .L7F006D4C
 /* 03B638 7F006B08 8FAF00D8 */   lw    $t7, 0xd8($sp)
 /* 03B63C 7F006B0C 11E0008F */  beqz  $t7, .L7F006D4C
-/* 03B640 7F006B10 00000000 */   nop   
+/* 03B640 7F006B10 00000000 */   nop
 /* 03B644 7F006B14 8DE30000 */  lw    $v1, ($t7)
 /* 03B648 7F006B18 00004825 */  move  $t1, $zero
 /* 03B64C 7F006B1C 01E05825 */  move  $t3, $t7
@@ -530,7 +604,7 @@ glabel init_path_table_links
 /* 03B670 7F006B40 01D02821 */  addu  $a1, $t6, $s0
 /* 03B674 7F006B44 8CA60008 */  lw    $a2, 8($a1)
 /* 03B678 7F006B48 04C10005 */  bgez  $a2, .L7F006B60
-/* 03B67C 7F006B4C 00000000 */   nop   
+/* 03B67C 7F006B4C 00000000 */   nop
 /* 03B680 7F006B50 ACA90008 */  sw    $t1, 8($a1)
 /* 03B684 7F006B54 8D640004 */  lw    $a0, 4($t3)
 /* 03B688 7F006B58 10000004 */  b     .L7F006B6C
@@ -573,7 +647,7 @@ glabel init_path_table_links
 /* 03B704 7F006BD4 8CCE0008 */   lw    $t6, 8($a2)
 .L7F006BD8:
 /* 03B708 7F006BD8 1060005C */  beqz  $v1, .L7F006D4C
-/* 03B70C 7F006BDC 00000000 */   nop   
+/* 03B70C 7F006BDC 00000000 */   nop
 /* 03B710 7F006BE0 8D640004 */  lw    $a0, 4($t3)
 .L7F006BE4:
 /* 03B714 7F006BE4 00001825 */  move  $v1, $zero
@@ -599,7 +673,7 @@ glabel init_path_table_links
 /* 03B758 7F006C28 00897821 */  addu  $t7, $a0, $t1
 /* 03B75C 7F006C2C 8DE20000 */  lw    $v0, ($t7)
 /* 03B760 7F006C30 0441FFF3 */  bgez  $v0, .L7F006C00
-/* 03B764 7F006C34 00000000 */   nop   
+/* 03B764 7F006C34 00000000 */   nop
 /* 03B768 7F006C38 8C850000 */  lw    $a1, ($a0)
 /* 03B76C 7F006C3C 00001825 */  move  $v1, $zero
 /* 03B770 7F006C40 00A01025 */  move  $v0, $a1
@@ -687,7 +761,7 @@ glabel init_path_table_links
 /* 03B880 7F006D50 8FB00018 */   lw    $s0, 0x18($sp)
 .L7F006D54:
 /* 03B884 7F006D54 1000FFFF */  b     .L7F006D54
-/* 03B888 7F006D58 00000000 */   nop   
+/* 03B888 7F006D58 00000000 */   nop
 .L7F006D5C:
 /* 03B88C 7F006D5C 8FBF003C */  lw    $ra, 0x3c($sp)
 /* 03B890 7F006D60 8FB1001C */  lw    $s1, 0x1c($sp)

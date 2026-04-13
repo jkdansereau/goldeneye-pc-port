@@ -303,8 +303,8 @@ extern Lights1 ninlogolight;
 
 extern f32 slider_007_mode_reaction;
 extern f32 slider_007_mode_health;
-extern f32 slider_007_mode_damage;
 extern f32 slider_007_mode_accuracy;
+extern f32 slider_007_mode_damage;
 
 
 extern struct mission_folder_setup mission_folder_setup_entries[];

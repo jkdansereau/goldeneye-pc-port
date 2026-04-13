@@ -3,11 +3,11 @@
 #include "debugmenu_handler.h"
 #include "joy.h"
 #include "player.h"
-#include "watch.h"
+#include "options.h"
 #include "file.h"
 #include "file2.h"
 #include "front.h"
-#include "cheat_buttons.h"
+#include "cheat.h"
 
 
 // bss
@@ -370,7 +370,7 @@ bool fileGetIsCheatUnlocked(save_data *save, s32 cheat)
 {
     s32 bits;
 
-    if (cheat >= 0 && cheat < CHEAT_20)
+    if (cheat >= 0 && cheat < CHEAT_INPUT_BUFFER_SIZE)
     {
         bits = save->unlocked_cheats_1 | save->unlocked_cheats_3 << 0x18 | save->unlocked_cheats_3 << 0x10 | save->unlocked_cheats_2 << 8;
         return ((1 << cheat) & bits) != 0;
@@ -390,7 +390,7 @@ void fileSetSaveCheatUnlocked(save_data *save, s32 cheat)
     u32 i;
     u32 temp;
 
-    if (cheat >= 0 && cheat < CHEAT_20)
+    if (cheat >= 0 && cheat < CHEAT_INPUT_BUFFER_SIZE)
     {
         temp = 1 << (cheat);
 
@@ -808,7 +808,7 @@ void fileUnlockStageInFolderAtDifficulty(s32 foldernum, LEVEL_SOLO_SEQUENCE stag
  */
 void fileSaveFolderUnlockCheat(s32 foldernum, s32 cheat)
 {
-    if ((foldernum >= FOLDER1) && (foldernum < MAX_FOLDER_COUNT) && (cheat >= 0) && (cheat < CHEAT_20))
+    if ((foldernum >= FOLDER1) && (foldernum < MAX_FOLDER_COUNT) && (cheat >= 0) && (cheat < CHEAT_INPUT_BUFFER_SIZE))
     {
         save_data *save = fileGetSaveForFoldernum(foldernum);
 

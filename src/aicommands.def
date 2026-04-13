@@ -5169,7 +5169,7 @@ _AI_CMD(
             {
                 pad = (PadRecord *)&g_CurrentSetup.boundpads[getBoundPadNum(padnum)];
             }
-            matrix_4x4_7F059908(&matrix, 0, 0, 0, -pad->target.x, -pad->target.y, -pad->target.z, pad->up.x, pad->up.y, pad->up.z);
+            matrix_4x4_set_basis_and_position_target(&matrix, 0, 0, 0, -pad->target.x, -pad->target.y, -pad->target.z, pad->up.x, pad->up.y, pad->up.z);
             if (obj->model)
             {
                 matrix_scalar_multiply(obj->model->scale, &matrix);

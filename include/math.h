@@ -43,6 +43,9 @@
 /* The circumference of a circle with radius 1, PI*2.*/
 #define M_TAU_F       6.2831855f
 
+#define M_PI_2F     1.5707964f
+#define M_LN2F      0.69813174f
+
 
 /* Half of PI. (PI/2)*/
 #define M_HALF_PI       (M_PI_F / 2)

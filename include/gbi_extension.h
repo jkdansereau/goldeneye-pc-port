@@ -25,6 +25,15 @@
 #define MASK_512 9
 #define MASK_1024 10
 
+typedef enum 
+{
+    TEXTURETYPE_LOD,
+    TEXTURETYPE_DETAIL,
+    TEXTURETYPE_MIPMAP,
+    TEXTURETYPE_TILE,
+    TEXTURETYPE_TILE_PRESWAPPED
+} TextureTypes;
+
 /* Set the Texel Scale (0.0 - 1.0) for multiplying UV's eg, 0.5 * (31 << 6) = 31.0 */
 #define CALC_TEXSCALE(scale) scale < 1.0f ? scale * 0x10000 : 0xffff
 
@@ -66,6 +75,8 @@
 
 
 #ifdef TRI4_Ext
+
+
 /***
  ***  4 Triangles
  ***/
@@ -87,6 +98,7 @@
 /**
   Draw up to 4 triangles at a time.
   Vertex index is 0-15, to use a higher index use gSP1Triangle
+  Triangles with all points set to 0 are not drawn.
 */
 #define gSP4Triangles(pkt, x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4) \
 {                                                                          \
@@ -110,6 +122,7 @@
 /**
   Draw up to 4 triangles at a time.
   Vertex index is 0-15, to use a higher index use gSP1Triangle
+  Triangles with all points set to 0 are not drawn.
 */
 #define gsSP4Triangles(x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4) \
 {                                                                      \
@@ -140,55 +153,6 @@
 	gsSP4Triangles(x1, y1, z1, x2, y2, z2, 0, 0, 0, 0, 0, 0)
 
 
-/**
- * B1	rsp_tri4
- * Draws up to four triangles at a time.
- * Expects values from 0-F, corresponding with # points declared by vertex command.
- * Triangles with all points set to 0 are not drawn.
- *
- * upper word
- * 0000F000	z4
- * 00000F00	z3
- * 000000F0	z2
- * 0000000F	z1
- *
- * lower word
- * f0000000	y4
- * 0f000000	x4
- * 00f00000	y3
- * 000f0000	x3
- * 0000f000	y2
- * 00000f00	x2
- * 000000f0	y1
- * 0000000f	x1
- */
-#define	gDPTri4(pkt, x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4) \
-{                                          \
-    Gfx *_g = (Gfx *)(pkt);                \
-    _g->words.w0 = (_SHIFTL(G_TRI4, 24, 8) \
-            | _SHIFTL(z4, 12, 4)           \
-            | _SHIFTL(z3, 8, 4)            \
-            | _SHIFTL(z2, 4, 4)            \
-            | _SHIFTL(z1, 0, 4));          \
-    _g->words.w1 = (_SHIFTL(y4, 28, 4)     \
-            | _SHIFTL(x4, 24, 4)           \
-            | _SHIFTL(y3, 20, 4)           \
-            | _SHIFTL(x3, 16, 4)           \
-            | _SHIFTL(y2, 12, 4)           \
-            | _SHIFTL(x2, 8, 4)            \
-            | _SHIFTL(y1, 4, 4)            \
-            | _SHIFTL(x1, 0, 4));          \
-}
-
-#define gDPTri3(pkt, x1, y1, z1, x2, y2, z2, x3, y3, z3) \
-    gDPTri4(pkt, x1, y1, z1, x2, y2, z2, x3, y3, z3, 0, 0, 0)
-
-#define gDPTri2(pkt, x1, y1, z1, x2, y2, z2) \
-    gDPTri4(pkt, x1, y1, z1, x2, y2, z2, 0, 0, 0, 0, 0, 0)
-
-#define gDPTri1(pkt, x1, y1, z1) \
-    gDPTri4(pkt, x1, y1, z1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-
 #define	gDPLoadTLUT06(pkt, a, b, c, d)				                                        \
 {                                                                                           \
     Gfx *_g = (Gfx *)pkt;                                                                   \
@@ -211,17 +175,84 @@
 }
 
 /*
- * Texturing macro Overrides
+ Use Texture from bank.
+ If detail, use shift eg 15 for 2x detail per base texel, 14 fpr 4x.
+
+ Confirm params from decomp in CO expand function 
+ 
+ @param        cms: s-axis mirror, no-mirror, wrap, and clamp flags
+ @param        cmt: t-axis mirror, no-mirror, wrap, and clamp flags eg G_TX_CLAMP    
+ @param       tile: Number of tiles
+ @param     shifts: s-coordinate shift value or G_TX_NOLOD 
+ @param     shiftt: t-coordinate shift value or G_TX_NOLOD 
+ @param       type: texture type: E.g. TEXTURETYPE_DETAIL 
+ @param   minlevel: Clamp at tile 0 + frac (eg, 0.5)
+ @param  detail_id: Detail Texture ID
+ @param texture_id: Texture ID
  */
 
-#define gsSPUseTexture()\
-{                                 \
-        {                             \
-            (_SHIFTL(G_SETTEX, 24, 8) | \
-             /*STUFF GOES HERE*/),    \
-            /*STUFF GOES HERE*/       \
-        }                             \
-    }
+#define gsSPUseTexture(cms, cmt, tile, shifts, shiftt, type, minlevel, detail_id, texture_id) \
+{                                                    \
+    {                                                \
+        (_SHIFTL(G_SETTEX, 24, 8) |                  \
+         _SHIFTL((cms), 22, 2) |                     \
+         _SHIFTL((cmt), 20, 2) |                     \
+         _SHIFTL((tile), 18, 2) |                    \
+         _SHIFTL((shifts), 14, 4) |                  \
+         _SHIFTL((shiftt), 10, 4) |                  \
+         _SHIFTL((type), 0, 3)),                     \
+        (_SHIFTL((minlevel), 24, 8) |                \
+         _SHIFTL((detail_id), 12, 12) |              \
+         _SHIFTL((texture_id), 0, 12))               \
+    }                                                \
+}
+
+
+/**
+ * GoldenEye Custom Vertex Commands
+ * 
+ * These commands use different encodings than standard F3DEX macros.
+ * Opcode 0x01: Custom GE format with simplified encoding
+ * Opcode 0x04: Uses (v0+n)*2 encoding instead of v0*2
+ */
+
+/* GoldenEye Matrix command (opcode 0x01) - G_MTX */
+#define G_MTX_GE 0x01
+#define G_VTX_GE 0x04
+
+#define gsSPMatrixGE(m, p) \
+{                                                        \
+    {                                                    \
+        (_SHIFTL(G_MTX_GE, 24, 8) |                     \
+         _SHIFTL((p), 16, 8) |                          \
+         _SHIFTL(sizeof(Mtx), 0, 16)),                  \
+        (unsigned int)(m)                               \
+    }                                                    \
+}
+
+/* RARE vertex load (opcode 0x04) - Custom encoding for GE/PD Tri4 support */
+/* Format: cmd(24-31) | (((v0+n)<<1)|flag)(16-23) | sizeof(Vtx)*n(0-15) */
+#define gsSPVertexGE(v, n, v0, flag) \
+{                                                        \
+    {                                                    \
+        (_SHIFTL(G_VTX_GE, 24, 8) |                         \
+         _SHIFTL((((v0) + (n)) << 1) | (flag), 16, 8) | \
+         _SHIFTL(sizeof(Vtx) * (n), 0, 16)),            \
+        (unsigned int)(v)                               \
+    }                                                    \
+}
+
+/* F3DEX gsSP1Triangle without flag rotation (GoldenEye uses simpler encoding) */
+/* Format: w0=0xBF000000, w1=(v0*2<<16)|(v1*2<<8)|(v2*2) */
+#define gsSP1TriangleGE(v0, v1, v2, flag) \
+{                                                        \
+    {                                                    \
+        0xBF000000,                                      \
+        (_SHIFTL((v0)*2, 16, 8) |                        \
+         _SHIFTL((v1)*2, 8, 8) |                         \
+         _SHIFTL((v2)*2, 0, 8))                          \
+    }                                                    \
+}
 
 
 #endif

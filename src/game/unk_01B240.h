@@ -4,6 +4,8 @@
 
 #include "include/PR/gbi.h"
 
-Gfx *sub_GAME_7F01B240(Gfx*, s32, s32, struct FolderSelect *, struct FolderSelect *);
+#include "bondtypes.h"
+
+Gfx* sub_GAME_7F01B240(Gfx* gdl, s32 imgIndex, s32 x, struct FolderSelect* arg3, struct FolderSelect* arg4);
 
 #endif

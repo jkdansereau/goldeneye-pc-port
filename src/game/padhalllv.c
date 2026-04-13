@@ -5,7 +5,7 @@
 #include "random.h"
 
 //pd decomp has a filesplit here
-//all ge versions align properly 
+//all ge versions align properly
 
 
 waypoint *sub_GAME_7F08EBD0(coord3d *pos, s32 arg1)
@@ -656,12 +656,27 @@ void sub_GAME_7F08FD1C(void)
         from = &waypoints[randomGetNext() % count];
         to = &waypoints[randomGetNext() % count];
 
+#ifdef DEBUG
+        osSyncPrintf("route from loc number %d to number %d", from->padID, to->padID);
+#endif
+
         if (waypointFindRoute(from, to, &arr, 0x32) != 0)
         {
             for (arr_entry = &arr; *arr_entry; arr_entry++)
             {
-                // do nothing
+#ifdef DEBUG
+                osSyncPrintf("%d", arr_entry[0]->padID);
+#endif
             }
         }
+#ifdef DEBUG
+        else
+        {
+            osSyncPrintf(" not connected");
+        }
+#endif
     }
+#ifdef DEBUG
+    osSyncPrintf("\n");
+#endif
 }

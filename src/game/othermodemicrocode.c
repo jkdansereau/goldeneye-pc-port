@@ -1,6 +1,6 @@
 #include <ultra64.h>
 #include <R4300.h>
-#include "unk_0CC4C0.h"
+#include "tex.h"
 #include "image.h"
 #include "bondtypes.h"
 #include "othermodemicrocode.h"

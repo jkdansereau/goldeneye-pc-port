@@ -13,7 +13,7 @@ extern struct criteria_deposit *ptr_last_deposit_in_room_subobject_entry_type21;
 extern struct criteria_picture *ptr_last_photo_obj_in_room_subobject_entry_type1E;
 
 extern s32 objective_count;
-extern s32 objective_count_related;
+extern s32 objective_status_display_disabled;
 
 void             objectiveTakePictureHandler(void);
 bool             objectiveIsAllComplete(void);

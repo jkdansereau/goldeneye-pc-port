@@ -4,10 +4,10 @@
 #include "player.h"
 #include "textrelated.h"
 #include <bondconstants.h>
-#include "lvl_text.h"
+#include "language.h"
 #include "bondinv.h"
 #include "gun.h"
-#include "lvl.h"
+#include "lv.h"
 #include <bondtypes.h>
 
 void bondinvReinitInv(void)
@@ -255,7 +255,7 @@ int bondinvHasDualWeapon(ITEM_IDS right, ITEM_IDS left)
     return bondinvGetDualWeapon(right, left) != NULL;
 }
 
-int bondinvItemAvailable(ITEM_IDS weaponid)
+s32 bondinvItemAvailable(ITEM_IDS weaponid)
 {
     if (((g_CurrentPlayer->equipallguns) && (weaponid != ITEM_UNARMED) && (weaponid < ITEM_BOMBCASE)))
     {
@@ -271,7 +271,7 @@ int bondinvItemAvailable(ITEM_IDS weaponid)
     return bondinvHasInvItem(weaponid);
 }
 
-int bondinvItemAvailableForHand(ITEM_IDS right, ITEM_IDS left)
+s32 bondinvItemAvailableForHand(ITEM_IDS right, ITEM_IDS left)
 {
 #ifdef BUGFIX_R0
     if (g_CurrentPlayer->equipallguns &&
@@ -1184,7 +1184,8 @@ u16 *bondinvGetLongNameByIndex(s32 index)
     return get_ptr_long_watch_text_for_item(weaponnum);
 }
 
-int bondinvGet45AngleForIndex(int index)
+extern f32 get_45_degree_angle_0(s32 item);
+f32 bondinvGet45AngleForIndex(int index)
 {
     return get_45_degree_angle_0(bondinvGetTextbyInvIndex(index));
 }
@@ -1323,8 +1324,8 @@ u16 *bondinvGetSecondTitlebyIndex(s32 index)
 
     return get_ptr_second_title_line_item(weaponnum);
 }
-
-int bondinvGetDifferent45AngleForIndex(int index)
+extern f32 get_45_degree_angle(s32 item);
+f32 bondinvGetDifferent45AngleForIndex(int index)
 {
     return get_45_degree_angle(bondinvGetTextbyInvIndex(index));
 }

@@ -293,17 +293,17 @@ char *LtitleE[] = {
  "Russian Soldier\n", //TITLE_STR_287_RUSSIANSOLDIER
  "Russian Infantry\n", //TITLE_STR_288_RUSSIANINFANTRY
  "Scientist\n", //TITLE_STR_289_SCIENTIST
- "Russian Commandant\n", //TITLE_STR_290
- "Janus Marine\n", //TITLE_STR_291
- "Naval Officer\n", //TITLE_STR_292
- "Helicopter Pilot\n", //TITLE_STR_293
- "St. Petersburg Guard\n", //TITLE_STR_294
- "Civilian\n", //TITLE_STR_295
- "Siberian Guard\n", //TITLE_STR_296
- "Arctic Commando\n", //TITLE_STR_297
- "Siberian Special Forces\n", //TITLE_STR_298
- "Jungle Commando\n", //TITLE_STR_299
- "Janus Special Forces\n", //TITLE_STR_300
- "Moonraker Elite\n" //TITLE_STR_301
+ "Russian Commandant\n", //TITLE_STR_290_RUSSIANCOMMANDANT
+ "Janus Marine\n", //TITLE_STR_291_JANUSMARINE
+ "Naval Officer\n", //TITLE_STR_292_NAVALOFFICER
+ "Helicopter Pilot\n", //TITLE_STR_293_HELICOPTERPILOT
+ "St. Petersburg Guard\n", //TITLE_STR_294_STPETERSBURGARD
+ "Civilian\n", //TITLE_STR_295_CIVILIAN
+ "Siberian Guard\n", //TITLE_STR_296_SIBERIANGUARD
+ "Arctic Commando\n", //TITLE_STR_297_ARCTICCOMMANDO
+ "Siberian Special Forces\n", //TITLE_STR_298_SIBERIANSPECIALFORCES
+ "Jungle Commando\n", //TITLE_STR_299_JUNGLECOMMANDO
+ "Janus Special Forces\n", //TITLE_STR_300_JANUSSPECIALFORCES
+ "Moonraker Elite\n" //TITLE_STR_301_MOONRAKERELITE
  #endif
 };

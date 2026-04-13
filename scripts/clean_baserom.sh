@@ -27,9 +27,14 @@ if [ "$DOALL" == "1" ] || [ $1 == 'files' ]; then
 fi
 
 if [ "$DOALL" == "1" ] || [ $1 == 'images' ]; then
+    # Generate imagelist if it doesn't exist
+    if [ ! -f build/u/imagelist.csv ]; then
+        mkdir -p build/u
+        python3 scripts/make/generate_imagelist.py build/u/imagelist.csv
+    fi
     while IFS=, read -r offset size name compressed extract
     do
         echo "removing $name"
         rm -f $name
-    done < imagelist.u.csv
+    done < build/u/imagelist.csv
 fi

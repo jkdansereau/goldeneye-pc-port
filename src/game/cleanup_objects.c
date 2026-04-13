@@ -2,7 +2,7 @@
 
 #include <bondtypes.h>
 #include "chrai.h"
-#include "chrobjhandler.h"
+#include "propobj.h"
 #include "cleanup_objects.h"
 #include "loadobjectmodel.h"
 

@@ -107,6 +107,10 @@ _musicsampletblSegmentRomEnd:
   .ifdef VERSION_DEBUG
     .incbin "build\/d\/assets\/music\/\name\.rz"
   .endif
+    /* Check if file size is odd, add 0xA to pad file if needed to make it even */
+    .if (. - \name) % 2 != 0
+      .byte 0xA
+    .endif
   end_\name:
 
   .section .musicdecompressed
@@ -116,98 +120,70 @@ _musicsampletblSegmentRomEnd:
 .endm
 
 
-/*
-music_fileA is used for the entries that end with A....the A doesn't seem to be from compression
-*/
-
-.macro music_fileA name
-  .section .musiccompressed
-  .global \name
-  \name:
-  .ifdef VERSION_US
-    .incbin "build\/u\/assets\/music\/\name\.rz"
-  .endif
-  .ifdef VERSION_JP
-    .incbin "build\/j\/assets\/music\/\name\.rz"
-  .endif
-  .ifdef VERSION_EU
-    .incbin "build\/e\/assets\/music\/\name\.rz"
-  .endif
-  .ifdef VERSION_DEBUG
-    .incbin "build\/d\/assets\/music\/\name\.rz"
-  .endif
-    .byte 0xA
-  end_\name:
-
-  .section .musicdecompressed
-  d_\name:
-    .incbin "assets\/music\/\name\.bin"
-  end_d_\name:
-.endm
 
 music_file Mno_music
-music_fileA Msolo_death_abrev
+music_file Msolo_death_abrev
 music_file Mintro_eye
-music_fileA Mtrain
-music_fileA Mdepot
+music_file Mtrain
+music_file Mdepot
 music_file Mjungle_unused
-music_fileA Mcitadel
+music_file Mcitadel
 music_file Mfacility
 music_file Mcontrol
-music_fileA Mdam
+music_file Mdam
 music_file Mfrigate
 music_file Marchives
 music_file Msilo
-music_fileA Mjungle_perimeter_unused
-music_fileA Mstreets
-music_fileA Mbunker1
-music_fileA Mbunker2
+music_file Mjungle_perimeter_unused
+music_file Mstreets
+music_file Mbunker1
+music_file Mbunker2
 music_file Mstatue
-music_fileA Melevator_control
-music_fileA Mcradle
-music_fileA Mnull1
-music_fileA Melevator_wc
+music_file Melevator_control
+music_file Mcradle
+music_file Mnull1
+music_file Melevator_wc
 music_file Megyptian
 music_file Mfolders
-music_fileA Mwatchmusic
+music_file Mwatchmusic
 music_file Maztec
-music_fileA Mwatercaverns
-music_fileA Mdeathsolo
-music_fileA Msurface2
-music_fileA Mtrainx
-music_fileA Mnull2
+music_file Mwatercaverns
+music_file Mdeathsolo
+music_file Msurface2
+music_file Mtrainx
+music_file Mnull2
 music_file Mfacilityx
 music_file Mdepotx
 music_file Mcontrolx
 music_file Mwatercavernsx
-music_fileA Mdamx
+music_file Mdamx
 music_file Mfrigatex
-music_fileA Marchivesx
+music_file Marchivesx
 music_file Msilox
-music_fileA Mnull3
+music_file Mnull3
 music_file Mstreetsx
 music_file Mbunker1x
-music_fileA Mbunker2x
-music_fileA Mjunglex
+music_file Mbunker2x
+music_file Mjunglex
 music_file Mnint_rare_logo
-music_fileA Mstatuex
+music_file Mstatuex
 music_file Maztecx
 music_file Megyptianx
-music_fileA Mcradlex
-music_fileA Mcuba
+music_file Mcradlex
+music_file Mcuba
 music_file Mrunway
 music_file Mrunway_plane
 music_file Msurface2x
-music_fileA Mwindblowing
+music_file Mwindblowing
 music_file Mmultideath_alt
 music_file Mjungle
 music_file Mrunwayx
-music_fileA Msurface1
+music_file Msurface1
 music_file Mmultiplayerdeath
 music_file Msurface1x
-music_fileA Msurface2_ending
+music_file Msurface2_ending
 music_file Mstatue_ending
-music_fileA Mfrigate_outro
+music_file Mfrigate_outro
 
 .section .musiccompressed
 .half 0

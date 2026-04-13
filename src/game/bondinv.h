@@ -24,5 +24,7 @@ bool          bondinvHasPropInInv(PropRecord *prop);
 WeaponObjRecord *bondinvRemovePropWeaponByID(ITEM_IDS weaponnum);
 void bondinvRemoveItemByID(ITEM_IDS weaponnum);
 s32 bondinvGetWeaponOfChoice(s32 *weapon1, s32 *weapon2);
+s32 bondinvItemAvailableForHand(ITEM_IDS right, ITEM_IDS left);
+s32 bondinvItemAvailable(ITEM_IDS weaponid);
 
 #endif

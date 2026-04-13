@@ -1,20 +1,19 @@
 #include <ultra64.h>
 #include <memp.h>
 #include "game/mp_weapon.h"
-#include "game/player_2.h"
 #include "game/bondview_r.h"
 #include "bg.h"
 #include "bondview_r.h"
 #include "chr.h"
 #include "chrai.h"
-#include "chrlv.h"
-#include "chrobjhandler.h"
+#include "chraction.h"
+#include "propobj.h"
 #include "inititemslots.h"
 #include "initobjects.h"
 #include "initpathtablesomething.h"
 #include "limits.h"
 #include "loadobjectmodel.h"
-#include "lvl_text.h"
+#include "language.h"
 #include "math_atan2f.h"
 #include "matrixmath.h"
 #include "mp_weapon.h"
@@ -25,6 +24,7 @@
 #include "player.h"
 #include "prop.h"
 #include "stan.h"
+#include "model.h"
 
 /**
  * EU .bss 0x80068480
@@ -184,7 +184,7 @@ void domakedefaultobj(s32 arg0, ObjectRecord *arg1, s32 cmdindex)
 
         if (sp74 != 0)
         {
-            arg1->state |= 4; // respawn enabled
+            arg1->state |= PROPSTATE_RESPAWN; // respawn enabled
         }
     }
 
@@ -232,7 +232,7 @@ void domakedefaultobj(s32 arg0, ObjectRecord *arg1, s32 cmdindex)
         {
             sp64 = &g_CurrentSetup.pads[arg1->pad];
 
-            matrix_4x4_7F059908(&sp8C, 0.0f, 0.0f, 0.0f, -sp64->look.f[0], -sp64->look.f[1], -sp64->look.f[2], sp64->up.f[0], sp64->up.f[1], sp64->up.f[2]);
+            matrix_4x4_set_basis_and_position_target(&sp8C, 0.0f, 0.0f, 0.0f, -sp64->look.f[0], -sp64->look.f[1], -sp64->look.f[2], sp64->up.f[0], sp64->up.f[1], sp64->up.f[2]);
 
             spD0.f[0] = sp64->pos.f[0];
             spD0.f[1] = sp64->pos.f[1];
@@ -259,7 +259,7 @@ void domakedefaultobj(s32 arg0, ObjectRecord *arg1, s32 cmdindex)
         {
             var_s0 = &g_CurrentSetup.boundpads[getBoundPadNum(arg1->pad)];
 
-            matrix_4x4_7F059908(&sp8C, 0.0f, 0.0f, 0.0f, -var_s0->look.f[0], -var_s0->look.f[1], -var_s0->look.f[2], var_s0->up.f[0], var_s0->up.f[1], var_s0->up.f[2]);
+            matrix_4x4_set_basis_and_position_target(&sp8C, 0.0f, 0.0f, 0.0f, -var_s0->look.f[0], -var_s0->look.f[1], -var_s0->look.f[2], var_s0->up.f[0], var_s0->up.f[1], var_s0->up.f[2]);
 
             if (!(arg1->flags2 & PROPFLAG2_00000001))
             {
@@ -679,7 +679,7 @@ void setupCctv(s32 arg0, CCTVRecord *arg1, s32 cmdindex)
         sp44.f[1] += arg1->prop->pos.f[1];
         sp44.f[2] += arg1->prop->pos.f[2];
 
-        matrix_4x4_7F059908(sp3C, 0.0f, 0.0f, 0.0f, sp44.f[0] - sp50->pos.f[0], sp44.f[1] - sp50->pos.f[1], sp44.f[2] - sp50->pos.f[2], 0.0f, 1.0f, 0.0f);
+        matrix_4x4_set_basis_and_position_target(sp3C, 0.0f, 0.0f, 0.0f, sp44.f[0] - sp50->pos.f[0], sp44.f[1] - sp50->pos.f[1], sp44.f[2] - sp50->pos.f[2], 0.0f, 1.0f, 0.0f);
         matrix_scalar_multiply(arg1->model->scale, sp3C->m[0]);
 
         if (arg1->convert_to_f32 == 0)
@@ -1038,7 +1038,7 @@ void setupDoor(s32 arg0, struct DoorRecord *door, s32 arg2)
 
     if (sub_GAME_7F056850(&pad->pos, pad->stan, 0.0f, &sp1B8, &sp1C8_stan) != 0)
     {
-        matrix_4x4_7F059908(&sp12C, 0, 0, 0, -pad->look.f[0], -pad->look.f[1], -pad->look.f[2], pad->up.f[0], pad->up.f[1], pad->up.f[2]);
+        matrix_4x4_set_basis_and_position_target(&sp12C, 0, 0, 0, -pad->look.f[0], -pad->look.f[1], -pad->look.f[2], pad->up.f[0], pad->up.f[1], pad->up.f[2]);
         sp124 = PitemZ_entries[modelnum].header;
         sp114_stan = sp1C8_stan;
 

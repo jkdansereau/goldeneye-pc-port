@@ -10,12 +10,16 @@
 #include "memp.h"
 #include <macro.h>
 
+#ifndef DEBUG
+    #define osSyncPrintf()
+#endif
+
 //i belong in a header, probably to another file
 
 ChrRecord global_action_block_temp_buffer = { 0 };
 
 WeaponProjectileModels weapon_models_for_weapon_load = {
-    PROJECTILES_TYPE_KNIFE, PROJECTILES_TYPE_GRENADE, 
+    PROJECTILES_TYPE_KNIFE, PROJECTILES_TYPE_GRENADE,
     PROJECTILES_TYPE_REMOTE_MINE, PROJECTILES_TYPE_PROX_MINE,
     PROJECTILES_TYPE_TIMED_MINE, PROJECTILES_TYPE_ROCKET_ROUND,
     PROJECTILES_TYPE_GLAUNCH_ROUND, 0xFFFFFFFF
@@ -107,26 +111,26 @@ void debug_object_load_all_models(void)
             {
                 case AI_TRYDroppingItem:
                     id = cmd[2] | (cmd[1] << 8);
-                    if (modelLoad(id));
+                    if (modelLoad(id)) osSyncPrintf("loaded dropguntype obj=%d", id);
                     break;
 
                 case AI_TRYSpawningChrAtPad:
-                    load_body_head_if_not_loaded(cmd[1]);
-                    if ((s8)cmd[2] >= 0 && load_body_head_if_not_loaded((s8)cmd[2]));
+                    if (load_body_head_if_not_loaded(cmd[1])) osSyncPrintf("loaded createchrhead obj=%d (body)", cmd[1]);
+                    if ((s8)cmd[2] >= 0 && load_body_head_if_not_loaded((s8)cmd[2])) osSyncPrintf("loaded createchrhead obj=%d (head)", cmd[2]);
                     break;
 
                 case AI_TRYSpawningChrNextToChr:
-                    load_body_head_if_not_loaded(cmd[1]);
-                    if ((s8)cmd[2] >= 0 && load_body_head_if_not_loaded((s8)cmd[2]));
+                    if (load_body_head_if_not_loaded(cmd[1])) osSyncPrintf("loaded createchrheadatchr obj=%d (body)", cmd[1]);
+                    if ((s8)cmd[2] >= 0 && load_body_head_if_not_loaded((s8)cmd[2])) osSyncPrintf("loaded createchrheadatchr obj=%d (head)", cmd[2]);
                     break;
 
                 case AI_TRYGiveMeItem:
-                    modelLoad(cmd[2] | (cmd[1] << 8));
-                    if (weaponLoadProjectileModels(cmd[3]));
+                    if (modelLoad(cmd[2] | (cmd[1] << 8))) osSyncPrintf("loaded createweaponheldchr obj=%d", cmd[2] | (cmd[1] << 8));
+                    if (weaponLoadProjectileModels(cmd[3])) osSyncPrintf("loaded createweaponheldchr obj=%d (ammo)", cmd[2] | (cmd[1] << 8));
                     break;
 
                 case AI_TRYGiveMeHat:
-                    modelLoad(cmd[2] | (cmd[1] << 8));
+                    if (modelLoad(cmd[2] | (cmd[1] << 8))) osSyncPrintf("loaded createhatonchr obj=%d", cmd[2] | (cmd[1] << 8));
                     break;
             }
 
@@ -146,12 +150,7 @@ void debug_weapon_load_table(void)
 
     for (i = 0; tmp.array[i] >= 0; i++)
     {
-        /*if(*/
-        modelLoad(tmp.array[i]);
-        /*){break;}*/
-        if (1);
-        #ifdef DEBUG
-        osSyncPrintf("loaded weapon obj=%d", tmp.array[i]);
-        #endif
+         if (modelLoad(tmp.array[i])) osSyncPrintf("loaded weapon obj=%d", tmp.array[i]);
     }
 }
+#undef osSyncPrintf

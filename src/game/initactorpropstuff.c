@@ -4,7 +4,7 @@
 #include "gun.h"
 #include "math_floor.h"
 
-/** 
+/**
  * Gets the number of currently allocated heads and bodies
  * Note: Compile-time static? why bother with a function?
  */
@@ -35,7 +35,7 @@ void reset_counter_rand_body_head(void)
 u32 sub_GAME_7F0001F0(void *ani, int aniid, int param_3) {
     short asStack8[4];
     u16 result = 0;
-    
+
     while (aniid < param_3) {
         result += sub_GAME_7F06D2E4(0, 0, &skeleton_guard, ani, aniid, asStack8);
         aniid++;
@@ -45,8 +45,24 @@ u32 sub_GAME_7F0001F0(void *ani, int aniid, int param_3) {
 
 
 #ifdef NONMATCHING
-void sub_GAME_7F000290(void) {
+s32 sub_GAME_7F000290(s32 arg0, s32 arg1, s32 arg2)
+{
+    ? sp3C;
+    s32 var_s0;
+    s32 var_s1;
 
+    var_s0 = arg1;
+    var_s1 = 0;
+    if (arg1 < arg2)
+    {
+        do
+        {
+            sub_GAME_7F06D2E4(0, 0, &skeleton_guard, arg0, var_s0, &sp3C);
+            var_s0 += 1;
+            var_s1 += sp40;
+        } while (var_s0 < arg2);
+    }
+    return var_s1;
 }
 #else
 GLOBAL_ASM(
@@ -100,9 +116,62 @@ glabel sub_GAME_7F000290
 
 #ifdef NONMATCHING
 //pd is raceInitAnimGroup
-void sub_GAME_7F00032C(void) {
+    s32 sub_GAME_7F00032C(s32 * arg0)
+    {
+        f32  temp_f0;
+        f32  var_f4;
+        f32  var_f6;
+        s32 *var_s0;
+        s32  temp_at;
+        s32  temp_t6;
+        s32  temp_v1;
+        s32  var_s1;
+        s32  var_v0;
 
-}
+        temp_t6 = *arg0;
+        var_s1  = 0;
+        var_s0  = arg0;
+        var_v0  = temp_t6;
+        if (temp_t6 != 0)
+        {
+            do
+            {
+                var_s0->unk0 = var_v0 + ptr_animation_table;
+                temp_f0      = var_s0->unk4;
+                temp_v1      = sub_GAME_7F0001F0(var_s0->unk0, 0, floorFloatToInt(var_s0->unk4)) & 0xFFFF;
+                temp_at      = temp_v1 < 0x8000;
+                if (temp_f0 > 0.0f)
+                {
+                    if (temp_at != 0)
+                    {
+                        var_f6 = temp_v1;
+                        if (temp_v1 < 0)
+                        {
+                            var_f6 += 4294967296.0f;
+                        }
+                        var_s0->unk8 = (var_f6 * 0.0000958738f) / temp_f0;
+                    }
+                    else
+                    {
+                        var_f4 = temp_v1;
+                        if (temp_v1 < 0)
+                        {
+                            var_f4 += 4294967296.0f;
+                        }
+                        var_s0->unk8 = ((var_f4 * 0.0000958738f) - 6.2831855f) / temp_f0;
+                    }
+                }
+                else
+                {
+                    var_s0->unk8 = 0.0f;
+                }
+                var_v0 = var_s0->unk48;
+                var_s0 += 0x48;
+                var_s1 += 1;
+            } while (var_v0 != 0);
+        }
+        return var_s1;
+    }
 #else
 GLOBAL_ASM(
 .late_rodata
@@ -148,7 +217,7 @@ glabel sub_GAME_7F00032C
 /* 034EDC 7F0003AC 3043FFFF */  andi  $v1, $v0, 0xffff
 /* 034EE0 7F0003B0 0073082A */  slt   $at, $v1, $s3
 /* 034EE4 7F0003B4 4600A03C */  c.lt.s $f20, $f0
-/* 034EE8 7F0003B8 00000000 */  nop   
+/* 034EE8 7F0003B8 00000000 */  nop
 /* 034EEC 7F0003BC 4502001B */  bc1fl .L7F00042C
 /* 034EF0 7F0003C0 E6140008 */   swc1  $f20, 8($s0)
 /* 034EF4 7F0003C4 5020000D */  beql  $at, $zero, .L7F0003FC
@@ -158,7 +227,7 @@ glabel sub_GAME_7F00032C
 /* 034F04 7F0003D4 04610004 */  bgez  $v1, .L7F0003E8
 /* 034F08 7F0003D8 468021A0 */   cvt.s.w $f6, $f4
 /* 034F0C 7F0003DC 44814000 */  mtc1  $at, $f8
-/* 034F10 7F0003E0 00000000 */  nop   
+/* 034F10 7F0003E0 00000000 */  nop
 /* 034F14 7F0003E4 46083180 */  add.s $f6, $f6, $f8
 .L7F0003E8:
 /* 034F18 7F0003E8 46163282 */  mul.s $f10, $f6, $f22
@@ -171,7 +240,7 @@ glabel sub_GAME_7F00032C
 /* 034F30 7F000400 04610004 */  bgez  $v1, .L7F000414
 /* 034F34 7F000404 46809120 */   cvt.s.w $f4, $f18
 /* 034F38 7F000408 44814000 */  mtc1  $at, $f8
-/* 034F3C 7F00040C 00000000 */  nop   
+/* 034F3C 7F00040C 00000000 */  nop
 /* 034F40 7F000410 46082100 */  add.s $f4, $f4, $f8
 .L7F000414:
 /* 034F44 7F000414 46162182 */  mul.s $f6, $f4, $f22
@@ -228,7 +297,7 @@ glabel sub_GAME_7F0004D0
 /* 035004 7F0004D4 00001825 */  move  $v1, $zero
 /* 035008 7F0004D8 00801025 */  move  $v0, $a0
 /* 03500C 7F0004DC 11C0000C */  beqz  $t6, .L7F000510
-/* 035010 7F0004E0 00000000 */   nop   
+/* 035010 7F0004E0 00000000 */   nop
 /* 035014 7F0004E4 8C850000 */  lw    $a1, ($a0)
 /* 035018 7F0004E8 3C048007 */  lui   $a0, %hi(ptr_animation_table)
 /* 03501C 7F0004EC 24849538 */  addiu $a0, %lo(ptr_animation_table) # addiu $a0, $a0, -0x6ac8
@@ -261,7 +330,7 @@ glabel F32_8004ED78
 .text
 glabel somethingwith_weapon_animation_groups
 /* 035048 7F000518 27BDFFC0 */  addiu $sp, $sp, -0x40
-/* 03504C 7F00051C 3C0E8003 */  lui   $t6, %hi(D_8002C914) 
+/* 03504C 7F00051C 3C0E8003 */  lui   $t6, %hi(D_8002C914)
 /* 035050 7F000520 8DCEC914 */  lw    $t6, %lo(D_8002C914)($t6)
 /* 035054 7F000524 AFB10024 */  sw    $s1, 0x24($sp)
 /* 035058 7F000528 2411FFFF */  li    $s1, -1
@@ -277,14 +346,14 @@ glabel somethingwith_weapon_animation_groups
 /* 03507C 7F00054C 50800005 */  beql  $a0, $zero, .L7F000564
 /* 035080 7F000550 8E040024 */   lw    $a0, 0x24($s0)
 /* 035084 7F000554 0FC00134 */  jal   sub_GAME_7F0004D0
-/* 035088 7F000558 00000000 */   nop   
+/* 035088 7F000558 00000000 */   nop
 /* 03508C 7F00055C AE020020 */  sw    $v0, 0x20($s0)
 /* 035090 7F000560 8E040024 */  lw    $a0, 0x24($s0)
 .L7F000564:
 /* 035094 7F000564 50800005 */  beql  $a0, $zero, .L7F00057C
 /* 035098 7F000568 8E0F002C */   lw    $t7, 0x2c($s0)
 /* 03509C 7F00056C 0FC00134 */  jal   sub_GAME_7F0004D0
-/* 0350A0 7F000570 00000000 */   nop   
+/* 0350A0 7F000570 00000000 */   nop
 /* 0350A4 7F000574 AE020028 */  sw    $v0, 0x28($s0)
 /* 0350A8 7F000578 8E0F002C */  lw    $t7, 0x2c($s0)
 .L7F00057C:
@@ -342,7 +411,7 @@ glabel somethingwith_weapon_animation_groups
 /* 035174 7F000644 46805420 */   cvt.s.w $f16, $f10
 /* 035178 7F000648 3C014F80 */  li    $at, 0x4F800000 # 4294967296.000000
 /* 03517C 7F00064C 44819000 */  mtc1  $at, $f18
-/* 035180 7F000650 00000000 */  nop   
+/* 035180 7F000650 00000000 */  nop
 /* 035184 7F000654 46128400 */  add.s $f16, $f16, $f18
 .L7F000658:
 /* 035188 7F000658 46104103 */  div.s $f4, $f8, $f16
@@ -368,7 +437,7 @@ glabel somethingwith_weapon_animation_groups
 /* 0351D8 7F0006A8 46804420 */   cvt.s.w $f16, $f8
 /* 0351DC 7F0006AC 3C014F80 */  li    $at, 0x4F800000 # 4294967296.000000
 /* 0351E0 7F0006B0 44812000 */  mtc1  $at, $f4
-/* 0351E4 7F0006B4 00000000 */  nop   
+/* 0351E4 7F0006B4 00000000 */  nop
 /* 0351E8 7F0006B8 46048400 */  add.s $f16, $f16, $f4
 .L7F0006BC:
 /* 0351EC 7F0006BC 46109183 */  div.s $f6, $f18, $f16
@@ -392,7 +461,7 @@ glabel somethingwith_weapon_animation_groups
 /* 035234 7F000704 46809420 */   cvt.s.w $f16, $f18
 /* 035238 7F000708 3C014F80 */  li    $at, 0x4F800000 # 4294967296.000000
 /* 03523C 7F00070C 44813000 */  mtc1  $at, $f6
-/* 035240 7F000710 00000000 */  nop   
+/* 035240 7F000710 00000000 */  nop
 /* 035244 7F000714 46068400 */  add.s $f16, $f16, $f6
 .L7F000718:
 /* 035248 7F000718 46102283 */  div.s $f10, $f4, $f16
@@ -418,7 +487,7 @@ glabel somethingwith_weapon_animation_groups
 /* 035298 7F000768 46802420 */   cvt.s.w $f16, $f4
 /* 03529C 7F00076C 3C014F80 */  li    $at, 0x4F800000 # 4294967296.000000
 /* 0352A0 7F000770 44815000 */  mtc1  $at, $f10
-/* 0352A4 7F000774 00000000 */  nop   
+/* 0352A4 7F000774 00000000 */  nop
 /* 0352A8 7F000778 460A8400 */  add.s $f16, $f16, $f10
 .L7F00077C:
 /* 0352AC 7F00077C 46103203 */  div.s $f8, $f6, $f16
@@ -444,7 +513,7 @@ glabel somethingwith_weapon_animation_groups
 /* 0352FC 7F0007CC 07010004 */  bgez  $t8, .L7F0007E0
 /* 035300 7F0007D0 46803420 */   cvt.s.w $f16, $f6
 /* 035304 7F0007D4 44814000 */  mtc1  $at, $f8
-/* 035308 7F0007D8 00000000 */  nop   
+/* 035308 7F0007D8 00000000 */  nop
 /* 03530C 7F0007DC 46088400 */  add.s $f16, $f16, $f8
 .L7F0007E0:
 /* 035310 7F0007E0 46105483 */  div.s $f18, $f10, $f16
@@ -468,7 +537,7 @@ glabel somethingwith_weapon_animation_groups
 /* 035358 7F000828 05010004 */  bgez  $t0, .L7F00083C
 /* 03535C 7F00082C 46805420 */   cvt.s.w $f16, $f10
 /* 035360 7F000830 44819000 */  mtc1  $at, $f18
-/* 035364 7F000834 00000000 */  nop   
+/* 035364 7F000834 00000000 */  nop
 /* 035368 7F000838 46128400 */  add.s $f16, $f16, $f18
 .L7F00083C:
 /* 03536C 7F00083C 46104103 */  div.s $f4, $f8, $f16
@@ -494,7 +563,7 @@ glabel somethingwith_weapon_animation_groups
 /* 0353BC 7F00088C 05410004 */  bgez  $t2, .L7F0008A0
 /* 0353C0 7F000890 46804420 */   cvt.s.w $f16, $f8
 /* 0353C4 7F000894 44812000 */  mtc1  $at, $f4
-/* 0353C8 7F000898 00000000 */  nop   
+/* 0353C8 7F000898 00000000 */  nop
 /* 0353CC 7F00089C 46048400 */  add.s $f16, $f16, $f4
 .L7F0008A0:
 /* 0353D0 7F0008A0 46109183 */  div.s $f6, $f18, $f16
@@ -520,7 +589,7 @@ glabel somethingwith_weapon_animation_groups
 /* 035420 7F0008F0 05810004 */  bgez  $t4, .L7F000904
 /* 035424 7F0008F4 46809420 */   cvt.s.w $f16, $f18
 /* 035428 7F0008F8 44813000 */  mtc1  $at, $f6
-/* 03542C 7F0008FC 00000000 */  nop   
+/* 03542C 7F0008FC 00000000 */  nop
 /* 035430 7F000900 46068400 */  add.s $f16, $f16, $f6
 .L7F000904:
 /* 035434 7F000904 46102283 */  div.s $f10, $f4, $f16
@@ -542,7 +611,7 @@ glabel somethingwith_weapon_animation_groups
 /* 035474 7F000944 05E10004 */  bgez  $t7, .L7F000958
 /* 035478 7F000948 46802420 */   cvt.s.w $f16, $f4
 /* 03547C 7F00094C 44815000 */  mtc1  $at, $f10
-/* 035480 7F000950 00000000 */  nop   
+/* 035480 7F000950 00000000 */  nop
 /* 035484 7F000954 460A8400 */  add.s $f16, $f16, $f10
 .L7F000958:
 /* 035488 7F000958 46103203 */  div.s $f8, $f6, $f16

@@ -54,7 +54,7 @@ Gfx g_DebugMenuTextureDisplayList[] = {
     gsDPLoadSync(),
     gsSPEndDisplayList()
 };
-character g_DebugMenuTextBuffer[80][35] = {0};
+character g_DebugMenuTextBuffer[80][35] = {0}; // unused in the final game (waste of space)
 Gfx g_DHudFgGbiPtrs[32] = {0};
 Gfx g_DHudBgGbiPtrs[32] = {0};
 s32 g_DebugMenuCurrentColorIndex = 0;
@@ -152,15 +152,15 @@ void debmenu7000ADA0(void) {
 #endif
 
 /**
- * Removed
+ * Address: 0x7000ADA8
  */
-void debmenu7000ADA8(void) {
-    // Removed
+void debmenuInit(void) {
+    // Removed or just blank?
 }
 
-void debmenuInit(void) {
+void debmenuRefresh(void) {
     #ifdef LEFTOVERDEBUG
-    debmenuReset();
+    debmenuResetBuffer();
     #endif
 }
 
@@ -190,7 +190,7 @@ void debmenuResetPosition(void) {
     #endif
 }
 
-void debmenuReset(void) {
+void debmenuResetBuffer(void) {
     #ifdef LEFTOVERDEBUG
     s32 x;
     s32 y;

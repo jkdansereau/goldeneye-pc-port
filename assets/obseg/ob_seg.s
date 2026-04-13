@@ -318,9 +318,9 @@ obseg_file_rz prop, PcarbmwZ
 obseg_file_rz prop, Pcard_box1Z
 obseg_file_rz prop, Pcard_box2Z
 obseg_file_rz prop, Pcard_box3Z
-obseg_file_rz prop, Pcard_box4Z
-obseg_file_rz prop, Pcard_box5Z
-obseg_file_rz prop, Pcard_box6Z
+obseg_file_rz prop, Pcard_box4_lgZ
+obseg_file_rz prop, Pcard_box5_lgZ
+obseg_file_rz prop, Pcard_box6_lgZ
 obseg_file_rz prop, PcarescortZ
 obseg_file_rz prop, PcargolfZ
 obseg_file_rz prop, PcarweirdZ

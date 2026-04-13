@@ -27,9 +27,11 @@
 #include <ultra64.h>
 #include <bondconstants.h>
 #include "snd.h"
-#include "game/chrobjdata.h"
+#ifndef AIPARSE
+    #include "game/chrobjdata.h"
+#endif
 
-/**
+        /**
  * Syntax Sugar for clarification of intent
  * Inheritance allows child structs to directly use parent elements
  * without sub-struct style calls
@@ -48,6 +50,8 @@
  * then move bool to bondtypes.h
  */
 typedef s32 bool; /* Boolean (TRUE/FALSE) */
+
+// forward declare for inherit structures
 typedef u32 romptr_t;
 struct object_standard;
 struct ChrRecord;
@@ -310,13 +314,26 @@ typedef union
 
     typedef struct bbox
     {
-        float xmin;
-        float xmax;
-        float ymin;
-        float ymax;
-        float zmin;
-        float zmax;
-    }bbox;
+        union
+        {
+            struct
+            {
+                float xmin;
+                float xmax;
+                float ymin;
+                float ymax;
+                float zmin;
+                float zmax;
+            };
+            struct
+            {
+                coord3d min;
+                coord3d max;
+            };
+            f32 f[3][2];
+            f32 AsArray[6];
+        };
+    } bbox;
 
     typedef struct view4s32
     {
@@ -609,71 +626,6 @@ typedef union
         f32   colorshifttimer;     // 0x70
     };
 
-    /*
-    typedef struct struck_animation_table
-    {
-        void *anonymous_0;
-        s32   anonymous_1;
-        f32   anonymous_2;
-        f32   anonymous_3;
-        s32   anonymous_4;
-        f32   sfx1_timer_60;
-        f32   sfx2_timer_60;
-    } struck_animation_table;
-
-    struct animation_something
-    {
-        s32                     anonymous_0;
-        s32                     field_4;
-        s32                     field_8;
-        f32                     field_C;
-        s32                     field_10;
-        s32                     field_14;
-        f32                     field_18;
-        struck_animation_table *field_1C;
-        s32                     field_20;
-        struck_animation_table *field_24;
-        s32                     field_28;
-    };
-
-    struct explosion_death_animation
-    {
-        s32 anonymous_0;
-        s32 anonymous_1;
-        f32 anonymous_2;
-        f32 anonymous_3;
-        f32 anonymous_4;
-        f32 anonymous_5;
-        f32 anonymous_6;
-    };
-
-    struct explosion_animation
-    {
-        void *explosion_death_animation;
-        s32   count;
-    };
-
-    struct weapon_firing_animation_table
-    {
-        s32 anonymous_0;
-        f32 anonymous_1;
-        f32 anonymous_2;
-        f32 anonymous_3;
-        f32 anonymous_4;
-        f32 anonymous_5;
-        f32 anonymous_6;
-        f32 anonymous_7;
-        f32 anonymous_8;
-        f32 anonymous_9;
-        f32 anonymous_10;
-        f32 anonymous_11;
-        f32 anonymous_12;
-        f32 anonymous_13;
-        f32 anonymous_14;
-        f32 anonymous_15;
-        f32 anonymous_16;
-        f32 anonymous_17;
-    };*/
 #pragma endregion AnimationStuff
 
 #pragma region ModelTypes
@@ -2425,10 +2377,11 @@ typedef union
 
     #pragma region IndividualObjectTypes
 
-    struct collision_data {
-        s32 unk00;
+    typedef struct collision_data
+    {
+        s32 edges; // 0x00
 
-        rect4f unk04;
+        rect4f polygon; // 0x04
 
         s32 unk24;
         s32 unk28;
@@ -2440,11 +2393,11 @@ typedef union
         s32 unk3C;
 
         s32 unk40;
-        f32 unk44;
+        f32 top; // 0x44
 
         // Might be related to collision radius
-        f32 unk48;
-    };
+        f32 bottom; // 0x48
+    } collision_data;
 
     typedef struct Projectile {
         u32 flags;
@@ -2482,12 +2435,8 @@ typedef union
         f32 unkC4;
         f32 unkC8;
 
-        u8 unkCC;
-        u8 unkCD;
-        u8 unkCE;
-        u8 unkCF;
+        u8 unkCC[8]; // array of rooms
 
-        u32 unkD0;
         f32 unkd4; // probably struct coord3d
         u32 unkD8;
         u32 unkDC;
@@ -2685,7 +2634,7 @@ typedef union
             */
             u32 runtime_bitflags;
         };
-        struct collision_data *ptr_allocated_collisiondata_block;
+        collision_data *ptr_allocated_collisiondata_block;
 
         union {
             struct Projectile *projectile; // 0x6c
@@ -3027,9 +2976,9 @@ typedef union
     // PROPDEF_CCTV (6)
     typedef struct CCTVRecord
     {
-        struct ObjectRecord;
-        s32 pad;
-        Mtxf unk84;
+        inherits ObjectRecord;
+        s32      pad; // lookpad
+        Mtxf     unk84;
         f32 unkC4;
         f32 unkC8;
         f32 unkCC;
@@ -3092,6 +3041,9 @@ typedef union
         {                                          \
             New_PropDefHeaderRecord(8), 0, pad + 0 \
         }
+#define Collectable(index, type, flag, value) _mkword(256, _mkshort(0, 8)), _mkword(184, index), flag, value, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+
+
 
     // PROPDEF_GUARD (9) (7 words)
     typedef struct GuardRecord
@@ -3205,7 +3157,7 @@ typedef union
     // PROPDEF_LINK (14)
     typedef struct LinkRecord
     {
-        struct PropDefHeaderRecord;
+        inherits PropDefHeaderRecord;
         union
         {
             struct PropRecord *first;
@@ -3252,12 +3204,15 @@ typedef union
             New_PropDefHeaderRecord(19), ID1 + 0, ID2 + 0 \
         }
 
+    struct multiammocrateslot {
+        u16 modelnum;
+        u16 quantity;
+    };
     // PROPDEF_AMMO (20)
     typedef struct MultiAmmoCrateRecord
     {
         inherits ObjectRecord;
-        u16      unk80;
-        u16      quantities[AMMOTYPE_GLOBAL_MAX]; // indexed by ammotype /*0x80*/
+        struct multiammocrateslot slots[AMMOTYPE_GLOBAL_MAX];
     } MultiAmmoCrateRecord;
     #define New_MultiAmmoCrateRecord(pad)           \
         {                                           \
@@ -3577,8 +3532,8 @@ typedef union
     typedef struct TankRecord
     {
         inherits ObjectRecord;
-        struct collision_data *unk80;
-        struct rect4f  rect;       /*0x84*/
+        collision_data *collision /*0x80*/;
+        rect4f  rect;       /*0x84*/
         //s32 unk88;
         //s32 unk8C;
         //s32 unk90;
@@ -3611,7 +3566,7 @@ typedef union
     typedef struct CutsceneRecord
     {
         inherits PropDefHeaderRecord;
-        struct coord3d pos;
+        coord3d pos;
         f32      theta; //10
         f32      verta; //14
         s32      pad;   //18
@@ -3638,11 +3593,30 @@ typedef union
     // objtype 48+
     #define EndObjectList PropDefHeaderRecord endme = New_PropDefHeaderRecord(48)
     #pragma endregion IndividualObjectTypes
-#pragma endregion
+#pragma endregion //Propdefs
 
 #pragma region Intro
+#define MemberRename(from, to) \
+    union                      \
+    {                          \
+        from;                  \
+        to;                    \
+    }
 
-union SetupFloatInt
+    typedef union fs15_16
+    {
+        f32 fval;
+        s32 ival;
+        s32 full;
+        struct
+        {
+            s16 integer  : 16;
+            u16 fraction : 16;
+        };
+
+    } fs15_16;
+
+    union SetupFloatInt
 {
     f32 fval;
     s32 ival;
@@ -3651,66 +3625,64 @@ union SetupFloatInt
 /**
  * sizeof == 0x4
 */
-struct SetupIntroEmpty
+typedef struct SetupIntroEmpty
 {
     s32 type;
-};
+} SetupIntroEmpty;
 
 /**
  * type == INTROTYPE_SPAWN
  * sizeof == 0xc
 */
-struct SetupIntroSpawn
+typedef struct SetupIntroSpawn
 {
     s32 type;
-    s32 index;
-    s32 is_demo_playback;
-};
+    s32 index;                                        // pad
+    MemberRename(s32 is_demo_playback, s32 demoSlot); // demoindex, perhaps called during demo
+} SetupIntroSpawn;
 
 /**
  * type == INTROTYPE_ITEM
  * sizeof == 0x10
-*/
+ */
 struct SetupIntroItem
 {
     s32 type;
     s32 item_right;
     s32 item_left;
-    s32 is_demo_playback;
+    MemberRename(s32 is_demo_playback, s32 demoSlot); // demoindex, perhaps called during demo
 };
 
 /**
  * type == INTROTYPE_AMMO
  * sizeof == 0x10
-*/
+ */
 struct SetupIntroAmmo
 {
     s32 type;
     s32 ammo_type;
     s32 ammo_amount;
-    s32 is_demo_playback;
+    MemberRename(s32 is_demo_playback, s32 demoSlot); // demoindex, perhaps called during demo
 };
 
 /**
  * type == INTROTYPE_SWIRL
  * sizeof == 0x20
-*/
+ */
 struct SetupIntroSwirl
 {
     s32 type;
-    s32 unk04;
-    union SetupFloatInt unk08;
-    union SetupFloatInt unk0C;
-    union SetupFloatInt unk10;
-    union SetupFloatInt unk14;
-    union SetupFloatInt unk18;
-    s32 unk1C;
+    MemberRename(s32 unk04, s32 bitflags);               // bitflags
+    MemberRename(struct {fs15_16 unk08; fs15_16 unk0C; fs15_16 unk10; }, fs15_16 offsetfromBond[3]); // offset from Bond in cm
+    MemberRename(fs15_16 unk14, fs15_16 scale);          // splinescale
+    MemberRename(fs15_16 unk18, fs15_16 duration);       // duration
+    MemberRename(s32 unk1C, s32 pad);                    // lookAt
 };
 
 /**
  * type == INTROTYPE_ANIM
  * sizeof == 0x8
-*/
+ */
 struct SetupIntroAnim
 {
     s32 type;
@@ -3720,7 +3692,7 @@ struct SetupIntroAnim
 /**
  * type == INTROTYPE_CUFF
  * sizeof == 0x8
-*/
+ */
 struct SetupIntroCuff
 {
     s32 type;
@@ -3730,31 +3702,34 @@ struct SetupIntroCuff
 /**
  * type == INTROTYPE_CAMERA
  * sizeof == 0x28
-*/
-struct SetupIntroCamera
+ */
+typedef struct SetupIntroCamera
 {
     s32 type;
-    union SetupFloatInt unk04;
-    union SetupFloatInt unk08;
-    union SetupFloatInt unk0C;
-    union SetupFloatInt unk10;
-    union SetupFloatInt unk14;
-    s32 unk18;
-    union {
-        u16 lang_index[2];
-        char* lang_ptr;
+    MemberRename(struct {
+        fs15_16 unk04;
+        fs15_16 unk08;
+        fs15_16 unk0C; }, fs15_16 coords[3]); // co-ordinates in cm scale
+    fs15_16 unk10;                               // yaw in radians
+    fs15_16 unk14;                               // pitch in radians
+    s32     unk18;                               // pad
+    union
+    {
+        u16   lang_index[2];
+        char *lang_ptr;
     } lang1c;
-    union {
-        s32 lang_index;
+    union
+    {
+        s32   lang_index;
         char *lang_ptr;
     } lang20;
     struct SetupIntroCamera *prev;
-};
+} SetupIntroCamera;
 
 /**
  * type == INTROTYPE_WATCH
  * sizeof == 0xc
-*/
+ */
 struct SetupIntroWatch
 {
     s32 type;
@@ -3764,22 +3739,23 @@ struct SetupIntroWatch
 
 /**
  * sizeof == 0xc
-*/
-typedef struct CreditsEntry_s {
+ */
+typedef struct CreditsEntry_s
+{
     u16 TextId1;
     u16 TextId2;
     s16 Position1;
 
     /**
      * See CREDITS_ALIGNMENT.
-    */
+     */
     u16 Alignment1;
 
     s16 Position2;
 
     /**
      * See CREDITS_ALIGNMENT.
-    */
+     */
     u16 Alignment2;
 
 } CreditsEntry;
@@ -3787,112 +3763,129 @@ typedef struct CreditsEntry_s {
 /**
  * type == INTROTYPE_CREDITS
  * sizeof == 0x8
-*/
+ */
 struct SetupIntroCredits
 {
     s32 type;
     s32 unk04;
 };
+#define CharArrayFrom32(input) ((input) & 0xFF000000) >> 24, ((input) & 0x00FF0000) >> 16, ((input) & 0x0000FF00) >> 8, (input) & 0x000000FF
+#define CharArrayFrom16(input) ((input) & 0xFF00) >> 8, (input) & 0x00FF
 
+#define IntroEmpty()                                                          CharArrayFrom32(0)
+#define IntroSpawn(index, is_demo_playback)                                   CharArrayFrom32(INTROTYPE_SPAWN), CharArrayFrom32(index), CharArrayFrom32(is_demo_playback)
+#define IntroItem(item_right, item_left, is_demo_playback)                    CharArrayFrom32(INTROTYPE_ITEM), CharArrayFrom32(item_right), CharArrayFrom32(item_left), CharArrayFrom32(is_demo_playback)
+#define IntroAmmo(ammo_type, ammo_amount, is_demo_playback)                   CharArrayFrom32(INTROTYPE_AMMO), CharArrayFrom32(ammo_type), CharArrayFrom32(ammo_amount), CharArrayFrom32(is_demo_playback)
+#define IntroSwirl(unk04, unk08, unk0C, unk10, unk14, unk18, unk1C)           CharArrayFrom32(INTROTYPE_SWIRL), CharArrayFrom32(unk04), CharArrayFrom32(unk08), CharArrayFrom32(unk0C), CharArrayFrom32(unk10), CharArrayFrom32(unk14), CharArrayFrom32(unk18), CharArrayFrom32(unk1C)
+#define IntroAnim(intro_anim)                                                 CharArrayFrom32(INTROTYPE_ANIM), CharArrayFrom32(intro_anim)
+#define IntroCuff(bondtype)                                                   CharArrayFrom32(INTROTYPE_CUFF), CharArrayFrom32(bondtype)
+#define IntroCamera(unk04, unk08, unk0C, unk10, unk14, unk18, lang1c, lang20) CharArrayFrom32(INTROTYPE_CAMERA), CharArrayFrom32(unk04), CharArrayFrom32(unk08), CharArrayFrom32(unk0C), CharArrayFrom32(unk10), CharArrayFrom32(unk14), CharArrayFrom32(unk18), CharArrayFrom32(lang1c), CharArrayFrom32(lang20), 0
+#define IntroWatch(hours, minutes)                                            CharArrayFrom32(INTROTYPE_WATCH), CharArrayFrom32(hours), CharArrayFrom32(minutes)
+#define IntroCredits(unk04)                                                   CharArrayFrom32(INTROTYPE_CREDITS), CharArrayFrom32(unk04)
 
 #pragma endregion Intro
 
 #pragma region Objectives
-    // PROPDEF_WATCH_MENU_OBJECTIVE_TEXT (35)
-    struct watchMenuObjectiveText
-    {
-        u32                            id;
-        enum WATCH_BRIEFING_PAGE       menu;
-        u16                            reserved;
-        u16                            text;
-        struct watchMenuObjectiveText *nextentry;
-    };
-    // PROPDEF_OBJECTIVE_x (23,24 ) - maybe not a propdef
-    //!FIXME all but text field cannot be trusted
-    struct objective_entry
-    {
-        u32                            id; //0
-        enum WATCH_BRIEFING_PAGE       menu;//4
-        u16                            reserved;//8
-        u16                            text; //a
-        u16                            unkC; //c
-        u8                             unkD; //d
-        s8                             difficulty; //f
-    };
+// PROPDEF_WATCH_MENU_OBJECTIVE_TEXT (35)
+struct watchMenuObjectiveText
+{
+    u32                            id;
+    enum WATCH_BRIEFING_PAGE       menu;
+    u16                            reserved;
+    u16                            text;
+    struct watchMenuObjectiveText *nextentry;
+};
+// PROPDEF_OBJECTIVE_x (23,24 ) - maybe not a propdef
+//! FIXME all but text field cannot be trusted
+struct objective_entry
+{
+    u32                      id;         // 0
+    enum WATCH_BRIEFING_PAGE menu;       // 4
+    u16                      reserved;   // 8
+    u16                      text;       // a
+    u16                      unkC;       // c
+    u8                       unkD;       // d
+    s8                       difficulty; // f
+};
 #pragma endregion Objectives
 
 #pragma region gamefile
 #pragma endregion gamefile
 
 #pragma region Images
-    typedef struct sImageTableEntry
-    {
-        u32 index;
-        u8  width;
-        u8  height;
-        u8  level;
-        u8  format;
-        u8  depth;
-        u8  flagsS;
-        u8  flagsT;
-        u8  pad;
-    } sImageTableEntry;
+typedef struct sImageTableEntry
+{
+    u32 index;
+    u8  width;
+    u8  height;
+    u8  level;
+    u8  format;
+    u8  depth;
+    u8  flagsS;
+    u8  flagsT;
+    u8  pad;
+} sImageTableEntry;
 #pragma endregion Images
 
 #pragma region Player
 
-    typedef struct SkyRelated38 {
-        f32 unk00; /*0x00*/
-        f32 unk04; /*0x04*/
-        f32 unk08; /*0x08*/
-        f32 unk0c; /*0x0c*/
-        f32 r;     /*0x10*/
-        f32 g;     /*0x14*/
-        f32 b;     /*0x18*/
-        f32 a;     /*0x1c*/
-        f32 unk20; /*0x20*/
-        f32 unk24; /*0x24*/
-        f32 unk28; /*0x28*/
-        f32 unk2c; /*0x2c*/
-        f32 unk30; /*0x30*/
-        f32 unk34; /*0x34*/
-    } SkyRelated38;
+typedef struct SkyRelated38
+{
+    f32 unk00; /*0x00*/
+    f32 unk04; /*0x04*/
+    f32 unk08; /*0x08*/
+    f32 unk0c; /*0x0c*/
+    f32 r;     /*0x10*/
+    f32 g;     /*0x14*/
+    f32 b;     /*0x18*/
+    f32 a;     /*0x1c*/
+    f32 unk20; /*0x20*/
+    f32 unk24; /*0x24*/
+    f32 unk28; /*0x28*/
+    f32 unk2c; /*0x2c*/
+    f32 unk30; /*0x30*/
+    f32 unk34; /*0x34*/
+} SkyRelated38;
 
-    typedef struct SkyRelated18 {
-        f32 unk00; /*0x00*/
-        f32 unk04; /*0x04*/
-        f32 unk08; /*0x08*/
-        f32 unk0c; /*0x0c*/
-        f32 unk10; /*0x10*/
-        u8 r;      /*0x14*/
-        u8 g;      /*0x15*/
-        u8 b;      /*0x16*/
-        u8 a;      /*0x17*/
-    } SkyRelated18;
+typedef struct SkyRelated18
+{
+    f32 unk00; /*0x00*/
+    f32 unk04; /*0x04*/
+    f32 unk08; /*0x08*/
+    f32 unk0c; /*0x0c*/
+    f32 unk10; /*0x10*/
+    u8  r;     /*0x14*/
+    u8  g;     /*0x15*/
+    u8  b;     /*0x16*/
+    u8  a;     /*0x17*/
+} SkyRelated18;
 
 #pragma endregion Player
 
 #pragma region stagesetup.h
-    struct pname {
-        union {
-            char *p;
-            s32 offset;
-        };
-    };
-
-    typedef struct stagesetup
+typedef struct pname
+{
+    union
     {
-        waypoint       *pathwaypoints;
-        waygroup       *waypointgroups;
-        struct SetupIntroEmpty *intro;
-        PropDefHeaderRecord    *propDefs;
-        PathRecord     *patrolpaths;
-        AIListRecord   *ailists;
-        PadRecord      *pads;
-        BoundPadRecord *boundpads;
-        struct pname *padnames;
-        struct pname *boundpadnames;
-    } stagesetup;
+        char *p;
+        s32   offset;
+    };
+} pname;
+
+typedef struct stagesetup
+{
+    waypoint            *pathwaypoints;
+    waygroup            *waypointgroups;
+    s32                 *intro;
+    PropDefHeaderRecord *propDefs;
+    PathRecord          *patrolpaths;
+    AIListRecord        *ailists;
+    PadRecord           *pads;
+    BoundPadRecord      *boundpads;
+    pname               *padnames;
+    pname               *boundpadnames;
+} stagesetup;
+
 
 
 #pragma endregion stagesetup.h
@@ -3907,6 +3900,13 @@ struct SetupIntroCredits
         ObjectRecord *Obj;       //20
     } sfxRecord;
 
+    struct sfx2 {
+        u16 half[2];
+    };
+
+    struct sfx3 {
+        u16 half[3];
+    };
 
 
 
@@ -4022,17 +4022,9 @@ struct MoveData {
 };
 
 
-struct unkown_gun_struct
+struct gun_trigger_state
 {
-    union
-    {
-        u32 arr[2];
-        struct
-        {
-            s32 unk00;
-            s32 unk04;
-        };
-    };
+    s32 triggerOn[2]; // 0 = weapon trigger not held, 1 = weapon trigger held
 };
 
 struct setup_objective_text {
@@ -4109,6 +4101,20 @@ struct s_display_list_something
     u8 unkD;
     u8 unkE;
     u8 unkF;
+};
+
+struct fontchar {
+    s32 index;
+    s32 baseline;
+    s32 height;
+    s32 width;
+    s32 kerningindex;
+    u8 *pixeldata;
+};
+
+struct font {
+	s32 kerning[13 * 13];
+	struct fontchar chars[94]; // can be 135 in PAL
 };
 
 #endif

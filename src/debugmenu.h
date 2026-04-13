@@ -8,9 +8,9 @@ typedef struct {
     u8 color;
 } character;
 
-void debmenu7000ADA8(void);
 void debmenuInit(void);
-void debmenuReset(void);
+void debmenuRefresh(void);
+void debmenuResetBuffer(void);
 #ifdef LEFTOVERDEBUG
 void debmenu7000AF84(s32 x1, s32 y1, s32 x2, s32 y2);
 #endif

@@ -129,7 +129,12 @@ typedef struct WeaponStats
     /**
      * Recoil speed.
      */
-    s32 RecoilSpeed;
+    struct {
+        union {
+            s32 RecoilSpeed;
+            s8 b44[4];
+        };        
+    };
 
     /**
      * How far back bonds hands pull back when the gun is fired.

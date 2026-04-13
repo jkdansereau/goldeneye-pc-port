@@ -1,4 +1,5 @@
 #include <ultra64.h>
+#include "model.h"
 
 //uncomment when actor is worked on
 //#include "chr.h"

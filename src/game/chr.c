@@ -7,21 +7,22 @@
 #include <snd.h>
 #include <math.h>
 #include "bg.h"
-#include "cheat_buttons.h"
+#include "cheat.h"
 #include "chr.h"
 #include "chrai.h"
-#include "chrlv.h"
+#include "chraction.h"
 #include "chrobjdata.h"
-#include "chrobjhandler.h"
-#include "explosions.h"
+#include "propobj.h"
+#include "explosion.h"
 #include "file.h"
 #include "gun.h"
 #include "initanitable.h"
-#include "lvl.h"
-#include "lvl_text.h"
+#include "lv.h"
+#include "language.h"
 #include "objecthandler.h"
 #include "player.h"
 #include "stan.h"
+#include "model.h"
 
 // forward declarations
 
@@ -183,352 +184,352 @@ f32 g_AiReactionSpeed = 1.0f;
 s32 g_SeenBondRecentlyGuardCount = 0;
 
 struct struck_animation_table D_8002CE54[] = {
-    {PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 0, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 0, 26.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 0, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 0, 23.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 0, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 0, 26.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 0, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 0, 23.0, -1.0 },
     {0, 0, 0.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002CEE0[] = {
-    {PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 0, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 0, 26.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 0, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 0, 23.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 0, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 0, 26.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 0, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 0, 23.0, -1.0 },
     {0, 0, 0.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002CF6C[] = {
-    {PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 1, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 1, 26.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 1, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 1, 23.0, -1.0},
-    {PTR_ANIM_death_left_leg, 1, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 1, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 1, 26.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 1, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 1, 23.0, -1.0 },
+    { PTR_ANIM_death_left_leg, 1, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, 0.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D014[] = {
-    {PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 0, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 0, 23.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 0, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 0, 26.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 0, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 0, 23.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 0, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 0, 26.0, -1.0 },
     {0, 0, 0.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D0A0[] = {
-    {PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 0, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 0, 23.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 0, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 0, 26.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 0, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 0, 23.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 0, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 0, 26.0, -1.0 },
     {0, 0, 0.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D12C[] = {
-    {PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 1, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 1, 23.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 1, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 1, 26.0, -1.0},
-    {PTR_ANIM_death_left_leg, 0, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 1, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 1, 23.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 1, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 1, 26.0, -1.0 },
+    { PTR_ANIM_death_left_leg, 0, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, 0.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D1D4[] = {
-    {PTR_ANIM_death_forward_face_down, 0, -1.0, 0.5, 0, 55.0, 39.0},
-    {PTR_ANIM_death_forward_face_down, 1, -1.0, 0.5, 0, 55.0, 39.0},
-    {PTR_ANIM_death_forward_spin_face_up, 0, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_forward_spin_face_up, 1, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up1, 0, -1.0, 0.5, 1, 29.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up1, 1, -1.0, 0.5, 1, 29.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_hard, 0, -1.0, 0.5, 0, 97.0, 64.0},
-    {PTR_ANIM_death_forward_face_down_hard, 1, -1.0, 0.5, 0, 97.0, 64.0},
-    {PTR_ANIM_death_fetal_position_right, 0, -1.0, 0.5, 0, 31.0, -1.0},
-    {PTR_ANIM_death_fetal_position_right, 1, -1.0, 0.5, 0, 31.0, -1.0},
-    {PTR_ANIM_death_fetal_position_left, 0, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_fetal_position_left, 1, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up2, 0, -1.0, 0.5, 0, 28.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up2, 1, -1.0, 0.5, 0, 28.0, -1.0},
-    {PTR_ANIM_death_genitalia, 0, -1.0, 0.5, 0, 79.0, 415.0},
-    {PTR_ANIM_death_genitalia, 1, -1.0, 0.5, 0, 79.0, 415.0},
+    { PTR_ANIM_death_forward_face_down, 0, -1.0, 0.5, 0, 55.0, 39.0 },
+    { PTR_ANIM_death_forward_face_down, 1, -1.0, 0.5, 0, 55.0, 39.0 },
+    { PTR_ANIM_death_forward_spin_face_up, 0, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_forward_spin_face_up, 1, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up1, 0, -1.0, 0.5, 1, 29.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up1, 1, -1.0, 0.5, 1, 29.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_hard, 0, -1.0, 0.5, 0, 97.0, 64.0 },
+    { PTR_ANIM_death_forward_face_down_hard, 1, -1.0, 0.5, 0, 97.0, 64.0 },
+    { PTR_ANIM_death_fetal_position_right, 0, -1.0, 0.5, 0, 31.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_right, 1, -1.0, 0.5, 0, 31.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_left, 0, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_left, 1, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up2, 0, -1.0, 0.5, 0, 28.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up2, 1, -1.0, 0.5, 0, 28.0, -1.0 },
+    { PTR_ANIM_death_genitalia, 0, -1.0, 0.5, 0, 79.0, 415.0 },
+    { PTR_ANIM_death_genitalia, 1, -1.0, 0.5, 0, 79.0, 415.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D3B0[] = {
-    {PTR_ANIM_death_forward_face_down, 0, -1.0, 0.5, 0, 55.0, 39.0},
-    {PTR_ANIM_death_forward_face_down, 1, -1.0, 0.5, 0, 55.0, 39.0},
-    {PTR_ANIM_death_forward_spin_face_up, 0, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_forward_spin_face_up, 1, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up1, 0, -1.0, 0.5, 1, 29.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up1, 1, -1.0, 0.5, 1, 29.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 1, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 1, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 1, 23.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 1, 23.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 1, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 1, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 1, 26.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 1, 26.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_hard, 0, -1.0, 0.5, 0, 97.0, 64.0},
-    {PTR_ANIM_death_forward_face_down_hard, 1, -1.0, 0.5, 0, 97.0, 64.0},
-    {PTR_ANIM_death_forward_face_down_soft, 0, -1.0, 0.5, 0, 94.0, 66.0},
-    {PTR_ANIM_death_forward_face_down_soft, 1, -1.0, 0.5, 0, 94.0, 66.0},
-    {PTR_ANIM_death_fetal_position_right, 0, -1.0, 0.5, 0, 31.0, -1.0},
-    {PTR_ANIM_death_fetal_position_right, 1, -1.0, 0.5, 0, 31.0, -1.0},
-    {PTR_ANIM_death_fetal_position_left, 0, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_fetal_position_left, 1, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up2, 0, -1.0, 0.5, 0, 28.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up2, 1, -1.0, 0.5, 0, 28.0, -1.0},
-    {PTR_ANIM_death_neck, 0, -1.0, 0.5, 0, 87.0, 203.0},
-    {PTR_ANIM_death_neck, 1, -1.0, 0.5, 0, 87.0, 203.0},
-    {PTR_ANIM_death_head, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_head, 1, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_death_forward_face_down, 0, -1.0, 0.5, 0, 55.0, 39.0 },
+    { PTR_ANIM_death_forward_face_down, 1, -1.0, 0.5, 0, 55.0, 39.0 },
+    { PTR_ANIM_death_forward_spin_face_up, 0, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_forward_spin_face_up, 1, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up1, 0, -1.0, 0.5, 1, 29.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up1, 1, -1.0, 0.5, 1, 29.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 1, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 1, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 1, 23.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 1, 23.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 1, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 1, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 1, 26.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 1, 26.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_hard, 0, -1.0, 0.5, 0, 97.0, 64.0 },
+    { PTR_ANIM_death_forward_face_down_hard, 1, -1.0, 0.5, 0, 97.0, 64.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 0, -1.0, 0.5, 0, 94.0, 66.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 1, -1.0, 0.5, 0, 94.0, 66.0 },
+    { PTR_ANIM_death_fetal_position_right, 0, -1.0, 0.5, 0, 31.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_right, 1, -1.0, 0.5, 0, 31.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_left, 0, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_left, 1, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up2, 0, -1.0, 0.5, 0, 28.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up2, 1, -1.0, 0.5, 0, 28.0, -1.0 },
+    { PTR_ANIM_death_neck, 0, -1.0, 0.5, 0, 87.0, 203.0 },
+    { PTR_ANIM_death_neck, 1, -1.0, 0.5, 0, 87.0, 203.0 },
+    { PTR_ANIM_death_head, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_head, 1, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D6DC[] = {
-    {PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 0, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 0, 26.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 0, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 0, 23.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 0, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 0, 26.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 0, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 0, 23.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D768[] = {
-    {PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 0, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 0, 26.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 0, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 0, 23.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 0, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 0, 26.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 0, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 0, 23.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D7F4[] = {
-    {PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 1, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 1, 26.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 1, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 1, 23.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 1, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 1, 26.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 1, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 1, 23.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D880[] = {
-    {PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 0, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 0, 23.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 0, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 0, 26.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 0, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 0, 23.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 0, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 0, 26.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D90C[] = {
-    {PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 0, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 0, 23.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 0, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 0, 26.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 0, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 0, 23.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 0, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 0, 26.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002D998[] = {
-    {PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 1, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 1, 23.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 1, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 1, 26.0, -1.0},
+    { PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 1, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 1, 23.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 1, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 1, 26.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002DA24[] = {
-    {PTR_ANIM_death_forward_face_down, 0, -1.0, 0.5, 0, 55.0, 39.0},
-    {PTR_ANIM_death_forward_face_down, 1, -1.0, 0.5, 0, 55.0, 39.0},
-    {PTR_ANIM_death_forward_spin_face_up, 0, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_forward_spin_face_up, 1, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up1, 0, -1.0, 0.5, 1, 29.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up1, 1, -1.0, 0.5, 1, 29.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 1, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 1, 25.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 1, 23.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 1, 23.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 1, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 1, 27.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 1, 26.0, -1.0},
-    {PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 1, 26.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_hard, 0, -1.0, 0.5, 0, 97.0, 64.0},
-    {PTR_ANIM_death_forward_face_down_hard, 1, -1.0, 0.5, 0, 97.0, 64.0},
-    {PTR_ANIM_death_forward_face_down_soft, 0, -1.0, 0.5, 0, 94.0, 66.0},
-    {PTR_ANIM_death_forward_face_down_soft, 1, -1.0, 0.5, 0, 94.0, 66.0},
-    {PTR_ANIM_death_fetal_position_right, 0, -1.0, 0.5, 0, 31.0, -1.0},
-    {PTR_ANIM_death_fetal_position_right, 1, -1.0, 0.5, 0, 31.0, -1.0},
-    {PTR_ANIM_death_fetal_position_left, 0, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_fetal_position_left, 1, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up2, 0, -1.0, 0.5, 0, 28.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up2, 1, -1.0, 0.5, 0, 28.0, -1.0},
+    { PTR_ANIM_death_forward_face_down, 0, -1.0, 0.5, 0, 55.0, 39.0 },
+    { PTR_ANIM_death_forward_face_down, 1, -1.0, 0.5, 0, 55.0, 39.0 },
+    { PTR_ANIM_death_forward_spin_face_up, 0, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_forward_spin_face_up, 1, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up1, 0, -1.0, 0.5, 1, 29.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up1, 1, -1.0, 0.5, 1, 29.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_right, 0, -1.0, 0.5, 1, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_right, 1, -1.0, 0.5, 1, 25.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 0, -1.0, 0.5, 1, 23.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_right, 1, -1.0, 0.5, 1, 23.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_left, 0, -1.0, 0.5, 1, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_down_left, 1, -1.0, 0.5, 1, 27.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 0, -1.0, 0.5, 1, 26.0, -1.0 },
+    { PTR_ANIM_death_backward_spin_face_up_left, 1, -1.0, 0.5, 1, 26.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_hard, 0, -1.0, 0.5, 0, 97.0, 64.0 },
+    { PTR_ANIM_death_forward_face_down_hard, 1, -1.0, 0.5, 0, 97.0, 64.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 0, -1.0, 0.5, 0, 94.0, 66.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 1, -1.0, 0.5, 0, 94.0, 66.0 },
+    { PTR_ANIM_death_fetal_position_right, 0, -1.0, 0.5, 0, 31.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_right, 1, -1.0, 0.5, 0, 31.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_left, 0, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_left, 1, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up2, 0, -1.0, 0.5, 0, 28.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up2, 1, -1.0, 0.5, 0, 28.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002DCE0[] = {
-    {PTR_ANIM_death_forward_face_down, 0, -1.0, 0.5, 0, 55.0, 39.0},
-    {PTR_ANIM_death_forward_face_down, 1, -1.0, 0.5, 0, 55.0, 39.0},
-    {PTR_ANIM_death_forward_spin_face_up, 0, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_forward_spin_face_up, 1, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up1, 0, -1.0, 0.5, 1, 29.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up1, 1, -1.0, 0.5, 1, 29.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_hard, 0, -1.0, 0.5, 0, 97.0, 64.0},
-    {PTR_ANIM_death_forward_face_down_hard, 1, -1.0, 0.5, 0, 97.0, 64.0},
-    {PTR_ANIM_death_forward_face_down_soft, 0, -1.0, 0.5, 0, 94.0, 66.0},
-    {PTR_ANIM_death_forward_face_down_soft, 1, -1.0, 0.5, 0, 94.0, 66.0},
-    {PTR_ANIM_death_fetal_position_right, 0, -1.0, 0.5, 0, 31.0, -1.0},
-    {PTR_ANIM_death_fetal_position_right, 1, -1.0, 0.5, 0, 31.0, -1.0},
-    {PTR_ANIM_death_fetal_position_left, 0, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_fetal_position_left, 1, -1.0, 0.5, 0, 36.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up2, 0, -1.0, 0.5, 0, 28.0, -1.0},
-    {PTR_ANIM_death_backward_fall_face_up2, 1, -1.0, 0.5, 0, 28.0, -1.0},
+    { PTR_ANIM_death_forward_face_down, 0, -1.0, 0.5, 0, 55.0, 39.0 },
+    { PTR_ANIM_death_forward_face_down, 1, -1.0, 0.5, 0, 55.0, 39.0 },
+    { PTR_ANIM_death_forward_spin_face_up, 0, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_forward_spin_face_up, 1, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up1, 0, -1.0, 0.5, 1, 29.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up1, 1, -1.0, 0.5, 1, 29.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_hard, 0, -1.0, 0.5, 0, 97.0, 64.0 },
+    { PTR_ANIM_death_forward_face_down_hard, 1, -1.0, 0.5, 0, 97.0, 64.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 0, -1.0, 0.5, 0, 94.0, 66.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 1, -1.0, 0.5, 0, 94.0, 66.0 },
+    { PTR_ANIM_death_fetal_position_right, 0, -1.0, 0.5, 0, 31.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_right, 1, -1.0, 0.5, 0, 31.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_left, 0, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_left, 1, -1.0, 0.5, 0, 36.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up2, 0, -1.0, 0.5, 0, 28.0, -1.0 },
+    { PTR_ANIM_death_backward_fall_face_up2, 1, -1.0, 0.5, 0, 28.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002DEBC[] = {
-    {PTR_ANIM_death_stagger_back_to_wall, 0, -1.0, 0.5, 0, 67.0, 54.0},
-    {PTR_ANIM_death_stagger_back_to_wall, 1, -1.0, 0.5, 0, 67.0, 54.0},
+    { PTR_ANIM_death_stagger_back_to_wall, 0, -1.0, 0.5, 0, 67.0, 54.0 },
+    { PTR_ANIM_death_stagger_back_to_wall, 1, -1.0, 0.5, 0, 67.0, 54.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002DF10[] = {
-    {PTR_ANIM_hit_left_leg, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_right_leg, 1, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_left_leg, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_right_leg, 1, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002DF64[] = {
-    {PTR_ANIM_hit_left_leg, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_right_leg, 1, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_left_leg, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_right_leg, 1, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002DFB8[] = {
-    {PTR_ANIM_hit_left_leg, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_right_leg, 1, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_left_leg, 1, 20.0, 0.40000001, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_left_leg, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_right_leg, 1, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_left_leg, 1, 20.0, 0.40000001, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E028[] = {
-    {PTR_ANIM_hit_right_leg, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_left_leg, 1, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_right_leg, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_left_leg, 1, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E07C[] = {
-    {PTR_ANIM_hit_right_leg, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_left_leg, 1, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_right_leg, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_left_leg, 1, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E0D0[] = {
-    {PTR_ANIM_hit_right_leg, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_left_leg, 1, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_left_leg, 0, 20.0, 0.40000001, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_right_leg, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_left_leg, 1, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_left_leg, 0, 20.0, 0.40000001, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E140[] = {
-    {PTR_ANIM_death_genitalia, 0, 20.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_genitalia, 1, 30.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_soft, 0, 20.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_soft, 1, 20.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down, 0, 15.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down, 1, 15.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_fetal_position_right, 0, 10.0, 0.25, 0, -1.0, -1.0},
-    {PTR_ANIM_death_fetal_position_right, 1, 10.0, 0.25, 0, -1.0, -1.0},
+    { PTR_ANIM_death_genitalia, 0, 20.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_genitalia, 1, 30.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 0, 20.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 1, 20.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down, 0, 15.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down, 1, 15.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_right, 0, 10.0, 0.25, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_fetal_position_right, 1, 10.0, 0.25, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E23C[] = {
-    {PTR_ANIM_death_neck, 0, 15.0, 0.5, 0, 87.0, 203.0},
-    {PTR_ANIM_death_neck, 1, 15.0, 0.5, 0, 87.0, 203.0},
-    {PTR_ANIM_death_forward_face_down_soft, 0, 20.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_soft, 1, 20.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down, 0, 15.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down, 1, 15.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_death_neck, 0, 15.0, 0.5, 0, 87.0, 203.0 },
+    { PTR_ANIM_death_neck, 1, 15.0, 0.5, 0, 87.0, 203.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 0, 20.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 1, 20.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down, 0, 15.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down, 1, 15.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E300[] = {
-    {PTR_ANIM_hit_left_hand, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_right_hand, 1, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_left_hand, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_right_hand, 1, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E354[] = {
-    {PTR_ANIM_hit_left_arm, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_right_arm, 1, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_left_arm, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_right_arm, 1, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E3A8[] = {
-    {PTR_ANIM_hit_left_shoulder, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_right_shoulder, 1, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_soft, 0, 20.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_left_shoulder, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_right_shoulder, 1, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 0, 20.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E418[] = {
-    {PTR_ANIM_hit_right_hand, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_left_hand, 1, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_right_hand, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_left_hand, 1, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E46C[] = {
-    {PTR_ANIM_hit_right_arm, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_left_arm, 1, -1.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_right_arm, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_left_arm, 1, -1.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E4C0[] = {
-    {PTR_ANIM_hit_right_shoulder, 0, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_hit_left_shoulder, 1, -1.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_soft, 1, 20.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_hit_right_shoulder, 0, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_hit_left_shoulder, 1, -1.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 1, 20.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E530[] = {
-    {PTR_ANIM_death_forward_face_down_soft, 0, 20.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_soft, 1, 20.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down, 0, 15.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down, 1, 15.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_death_forward_face_down_soft, 0, 20.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 1, 20.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down, 0, 15.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down, 1, 15.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 struct struck_animation_table D_8002E5BC[] = {
-    {PTR_ANIM_death_forward_face_down_soft, 0, 20.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down_soft, 1, 20.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down, 0, 15.0, 0.5, 0, -1.0, -1.0},
-    {PTR_ANIM_death_forward_face_down, 1, 15.0, 0.5, 0, -1.0, -1.0},
+    { PTR_ANIM_death_forward_face_down_soft, 0, 20.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down_soft, 1, 20.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down, 0, 15.0, 0.5, 0, -1.0, -1.0 },
+    { PTR_ANIM_death_forward_face_down, 1, 15.0, 0.5, 0, -1.0, -1.0 },
     {0, 0, -1.0, 0.5, 0, -1.0, -1.0}
 };
 
 
 
 struct explosion_death_animation D_8002E648[] = {
-    {PTR_ANIM_death_explosion_forward, 0, 0.5, 9.0, 18.0, 29.0, -1.0},
-    {PTR_ANIM_death_explosion_forward, 1, 0.5, 9.0, 18.0, 29.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_face_down, 0, 0.5, 11.0, 19.0, 31.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_face_down, 1, 0.5, 11.0, 19.0, 31.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_roll, 0, 0.5, 6.0, 20.0, 27.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_roll, 1, 0.5, 6.0, 20.0, 27.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_right2, 0, 0.5, 29.0, 36.0, 48.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_right2, 1, 0.5, 29.0, 36.0, 48.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_right2_alt, 0, 0.5, 29.0, 38.0, 49.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_right2_alt, 1, 0.5, 29.0, 38.0, 49.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_right3, 0, 0.5, 19.0, 30.0, 42.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_right3, 1, 0.5, 19.0, 30.0, 42.0, -1.0},
-    {PTR_ANIM_death_explosion_left1, 0, 0.5, 9.0, 21.0, 29.0, 55.0},
-    {PTR_ANIM_death_explosion_left1, 1, 0.5, 9.0, 21.0, 29.0, 55.0},
-    {PTR_ANIM_death_explosion_right, 0, 0.5, 6.0, 18.0, 27.0, -1.0},
-    {PTR_ANIM_death_explosion_right, 1, 0.5, 6.0, 18.0, 27.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_right1, 0, 0.5, 6.0, 19.0, 29.0, -1.0},
-    {PTR_ANIM_death_explosion_forward_right1, 1, 0.5, 6.0, 19.0, 29.0, -1.0},
-    {PTR_ANIM_death_explosion_back_left, 0, 0.5, 8.0, 14.0, 25.0, -1.0},
-    {PTR_ANIM_death_explosion_back_left, 1, 0.5, 8.0, 14.0, 25.0, -1.0},
-    {PTR_ANIM_death_explosion_back1, 0, 0.5, 8.0, 19.0, 25.0, -1.0},
-    {PTR_ANIM_death_explosion_back1, 1, 0.5, 8.0, 19.0, 25.0, -1.0},
-    {PTR_ANIM_death_explosion_back2, 0, 0.5, 12.0, 21.0, 29.0, -1.0},
-    {PTR_ANIM_death_explosion_back2, 1, 0.5, 12.0, 21.0, 29.0, -1.0},
-    {PTR_ANIM_death_explosion_left2, 0, 0.5, 22.0, 30.0, 41.0, -1.0},
-    {PTR_ANIM_death_explosion_left2, 1, 0.5, 22.0, 30.0, 41.0, -1.0},
+    { PTR_ANIM_death_explosion_forward, 0, 0.5, 9.0, 18.0, 29.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward, 1, 0.5, 9.0, 18.0, 29.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_face_down, 0, 0.5, 11.0, 19.0, 31.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_face_down, 1, 0.5, 11.0, 19.0, 31.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_roll, 0, 0.5, 6.0, 20.0, 27.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_roll, 1, 0.5, 6.0, 20.0, 27.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_right2, 0, 0.5, 29.0, 36.0, 48.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_right2, 1, 0.5, 29.0, 36.0, 48.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_right2_alt, 0, 0.5, 29.0, 38.0, 49.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_right2_alt, 1, 0.5, 29.0, 38.0, 49.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_right3, 0, 0.5, 19.0, 30.0, 42.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_right3, 1, 0.5, 19.0, 30.0, 42.0, -1.0 },
+    { PTR_ANIM_death_explosion_left1, 0, 0.5, 9.0, 21.0, 29.0, 55.0 },
+    { PTR_ANIM_death_explosion_left1, 1, 0.5, 9.0, 21.0, 29.0, 55.0 },
+    { PTR_ANIM_death_explosion_right, 0, 0.5, 6.0, 18.0, 27.0, -1.0 },
+    { PTR_ANIM_death_explosion_right, 1, 0.5, 6.0, 18.0, 27.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_right1, 0, 0.5, 6.0, 19.0, 29.0, -1.0 },
+    { PTR_ANIM_death_explosion_forward_right1, 1, 0.5, 6.0, 19.0, 29.0, -1.0 },
+    { PTR_ANIM_death_explosion_back_left, 0, 0.5, 8.0, 14.0, 25.0, -1.0 },
+    { PTR_ANIM_death_explosion_back_left, 1, 0.5, 8.0, 14.0, 25.0, -1.0 },
+    { PTR_ANIM_death_explosion_back1, 0, 0.5, 8.0, 19.0, 25.0, -1.0 },
+    { PTR_ANIM_death_explosion_back1, 1, 0.5, 8.0, 19.0, 25.0, -1.0 },
+    { PTR_ANIM_death_explosion_back2, 0, 0.5, 12.0, 21.0, 29.0, -1.0 },
+    { PTR_ANIM_death_explosion_back2, 1, 0.5, 12.0, 21.0, 29.0, -1.0 },
+    { PTR_ANIM_death_explosion_left2, 0, 0.5, 22.0, 30.0, 41.0, -1.0 },
+    { PTR_ANIM_death_explosion_left2, 1, 0.5, 22.0, 30.0, 41.0, -1.0 },
     {0, 0, 0.5, 0.0, 0.0, 0.0, -1.0},
 };
 
@@ -553,37 +554,37 @@ struct explosion_anim_group_info explosion_animation_table[EXPLOSION_ANIMATION_T
 };
 
 struct weapon_firing_animation_table rifle_firing_animation_group1[] = {
-    {0x214, 28.0, 0, 0, 0, -1.0, 23.0, 54.0, -1.0, -1.0, 18.0, 54.0, 0.87266463, -0.52359879, 1.0471976, -0.34906587, 1.6, 1.8},
+    { PTR_ANIM_fire_standing_fast, 28.0, 0, 0, 0, -1.0, 23.0, 54.0, -1.0, -1.0, 18.0, 54.0, 0.87266463, -0.52359879, 1.0471976, -0.34906587, 1.6, 1.8 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_rifle_firing_animation_group1 = { &rifle_firing_animation_group1, -1 };
 
 struct weapon_firing_animation_table rifle_firing_animation_group2[] = {
-    {0x144, 37.0, 0, 0, 0, -1.0, 30.0, 81.0, -1.0, -1.0, 25.0, 81.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 1.6, 1.75},
-    {0x318, 27.0, 0, 0, 0, -1.0, 22.0, 61.0, -1.0, -1.0, 17.0, 61.0, 0.87266463, -0.2617994, 0.69813174, -0.69813174, 2.0, 1.0},
+    { PTR_ANIM_fire_standing, 37.0, 0, 0, 0, -1.0, 30.0, 81.0, -1.0, -1.0, 25.0, 81.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 1.6, 1.75 },
+    { PTR_ANIM_fire_hip, 27.0, 0, 0, 0, -1.0, 22.0, 61.0, -1.0, -1.0, 17.0, 61.0, 0.87266463, -0.2617994, 0.69813174, -0.69813174, 2.0, 1.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_rifle_firing_animation_group2 = { &rifle_firing_animation_group2, -1 };
 
 struct weapon_firing_animation_table rifle_firing_animation_group5[] = {
-    {0x144, 37.0, 0, 0, 0, -1.0, 30.0, 81.0, -1.0, -1.0, 25.0, 81.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 1.6, 1.75},
-    {0x318, 27.0, 0, 0, 0, -1.0, 22.0, 61.0, -1.0, -1.0, 17.0, 61.0, 0.87266463, -0.2617994, 0.69813174, -0.69813174, 2.0, 1.0},
+    { PTR_ANIM_fire_standing, 37.0, 0, 0, 0, -1.0, 30.0, 81.0, -1.0, -1.0, 25.0, 81.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 1.6, 1.75 },
+    { PTR_ANIM_fire_hip, 27.0, 0, 0, 0, -1.0, 22.0, 61.0, -1.0, -1.0, 17.0, 61.0, 0.87266463, -0.2617994, 0.69813174, -0.69813174, 2.0, 1.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_rifle_firing_animation_group5 = { &rifle_firing_animation_group5, -1 };
 
 struct weapon_firing_animation_table rifle_firing_animation_group3[] = {
-    {0x3C4, 19.0, 0, 1.5707964, 0, -1.0, 19.0, 61.0, -1.0, -1.0, 14.0, 61.0, 0.87266463, -0.34906587, 0.43633232, -1.0471976, 2.5, 2.5},
+    { PTR_ANIM_fire_shoulder_left, 19.0, 0, 1.5707964, 0, -1.0, 19.0, 61.0, -1.0, -1.0, 14.0, 61.0, 0.87266463, -0.34906587, 0.43633232, -1.0471976, 2.5, 2.5 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_rifle_firing_animation_group3 = { &rifle_firing_animation_group3, -1 };
 
 struct weapon_firing_animation_table rifle_firing_animation_group4[] = {
-    {0x814, 27.0, 0, 0, 0, -1.0, 39.0, 74.0, -1.0, -1.0, 34.0, 74.0, 0.87266463, -0.69813174, 0.78539819, -0.69813174, 1.5, 1.5},
+    { PTR_ANIM_fire_turn_right2, 27.0, 0, 0, 0, -1.0, 39.0, 74.0, -1.0, -1.0, 34.0, 74.0, 0.87266463, -0.69813174, 0.78539819, -0.69813174, 1.5, 1.5 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
@@ -625,52 +626,52 @@ struct anim_group_info *ptr_rifle_firing_animation_groups[] = {
 };
 
 struct weapon_firing_animation_table pistol_firing_animation_group1[] = {
-    {0x60D4, 26.0, 0, 0, 12.0, 140.0, 58.0, 92.0, 60.0, 79.0, 20.0, 120.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0},
-    {0x6484, 0.0, 0, 0, 17.0, 100.0, 25.0, 87.0, 30.0, 55.0, 20.0, 93.0, 0.87266463, -0.69813174, 0.69813174, -1.0471976, 0.0, 0.0},
-    {0x6554, 0.0, 0, 0, 12.0, 64.0, 19.0, 51.0, 24.0, 46.0, 14.0, 58.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0},
-    {0x6644, 22.0, 0, 0, 4.0, 69.0, 22.0, 49.0, 22.0, 33.0, 8.0, 58.0, 0.87266463, -0.69813174, 0.43633232, -0.78539819, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_one_handed_weapon, 26.0, 0, 0, 12.0, 140.0, 58.0, 92.0, 60.0, 79.0, 20.0, 120.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0 },
+    { PTR_ANIM_fire_hip_one_handed_weapon_fast, 0.0, 0, 0, 17.0, 100.0, 25.0, 87.0, 30.0, 55.0, 20.0, 93.0, 0.87266463, -0.69813174, 0.69813174, -1.0471976, 0.0, 0.0 },
+    { PTR_ANIM_fire_hip_one_handed_weapon_slow, 0.0, 0, 0, 12.0, 64.0, 19.0, 51.0, 24.0, 46.0, 14.0, 58.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0 },
+    { PTR_ANIM_fire_hip_forward_one_handed_weapon, 22.0, 0, 0, 4.0, 69.0, 22.0, 49.0, 22.0, 33.0, 8.0, 58.0, 0.87266463, -0.69813174, 0.43633232, -0.78539819, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_pistol_firing_animation_group1 = { &pistol_firing_animation_group1, -1 };
 
 struct weapon_firing_animation_table pistol_firing_animation_group2[] = {
-    {0x60D4, 26.0, 0, 0, 12.0, 140.0, 58.0, 92.0, 60.0, 79.0, 20.0, 120.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0},
-    {0x6644, 22.0, 0, 0, 4.0, 69.0, 22.0, 49.0, 22.0, 33.0, 8.0, 58.0, 0.87266463, -0.69813174, 0.43633232, -0.78539819, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_one_handed_weapon, 26.0, 0, 0, 12.0, 140.0, 58.0, 92.0, 60.0, 79.0, 20.0, 120.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0 },
+    { PTR_ANIM_fire_hip_forward_one_handed_weapon, 22.0, 0, 0, 4.0, 69.0, 22.0, 49.0, 22.0, 33.0, 8.0, 58.0, 0.87266463, -0.69813174, 0.43633232, -0.78539819, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_pistol_firing_animation_group2 = { &pistol_firing_animation_group2, -1 };
 
 struct weapon_firing_animation_table pistol_firing_animation_group3[] = {
-    {0x60D4, 26.0, 0, 0, 12.0, 140.0, 58.0, 92.0, 60.0, 79.0, 20.0, 120.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0},
-    {0x6644, 22.0, 0, 0, 4.0, 69.0, 22.0, 49.0, 22.0, 33.0, 8.0, 58.0, 0.87266463, -0.69813174, 0.43633232, -0.78539819, 0.0, 0.0},
-    {0x694C, 0.0, 0, 1.5707964, 7.0, 130.0, 45.0, 93.0, 56.0, 73.0, 26.0, 107.0, 0.87266463, -0.69813174, 0.34906587, -0.52359879, 0.0, 0.0},
-    {0x6A18, 15.0, 0, 1.5707964, 5.0, 76.0, 20.0, 31.0, 31.0, 38.0, 15.0, 49.0, 0.87266463, -0.69813174, 0.52359879, -1.0471976, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_one_handed_weapon, 26.0, 0, 0, 12.0, 140.0, 58.0, 92.0, 60.0, 79.0, 20.0, 120.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0 },
+    { PTR_ANIM_fire_hip_forward_one_handed_weapon, 22.0, 0, 0, 4.0, 69.0, 22.0, 49.0, 22.0, 33.0, 8.0, 58.0, 0.87266463, -0.69813174, 0.43633232, -0.78539819, 0.0, 0.0 },
+    { PTR_ANIM_fire_standing_left_one_handed_weapon_slow, 0.0, 0, 1.5707964, 7.0, 130.0, 45.0, 93.0, 56.0, 73.0, 26.0, 107.0, 0.87266463, -0.69813174, 0.34906587, -0.52359879, 0.0, 0.0 },
+    { PTR_ANIM_fire_standing_left_one_handed_weapon_fast, 15.0, 0, 1.5707964, 5.0, 76.0, 20.0, 31.0, 31.0, 38.0, 15.0, 49.0, 0.87266463, -0.69813174, 0.52359879, -1.0471976, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_pistol_firing_animation_group3 = { &pistol_firing_animation_group3, -1 };
 
 struct weapon_firing_animation_table pistol_firing_animation_group6[] = {
-    {0x60D4, 26.0, 0, 0, 12.0, 140.0, 58.0, 92.0, 60.0, 79.0, 20.0, 120.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0},
-    {0x6644, 22.0, 0, 0, 4.0, 69.0, 22.0, 49.0, 22.0, 33.0, 8.0, 58.0, 0.87266463, -0.69813174, 0.43633232, -0.78539819, 0.0, 0.0},
-    {0x6738, 0.0, 0, 4.712389, 7.0, 139.0, 54.0, 105.0, 61.0, 88.0, 26.0, 120.0, 0.87266463, -0.69813174, 0.69813174, -0.61086529, 0.0, 0.0},
-    {0x6808, 19.0, 0, 4.712389, 4.0, 79.0, 21.0, 50.0, 26.0, 42.0, 10.0, 64.0, 0.87266463, -0.69813174, 0.69813174, -0.61086529, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_one_handed_weapon, 26.0, 0, 0, 12.0, 140.0, 58.0, 92.0, 60.0, 79.0, 20.0, 120.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0 },
+    { PTR_ANIM_fire_hip_forward_one_handed_weapon, 22.0, 0, 0, 4.0, 69.0, 22.0, 49.0, 22.0, 33.0, 8.0, 58.0, 0.87266463, -0.69813174, 0.43633232, -0.78539819, 0.0, 0.0 },
+    { PTR_ANIM_fire_standing_right_one_handed_weapon, 0.0, 0, 4.712389, 7.0, 139.0, 54.0, 105.0, 61.0, 88.0, 26.0, 120.0, 0.87266463, -0.69813174, 0.69813174, -0.61086529, 0.0, 0.0 },
+    { PTR_ANIM_fire_step_right_one_handed_weapon, 19.0, 0, 4.712389, 4.0, 79.0, 21.0, 50.0, 26.0, 42.0, 10.0, 64.0, 0.87266463, -0.69813174, 0.69813174, -0.61086529, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_pistol_firing_animation_group6 = { &pistol_firing_animation_group6, -1 };
 
 struct weapon_firing_animation_table pistol_firing_animation_group4[] = {
-    {0x6A18, 19.0, 0, 1.5707964, 5.0, 76.0, 20.0, 31.0, 31.0, 38.0, 15.0, 49.0, 0.87266463, -0.69813174, 0.52359879, -1.0471976, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_left_one_handed_weapon_fast, 19.0, 0, 1.5707964, 5.0, 76.0, 20.0, 31.0, 31.0, 38.0, 15.0, 49.0, 0.87266463, -0.69813174, 0.52359879, -1.0471976, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_pistol_firing_animation_group4 = { &pistol_firing_animation_group4, -1 };
 
 struct weapon_firing_animation_table pistol_firing_animation_group5[] = {
-    {0x6808, 19.0, 0, 4.712389, 4.0, 79.0, 21.0, 50.0, 26.0, 42.0, 10.0, 64.0, 0.87266463, -0.69813174, 0.69813174, -0.61086529, 0.0, 0.0},
+    { PTR_ANIM_fire_step_right_one_handed_weapon, 19.0, 0, 4.712389, 4.0, 79.0, 21.0, 50.0, 26.0, 42.0, 10.0, 64.0, 0.87266463, -0.69813174, 0.69813174, -0.61086529, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
@@ -712,23 +713,23 @@ struct anim_group_info *ptr_pistol_firing_animation_groups[] = {
 };
 
 struct weapon_firing_animation_table doubles_firing_animation_group1[] = {
-    {0x8E1C, 26.0, 0, 0, 7.0, 92.0, 28.0, 68.0, -1.0, -1.0, 11.0, 73.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_dual_wield, 26.0, 0, 0, 7.0, 92.0, 28.0, 68.0, -1.0, -1.0, 11.0, 73.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_doubles_firing_animation_group1 = { &doubles_firing_animation_group1, -1 };
 
 struct weapon_firing_animation_table doubles_firing_animation_group2[] = {
-    {0x8F2C, 26.0, 0, 1.5707964, 9.0, 112.0, 38.0, 87.0, -1.0, -1.0, 19.0, 98.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0},
-    {0x9194, 25.0, 0, 1.5707964, 10.0, 112.0, 32.0, 86.0, -1.0, -1.0, 19.0, 97.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_dual_wield_left, 26.0, 0, 1.5707964, 9.0, 112.0, 38.0, 87.0, -1.0, -1.0, 19.0, 98.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0 },
+    { PTR_ANIM_fire_standing_dual_wield_hands_crossed_left, 25.0, 0, 1.5707964, 10.0, 112.0, 32.0, 86.0, -1.0, -1.0, 19.0, 97.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_doubles_firing_animation_group2 = { &doubles_firing_animation_group2, -1 };
 
 struct weapon_firing_animation_table doubles_firing_animation_group3[] = {
-    {0x9084, 39.0, 0, 4.712389, 22.0, 127.0, 44.0, 102.0, -1.0, -1.0, 28.0, 112.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0},
-    {0x92EC, 39.0, 0, 4.712389, 23.0, 130.0, 46.0, 100.0, -1.0, -1.0, 30.0, 110.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_dual_wield_right, 39.0, 0, 4.712389, 22.0, 127.0, 44.0, 102.0, -1.0, -1.0, 28.0, 112.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0 },
+    { PTR_ANIM_fire_standing_dual_wield_hands_crossed_right, 39.0, 0, 4.712389, 23.0, 130.0, 46.0, 100.0, -1.0, -1.0, 30.0, 110.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
@@ -770,25 +771,25 @@ struct anim_group_info *ptr_doubles_firing_animation_groups[] = {
 };
 
 struct weapon_firing_animation_table crouched_rifle_firing_animation_group1[] = {
-    {0x990, 27.0, 0, 0, 0, -1.0, 35.0, 75.0, -1.0, -1.0, 31.0, 75.0, 0.87266463, -0.69813174, 0.90757126, -0.69813174, 1.5, 1.5},
+    { PTR_ANIM_fire_kneel_right_leg, 27.0, 0, 0, 0, -1.0, 35.0, 75.0, -1.0, -1.0, 31.0, 75.0, 0.87266463, -0.69813174, 0.90757126, -0.69813174, 1.5, 1.5 },
 };
 
 struct weapon_firing_animation_table crouched_rifle_firing_animation_groupA[] = {
-    {0xB84, 24.0, 0, 0, 0, -1.0, 46.0, 98.0, -1.0, -1.0, 41.0, 98.0, 0.87266463, -0.52359879, 1.134464, -0.69813174, 1.6, 1.6},
+    { PTR_ANIM_fire_kneel_left_leg, 24.0, 0, 0, 0, -1.0, 46.0, 98.0, -1.0, -1.0, 41.0, 98.0, 0.87266463, -0.52359879, 1.134464, -0.69813174, 1.6, 1.6 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_crouched_rifle_firing_animation_group1 = { &crouched_rifle_firing_animation_group1, -1 };
 
 struct weapon_firing_animation_table crouched_rifle_firing_animation_group2[] = {
-    {0xDB4, 26.0, 0, 0, 0, -1.0, 34.0, 87.0, -1.0, -1.0, 29.0, 87.0, 0.87266463, -0.52359879, 0.69813174, -0.95993108, 1.6, 2.0},
+    { PTR_ANIM_fire_kneel_left, 26.0, 0, 0, 0, -1.0, 34.0, 87.0, -1.0, -1.0, 29.0, 87.0, 0.87266463, -0.52359879, 0.69813174, -0.95993108, 1.6, 2.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_crouched_rifle_firing_animation_group2 = { &crouched_rifle_firing_animation_group2, -1 };
 
 struct weapon_firing_animation_table crouched_rifle_firing_animation_group3[] = {
-    {0x1028, 28.0, 0, 0, 0, -1.0, 36.0, 88.0, -1.0, -1.0, 31.0, 88.0, 0.87266463, -0.69813174, 0.87266463, -0.43633232, 1.6, 1.5},
+    { PTR_ANIM_fire_kneel_right, 28.0, 0, 0, 0, -1.0, 36.0, 88.0, -1.0, -1.0, 31.0, 88.0, 0.87266463, -0.69813174, 0.87266463, -0.43633232, 1.6, 1.5 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
@@ -830,25 +831,25 @@ struct anim_group_info *ptr_crouched_rifle_firing_animation_groups[] = {
 };
 
 struct weapon_firing_animation_table crouched_pistol_firing_animation_group1[] = {
-    {0x6C18, 25.0, 0, 0, 12.0, 132.0, 55.0, 87.0, 67.0, 87.0, 26.0, 111.0, 0.87266463, -0.69813174, 0.61086529, -0.78539819, 0.0, 0.0},
-    {0x6D50, 26.0, 0, 0, 8.0, 89.0, 31.0, 63.0, 41.0, 51.0, 21.0, 80.0, 0.87266463, -0.69813174, 0.34906587, -1.134464, 0.0, 0.0},
+    { PTR_ANIM_fire_kneel_forward_one_handed_weapon_slow, 25.0, 0, 0, 12.0, 132.0, 55.0, 87.0, 67.0, 87.0, 26.0, 111.0, 0.87266463, -0.69813174, 0.61086529, -0.78539819, 0.0, 0.0 },
+    { PTR_ANIM_fire_kneel_forward_one_handed_weapon_fast, 26.0, 0, 0, 8.0, 89.0, 31.0, 63.0, 41.0, 51.0, 21.0, 80.0, 0.87266463, -0.69813174, 0.34906587, -1.134464, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_crouched_pistol_firing_animation_group1 = { &crouched_pistol_firing_animation_group1, -1 };
 
 struct weapon_firing_animation_table crouched_pistol_firing_animation_group2[] = {
-    {0x71D0, 47.0, 0, 1.5707964, 7.0, 128.0, 33.0, 86.0,47.0, 74.0, 23.0, 106.0, 0.87266463, -0.52359879, 0.52359879, -0.78539819, 0.0, 0.0},
-    {0x7304, 18.0, 0, 1.5707964, 7.0, 78.0, 28.0, 52.0, 35.0, 45.0, 15.0, 66.0, 0.87266463, -0.087266468, 0.69813174, -0.78539819, 1.5, 1.0},
-    {0x7430, 20.0, 0, 1.5707964, 13.0, 92.0, 37.0, 67.0, 42.0, 55.0, 25.0, 84.0, 0.87266463, -0.52359879, 0.34906587, -0.69813174, 0.0, 0.0},
+    { PTR_ANIM_fire_kneel_left_one_handed_weapon_slow, 47.0, 0, 1.5707964, 7.0, 128.0, 33.0, 86.0,47.0, 74.0, 23.0, 106.0, 0.87266463, -0.52359879, 0.52359879, -0.78539819, 0.0, 0.0 },
+    { PTR_ANIM_fire_kneel_left_one_handed_weapon_fast, 18.0, 0, 1.5707964, 7.0, 78.0, 28.0, 52.0, 35.0, 45.0, 15.0, 66.0, 0.87266463, -0.087266468, 0.69813174, -0.78539819, 1.5, 1.0 },
+    { PTR_ANIM_fire_kneel_left_one_handed_weapon, 20.0, 0, 1.5707964, 13.0, 92.0, 37.0, 67.0, 42.0, 55.0, 25.0, 84.0, 0.87266463, -0.52359879, 0.34906587, -0.69813174, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_crouched_pistol_firing_animation_group2 = { &crouched_pistol_firing_animation_group2, -1 };
 
 struct weapon_firing_animation_table crouched_pistol_firing_animation_group3[] = {
-    {0x6F08, 28.0, 0, 4.712389, 15.0, 124.0, 38.0, 97.0, 60.0, 84.0, 20.0, 106.0, 0.87266463, -0.69813174, 0.52359879, -0.87266463, 0.0, 0.0},
-    {0x700C, 23.0, 0, 4.712389, 0, 85.0, 32.0, 38.0, 38.0, 60.0, 14.0, 71.0, 0.87266463, -0.69813174, 0.61086529, -0.95993108, 0.0, 0.0},
+    { PTR_ANIM_fire_kneel_right_one_handed_weapon_slow, 28.0, 0, 4.712389, 15.0, 124.0, 38.0, 97.0, 60.0, 84.0, 20.0, 106.0, 0.87266463, -0.69813174, 0.52359879, -0.87266463, 0.0, 0.0 },
+    { PTR_ANIM_fire_kneel_right_one_handed_weapon_fast, 23.0, 0, 4.712389, 0, 85.0, 32.0, 38.0, 38.0, 60.0, 14.0, 71.0, 0.87266463, -0.69813174, 0.61086529, -0.95993108, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
@@ -890,24 +891,24 @@ struct anim_group_info *ptr_crouched_pistol_firing_animation_groups[] = {
 };
 
 struct weapon_firing_animation_table crouched_doubles_firing_animation_group1[] = {
-    {0x8698, 22.0, 0, 0, 10.0, 111.0, 34.0, 87.0, -1.0, -1.0, 17.0, 104.0, 0.87266463, -0.69813174, 0.61086529, -0.78539819, 0.0, 0.0},
-    {0x8AAC, 25.0, 0, 0, 9.0, 92.0, 33.0, 62.0, -1.0, -1.0, 18.0, 69.0, 0.87266463, -0.69813174, 0.61086529, -0.78539819, 0.0, 0.0},
+    { PTR_ANIM_fire_kneel_dual_wield, 22.0, 0, 0, 10.0, 111.0, 34.0, 87.0, -1.0, -1.0, 17.0, 104.0, 0.87266463, -0.69813174, 0.61086529, -0.78539819, 0.0, 0.0 },
+    { PTR_ANIM_fire_kneel_dual_wield_hands_crossed, 25.0, 0, 0, 9.0, 92.0, 33.0, 62.0, -1.0, -1.0, 18.0, 69.0, 0.87266463, -0.69813174, 0.61086529, -0.78539819, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_crouched_doubles_firing_animation_group1 = { &crouched_doubles_firing_animation_group1, -1 };
 
 struct weapon_firing_animation_table crouched_doubles_firing_animation_group2[] = {
-    {0x8800, 28.0, 0, 1.5707964, 15.0, 108.0, 34.0, 73.0, -1.0, -1.0, 17.0, 93.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0},
-    {0x8BF0, 19.0, 0, 1.5707964, 3.0, 95.0, 30.0, 64.0, -1.0, -1.0, 14.0, 71.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 1.5, 1.0},
+    { PTR_ANIM_fire_kneel_dual_wield_left, 28.0, 0, 1.5707964, 15.0, 108.0, 34.0, 73.0, -1.0, -1.0, 17.0, 93.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0 },
+    { PTR_ANIM_fire_kneel_dual_wield_hands_crossed_left, 19.0, 0, 1.5707964, 3.0, 95.0, 30.0, 64.0, -1.0, -1.0, 14.0, 71.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 1.5, 1.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
 struct anim_group_info ptr_crouched_doubles_firing_animation_group2 = { &crouched_doubles_firing_animation_group2, -1 };
 
 struct weapon_firing_animation_table crouched_doubles_firing_animation_group3[] = {
-    {0x8978, 31.0, 0, 4.712389, 14.0, 111.0, 40.0, 83.0,-1.0, -1.0, 21.0, 94.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0},
-    {0x8D28, 26.0, 0, 4.712389, 7.0, 89.0, 34.0, 60.0, -1.0, -1.0, 20.0, 68.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0},
+    { PTR_ANIM_fire_kneel_dual_wield_right, 31.0, 0, 4.712389, 14.0, 111.0, 40.0, 83.0,-1.0, -1.0, 21.0, 94.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0 },
+    { PTR_ANIM_fire_kneel_dual_wield_hands_crossed_right, 26.0, 0, 4.712389, 7.0, 89.0, 34.0, 60.0, -1.0, -1.0, 20.0, 68.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
 
@@ -951,64 +952,64 @@ struct anim_group_info* ptr_crouched_doubles_firing_animation_groups[] = {
 struct weapon_firing_animation_table D_80030078[] = {
     // sizeof(struct weapon_firing_animation_table) = 0x48 = 72.
     // address 0xD_80030078. Index 0, = D_80030078 + 0.
-    {0x1334, 76.0, 0.0, 0.0, 20.0, -1.0, 98.0, 161.0, -1.0, -1.0, 93.0, 161.0, 0.87266463, -0.52359879, 0.69813174, -0.69813174, 1.7, 2.0},
+    { PTR_ANIM_fire_roll_left, 76.0, 0.0, 0.0, 20.0, -1.0, 98.0, 161.0, -1.0, -1.0, 93.0, 161.0, 0.87266463, -0.52359879, 0.69813174, -0.69813174, 1.7, 2.0 },
 
     // address 0x800300C0. Index 1, = D_80030078 + 72.
-    {0x1578, 58.0, 0.0, 0.0, 10.0, -1.0, 77.0, 104.0, -1.0, -1.0, 72.0, 104.0, 0.87266463, -0.34906587, 0.61086529, -0.69813174, 1.55, 1.5},
+    { PTR_ANIM_fire_roll_right1, 58.0, 0.0, 0.0, 10.0, -1.0, 77.0, 104.0, -1.0, -1.0, 72.0, 104.0, 0.87266463, -0.34906587, 0.61086529, -0.69813174, 1.55, 1.5 },
 
     // address 0x80030108. Index 2, = D_80030078 + 144.
-    {0x17B4, 61.0, 0.0, 0.0, 10.0, -1.0, 83.0, 128.0, -1.0, -1.0, 78.0, 128.0, 0.87266463, -0.52359879, 0.87266463, -0.52359879, 1.2, 1.3},
+    { PTR_ANIM_fire_roll_left_fast, 61.0, 0.0, 0.0, 10.0, -1.0, 83.0, 128.0, -1.0, -1.0, 78.0, 128.0, 0.87266463, -0.52359879, 0.87266463, -0.52359879, 1.2, 1.3 },
 
     // address 0x80030150. Index 3, = D_80030078 + 216.
-    {0x3FA0, 63.0, 0.0, 0.0, 10.0, -1.0, 73.0, 114.0, -1.0, -1.0, 68.0, 114.0, 0.87266463, -0.52359879, 0.61086529, -0.61086529, 1.65, 1.5},
+    { PTR_ANIM_fire_roll_right2, 63.0, 0.0, 0.0, 10.0, -1.0, 73.0, 114.0, -1.0, -1.0, 68.0, 114.0, 0.87266463, -0.52359879, 0.61086529, -0.61086529, 1.65, 1.5 },
 
     // address 0x80030198. Index 4, = D_80030078 + 288.
-    {0x1334, 76.0, 0.0, 0.0, 20.0, 76.0, 98.0, 161.0, -1.0, -1.0, 93.0, 161.0, 0.87266463, -0.52359879, 0.69813174, -0.69813174, 1.7, 2.0},
+    { PTR_ANIM_fire_roll_left, 76.0, 0.0, 0.0, 20.0, 76.0, 98.0, 161.0, -1.0, -1.0, 93.0, 161.0, 0.87266463, -0.52359879, 0.69813174, -0.69813174, 1.7, 2.0 },
 
     // address 0x800301E0. Index 5, = D_80030078 + 360.
-    {0x1578, 58.0, 0.0, 0.0, 10.0, 63.0, 77.0, 104.0, -1.0, -1.0, 72.0, 104.0, 0.87266463, -0.34906587, 0.61086529, -0.69813174, 1.55, 1.5},
+    { PTR_ANIM_fire_roll_right1, 58.0, 0.0, 0.0, 10.0, 63.0, 77.0, 104.0, -1.0, -1.0, 72.0, 104.0, 0.87266463, -0.34906587, 0.61086529, -0.69813174, 1.55, 1.5 },
 
     // address 0x80030228. Index 6, = D_80030078 + 432.
-    {0x17B4, 61.0, 0.0, 0.0, 10.0, 56.0, 83.0, 128.0, -1.0, -1.0, 78.0, 128.0, 0.87266463, -0.52359879, 0.87266463, -0.52359879, 1.2, 1.3},
+    { PTR_ANIM_fire_roll_left_fast, 61.0, 0.0, 0.0, 10.0, 56.0, 83.0, 128.0, -1.0, -1.0, 78.0, 128.0, 0.87266463, -0.52359879, 0.87266463, -0.52359879, 1.2, 1.3 },
 
     // address 0x80030270. Index 7, = D_80030078 + 504.
-    {0x3FA0, 63.0, 0.0, 0.0, 10.0, 50.0, 73.0, 114.0, -1.0, -1.0, 68.0, 114.0, 0.87266463, -0.52359879, 0.61086529, -0.61086529, 1.65, 1.5},
+    { PTR_ANIM_fire_roll_right2, 63.0, 0.0, 0.0, 10.0, 50.0, 73.0, 114.0, -1.0, -1.0, 68.0, 114.0, 0.87266463, -0.52359879, 0.61086529, -0.61086529, 1.65, 1.5 },
 
     // address 0x800302B8. Index 8, = D_80030078 + 576.
-    {0x6554, 0.0, 0.0, 0.0, 7.0, 64.0, 19.0, 51.0, 24.0, 46.0, 14.0, 58.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0},
+    { PTR_ANIM_fire_hip_one_handed_weapon_slow, 0.0, 0.0, 0.0, 7.0, 64.0, 19.0, 51.0, 24.0, 46.0, 14.0, 58.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0 },
 
     // address 0x80030300. Index 9, = D_80030078 + 648.
-    {0x6A18, 0.0, 0.0, 1.5707964, 14.0, 76.0, 26.0, 31.0, 31.0, 38.0, 15.0, 49.0, 0.87266463, -0.69813174, 0.52359879, -1.0471976, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_left_one_handed_weapon_fast, 0.0, 0.0, 1.5707964, 14.0, 76.0, 26.0, 31.0, 31.0, 38.0, 15.0, 49.0, 0.87266463, -0.69813174, 0.52359879, -1.0471976, 0.0, 0.0 },
 
     // address 0x80030348. Index 10, = D_80030078 + 720.
-    {0x6D50, 26.0, 0.0, 0.0, 25.0, 89.0, 41.0, 63.0, 41.0, 51.0, 21.0, 80.0, 0.87266463, -0.69813174, 0.34906587, -1.134464, 0.0, 0.0},
+    { PTR_ANIM_fire_kneel_forward_one_handed_weapon_fast, 26.0, 0.0, 0.0, 25.0, 89.0, 41.0, 63.0, 41.0, 51.0, 21.0, 80.0, 0.87266463, -0.69813174, 0.34906587, -1.134464, 0.0, 0.0 },
 
     // address 0x80030390. Index 11, = D_80030078 + 792.
-    {0x7304, 18.0, 0.0, 1.5707964, 11.0, 78.0, 33.0, 52.0, 35.0, 45.0, 15.0, 66.0, 0.87266463, -0.087266468, 0.69813174, -0.78539819, 1.5, 1.0},
+    { PTR_ANIM_fire_kneel_left_one_handed_weapon_fast, 18.0, 0.0, 1.5707964, 11.0, 78.0, 33.0, 52.0, 35.0, 45.0, 15.0, 66.0, 0.87266463, -0.087266468, 0.69813174, -0.78539819, 1.5, 1.0 },
 
     // address 0x800303D8. Index 12, = D_80030078 + 864.
-    {0x8E1C, 26.0, 0.0, 0.0, 7.0, 92.0, 28.0, 68.0, -1.0, -1.0, 11.0, 73.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_dual_wield, 26.0, 0.0, 0.0, 7.0, 92.0, 28.0, 68.0, -1.0, -1.0, 11.0, 73.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0 },
 
     // address 0x80030420. Index 13, = D_80030078 + 936.
-    {0x8F2C, 26.0, 0.0, 1.5707964, 9.0, 112.0, 38.0, 87.0, -1.0, -1.0, 19.0, 98.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_dual_wield_left, 26.0, 0.0, 1.5707964, 9.0, 112.0, 38.0, 87.0, -1.0, -1.0, 19.0, 98.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0 },
 
     // address 0x80030468. Index 14, = D_80030078 + 1008.
-    {0x8698, 22.0, 0.0, 0.0, 10.0, 11.0, 34.0, 87.0, -1.0, -1.0, 17.0, 104.0, 0.87266463, -0.69813174, 0.61086529, -0.78539819, 0.0, 0.0},
+    { PTR_ANIM_fire_kneel_dual_wield, 22.0, 0.0, 0.0, 10.0, 11.0, 34.0, 87.0, -1.0, -1.0, 17.0, 104.0, 0.87266463, -0.69813174, 0.61086529, -0.78539819, 0.0, 0.0 },
 
     // address 0x800304B0. Index 15, = D_80030078 + 1080.
-    {0x8800, 28.0, 0.0, 1.5707964, 15.0, 108.0, 34.0, 73.0, -1.0, -1.0, 17.0, 93.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0},
+    { PTR_ANIM_fire_kneel_dual_wield_left, 28.0, 0.0, 1.5707964, 15.0, 108.0, 34.0, 73.0, -1.0, -1.0, 17.0, 93.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 0.0, 0.0 },
 
     // address 0x800304F8. Index 16, = D_80030078 + 1152.
-    {0x8E1C, 26.0, 0.0, 0.0, 7.0, 92.0, 28.0, 68.0, -1.0, -1.0, 11.0, 73.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_dual_wield, 26.0, 0.0, 0.0, 7.0, 92.0, 28.0, 68.0, -1.0, -1.0, 11.0, 73.0, 0.87266463, -0.69813174, 0.69813174, -0.69813174, 0.0, 0.0 },
 
     // address 0x80030540. Index 17, = D_80030078 + 1224.
-    {0x9194, 25.0, 0.0, 1.5707964, 10.0, 112.0, 32.0, 86.0, -1.0, -1.0, 19.0, 97.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0},
+    { PTR_ANIM_fire_standing_dual_wield_hands_crossed_left, 25.0, 0.0, 1.5707964, 10.0, 112.0, 32.0, 86.0, -1.0, -1.0, 19.0, 97.0, 0.87266463, -0.69813174, 0.43633232, -0.43633232, 0.0, 0.0 },
 
     // address 0x80030588. Index 18, = D_80030078 + 1296.
-    {0x8AAC, 25.0, 0.0, 0.0, 9.0, 92.0, 33.0, 62.0, -1.0, -1.0, 18.0, 69.0, 0.87266463, -0.69813174, 0.61086529, -0.78539819, 0.0, 0.0},
+    { PTR_ANIM_fire_kneel_dual_wield_hands_crossed, 25.0, 0.0, 0.0, 9.0, 92.0, 33.0, 62.0, -1.0, -1.0, 18.0, 69.0, 0.87266463, -0.69813174, 0.61086529, -0.78539819, 0.0, 0.0 },
 
     // address 0x800305D0. Index 19, = D_80030078 + 1368.
-    {0x8BF0, 19.0, 0.0, 1.5707964, 3.0, 95.0, 30.0, 64.0, -1.0, -1.0, 14.0, 71.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 1.5, 1.0},
+    { PTR_ANIM_fire_kneel_dual_wield_hands_crossed_left, 19.0, 0.0, 1.5707964, 3.0, 95.0, 30.0, 64.0, -1.0, -1.0, 14.0, 71.0, 0.87266463, -0.69813174, 0.52359879, -0.78539819, 1.5, 1.0 },
 
     // address 0x80030618. Index 20, = D_80030078 + 1440.
     {0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
@@ -1016,34 +1017,34 @@ struct weapon_firing_animation_table D_80030078[] = {
 
 struct weapon_firing_animation_table D_80030660[] = {
     // address 0x80030660. Index 0, = D_80030660 + 0.
-    {0x4574, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 1.4, 1.3},
+    { PTR_ANIM_fire_walking, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 1.4, 1.3 },
 
     // address 0x800306A8. Index 1, = D_80030660 + 72.
-    {0x45CC, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 1.1, 1.2},
+    { PTR_ANIM_fire_running, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 1.1, 1.2 },
 
     // address 0x800306F0. Index 2, = D_80030660 + 144.
-    {0x74A4, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0},
+    { PTR_ANIM_aim_walking_one_handed_weapon, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0 },
 
     // address 0x80030738. Index 3, = D_80030660 + 216.
-    {0x75EC, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0},
+    { PTR_ANIM_aim_running_one_handed_weapon, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0 },
 
     // address 0x80030780. Index 4, = D_80030660 + 288.
-    {0x8274, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0},
+    { PTR_ANIM_fire_walking_dual_wield, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0 },
 
     // address 0x800307C8. Index 5, = D_80030660 + 360.
-    {0x8340, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0},
+    { PTR_ANIM_fire_running_dual_wield, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0 },
 
     // address 0x80030810. Index 6, = D_80030660 + 432.
-    {0x82E0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0},
+    { PTR_ANIM_fire_walking_dual_wield_hands_crossed, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0 },
 
     // address 0x80030858. Index 7, = D_80030660 + 504.
-    {0x83A4, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0},
+    { PTR_ANIM_fire_running_dual_wield_hands_crossed, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0 },
 
     // address 0x800308A0. Index 8, = D_80030660 + 576.
-    {0x76B8, 0.0, 0.0, 1.5707964, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0},
+    { PTR_ANIM_aim_running_left_one_handed_weapon, 0.0, 0.0, 1.5707964, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0 },
 
     // address 0x800308E8. Index 9, = D_80030660 + 648.
-    {0x7650, 0.0, 0.0, 4.712389, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0},
+    { PTR_ANIM_aim_running_right_one_handed_weapon, 0.0, 0.0, 4.712389, 0.0, -1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.87266463, -0.52359879, 0.52359879, -0.52359879, 0.0, 0.0 },
 
     // address 0x80030930. Index 10, = D_80030660 + 720.
     {0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
@@ -6891,7 +6892,7 @@ Gfx *chrRenderProp(PropRecord *prop, Gfx *gdl, s32 withalpha)
             chrShade.b = chr->shadecol.b;
             chrShade.a = chr->shadecol.a;
 
-            sub_GAME_7F040384(&chrShade, spBC, &spC0);
+            lerp_rgba_s32_with_rgba_f32(&chrShade, spBC, &spC0);
 
             mrData.envcolour.word = ((gBloodColour.rgba[0] << 0x18) | (gBloodColour.rgba[1] << 0x10)) | (gBloodColour.rgba[2] << 0x08);
             mrData.fogcolour.word = (chrShade.rgba[0] << 0x18) | (chrShade.rgba[1] << 0x10) | (chrShade.rgba[2] << 0x08) | (chrShade.rgba[3] << 0x00);
@@ -7388,7 +7389,7 @@ glabel sub_GAME_7F0221DC
 #endif
 
 
-
+// PD: chr_test_hit
 #ifdef NONMATCHING
 void sub_GAME_7F022648(void) {
     //somewhere
@@ -7491,10 +7492,10 @@ glabel sub_GAME_7F022648
 /* 0572CC 7F02279C 27A700DC */  addiu $a3, $sp, 0xdc
 /* 0572D0 7F0227A0 0FC1B004 */  jal   sub_GAME_7F06C010
 /* 0572D4 7F0227A4 AFAA0080 */   sw    $t2, 0x80($sp)
-/* 0572D8 7F0227A8 24010064 */  li    $at, 100
+/* 0572D8 7F0227A8 24010064 */  li    $at, 100 /* HITPART_GUN */
 /* 0572DC 7F0227AC 10410003 */  beq   $v0, $at, .L7F0227BC
 /* 0572E0 7F0227B0 00408825 */   move  $s1, $v0
-/* 0572E4 7F0227B4 2401006E */  li    $at, 110
+/* 0572E4 7F0227B4 2401006E */  li    $at, 110 /* HITPART_HAT */
 /* 0572E8 7F0227B8 14410019 */  bne   $v0, $at, .L7F022820
 .L7F0227BC:
 /* 0572EC 7F0227BC 27AC00A4 */   addiu $t4, $sp, 0xa4
@@ -7517,10 +7518,10 @@ glabel sub_GAME_7F022648
 /* 05732C 7F0227FC 02003025 */  move  $a2, $s0
 /* 057330 7F022800 0FC1AF80 */  jal   probably_damage_detail_blood_effect_related
 /* 057334 7F022804 27A700DC */   addiu $a3, $sp, 0xdc
-/* 057338 7F022808 24010064 */  li    $at, 100
+/* 057338 7F022808 24010064 */  li    $at, 100 /* HITPART_GUN */
 /* 05733C 7F02280C 1041FFEB */  beq   $v0, $at, .L7F0227BC
 /* 057340 7F022810 00408825 */   move  $s1, $v0
-/* 057344 7F022814 2401006E */  li    $at, 110
+/* 057344 7F022814 2401006E */  li    $at, 110 /* HITPART_HAT */
 /* 057348 7F022818 5041FFE9 */  beql  $v0, $at, .L7F0227C0
 /* 05734C 7F02281C 27AC00A4 */   addiu $t4, $sp, 0xa4
 .L7F022820:
@@ -7912,7 +7913,7 @@ glabel sub_GAME_7F022980
 /* 0578E8 7F022DB8 02002025 */  move  $a0, $s0
 /* 0578EC 7F022DBC 46082402 */  mul.s $f16, $f4, $f8
 /* 0578F0 7F022DC0 46105181 */  sub.s $f6, $f10, $f16
-/* 0578F4 7F022DC4 0FC16799 */  jal   matrix_4x4_7F059E64
+/* 0578F4 7F022DC4 0FC16799 */  jal   matrix_4x4_set_inverse_rotation_and_translation
 /* 0578F8 7F022DC8 E7A60078 */   swc1  $f6, 0x78($sp)
 /* 0578FC 7F022DCC 27B00070 */  addiu $s0, $sp, 0x70
 /* 057900 7F022DD0 02002825 */  move  $a1, $s0
@@ -8114,11 +8115,11 @@ PropRecord *chrGetEquippedWeaponPropWithCheck(ChrRecord *self, GUNHAND hand)
  *
  * Address 0x7F02308C.
  */
-void chrUpdateCollisionBounds(PropRecord *arg0, rect4f **arg1, s32 *arg2, f32 *y_out, f32 *ground)
+void chrUpdateCollisionBounds(PropRecord *prop, rect4f **polygon, s32 *edges, f32 *y_out, f32 *ground)
 {
     ChrRecord *chr;
 
-    chr = arg0->chr;
+    chr = prop->chr;
 
     if (
         (chr->actiontype != ACT_DIE) &&
@@ -8127,22 +8128,22 @@ void chrUpdateCollisionBounds(PropRecord *arg0, rect4f **arg1, s32 *arg2, f32 *y
         ((chr->hidden & CHRHIDDEN_MOVING) == 0)
         )
     {
-        *arg2 = 4;
-        *arg1 = &chr->collision_bounds;
+        *edges = 4;
+        *polygon = &chr->collision_bounds;
 
         //collision box is a diamond around chr
 
-        chr->collision_bounds.f[0] = arg0->pos.x + chr->chrwidth;
-        chr->collision_bounds.f[1] = arg0->pos.z;
+        chr->collision_bounds.f[0] = prop->pos.x + chr->chrwidth;
+        chr->collision_bounds.f[1] = prop->pos.z;
 
-        chr->collision_bounds.f[2] = arg0->pos.x;
-        chr->collision_bounds.f[3] = arg0->pos.z + chr->chrwidth;
+        chr->collision_bounds.f[2] = prop->pos.x;
+        chr->collision_bounds.f[3] = prop->pos.z + chr->chrwidth;
 
-        chr->collision_bounds.f[4] = arg0->pos.x - chr->chrwidth;
-        chr->collision_bounds.f[5] = arg0->pos.z;
+        chr->collision_bounds.f[4] = prop->pos.x - chr->chrwidth;
+        chr->collision_bounds.f[5] = prop->pos.z;
 
-        chr->collision_bounds.f[6] = arg0->pos.x;
-        chr->collision_bounds.f[7] = arg0->pos.z - chr->chrwidth;
+        chr->collision_bounds.f[6] = prop->pos.x;
+        chr->collision_bounds.f[7] = prop->pos.z - chr->chrwidth;
 
         *ground = chr->ground;
         *y_out = *ground + chr->chrheight;
@@ -8150,7 +8151,7 @@ void chrUpdateCollisionBounds(PropRecord *arg0, rect4f **arg1, s32 *arg2, f32 *y
         return;
     }
 
-    *arg2 = 0;
+    *edges = 0;
 }
 
 

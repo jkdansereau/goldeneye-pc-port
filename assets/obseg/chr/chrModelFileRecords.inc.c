@@ -1,83 +1,83 @@
 struct ChrModelFileRecord c_item_entries[] = {
     #include <assets/obseg/chr/camguard/chrModelFileRecord.inc.c>
-    {&greyguard_header, "CgreyguardZ", 1.0, 1.0, 0x1, 0x00, 0x00, 0x00},
-    {&oliveguard_header, "ColiveguardZ", 1.0, 1.0, 0x1, 0x00, 0x00, 0x00},
-    {&rusguard_header, "CrusguardZ", 1.0, 1.0, 0x1, 0x00, 0x00, 0x00},
-    {&trevguard_header, "CtrevguardZ", 1.0, 1.0, 0x1, 0x00, 0x00, 0x00},
-    {&djbond_header, "CdjbondZ", 1.0, 1.0446, 0x1, 0x00, 0x00, 0x00},
-    {&boris_header, "CborisZ", 1.0, 0.9702, 0x1, 0x01, 0x00, 0x00},
-    {&orumov_header, "CorumovZ", 1.0, 1.0778, 0x1, 0x01, 0x00, 0x00},
-    {&trevelyan_header, "CtrevelyanZ", 1.0, 1.0, 0x1, 0x01, 0x00, 0x00},
-    {&boilertrev_header, "CboilertrevZ", 1.0, 1.0, 0x1, 0x01, 0x00, 0x00},
-    {&valentin_header, "CvalentinZ", 1.0, 0.93239999, 0x1, 0x01, 0x00, 0x00},
-    {&xenia_header, "CxeniaZ", 1.0, 1.0, 0x00, 0x1, 0x00, 0x00},
-    {&baronsamedi_header, "CbaronsamediZ", 1.0, 1.0, 0x1, 0x01, 0x00, 0x00},
-    {&jaws_header, "CjawsZ", 1.0, 1.199, 0x1, 0x01, 0x00, 0x00},
-    {&mayday_header, "CmaydayZ", 1.0, 1.0, 0x0, 0x1, 0x00, 0x00},
-    {&oddjob_header, "CoddjobZ", 1.0, 0.78780001, 0x1, 0x01, 0x00, 0x00},
-    {&natalya_header, "CnatalyaZ", 1.0, 0.96609998, 0x0, 0x1, 0x00, 0x00},
-    {&armourguard_header, "CarmourguardZ", 1.0, 1.0, 0x1, 0x00, 0x00, 0x00},
-    {&commguard_header, "CcommguardZ", 1.0, 1.0, 0x1, 0x00, 0x00, 0x00},
-    {&greatguard_header, "CgreatguardZ", 1.0, 1.0, 0x1, 0x00, 0x00, 0x00},
-    {&navyguard_header, "CnavyguardZ", 1.0, 1.0, 0x1, 0x00, 0x00, 0x00},
-    {&snowguard_header, "CsnowguardZ", 1.0, 1.0, 0x1, 0x01, 0x00, 0x00},
-    {&boilerbond_header, "CboilerbondZ", 1.0, 1.0403, 0x1, 0x00, 0x00, 0x00},
-    {&suitbond_header, "CsuitbondZ", 1.0, 1.058, 0x1, 0x00, 0x00, 0x00},
-    {&timberbond_header, "CtimberbondZ", 1.0, 1.0438, 0x1, 0x00, 0x00, 0x00},
-    {&snowbond_header, "CsnowbondZ", 1.0, 1.0438, 0x1, 0x00, 0x00, 0x00},
-    {&bluewoman_header, "CbluewomanZ", 1.0, 0.88529998, 0x00, 0x00, 0x00, 0x00},
-    {&fattechwoman_header, "CfattechwomanZ", 1.0, 0.88529998, 0x00, 0x00, 0x00, 0x00},
-    {&techwoman_header, "CtechwomanZ", 1.0, 0.91600001, 0x00, 0x00, 0x00, 0x00},
-    {&jeanwoman_header, "CjeanwomanZ", 1.0, 0.88529998, 0x00, 0x00, 0x00, 0x00},
-    {&greyman_header, "CgreymanZ", 1.0, 1.0, 0x01, 0x00, 0x00, 0x00},
-    {&blueman_header, "CbluemanZ", 1.0, 1.0, 0x01, 0x00, 0x00, 0x00},
-    {&redman_header, "CredmanZ", 1.0, 1.0, 0x01, 0x00, 0x00, 0x00},
-    {&cardiman_header, "CcardimanZ", 1.0, 1.0, 0x01, 0x00, 0x00, 0x00},
-    {&checkman_header, "CcheckmanZ", 1.0, 1.0, 0x01, 0x00, 0x00, 0x00},
-    {&techman_header, "CtechmanZ", 1.0, 1.0, 0x01, 0x00, 0x00, 0x00},
-    {&pilot_header, "CpilotZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&greatguard2_header, "Cgreatguard2Z", 1.0, 1.0, 0x01, 0x00, 0x00, 0x00},
-    {&bluecamguard_header, "CbluecamguardZ", 1.0, 1.0, 0x01, 0x00, 0x00, 0x00},
-    {&moonguard_header, "CmoonguardZ", 1.0, 1.0, 0x01, 0x00, 0x00, 0x00},
-    {&moonfemale_header, "CmoonfemaleZ", 1.0, 0.88529998, 0x00, 0x00, 0x00, 0x00},
-    {&suit_lf_hand_header, "Csuit_lf_handZ", 0.1, 1.0, 0x01, 0x00, 0x00, 0x00},
-    {&headkarl_header, "CheadkarlZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headalan_header, "CheadalanZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headpete_header, "CheadpeteZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headmartin_header, "CheadmartinZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headmark_header, "CheadmarkZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headduncan_header, "CheadduncanZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headshaun_header, "CheadshaunZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headdwayne_header, "CheaddwayneZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headb_header, "CheadbZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headdave_header, "CheaddaveZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headgrant_header, "CheadgrantZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headdes_header, "CheaddesZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headchris_header, "CheadchrisZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headlee_header, "CheadleeZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headneil_header, "CheadneilZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headjim_header, "CheadjimZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headrobin_header, "CheadrobinZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headsteveh_header, "CheadstevehZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headbalaclava_header, "CheadbalaclavaZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headbike_header, "CheadbikeZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headgraham_header, "CheadgrahamZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headstevee_header, "CheadsteveeZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headjoel_header, "CheadjoelZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headscott_header, "CheadscottZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headjoe_header, "CheadjoeZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headken_header, "CheadkenZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headjoe2_header, "Cheadjoe2Z", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headmishkin_header, "CheadmishkinZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headsally_header, "CheadsallyZ", 1.0, 1.0, 0x00, 0x01, 0x00, 0x00},
-    {&headmarion_header, "CheadmarionZ", 1.0, 1.0, 0x00, 0x01, 0x00, 0x00},
-    {&headmandy_header, "CheadmandyZ", 1.0, 1.0, 0x00, 0x01, 0x00, 0x00},
-    {&headvivien_header, "CheadvivienZ", 1.0, 1.0, 0x00, 0x01, 0x00, 0x00},
-    {&headbrosnanboiler_header, "CheadbrosnanboilerZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headbrosnansuit_header, "CheadbrosnansuitZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headbrosnantimber_header, "CheadbrosnantimberZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headbrosnansnow_header, "CheadbrosnansnowZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&headbrosnan_header, "CheadbrosnanZ", 1.0, 1.0, 0x01, 0x01, 0x00, 0x00},
-    {&spicebond_header, "CspicebondZ", 0.94999999, 0.96609998, 0x00, 0x01, 0x00, 0x00},
+    #include <assets/obseg/chr/greyguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/oliveguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/rusguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/trevguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/djbond/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/boris/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/orumov/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/trevelyan/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/boilertrev/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/valentin/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/xenia/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/baronsamedi/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/jaws/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/mayday/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/oddjob/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/natalya/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/armourguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/commguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/greatguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/navyguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/snowguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/boilerbond/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/suitbond/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/timberbond/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/snowbond/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/bluewoman/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/fattechwoman/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/techwoman/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/jeanwoman/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/greyman/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/blueman/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/redman/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/cardiman/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/checkman/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/techman/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/pilot/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/greatguard2/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/bluecamguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/moonguard/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/moonfemale/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/suit_lf_hand/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headkarl/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headalan/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headpete/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headmartin/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headmark/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headduncan/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headshaun/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headdwayne/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headb/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headdave/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headgrant/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headdes/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headchris/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headlee/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headneil/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headjim/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headrobin/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headsteveh/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headbalaclava/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headbike/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headgraham/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headstevee/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headjoel/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headscott/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headjoe/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headken/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headjoe2/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headmishkin/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headsally/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headmarion/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headmandy/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headvivien/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headbrosnanboiler/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headbrosnansuit/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headbrosnantimber/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headbrosnansnow/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/headbrosnan/chrModelFileRecord.inc.c>
+    #include <assets/obseg/chr/spicebond/chrModelFileRecord.inc.c>
     {0, 0, 1.0, 0.0, 0x00, 0x00, 0x00, 0x00}
 };

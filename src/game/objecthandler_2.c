@@ -7,8 +7,9 @@
 #include "chrobjdata.h"
 #include "ob.h"
 #include "objecthandler.h"
-#include "unk_0CC4C0.h"
+#include "tex.h"
 #include "image.h"
+#include "model.h"
 
 //file split per EU
 #ifdef NONMATCHING

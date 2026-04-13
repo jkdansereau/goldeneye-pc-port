@@ -97,11 +97,15 @@ void set_cur_player(s32 playernum);
 s32 getPlayerCount(void);
 void set_cur_player_screen_size(u32 width, u32 height);
 void set_cur_player_viewport_size(u32 ulx, u32 uly);
-void skySetStageNum(s32 stagenum);
-void sub_GAME_7F094438(void);
-Gfx * skyRender(Gfx *arg0);
-void sub_GAME_7F097388(SkyRelated18 *arg0, Mtxf *arg1, u16 arg2, f32 arg3, f32 arg4, SkyRelated38 *arg5);
-Gfx *sub_GAME_7F097818(Gfx *gdl, SkyRelated38 *arg1, SkyRelated38 *arg2, SkyRelated38 *arg3, f32 arg4, bool textured);
-Gfx *sub_GAME_7F098A2C(Gfx *gdl, SkyRelated38 *arg1, SkyRelated38 *arg2, SkyRelated38 *arg3, SkyRelated38 *arg4, f32 arg5);
+
+
+s32 get_cur_playernum(void);
+void set_cur_player_fovy(f32 fovy);
+s32 getPlayerPointerIndex( PropRecord* prop);
+void set_cur_player_aspect(f32 aspect);
+void initBONDdataforPlayer(s32 player_num);
+s32 get_player_position_in_shuffled(s32 current_player_num);
+void sub_GAME_7F09B368(enum GUNHAND hand);
+void sub_GAME_7F09B398(enum GUNHAND hand);
 
 #endif

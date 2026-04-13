@@ -5,7 +5,7 @@
 #include "bg.h"
 #include "chrai.h"
 #include "chr.h"
-#include "unk_0B3200.h"
+#include "stanintersection.h"
 #include "assert.h"
 
 // bss
@@ -259,16 +259,16 @@ void sub_GAME_7F0AEFE0(void) {
 
 //stanChecksf
 u32 stanRemovedAnimationRoutine(s32 arg0) {
-    /*
-      if (arg0 < g_someinteger)
-      {
-        printf("checksf: ERROR line %d %08x<%08x",__LINE__,arg0,g_someInteger);
-      }
-      if (arg0 > g_someinteger2)
-      {
-        printf("checksf: ERROR line %d %08x>%08x",__LINE__,arg0,g_someinteger2);
-      }
-  */
+#ifdef DEBUG
+    if (arg0 < ptr_firstroom_0)
+    {
+        osSyncPrintf("checksf: ERROR line %d %08x<%08x", __LINE__, arg0, ptr_firstroom_0);
+    }
+    if (D_80040F60 < arg0)
+    {
+        osSyncPrintf("checksf: ERROR line %d %08x>%08x", __LINE__, arg0, D_80040F60);
+    }
+#endif
     return 0;
 }
 
@@ -1003,7 +1003,7 @@ void sub_GAME_7F0AF630(s32 arg0)
 
     if (arg0 < 0)
     {
-        if (*(stanPrefix->ptr_firstroom)[m_stanRegion - 1])
+        if (*(stan_prefix->ptr_firstroom)[m_stanRegion - 1])
         {
             m_stanRegion --;
         }
@@ -1015,7 +1015,7 @@ void sub_GAME_7F0AF630(s32 arg0)
             m_stanRegion = 1;
         }
     }
-    else if (*(stanPrefix->ptr_firstroom)[m_stanRegion + 1])
+    else if (*(stan_prefix->stanfile)[m_stanRegion + 1])
     {
         m_stanRegion ++;
     }
@@ -1145,7 +1145,7 @@ loop_5:
     return phi_s7;
 
     /*somewhere in this function a loop is checked for overflow
-    if (uStack < local_20)
+    if (i < param4)
     {
         printf("stanFillin: Stack overflow %d>%d",local_20,uStack);
     }
@@ -2775,13 +2775,6 @@ bool sub_GAME_7F0B0914(StandTile **tileStack, f32 start_x, f32 start_z, f32 dest
     s32 trynexttile;
     u16 temp_v1;
 
-    /*
-    somewhere in here debug has
-    */
-    #ifdef DEBUG
-    ossyncPrintf("{\"%s\",0x%08x,0x%08x,0x%08x,0x%08x},\t/* %8.3f %8.3f  %8.3f %8.3f */\n", GetStanRoomID(*tilestack),start_x,start_z,dest_x,dest_z,start_x,start_z);
-    #endif
-
 
     scaled_startX = start_x * level_scale;
     scaled_startZ = start_z * level_scale;
@@ -2804,6 +2797,10 @@ bool sub_GAME_7F0B0914(StandTile **tileStack, f32 start_x, f32 start_z, f32 dest
         if (func != NULL)
         {
             func(var_s3, var_s6, funcData);
+    #ifdef DEBUG
+            ossyncPrintf("{\"%s\",0x%08x,0x%08x,0x%08x,0x%08x},\t/* %8.3f %8.3f  %8.3f %8.3f */\n", GetStanRoomID(*tilestack), start_x, start_z, dest_x, dest_z, start_x, start_z);
+    #endif
+
         }
         var_s0 = var_s3;
         pointcount = (var_s3->tail.half >> 0xC) & 0xF; //pointcount
@@ -2845,9 +2842,11 @@ bool sub_GAME_7F0B0914(StandTile **tileStack, f32 start_x, f32 start_z, f32 dest
         var_s7 = var_s6;
         var_s6 = var_s3;
         var_s3 = trynexttile;
-        //assert(intersections!=0);
-        //assert(intersections!=3);
-        //printf("sf: stanLineDo %d   %5.1f %5.1f %5.1f %5.1f  %s %s %s\n",3,start_x, start_z,dest_x,dest_z,GetStanRoomID(*tilestack),GetStanRoomID(puVar3));
+    #ifdef DEBUG
+        assert(intersections != 0);
+        assert(intersections != 3);
+        osSyncPrintf("sf: stanLineDo %d   %5.1f %5.1f %5.1f %5.1f  %s %s %s\n", 3, start_x, start_z, dest_x, dest_z, GetStanRoomID(*tilestack), GetStanRoomID(puVar3));
+    #endif
         if ((var_s3 ^ trynexttile) == 0)
         {
             var_s4 = 0;
@@ -3317,7 +3316,7 @@ s32 stanTestLineUnobstructed(StandTile **pTile, f32 p_x, f32 p_z, f32 dest_x, f3
     f32 spC0;
     f32 temp_f0_2;
     s16 *spB8;
-    struct rect4f *spB4; // spB4
+    struct rect4f *polygon; // spB4
     s32 numvertices0; // spB0
     //f32 unused2;
     s32 i;
@@ -3341,9 +3340,13 @@ s32 stanTestLineUnobstructed(StandTile **pTile, f32 p_x, f32 p_z, f32 dest_x, f3
     retval = sub_GAME_7F0B0C24(&sp154, p_x, p_z, dest_x, dest_z, &spD0[0], &sp124, 0x14);
 
 
-    if (sp124 > 0x14)
+    if (sp124 > 20)
     {
-        sp124 = 0x14;
+        #ifdef DEBUG
+            osSyncPrintf("stanLineObjType: %d rooms is more than %d\n", retval, 20);
+#endif
+
+        sp124 = 20;
     }
 
     if (retval == 0)
@@ -3359,7 +3362,7 @@ s32 stanTestLineUnobstructed(StandTile **pTile, f32 p_x, f32 p_z, f32 dest_x, f3
         stanSavedColl_pntB.f[0] = (f32) stanSavedColl_tile->points[point_index].x * inv_level_scale;
         stanSavedColl_pntB.f[1] = (f32) stanSavedColl_tile->points[point_index].z * inv_level_scale;
 
-        sp140 = calculateLineIntersectionFactor(&sp14C, &sp144, &stanSavedColl_pntA, &stanSavedColl_pntB);
+        sp140 = calculateSegmentIntersectionFraction(&sp14C, &sp144, &stanSavedColl_pntA, &stanSavedColl_pntB);
     }
     else
     {
@@ -3379,7 +3382,7 @@ s32 stanTestLineUnobstructed(StandTile **pTile, f32 p_x, f32 p_z, f32 dest_x, f3
 
             if (propIsOfCdType(prop, cdtypes) != 0)
             {
-                chraiGetCollisionBounds(prop, &spB4, &numvertices0, &spA4, &spA0);
+                chraiGetCollisionBounds(prop, &polygon, &numvertices0, &spA4, &spA0);
 
                 if (numvertices0 > 0)
                 {
@@ -3387,14 +3390,14 @@ s32 stanTestLineUnobstructed(StandTile **pTile, f32 p_x, f32 p_z, f32 dest_x, f3
                     {
                         next = (i + 1) % numvertices0;
 
-                        if (sub_GAME_7F0B0688(p_x, p_z, dest_x, dest_z, spB4->points[i].f[0], spB4->points[i].f[1], spB4->points[next].f[0], spB4->points[next].f[1]) != 0)
+                        if (sub_GAME_7F0B0688(p_x, p_z, dest_x, dest_z, polygon->points[i].f[0], polygon->points[i].f[1], polygon->points[next].f[0], polygon->points[next].f[1]) != 0)
                         {
-                            sp134.f[0] = spB4->points[i].f[0];
-                            sp134.f[1] = spB4->points[i].f[1];
-                            sp12C.f[0] = spB4->points[next].f[0];
-                            sp12C.f[1] = spB4->points[next].f[1];
+                            sp134.f[0] = polygon->points[i].f[0];
+                            sp134.f[1] = polygon->points[i].f[1];
+                            sp12C.f[0] = polygon->points[next].f[0];
+                            sp12C.f[1] = polygon->points[next].f[1];
 
-                            temp_f0 = calculateLineIntersectionFactor(&sp14C, &sp144, &sp134, &sp12C);
+                            temp_f0 = calculateSegmentIntersectionFraction(&sp14C, &sp144, &sp134, &sp12C);
 
                             if (temp_f0 < sp140)
                             {
@@ -3634,7 +3637,7 @@ glabel sub_GAME_7F0B1410
 /* 0E6150 7F0B1620 C4440000 */  lwc1  $f4, ($v0)
 /* 0E6154 7F0B1624 E7A400F8 */  swc1  $f4, 0xf8($sp)
 /* 0E6158 7F0B1628 C4460004 */  lwc1  $f6, 4($v0)
-/* 0E615C 7F0B162C 0FC2CC80 */  jal   calculateLineIntersectionFactor
+/* 0E615C 7F0B162C 0FC2CC80 */  jal   calculateSegmentIntersectionFraction
 /* 0E6160 7F0B1630 E7A600FC */   swc1  $f6, 0xfc($sp)
 /* 0E6164 7F0B1634 4614003C */  c.lt.s $f0, $f20
 /* 0E6168 7F0B1638 00000000 */  nop
@@ -3759,7 +3762,7 @@ s32 stanTestVolume(StandTile **arg0, f32 arg1, f32 arg2, f32 arg3, s32 cdtypes, 
     s32 spFC;
     struct PropRecord *prop; // no stack
     s32 spA8[0x14];
-    struct rect4f *spA4;
+    struct rect4f *polygon;
     s32 numvertices0;  // spa0
     f32 temp_f0_3; // stack ??
     f32 temp_f0_2; // stack ??
@@ -3808,7 +3811,7 @@ s32 stanTestVolume(StandTile **arg0, f32 arg1, f32 arg2, f32 arg3, s32 cdtypes, 
 
             if (propIsOfCdType(prop, cdtypes) != 0)
             {
-                chraiGetCollisionBounds(prop, &spA4, &numvertices0, &sp94, &sp90);
+                chraiGetCollisionBounds(prop, &polygon, &numvertices0, &sp94, &sp90);
                 if ((numvertices0 > 0) && ((sp108 == 0) || ((sp90 <= arg5) && (arg6 <= sp94))))
                 {
                     var_f24 = -1.0f;
@@ -3818,7 +3821,7 @@ s32 stanTestVolume(StandTile **arg0, f32 arg1, f32 arg2, f32 arg3, s32 cdtypes, 
                     {
                         next = (i + 1) % numvertices0;
 
-                        var_f20 = sub_GAME_7F0B16C4(spA4->points[i].f[0], spA4->points[i].f[1], spA4->points[next].f[0], spA4->points[next].f[1], arg1, arg2);
+                        var_f20 = sub_GAME_7F0B16C4(polygon->points[i].f[0], polygon->points[i].f[1], polygon->points[next].f[0], polygon->points[next].f[1], arg1, arg2);
 
                         if (var_f20 < 0.0f)
                         {
@@ -3827,22 +3830,22 @@ s32 stanTestVolume(StandTile **arg0, f32 arg1, f32 arg2, f32 arg3, s32 cdtypes, 
 
                         if (var_f24 < var_f20)
                         {
-                            temp_f0_2 = distBetweenPoints2d(spA4->points[i].f[0], spA4->points[i].f[1], arg1, arg2);
-                            temp_f0_3 = distBetweenPoints2d(spA4->points[next].f[0], spA4->points[next].f[1], arg1, arg2);
+                            temp_f0_2 = distBetweenPoints2d(polygon->points[i].f[0], polygon->points[i].f[1], arg1, arg2);
+                            temp_f0_3 = distBetweenPoints2d(polygon->points[next].f[0], polygon->points[next].f[1], arg1, arg2);
 
                             if ((var_f20 < arg3)
                                 && (
                                     (temp_f0_2 < arg3)
                                     || (temp_f0_3 < arg3)
-                                    || (sub_GAME_7F0B17E4(spA4->points[i].f[0], spA4->points[i].f[1], spA4->points[next].f[0], spA4->points[next].f[1], arg1, arg2) != 0)))
+                                    || (sub_GAME_7F0B17E4(polygon->points[i].f[0], polygon->points[i].f[1], polygon->points[next].f[0], polygon->points[next].f[1], arg1, arg2) != 0)))
                             {
                                 D_800413BC = 1;
                                 var_f24 = var_f20;
 
-                                stanSavedColl_pntA.f[0] = spA4->points[i].f[0];
-                                stanSavedColl_pntA.f[1] = spA4->points[i].f[1];
-                                stanSavedColl_pntB.f[0] = spA4->points[next].f[0];
-                                stanSavedColl_pntB.f[1] = spA4->points[next].f[1];
+                                stanSavedColl_pntA.f[0] = polygon->points[i].f[0];
+                                stanSavedColl_pntA.f[1] = polygon->points[i].f[1];
+                                stanSavedColl_pntB.f[0] = polygon->points[next].f[0];
+                                stanSavedColl_pntB.f[1] = polygon->points[next].f[1];
                                 stanSavedColl_tile = NULL;
                                 stanSavedColl_pointI = 0;
                                 stanSavedColl_posData = prop;
@@ -5408,7 +5411,7 @@ StandTile RemovedDebugFunctionOrXBLAUnique_7F0B2EFC()
     if ((*local_10 == sStack0000001e) && (cVar2 = cStack00000017, *(local_10 + 2) == cStack00000017)
         ) break;
     local_10 = Function_8238ED08(local_10,lVar1,in_r5,in_r6,in_r7,in_r8,in_r9,cVar2,
-                                    in_stack_ffffffab,in_stack_ffffffaf,in_stack_ffffffb4); 
+                                    in_stack_ffffffab,in_stack_ffffffaf,in_stack_ffffffb4);
     }
     return local_10;
 }
@@ -5431,7 +5434,7 @@ void *stanDetermineEOF(struct StanPrefixRecord *r, s32 arg1, s32 arg2)
      int iVar1;
   StandTile *local_20;
   StandTile **local_18;
-  
+
   iVar1 = param_3._4_4_ - param_2._4_4_;
   stanTileStart = r->ptr_firstroom + iVar1 + -0x80;
   ptr_firstroom_0 = r->ptr_firstroom + iVar1;
@@ -5591,7 +5594,7 @@ Gfx * sub_GAME_7F0B312C(Gfx *arg0, s32 arg1)
       dword local_20;
       qword local_10;
       dword local_8;
-  
+
       uStack00000034 = param_5;
       ppuStack0000002c = param_4;
       uVar6 = ZEXT48(param_2);

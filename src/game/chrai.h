@@ -273,9 +273,9 @@ void          chrpropEnable(PropRecord *);
 void          chrpropActivateThisFrame(PropRecord *);
 void          chrpropReparent(PropRecord *newChild, PropRecord *host);
 AIRecord     *ailistFindById(s32 ID);
-void          chraiGetCollisionBounds(PropRecord *arg0, struct rect4f **arg1, s32 *arg2, f32 *arg3, f32 *arg4);
+void          chraiGetCollisionBounds(PropRecord *prop, struct rect4f **polygon, s32 *edges, f32 *arg3, f32 *arg4);
 void          sub_GAME_7F03D058(PropRecord *prop, bool unset);
-void          chraiGetCollisionBoundsWithoutY(PropRecord *arg0, struct rect4f **arg1, s32 *arg2);
+void          chraiGetCollisionBoundsWithoutY(PropRecord *prop, struct rect4f **polygon, s32 *edges);
 s32 chrpropTestPointInPolygon(coord3d *point, struct rect4f *polygon, s32 edges);
 void          roomGetProps(s32 *roomids);
 ObjectRecord *scan_position_data_table_for_normal_object_at_preset(s32 arg0);
@@ -290,7 +290,6 @@ f32           chrpropBBOXGetYmin(ModelRoData_BoundingBoxRecord *modelBoundingBox
 f32           chrpropBBOXGetYmax(ModelRoData_BoundingBoxRecord *modelBoundingBox);
 f32           chrpropBBOXGetZmin(ModelRoData_BoundingBoxRecord *modelBoundingBox);
 ObjectRecord *sub_GAME_7F03FAB0(struct coord3d *pos, s32 RoomID);
-void          chraiGetCollisionBounds(PropRecord *arg0, struct rect4f **arg1, s32 *arg2, f32 *arg3, f32 *arg4);
 void chrpropGetCollisionBounds(PropRecord *arg0, f32 *arg1, f32 *arg2, f32 *arg3);
 f32 sub_GAME_7F03CFE8(PropRecord *arg0);
 f32 chrpropSumMatrixPosX(struct ModelRoData_BoundingBoxRecord *bbox, Mtxf *arg1);
@@ -302,4 +301,5 @@ f32 chrpropSumMatrixNegZ(struct ModelRoData_BoundingBoxRecord *bbox, Mtxf *arg1)
 void sub_GAME_7F03F540(struct ModelRoData_BoundingBoxRecord *bbox, Mtxf *arg1, struct rect4f* arg2, struct collision_data *arg3);
 void sub_GAME_7F03F948(struct coord3d *arg0, struct coord2d *arg1, struct coord2d *arg2, struct coord2d *arg3, struct coord2d *arg4);
 void sub_GAME_7F03E6A0(PropRecord *prop);
+struct PropRecord *propFindForInteract(void);
 #endif

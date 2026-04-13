@@ -1,12 +1,12 @@
 #include <os_extension.h>
-#include <assets/GlobalImageTable.h>
+#include <assets/oddtextures.h>
 #include "assets/image_externs.h"
 #include <ultra64.h>
 #include <bondgame.h>
 #include <bondconstants.h>
 #include <boss.h>
 #include <fr.h>
-#include "lvl_text.h"
+#include "language.h"
 #include <joy.h>
 #include <music.h>
 #include <random.h>
@@ -14,13 +14,13 @@
 #include "bondview.h"
 #include "chr.h"
 #include "chr_b.h"
-#include "chrlv.h"
-#include "cheat_buttons.h"
+#include "chraction.h"
+#include "cheat.h"
 #include "chrobjdata.h"
 #include "file2.h"
 #include "front.h"
 #include "image_bank.h"
-#include "lvl.h"
+#include "lv.h"
 #include "mp_weapon.h"
 #include "math_floor.h"
 #include "objective_status.h"
@@ -34,7 +34,6 @@
 #include "objecthandler.h"
 #include "dyn.h"
 #include "assets/obseg/text/LtitleE.h"
-#include "textrelated.h"
 #include "matrixmath.h"
 #include "bg.h"
 #include "chrai.h"
@@ -43,6 +42,7 @@
 #include "image.h"
 #include "ob.h"
 #include "gbi_extension.h"
+#include "model.h"
 
 
 
@@ -310,13 +310,13 @@ Lights1 ninlogolight = gdSPDefLights1(
 
 f32 slider_007_mode_reaction = 0.0f;
 f32 slider_007_mode_health = 1.0f;
-f32 slider_007_mode_accuracy = 1.0f;
 f32 slider_007_mode_damage = 1.0f;
+f32 slider_007_mode_accuracy = 1.0f;
 
-rgba_u8 D_8002A9B0 = { 160, 0, 0, 0 };
-rgba_u8 D_8002A9B4 = { 150, 0, 0, 0 };
-rgba_u8 D_8002A9B8 = { 40, 0, 0, 0 };
-rgba_u8 D_8002A9BC = { 140, 0, 0, 0 };
+/* 0x8002A9B0 */ rgba_u8 textglowR = { 160, 0, 0, 0 };
+/* 0x8002A9B4 */ rgba_u8 textglowG = { 150, 0, 0, 0 };
+/* 0x8002A9B8 */ rgba_u8 textglowB = { 40, 0, 0, 0 };
+/* 0x8002A9BC */ rgba_u8 textglowA = { 140, 0, 0, 0 };
 
 struct coord3d legalpage_pos = {0.0f, 0.0f, 0.0f};
 
@@ -335,7 +335,7 @@ struct legal_screen_text legalpage_text_array[] = {
     { 80, 280, LEFT_ALIGN, CENTER_ALIGN, getStringID(LTITLE, TITLE_STR_18_EMI), 0}  //"Used by permission of EMI Unart Catalog Inc.\n"
 };
 
-ModelRenderData       D_8002AABC = {NULL,
+/* 0x8002AABC */ ModelRenderData legalscreen_MRD = {NULL,
                                     TRUE,
                                     0x00000003,
                                     NULL,
@@ -358,7 +358,7 @@ ModelRenderData       D_8002AABC = {NULL,
 
 struct coord3d nintendologo_pos = {0};
 
-ModelRenderData       D_8002AB08 = {NULL,
+ModelRenderData       nintendologo_MRD = {NULL,
                                     TRUE,
                                     0x00000003,
                                     NULL,
@@ -381,7 +381,7 @@ ModelRenderData       D_8002AB08 = {NULL,
 
 struct coord3d goldeneyelogo_pos = { 0 };
 
-ModelRenderData       D_8002AB54 = {NULL,
+ModelRenderData       goldeneyelogo_MRD = {NULL,
                                     TRUE,
                                     0x00000003,
                                     NULL,
@@ -402,7 +402,7 @@ ModelRenderData       D_8002AB54 = {NULL,
                                     CULLMODE_BOTH};
 
 
-struct coord3d D_8002AB94[] = {
+struct coord3d folderpositions[] = {
     {-900.0f, 800.0f, 0.0f},
     {1800.0f, 800.0f, 0.0f},
     {-1800.0f, -200.0f, 0.0f},
@@ -539,11 +539,13 @@ struct mp_stage_setup multi_stage_setups[] = {
     {getStringID(LTITLE, TITLE_STR_170_WATERCAVERNS), getStringID(LTITLE, TITLE_STR_171_CAVERNS), IMG_MP_CAVERNS, LEVELID_CAVERNS, SP_LEVEL_CAVERNS, 1, 3},
     {getStringID(LTITLE, TITLE_STR_172_EGYPTIANTEMPLEMP), getStringID(LTITLE, TITLE_STR_173_EGYPTIANMP), IMG_MP_EGYPT, LEVELID_EGYPT, SP_LEVEL_EGYPT, 1, 2}
   //{getStringID(LTITLE, TITLE_STR_174_CITADEL), getStringID(LTITLE, TITLE_STR_175_CITADEL2), IMG_MP_RANDOM, LEVELID_CITADEL, -1, 1, 4}, //Citadel (old format setup)
-  //{getStringID(LTITLE, TITLE_STR_176_DEST), getStringID(LTITLE, TITLE_STR_177_DEST2), IMG_MP_FRIGATE, LEVELID_FRIGATE, -1, 1, 4}, //dest (needs setup)
-  //{getStringID(LTITLE, TITLE_STR_178_STAT), getStringID(LTITLE, TITLE_STR_179_STAT2), IMG_MP_STATUE, LEVELID_STATUE, -1, 1, 2}, //stat (works)
-  //{getStringID(LTITLE, TITLE_STR_180_CRAD), getStringID(LTITLE, TITLE_STR_181_CRADLE2), IMG_MP_CRADLE, LEVELID_CRADLE, -1, 1, 2}, //crad (works)
-  //{getStringID(LTITLE, TITLE_STR_182_AZT), getStringID(LTITLE, TITLE_STR_183_AZT2), IMG_MP_AZTEC, LEVELID_AZTEC, -1, 1, 4}, //azt (needs setup)
-
+  //{getStringID(LTITLE, TITLE_STR_176_DEST), getStringID(LTITLE, TITLE_STR_177_DEST2), IMG_MP_FRIGATE, LEVELID_FRIGATE, SP_LEVEL_FRIGATE, 1, 4}, //dest (has xbla setup)
+  //{getStringID(LTITLE, TITLE_STR_178_STAT), getStringID(LTITLE, TITLE_STR_179_STAT2), IMG_MP_STATUE, LEVELID_STATUE, SP_LEVEL_STATUE, 1, 2}, //stat (works)
+  //{getStringID(LTITLE, TITLE_STR_180_CRAD), getStringID(LTITLE, TITLE_STR_181_CRADLE2), IMG_MP_CRADLE, LEVELID_CRADLE, SP_LEVEL_CRADLE, 1, 2}, //crad (works)
+  //{getStringID(LTITLE, TITLE_STR_182_AZT), getStringID(LTITLE, TITLE_STR_183_AZT2), IMG_MP_AZTEC, LEVELID_AZTEC, SP_LEVEL_AZTEC, 1, 4}, //azt (needs setup)
+  //{getStringID(LTITLE, TITLE_STR_123_RUN), getStringID(LTITLE, TITLE_STR_123_RUN), IMG_MP_RUNWAY, LEVELID_RUNWAY, SP_LEVEL_RUN, 1, 4}, //runway (xbla setup)
+  //{getStringID(LTITLE, TITLE_STR_121_DAM), getStringID(LTITLE, TITLE_STR_121_DAM), IMG_MP_DAM, LEVELID_DAM, SP_LEVEL_DAM, 1, 4}, //dam (xbla setup)
+  //{getStringID(LTITLE, TITLE_STR_138_DEPOT), getStringID(LTITLE, TITLE_STR_138_DEPOT), IMG_MP_DEPOT, LEVELID_DEPOT, SP_LEVEL_DEPOT, 1, 4}, //depot (xbla setup)
 };
 
 s32 num_chars_selectable_mp = 8;
@@ -633,23 +635,23 @@ struct MP_selectable_chars mp_chr_setup[] = {
     {getStringID(LTITLE, TITLE_STR_288_RUSSIANINFANTRY), MALE,   IMG_MPC_RANDOM, BODY_Russian_Infantry,         HEAD_Male_Karl, 1.0},
     {getStringID(LTITLE, TITLE_STR_289_SCIENTIST), MALE,   IMG_MPC_RANDOM, BODY_Scientist_1_Male,         HEAD_Male_Dave_Dr_Doak, 1.0},
     {getStringID(LTITLE, TITLE_STR_289_SCIENTIST), FEMALE, IMG_MPC_RANDOM, BODY_Scientist_2_Female,       HEAD_Female_Sally, 1.0},
-    {getStringID(LTITLE, TITLE_STR_290), MALE,   IMG_MPC_RANDOM, BODY_Russian_Commandant,       HEAD_Male_Martin, 1.0},
-    {getStringID(LTITLE, TITLE_STR_291), MALE,   IMG_MPC_RANDOM, BODY_Janus_Marine,             HEAD_Male_Steve_Ellis, 1.0},
-    {getStringID(LTITLE, TITLE_STR_292), MALE,   IMG_MPC_RANDOM, BODY_Naval_Officer,            HEAD_Male_Duncan, 1.0},
-    {getStringID(LTITLE, TITLE_STR_293), MALE,   IMG_MPC_RANDOM, BODY_Helicopter_Pilot,         HEAD_Male_Pete, 1.0},
-    {getStringID(LTITLE, TITLE_STR_294), MALE,   IMG_MPC_RANDOM, BODY_St_Petersburg_Guard,      HEAD_Male_Ken, 1.0},
-    {getStringID(LTITLE, TITLE_STR_295), FEMALE, IMG_MPC_RANDOM, BODY_Civilian_1_Female,        HEAD_Female_Marion_Rosika, 1.0},
-    {getStringID(LTITLE, TITLE_STR_295), MALE,   IMG_MPC_RANDOM, BODY_Civilian_2,               HEAD_Male_Graeme, 1.0},
-    {getStringID(LTITLE, TITLE_STR_295), MALE,   IMG_MPC_RANDOM, BODY_Civilian_3,               HEAD_Male_Grant, 1.0},
-    {getStringID(LTITLE, TITLE_STR_295), MALE,   IMG_MPC_RANDOM, BODY_Civilian_4,               HEAD_Male_Dwayne, 1.0},
-    {getStringID(LTITLE, TITLE_STR_296), MALE,   IMG_MPC_RANDOM, BODY_Siberian_Guard_1_Mishkin, HEAD_Male_Lee, 1.0},
-    {getStringID(LTITLE, TITLE_STR_297), MALE,   IMG_MPC_RANDOM, BODY_Arctic_Commando,          HEAD_Male_Chris, 1.0},
-    {getStringID(LTITLE, TITLE_STR_296), MALE,   IMG_MPC_RANDOM, BODY_Siberian_Guard_2,         HEAD_Male_Scott, 1.0},
-    {getStringID(LTITLE, TITLE_STR_298), MALE,   IMG_MPC_RANDOM, BODY_Siberian_Special_Forces,  HEAD_Male_Alan, 1.0},
-    {getStringID(LTITLE, TITLE_STR_299), MALE,   IMG_MPC_RANDOM, BODY_Jungle_Commando,          HEAD_Male_Joel, 1.0},
-    {getStringID(LTITLE, TITLE_STR_300), MALE,   IMG_MPC_RANDOM, BODY_Janus_Special_Forces,     HEAD_Male_B, 1.0},
-    {getStringID(LTITLE, TITLE_STR_301), MALE,   IMG_MPC_RANDOM, BODY_Moonraker_Elite_1_Male,   HEAD_Male_Neil, 1.0},
-    {getStringID(LTITLE, TITLE_STR_301), FEMALE, IMG_MPC_RANDOM, BODY_Moonraker_Elite_2_Female, HEAD_Female_Vivien, 1.0},
+    {getStringID(LTITLE, TITLE_STR_290_RUSSIANCOMMANDANT), MALE,   IMG_MPC_RANDOM, BODY_Russian_Commandant,       HEAD_Male_Martin, 1.0},
+    {getStringID(LTITLE, TITLE_STR_291_JANUSMARINE), MALE,   IMG_MPC_RANDOM, BODY_Janus_Marine,             HEAD_Male_Steve_Ellis, 1.0},
+    {getStringID(LTITLE, TITLE_STR_292_NAVALOFFICER), MALE,   IMG_MPC_RANDOM, BODY_Naval_Officer,            HEAD_Male_Duncan, 1.0},
+    {getStringID(LTITLE, TITLE_STR_293_HELICOPTERPILOT), MALE,   IMG_MPC_RANDOM, BODY_Helicopter_Pilot,         HEAD_Male_Pete, 1.0},
+    {getStringID(LTITLE, TITLE_STR_294_STPETERSBURGARD), MALE,   IMG_MPC_RANDOM, BODY_St_Petersburg_Guard,      HEAD_Male_Ken, 1.0},
+    {getStringID(LTITLE, TITLE_STR_295_CIVILIAN), FEMALE, IMG_MPC_RANDOM, BODY_Civilian_1_Female,        HEAD_Female_Marion_Rosika, 1.0},
+    {getStringID(LTITLE, TITLE_STR_295_CIVILIAN), MALE,   IMG_MPC_RANDOM, BODY_Civilian_2,               HEAD_Male_Graeme, 1.0},
+    {getStringID(LTITLE, TITLE_STR_295_CIVILIAN), MALE,   IMG_MPC_RANDOM, BODY_Civilian_3,               HEAD_Male_Grant, 1.0},
+    {getStringID(LTITLE, TITLE_STR_295_CIVILIAN), MALE,   IMG_MPC_RANDOM, BODY_Civilian_4,               HEAD_Male_Dwayne, 1.0},
+    {getStringID(LTITLE, TITLE_STR_296_SIBERIANGUARD), MALE,   IMG_MPC_RANDOM, BODY_Siberian_Guard_1_Mishkin, HEAD_Male_Lee, 1.0},
+    {getStringID(LTITLE, TITLE_STR_297_ARCTICCOMMANDO), MALE,   IMG_MPC_RANDOM, BODY_Arctic_Commando,          HEAD_Male_Chris, 1.0},
+    {getStringID(LTITLE, TITLE_STR_296_SIBERIANGUARD), MALE,   IMG_MPC_RANDOM, BODY_Siberian_Guard_2,         HEAD_Male_Scott, 1.0},
+    {getStringID(LTITLE, TITLE_STR_298_SIBERIANSPECIALFORCES), MALE,   IMG_MPC_RANDOM, BODY_Siberian_Special_Forces,  HEAD_Male_Alan, 1.0},
+    {getStringID(LTITLE, TITLE_STR_299_JUNGLECOMMANDO), MALE,   IMG_MPC_RANDOM, BODY_Jungle_Commando,          HEAD_Male_Joel, 1.0},
+    {getStringID(LTITLE, TITLE_STR_300_JANUSSPECIALFORCES), MALE,   IMG_MPC_RANDOM, BODY_Janus_Special_Forces,     HEAD_Male_B, 1.0},
+    {getStringID(LTITLE, TITLE_STR_301_MOONRAKERELITE), MALE,   IMG_MPC_RANDOM, BODY_Moonraker_Elite_1_Male,   HEAD_Male_Neil, 1.0},
+    {getStringID(LTITLE, TITLE_STR_301_MOONRAKERELITE), FEMALE, IMG_MPC_RANDOM, BODY_Moonraker_Elite_2_Female, HEAD_Female_Vivien, 1.0},
     {getStringID(LTITLE, TITLE_STR_196_ROSIKA), FEMALE, IMG_MPC_RANDOM, BODY_Rosika,                   HEAD_Female_Marion_Rosika, 0.88529998},
     {getStringID(LTITLE, TITLE_STR_197_KARL), MALE,   IMG_MPC_RANDOM, BODY_Brosnan_Tuxedo,                   HEAD_Male_Karl, 1.0446},
     {getStringID(LTITLE, TITLE_STR_198_MARTIN), MALE,   IMG_MPC_RANDOM, BODY_Brosnan_Tuxedo,                   HEAD_Male_Martin, 1.0446},
@@ -758,7 +760,7 @@ s16 solo_target_time_array[20][3] = {
 };
 
 s32 totalunlockedcheats = 0;
-s32 D_8002B5E0 = 0;
+s32 cheathighlighted = 0; // 0x8002B5E0
 
 
 u32 MP_menu_selected_option = 0;
@@ -770,41 +772,41 @@ struct Model *cast_model_weapon = NULL;
 u32 full_actor_intro = 0;
 
 struct intro_char intro_char_table[] = {
-    {BODY_Brosnan_Tuxedo, HEAD_Male_Brosnan_Tuxedo, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_228_THEACTORS), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Special_Operations_Uniform, HEAD_Male_Brosnan_Boiler, getStringID(LTITLE, TITLE_STR_229_STARRING), getStringID(LTITLE, TITLE_STR_232_007), getStringID(LTITLE, TITLE_STR_233_JAMESBOND), 0, 0},
-    {BODY_Natalya_Skirt, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_229_STARRING), getStringID(LTITLE, TITLE_STR_234_NATALYASIMONOVA), getStringID(LTITLE, TITLE_STR_227_LF), 0, 0},
-    {BODY_Trevelyan_006, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_229_STARRING), getStringID(LTITLE, TITLE_STR_235_006), getStringID(LTITLE, TITLE_STR_236_ALECTREVELYAN), 0, 0},
-    {BODY_Xenia, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_230_ALSOFEATURING), getStringID(LTITLE, TITLE_STR_237_JANUSOPPERATIVE), getStringID(LTITLE, TITLE_STR_238_XENIAONPTOPP), 0, 0},
-    {BODY_Ourumov, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_230_ALSOFEATURING), getStringID(LTITLE, TITLE_STR_239_GENERAL), getStringID(LTITLE, TITLE_STR_240_ARKADYOURUMOV), 0, 0},
-    {BODY_Boris, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_230_ALSOFEATURING), getStringID(LTITLE, TITLE_STR_241_BORISGRISHENKO), getStringID(LTITLE, TITLE_STR_227_LF), 0, 0},
-    {BODY_Valentin_, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_230_ALSOFEATURING), getStringID(LTITLE, TITLE_STR_242_EXKGBAGENT), getStringID(LTITLE, TITLE_STR_243_VELENTINZUKOVSKY), 0, 0},
-    {BODY_Siberian_Guard_1_Mishkin, 0x45, getStringID(LTITLE, TITLE_STR_230_ALSOFEATURING), getStringID(LTITLE, TITLE_STR_244_DEFENSEMINISTER), getStringID(LTITLE, TITLE_STR_245_DIMITRIMISHKIN), 0, 0},
-    {BODY_Russian_Soldier, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_253_RUSSIANSOLDIER), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Russian_Infantry, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_252_RUSSIANINFANTRY), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Scientist_1_Male, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_263_SCIENTIST), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Scientist_2_Female, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_263_SCIENTIST), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Russian_Commandant, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_256_RUSSIANCOMMANDANT), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Janus_Marine, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_254_JANUSMARINE), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Naval_Officer, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_257_NAVALOFFICER), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Helicopter_Pilot, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_262_HELICOPTERPILOT), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_St_Petersburg_Guard, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_251_STPETERSBURGGUARD), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Civilian_1_Female, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_264_CIVILIAN), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Civilian_2, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_264_CIVILIAN), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Civilian_3, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_264_CIVILIAN), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Civilian_4, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_264_CIVILIAN), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Siberian_Guard_1_Mishkin, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_258_SIBERIANGUARD), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Arctic_Commando, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_259_ARCTICCOMMANDO), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Siberian_Guard_2, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_258_SIBERIANGUARD), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Siberian_Special_Forces, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_260_SIBERIANSPECIALFORCES), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Jungle_Commando, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_250_JUNGLECOMMANDO), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Janus_Special_Forces, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_255_JANUSSPECIALFORCES), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Moonraker_Elite_1_Male, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_261_MOOKRAKERELITE), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Moonraker_Elite_2_Female, 0xFFFFFF9F, getStringID(LTITLE, TITLE_STR_227_LF), getStringID(LTITLE, TITLE_STR_261_MOOKRAKERELITE), getStringID(LTITLE, TITLE_STR_227_LF), 0, 1},
-    {BODY_Mayday, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_231_GUESTSTAR), getStringID(LTITLE, TITLE_STR_246_MAYDAY), getStringID(LTITLE, TITLE_STR_227_LF), 0, 0},
-    {BODY_Jaws, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_231_GUESTSTAR), getStringID(LTITLE, TITLE_STR_247_JAWS), getStringID(LTITLE, TITLE_STR_227_LF), 0, 0},
-    {BODY_Oddjob, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_231_GUESTSTAR), getStringID(LTITLE, TITLE_STR_248_ODDJOB), getStringID(LTITLE, TITLE_STR_227_LF), 0, 0},
-    {BODY_Baron_Samedi, 0xFFFFFFFF, getStringID(LTITLE, TITLE_STR_231_GUESTSTAR), getStringID(LTITLE, TITLE_STR_249_BERONSAMEDI), getStringID(LTITLE, TITLE_STR_227_LF), 0, 0},
-    {0xFFFFFFFF, 0, 0, 0, 0, 0, 0}
+    {BODY_Brosnan_Tuxedo,             HEAD_Male_Brosnan_Tuxedo, getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_228_THEACTORS),             getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Special_Operations_Uniform, HEAD_Male_Brosnan_Boiler, getStringID(LTITLE, TITLE_STR_229_STARRING),      getStringID(LTITLE, TITLE_STR_232_007),                   getStringID(LTITLE, TITLE_STR_233_JAMESBOND),        0, 0},
+    {BODY_Natalya_Skirt,              HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_229_STARRING),      getStringID(LTITLE, TITLE_STR_234_NATALYASIMONOVA),       getStringID(LTITLE, TITLE_STR_227_LF),               0, 0},
+    {BODY_Trevelyan_006,              HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_229_STARRING),      getStringID(LTITLE, TITLE_STR_235_006),                   getStringID(LTITLE, TITLE_STR_236_ALECTREVELYAN),    0, 0},
+    {BODY_Xenia,                      HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_230_ALSOFEATURING), getStringID(LTITLE, TITLE_STR_237_JANUSOPPERATIVE),       getStringID(LTITLE, TITLE_STR_238_XENIAONPTOPP),     0, 0},
+    {BODY_Ourumov,                    HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_230_ALSOFEATURING), getStringID(LTITLE, TITLE_STR_239_GENERAL),               getStringID(LTITLE, TITLE_STR_240_ARKADYOURUMOV),    0, 0},
+    {BODY_Boris,                      HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_230_ALSOFEATURING), getStringID(LTITLE, TITLE_STR_241_BORISGRISHENKO),        getStringID(LTITLE, TITLE_STR_227_LF),               0, 0},
+    {BODY_Valentin_,                  HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_230_ALSOFEATURING), getStringID(LTITLE, TITLE_STR_242_EXKGBAGENT),            getStringID(LTITLE, TITLE_STR_243_VELENTINZUKOVSKY), 0, 0},
+    {BODY_Siberian_Guard_1_Mishkin,   HEAD_Male_Mishkin,        getStringID(LTITLE, TITLE_STR_230_ALSOFEATURING), getStringID(LTITLE, TITLE_STR_244_DEFENSEMINISTER),       getStringID(LTITLE, TITLE_STR_245_DIMITRIMISHKIN),   0, 0},
+    {BODY_Russian_Soldier,            HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_253_RUSSIANSOLDIER),        getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Russian_Infantry,           HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_252_RUSSIANINFANTRY),       getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Scientist_1_Male,           HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_263_SCIENTIST),             getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Scientist_2_Female,         HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_263_SCIENTIST),             getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Russian_Commandant,         HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_256_RUSSIANCOMMANDANT),     getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Janus_Marine,               HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_254_JANUSMARINE),           getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Naval_Officer,              HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_257_NAVALOFFICER),          getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Helicopter_Pilot,           HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_262_HELICOPTERPILOT),       getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_St_Petersburg_Guard,        HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_251_STPETERSBURGGUARD),     getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Civilian_1_Female,          HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_264_CIVILIAN),              getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Civilian_2,                 HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_264_CIVILIAN),              getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Civilian_3,                 HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_264_CIVILIAN),              getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Civilian_4,                 HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_264_CIVILIAN),              getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Siberian_Guard_1_Mishkin,   HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_258_SIBERIANGUARD),         getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Arctic_Commando,            HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_259_ARCTICCOMMANDO),        getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Siberian_Guard_2,           HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_258_SIBERIANGUARD),         getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Siberian_Special_Forces,    HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_260_SIBERIANSPECIALFORCES), getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Jungle_Commando,            HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_250_JUNGLECOMMANDO),        getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Janus_Special_Forces,       HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_255_JANUSSPECIALFORCES),    getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Moonraker_Elite_1_Male,     HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_261_MOOKRAKERELITE),        getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Moonraker_Elite_2_Female,   HEAD_RANDOM,              getStringID(LTITLE, TITLE_STR_227_LF),            getStringID(LTITLE, TITLE_STR_261_MOOKRAKERELITE),        getStringID(LTITLE, TITLE_STR_227_LF),               0, 1},
+    {BODY_Mayday,                     HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_231_GUESTSTAR),     getStringID(LTITLE, TITLE_STR_246_MAYDAY),                getStringID(LTITLE, TITLE_STR_227_LF),               0, 0},
+    {BODY_Jaws,                       HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_231_GUESTSTAR),     getStringID(LTITLE, TITLE_STR_247_JAWS),                  getStringID(LTITLE, TITLE_STR_227_LF),               0, 0},
+    {BODY_Oddjob,                     HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_231_GUESTSTAR),     getStringID(LTITLE, TITLE_STR_248_ODDJOB),                getStringID(LTITLE, TITLE_STR_227_LF),               0, 0},
+    {BODY_Baron_Samedi,               HEAD_FIXED,               getStringID(LTITLE, TITLE_STR_231_GUESTSTAR),     getStringID(LTITLE, TITLE_STR_249_BERONSAMEDI),           getStringID(LTITLE, TITLE_STR_227_LF),               0, 0},
+    {0xFFFFFFFF,                      0,                        0,                                                0,                                                        0,                                                   0, 0}
 };
 
 struct intro_animation intro_animation_table[] = {
@@ -947,7 +949,7 @@ Gfx *frontPrintText(Gfx *gdl, s32 *x, s32 *y, s8 *text, s32 second_font_table, s
 {
     if (j_text_trigger != 0)
     {
-        gdl = textRenderGlow(
+        gdl = textRenderOutlined(
             gdl,
             x,
             y,
@@ -955,7 +957,7 @@ Gfx *frontPrintText(Gfx *gdl, s32 *x, s32 *y, s8 *text, s32 second_font_table, s
             second_font_table,
             first_font_table,
             arg6,
-            (D_8002A9B0.r << 0x18) | (D_8002A9B4.r << 0x10) | (D_8002A9B8.r << 8) | D_8002A9BC.r,
+            (textglowR.r << 0x18) | (textglowG.r << 0x10) | (textglowB.r << 8) | textglowA.r,
             view_x,
             view_y,
             arg9,
@@ -1111,7 +1113,7 @@ s32 frontCheckIfCheatIsUnlocked(s32 cheat)
             return fileIsEgyptCompletedOn00ForFolder(selected_folder_num);
 
         default:
-            do {
+            do {/* WARNING: Do nothing block with infinite loop */
             } while( 1 );
         }
 }
@@ -1503,15 +1505,15 @@ Gfx *constructor_menu00_legalscreen(Gfx *DL)
     Mtxf sp58;
     struct legal_screen_text *legal_text_ptr;
 
-    spE4 = D_8002AABC;
+    spE4 = legalscreen_MRD;
 
     DL = insert_imageDL(DL);
-    matrix_4x4_7F059694(&spA0, 0.0f, 0.0f, 4000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+    matrix_4x4_set_lookat_target(&spA0, 0.0f, 0.0f, 4000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
     spE4.unk_matrix = &spA0;
     spE4.mtxlist = (Mtxf*)dynAllocate(logoinst->obj->numMatrices << 6);
     matrix_4x4_copy(&spA0, spE4.mtxlist);
     logoinst->render_pos = spE4.mtxlist;
-    sub_GAME_7F06EFC4(logoinst);
+    modelUpdateNodeRelations(logoinst);
     spE4.unk08 = 3;
     spE4.unk04 = 0;
     spE4.gdl = DL;
@@ -1551,10 +1553,10 @@ GLOBAL_ASM(
 glabel constructor_menu00_legalscreen
 /* 03F410 7F00A8E0 27BDFED8 */  addiu $sp, $sp, -0x128
 /* 03F414 7F00A8E4 AFB10034 */  sw    $s1, 0x34($sp)
-/* 03F418 7F00A8E8 3C0E8003 */  lui   $t6, %hi(D_8002AABC)
+/* 03F418 7F00A8E8 3C0E8003 */  lui   $t6, %hi(legalscreen_MRD)
 /* 03F41C 7F00A8EC 27B100E4 */  addiu $s1, $sp, 0xe4
 /* 03F420 7F00A8F0 AFB40040 */  sw    $s4, 0x40($sp)
-/* 03F424 7F00A8F4 25CEAABC */  addiu $t6, %lo(D_8002AABC) # addiu $t6, $t6, -0x5544
+/* 03F424 7F00A8F4 25CEAABC */  addiu $t6, %lo(legalscreen_MRD) # addiu $t6, $t6, -0x5544
 /* 03F428 7F00A8F8 0080A025 */  move  $s4, $a0
 /* 03F42C 7F00A8FC AFBF0044 */  sw    $ra, 0x44($sp)
 /* 03F430 7F00A900 AFB3003C */  sw    $s3, 0x3c($sp)
@@ -1590,7 +1592,7 @@ glabel constructor_menu00_legalscreen
 /* 03F4A4 7F00A974 E7A00018 */  swc1  $f0, 0x18($sp)
 /* 03F4A8 7F00A978 E7A0001C */  swc1  $f0, 0x1c($sp)
 /* 03F4AC 7F00A97C E7A00024 */  swc1  $f0, 0x24($sp)
-/* 03F4B0 7F00A980 0FC165A5 */  jal   matrix_4x4_7F059694
+/* 03F4B0 7F00A980 0FC165A5 */  jal   matrix_4x4_set_lookat_target
 /* 03F4B4 7F00A984 E7A40020 */   swc1  $f4, 0x20($sp)
 /* 03F4B8 7F00A988 3C138003 */  lui   $s3, %hi(logoinst)
 /* 03F4BC 7F00A98C 2673A958 */  addiu $s3, %lo(logoinst) # addiu $s3, $s3, -0x56a8
@@ -1608,7 +1610,7 @@ glabel constructor_menu00_legalscreen
 /* 03F4EC 7F00A9BC 8FAC00F4 */  lw    $t4, 0xf4($sp)
 /* 03F4F0 7F00A9C0 8E6D0000 */  lw    $t5, ($s3)
 /* 03F4F4 7F00A9C4 ADAC000C */  sw    $t4, 0xc($t5)
-/* 03F4F8 7F00A9C8 0FC1BBF1 */  jal   sub_GAME_7F06EFC4
+/* 03F4F8 7F00A9C8 0FC1BBF1 */  jal   modelUpdateNodeRelations
 /* 03F4FC 7F00A9CC 8E640000 */   lw    $a0, ($s3)
 /* 03F500 7F00A9D0 24180003 */  li    $t8, 3
 /* 03F504 7F00A9D4 AFB800EC */  sw    $t8, 0xec($sp)
@@ -1649,12 +1651,12 @@ glabel constructor_menu00_legalscreen
 /* 03F588 7F00AA58 0FC2B366 */  jal   microcode_constructor
 /* 03F58C 7F00AA5C 02802025 */   move  $a0, $s4
 /* 03F590 7F00AA60 3C108003 */  lui   $s0, %hi(legalpage_text_array)
-/* 03F594 7F00AA64 3C118003 */  lui   $s1, %hi(D_8002AABC)
+/* 03F594 7F00AA64 3C118003 */  lui   $s1, %hi(legalscreen_MRD)
 /* 03F598 7F00AA68 3C138004 */  lui   $s3, %hi(ptrFontZurichBold)
 /* 03F59C 7F00AA6C 3C128004 */  lui   $s2, %hi(ptrFontZurichBoldChars)
 /* 03F5A0 7F00AA70 0040A025 */  move  $s4, $v0
 /* 03F5A4 7F00AA74 2610A9CC */  addiu $s0, %lo(legalpage_text_array) # addiu $s0, $s0, -0x5634
-/* 03F5A8 7F00AA78 2631AABC */  addiu $s1, %lo(D_8002AABC) # addiu $s1, $s1, -0x5544
+/* 03F5A8 7F00AA78 2631AABC */  addiu $s1, %lo(legalscreen_MRD) # addiu $s1, $s1, -0x5544
 /* 03F5AC 7F00AA7C 26520EB8 */  addiu $s2, %lo(ptrFontZurichBoldChars) # addiu $s2, $s2, 0xeb8
 /* 03F5B0 7F00AA80 26730EB4 */  addiu $s3, %lo(ptrFontZurichBold) # addiu $s3, $s3, 0xeb4
 .L7F00AA84:
@@ -1797,13 +1799,13 @@ void interface_menu01_nintendo(void)
 
 Gfx *constructor_menu01_nintendo(Gfx *DL)
 {
-    ModelRenderData sp128;
+    ModelRenderData ninlogo;
     s32 padding;
-    s32 var_v1;
-    Mtxf spE0;
+    s32 ambiantlight;
+    Mtxf ninlogoMtxf;
     s32 i;
 
-    sp128 = D_8002AB08;
+    ninlogo = nintendologo_MRD;
 
     DL = insert_imageDL(DL);
 
@@ -1814,26 +1816,26 @@ Gfx *constructor_menu01_nintendo(Gfx *DL)
 
 #if defined(VERSION_EU)
     // 0x100000000 ? 0xFFFECD34 = 0x132CC (78540 decimal)
-    var_v1 = 0xFF - ((s32) ((g_MenuTimer * 0xFF) + 0xFFFECD34) / 83);
+    ambiantlight = 0xFF - ((s32) ((g_MenuTimer * 0xFF) + 0xFFFECD34) / 83);
 #else
     // 0x100000000 ? 0xFFFE8F72 = 0x1708E (94350 decimal)
-    var_v1 = 0xFF - ((s32) ((g_MenuTimer * 0xFF) + 0xFFFE8F72) / 100);
+    ambiantlight = 0xFF - ((s32) ((g_MenuTimer * 0xFF) + 0xFFFE8F72) / 100);
 #endif
-    if (var_v1 >= 0x100)
+    if (ambiantlight >= 0x100)
     {
-        var_v1 = 0xff;
+        ambiantlight = 0xff;
     }
-    if (var_v1 < 0)
+    if (ambiantlight < 0)
     {
-        var_v1 = 0;
+        ambiantlight = 0;
     }
 
-    ninlogolight.a.l.colc[2] = var_v1;
-    ninlogolight.a.l.colc[1] = var_v1;
-    ninlogolight.a.l.colc[0] = var_v1;
-    ninlogolight.a.l.col[2] = var_v1;
-    ninlogolight.a.l.col[1] = var_v1;
-    ninlogolight.a.l.col[0] = var_v1;
+    ninlogolight.a.l.colc[2] = ambiantlight;
+    ninlogolight.a.l.colc[1] = ambiantlight;
+    ninlogolight.a.l.colc[0] = ambiantlight;
+    ninlogolight.a.l.col[2] = ambiantlight;
+    ninlogolight.a.l.col[1] = ambiantlight;
+    ninlogolight.a.l.col[0] = ambiantlight;
 
 #if defined(VERSION_EU)
     ninLogoRotRate += 0.0209439527243f;
@@ -1845,10 +1847,10 @@ Gfx *constructor_menu01_nintendo(Gfx *DL)
     // needs to be declared here for the stack to match.
     if(1)
     {
-        Mtxf sp90;
+        Mtxf tmpMtx;
 
-        matrix_4x4_set_rotation_around_y(ninLogoRotRate, &sp90);
-        matrix_scalar_multiply_3(ninLogoScale, (f32*)&sp90);
+        matrix_4x4_set_rotation_around_y(ninLogoRotRate, &tmpMtx);
+        matrix_scalar_multiply_3(ninLogoScale, (f32*)&tmpMtx);
 
 #if defined(VERSION_EU)
         ninLogoScale *= 1.09647190571f;
@@ -1860,37 +1862,37 @@ Gfx *constructor_menu01_nintendo(Gfx *DL)
             ninLogoScale = 1.1f;
         }
 
-        matrix_4x4_7F059694(&spE0, 0.0f, 0.0f, 4000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
-        matrix_4x4_multiply_in_place(&spE0, &sp90);
-        matrix_4x4_copy(&sp90, &spE0);
+        matrix_4x4_set_lookat_target(&ninlogoMtxf, 0.0f, 0.0f, 4000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+        matrix_4x4_multiply_in_place(&ninlogoMtxf, &tmpMtx);
+        matrix_4x4_copy(&tmpMtx, &ninlogoMtxf);
     }
 
-    sp128.unk_matrix = &spE0;
+    ninlogo.unk_matrix = &ninlogoMtxf;
 
-    sp128.mtxlist = dynAllocate(logoinst->obj->numMatrices << 6);
+    ninlogo.mtxlist = dynAllocate(logoinst->obj->numMatrices << 6);
 
-    matrix_4x4_copy(&spE0, sp128.mtxlist);
+    matrix_4x4_copy(&ninlogoMtxf, ninlogo.mtxlist);
 
-    logoinst->render_pos = (union RenderPosView*)sp128.mtxlist;
+    logoinst->render_pos = (union RenderPosView*)ninlogo.mtxlist;
 
-    sub_GAME_7F06EFC4(logoinst);
+    modelUpdateNodeRelations(logoinst);
 
-    sp128.flags = 3;
-    sp128.zbufferenabled = FALSE;
-    sp128.gdl = DL;
+    ninlogo.flags = 3;
+    ninlogo.zbufferenabled = FALSE;
+    ninlogo.gdl = DL;
 
-    subdraw(&sp128, logoinst);
+    subdraw(&ninlogo, logoinst);
 
-    DL = sp128.gdl;
+    DL = ninlogo.gdl;
 
     for (i=0; i<logoinst->obj->numMatrices; i++)
     {
-        Mtxf sp50;
+        Mtxf tmpMtxf;
         s32 padding2;
 
         // hack: source address steps by sizeof(Mtxf), but can't get that to match
-        matrix_4x4_copy(&((s8*)logoinst->render_pos)[i*0x40], &sp50);
-        matrix_4x4_f32_to_s32(&sp50, &((Mtxf*)logoinst->render_pos)[i]);
+        matrix_4x4_copy(&((s8*)logoinst->render_pos)[i*0x40], &tmpMtxf);
+        matrix_4x4_f32_to_s32(&tmpMtxf, &((Mtxf*)logoinst->render_pos)[i]);
 
         if(i);
     }
@@ -1912,9 +1914,13 @@ Gfx *constructor_menu01_nintendo(Gfx *DL)
 //********************************************************************************************************
 //RARE LOGO
 //********************************************************************************************************
+
+/*
+ * Address: 0x7F008B58
+*/
 void init_menu02_rarelogo(void)
 {
-    sub_GAME_7F008B58(ptr_logo_and_walletbond_DL, 0x78000);
+    setupRarewareLogoData(ptr_logo_and_walletbond_DL, 0x78000);
     sndPlaySfx(g_musicSfxBufferPtr, RARELOGO_SFX, 0);
 }
 
@@ -1924,7 +1930,7 @@ void update_menu02_rareware(void) {
 
 void interface_menu02_rareware(void)
 {
-    viSetUseZBuf(0);
+    viSetUseZBuf(FALSE);
     if (isGunBarrelInMode2())
     {
         frontChangeMenu(MENU_EYE_INTRO, TRUE);
@@ -1959,18 +1965,21 @@ Gfx * constructor_menu02_rareware(Gfx * DL) {
 //********************************************************************************************************
 //GUNBARREL
 //********************************************************************************************************
-void init_menu03_eyeintro(void) {
+void init_menu03_gunbarrel(void) {
     initializeGunBarrelIntro(ptr_logo_and_walletbond_DL, 0x78000);
     musicTrack1Play(M_INTRO);
     maybe_is_in_menu = TRUE;
 }
 
-void update_menu_03_eye(void) {
-    sub_GAME_7F00920C();
+/*
+ * Address: 0x7F00920C
+*/
+void update_menu_03_gunbarrel(void) {
+    clearChrGunModelInstances();
 }
 
 void interface_menu03_eye(void) {
-    viSetUseZBuf(0);
+    viSetUseZBuf(FALSE);
     if (isGunBarrelInMode9()) {
         frontChangeMenu(MENU_GOLDENEYE_LOGO, TRUE);
         return;
@@ -1986,7 +1995,7 @@ void interface_menu03_eye(void) {
 }
 
 Gfx * constructor_menu03_eye(Gfx * DL) {
-    return sub_GAME_7F009254(DL);
+    return renderGunbarrelEyeIntroSequence (DL);
 }
 
 
@@ -2064,20 +2073,20 @@ void interface_menu04_goldeneyelogo(void)
 
 Gfx *constructor_menu04_goldeneyelogo(Gfx *DL)
 {
-    ModelRenderData sp140;
+    ModelRenderData gelogo;
     s32 padding[2];
-    Mtxf spF8;
+    Mtxf logoMatrix;
     s32 i;
-    LookAt * temp_v0;
-    Mtxf spB0;
+    LookAt * logoLookAt;
+    Mtxf logoReflectMtx;
 
-    sp140 = D_8002AB54;
+    gelogo = goldeneyelogo_MRD;
 
     DL = viSetFillColor(DL, 0, 0, 0);
     DL = viFillScreen(DL);
 
-    temp_v0 = (LookAt *)dynAllocate7F0BD6F8(2);
-    guLookAtReflect(&spB0, temp_v0, 0.0f, 0.0f, 4000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+    logoLookAt = (LookAt *)dynAllocate7F0BD6F8(2);
+    guLookAtReflect(&logoReflectMtx, logoLookAt, 0.0f, 0.0f, 4000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
 
     // Lights macro? These need to be on one line.
     gSPNumLights(DL++, 1); \
@@ -2085,34 +2094,34 @@ Gfx *constructor_menu04_goldeneyelogo(Gfx *DL)
     gSPLight(DL++, &gelogolight, 2);
 
     // gSPLookAt macro expands to gSPLookAtX + gSPLookAtY
-    gSPLookAt(DL++, temp_v0);
+    gSPLookAt(DL++, logoLookAt);
 
-    matrix_4x4_7F059694(&spF8, 0.0f, 0.0f, 3000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
-    sp140.unk_matrix = &spF8;
-    sp140.mtxlist = dynAllocate(logoinst->obj->numMatrices << 6);
+    matrix_4x4_set_lookat_target(&logoMatrix, 0.0f, 0.0f, 3000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+    gelogo.unk_matrix = &logoMatrix;
+    gelogo.mtxlist = dynAllocate(logoinst->obj->numMatrices << 6);
 
-    matrix_scalar_multiply(1.2f, spF8.m[0]);
-    matrix_4x4_copy(&spF8, sp140.mtxlist);
-    logoinst->render_pos = (union RenderPosView*)sp140.mtxlist;
+    matrix_scalar_multiply(1.2f, logoMatrix.m[0]);
+    matrix_4x4_copy(&logoMatrix, gelogo.mtxlist);
+    logoinst->render_pos = (union RenderPosView*)gelogo.mtxlist;
 
-    sub_GAME_7F06EFC4(logoinst);
+    modelUpdateNodeRelations(logoinst);
 
-    sp140.flags = 3;
-    sp140.zbufferenabled = FALSE;
-    sp140.gdl = DL;
+    gelogo.flags = 3;
+    gelogo.zbufferenabled = FALSE;
+    gelogo.gdl = DL;
 
-    subdraw(&sp140, logoinst);
+    subdraw(&gelogo, logoinst);
 
-    DL = sp140.gdl;
+    DL = gelogo.gdl;
 
     for (i=0; i<logoinst->obj->numMatrices; i++)
     {
-        Mtxf sp50;
+        Mtxf tempMtxf;
         s32 padding2;
 
         // hack: source address steps by sizeof(Mtxf), but can't get that to match
-        matrix_4x4_copy(&((s8*)logoinst->render_pos)[i*0x40], &sp50);
-        matrix_4x4_f32_to_s32(&sp50, &((Mtxf*)logoinst->render_pos)[i]);
+        matrix_4x4_copy(&((s8*)logoinst->render_pos)[i*0x40], &tempMtxf);
+        matrix_4x4_f32_to_s32(&tempMtxf, &((Mtxf*)logoinst->render_pos)[i]);
 
         if(i);
     }
@@ -2131,7 +2140,7 @@ void disable_all_switches(Model *arg0)
     {
         mnode = arg0->obj->Switches[i];
 
-        if (mnode != NULL && (mnode->Opcode & 0xff) == 0x12)
+        if (mnode != NULL && (mnode->Opcode & 0xff) == MODELNODE_OPCODE_SWITCH)
         {
             union ModelRwData *unmrd;
             struct ModelRwData_SwitchRecord *srecord;
@@ -2183,16 +2192,6 @@ void select_load_bond_picture(Model *objinstance, u32 bondID)
 
 
 
-struct unk_walletbond_struct {
-    s32 Primary;
-    s32 unk04;
-    s32 unk08;
-    s32 unk0C;
-    s32 unk10;
-    s32 unk14;
-    s32 unk18;
-    s32 BaseAddr;
-};
 
 
 /**
@@ -2227,15 +2226,15 @@ void load_walletbond(void)
 
         if (mnode != NULL)
         {
-            struct unk_walletbond_struct *srecord;
+            struct ModelRoData_DisplayList_CollisionRecord *srecord;
             struct ModelNode *b;
             Gfx *arg0;
 
             b = (struct ModelNode *)mnode;
             srecord = b->Data;
 
-            arg0 = (s32)srecord->BaseAddr + (srecord->Primary & 0xffffff);
-            bgLoadFromDynamicCCRMLUT(arg0, NULL, CCRMLUT_WALLETBOND);
+            arg0 = (s32)srecord->BaseAddr + ((s32)srecord->Primary & 0xffffff);
+            bgApplyDynamicCCRMLUT(arg0, NULL, CCRMLUT_WALLETBOND);
         }
     }
 }
@@ -2263,8 +2262,8 @@ void frontCleanUpWalletBond(void)
 //********************************************************************************************************
 void init_menu05_fileselect(void)
 {
-    s32 sp24 = 0x6e000;
-    Gfx* sp20 = (s32)(ptr_logo_and_walletbond_DL) + (s32)(4096*10);
+    s32 size = 0x6e000;
+    Gfx* DL = (s32)(ptr_logo_and_walletbond_DL) + (s32)(4096*10);
     int i;
 
     prev_keypresses = FALSE;
@@ -2278,7 +2277,7 @@ void init_menu05_fileselect(void)
     tab_prev_selected = FALSE;
     folder_selected_for_deletion = FOLDER_INVALID;
     folder_selected_for_deletion_choice = FOLDER2;
-    sub_GAME_7F008DE4(&sp20, &sp24);
+    sub_GAME_7F008DE4(&DL, &size);
     load_walletbond();
     if (maybe_is_in_menu){
         musicTrack1Play(M_FOLDERS);
@@ -2359,9 +2358,9 @@ s32 interface_menu05_fileselect(void)
 
     for (i1 = 0; i1 < 4; i1++)
     {
-        sp54 = &D_8002AB94[i1];
+        sp54 = &folderpositions[i1];
 
-        matrix_4x4_7F059694(&spC8, 0.0f, 0.0f, 4000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+        matrix_4x4_set_lookat_target(&spC8, 0.0f, 0.0f, 4000.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
         matrix_4x4_set_identity_and_position(sp54, &sp88);
         matrix_scalar_multiply(0.37f, (f32*)&sp88);
         matrix_4x4_multiply_in_place(&spC8, &sp88);
@@ -2462,6 +2461,9 @@ s32 interface_menu05_fileselect(void)
                 && (cursor_v_pos <= sp64.up))
             {
                 fileGetHighestStageDifficultyCompletedForFolder(i2, &sp60, &sp5C);
+#ifdef DEBUG
+                osSyncPrintf("selected file %d\n", i2);
+#endif
 
                 if (joyGetButtonsPressedThisFrame(0, A_BUTTON | Z_TRIG | START_BUTTON) != 0)
                 {
@@ -2967,16 +2969,16 @@ Gfx *frontSetupMenuBackground(Gfx *DL)
     Mtxf sp88;
     Mtxf sp48;
 
-    temp_f0 = D_8002AB94[selected_folder_num].f[0];
-    temp_f2 = D_8002AB94[selected_folder_num].f[1];
+    temp_f0 = folderpositions[selected_folder_num].f[0];
+    temp_f2 = folderpositions[selected_folder_num].f[1];
 
     sp10C = D_8002AF84;
 
     temp_f0 += D_8002AFC4;
     temp_f2 += D_8002AFC8;
 
-    matrix_4x4_7F059694(&spC8, temp_f0, temp_f2, 4000.0f + D_8002AFCC, temp_f0, temp_f2, 0.0f, 0.0f, 1.0f, 0.0f);
-    matrix_4x4_set_identity_and_position(&D_8002AB94[selected_folder_num], &sp88);
+    matrix_4x4_set_lookat_target(&spC8, temp_f0, temp_f2, 4000.0f + D_8002AFCC, temp_f0, temp_f2, 0.0f, 0.0f, 1.0f, 0.0f);
+    matrix_4x4_set_identity_and_position(&folderpositions[selected_folder_num], &sp88);
     matrix_scalar_multiply(0.25f, sp88.m[0]);
     matrix_4x4_multiply_in_place(&spC8, &sp88);
 
@@ -3141,10 +3143,10 @@ s32 get_highest_unlocked_difficulty_for_level(s32 arg0)
 
     if (mission_folder_setup_entries[pull_and_display_text_for_folder_a0(arg0)].stage_id >= 0)
     {
-        num = 2;
+        num = DIFFICULTY_00;
         if (fileIs007ModeUnlocked(selected_folder_num) || get_debug_007_unlock_flag())
         {
-            num = 3;
+            num = DIFFICULTY_007;
         }
 
         for (difficulty=num; difficulty >= 0; difficulty--)
@@ -3152,12 +3154,12 @@ s32 get_highest_unlocked_difficulty_for_level(s32 arg0)
             temp_v0 = fileIsStageUnlockedAtDifficulty(selected_folder_num, arg0, difficulty);
             if (g_AppendCheatSinglePlayer == 0)
             {
-                if (temp_v0 != 0)
+                if (temp_v0 != DIFFICULTY_AGENT)
                 {
                     return difficulty;
                 }
             }
-            else if (temp_v0 == 3)
+            else if (temp_v0 == DIFFICULTY_007)
             {
                 return difficulty;
             }
@@ -3929,11 +3931,11 @@ void interface_menu09_007options(void)
         }
         else if (highlight_enemy_accuracy)
         {
-            slider_007_mode_accuracy = (f32) (temp_x * temp_x * 10.0f);
+            slider_007_mode_damage = (f32) (temp_x * temp_x * 10.0f);
         }
         else if (highlight_enemy_damage)
         {
-            slider_007_mode_damage = (f32) (temp_x * temp_x * 10.0f);
+            slider_007_mode_accuracy = (f32) (temp_x * temp_x * 10.0f);
         }
     }
     disable_all_switches(walletinst[0]);
@@ -4032,7 +4034,7 @@ Gfx *constructor_menu09_007options(Gfx *DL)
     spC0C = 0xC5;
 
     DL = microcode_constructor_related_to_menus(DL, 0x37, 0xD6, 0x163, 0xE1, 0x32);
-    val = (sqrtf(slider_007_mode_accuracy / 10.0f)) * 300.0f;
+    val = (sqrtf(slider_007_mode_damage / 10.0f)) * 300.0f;
     DL = microcode_constructor_related_to_menus(DL, 0x37, spC0C + 0x11, val + 0x37, spC0C + 0x1c, 0x64);
 
     if (highlight_enemy_accuracy != 0)
@@ -4042,7 +4044,7 @@ Gfx *constructor_menu09_007options(Gfx *DL)
 
     DL = frontPrintText(DL, &spC10, &spC0C, (s8*)spC14, ptrFontZurichBoldChars, ptrFontZurichBold, 0xFF, viGetX(), viGetY(), 0, 0);
 
-    sprintf((char*)&sp54, "%d%%\n", (s32) (slider_007_mode_accuracy * 100.0f));
+    sprintf((char*)&sp54, "%d%%\n", (s32) (slider_007_mode_damage * 100.0f));
 
     sp4C = 0;
     sp50 = 0;
@@ -4060,7 +4062,7 @@ Gfx *constructor_menu09_007options(Gfx *DL)
     spC0C = 0xE6;
 
     DL = microcode_constructor_related_to_menus(DL, 0x37, 0xF7, 0x163, 0x102, 0x32);
-    val = (sqrtf(slider_007_mode_damage / 10.0f)) * 300.0f;
+    val = (sqrtf(slider_007_mode_accuracy / 10.0f)) * 300.0f;
     DL = microcode_constructor_related_to_menus(DL, 0x37, spC0C + 0x11, val + 0x37, spC0C + 0x1c, 0x64);
 
     if (highlight_enemy_damage != 0)
@@ -4070,7 +4072,7 @@ Gfx *constructor_menu09_007options(Gfx *DL)
 
     DL = frontPrintText(DL, &spC10, &spC0C, (s8*)spC14, ptrFontZurichBoldChars, ptrFontZurichBold, 0xFF, viGetX(), viGetY(), 0, 0);
 
-    sprintf((char*)&sp54, "%d%%\n", (s32) (slider_007_mode_damage * 10.0f));
+    sprintf((char*)&sp54, "%d%%\n", (s32) (slider_007_mode_accuracy * 10.0f));
 
     sp4C = 0;
     sp50 = 0;
@@ -4409,15 +4411,15 @@ void update_menu0E_mpoptions(void)
 // Address 0x7F010848 NTSC
 void interface_menu0E_mpoptions(void)
 {
-    s32 sp3C = 0;
-    s32 sp38 = 0;
-    s32 sp34 = 0;
-    s32 sp30 = 0;
-    s32 sp2C = 0;
-    s32 sp28 = 0;
-    s32 sp24 = 0;
-    s32 sp20 = 0;
-    s32 sp1C = 0;
+    s32 players_selected = 0;
+    s32 scenario_selected = 0;
+    s32 gameselect_selected = 0;
+    s32 gamelength_selected = 0;
+    s32 character_selected = 0;
+    s32 weapon_selected = 0;
+    s32 health_selected = 0;
+    s32 controlstyle_selected = 0;
+    s32 aimadjust_selected = 0;
 
     viSetFovY(FOV_Y_F);
     viSetAspect(ASPECT_RATIO_SD);
@@ -4518,39 +4520,39 @@ void interface_menu0E_mpoptions(void)
         }
         else if (highlight_players)
         {
-            sp3C = 1;
+            players_selected = 1;
         }
         else if (highlight_scenario)
         {
-            sp38 = 1;
+            scenario_selected = 1;
         }
         else if (highlight_gameselect)
         {
-            sp34 = 1;
+            gameselect_selected = 1;
         }
         else if (highlight_gamelength)
         {
-            sp30 = 1;
+            gamelength_selected = 1;
         }
         else if (highlight_character)
         {
-            sp2C = 1;
+            character_selected = 1;
         }
         else if (highlight_weaponselect)
         {
-            sp28 = 1;
+            weapon_selected = 1;
         }
         else if (highlight_health)
         {
-            sp24 = 1;
+            health_selected = 1;
         }
         else if (highlight_controlstyle)
         {
-            sp20 = 1;
+            controlstyle_selected = 1;
         }
         else if (highlight_aimadjustment)
         {
-            sp1C = 1;
+            aimadjust_selected = 1;
         }
 
         sndPlaySfx((struct ALBankAlt_s *) g_musicSfxBufferPtr, DOOR_METAL_CLOSE2_SFX, NULL);
@@ -4597,59 +4599,59 @@ void interface_menu0E_mpoptions(void)
         return;
     }
 
-    if (sp3C)
+    if (players_selected)
     {
-        s32 temp_v1;
+        s32 tmpNumPlayers;
 
         if (joyGetControllerCount() < selected_num_players + 1)
         {
-            temp_v1 = 2;
+            tmpNumPlayers = 2;
         }
         else
         {
-            temp_v1 = selected_num_players + 1;
+            tmpNumPlayers = selected_num_players + 1;
         }
 
-        init_mp_options_for_scenario(temp_v1);
+        init_mp_options_for_scenario(tmpNumPlayers);
 
         return;
     }
-    if (sp38)
+    if (scenario_selected)
     {
         frontChangeMenu(MENU_MP_SCENARIO_SELECT, 0);
         return;
     }
-    if (sp34)
+    if (gameselect_selected)
     {
         frontChangeMenu(MENU_MP_STAGE_SELECT, 0);
         return;
     }
-    if (sp30)
+    if (gamelength_selected)
     {
         select_game_length();
         return;
     }
-    if (sp2C)
+    if (character_selected)
     {
         frontChangeMenu(MENU_MP_CHAR_SELECT, 0);
         return;
     }
-    if (sp28)
+    if (weapon_selected)
     {
         incrementMPWeaponSet();
         return;
     }
-    if (sp24)
+    if (health_selected)
     {
         frontChangeMenu(MENU_MP_HANDICAP, 0);
         return;
     }
-    if (sp20)
+    if (controlstyle_selected)
     {
         frontChangeMenu(MENU_MP_CONTROL_STYLE, 0);
         return;
     }
-    if (sp1C)
+    if (aimadjust_selected)
     {
         advance_aim_settings_selection();
     }
@@ -7501,12 +7503,12 @@ Gfx *print_objectives_and_status_to_menu(Gfx *DL, s32 arg1, u8 *arg2, s32 arg3)
             if (arg3 != 0)
             {
                 setTextWordWrap(2);
-                sub_GAME_7F0AEB64(0xDC, (s8*)text, (s8*)arg2, ptrFontZurichBoldChars, ptrFontZurichBold);
+                textWrap(0xDC, (s8*)text, (s8*)arg2, ptrFontZurichBoldChars, ptrFontZurichBold);
                 setTextWordWrap(0);
             }
             else
             {
-                sub_GAME_7F0AEB64(0x140, (s8*)text, (s8*)arg2, ptrFontZurichBoldChars, ptrFontZurichBold);
+                textWrap(0x140, (s8*)text, (s8*)arg2, ptrFontZurichBoldChars, ptrFontZurichBold);
             }
 
             DL = frontPrintText(DL, &sp8C, &sp88, (s8*)arg2,  ptrFontZurichBoldChars, ptrFontZurichBold, 0xFF, viGetX(), viGetY(), 0, 0);
@@ -7623,7 +7625,7 @@ Gfx *constructor_menu0A_briefing(Gfx *DL)
 
         spC08 = 0x37;
         spC04 = 0xA7;
-        sub_GAME_7F0AEB64(0x140, (s8*)spC0C, (s8*)&sp4C, ptrFontZurichBoldChars, ptrFontZurichBold);
+        textWrap(0x140, (s8*)spC0C, (s8*)&sp4C, ptrFontZurichBoldChars, ptrFontZurichBold);
         setTextOverlapCorrection(8);
         DL = frontPrintText(DL, &spC08, &spC04, (s8*)&sp4C, ptrFontZurichBoldChars, ptrFontZurichBold, 0xFF, viGetX(), viGetY(), 0, 0);
         setTextOverlapCorrection(-1);
@@ -8269,7 +8271,7 @@ void interface_menu15_cheat(void)
         tab_prev_highlight = 0;
         tab_next_highlight = 0;
         tab_start_highlight = 0;
-        D_8002B5E0 = 0;
+        cheathighlighted = 0;
 
         if (frontCheckCursorOnPreviousTab())
         {
@@ -8286,14 +8288,14 @@ void interface_menu15_cheat(void)
                     {
                         if ((s32) cursor_v_pos >= (i * 0x14) + 0x35)
                         {
-                            D_8002B5E0 = i + 0xC;
+                            cheathighlighted = i + 0xC;
                             break;
                         }
                     }
                 }
             }
 
-            if (D_8002B5E0 == 0)
+            if (cheathighlighted == 0)
             {
                 i = (totalunlockedcheats >= 0xD)
                     ? 0xB
@@ -8303,7 +8305,7 @@ void interface_menu15_cheat(void)
                 {
                     if ((s32) cursor_v_pos >= (i * 0x14) + 0x35)
                     {
-                        D_8002B5E0 = i;
+                        cheathighlighted = i;
                         break;
                     }
                 }
@@ -8345,7 +8347,7 @@ void interface_menu15_cheat(void)
 
     if (MP_menu_selected_option)
     {
-    i = arrayUnlockedCheats[D_8002B5E0];
+    i = arrayUnlockedCheats[cheathighlighted];
         g_CheatActivated[i] = 1 - g_CheatActivated[i];
     }
 }
@@ -8383,7 +8385,7 @@ Gfx * constructor_menu15_cheat(Gfx *DL)
 
         sp88 = 0x37;
         sp84 = (var_fp * 0x14) + 0x35;
-        if ((var_fp == D_8002B5E0) && (frontCheckCursorOnPreviousTab() == 0))
+        if ((var_fp == cheathighlighted) && (frontCheckCursorOnPreviousTab() == 0))
         {
             DL = microcode_constructor_related_to_menus(DL, sp88 - 2, sp84 - 1, sp88 + sp7C + 5, sp84 + 0xE, 0x32);
         }
@@ -8409,7 +8411,7 @@ Gfx * constructor_menu15_cheat(Gfx *DL)
 
             sp88 = 0xDC;
             sp84 = (var_fp * 0x14) + 0x35;
-            if ((var_fp + 0xc == D_8002B5E0) && (frontCheckCursorOnPreviousTab() == 0))
+            if ((var_fp + 0xc == cheathighlighted) && (frontCheckCursorOnPreviousTab() == 0))
             {
                 DL = microcode_constructor_related_to_menus(DL, sp88 - 2, sp84 - 1, sp88 + sp7C + 5, sp84 + 0xE, 0x32);
             }
@@ -8488,7 +8490,7 @@ Gfx *constructor_menu16_nocontrollers(Gfx *DL)
     y = 0x99 - (y2 >> 1);
 #ifdef BUGFIX_R1
     if (j_text_trigger) {
-        DL = textRenderGlow(DL, &x, &y, text, ptrFontZurichBoldChars, ptrFontZurichBold, -1, 0x8000FF, viGetX(), viGetY(), 0, 0);
+        DL = textRenderOutlined(DL, &x, &y, text, ptrFontZurichBoldChars, ptrFontZurichBold, -1, 0x8000FF, viGetX(), viGetY(), 0, 0);
     }
     else {
 #endif
@@ -8506,7 +8508,7 @@ Gfx *constructor_menu16_nocontrollers(Gfx *DL)
     y = 0xB1 - (y2 >> 1);
 #ifdef BUGFIX_R1
     if (j_text_trigger) {
-        DL = textRenderGlow(DL, &x, &y, text, ptrFontZurichBoldChars, ptrFontZurichBold, -1, 0x8000FF, viGetX(), viGetY(), 0, 0);
+        DL = textRenderOutlined(DL, &x, &y, text, ptrFontZurichBoldChars, ptrFontZurichBold, -1, 0x8000FF, viGetX(), viGetY(), 0, 0);
     }
     else {
 #endif
@@ -10307,7 +10309,7 @@ Gfx * constructor_menu18_displaycast(Gfx *DL)
     sp134.f[0] = flt_CODE_bss_800695E8.f[0] + flt_CODE_bss_800695C8.f[0];
     sp134.f[2] = (flt_CODE_bss_800695E8.f[1] + flt_CODE_bss_800695C8.f[1]) - 10.0f;
 
-    matrix_4x4_7F059694(&sp1E8, sp244.f[0], sp244.f[1], sp244.f[2], flt_CODE_bss_800695E8.f[1], sp238.f[2], sp238.f[2], sp22C.f[0], sp22C.f[1], sp22C.f[2]);
+    matrix_4x4_set_lookat_target(&sp1E8, sp244.f[0], sp244.f[1], sp244.f[2], flt_CODE_bss_800695E8.f[1], sp238.f[2], sp238.f[2], sp22C.f[0], sp22C.f[1], sp22C.f[2]);
 
     sp1A8.unk_matrix = &sp1E8;
     sp1A8.mtxlist = dynAllocate(cast_model->obj->numMatrices << 6);
@@ -11069,7 +11071,7 @@ glabel constructor_menu18_displaycast
 /* 04E710 7F019BE0 E7A8001C */  swc1  $f8, 0x1c($sp)
 /* 04E714 7F019BE4 E7A60018 */  swc1  $f6, 0x18($sp)
 /* 04E718 7F019BE8 E7A40024 */  swc1  $f4, 0x24($sp)
-/* 04E71C 7F019BEC 0FC165A5 */  jal   matrix_4x4_7F059694
+/* 04E71C 7F019BEC 0FC165A5 */  jal   matrix_4x4_set_lookat_target
 /* 04E720 7F019BF0 E7AA0020 */   swc1  $f10, 0x20($sp)
 /* 04E724 7F019BF4 8E8E0000 */  lw    $t6, ($s4)
 /* 04E728 7F019BF8 AFB201A8 */  sw    $s2, 0x1a8($sp)
@@ -12193,7 +12195,7 @@ glabel constructor_menu18_displaycast
 /* 04C64C 7F019C5C E7A8001C */  swc1  $f8, 0x1c($sp)
 /* 04C650 7F019C60 E7A60018 */  swc1  $f6, 0x18($sp)
 /* 04C654 7F019C64 E7A40024 */  swc1  $f4, 0x24($sp)
-/* 04C658 7F019C68 0FC166CF */  jal   matrix_4x4_7F059694
+/* 04C658 7F019C68 0FC166CF */  jal   matrix_4x4_set_lookat_target
 /* 04C65C 7F019C6C E7AA0020 */   swc1  $f10, 0x20($sp)
 /* 04C660 7F019C70 8E8E0000 */  lw    $t6, ($s4)
 /* 04C664 7F019C74 AFB201A8 */  sw    $s2, 0x1a8($sp)
@@ -12902,7 +12904,7 @@ void menu_init(void)
             case MENU_LEGAL_SCREEN:           update_menu00_legalscreen();          break;
             case MENU_NINTENDO_LOGO:          update_menu01_nintendo();             break;
             case MENU_RAREWARE_LOGO:          update_menu02_rareware();             break;
-            case MENU_EYE_INTRO:              update_menu_03_eye();                 break;
+            case MENU_EYE_INTRO:              update_menu_03_gunbarrel();                 break;
             case MENU_GOLDENEYE_LOGO:         update_menu04_goldeneye();            break;
             case MENU_FILE_SELECT:            update_menu05_filesel();              break;
             case MENU_MODE_SELECT:            update_menu06_modesel();              break;
@@ -12941,7 +12943,7 @@ void menu_init(void)
             case MENU_LEGAL_SCREEN:           init_menu00_legalscreen();            break;
             case MENU_NINTENDO_LOGO:          init_menu01_nintendo();               break;
             case MENU_RAREWARE_LOGO:          init_menu02_rarelogo();               break;
-            case MENU_EYE_INTRO:              init_menu03_eyeintro();               break;
+            case MENU_EYE_INTRO:              init_menu03_gunbarrel();               break;
             case MENU_GOLDENEYE_LOGO:         init_menu04_goldeneyelogo();          break;
             case MENU_FILE_SELECT:            init_menu05_fileselect();             break;
             case MENU_MODE_SELECT:            init_menu06_modeselect();             break;

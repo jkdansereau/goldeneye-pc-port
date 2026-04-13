@@ -12,16 +12,7 @@
 #include "bondview.h"
 #include "random.h"
 #include "gbi_extension.h"
-
-// forward declarations
-
-void sub_GAME_7F06D490(struct Model *arg0, struct ModelNode *arg1);
-void sub_GAME_7F0755B0(void);
-s32 loadAnimationFrame(struct ModelAnimation *, s32, struct ModelSkeleton*);
-
-// end forward declarations
-
-
+#include "model.h"
 
 
 
@@ -36,9 +27,92 @@ bool modelmgrCanSlotFitRwdata(Model *modelslot, ModelFileHeader *modeldef)
 #ifdef NONMATCHING
 struct PropRecord * get_obj_instance_controller_for_header(struct ModelFileHeader* arg0)
 {
+    void *sp40;
+    s16   sp3E;
+    ? *var_a2;
+    ? *var_v1;
+    s16   temp_v0;
+    s32   temp_a0;
+    s32   temp_s2;
+    s32   var_s0;
+    s32   var_s1;
+    s32   var_v0;
+    void *temp_v0_2;
+    void *var_s6;
+
+    var_s6 = NULL;
+    sp40   = NULL;
+    sp3E   = -1;
+    if (D_80036078 != 0)
+    {
     #ifdef DEBUG
-    if (arg0 + 5 > 19) osSyncPrintf("WARNING: increase OISAVESIZE to %d!\n", *(arg0 + 5));
+        if (arg0->numRecords > 19) osSyncPrintf("WARNING: increase OISAVESIZE to %d!\n", (arg0->numRecords));
     #endif
+        var_v0  = 0;
+        var_a2  = &ptr_allocation_1;
+        temp_a0 = D_80036074 - 0x1E;
+        if (temp_a0 > 0)
+        {
+            var_a2 = ptr_allocation_1;
+            var_v1 = var_a2;
+loop_3:
+            if (var_v1->unk8 == 0)
+            {
+                var_s6 = (var_v0 << 5) + var_a2;
+            }
+            else
+            {
+                var_v0 += 1;
+                var_v1 += 0x20;
+                if (var_v0 < temp_a0)
+                {
+                    goto loop_3;
+                }
+            }
+        }
+        if (var_s6 == NULL)
+        {
+            var_s6 = mempAllocBytesInBank(0x20, MEMPOOL_STAGE);
+        }
+        temp_v0 = arg0->unk14;
+        if (temp_v0 > 0)
+        {
+            sp40 = mempAllocBytesInBank((((temp_v0 * 4) + 0xF) | 0xF) ^ 0xF, MEMPOOL_STAGE);
+            sp3E = arg0->unk14;
+        }
+    }
+    else
+    {
+        var_s0 = 0;
+        var_s1 = 0;
+        if (D_80036074 > 0)
+        {
+loop_12:
+            temp_s2 = var_s0 << 5;
+            if (((ptr_allocation_1 + var_s1)->unk8 == 0) && (modelmgrCanSlotFitRwdata(temp_s2 + ptr_allocation_1, arg0, ptr_allocation_1) != 0))
+            {
+                temp_v0_2 = ptr_allocation_1 + var_s1;
+                var_s6    = temp_s2 + ptr_allocation_1;
+                sp40      = temp_v0_2->unk10;
+                sp3E      = temp_v0_2->unk2;
+            }
+            else
+            {
+                var_s0 += 1;
+                var_s1 += 0x20;
+                if (var_s0 < D_80036074)
+                {
+                    goto loop_12;
+                }
+            }
+        }
+    }
+    if (var_s6 != NULL)
+    {
+        modelInit(var_s6, arg0, sp40);
+        var_s6->unk2 = sp3E;
+    }
+    return var_s6;
 }
 #else
 GLOBAL_ASM(
@@ -170,7 +244,7 @@ void clear_model_obj(Model* model)
 #ifdef NONMATCHING
 void get_aircraft_obj_instance_controller(void) {
     #ifdef DEBUG
-    if (arg0 + 0x14 > 140) osSyncPrintf("WARNING: increase OISAVESIZE to %d!\n", *(arg0 + 0x14));
+    if (arg0->numRecords > 140) osSyncPrintf("WARNING: increase OISAVESIZE to %d!\n", *(arg0->numRecords));
     #endif
 }
 #else
@@ -293,7 +367,7 @@ void modelAttachHead(Model *model, ModelNode *node,  ModelFileHeader *head)
 {
     modelAttachPart(model,model->obj,node,head);
 #ifdef DEBUG
-    if (model + 0x14 > 140 && g_ModelDistanceScale == 0) osSyncPrintf("WARNING: increase OASAVESIZE to %d!\n", *(model + 0x14));
+    if (model->numRecords > 140 && g_ModelDistanceScale == 0) osSyncPrintf("WARNING: increase OASAVESIZE to %d!\n", *(model + 0x14));
 #endif
 
     modelInitRwData(model,head->RootNode);
@@ -320,8 +394,28 @@ void modelSetDistanceScale(f32 param_1) {
 
 
 #ifdef NONMATCHING
-void sub_GAME_7F06C418(void) {
+// unreferenced
+void sub_GAME_7F06C418(void *arg0, void *arg1)
+{
+    s32   temp_t7;
+    s32   var_v0;
+    void *var_a2;
+    void *var_v1;
 
+    var_a2 = arg0;
+    var_v0 = 0;
+    var_v1 = arg1;
+    do
+    {
+        var_v0 += 1;
+        var_v1 += 0x10;
+        var_v1->unk - 10 = var_a2->unk0;
+        temp_t7          = var_a2->unk4;
+        var_a2 += 0x10;
+        var_v1->unk - C = temp_t7;
+        var_v1->unk - 8 = var_a2->unk - 8;
+        var_v1->unk - 4 = var_a2->unk - 4;
+    } while (var_v0 != 4);
 }
 #else
 GLOBAL_ASM(
@@ -359,9 +453,12 @@ void set_vtxallocator(s32 param_1) {
 
 
 #if defined(LEFTOVERDEBUG)
-//called after a debug print during failed model operation
-void return_null(void) {
-  return;
+// called after a debug print during failed model operation possible "exit()" function in debug
+void return_null(void)
+{
+    // dump something 8 bytes long?
+
+    return;
 }
 #endif
 
@@ -472,6 +569,7 @@ Mtxf *getsubmatrix(Model *objinst)
 }
 
 
+// unreferenced
 void sub_GAME_7F06C710(Model* model, coord3d* pos)
 {
     Mtxf* mtx;
@@ -789,7 +887,7 @@ f32 getsubroty(Model *objinst)
     #endif
 
     root = objinst->obj->RootNode;
-    if ((root->Opcode & 0xFF) == 1)
+    if ((root->Opcode & 0xFF) == MODELNODE_OPCODE_HEADER)
     {
         return ((struct modeldata_root *)modelGetNodeRwData(objinst, root))->subroty;
     }
@@ -1011,8 +1109,45 @@ void sub_GAME_7F06D160(coord3d *arg0, coord3d *arg1, f32 mult)
 
 
 #ifdef NONMATCHING
-void sub_GAME_7F06D1CC(void) {
+void sub_GAME_7F06D1CC(int param_1, int param_2, int param_3)
 
+{
+    byte   bVar1;
+    uint   uVar2;
+    dword  local_70;
+    byte   local_20;
+    dword  local_1c;
+    byte  *local_18;
+    dword  local_14;
+    ushort local_10;
+    byte   local_e;
+    dword  local_8;
+
+    local_10 = 0;
+    local_20 = *(*(param_1 + 8) + param_2 * 6 + 2);
+    if (local_20 != 0)
+    {
+        uVar2    = param_3 + *(*(param_1 + 8) + param_2 * 6);
+        local_18 = *(param_1 + 0x10) + (uVar2 >> 3);
+        local_e  = 8 - (uVar2 & 7);
+        while (local_e <= local_20)
+        {
+            local_20 = local_20 - local_e;
+            local_10 = local_10 | (*local_18 & (1 << (local_e & 0x3f)) - 1U) << (local_20 & 0x3f);
+            local_18 = local_18 + 1;
+            local_e  = 8;
+        }
+        if (local_20 != 0)
+        {
+            local_10 = local_10 | *local_18 >> (local_e - local_20 & 0x3f) & (1 << (local_20 & 0x3f)) - 1U;
+        }
+        bVar1 = *(*(param_1 + 8) + param_2 * 6 + 2);
+        if ((bVar1 < 0x10) && ((local_10 & 1 << (bVar1 - 1 & 0x3f)) != 0))
+        {
+            local_10 = local_10 | (1 << (0x10 - bVar1 & 0x3f)) + -1 << (bVar1 & 0x3f);
+        }
+    }
+    return local_10 + *(*(param_1 + 8) + param_2 * 6 + 4);
 }
 #else
 GLOBAL_ASM(
@@ -1101,7 +1236,9 @@ glabel sub_GAME_7F06D1CC
 
 
 #ifdef NONMATCHING
-void sub_GAME_7F06D2E4(void) {
+// arg0: unknown type. arg1: unknown type. arg5: unknown type, maybe struct.
+void sub_GAME_7F06D2E4(s32, s32, ModelSkeleton*, void* anim, s32, s16*)
+{
 
 }
 #else
@@ -2133,7 +2270,6 @@ void process_02_position(ModelRenderData *arg0, Model *model, ModelNode *node) {
 
 }
 #else
-void process_02_position(ModelRenderData *arg0, Model *model, ModelNode *node);
 GLOBAL_ASM(
 .text
 glabel process_02_position
@@ -2584,7 +2720,6 @@ void process_03_unknown(ModelRenderData *arg0, Model *model, ModelNode *node) {
 
 }
 #else
-void process_03_unknown(ModelRenderData *arg0, Model *model, ModelNode *node);
 GLOBAL_ASM(
 .text
 glabel process_03_unknown
@@ -3034,7 +3169,10 @@ void modelUpdateRelationsQuick(Model *model, ModelNode *parent)
 }
 
 
-void sub_GAME_7F06EFC4(Model *model)
+/*
+ * Address: 0x7F06EFC4
+*/
+void modelUpdateNodeRelations(Model *model)
 {
     ModelNode *node = model->obj->RootNode;
 
@@ -3367,6 +3505,7 @@ f32 modelGetAbsAnimSpeed(Model *model)
 
 /**
  * Unused Function
+ * Unreferenced
 */
 f32 modelGetEffectiveAnimSpeed(Model *model) {
     return modelGetAnimSpeed(model) * model->playspeed;
@@ -3415,7 +3554,6 @@ s32 modelConstrainOrWrapAnimFrame(s32 frame, ModelAnimation *anim, f32 endframe)
     return frame;
 }
 #else
-s32 modelConstrainOrWrapAnimFrame(s32 frame, ModelAnimation *anim, f32 endframe);
 GLOBAL_ASM(
 .text
 glabel modelConstrainOrWrapAnimFrame
@@ -4054,9 +4192,32 @@ void modelSetAnimation(Model *model, ModelAnimation *modelAnimation, s32 flip, f
 
 
 #ifdef NONMATCHING
-void sub_GAME_7F06FCFC()
+void sub_GAME_7F06FCFC(s32 arg0, void *arg1)
 {
+    void *temp_t2;
+    void *temp_t3;
 
+    sp->unk0  = arg1->unk0;
+    sp->unk4  = arg1->unk4;
+    sp->unk8  = arg1->unk8;
+    sp->unkC  = arg1->unkC;
+    sp->unk10 = arg1->unk10;
+    sp->unk14 = arg1->unk14;
+    sp->unk18 = arg1->unk18;
+    sp->unk1C = arg1->unk1C;
+    M2C_MEMCPY_ALIGNED(arg1, arg0, 0xB4);
+    temp_t3       = arg1 + 0xB4;
+    temp_t2       = arg0 + 0xB4;
+    temp_t3->unk0 = temp_t2->unk0;
+    temp_t3->unk4 = temp_t2->unk4;
+    arg1->unk0    = sp->unk0;
+    arg1->unk4    = sp->unk4;
+    arg1->unk8    = sp->unk8;
+    arg1->unkC    = sp->unkC;
+    arg1->unk10   = sp->unk10;
+    arg1->unk14   = sp->unk14;
+    arg1->unk18   = sp->unk18;
+    arg1->unk1C   = sp->unk1C;
 }
 #else
 GLOBAL_ASM(
@@ -4137,6 +4298,10 @@ void modelSetAnimEndFrame(Model *model, f32 endframe) {
     } else {
         model->endframe = -1.0f;
     }
+#ifdef DEBUG
+    // not too sure why debug wants to call this - must have some significance when most debug has been stripped from this file in XBLA
+    modelSetAnimFrame(model, (int)model->unk28);
+#endif
 }
 
 void modelSetAnimFlipFunction(Model *model, void *callback) {
@@ -4305,8 +4470,353 @@ u32 modelIsAnimMergingEnabled(void)
 
 
 #ifdef NONMATCHING
-void modelSetAnimFrame2WithChrStuff(void) {
+void modelSetAnimFrame2WithChrStuff(void *arg0, f32 arg1, f32 arg2, f32 arg3, f32 arg4)
+{
+    s32   spE4;
+    s32   spE0;
+    f32   spDC;
+    f32   spD0;
+    f32   spCC;
+    f32   spC8;
+    s32   spB8;
+    f32   spB4;
+    f32   spB0;
+    f32   spAC;
+    f32   spA4;
+    f32   spA0;
+    f32   sp9C;
+    f32   sp98;
+    s32   sp94;
+    f32   sp88;
+    f32   sp84;
+    f32   sp7C;
+    s32   sp6C;
+    f32   temp_f0;
+    f32   temp_f0_10;
+    f32   temp_f0_11;
+    f32   temp_f0_2;
+    f32   temp_f0_3;
+    f32   temp_f0_4;
+    f32   temp_f0_5;
+    f32   temp_f0_6;
+    f32   temp_f0_7;
+    f32   temp_f0_8;
+    f32   temp_f0_9;
+    f32   temp_f10;
+    f32   temp_f20;
+    f32   temp_f20_2;
+    f32   temp_f2;
+    f32   temp_f2_2;
+    f32   temp_f8;
+    f32   temp_f8_2;
+    f32   var_f0;
+    f32   var_f0_2;
+    f32   var_f12;
+    f32   var_f22;
+    f32   var_f22_2;
+    f32   var_f28;
+    f32   var_f30;
+    f32   var_f8;
+    s16   temp_v0_2;
+    s16   temp_v0_3;
+    s16   temp_v0_4;
+    s16   temp_v0_6;
+    s16   temp_v1;
+    s32   temp_s2_2;
+    s32   temp_v0_5;
+    s32   var_s2;
+    s32   var_s3;
+    s32   var_v0;
+    u16  *temp_s2;
+    void *partdesc;
+    void *temp_v0;
 
+    partdesc = *arg0->unk8;
+    if ((partdesc->unk0 & 0xFF) == 1)
+    {
+        temp_s2 = partdesc->unk4;
+        temp_v0 = modelGetNodeRwData(partdesc);
+        if (temp_v0->unk0 == 0)
+        {
+            spE4      = *temp_s2;
+            spE0      = arg0->unk8->unk4; // skeleton
+            spDC      = arg0->unk14 * arg0->unkB8;
+            spC8.unk0 = D_80036254.unk0;
+            spC8.unk4 = D_80036254.unk4;
+            spC8.unk8 = D_80036254.unk8;
+            spAC      = temp_v0->unk34;
+            spB0      = temp_v0->unk38;
+            spB4      = temp_v0->unk3C;
+            var_f28   = temp_v0->unk30;
+            sp9C      = temp_v0->unk24;
+            spA0      = temp_v0->unk28;
+            spA4      = temp_v0->unk2C;
+            sp98      = temp_v0->unk20;
+            sp94      = temp_v0->unk1;
+            var_f30   = arg0->unk40;
+            if (var_f30 < 0.0f)
+            {
+                var_f30 = -var_f30;
+            }
+            var_f0 = arg0->unk70;
+            if (var_f0 < 0.0f)
+            {
+                var_f0 = -var_f0;
+            }
+            var_s3 = 0;
+            if (arg1 <= arg2)
+            {
+                var_s3 = 1;
+            }
+            if (var_s3 != 0)
+            {
+                sp88   = var_f0;
+                var_s2 = floorFloatToInt(arg1) + 1;
+                var_v0 = floorFloatToInt(arg2);
+            }
+            else
+            {
+                sp88   = var_f0;
+                var_s2 = ceilFloatToInt(arg1) - 1;
+                var_v0 = ceilFloatToInt(arg2);
+            }
+            spB8 = var_v0;
+loop_12:
+            if (var_s3 != 0)
+            {
+                if (spB8 < var_s2)
+                {
+                }
+                else
+                {
+                    goto block_16;
+                }
+            }
+            else if (var_s2 >= spB8)
+            {
+block_16:
+                temp_v0_2   = modelConstrainOrWrapAnimFrame(var_s2, arg0->unk20, arg0->unk3C, spB8);
+                arg0->unk30 = temp_v0_2;
+                if (sp94 != 0)
+                {
+                    spAC = sp9C;
+                    spB0 = spA0;
+                    spB4 = spA4;
+                    if (temp_v0->unk18 == 0.0f)
+                    {
+                        var_f28 = sp98;
+                    }
+                }
+                else
+                {
+                    temp_f0 = sub_GAME_7F06D3F4(spE4, arg0->unk24, spE0, arg0->unk20, temp_v0_2, &spC8);
+                    var_f22 = temp_f0;
+                    if (spDC != 1.0f)
+                    {
+                        spC8 *= spDC;
+                        spCC *= spDC;
+                        spD0 *= spDC;
+                    }
+                    if (var_s3 == 0)
+                    {
+                        spC8 = -spC8;
+                        spD0 = -spD0;
+                        if (temp_f0 > 0.0f)
+                        {
+                            var_f22 = 6.2831855f - temp_f0;
+                        }
+                    }
+                    temp_f20  = cosf(temp_v0->unk14);
+                    temp_f0_2 = sinf(temp_v0->unk14);
+                    temp_f8   = spAC + ((spC8 * temp_f20) + (spD0 * temp_f0_2));
+                    spB0      = spCC;
+                    spAC      = temp_f8;
+                    spB4 += (-spC8 * temp_f0_2) + (spD0 * temp_f20);
+                    if (temp_v0->unk18 == 0.0f)
+                    {
+                        var_f28 += var_f22;
+                        if (var_f28 >= 6.2831855f)
+                        {
+                            var_f28 -= 6.2831855f;
+                        }
+                    }
+                }
+                if (var_s3 != 0)
+                {
+                    var_s2 += 1;
+                }
+                else
+                {
+                    var_s2 -= 1;
+                }
+                temp_v0_3   = modelConstrainOrWrapAnimFrame(var_s2, arg0->unk20, arg0->unk3C);
+                arg0->unk32 = temp_v0_3;
+                if (arg0->unk30 != arg0->unk32)
+                {
+                    sp94      = 1;
+                    temp_f0_3 = sub_GAME_7F06D3F4(spE4, arg0->unk24, spE0, arg0->unk20, temp_v0_3, &spC8);
+                    var_f22_2 = temp_f0_3;
+                    if (spDC != 1.0f)
+                    {
+                        spC8 *= spDC;
+                        spCC *= spDC;
+                        spD0 *= spDC;
+                    }
+                    if (var_s3 == 0)
+                    {
+                        spC8 = -spC8;
+                        spD0 = -spD0;
+                        if (temp_f0_3 > 0.0f)
+                        {
+                            var_f22_2 = 6.2831855f - temp_f0_3;
+                        }
+                    }
+                    temp_f20_2 = cosf(temp_v0->unk30);
+                    temp_f0_4  = sinf(temp_v0->unk30);
+                    if ((g_ModelAnimMergingEnabled != 0) && (arg0->unk54 != 0))
+                    {
+                        sp9C = (spD0 * temp_f0_4) + (spC8 * temp_f20_2);
+                        spA4 = (spD0 * temp_f20_2) + (-spC8 * temp_f0_4);
+                        if (var_f30 > 0.0f)
+                        {
+                            temp_f2  = arg0->unk84;
+                            var_f0_2 = temp_f2 - (arg0->unkA4 / (var_f30 * arg0->unk88));
+                            if (var_f0_2 < 0.0f)
+                            {
+                                var_f0_2 = 0.0f;
+                            }
+                            temp_f0_5 = (temp_f2 + var_f0_2) * 0.5f;
+                            temp_f10  = ((temp_v0->unk40 - temp_v0->unk4C) * sp88) / var_f30;
+                            sp7C      = temp_f10;
+                            temp_f8_2 = ((temp_v0->unk48 - temp_v0->unk54) * sp88) / var_f30;
+                            sp9C += (temp_f10 - sp9C) * temp_f0_5;
+                            sp84 = temp_f8_2;
+                            spA4 += (temp_f8_2 - spA4) * temp_f0_5;
+                        }
+                        else
+                        {
+                            sp9C += (temp_v0->unk40 - temp_v0->unk4C) * arg0->unk84;
+                            spA4 += (temp_v0->unk48 - temp_v0->unk54) * arg0->unk84;
+                        }
+                        var_f8 = spA4 + spB4;
+                        sp9C += spAC;
+                        spA0 = spCC;
+                    }
+                    else
+                    {
+                        spA0   = spCC;
+                        sp9C   = (spD0 * temp_f0_4) + (spAC + (spC8 * temp_f20_2));
+                        var_f8 = (spD0 * temp_f20_2) + (spB4 - (spC8 * temp_f0_4));
+                    }
+                    spA4      = var_f8;
+                    temp_f0_6 = temp_v0->unk5C;
+                    if ((temp_f0_6 > 0.0f) && (var_f30 > 0.0f))
+                    {
+                        temp_f2_2 = 1.0f / var_f30;
+                        var_f12   = temp_f2_2;
+                        if (temp_f0_6 < temp_f2_2)
+                        {
+                            var_f12        = temp_f0_6;
+                            temp_v0->unk5C = 0.0f;
+                        }
+                        else
+                        {
+                            temp_v0->unk5C = temp_f0_6 - temp_f2_2;
+                        }
+                        var_f22_2 += temp_v0->unk58 * var_f12;
+                        if (var_f22_2 < 0.0f)
+                        {
+                            var_f22_2 += 6.2831855f;
+                        }
+                        else if (var_f22_2 >= 6.2831855f)
+                        {
+                            var_f22_2 -= 6.2831855f;
+                        }
+                    }
+                    if (temp_v0->unk18 == 0.0f)
+                    {
+                        temp_f0_7 = var_f28 + var_f22_2;
+                        sp98      = temp_f0_7;
+                        if (temp_f0_7 >= 6.2831855f)
+                        {
+                            sp98 = temp_f0_7 - 6.2831855f;
+                        }
+                    }
+                }
+                goto loop_12;
+            }
+            temp_v0->unk34 = spAC;
+            temp_v0->unk38 = spB0;
+            temp_v0->unk30 = var_f28;
+            temp_v0->unk3C = spB4;
+            temp_v0->unk24 = sp9C;
+            temp_v0->unk28 = spA0;
+            temp_v0->unk2C = spA4;
+            temp_v0->unk20 = sp98;
+            temp_v0_4      = arg0->unk30;
+            temp_v1        = arg0->unk32;
+            if (temp_v1 == temp_v0_4)
+            {
+                arg0->unk2C = 0.0f;
+                arg0->unk28 = temp_v0_4;
+            }
+            else if (var_s3 != 0)
+            {
+                temp_f0_8   = arg2 - spB8;
+                arg0->unk2C = temp_f0_8;
+                arg0->unk28 = temp_v0_4 + temp_f0_8;
+            }
+            else
+            {
+                temp_f0_9   = spB8 - arg2;
+                arg0->unk2C = temp_f0_9;
+                arg0->unk28 = temp_v1 + (1.0f - temp_f0_9);
+            }
+            if (arg0->unk54 != 0)
+            {
+                temp_s2_2 = floorFloatToInt(arg3);
+                temp_v0_5 = floorFloatToInt(arg4);
+                sp6C      = temp_v0_5;
+                if (((var_s3 != 0) && (temp_s2_2 < temp_v0_5)) || ((var_s3 == 0) && (temp_v0_5 < temp_s2_2)))
+                {
+                    if (temp_v0->unk2 != 0)
+                    {
+                        temp_v0->unk50 = temp_v0->unk44;
+                    }
+                    else
+                    {
+                        temp_v0->unk50 = temp_v0->unk38;
+                    }
+                    arg0->unk60 = modelConstrainOrWrapAnimFrame(sp6C, arg0->unk54, arg0->unk6C);
+                    temp_v0_6   = modelConstrainOrWrapAnimFrame(sp6C + 1, arg0->unk54, arg0->unk6C);
+                    arg0->unk62 = temp_v0_6;
+                    sub_GAME_7F06D3F4(spE4, arg0->unk25, spE0, arg0->unk54, temp_v0_6, &spC8);
+                    if (spDC != 1.0f)
+                    {
+                        spCC *= spDC;
+                    }
+                    temp_v0->unk2  = 1;
+                    temp_v0->unk44 = spCC;
+                }
+                if (var_s3 != 0)
+                {
+                    temp_f0_10  = arg4 - sp6C;
+                    arg0->unk5C = temp_f0_10;
+                    arg0->unk58 = arg0->unk60 + temp_f0_10;
+                    return;
+                }
+                temp_f0_11  = 1.0f - (arg4 - sp6C);
+                arg0->unk5C = temp_f0_11;
+                arg0->unk58 = arg0->unk62 + (1.0f - temp_f0_11);
+                return;
+            }
+            temp_v0->unk2 = 0;
+            return;
+        }
+        modelSetAnimFrame2(arg0, arg2, arg4);
+        return;
+    }
+    modelSetAnimFrame2(arg0, arg2, arg4);
 }
 #else
 GLOBAL_ASM(
@@ -6690,7 +7200,7 @@ void dogfnegx(ModelRenderData *renderdata, Model *model, ModelNode *node)
         gSPMatrix(renderdata->gdl++, osVirtualToPhysical(mtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gSPVertex(renderdata->gdl++, osVirtualToPhysical(vertices), 4, 0);
         if (1);
-        gDPTri2(renderdata->gdl++, 0, 1, 2, 2, 3, 0);
+        gSP2Triangles(renderdata->gdl++, 0, 1, 2, 0, 2, 3, 0, 0);
     }
 }
 
@@ -6703,11 +7213,181 @@ void sub_GAME_7F073FC8(s32 arg0)
 
 
 #ifdef NONMATCHING
-void doshadow(void) {
+void doshadow(void)
+{
+    s32   sp70;
+    void *sp6C;
+    s8    sp67;
+    ? sp58;
+    void *sp54;
+    s16   sp52;
+    f32   sp48;
+    f32   sp44;
+    f32   sp40;
+    void *sp38;
+    void *sp2C;
+    void *sp28;
+    f32   temp_f0;
+    f32   temp_f12;
+    f32   temp_f14;
+    f32   temp_f2;
+    f32   var_f12;
+    f32   var_f14;
+    s16   var_v1;
+    s32   temp_v0_2;
+    void *(*temp_v0_3)(f32, f32, ?, void *);
+    void *temp_a2;
+    void *temp_v0;
+    void *temp_v0_4;
+    void *temp_v1;
+    void *temp_v1_2;
+    void *temp_v1_3;
+    void *temp_v1_4;
+    void *temp_v1_5;
+    void *temp_v1_6;
 
+    if (D_800363F0 > 0)
+    {
+        temp_a2   = arg2->unk4;
+        sp58.unk0 = D_800363F8.unk0;
+        sp58.unk4 = D_800363F8.unk4;
+        sp58.unkC = D_800363F8.unkC;
+        sp58.unk8 = D_800363F8.unk8;
+        sp6C      = temp_a2;
+        temp_v0   = modelGetNodeRwData(arg1, temp_a2->unk14, temp_a2, arg1);
+        temp_f12  = temp_a2->unk8;
+        temp_f14  = temp_a2->unkC;
+        temp_f2   = temp_v0->unkC - temp_v0->unk4;
+        if (arg0->unk8 & 2)
+        {
+            temp_v0_2 = arg0->unk30;
+            if ((temp_v0_2 == 3) || (temp_v0_2 == 8))
+            {
+                sp67 = ((arg0->unk34 & 0xFF) * D_800363F0) / 255;
+            }
+            else
+            {
+                sp67 = D_800363F0;
+            }
+            sp6C = temp_a2;
+            sp40 = temp_f2;
+            sp48 = temp_f12;
+            sp44 = temp_f14;
+            sp70 = arg1->unkC + (modelFindNodeMtxIndex(temp_f12, temp_f14, arg2, 0, temp_a2, arg1) << 6);
+            if (arg0->unk4 != 0)
+            {
+                var_v1 = (2.0f - temp_f2) / arg1->unk14;
+            }
+            else
+            {
+                var_v1 = -temp_f2 / arg1->unk14;
+            }
+            if (temp_f2 < 50.0f)
+            {
+                var_f12 = temp_f12 * 1.25f;
+                var_f14 = temp_f14 * 1.25f;
+            }
+            else if (temp_f2 > 300.0f)
+            {
+                var_f14 = 0.0f;
+                var_f12 = 0.0f;
+            }
+            else
+            {
+                temp_f0 = (300.0f - temp_f2) / 200.0f;
+                var_f12 = temp_f12 * temp_f0;
+                var_f14 = temp_f14 * temp_f0;
+            }
+            temp_v0_3 = vtxallocator;
+            if (temp_v0_3 == NULL)
+            {
+                sp52 = var_v1;
+                sp6C = temp_a2;
+                sp48 = var_f12;
+                sp44 = var_f14;
+                osSyncPrintf("doshadow: no vtx allocator!\n", temp_a2, arg1);
+                return_null();
+            }
+            sp52             = var_v1;
+            sp6C             = temp_a2;
+            sp48             = var_f12;
+            sp44             = var_f14;
+            temp_v0_4        = temp_v0_3(var_f12, var_f14, 4, temp_a2);
+            temp_v0_4->unk0  = sp58.unk0;
+            temp_v0_4->unk4  = sp58.unk4;
+            temp_v0_4->unk8  = sp58.unk8;
+            temp_v0_4->unkC  = sp58.unkC;
+            temp_v0_4->unk10 = sp58.unk0;
+            temp_v0_4->unk14 = sp58.unk4;
+            temp_v0_4->unk18 = sp58.unk8;
+            temp_v0_4->unk1C = sp58.unkC;
+            temp_v0_4->unk20 = sp58.unk0;
+            temp_v0_4->unk24 = sp58.unk4;
+            temp_v0_4->unk28 = sp58.unk8;
+            temp_v0_4->unk2C = sp58.unkC;
+            temp_v0_4->unk30 = sp58.unk0;
+            temp_v0_4->unk34 = sp58.unk4;
+            temp_v0_4->unk38 = sp58.unk8;
+            temp_v0_4->unk3C = sp58.unkC;
+            temp_v0_4->unk2  = var_v1;
+            temp_v0_4->unk0  = temp_a2->unk0 - var_f12;
+            temp_v0_4->unk4  = temp_a2->unk4 - var_f14;
+            temp_v0_4->unk12 = var_v1;
+            temp_v0_4->unk10 = temp_a2->unk0 - var_f12;
+            temp_v0_4->unk14 = temp_a2->unk4 + var_f14;
+            temp_v0_4->unk22 = var_v1;
+            temp_v0_4->unk20 = temp_a2->unk0 + var_f12;
+            temp_v0_4->unk24 = temp_a2->unk4 + var_f14;
+            temp_v0_4->unk32 = var_v1;
+            temp_v0_4->unk30 = temp_a2->unk0 + var_f12;
+            temp_v0_4->unk34 = temp_a2->unk4 - var_f14;
+            temp_v1          = arg0->unkC;
+            arg0->unkC       = temp_v1 + 8;
+            temp_v1->unk0    = 0xBC001406;
+            sp54             = temp_v0_4;
+            sp6C             = temp_a2;
+            sp38             = temp_v1;
+            sp38->unk4       = osVirtualToPhysical(var_f12, var_f14, temp_a2->unk1C, temp_a2);
+            temp_v1_2        = temp_a2->unk10;
+            if (temp_v1_2 != NULL)
+            {
+                sp54->unk8  = 0;
+                sp54->unkA  = 0;
+                sp54->unk1A = 0;
+                sp54->unk18 = (temp_v1_2->unk4 << 5) - 1;
+                sp54->unk28 = (temp_v1_2->unk4 << 5) - 1;
+                sp54->unk38 = 0;
+                sp54->unk2A = (temp_v1_2->unk5 << 5) - 1;
+                sp54->unk3A = (temp_v1_2->unk5 << 5) - 1;
+                sub_GAME_7F073038(arg0, temp_v1_2, 4, sp54);
+            }
+            else
+            {
+                sub_GAME_7F073038(arg0, NULL, 1, sp54);
+            }
+            temp_v1_3       = arg0->unkC;
+            arg0->unkC      = temp_v1_3 + 8;
+            temp_v1_3->unk0 = 0xB7000000;
+            temp_v1_3->unk4 = 0x2000;
+            temp_v1_4       = arg0->unkC;
+            arg0->unkC      = temp_v1_4 + 8;
+            temp_v1_4->unk0 = 0x01020040;
+            sp2C            = temp_v1_4;
+            sp2C->unk4      = osVirtualToPhysical((bitwise f32)sp70);
+            temp_v1_5       = arg0->unkC;
+            arg0->unkC      = temp_v1_5 + 8;
+            temp_v1_5->unk0 = 0x04300040;
+            sp28            = temp_v1_5;
+            sp28->unk4      = osVirtualToPhysical((bitwise f32)sp54, (bitwise f32)sp2C);
+            temp_v1_6       = arg0->unkC;
+            arg0->unkC      = temp_v1_6 + 8;
+            temp_v1_6->unk4 = 0x3210;
+            temp_v1_6->unk0 = 0xB1000002;
+        }
+    }
 }
 #else
-#ifndef VERSION_EU
+    #ifndef VERSION_EU
 //D:80054A94
 const char aDoshadowNoVtxAllocator[] = "doshadow: no vtx allocator!\n";
 GLOBAL_ASM(
@@ -7490,10 +8170,52 @@ void sub_GAME_7F074534(ModelRenderData* data, Model* model, ModelNode* node) {
 
 
 
-#ifdef NONMATCHING
-void subdraw(void) {
+#if 1
+void subdraw(ModelRenderData *mrData, Model *mdl) // Matches
+{
+    ModelNode *root = mdl->obj->RootNode;
+    #if defined(LEFTOVERDEBUG)
 
+    if (mrData->gdl == NULL)
+    {
+        osSyncPrintf("subdraw: no gfxlist!\n");
+        return_null();
+    }
+
+    if (mdl->obj->isLoaded)
+    {
+    }
+    else
+    {
+        osSyncPrintf("subdraw: object not initialised! (0x%X)\n", (u32)mdl->obj);
+        return_null();
+    }
+    #endif
+    gSPSegment(mrData->gdl++, 3, osVirtualToPhysical(mdl->render_pos));
+
+    while (root != NULL)
+    {
+        sub_GAME_7F074534(mrData, mdl, root);
+
+        if (root->Child)
+        {
+            root = root->Child;
+        }
+        else
+        {
+            while (root)
+            {
+                if (root->Next)
+                {
+                    root = root->Next;
+                    break;
+                }
+                root = root->Parent;
+            }
+        }
+    }
 }
+
 #else
 #ifndef VERSION_EU
 //D:80054AB4
@@ -7644,6 +8366,7 @@ glabel subdraw
 #endif
 
 
+// unreferenced
 void sub_GAME_7F074790(ModelRenderData* arg0, Model* arg1)
 {
     subcalcpos(arg1);
@@ -7980,8 +8703,12 @@ glabel sub_GAME_7F0747D0
 
 
 #ifdef NONMATCHING
-void sub_GAME_7F074C68(void) {
+void sub_GAME_7F074C68(void *arg1, s32 arg2, s32 arg3)
+{
+    s32 sp1C;
 
+    sp1C = arg1->unk4;
+    sub_GAME_7F0747D0(sp1C, modelFindNodeMtx(0), arg2, arg3);
 }
 #else
 GLOBAL_ASM(
@@ -8611,6 +9338,7 @@ def_7F0753C4:
 
 
 #ifdef NONMATCHING
+// unreferenced
 void sub_GAME_7F07549C(s32 arg0, f32 *arg1, f32 *arg2, ModelNode *arg3)
 {
     //uses sh vs sw
@@ -8679,7 +9407,7 @@ s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
 
         // Set this to point to the end of the copied frame
         // This allows to copy another frame after this one
-        D_80036414->animBufferPtr2 = dest + size; 
+        D_80036414->animBufferPtr2 = dest + size;
     }
     return ret;
 }
@@ -8915,6 +9643,7 @@ void sub_GAME_7F075A90(ModelFileHeader *header, s32 vma, u32 addr) {
 }
 
 /**
+ * unreferenced
  * Address 7F075B08.
 */
 void REMOVED_sub_GAME_7F075B08(s32 param_1,s32 param_2,s32 param_3,s32 param_4)

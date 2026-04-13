@@ -3,7 +3,7 @@
 #include <bondtypes.h>
 #include "objective_status.h"
 #include "assets/obseg/text/LmiscE.h"
-#include "lvl_text.h"
+#include "language.h"
 #include "PR/os.h"
 #include "str.h"
 #include "bondview.h"
@@ -27,7 +27,7 @@ struct criteria_picture *ptr_last_photo_obj_in_room_subobject_entry_type1E;
 
 // data
 s32 objective_count = 0xFFFFFFFF;
-s32 objective_count_related = 0;
+s32 objective_status_display_disabled = FALSE;
 
 
 
@@ -330,9 +330,9 @@ bool objectiveIsAllComplete(void)
 
 
 #ifdef BUGFIX_R1
-void FUN_7f057a40(void)
+void objectivestatusDisableStatusDisplay(void)
 {
-  objective_count_related = 1;
+  objective_status_display_disabled = TRUE;
   return;
 }
 #endif
@@ -345,7 +345,7 @@ void display_objective_status_text_on_status_change(void) {
     enum OBJECTIVESTATUS status;
 
 #ifdef BUGFIX_R1
-    if (objective_count_related != 0) { return; }
+    if (objective_status_display_disabled) { return; }
 #endif
 
     for (i = 0; i <= objective_count; i++) {

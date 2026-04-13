@@ -5,7 +5,7 @@ SECTIONS
 {
    _UchrDataStart = ADDR(.data);
    _UchrDataRomStart = 0x0000;
-   .data 0x00000000 : AT(0x0000) {
+   .data 0x05000000 : AT(0x0000) {
       * (.data);
    }
    _UchrDataEnd = ADDR(.data) + SIZEOF(.data);

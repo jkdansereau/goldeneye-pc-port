@@ -122,7 +122,7 @@ SECTIONS
 
    BEGIN_SEG(Globalimagetable, _animation_dataSegmentRomEnd, 0x02000000)
    {
-      build/OUTCODE/assets/GlobalImageTable.o (.data);
+      build/OUTCODE/assets/oddtextures.o (.data);
    }
    END_SEG(Globalimagetable)
 

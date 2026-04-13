@@ -702,9 +702,9 @@ typedef struct {
 extern u64 osClockRate;
 
 #define	OS_CLOCK_RATE		62500000LL
-#if 0 /*(OS_MAJOR_VERSION > 'H')*/
+#define OS_CPU_COUNTER       (OS_CLOCK_RATE * 3 / 4)
 
-#    define OS_CPU_COUNTER       (OS_CLOCK_RATE * 3 / 4)
+#if 0 /*(OS_MAJOR_VERSION > 'H')*/
 #    define OS_NSEC_TO_CYCLES(n) (((u64)(n) * (OS_CPU_COUNTER / 15625000LL)) / (1000000000LL / 15625000LL))
 #    define OS_USEC_TO_CYCLES(n) (((u64)(n) * (OS_CPU_COUNTER / 15625LL)) / (1000000LL / 15625LL))
 #    define OS_CYCLES_TO_NSEC(c) (((u64)(c) * (1000000000LL / 15625000LL)) / (OS_CPU_COUNTER / 15625000LL))

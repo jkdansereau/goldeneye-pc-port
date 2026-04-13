@@ -13,7 +13,7 @@
 #include "game/indy_comms.h"
 #include "init.h"
 #include "joy.h"
-#include "game/lvl.h"
+#include "game/lv.h"
 #include "game/front.h"
 #include "mema.h"
 #include "memp.h"
@@ -31,13 +31,13 @@
 #include "vi.h"
 #include "game/bg.h"
 #include "game/debugmenu_handler.h"
-#include "game/lvl.h"
+#include "game/lv.h"
 #include "game/ramromreplay.h"
 #include "game/rsp.h"
 #include "game/stan.h"
 #include "game/textrelated.h"
 #include "game/player.h"
-#include "game/unk_0C0A70.h"
+#include "game/frametiming.h"
 #include "PR/R4300.h"
 
 /**
@@ -48,10 +48,25 @@
  */
 
 
+// #define	OS_CLOCK_RATE		62500000LL
+// #define OS_CPU_COUNTER       (OS_CLOCK_RATE * 3 / 4)
+
 #ifdef REFRESH_PAL
-#define MAIN_LOOP_TICK_INTERVAL frameDelay * 0xe34ea - 0x71a75U
+
+    #define CYCLES_PER_FRAME    ((u32) OS_CPU_COUNTER / 50U) // 937,500
+    #define INTERVAL_INTER_MATH    (CYCLES_PER_FRAME / 2U) // 468,750
+
+    // this is: frameDelay * 931050 - 465525
+    #define MAIN_LOOP_TICK_INTERVAL frameDelay * (CYCLES_PER_FRAME - 6450U) - (INTERVAL_INTER_MATH - 3225U)
+
 #else
-#define MAIN_LOOP_TICK_INTERVAL 0x5eb61U
+
+    #define CYCLES_PER_FRAME    ((u32) OS_CPU_COUNTER / 60U) // 781,250
+    #define INTERVAL_INTER_MATH    (CYCLES_PER_FRAME / 2U) // 390,625
+
+    // note: 3225U * 5/6 = 2687.5
+    #define MAIN_LOOP_TICK_INTERVAL (INTERVAL_INTER_MATH - 2688U) // 387,937
+
 #endif
 
 /**
@@ -205,8 +220,8 @@ void bossInitMainthreadData(void)
     langInit();
     lvInit();
     bossInit();
-    textrelatedInit_REMOVED();
-    debmenu7000ADA8();
+    textInit();
+    debmenuInit();
     default_player_perspective_and_height();
     store_osgetcount();
     null_init_main_1();
@@ -423,7 +438,7 @@ void bossMainloop(void)
         joyCheckStatusThreadSafe();
         lvlStageLoad(g_StageNum);
         viInitBuffers();
-        debmenuInit();
+        debmenuRefresh();
         waitForNextFrame();
         speedgraphMarkerCommit();
 
@@ -614,8 +629,8 @@ void bossMainloop(void)
                     pendingGfx--;
                     break;
 
-                case OS_SC_PRE_NMI_MSG:
-                    pendingGfx = 4U;
+                case OS_SC_PRE_NMI_MSG: // message when the console's power is being cut off
+                    pendingGfx = 4U;    // this stops any further graphics processing
                     break;
             }
         }
@@ -677,7 +692,7 @@ LEVELID bossGetStageNum() {
 void bossReturnTitleStage(void) {
 #ifdef BUGFIX_R1
     display_objective_status_text_on_status_change();
-    FUN_7f057a40();
+    objectivestatusDisableStatusDisplay();
 #endif
     if ((bossGetStageNum() != LEVELID_CUBA) && (objectiveIsAllComplete() != 0x0)) {
         end_of_mission_briefing();

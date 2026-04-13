@@ -10,20 +10,20 @@
 #include <snd.h>
 #include "bg.h"
 #include "bondview.h"
-#include "cheat_buttons.h"
+#include "cheat.h"
 #include "chr.h"
 #include "chrai.h"
 #include "chraidata.h"
-#include "chrlv.h"
-#include "chrobjhandler.h"
-#include "explosions.h"
+#include "chraction.h"
+#include "propobj.h"
+#include "explosion.h"
 #include "file.h"
-#include "fog.h"
+#include "bgfog.h"
 #include "gun.h"
 #include "initanitable.h"
 #include "loadobjectmodel.h"
-#include "lvl.h"
-#include "lvl_text.h"
+#include "lv.h"
+#include "language.h"
 #include "math_atan2f.h"
 #include "math_ceil.h"
 #include "math_floor.h"
@@ -32,8 +32,8 @@
 #include "objecthandler.h"
 #include "objective_status.h"
 #include "player.h"
-#include "player_2.h"
 #include "stan.h"
+#include "model.h"
 
 // bss
 
@@ -718,7 +718,7 @@ glabel sub_GAME_7F03AB58
 /* 06F6C4 7F03AB94 AFA7022C */   sw    $a3, 0x22c($sp)
 /* 06F6C8 7F03AB98 46000506 */  mov.s $f20, $f0
 /* 06F6CC 7F03AB9C 27A40090 */  addiu $a0, $sp, 0x90
-/* 06F6D0 7F03ABA0 0FC2E3A6 */  jal   sub_GAME_7F0B8E98
+/* 06F6D0 7F03ABA0 0FC2E3A6 */  jal   bgCopyVisibleRoomsToList
 /* 06F6D4 7F03ABA4 24050064 */   li    $a1, 100
 /* 06F6D8 7F03ABA8 18400085 */  blez  $v0, .L7F03ADC0
 /* 06F6DC 7F03ABAC 27B00090 */   addiu $s0, $sp, 0x90
@@ -1639,7 +1639,7 @@ glabel chraiDefaultWeaponFireHandler
 /* 070384 7F03B854 10400004 */  beqz  $v0, .L7F03B868
 /* 070388 7F03B858 8FA40534 */   lw    $a0, 0x534($sp)
 /* 07038C 7F03B85C 87A50538 */  lh    $a1, 0x538($sp)
-/* 070390 7F03B860 0FC2EF83 */  jal   sub_GAME_7F0BBE0C
+/* 070390 7F03B860 0FC2EF83 */  jal   lightFixtureBreak
 /* 070394 7F03B864 8FA60544 */   lw    $a2, 0x544($sp)
 .L7F03B868:
 /* 070398 7F03B868 10000014 */  b     .L7F03B8BC
@@ -2607,7 +2607,7 @@ void handle_mp_respawn_and_some_things(void) {
                             temp_s0_2->unk84 = (f32) temp_s0_2->unk80; // unk80 and unk84 invalid??
                         }
                         if (var_s3 == 0) {
-                            chrobjSndCreatePostEventDefault(sndPlaySfx(g_musicSfxBufferPtr, 0x52, 0), prop_s1->pos);
+                            chrobjSndCreatePostEventDefault(sndPlaySfx(g_musicSfxBufferPtr, OBJ_REGEN_SFX, 0), prop_s1->pos);
                         }
                     }
                 }
@@ -3285,7 +3285,7 @@ void determing_type_of_object_and_detection(void)
 		prop = propprev;
     }
 
-    if (sub_GAME_7F09B4D8(get_cur_playernum()) == 0)
+    if (get_player_position_in_shuffled(get_cur_playernum()) == 0)
     {
         handle_alarm_gas_timer_calldamage();
         loop_set_sound_effect_all_slots();
@@ -3346,32 +3346,32 @@ void chraiGetPropRoomIds(PropRecord *self, s32 *roomids)
  *
  * Address 0x7F03CC20.
 */
-void chraiGetCollisionBounds(PropRecord *arg0, struct rect4f **arg1, s32 *arg2, f32 *arg3, f32 *arg4)
+void chraiGetCollisionBounds(PropRecord *prop, struct rect4f **polygon, s32 *edges, f32 *top, f32 *bottom)
 {
-    *arg1 = NULL;
-    *arg2 = 0;
+    *polygon = NULL;
+    *edges = 0;
 
-    if (arg0->type == PROP_TYPE_CHR)
+    if (prop->type == PROP_TYPE_CHR)
     {
-        chrUpdateCollisionBounds(arg0, arg1, arg2, arg3, arg4);
+        chrUpdateCollisionBounds(prop, polygon, edges, top, bottom);
     }
-    else if (arg0->type == PROP_TYPE_VIEWER)
+    else if (prop->type == PROP_TYPE_VIEWER)
     {
-        bondviewGetPropHeightRelatedValues(arg0, arg1, arg2, arg3, arg4);
+        bondviewGetPropHeightRelatedValues(prop, polygon, edges, top, bottom);
     }
-    else if (arg0->type == PROP_TYPE_WEAPON)
-    {
-        // nothing to do
-    }
-    else if ((arg0->type == PROP_TYPE_OBJ) || (arg0->type == PROP_TYPE_DOOR))
-    {
-        sub_GAME_7F04F244(arg0, arg1, arg2, arg3, arg4);
-    }
-    else if (arg0->type == PROP_TYPE_PLAYER)
+    else if (prop->type == PROP_TYPE_WEAPON)
     {
         // nothing to do
     }
-    else if (arg0->type == PROP_TYPE_NUL)
+    else if ((prop->type == PROP_TYPE_OBJ) || (prop->type == PROP_TYPE_DOOR))
+    {
+        sub_GAME_7F04F244(prop, polygon, edges, top, bottom);
+    }
+    else if (prop->type == PROP_TYPE_PLAYER)
+    {
+        // nothing to do
+    }
+    else if (prop->type == PROP_TYPE_NUL)
     {
         // nothing to do
     }
@@ -3392,12 +3392,12 @@ void chraiGetCollisionBounds(PropRecord *arg0, struct rect4f **arg1, s32 *arg2, 
  *
  * Address 0x7F03CCB0.
 */
-void chraiGetCollisionBoundsWithoutY(PropRecord *arg0, struct rect4f **arg1, s32 *arg2)
+void chraiGetCollisionBoundsWithoutY(PropRecord *prop, struct rect4f **polygon, s32 *edges)
 {
     f32 sp24;
     f32 sp20;
 
-    chraiGetCollisionBounds(arg0, arg1, arg2, &sp24, &sp20);
+    chraiGetCollisionBounds(prop, polygon, edges, &sp24, &sp20);
 }
 
 

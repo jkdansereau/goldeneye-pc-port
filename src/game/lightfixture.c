@@ -1,7 +1,7 @@
 #include <ultra64.h>
 #include "lightfixture.h"
 #include "bg.h"
-#include "unk_0A1DA0.h"
+#include "glass.h"
 #include <bondconstants.h>
 #include <assets/image_externs.h>
 #include <PR/gbi.h>
@@ -205,6 +205,7 @@ void darken_vertex_in_room(Vtx * vertex, s32 room_index)
 {
     s32 vtx_index;
 
+    // Check if this vertex was already darkened
     if (darkened_light_table_contains_vertex(vertex, room_index) != 0) { return; }
 
     // weird memory stuff going on here
@@ -284,13 +285,15 @@ s32 darkened_light_table_contains_triangle(Gfx * gfx, u32 tri_type, s32 room_ind
     return out3 + out2 + out1;
 }
 
-
-s32 sub_GAME_7F0BBCCC(coord16 * coord, s32 room_index)
+/**
+ * Test whether a tri belongs to a light fixture region that should also be darkened.
+ */
+s32 lightIsCoordNearDarkenedVertex(coord16 * coord, s32 room_index)
 {
-    s32 var_s0;
-    s32 var_s1;
+    s32 dx;
+    s32 dy;
+    s32 dz;
     s32 i;
-    s32 var_s2;
     Vtx * vertex;
 
     i = 0;
@@ -300,15 +303,15 @@ s32 sub_GAME_7F0BBCCC(coord16 * coord, s32 room_index)
         {
             vertex = &g_BgRoomInfo[room_index].ptr_point_index[darkened_light_table[i].vtx_index];
 
-            var_s0 = vertex->v.ob[0] - coord->AsArray[0];
-            var_s1 = vertex->v.ob[1] - coord->AsArray[1];
-            var_s2 = vertex->v.ob[2] - coord->AsArray[2];
+            dx = vertex->v.ob[0] - coord->AsArray[0];
+            dy = vertex->v.ob[1] - coord->AsArray[1];
+            dz = vertex->v.ob[2] - coord->AsArray[2];
 
-            if (var_s0 < 0) { var_s0 = -var_s0; }
-            if (var_s1 < 0) { var_s1 = -var_s1; }
-            if (var_s2 < 0) { var_s2 = -var_s2; }
+            if (dx < 0) { dx = -dx; }
+            if (dy < 0) { dy = -dy; }
+            if (dz < 0) { dz = -dz; }
 
-            if ((var_s0 + var_s1 + var_s2) < (s32) (get_room_data_float1() * 100.0f))
+            if ((dx + dy + dz) < (s32) (get_room_data_float1() * 100.0f))
             {
                 return 1;
             }
@@ -318,23 +321,29 @@ s32 sub_GAME_7F0BBCCC(coord16 * coord, s32 room_index)
     return 0;
 }
 
-
-void sub_GAME_7F0BBE0C(Gfx * gfx, u32 tri_type, s32 room_index)
+/**
+ * Darken the vertices belonging to a light fixture and spawn shards of glass.
+ */
+void lightFixtureBreak(Gfx * gfx, u32 tri_type, s32 room_index)
 {
     s16 diff_z_12;
-    coord16 coord1;
-    coord16 coord2;
-    coord16 coord3;
-    coord16 coord4;
-    coord16 coord5;
-    coord16 coord6;
+
+    // Vertices of the hit triangle
+    coord16 hit_vtx1;
+    coord16 hit_vtx2;
+    coord16 hit_vtx3;
+
+    coord16 tri_vtx1;
+    coord16 tri_vtx2;
+    coord16 tri_vtx3;
+
     s16 diff_x_13;
     s16 diff_x_12;
-    Gfx *gfx2;
+    Gfx *fixture_gfx;
     f32 dist_tween;
     s32 j;
-    s8 exec;
-    s8 exec2;
+    s8 should_darken1;
+    s8 should_darken2;
     s16 diff_y_13;
     s16 diff_y_12;
     s16 diff_x_23;
@@ -342,11 +351,11 @@ void sub_GAME_7F0BBE0C(Gfx * gfx, u32 tri_type, s32 room_index)
     f32 inv_dist_12;
     f32 inv_dist_23;
     f32 inv_dist_13;
-    coord3d origin;
-    coord3d calc_coord;
+    coord3d room_origin;
+    coord3d shard_pos;
     s32 i;
     s16 diff_z_23;
-    f32 dist_nn;
+    f32 edge_length;
     s16 diff_y_23;
 
     for (i = 0; i < LIGHTFIXTURE_TABLE_MAX; i++)
@@ -358,106 +367,123 @@ void sub_GAME_7F0BBE0C(Gfx * gfx, u32 tri_type, s32 room_index)
 
         if (darkened_light_table_contains_triangle(gfx, tri_type, light_fixture_table[i].room_index) != 0) { return; }
 
+        /**
+         * Darken the exact triangle that was shot.
+         */
         darken_triangle_in_room(gfx, tri_type, light_fixture_table[i].room_index);
-        extract_vertex_coords_from_triangle(gfx, tri_type, light_fixture_table[i].room_index, &coord1, &coord2, &coord3);
 
-		diff_x_12 = coord1.AsArray[0] - coord2.AsArray[0];
-		diff_x_23 = coord1.AsArray[0] - coord3.AsArray[0];
-		diff_x_13 = coord2.AsArray[0] - coord3.AsArray[0];
+        /**
+         * Get the hit tri's verts, compute the edge lengths, and a step size (inv_dist)
+         */
+        extract_vertex_coords_from_triangle(gfx, tri_type, light_fixture_table[i].room_index, &hit_vtx1, &hit_vtx2, &hit_vtx3);
 
-		diff_y_12 = coord1.AsArray[1] - coord2.AsArray[1];
-		diff_y_23 = coord1.AsArray[1] - coord3.AsArray[1];
-		diff_y_13 = coord2.AsArray[1] - coord3.AsArray[1];
+		diff_x_12 = hit_vtx1.AsArray[0] - hit_vtx2.AsArray[0];
+		diff_x_23 = hit_vtx1.AsArray[0] - hit_vtx3.AsArray[0];
+		diff_x_13 = hit_vtx2.AsArray[0] - hit_vtx3.AsArray[0];
 
-		diff_z_12 = coord1.AsArray[2] - coord2.AsArray[2];
-		diff_z_23 = coord1.AsArray[2] - coord3.AsArray[2];
-		diff_z_13 = coord2.AsArray[2] - coord3.AsArray[2];
+		diff_y_12 = hit_vtx1.AsArray[1] - hit_vtx2.AsArray[1];
+		diff_y_23 = hit_vtx1.AsArray[1] - hit_vtx3.AsArray[1];
+		diff_y_13 = hit_vtx2.AsArray[1] - hit_vtx3.AsArray[1];
 
-        dist_nn = sqrtf((diff_x_12 * diff_x_12) + (diff_y_12 * diff_y_12) + (diff_z_12 * diff_z_12));
-        inv_dist_12 = 10.0f / (get_room_data_float2() * dist_nn);
+		diff_z_12 = hit_vtx1.AsArray[2] - hit_vtx2.AsArray[2];
+		diff_z_23 = hit_vtx1.AsArray[2] - hit_vtx3.AsArray[2];
+		diff_z_13 = hit_vtx2.AsArray[2] - hit_vtx3.AsArray[2];
 
-        dist_nn = sqrtf((diff_x_23 * diff_x_23) + (diff_y_23 * diff_y_23) + (diff_z_23 * diff_z_23));
-        inv_dist_23 = 10.0f / (get_room_data_float2() * dist_nn);
+        edge_length = sqrtf((diff_x_12 * diff_x_12) + (diff_y_12 * diff_y_12) + (diff_z_12 * diff_z_12));
+        inv_dist_12 = 10.0f / (get_room_data_float2() * edge_length);
 
-        dist_nn = sqrtf((diff_x_13 * diff_x_13) + (diff_y_13 * diff_y_13) + (diff_z_13 * diff_z_13));
-        inv_dist_13 = 10.0f / (get_room_data_float2() * dist_nn);
+        edge_length = sqrtf((diff_x_23 * diff_x_23) + (diff_y_23 * diff_y_23) + (diff_z_23 * diff_z_23));
+        inv_dist_23 = 10.0f / (get_room_data_float2() * edge_length);
 
-        getRoomPositionScaledByIndex(light_fixture_table[i].room_index, &origin);
+        edge_length = sqrtf((diff_x_13 * diff_x_13) + (diff_y_13 * diff_y_13) + (diff_z_13 * diff_z_13));
+        inv_dist_13 = 10.0f / (get_room_data_float2() * edge_length);
 
+        getRoomPositionScaledByIndex(light_fixture_table[i].room_index, &room_origin);
+
+        /**
+         * Spawn glass shards along the edges of the hit tri.
+         * Shards are spawned at fixed length intervals i.e. a long edge spawns more shards than a short edge.
+         * Positions are converted from room space to world space for the glassCreateShard() function.
+         */
         for (dist_tween = 0.0f; dist_tween < 1.0f; dist_tween += inv_dist_12)
         {
-            calc_coord.x = ((coord2.AsArray[0] + (diff_x_12 * dist_tween)) * get_room_data_float2()) + origin.f[0];
-            calc_coord.y = ((coord2.AsArray[1] + (diff_y_12 * dist_tween)) * get_room_data_float2()) + origin.f[1];
-            calc_coord.z = ((coord2.AsArray[2] + (diff_z_12 * dist_tween)) * get_room_data_float2()) + origin.f[2];
-            sub_GAME_7F0A2160(&calc_coord, 0.0f, 10.0f);
+            shard_pos.x = ((hit_vtx2.AsArray[0] + (diff_x_12 * dist_tween)) * get_room_data_float2()) + room_origin.f[0];
+            shard_pos.y = ((hit_vtx2.AsArray[1] + (diff_y_12 * dist_tween)) * get_room_data_float2()) + room_origin.f[1];
+            shard_pos.z = ((hit_vtx2.AsArray[2] + (diff_z_12 * dist_tween)) * get_room_data_float2()) + room_origin.f[2];
+            glassCreateShard(&shard_pos, 0.0f, 10.0f);
         }
 
         for (dist_tween = 0.0f; dist_tween < 1.0f; dist_tween += inv_dist_23)
         {
-            calc_coord.x = ((coord3.AsArray[0] + (diff_x_23 * dist_tween)) * get_room_data_float2()) + origin.f[0];
-            calc_coord.y = ((coord3.AsArray[1] + (diff_y_23 * dist_tween)) * get_room_data_float2()) + origin.f[1];
-            calc_coord.z = ((coord3.AsArray[2] + (diff_z_23 * dist_tween)) * get_room_data_float2()) + origin.f[2];
-            sub_GAME_7F0A2160(&calc_coord, 0.0f, 10.0f);
+            shard_pos.x = ((hit_vtx3.AsArray[0] + (diff_x_23 * dist_tween)) * get_room_data_float2()) + room_origin.f[0];
+            shard_pos.y = ((hit_vtx3.AsArray[1] + (diff_y_23 * dist_tween)) * get_room_data_float2()) + room_origin.f[1];
+            shard_pos.z = ((hit_vtx3.AsArray[2] + (diff_z_23 * dist_tween)) * get_room_data_float2()) + room_origin.f[2];
+            glassCreateShard(&shard_pos, 0.0f, 10.0f);
         }
 
         for (dist_tween = 0.0f; dist_tween < 1.0f; dist_tween += inv_dist_13)
         {
-            calc_coord.x = ((coord3.AsArray[0] + (diff_x_13 * dist_tween)) * get_room_data_float2()) + origin.f[0];
-            calc_coord.y = ((coord3.AsArray[1] + (diff_y_13 * dist_tween)) * get_room_data_float2()) + origin.f[1];
-            calc_coord.z = ((coord3.AsArray[2] + (diff_z_13 * dist_tween)) * get_room_data_float2()) + origin.f[2];
-            sub_GAME_7F0A2160(&calc_coord, 0.0f, 10.0f);
+            shard_pos.x = ((hit_vtx3.AsArray[0] + (diff_x_13 * dist_tween)) * get_room_data_float2()) + room_origin.f[0];
+            shard_pos.y = ((hit_vtx3.AsArray[1] + (diff_y_13 * dist_tween)) * get_room_data_float2()) + room_origin.f[1];
+            shard_pos.z = ((hit_vtx3.AsArray[2] + (diff_z_13 * dist_tween)) * get_room_data_float2()) + room_origin.f[2];
+            glassCreateShard(&shard_pos, 0.0f, 10.0f);
         }
 
-        for (gfx2 = light_fixture_table[i].ptr_start_pertinent_DL; gfx2 < light_fixture_table[i].ptr_end_pertinent_DL; gfx2++)
+        /**
+         * Iterate over all tris in the fixture's display list range.
+         * If any vertex of a tri is close to a previously darkened vertex,
+         * darken the entire tri. This ensures the entire fixture is darkened, not just the hit tri.
+         */
+        for (fixture_gfx = light_fixture_table[i].ptr_start_pertinent_DL; fixture_gfx < light_fixture_table[i].ptr_end_pertinent_DL; fixture_gfx++)
         {
-            if (gfx2->dma.cmd == G_TRI1)
+            if (fixture_gfx->dma.cmd == G_TRI1)
             {
-                exec = 0;
+                should_darken1 = 0;
 
-                extract_vertex_coords_from_triangle(gfx2, 0U, light_fixture_table[i].room_index, &coord4, &coord5, &coord6);
+                extract_vertex_coords_from_triangle(fixture_gfx, 0U, light_fixture_table[i].room_index, &tri_vtx1, &tri_vtx2, &tri_vtx3);
 
-                if (sub_GAME_7F0BBCCC(&coord4, light_fixture_table[i].room_index) != 0)
+                if (lightIsCoordNearDarkenedVertex(&tri_vtx1, light_fixture_table[i].room_index) != 0)
                 {
-                    exec = 1;
+                    should_darken1 = 1;
                 }
-                else if (sub_GAME_7F0BBCCC(&coord5, light_fixture_table[i].room_index) != 0)
+                else if (lightIsCoordNearDarkenedVertex(&tri_vtx2, light_fixture_table[i].room_index) != 0)
                 {
-                    exec = 1;
+                    should_darken1 = 1;
                 }
-                else if (sub_GAME_7F0BBCCC(&coord6, light_fixture_table[i].room_index) != 0)
+                else if (lightIsCoordNearDarkenedVertex(&tri_vtx3, light_fixture_table[i].room_index) != 0)
                 {
-                    exec = 1;
+                    should_darken1 = 1;
                 }
 
-                if (exec != 0)
+                if (should_darken1 != 0)
                 {
-                    darken_triangle_in_room(gfx2, 0U, light_fixture_table[i].room_index);
+                    darken_triangle_in_room(fixture_gfx, 0U, light_fixture_table[i].room_index);
                 }
             }
-            else if (gfx2->dma.cmd == -0x4f /* G_TRI2 ? */)
+            else if (fixture_gfx->dma.cmd == -0x4f /* G_TRI2 ? */)
             {
                 for (j = 0; j < 4; j++)
                 {
-                    exec2 = 0;
+                    should_darken2 = 0;
 
-                    extract_vertex_coords_from_triangle(gfx2, j + 1, light_fixture_table[i].room_index, &coord4, &coord5, &coord6);
+                    extract_vertex_coords_from_triangle(fixture_gfx, j + 1, light_fixture_table[i].room_index, &tri_vtx1, &tri_vtx2, &tri_vtx3);
 
-                    if (sub_GAME_7F0BBCCC(&coord4, light_fixture_table[i].room_index) != 0)
+                    if (lightIsCoordNearDarkenedVertex(&tri_vtx1, light_fixture_table[i].room_index) != 0)
                     {
-                        exec2 = 1;
+                        should_darken2 = 1;
                     }
-                    else if (sub_GAME_7F0BBCCC(&coord5, light_fixture_table[i].room_index) != 0)
+                    else if (lightIsCoordNearDarkenedVertex(&tri_vtx2, light_fixture_table[i].room_index) != 0)
                     {
-                        exec2 = 1;
+                        should_darken2 = 1;
                     }
-                    else if (sub_GAME_7F0BBCCC(&coord6, light_fixture_table[i].room_index) != 0)
+                    else if (lightIsCoordNearDarkenedVertex(&tri_vtx3, light_fixture_table[i].room_index) != 0)
                     {
-                        exec2 = 1;
+                        should_darken2 = 1;
                     }
 
-                    if (exec2 != 0)
+                    if (should_darken2 != 0)
                     {
-                        darken_triangle_in_room(gfx2, j + 1, light_fixture_table[i].room_index);
+                        darken_triangle_in_room(fixture_gfx, j + 1, light_fixture_table[i].room_index);
                     }
                 }
             }

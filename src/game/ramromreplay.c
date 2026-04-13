@@ -1,7 +1,7 @@
 
 #include <ultra64.h>
 #include "debugmenu_handler.h"
-#include "lvl.h"
+#include "lv.h"
 #include "initcheattext.h"
 #include "front.h"
 #include "ramromreplay.h"

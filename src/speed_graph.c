@@ -1,6 +1,6 @@
 #include <ultra64.h>
 #include "speed_graph.h"
-#include "unk_0C0A70.h"
+#include "frametiming.h"
 #include "speedgraphrenderer.h"
 #include "debugmenu.h"
 #include "sched.h"

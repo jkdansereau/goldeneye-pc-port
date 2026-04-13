@@ -36,6 +36,7 @@ assets/ge007.u.123040.efont_chardata.bin
 assets/ge007.u.29E560.Globalimagetable_commandblock.bin
 #images
 assets/images/split/*.bin*
+assets/images/combined/*.bin*
 assets/images/out/*
 assets/images/split/png/*
 #music
@@ -49,10 +50,10 @@ assets/music/*.aiff
 #obseg
 assets/obseg/bg/*.bin
 assets/obseg/bg/e/*.bin
-assets/obseg/chr/*.bin
-assets/obseg/gun/*.bin
+assets/obseg/chr/*/Model.c
+assets/obseg/gun/*/Model.c
 assets/obseg/ob__ob_end.seg
-assets/obseg/prop/*.bin
+assets/obseg/prop/*/Model.c
 assets/obseg/setup/*.bin
 assets/obseg/setup/[eju]/*.bin
 assets/obseg/stan/*.bin
@@ -110,3 +111,4 @@ assets/obseg/em/data/under.seg
 
 scripts/local/
 scripts/make/local/
+scripts/__pycache__/generate_prop_model_c.cpython-310.pyc

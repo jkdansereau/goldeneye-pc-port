@@ -49,7 +49,7 @@ dirs=(
 	assets/music
     assets/ramrom
     assets/images
-    assets/images/split
+    assets/images/combined
     assets/font
 	assets/embedded
     assets/embedded/skeletons

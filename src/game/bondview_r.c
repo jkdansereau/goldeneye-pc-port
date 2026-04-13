@@ -10,9 +10,8 @@
 #include "game/chrai.h"
 #include "game/front.h"
 #include "game/gun.h"
-#include "game/lvl_text.h"
+#include "game/language.h"
 #include "game/player.h"
-#include "game/player_2.h"
 #include "game/ramromreplay.h"
 #include "game/stan.h"
 
@@ -25,7 +24,7 @@ struct coord3d default_start_position = { 0 };
 u32 weaponLoadProjectileModels(ITEM_IDS modelid)
 {
     s32 model;
-  
+
     model = -1;
     switch(modelid)
     {
@@ -71,7 +70,7 @@ u32 weaponLoadProjectileModels(ITEM_IDS modelid)
         return modelLoad(model);
     }
     return 0;
-}  
+}
 
 void bondviewLoadSetupIntroSection(void)
 {
@@ -118,7 +117,7 @@ void bondviewLoadSetupIntroSection(void)
     set_starting_weapon = 0;
     cameraFrameCounter2 = 0;
     start_look_angle = FLOAT_INIT;
-    
+
     if (bossGetStageNum() == LEVELID_CUBA)
     {
         resolution = (s32)mempAllocBytesInBank(0x46EA0, MEMPOOL_STAGE);
@@ -170,7 +169,7 @@ void bondviewLoadSetupIntroSection(void)
     watch_transition_time = 0.9090909f;
     starting_weapon[GUNLEFT] = ITEM_UNARMED;
     starting_weapon[GUNRIGHT] = ITEM_UNARMED;
-    
+
     if (intro_record != NULL)
     {
         while (intro_record->type != INTROTYPE_END)
@@ -215,14 +214,14 @@ void bondviewLoadSetupIntroSection(void)
                             if(intro_item->item_left);
 
                             set_starting_weapon = 1;
-                            
+
                             if (intro_item->item_left >= 0)
                             {
                                 starting_weapon[GUNLEFT] = intro_item->item_left;
                             }
                         }
                     }
-                    
+
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroItem));
                 }
                 break;
@@ -233,7 +232,7 @@ void bondviewLoadSetupIntroSection(void)
                     {
                         give_cur_player_ammo(((struct SetupIntroAmmo*)intro_record)->ammo_type, ((struct SetupIntroAmmo*)intro_record)->ammo_amount);
                     }
-                   
+
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroAmmo));
                 }
                 break;
@@ -241,7 +240,7 @@ void bondviewLoadSetupIntroSection(void)
                 case INTROTYPE_SWIRL:
                 {
                     intro_swirl = (struct SetupIntroSwirl*)intro_record;
-                        
+
                     if (g_IntroSwirl == NULL)
                     {
                         g_IntroSwirl = intro_swirl;
@@ -252,7 +251,7 @@ void bondviewLoadSetupIntroSection(void)
                     intro_swirl->unk10.fval = intro_swirl->unk10.ival / M_U16_MAX_VALUE_F;
                     intro_swirl->unk14.fval = intro_swirl->unk14.ival / M_U16_MAX_VALUE_F;
                     intro_swirl->unk18.fval = intro_swirl->unk18.ival / M_U16_MAX_VALUE_F;
-                    
+
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroSwirl));
                 }
                 break;
@@ -260,7 +259,7 @@ void bondviewLoadSetupIntroSection(void)
                 case INTROTYPE_ANIM:
                 {
                     g_IntroAnimationIndex = ((struct SetupIntroAnim*)intro_record)->intro_anim;
-                    
+
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroAnim));
                 }
                 break;
@@ -268,7 +267,7 @@ void bondviewLoadSetupIntroSection(void)
                 case INTROTYPE_CUFF:
                 {
                     g_CurrentPlayer->bondtype = ((struct SetupIntroCuff*)intro_record)->bondtype;
-                    
+
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroCuff));
                 }
                 break;
@@ -280,7 +279,7 @@ void bondviewLoadSetupIntroSection(void)
                         ((struct SetupIntroCamera*)intro_record)->prev = g_CurrentSetupIntroCamera;
                         g_CurrentSetupIntroCamera = (struct SetupIntroCamera*)intro_record;
                         g_SetupIntroCameraCount = g_SetupIntroCameraCount + 1;
-                        
+
                         ((struct SetupIntroCamera*)intro_record)->unk04.fval = ((struct SetupIntroCamera*)intro_record)->unk04.ival / 100.0f;
                         ((struct SetupIntroCamera*)intro_record)->unk08.fval = ((struct SetupIntroCamera*)intro_record)->unk08.ival / 100.0f;
                         ((struct SetupIntroCamera*)intro_record)->unk0C.fval = ((struct SetupIntroCamera*)intro_record)->unk0C.ival / 100.0f;
@@ -288,13 +287,13 @@ void bondviewLoadSetupIntroSection(void)
                         ((struct SetupIntroCamera*)intro_record)->unk14.fval = ((struct SetupIntroCamera*)intro_record)->unk14.ival / M_U16_MAX_VALUE_F;
 
                         ((struct SetupIntroCamera*)intro_record)->lang1c.lang_ptr = langGet(((struct SetupIntroCamera*)intro_record)->lang1c.lang_index[1]);
-                        
+
                         if (((struct SetupIntroCamera*)intro_record)->lang20.lang_index != 0)
                         {
                             ((struct SetupIntroCamera*)intro_record)->lang20.lang_ptr = langGet((u16)((struct SetupIntroCamera*)intro_record)->lang20.lang_index);
                         }
                     }
-                    
+
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroCamera));
                 }
                 break;
@@ -316,15 +315,15 @@ void bondviewLoadSetupIntroSection(void)
                     }
 
                     if (watch_time_0);
-                    
+
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroWatch));
                 }
                 break;
-                    
+
                 case INTROTYPE_CREDITS:
                 {
                     intro_credits = (struct SetupIntroCredits*)intro_record;
-                    
+
                     // hack: bad address math
                     credits = (CreditsEntry*)((s32)g_ptrStageSetupFile + (s32)intro_credits->unk04);
                     credits_pointer = credits;
@@ -334,7 +333,7 @@ void bondviewLoadSetupIntroSection(void)
                     {
                         credits++;
                     }
-                    
+
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroCredits));
                 }
                 break;
@@ -384,17 +383,14 @@ void bondviewLoadSetupIntroSection(void)
         {
             rand_pad_index = 0;
         }
-        
+
+#ifdef DEBUG
+        assert(g_Startpad[rand_pad_index]->stan); //              (".\\ported\\bondview_r.cpp",0x171,"Assertion failed: g_Startpad[sp]->stan");
+#endif
+
         start_pos.f[0] = g_Startpad[rand_pad_index]->pos.f[0];
         start_pos.f[2] = g_Startpad[rand_pad_index]->pos.f[2];
 
-#ifdef XBLADEBUG
-    #error fix XBLADEBUG
-        //if (*((&g_Startpad)[local_74] + 0x28) == 0) {
-        //    assertPrint_8291E690
-        //              (".\\ported\\bondview_r.cpp",0x171,"Assertion failed: g_Startpad[sp]->stan");
-        //}
-#endif
 
         start_stan = g_Startpad[rand_pad_index]->stan;
 
@@ -420,7 +416,7 @@ void bondviewLoadSetupIntroSection(void)
     g_CurrentPlayer->field_488.theta_transform.f[2] = cosf(start_look_angle);
     sub_GAME_7F089718(D_800364D0);
     dword_CODE_bss_80079DA0 = 0;
-    
+
 
     for (i=0; i<BSS_80079DA8_LENGTH; i++)
     {
@@ -433,8 +429,8 @@ void bondviewLoadSetupIntroSection(void)
     g_CurrentPlayer->prop = chrpropAllocate();
     g_CurrentPlayer->prop->obj = NULL;
     g_CurrentPlayer->prop->type = PROP_TYPE_VIEWER;
-    
-    g_CurrentPlayer->prop->pos.f[0] = 
+
+    g_CurrentPlayer->prop->pos.f[0] =
         g_CurrentPlayer->bondprevpos.f[0] = start_pos.f[0];
 
     g_CurrentPlayer->prop->pos.f[1] =
@@ -444,13 +440,13 @@ void bondviewLoadSetupIntroSection(void)
         g_CurrentPlayer->bondprevpos.f[2] = start_pos.f[2];
 
     g_CurrentPlayer->prop->stan = start_stan;
-    
+
     chrpropActivate(g_CurrentPlayer->prop);
     chrpropEnable(g_CurrentPlayer->prop);
     g_CurrentPlayer->field_3B8.f[0] = (g_CurrentPlayer->field_488.pos.f[0] / FIELD_3B8_FACTOR);
     g_CurrentPlayer->field_3B8.f[1] = (g_CurrentPlayer->field_488.pos.f[1] / FIELD_3B8_FACTOR);
     g_CurrentPlayer->field_3B8.f[2] = (g_CurrentPlayer->field_488.pos.f[2] / FIELD_3B8_FACTOR);
-    
+
     if (getPlayerCount() == 1)
     {
         bondviewSetCameraMode(CAMERAMODE_INTRO);
@@ -465,7 +461,7 @@ void bondviewLoadSetupIntroSection(void)
     {
         g_bondviewBondDeathAnimationsCount++;
     }
-    
+
     g_CurrentPlayer->startnewbonddie = TRUE;
     g_CurrentPlayer->redbloodfinished = FALSE;
     g_CurrentPlayer->deathanimfinished = FALSE;

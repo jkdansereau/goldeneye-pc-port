@@ -1,9 +1,9 @@
 #include <ultra64.h>
 #include <music.h>
 #include "music_0D2720.h"
-#include "watch.h"
+#include "options.h"
 #include "mp_music.h"
-#include "lvl.h"
+#include "lv.h"
 
 #ifdef VERSION_EU
 #define MP_MUSIC_FRAMERATE 50
@@ -54,9 +54,9 @@ MISSION_STATE_ID get_mission_state(void)
 void set_missionstate(MISSION_STATE_ID arg0)
 {
     s32 old_mission_state = mission_state;
-    
+
     mission_state = arg0;
-    
+
     switch (old_mission_state)
     {
         case MISSION_STATE_0:
@@ -87,7 +87,7 @@ void set_missionstate(MISSION_STATE_ID arg0)
             case MISSION_STATE_6:
                 break;
 #endif
-            
+
 #if defined(VERSION_JP) || defined(VERSION_EU)
             case MISSION_STATE_0:
                 musicTrack1Stop();
@@ -118,7 +118,7 @@ void set_missionstate(MISSION_STATE_ID arg0)
                 break;
 #endif
         }
-        
+
         case MISSION_STATE_1:
         switch (arg0)
         {
@@ -150,7 +150,7 @@ void set_missionstate(MISSION_STATE_ID arg0)
                 musicTrack2Play(0x3A);
                 return;
         }
-        
+
         case MISSION_STATE_2:
         switch (arg0)
         {
@@ -177,7 +177,7 @@ void set_missionstate(MISSION_STATE_ID arg0)
             case MISSION_STATE_6:
                 break;
         }
-        
+
         case MISSION_STATE_3:
         switch (arg0)
         {
@@ -211,7 +211,7 @@ void set_missionstate(MISSION_STATE_ID arg0)
             case MISSION_STATE_6:
                 break;
         }
-        
+
         case MISSION_STATE_4:
         switch (arg0)
         {
@@ -242,7 +242,7 @@ void set_missionstate(MISSION_STATE_ID arg0)
             case MISSION_STATE_6:
                 break;
         }
-        
+
         case MISSION_STATE_5:
         switch (arg0)
         {
@@ -270,7 +270,7 @@ void set_missionstate(MISSION_STATE_ID arg0)
             case MISSION_STATE_6:
                 break;
         }
-        
+
         case MISSION_STATE_6:
         switch (arg0)
         {
@@ -300,7 +300,10 @@ void set_missionstate(MISSION_STATE_ID arg0)
         default:
         break;
     }
-    
+#ifdef DEBUG
+    osSyncPrintf("Invalid current music state %d\n", arg0);
+#endif
+
     while(1)
     {
         // error
@@ -447,7 +450,7 @@ void reset_all_music_slots(void)
             sub_GAME_7F0C1288();
         }
     }
-    
+
 }
 
 
@@ -456,9 +459,6 @@ void reset_all_music_slots(void)
 
 void musicPlaySlot(s32 slot, s32 min, s32 sec)
 {
-#ifdef DEBUG
-    osSyncPrintf("ai_ifmusicqueueemptyjumpf : %s, State=%x (getlvleveltime60=%f)\n", MUSIC_TRACK_ToString[slot], (music_slot_active_0)[slot], getlvleveltime60);
-#endif
     if ((music_slot_active_0)[slot] == FALSE)
     {
         (music_slot_active_0)[slot] = TRUE;

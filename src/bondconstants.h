@@ -548,40 +548,75 @@ BITFLAG(RUNTIMEBITFLAG,
 #define RUNTIMEBITSHIFT_OWNER   0x11
 #define RUNTIMEBITFLAG_00000001   0x1
 
-BITFLAG(WEAPONSTATBITFLAG,
-        00000001,
-        SINGLE_USE_RELOAD, /* skip from fire to reload animation; item "disappears" after use, redrawn from off-screen like knives" */
-        BURST_FIRE, /* fire three round burst*/
-        HAS_AUTO_AIM, /* auto aim capable*/
-        CLICKY, /* if holding trigger, click if empty */
-        00000020,
-        00000040,
-        00000080,
-        ONLY_1_HANDED, /* requires HOLD_AS_GUN as well */
-        HOLD_AS_GUN, /* default 2 handed*/
-        MIRROR_DUAL, /* mirror double weapon, not copy */
-        SHOW_FIRST_PERSON, /* display 1st person model */
-        FIRST_SHOT_ACCURACY, /* for a single first shot, inaccuracy multiplied by 0.25 */
-        HIDE_FIRST_PERSON_HAND, /* hide first person model in hand */
-        HIDE_FIRST_PERSON_MENU, /* hide first person model in menu */
-        DISABLE_CROUCH, /* can not crouch */
-        PLAYER_STAT_HIT, /* count hits in player statistics */
-        USE_HOLD_TIME, /* increment hold time when used, to consider as weapon of choice */
-        HAS_AMMO,
-        HIDE_AMMO_DISPLAY, /* do not display ammo on screen */
-        CAN_DUAL_WIELD, /* capable of doubles */
-        AMMO_CLIP_LIMIT, /* limit ammo to assigned value on clip */
-        NO_CLIP_RELOADS, /* no ammo clip/reloads - draw straight from ammo supply (right of icon) */
-        00800000,
-        01000000,
-        02000000,
-        04000000,
-        08000000,
-        10000000,
-        20000000,
-        40000000,
-        80000000
-)
+#define WEAPONSTATBITFLAG_00000001 0x1
+/* skip from fire to reload animation; item "disappears" after use, redrawn from off-screen like knives" */
+#define WEAPONSTATBITFLAG_SINGLE_USE_RELOAD 0x2
+
+/* fire three round burst*/
+#define WEAPONSTATBITFLAG_BURST_FIRE 0x4
+
+/* auto aim capable*/
+#define WEAPONSTATBITFLAG_HAS_AUTO_AIM 0x8
+
+/* if holding trigger, click if empty */
+#define WEAPONSTATBITFLAG_CLICKY 0x10
+#define WEAPONSTATBITFLAG_00000020 0x20
+#define WEAPONSTATBITFLAG_00000040 0x40
+
+/* dual wield prefers to fire one hand then the other (e.g. pistols) instead of both together (e.g. automatics) */
+#define WEAPONSTATBITFLAG_DUAL_WIELD_ALTERNATING_FIRE 0x80
+
+/* requires HOLD_AS_GUN as well */
+#define WEAPONSTATBITFLAG_ONLY_1_HANDED 0x100
+
+/* default 2 handed*/
+#define WEAPONSTATBITFLAG_HOLD_AS_GUN 0x200
+
+/* mirror double weapon, not copy */
+#define WEAPONSTATBITFLAG_MIRROR_DUAL 0x400
+
+/* display 1st person model */
+#define WEAPONSTATBITFLAG_SHOW_FIRST_PERSON 0x800
+
+/* for a single first shot, inaccuracy multiplied by 0.25 */
+#define WEAPONSTATBITFLAG_FIRST_SHOT_ACCURACY 0x1000
+
+/* hide first person model in hand */
+#define WEAPONSTATBITFLAG_HIDE_FIRST_PERSON_HAND 0x2000
+
+/* hide first person model in menu */
+#define WEAPONSTATBITFLAG_HIDE_FIRST_PERSON_MENU 0x4000
+
+/* can not crouch */
+#define WEAPONSTATBITFLAG_DISABLE_CROUCH 0x8000
+
+/* count hits in player statistics */
+#define WEAPONSTATBITFLAG_PLAYER_STAT_HIT 0x10000
+
+/* increment hold time when used, to consider as weapon of choice */
+#define WEAPONSTATBITFLAG_USE_HOLD_TIME 0x20000
+#define WEAPONSTATBITFLAG_HAS_AMMO 0x40000
+
+/* do not display ammo on screen */
+#define WEAPONSTATBITFLAG_HIDE_AMMO_DISPLAY 0x80000
+
+/* capable of doubles */
+#define WEAPONSTATBITFLAG_CAN_DUAL_WIELD 0x100000
+
+/* limit ammo to assigned value on clip */
+#define WEAPONSTATBITFLAG_AMMO_CLIP_LIMIT 0x200000
+
+/* no ammo clip/reloads - draw straight from ammo supply (right of icon) */
+#define WEAPONSTATBITFLAG_NO_CLIP_RELOADS 0x400000
+#define WEAPONSTATBITFLAG_00800000
+#define WEAPONSTATBITFLAG_01000000
+#define WEAPONSTATBITFLAG_02000000
+#define WEAPONSTATBITFLAG_04000000
+#define WEAPONSTATBITFLAG_08000000
+#define WEAPONSTATBITFLAG_10000000
+#define WEAPONSTATBITFLAG_20000000
+#define WEAPONSTATBITFLAG_40000000
+#define WEAPONSTATBITFLAG_80000000
 
 
 #define OBJECTTYPE_00 0x00
@@ -892,7 +927,193 @@ typedef enum ANIMATIONS
     ANIM_credits_natalya_kissing,
     ANIM_MAX
 } ANIMATIONS;
+#ifdef AIPARSE
+char *ANIMATIONS_ToString[] = {
+    "ANIM_idle",
+    "ANIM_fire_standing",
+    "ANIM_fire_standing_fast",
+    "ANIM_fire_hip",
+    "ANIM_fire_shoulder_left",
+    "ANIM_fire_turn_right1",
+    "ANIM_fire_turn_right2",
+    "ANIM_fire_kneel_right_leg",
+    "ANIM_fire_kneel_left_leg",
+    "ANIM_fire_kneel_left",
+    "ANIM_fire_kneel_right",
+    "ANIM_fire_roll_left",
+    "ANIM_fire_roll_right1",
+    "ANIM_fire_roll_left_fast",
+    "ANIM_hit_left_shoulder",
+    "ANIM_hit_right_shoulder",
+    "ANIM_hit_left_arm",
+    "ANIM_hit_right_arm",
+    "ANIM_hit_left_hand",
+    "ANIM_hit_right_hand",
+    "ANIM_hit_left_leg",
+    "ANIM_hit_right_leg",
+    "ANIM_death_genitalia", /* Thank you Mr. Botwood", here is your award */
+    "ANIM_hit_neck",
+    "ANIM_death_neck",
+    "ANIM_death_stagger_back_to_wall",
+    "ANIM_death_forward_face_down",
+    "ANIM_death_forward_spin_face_up",
+    "ANIM_death_backward_fall_face_up1",
+    "ANIM_death_backward_spin_face_down_right",
+    "ANIM_death_backward_spin_face_up_right",
+    "ANIM_death_backward_spin_face_down_left",
+    "ANIM_death_backward_spin_face_up_left",
+    "ANIM_death_forward_face_down_hard",
+    "ANIM_death_forward_face_down_soft",
+    "ANIM_death_fetal_position_right",
+    "ANIM_death_fetal_position_left",
+    "ANIM_death_backward_fall_face_up2",
+    "ANIM_side_step_left",
+    "ANIM_fire_roll_right2",
+    "ANIM_walking",
+    "ANIM_sprinting",
+    "ANIM_running",
+    "ANIM_bond_eye_walk",
+    "ANIM_bond_eye_fire",
+    "ANIM_bond_watch",
+    "ANIM_surrendering_armed",
+    "ANIM_surrendering_armed_drop_weapon",
+    "ANIM_fire_walking",
+    "ANIM_fire_running",
+    "ANIM_null50", /* invalid slot */
+    "ANIM_null51", /* invalid slot */
+    "ANIM_fire_jump_to_side_left",
+    "ANIM_fire_jump_to_side_right",
+    "ANIM_hit_butt_long",
+    "ANIM_hit_butt_short",
+    "ANIM_death_head",
+    "ANIM_death_left_leg",
+    "ANIM_slide_right",
+    "ANIM_slide_left",
+    "ANIM_jump_backwards",
+    "ANIM_extending_left_hand",
+    "ANIM_fire_throw_grenade",
+    "ANIM_spotting_bond", /* used by chr ai command guard_points_at_bond */
+    "ANIM_look_around",   /* used by chr ai command GUARD_ANIM_LOOKS_AROUND_SELF */
+    "ANIM_fire_standing_one_handed_weapon",
+    "ANIM_fire_standing_draw_one_handed_weapon_fast",
+    "ANIM_fire_standing_draw_one_handed_weapon_slow",
+    "ANIM_fire_hip_one_handed_weapon_fast",
+    "ANIM_fire_hip_one_handed_weapon_slow",
+    "ANIM_fire_hip_forward_one_handed_weapon",
+    "ANIM_fire_standing_right_one_handed_weapon",
+    "ANIM_fire_step_right_one_handed_weapon",
+    "ANIM_fire_standing_left_one_handed_weapon_slow",
+    "ANIM_fire_standing_left_one_handed_weapon_fast",
+    "ANIM_fire_kneel_forward_one_handed_weapon_slow",
+    "ANIM_fire_kneel_forward_one_handed_weapon_fast",
+    "ANIM_fire_kneel_right_one_handed_weapon_slow",
+    "ANIM_fire_kneel_right_one_handed_weapon_fast",
+    "ANIM_fire_kneel_left_one_handed_weapon_slow",
+    "ANIM_fire_kneel_left_one_handed_weapon_fast",
+    "ANIM_fire_kneel_left_one_handed_weapon",
+    "ANIM_aim_walking_one_handed_weapon",
+    "ANIM_aim_walking_left_one_handed_weapon",
+    "ANIM_aim_walking_right_one_handed_weapon",
+    "ANIM_aim_running_one_handed_weapon",
+    "ANIM_aim_running_right_one_handed_weapon",
+    "ANIM_aim_running_left_one_handed_weapon",
+    "ANIM_aim_sprinting_one_handed_weapon",
+    "ANIM_running_one_handed_weapon",
+    "ANIM_sprinting_one_handed_weapon",
+    "ANIM_null91", /* invalid slot */
+    "ANIM_null92", /* invalid slot */
+    "ANIM_null93", /* invalid slot */
+    "ANIM_null94", /* invalid slot */
+    "ANIM_null95", /* invalid slot */
+    "ANIM_null96", /* invalid slot */
+    "ANIM_draw_one_handed_weapon_and_look_around",
+    "ANIM_draw_one_handed_weapon_and_stand_up",
+    "ANIM_aim_one_handed_weapon_left_right",
+    "ANIM_cock_one_handed_weapon_and_turn_around",
+    "ANIM_holster_one_handed_weapon_and_cross_arms",
+    "ANIM_cock_one_handed_weapon_turn_around_and_stand_up",
+    "ANIM_draw_one_handed_weapon_and_turn_around",
+    "ANIM_step_foward_and_hold_one_handed_weapon",
+    "ANIM_holster_one_handed_weapon_and_adjust_suit",
+    "ANIM_idle_unarmed",
+    "ANIM_walking_unarmed",
+    "ANIM_fire_walking_dual_wield",
+    "ANIM_fire_walking_dual_wield_hands_crossed",
+    "ANIM_fire_running_dual_wield",
+    "ANIM_fire_running_dual_wield_hands_crossed",
+    "ANIM_fire_sprinting_dual_wield",
+    "ANIM_fire_sprinting_dual_wield_hands_crossed",
+    "ANIM_walking_female",
+    "ANIM_running_female",
+    "ANIM_fire_kneel_dual_wield",
+    "ANIM_fire_kneel_dual_wield_left",
+    "ANIM_fire_kneel_dual_wield_right",
+    "ANIM_fire_kneel_dual_wield_hands_crossed",
+    "ANIM_fire_kneel_dual_wield_hands_crossed_left",
+    "ANIM_fire_kneel_dual_wield_hands_crossed_right",
+    "ANIM_fire_standing_dual_wield",
+    "ANIM_fire_standing_dual_wield_left",
+    "ANIM_fire_standing_dual_wield_right",
+    "ANIM_fire_standing_dual_wield_hands_crossed_left",
+    "ANIM_fire_standing_dual_wield_hands_crossed_right",
+    "ANIM_fire_standing_aiming_down_sights",
+    "ANIM_fire_kneel_aiming_down_sights",
+    "ANIM_hit_taser", /* unused tazer boy hit reaction */
+    "ANIM_death_explosion_forward",
+    "ANIM_death_explosion_left1",
+    "ANIM_death_explosion_back_left",
+    "ANIM_death_explosion_back1",
+    "ANIM_death_explosion_right",
+    "ANIM_death_explosion_forward_right1",
+    "ANIM_death_explosion_back2",
+    "ANIM_death_explosion_forward_roll",
+    "ANIM_death_explosion_forward_face_down",
+    "ANIM_death_explosion_left2",
+    "ANIM_death_explosion_forward_right2",
+    "ANIM_death_explosion_forward_right2_alt", /* copy of right2 with different fall */
+    "ANIM_death_explosion_forward_right3",
+    "ANIM_null143", /* invalid slot */
+    "ANIM_null144", /* invalid slot */
+    "ANIM_null145", /* invalid slot */
+    "ANIM_null146", /* invalid slot */
+    "ANIM_running_hands_up",
+    "ANIM_sprinting_hands_up",
+    "ANIM_aim_and_blow_one_handed_weapon",
+    "ANIM_aim_one_handed_weapon_left",
+    "ANIM_aim_one_handed_weapon_right",
+    "ANIM_conversation",
+    "ANIM_drop_weapon_and_show_fight_stance", /* orthodox stance woo */
+    "ANIM_yawning",
+    "ANIM_swatting_flies",
+    "ANIM_scratching_leg",
+    "ANIM_scratching_butt",
+    "ANIM_adjusting_crotch",
+    "ANIM_sneeze",
+    "ANIM_conversation_cleaned", /* cleaned up copy of "ANIM_conversation (compare left wrist) */
+    "ANIM_conversation_listener",
+    "ANIM_startled_and_looking_around",
+    "ANIM_laughing_in_disbelief",
+    "ANIM_surrendering_unarmed",
+    "ANIM_coughing_standing",
+    "ANIM_coughing_kneel1",
+    "ANIM_coughing_kneel2",
+    "ANIM_standing_up",
+    "ANIM_null169", /* invalid slot */
+    "ANIM_dancing",
+    "ANIM_dancing_one_handed_weapon",
+    "ANIM_keyboard_right_hand1",
+    "ANIM_keyboard_right_hand2",
+    "ANIM_keyboard_left_hand",
+    "ANIM_keyboard_right_hand_tapping",
+    "ANIM_bond_eye_fire_alt", /* unused */
+    "ANIM_dam_jump",
+    "ANIM_surface_vent_jump",
+    "ANIM_cradle_jump",
+    "ANIM_cradle_fall",
+    "ANIM_credits_bond_kissing",
+    "ANIM_credits_natalya_kissing"};
 
+#endif
 typedef enum AIRCRAFT_ANIMATION
 {
     AIRCRAFT_ANIMATION_helicopter_cradle,
@@ -901,9 +1122,15 @@ typedef enum AIRCRAFT_ANIMATION
     AIRCRAFT_ANIMATION_MAX
 } AIRCRAFT_ANIMATION;
 
+#ifdef AIPARSE
+char *AIRCRAFT_ANIMATION_ToString[] = {
+    "AIRCRAFT_ANIMATION_helicopter_cradle",
+    "AIRCRAFT_ANIMATION_plane_runway",
+    "AIRCRAFT_ANIMATION_helicopter_takeoff"};
+#endif
 
 /*
-values need to be verified against cheat_buttons.c : void cheatButtonHandleCheatsTurnedOn(CHEAT_ID cheat)
+values need to be verified against cheat.c : void cheatButtonHandleCheatsTurnedOn(CHEAT_ID cheat)
 */
 typedef enum CHEAT_IDS
 {
@@ -1093,6 +1320,18 @@ typedef enum CUFF_TYPES
     CUFF_MOORE,
     CUFF_FOLDER
 } CUFF_TYPES;
+#ifdef AIPARSE
+char *CUFF_TYPES_ToString[] = {
+    "CUFF_BLUE",
+    "CUFF_BROSNAN",
+    "CUFF_JUNGLE",
+    "CUFF_BOILER",
+    "CUFF_SNOW",
+    "CUFF_CONNERY",
+    "CUFF_DALTON",
+    "CUFF_MOORE",
+    "CUFF_FOLDER"};
+#endif
 
 typedef enum CREDITS_ALIGNMENT
 {
@@ -1200,6 +1439,16 @@ typedef enum DIFFICULTY
     DIFFICULTY_007,
     DIFFICULTY_MAX
 } DIFFICULTY;
+#ifdef AIPARSE
+// Add 1 to ID for correct string
+char *DIFFICULTY_ToString[] = {
+    "DIFFICULTY_MULTI", //-1
+    "DIFFICULTY_AGENT",
+    "DIFFICULTY_SECRET",
+    "DIFFICULTY_00",
+    "DIFFICULTY_007",
+};
+#endif
 
 typedef enum ENVIRONMENTDATA_IDS
 {
@@ -1317,8 +1566,9 @@ typedef enum HIT_TYPE
         "HIT_GLASS_XLU"};
 #endif
 
-#define IMAGE(NAME, SZ, HS, HT, F3, F4, F5, F6) IMAGE_ ## NAME,
-typedef enum IMAGEIDS
+#ifndef AIPARSE
+#define IMAGE(NAME, SZ, HS, HT, F3, F4, F5, F6) IMAGE_##NAME,
+    typedef enum IMAGEIDS
 {
 #include <assets/images.def>
     IMAGEIDS_COUNT
@@ -1332,7 +1582,7 @@ typedef enum IMGAGESIZES
     IMGAGESIZES_COUNT
 } IMGAGESIZES;
 #undef IMAGE
-
+#endif
 
 typedef enum LEVELID
 { // skyID since only used by Sky and does not reflect levelID, rather in past
@@ -1387,6 +1637,69 @@ typedef enum LEVELID
     LEVELID_FACILITY_MP = LEVELID_FACILITY + ENVIRONMENTDATA_PLAYERS_4,
     LEVELID_EGYPT_MP    = LEVELID_EGYPT + ENVIRONMENTDATA_PLAYERS_4
 } LEVELID;
+#ifdef AIPARSE
+char *LEVELID_ToString[] = {
+    "LEVELID_NONE",
+    "LEVELID_DEFAULT",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "LEVELID_BUNKER1",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "LEVELID_SILO",
+    "21",
+    "LEVELID_STATUE",
+    "LEVELID_CONTROL",
+    "LEVELID_ARCHIVES",
+    "LEVELID_TRAIN",
+    "LEVELID_FRIGATE",
+    "LEVELID_BUNKER2",
+    "LEVELID_AZTEC",
+    "LEVELID_STREETS",
+    "LEVELID_DEPOT",
+    "LEVELID_COMPLEX",
+    "LEVELID_EGYPT",
+    "LEVELID_DAM",
+    "LEVELID_FACILITY",
+    "LEVELID_RUNWAY",
+    "LEVELID_SURFACE",
+    "LEVELID_JUNGLE",
+    "LEVELID_TEMPLE",
+    "LEVELID_CAVERNS",
+    "LEVELID_CITADEL",
+    "LEVELID_CRADLE",
+    "LEVELID_SHO",
+    "LEVELID_SURFACE2",
+    "LEVELID_ELD",
+    "LEVELID_BASEMENT",
+    "LEVELID_STACK",
+    "LEVELID_LUE",
+    "LEVELID_LIBRARY",
+    "LEVELID_RIT",
+    "LEVELID_CAVES",
+    "LEVELID_EAR",
+    "LEVELID_LEE",
+    "LEVELID_LIP",
+    "LEVELID_CUBA",
+    "LEVELID_WAX",
+    "LEVELID_PAM",
+    "LEVELID_MAX"};
+
+#endif
 
 typedef enum LEVEL_SOLO_SEQUENCE
 {
@@ -2392,6 +2705,58 @@ typedef enum TEXTBANK_LEVEL_INDEX
     LOPTIONS,    /* Solo in-game menus */
     LMISC        /* Cheat options */
 } TEXTBANK_LEVEL_INDEX;
+#ifdef AIPARSE
+char *TEXTBANK_LEVEL_INDEX_ToString[] =
+    {
+        "LNULL",      /* Null (unused) */
+        "LAME",       /* Library (multi) */
+        "LARCH",      /* Archives */
+        "LARK",       /* Facility */
+        "LASH",       /* Stack (multi) */
+        "LAZT",       /* Aztec */
+        "LCAT",       /* Citadel (multi) */
+        "LCAVE",      /* Caverns */
+        "LAREC",      /* Control */
+        "LCRAD",      /* Cradle */
+        "LCRYP",      /* Egypt */
+        "LDAM",       /* Dam */
+        "LDEPO",      /* Depot */
+        "LDEST",      /* Frigate */
+        "LDISH",      /* Temple (multi) */
+        "LEAR",       /* Ear (unused) */
+        "LELD",       /* Eld (unused) */
+        "LIMP",       /* Basement (multi) */
+        "LJUN",       /* Jungle */
+        "LLEE",       /* Lee (unused) */
+        "LLEN",       /* Cuba */
+        "LLIP",       /* Lip (unused) */
+        "LLUE",       /* Lue (unused) */
+        "LOAT",       /* Cave (multi) */
+        "LPAM",       /* Pam (unused) */
+        "LPETE",      /* Streets */
+        "LREF",       /* Complex (multi) */
+        "LRIT",       /* Rit (unused) */
+        "LRUN",       /* Runway */
+        "LSEVB",      /* Bunker 2 */
+        "LSEV",       /* Bunker 1 */
+        "LSEVX",      /* Surface 1 */
+        "LSEVXB",     /* Surface 2 */
+        "LSHO",       /* Sho (unused) */
+        "LSILO",      /* Silo */
+        "LSTAT",      /* Statue */
+        "LTRA",       /* Train */
+        "LWAX",       /* Wax (unused) */
+        "LGUN",       /* Guns */
+        "LTITLE",     /* Stage and menu titles */
+        "LMPMENU",    /* Multi menus */
+        "LPROPOBJ",   /* In-game pickups */
+        "LMPWEAPONS", /* Multi weapon select */
+        "LOPTIONS",   /* Solo in-game menus */
+        "LMISC"       /* Cheat options */
+};
+
+#endif
+
 
 #define GUNSIGHTREASON_1         0x01
 #define GUNSIGHTREASON_NOTAIMING 0x02
@@ -2659,7 +3024,9 @@ enum CCRMLUT
         /*The following are some maybe helpfull counts (maybe GE doesnt need them, but thought Id ad while here)*/
         HEAD_COUNT        = HEAD_END - HEAD_START,         // Total number of heads
         HEAD_MALE_COUNT   = HEAD_F_START - HEAD_START,     // Total number of usable randon male heads
-        HEAD_FEMALE_COUNT = HEAD_BOND_START - HEAD_F_START // Total number of usable randon female heads
+        HEAD_FEMALE_COUNT = HEAD_BOND_START - HEAD_F_START, // Total number of usable randon female heads
+        HEAD_FIXED        = 0xFFFFFFFF,
+        HEAD_RANDOM       = 0xFFFFFF9F
     } HEADS;
 
     //Canonical name and style "ai_destroyobj 2 : (def->obj == PROP_ELVIS_SAUCER)\n"
@@ -3007,9 +3374,352 @@ enum CCRMLUT
         PROP_BOLLARD,             /* Bollard                                                            */
         PROP_MAX
     } PROP;
-
-        #define MAX_MULTI_PROP_IDS 600
-    #define MAX_DROPPED_PROP_IDS 1000
+#ifdef AIPARSE
+    char *PROP_ToString[] = {
+        "PROP_ALARM1",              /* Beta Alarm / Default Multi Weapon         */
+        "PROP_ALARM2",              /* Alarm                */
+        "PROP_EXPLOSIONBIT",        /* White Pyramid (Explosion Bit)          */
+        "PROP_AMMO_CRATE1",         /* Ammo Crate (Brown w/ Edge Brace", 6x240 Black)      */
+        "PROP_AMMO_CRATE2",         /* Ammo Crate (Brown w/ Center Brace", 12x8 Black)      */
+        "PROP_AMMO_CRATE3",         /* Ammo Crate (Green w/ Center Brace", 12x8 Brown)      */
+        "PROP_AMMO_CRATE4",         /* Ammo Crate (Green w/ Edge Brace", 6x8 White)      */
+        "PROP_AMMO_CRATE5",         /* Ammo Crate (Green w/ Double Brace", 24x60 Black)     */
+        "PROP_BIN1",                /* Rusted Trash Bin             */
+        "PROP_BLOTTER1",            /* Desk Blotter              */
+        "PROP_BOOK1",               /* Red Book               */
+        "PROP_BOOKSHELF1",          /* Bookshelf               */
+        "PROP_BRIDGE_CONSOLE1A",    /* Bridge Console w/ Monitor", Navigation + Keyboard 1A    */
+        "PROP_BRIDGE_CONSOLE1B",    /* Bridge Console w/ Navigation 1B         */
+        "PROP_BRIDGE_CONSOLE2A",    /* Bridge Console w/ Navigation", Monitor + Keyboard 2A    */
+        "PROP_BRIDGE_CONSOLE2B",    /* Bridge Console w/ Various Controls 2B        */
+        "PROP_BRIDGE_CONSOLE3A",    /* Bridge Console w/ Monitor", Navigation + Keyboard 3A    */
+        "PROP_BRIDGE_CONSOLE3B",    /* Bridge Console w/ Monitor", Keyboard + Navigation 3B    */
+        "PROP_CARD_BOX1",           /* Cardboard Box", Kapto|Enb           */
+        "PROP_CARD_BOX2",           /* Cardboard Box", Red Arrow", Bahko         */
+        "PROP_CARD_BOX3",           /* Cardboard Box", Scrawled Text", Bahah        */
+        "PROP_CARD_BOX4_LG",        /* Cardboard Box", Three Seams           */
+        "PROP_CARD_BOX5_LG",        /* Cardboard Box", Two Seams", Bahah         */
+        "PROP_CARD_BOX6_LG",        /* Cardboard Box", Bahko            */
+        "PROP_CCTV",                /* Surveillance Camera            */
+        "PROP_CONSOLE1",            /* Double Screen Consoles w/ Keyboards        */
+        "PROP_CONSOLE2",            /* Double Screen Consoles w/ Left Keyboard       */
+        "PROP_CONSOLE3",            /* Double Screen Consoles w/ Right Keyboard       */
+        "PROP_CONSOLE_SEVA",        /* Console w/ Keyboard            */
+        "PROP_CONSOLE_SEVB",        /* Console w/ Monitor + Keyboard          */
+        "PROP_CONSOLE_SEVC",        /* Console w/ Switches            */
+        "PROP_CONSOLE_SEVD",        /* Console w/ Five Gauges            */
+        "PROP_CONSOLE_SEV2A",       /* Console w/ Four Faders            */
+        "PROP_CONSOLE_SEV2B",       /* Console w/ Monitor", Keyboard + Switches       */
+        "PROP_CONSOLE_SEV2C",       /* Console w/ Three Gauges           */
+        "PROP_CONSOLE_SEV2D",       /* Console w/ Pressure Gauge           */
+        "PROP_CONSOLE_SEV_GEA",     /* Console w/ GoldenEye Key Slot          */
+        "PROP_CONSOLE_SEV_GEB",     /* Console w/ Faders + Pressure Gauge         */
+        "PROP_DESK1",               /* Desk w/ Kickplate             */
+        "PROP_DESK2",               /* Desk                */
+        "PROP_DESK_LAMP2",          /* Desk Lamp               */
+        "PROP_DISC_READER",         /* External Hard Drive            */
+        "PROP_DISK_DRIVE1",         /* Floppy Disc Drive             */
+        "PROP_FILING_CABINET1",     /* Filing Cabinet              */
+        "PROP_JERRY_CAN1",          /* Jerrycan (Fuel Container)           */
+        "PROP_KEYBOARD1",           /* Computer Keyboard             */
+        "PROP_KIT_UNITS1",          /* Kitchen Cabinets             */
+        "PROP_LETTER_TRAY1",        /* Letter Tray              */
+        "PROP_MAINFRAME1",          /* Mainframe", Basic             */
+        "PROP_MAINFRAME2",          /* Mainframe", Advanced            */
+        "PROP_METAL_CHAIR1",        /* Chair (Metal)              */
+        "PROP_METAL_CRATE1",        /* Metal Crate", 6 Top Corner           */
+        "PROP_METAL_CRATE2",        /* Metal Crate", 6 Bottom Corner          */
+        "PROP_METAL_CRATE3",        /* Metal Crate", Toxic Materials          */
+        "PROP_METAL_CRATE4",        /* Metal Crate", Double Stripe - Class D1 Hazard      */
+        "PROP_MISSILE_RACK",        /* Naval Harpoon Missile in Containment Rack       */
+        "PROP_MISSILE_RACK2",       /* Naval Harpoon Missiles in Containment Racks x4      */
+        "PROP_OIL_DRUM1",           /* Oil Drum", Single Stripe", Ribbed         */
+        "PROP_OIL_DRUM2",           /* Oil Drum", Single Stripe", Ribbed - Class D1 Hazard     */
+        "PROP_OIL_DRUM3",           /* Oil Drum", Single Stripe", Ribbed - Toxic Materials     */
+        "PROP_OIL_DRUM5",           /* Oil Drum", Double Stripe - Toxic Materials       */
+        "PROP_OIL_DRUM6",           /* Oil Drum - Toxic Materials           */
+        "PROP_OIL_DRUM7",           /* Oil Drum", Double Dashes - Class D1 Hazard       */
+        "PROP_PADLOCK",             /* Padlock               */
+        "PROP_PHONE1",              /* Telephone               */
+        "PROP_RADIO_UNIT1",         /* Radio Tuner w/ 1 Knob + 2 Gauges         */
+        "PROP_RADIO_UNIT2",         /* Radio Tuner w/ 1 Knob + 5 Gauges         */
+        "PROP_RADIO_UNIT3",         /* Radio Tuner w/ 3 Knobs + 5 Gauges         */
+        "PROP_RADIO_UNIT4",         /* Radio Tuner w/ 3 Knobs + 2 Gauges         */
+        "PROP_SAT1_REFLECT",        /* GoldenEye Satellite            */
+        "PROP_SATDISH",             /* Satellite Dish (Arkangelsk)          */
+        "PROP_SATBOX",              /* Uplink Box               */
+        "PROP_STOOL1",              /* Wooden Stool              */
+        "PROP_SWIVEL_CHAIR1",       /* Swivel Chair              */
+        "PROP_TORPEDO_RACK",        /* Naval Torpedo Rack x3            */
+        "PROP_TV1",                 /* Television Monitor             */
+        "PROP_TV_HOLDER",           /* Hanging Monitor Rack            */
+        "PROP_TVSCREEN",            /* Wall Monitor Screen            */
+        "PROP_TV4SCREEN",           /* Wall Monitor Screens", 4-in-1          */
+        "PROP_WOOD_LG_CRATE1",      /* Wooden Crate w/ #4 Label", Bahah         */
+        "PROP_WOOD_LG_CRATE2",      /* Wooden Crate", Darker Shading", Kapto|Enb       */
+        "PROP_WOOD_MD_CRATE3",      /* Wooden Crates x8", Bahko           */
+        "PROP_WOOD_SM_CRATE4",      /* Wooden Crate w/ #2 Label", Bahko         */
+        "PROP_WOOD_SM_CRATE5",      /* Wooden Crate w/ #4 Label", Darker Shading", Bahah     */
+        "PROP_WOOD_SM_CRATE6",      /* Wooden Crate w/ UP Arrow", Kapto|Enb        */
+        "PROP_WOODEN_TABLE1",       /* Wooden Table              */
+        "PROP_SWIPE_CARD2",         /* Keycard               */
+        "PROP_BORG_CRATE",          /* Blue and Gold Printed Circuit Cube (Borg Crate)     */
+        "PROP_BOXES4X4",            /* Metal Crate Stack", 4x4            */
+        "PROP_BOXES3X4",            /* Metal Crate Stack", 3x4            */
+        "PROP_BOXES2X4",            /* Metal Crate Stack", 2x4            */
+        "PROP_SEC_PANEL",           /* Security Card Panel            */
+        "PROP_ICBM_NOSE",           /* Silo Missile (ICBM)", Nose Cone Only        */
+        "PROP_ICBM",                /* Silo Missile (ICBM)            */
+        "PROP_TUNING_CONSOLE1",     /* Dual Consoles on Castors           */
+        "PROP_DESK_ARECIBO1",       /* Computer Work Desk             */
+        "PROP_LOCKER3",             /* Lockers", Single Venting           */
+        "PROP_LOCKER4",             /* Lockers", Double Venting           */
+        "PROP_ROOFGUN",             /* Ceiling Mounted Drone Gun           */
+        "PROP_DEST_ENGINE",         /* Frigate Engine              */
+        "PROP_DEST_EXOCET",         /* Naval MK 29 Missile Launcher (Exocet)        */
+        "PROP_DEST_GUN",            /* Naval 100 mm Gun Turret (TR 100)         */
+        "PROP_DEST_HARPOON",        /* Naval MK 141 Launch Canisters (Harpoon)       */
+        "PROP_DEST_SEAWOLF",        /* Naval MK 26 Dual Missile Launcher (Seawolf)      */
+        "PROP_WINDOW",              /* Window Glass              */
+        "PROP_WINDOW_LIB_LG1",      /* Window Glass", Lattice Frame", 4x10 (single-sided)     */
+        "PROP_WINDOW_LIB_SM1",      /* Window Glass", Lattice Frame", 4x3 (double-sided)     */
+        "PROP_WINDOW_COR11",        /* Window Glass", Lattice Frame", 4x4 (single-sided)     */
+        "PROP_JUNGLE3_TREE",        /* Jungle Large Tree             */
+        "PROP_PALM",                /* Jungle Palm Tree             */
+        "PROP_PALMTREE",            /* Jungle Palm Tree", Resprouting After Loss of Fronds     */
+        "PROP_PLANT2B",             /* Jungle Plant", Low Shrub           */
+        "PROP_LABBENCH",            /* Laboratory Table w/ Sink Drains         */
+        "PROP_GASBARREL",           /* White Bin               */
+        "PROP_GASBARRELS",          /* White Bins x4              */
+        "PROP_BODYARMOUR",          /* Body Armor               */
+        "PROP_BODYARMOURVEST",      /* Body Armor (Vest)             */
+        "PROP_GASTANK",             /* Bottling Tank              */
+        "PROP_GLASSWARE1",          /* Glass Cup               */
+        "PROP_HATCHBOLT",           /* Metallic Securing Strip (Hatch Bolt)        */
+        "PROP_BRAKEUNIT",           /* Train Brake Controller            */
+        "PROP_AK47MAG",             /* Gun Magazine (KF7 Soviet)           */
+        "PROP_M16MAG",              /* Gun Magazine (AR33 Assault Rifle)         */
+        "PROP_MP5KMAG",             /* Gun Magazine (D5K Deutsche)          */
+        "PROP_SKORPIONMAG",         /* Gun Magazine (Klobb)            */
+        "PROP_SPECTREMAG",          /* Gun Magazine (Phantom)            */
+        "PROP_UZIMAG",              /* Gun Magazine (ZMG (9mm))           */
+        "PROP_SILENCER",            /* Silencer               */
+        "PROP_CHREXTINGUISHER",     /* Fire Extinguisher             */
+        "PROP_BOXCARTRIDGES",       /* Box of Shells (Shotgun Cartridges)         */
+        "PROP_FNP90MAG",            /* Gun Magazine (RC-P90)            */
+        "PROP_GOLDENSHELLS",        /* Box of Shells (Golden Gun Bullets)         */
+        "PROP_MAGNUMSHELLS",        /* Box of Shells (Magnum Rounds)          */
+        "PROP_WPPKMAG",             /* Gun Magazine (PP7)             */
+        "PROP_TT33MAG",             /* Gun Magazine (DD44 Dostovei)          */
+        "PROP_SEV_DOOR",            /* Grey Containment Door w/ Caution Stripes and Window    */
+        "PROP_SEV_DOOR3",           /* Grey Electronic Door w/ LEFT Arrow         */
+        "PROP_SEV_DOOR3_WIND",      /* BETA Electronic Door w/ LEFT Arrow and Fake Window     */
+        "PROP_SEV_DOOR4_WIND",      /* Grey Electronic Door w/ LEFT Arrow and Window      */
+        "PROP_SEV_TRISLIDE",        /* Glass Door w/ Stone Frame           */
+        "PROP_SEV_DOOR_V1",         /* Grey Electronic Door w/ UP Arrow         */
+        "PROP_STEEL_DOOR1",         /* Silver Corrugated Door w/ Caution Stripes       */
+        "PROP_STEEL_DOOR2",         /* Rusty Door w/ Handle            */
+        "PROP_STEEL_DOOR3",         /* Double Cross Brace Door           */
+        "PROP_SILO_LIFT_DOOR",      /* Elevator Door              */
+        "PROP_STEEL_DOOR2B",        /* Rusty Door w/o Handle            */
+        "PROP_DOOR_ROLLER1",        /* Blue Bay Door w/ Caution Stripes         */
+        "PROP_DOOR_ROLLER2",        /* Blue Bay Door w/ Venting and Caution Stripes      */
+        "PROP_DOOR_ROLLER3",        /* Blue Bay Door w/ Venting and Caution Stripes      */
+        "PROP_DOOR_ROLLER4",        /* Cargo Bay Door w/ UP Arrow and Transportation Stripes    */
+        "PROP_DOOR_ST_AREC1",       /* Blue Corrugated Door w/ Transportation Stripes      */
+        "PROP_DOOR_ST_AREC2",       /* Blue Reversed Corrugated Door w/ Transportation Stripes   */
+        "PROP_DOOR_DEST1",          /* Grey Frigate Door w/ Indents and Caution Stripes     */
+        "PROP_DOOR_DEST2",          /* Grey Frigate Door w/ Indents", Caution Stripes and KEEP CLEAR Label */
+        "PROP_GAS_PLANT_SW_DO1",    /* Grey Swinging Door w/ Blue Stripe         */
+        "PROP_GAS_PLANT_SW2_DO1",   /* Grey Swinging Door", Darker           */
+        "PROP_GAS_PLANT_SW3_DO1",   /* Grey Swinging Door", Lighter          */
+        "PROP_GAS_PLANT_SW4_DO1",   /* Light Wooden Door (Looks Like Sand)        */
+        "PROP_GAS_PLANT_MET1_DO1",  /* Brown Electronic Door            */
+        "PROP_GAS_PLANT_WC_CUB1",   /* Bathroom Stall Door            */
+        "PROP_GASPLANT_CLEAR_DOOR", /* Laboratory Glass Door            */
+        "PROP_TRAIN_DOOR",          /* Dark Wooden Door             */
+        "PROP_TRAIN_DOOR2",         /* Dark Wooden Door w/ Window           */
+        "PROP_TRAIN_DOOR3",         /* Dark Wooden Door w/ Window + Shutter        */
+        "PROP_DOOR_EYELID",         /* Eyelid Door              */
+        "PROP_DOOR_IRIS",           /* Iris Door               */
+        "PROP_SEVDOORWOOD",         /* Cabin Door               */
+        "PROP_SEVDOORWIND",         /* Weathered Swinging Door w/ Window         */
+        "PROP_SEVDOORNOWIND",       /* Weathered Swinging Door           */
+        "PROP_SEVDOORMETSLIDE",     /* Brown Corrugated Electronic Door         */
+        "PROP_CRYPTDOOR1A",         /* Stone Door w/ Prints (Set A)          */
+        "PROP_CRYPTDOOR1B",         /* Sand Door w/ Damage (Set A)          */
+        "PROP_CRYPTDOOR2A",         /* Stone Door w/ Prints", Darker (Set B)        */
+        "PROP_CRYPTDOOR2B",         /* Sand Door w/ Damage", Darker (Set B)        */
+        "PROP_CRYPTDOOR3",          /* Egyptian Moving Wall            */
+        "PROP_CRYPTDOOR4",          /* Brown Sand Door (Temple)           */
+        "PROP_VERTDOOR",            /* Blast Door (Control)            */
+        "PROP_HATCHDOOR",           /* Train Floor Hatch             */
+        "PROP_DAMGATEDOOR",         /* Security Gate (Dam)            */
+        "PROP_DAMTUNDOOR",          /* Tunnel Flood Door (Dam)           */
+        "PROP_DAMCHAINDOOR",        /* Mesh Gate               */
+        "PROP_SILOTOPDOOR",         /* Launch Tube Ceiling Shutter (Silo)         */
+        "PROP_DOORPRISON1",         /* Cell Door               */
+        "PROP_DOORSTATGATE",        /* Park Gate               */
+        "PROP_CHRKALASH",           /* KF7 Soviet               */
+        "PROP_CHRGRENADELAUNCH",    /* Grenade Launcher             */
+        "PROP_CHRKNIFE",            /* Hunting Knife              */
+        "PROP_CHRLASER",            /* Moonraker Laser             */
+        "PROP_CHRM16",              /* AR33 Assault Rifle             */
+        "PROP_CHRMP5K",             /* D5K Deutsche              */
+        "PROP_CHRRUGER",            /* Cougar Magnum              */
+        "PROP_CHRWPPK",             /* PP7 Special Issue             */
+        "PROP_CHRSHOTGUN",          /* Shotgun               */
+        "PROP_CHRSKORPION",         /* Klobb                */
+        "PROP_CHRSPECTRE",          /* Phantom               */
+        "PROP_CHRUZI",              /* ZMG (9mm)               */
+        "PROP_CHRGRENADE",          /* Hand Grenade              */
+        "PROP_CHRFNP90",            /* RC-P90                */
+        "PROP_CHRBRIEFCASE",        /* Briefcase               */
+        "PROP_CHRREMOTEMINE",       /* Remote Mine              */
+        "PROP_CHRPROXIMITYMINE",    /* Proximity Mine              */
+        "PROP_CHRTIMEDMINE",        /* Timed Mine               */
+        "PROP_CHRROCKET",           /* Rocket                */
+        "PROP_CHRGRENADEROUND",     /* Grenade Round              */
+        "PROP_CHRWPPKSIL",          /* PP7 (Silenced)              */
+        "PROP_CHRTT33",             /* DD44 Dostovei              */
+        "PROP_CHRMP5KSIL",          /* D5K (Silenced)              */
+        "PROP_CHRAUTOSHOT",         /* Automatic Shotgun             */
+        "PROP_CHRGOLDEN",           /* Golden Gun               */
+        "PROP_CHRTHROWKNIFE",       /* Throwing Knife              */
+        "PROP_CHRSNIPERRIFLE",      /* Sniper Rifle              */
+        "PROP_CHRROCKETLAUNCH",     /* Rocket Launcher             */
+        "PROP_HATFURRY",            /* Fur Hat", Blue              */
+        "PROP_HATFURRYBROWN",       /* Fur Hat", Brown              */
+        "PROP_HATFURRYBLACK",       /* Fur Hat", Black              */
+        "PROP_HATTBIRD",            /* Side Cap", Light Green            */
+        "PROP_HATTBIRDBROWN",       /* Side Cap", Dark Green            */
+        "PROP_HATHELMET",           /* Combat Helmet", Green            */
+        "PROP_HATHELMETGREY",       /* Combat Helmet", Grey            */
+        "PROP_HATMOON",             /* Elite Headgear              */
+        "PROP_HATBERET",            /* Special Forces Beret", Black          */
+        "PROP_HATBERETBLUE",        /* Special Forces Beret", Navy           */
+        "PROP_HATBERETRED",         /* Special Forces Beret", Burgundy          */
+        "PROP_HATPEAKED",           /* Officer's Peaked Visor Cap           */
+        "PROP_CHRWRISTDART",        /* Pchrwristdart (BETA)            */
+        "PROP_CHREXPLOSIVEPEN",     /* Pchrexplosivepen (BETA)           */
+        "PROP_CHRBOMBCASE",         /* Bomb Case (Briefcase Laying Down)         */
+        "PROP_CHRFLAREPISTOL",      /* Pchrflarepistol (BETA Pickup)          */
+        "PROP_CHRPITONGUN",         /* Pchrpitongun (BETA Pickup)           */
+        "PROP_CHRFINGERGUN",        /* Pchrfingergun (BETA Pickup)          */
+        "PROP_CHRSILVERWPPK",       /* Pchrsilverwppk (BETA Pickup)          */
+        "PROP_CHRGOLDWPPK",         /* Pchrgoldwppk (BETA Pickup)           */
+        "PROP_CHRDYNAMITE",         /* Pchrdynamite (BETA Pickup)           */
+        "PROP_CHRBUNGEE",           /* Pchrbungee (BETA Pickup)           */
+        "PROP_CHRDOORDECODER",      /* Door Decoder              */
+        "PROP_CHRBOMBDEFUSER",      /* Bomb Defuser              */
+        "PROP_CHRBUGDETECTOR",      /* Pchrbugdetector (BETA Pickup)          */
+        "PROP_CHRSAFECRACKERCASE",  /* Safe Cracker Case (Briefcase Laying Down)       */
+        "PROP_CHRCAMERA",           /* Photo Camera (007)             */
+        "PROP_CHRLOCKEXPLODER",     /* Pchrlockexploder (BETA Pickup)          */
+        "PROP_CHRDOOREXPLODER",     /* Pchrdoorexploder (BETA Pickup)          */
+        "PROP_CHRKEYANALYSERCASE",  /* Key Analyzer Case (Briefcase Laying Down)       */
+        "PROP_CHRWEAPONCASE",       /* Weapon Case (Briefcase Standing Up)        */
+        "PROP_CHRKEYYALE",          /* Yale Key               */
+        "PROP_CHRKEYBOLT",          /* Bolt Key               */
+        "PROP_CHRBUG",              /* Covert Modem / Tracker Bug           */
+        "PROP_CHRMICROCAMERA",      /* Micro Camera              */
+        "PROP_FLOPPY",              /* Floppy Disc              */
+        "PROP_CHRGOLDENEYEKEY",     /* GoldenEye Key              */
+        "PROP_CHRPOLARIZEDGLASSES", /* Polarized Glasses             */
+        "PROP_CHRCREDITCARD",       /* Pchrcreditcard (BETA Pickup)          */
+        "PROP_CHRDARKGLASSES",      /* Pchrdarkglasses (BETA Pickup)          */
+        "PROP_CHRGASKEYRING",       /* Gas Keyring              */
+        "PROP_CHRDATATHIEF",        /* Datathief               */
+        "PROP_SAFE",                /* Safe Body               */
+        "PROP_BOMB",                /* Pbomb (BETA Pickup)            */
+        "PROP_CHRPLANS",            /* Plans (Briefing Folder)           */
+        "PROP_CHRSPYFILE",          /* Pchrspyfile (BETA Pickup)           */
+        "PROP_CHRBLUEPRINTS",       /* Pirate Blueprints             */
+        "PROP_CHRCIRCUITBOARD",     /* Circuitboard              */
+        "PROP_CHRMAP",              /* Bunker Expansion Plans            */
+        "PROP_CHRSPOOLTAPE",        /* Pchrspooltape (BETA Pickup)          */
+        "PROP_CHRAUDIOTAPE",        /* Audiotape               */
+        "PROP_CHRMICROFILM",        /* Pchrmicrofilm (BETA Pickup)          */
+        "PROP_CHRMICROCODE",        /* Pchrmicrocode (BETA Pickup)          */
+        "PROP_CHRLECTRE",           /* Pchrlectre (BETA Pickup)           */
+        "PROP_CHRMONEY",            /* Pchrmoney (BETA Pickup)           */
+        "PROP_CHRGOLDBAR",          /* Pchrgoldbar (BETA Pickup)           */
+        "PROP_CHRHEROIN",           /* Pchrheroin (BETA Pickup)           */
+        "PROP_CHRCLIPBOARD",        /* Clipboard               */
+        "PROP_CHRDOSSIERRED",       /* Red Dossier              */
+        "PROP_CHRSTAFFLIST",        /* Staff List               */
+        "PROP_CHRDATTAPE",          /* DAT                */
+        "PROP_CHRPLASTIQUE",        /* Plastique               */
+        "PROP_CHRBLACKBOX",         /* Black Box (Orange Flight Recorder)         */
+        "PROP_CHRVIDEOTAPE",        /* CCTV Tape (GoldenEye VHS)           */
+        "PROP_NINTENDOLOGO",        /* Nintendo Logo              */
+        "PROP_GOLDENEYELOGO",       /* GoldenEye Logo              */
+        "PROP_WALLETBOND",          /* Classified Folder w/ Royal Crest (Folder Menus)     */
+        "PROP_MILTRUCK",            /* Supply Truck              */
+        "PROP_JEEP",                /* Military Jeep              */
+        "PROP_ARTIC",               /* Red Prime Mover             */
+        "PROP_HELICOPTER",          /* Transport Helicopter w/ Natalya         */
+        "PROP_TIGER",               /* Pirate Euro Chopper            */
+        "PROP_MILCOPTER",           /* Hound Helicopter             */
+        "PROP_HIND",                /* Soviet Camouflage Chopper           */
+        "PROP_ARTICTRAILER",        /* Black Trailer              */
+        "PROP_MOTORBIKE",           /* Motorbike               */
+        "PROP_TANK",                /* Tank                */
+        "PROP_APC",                 /* Armored Personnel Carrier           */
+        "PROP_SPEEDBOAT",           /* Speedboat               */
+        "PROP_PLANE",               /* Aeroplane               */
+        "PROP_GUN_RUNWAY1",         /* Heavy Gun Emplacement            */
+        "PROP_SAFEDOOR",            /* Safe Door               */
+        "PROP_KEY_HOLDER",          /* Key Rack               */
+        "PROP_HATCHSEVX",           /* Grating (Ventshaft Hatch)           */
+        "PROP_SEVDISH",             /* Satellite Dish (Severnaya)           */
+        "PROP_ARCHSECDOOR1",        /* Archives Moving Wall (Dark)          */
+        "PROP_ARCHSECDOOR2",        /* Archives Moving Wall (Light)          */
+        "PROP_GROUNDGUN",           /* Free Standing Drone Gun           */
+        "PROP_TRAINEXTDOOR",        /* Train Exterior Door            */
+        "PROP_CARBMW",              /* White Car #1 (BMW)             */
+        "PROP_CARESCORT",           /* White Car #2 (Escort)            */
+        "PROP_CARGOLF",             /* White Car #3 (Golf)            */
+        "PROP_CARWEIRD",            /* Red Car (Cadillac)             */
+        "PROP_CARZIL",              /* Ourumov's Car (ZIL)            */
+        "PROP_SHUTTLE_DOOR_L",      /* Exhaust Bay Doors", Left Side          */
+        "PROP_SHUTTLE_DOOR_R",      /* Exhaust Bay Doors", Right Side          */
+        "PROP_DEPOT_GATE_ENTRY",    /* Metallic Gate w/ Red Star           */
+        "PROP_DEPOT_DOOR_STEEL",    /* Rusty Door w/ Handle (Lo-Res)          */
+        "PROP_GLASSWARE2",          /* Beaker w/ Blue Topper            */
+        "PROP_GLASSWARE3",          /* Erlenmeyer Flask             */
+        "PROP_GLASSWARE4",          /* Set of Five Beakers            */
+        "PROP_LANDMINE",            /* Land Mine               */
+        "PROP_PLANT1",              /* Jungle Plant", Withered and Dying         */
+        "PROP_PLANT11",             /* Jungle Plant", Turning Colour          */
+        "PROP_PLANT2",              /* Jungle Plant", Healthy and Thick         */
+        "PROP_PLANT3",              /* Jungle Plant", Tall Leaves           */
+        "PROP_JUNGLE5_TREE",        /* Jungle Tree", Moss Covered           */
+        "PROP_LEGALPAGE",           /* GoldenEye Certification Screen          */
+        "PROP_ST_PETE_ROOM_1I",     /* Roads and Buildings #1 (stretch of road)       */
+        "PROP_ST_PETE_ROOM_2I",     /* Roads and Buildings #2 (stretch of road)       */
+        "PROP_ST_PETE_ROOM_3T",     /* Roads and Buildings #3 (intersection)        */
+        "PROP_ST_PETE_ROOM_5C",     /* Roads and Buildings #4 (street corner)        */
+        "PROP_ST_PETE_ROOM_6C",     /* Roads and Buildings #5 (street corner)        */
+        "PROP_DOOR_ROLLERTRAIN",    /* Roller Door              */
+        "PROP_DOOR_WIN",            /* Glass Sliding Door (Aztec)           */
+        "PROP_DOOR_AZTEC",          /* Stone Sliding Door (Aztec)           */
+        "PROP_SHUTTLE",             /* Moonraker Shuttle             */
+        "PROP_DOOR_AZT_DESK",       /* Boardroom Table (Aztec Exhaust Bay)        */
+        "PROP_DOOR_AZT_DESK_TOP",   /* Boardroom Table Extension (Aztec Exhaust Bay)      */
+        "PROP_DOOR_AZT_CHAIR",      /* Boardroom Chair (Aztec Exhaust Bay)        */
+        "PROP_DOOR_MF",             /* Mainframe Door              */
+        "PROP_FLAG",                /* Flag Tag Token              */
+        "PROP_BARRICADE",           /* Road Barricade              */
+        "PROP_MODEMBOX",            /* Covert Modem Connection Screen          */
+        "PROP_DOORPANEL",           /* Sliding Door Activation Switch          */
+        "PROP_DOORCONSOLE",         /* Console w/ Activation Light          */
+        "PROP_CHRTESTTUBE",         /* Glass Test Tube             */
+        "PROP_BOLLARD",             /* Bollard               */
+    };
+#endif
+#define MAX_MULTI_PROP_IDS 600
+#define MAX_DROPPED_PROP_IDS 1000
 #define DROPPED_PROP_ID_NUMBIT 0x1fff
 #define GUNTYPE_NUMBITS 127
 
@@ -3252,7 +3962,40 @@ typedef enum PROJECTILES
         AMMO_TOKEN,
         AMMOTYPE_MAX
     } AMMOTYPE;
+#ifdef AIPARSE
+    char *AMMOTYPE_ToString[] = {
+        "AMMO_NONE",
+        "AMMO_9MM",
+        "AMMO_9MM_2",
+        "AMMO_RIFLE",
+        "AMMO_SHOTGUN",
+        "AMMO_GRENADE",
+        "AMMO_ROCKETS",
+        "AMMO_REMOTEMINE",
+        "AMMO_PROXMINE",
+        "AMMO_TIMEDMINE",
+        "AMMO_KNIFE",
+        "AMMO_GRENADEROUND",
+        "AMMO_MAGNUM",
+        "AMMO_GGUN",
+        "AMMO_DARTS",
+        "AMMO_EXPLOSIVEPEN",
+        "AMMO_BOMBCASE",
+        "AMMO_FLARE",
+        "AMMO_PITON",
+        "AMMO_DYNAMITE",
+        "AMMO_BUG",
+        "AMMO_MICRO_CAMERA",
+        "AMMO_GEKEY",
+        "AMMO_PLASTIQUE",
+        "AMMO_WATCH_LASER",
+        "AMMO_WATCH_MAGNET",
+        "AMMO_UNK",
+        "AMMO_CAMERA",
+        "AMMO_TANK",
+        "AMMO_TOKEN"};
 
+#endif
     typedef enum HATTYPE
     {
         HATTYPE_OTHER = -1,
@@ -3274,6 +4017,8 @@ typedef enum PROJECTILES
 
     typedef enum ITEM_IDS
     {
+        ITEM_NOTHING = -1,
+
         ITEM_UNARMED,
         ITEM_FIST,
         ITEM_KNIFE,
@@ -3360,11 +4105,105 @@ typedef enum PROJECTILES
         ITEM_KEYBOLT,
         ITEM_SUIT_LF_HAND,
         ITEM_JOYPAD,
-        ITEM_NULL86,
-        ITEM_NULL87,
+        ITEM_ROCKETROUND,
+        ITEM_GRENADEROUND ,
         ITEM_TOKEN,
         ITEM_IDS_MAX
     } ITEM_IDS;
+#ifdef AIPARSE
+    char *ITEM_IDS_ToString[] = {
+        "ITEM_UNARMED",
+        "ITEM_FIST",
+        "ITEM_KNIFE",
+        "ITEM_THROWKNIFE",
+        "ITEM_WPPK",
+        "ITEM_WPPKSIL",
+        "ITEM_TT33",
+        "ITEM_SKORPION",
+        "ITEM_AK47",
+        "ITEM_UZI",
+        "ITEM_MP5K",
+        "ITEM_MP5KSIL",
+        "ITEM_SPECTRE",
+        "ITEM_M16",
+        "ITEM_FNP90",
+        "ITEM_SHOTGUN",
+        "ITEM_AUTOSHOT",
+        "ITEM_SNIPERRIFLE",
+        "ITEM_RUGER",
+        "ITEM_GOLDENGUN",
+        "ITEM_SILVERWPPK",
+        "ITEM_GOLDWPPK",
+        "ITEM_LASER",
+        "ITEM_WATCHLASER",
+        "ITEM_GRENADELAUNCH",
+        "ITEM_ROCKETLAUNCH",
+        "ITEM_GRENADE",
+        "ITEM_TIMEDMINE",
+        "ITEM_PROXIMITYMINE",
+        "ITEM_REMOTEMINE",
+        "ITEM_TRIGGER",
+        "ITEM_TASER",
+        "ITEM_TANKSHELLS",
+        "ITEM_BOMBCASE",
+        "ITEM_PLASTIQUE",
+        "ITEM_FLAREPISTOL",
+        "ITEM_PITONGUN",
+        "ITEM_BUNGEE",
+        "ITEM_DOORDECODER",
+        "ITEM_BOMBDEFUSER",
+        "ITEM_CAMERA",
+        "ITEM_LOCKEXPLODER",
+        "ITEM_DOOREXPLODER",
+        "ITEM_BRIEFCASE",
+        "ITEM_WEAPONCASE",
+        "ITEM_SAFECRACKERCASE",
+        "ITEM_KEYANALYSERCASE",
+        "ITEM_BUG",
+        "ITEM_MICROCAMERA",
+        "ITEM_BUGDETECTOR",
+        "ITEM_EXPLOSIVEFLOPPY",
+        "ITEM_POLARIZEDGLASSES",
+        "ITEM_DARKGLASSES",
+        "ITEM_CREDITCARD",
+        "ITEM_GASKEYRING",
+        "ITEM_DATATHIEF",
+        "ITEM_WATCHIDENTIFIER",
+        "ITEM_WATCHCOMMUNICATOR",
+        "ITEM_WATCHGEIGERCOUNTER",
+        "ITEM_WATCHMAGNETREPEL",
+        "ITEM_WATCHMAGNETATTRACT",
+        "ITEM_GOLDENEYEKEY",
+        "ITEM_BLACKBOX",
+        "ITEM_CIRCUITBOARD",
+        "ITEM_CLIPBOARD",
+        "ITEM_STAFFLIST",
+        "ITEM_DOSSIERRED",
+        "ITEM_PLANS",
+        "ITEM_SPYFILE",
+        "ITEM_BLUEPRINTS",
+        "ITEM_MAP",
+        "ITEM_AUDIOTAPE",
+        "ITEM_VIDEOTAPE",
+        "ITEM_DATTAPE",
+        "ITEM_SPOOLTAPE",
+        "ITEM_MICROFILM",
+        "ITEM_MICROCODE",
+        "ITEM_LECTRE",
+        "ITEM_MONEY",
+        "ITEM_GOLDBAR",
+        "ITEM_HEROIN",
+        "ITEM_KEYCARD",
+        "ITEM_KEYYALE",
+        "ITEM_KEYBOLT",
+        "ITEM_SUIT_LF_HAND",
+        "ITEM_JOYPAD",
+        "ITEM_NULL86",
+        "ITEM_NULL87",
+        "ITEM_TOKEN",
+        "ITEM_IDS_MAX"};
+
+#endif
 
     typedef enum PROPDEF_TYPE
     {
@@ -3419,7 +4258,60 @@ typedef enum PROJECTILES
         PROPDEF_END,
         PROPDEF_MAX
     } PROPDEF_TYPE;
+#ifdef AIPARSE
+    char *PROPDEF_TYPE_ToString[] = {
+        "PROPDEF_NOTHING",
+        "PROPDEF_DOOR",
+        "PROPDEF_DOOR_SCALE",
+        "PROPDEF_PROP",
+        "PROPDEF_KEY",
+        "PROPDEF_ALARM",
+        "PROPDEF_CCTV",
+        "PROPDEF_MAGAZINE",
+        "PROPDEF_COLLECTABLE",
+        "PROPDEF_GUARD",
+        "PROPDEF_MONITOR",
+        "PROPDEF_MULTI_MONITOR",
+        "PROPDEF_RACK",
+        "PROPDEF_AUTOGUN",
+        "PROPDEF_LINK",
+        "PROPDEF_DEBRIS",
+        "PROPDEF_UNK16",
+        "PROPDEF_HAT",
+        "PROPDEF_GUARD_ATTRIBUTE",
+        "PROPDEF_SWITCH",
+        "PROPDEF_AMMO",
+        "PROPDEF_ARMOUR",
+        "PROPDEF_TAG",
+        "PROPDEF_OBJECTIVE_START",
+        "PROPDEF_OBJECTIVE_END",
+        "PROPDEF_OBJECTIVE_DESTROY_OBJECT",
+        "PROPDEF_OBJECTIVE_COMPLETE_CONDITION",
+        "PROPDEF_OBJECTIVE_FAIL_CONDITION",
+        "PROPDEF_OBJECTIVE_COLLECT_OBJECT",
+        "PROPDEF_OBJECTIVE_DEPOSIT_OBJECT",
+        "PROPDEF_OBJECTIVE_PHOTOGRAPH",
+        "PROPDEF_OBJECTIVE_NULL",
+        "PROPDEF_OBJECTIVE_ENTER_ROOM",
+        "PROPDEF_OBJECTIVE_DEPOSIT_OBJECT_IN_ROOM",
+        "PROPDEF_OBJECTIVE_COPY_ITEM",
+        "PROPDEF_WATCH_MENU_OBJECTIVE_TEXT",
+        "PROPDEF_GAS_RELEASING",
+        "PROPDEF_RENAME",
+        "PROPDEF_LOCK_DOOR",
+        "PROPDEF_VEHICHLE",
+        "PROPDEF_AIRCRAFT",
+        "PROPDEF_UNK41",
+        "PROPDEF_GLASS",
+        "PROPDEF_SAFE",
+        "PROPDEF_SAFE_ITEM",
+        "PROPDEF_TANK",
+        "PROPDEF_CAMERAPOS", // canonical name
+        "PROPDEF_TINTED_GLASS",
+        "PROPDEF_END",
+    };
 
+#endif
 
 #pragma endregion
 
@@ -3445,6 +4337,22 @@ typedef enum PROJECTILES
         CAMERAMODE_FADE_TO_TITLE,
         CAMERAMODE_COUNT
     } CAMERAMODE;
+#ifdef AIPARSE
+    char *CAMERAMODE_ToString[] = {
+        "CAMERAMODE_NONE",
+        "CAMERAMODE_INTRO",
+        "CAMERAMODE_FADESWIRL",
+        "CAMERAMODE_SWIRL",
+        "CAMERAMODE_FP",
+        "CAMERAMODE_DEATH_CAM_SP",
+        "CAMERAMODE_DEATH_CAM_MP",
+        "CAMERAMODE_POSEND",
+        "CAMERAMODE_FP_NOINPUT",
+        "CAMERAMODE_MP",
+        "CAMERAMODE_FADE_TO_TITLE",
+    };
+
+#endif
 
     typedef enum INTRO_TYPE
     {
@@ -3460,6 +4368,21 @@ typedef enum PROJECTILES
         INTROTYPE_END,
         INTROTYPE_MAX
     } INTRO_TYPE;
+#ifdef AIPARSE
+    char *INTRO_TYPE_ToString[] = {
+        "INTROTYPE_SPAWN",
+        "INTROTYPE_ITEM",
+        "INTROTYPE_AMMO",
+        "INTROTYPE_SWIRL",
+        "INTROTYPE_ANIM",
+        "INTROTYPE_CUFF",
+        "INTROTYPE_CAMERA",
+        "INTROTYPE_WATCH",
+        "INTROTYPE_CREDITS",
+        "INTROTYPE_END",
+    };
+#endif
+
     typedef enum MISSION_STATE_IDS
     {
         MISSION_STATE_0,
@@ -3470,6 +4393,18 @@ typedef enum PROJECTILES
         MISSION_STATE_5,
         MISSION_STATE_6
     } MISSION_STATE_ID;
+#ifdef AIPARSE
+    char *MISSION_STATE_IDS_ToString[] = {
+        "MISSION_STATE_0",
+        "MISSION_STATE_1",
+        "MISSION_STATE_2",
+        "MISSION_STATE_3",
+        "MISSION_STATE_4",
+        "MISSION_STATE_5",
+        "MISSION_STATE_6"};
+
+#endif
+
 
     typedef enum OBJECTIVESTATUS
     {
@@ -3477,6 +4412,13 @@ typedef enum PROJECTILES
         OBJECTIVESTATUS_COMPLETE,
         OBJECTIVESTATUS_FAILED
     } OBJECTIVESTATUS;
+#ifdef AIPARSE
+    char *OBJECTIVESTATUS_ToString[] = {
+        "OBJECTIVESTATUS_INCOMPLETE",
+        "OBJECTIVESTATUS_COMPLETE",
+        "OBJECTIVESTATUS_FAILED"};
+#endif
+
 
     typedef enum TANK_RUN_STATE
     {
@@ -3545,6 +4487,19 @@ typedef enum PROJECTILES
     /* private chr ID, cannot be accessed with ai commands */
 #define CHR_OBJECTIVE        -2    /* objective ai list chr ID */
 #define CHR_FREE             -1    /* chr IDs when free'd (killed or removed from level) */
+#ifdef AIPARSE
+    /* CHR to String needs a sign flipped number */
+    char *CHR_ToString[] = {
+        "",
+        "CHR_FREE",
+        "CHR_OBJECTIVE",
+        "CHR_SELF",
+        "CHR_PRESET",
+        "CHR_SEE_DIE",
+        "CHR_SEE_SHOT",
+        "CHR_CLONE",
+        "CHR_BOND_CINEMA"};
+#endif
 #define CHR_SPAWN_NUM_START  5000  /* default chr num for spawned guards with ai command BD/BE */
 #define CHR_CLONED_NUM_START 10000 /* default chr num for cloed guards with ai command C1 */
     /* Special ID for selecting PadPreset in AI list */
@@ -3609,6 +4564,13 @@ typedef enum PROJECTILES
 #define CharArrayTo16(val, index) (                                         val[index+1] | val[index] << 8)
 #define CharArrayTo24(val, index) (                     val[index+1] << 8 | val[index+2] | val[index] << 16)
 #define CharArrayTo32(val, index) (val[index+1] << 16 | val[index+2] << 8 | val[index+3] | val[index] << 24)
+    // rewrite these to use char array as system provided funcs do not.
+    // converts the unsigned integer netlong from network byte order to host byte order
+
+#define btol(var)  *(int *)&(var) = CharArrayTo32(((unsigned char *)(&(var))), 0)
+#define ntohl(var) CharArrayTo32(((unsigned char *)(&(var))), 0)
+#define ntohs(var) CharArrayTo16(((unsigned char *)(&(var))), 0)
+
     /* Pad Catagory */
 #define isNotBoundPad(pad)        pad < 10000
 #define getBoundPadNum(pad)       pad - 10000
