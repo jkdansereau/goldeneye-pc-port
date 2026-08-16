@@ -30,7 +30,7 @@ void skyGetWorldPosFromScreenPos(f32 offset_x, f32 offset_y, coord3d* out) {
     coord2d coords;
     f32 screen_top;
 
-    player_mtxf = currentPlayerGetMatrix10D4();
+    player_mtxf = currentPlayerGetViewToWorldMtxf();
     coords.x = getPlayer_c_screenleft() + offset_x;
     screen_top = getPlayer_c_screentop();
     coords.y = fogGetCurrentEnvironmentp()->WaterConcavity + (offset_y + screen_top);
@@ -50,7 +50,7 @@ bool skyIsScreenCornerInSky(coord3d *corner3dpos, coord3d *dstpos, f32 *dstfrac)
     f32 sp24;
     u32 stack[2];
 #ifdef DEBUG
-    assert(eye[1] < fogGetCurrentEnvironmentp()->skyheight);
+    assert(eye[1] < fogGetCurrentEnvironmentp()->skyheight); //canonically bgFogGet()
 #endif
 
     if (f12 > 1.0f)
@@ -252,6 +252,8 @@ void skyTick(void)
         g_SkyCloudOffset -= 4096.0f;
     }
 }
+
+Gfx* sub_GAME_7F09343C(Gfx*, s32);
 
 Gfx *skyRender(Gfx *gdl)
 {

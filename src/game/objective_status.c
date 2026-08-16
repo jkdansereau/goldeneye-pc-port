@@ -338,7 +338,8 @@ void objectivestatusDisableStatusDisplay(void)
 #endif
 
 
-void display_objective_status_text_on_status_change(void) {
+void display_objective_status_text_on_status_change(void) 
+{
     s32 i;
     s32 availableindex = 0;
     char buffer[50] = "";
@@ -494,9 +495,9 @@ void objectiveTakePictureHandler(void)
                     && (target_prop->flags & PROPFLAG_ONSCREEN)
                     && (target_prop->zDepth >= 0.0f) // draw/render distance
                     && (objIsHealthy(target_object) != 0)
-                    && (sub_GAME_7F050D30(target_object->prop, &sp84, &sp7C, &sp74) != 0))
+                    && (objGetOnscreenRenderBounds(target_object->prop, &sp84, &sp7C, &sp74) != 0))
                 {
-                    sub_GAME_7F03F948(&sp84, &sp7C, &sp74, &sp64.right, &sp64.left);
+                    projectRectCornersTo2D(&sp84, &sp7C, &sp74, &sp64.right, &sp64.left);
                     
                     if (getPlayer_c_screenleft() < sp64.right)
                     {

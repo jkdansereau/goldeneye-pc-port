@@ -4,9 +4,9 @@
 
 struct BONDdata_item_control_blocks {
     int hand_data_dummy;
-    int field_4;
-    int field_8;
-    int field_C;
+    int field_04;
+    int field_08;
+    int field_0C;
     int field_10;
     int field_14;
     int field_18;

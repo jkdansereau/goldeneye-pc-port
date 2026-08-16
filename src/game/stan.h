@@ -26,6 +26,28 @@ struct move_bond_collision {
     struct coord3d sp1A8;
 };
 
+typedef enum StanCollisionResult {
+    STAN_COLLISION_NONE = -2,
+    STAN_COLLISION_FOUND = 2,
+    STAN_COLLISION_TRAVERSAL_LIMIT = 5
+} StanCollisionResult;
+
+typedef struct StanRoomBounds {
+    union {
+        struct {
+            s16 minX;
+            s16 minY;
+            s16 minZ;
+            s16 maxX;
+            s16 maxY;
+            s16 maxZ;
+        };
+        struct {
+            s16 min[3];
+            s16 max[3];
+        };
+    };
+} StanRoomBounds;
 
 /////////////////
 // extern
@@ -34,6 +56,9 @@ extern f32 stanSavedColl_someMin;
 extern PropRecord *stanSavedColl_posData;
 extern struct StandTile *standTileStart;
 extern s32 stanlinelog_flag;
+extern StandTile *firststaninroom[139];
+extern StanRoomBounds g_StanRoomBounds[139];
+extern s32 dword_CODE_bss_8007B9DC;
 
 /////////////////
 // prototypes
@@ -42,11 +67,11 @@ extern s32 stanlinelog_flag;
 void noteTileRoomIfDifferentToPrev( StandTile *tile,  StandTile *unused,  struct StandTileWalkCallbackRecord *data);
 
 void stanInit(void);
-
+void setLevelScale(f32 ls);
 void debugStanView(s8 joyX, s8 joyY, u16 joyBtns);
 void sub_GAME_7F0AF630(s32 arg0);
-void sub_GAME_7F0B1CC4(void);
-Gfx * sub_GAME_7F0B2D48(Gfx *arg0);
+void stanResetHits(void);
+Gfx * stanRenderDebugStanView(Gfx *arg0);
 Gfx * sub_GAME_7F0B303C(Gfx *arg0);
 Gfx * sub_GAME_7F0B3034(Gfx *arg0);
 Gfx * sub_GAME_7F0B312C(Gfx *arg0, s32 arg1);
@@ -55,12 +80,12 @@ s32 walkTilesBetweenPoints_NoCallback(StandTile **tileStack, f32 start_x, f32 st
 s32 stanTestPointWithinTileBoundsMaybe(StandTile *tile, f32 p_x, f32 p_z);
 f32 stanGetPositionYValue(StandTile* tile, f32 p_x, f32 p_z);
 s32 getCollisionEdge_maybe(coord3d *pntA, coord3d *pntB);
-s32 sub_GAME_7F0B26B8(StandTile **tile, f32 target_x, f32 target_z, f32 b_z, f32 param_5);
+s32 stanTestLocusEdgeAboveY(StandTile **tile, f32 target_x, f32 target_z, f32 radius, f32 yThreshold);
 s32 sub_GAME_7F0B20D0(StandTile** tileStack, f32 target_x, f32 target_z, f32 unknown);
 
 s32 stanTestLineUnobstructed(StandTile **pTile, f32 p_x, f32 p_z, f32 dest_x, f32 dest_z, int cdtypes, f32 unkHeight, f32 unkA, f32 unkB, f32 unkC);
-StandTile* sub_GAME_7F0B2718(StandTile* srcTile, tilePredicate_t tilePred);
-s32 sub_GAME_7F0B0D0C(StandTile *tile, f32 start_x, f32 start_z,  StandTile **tilePtr, f32 end_x, f32 end_z, s32 *roomBuf, s32 maxBufSize);
+StandTile* stanFillSearch(StandTile* srcTile, tilePredicate_t tilePred);
+s32 sub_GAME_7F0B0D0C(StandTile *tile, f32 start_x, f32 start_z, StandTile **destTile, f32 dest_x, f32 dest_z, s32 *roomBuffer, s32 maxBufSize);
 s32 sub_GAME_7F0B0C24(StandTile **tileStack, f32 start_x, f32 start_z, f32 dest_x, f32 dest_z, s32 *roomBuffer, s32 *rtnCountSize, s32 maxBufSize);
 s32 stanTestVolume(StandTile **, f32 posX, f32 posY, f32 radius, s32 cdtypes, f32 float1, f32 float2);
 s32 getTileRoom(StandTile* tile);
@@ -70,11 +95,13 @@ s32 stanTileDistanceRelated(struct StandTile **arg0, f32 arg1, f32 arg2, f32 arg
 s32 stanGetLocusField0(struct StandTileLocusCallbackRecord *arg0);
 s32 stanGetLocusCount(struct StandTileLocusCallbackRecord *arg0);
 f32 distBetweenPoints2d(f32 o_x,f32 o_z,f32 p_x,f32 p_z);
-bool sub_GAME_7F0B17E4(f32 x1, f32 z1, f32 x2, f32 z2, f32 x3, f32 z3);
-f32 sub_GAME_7F0B16C4(f32 x1, f32 z1, f32 x2, f32 z2, f32 x3, f32 z3);
-void stanGetMoveBondCollisionTiles(struct StandTile **arg0, struct StandTile **arg1, struct move_bond_collision *arg2);
+bool stanPointProjectsOntoEdge(f32 x1, f32 z1, f32 x2, f32 z2, f32 x3, f32 z3);
+f32 stanGetSignedPointLineDistance(f32 x1, f32 z1, f32 x2, f32 z2, f32 x3, f32 z3);
+void stanGetMoveBondCollisionTiles(StandTile **tile1, StandTile **tile2, coord3d *coords);
 struct StandTile *sub_GAME_7F0AFB78(f32 *arg_x, f32 *arg_y, f32 *arg_z, f32 arg3);
-s32 sub_GAME_7F0B0688(f32 arg0, f32 arg1, f32 arg2, f32 arg3, f32 arg4, f32 arg5, f32 arg6, f32 arg7);
-struct StandTile *stanMatchTileName(char *);
+bool doSegmentsIntersect(f32 start1X, f32 start1Z, f32 end1X, f32 end1Z, f32 start2X, f32 start2Z, f32 end2X, f32 end2Z);
+struct StandTilePoint *stanMatchTileName(char *id);
 s32 isPointInsideTriStandTileUnscaled_Maybe(struct StandTile *tile, f32 p_x, f32 p_z);
+s32 sub_GAME_7F0B21B0(StandTile **tileStack, f32 target_x, f32 target_z, f32 radius, s32 *rooms, s32 *count_rtn, s32 bufMax);
+StandTile *stanFindTileBelowPos(coord3d *pos, u8 *rooms, f32 *yRtn);
 #endif

@@ -7,7 +7,7 @@ ModelNode player_gait_pos_hdr_2 = {2, &player_gait_pos_2, &player_gait_pos_hdr_1
 //D:8003C5C8
 ModelNode player_gait_pos_hdr_3 = {2, &player_gait_pos_3, &player_gait_pos_hdr_2, 0, 0, 0};
 //D:8003C5E0
-ModelRoData_HeaderRecord player_gait_obj = {1, &player_gait_pos_hdr_1, 0, 0, 0, 0};
+ModelRoData_HeaderRecord player_gait_obj = {0, 1, &player_gait_pos_hdr_1, 0, 0, 0};
 //D:8003C5F0
 ModelRoData_GroupRecord player_gait_pos_1 = {{0.0, 0.0, 0.0}, 0x0001, 0x0002, 0xFFFF, 0xFFFF, &player_gait_pos_hdr_2, 0};
 //D:8003C60C

@@ -40,7 +40,6 @@ The requirements for Debian / Ubuntu should be:
 ```bash
 sudo apt-get update
 sudo apt-get install binutils-mips-linux-gnu make git python3
-sudo apt-get install libcapstone-dev pkg-config
 ```
 
 If you don't have host development tools already installed then you will also need to install `build-essential`:
@@ -48,6 +47,14 @@ If you don't have host development tools already installed then you will also ne
 ```bash
 sudo apt-get install build-essential
 ```
+
+> **Note:** `libcapstone-dev`/`pkg-config` are **no longer required**. Older
+> versions of this repo's recompiled IDO toolchain (`tools/ido5.3_recomp`,
+> see [Recompile IDO](#recompile-ido) below) linked against the system
+> `libcapstone` library for MIPS disassembly. The current toolchain vendors
+> its own disassembly library (`rabbitizer`) instead, so there's nothing
+> extra to install for it beyond the compiler already covered by
+> `build-essential` above.
 
 Additionally, [qemu-irix](https://github.com/n64decomp/qemu-irix/releases) is needed. Download the package to a desired location and install with:
 
@@ -71,12 +78,28 @@ Alternatively, you can start the container with `docker compose up` and connect 
 
 ### Recompile IDO
 
-Recompile IDO for your platform to increase compilation speed
+This project can compile the ROM's C code in one of two ways, controlled by the `IDO_RECOMP` build option (see
+[Build the ROM](#build-the-rom)):
+
+* `IDO_RECOMP=YES` (the default) — uses `tools/ido5.3_recomp/cc`, a copy of the original SGI IRIX 5.3 IDO compiler
+  that has been *statically recompiled* into a native x86-64 Linux program. Since it runs directly on your machine
+  instead of under an emulator, it's noticeably faster to compile with — this is why the setup step below exists.
+* `IDO_RECOMP=NO` — runs the original, unmodified IRIX IDO binaries (`tools/irix/root/usr/bin/cc` etc.) under the
+  [qemu-irix](https://github.com/n64decomp/qemu-irix/releases) user-mode emulator instead. Slower, but useful as a
+  lower-risk reference if you ever suspect the recompiled toolchain is misbehaving.
+
+The recompiled toolchain isn't checked into git — it's generated locally the first time it's needed, from the
+original IDO binaries in `tools/irix/root`. A plain `make` from the repo root builds it automatically if it's
+missing (wired up via `tools/Makefile`), so most people never need to run this step by hand. To build it explicitly
+(e.g. to watch its own build output, or force a rebuild after changing it):
 
 ```bash
 cd tools/ido5.3_recomp
 make
 ```
+
+For what this toolchain actually *is*, where it comes from upstream, and how to update it to a newer version, see
+[`tools/ido5.3_recomp/README.md`](../tools/ido5.3_recomp/README.md).
 
 Be careful! If you previously compiled GoldenEye on a different operating system or CPU architecture, the binaries (gzip, n64cksum) that were compiled will be incompatible.
 You must delete them.

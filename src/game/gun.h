@@ -5,6 +5,11 @@
 #include <bondconstants.h>
 #include <bondtypes.h>
 
+/**
+ * Pool of AlSoundState slots for impact and ricochet SFX.
+ */
+#define NUM_IMPACT_SFX_STATES 4
+
 typedef struct WeaponStats
 {
     /**
@@ -168,14 +173,21 @@ typedef struct WeaponStats
     f32 NoiseIncreasePerShot;
 
     /**
-     * Unknown (field 0x60).
+     * Noise bleeds off at a constant NoiseIncreasePerShot / this value per
+     * second, i.e. one shot's worth of noise decays over this many seconds.
+     * This is the guaranteed minimum decay, so accumulated noise always
+     * drains to LoudnessMin in finite time. All weapons use 2.0 for this value.
      */
-    f32 field_60;
+    f32 NoiseDecayLinearTime;
 
     /**
-     * Unknown (field 0x64).
+     * Proportional noise decay time constant in seconds.
+     * Noise above LoudnessMin relaxes toward the floor with this time
+     * constant: (noise - LoudnessMin) / this value is removed per second.
+     * Dominates when the player is loud; near LoudnessMin the linear term
+     * (NoiseDecayLinearTime) takes over. All weapons use 4.0 for this value.
      */
-    f32 field_64;
+    f32 NoiseDecayScaledTime;
 
     /**
      * Force of impact.
@@ -195,24 +207,16 @@ typedef struct AmmoStats {
     u32 MaxAmmo;
 
     /**
-     * Unknown (field 0x04).
+     * Segmented address (segment 0x02, global image bank) of this ammo
+     * type's HUD icon image. 0 for no icon. Resolved to an RDRAM pointer
+     * by adding globalbank_rdram_offset before use.
      */
-    u16 field_04;
+    u32 IconImage;
 
     /**
-     * Unknown (field 0x06).
+     * Vertical offset in pixels when the icon is drawn on the HUD.
      */
-    u16 field_06;
-
-    /**
-     * Unknown (field 0x08).
-     */
-    u16 field_08;
-
-    /**
-     * Unknown (field 0x0A).
-     */
-    u16 field_0A;
+    f32 IconYOffset;
 } AmmoStats;
 
 typedef struct GunModelFileRecord
@@ -240,11 +244,11 @@ typedef struct CasingRecord {
     coord3d pos;
     coord3d vel;
 #if VERSION_EU
-    f32 unk1C[3][3];
-    f32 unk40[3][3];
+    f32 rot_mtx[3][3];
+    f32 rot_velocity_mtx[3][3];
 #else
-    Mtxf unk1C;
-    Mtxf unk5C;
+    Mtxf rot_mtx;
+    Mtxf rot_velocity_mtx;
 #endif
     ModelFileHeader *header;
 } CasingRecord;
@@ -283,11 +287,27 @@ extern u32 size_item_buffer[];
 extern WeaponStats sniperrifle_stats;
 extern WeaponStats camera_stats;
 
+typedef struct WatchContButtonPositions {
+    f32 words[19];
+    struct coord3d start;
+    struct coord3d joystick;
+    struct coord3d dPad;
+    struct coord3d cUp;
+    struct coord3d cDown;
+    struct coord3d cLeft;
+    struct coord3d cRight;
+    struct coord3d a;
+    struct coord3d b;
+    struct coord3d l;
+    struct coord3d r;
+    struct coord3d z;
+} WatchContButtonPositions;
+
 f32 bondwalkItemGetForceOfImpact(ITEM_IDS item);
 
 u32 bondwalkItemCheckBitflags(ITEM_IDS item, u32 mask);
 
-void bondwalkFireBothHands(void);
+void gunUpdateAndFireBothHands(void);
 
 f32 sub_GAME_7F0649AC(s32 param_1);
 
@@ -314,14 +334,14 @@ void give_cur_player_ammo(s32, s32);
 s8 bondwalkItemGetAutomaticFiringRate(ITEM_IDS item);
 void inc_cur_civilian_casualties(void);
 void increment_num_kills_display_text_in_MP(void);
-f32 bondwalkItemGetDestructionAmount(ITEM_IDS item);
+f32 gunItemGetDestructionAmount(ITEM_IDS item);
 u16 bondwalkItemGetSound(ITEM_IDS item);
 u8 bondwalkItemGetSoundTriggerRate(ITEM_IDS item);
 
 void recall_joy2_hits_edit_detail_edit_flag(enum ITEM_IDS item, PropRecord* prop, s32 texture_index);
 void recall_joy2_hits_edit_flag(enum ITEM_IDS item, coord3d* arg1, s32 texture_index);
-void sub_GAME_7F05EB0C(ObjectRecord *arg0, coord3d *arg1,  StandTile *arg2, Mtxf *arg3, coord3d *arg4, Mtxf *arg5,  PropRecord *arg6);
-void CapBeamLengthAndDecideIfRendered(struct ChrRecord_f180 *arg0, ITEM_IDS item, coord3d *arg2, coord3d *arg3);
+void gunInitProjectileObject(ObjectRecord *arg0, coord3d *arg1,  StandTile *arg2, Mtxf *arg3, coord3d *arg4, Mtxf *arg5,  PropRecord *owner);
+void CapBeamLengthAndDecideIfRendered(struct BeamRecord *arg0, ITEM_IDS item, coord3d *arg2, coord3d *arg3);
 void sub_GAME_7F068190(coord3d *arg0, coord3d *arg1);
 
 void inc_curplayer_hitcount_with_weapon(ITEM_IDS item, SHOT_REGISTER shot_register);
@@ -333,6 +353,7 @@ s32          currentPlayerGetAmmoCount(AMMOTYPE ammotype);
 s32          get_civilian_casualties(void);
 s32 Gun_hand_without_item(enum GUNHAND arg0);
 void sub_GAME_7F05FB00(enum GUNHAND hand);
+void gunSetTracerTarget(coord3d* pos);
 
 void bgunCalculateBlend(enum GUNHAND handnum);
 void gunSetBondWeaponSway(f32 arg0, f32 arg1, f32 speed_verta, f32 speed_theta);
@@ -358,8 +379,18 @@ void backstep_through_inventory(void);
 void gunSetAimType(s32 param_1);
 void sub_GAME_7F067FBC(f32 turn_x, f32 turn_y);
 void gunTickGameplay(s32 arg0);
+u8 bondwalkItemGetObjectsShootThrough(ITEM_IDS item);
+void sub_GAME_7F064720(coord3d* pos);
 
-Gfx *gunDrawHudString(Gfx *gdl, s8 *text, s32 x, s32 halign, s32 y, s32 valign, bool glow);
-Gfx *gunDrawHudInteger(Gfx *gdl, s32 value, s32 x, s32 halign, s32 y, s32 valign, bool glow);
+Gfx *gunDrawHudString(Gfx *gdl, s8 *text, s32 x, s32 halign, s32 y, s32 valign, bool outline);
+Gfx *gunDrawHudInteger(Gfx *gdl, s32 value, s32 x, s32 halign, s32 y, s32 valign, bool outline);
+void gunAdvanceBeamTimer(BeamRecord* arg0);
+Gfx* watchRenderController(Gfx* gdl, Mtxf* basemtx, s32 envcolour, bool animatebuttons, WatchContButtonPositions* buttonpositions, s8* contpadnum);
+Gfx *watchRenderControllerOpaque(Gfx *gdl, Mtxf *basemtx, bool animatebuttons, WatchContButtonPositions *buttonpositions, s8 *contpadnum);
+
+Gfx *set_enviro_fog_for_items_in_solo_watch_menu(Gfx *gdl, ITEM_IDS itemid, Mtxf *mtx, s32 arg3, s32 arg4);
+void gunRenderCasings(Gfx **gdl);
+void gunRenderFirstPersonGunModels(Gfx **gdl);
+Gfx *generate_ammo_total_microcode(Gfx *gdl);
 
 #endif

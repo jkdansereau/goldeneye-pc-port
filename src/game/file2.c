@@ -20,7 +20,10 @@
 save_data saves[SAVESLOTMAX];
 
 //CODE.bss:80069B60
-u32 dword_CODE_bss_80069B60;
+/**
+ * The chr whose model is currently being built. Has to stay here to preserve ROM layout.
+ */
+ChrRecord *g_CurModelChr;
 
 //data
 //D:8002C510
@@ -29,8 +32,6 @@ s32 save_selected_bond[] = {BOND_BROSNAN,BOND_CONNERY,BOND_DALTON,BOND_MOORE};
 #else
 s32 save_selected_bond[] = {BOND_BROSNAN,BOND_BROSNAN,BOND_BROSNAN,BOND_BROSNAN};
 #endif
-
-
 
 
 /**
@@ -963,7 +964,7 @@ bool fileIsEgyptCompletedOn00ForFolder(int foldernum)
  */
 bool fileIsCradleCompletedAnyFolder(void)
 {
-    int folder;
+    s32 folder;
 
     for (folder = FOLDER1; folder < MAX_FOLDER_COUNT; folder++)
     {
@@ -983,7 +984,7 @@ bool fileIsCradleCompletedAnyFolder(void)
  */
 bool check_aztec_completed_any_folder_secret_00(void)
 {
-    int folder;
+    s32 folder;
 
     for (folder = FOLDER1; folder < MAX_FOLDER_COUNT; folder++)
     {
@@ -1003,7 +1004,7 @@ bool check_aztec_completed_any_folder_secret_00(void)
  */
 bool fileIsEgyptCompletedOn00AnyFolder(void)
 {
-    int folder;
+    s32 folder;
 
     for (folder = FOLDER1; folder < MAX_FOLDER_COUNT; folder++)
     {

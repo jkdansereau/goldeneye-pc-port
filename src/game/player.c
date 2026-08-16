@@ -122,7 +122,7 @@ void initBONDdataforPlayer(s32 player_num)
 #ifdef DEBUG
     assert(players[num]==NULL); //according to assert, this file name is "player.c"
 #endif
-    default_hand = *((struct hand*)D_8003FDA0);
+    default_hand = D_8003FDA0;
 #if defined(VERSION_US) || defined(VERSION_JP)
     g_playerPointers[player_num] = mempAllocBytesInBank(0x2A80U, MEMPOOL_STAGE);
 #elif defined(VERSION_EU)
@@ -133,7 +133,7 @@ void initBONDdataforPlayer(s32 player_num)
     assert(players[num]!=NULL);
 #endif
 
-    g_playerPointers[player_num]->unknown = 0;
+    g_playerPointers[player_num]->cameramode = 0;
     g_playerPointers[player_num]->pos.x = 0.0f;
     g_playerPointers[player_num]->pos.y = 0.0f;
     g_playerPointers[player_num]->pos.z = 0.0f;
@@ -146,7 +146,7 @@ void initBONDdataforPlayer(s32 player_num)
     g_playerPointers[player_num]->pos3.x = 0.0f;
     g_playerPointers[player_num]->pos3.y = 0.0f;
     g_playerPointers[player_num]->pos3.z = 0.0f;
-    g_playerPointers[player_num]->room_pointer = NULL;
+    g_playerPointers[player_num]->cameratile = NULL;
     g_playerPointers[player_num]->current_model_pos.x = 0.0f;
     g_playerPointers[player_num]->current_model_pos.y = 0.0f;
     g_playerPointers[player_num]->current_model_pos.z = 0.0f;
@@ -178,7 +178,7 @@ void initBONDdataforPlayer(s32 player_num)
     g_playerPointers[player_num]->prop = NULL;
     g_playerPointers[player_num]->field_AC = 1;
     g_playerPointers[player_num]->field_D0 = 0;
-    g_playerPointers[player_num]->ptr_char_objectinstance = NULL;
+    g_playerPointers[player_num]->bodyModel = NULL;
     g_playerPointers[player_num]->bonddead = FALSE;
     g_playerPointers[player_num]->bondhealth = 1.0f;
     g_playerPointers[player_num]->bondarmour = 0.0f;
@@ -188,9 +188,9 @@ void initBONDdataforPlayer(s32 player_num)
     g_playerPointers[player_num]->apparentarmour = 0.0f;
     g_playerPointers[player_num]->damageshowtime = -1;
     g_playerPointers[player_num]->healthshowtime = -1;
-    g_playerPointers[player_num]->field_104 = 0;
-    g_playerPointers[player_num]->field_108 = 0;
-    g_playerPointers[player_num]->field_10C = 0;
+    g_playerPointers[player_num]->docentreupdown = FALSE;
+    g_playerPointers[player_num]->lastupdown60 = 0;
+    g_playerPointers[player_num]->prevupdown = 0;
     g_playerPointers[player_num]->movecentrerelease = FALSE;
     g_playerPointers[player_num]->lookaheadcentreenabled = TRUE;
     g_playerPointers[player_num]->automovecentreenabled = TRUE;
@@ -247,11 +247,11 @@ void initBONDdataforPlayer(s32 player_num)
     g_playerPointers[player_num]->field_1F4 = 1.0f;
     g_playerPointers[player_num]->pausing_flag = FALSE;
     g_playerPointers[player_num]->pause_starting_angle = 0.0f;
-    g_playerPointers[player_num]->pause_related = 0.0f;
-    g_playerPointers[player_num]->pause_target_angle = 0.0f;
-    g_playerPointers[player_num]->field_210 = 0.0f;
-    g_playerPointers[player_num]->field_214 = 0.0f;
-    g_playerPointers[player_num]->field_218 = 0;
+    g_playerPointers[player_num]->pause_saved_verta = 0.0f;
+    g_playerPointers[player_num]->pause_target_verta = 0.0f;
+    g_playerPointers[player_num]->pause_transition_time = 0.0f;
+    g_playerPointers[player_num]->pause_transition_duration = 0.0f;
+    g_playerPointers[player_num]->pause_state = 0;
     g_playerPointers[player_num]->field_21C = 1;
     g_playerPointers[player_num]->step_in_view_watch_animation = 0;
     g_playerPointers[player_num]->pause_animation_counter = 0.0f;
@@ -416,7 +416,7 @@ void initBONDdataforPlayer(s32 player_num)
     g_playerPointers[player_num]->field_10C8 = NULL;
     g_playerPointers[player_num]->field_10CC = NULL;
     g_playerPointers[player_num]->field_10D0 = 0;
-    g_playerPointers[player_num]->field_10D4 = NULL;
+    g_playerPointers[player_num]->viewtoworldmtxf = NULL;
     g_playerPointers[player_num]->projmatrix = NULL;
     g_playerPointers[player_num]->projmatrixf = NULL;
     g_playerPointers[player_num]->field_10E0 = 0;
@@ -454,9 +454,9 @@ void initBONDdataforPlayer(s32 player_num)
     g_playerPointers[player_num]->field_1280 = 0.0f;
     g_playerPointers[player_num]->players_cur_animation = 0;
     g_playerPointers[player_num]->field_1288 = 0.0f;
-    g_playerPointers[player_num]->bondinvincible = FALSE;
-    g_playerPointers[player_num]->healthDamageType = 7;
-    g_playerPointers[player_num]->field_29BC = 1.0f;
+    g_playerPointers[player_num]->cheatBondInvincible = FALSE;
+    g_playerPointers[player_num]->healthdamagetype = 7;
+    g_playerPointers[player_num]->eyeheight = 1.0f;
     g_playerPointers[player_num]->field_29C0 = 0.0f;
     g_playerPointers[player_num]->mpmenuon = FALSE;
     g_playerPointers[player_num]->damagetype = 7;

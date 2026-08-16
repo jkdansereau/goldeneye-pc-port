@@ -133,7 +133,7 @@ void bondviewLoadSetupIntroSection(void)
     g_ForceBondMoveOffset.f[2] = FLOAT_INIT;
     g_SurroundBondWithExplosionsFlag = 0;
     startpadcount = 0;
-    in_tank_flag = 0;
+    g_PlayerIsInTank = 0;
     g_WorldTankProp = 0;
     g_PlayerTankProp = NULL;
     g_PlayerTankYOffset = FLOAT_INIT;
@@ -152,7 +152,7 @@ void bondviewLoadSetupIntroSection(void)
     g_TankTurretTurn = FLOAT_INIT;
     g_ExplodeTankOnDeathFlag = 0;
     is_timer_active = 1;
-    g_PlayerInvincible = 0;
+    g_PlayerInvincible = FALSE;
     g_CameraMode = 0;
     g_CameraAfterCinema = 0;
     camera_fade_active = 0;
@@ -395,7 +395,7 @@ void bondviewLoadSetupIntroSection(void)
         start_stan = g_Startpad[rand_pad_index]->stan;
 
         stan_height = bondviewYPositionRelated(start_stan, start_pos.f[0], start_pos.f[2]);
-        start_pos.f[1] = g_CurrentPlayer->field_29BC + stan_height;
+        start_pos.f[1] = g_CurrentPlayer->eyeheight + stan_height;
         g_CurrentPlayer->field_70 = stan_height;
         start_look_angle = M_TAU_F - atan2f(g_Startpad[rand_pad_index]->look.f[0], g_Startpad[rand_pad_index]->look.f[2]);
     }
@@ -403,7 +403,7 @@ void bondviewLoadSetupIntroSection(void)
     {
         start_stan = sub_GAME_7F0AFB78(&start_pos.f[0], &start_pos.f[1], &start_pos.f[2], 30.0f);
         stan_height = bondviewYPositionRelated(start_stan, start_pos.f[0], start_pos.f[2]);
-        start_pos.f[1] = g_CurrentPlayer->field_29BC + stan_height;
+        start_pos.f[1] = g_CurrentPlayer->eyeheight + stan_height;
         g_CurrentPlayer->field_70 = stan_height;
     }
 

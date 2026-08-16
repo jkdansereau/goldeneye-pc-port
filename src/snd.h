@@ -9,6 +9,27 @@
 
 #define SFX_SLOT_COUNT   7
 
+enum SoundFlags {
+    SOUND_FLAG_FINAL_IN_SEQUENCE = 1 << 0,
+    SOUND_FLAG_LOOPED            = 1 << 1,
+    SOUND_FLAG_PLAYING           = 1 << 2,
+    SOUND_FLAG_RETRIGGER         = 1 << 4,
+    SOUND_FLAG_PITCH_SLIDE       = 1 << 5
+};
+
+#define SOUND_PARAM_GROUP(m) ((m)->keyMin & 0x3F)
+#define SOUND_PARAM_FXMIX(m) ((m)->keyMax & 0xF)
+#define AL_SNDP_GROUP_VOLUME_MAX 32767
+
+enum SoundState {
+    SOUND_STATE_NONE,
+    SOUND_STATE_PLAYING,
+    SOUND_STATE_STOPPING,
+    SOUND_STATE_PREEMPT,
+    SOUND_STATE_WAIT_VOICE,
+    SOUND_STATE_INIT
+};
+
 /**
  * Based on n64devkit\ultra\usr\src\pr\libsrc\libultra\audio\sndp.h
  * enum ALSndpMsgType,

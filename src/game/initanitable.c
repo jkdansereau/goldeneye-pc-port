@@ -219,111 +219,44 @@ struct ModelAnimation *animation_table_ptrs2[] = {
 };
 
 
-#ifdef NONMATCHING
-struct anim_data_entry
+extern u32 _animation_entriesSegmentRomStart[];
+
+struct anim_entry
 {
-    void *unk00;
+    s32 unk00;
     s32 unk04;
-    void *unk08;
+    s32 unk08;
     s32 unk0C;
-    void *unk10;
+    s32 unk10;
 };
-/**
- * https://decomp.me/scratch/n0qGM 82.91%
-*/
+
 void expand_ani_table_entries(s32** arg0)
 {
-    s32 **var_v0;
-    struct anim_data_entry *temp_t7;
-    s32 intval;
-    
-    for (var_v0 = arg0; *var_v0 != 0; var_v0++)
-    {
-        //var_v1 = *var_v0;
-        if (*var_v0 != (s32*)1)
-        {
-            temp_t7 = (struct anim_data_entry *)(&ptr_animation_table->data[(s32)*var_v0]);
-            //temp_t7->unk00 = (s32*)temp_t7;
-            //*var_v0 = (s32*)temp_t7;
+    s32** var_v0;
 
-            intval = *(s32*)temp_t7->unk08;
-            temp_t7->unk08 = &ptr_animation_table->data[intval];
-            intval = *(s32*)temp_t7->unk10;
-            temp_t7->unk10 = &ptr_animation_table->data[intval];
+    var_v0 = arg0;
+    while (*var_v0 != 0) {
+        if (*var_v0 != (s32*)1) {
+            *var_v0 = (s32)((s32)*var_v0 + (s32)(&ptr_animation_table->data));
+            ((struct anim_entry *)*var_v0)->unk08 += (s32)&ptr_animation_table->data;
+            ((struct anim_entry *)*var_v0)->unk10 += (s32)&ptr_animation_table->data;
         }
+        var_v0++;
     }
 
-    for (var_v0 = arg0; *var_v0 != 0; var_v0++)
-    {
-        //var_v1 = *var_v0;
-        if (*var_v0 != (s32*)1)
-        {
+    for (var_v0 = arg0; *var_v0 != 0; var_v0++) {
+        if (*var_v0 != (s32*)1) {
             **var_v0 += (s32)&_animation_entriesSegmentRomStart;
         }
     }
 }
-#else
-GLOBAL_ASM(
-.text
-glabel expand_ani_table_entries
-/* 035530 7F000A00 8C830000 */  lw    $v1, ($a0)
-/* 035534 7F000A04 3C068007 */  lui   $a2, %hi(ptr_animation_table)
-/* 035538 7F000A08 00801025 */  move  $v0, $a0
-/* 03553C 7F000A0C 10600017 */  beqz  $v1, .L7F000A6C
-/* 035540 7F000A10 24C69538 */   addiu $a2, %lo(ptr_animation_table) # addiu $a2, $a2, -0x6ac8
-/* 035544 7F000A14 8C830000 */  lw    $v1, ($a0)
-/* 035548 7F000A18 24050001 */  li    $a1, 1
-.L7F000A1C:
-/* 03554C 7F000A1C 50A3000E */  beql  $a1, $v1, .L7F000A58
-/* 035550 7F000A20 8C430004 */   lw    $v1, 4($v0)
-/* 035554 7F000A24 8CCE0000 */  lw    $t6, ($a2)
-/* 035558 7F000A28 006E7821 */  addu  $t7, $v1, $t6
-/* 03555C 7F000A2C AC4F0000 */  sw    $t7, ($v0)
-/* 035560 7F000A30 8CD90000 */  lw    $t9, ($a2)
-/* 035564 7F000A34 8DF80008 */  lw    $t8, 8($t7)
-/* 035568 7F000A38 03194021 */  addu  $t0, $t8, $t9
-/* 03556C 7F000A3C ADE80008 */  sw    $t0, 8($t7)
-/* 035570 7F000A40 8C430000 */  lw    $v1, ($v0)
-/* 035574 7F000A44 8CCA0000 */  lw    $t2, ($a2)
-/* 035578 7F000A48 8C690010 */  lw    $t1, 0x10($v1)
-/* 03557C 7F000A4C 012A5821 */  addu  $t3, $t1, $t2
-/* 035580 7F000A50 AC6B0010 */  sw    $t3, 0x10($v1)
-/* 035584 7F000A54 8C430004 */  lw    $v1, 4($v0)
-.L7F000A58:
-/* 035588 7F000A58 24420004 */  addiu $v0, $v0, 4
-/* 03558C 7F000A5C 1460FFEF */  bnez  $v1, .L7F000A1C
-/* 035590 7F000A60 00000000 */   nop   
-/* 035594 7F000A64 00801025 */  move  $v0, $a0
-/* 035598 7F000A68 8C830000 */  lw    $v1, ($a0)
-.L7F000A6C:
-/* 03559C 7F000A6C 1060000D */  beqz  $v1, .L7F000AA4
-/* 0355A0 7F000A70 24050001 */   li    $a1, 1
-/* 0355A4 7F000A74 3C040012 */  lui   $a0, %hi(_animation_entriesSegmentRomStart) # $a0, 0x12
-/* 0355A8 7F000A78 24844AC0 */  addiu $a0, %lo(_animation_entriesSegmentRomStart) # addiu $a0, $a0, 0x4ac0
-/* 0355AC 7F000A7C 8C430000 */  lw    $v1, ($v0)
-.L7F000A80:
-/* 0355B0 7F000A80 50A30005 */  beql  $a1, $v1, .L7F000A98
-/* 0355B4 7F000A84 8C430004 */   lw    $v1, 4($v0)
-/* 0355B8 7F000A88 8C6C0000 */  lw    $t4, ($v1)
-/* 0355BC 7F000A8C 01846821 */  addu  $t5, $t4, $a0
-/* 0355C0 7F000A90 AC6D0000 */  sw    $t5, ($v1)
-/* 0355C4 7F000A94 8C430004 */  lw    $v1, 4($v0)
-.L7F000A98:
-/* 0355C8 7F000A98 24420004 */  addiu $v0, $v0, 4
-/* 0355CC 7F000A9C 1460FFF8 */  bnez  $v1, .L7F000A80
-/* 0355D0 7F000AA0 00000000 */   nop   
-.L7F000AA4:
-/* 0355D4 7F000AA4 03E00008 */  jr    $ra
-/* 0355D8 7F000AA8 00000000 */   nop   
-)
-#endif
 
 void alloc_load_expand_ani_table(void)
 {
     s32 animsDataSegmentSize;
     
     osCreateMesgQueue(&animMsgQ, animMesg, 8);
-    sub_GAME_7F0009E0(&D_80029D60, &animMsgQ, &dword_CODE_bss_80069458);
+    initAnimationsBuffer(&D_80029D60, &animMsgQ, &dword_CODE_bss_80069458);
     
     animsDataSegmentSize = (s32)&_animation_dataSegmentEnd - (s32)&_animation_dataSegmentStart;
     

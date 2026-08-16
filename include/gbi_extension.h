@@ -4,8 +4,8 @@
 
 #define TRI4_Ext
 
-/** 
- * This file should contain most of the extensions to gbi avoiding loosing 
+/**
+ * This file should contain most of the extensions to gbi avoiding loosing
  * changes should the OS ever be updated.
  */
 
@@ -25,7 +25,7 @@
 #define MASK_512 9
 #define MASK_1024 10
 
-typedef enum 
+typedef enum
 {
     TEXTURETYPE_LOD,
     TEXTURETYPE_DETAIL,
@@ -144,7 +144,7 @@ typedef enum
 }
 
 /**
-  Source compatable F3DEX gSP2Triangles for GE
+  Source compatible F3DEX gSP2Triangles for GE
   Vertex index is 0-15, to use a higher index use gSP1Triangle
 */
 #define gSP2Triangles(pkt, x1, y1, z1, flag0, x2, y2, z2, flag1) \
@@ -178,19 +178,18 @@ typedef enum
  Use Texture from bank.
  If detail, use shift eg 15 for 2x detail per base texel, 14 fpr 4x.
 
- Confirm params from decomp in CO expand function 
- 
+ Confirm params from decomp in CO expand function
+
  @param        cms: s-axis mirror, no-mirror, wrap, and clamp flags
- @param        cmt: t-axis mirror, no-mirror, wrap, and clamp flags eg G_TX_CLAMP    
+ @param        cmt: t-axis mirror, no-mirror, wrap, and clamp flags eg G_TX_CLAMP
  @param       tile: Number of tiles
- @param     shifts: s-coordinate shift value or G_TX_NOLOD 
- @param     shiftt: t-coordinate shift value or G_TX_NOLOD 
- @param       type: texture type: E.g. TEXTURETYPE_DETAIL 
+ @param     shifts: s-coordinate shift value or G_TX_NOLOD
+ @param     shiftt: t-coordinate shift value or G_TX_NOLOD
+ @param       type: texture type: E.g. TEXTURETYPE_DETAIL
  @param   minlevel: Clamp at tile 0 + frac (eg, 0.5)
  @param  detail_id: Detail Texture ID
  @param texture_id: Texture ID
  */
-
 #define gsSPUseTexture(cms, cmt, tile, shifts, shiftt, type, minlevel, detail_id, texture_id) \
 {                                                    \
     {                                                \
@@ -206,54 +205,6 @@ typedef enum
          _SHIFTL((texture_id), 0, 12))               \
     }                                                \
 }
-
-
-/**
- * GoldenEye Custom Vertex Commands
- * 
- * These commands use different encodings than standard F3DEX macros.
- * Opcode 0x01: Custom GE format with simplified encoding
- * Opcode 0x04: Uses (v0+n)*2 encoding instead of v0*2
- */
-
-/* GoldenEye Matrix command (opcode 0x01) - G_MTX */
-#define G_MTX_GE 0x01
-#define G_VTX_GE 0x04
-
-#define gsSPMatrixGE(m, p) \
-{                                                        \
-    {                                                    \
-        (_SHIFTL(G_MTX_GE, 24, 8) |                     \
-         _SHIFTL((p), 16, 8) |                          \
-         _SHIFTL(sizeof(Mtx), 0, 16)),                  \
-        (unsigned int)(m)                               \
-    }                                                    \
-}
-
-/* RARE vertex load (opcode 0x04) - Custom encoding for GE/PD Tri4 support */
-/* Format: cmd(24-31) | (((v0+n)<<1)|flag)(16-23) | sizeof(Vtx)*n(0-15) */
-#define gsSPVertexGE(v, n, v0, flag) \
-{                                                        \
-    {                                                    \
-        (_SHIFTL(G_VTX_GE, 24, 8) |                         \
-         _SHIFTL((((v0) + (n)) << 1) | (flag), 16, 8) | \
-         _SHIFTL(sizeof(Vtx) * (n), 0, 16)),            \
-        (unsigned int)(v)                               \
-    }                                                    \
-}
-
-/* F3DEX gsSP1Triangle without flag rotation (GoldenEye uses simpler encoding) */
-/* Format: w0=0xBF000000, w1=(v0*2<<16)|(v1*2<<8)|(v2*2) */
-#define gsSP1TriangleGE(v0, v1, v2, flag) \
-{                                                        \
-    {                                                    \
-        0xBF000000,                                      \
-        (_SHIFTL((v0)*2, 16, 8) |                        \
-         _SHIFTL((v1)*2, 8, 8) |                         \
-         _SHIFTL((v2)*2, 0, 8))                          \
-    }                                                    \
-}
-
 
 #endif
 
@@ -281,8 +232,8 @@ typedef enum
  Override of Load Texture Block without the PipeSync.
  Loads a Texture and sets its tile
  @param   timg: Address of the texture image. E.g. IMAGESEG(IMAGE_SMOKE_0)
- @param    fmt: Texture image format: E.g. G_IM_FMT_IA 
- @param    siz: Pixel component size: E.g. G_IM_SIZ_8b 
+ @param    fmt: Texture image format: E.g. G_IM_FMT_IA
+ @param    siz: Pixel component size: E.g. G_IM_SIZ_8b
  @param  width: Texture image width
  @param height: Texture image height
  @param    pal: Location of palette for 4-bit color index texture (0 - 15)
@@ -290,8 +241,8 @@ typedef enum
  @param    cmt: t-axis mirror, no-mirror, wrap, and clamp flags
  @param  masks: s-axis mask (0 - 15 or G_TX_NOMASK)
  @param  maskt: t-axis mask (0 - 15 or G_TX_NOMASK)
- @param shifts: s-coordinate shift value or G_TX_NOLOD 
- @param shiftt: t-coordinate shift value or G_TX_NOLOD 
+ @param shifts: s-coordinate shift value or G_TX_NOLOD
+ @param shiftt: t-coordinate shift value or G_TX_NOLOD
  */
 #define gDPLoadTextureBlock(pkt, timg, fmt, siz, width, height, pal, cms, cmt, masks, maskt, shifts, shiftt)                               \
     {                                                                                                                                      \
@@ -308,8 +259,8 @@ typedef enum
  Override of Load Texture Block (static) without the PipeSync.
  Loads a Texture and sets its tile
  @param   timg: Address of the texture image. E.g. IMAGESEG(IMAGE_SMOKE_0)
- @param    fmt: Texture image format: E.g. G_IM_FMT_IA 
- @param    siz: Pixel component size: E.g. G_IM_SIZ_8b 
+ @param    fmt: Texture image format: E.g. G_IM_FMT_IA
+ @param    siz: Pixel component size: E.g. G_IM_SIZ_8b
  @param  width: Texture image width
  @param height: Texture image height
  @param    pal: Location of palette for 4-bit color index texture (0 - 15)
@@ -317,8 +268,8 @@ typedef enum
  @param    cmt: t-axis mirror, no-mirror, wrap, and clamp flags
  @param  masks: s-axis mask (0 - 15 or G_TX_NOMASK)
  @param  maskt: t-axis mask (0 - 15 or G_TX_NOMASK)
- @param shifts: s-coordinate shift value or G_TX_NOLOD 
- @param shiftt: t-coordinate shift value or G_TX_NOLOD 
+ @param shifts: s-coordinate shift value or G_TX_NOLOD
+ @param shiftt: t-coordinate shift value or G_TX_NOLOD
  */
 #define gsDPLoadTextureBlock(timg, fmt, siz, width, height, pal, cms, cmt, masks, maskt, shifts, shiftt)                             \
                                                                                                                                      \

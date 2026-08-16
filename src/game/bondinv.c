@@ -250,7 +250,7 @@ InvItem *bondinvGetDualWeapon(ITEM_IDS right, ITEM_IDS left)
  * @param left: enum Item ID eg: ITEM_KNIFE
  * @return TRUE/FALSE
  */
-int bondinvHasDualWeapon(ITEM_IDS right, ITEM_IDS left)
+bool bondinvHasDualWeapon(ITEM_IDS right, ITEM_IDS left)
 {
     return bondinvGetDualWeapon(right, left) != NULL;
 }

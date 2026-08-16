@@ -14,10 +14,18 @@ extern struct sImageTableEntry *monitorimages;
 extern struct sImageTableEntry *mpcharselimages;
 extern struct sImageTableEntry *mpradarimages;
 extern struct sImageTableEntry *impactimages;
+extern struct sImageTableEntry *explosion_smokeimages;
+extern struct sImageTableEntry *scattered_explosions;
+extern struct sImageTableEntry *flareimage2;
+extern struct sImageTableEntry *glassoverlayimage;
+extern struct sImageTableEntry *flareimage3;
+extern struct sImageTableEntry *flareimage4;
+extern struct sImageTableEntry *flareimage5;
 
 extern u8* img_curpos;
 extern s32 img_bitcount;
 extern s32 *pGlobalimagetable;
+extern s32 globalbank_rdram_offset;
 
 void texReset(void);
 u32 texReadBits(s32 bitCount);

@@ -18,23 +18,23 @@ struct hand hand_data_dummy = {
     0, // ITEM_IDS weaponnum;
     0xFFFFFFFF, // ITEM_IDS weaponnum_watchmenu;
     0, // ITEM_IDS previous_weapon;
-
+ 
     0, // s8 weapon_firing_status;
-
+ 
     0, // s8 field_87D;
     0x1, // s8 field_87E;
     0, // s8 field_87F;
-
+ 
     0, // s32 weapon_hold_time;
     0, // s32 field_884;
     0, // s32 field_888;
     0, // s32 field_88C;
     0, // s32 field_890;
-    0, // s32 when_detonating_mines_is_0;
+    0, // s32 weapon_action_state;
     0, // s32 weapon_current_animation;
     0, // s32 weapon_ammo_in_magazine;
     0, // s32 field_8A0;
-    0, // s32 field_8A4;
+    0, // s32 numvisibleshells;
     0, // s32 field_8A8;
     0, // s32 weapon_next_weapon;
     0, // s32 field_8B0;
@@ -52,51 +52,51 @@ struct hand hand_data_dummy = {
     0, // s32 field_8E0;
     0, // s32 field_8E4;
     0, // s32 field_8E8;
-
+ 
     // Mtxf field_8EC;
     1.0f,0,0,0,
     0,1.0f,0,0,
     0,0,1.0f,0,
     0,0,0,1.0f,
-
+ 
     0, // s32 field_92C;
-    0, // s32 field_930;
-    0, // s32 field_934;
-    0, // s32 field_938;
-    0, // s32 field_93C;
-    0, // s32 field_940;
-    -1.0f, // s32 field_944;
-    0, // s32 field_948;
-    1.0f, // s32 field_94C;
-    0, // s32 field_950;
-    0, // s32 field_954;
-    0, // s32 field_958;
-    0, // s32 field_95C;
-    0, // s32 field_960;
-    0, // s32 field_964;
-    -VALUENAME, // f32 field_968;
-    0, // s32 field_96C;
-    VALUENAME, // f32 field_970;
-    0, // s32 field_974;
-
+    0, // f32 sway_pos_x;
+    0, // f32 sway_pos_y;
+    0, // f32 sway_pos_z;
+    0, // f32 sway_look_x;
+    0, // f32 sway_look_y;
+    -1.0f, // f32 sway_look_z;
+    0, // f32 sway_up_x;
+    1.0f, // f32 sway_up_y;
+    0, // f32 sway_up_z;
+    0, // f32 spring_pos_x;
+    0, // f32 spring_pos_y;
+    0, // f32 spring_pos_z;
+    0, // f32 spring_look_x;
+    0, // f32 spring_look_y;
+    -VALUENAME, // f32 spring_look_z;
+    0, // f32 spring_up_x;
+    VALUENAME, // f32 spring_up_y;
+    0, // f32 spring_up_z;
+ 
     // coord3d blendpos[4];
     0,0,0,
     0,0,0,
     0,0,0,
     0,0,0,
-
+ 
     // coord3d blendlook[4];
     0,0,-1.0f,
     0,0,-1.0f,
     0,0,-1.0f,
     0,0,-1.0f,
-
+ 
     // coord3d blendup[4];
     0,1.0f,0,
     0,1.0f,0,
     0,1.0f,0,
     0,1.0f,0,
-
+ 
     0, // s32 curblendpos;
     0, // f32 dampt;
     1.0f, // f32 blendscale;
@@ -105,9 +105,9 @@ struct hand hand_data_dummy = {
     0, // f32 weapon_theta_displacement;
     0, // f32 weapon_verta_displacement;
     0, // s32 field_A24;
-    0, // s32 field_A28;
-    0, // s32 field_A2C;
-    0, // f32 field_A30;
+    0, // f32 gunofs2_x;
+    0, // f32 gunofs2_y;
+    0, // f32 gunofs2_z;
     0, // f32 field_A34;
     0, // f32 field_A38;
     0, // f32 field_A3C;
@@ -116,91 +116,81 @@ struct hand hand_data_dummy = {
     0, // s32 field_A48;
     0, // s32 field_A4C;
     0, // s32 field_A50;
-
-    // // struct ChrRecord_f180 {
+ 
+    // // struct BeamRecord {
     {
         0xff, //     s8      unk00;
         0, //     s8      item_id; // type ITEM_IDS
         0, //     char    unk02;
         0, //     char    unk03;
-
+ 
         //     coord3d pos;
         0,0,0,
-
+ 
         //     /**
         //     * Offset 0x10
         //     */
         //     struct coord3d delta;
         0,0,0,
-
+ 
         0, //     f32     unk1c;
-
+ 
         0, //     f32     unk20;
         0, //     f32     unk24;
         0 //     f32     unk28;
     },
     // // }
-
+ 
     0, // f32 noise;
     0, // f32 field_A84;
     0, // f32 field_A88;
     0, // s32 field_A8C;
     NULL, // ObjectRecord* rocket;
     0, // s32 firedrocket;
-    0, // s32 field_A98;
-    0, // s32 field_A9C;
-    0, // s32 field_AA0;
-    0, // s32 field_AA4;
-    0, // s32 field_AA8;
-    0, // s32 field_AAC;
-    0, // s32 field_AB0;
-    0, // s32 field_AB4;
-    0, // s32 field_AB8;
-    0, // s32 field_ABC;
-    0, // s32 field_AC0;
-    0, // s32 field_AC4;
-    0, // s32 field_AC8;
-    0, // s32 field_ACC;
-    0, // s32 field_AD0;
-    0, // s32 field_AD4;
-
-    // // offset 0xad8
+    0, // gunmtx_camspace.m[0][0];
+    0, // gunmtx_camspace.m[0][1];
+    0, // gunmtx_camspace.m[0][2];
+    0, // gunmtx_camspace.m[0][3];
+    0, // gunmtx_camspace.m[1][0];
+    0, // gunmtx_camspace.m[1][1];
+    0, // gunmtx_camspace.m[1][2];
+    0, // gunmtx_camspace.m[1][3];
+    0, // gunmtx_camspace.m[2][0];
+    0, // gunmtx_camspace.m[2][1];
+    0, // gunmtx_camspace.m[2][2];
+    0, // gunmtx_camspace.m[2][3];
+    0, // gunmtx_camspace.m[3][0];
+    0, // gunmtx_camspace.m[3][1];
+    0, // gunmtx_camspace.m[3][2];
+    0, // gunmtx_camspace.m[3][3];
+ 
+    // offset 0xad8
     // Mtxf throw_item_pos_related;
     0,0,0,0,
     0,0,0,0,
     0,0,0,0,
     0,0,0,0,
-
-    0, // s32 field_B18;
-    0, // s32 field_B1C;
-    0, // s32 field_B20;
-    0, // s32 field_B24;
-    0, // s32 field_B28;
-    0, // s32 field_B2C;
-    0, // s32 field_B30;
-    0, // s32 field_B34;
-    0, // s32 field_B38;
-    0, // s32 field_B3C;
-    0, // s32 field_B40;
-    0, // s32 field_B44;
-    0, // s32 field_B48;
-    0, // s32 field_B4C;
-    0, // s32 field_B50;
-    0, // s32 field_B54;
-
+ 
+    // offset 0xb18
+    // Mtxf throw_item_pos_related_prev;
+    0,0,0,0,
+    0,0,0,0,
+    0,0,0,0,
+    0,0,0,0,
+ 
     // coord3d field_B58;
     0,0,0,
-
+ 
     0, // f32 field_B64;
     0, // s32 field_B68;
     0, // s32 field_B6C;
     0, // s32 field_B70;
-    0, // s32 field_B74;
+    0, // Mtxf * mtxlist;
     0, // s32 field_B78;
     0, // s32 field_B7C;
     0, // s32 field_B80;
     0, // s32 field_B84;
-    0, // s32 field_B88;
+    0, // s32 modeldatas;
     0, // s32 field_B8C;
     0, // s32 field_B90;
     0, // s32 field_B94;

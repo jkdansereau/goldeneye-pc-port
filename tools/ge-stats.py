@@ -290,13 +290,13 @@ def apply_build_map(stats: StatResults, version: str):
     # followed by a hex address (capturing everything after "0x"), followed by any whitespace (at least one).
     # It then matches a build path, based on version, capturing everything after the version and slash
     # up to the file extension, followed by end of line.
-    p1 = re.compile(r"^ \.text\s+0x00000000([0-9a-f]{8})\s+0x([0-9a-f]+)\s+build\/" + re.escape(version_code) + r"\/([^\s]+)$")
+    p1 = re.compile(r"^ \.text\s+0x(?:00000000)?([0-9a-f]{8})\s+0x([0-9a-f]+)\s+build\/" + re.escape(version_code) + r"\/([^\s]+)$")
 
     # regex to match subsequent lines after the above regex matches. This will
     # match any whitespace, then 64 bit address (capturing the lower 32 bits), then
     # any whitespace (at least one), then capture the remaining non-whitespace-text until end of line (in capture group).
     # That last capture group is the function name.
-    p2 = re.compile(r"^\s+0x00000000([0-9a-f]{8})\s+(\S+)$")
+    p2 = re.compile(r"^\s+0x(?:00000000)?([0-9a-f]{8})\s+(\S+)$")
 
     current_sfc = None
     current_fi = None
@@ -675,8 +675,8 @@ def main():
     if print_method == 'non_matching' and not run_report:
         mtime_use_os = True
 
-    if not qlocal:
-        print(subprocess.run(['git', 'diff', 'origin/master', '--name-only', '"@{10 minutes ago}"']).stdout)
+    #if not qlocal:
+    #    print(subprocess.run(['git', 'diff', 'origin/master', '--name-only', '"@{10 minutes ago}"']).stdout)
     # Default to using git log to get the file's modified date.
     # Git log will be much slower, but cloning a new repo (i.e., github actions online)
     # will reset all the modified timestamps to the same value, so will need to
@@ -698,20 +698,27 @@ def main():
     src_completed_list = [
         '_start.s',
         'aspboot.s',
+        'boot.s',
         'bootcode.s',
         'getra.s',
         'gspboot.s',
         'osMapTLB.s',
+        'random.s',
         'rom_header.s',
         'rspboot.s',
+        'tlb_random.s',
         'tlb_hardwire.s',
         'tlb_resolve.s']
+
+     # files to count as complete, in src/libultrare directory
+    src_libultrare_completed_list = [
+        'ultra80069080.s']
 
     search = []
     search.append(SearchDir('src', False, completed=src_completed_list))
     search.append(SearchDir('src/game', False))
     search.append(SearchDir('src/inflate', False))
-    search.append(SearchDir('src/libultrare', True))
+    search.append(SearchDir('src/libultrare', True, completed=src_libultrare_completed_list))
 
     stats = StatResults()
 

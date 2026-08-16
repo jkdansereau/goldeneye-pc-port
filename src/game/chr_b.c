@@ -30,7 +30,7 @@ struct Model *makeonebody(s32 body, s32 head, struct ModelFileHeader *bodyHeader
     f32 scale;
     f32 pov;
     s32 opcode;
-    struct ModelRoData_HeaderRecord *node;
+    ModelRwData_SwitchRecord *rwdata;
 
     scale = c_item_entries[body].scale * 0.10000001f;
     opcode = 0;
@@ -38,7 +38,7 @@ struct Model *makeonebody(s32 body, s32 head, struct ModelFileHeader *bodyHeader
 
     if (
 #ifdef BUGFIX_R1
-    cheatIsActive(CHEAT_DK_MODE) && not_in_us_7F0209EC(body, head)
+    cheatIsActive(CHEAT_DK_MODE) && chrCanUseDKModeScaling(body, head)
 #else
     cheatIsActive(CHEAT_DK_MODE)
 #endif
@@ -76,7 +76,7 @@ struct Model *makeonebody(s32 body, s32 head, struct ModelFileHeader *bodyHeader
 
     if (model == 0)
     {
-        model = get_aircraft_obj_instance_controller(bodyHeader);
+        model = modelmgrInstantiateModelWithAnim(bodyHeader);
     }
     #ifdef DEBUG
     assert(chrsub->inst.savesize>=bodyobj->savesize); //bodyHeader = chrsub, model = bodyobj
@@ -95,7 +95,7 @@ struct Model *makeonebody(s32 body, s32 head, struct ModelFileHeader *bodyHeader
     if (model != 0)
     {
         modelSetScale(model, scale);
-        sub_GAME_7F06CE84(model, pov);
+        modelSetAnimTranslationScale(model, pov);
 
         if ((headHeader != 0) && (c_item_entries[body].hasHead == 0))
         {
@@ -106,8 +106,8 @@ struct Model *makeonebody(s32 body, s32 head, struct ModelFileHeader *bodyHeader
             {
                 if (headHeader->Switches[0] != 0)
                 {
-                    node = modelGetNodeRwData(model, headHeader->Switches[0]);
-                    node->ModelType = 0;
+                    rwdata = &modelGetNodeRwData(model, headHeader->Switches[0])->Switch;
+                    rwdata->visible = 0;
                 }
             }
         }

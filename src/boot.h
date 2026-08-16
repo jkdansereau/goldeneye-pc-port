@@ -2,6 +2,7 @@
 #define _BOOT_H_
 #include <ultra64.h>
 
+void boot(void);
 u32 get_csegmentSegmentStart(void);
 u32 get_cdataSegmentRomStart(void);
 u32 get_cdataSegmentRomEnd(void);

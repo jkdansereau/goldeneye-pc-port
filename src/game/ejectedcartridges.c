@@ -4,30 +4,33 @@
 #include "gun.h"
 
 // Copied from another file. Might need code reorganization to prevent the use of extra externs.
-extern s32 dword_CODE_bss_80075DB0;
-extern s32 dword_CODE_bss_80075DB4;
-extern ALSoundState* dword_CODE_bss_80075DB8[4];
+extern ALSoundState* g_CasingSfxState;
+extern ALSoundState* g_UnusedSfxState;
+extern ALSoundState* g_ImpactSfxStates[NUM_IMPACT_SFX_STATES];
 
 extern u32 cartridges_eject;
-extern u32 D_80034CA0;
+extern u32 g_gunDebKeyframeIndex;
 
 extern CartridgeModelFileRecord ejected_cartridge[] ;
 
-void init_ejected_cartridges(void) {
-    int i = 0;
-    dword_CODE_bss_80075DB0 = 0;
+void init_ejected_cartridges(void) 
+{
+    s32 i = 0;
 
-    while (i < 4)
+    g_CasingSfxState = NULL;
+
+    while (i < NUM_IMPACT_SFX_STATES)
     {
-        dword_CODE_bss_80075DB8[i] = NULL;
+        g_ImpactSfxStates[i] = NULL;
         i++;
     }
 
     i = 0;
     cartridges_eject = 0;
-    D_80034CA0 = 0;
+    g_gunDebKeyframeIndex = 0;
 
-    while (ejected_cartridge[i].header != 0) {
+    while (ejected_cartridge[i].header != 0) 
+    {
         fileLoad(ejected_cartridge[i].header, ejected_cartridge[i].text);
         i++;
     }

@@ -7,6 +7,9 @@
 #include "ramrom.h"
 #include "decompress.h"
 
+
+#define TEX_ALPHA_WEIGHT 961
+
 // bss
 //8008C720
 struct texpool *ptr_texture_alloc_start;
@@ -172,7 +175,7 @@ s32 texInflateZlib(u8 *src, u8 *dst, s32 arg2, s32 forcenumimages, struct texpoo
     }
 
     arg4->rightpos->maxlod = forcenumimages;
-    arg4->rightpos->unk0c_02 = arg2;
+    arg4->rightpos->hasExplicitLods = arg2;
 
     if (arg2)
     {
@@ -321,7 +324,7 @@ s32 texAlignIndices(u8 *src, s32 width, s32 height, s32 format, u8 *dst)
     {
         indicesperbyte = 1;
     }
-    else if (format == TEXFORMAT_RGBA16_CI4 || format == TEXFORMAT_0C)
+    else if (format == TEXFORMAT_RGBA16_CI4 || format == TEXFORMAT_IA16_CI4)
     {
         indicesperbyte = 2;
     }
@@ -385,7 +388,7 @@ s32 texShrinkPaletted(u8 *src, u8 *dst, s32 srcwidth, s32 srcheight, s32 format,
             break;
 
         case TEXFORMAT_RGBA16_CI4:
-        case TEXFORMAT_0C:
+        case TEXFORMAT_IA16_CI4:
             aligneddstwidth = (((srcwidth + 1) >> 1) + 15) & 0xff0;
             alignedsrcwidth = (srcwidth + 15) & 0xff0;
             break;
@@ -486,7 +489,7 @@ s32 texShrinkPaletted(u8 *src, u8 *dst, s32 srcwidth, s32 srcheight, s32 format,
 
             return (aligneddstwidth >> 1) * dstheight;
 
-        case TEXFORMAT_0C:
+        case TEXFORMAT_IA16_CI4:
             for (i = 0; i < srcheight; i += 2)
             {
                 nextrow = i + 1 < srcheight ? alignedsrcwidth >> 1 : 0;
@@ -529,681 +532,279 @@ s32 texShrinkPaletted(u8 *src, u8 *dst, s32 srcwidth, s32 srcheight, s32 format,
 }
 
 
-#ifdef NONMATCHING
-// https://decomp.me/scratch/m2ol7 79.87%
+/**
+ * Find the palette entry closest to the target colour and return its index.
+ * Used for texture LOD generation/shrinking a colour-indexed texture (see texShrinkPaletted): the 2x2
+ * box filter averages four palette entries, and the average may not be a colour
+ * the palette already holds, so it has to be requantized to the nearest entry. This allows the LOD
+ * textures to use existing palettes instead of creating new ones.
+ * 
+ * The design of the algorithm is to:
+ * 1) Return an exact match in the palette for the target colour if there is one.
+ * 2) Failing that, a binary search uses cheap scalar ordering to find a promising region in the palette.
+ * 3) Perform a more meaningful RGBA comparison on only a small section of the palette.
+ * 
+ * Stage 2 is an approximation so this function isn't necessarily guaranteed to return the closest matching palette index for a target colour.
+ * 
+ * Used by TEXFORMAT_RGBA16_CI8, TEXFORMAT_RGBA16_CI4
+ *
+ * @param palette    Palette to search, RGBA5551, assumed ordered by the stage 2 key
+ * @param numcolours Number of entries in palette
+ * @param r          Target red, 0..31
+ * @param g          Target green, 0..31
+ * @param b          Target blue, 0..31
+ * @param a          Target alpha, 0..1
+ * @return Index of the closest entry, or 0 if numcolours is not positive
+ */
 s32 texFindClosestColourIndexRGBA(u16 *palette, s32 numcolours, s32 r, s32 g, s32 b, s32 a)
 {
-    s32 var_v1;
-    u16 temp_t6;
-    s32 temp_t0;
-    s32 var_a1;
-    s32 temp_a0;
-
-    s32 loop_start;
-    s32 loop_end;
-
-    s32 bestindex;
-    s32 bestvalue;
-    
-    u16 local_color;
-    s32 local_r;
-    s32 local_g;
-    s32 local_b;
-    s32 local_a;
-    s32 temp_s4;
-
-    temp_t6 = ((r << 11) | (g << 6) | (b << 1) | a);
-    
-    for (var_v1 = 0; var_v1 < numcolours; var_v1++)
-    {
-        if (temp_t6 == palette[var_v1])
-        {
-            return var_v1;
-        }
-    }
-
-    temp_t0 = (r * r) + (g * g) + (b * b) + (a * 0x3C1);
-    var_v1 = numcolours - 1;
-    var_a1 = 0;
-
-    // binary search for a region
-    while (var_v1 - var_a1 >= 2)
-    {
-        temp_a0 = (s32) (var_v1 + var_a1) >> 1;
-
-        local_color = palette[temp_a0 * 4];
-        local_r = ((s32) local_color >> 0xB) & 0x1F;
-        local_g = ((s32) local_color >> 0x6) & 0x1F;
-        local_b = ((s32) local_color >> 0x1) & 0x1F;
-        local_a = local_color & 1;
-
-        temp_s4 = (local_r * local_r) + (local_g * local_g) + (local_b * local_b) + (local_a * 0x3C1);
-
-        if (temp_s4 < temp_t0)
-        {
-            var_a1 = temp_a0;
-        }
-        else
-        {
-            if (temp_t0 < temp_s4)
-            {
-                var_v1 = temp_a0;
-            }
-            else
-            {
-                var_v1 = temp_a0;
-                var_a1 = temp_a0;
-            }            
-        }
-    }
-
-    loop_start = var_v1 - 4;
-    if (loop_start < 0)
-    {
-        loop_start = 0;
-    }
-
-    loop_end = var_v1 + 4;
-    if (loop_end >= numcolours)
-    {
-        loop_end = numcolours - 1;
-    }
-
-    bestindex = 0;
-    bestvalue = 999999;
-
-    // search for best within the region
-    for (var_v1 = loop_start; var_v1 < loop_end; var_v1++)
-    {
-        local_color = palette[var_v1 * 4];
-        local_r = (((s32) local_color >> 0xB) & 0x1F) - r;
-        local_g = (((s32) local_color >> 0x6) & 0x1F) - g;
-        local_b = (((s32) local_color >> 0x1) & 0x1F) - b;
-        local_a = 0x3C1;
-        if (a == (local_color & 1))
-        {
-            local_a = 0;
-        }
-
-        temp_s4 = (local_r * local_r) + (local_g * local_g) + (local_b * local_b) + (local_a);
-
-        if (temp_s4 < bestvalue)
-        {
-            bestindex = var_v1;
-            bestvalue = temp_s4;
-        }
-    }
-
-    return bestindex;
-}
-
-#else
-GLOBAL_ASM(
-.text
-glabel texFindClosestColourIndexRGBA
-/* 0FC2DC 7F0C77AC 27BDFFE8 */  addiu $sp, $sp, -0x18
-/* 0FC2E0 7F0C77B0 AFB2000C */  sw    $s2, 0xc($sp)
-/* 0FC2E4 7F0C77B4 AFB10008 */  sw    $s1, 8($sp)
-/* 0FC2E8 7F0C77B8 AFB00004 */  sw    $s0, 4($sp)
-/* 0FC2EC 7F0C77BC 00C08025 */  move  $s0, $a2
-/* 0FC2F0 7F0C77C0 00E08825 */  move  $s1, $a3
-/* 0FC2F4 7F0C77C4 00809025 */  move  $s2, $a0
-/* 0FC2F8 7F0C77C8 AFB40014 */  sw    $s4, 0x14($sp)
-/* 0FC2FC 7F0C77CC AFB30010 */  sw    $s3, 0x10($sp)
-/* 0FC300 7F0C77D0 AFA5001C */  sw    $a1, 0x1c($sp)
-/* 0FC304 7F0C77D4 18A0003F */  blez  $a1, .L7F0C78D4
-/* 0FC308 7F0C77D8 00001825 */   move  $v1, $zero
-/* 0FC30C 7F0C77DC 30A60003 */  andi  $a2, $a1, 3
-/* 0FC310 7F0C77E0 10C00018 */  beqz  $a2, .L7F0C7844
-/* 0FC314 7F0C77E4 8FA90028 */   lw    $t1, 0x28($sp)
-/* 0FC318 7F0C77E8 00007840 */  sll   $t7, $zero, 1
-/* 0FC31C 7F0C77EC 8FAA002C */  lw    $t2, 0x2c($sp)
-/* 0FC320 7F0C77F0 024F1021 */  addu  $v0, $s2, $t7
-/* 0FC324 7F0C77F4 0010C2C0 */  sll   $t8, $s0, 0xb
-/* 0FC328 7F0C77F8 0007C980 */  sll   $t9, $a3, 6
-/* 0FC32C 7F0C77FC 03197025 */  or    $t6, $t8, $t9
-/* 0FC330 7F0C7800 00097840 */  sll   $t7, $t1, 1
-/* 0FC334 7F0C7804 01CFC025 */  or    $t8, $t6, $t7
-/* 0FC338 7F0C7808 030A2825 */  or    $a1, $t8, $t2
-/* 0FC33C 7F0C780C 30B9FFFF */  andi  $t9, $a1, 0xffff
-/* 0FC340 7F0C7810 03202825 */  move  $a1, $t9
-/* 0FC344 7F0C7814 00C02025 */  move  $a0, $a2
-.L7F0C7818:
-/* 0FC348 7F0C7818 944E0000 */  lhu   $t6, ($v0)
-/* 0FC34C 7F0C781C 54AE0004 */  bnel  $a1, $t6, .L7F0C7830
-/* 0FC350 7F0C7820 24630001 */   addiu $v1, $v1, 1
-/* 0FC354 7F0C7824 100000E5 */  b     .L7F0C7BBC
-/* 0FC358 7F0C7828 00601025 */   move  $v0, $v1
-/* 0FC35C 7F0C782C 24630001 */  addiu $v1, $v1, 1
-.L7F0C7830:
-/* 0FC360 7F0C7830 1483FFF9 */  bne   $a0, $v1, .L7F0C7818
-/* 0FC364 7F0C7834 24420002 */   addiu $v0, $v0, 2
-/* 0FC368 7F0C7838 8FAF001C */  lw    $t7, 0x1c($sp)
-/* 0FC36C 7F0C783C 506F0026 */  beql  $v1, $t7, .L7F0C78D8
-/* 0FC370 7F0C7840 8FA6001C */   lw    $a2, 0x1c($sp)
-.L7F0C7844:
-/* 0FC374 7F0C7844 8FA90028 */  lw    $t1, 0x28($sp)
-/* 0FC378 7F0C7848 0003C040 */  sll   $t8, $v1, 1
-/* 0FC37C 7F0C784C 8FAA002C */  lw    $t2, 0x2c($sp)
-/* 0FC380 7F0C7850 02581021 */  addu  $v0, $s2, $t8
-/* 0FC384 7F0C7854 0010CAC0 */  sll   $t9, $s0, 0xb
-/* 0FC388 7F0C7858 00117180 */  sll   $t6, $s1, 6
-/* 0FC38C 7F0C785C 032E7825 */  or    $t7, $t9, $t6
-/* 0FC390 7F0C7860 0009C040 */  sll   $t8, $t1, 1
-/* 0FC394 7F0C7864 01F8C825 */  or    $t9, $t7, $t8
-/* 0FC398 7F0C7868 032A2825 */  or    $a1, $t9, $t2
-/* 0FC39C 7F0C786C 30AEFFFF */  andi  $t6, $a1, 0xffff
-/* 0FC3A0 7F0C7870 01C02825 */  move  $a1, $t6
-.L7F0C7874:
-/* 0FC3A4 7F0C7874 944F0000 */  lhu   $t7, ($v0)
-/* 0FC3A8 7F0C7878 54AF0004 */  bnel  $a1, $t7, .L7F0C788C
-/* 0FC3AC 7F0C787C 94580002 */   lhu   $t8, 2($v0)
-/* 0FC3B0 7F0C7880 100000CE */  b     .L7F0C7BBC
-/* 0FC3B4 7F0C7884 00601025 */   move  $v0, $v1
-/* 0FC3B8 7F0C7888 94580002 */  lhu   $t8, 2($v0)
-.L7F0C788C:
-/* 0FC3BC 7F0C788C 8FAF001C */  lw    $t7, 0x1c($sp)
-/* 0FC3C0 7F0C7890 54B80004 */  bnel  $a1, $t8, .L7F0C78A4
-/* 0FC3C4 7F0C7894 94590004 */   lhu   $t9, 4($v0)
-/* 0FC3C8 7F0C7898 100000C8 */  b     .L7F0C7BBC
-/* 0FC3CC 7F0C789C 24620001 */   addiu $v0, $v1, 1
-/* 0FC3D0 7F0C78A0 94590004 */  lhu   $t9, 4($v0)
-.L7F0C78A4:
-/* 0FC3D4 7F0C78A4 54B90004 */  bnel  $a1, $t9, .L7F0C78B8
-/* 0FC3D8 7F0C78A8 944E0006 */   lhu   $t6, 6($v0)
-/* 0FC3DC 7F0C78AC 100000C3 */  b     .L7F0C7BBC
-/* 0FC3E0 7F0C78B0 24620002 */   addiu $v0, $v1, 2
-/* 0FC3E4 7F0C78B4 944E0006 */  lhu   $t6, 6($v0)
-.L7F0C78B8:
-/* 0FC3E8 7F0C78B8 54AE0004 */  bnel  $a1, $t6, .L7F0C78CC
-/* 0FC3EC 7F0C78BC 24630004 */   addiu $v1, $v1, 4
-/* 0FC3F0 7F0C78C0 100000BE */  b     .L7F0C7BBC
-/* 0FC3F4 7F0C78C4 24620003 */   addiu $v0, $v1, 3
-/* 0FC3F8 7F0C78C8 24630004 */  addiu $v1, $v1, 4
-.L7F0C78CC:
-/* 0FC3FC 7F0C78CC 146FFFE9 */  bne   $v1, $t7, .L7F0C7874
-/* 0FC400 7F0C78D0 24420008 */   addiu $v0, $v0, 8
-.L7F0C78D4:
-/* 0FC404 7F0C78D4 8FA6001C */  lw    $a2, 0x1c($sp)
-.L7F0C78D8:
-/* 0FC408 7F0C78D8 8FA90028 */  lw    $t1, 0x28($sp)
-/* 0FC40C 7F0C78DC 8FAA002C */  lw    $t2, 0x2c($sp)
-/* 0FC410 7F0C78E0 24C6FFFF */  addiu $a2, $a2, -1
-/* 0FC414 7F0C78E4 28C10002 */  slti  $at, $a2, 2
-/* 0FC418 7F0C78E8 00002825 */  move  $a1, $zero
-/* 0FC41C 7F0C78EC 1420003A */  bnez  $at, .L7F0C79D8
-/* 0FC420 7F0C78F0 00C03825 */   move  $a3, $a2
-/* 0FC424 7F0C78F4 02100019 */  multu $s0, $s0
-/* 0FC428 7F0C78F8 0000C012 */  mflo  $t8
-/* 0FC42C 7F0C78FC 00000000 */  nop   
-/* 0FC430 7F0C7900 00000000 */  nop   
-/* 0FC434 7F0C7904 02310019 */  multu $s1, $s1
-/* 0FC438 7F0C7908 0000C812 */  mflo  $t9
-/* 0FC43C 7F0C790C 03197021 */  addu  $t6, $t8, $t9
-/* 0FC440 7F0C7910 000AC900 */  sll   $t9, $t2, 4
-/* 0FC444 7F0C7914 01290019 */  multu $t1, $t1
-/* 0FC448 7F0C7918 032AC823 */  subu  $t9, $t9, $t2
-/* 0FC44C 7F0C791C 0019C980 */  sll   $t9, $t9, 6
-/* 0FC450 7F0C7920 032AC821 */  addu  $t9, $t9, $t2
-/* 0FC454 7F0C7924 00007812 */  mflo  $t7
-/* 0FC458 7F0C7928 01CFC021 */  addu  $t8, $t6, $t7
-/* 0FC45C 7F0C792C 03194021 */  addu  $t0, $t8, $t9
-/* 0FC460 7F0C7930 00E55821 */  addu  $t3, $a3, $a1
-.L7F0C7934:
-/* 0FC464 7F0C7934 000B2043 */  sra   $a0, $t3, 1
-/* 0FC468 7F0C7938 00047840 */  sll   $t7, $a0, 1
-/* 0FC46C 7F0C793C 024FC021 */  addu  $t8, $s2, $t7
-/* 0FC470 7F0C7940 97030000 */  lhu   $v1, ($t8)
-/* 0FC474 7F0C7944 000362C3 */  sra   $t4, $v1, 0xb
-/* 0FC478 7F0C7948 3199001F */  andi  $t9, $t4, 0x1f
-/* 0FC47C 7F0C794C 03390019 */  multu $t9, $t9
-/* 0FC480 7F0C7950 00036983 */  sra   $t5, $v1, 6
-/* 0FC484 7F0C7954 31AE001F */  andi  $t6, $t5, 0x1f
-/* 0FC488 7F0C7958 00039843 */  sra   $s3, $v1, 1
-/* 0FC48C 7F0C795C 326F001F */  andi  $t7, $s3, 0x1f
-/* 0FC490 7F0C7960 0000C012 */  mflo  $t8
-/* 0FC494 7F0C7964 00000000 */  nop   
-/* 0FC498 7F0C7968 00000000 */  nop   
-/* 0FC49C 7F0C796C 01CE0019 */  multu $t6, $t6
-/* 0FC4A0 7F0C7970 0000C812 */  mflo  $t9
-/* 0FC4A4 7F0C7974 03197021 */  addu  $t6, $t8, $t9
-/* 0FC4A8 7F0C7978 30790001 */  andi  $t9, $v1, 1
-/* 0FC4AC 7F0C797C 01EF0019 */  multu $t7, $t7
-/* 0FC4B0 7F0C7980 00007812 */  mflo  $t7
-/* 0FC4B4 7F0C7984 01CFC021 */  addu  $t8, $t6, $t7
-/* 0FC4B8 7F0C7988 00197100 */  sll   $t6, $t9, 4
-/* 0FC4BC 7F0C798C 01D97023 */  subu  $t6, $t6, $t9
-/* 0FC4C0 7F0C7990 000E7180 */  sll   $t6, $t6, 6
-/* 0FC4C4 7F0C7994 01D97021 */  addu  $t6, $t6, $t9
-/* 0FC4C8 7F0C7998 030EA021 */  addu  $s4, $t8, $t6
-/* 0FC4CC 7F0C799C 0288082A */  slt   $at, $s4, $t0
-/* 0FC4D0 7F0C79A0 50200004 */  beql  $at, $zero, .L7F0C79B4
-/* 0FC4D4 7F0C79A4 0114082A */   slt   $at, $t0, $s4
-/* 0FC4D8 7F0C79A8 10000007 */  b     .L7F0C79C8
-/* 0FC4DC 7F0C79AC 00802825 */   move  $a1, $a0
-/* 0FC4E0 7F0C79B0 0114082A */  slt   $at, $t0, $s4
-.L7F0C79B4:
-/* 0FC4E4 7F0C79B4 10200003 */  beqz  $at, .L7F0C79C4
-/* 0FC4E8 7F0C79B8 00803825 */   move  $a3, $a0
-/* 0FC4EC 7F0C79BC 10000002 */  b     .L7F0C79C8
-/* 0FC4F0 7F0C79C0 00803825 */   move  $a3, $a0
-.L7F0C79C4:
-/* 0FC4F4 7F0C79C4 00802825 */  move  $a1, $a0
-.L7F0C79C8:
-/* 0FC4F8 7F0C79C8 00E57823 */  subu  $t7, $a3, $a1
-/* 0FC4FC 7F0C79CC 29E10002 */  slti  $at, $t7, 2
-/* 0FC500 7F0C79D0 5020FFD8 */  beql  $at, $zero, .L7F0C7934
-/* 0FC504 7F0C79D4 00E55821 */   addu  $t3, $a3, $a1
-.L7F0C79D8:
-/* 0FC508 7F0C79D8 24E5FFFC */  addiu $a1, $a3, -4
-/* 0FC50C 7F0C79DC 04A10002 */  bgez  $a1, .L7F0C79E8
-/* 0FC510 7F0C79E0 8FB9001C */   lw    $t9, 0x1c($sp)
-/* 0FC514 7F0C79E4 00002825 */  move  $a1, $zero
-.L7F0C79E8:
-/* 0FC518 7F0C79E8 24E70004 */  addiu $a3, $a3, 4
-/* 0FC51C 7F0C79EC 00F9082A */  slt   $at, $a3, $t9
-/* 0FC520 7F0C79F0 14200002 */  bnez  $at, .L7F0C79FC
-/* 0FC524 7F0C79F4 3C14000F */   lui   $s4, (0x000F423F >> 16) # lui $s4, 0xf
-/* 0FC528 7F0C79F8 00C03825 */  move  $a3, $a2
-.L7F0C79FC:
-/* 0FC52C 7F0C79FC 3694423F */  ori   $s4, (0x000F423F & 0xFFFF) # ori $s4, $s4, 0x423f
-/* 0FC530 7F0C7A00 00E5082A */  slt   $at, $a3, $a1
-/* 0FC534 7F0C7A04 00004025 */  move  $t0, $zero
-/* 0FC538 7F0C7A08 02803025 */  move  $a2, $s4
-/* 0FC53C 7F0C7A0C 1420006A */  bnez  $at, .L7F0C7BB8
-/* 0FC540 7F0C7A10 00A02025 */   move  $a0, $a1
-/* 0FC544 7F0C7A14 00E51023 */  subu  $v0, $a3, $a1
-/* 0FC548 7F0C7A18 24420001 */  addiu $v0, $v0, 1
-/* 0FC54C 7F0C7A1C 30580001 */  andi  $t8, $v0, 1
-/* 0FC550 7F0C7A20 13000023 */  beqz  $t8, .L7F0C7AB0
-/* 0FC554 7F0C7A24 00057040 */   sll   $t6, $a1, 1
-/* 0FC558 7F0C7A28 024E7821 */  addu  $t7, $s2, $t6
-/* 0FC55C 7F0C7A2C 95E20000 */  lhu   $v0, ($t7)
-/* 0FC560 7F0C7A30 24A40001 */  addiu $a0, $a1, 1
-/* 0FC564 7F0C7A34 240303C1 */  li    $v1, 961
-/* 0FC568 7F0C7A38 30590001 */  andi  $t9, $v0, 1
-/* 0FC56C 7F0C7A3C 15590003 */  bne   $t2, $t9, .L7F0C7A4C
-/* 0FC570 7F0C7A40 0002C2C3 */   sra   $t8, $v0, 0xb
-/* 0FC574 7F0C7A44 10000001 */  b     .L7F0C7A4C
-/* 0FC578 7F0C7A48 00001825 */   move  $v1, $zero
-.L7F0C7A4C:
-/* 0FC57C 7F0C7A4C 330E001F */  andi  $t6, $t8, 0x1f
-/* 0FC580 7F0C7A50 01D05823 */  subu  $t3, $t6, $s0
-/* 0FC584 7F0C7A54 016B0019 */  multu $t3, $t3
-/* 0FC588 7F0C7A58 00027983 */  sra   $t7, $v0, 6
-/* 0FC58C 7F0C7A5C 31F9001F */  andi  $t9, $t7, 0x1f
-/* 0FC590 7F0C7A60 03316023 */  subu  $t4, $t9, $s1
-/* 0FC594 7F0C7A64 0002C043 */  sra   $t8, $v0, 1
-/* 0FC598 7F0C7A68 330E001F */  andi  $t6, $t8, 0x1f
-/* 0FC59C 7F0C7A6C 01C96823 */  subu  $t5, $t6, $t1
-/* 0FC5A0 7F0C7A70 00007812 */  mflo  $t7
-/* 0FC5A4 7F0C7A74 006FC821 */  addu  $t9, $v1, $t7
-/* 0FC5A8 7F0C7A78 00000000 */  nop   
-/* 0FC5AC 7F0C7A7C 018C0019 */  multu $t4, $t4
-/* 0FC5B0 7F0C7A80 0000C012 */  mflo  $t8
-/* 0FC5B4 7F0C7A84 03387021 */  addu  $t6, $t9, $t8
-/* 0FC5B8 7F0C7A88 24F90001 */  addiu $t9, $a3, 1
-/* 0FC5BC 7F0C7A8C 01AD0019 */  multu $t5, $t5
-/* 0FC5C0 7F0C7A90 00007812 */  mflo  $t7
-/* 0FC5C4 7F0C7A94 01CF9821 */  addu  $s3, $t6, $t7
-/* 0FC5C8 7F0C7A98 0274082A */  slt   $at, $s3, $s4
-/* 0FC5CC 7F0C7A9C 10200003 */  beqz  $at, .L7F0C7AAC
-/* 0FC5D0 7F0C7AA0 00000000 */   nop   
-/* 0FC5D4 7F0C7AA4 00A04025 */  move  $t0, $a1
-/* 0FC5D8 7F0C7AA8 02603025 */  move  $a2, $s3
-.L7F0C7AAC:
-/* 0FC5DC 7F0C7AAC 13240042 */  beq   $t9, $a0, .L7F0C7BB8
-.L7F0C7AB0:
-/* 0FC5E0 7F0C7AB0 0004C040 */   sll   $t8, $a0, 1
-/* 0FC5E4 7F0C7AB4 02582821 */  addu  $a1, $s2, $t8
-.L7F0C7AB8:
-/* 0FC5E8 7F0C7AB8 94A20000 */  lhu   $v0, ($a1)
-/* 0FC5EC 7F0C7ABC 240303C1 */  li    $v1, 961
-/* 0FC5F0 7F0C7AC0 304E0001 */  andi  $t6, $v0, 1
-/* 0FC5F4 7F0C7AC4 154E0003 */  bne   $t2, $t6, .L7F0C7AD4
-/* 0FC5F8 7F0C7AC8 00027AC3 */   sra   $t7, $v0, 0xb
-/* 0FC5FC 7F0C7ACC 10000001 */  b     .L7F0C7AD4
-/* 0FC600 7F0C7AD0 00001825 */   move  $v1, $zero
-.L7F0C7AD4:
-/* 0FC604 7F0C7AD4 31F9001F */  andi  $t9, $t7, 0x1f
-/* 0FC608 7F0C7AD8 03306023 */  subu  $t4, $t9, $s0
-/* 0FC60C 7F0C7ADC 018C0019 */  multu $t4, $t4
-/* 0FC610 7F0C7AE0 0002C183 */  sra   $t8, $v0, 6
-/* 0FC614 7F0C7AE4 330E001F */  andi  $t6, $t8, 0x1f
-/* 0FC618 7F0C7AE8 01D16823 */  subu  $t5, $t6, $s1
-/* 0FC61C 7F0C7AEC 00027843 */  sra   $t7, $v0, 1
-/* 0FC620 7F0C7AF0 31F9001F */  andi  $t9, $t7, 0x1f
-/* 0FC624 7F0C7AF4 03299023 */  subu  $s2, $t9, $t1
-/* 0FC628 7F0C7AF8 0000C012 */  mflo  $t8
-/* 0FC62C 7F0C7AFC 00787021 */  addu  $t6, $v1, $t8
-/* 0FC630 7F0C7B00 240303C1 */  li    $v1, 961
-/* 0FC634 7F0C7B04 01AD0019 */  multu $t5, $t5
-/* 0FC638 7F0C7B08 00007812 */  mflo  $t7
-/* 0FC63C 7F0C7B0C 01CFC821 */  addu  $t9, $t6, $t7
-/* 0FC640 7F0C7B10 00000000 */  nop   
-/* 0FC644 7F0C7B14 02520019 */  multu $s2, $s2
-/* 0FC648 7F0C7B18 0000C012 */  mflo  $t8
-/* 0FC64C 7F0C7B1C 03389821 */  addu  $s3, $t9, $t8
-/* 0FC650 7F0C7B20 0266082A */  slt   $at, $s3, $a2
-/* 0FC654 7F0C7B24 50200004 */  beql  $at, $zero, .L7F0C7B38
-/* 0FC658 7F0C7B28 94A20002 */   lhu   $v0, 2($a1)
-/* 0FC65C 7F0C7B2C 00804025 */  move  $t0, $a0
-/* 0FC660 7F0C7B30 02603025 */  move  $a2, $s3
-/* 0FC664 7F0C7B34 94A20002 */  lhu   $v0, 2($a1)
-.L7F0C7B38:
-/* 0FC668 7F0C7B38 304E0001 */  andi  $t6, $v0, 1
-/* 0FC66C 7F0C7B3C 154E0003 */  bne   $t2, $t6, .L7F0C7B4C
-/* 0FC670 7F0C7B40 00027AC3 */   sra   $t7, $v0, 0xb
-/* 0FC674 7F0C7B44 10000001 */  b     .L7F0C7B4C
-/* 0FC678 7F0C7B48 00001825 */   move  $v1, $zero
-.L7F0C7B4C:
-/* 0FC67C 7F0C7B4C 31F9001F */  andi  $t9, $t7, 0x1f
-/* 0FC680 7F0C7B50 03305823 */  subu  $t3, $t9, $s0
-/* 0FC684 7F0C7B54 016B0019 */  multu $t3, $t3
-/* 0FC688 7F0C7B58 0002C183 */  sra   $t8, $v0, 6
-/* 0FC68C 7F0C7B5C 330E001F */  andi  $t6, $t8, 0x1f
-/* 0FC690 7F0C7B60 01D16023 */  subu  $t4, $t6, $s1
-/* 0FC694 7F0C7B64 00027843 */  sra   $t7, $v0, 1
-/* 0FC698 7F0C7B68 31F9001F */  andi  $t9, $t7, 0x1f
-/* 0FC69C 7F0C7B6C 03296823 */  subu  $t5, $t9, $t1
-/* 0FC6A0 7F0C7B70 0000C012 */  mflo  $t8
-/* 0FC6A4 7F0C7B74 00787021 */  addu  $t6, $v1, $t8
-/* 0FC6A8 7F0C7B78 00000000 */  nop   
-/* 0FC6AC 7F0C7B7C 018C0019 */  multu $t4, $t4
-/* 0FC6B0 7F0C7B80 00007812 */  mflo  $t7
-/* 0FC6B4 7F0C7B84 01CFC821 */  addu  $t9, $t6, $t7
-/* 0FC6B8 7F0C7B88 24EE0001 */  addiu $t6, $a3, 1
-/* 0FC6BC 7F0C7B8C 01AD0019 */  multu $t5, $t5
-/* 0FC6C0 7F0C7B90 0000C012 */  mflo  $t8
-/* 0FC6C4 7F0C7B94 03389021 */  addu  $s2, $t9, $t8
-/* 0FC6C8 7F0C7B98 0246082A */  slt   $at, $s2, $a2
-/* 0FC6CC 7F0C7B9C 50200004 */  beql  $at, $zero, .L7F0C7BB0
-/* 0FC6D0 7F0C7BA0 24840002 */   addiu $a0, $a0, 2
-/* 0FC6D4 7F0C7BA4 24880001 */  addiu $t0, $a0, 1
-/* 0FC6D8 7F0C7BA8 02403025 */  move  $a2, $s2
-/* 0FC6DC 7F0C7BAC 24840002 */  addiu $a0, $a0, 2
-.L7F0C7BB0:
-/* 0FC6E0 7F0C7BB0 15C4FFC1 */  bne   $t6, $a0, .L7F0C7AB8
-/* 0FC6E4 7F0C7BB4 24A50004 */   addiu $a1, $a1, 4
-.L7F0C7BB8:
-/* 0FC6E8 7F0C7BB8 01001025 */  move  $v0, $t0
-.L7F0C7BBC:
-/* 0FC6EC 7F0C7BBC 8FB00004 */  lw    $s0, 4($sp)
-/* 0FC6F0 7F0C7BC0 8FB10008 */  lw    $s1, 8($sp)
-/* 0FC6F4 7F0C7BC4 8FB2000C */  lw    $s2, 0xc($sp)
-/* 0FC6F8 7F0C7BC8 8FB30010 */  lw    $s3, 0x10($sp)
-/* 0FC6FC 7F0C7BCC 8FB40014 */  lw    $s4, 0x14($sp)
-/* 0FC700 7F0C7BD0 03E00008 */  jr    $ra
-/* 0FC704 7F0C7BD4 27BD0018 */   addiu $sp, $sp, 0x18
-)
-#endif
-
-
-
-
-
-#ifdef NONMATCHING
-// https://decomp.me/scratch/tmXxj 99.64%
-s32 texFindClosestColourIndexIA(u16 *palette, s32 numcolours, s32 intensity, s32 alpha)
-{
-    s32 loop_start;
-    s32 loop_end;
-    s32 i;
-    s32 j;
-
-    s32 bestindex;
-    s32 bestvalue;
-
     s32 low;
-    s32 colour;
-
-    s32 value;
-    s32 a;
-    s32 b;
-    s32 sum;
-
-    u32 sum2; // is this real?
-
-    // check palette for existing color
-    colour = (intensity << 8) | alpha;
+    s32 high;
+    s32 i;
+    u16 targetcolour;
+    s32 targetmagnitude;
+ 
+    // Cursor into the palette: the midpoint in stage 2, the scan position in stage 3.
+    s32 paletteidx;
+ 
+    u16 colour;
+    s32 red;
+    s32 green;
+    s32 blue;
+    s32 alpha;
+    s32 magnitude;
+ 
+    s32 diffr;
+    s32 diffg;
+    s32 diffb;
+    s32 alphapenalty;
+    s32 distance;
+ 
+    s32 bestindex;
+    s32 bestvalue;
+ 
+    // Stage 1: scan the whole palette for a matching colour and return its index if one is found.
+    targetcolour = ((r << 11) | (g << 6) | (b << 1) | a);
+ 
     for (i = 0; i < numcolours; i++)
     {
-        if (palette[i] == (colour & 0xFFFFU))
+        if (targetcolour == palette[i])
         {
             return i;
         }
     }
-
-    // binary search for a region
+ 
+    /** 
+     * Stage 2: Find a promising palette neighborhood.
+     */
     low = 0;
-    loop_end = numcolours - 1;
-    colour = (intensity * intensity) + (alpha * alpha);
-
-    while ((loop_end - low) >= 2)
+    high = numcolours - 1;
+    // TEX_ALPHA_WEIGHT = 31^2, the maximum possible squared difference in one five-bit color channel.
+    targetmagnitude = (r * r) + (g * g) + (b * b) + (a * TEX_ALPHA_WEIGHT);
+ 
+    while (high - low >= 2)
     {
-        s32 index;
-        
-        index = (loop_end + low) >> 1;
-        value = palette[index];
-        a = (((s32) value) >> 8) & 0xFF;
-        b = value & 0xFF;
-        sum = (a * a) + (b * b);
-        if (sum < colour)
+        paletteidx = (high + low) >> 1;
+ 
+        colour = palette[paletteidx];
+        red = (colour >> 11) & 0x1F;
+        green = (colour >> 6) & 0x1F;
+        blue = (colour >> 1) & 0x1F;
+        alpha = colour & 1;
+ 
+        magnitude = (red * red) + (green * green) + (blue * blue) + (alpha * TEX_ALPHA_WEIGHT);
+ 
+        if (magnitude < targetmagnitude)
         {
-            low = index;
+            low = paletteidx;
             continue;
         }
-        if (colour < sum)
+ 
+        if (targetmagnitude < magnitude)
         {
-            loop_end = index;
+            high = paletteidx;
         }
         else
         {
-            low = index;
-            loop_end = index;
+            high = paletteidx;
+            low = paletteidx;
         }
     }
-
-    loop_start = loop_end - 4;
-    if (loop_start < 0)
+ 
+    // Stage 3: Search the nearby palette entries accurately. 
+    low = high - 4;
+ 
+    if (low < 0)
     {
-        loop_start = 0;
+        low = 0;
+    }
+ 
+    high += 4;
+ 
+    if (high >= numcolours)
+    {
+        high = numcolours - 1;
+    }
+ 
+    bestindex = 0;
+    bestvalue = 999999;
+ 
+    for (paletteidx = low; paletteidx <= high; paletteidx++)
+    {
+        colour = palette[paletteidx];
+        diffr = ((colour >> 11) & 0x1F) - r;
+        diffg = ((colour >> 6) & 0x1F) - g;
+        diffb = ((colour >> 1) & 0x1F) - b;
+ 
+        // An alpha mismatch costs 961, strongly discouraging a palette entry with the wrong transparency.
+        alphapenalty = (a == (colour & 1)) ? 0 : TEX_ALPHA_WEIGHT;
+ 
+        distance = alphapenalty;
+        distance += diffr * diffr;
+        distance += diffg * diffg;
+        distance += diffb * diffb;
+ 
+        if (distance < bestvalue)
+        {
+            bestindex = paletteidx;
+            bestvalue = distance;
+        }
+    }
+ 
+    return bestindex;
+}
+
+
+/**
+ * Find the palette entry closest to the given intensity/alpha pair and return its index.
+ *
+ * Used by TEXFORMAT_IA16_CI8 and TEXFORMAT_IA16_CI4 to
+ * requantize box-filtered averages back onto the palette.
+ *
+ * Colours are IA16, packed iiiiiiiiaaaaaaaa, intensity and alpha both 0..255.
+ *
+ * @param palette    Palette to search, IA16, assumed ordered by the stage 2 key
+ * @param numcolours Number of entries in palette
+ * @param intensity  Target intensity, 0..255
+ * @param alpha      Target alpha, 0..255
+ * @return Index of the closest entry, or 0 if numcolours is not positive
+ */
+s32 texFindClosestColourIndexIA(u16 *palette, s32 numcolours, s32 intensity, s32 alpha)
+{
+    s32 scanstart;
+    s32 high;
+    s32 i;
+    s32 scanidx;
+    s32 bestindex;
+    s32 bestvalue;
+    s32 low;
+    s32 targetcolour;
+    s32 targetmagnitude;
+    s32 colour;
+    s32 entryintensity;
+    s32 entryalpha;
+    s32 magnitude;
+    s32 diffi;
+    s32 diffa;
+    s32 distance;
+ 
+    // Stage 1: scan the whole palette for a matching intensity and return its index if one is found.
+    targetcolour = (intensity << 8) | alpha;
+ 
+    for (i = 0; i < numcolours; i++)
+    {
+        if ((u16)targetcolour == palette[i])
+        {
+            return i;
+        }
+    }
+ 
+    // Stage 2: binary search by squared magnitude.
+    low = 0;
+    high = numcolours - 1;
+    targetmagnitude = (intensity * intensity) + (alpha * alpha);
+ 
+    while (high - low >= 2)
+    {
+        s32 mid;
+ 
+        mid = (high + low) >> 1;
+        colour = palette[mid];
+ 
+        entryintensity = (colour >> 8) & 0xFF;
+        entryalpha = colour & 0xFF;
+        magnitude = (entryintensity * entryintensity) + (entryalpha * entryalpha);
+ 
+        if (magnitude < targetmagnitude)
+        {
+            low = mid;
+            continue;
+        }
+ 
+        if (targetmagnitude < magnitude)
+        {
+            high = mid;
+        }
+        else
+        {
+            // Equal magnitude. Collapse the window to end the search here.
+            low = mid;
+            high = mid;
+        }
+    }
+ 
+    // Stage 3: widen the window by four entries either side and clamp it.
+    scanstart = high - 4;
+    scanidx = scanstart;
+    high += 4;
+
+    if (scanidx < 0)
+    {
+        scanstart = 0;
+    }
+ 
+    if (high >= numcolours)
+    {
+        high = numcolours - 1;
     }
 
-    loop_end += 4;
-    if (loop_end >= numcolours)
-    {
-        loop_end = numcolours - 1;
-    }
-
-    // search for best within the region
+    /* 999999 is an unreachable sentinel: the worst possible distance is
+     * 2 * 255 * 255 = 130050. */
     bestindex = 0;
     bestvalue = 999999;
 
-    for (j = loop_start; j <= loop_end; j++)
+    scanidx = scanstart;
+ 
+    if (scanidx <= high)
     {
-        value = palette[j];
-        a = ((value >> 8) & 0xff) - intensity;
-        b = (value & 0xff) - alpha;
-        sum = (a * a) + (b * b);
+        s32 scanend;
 
-        sum2 = sum; 
-
-        if (sum < bestvalue)
+        for (;;)
         {
-            bestindex = j;
-            bestvalue = sum;
+            colour = palette[scanidx];
+ 
+            diffi = ((colour >> 8) & 0xff) - intensity;
+            diffa = (colour & 0xff) - alpha;
+            distance = (diffi * diffi) + (diffa * diffa);
+            scanend = high + 1;
+ 
+            if (distance < bestvalue)
+            {
+                bestindex = scanidx;
+                bestvalue = distance;
+            }
+
+            scanidx++;
+
+            if (scanend == scanidx)
+            {
+                break;
+            }
         }
-
-        // Seems to need to be any variable used in the loop here?
-        if (j);
     }
-
+ 
     return bestindex;
 }
-#else
-GLOBAL_ASM(
-.text
-glabel texFindClosestColourIndexIA
-/* 0FC708 7F0C7BD8 27BDFFF0 */  addiu $sp, $sp, -0x10
-/* 0FC70C 7F0C7BDC AFB1000C */  sw    $s1, 0xc($sp)
-/* 0FC710 7F0C7BE0 AFB00008 */  sw    $s0, 8($sp)
-/* 0FC714 7F0C7BE4 18A00030 */  blez  $a1, .L7F0C7CA8
-/* 0FC718 7F0C7BE8 00001825 */   move  $v1, $zero
-/* 0FC71C 7F0C7BEC 30AA0003 */  andi  $t2, $a1, 3
-/* 0FC720 7F0C7BF0 11400010 */  beqz  $t2, .L7F0C7C34
-/* 0FC724 7F0C7BF4 01404025 */   move  $t0, $t2
-/* 0FC728 7F0C7BF8 00067A00 */  sll   $t7, $a2, 8
-/* 0FC72C 7F0C7BFC 01E74825 */  or    $t1, $t7, $a3
-/* 0FC730 7F0C7C00 3138FFFF */  andi  $t8, $t1, 0xffff
-/* 0FC734 7F0C7C04 00007040 */  sll   $t6, $zero, 1
-/* 0FC738 7F0C7C08 008E1021 */  addu  $v0, $a0, $t6
-/* 0FC73C 7F0C7C0C 03004825 */  move  $t1, $t8
-.L7F0C7C10:
-/* 0FC740 7F0C7C10 94590000 */  lhu   $t9, ($v0)
-/* 0FC744 7F0C7C14 55390004 */  bnel  $t1, $t9, .L7F0C7C28
-/* 0FC748 7F0C7C18 24630001 */   addiu $v1, $v1, 1
-/* 0FC74C 7F0C7C1C 10000073 */  b     .L7F0C7DEC
-/* 0FC750 7F0C7C20 00601025 */   move  $v0, $v1
-/* 0FC754 7F0C7C24 24630001 */  addiu $v1, $v1, 1
-.L7F0C7C28:
-/* 0FC758 7F0C7C28 1503FFF9 */  bne   $t0, $v1, .L7F0C7C10
-/* 0FC75C 7F0C7C2C 24420002 */   addiu $v0, $v0, 2
-/* 0FC760 7F0C7C30 1065001D */  beq   $v1, $a1, .L7F0C7CA8
-.L7F0C7C34:
-/* 0FC764 7F0C7C34 00067A00 */   sll   $t7, $a2, 8
-/* 0FC768 7F0C7C38 01E74825 */  or    $t1, $t7, $a3
-/* 0FC76C 7F0C7C3C 3138FFFF */  andi  $t8, $t1, 0xffff
-/* 0FC770 7F0C7C40 00037040 */  sll   $t6, $v1, 1
-/* 0FC774 7F0C7C44 008E1021 */  addu  $v0, $a0, $t6
-/* 0FC778 7F0C7C48 03004825 */  move  $t1, $t8
-.L7F0C7C4C:
-/* 0FC77C 7F0C7C4C 94590000 */  lhu   $t9, ($v0)
-/* 0FC780 7F0C7C50 55390004 */  bnel  $t1, $t9, .L7F0C7C64
-/* 0FC784 7F0C7C54 944E0002 */   lhu   $t6, 2($v0)
-/* 0FC788 7F0C7C58 10000064 */  b     .L7F0C7DEC
-/* 0FC78C 7F0C7C5C 00601025 */   move  $v0, $v1
-/* 0FC790 7F0C7C60 944E0002 */  lhu   $t6, 2($v0)
-.L7F0C7C64:
-/* 0FC794 7F0C7C64 552E0004 */  bnel  $t1, $t6, .L7F0C7C78
-/* 0FC798 7F0C7C68 944F0004 */   lhu   $t7, 4($v0)
-/* 0FC79C 7F0C7C6C 1000005F */  b     .L7F0C7DEC
-/* 0FC7A0 7F0C7C70 24620001 */   addiu $v0, $v1, 1
-/* 0FC7A4 7F0C7C74 944F0004 */  lhu   $t7, 4($v0)
-.L7F0C7C78:
-/* 0FC7A8 7F0C7C78 552F0004 */  bnel  $t1, $t7, .L7F0C7C8C
-/* 0FC7AC 7F0C7C7C 94580006 */   lhu   $t8, 6($v0)
-/* 0FC7B0 7F0C7C80 1000005A */  b     .L7F0C7DEC
-/* 0FC7B4 7F0C7C84 24620002 */   addiu $v0, $v1, 2
-/* 0FC7B8 7F0C7C88 94580006 */  lhu   $t8, 6($v0)
-.L7F0C7C8C:
-/* 0FC7BC 7F0C7C8C 55380004 */  bnel  $t1, $t8, .L7F0C7CA0
-/* 0FC7C0 7F0C7C90 24630004 */   addiu $v1, $v1, 4
-/* 0FC7C4 7F0C7C94 10000055 */  b     .L7F0C7DEC
-/* 0FC7C8 7F0C7C98 24620003 */   addiu $v0, $v1, 3
-/* 0FC7CC 7F0C7C9C 24630004 */  addiu $v1, $v1, 4
-.L7F0C7CA0:
-/* 0FC7D0 7F0C7CA0 1465FFEA */  bne   $v1, $a1, .L7F0C7C4C
-/* 0FC7D4 7F0C7CA4 24420008 */   addiu $v0, $v0, 8
-.L7F0C7CA8:
-/* 0FC7D8 7F0C7CA8 24A8FFFF */  addiu $t0, $a1, -1
-/* 0FC7DC 7F0C7CAC 29010002 */  slti  $at, $t0, 2
-/* 0FC7E0 7F0C7CB0 00001025 */  move  $v0, $zero
-/* 0FC7E4 7F0C7CB4 14200027 */  bnez  $at, .L7F0C7D54
-/* 0FC7E8 7F0C7CB8 01001825 */   move  $v1, $t0
-/* 0FC7EC 7F0C7CBC 00C60019 */  multu $a2, $a2
-/* 0FC7F0 7F0C7CC0 0000C812 */  mflo  $t9
-/* 0FC7F4 7F0C7CC4 00000000 */  nop   
-/* 0FC7F8 7F0C7CC8 00000000 */  nop   
-/* 0FC7FC 7F0C7CCC 00E70019 */  multu $a3, $a3
-/* 0FC800 7F0C7CD0 00007012 */  mflo  $t6
-/* 0FC804 7F0C7CD4 032E4821 */  addu  $t1, $t9, $t6
-/* 0FC808 7F0C7CD8 00000000 */  nop   
-/* 0FC80C 7F0C7CDC 00625821 */  addu  $t3, $v1, $v0
-.L7F0C7CE0:
-/* 0FC810 7F0C7CE0 000B5043 */  sra   $t2, $t3, 1
-/* 0FC814 7F0C7CE4 000AC040 */  sll   $t8, $t2, 1
-/* 0FC818 7F0C7CE8 0098C821 */  addu  $t9, $a0, $t8
-/* 0FC81C 7F0C7CEC 972C0000 */  lhu   $t4, ($t9)
-/* 0FC820 7F0C7CF0 000C6A03 */  sra   $t5, $t4, 8
-/* 0FC824 7F0C7CF4 31AE00FF */  andi  $t6, $t5, 0xff
-/* 0FC828 7F0C7CF8 01CE0019 */  multu $t6, $t6
-/* 0FC82C 7F0C7CFC 319000FF */  andi  $s0, $t4, 0xff
-/* 0FC830 7F0C7D00 00007812 */  mflo  $t7
-/* 0FC834 7F0C7D04 00000000 */  nop   
-/* 0FC838 7F0C7D08 00000000 */  nop   
-/* 0FC83C 7F0C7D0C 02100019 */  multu $s0, $s0
-/* 0FC840 7F0C7D10 0000C012 */  mflo  $t8
-/* 0FC844 7F0C7D14 01F88821 */  addu  $s1, $t7, $t8
-/* 0FC848 7F0C7D18 0229082A */  slt   $at, $s1, $t1
-/* 0FC84C 7F0C7D1C 50200004 */  beql  $at, $zero, .L7F0C7D30
-/* 0FC850 7F0C7D20 0131082A */   slt   $at, $t1, $s1
-/* 0FC854 7F0C7D24 10000007 */  b     .L7F0C7D44
-/* 0FC858 7F0C7D28 01401025 */   move  $v0, $t2
-/* 0FC85C 7F0C7D2C 0131082A */  slt   $at, $t1, $s1
-.L7F0C7D30:
-/* 0FC860 7F0C7D30 10200003 */  beqz  $at, .L7F0C7D40
-/* 0FC864 7F0C7D34 01401825 */   move  $v1, $t2
-/* 0FC868 7F0C7D38 10000002 */  b     .L7F0C7D44
-/* 0FC86C 7F0C7D3C 01401825 */   move  $v1, $t2
-.L7F0C7D40:
-/* 0FC870 7F0C7D40 01401025 */  move  $v0, $t2
-.L7F0C7D44:
-/* 0FC874 7F0C7D44 0062C823 */  subu  $t9, $v1, $v0
-/* 0FC878 7F0C7D48 2B210002 */  slti  $at, $t9, 2
-/* 0FC87C 7F0C7D4C 5020FFE4 */  beql  $at, $zero, .L7F0C7CE0
-/* 0FC880 7F0C7D50 00625821 */   addu  $t3, $v1, $v0
-.L7F0C7D54:
-/* 0FC884 7F0C7D54 2462FFFC */  addiu $v0, $v1, -4
-/* 0FC888 7F0C7D58 04410002 */  bgez  $v0, .L7F0C7D64
-/* 0FC88C 7F0C7D5C 24630004 */   addiu $v1, $v1, 4
-/* 0FC890 7F0C7D60 00001025 */  move  $v0, $zero
-.L7F0C7D64:
-/* 0FC894 7F0C7D64 0065082A */  slt   $at, $v1, $a1
-/* 0FC898 7F0C7D68 14200002 */  bnez  $at, .L7F0C7D74
-/* 0FC89C 7F0C7D6C 00002825 */   move  $a1, $zero
-/* 0FC8A0 7F0C7D70 01001825 */  move  $v1, $t0
-.L7F0C7D74:
-/* 0FC8A4 7F0C7D74 3C08000F */  lui   $t0, (0x000F423F >> 16) # lui $t0, 0xf
-/* 0FC8A8 7F0C7D78 0062082A */  slt   $at, $v1, $v0
-/* 0FC8AC 7F0C7D7C 3508423F */  ori   $t0, (0x000F423F & 0xFFFF) # ori $t0, $t0, 0x423f
-/* 0FC8B0 7F0C7D80 14200019 */  bnez  $at, .L7F0C7DE8
-/* 0FC8B4 7F0C7D84 00405025 */   move  $t2, $v0
-/* 0FC8B8 7F0C7D88 00027040 */  sll   $t6, $v0, 1
-/* 0FC8BC 7F0C7D8C 008E1021 */  addu  $v0, $a0, $t6
-/* 0FC8C0 7F0C7D90 246B0001 */  addiu $t3, $v1, 1
-.L7F0C7D94:
-/* 0FC8C4 7F0C7D94 944C0000 */  lhu   $t4, ($v0)
-/* 0FC8C8 7F0C7D98 000C7A03 */  sra   $t7, $t4, 8
-/* 0FC8CC 7F0C7D9C 31F800FF */  andi  $t8, $t7, 0xff
-/* 0FC8D0 7F0C7DA0 03061823 */  subu  $v1, $t8, $a2
-/* 0FC8D4 7F0C7DA4 00630019 */  multu $v1, $v1
-/* 0FC8D8 7F0C7DA8 319900FF */  andi  $t9, $t4, 0xff
-/* 0FC8DC 7F0C7DAC 03272023 */  subu  $a0, $t9, $a3
-/* 0FC8E0 7F0C7DB0 00007012 */  mflo  $t6
-/* 0FC8E4 7F0C7DB4 00000000 */  nop   
-/* 0FC8E8 7F0C7DB8 00000000 */  nop   
-/* 0FC8EC 7F0C7DBC 00840019 */  multu $a0, $a0
-/* 0FC8F0 7F0C7DC0 00007812 */  mflo  $t7
-/* 0FC8F4 7F0C7DC4 01CF4821 */  addu  $t1, $t6, $t7
-/* 0FC8F8 7F0C7DC8 0128082A */  slt   $at, $t1, $t0
-/* 0FC8FC 7F0C7DCC 50200004 */  beql  $at, $zero, .L7F0C7DE0
-/* 0FC900 7F0C7DD0 254A0001 */   addiu $t2, $t2, 1
-/* 0FC904 7F0C7DD4 01402825 */  move  $a1, $t2
-/* 0FC908 7F0C7DD8 01204025 */  move  $t0, $t1
-/* 0FC90C 7F0C7DDC 254A0001 */  addiu $t2, $t2, 1
-.L7F0C7DE0:
-/* 0FC910 7F0C7DE0 156AFFEC */  bne   $t3, $t2, .L7F0C7D94
-/* 0FC914 7F0C7DE4 24420002 */   addiu $v0, $v0, 2
-.L7F0C7DE8:
-/* 0FC918 7F0C7DE8 00A01025 */  move  $v0, $a1
-.L7F0C7DEC:
-/* 0FC91C 7F0C7DEC 8FB00008 */  lw    $s0, 8($sp)
-/* 0FC920 7F0C7DF0 8FB1000C */  lw    $s1, 0xc($sp)
-/* 0FC924 7F0C7DF4 03E00008 */  jr    $ra
-/* 0FC928 7F0C7DF8 27BD0010 */   addiu $sp, $sp, 0x10
-)
-#endif
 
 
 /**
@@ -1243,7 +844,7 @@ s32 texInflateNonZlib(u8 *src, u8 *dst, s32 arg2, s32 forcenumimages, struct tex
     numimages = arg2 && forcenumimages ? forcenumimages : 1;
 
     arg4->rightpos->maxlod = forcenumimages;
-    arg4->rightpos->unk0c_02 = arg2;
+    arg4->rightpos->hasExplicitLods = arg2;
 
     if (arg2)
     {
@@ -2588,7 +2189,7 @@ void texSwapAltRowBytes(u8 *dst, s32 width, s32 height, s32 format)
 	case TEXFORMAT_IA4:
 	case TEXFORMAT_I4:
 	case TEXFORMAT_RGBA16_CI4:
-	case TEXFORMAT_0C:
+	case TEXFORMAT_IA16_CI4:
 		alignedwidth = ((width + 0xf) & 0xff0) >> 3;
 		break;
 	}

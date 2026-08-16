@@ -7,6 +7,7 @@
 
 #include "ultra64.h"
 #include "bondtypes.h"
+#include "bondaicommands.h"
 
 // forward declarations
 PadRecord padlist[];
@@ -1589,36 +1590,1132 @@ PathRecord patrolpaths[] = {
 };
 
 
-u32 ai_0[] = { 0x02000301, 0x00040000 };
-u32 ai_1[] = { 0xad627272, 0x6d206272, 0x726d0a00, 0x02030352, 0x0032010a, 0x2c010302, 0x2cad0a0a, 0x0a676f0a, 0x0a0a00cb, 0x00cc0600, 0x00780204, 0x03010404 };
-u32 ai_26[] = { 0xae020803, 0xb4000258, 0x2c010802, 0x2c710038, 0xb7012c00, 0x2c0238b7, 0x00b4022c, 0xb9b5020a, 0x039c0001, 0x000038bb, 0x00002c01, 0x0a0238b7, 0x01680209, 0x03bb0000, 0x2c010902, 0x2c9a0000, 0x8000c364, 0x0ab6b802, 0x0b03010b, 0x020cb702, 0x58010904 };
-u32 ai_20[] = { 0x020303eb, 0x565500f8, 0x2c010302, 0x2c520064, 0x00f82c01, 0x03022c9a, 0x00004000, 0xecd700da, 0x020803dc, 0x2c010802, 0x2cf12c05, 0xfd000f02, 0x2cddeaed, 0x030303d5, 0x01000200, 0x0005f804, 0x1405fd00, 0x01025605, 0xfd000104 };
-u32 ai_19[] = { 0xd9fd00f7, 0x2c022ce6, 0x0000f610, 0x002c0210, 0x03650000, 0xa9036500, 0x00f6022c, 0x0a006bff, 0xffffff06, 0x10dbf400, 0x00ffae02, 0x0803b400, 0x00782c01, 0x08022ca4, 0x02000200, 0x005f0202, 0x0903b400, 0x012c2c01, 0x09022cda, 0x020a03dc, 0x2c010a02, 0x2cd20206, 0x03010604 };
-u32 ai_21[] = { 0x9a000001, 0x00020403, 0x9a000001, 0x009b0000, 0x02000355, 0x002c4155, 0x002e4155, 0x00314103, 0x55003442, 0x55003742, 0x55004342, 0x03550049, 0x4355004c, 0x4355004f, 0x43035500, 0x3b445500, 0x46445500, 0x5e440355, 0x005c4555, 0x00644503, 0x55005246, 0x55005546, 0x55005846, 0x0355006a, 0x4755006d, 0x47550070, 0x47035500, 0x73485500, 0x76480355, 0x007c4955, 0x00824903, 0x5500914a, 0x55008f4a, 0x5500944a, 0x03550089, 0x4b550084, 0x4b55008a, 0x4b035500, 0x974c5500, 0x9a4c5500, 0x9d4c0355, 0x00a34d55, 0x00a74d55, 0x00ac4d03, 0xac2a002d, 0xac2b002e, 0xac2c002f, 0xac2d0030, 0xac2e0031, 0xac2f0032, 0xac300034, 0x01040241, 0x03ad494e, 0x310a00ac, 0x2a0036ac, 0x2b0037ac, 0x2c0038ac, 0x2d0043ac, 0x2e003eac, 0x2f0049ac, 0x30003b01, 0x04024203, 0xad494e32, 0x0a00ac2a, 0x004cac2b, 0x004bac2c, 0x004dac2d, 0x0045ac2e, 0x0046ac2f, 0x0047ac30, 0x005e0104, 0x024303ad, 0x494e330a, 0x00ac2a00, 0x54ac2b00, 0x55ac2c00, 0x56ac2d00, 0x63ac2e00, 0x64ac2f00, 0x65ac3000, 0x3b010402, 0x4403ad49, 0x4e340a00, 0xac2a0069, 0xac2b006a, 0xac2c006b, 0xac2d006c, 0xac2e006d, 0xac2f006e, 0xac300070, 0x01040245, 0x03ad494e, 0x350a00ac, 0x2a006cac, 0x2b006dac, 0x2c006eac, 0x2d0055ac, 0x2e0072ac, 0x2f0073ac, 0x30007401, 0x04024603, 0xad494e36, 0x0a00ac2a, 0x0069ac2b, 0x006aac2c, 0x006bac2d, 0x006fac2e, 0x0070ac2f, 0x0071ac30, 0x00730104, 0x024703ad, 0x494e370a, 0x00ac2a00, 0x76ac2b00, 0x79ac2c00, 0x7cac2d00, 0x7fac2e00, 0x82ac2f00, 0x91ac3000, 0x63010402, 0x4803ad49, 0x4e380a00, 0xac2a0082, 0xac2b0089, 0xac2c0088, 0xac2d008e, 0xac2e008f, 0xac2f0093, 0xac300097, 0x01040249, 0x03ad494e, 0x390a00ac, 0x2a0085ac, 0x2b0086ac, 0x2c0084ac, 0x2d0093ac, 0x2e0094ac, 0x2f008eac, 0x30008f01, 0x04024a03, 0xad494e31, 0x300a00ac, 0x2a0099ac, 0x2b009cac, 0x2c009dac, 0x2d00a0ac, 0x2e00a6ac, 0x2f0081ac, 0x30008201, 0x04024b03, 0xad494e31, 0x310a00ac, 0x2a00a8ac, 0x2b00a9ac, 0x2c00aaac, 0x2d009cac, 0x2e009dac, 0x2f007fac, 0x30007c01, 0x04024c03, 0xad494e31, 0x320a00ac, 0x2a008bac, 0x2b00acac, 0x2c00a8ac, 0x2d00a9ac, 0x2e008fac, 0x2f008eac, 0x30008501, 0x04024d03, 0xad494e31, 0x330a00ac, 0x2a0085ac, 0x2b0089ac, 0x2c0087ac, 0x2d0088ac, 0x2e009aac, 0x2f0099ac, 0x30009601, 0x0402559a, 0x00000200, 0x9b000001, 0x00010404 };
-u32 ai_22[] = { 0x8e2aae02, 0x4e03b400, 0x04b00301, 0x4e02039c, 0x00000200, 0x09ae0208, 0x03b40001, 0x2c2c0108, 0x022c3120, 0x2c010302, 0x2cad7370, 0x61776e31, 0x00f306bd, 0x02ff2328, 0x04030000, 0x001006ad, 0x2d3e6661, 0x696c0001, 0x030206ad, 0x7331204f, 0x4b210001, 0x03020903, 0x9c000001, 0x002c0109, 0x022c0103, 0x04000000 };
-u32 ai_23[] = { 0x8e2bae02, 0x4e03b400, 0x04b00301, 0x4e02039c, 0x00000200, 0x09ae0208, 0x03b40001, 0x682c0108, 0x022c3127, 0x2c010302, 0x2cad7370, 0x61776e32, 0x00f306bd, 0x20ff2328, 0x04040000, 0x001006ad, 0x2d3e6661, 0x696c0001, 0x03020697, 0x2d02ad63, 0x31204f4b, 0x21000103, 0x0209039c, 0x00000100, 0x2c010902, 0x2c010304, 0x8e2cae02, 0x4e03b400, 0x04b00301, 0x4e02039c, 0x00000200, 0x09ae0208, 0x03b40001, 0xa42c0108, 0x022c3121, 0x2c010302, 0x2cad7370, 0x61776e33, 0x00f306bd, 0x02ff2328, 0x04050000, 0x001006ad, 0x2d3e6661, 0x696c0001, 0x030206ad, 0x7333204f, 0x4b210001, 0x03020903, 0x9c000001, 0x002c0109, 0x022c0103, 0x04000000 };
-u32 ai_24[] = { 0x8e2dae02, 0x4e03b400, 0x04b00301, 0x4e02039c, 0x00000200, 0x09ae0208, 0x03b40001, 0xe02c0108, 0x022c3128, 0x2c010302, 0x2cad7370, 0x61776e34, 0x00f306bd, 0x20ff2328, 0x04060000, 0x001006ad, 0x2d3e6661, 0x696c0001, 0x03020697, 0x2d02ad63, 0x32204f4b, 0x21000103, 0x0209039c, 0x00000100, 0x2c010902, 0x2c010304 };
-u32 ai_25[] = { 0x8e2eae02, 0x4e03b400, 0x04b00301, 0x4e02039c, 0x00000200, 0x09ae0208, 0x03b40002, 0x1c2c0108, 0x022c3122, 0x2c010302, 0x2cad7370, 0x61776e35, 0x00f306bd, 0x02ff2328, 0x04070000, 0x001006ad, 0x2d3e6661, 0x696c0001, 0x030206ad, 0x7335204f, 0x4b210001, 0x03020903, 0x9c000001, 0x002c0109, 0x022c0103, 0x04000000, 0x8e2fae02, 0x4e03b400, 0x04b00301, 0x4e02039c, 0x00000200, 0x09ae0208, 0x03b40002, 0x582c0108, 0x022c3129, 0x2c010302, 0x2cad7370, 0x61776e36, 0x00f306bd, 0x20ff2328, 0x04080000, 0x001006ad, 0x2d3e6661, 0x696c0001, 0x03020697, 0x2f02ad63, 0x33204f4b, 0x21000103, 0x0209039c, 0x00000100, 0x2c010902, 0x2c010304, 0x8e30ae02, 0x4e03b400, 0x04b00301, 0x4e02039c, 0x00000200, 0x09ae0208, 0x03b40000, 0xb42c0108, 0x022c3123, 0x2c010302, 0x2cad7370, 0x61776e37, 0x00f306bd, 0x02ff2328, 0x04090000, 0x001006ad, 0x2d3e6661, 0x696c0001, 0x030206ad, 0x7337204f, 0x4b210001, 0x03020903, 0x9c000001, 0x002c0109, 0x022c0103, 0x04000000 };
-u32 ai_2[] = { 0x8e20ad64, 0x310a0005, 0xfd040a04 };
-u32 ai_3[] = { 0x8e27ad64, 0x320a0005, 0xfd040b04 };
-u32 ai_4[] = { 0x8e21ad64, 0x330a0005, 0xfd040a04 };
-u32 ai_5[] = { 0x8e28ad64, 0x340a0005, 0xfd040b04 };
-u32 ai_6[] = { 0x8e22ad64, 0x350a0005, 0xfd040a04 };
-u32 ai_7[] = { 0x8e29ad64, 0x360a0005, 0xfd040b04 };
-u32 ai_8[] = { 0x8e23ad64, 0x370a0005, 0xfd040a04 };
-u32 ai_10[] = { 0x02000345, 0x28000101, 0x00020103, 0x4c032007, 0x4b00c808, 0x28090101, 0x0209032f, 0x064b0064, 0x08010902, 0x08033335, 0x8006036f, 0x202c6f02, 0x2c6f042c, 0x6f082c6f, 0x012c0801, 0x00022cad, 0x66726f6c, 0x6963001d, 0x020a032f, 0x064c012c, 0x06010902, 0x2821022f, 0xae020b03, 0xb40000f0, 0x2c010b02, 0x2c339100, 0x35c82e35, 0x962d3564, 0x2c010002, 0x2c91320a, 0x00930000, 0x00190010, 0x0038022d, 0x0a009400, 0x00001100, 0x10003802, 0x2e210038, 0x0238012f, 0x02060100, 0x020705fd, 0x04100400 };
-u32 ai_15[] = { 0xad0a2d2d, 0x2d2d3e64, 0x656c6574, 0x65210a00, 0x9a000020, 0x0023fd02, 0x05030105, 0x04000000 };
-u32 ai_16[] = { 0x23fd0205, 0x03010504 };
-u32 ai_9[] = { 0x022c3335, 0xdc573564, 0x388f0028, 0x9000008d, 0xe5bf00b8, 0x08000000, 0x002c022c, 0x00060238, 0x8f002890, 0x00148dcc, 0xbf00b808, 0x00000000, 0x2c022c02, 0x2c000602, 0x3b8f0028, 0x90001402, 0x2cbf00c1, 0x07800000, 0x002c022c, 0xbf00c107, 0x90000000, 0x0602578f, 0x00289000, 0x14022cbf, 0x00b91800, 0x00000006, 0x02588f00, 0x28900014, 0x022cbf00, 0xd3190000, 0x00000602, 0x069d0000, 0x004005fd, 0x040c0400 };
-u32 ai_11[] = { 0x023c4c03, 0x20074c01, 0x90382808, 0x02382a08, 0x0208034c, 0x01c2383c, 0x3d02382f, 0x3e010802, 0x3d3c2c00, 0x06023e03, 0x013c022c, 0x023f3335, 0x142c1a06, 0x022c3532, 0x2c0e0602, 0x2c353c2c, 0x1306022c, 0x35502c13, 0x06022c35, 0x642c1106, 0x022c3596, 0x2c120602, 0x2c35c82c, 0x14000100, 0x0006022c, 0x15000100, 0x00060206, 0x032f2c01, 0x06022c3c, 0x2c000802, 0x0803013c, 0x022c0301, 0x3f020705, 0xfd041104 };
-u32 ai_13[] = { 0x02040301, 0x04040000 };
-u32 ai_12[] = { 0xbf00d319, 0x00000000, 0x2c022cc0, 0x00de0000, 0x00002c02, 0x2c915093, 0x64925002, 0x04034b00, 0x64073c3f, 0x0104023f, 0x33022c35, 0xc82c1400, 0x01000006, 0x022c1500, 0x01000006, 0x0206032f, 0x2c010602, 0x2c3c2c00, 0x08020803, 0x0104022c, 0x03013f02, 0x0705fd00, 0x02040000 };
-u32 ai_14[] = { 0xbf00b808, 0x00000000, 0x2c022c91, 0x14931492, 0x3205fd00, 0x02040000 };
-u32 ai_27[] = { 0x860f0200, 0x039c0000, 0x20004499, 0x2b024199, 0x2d024299, 0x2f02439c, 0x00001000, 0x0b89010a, 0x9c000008, 0x00388904, 0x099c0000, 0x04003889, 0x08080238, 0x01000241, 0xad0a6d75, 0x72646572, 0x210a0088, 0x01023898, 0x2b020100, 0x0242ad0a, 0x6d757264, 0x6572210a, 0x00880102, 0x38982d02, 0x01000243, 0xad0a6d75, 0x72646572, 0x210a0088, 0x01023898, 0x2f020100, 0x0244ad0a, 0x66616c73, 0x65210a00, 0x87019b00, 0x00200001, 0x00020803, 0xc364079a, 0x00000400, 0x01000209, 0x03c36408, 0x9a000008, 0x00010002, 0x0a03c364, 0x099a0000, 0x10000100, 0x020b0301, 0x0b040000 };
-u32 ai_17[] = { 0x90002802, 0x03140021, 0x00000402, 0x0403462c, 0x3a2c3b2c, 0x322c3c2c, 0x0104022c, 0x3335962c, 0x16000100, 0x0008022c, 0x09ae0209, 0x033335fa, 0x2cb40000, 0xf0060109, 0x022c1400, 0x2100002c, 0x022c1600, 0x0100002c, 0x022c0208, 0x032f0601, 0x08020601, 0x03040000 };
-u32 ai_18[] = { 0x9d000008, 0x00020403, 0x3c2c30fd, 0x0b010402, 0x2c170001, 0x00002c02, 0x2c0209ae, 0xad68656c, 0x6c6f0a00, 0x02000330, 0xfd0c4c01, 0xf4184c00, 0x50179501, 0xb1b40006, 0x901ab400, 0x05a016b4, 0x0004b015, 0xb40003c0, 0x14b40002, 0xd013b400, 0x01e012b4, 0x0000f011, 0x01000211, 0xb400012c, 0x2cc3640b, 0x022c0100, 0x0212b400, 0x021c2cc3, 0x640c022c, 0x01000213, 0xb400030c, 0x2cc3640d, 0x022c0100, 0x0214b400, 0x03fc2cc3, 0x640e022c, 0x01000215, 0xb40004ec, 0x2cc3640f, 0x022c0100, 0x0216b400, 0x05dc2cc3, 0x6410022c, 0x01000217, 0x960138c3, 0x64110238, 0xb0940101, 0x000218c3, 0x64129a00, 0x04000000, 0x29021a03, 0x0033011a, 0x02339a00, 0x0800009a, 0x00020000, 0x1c00f502, 0x29034c01, 0x2c062f2c, 0x4dfd000f, 0x00f52c01, 0x29022c02, 0x06039c00, 0x0400002c, 0xc364139a, 0x00010000, 0x022c2201, 0x06020b02, 0x0c03010c, 0x04000000 };
-u32 ai_28[] = { 0x02040355, 0x002c2c01, 0x04022c33, 0x358038ad, 0x33204841, 0x52440a00, 0x0506040d, 0x0507040d, 0x0508040d, 0x050c040f, 0x050d040f, 0x050e040f, 0x00080238, 0xad352048, 0x4152440a, 0x00050604, 0x0f050704, 0x0f050804, 0x0f050c04, 0x0d050d04, 0x0d050e04, 0x0d000802, 0x08333580, 0x38ad3820, 0x48415244, 0x0a00050f, 0x040d0510, 0x040d0511, 0x040d0515, 0x040f0516, 0x040f0517, 0x040f0009, 0x0238ad31, 0x31204841, 0x52440a00, 0x050f040f, 0x0510040f, 0x0511040f, 0x0515040d, 0x0516040d, 0x0517040d, 0x00090209, 0x02060301, 0x06040000 };
-u32 ai_29[] = { 0x0204039c, 0x00080000, 0x06301f2c, 0x311f2c01, 0x04022c9a, 0x00040000, 0x02060301, 0x06040000 };
+u8 ai_0[] = {
+    label(0x00)
+    ai_sleep
+    goto_first(0x00)
+    ai_list_end
+};
+u8 ai_1[] = {
+    debug_log 'b', 'r', 'r', 'm', ' ', 'b', 'r', 'r', 'm', '\n', '\0',
+    label(0x03)
+    ai_sleep
+    if_bond_distance_to_pad_less_than(0x3200, 0x0a01, 0x2c)
+    goto_first(0x03)
+    label(0x2c)
+    debug_log '\n', '\n', '\n', 'g', 'o', '\n', '\n', '\n', '\0',
+    vehicle_start_path(0x00)
+    vehicle_speed(0x0006, 0x7800)
+    label(0x04)
+    ai_sleep
+    goto_first(0x04)
+    ai_list_end
+};
+u8 ai_26[] = {
+    local_timer_reset_start
+    label(0x08)
+    ai_sleep
+    if_local_timer_greater_than(0x580200, 0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    if_game_difficulty_greater_than(0x00, 0x38)
+    hud_countdown_set(0x2c01)
+    goto_next(0x2c)
+    label(0x38)
+    hud_countdown_set(0xb400)
+    label(0x2c)
+    hud_countdown_start
+    hud_countdown_show
+    label(0x0a)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00000100, 0x38)
+    if_hud_countdown_less_than(0x0000, 0x2c)
+    goto_first(0x0a)
+    label(0x38)
+    hud_countdown_set(0x6801)
+    label(0x09)
+    ai_sleep
+    if_hud_countdown_less_than(0x0000, 0x2c)
+    goto_first(0x09)
+    label(0x2c)
+    objective_bitfield_set_on(0x00800000)
+    text_print_top(0x0a64)
+    hud_countdown_hide
+    hud_countdown_stop
+    label(0x0b)
+    ai_sleep
+    goto_first(0x0b)
+    label(0x0c)
+    hud_countdown_set(0x5802)
+    goto_first(0x09)
+    ai_list_end
+};
+u8 ai_20[] = {
+    label(0x03)
+    ai_sleep
+    if_bond_is_dead(0x56)
+    if_bond_in_room_with_pad(0xf800, 0x2c)
+    goto_first(0x03)
+    label(0x2c)
+    if_bond_distance_to_pad_less_than(0x6400, 0xf800, 0x2c)
+    goto_first(0x03)
+    label(0x2c)
+    objective_bitfield_set_on(0x00400000)
+    bond_disable_damage_and_pickups
+    hud_hide_and_lock_controls_and_pause_mission_time(0x00)
+    screen_fade_to_black
+    label(0x08)
+    ai_sleep
+    if_screen_fade_completed(0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    if_objective_all_completed(0x2c)
+    jump_to_ai_list(0xfd, 0x0f00)
+    label(0x2c)
+    chr_hide_all
+    trigger_fade_and_exit_level_on_button_press
+    bond_hide_weapons
+    ai_sleep
+    ai_sleep
+    ai_sleep
+    camera_switch(0x01, 0x0200, 0x0000)
+    jump_to_ai_list(0xf8, 0x1404)
+    jump_to_ai_list(0xfd, 0x0100)
+    label(0x56)
+    jump_to_ai_list(0xfd, 0x0100)
+    ai_list_end
+};
+u8 ai_19[] = {
+    chr_try_teleporting_to_pad(0xfd, 0xf700, 0x2c)
+    label(0x2c)
+    if_object_in_room_with_pad(0x00, 0xf600, 0x10)
+    goto_next(0x2c)
+    label(0x10)
+    ai_sleep
+    object_move_to_pad(0x00, 0xa900)
+    ai_sleep
+    object_move_to_pad(0x00, 0xf600)
+    label(0x2c)
+    guard_play_animation(0x6b00, 0xffff, 0xffff, 0x06, 0x10)
+    screen_fade_from_black
+    music_xtrack_play(0x00, 0x00, 0xff)
+    local_timer_reset_start
+    label(0x08)
+    ai_sleep
+    if_local_timer_greater_than(0x780000, 0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    object_flags_1_set_off(0x02, 0x00000200)
+    object_destroy(0x02)
+    label(0x09)
+    ai_sleep
+    if_local_timer_greater_than(0x2c0100, 0x2c)
+    goto_first(0x09)
+    label(0x2c)
+    screen_fade_to_black
+    label(0x0a)
+    ai_sleep
+    if_screen_fade_completed(0x2c)
+    goto_first(0x0a)
+    label(0x2c)
+    exit_level
+    label(0x06)
+    ai_sleep
+    goto_first(0x06)
+    ai_list_end
+};
+u8 ai_21[] = {
+    objective_bitfield_set_on(0x00010000)
+    label(0x04)
+    ai_sleep
+    objective_bitfield_set_on(0x00010000)
+    objective_bitfield_set_off(0x00020000)
+    ai_sleep
+    if_bond_in_room_with_pad(0x2c00, 0x41)
+    if_bond_in_room_with_pad(0x2e00, 0x41)
+    if_bond_in_room_with_pad(0x3100, 0x41)
+    ai_sleep
+    if_bond_in_room_with_pad(0x3400, 0x42)
+    if_bond_in_room_with_pad(0x3700, 0x42)
+    if_bond_in_room_with_pad(0x4300, 0x42)
+    ai_sleep
+    if_bond_in_room_with_pad(0x4900, 0x43)
+    if_bond_in_room_with_pad(0x4c00, 0x43)
+    if_bond_in_room_with_pad(0x4f00, 0x43)
+    ai_sleep
+    if_bond_in_room_with_pad(0x3b00, 0x44)
+    if_bond_in_room_with_pad(0x4600, 0x44)
+    if_bond_in_room_with_pad(0x5e00, 0x44)
+    ai_sleep
+    if_bond_in_room_with_pad(0x5c00, 0x45)
+    if_bond_in_room_with_pad(0x6400, 0x45)
+    ai_sleep
+    if_bond_in_room_with_pad(0x5200, 0x46)
+    if_bond_in_room_with_pad(0x5500, 0x46)
+    if_bond_in_room_with_pad(0x5800, 0x46)
+    ai_sleep
+    if_bond_in_room_with_pad(0x6a00, 0x47)
+    if_bond_in_room_with_pad(0x6d00, 0x47)
+    if_bond_in_room_with_pad(0x7000, 0x47)
+    ai_sleep
+    if_bond_in_room_with_pad(0x7300, 0x48)
+    if_bond_in_room_with_pad(0x7600, 0x48)
+    ai_sleep
+    if_bond_in_room_with_pad(0x7c00, 0x49)
+    if_bond_in_room_with_pad(0x8200, 0x49)
+    ai_sleep
+    if_bond_in_room_with_pad(0x9100, 0x4a)
+    if_bond_in_room_with_pad(0x8f00, 0x4a)
+    if_bond_in_room_with_pad(0x9400, 0x4a)
+    ai_sleep
+    if_bond_in_room_with_pad(0x8900, 0x4b)
+    if_bond_in_room_with_pad(0x8400, 0x4b)
+    if_bond_in_room_with_pad(0x8a00, 0x4b)
+    ai_sleep
+    if_bond_in_room_with_pad(0x9700, 0x4c)
+    if_bond_in_room_with_pad(0x9a00, 0x4c)
+    if_bond_in_room_with_pad(0x9d00, 0x4c)
+    ai_sleep
+    if_bond_in_room_with_pad(0xa300, 0x4d)
+    if_bond_in_room_with_pad(0xa700, 0x4d)
+    if_bond_in_room_with_pad(0xac00, 0x4d)
+    ai_sleep
+    chr_set_pad_preset(0x2a, 0x2d00)
+    chr_set_pad_preset(0x2b, 0x2e00)
+    chr_set_pad_preset(0x2c, 0x2f00)
+    chr_set_pad_preset(0x2d, 0x3000)
+    chr_set_pad_preset(0x2e, 0x3100)
+    chr_set_pad_preset(0x2f, 0x3200)
+    chr_set_pad_preset(0x30, 0x3400)
+    goto_first(0x04)
+    label(0x41)
+    ai_sleep
+    debug_log 'I', 'N', '1', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x3600)
+    chr_set_pad_preset(0x2b, 0x3700)
+    chr_set_pad_preset(0x2c, 0x3800)
+    chr_set_pad_preset(0x2d, 0x4300)
+    chr_set_pad_preset(0x2e, 0x3e00)
+    chr_set_pad_preset(0x2f, 0x4900)
+    chr_set_pad_preset(0x30, 0x3b00)
+    goto_first(0x04)
+    label(0x42)
+    ai_sleep
+    debug_log 'I', 'N', '2', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x4c00)
+    chr_set_pad_preset(0x2b, 0x4b00)
+    chr_set_pad_preset(0x2c, 0x4d00)
+    chr_set_pad_preset(0x2d, 0x4500)
+    chr_set_pad_preset(0x2e, 0x4600)
+    chr_set_pad_preset(0x2f, 0x4700)
+    chr_set_pad_preset(0x30, 0x5e00)
+    goto_first(0x04)
+    label(0x43)
+    ai_sleep
+    debug_log 'I', 'N', '3', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x5400)
+    chr_set_pad_preset(0x2b, 0x5500)
+    chr_set_pad_preset(0x2c, 0x5600)
+    chr_set_pad_preset(0x2d, 0x6300)
+    chr_set_pad_preset(0x2e, 0x6400)
+    chr_set_pad_preset(0x2f, 0x6500)
+    chr_set_pad_preset(0x30, 0x3b00)
+    goto_first(0x04)
+    label(0x44)
+    ai_sleep
+    debug_log 'I', 'N', '4', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x6900)
+    chr_set_pad_preset(0x2b, 0x6a00)
+    chr_set_pad_preset(0x2c, 0x6b00)
+    chr_set_pad_preset(0x2d, 0x6c00)
+    chr_set_pad_preset(0x2e, 0x6d00)
+    chr_set_pad_preset(0x2f, 0x6e00)
+    chr_set_pad_preset(0x30, 0x7000)
+    goto_first(0x04)
+    label(0x45)
+    ai_sleep
+    debug_log 'I', 'N', '5', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x6c00)
+    chr_set_pad_preset(0x2b, 0x6d00)
+    chr_set_pad_preset(0x2c, 0x6e00)
+    chr_set_pad_preset(0x2d, 0x5500)
+    chr_set_pad_preset(0x2e, 0x7200)
+    chr_set_pad_preset(0x2f, 0x7300)
+    chr_set_pad_preset(0x30, 0x7400)
+    goto_first(0x04)
+    label(0x46)
+    ai_sleep
+    debug_log 'I', 'N', '6', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x6900)
+    chr_set_pad_preset(0x2b, 0x6a00)
+    chr_set_pad_preset(0x2c, 0x6b00)
+    chr_set_pad_preset(0x2d, 0x6f00)
+    chr_set_pad_preset(0x2e, 0x7000)
+    chr_set_pad_preset(0x2f, 0x7100)
+    chr_set_pad_preset(0x30, 0x7300)
+    goto_first(0x04)
+    label(0x47)
+    ai_sleep
+    debug_log 'I', 'N', '7', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x7600)
+    chr_set_pad_preset(0x2b, 0x7900)
+    chr_set_pad_preset(0x2c, 0x7c00)
+    chr_set_pad_preset(0x2d, 0x7f00)
+    chr_set_pad_preset(0x2e, 0x8200)
+    chr_set_pad_preset(0x2f, 0x9100)
+    chr_set_pad_preset(0x30, 0x6300)
+    goto_first(0x04)
+    label(0x48)
+    ai_sleep
+    debug_log 'I', 'N', '8', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x8200)
+    chr_set_pad_preset(0x2b, 0x8900)
+    chr_set_pad_preset(0x2c, 0x8800)
+    chr_set_pad_preset(0x2d, 0x8e00)
+    chr_set_pad_preset(0x2e, 0x8f00)
+    chr_set_pad_preset(0x2f, 0x9300)
+    chr_set_pad_preset(0x30, 0x9700)
+    goto_first(0x04)
+    label(0x49)
+    ai_sleep
+    debug_log 'I', 'N', '9', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x8500)
+    chr_set_pad_preset(0x2b, 0x8600)
+    chr_set_pad_preset(0x2c, 0x8400)
+    chr_set_pad_preset(0x2d, 0x9300)
+    chr_set_pad_preset(0x2e, 0x9400)
+    chr_set_pad_preset(0x2f, 0x8e00)
+    chr_set_pad_preset(0x30, 0x8f00)
+    goto_first(0x04)
+    label(0x4a)
+    ai_sleep
+    debug_log 'I', 'N', '1', '0', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x9900)
+    chr_set_pad_preset(0x2b, 0x9c00)
+    chr_set_pad_preset(0x2c, 0x9d00)
+    chr_set_pad_preset(0x2d, 0xa000)
+    chr_set_pad_preset(0x2e, 0xa600)
+    chr_set_pad_preset(0x2f, 0x8100)
+    chr_set_pad_preset(0x30, 0x8200)
+    goto_first(0x04)
+    label(0x4b)
+    ai_sleep
+    debug_log 'I', 'N', '1', '1', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0xa800)
+    chr_set_pad_preset(0x2b, 0xa900)
+    chr_set_pad_preset(0x2c, 0xaa00)
+    chr_set_pad_preset(0x2d, 0x9c00)
+    chr_set_pad_preset(0x2e, 0x9d00)
+    chr_set_pad_preset(0x2f, 0x7f00)
+    chr_set_pad_preset(0x30, 0x7c00)
+    goto_first(0x04)
+    label(0x4c)
+    ai_sleep
+    debug_log 'I', 'N', '1', '2', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x8b00)
+    chr_set_pad_preset(0x2b, 0xac00)
+    chr_set_pad_preset(0x2c, 0xa800)
+    chr_set_pad_preset(0x2d, 0xa900)
+    chr_set_pad_preset(0x2e, 0x8f00)
+    chr_set_pad_preset(0x2f, 0x8e00)
+    chr_set_pad_preset(0x30, 0x8500)
+    goto_first(0x04)
+    label(0x4d)
+    ai_sleep
+    debug_log 'I', 'N', '1', '3', '\n', '\0',
+    chr_set_pad_preset(0x2a, 0x8500)
+    chr_set_pad_preset(0x2b, 0x8900)
+    chr_set_pad_preset(0x2c, 0x8700)
+    chr_set_pad_preset(0x2d, 0x8800)
+    chr_set_pad_preset(0x2e, 0x9a00)
+    chr_set_pad_preset(0x2f, 0x9900)
+    chr_set_pad_preset(0x30, 0x9600)
+    goto_first(0x04)
+    label(0x55)
+    objective_bitfield_set_on(0x00020000)
+    objective_bitfield_set_off(0x00010000)
+    goto_first(0x04)
+    ai_list_end
+};
+u8 ai_22[] = {
+    guard_set_chr_num(0x2a)
+    local_timer_reset_start
+    label(0x4e)
+    ai_sleep
+    if_local_timer_greater_than(0xb00400, 0x03)
+    goto_first(0x4e)
+    label(0x03)
+    if_objective_bitfield_is_set_on(0x00020000, 0x09)
+    local_timer_reset_start
+    label(0x08)
+    ai_sleep
+    if_local_timer_greater_than(0x2c0100, 0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    if_chr_does_not_exist(0x20, 0x2c)
+    goto_first(0x03)
+    label(0x2c)
+    debug_log 's', 'p', 'a', 'w', 'n', '1', '\0',
+    if_bond_damage_and_pickups_disabled(0x06)
+    chr_try_spawning_at_pad(0x02, 0xff, 0x2823, 0x0304, 0x10000000, 0x06)
+    debug_log '-', '>', 'f', 'a', 'i', 'l', '\0',
+    goto_first(0x03)
+    label(0x06)
+    debug_log 's', '1', ' ', 'O', 'K', '!', '\0',
+    goto_first(0x03)
+    label(0x09)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00010000, 0x2c)
+    goto_first(0x09)
+    label(0x2c)
+    goto_first(0x03)
+    ai_list_end
+};
+u8 ai_23[] = {
+    guard_set_chr_num(0x2b)
+    local_timer_reset_start
+    label(0x4e)
+    ai_sleep
+    if_local_timer_greater_than(0xb00400, 0x03)
+    goto_first(0x4e)
+    label(0x03)
+    if_objective_bitfield_is_set_on(0x00020000, 0x09)
+    local_timer_reset_start
+    label(0x08)
+    ai_sleep
+    if_local_timer_greater_than(0x680100, 0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    if_chr_does_not_exist(0x27, 0x2c)
+    goto_first(0x03)
+    label(0x2c)
+    debug_log 's', 'p', 'a', 'w', 'n', '2', '\0',
+    if_bond_damage_and_pickups_disabled(0x06)
+    chr_try_spawning_at_pad(0x20, 0xff, 0x2823, 0x0404, 0x10000000, 0x06)
+    debug_log '-', '>', 'f', 'a', 'i', 'l', '\0',
+    goto_first(0x03)
+    label(0x06)
+    chr_bitfield_set_on(0x2d, 0x02)
+    debug_log 'c', '1', ' ', 'O', 'K', '!', '\0',
+    goto_first(0x03)
+    label(0x09)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00010000, 0x2c)
+    goto_first(0x09)
+    label(0x2c)
+    goto_first(0x03)
+    ai_list_end
+    guard_set_chr_num(0x2c)
+    local_timer_reset_start
+    label(0x4e)
+    ai_sleep
+    if_local_timer_greater_than(0xb00400, 0x03)
+    goto_first(0x4e)
+    label(0x03)
+    if_objective_bitfield_is_set_on(0x00020000, 0x09)
+    local_timer_reset_start
+    label(0x08)
+    ai_sleep
+    if_local_timer_greater_than(0xa40100, 0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    if_chr_does_not_exist(0x21, 0x2c)
+    goto_first(0x03)
+    label(0x2c)
+    debug_log 's', 'p', 'a', 'w', 'n', '3', '\0',
+    if_bond_damage_and_pickups_disabled(0x06)
+    chr_try_spawning_at_pad(0x02, 0xff, 0x2823, 0x0504, 0x10000000, 0x06)
+    debug_log '-', '>', 'f', 'a', 'i', 'l', '\0',
+    goto_first(0x03)
+    label(0x06)
+    debug_log 's', '3', ' ', 'O', 'K', '!', '\0',
+    goto_first(0x03)
+    label(0x09)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00010000, 0x2c)
+    goto_first(0x09)
+    label(0x2c)
+    goto_first(0x03)
+    ai_list_end
+};
+u8 ai_24[] = {
+    guard_set_chr_num(0x2d)
+    local_timer_reset_start
+    label(0x4e)
+    ai_sleep
+    if_local_timer_greater_than(0xb00400, 0x03)
+    goto_first(0x4e)
+    label(0x03)
+    if_objective_bitfield_is_set_on(0x00020000, 0x09)
+    local_timer_reset_start
+    label(0x08)
+    ai_sleep
+    if_local_timer_greater_than(0xe00100, 0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    if_chr_does_not_exist(0x28, 0x2c)
+    goto_first(0x03)
+    label(0x2c)
+    debug_log 's', 'p', 'a', 'w', 'n', '4', '\0',
+    if_bond_damage_and_pickups_disabled(0x06)
+    chr_try_spawning_at_pad(0x20, 0xff, 0x2823, 0x0604, 0x10000000, 0x06)
+    debug_log '-', '>', 'f', 'a', 'i', 'l', '\0',
+    goto_first(0x03)
+    label(0x06)
+    chr_bitfield_set_on(0x2d, 0x02)
+    debug_log 'c', '2', ' ', 'O', 'K', '!', '\0',
+    goto_first(0x03)
+    label(0x09)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00010000, 0x2c)
+    goto_first(0x09)
+    label(0x2c)
+    goto_first(0x03)
+    ai_list_end
+};
+u8 ai_25[] = {
+    guard_set_chr_num(0x2e)
+    local_timer_reset_start
+    label(0x4e)
+    ai_sleep
+    if_local_timer_greater_than(0xb00400, 0x03)
+    goto_first(0x4e)
+    label(0x03)
+    if_objective_bitfield_is_set_on(0x00020000, 0x09)
+    local_timer_reset_start
+    label(0x08)
+    ai_sleep
+    if_local_timer_greater_than(0x1c0200, 0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    if_chr_does_not_exist(0x22, 0x2c)
+    goto_first(0x03)
+    label(0x2c)
+    debug_log 's', 'p', 'a', 'w', 'n', '5', '\0',
+    if_bond_damage_and_pickups_disabled(0x06)
+    chr_try_spawning_at_pad(0x02, 0xff, 0x2823, 0x0704, 0x10000000, 0x06)
+    debug_log '-', '>', 'f', 'a', 'i', 'l', '\0',
+    goto_first(0x03)
+    label(0x06)
+    debug_log 's', '5', ' ', 'O', 'K', '!', '\0',
+    goto_first(0x03)
+    label(0x09)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00010000, 0x2c)
+    goto_first(0x09)
+    label(0x2c)
+    goto_first(0x03)
+    ai_list_end
+    goto_next(0x00)
+    goto_next(0x8e)
+    if_guard_has_stopped_moving(0xae)
+    label(0x4e)
+    ai_sleep
+    if_local_timer_greater_than(0xb00400, 0x03)
+    goto_first(0x4e)
+    label(0x03)
+    if_objective_bitfield_is_set_on(0x00020000, 0x09)
+    local_timer_reset_start
+    label(0x08)
+    ai_sleep
+    if_local_timer_greater_than(0x580200, 0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    if_chr_does_not_exist(0x29, 0x2c)
+    goto_first(0x03)
+    label(0x2c)
+    debug_log 's', 'p', 'a', 'w', 'n', '6', '\0',
+    if_bond_damage_and_pickups_disabled(0x06)
+    chr_try_spawning_at_pad(0x20, 0xff, 0x2823, 0x0804, 0x10000000, 0x06)
+    debug_log '-', '>', 'f', 'a', 'i', 'l', '\0',
+    goto_first(0x03)
+    label(0x06)
+    chr_bitfield_set_on(0x2f, 0x02)
+    debug_log 'c', '3', ' ', 'O', 'K', '!', '\0',
+    goto_first(0x03)
+    label(0x09)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00010000, 0x2c)
+    goto_first(0x09)
+    label(0x2c)
+    goto_first(0x03)
+    ai_list_end
+    guard_set_chr_num(0x30)
+    local_timer_reset_start
+    label(0x4e)
+    ai_sleep
+    if_local_timer_greater_than(0xb00400, 0x03)
+    goto_first(0x4e)
+    label(0x03)
+    if_objective_bitfield_is_set_on(0x00020000, 0x09)
+    local_timer_reset_start
+    label(0x08)
+    ai_sleep
+    if_local_timer_greater_than(0xb40000, 0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    if_chr_does_not_exist(0x23, 0x2c)
+    goto_first(0x03)
+    label(0x2c)
+    debug_log 's', 'p', 'a', 'w', 'n', '7', '\0',
+    if_bond_damage_and_pickups_disabled(0x06)
+    chr_try_spawning_at_pad(0x02, 0xff, 0x2823, 0x0904, 0x10000000, 0x06)
+    debug_log '-', '>', 'f', 'a', 'i', 'l', '\0',
+    goto_first(0x03)
+    label(0x06)
+    debug_log 's', '7', ' ', 'O', 'K', '!', '\0',
+    goto_first(0x03)
+    label(0x09)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00010000, 0x2c)
+    goto_first(0x09)
+    label(0x2c)
+    goto_first(0x03)
+    ai_list_end
+};
+u8 ai_2[] = {
+    guard_set_chr_num(0x20)
+    debug_log 'd', '1', '\n', '\0',
+    jump_to_ai_list(0xfd, 0x0a04)
+    ai_list_end
+};
+u8 ai_3[] = {
+    guard_set_chr_num(0x27)
+    debug_log 'd', '2', '\n', '\0',
+    jump_to_ai_list(0xfd, 0x0b04)
+    ai_list_end
+};
+u8 ai_4[] = {
+    guard_set_chr_num(0x21)
+    debug_log 'd', '3', '\n', '\0',
+    jump_to_ai_list(0xfd, 0x0a04)
+    ai_list_end
+};
+u8 ai_5[] = {
+    guard_set_chr_num(0x28)
+    debug_log 'd', '4', '\n', '\0',
+    jump_to_ai_list(0xfd, 0x0b04)
+    ai_list_end
+};
+u8 ai_6[] = {
+    guard_set_chr_num(0x22)
+    debug_log 'd', '5', '\n', '\0',
+    jump_to_ai_list(0xfd, 0x0a04)
+    ai_list_end
+};
+u8 ai_7[] = {
+    guard_set_chr_num(0x29)
+    debug_log 'd', '6', '\n', '\0',
+    jump_to_ai_list(0xfd, 0x0b04)
+    ai_list_end
+};
+u8 ai_8[] = {
+    guard_set_chr_num(0x23)
+    debug_log 'd', '7', '\n', '\0',
+    jump_to_ai_list(0xfd, 0x0a04)
+    ai_list_end
+};
+u8 ai_10[] = {
+    label(0x00)
+    ai_sleep
+    if_guard_is_targeted_by_bond(0x28)
+    goto_next(0x01)
+    goto_first(0x00)
+    label(0x01)
+    ai_sleep
+    if_guard_distance_to_bond_greater_than(0x2003, 0x07)
+    if_guard_distance_to_bond_less_than(0xc800, 0x08)
+    guard_try_running_to_bond_position(0x09)
+    goto_first(0x01)
+    label(0x09)
+    ai_sleep
+    if_guard_has_stopped_moving(0x06)
+    if_guard_distance_to_bond_less_than(0x6400, 0x08)
+    goto_first(0x09)
+    label(0x08)
+    ai_sleep
+    random_generate_seed
+    if_random_seed_greater_than(0x80, 0x06)
+    ai_sleep
+    guard_try_unknown6F(0x20, 0x2c)
+    guard_try_unknown6F(0x02, 0x2c)
+    guard_try_unknown6F(0x04, 0x2c)
+    guard_try_unknown6F(0x08, 0x2c)
+    guard_try_unknown6F(0x01, 0x2c)
+    guard_animation_stop
+    goto_first(0x00)
+    label(0x2c)
+    debug_log 'f', 'r', 'o', 'l', 'i', 'c', '\0',
+    guard_runs_to_pad_preset
+    label(0x0a)
+    ai_sleep
+    if_guard_has_stopped_moving(0x06)
+    if_guard_distance_to_bond_greater_than(0x2c01, 0x06)
+    goto_first(0x09)
+    label(0x28)
+    guard_surrenders
+    label(0x2f)
+    local_timer_reset_start
+    label(0x0b)
+    ai_sleep
+    if_local_timer_greater_than(0xf00000, 0x2c)
+    goto_first(0x0b)
+    label(0x2c)
+    random_generate_seed
+    guard_set_speed_rating(0x00)
+    if_random_seed_greater_than(0xc8, 0x2e)
+    if_random_seed_greater_than(0x96, 0x2d)
+    if_random_seed_greater_than(0x64, 0x2c)
+    goto_first(0x00)
+    label(0x2c)
+    guard_set_speed_rating(0x32)
+    guard_play_animation(0x9300, 0x0000, 0x1900, 0x00, 0x10)
+    goto_next(0x38)
+    label(0x2d)
+    guard_play_animation(0x9400, 0x0000, 0x1100, 0x00, 0x10)
+    goto_next(0x38)
+    label(0x2e)
+    guard_surrenders
+    goto_next(0x38)
+    label(0x38)
+    goto_first(0x2f)
+    label(0x06)
+    goto_first(0x00)
+    label(0x07)
+    jump_to_ai_list(0xfd, 0x1004)
+    ai_list_end
+};
+u8 ai_15[] = {
+    debug_log '\n', '-', '-', '-', '-', '>', 'd', 'e', 'l', 'e', 't', 'e', '!', '\n', '\0',
+    objective_bitfield_set_on(0x00200000)
+    chr_remove_instant(0xfd)
+    label(0x05)
+    ai_sleep
+    goto_first(0x05)
+    ai_list_end
+};
+u8 ai_16[] = {
+    chr_remove_instant(0xfd)
+    label(0x05)
+    ai_sleep
+    goto_first(0x05)
+    ai_list_end
+};
+u8 ai_9[] = {
+    label(0x2c)
+    random_generate_seed
+    if_random_seed_greater_than(0xdc, 0x57)
+    if_random_seed_greater_than(0x64, 0x38)
+    guard_set_health_total(0x2800)
+    guard_set_armour(0x0000)
+    guard_set_grenade_probability(0xe5)
+    guard_try_spawning_item(0xb800, 0x08, 0x00000000, 0x2c)
+    label(0x2c)
+    goto_next(0x06)
+    label(0x38)
+    guard_set_health_total(0x2800)
+    guard_set_armour(0x1400)
+    guard_set_grenade_probability(0xcc)
+    guard_try_spawning_item(0xb800, 0x08, 0x00000000, 0x2c)
+    label(0x2c)
+    label(0x2c)
+    goto_next(0x06)
+    label(0x3b)
+    guard_set_health_total(0x2800)
+    guard_set_armour(0x1400)
+    label(0x2c)
+    guard_try_spawning_item(0xc100, 0x07, 0x00000080, 0x2c)
+    label(0x2c)
+    guard_try_spawning_item(0xc100, 0x07, 0x00000090, 0x06)
+    label(0x57)
+    guard_set_health_total(0x2800)
+    guard_set_armour(0x1400)
+    label(0x2c)
+    guard_try_spawning_item(0xb900, 0x18, 0x00000000, 0x06)
+    label(0x58)
+    guard_set_health_total(0x2800)
+    guard_set_armour(0x1400)
+    label(0x2c)
+    guard_try_spawning_item(0xd300, 0x19, 0x00000000, 0x06)
+    label(0x06)
+    guard_flags_set_on(0x40000000)
+    jump_to_ai_list(0xfd, 0x0c04)
+    ai_list_end
+};
+u8 ai_11[] = {
+    label(0x3c)
+    if_guard_distance_to_bond_greater_than(0x2003, 0x07)
+    if_guard_distance_to_bond_greater_than(0x9001, 0x38)
+    guard_try_running_to_bond_position(0x08)
+    label(0x38)
+    guard_try_sprinting_to_bond_position(0x08)
+    label(0x08)
+    ai_sleep
+    if_guard_distance_to_bond_greater_than(0xc201, 0x38)
+    if_guard_and_bond_within_line_of_sight(0x3d)
+    label(0x38)
+    if_guard_has_stopped_moving(0x3e)
+    goto_first(0x08)
+    label(0x3d)
+    if_guard_and_bond_within_line_of_sight(0x2c)
+    goto_next(0x06)
+    label(0x3e)
+    ai_sleep
+    goto_first(0x3c)
+    label(0x2c)
+    label(0x3f)
+    random_generate_seed
+    if_random_seed_greater_than(0x14, 0x2c)
+    guard_try_throwing_grenade(0x06)
+    label(0x2c)
+    if_random_seed_greater_than(0x32, 0x2c)
+    guard_try_sidestepping(0x06)
+    label(0x2c)
+    if_random_seed_greater_than(0x3c, 0x2c)
+    guard_try_firing_roll(0x06)
+    label(0x2c)
+    if_random_seed_greater_than(0x50, 0x2c)
+    guard_try_firing_roll(0x06)
+    label(0x2c)
+    if_random_seed_greater_than(0x64, 0x2c)
+    guard_try_firing_walk(0x06)
+    label(0x2c)
+    if_random_seed_greater_than(0x96, 0x2c)
+    guard_try_firing_run(0x06)
+    label(0x2c)
+    if_random_seed_greater_than(0xc8, 0x2c)
+    guard_try_fire_or_aim_at_target(0x0100, 0x0000, 0x06)
+    label(0x2c)
+    guard_try_fire_or_aim_at_target_kneel(0x0100, 0x0000, 0x06)
+    label(0x06)
+    ai_sleep
+    if_guard_has_stopped_moving(0x2c)
+    goto_first(0x06)
+    label(0x2c)
+    if_guard_and_bond_within_line_of_sight(0x2c)
+    goto_next(0x08)
+    label(0x08)
+    ai_sleep
+    goto_first(0x3c)
+    label(0x2c)
+    ai_sleep
+    goto_first(0x3f)
+    label(0x07)
+    jump_to_ai_list(0xfd, 0x1104)
+    ai_list_end
+};
+u8 ai_13[] = {
+    label(0x04)
+    ai_sleep
+    goto_first(0x04)
+    ai_list_end
+};
+u8 ai_12[] = {
+    guard_try_spawning_item(0xd300, 0x19, 0x00000000, 0x2c)
+    label(0x2c)
+    guard_try_spawning_hat(0xde00, 0x00000000, 0x2c)
+    label(0x2c)
+    guard_set_speed_rating(0x50)
+    guard_set_accuracy_rating(0x64)
+    guard_set_argh_rating(0x50)
+    label(0x04)
+    ai_sleep
+    if_guard_distance_to_bond_less_than(0x6400, 0x07)
+    if_guard_and_bond_within_line_of_sight(0x3f)
+    goto_first(0x04)
+    label(0x3f)
+    random_generate_seed
+    label(0x2c)
+    if_random_seed_greater_than(0xc8, 0x2c)
+    guard_try_fire_or_aim_at_target(0x0100, 0x0000, 0x06)
+    label(0x2c)
+    guard_try_fire_or_aim_at_target_kneel(0x0100, 0x0000, 0x06)
+    label(0x06)
+    ai_sleep
+    if_guard_has_stopped_moving(0x2c)
+    goto_first(0x06)
+    label(0x2c)
+    if_guard_and_bond_within_line_of_sight(0x2c)
+    goto_next(0x08)
+    label(0x08)
+    ai_sleep
+    goto_first(0x04)
+    label(0x2c)
+    ai_sleep
+    goto_first(0x3f)
+    label(0x07)
+    jump_to_ai_list(0xfd, 0x0200)
+    ai_list_end
+};
+u8 ai_14[] = {
+    guard_try_spawning_item(0xb800, 0x08, 0x00000000, 0x2c)
+    label(0x2c)
+    guard_set_speed_rating(0x14)
+    guard_set_accuracy_rating(0x14)
+    guard_set_argh_rating(0x32)
+    jump_to_ai_list(0xfd, 0x0200)
+    ai_list_end
+};
+u8 ai_27[] = {
+    local_byte_2_set(0x0f)
+    label(0x00)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00200000, 0x44)
+    if_chr_bitfield_is_set_on(0x2b, 0x02, 0x41)
+    if_chr_bitfield_is_set_on(0x2d, 0x02, 0x42)
+    if_chr_bitfield_is_set_on(0x2f, 0x02, 0x43)
+    if_objective_bitfield_is_set_on(0x00100000, 0x0b)
+    if_local_byte_2_less_than(0x01, 0x0a)
+    if_objective_bitfield_is_set_on(0x00080000, 0x38)
+    if_local_byte_2_less_than(0x04, 0x09)
+    if_objective_bitfield_is_set_on(0x00040000, 0x38)
+    if_local_byte_2_less_than(0x08, 0x08)
+    label(0x38)
+    goto_first(0x00)
+    label(0x41)
+    debug_log '\n', 'm', 'u', 'r', 'd', 'e', 'r', '!', '\n', '\0',
+    local_byte_2_subtract(0x01)
+    label(0x38)
+    chr_bitfield_set_off(0x2b, 0x02)
+    goto_first(0x00)
+    label(0x42)
+    debug_log '\n', 'm', 'u', 'r', 'd', 'e', 'r', '!', '\n', '\0',
+    local_byte_2_subtract(0x01)
+    label(0x38)
+    chr_bitfield_set_off(0x2d, 0x02)
+    goto_first(0x00)
+    label(0x43)
+    debug_log '\n', 'm', 'u', 'r', 'd', 'e', 'r', '!', '\n', '\0',
+    local_byte_2_subtract(0x01)
+    label(0x38)
+    chr_bitfield_set_off(0x2f, 0x02)
+    goto_first(0x00)
+    label(0x44)
+    debug_log '\n', 'f', 'a', 'l', 's', 'e', '!', '\n', '\0',
+    local_byte_2_add(0x01)
+    objective_bitfield_set_off(0x00200000)
+    goto_first(0x00)
+    label(0x08)
+    ai_sleep
+    text_print_top(0x0764)
+    objective_bitfield_set_on(0x00040000)
+    goto_first(0x00)
+    label(0x09)
+    ai_sleep
+    text_print_top(0x0864)
+    objective_bitfield_set_on(0x00080000)
+    goto_first(0x00)
+    label(0x0a)
+    ai_sleep
+    text_print_top(0x0964)
+    objective_bitfield_set_on(0x00100000)
+    goto_first(0x00)
+    label(0x0b)
+    ai_sleep
+    goto_first(0x0b)
+    ai_list_end
+};
+u8 ai_17[] = {
+    guard_set_armour(0x2800)
+    label(0x03)
+    guard_try_fire_or_aim_at_target(0x2100, 0x0000, 0x04)
+    label(0x04)
+    ai_sleep
+    if_guard_shot_from_bond_missed(0x2c)
+    if_guard_see_another_guard_shot(0x2c)
+    if_guard_see_another_guard_die(0x2c)
+    if_guard_sees_bond(0x2c)
+    if_guard_and_bond_within_line_of_sight(0x2c)
+    goto_first(0x04)
+    label(0x2c)
+    random_generate_seed
+    if_random_seed_greater_than(0x96, 0x2c)
+    guard_try_fire_or_aim_at_target_update(0x0100, 0x0000, 0x08)
+    label(0x2c)
+    guard_kneel
+    local_timer_reset_start
+    label(0x09)
+    ai_sleep
+    random_generate_seed
+    if_random_seed_greater_than(0xfa, 0x2c)
+    if_local_timer_greater_than(0xf00000, 0x06)
+    goto_first(0x09)
+    label(0x2c)
+    guard_try_fire_or_aim_at_target(0x2100, 0x0000, 0x2c)
+    label(0x2c)
+    guard_try_fire_or_aim_at_target_update(0x0100, 0x0000, 0x2c)
+    label(0x2c)
+    label(0x08)
+    ai_sleep
+    if_guard_has_stopped_moving(0x06)
+    goto_first(0x08)
+    label(0x06)
+    goto_first(0x03)
+    ai_list_end
+};
+u8 ai_18[] = {
+    guard_flags_set_on(0x00080000)
+    label(0x04)
+    ai_sleep
+    if_guard_and_bond_within_line_of_sight(0x2c)
+    if_chr_dying_or_dead(0xfd, 0x0b)
+    goto_first(0x04)
+    label(0x2c)
+    guard_try_facing_target(0x0100, 0x0000, 0x2c)
+    label(0x2c)
+    label(0x09)
+    local_timer_reset_start
+    debug_log 'h', 'e', 'l', 'l', 'o', '\n', '\0',
+    label(0x00)
+    ai_sleep
+    if_chr_dying_or_dead(0xfd, 0x0c)
+    if_guard_distance_to_bond_greater_than(0xf401, 0x18)
+    if_guard_distance_to_bond_greater_than(0x5000, 0x17)
+    guard_bitfield_set_off(0x01)
+    local_timer_start
+    if_local_timer_greater_than(0x900600, 0x1a)
+    if_local_timer_greater_than(0xa00500, 0x16)
+    if_local_timer_greater_than(0xb00400, 0x15)
+    if_local_timer_greater_than(0xc00300, 0x14)
+    if_local_timer_greater_than(0xd00200, 0x13)
+    if_local_timer_greater_than(0xe00100, 0x12)
+    if_local_timer_greater_than(0xf00000, 0x11)
+    goto_first(0x00)
+    label(0x11)
+    if_local_timer_greater_than(0x2c0100, 0x2c)
+    text_print_top(0x0b64)
+    label(0x2c)
+    goto_first(0x00)
+    label(0x12)
+    if_local_timer_greater_than(0x1c0200, 0x2c)
+    text_print_top(0x0c64)
+    label(0x2c)
+    goto_first(0x00)
+    label(0x13)
+    if_local_timer_greater_than(0x0c0300, 0x2c)
+    text_print_top(0x0d64)
+    label(0x2c)
+    goto_first(0x00)
+    label(0x14)
+    if_local_timer_greater_than(0xfc0300, 0x2c)
+    text_print_top(0x0e64)
+    label(0x2c)
+    goto_first(0x00)
+    label(0x15)
+    if_local_timer_greater_than(0xec0400, 0x2c)
+    text_print_top(0x0f64)
+    label(0x2c)
+    goto_first(0x00)
+    label(0x16)
+    if_local_timer_greater_than(0xdc0500, 0x2c)
+    text_print_top(0x1064)
+    label(0x2c)
+    goto_first(0x00)
+    label(0x17)
+    if_guard_bitfield_is_set_on(0x01, 0x38)
+    text_print_top(0x1164)
+    label(0x38)
+    local_timer_stop
+    guard_bitfield_set_on(0x01)
+    goto_first(0x00)
+    label(0x18)
+    text_print_top(0x1264)
+    objective_bitfield_set_on(0x00000400)
+    goto_next(0x29)
+    label(0x1a)
+    ai_sleep
+    goto_next(0x33)
+    goto_first(0x1a)
+    label(0x33)
+    objective_bitfield_set_on(0x00000800)
+    objective_bitfield_set_on(0x00000200)
+    guard_runs_to_pad(0xf500)
+    label(0x29)
+    ai_sleep
+    if_guard_distance_to_bond_greater_than(0x2c01, 0x06)
+    if_guard_has_stopped_moving(0x2c)
+    if_chr_distance_to_pad_less_than(0xfd, 0x0f00, 0xf500, 0x2c)
+    goto_first(0x29)
+    label(0x2c)
+    label(0x06)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00000400, 0x2c)
+    text_print_top(0x1364)
+    objective_bitfield_set_on(0x00000100)
+    label(0x2c)
+    guard_remove_fade
+    goto_first(0x06)
+    label(0x0b)
+    label(0x0c)
+    ai_sleep
+    goto_first(0x0c)
+    ai_list_end
+};
+u8 ai_28[] = {
+    label(0x04)
+    ai_sleep
+    if_bond_in_room_with_pad(0x2c00, 0x2c)
+    goto_first(0x04)
+    label(0x2c)
+    random_generate_seed
+    if_random_seed_greater_than(0x80, 0x38)
+    debug_log '3', ' ', 'H', 'A', 'R', 'D', '\n', '\0',
+    jump_to_ai_list(0x06, 0x0d04)
+    jump_to_ai_list(0x07, 0x0d04)
+    jump_to_ai_list(0x08, 0x0d04)
+    jump_to_ai_list(0x0c, 0x0f04)
+    jump_to_ai_list(0x0d, 0x0f04)
+    jump_to_ai_list(0x0e, 0x0f04)
+    goto_next(0x08)
+    label(0x38)
+    debug_log '5', ' ', 'H', 'A', 'R', 'D', '\n', '\0',
+    jump_to_ai_list(0x06, 0x0f04)
+    jump_to_ai_list(0x07, 0x0f04)
+    jump_to_ai_list(0x08, 0x0f04)
+    jump_to_ai_list(0x0c, 0x0d04)
+    jump_to_ai_list(0x0d, 0x0d04)
+    jump_to_ai_list(0x0e, 0x0d04)
+    goto_next(0x08)
+    label(0x08)
+    random_generate_seed
+    if_random_seed_greater_than(0x80, 0x38)
+    debug_log '8', ' ', 'H', 'A', 'R', 'D', '\n', '\0',
+    jump_to_ai_list(0x0f, 0x0d04)
+    jump_to_ai_list(0x10, 0x0d04)
+    jump_to_ai_list(0x11, 0x0d04)
+    jump_to_ai_list(0x15, 0x0f04)
+    jump_to_ai_list(0x16, 0x0f04)
+    jump_to_ai_list(0x17, 0x0f04)
+    goto_next(0x09)
+    label(0x38)
+    debug_log '1', '1', ' ', 'H', 'A', 'R', 'D', '\n', '\0',
+    jump_to_ai_list(0x0f, 0x0f04)
+    jump_to_ai_list(0x10, 0x0f04)
+    jump_to_ai_list(0x11, 0x0f04)
+    jump_to_ai_list(0x15, 0x0d04)
+    jump_to_ai_list(0x16, 0x0d04)
+    jump_to_ai_list(0x17, 0x0d04)
+    goto_next(0x09)
+    label(0x09)
+    label(0x06)
+    ai_sleep
+    goto_first(0x06)
+    ai_list_end
+};
+u8 ai_29[] = {
+    label(0x04)
+    ai_sleep
+    if_objective_bitfield_is_set_on(0x00000800, 0x06)
+    if_chr_dying_or_dead(0x1f, 0x2c)
+    if_chr_does_not_exist(0x1f, 0x2c)
+    goto_first(0x04)
+    label(0x2c)
+    objective_bitfield_set_on(0x00000400)
+    label(0x06)
+    ai_sleep
+    goto_first(0x06)
+    ai_list_end
+};
 
 AIListRecord ailists[] = {
     /* index = 0 */

@@ -16,7 +16,7 @@
 #define TEXFORMAT_RGBA16_CI8 0x09 // 16-bit 5551 paletted colour with 8-bit palette indexes
 #define TEXFORMAT_RGBA16_CI4 0x0a // 16-bit 5551 paletted colour with 4-bit palette indexes
 #define TEXFORMAT_IA16_CI8   0x0b // 16-bit 88 paletted greyscale+alpha with 8-bit palette indexes
-#define TEXFORMAT_0C         0x0c
+#define TEXFORMAT_IA16_CI4   0x0c // 16-bit 88 paletted greyscale+alpha with 4-bit palette indexes
 
 #define TEXCOMPMETHOD_UNCOMPRESSED0      0
 #define TEXCOMPMETHOD_UNCOMPRESSED1      1
@@ -47,7 +47,7 @@ struct tex {
 	/*0x0b*/ u8 gbiformat : 3;
 	/*0x0b*/ u8 depth : 2;
 	/*0x0c*/ u32 lutmodeindex : 2;
-	/*0x0c*/ u32 unk0c_02 : 1;
+	/*0x0c*/ u32 hasExplicitLods : 1;
 	/*0x0c*/ u32 unk0c_03 : 1;
 	/*0x0c*/ u32 next : 24;
 };
@@ -55,7 +55,7 @@ struct tex {
 struct image_entry
 {
     u8 hitSound         : 4;  // HitType-Sound (should be enum HIT_TYPE, but it needs to be unsigned)
-    HIT_TYPE hitTexture : 4;  // HitType-Texture
+    u32 hitTexture : 4;  // HitType-Texture
     u32  dataoffset     : 24; // this is u32 Size:24 - 24bit size/address
     u32 flag3 : 4; // Detailflag1 used once with value 0x38D2 (S/T offset of detail)
 	u32 flag4 : 4;

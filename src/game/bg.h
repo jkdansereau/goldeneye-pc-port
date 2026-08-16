@@ -17,37 +17,83 @@ struct levelentry
 // cannon definition
 #define MAXPORTALSPERROOM 20
 
+// cannonical name
+#define PORTMAX 200
+
+#define BG_SEG_TO_PTR(base, off) ((void *) (((u32) (base)) + (((u32) (off)) + 0xF1000000)))
+
+typedef struct RoomVtxBatchBounds {
+    s16 gdlindex;    // 0x00
+    s16 pad02;       // 0x02
+
+    union {
+        struct {
+            s32 xmin; // 0x04
+            s32 ymin; // 0x08
+            s32 zmin; // 0x0c
+            s32 xmax; // 0x10
+            s32 ymax; // 0x14
+            s32 zmax; // 0x18
+        };
+
+        struct {
+            s32 min[3]; // 0x04
+            s32 max[3]; // 0x10
+        };
+    };
+} RoomVtxBatchBounds; // size = 0x1c
+
+typedef struct BoundVec { 
+    s32 x, y, z; 
+} BoundVec;
+
 typedef struct s_room_info {
     // is room being rendered? boolean
-    u8 room_rendered;
+    u8 room_rendered;                       // 0x00
 
     // is the room a neighbor to a room being rendered? boolean
-    u8 room_neighbor_to_rendered;
+    u8 room_neighbor_to_rendered;           // 0x01
 
-    u8 model_bin_loaded;
+    /**
+     * Acts like a small room age counter.
+     * 0 = unloaded
+     * 1 = loaded/used recently
+     * 2-3 = loaded but aging towards unload
+     * 4 = unload on tick
+     */
+    u8 model_bin_loaded;                    // 0x02
 
-    // number of portals in between the player's room and this room.
-    // is 0 if the room is not visible or if the player is standing in this room.
-    u8 portals_to_room_count;
+    /**
+     * Counts how often this room has been reached during the current portal
+     * visibility traversal.
+     */
+    u8 portal_visit_count;                  // 0x03
 
-    Vtx * ptr_point_index;
-    void * ptr_expanded_mapping_info;
-    void * ptr_secondary_expanded_mapping_info;
-    s32 csize_point_index_binary;
-    s32 csize_primary_DL_binary;
-    s32 csize_secondary_DL_binary;
-    s32 usize_point_index_binary;
-    s32 usize_primary_DL_binary;
-    s32 usize_secondary_DL_binary;
-    s32 cur_room_totalsize;
-    void * ptr_unique_collision_points;
-    s32 bitflags3;
-    u8 room_loaded_mask;
-    u8 field_35;
-    s16 field_36;
-    coord3d minbounds;
-    coord3d maxbounds;
-} s_room_info;
+    Vtx *vertices;                          // 0x04
+    void *ptr_expanded_mapping_info;        // 0x08
+    void *ptr_secondary_expanded_mapping_info; // 0x0c
+
+    s32 csize_point_index_binary;           // 0x10
+    s32 csize_primary_DL_binary;            // 0x14
+    s32 csize_secondary_DL_binary;          // 0x18
+
+    s32 usize_point_index_binary;           // 0x1c
+    s32 usize_primary_DL_binary;            // 0x20
+    s32 usize_secondary_DL_binary;          // 0x24
+
+    s32 cur_room_totalsize;                 // 0x28
+    RoomVtxBatchBounds *vtx_batch_bounds;   // 0x2c
+
+    s16 num_vtx_batch_bounds;               // 0x30
+    s16 field_32;                           // 0x32
+
+    u8 room_loaded_mask;                    // 0x34
+    u8 field_35;                            // 0x35
+    s16 field_36;                           // 0x36
+
+    coord3d minbounds;                      // 0x38
+    coord3d maxbounds;                      // 0x44
+} s_room_info; 
 
 typedef struct s_bound_info
 {
@@ -112,7 +158,29 @@ typedef struct unk_portalstruct
     s32 unk10;
 } unk_portalstruct;
 
-extern struct unk_portalstruct table_for_portals[200];
+typedef struct PortalCache {
+    s32 count;
+    bbox2d bbox;
+} PortalCache;
+
+typedef struct bg_queued_portal_entry {
+
+    #if defined(VERSION_EU)
+    u8 arg0;           // 0x00
+    u8 roomnum;        // 0x01
+    s16 portalnum;     // 0x02
+    f32 sp4[4];        // 0x04
+    #else
+    s32 arg0;          // 0x00
+    s32 roomnum;       // 0x04
+    s32 portalnum;     // 0x08
+    s32 arg3;          // 0x0c
+    f32 sp10[4];       // 0x10
+    #endif
+} bg_queued_portal_entry;
+
+extern bg_portal_data_entry *g_BgPortals;
+extern struct unk_portalstruct table_for_portals[PORTMAX];
 extern s32 g_MaxNumRooms;
 extern f32 room_data_float2;
 
@@ -125,10 +193,12 @@ extern Gfx DL_LUT_PRIMARY_ADDFOG[];
 void bgInit(void);
 
 // sub_GAME_7F033B38 requres arg be s32
-s32 sub_GAME_7F0B8FD0(s32 roomA, s32 roomB);
+bool bgRoomsSharePortal(s32 roomA, s32 roomB);
 
 //f32 sub_GAME_7F0B4F9C(s32 room); // u8 not s32 for sub_GAME_7F0B2FE0
+s32 bgCopyVisibleRoomsToList(s32 *rooms, s32 max);
 u32 bgDecompress(u8* source, u8 *target);
+bool bgTestBulletHitBackground(coord3d *from, coord3d *to, s32 roomnum, struct HitThing *hit);
 void delete_room_data(s32 roomID);
 void load_bg_file(LEVEL_INDEX stagenum);
 
@@ -140,8 +210,8 @@ void bgToggleDataPortalsContrlBytes1Bit1(s32 index, s32 toggle);
 s32 bgGetDataPortalsControlBytes1Bit2(s32 arg0);
 void bgClearDataPortalsControlBytes1Low2Bits(s32 index);
 void bgSetDataPortalsControlBytes1Bit2(s32 index);
-s32 sub_GAME_7F0B9A7C(s32 arg0);
-s32 sub_GAME_7F0B9A2C(s32 arg0);
+void sub_GAME_7F0B9A7C(s32 portalnum);
+void sub_GAME_7F0B9A2C(s32 portalnum);
 void bgRoomVisibilityRelated(void);
 Gfx* bgLevelRender(Gfx *arg0);
 Gfx *bgScissorCurrentPlayerView(Gfx *arg0, s32 left, s32 top, s32 width, s32 height);
@@ -151,10 +221,14 @@ f32 get_room_data_float1(void);
 u8 getROOMID_isRendered(int roomID);
 s32 bgGet2dBboxByRoomId(s32 room_id, struct bbox2d *result);
 f32 bgGetLevelVisibilityScale(void);
-void sub_GAME_7F0B5CC0(struct bbox2d *a, struct bbox2d *b);
+void bgRectOutersect(struct bbox2d *a, struct bbox2d *b);
 f32 get_room_data_float2(void);
-s32 sub_GAME_7F0B9CC8(s32 arg0, s32 arg1, struct coord3d *arg2, struct coord3d *arg3);
-void sub_GAME_7F0B96CC(s32 arg0, struct PortalMetric *arg1);
+s32 bgGetPortalBetweenRooms(s32 arg0, s32 arg1, struct coord3d *arg2, struct coord3d *arg3);
+void sub_GAME_7F0B96CC(s32 portalnum, f32 *out);
 void bgApplyDynamicCCRMLUT(Gfx *arg0, Gfx *arg1, enum CCRMLUT arg2);
+void sub_GAME_7F0BA2D4(coord3d *, coord3d *, s32 *, s32 *, s32);
+void bgFindRoomsAlongSegment(coord3d *pos1, coord3d *pos2, u8 *initialRooms, u8 *outRoomSet, s32 *outRoomNums, s32 *outRoomNumsCount, s32 outRoomNumsMax);
+s32 sub_GAME_7F0B9E04(coord3d *arg0, coord3d *arg1);
+void bgRoomCalcBB(s32 room);
 
 #endif

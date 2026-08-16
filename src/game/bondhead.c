@@ -252,13 +252,13 @@ void bheadUpdate(f32 percent_speed, f32 speedsideways)
     g_CurrentPlayer->resetheadtick = FALSE;
 
     modelSetAnimMergingEnabled(0);
-    modelTickAnimQuarterSpeed(&g_CurrentPlayer->model, g_ClockTimer, 1);
+    modelTickAnim(&g_CurrentPlayer->model, g_ClockTimer, 1);
     modelSetAnimMergingEnabled((s32) isMergable);
 
     subcalcpos(&g_CurrentPlayer->model);
     matrix_4x4_set_identity(&sp40);
 
-    renderData.unk_matrix = &sp40;
+    renderData.basemtx = &sp40;
     renderData.mtxlist = &g_CurrentPlayer->bondheadmatrices[0];
 
     subcalcmatrices(&renderData, &g_CurrentPlayer->model);
@@ -360,7 +360,7 @@ void bheadUpdate(f32 percent_speed, f32 speedsideways)
 
         // result = x vector plus ((y - x vector) * scaler)
         // lookvel = ...
-        sub_GAME_7F05AE00(
+        vec3Lerp(
             &g_CurrentPlayer->standlook[g_CurrentPlayer->standcnt].f[0],
             &g_CurrentPlayer->standlook[1 - g_CurrentPlayer->standcnt].f[0],
             g_CurrentPlayer->standfrac,
@@ -371,7 +371,7 @@ void bheadUpdate(f32 percent_speed, f32 speedsideways)
 
         // result = x vector plus ((y - x vector) * scaler)
         // upvel = ...
-        sub_GAME_7F05AE00(
+        vec3Lerp(
             &g_CurrentPlayer->standup[g_CurrentPlayer->standcnt].f[0],
             &g_CurrentPlayer->standup[1 - g_CurrentPlayer->standcnt].f[0],
             g_CurrentPlayer->standfrac,

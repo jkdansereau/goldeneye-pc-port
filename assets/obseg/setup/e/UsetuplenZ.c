@@ -7,6 +7,7 @@
 
 #include "ultra64.h"
 #include "bondtypes.h"
+#include "bondaicommands.h"
 
 // forward declarations
 PadRecord padlist[];
@@ -795,15 +796,122 @@ PathRecord patrolpaths[] = {
 };
 
 
-u32 ai_not_used_0[] = { 0x04000000 };
+u8 ai_not_used_0[] = {
+    ai_list_end
+};
 
 
 
-u32 ai_1[] = { 0xd9fd002d, 0x2c022c0a, 0x00b6ffff, 0xffff0600, 0x05fd0001, 0x04000000 };
-u32 ai_3[] = { 0x02030a00, 0xb6009e00, 0xfa442005, 0xfd000104 };
-u32 ai_4[] = { 0x02030a00, 0xb60103ff, 0xff442005, 0xfd000104 };
-u32 ai_2[] = { 0xf20009d9, 0xfd002c2c, 0x0209ad62, 0x320a00d9, 0xfd002f2c, 0x022c0a00, 0xb5ffffff, 0xff060002, 0x08032f2c, 0x0108022c, 0x3335dc2c, 0x0a00b500, 0x9e00fa44, 0x20050004, 0x03010802, 0x2c0a00b5, 0x0103ffff, 0x44200500, 0x04040108, 0x04000000 };
-u32 ai_5[] = { 0x03d701ed, 0x030303ee, 0x012c0064, 0x0012002e, 0xffba1c71, 0xa0f80001, 0x0000a000, 0x00010000, 0xa0f80002, 0x0000a000, 0x00020000, 0x05f80402, 0x05000401, 0x0303db02, 0x0b03dc2c, 0x010b022c, 0xae020f03, 0xb400001e, 0x2c010f02, 0x2cc35008, 0xae020c03, 0xb40000b4, 0x2c010c02, 0x2cc35009, 0xae020d03, 0xb40000b4, 0x2c010d02, 0x2cc3500a, 0xae020e03, 0xb400012c, 0x2c010e02, 0x2cef0208, 0x03f02c01, 0x08022cda, 0x020903dc, 0x2c010902, 0x2c020a03, 0xd2010a04 };
+u8 ai_1[] = {
+    chr_try_teleporting_to_pad(0xfd, 0x2d00, 0x2c)
+    label(0x2c)
+    guard_play_animation(0xb600, 0xffff, 0xffff, 0x06, 0x00)
+    jump_to_ai_list(0xfd, 0x0100)
+    ai_list_end
+};
+u8 ai_3[] = {
+    label(0x03)
+    guard_play_animation(0xb600, 0x9e00, 0xfa00, 0x44, 0x20)
+    jump_to_ai_list(0xfd, 0x0100)
+    ai_list_end
+};
+u8 ai_4[] = {
+    label(0x03)
+    guard_play_animation(0xb600, 0x0301, 0xffff, 0x44, 0x20)
+    jump_to_ai_list(0xfd, 0x0100)
+    ai_list_end
+};
+u8 ai_2[] = {
+    if_folder_actor_is_equal(0x00, 0x09)
+    chr_try_teleporting_to_pad(0xfd, 0x2c00, 0x2c)
+    label(0x09)
+    debug_log 'b', '2', '\n', '\0',
+    chr_try_teleporting_to_pad(0xfd, 0x2f00, 0x2c)
+    label(0x2c)
+    guard_play_animation(0xb500, 0xffff, 0xffff, 0x06, 0x00)
+    label(0x08)
+    ai_sleep
+    if_guard_has_stopped_moving(0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    random_generate_seed
+    if_random_seed_greater_than(0xdc, 0x2c)
+    guard_play_animation(0xb500, 0x9e00, 0xfa00, 0x44, 0x20)
+    jump_to_ai_list(0x00, 0x0304)
+    goto_first(0x08)
+    label(0x2c)
+    guard_play_animation(0xb500, 0x0301, 0xffff, 0x44, 0x20)
+    jump_to_ai_list(0x00, 0x0404)
+    goto_first(0x08)
+    ai_list_end
+};
+u8 ai_5[] = {
+    ai_sleep
+    hud_hide_and_lock_controls_and_pause_mission_time(0x01)
+    bond_hide_weapons
+    ai_sleep
+    ai_sleep
+    ai_sleep
+    camera_orbit_pad(0x2c01, 0x6400, 0x1200, 0x2e00, 0xbaff, 0x711c)
+    chr_flags_set_on(0xf8, 0x00000100)
+    chr_flags_set_on(0x00, 0x00000100)
+    chr_flags_set_on(0xf8, 0x00000200)
+    chr_flags_set_on(0x00, 0x00000200)
+    jump_to_ai_list(0xf8, 0x0204)
+    jump_to_ai_list(0x00, 0x0104)
+    ai_sleep
+    ai_sleep
+    screen_fade_from_black
+    label(0x0b)
+    ai_sleep
+    if_screen_fade_completed(0x2c)
+    goto_first(0x0b)
+    label(0x2c)
+    local_timer_reset_start
+    label(0x0f)
+    ai_sleep
+    if_local_timer_greater_than(0x1e0000, 0x2c)
+    goto_first(0x0f)
+    label(0x2c)
+    text_print_top(0x0850)
+    local_timer_reset_start
+    label(0x0c)
+    ai_sleep
+    if_local_timer_greater_than(0xb40000, 0x2c)
+    goto_first(0x0c)
+    label(0x2c)
+    text_print_top(0x0950)
+    local_timer_reset_start
+    label(0x0d)
+    ai_sleep
+    if_local_timer_greater_than(0xb40000, 0x2c)
+    goto_first(0x0d)
+    label(0x2c)
+    text_print_top(0x0a50)
+    local_timer_reset_start
+    label(0x0e)
+    ai_sleep
+    if_local_timer_greater_than(0x2c0100, 0x2c)
+    goto_first(0x0e)
+    label(0x2c)
+    credits_roll
+    label(0x08)
+    ai_sleep
+    if_credits_has_completed(0x2c)
+    goto_first(0x08)
+    label(0x2c)
+    screen_fade_to_black
+    label(0x09)
+    ai_sleep
+    if_screen_fade_completed(0x2c)
+    goto_first(0x09)
+    label(0x2c)
+    label(0x0a)
+    ai_sleep
+    exit_level
+    goto_first(0x0a)
+    ai_list_end
+};
 
 AIListRecord ailists[] = {
     /* index = 0 */

@@ -9,5 +9,6 @@ void setup_briefing_text_entry_parent(struct setup_objective_text *arg0);
 void set_parent_cur_obj_enter_room(struct criteria_roomentered *arg0);
 void set_parent_cur_obj_deposited_in_room(struct criteria_deposit *arg0);
 void set_parent_cur_obj_photograph(struct criteria_picture *arg0);
+void add_ptr_to_objective(struct objective_entry* objective);
 
 #endif

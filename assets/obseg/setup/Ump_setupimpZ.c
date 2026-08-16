@@ -7,6 +7,7 @@
 
 #include "ultra64.h"
 #include "bondtypes.h"
+#include "bondaicommands.h"
 
 // forward declarations
 PadRecord padlist[];
@@ -217,7 +218,9 @@ PathRecord patrolpaths[] = {
 };
 
 
-u32 ai_not_used_0[] = { 0x04000000 };
+u8 ai_not_used_0[] = {
+    ai_list_end
+};
 
 
 

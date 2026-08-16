@@ -17,7 +17,7 @@ f32 g_DoorScale = 1.0f;
 
 void alloc_lookup_buffers();
 void write_monitor_ani_control_blocks();
-void initialize_temp_mine_table();
+void initialize_proxy_mine_table();
 
 // end forward declarations
 
@@ -45,16 +45,15 @@ void init_load_objpos_table(void)
     s32 i;
 
     difficulty = 1.0f;
-    ptr_obj_pos_list_current_entry = 
-        ptr_obj_pos_list_first_entry = NULL;
+    g_ActivePropsTail = g_ActivePropsHead = NULL;
     g_OnScreenPropCount = 0;
     g_OnScreenPropList[0] = NULL;
     g_LastOnScreenProp = (PropRecord *) g_OnScreenPropList;
-    ptr_obj_pos_list_final_entry = pos_data_entry;
+    g_FreeProps = g_Props;
 
-    for (i=0; i<(POS_DATA_ENTRY_LEN-1); i++)
+    for (i = 0; i < (MAX_PROPS - 1); i++)
     {
-        pos_data_entry[i].prev = &pos_data_entry[i+1];
+        g_Props[i].prev = &g_Props[i + 1];
     }
 
     alloc_lookup_buffers();
@@ -70,23 +69,23 @@ void alloc_lookup_buffers(void)
     s32 i;
 
     ptr_list_object_lookup_indices = (s16 *)mempAllocBytesInBank(PTR_LIST_OBJECT_LOOKUP_INDICES_LEN * sizeof(s16), MEMPOOL_STAGE);
-    RoomPropListChunkIndexes       = (s16 *)mempAllocBytesInBank((((g_MaxNumRooms * 4) + 0xF) | 0xF) ^ 0xF, MEMPOOL_STAGE);
-    RoomPropListChunks             = (s16 *)mempAllocBytesInBank(BSS_8007161C_LEN * sizeof(struct roomproplistchunk), MEMPOOL_STAGE);
+    RoomPropListBlockIndices       = (s16 *)mempAllocBytesInBank((((g_MaxNumRooms * 4) + 0xF) | 0xF) ^ 0xF, MEMPOOL_STAGE);
+    RoomPropListBlocks             = (s16 *)mempAllocBytesInBank(BSS_8007161C_LEN * sizeof(struct roomproplistblock), MEMPOOL_STAGE);
 
     ptr_list_object_lookup_indices[0] = -1;
 
     for (i=0; i<g_MaxNumRooms; i++)
     {
-        RoomPropListChunkIndexes[i] = -1;
+        RoomPropListBlockIndices[i] = -1;
     }
 
     for (i=0; i<BSS_8007161C_LEN; i++)
     {
-        RoomPropListChunks[i].propnums[0] = -2;
+        RoomPropListBlocks[i].propnums[0] = -2;
 
         for (j=1; j<BSS_8007161C_DATA_LEN; j++)
         {
-            RoomPropListChunks[i].propnums[j] = -1;
+            RoomPropListBlocks[i].propnums[j] = -1;
         }
     }
 }
@@ -101,7 +100,7 @@ void reinit_between_menus(void)
     s32 i;
 
     write_monitor_ani_control_blocks();
-    initialize_temp_mine_table();
+    initialize_proxy_mine_table();
     alarm_timer = 0;
     ptr_alarm_sfx = 0;
     toxic_gas_sound_timer = 0.0f;
@@ -139,8 +138,8 @@ void reinit_between_menus(void)
     for (i = 0; i < PROJECTILES_ARR_MAX; i++)
     {
         g_Projectiles[i].flags = 0x80000000;
-        g_Projectiles[i].sound1 = NULL;
-        g_Projectiles[i].sound2 = NULL;
+        g_Projectiles[i].sounds[0] = NULL;
+        g_Projectiles[i].sounds[1] = NULL;
     }
 
     for (i = 0; i < EMBEDMENT_ARR_MAX; i++)
@@ -215,13 +214,13 @@ void write_monitor_ani_control_blocks(void)
 }
 
 
-void initialize_temp_mine_table(void)
+void initialize_proxy_mine_table(void)
 {
     s32 i;
 
     for (i=0; i<30; i++)
     {
-        temp_mine_table[i] = NULL;
+        proxy_mine_table[i] = NULL;
     }
 }
 

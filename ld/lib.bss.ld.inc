@@ -248,5 +248,5 @@
 #endif
       build/OUTCODE/src/libultra/io/vimodentsclan1.o (.bss);
       build/OUTCODE/src/libultrare/io/vimodepallan1.o (.bss);
-      build/OUTCODE/src/libultrare/ultra80069080.o (.bss); /*edited*/
+      build/OUTCODE/src/libultrare/io/ultra80069080.o (.bss); /*edited*/
       /*build/OUTCODE/src/libultra/libultra.a:libultra.o (.bss);*/

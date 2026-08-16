@@ -1157,9 +1157,9 @@ void cheatButtonHandleCheatsTurnedOn(CHEAT_ID cheat_id)
                 HUDMESSAGEBOTTOM((char *)langGet(getStringID(LMISC, MISC_STR_19_TINYBONDON_LF)));
                 g_playerPerm->player_perspective_height = 0.5f;
 
-                if (g_CurrentPlayer->ptr_char_objectinstance != NULL)
+                if (g_CurrentPlayer->bodyModel != NULL)
                 {
-                    modelSetScale((struct Model *)g_CurrentPlayer->ptr_char_objectinstance, ((struct Model *)g_CurrentPlayer->ptr_char_objectinstance)->scale * 0.5f);
+                    modelSetScale((struct Model *)g_CurrentPlayer->bodyModel, ((struct Model *)g_CurrentPlayer->bodyModel)->scale * 0.5f);
                 }
                 return;
             }
@@ -1509,9 +1509,9 @@ void cheatButtonHandleCheatsTurnedOff(CHEAT_ID cheat_id)
             {
                 HUDMESSAGEBOTTOM((char *)langGet(getStringID(LMISC, MISC_STR_24_TINYBONDOFF_LF)));
                 g_playerPerm->player_perspective_height = 1.0f;
-                if (g_CurrentPlayer->ptr_char_objectinstance)
+                if (g_CurrentPlayer->bodyModel)
                 {
-                    modelSetScale(g_CurrentPlayer->ptr_char_objectinstance, 2.0f * ((struct Model *)g_CurrentPlayer->ptr_char_objectinstance)->scale);
+                    modelSetScale(g_CurrentPlayer->bodyModel, 2.0f * ((struct Model *)g_CurrentPlayer->bodyModel)->scale);
                 }
                 return;
             }
@@ -1714,7 +1714,7 @@ void cheatButtonSetDkMode(CHEAT_ID cheat_id)
             modelSetScale(model, model->scale * scale);
         }
 #else
-        if (guard->model && not_in_us_7F0209EC(guard->bodynum, guard->headnum))
+        if (guard->model && chrCanUseDKModeScaling(guard->bodynum, guard->headnum))
         {
             model = (Model*)guard->model;
             modelSetScale(model, model->scale * scale);

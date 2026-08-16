@@ -1434,2409 +1434,696 @@ PathRecord patrolpaths[] = {
 
 
 u8 ai_0[] = { 
-    // 0x20
-    guard_start_patrol(
-        // path_num
-        0x0)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x700)
-    // 0x04
+    guard_start_patrol(0x0)
+    jump_to_ai_list(0xfd, 0x700)
     ai_list_end
-    ,0x00
  };
 u8 ai_10[] = { 
-    // 0x02
-    label(
-        // id
-        0x6)
-    // 0x03
+    label(0x6)
     ai_sleep
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x8300, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x10000, 0x36)
-    // 0x5e
-    object_activate(
-        // object_tag
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0x02
-    label(
-        // id
-        0x7)
-    // 0x03
+    if_bond_in_room_with_pad(0x8300, 0x2c)
+    goto_first(0x6)
+    label(0x2c)
+    if_objective_bitfield_is_set_on(0x10000, 0x36)
+    object_activate(0xb)
+    label(0x36)
+    label(0x7)
     ai_sleep
-    // 0xad
-    // debug_log: W2
-    0xad, 0x57, 0x32, 0x0a, 0x00,
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x10000, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x7)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xae
+    debug_log 'W', '2', '\n', '\0',
+    if_objective_bitfield_is_set_on(0x10000, 0x2c)
+    goto_first(0x7)
+    label(0x2c)
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0xb)
-    // 0x03
+    label(0xb)
     ai_sleep
-    // 0xad
-    // debug_log: I2
-    0xad, 0x49, 0x32, 0x0a, 0x00,
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x580200, 0x18)
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x860100, 0x17)
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x4a0100, 0x16)
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0xd20000, 0x15)
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x960000, 0x14)
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x5a0000, 0x13)
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x1e0000, 0x12)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x12)
-    // 0xad
-    // debug_log: T1
-    0xad, 0x54, 0x31, 0x0a, 0x00,
-    // 0xa4
-    object_flags_1_set_off(
-        // object_tag, bitfield
-        0x1, 0x200)
-    // 0x5f
-    object_destroy(
-        // object_tag
-        0x1)
-    // 0xa4
-    object_flags_1_set_off(
-        // object_tag, bitfield
-        0x2, 0x200)
-    // 0x5f
-    object_destroy(
-        // object_tag
-        0x2)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x13)
-    // 0xa4
-    object_flags_1_set_off(
-        // object_tag, bitfield
-        0x3, 0x200)
-    // 0x5f
-    object_destroy(
-        // object_tag
-        0x3)
-    // 0xa4
-    object_flags_1_set_off(
-        // object_tag, bitfield
-        0x4, 0x200)
-    // 0x5f
-    object_destroy(
-        // object_tag
-        0x4)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x14)
-    // 0xa4
-    object_flags_1_set_off(
-        // object_tag, bitfield
-        0x5, 0x200)
-    // 0x5f
-    object_destroy(
-        // object_tag
-        0x5)
-    // 0xa4
-    object_flags_1_set_off(
-        // object_tag, bitfield
-        0x6, 0x200)
-    // 0x5f
-    object_destroy(
-        // object_tag
-        0x6)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x15)
-    // 0xa4
-    object_flags_1_set_off(
-        // object_tag, bitfield
-        0x7, 0x200)
-    // 0x5f
-    object_destroy(
-        // object_tag
-        0x7)
-    // 0xa4
-    object_flags_1_set_off(
-        // object_tag, bitfield
-        0x8, 0x200)
-    // 0x5f
-    object_destroy(
-        // object_tag
-        0x8)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x16)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x17)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x18)
-    // 0xad
-    // debug_log: CL
-    0xad, 0x43, 0x4c, 0x0a, 0x00,
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x100)
-    // 0x04
+    debug_log 'I', '2', '\n', '\0',
+    if_local_timer_greater_than(0x580200, 0x18)
+    if_local_timer_greater_than(0x860100, 0x17)
+    if_local_timer_greater_than(0x4a0100, 0x16)
+    if_local_timer_greater_than(0xd20000, 0x15)
+    if_local_timer_greater_than(0x960000, 0x14)
+    if_local_timer_greater_than(0x5a0000, 0x13)
+    if_local_timer_greater_than(0x1e0000, 0x12)
+    goto_first(0xb)
+    label(0x12)
+    debug_log 'T', '1', '\n', '\0',
+    object_flags_1_set_off(0x1, 0x200)
+    object_destroy(0x1)
+    object_flags_1_set_off(0x2, 0x200)
+    object_destroy(0x2)
+    goto_first(0xb)
+    label(0x13)
+    object_flags_1_set_off(0x3, 0x200)
+    object_destroy(0x3)
+    object_flags_1_set_off(0x4, 0x200)
+    object_destroy(0x4)
+    goto_first(0xb)
+    label(0x14)
+    object_flags_1_set_off(0x5, 0x200)
+    object_destroy(0x5)
+    object_flags_1_set_off(0x6, 0x200)
+    object_destroy(0x6)
+    goto_first(0xb)
+    label(0x15)
+    object_flags_1_set_off(0x7, 0x200)
+    object_destroy(0x7)
+    object_flags_1_set_off(0x8, 0x200)
+    object_destroy(0x8)
+    goto_first(0xb)
+    label(0x16)
+    goto_first(0xb)
+    label(0x17)
+    goto_first(0xb)
+    label(0x18)
+    debug_log 'C', 'L', '\n', '\0',
+    jump_to_ai_list(0xfd, 0x100)
     ai_list_end
-    ,0x00,0x00
  };
 u8 ai_11[] = { 
-    // 0x9b
-    objective_bitfield_set_off(
-        // bitfield
-        0x10000)
-    // 0x02
-    label(
-        // id
-        0x0)
-    // 0x03
+    objective_bitfield_set_off(0x10000)
+    label(0x0)
     ai_sleep
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x10000, 0x36)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x40000, 0xa)
-    // 0x01
-    goto_first(
-        // label
-        0x0)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x80000, 0xd)
-    // 0x01
-    goto_first(
-        // label
-        0x0)
-    // 0x02
-    label(
-        // id
-        0xa)
-    // 0xc3
-    text_print_top(
-        // text_slot
-        0x614)
-    // 0x67
-    door_close(
-        // object_tag
-        0x14)
-    // 0x66
-    door_open(
-        // object_tag
-        0x0)
-    // 0xae
+    if_objective_bitfield_is_set_on(0x10000, 0x36)
+    if_objective_bitfield_is_set_on(0x40000, 0xa)
+    goto_first(0x0)
+    label(0x36)
+    if_objective_bitfield_is_set_on(0x80000, 0xd)
+    goto_first(0x0)
+    label(0xa)
+    text_print_top(0x614)
+    door_close(0x14)
+    door_open(0x0)
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0xb)
-    // 0x03
+    label(0xb)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x840300, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x66
-    door_open(
-        // object_tag
-        0x9)
-    // 0x67
-    door_close(
-        // object_tag
-        0xa)
-    // 0x02
-    label(
-        // id
-        0xc)
-    // 0x03
+    if_local_timer_greater_than(0x840300, 0x2c)
+    goto_first(0xb)
+    label(0x2c)
+    door_open(0x9)
+    door_close(0xa)
+    label(0xc)
     ai_sleep
-    // 0x68
-    if_door_state_equal(
-        // object_tag, door_state, label
-        0x0, 0x2, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xc)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x10000)
-    // 0x9b
-    objective_bitfield_set_off(
-        // bitfield
-        0x40000)
-    // 0x01
-    goto_first(
-        // label
-        0x0)
-    // 0x02
-    label(
-        // id
-        0xd)
-    // 0xc3
-    text_print_top(
-        // text_slot
-        0x714)
-    // 0x66
-    door_open(
-        // object_tag
-        0x14)
-    // 0x67
-    door_close(
-        // object_tag
-        0x0)
-    // 0xae
+    if_door_state_equal(0x0, 0x2, 0x2c)
+    goto_first(0xc)
+    label(0x2c)
+    objective_bitfield_set_on(0x10000)
+    objective_bitfield_set_off(0x40000)
+    goto_first(0x0)
+    label(0xd)
+    text_print_top(0x714)
+    door_open(0x14)
+    door_close(0x0)
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0xe)
-    // 0x03
+    label(0xe)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x840300, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xe)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x67
-    door_close(
-        // object_tag
-        0x9)
-    // 0x66
-    door_open(
-        // object_tag
-        0xa)
-    // 0x02
-    label(
-        // id
-        0xf)
-    // 0x03
+    if_local_timer_greater_than(0x840300, 0x2c)
+    goto_first(0xe)
+    label(0x2c)
+    door_close(0x9)
+    door_open(0xa)
+    label(0xf)
     ai_sleep
-    // 0x68
-    if_door_state_equal(
-        // object_tag, door_state, label
-        0x0, 0x1, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xf)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x9b
-    objective_bitfield_set_off(
-        // bitfield
-        0x10000)
-    // 0x9b
-    objective_bitfield_set_off(
-        // bitfield
-        0x80000)
-    // 0x01
-    goto_first(
-        // label
-        0x0)
-    // 0x04
+    if_door_state_equal(0x0, 0x1, 0x2c)
+    goto_first(0xf)
+    label(0x2c)
+    objective_bitfield_set_off(0x10000)
+    objective_bitfield_set_off(0x80000)
+    goto_first(0x0)
     ai_list_end
-    ,0x00
  };
 u8 ai_12[] = { 
-    // 0x02
-    label(
-        // id
-        0x0)
-    // 0x03
+    label(0x0)
     ai_sleep
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x40000, 0x36)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x80000, 0x36)
-    // 0x5c
-    if_object_was_activated(
-        // object_tag, label
-        0xb, 0x2c)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0x5c
-    if_object_was_activated(
-        // object_tag, label
-        0xb, 0x36)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0x01
-    goto_first(
-        // label
-        0x0)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x10000, 0xa)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x40000)
-    // 0x01
-    goto_first(
-        // label
-        0x0)
-    // 0x02
-    label(
-        // id
-        0xa)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x100, 0xb)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x80000)
-    // 0x01
-    goto_first(
-        // label
-        0x0)
-    // 0x02
-    label(
-        // id
-        0xb)
-    // 0xc3
-    text_print_top(
-        // text_slot
-        0xf14)
-    // 0x01
-    goto_first(
-        // label
-        0x0)
-    // 0x04
+    if_objective_bitfield_is_set_on(0x40000, 0x36)
+    if_objective_bitfield_is_set_on(0x80000, 0x36)
+    if_object_was_activated(0xb, 0x2c)
+    label(0x36)
+    if_object_was_activated(0xb, 0x36)
+    label(0x36)
+    goto_first(0x0)
+    label(0x2c)
+    if_objective_bitfield_is_set_on(0x10000, 0xa)
+    objective_bitfield_set_on(0x40000)
+    goto_first(0x0)
+    label(0xa)
+    if_objective_bitfield_is_set_on(0x100, 0xb)
+    objective_bitfield_set_on(0x80000)
+    goto_first(0x0)
+    label(0xb)
+    text_print_top(0xf14)
+    goto_first(0x0)
     ai_list_end
-    ,0x00,0x00,0x00
  };
 u8 ai_13[] = { 
-    // 0x02
-    label(
-        // id
-        0x6)
-    // 0x03
+    label(0x6)
     ai_sleep
-    // 0x5d
-    if_bond_used_gadget_on_object(
-        // object_tag, label
-        0x13, 0x2c)
-    // 0x5c
-    if_object_was_activated(
-        // object_tag, label
-        0x13, 0x2d)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x59
-    if_bond_has_item_equipped(
-        // item_num, label
-        0x32, 0xb)
-    // 0x02
-    label(
-        // id
-        0x2d)
-    // 0xc3
-    text_print_top(
-        // text_slot
-        0x914)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0xb)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x100000)
-    // 0xc3
-    text_print_top(
-        // text_slot
-        0x814)
-    // 0x02
-    label(
-        // id
-        0xc)
-    // 0x03
+    if_bond_used_gadget_on_object(0x13, 0x2c)
+    if_object_was_activated(0x13, 0x2d)
+    goto_first(0x6)
+    label(0x2c)
+    if_bond_has_item_equipped(0x32, 0xb)
+    label(0x2d)
+    text_print_top(0x914)
+    goto_first(0x6)
+    label(0xb)
+    objective_bitfield_set_on(0x100000)
+    text_print_top(0x814)
+    label(0xc)
     ai_sleep
-    // 0x01
-    goto_first(
-        // label
-        0xc)
-    // 0x04
+    goto_first(0xc)
     ai_list_end
-    ,0x00
  };
 u8 ai_14[] = { 
-    // 0x02
-    label(
-        // id
-        0x6)
-    // 0x03
+    label(0x6)
     ai_sleep
-    // 0x5d
-    if_bond_used_gadget_on_object(
-        // object_tag, label
-        0xf, 0x2c)
-    // 0x5c
-    if_object_was_activated(
-        // object_tag, label
-        0xf, 0x2d)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x59
-    if_bond_has_item_equipped(
-        // item_num, label
-        0x49, 0xb)
-    // 0x02
-    label(
-        // id
-        0x2d)
-    // 0xc3
-    text_print_top(
-        // text_slot
-        0xa14)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0xb)
-    // 0xc3
-    text_print_top(
-        // text_slot
-        0xb14)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xae
+    if_bond_used_gadget_on_object(0xf, 0x2c)
+    if_object_was_activated(0xf, 0x2d)
+    goto_first(0x6)
+    label(0x2c)
+    if_bond_has_item_equipped(0x49, 0xb)
+    label(0x2d)
+    text_print_top(0xa14)
+    goto_first(0x6)
+    label(0xb)
+    text_print_top(0xb14)
+    label(0x2c)
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0xd)
-    // 0x03
+    label(0xd)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x2c0100, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xd)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x200000)
-    // 0x02
-    label(
-        // id
-        0xc)
-    // 0x03
+    if_local_timer_greater_than(0x2c0100, 0x2c)
+    goto_first(0xd)
+    label(0x2c)
+    objective_bitfield_set_on(0x200000)
+    label(0xc)
     ai_sleep
-    // 0x01
-    goto_first(
-        // label
-        0xc)
-    // 0x04
+    goto_first(0xc)
     ai_list_end
-    ,0x00,0x00
  };
 u8 ai_15[] = { 
-    // 0x02
-    label(
-        // id
-        0x6)
-    // 0x03
+    label(0x6)
     ai_sleep
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x200000, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xb7
-    hud_countdown_set(
-        // seconds
-        0x1e00)
-    // 0xb9
+    if_objective_bitfield_is_set_on(0x200000, 0x2c)
+    goto_first(0x6)
+    label(0x2c)
+    hud_countdown_set(0x1e00)
     hud_countdown_start
-    // 0xb5
     hud_countdown_show
-    // 0xf4
-    music_xtrack_play(
-        // music_slot, seconds_stopped_duration, seconds_total_duration
-        0x0, 0x0, 0xff)
-    // 0xc3
-    text_print_top(
-        // text_slot
-        0xc14)
-    // 0x02
-    label(
-        // id
-        0xa)
-    // 0x03
+    music_xtrack_play(0x0, 0x0, 0xff)
+    text_print_top(0xc14)
+    label(0xa)
     ai_sleep
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x10000, 0x2c)
-    // 0x00
-    goto_next(
-        // label
-        0x36)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x100)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0xbb
-    if_hud_countdown_less_than(
-        // seconds, label
-        0xa00, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x80000, 0x7)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x10000, 0x4)
-    // 0x02
-    label(
-        // id
-        0x7)
-    // 0xb8
+    if_objective_bitfield_is_set_on(0x10000, 0x2c)
+    goto_next(0x36)
+    label(0x2c)
+    objective_bitfield_set_on(0x100)
+    label(0x36)
+    if_hud_countdown_less_than(0xa00, 0x2c)
+    goto_first(0xa)
+    label(0x2c)
+    if_objective_bitfield_is_set_on(0x80000, 0x7)
+    if_objective_bitfield_is_set_on(0x10000, 0x4)
+    label(0x7)
     hud_countdown_stop
-    // 0xb7
-    hud_countdown_set(
-        // seconds
-        0xa00)
-    // 0xae
+    hud_countdown_set(0xa00)
     local_timer_reset_start
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x10000, 0x36)
-    // 0xc3
-    text_print_top(
-        // text_slot
-        0xe14)
-    // 0x02
-    label(
-        // id
-        0xc)
-    // 0x03
+    if_objective_bitfield_is_set_on(0x10000, 0x36)
+    text_print_top(0xe14)
+    label(0xc)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x2c0100, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xc)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x7)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x100)
-    // 0xb9
+    if_local_timer_greater_than(0x2c0100, 0x2c)
+    goto_first(0xc)
+    label(0x2c)
+    goto_first(0x7)
+    label(0x36)
+    objective_bitfield_set_on(0x100)
     hud_countdown_start
-    // 0x02
-    label(
-        // id
-        0x4)
-    // 0xc3
-    text_print_top(
-        // text_slot
-        0xd14)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x100)
-    // 0x02
-    label(
-        // id
-        0xb)
-    // 0x03
+    label(0x4)
+    text_print_top(0xd14)
+    objective_bitfield_set_on(0x100)
+    label(0xb)
     ai_sleep
-    // 0xbb
-    if_hud_countdown_less_than(
-        // seconds, label
-        0x100, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x400000)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x800000)
-    // 0xb6
+    if_hud_countdown_less_than(0x100, 0x2c)
+    goto_first(0xb)
+    label(0x2c)
+    objective_bitfield_set_on(0x400000)
+    objective_bitfield_set_on(0x800000)
     hud_countdown_hide
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x100)
-    // 0x04
+    jump_to_ai_list(0xfd, 0x100)
     ai_list_end
-
  };
 u8 ai_1[] = { 
-    // 0x91
-    guard_set_speed_rating(
-        // speed_rating
-        0x32)
-    // 0x93
-    guard_set_accuracy_rating(
-        // accuracy_rating
-        0x32)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x200)
-    // 0x04
+    guard_set_speed_rating(0x32)
+    guard_set_accuracy_rating(0x32)
+    jump_to_ai_list(0xfd, 0x200)
     ai_list_end
-    ,0x00,0x00,0x00
  };
 u8 ai_3[] = { 
-    // 0x91
-    guard_set_speed_rating(
-        // speed_rating
-        0x32)
-    // 0x93
-    guard_set_accuracy_rating(
-        // accuracy_rating
-        0x32)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x500)
-    // 0x04
+    guard_set_speed_rating(0x32)
+    guard_set_accuracy_rating(0x32)
+    jump_to_ai_list(0xfd, 0x500)
     ai_list_end
-    ,0x00,0x00,0x00
  };
 u8 ai_2[] = { 
-    // 0x90
-    guard_set_armour(
-        // armour_value
-        0xf401)
-    // 0x8f
-    guard_set_health_total(
-        // total_health
-        0xf401)
-    // 0x91
-    guard_set_speed_rating(
-        // speed_rating
-        0x50)
-    // 0x93
-    guard_set_accuracy_rating(
-        // accuracy_rating
-        0x50)
-    // 0x92
-    guard_set_argh_rating(
-        // speed_rating
-        0x50)
-    // 0x9d
-    guard_flags_set_on(
-        // bitfield
-        0x80000)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x200)
-    // 0x04
+    guard_set_armour(0xf401)
+    guard_set_health_total(0xf401)
+    guard_set_speed_rating(0x50)
+    guard_set_accuracy_rating(0x50)
+    guard_set_argh_rating(0x50)
+    guard_flags_set_on(0x80000)
+    jump_to_ai_list(0xfd, 0x200)
     ai_list_end
-    ,0x00,0x00
  };
 u8 ai_4[] = { 
-    // 0x90
-    guard_set_armour(
-        // armour_value
-        0x1400)
-    // 0x91
-    guard_set_speed_rating(
-        // speed_rating
-        0x50)
-    // 0x93
-    guard_set_accuracy_rating(
-        // accuracy_rating
-        0x50)
-    // 0x02
-    label(
-        // id
-        0x4)
-    // 0x14
-    guard_try_fire_or_aim_at_target(
-        // bitfield, target, label
-        0x2100, 0x0, 0x6)
-    // 0x02
-    label(
-        // id
-        0x6)
-    // 0x03
+    guard_set_armour(0x1400)
+    guard_set_speed_rating(0x50)
+    guard_set_accuracy_rating(0x50)
+    label(0x4)
+    guard_try_fire_or_aim_at_target(0x2100, 0x0, 0x6)
+    label(0x6)
     ai_sleep
-    // 0x46
-    if_guard_shot_from_bond_missed(
-        // label
-        0x2c)
-    // 0x3a
-    if_guard_see_another_guard_shot(
-        // label
-        0x2c)
-    // 0x3b
-    if_guard_see_another_guard_die(
-        // label
-        0x2c)
-    // 0x32
-    if_guard_sees_bond(
-        // label
-        0x2c)
-    // 0x3c
-    if_guard_and_bond_within_line_of_sight(
-        // label
-        0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x33
+    if_guard_shot_from_bond_missed(0x2c)
+    if_guard_see_another_guard_shot(0x2c)
+    if_guard_see_another_guard_die(0x2c)
+    if_guard_sees_bond(0x2c)
+    if_guard_and_bond_within_line_of_sight(0x2c)
+    goto_first(0x6)
+    label(0x2c)
     random_generate_seed
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0xc8, 0x2d)
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0x64, 0x2c)
-    // 0x16
-    guard_try_fire_or_aim_at_target_update(
-        // bitfield, target, label
-        0x100, 0x0, 0xa)
-    // 0x02
-    label(
-        // id
-        0x2d)
-    // 0x1a
-    guard_try_throwing_grenade(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x09
+    if_random_seed_greater_than(0xc8, 0x2d)
+    if_random_seed_greater_than(0x64, 0x2c)
+    guard_try_fire_or_aim_at_target_update(0x100, 0x0, 0xa)
+    label(0x2d)
+    guard_try_throwing_grenade(0xa)
+    label(0x2c)
     guard_kneel
-    // 0xae
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0xb)
-    // 0x03
+    label(0xb)
     ai_sleep
-    // 0x33
     random_generate_seed
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0xfa, 0x2c)
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0xb40000, 0x8)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x14
-    guard_try_fire_or_aim_at_target(
-        // bitfield, target, label
-        0x2100, 0x0, 0x2c)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x16
-    guard_try_fire_or_aim_at_target_update(
-        // bitfield, target, label
-        0x100, 0x0, 0x2c)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x02
-    label(
-        // id
-        0xa)
-    // 0x03
+    if_random_seed_greater_than(0xfa, 0x2c)
+    if_local_timer_greater_than(0xb40000, 0x8)
+    goto_first(0xb)
+    label(0x2c)
+    guard_try_fire_or_aim_at_target(0x2100, 0x0, 0x2c)
+    label(0x2c)
+    guard_try_fire_or_aim_at_target_update(0x100, 0x0, 0x2c)
+    label(0x2c)
+    label(0xa)
     ai_sleep
-    // 0x2f
-    if_guard_has_stopped_moving(
-        // label
-        0x8)
-    // 0x01
-    goto_first(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0x8)
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x04
+    if_guard_has_stopped_moving(0x8)
+    goto_first(0xa)
+    label(0x8)
+    goto_first(0x4)
     ai_list_end
-    ,0x00,0x00,0x00
  };
 u8 ai_16[] = { 
-    // 0x02
-    label(
-        // id
-        0x4)
-    // 0x03
+    label(0x4)
     ai_sleep
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x400000, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xeb
-    if_bond_is_dead(
-        // label
-        0x5f)
-    // 0xec
+    if_objective_bitfield_is_set_on(0x400000, 0x2c)
+    goto_first(0x4)
+    label(0x2c)
+    if_bond_is_dead(0x5f)
     bond_disable_damage_and_pickups
-    // 0xd7
-    hud_hide_and_lock_controls_and_pause_mission_time(
-        // bitfield
-        0x0)
-    // 0xda
+    hud_hide_and_lock_controls_and_pause_mission_time(0x0)
     screen_fade_to_black
-    // 0x02
-    label(
-        // id
-        0xa)
-    // 0x03
+    label(0xa)
     ai_sleep
-    // 0xdc
-    if_screen_fade_completed(
-        // label
-        0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xdd
+    if_screen_fade_completed(0x2c)
+    goto_first(0xa)
+    label(0x2c)
     chr_hide_all
-    // 0xea
     trigger_fade_and_exit_level_on_button_press
-    // 0xed
     bond_hide_weapons
-    // 0x03
     ai_sleep
-    // 0x03
     ai_sleep
-    // 0x03
     ai_sleep
-    // 0xd5
-    camera_switch(
-        // object_tag, look_at_bond_flag, unused_flag
-        0x16, 0x200, 0x0)
-    // 0xd9
-    chr_try_teleporting_to_pad(
-        // chr_num, pad, label
-        0xf8, 0x8100, 0x2c)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x03
+    camera_switch(0x16, 0x200, 0x0)
+    chr_try_teleporting_to_pad(0xf8, 0x8100, 0x2c)
+    label(0x2c)
     ai_sleep
-    // 0x03
     ai_sleep
-    // 0xdb
     screen_fade_from_black
-    // 0xfc
-    object_rocket_launch(
-        // object_tag
-        0x17)
-    // 0xe9
+    object_rocket_launch(0x17)
     switch_fog_instantly
-    // 0xae
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0xc)
-    // 0x03
+    label(0xc)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x580200, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xc)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xda
+    if_local_timer_greater_than(0x580200, 0x2c)
+    goto_first(0xc)
+    label(0x2c)
     screen_fade_to_black
-    // 0x02
-    label(
-        // id
-        0xd)
-    // 0x03
+    label(0xd)
     ai_sleep
-    // 0xdc
-    if_screen_fade_completed(
-        // label
-        0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xd)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xd2
+    if_screen_fade_completed(0x2c)
+    goto_first(0xd)
+    label(0x2c)
     exit_level
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x100)
-    // 0x02
-    label(
-        // id
-        0x5f)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x100)
-    // 0x04
+    jump_to_ai_list(0xfd, 0x100)
+    label(0x5f)
+    jump_to_ai_list(0xfd, 0x100)
     ai_list_end
-
  };
 u8 ai_17[] = { 
-    // 0x02
-    label(
-        // id
-        0x6)
-    // 0x03
+    label(0x6)
     ai_sleep
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x8200, 0x40)
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x1600, 0x40)
-    // 0x03
+    if_bond_in_room_with_pad(0x8200, 0x40)
+    if_bond_in_room_with_pad(0x1600, 0x40)
     ai_sleep
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x1700, 0x41)
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x6b00, 0x41)
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x5400, 0x42)
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x5500, 0x42)
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x4e00, 0x42)
-    // 0x03
+    if_bond_in_room_with_pad(0x1700, 0x41)
+    if_bond_in_room_with_pad(0x6b00, 0x41)
+    if_bond_in_room_with_pad(0x5400, 0x42)
+    if_bond_in_room_with_pad(0x5500, 0x42)
+    if_bond_in_room_with_pad(0x4e00, 0x42)
     ai_sleep
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x2700, 0x43)
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x2500, 0x43)
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x7e00, 0x44)
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x4100, 0x44)
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x6d00, 0x45)
-    // 0x55
-    if_bond_in_room_with_pad(
-        // pad, label
-        0x4b00, 0x45)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x40)
-    // 0x03
+    if_bond_in_room_with_pad(0x2700, 0x43)
+    if_bond_in_room_with_pad(0x2500, 0x43)
+    if_bond_in_room_with_pad(0x7e00, 0x44)
+    if_bond_in_room_with_pad(0x4100, 0x44)
+    if_bond_in_room_with_pad(0x6d00, 0x45)
+    if_bond_in_room_with_pad(0x4b00, 0x45)
+    goto_first(0x6)
+    label(0x40)
     ai_sleep
-    // 0xad
-    // debug_log: START
-    0xad, 0x53, 0x54, 0x41, 0x52, 0x54, 0x0a, 0x00,
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x0, 0x6100)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x1, 0x6500)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x2, 0x6300)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x41)
-    // 0x03
+    debug_log 'S', 'T', 'A', 'R', 'T', '\n', '\0',
+    chr_set_pad_preset(0x0, 0x6100)
+    chr_set_pad_preset(0x1, 0x6500)
+    chr_set_pad_preset(0x2, 0x6300)
+    goto_first(0x6)
+    label(0x41)
     ai_sleep
-    // 0xad
-    // debug_log: SCREEN
-    0xad, 0x53, 0x43, 0x52, 0x45, 0x45, 0x4e, 0x0a, 0x00,
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x0, 0x6700)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x1, 0x5a00)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x2, 0x5900)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x42)
-    // 0x03
+    debug_log 'S', 'C', 'R', 'E', 'E', 'N', '\n', '\0',
+    chr_set_pad_preset(0x0, 0x6700)
+    chr_set_pad_preset(0x1, 0x5a00)
+    chr_set_pad_preset(0x2, 0x5900)
+    goto_first(0x6)
+    label(0x42)
     ai_sleep
-    // 0xad
-    // debug_log: DUCT
-    0xad, 0x44, 0x55, 0x43, 0x54, 0x0a, 0x00,
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x0, 0x7500)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x1, 0x8000)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x2, 0x7600)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x43)
-    // 0x03
+    debug_log 'D', 'U', 'C', 'T', '\n', '\0',
+    chr_set_pad_preset(0x0, 0x7500)
+    chr_set_pad_preset(0x1, 0x8000)
+    chr_set_pad_preset(0x2, 0x7600)
+    goto_first(0x6)
+    label(0x43)
     ai_sleep
-    // 0xad
-    // debug_log: BAY
-    0xad, 0x42, 0x41, 0x59, 0x0a, 0x00,
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x0, 0x5400)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x1, 0x7d00)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x2, 0x7c00)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x44)
-    // 0x03
+    debug_log 'B', 'A', 'Y', '\n', '\0',
+    chr_set_pad_preset(0x0, 0x5400)
+    chr_set_pad_preset(0x1, 0x7d00)
+    chr_set_pad_preset(0x2, 0x7c00)
+    goto_first(0x6)
+    label(0x44)
     ai_sleep
-    // 0xad
-    // debug_log: AZT1
-    0xad, 0x41, 0x5a, 0x54, 0x31, 0x0a, 0x00,
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x0, 0x7600)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x1, 0x6f00)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x2, 0x7000)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x45)
-    // 0x03
+    debug_log 'A', 'Z', 'T', '1', '\n', '\0',
+    chr_set_pad_preset(0x0, 0x7600)
+    chr_set_pad_preset(0x1, 0x6f00)
+    chr_set_pad_preset(0x2, 0x7000)
+    goto_first(0x6)
+    label(0x45)
     ai_sleep
-    // 0xad
-    // debug_log: AZT2
-    0xad, 0x41, 0x5a, 0x54, 0x32, 0x0a, 0x00,
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x0, 0x5f00)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x1, 0x5b00)
-    // 0xac
-    chr_set_pad_preset(
-        // chr_num, pad_preset
-        0x2, 0x7c00)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x04
+    debug_log 'A', 'Z', 'T', '2', '\n', '\0',
+    chr_set_pad_preset(0x0, 0x5f00)
+    chr_set_pad_preset(0x1, 0x5b00)
+    chr_set_pad_preset(0x2, 0x7c00)
+    goto_first(0x6)
     ai_list_end
-    ,0x00,0x00
  };
 u8 ai_18[] = { 
-    // 0x8e
-    guard_set_chr_num(
-        // chr_num
-        0x0)
-    // 0xae
+    guard_set_chr_num(0x0)
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0x4a)
-    // 0x03
+    label(0x4a)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x780000, 0x4)
-    // 0x01
-    goto_first(
-        // label
-        0x4a)
-    // 0x02
-    label(
-        // id
-        0x4)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x400, 0xb)
-    // 0xae
+    if_local_timer_greater_than(0x780000, 0x4)
+    goto_first(0x4a)
+    label(0x4)
+    if_objective_bitfield_is_set_on(0x400, 0xb)
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0xa)
-    // 0x03
+    label(0xa)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x580200, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x31
-    if_chr_does_not_exist(
-        // chr_num, label
-        0x3, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xad
-    // debug_log: spawn1
-    0xad, 0x73, 0x70, 0x61, 0x77, 0x6e, 0x31, 0x00,
-    // 0xf3
-    if_bond_damage_and_pickups_disabled(
-        // label
-        0x36)
-    // 0x02
-    label(
-        // id
-        0x56)
-    // 0xbd
-    chr_try_spawning_at_pad(
-        // body_num, head_num, pad, ai_list, bitfield, label
-        0x27, 0xff, 0x2823, 0x604, 0x0, 0x8)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0xad
-    // debug_log: ->fail
-    0xad, 0x2d, 0x3e, 0x66, 0x61, 0x69, 0x6c, 0x00,
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x02
-    label(
-        // id
-        0x8)
-    // 0xad
-    // debug_log: s1 OK!
-    0xad, 0x73, 0x31, 0x20, 0x4f, 0x4b, 0x21, 0x00,
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x02
-    label(
-        // id
-        0xb)
-    // 0x03
+    if_local_timer_greater_than(0x580200, 0x2c)
+    goto_first(0xa)
+    label(0x2c)
+    if_chr_does_not_exist(0x3, 0x2c)
+    goto_first(0x4)
+    label(0x2c)
+    debug_log 's', 'p', 'a', 'w', 'n', '1', '\0',
+    if_bond_damage_and_pickups_disabled(0x36)
+    label(0x56)
+    chr_try_spawning_at_pad(0x27, 0xff, 0x2823, 0x604, 0x0, 0x8)
+    label(0x36)
+    debug_log '-', '>', 'f', 'a', 'i', 'l', '\0',
+    goto_first(0x4)
+    label(0x8)
+    debug_log 's', '1', ' ', 'O', 'K', '!', '\0',
+    goto_first(0x4)
+    label(0xb)
     ai_sleep
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x200, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x04
+    if_objective_bitfield_is_set_on(0x200, 0x2c)
+    goto_first(0xb)
+    label(0x2c)
+    goto_first(0x4)
     ai_list_end
-    ,0x00,0x00,0x00
  };
 u8 ai_19[] = { 
-    // 0x8e
-    guard_set_chr_num(
-        // chr_num
-        0x1)
-    // 0xae
+    guard_set_chr_num(0x1)
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0x4a)
-    // 0x03
+    label(0x4a)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x780000, 0x4)
-    // 0x01
-    goto_first(
-        // label
-        0x4a)
-    // 0x02
-    label(
-        // id
-        0x4)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x400, 0xb)
-    // 0xae
+    if_local_timer_greater_than(0x780000, 0x4)
+    goto_first(0x4a)
+    label(0x4)
+    if_objective_bitfield_is_set_on(0x400, 0xb)
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0xa)
-    // 0x03
+    label(0xa)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x580200, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x31
-    if_chr_does_not_exist(
-        // chr_num, label
-        0x4, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xad
-    // debug_log: spawn2
-    0xad, 0x73, 0x70, 0x61, 0x77, 0x6e, 0x32, 0x00,
-    // 0xf3
-    if_bond_damage_and_pickups_disabled(
-        // label
-        0x36)
-    // 0x02
-    label(
-        // id
-        0x56)
-    // 0xbd
-    chr_try_spawning_at_pad(
-        // body_num, head_num, pad, ai_list, bitfield, label
-        0x27, 0xff, 0x2823, 0x704, 0x0, 0x8)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0xad
-    // debug_log: ->fail
-    0xad, 0x2d, 0x3e, 0x66, 0x61, 0x69, 0x6c, 0x00,
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x02
-    label(
-        // id
-        0x8)
-    // 0xad
-    // debug_log: s2 OK!
-    0xad, 0x73, 0x32, 0x20, 0x4f, 0x4b, 0x21, 0x00,
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x02
-    label(
-        // id
-        0xb)
-    // 0x03
+    if_local_timer_greater_than(0x580200, 0x2c)
+    goto_first(0xa)
+    label(0x2c)
+    if_chr_does_not_exist(0x4, 0x2c)
+    goto_first(0x4)
+    label(0x2c)
+    debug_log 's', 'p', 'a', 'w', 'n', '2', '\0',
+    if_bond_damage_and_pickups_disabled(0x36)
+    label(0x56)
+    chr_try_spawning_at_pad(0x27, 0xff, 0x2823, 0x704, 0x0, 0x8)
+    label(0x36)
+    debug_log '-', '>', 'f', 'a', 'i', 'l', '\0',
+    goto_first(0x4)
+    label(0x8)
+    debug_log 's', '2', ' ', 'O', 'K', '!', '\0',
+    goto_first(0x4)
+    label(0xb)
     ai_sleep
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x200, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x04
+    if_objective_bitfield_is_set_on(0x200, 0x2c)
+    goto_first(0xb)
+    label(0x2c)
+    goto_first(0x4)
     ai_list_end
-    ,0x00,0x00,0x00
  };
 u8 ai_20[] = { 
-    // 0x8e
-    guard_set_chr_num(
-        // chr_num
-        0x2)
-    // 0xae
+    guard_set_chr_num(0x2)
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0x4a)
-    // 0x03
+    label(0x4a)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x780000, 0x4)
-    // 0x01
-    goto_first(
-        // label
-        0x4a)
-    // 0x02
-    label(
-        // id
-        0x4)
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x400, 0xb)
-    // 0xae
+    if_local_timer_greater_than(0x780000, 0x4)
+    goto_first(0x4a)
+    label(0x4)
+    if_objective_bitfield_is_set_on(0x400, 0xb)
     local_timer_reset_start
-    // 0x02
-    label(
-        // id
-        0xa)
-    // 0x03
+    label(0xa)
     ai_sleep
-    // 0xb4
-    if_local_timer_greater_than(
-        // time60, label
-        0x580200, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x31
-    if_chr_does_not_exist(
-        // chr_num, label
-        0x5, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xad
-    // debug_log: spawn3
-    0xad, 0x73, 0x70, 0x61, 0x77, 0x6e, 0x33, 0x00,
-    // 0xf3
-    if_bond_damage_and_pickups_disabled(
-        // label
-        0x36)
-    // 0x02
-    label(
-        // id
-        0x56)
-    // 0xbd
-    chr_try_spawning_at_pad(
-        // body_num, head_num, pad, ai_list, bitfield, label
-        0x27, 0xff, 0x2823, 0x804, 0x0, 0x8)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0xad
-    // debug_log: ->fail
-    0xad, 0x2d, 0x3e, 0x66, 0x61, 0x69, 0x6c, 0x00,
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x02
-    label(
-        // id
-        0x8)
-    // 0xad
-    // debug_log: s3 OK!
-    0xad, 0x73, 0x33, 0x20, 0x4f, 0x4b, 0x21, 0x00,
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x02
-    label(
-        // id
-        0xb)
-    // 0x03
+    if_local_timer_greater_than(0x580200, 0x2c)
+    goto_first(0xa)
+    label(0x2c)
+    if_chr_does_not_exist(0x5, 0x2c)
+    goto_first(0x4)
+    label(0x2c)
+    debug_log 's', 'p', 'a', 'w', 'n', '3', '\0',
+    if_bond_damage_and_pickups_disabled(0x36)
+    label(0x56)
+    chr_try_spawning_at_pad(0x27, 0xff, 0x2823, 0x804, 0x0, 0x8)
+    label(0x36)
+    debug_log '-', '>', 'f', 'a', 'i', 'l', '\0',
+    goto_first(0x4)
+    label(0x8)
+    debug_log 's', '3', ' ', 'O', 'K', '!', '\0',
+    goto_first(0x4)
+    label(0xb)
     ai_sleep
-    // 0x9c
-    if_objective_bitfield_is_set_on(
-        // bitfield, label
-        0x200, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0xb)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x4)
-    // 0x04
+    if_objective_bitfield_is_set_on(0x200, 0x2c)
+    goto_first(0xb)
+    label(0x2c)
+    goto_first(0x4)
     ai_list_end
-    ,0x00,0x00,0x00
  };
 u8 ai_5[] = { 
-    // 0x8e
-    guard_set_chr_num(
-        // chr_num
-        0x3)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x904)
-    // 0x04
+    guard_set_chr_num(0x3)
+    jump_to_ai_list(0xfd, 0x904)
     ai_list_end
-    ,0x00
  };
 u8 ai_6[] = { 
-    // 0x8e
-    guard_set_chr_num(
-        // chr_num
-        0x4)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x904)
-    // 0x04
+    guard_set_chr_num(0x4)
+    jump_to_ai_list(0xfd, 0x904)
     ai_list_end
-    ,0x00
  };
 u8 ai_7[] = { 
-    // 0x8e
-    guard_set_chr_num(
-        // chr_num
-        0x5)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x904)
-    // 0x04
+    guard_set_chr_num(0x5)
+    jump_to_ai_list(0xfd, 0x904)
     ai_list_end
-    ,0x00
  };
 u8 ai_8[] = { 
-    // 0x02
-    label(
-        // id
-        0x40)
-    // 0x91
-    guard_set_speed_rating(
-        // speed_rating
-        0x28)
-    // 0x93
-    guard_set_accuracy_rating(
-        // accuracy_rating
-        0x28)
-    // 0x00
-    goto_next(
-        // label
-        0x2c)
-    // 0x02
-    label(
-        // id
-        0x41)
-    // 0x91
-    guard_set_speed_rating(
-        // speed_rating
-        0x32)
-    // 0x93
-    guard_set_accuracy_rating(
-        // accuracy_rating
-        0x32)
-    // 0x00
-    goto_next(
-        // label
-        0x2c)
-    // 0x02
-    label(
-        // id
-        0x42)
-    // 0x91
-    guard_set_speed_rating(
-        // speed_rating
-        0x3c)
-    // 0x93
-    guard_set_accuracy_rating(
-        // accuracy_rating
-        0x3c)
-    // 0x00
-    goto_next(
-        // label
-        0x2c)
-    // 0x02
-    label(
-        // id
-        0x43)
-    // 0x91
-    guard_set_speed_rating(
-        // speed_rating
-        0x50)
-    // 0x93
-    guard_set_accuracy_rating(
-        // accuracy_rating
-        0x50)
-    // 0x00
-    goto_next(
-        // label
-        0x2c)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x33
+    label(0x40)
+    guard_set_speed_rating(0x28)
+    guard_set_accuracy_rating(0x28)
+    goto_next(0x2c)
+    label(0x41)
+    guard_set_speed_rating(0x32)
+    guard_set_accuracy_rating(0x32)
+    goto_next(0x2c)
+    label(0x42)
+    guard_set_speed_rating(0x3c)
+    guard_set_accuracy_rating(0x3c)
+    goto_next(0x2c)
+    label(0x43)
+    guard_set_speed_rating(0x50)
+    guard_set_accuracy_rating(0x50)
+    goto_next(0x2c)
+    label(0x2c)
     random_generate_seed
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0x82, 0x39)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0x8f
-    guard_set_health_total(
-        // total_health
-        0x2800)
-    // 0x90
-    guard_set_armour(
-        // armour_value
-        0xa00)
-    // 0x8d
-    guard_set_grenade_probability(
-        // grenade_prob
-        0xcc)
-    // 0xbf
-    guard_try_spawning_item(
-        // prop_num, item_num, prop_bitfield, label
-        0xbb00, 0x16, 0x0, 0x2c)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x00
-    goto_next(
-        // label
-        0x8)
-    // 0x02
-    label(
-        // id
-        0x39)
-    // 0x8f
-    guard_set_health_total(
-        // total_health
-        0x2800)
-    // 0x90
-    guard_set_armour(
-        // armour_value
-        0x1400)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xbf
-    guard_try_spawning_item(
-        // prop_num, item_num, prop_bitfield, label
-        0xbb00, 0x16, 0x80, 0x2c)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0xbf
-    guard_try_spawning_item(
-        // prop_num, item_num, prop_bitfield, label
-        0xbb00, 0x16, 0x90, 0x8)
-    // 0x02
-    label(
-        // id
-        0x8)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0xa04)
-    // 0x04
+    if_random_seed_greater_than(0x82, 0x39)
+    label(0x36)
+    guard_set_health_total(0x2800)
+    guard_set_armour(0xa00)
+    guard_set_grenade_probability(0xcc)
+    guard_try_spawning_item(0xbb00, 0x16, 0x0, 0x2c)
+    label(0x2c)
+    label(0x2c)
+    goto_next(0x8)
+    label(0x39)
+    guard_set_health_total(0x2800)
+    guard_set_armour(0x1400)
+    label(0x2c)
+    guard_try_spawning_item(0xbb00, 0x16, 0x80, 0x2c)
+    label(0x2c)
+    guard_try_spawning_item(0xbb00, 0x16, 0x90, 0x8)
+    label(0x8)
+    jump_to_ai_list(0xfd, 0xa04)
     ai_list_end
-
  };
 u8 ai_9[] = { 
-    // 0x02
-    label(
-        // id
-        0x3a)
-    // 0x03
+    label(0x3a)
     ai_sleep
-    // 0x4c
-    if_guard_distance_to_bond_greater_than(
-        // distance, label
-        0x2c01, 0x36)
-    // 0x4c
-    if_guard_distance_to_bond_greater_than(
-        // distance, label
-        0x2003, 0x9)
-    // 0x28
-    guard_try_running_to_bond_position(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0x2a
-    guard_try_sprinting_to_bond_position(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0xa)
-    // 0x03
+    if_guard_distance_to_bond_greater_than(0x2c01, 0x36)
+    if_guard_distance_to_bond_greater_than(0x2003, 0x9)
+    guard_try_running_to_bond_position(0xa)
+    label(0x36)
+    guard_try_sprinting_to_bond_position(0xa)
+    label(0xa)
     ai_sleep
-    // 0x4c
-    if_guard_distance_to_bond_greater_than(
-        // distance, label
-        0x9001, 0x36)
-    // 0x4c
-    if_guard_distance_to_bond_greater_than(
-        // distance, label
-        0x2003, 0x9)
-    // 0x3c
-    if_guard_and_bond_within_line_of_sight(
-        // label
-        0x3b)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0x2f
-    if_guard_has_stopped_moving(
-        // label
-        0x3c)
-    // 0x01
-    goto_first(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0x3b)
-    // 0x3c
-    if_guard_and_bond_within_line_of_sight(
-        // label
-        0x2c)
-    // 0x00
-    goto_next(
-        // label
-        0x8)
-    // 0x02
-    label(
-        // id
-        0x3c)
-    // 0x03
+    if_guard_distance_to_bond_greater_than(0x9001, 0x36)
+    if_guard_distance_to_bond_greater_than(0x2003, 0x9)
+    if_guard_and_bond_within_line_of_sight(0x3b)
+    label(0x36)
+    if_guard_has_stopped_moving(0x3c)
+    goto_first(0xa)
+    label(0x3b)
+    if_guard_and_bond_within_line_of_sight(0x2c)
+    goto_next(0x8)
+    label(0x3c)
     ai_sleep
-    // 0x01
-    goto_first(
-        // label
-        0x3a)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x02
-    label(
-        // id
-        0x3d)
-    // 0x33
+    goto_first(0x3a)
+    label(0x2c)
+    label(0x3d)
     random_generate_seed
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0xa, 0x2c)
-    // 0x1a
-    guard_try_throwing_grenade(
-        // label
-        0x8)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0x32, 0x2c)
-    // 0x0e
-    guard_try_sidestepping(
-        // label
-        0x8)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0x3c, 0x2c)
-    // 0x13
-    guard_try_firing_roll(
-        // label
-        0x8)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0x50, 0x2c)
-    // 0x13
-    guard_try_firing_roll(
-        // label
-        0x8)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0x64, 0x2c)
-    // 0x11
-    guard_try_firing_walk(
-        // label
-        0x8)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0x96, 0x2c)
-    // 0x12
-    guard_try_firing_run(
-        // label
-        0x8)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x35
-    if_random_seed_greater_than(
-        // cbyte, label
-        0xc8, 0x2c)
-    // 0x14
-    guard_try_fire_or_aim_at_target(
-        // bitfield, target, label
-        0x100, 0x0, 0x8)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x15
-    guard_try_fire_or_aim_at_target_kneel(
-        // bitfield, target, label
-        0x100, 0x0, 0x8)
-    // 0x02
-    label(
-        // id
-        0x8)
-    // 0x03
+    if_random_seed_greater_than(0xa, 0x2c)
+    guard_try_throwing_grenade(0x8)
+    label(0x2c)
+    if_random_seed_greater_than(0x32, 0x2c)
+    guard_try_sidestepping(0x8)
+    label(0x2c)
+    if_random_seed_greater_than(0x3c, 0x2c)
+    guard_try_firing_roll(0x8)
+    label(0x2c)
+    if_random_seed_greater_than(0x50, 0x2c)
+    guard_try_firing_roll(0x8)
+    label(0x2c)
+    if_random_seed_greater_than(0x64, 0x2c)
+    guard_try_firing_walk(0x8)
+    label(0x2c)
+    if_random_seed_greater_than(0x96, 0x2c)
+    guard_try_firing_run(0x8)
+    label(0x2c)
+    if_random_seed_greater_than(0xc8, 0x2c)
+    guard_try_fire_or_aim_at_target(0x100, 0x0, 0x8)
+    label(0x2c)
+    guard_try_fire_or_aim_at_target_kneel(0x100, 0x0, 0x8)
+    label(0x8)
     ai_sleep
-    // 0x2f
-    if_guard_has_stopped_moving(
-        // label
-        0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x8)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x3c
-    if_guard_and_bond_within_line_of_sight(
-        // label
-        0x2c)
-    // 0x00
-    goto_next(
-        // label
-        0xa)
-    // 0x02
-    label(
-        // id
-        0xa)
-    // 0x03
+    if_guard_has_stopped_moving(0x2c)
+    goto_first(0x8)
+    label(0x2c)
+    if_guard_and_bond_within_line_of_sight(0x2c)
+    goto_next(0xa)
+    label(0xa)
     ai_sleep
-    // 0x01
-    goto_first(
-        // label
-        0x3a)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x03
+    goto_first(0x3a)
+    label(0x2c)
     ai_sleep
-    // 0x01
-    goto_first(
-        // label
-        0x3d)
-    // 0x02
-    label(
-        // id
-        0x9)
-    // 0x42
-    if_guard_is_on_screen(
-        // label
-        0x36)
-    // 0xad
-    // debug_log: DELETE!
-    0xad, 0x44, 0x45, 0x4c, 0x45, 0x54, 0x45, 0x21, 0x00,
-    // 0x23
-    chr_remove_instant(
-        // chr_num
-        0xfd)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x100)
-    // 0x02
-    label(
-        // id
-        0x36)
-    // 0x01
-    goto_first(
-        // label
-        0x3a)
-    // 0x04
+    goto_first(0x3d)
+    label(0x9)
+    if_guard_is_on_screen(0x36)
+    debug_log 'D', 'E', 'L', 'E', 'T', 'E', '!', '\0',
+    chr_remove_instant(0xfd)
+    jump_to_ai_list(0xfd, 0x100)
+    label(0x36)
+    goto_first(0x3a)
     ai_list_end
-    ,0x00,0x00
  };
 u8 ai_21[] = { 
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x400)
-    // 0x9b
-    objective_bitfield_set_off(
-        // bitfield
-        0x200)
-    // 0x02
-    label(
-        // id
-        0x6)
-    // 0x03
+    objective_bitfield_set_on(0x400)
+    objective_bitfield_set_off(0x200)
+    label(0x6)
     ai_sleep
-    // 0x31
-    if_chr_does_not_exist(
-        // chr_num, label
-        0x2a, 0x2c)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x01
-    goto_first(
-        // label
-        0x6)
-    // 0x02
-    label(
-        // id
-        0x2c)
-    // 0x9a
-    objective_bitfield_set_on(
-        // bitfield
-        0x200)
-    // 0x9b
-    objective_bitfield_set_off(
-        // bitfield
-        0x400)
-    // 0x05
-    jump_to_ai_list(
-        // chr_num, ai_list
-        0xfd, 0x100)
-    // 0x04
+    if_chr_does_not_exist(0x2a, 0x2c)
+    goto_first(0x6)
+    goto_first(0x6)
+    label(0x2c)
+    objective_bitfield_set_on(0x200)
+    objective_bitfield_set_off(0x400)
+    jump_to_ai_list(0xfd, 0x100)
     ai_list_end
-    ,0x00,0x00,0x00
  };
 u8 ai_22[] = { 
-    // 0x00
-    goto_next(
-        // label
-        0x58)
-    // 0x02
-    label(
-        // id
-        0x5b)
-    // 0x03
+    goto_next(0x58)
+    label(0x5b)
     ai_sleep
-    // 0x68
-    if_door_state_equal(
-        // object_tag, door_state, label
-        0x15, 0x4, 0x5a)
-    // 0x01
-    goto_first(
-        // label
-        0x5b)
-    // 0x02
-    label(
-        // id
-        0x5e)
-    // 0x03
+    if_door_state_equal(0x15, 0x4, 0x5a)
+    goto_first(0x5b)
+    label(0x5e)
     ai_sleep
-    // 0x68
-    if_door_state_equal(
-        // object_tag, door_state, label
-        0x15, 0x1, 0x58)
-    // 0x68
-    if_door_state_equal(
-        // object_tag, door_state, label
-        0x15, 0x8, 0x59)
-    // 0x01
-    goto_first(
-        // label
-        0x5e)
-    // 0x02
-    label(
-        // id
-        0x5c)
-    // 0x03
+    if_door_state_equal(0x15, 0x1, 0x58)
+    if_door_state_equal(0x15, 0x8, 0x59)
+    goto_first(0x5e)
+    label(0x5c)
     ai_sleep
-    // 0x68
-    if_door_state_equal(
-        // object_tag, door_state, label
-        0x15, 0x8, 0x59)
-    // 0x01
-    goto_first(
-        // label
-        0x5c)
-    // 0x02
-    label(
-        // id
-        0x5d)
-    // 0x03
+    if_door_state_equal(0x15, 0x8, 0x59)
+    goto_first(0x5c)
+    label(0x5d)
     ai_sleep
-    // 0x68
-    if_door_state_equal(
-        // object_tag, door_state, label
-        0x15, 0x2, 0x57)
-    // 0x68
-    if_door_state_equal(
-        // object_tag, door_state, label
-        0x15, 0x4, 0x5a)
-    // 0x01
-    goto_first(
-        // label
-        0x5d)
-    // 0x02
-    label(
-        // id
-        0x57)
-    // 0xd0
-    tv_change_screen_bank(
-        // object_tag, screen_index, screen_bank
-        0x12, 0x0, 0x2f)
-    // 0x01
-    goto_first(
-        // label
-        0x5b)
-    // 0x02
-    label(
-        // id
-        0x5a)
-    // 0xd0
-    tv_change_screen_bank(
-        // object_tag, screen_index, screen_bank
-        0x12, 0x0, 0x2e)
-    // 0x01
-    goto_first(
-        // label
-        0x5e)
-    // 0x02
-    label(
-        // id
-        0x58)
-    // 0xd0
-    tv_change_screen_bank(
-        // object_tag, screen_index, screen_bank
-        0x12, 0x0, 0x2e)
-    // 0x01
-    goto_first(
-        // label
-        0x5c)
-    // 0x02
-    label(
-        // id
-        0x59)
-    // 0xd0
-    tv_change_screen_bank(
-        // object_tag, screen_index, screen_bank
-        0x12, 0x0, 0x2f)
-    // 0x01
-    goto_first(
-        // label
-        0x5d)
-    // 0x04
+    if_door_state_equal(0x15, 0x2, 0x57)
+    if_door_state_equal(0x15, 0x4, 0x5a)
+    goto_first(0x5d)
+    label(0x57)
+    tv_change_screen_bank(0x12, 0x0, 0x2f)
+    goto_first(0x5b)
+    label(0x5a)
+    tv_change_screen_bank(0x12, 0x0, 0x2e)
+    goto_first(0x5e)
+    label(0x58)
+    tv_change_screen_bank(0x12, 0x0, 0x2e)
+    goto_first(0x5c)
+    label(0x59)
+    tv_change_screen_bank(0x12, 0x0, 0x2f)
+    goto_first(0x5d)
     ai_list_end
-    ,0x00
  };
 
 AIListRecord ailists[] = {

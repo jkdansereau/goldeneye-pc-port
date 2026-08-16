@@ -4485,7 +4485,7 @@ _AI_CMD(
 * Is Key, if it exists, "Dropped"? (not moving/in mid-air)
 ********************************************************************************
 * @return     Continue execution from LABEL if TRUE
-* @exception: Used to check if a Key with ID has been "Dropped" (RUNTIMEBITFLAG_DEPOSIT)
+* @exception: Used to check if a Key with ID has been "Dropped" (RUNTIMEBITFLAG_HASPROJECTILE)
 *             Make sure IFItemIsAttachedToObject takes priority over
 *             IFKeyDropped when using both commands
 *******************************************************************************/
@@ -4879,7 +4879,7 @@ _AI_CMD(
             if (!objGetDestroyedLevel(obj))
             {
                 f32 damage = ((obj->damage - obj->maxdamage) + 1) / 250.0f;
-                maybe_detonate_object(obj, damage, &obj->runtime_pos, 29, -1);
+                objApplyDamage(obj, damage, &obj->runtime_pos, 29, -1);
             }
         }
         Offset += CAT(CAT(AI_, CMDNAME), _LENGTH);
@@ -5062,7 +5062,7 @@ _AI_CMD(
         ObjectRecord *obj = objFindByTagId(ai->val[0]);
         if (obj && obj->prop)
         {
-            bool a = collect_or_interact_object(obj->prop, 0);
+            bool a = propPickupByPlayer(obj->prop, 0);
             propExecuteTickOperation(obj->prop, a);
         }
         Offset += CAT(CAT(AI_, CMDNAME), _LENGTH);
@@ -6394,7 +6394,7 @@ _AI_CMD(
     {
         AIRecord *ai  = AiListp + Offset;
         float     val = (ai->val[0]) / 255.0f;
-        if (val > bondviewGetCurrentPlayerHealth())
+        if (val > currentPlayerGetHealth())
         {
             Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
         }
@@ -6436,7 +6436,7 @@ _AI_CMD(
     {
         AIRecord *ai  = AiListp + Offset;
         float     val = (ai->val[0]) / 255.0f;
-        if (val < bondviewGetCurrentPlayerHealth())
+        if (val < currentPlayerGetHealth())
         {
             Offset = chraiGoToLabel(AiListp, Offset, ai->val[1]);
         }
@@ -10165,11 +10165,11 @@ _AI_CMD(
         u16       padnum = CharArrayTo16(ai->val,0);
         if (isNotBoundPad(padnum))
         {
-            dword_CODE_bss_800799F8 = &g_CurrentSetup.pads[padnum];
+            g_CameraLookAtBondPad = &g_CurrentSetup.pads[padnum];
         }
         else
         {
-            dword_CODE_bss_800799F8 = (PadRecord *) &g_CurrentSetup.boundpads[getBoundPadNum(padnum)];
+            g_CameraLookAtBondPad = (PadRecord *) &g_CurrentSetup.boundpads[getBoundPadNum(padnum)];
         }
         set_camera_mode(CAMERAMODE_POSEND);
         Offset += CAT(CAT(AI_, CMDNAME), _LENGTH);
@@ -10218,7 +10218,7 @@ _AI_CMD(
             if (TagIndex >= 0)
             {
                 CutsceneRecord *cdef = setupGetPtrToCommandByIndex(tag->OffsetToObj + TagIndex);
-                dword_CODE_bss_800799F8 = NULL;
+                g_CameraLookAtBondPad = NULL;
                 gBondViewCutscene = cdef;
                 dword_CODE_bss_80079A18 = CharArrayTo16(ai->val,1);
                 dword_CODE_bss_80079A1C = CharArrayTo16(ai->val,3);
@@ -10262,7 +10262,7 @@ _AI_CMD(
     {
         AIRecord * ai = AiListp + Offset;
         f32       bondpos = (s16) CharArrayTo16(ai->val,0);
-        if (get_curplayer_positiondata()->pos.y < bondpos)
+        if (getCurrentPlayerProp()->pos.y < bondpos)
         {
             Offset = chraiGoToLabel(AiListp, Offset, ai->val[2]);
         }
@@ -11294,7 +11294,7 @@ _AI_CMD(
         padnum                  = CharArrayTo16(ai->val, 6);
         targetHeight            = (s16)CharArrayTo16(ai->val, 8);
         start                   = CharArrayTo16(ai->val, 10);
-        dword_CODE_bss_800799F8 = NULL;
+        g_CameraLookAtBondPad = NULL;
         gBondViewCutscene       = NULL;
         flt_CODE_bss_80079A00   = (start * M_TAU_F) / M_U16_MAX_VALUE_F; /*unit direction 0 - 1 (increments are 0.000001)*/
         flt_CODE_bss_80079A04   = (speed60 * M_TAU_F) / M_U16_MAX_VALUE_F; /*how many increments per frame*/
@@ -11850,7 +11850,7 @@ _AI_CMD(
         if (obj && obj->prop)
         {
             sub_GAME_7F03FDA8(obj->prop);
-            if (obj->runtime_bitflags & RUNTIMEBITFLAG_DEPOSIT)
+            if (obj->runtime_bitflags & RUNTIMEBITFLAG_HASPROJECTILE)
             {
                 obj->projectile->flags |= 0x601;
                 projectileSetSticky(obj->prop);

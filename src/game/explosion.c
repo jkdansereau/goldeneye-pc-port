@@ -479,7 +479,7 @@ void explosionInflictDamage(PropRecord *arg0, f32 horiz_range, f32 vert_range)
 
         for (var_s3 = ptr_list_object_lookup_indices; *var_s3 >= 0; var_s3++)
         {
-            temp_s0 = &pos_data_entry[*var_s3];
+            temp_s0 = &g_Props[*var_s3];
 
             if ((temp_s0 != temp_s2->source) && (temp_s0->timetoregen == 0))
             {
@@ -690,7 +690,7 @@ s32 explosionTick(PropRecord* arg0)
 
     if (g_ClockTimer == 0)
     {
-        return 0;
+        return TICKOP_NONE;
     }
 
     lvupdate = (g_ClockTimer < 15) ? (f32) g_ClockTimer : 15.0f;
@@ -759,7 +759,7 @@ s32 explosionTick(PropRecord* arg0)
 
         // end explosionGetBboxAtFrame.
 
-        sub_GAME_7F03E27C(arg0, &sp90, &sp84, hrange);
+        chrpropUpdateRoomList(arg0, &sp90, &sp84, hrange);
 
         vrange = explosiontype->explosion_range + (((explosiontype->dmg_range - explosiontype->explosion_range) * (f32) exp->age) / (f32) explosiontype->duration);
         explosionInflictDamage(arg0, vrange, vrange);
@@ -807,12 +807,12 @@ s32 explosionTick(PropRecord* arg0)
     if (exp->age >= explosiontype->duration + (s32) (16.0f * explosiontype->flareanimspeed))
     {
         exp->prop = NULL;
-        return 1;
+
+        return TICKOP_FREE;
     }
 
-    return 0;
+    return TICKOP_NONE;
 }
-
 
 
 /*
@@ -836,10 +836,10 @@ u8 explosionChrpropExplosionTick(PropRecord* prop)
 
     if (g_ClockTimer == 0)
     {
-        return 0;
+        return TICKOP_NONE;
     }
 
-    return 0;
+    return TICKOP_NONE;
 }
 
 
@@ -871,7 +871,7 @@ Gfx *explosionRenderPropExplosion(PropRecord *prop, Gfx *gdl, s32 withalpha)
     }
     else
     {
-        if (sub_GAME_7F054A64(prop, &sp70) > 0)
+        if (getPropCombinedRoomsBBox2D(prop, &sp70) > 0)
         {
             gdl = bgScissorCurrentPlayerViewF(gdl, sp70.min.f[0], sp70.min.f[1], sp70.max.f[0], sp70.max.f[1]);
         }
@@ -957,7 +957,7 @@ Gfx *explosionRenderPart(struct ExplosionPart *arg0, Gfx *gdl, struct coord3d *c
 
     spA0 = g_ExplosionRenderPartDefaultVertex;
 
-    sp9C = currentPlayerGetMatrix10D4();
+    sp9C = currentPlayerGetViewToWorldMtxf();
     sp98 = bondviewGetCurrentPlayersPosition();
 
     sp64 = arg0->pos.f[0] - sp98->f[0];
@@ -987,7 +987,7 @@ Gfx *explosionRenderPart(struct ExplosionPart *arg0, Gfx *gdl, struct coord3d *c
     sp48 = sp98->f[1] + (sp60 * f2);
     sp44 = sp98->f[2] + (sp5C * f2);
 
-    vertices = dynAllocate7F0BD6C4(4);
+    vertices = dynAllocateVertices(4);
 
     vertices[0] = spA0;
     vertices[1] = spA0;
@@ -1077,7 +1077,7 @@ Gfx *explosionSmokeRenderPart(struct Smoke *smoke, struct SmokePart *smoke_part,
 
     spC0 = g_SmokeRenderPartDefaultVertex;
 
-    mtx = currentPlayerGetMatrix10D4();
+    mtx = currentPlayerGetViewToWorldMtxf();
     sp70 = bondviewGetCurrentPlayersPosition();
 
     if (g_SmokeTypes[smoke->smoke_type].rateappear >= smoke_part->count)
@@ -1089,7 +1089,7 @@ Gfx *explosionSmokeRenderPart(struct Smoke *smoke, struct SmokePart *smoke_part,
         sp77 = smoke_part->alpha;
     }
 
-    vertices = dynAllocate7F0BD6C4(4);
+    vertices = dynAllocateVertices(4);
 
     vertices[0] = spC0;
     vertices[1] = spC0;
@@ -1291,7 +1291,7 @@ s32 explosionSmokeTick(PropRecord *arg0)
 
 	if (g_ClockTimer == 0)
     {
-		return 0;
+		return TICKOP_NONE;
 	}
 
     lvupdate = (g_ClockTimer < 15) ? (f32) g_ClockTimer : 15.0f;
@@ -1407,7 +1407,7 @@ s32 explosionSmokeTick(PropRecord *arg0)
         var_f14 = bbmax.f[2] - arg0->pos.f[2];
     }
 
-    sub_GAME_7F03E27C(arg0, &bbmin, &bbmax, var_f14);
+    chrpropUpdateRoomList(arg0, &bbmin, &bbmax, var_f14);
 
     if (smoke->duration > g_SmokeTypes[smoke->smoke_type].ratedissolve)
     {
@@ -1430,10 +1430,10 @@ s32 explosionSmokeTick(PropRecord *arg0)
     if (var_v1 != 0)
     {
         smoke->prop = NULL;
-        return 1;
+        return TICKOP_FREE;
     }
 
-    return 0;
+    return TICKOP_NONE;
 }
 
 
@@ -1456,7 +1456,7 @@ u8 explosionChrpropSmokeTick(PropRecord* prop)
         prop->zDepth -= 100.0f;
     }
 
-    return 0;
+    return TICKOP_NONE;
 }
 
 
@@ -1483,7 +1483,7 @@ Gfx *explosionRenderPropSmoke(PropRecord *arg0, Gfx *gdl, s32 withalpha)
         return gdl;
     }
 
-    if (sub_GAME_7F054A64(arg0, &sp78) > 0)
+    if (getPropCombinedRoomsBBox2D(arg0, &sp78) > 0)
     {
         gdl = bgScissorCurrentPlayerViewF(gdl, sp78.min.f[0], sp78.min.f[1], sp78.max.f[0], sp78.max.f[1]);
     }

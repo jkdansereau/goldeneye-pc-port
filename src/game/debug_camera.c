@@ -202,7 +202,7 @@ coord3d debugCameraPreviousPosition = {0.0f,0.0f,0.0f};
 * Address: 0x7F091580
 */
 Gfx * sub_GAME_7F091580(Gfx * arg0) {
-    sub_GAME_7F0876C4(&debugCameraPosition, &debugCameraForward, &debugCameraUp);
+    bondviewUpdateCameraMatrices(&debugCameraPosition, &debugCameraForward, &debugCameraUp);
     return arg0;
 }
 
@@ -229,7 +229,7 @@ void setDebugCameraScale(float scale)
 void initializeDebugCameraPosition(void)
 {
     coord3d *pos = bondviewGetCurrentPlayersPosition();
-    f32      r   = M_TAU_F - get_curplay_horizontal_rotation_in_degrees();
+    f32      r   = M_TAU_F - bondviewGetPlayerYawRadians();
     f32      x   = ((debugCameraPosition.x - pos->x) * cosf(r)) + ((debugCameraPosition.x - pos->x) * sinf(r));
     f32      y   = debugCameraPosition.y - pos->y;
     f32      z   = (debugCameraPosition.z - pos->z) * cosf(r) - (debugCameraPosition.x - pos->x) * sinf(r);

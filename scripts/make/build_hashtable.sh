@@ -2,6 +2,7 @@
 
 COUNTRY_CODE=""
 OUTFILE=""
+ARG_VERSION=""
 
 usage() {
     echo "$0 usage:"
@@ -11,38 +12,45 @@ usage() {
     echo "    -o        output filename. Optional. Defaults to full_hashtable_{version}.csv"
     echo "    -v        version. Supported options are: US,u, JP,j, EU,e"
     echo ""
-    exit 0;
+    exit 0
 }
 
 [ $# -eq 0 ] && usage
-while getopts "o:hv:" arg; do
-  case $arg in
-    v) # version
-        if [ "${OPTARG,,}" = "us" ]; then
-            COUNTRY_CODE="u"
-        elif [ "${OPTARG,,}" = "u" ]; then
-            COUNTRY_CODE="u"
-        elif [ "${OPTARG,,}" = "jp" ]; then
-            COUNTRY_CODE="j"
-        elif [ "${OPTARG,,}" = "j" ]; then
-            COUNTRY_CODE="j"
-        elif [ "${OPTARG,,}" = "eu" ]; then
-            COUNTRY_CODE="e"
-        elif [ "${OPTARG,,}" = "e" ]; then
-            COUNTRY_CODE="e"
-        fi
 
-        ARG_VERSION="${OPTARG}"
-      ;;
-    o) # out file
-        OUTFILE="${OPTARG}"
-      ;;
-    h | *) # Display help.
-      usage
-      exit 0
-      ;;
-  esac
+while getopts "o:hv:" arg; do
+    case $arg in
+        v)
+            case "${OPTARG,,}" in
+                us | u)
+                    COUNTRY_CODE="u"
+                    ;;
+                jp | j)
+                    COUNTRY_CODE="j"
+                    ;;
+                eu | e)
+                    COUNTRY_CODE="e"
+                    ;;
+                *)
+                    echo "Unsupported version: ${OPTARG}"
+                    usage
+                    ;;
+            esac
+
+            ARG_VERSION="${OPTARG}"
+            ;;
+        o)
+            OUTFILE="${OPTARG}"
+            ;;
+        h | *)
+            usage
+            ;;
+    esac
 done
+
+if [ -z "${COUNTRY_CODE}" ]; then
+    echo "No valid version provided."
+    usage
+fi
 
 if ! command -v "mips-linux-gnu-objcopy" &> /dev/null
 then
@@ -50,129 +58,51 @@ then
     exit 1
 fi
 
-if [ "${OUTFILE}" = "" ] ; then
-    OUTFILE="full_hashtable_${version}.csv"
+    if ! command -v "md5sum" &> /dev/null
+then
+    echo "command md5sum not found"
+    exit 1
 fi
 
-TMP=$(mktemp /tmp/ge_test_files.XXXXXX)
+if [ -z "${OUTFILE}" ] ; then
+    OUTFILE="full_hashtable_${ARG_VERSION}.csv"
+fi
+
+TMP=$(mktemp /tmp/ge_test_files.XXXXXX) || { echo "Failed to create temp file"; exit 1; }
+trap 'rm -f "${TMP}"' EXIT
 
 rm -f "${OUTFILE}"
-
 touch "${OUTFILE}"
 
-# output format is simple csv, one entry per line
-# 32 character md5, name of section extracted from ELF binary, and path to file relative from repo root (where this script is)
-#
-# escaped csv, quotes or commas in filenames are not supported.
+SECTIONS=( ".text" ".code" ".bss" ".data" ".rodata" )
 
-for FILE in build/${COUNTRY_CODE}/src/*.o
+# Search roots: build country tree and repository root assets folder
+SEARCH_ROOTS=( "build/${COUNTRY_CODE}" )
+
+for ROOT in "${SEARCH_ROOTS[@]}"
 do
-    echo "adding ${FILE}"
+    if [ -d "${ROOT}" ]; then
+        # find all object files under this root, but skip build/${COUNTRY_CODE}/assets/images/*
+        find "${ROOT}" -type f -name '*.o' ! -path "*/assets/images/*" -print0 | while IFS= read -r -d '' FILE
+        do
+            echo "adding ${FILE}"
+            for SEC in "${SECTIONS[@]}"
+            do
+                # Extract section to TMP; suppress objcopy stderr (section may be missing)
+                mips-linux-gnu-objcopy -j "${SEC}" -O binary "${FILE}" "${TMP}" 2>/dev/null || true
 
-    mips-linux-gnu-objcopy -j .text -O binary "${FILE}" "${TMP}"
-    printf "%s,.text,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
+                # If TMP has content, compute md5 and append to OUTFILE
+                if [ -s "${TMP}" ]; then
+                    MD5=$(md5sum -b "${TMP}" | cut -c -32)
+                    printf "%s,%s,%s\n" "${MD5}" "${SEC}" "${FILE}" >> "${OUTFILE}"
+                fi
 
-    mips-linux-gnu-objcopy -j .code -O binary "${FILE}" "${TMP}"
-    printf "%s,.code,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .bss -O binary "${FILE}" "${TMP}"
-    printf "%s,.bss,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .data -O binary "${FILE}" "${TMP}"
-    printf "%s,.data,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .rodata -O binary "${FILE}" "${TMP}"
-    printf "%s,.rodata,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
+                # Clear TMP for next section
+                : > "${TMP}"
+            done
+        done
+    fi
 done
 
-for FILE in build/${COUNTRY_CODE}/src/game/*.o
-do
-    echo "adding ${FILE}"
-
-    mips-linux-gnu-objcopy -j .text -O binary "${FILE}" "${TMP}"
-    printf "%s,.text,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .code -O binary "${FILE}" "${TMP}"
-    printf "%s,.code,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .bss -O binary "${FILE}" "${TMP}"
-    printf "%s,.bss,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .data -O binary "${FILE}" "${TMP}"
-    printf "%s,.data,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .rodata -O binary "${FILE}" "${TMP}"
-    printf "%s,.rodata,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-done
-
-for FILE in build/${COUNTRY_CODE}/assets/obseg/bg/*.o
-do
-    echo "adding ${FILE}"
-
-    mips-linux-gnu-objcopy -j .bss -O binary "${FILE}" "${TMP}"
-    printf "%s,.bss,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .data -O binary "${FILE}" "${TMP}"
-    printf "%s,.data,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .rodata -O binary "${FILE}" "${TMP}"
-    printf "%s,.rodata,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-done
-
-for FILE in build/${COUNTRY_CODE}/assets/obseg/brief/*.o
-do
-    echo "adding ${FILE}"
-
-    mips-linux-gnu-objcopy -j .bss -O binary "${FILE}" "${TMP}"
-    printf "%s,.bss,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .data -O binary "${FILE}" "${TMP}"
-    printf "%s,.data,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .rodata -O binary "${FILE}" "${TMP}"
-    printf "%s,.rodata,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-done
-
-for FILE in build/${COUNTRY_CODE}/assets/obseg/setup/*.o
-do
-    echo "adding ${FILE}"
-
-    mips-linux-gnu-objcopy -j .bss -O binary "${FILE}" "${TMP}"
-    printf "%s,.bss,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .data -O binary "${FILE}" "${TMP}"
-    printf "%s,.data,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .rodata -O binary "${FILE}" "${TMP}"
-    printf "%s,.rodata,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-done
-
-for FILE in build/${COUNTRY_CODE}/assets/obseg/stan/*.o
-do
-    echo "adding ${FILE}"
-
-    mips-linux-gnu-objcopy -j .bss -O binary "${FILE}" "${TMP}"
-    printf "%s,.bss,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .data -O binary "${FILE}" "${TMP}"
-    printf "%s,.data,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .rodata -O binary "${FILE}" "${TMP}"
-    printf "%s,.rodata,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-done
-
-for FILE in build/${COUNTRY_CODE}/assets/obseg/text/*.o
-do
-    echo "adding ${FILE}"
-
-    mips-linux-gnu-objcopy -j .bss -O binary "${FILE}" "${TMP}"
-    printf "%s,.bss,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .data -O binary "${FILE}" "${TMP}"
-    printf "%s,.data,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-
-    mips-linux-gnu-objcopy -j .rodata -O binary "${FILE}" "${TMP}"
-    printf "%s,.rodata,%s\n" $(md5sum -b "${TMP}" | cut -c -32) "${FILE}" >> "${OUTFILE}"
-done
-
-rm -f "${TMP}"
+# TMP is removed by trap on exit
+exit 0

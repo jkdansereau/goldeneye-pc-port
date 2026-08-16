@@ -216,7 +216,7 @@ s32 viGet800232A0(void);
 void viSet800232A0(s32 arg0);
 
 Gfx *viClearZBufCurrentPlayer(Gfx *gdl);
-Gfx *video_related_F(Gfx *gdl);
+Gfx *viSetupCurrentPlayerView(Gfx *gdl);
 void viGetZRange(f32 *zrange);
 #endif
 

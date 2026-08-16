@@ -933,7 +933,7 @@ IF_VA(NOT(IS_EMPTY(CASE_VAL0)))(IF_VA(NOT(IS_EMPTY(CASE_VAL1)))(BREAK(FAIL_LBL) 
 #define ai_list_end_ID 0x04
 #define ai_list_end_LENGTH 0x01
 #define ai_list_end \
-        ai_list_end_ID
+        ai_list_end_ID,
 
 /*=============================================================================
 // name: jump_to_ai_list

@@ -228,7 +228,7 @@ void bossInitMainthreadData(void)
     speedgraphInit();
     set_gu_scale();
     null_init_main_2();
-    sub_GAME_7F000980();
+    casingsInit();
     alloc_load_expand_ani_table();
     init_weapon_animation_groups_maybe();
     reset_counter_rand_body_head();

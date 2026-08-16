@@ -21,6 +21,7 @@ void zbufDeallocate(void) {
     z_buffer = 0;
 }
 
+
 /*
  * Address: 0x7f0d287c
 */
@@ -49,6 +50,7 @@ void zbufAllocate(void)
     z_buffer = ALIGN64_V1(z_buffer);
 }
 
+
 /*
  * Address: 0x7f0d2938
 */
@@ -57,6 +59,7 @@ void zbufSetBuffer(s32 buffer, s32 width, s32 height) {
     z_buffer_width = width;
     z_buffer_height = height;
 }
+
 
 /*
  * Address: 0x7f0d2954
@@ -78,6 +81,7 @@ Gfx *zbufInit(Gfx *gdl) {
     gDPSetDepthImage(gdl++, test);
     return gdl;
 }
+
 
 /*
  * Address: 0x7f0d2a08

@@ -6,7 +6,7 @@ Parses N64 binary model files (.bin) and generates C source code (Model.c).
 
 Binary Format:
     Offset 0x00: Switches array (if numSwitches > 0)
-    Offset 0x??: Texture table (ModelFileTextures[numtextures])  
+    Offset 0x??: Texture table (ModelFileTextures[numtextures])
     Offset 0x??: RootNode and complete ModelNode tree with embedded data
 
 All pointers in the binary are stored as offsets from base address 0x05000000.
@@ -104,7 +104,7 @@ class BinaryModelParser:
         self.switches = []
         self.base_address = BASE_ADDRESS
         self.image_map = image_map or {}
-        
+
     def to_file_offset(self, addr: int) -> int:
         """Convert base-relative address to file offset. Returns -1 for NULL (0x00000000)"""
         if addr == 0:
@@ -112,7 +112,7 @@ class BinaryModelParser:
         if addr < self.base_address:
             return addr  # Already a file offset
         return addr - self.base_address
-    
+
     def offset_to_ptr_name(self, offset: int) -> str:
         """Convert binary offset to C pointer/symbol name"""
         if offset == 0:
@@ -122,14 +122,14 @@ class BinaryModelParser:
             return f"&ModelNode_0x{offset:03x}"
         # It's some data structure
         return f"0x{offset:08x}"  # Will need resolving later
-    
+
     def parse(self):
         """Parse the complete binary model file"""
         num_switches = self.metadata.get('num_switches', 0)
         num_textures = self.metadata['num_textures']
-        
+
         offset = 0
-        
+
         # Parse switches array (array of u32 pointers)
         if num_switches > 0:
             for i in range(num_switches):
@@ -141,7 +141,7 @@ class BinaryModelParser:
                     switch_offset = 0
                 self.switches.append(switch_offset)
                 offset += 4
-        
+
         # Parse texture table (12 bytes per texture)
         for i in range(num_textures):
             tex = ModelTexture(
@@ -156,15 +156,15 @@ class BinaryModelParser:
             )
             self.textures.append(tex)
             offset += 12
-        
+
         # Parse ModelNode tree (starts after textures)
         # RootNode is at this offset
         root_offset = offset
         self.parse_node_tree(root_offset)
-        
+
         # Second pass: parse structures referenced by pointers but not in ModelNode tree
         self.parse_referenced_structures()
-        
+
         return {
             'switches': self.switches,
             'textures': self.textures,
@@ -172,12 +172,12 @@ class BinaryModelParser:
             'referenced_data': self.referenced_data,
             'root_offset': root_offset
         }
-    
+
     def parse_node_tree(self, node_offset: int):
         """Recursively parse ModelNode tree structure"""
         if node_offset in self.nodes:
             return
-        
+
         # Parse ModelNode structure (24 bytes)
         # typedef struct ModelNode {
         #     u8 UseAdditionalMatrices; /*0x00 - high byte of opcode field, used in chr models*/
@@ -190,7 +190,7 @@ class BinaryModelParser:
         #     struct ModelNode *Child;  /*0x14*/
         # } ModelNode;
         # Note: Officially it's "u16 Opcode" but chr models use both bytes separately
-        
+
         opcode_u16 = read_u16(self.data, node_offset)
         opcode_flags = (opcode_u16 >> 8) & 0xFF  # High byte
         opcode = opcode_u16 & 0xFF  # Low byte
@@ -199,7 +199,7 @@ class BinaryModelParser:
         next_offset = self.to_file_offset(read_u32(self.data, node_offset + 12))
         prev_offset = self.to_file_offset(read_u32(self.data, node_offset + 16))
         child_offset = self.to_file_offset(read_u32(self.data, node_offset + 20))
-        
+
         # Create node
         node = ModelNode(
             offset=node_offset,
@@ -211,33 +211,33 @@ class BinaryModelParser:
             prev_offset=prev_offset,
             child_offset=child_offset
         )
-        
+
         self.nodes[node_offset] = node
-        
+
         # Parse the data structure for this opcode
         if data_offset > 0:
             node.data = self.parse_node_data(node.opcode, data_offset)
-        
+
         # Recursively parse linked nodes (but not parent to avoid cycles)
         if child_offset > 0:
             self.parse_node_tree(child_offset)
         if next_offset > 0:
             self.parse_node_tree(next_offset)
-    
+
     def parse_referenced_structures(self):
         """Parse structures referenced by pointers that aren't in ModelNode tree"""
         # Collect all referenced offsets
         referenced_offsets = set()
-        
+
         for node_offset, node in self.nodes.items():
             if not node.data:
                 continue
-                
+
             dtype = node.data.get('_type')
-            
+
             # HeaderRecord.FirstGroup actually points to a ModelNode (not directly to GroupRecord)
             # The ModelNode is already in the tree, so no need to parse as referenced structure
-            
+
             # LODRecord.Children point to ModelNodes with data
             if dtype == 'LODRecord':
                 for i in range(3):
@@ -248,22 +248,22 @@ class BinaryModelParser:
                             # Determine opcode from child node
                             ref_opcode = child_node.opcode
                             referenced_offsets.add((child_node.data_offset, ref_opcode))
-        
+
         # Parse any referenced structures that don't already have a ModelNode
         for ref_offset, ref_opcode in referenced_offsets:
             # Check if this offset already has a node pointing to it
             already_exists = any(
-                node.data_offset == ref_offset 
+                node.data_offset == ref_offset
                 for node in self.nodes.values()
             )
-            
+
             if not already_exists and ref_offset not in self.referenced_data:
                 # Parse and store as a standalone data structure (not a ModelNode)
                 self.referenced_data[ref_offset] = self.parse_node_data(ref_opcode, ref_offset)
-    
+
     def parse_node_data(self, opcode: int, data_offset: int) -> Dict:
         """Parse the data structure for a specific opcode"""
-        
+
         if opcode == 2:  # GROUP
             return self.parse_group_record(data_offset)
         elif opcode == 9:  # BSP
@@ -280,7 +280,7 @@ class BinaryModelParser:
             return self.parse_gunfire_record(data_offset)
         elif opcode == 22:  # DLPRIMARY
             return self.parse_dlprimary_record(data_offset)
-        elif opcode == 24:  # DLCOLLISION  
+        elif opcode == 24:  # DLCOLLISION
             return self.parse_dlcollision_record(data_offset)
         elif opcode == 4:  # DL
             return self.parse_dl_record(data_offset)
@@ -295,7 +295,7 @@ class BinaryModelParser:
         # Add more as needed
         else:
             return {'_raw_offset': data_offset}
-    
+
     def parse_group_record(self, offset: int) -> Dict:
         """Parse ModelRoData_GroupRecord (28 bytes)"""
         return {
@@ -310,7 +310,7 @@ class BinaryModelParser:
             'child_group_offset': self.to_file_offset(read_u32(self.data, offset + 20)),
             'bounding_volume_radius': read_float(self.data, offset + 24),
         }
-    
+
     def parse_bbox_record(self, offset: int) -> Dict:
         """Parse ModelRoData_BoundingBoxRecord (28 bytes)"""
         return {
@@ -323,10 +323,10 @@ class BinaryModelParser:
             'zmin': read_float(self.data, offset + 20),
             'zmax': read_float(self.data, offset + 24),
         }
-    
+
     def parse_lod_record(self, offset: int) -> Dict:
         """Parse ModelRoData_LODRecord (16 bytes)
-        
+
         Structure (from bondtypes.h):
             f32 MinDistance;    // 0x0
             f32 MaxDistance;    // 0x4
@@ -344,10 +344,10 @@ class BinaryModelParser:
             'reserved': read_u16(self.data, offset + 0xE),
             '_binary_size': 16,  # Actual size in binary
         }
-    
+
     def parse_dlcollision_record(self, offset: int) -> Dict:
         """Parse ModelRoData_DisplayList_CollisionRecord (32 bytes)
-        
+
         Structure (from bondtypes.h):
             Gfx    *Primary;              // 0x00 - Primary display list
             Gfx    *Secondary;            // 0x04 - Secondary display list (optional)
@@ -371,16 +371,16 @@ class BinaryModelParser:
         model_type = read_s16(self.data, offset + 0x18)
         rw_data_index = read_u16(self.data, offset + 0x1A)
         # base_addr at 0x1C is runtime pointer, not needed
-        
+
         # Parse vertex arrays
         vertices = self.parse_vertex_array(vertices_offset, num_vertices) if vertices_offset > 0 else []
         collision_vertices = self.parse_vertex_array(collision_vertices_offset, num_collision_vertices) if collision_vertices_offset > 0 else []
         point_usage = self.parse_point_usage(point_usage_offset, num_vertices) if point_usage_offset > 0 else []
-        
+
         # Parse GDL commands
         primary_gfx = self.parse_gfx_list(primary_offset, vertices_offset) if primary_offset > 0 else []
         secondary_gfx = self.parse_gfx_list(secondary_offset, vertices_offset) if secondary_offset > 0 else []
-        
+
         return {
             '_type': 'DisplayListCollisionRecord',
             'primary_offset': primary_offset,
@@ -396,7 +396,7 @@ class BinaryModelParser:
             'primary_gfx': primary_gfx,
             'secondary_gfx': secondary_gfx,
         }
-    
+
     def parse_dl_record(self, offset: int) -> Dict:
         """Parse ModelRoData_DisplayListRecord (19 bytes logical, 20 with padding)"""
         return {
@@ -405,7 +405,7 @@ class BinaryModelParser:
             'secondary_offset': self.to_file_offset(read_u32(self.data, offset + 4)),
             # More fields...
         }
-    
+
     def parse_bsp_record(self, offset: int) -> Dict:
         """Parse ModelRoData_BSPRecord (36 bytes total)"""
         return {
@@ -421,7 +421,7 @@ class BinaryModelParser:
             'reserved': read_s16(self.data, offset + 32),
             'rw_data_index': read_u16(self.data, offset + 34),
         }
-    
+
     def parse_switch_record(self, offset: int) -> Dict:
         """Parse ModelRoData_SwitchRecord (8 bytes)"""
         return {
@@ -430,10 +430,10 @@ class BinaryModelParser:
             'rw_data_index': read_u16(self.data, offset + 4),
             'reserved': read_u16(self.data, offset + 6),
         }
-    
+
     def parse_interlink_record(self, offset: int) -> Dict:
         """Parse ModelRoData_InterlinkageRecord (28 bytes)
-        
+
         Structure (from bondtypes.h):
             coord3d pos;      // 0x0 - position (3 floats)
             u32     unknown1; // 0xC
@@ -452,7 +452,7 @@ class BinaryModelParser:
             'unknown3': read_u32(self.data, offset + 0x14),
             'scale': read_float(self.data, offset + 0x18),
         }
-    
+
     def parse_groupsimple_record(self, offset: int) -> Dict:
         """Parse ModelRoData_GroupSimpleRecord (20 bytes)"""
         return {
@@ -464,22 +464,23 @@ class BinaryModelParser:
             'group2': read_u16(self.data, offset + 14),
             'bounding_volume_radius': read_float(self.data, offset + 16),
         }
-    
+
     def parse_header_record(self, offset: int) -> Dict:
         """Parse ModelRoData_HeaderRecord (16 bytes)"""
         return {
             '_type': 'HeaderRecord',
-            'model_type': read_u32(self.data, offset),
+            'anim_part': read_u16(self.data, offset),
+            'matrix_index': read_s16(self.data, offset + 2),
             'first_group_offset': self.to_file_offset(read_u32(self.data, offset + 4)),
             'group1': read_u16(self.data, offset + 8),
             'group2': read_u16(self.data, offset + 10),
             'rw_data_index': read_u16(self.data, offset + 12),
             'reserved': read_u16(self.data, offset + 14),
         }
-    
+
     def parse_head_placeholder_record(self, offset: int) -> Dict:
         """Parse ModelRoData_HeadPlaceholderRecord (4 bytes with padding)
-        
+
         Structure (from bondtypes.h):
             u16 RwDataIndex;     // 0x0
             u16 padding;         // 0x2 (implicit padding to 4 bytes)
@@ -490,10 +491,10 @@ class BinaryModelParser:
             'rw_data_index': read_u16(self.data, offset),
             'padding': read_u16(self.data, offset + 2),
         }
-    
+
     def parse_shadow_record(self, offset: int) -> Dict:
         """Parse ModelRoData_ShadowRecord (32 bytes)
-        
+
         Structure (from bondtypes.h):
             coord2d pos;                   // 0x0 (2 floats)
             coord2d size;                  // 0x8 (2 floats)
@@ -505,10 +506,10 @@ class BinaryModelParser:
         """
         image_ptr = read_u32(self.data, offset + 0x10)
         image_offset = self.to_file_offset(image_ptr) if image_ptr != 0 else 0
-        
+
         header_ptr = read_u32(self.data, offset + 0x14)
         header_offset = self.to_file_offset(header_ptr) if header_ptr != 0 else 0
-        
+
         return {
             '_type': 'ShadowRecord',
             'pos_x': read_float(self.data, offset + 0x0),
@@ -520,10 +521,10 @@ class BinaryModelParser:
             'scale': read_float(self.data, offset + 0x18),
             'base_addr': read_u32(self.data, offset + 0x1C),
         }
-    
+
     def parse_gunfire_record(self, offset: int) -> Dict:
         """Parse ModelRoData_GunfireRecord (40 bytes)
-        
+
         Structure (from bondtypes.h):
             coord3d Offset;      // 0x0 (3 floats)
             coord3d Size;        // 0xC (3 floats)
@@ -536,7 +537,7 @@ class BinaryModelParser:
         """
         image_ptr = read_u32(self.data, offset + 0x18)
         image_offset = self.to_file_offset(image_ptr) if image_ptr != 0 else 0
-        
+
         return {
             '_type': 'GunfireRecord',
             'offset_x': read_float(self.data, offset + 0x0),
@@ -552,10 +553,10 @@ class BinaryModelParser:
             'base_addr': read_u32(self.data, offset + 0x24),
             '_binary_size': 40,
         }
-    
+
     def parse_dlprimary_record(self, offset: int) -> Dict:
         """Parse ModelRoData_DisplayListPrimaryRecord (16 bytes)
-        
+
         Structure (from bondtypes.h):
             s32 numVertices;    // 0x0
             Vertex *Vertices;   // 0x4
@@ -567,10 +568,10 @@ class BinaryModelParser:
         vertices_ptr = read_u32(self.data, offset + 4)
         primary_ptr = read_u32(self.data, offset + 8)
         base_addr = read_u32(self.data, offset + 12)
-        
+
         vertices_offset = self.to_file_offset(vertices_ptr) if vertices_ptr != 0 else 0
         primary_offset = self.to_file_offset(primary_ptr) if primary_ptr != 0 else 0
-        
+
         # Parse vertex array if present
         vertices = []
         if vertices_offset > 0 and num_vertices > 0:
@@ -588,10 +589,10 @@ class BinaryModelParser:
                     b=read_u8(self.data, v_offset + 14),
                     a=read_u8(self.data, v_offset + 15)
                 ))
-        
+
         # Parse Gfx array
         primary_gfx, _ = parse_gfx_array(self.data, primary_offset, self.base_address) if primary_offset > 0 else ([], 0)
-        
+
         return {
             '_type': 'DisplayListPrimaryRecord',
             'num_vertices': num_vertices,
@@ -602,28 +603,28 @@ class BinaryModelParser:
             'primary_gfx': primary_gfx,
             '_binary_size': 16,
         }
-    
+
     def parse_dl_record(self, offset: int) -> Dict:
         """Parse ModelRoData_DisplayListRecord (19 bytes)"""
         primary_offset = self.to_file_offset(read_u32(self.data, offset))
         secondary_offset = self.to_file_offset(read_u32(self.data, offset + 4))
         vertices_offset = self.to_file_offset(read_u32(self.data, offset + 12))
         num_vertices = read_u16(self.data, offset + 16)
-        
+
         # Extract vertex array if present
         vertices = []
         if vertices_offset > 0 and num_vertices > 0:
             vertices = self.parse_vertex_array(vertices_offset, num_vertices)
-        
+
         # Extract Gfx display lists if present
         primary_gfx = []
         if primary_offset > 0:
             primary_gfx = self.parse_gfx_list(primary_offset, vertices_offset)
-        
+
         secondary_gfx = []
         if secondary_offset > 0:
             secondary_gfx = self.parse_gfx_list(secondary_offset, vertices_offset)
-        
+
         return {
             '_type': 'DisplayListRecord',
             'primary_offset': primary_offset,
@@ -636,7 +637,7 @@ class BinaryModelParser:
             'primary_gfx': primary_gfx,
             'secondary_gfx': secondary_gfx,
         }
-    
+
     def parse_vertex_array(self, offset: int, count: int) -> List[Vertex]:
         """Parse Vertex array (16 bytes per vertex)"""
         vertices = []
@@ -656,44 +657,44 @@ class BinaryModelParser:
             )
             vertices.append(v)
         return vertices
-    
+
     def parse_point_usage(self, offset: int, count: int) -> List[int]:
         """Parse point usage array (s16[])"""
         return [read_s16(self.data, offset + i * 2) for i in range(count)]
-    
+
     def parse_gfx_list(self, offset: int, vertices_offset: int = None) -> List[str]:
         """Parse Gfx display list commands (8 bytes each) until final end marker
         Returns decoded command strings ready for C output
-        
+
         vertices_offset: File offset where vertex array starts (for resolving vertex addresses)
         """
         if offset <= 0 or offset >= len(self.data):
             return []
-        
+
         # Prepare vertex array name for address resolution
         vtx_array_name = f"Vertex_0x{vertices_offset:03x}" if vertices_offset else None
-        
+
         gfx_cmds = []
         while offset + 8 <= len(self.data):
             w0 = read_u32(self.data, offset)
             w1 = read_u32(self.data, offset + 4)
-            
+
             # Decode command to macro format with image_map for texture lookup
             decoded = decode_gfx_command(w0, w1, vtx_array_name, vertices_offset, self.image_map)
             gfx_cmds.append(decoded)
-            
+
             opcode = (w0 >> 24) & 0xFF
-            
+
             # Stop at B8 (final end marker), but continue past E7 (initial marker)
             if opcode == 0xB8:
                 break
-            
+
             offset += 8
-            
+
             # Safety limit to prevent infinite loops
             if len(gfx_cmds) > 10000:
                 break
-        
+
         return gfx_cmds
 
 
@@ -718,15 +719,15 @@ def load_image_map():
 def parse_metadata_files(prop_name: str) -> Optional[Dict]:
     """Parse ModelFileHeader.inc.c and propFileRecord.inc.c"""
     prop_dir = Path("assets/obseg/prop") / prop_name
-    
+
     header_file = prop_dir / "ModelFileHeader.inc.c"
     record_file = prop_dir / "propFileRecord.inc.c"
-    
+
     if not header_file.exists() or not record_file.exists():
         return None
-    
+
     metadata = {}
-    
+
     # Parse ModelFileHeader.inc.c
     with open(header_file, 'r') as f:
         content = f.read()
@@ -738,14 +739,14 @@ def parse_metadata_files(prop_name: str) -> Optional[Dict]:
             metadata['num_switches'] = int(match.group(5), 0)
             metadata['bounding_radius'] = float(match.group(7))
             metadata['num_textures'] = int(match.group(9), 0)  # 0 base auto-detects hex/decimal
-    
+
     # Parse propFileRecord.inc.c
     with open(record_file, 'r') as f:
         content = f.read()
         match = re.search(r'PROPFILERECORD\s*\(\s*\w+\s*,\s*([\d.]+)\s*\)', content)
         if match:
             metadata['scale'] = float(match.group(1))
-    
+
     return metadata if 'num_textures' in metadata else None
 
 
@@ -755,25 +756,25 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
     Returns the macro call as a string (e.g., "gsDPPipeSync()").
     Falls back to raw hex format if command is unknown.
     image_map: dict mapping texture_id -> IMAGE_NAME for G_SETTEX
-    
+
     Reference: include/PR/gbi.h
-    
+
     vertex_array_name: Name of the vertex array (e.g., "Vertex_0x098")
     vertex_array_offset: File offset where vertex array starts
     """
     opcode = (w0 >> 24) & 0xFF
-    
+
     # Helper to resolve segment addresses to symbol names
     def resolve_address(addr):
         # All segment addresses (0xXX000000 format) are runtime-resolved
         # Leave them as raw hex for the game engine to resolve
         # The segments (3, 4, 5, etc.) are set up at runtime
         return f"0x{addr:08X}"
-    
+
     # Helper to extract bit fields using _SHIFTR logic
     def extract_bits(value, shift, width):
         return (value >> shift) & ((1 << width) - 1)
-    
+
     # G_IM_FMT_ constants from gbi.h
     FMT_NAMES = {
         0: "G_IM_FMT_RGBA",
@@ -782,7 +783,7 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         3: "G_IM_FMT_IA",
         4: "G_IM_FMT_I",
     }
-    
+
     # G_IM_SIZ_ constants from gbi.h
     SIZ_NAMES = {
         0: "G_IM_SIZ_4b",
@@ -791,7 +792,7 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         3: "G_IM_SIZ_32b",
         5: "G_IM_SIZ_DD",
     }
-    
+
     # RDP Sync commands (no parameters)
     if opcode == 0xE7:
         return "gsDPPipeSync()"
@@ -813,17 +814,17 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         minlevel = extract_bits(w1, 24, 8)
         detail_id = extract_bits(w1, 12, 12)
         texture_id = extract_bits(w1, 0, 12)
-        
+
         # Map type value to TextureTypes enum
         type_names = [
             "TEXTURETYPE_LOD",
-            "TEXTURETYPE_DETAIL", 
+            "TEXTURETYPE_DETAIL",
             "TEXTURETYPE_MIPMAP",
             "TEXTURETYPE_TILE",
             "TEXTURETYPE_TILE_PRESWAPPED"
         ]
         type_str = type_names[type_val] if type_val < len(type_names) else str(type_val)
-        
+
         # Look up IMAGE enum from texture_id
         if image_map and texture_id in image_map:
             image_name = image_map[texture_id]
@@ -831,14 +832,14 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         else:
             # Fallback to raw texture_id if not found in map
             return f"gsSPUseTexture({cms}, {cmt}, {tile}, {shifts}, {shiftt}, {type_str}, {minlevel}, {detail_id}, 0x{texture_id:03X})"
-    
+
     elif opcode == 0x00:
         return "gsDPNoOp()"
-    
+
     # gsSPEndDisplayList (0xB8 or 0xDF depending on mode)
     elif opcode == 0xB8 or opcode == 0xDF:
         return "gsSPEndDisplayList()"
-    
+
     # gsSPMatrixGE (0x01 G_MTX) - GoldenEye matrix command
     # Format: w0 = cmd(24-31) | params(16-23) | sizeof(Mtx)(0-15), w1 = address
     # params bits: projection(0) | load(1) | push(2)
@@ -847,27 +848,27 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         size = extract_bits(w0, 0, 16)
         addr = w1
         addr_str = resolve_address(addr)
-        
+
         # Decode matrix parameters
         param_str = ""
         if params & 0x01:
             param_str = "G_MTX_PROJECTION"
         else:
             param_str = "G_MTX_MODELVIEW"
-        
+
         if params & 0x02:
             param_str += " | G_MTX_LOAD"
         else:
             param_str += " | G_MTX_MUL"
-            
+
         if params & 0x04:
             param_str += " | G_MTX_PUSH"
         else:
             param_str += " | G_MTX_NOPUSH"
-        
+
         # Output raw bytes with decoded comment
-        return f"gsSPMatrixGE({addr_str}, {param_str})"
-    
+        return f"gsSPMatrix({addr_str}, {param_str})"
+
     elif opcode == 0x04:
         # RARE vertex format: w0 = cmd(24-31) | encoded(16-23) | sizeof(Vtx)*n(0-15)
         # encoded byte format: ((v0+n) << 1) | flag
@@ -875,24 +876,14 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         encoded_value = extract_bits(w0, 16, 8)
         length = extract_bits(w0, 0, 16)
         flag = encoded_value & 1
-        v0_plus_n = encoded_value >> 1
-        n = length // 16  # sizeof(Vtx) = 16
-        v0 = v0_plus_n - n
+        n = encoded_value >> 4
+        #n = length // 16  # sizeof(Vtx) = 16
+        v0 = encoded_value & 15
         addr = w1
         addr_str = resolve_address(addr)
-        return f"gsSPVertexGE({addr_str}, {n}, {v0}, {flag})"
-        v00 = extract_bits(w0, 16, 8) // 2
-        v01 = extract_bits(w0, 8, 8) // 2
-        v02 = extract_bits(w0, 0, 8) // 2
-        flag0 = 0  # Simplified - actual flag extraction is complex
-        
-        v10 = extract_bits(w1, 16, 8) // 2
-        v11 = extract_bits(w1, 8, 8) // 2
-        v12 = extract_bits(w1, 0, 8) // 2
-        flag1 = 0
-        
-        return f"gsSP2Triangles({v00}, {v01}, {v02}, {flag0}, {v10}, {v11}, {v12}, {flag1})"
-    
+        return f"gsSPVertex({addr_str}, {n+1}, {v0})"
+
+
     # G_TRI4 (0xB1) - GoldenEye extension packing 4 triangles with 4-bit vertex indices
     # gsSP4Triangles(x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, z4)
     elif opcode == 0xB1:
@@ -901,7 +892,7 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         z2 = extract_bits(w0, 4, 4)
         z3 = extract_bits(w0, 8, 4)
         z4 = extract_bits(w0, 12, 4)
-        
+
         # Extract from w1: y4(28-31) | x4(24-27) | y3(20-23) | x3(16-19) | y2(12-15) | x2(8-11) | y1(4-7) | x1(0-3)
         x1 = extract_bits(w1, 0, 4)
         y1 = extract_bits(w1, 4, 4)
@@ -911,9 +902,13 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         y3 = extract_bits(w1, 20, 4)
         x4 = extract_bits(w1, 24, 4)
         y4 = extract_bits(w1, 28, 4)
-        
+
+        # If z3 and z4 are both zero, produce a shorter gsSP2Triangles macro as requested
+        if x3 == 0 and x4 == 0 and y3 == 0 and y4 == 0 and z3 == 0 and z4 == 0:
+            return f"gsSP2Triangles({x1}, {y1}, {z1},{x1}, {x2}, {y2}, {z2}, {x2})"
+
         return f"gsSP4Triangles({x1}, {y1}, {z1}, {x2}, {y2}, {z2}, {x3}, {y3}, {z3}, {x4}, {y4}, {z4})"
-    
+
     # gsSP1Triangle (0x05 in F3DEX_GBI_2, 0xBF in F3DEX/classic)
     elif opcode == 0x05:
         v0 = extract_bits(w1, 16, 8) // 2
@@ -921,15 +916,15 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         v2 = extract_bits(w1, 0, 8) // 2
         flag = 0
         return f"gsSP1Triangle({v0}, {v1}, {v2}, {flag})"
-    
+
     # 0xBF - F3DEX gsSP1Triangle (GoldenEye version without flag rotation)
     elif opcode == 0xBF:
-        v0 = extract_bits(w1, 16, 8) // 2
-        v1 = extract_bits(w1, 8, 8) // 2
-        v2 = extract_bits(w1, 0, 8) // 2
+        v0 = extract_bits(w1, 16, 8) // 10
+        v1 = extract_bits(w1, 8, 8) // 10
+        v2 = extract_bits(w1, 0, 8) // 10
         flag = 0
-        return f"gsSP1TriangleGE({v0}, {v1}, {v2}, {flag})"
-    
+        return f"gsSP1Triangle({v0}, {v1}, {v2}, {flag})"
+
     # gsSPTexture (0xD7 in F3DEX_GBI_2, 0xBB in classic)
     elif opcode == 0xD7 or opcode == 0xBB:
         # w0 = cmd(24-31) | bowtie(16-23) | level(11-13) | tile(8-10) | on(0-7)
@@ -940,26 +935,26 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         on = extract_bits(w0, 0, 8)
         s = extract_bits(w1, 16, 16)
         t = extract_bits(w1, 0, 16)
-        
+
         # Use gsSPTextureL if bowtie != 0, otherwise gsSPTexture
         if bowtie != 0:
             return f"gsSPTextureL({s}, {t}, {level}, 0x{bowtie:02X}, {tile}, {on})"
         else:
             return f"gsSPTexture({s}, {t}, {level}, {tile}, {on})"
-    
+
     # gsDPSetCombineMode / gsDPSetCombineLERP (0xFC)
     elif opcode == 0xFC:
         # Complex color combiner - show as raw for now
         muxs0 = w0 & 0xFFFFFF
         muxs1 = w1
         return f"gsDPSetCombine(0x{muxs0:06X}, 0x{muxs1:08X})"
-    
+
     # gsSPSetOtherMode_H (0xE3 in F3DEX_GBI_2, 0xBA in classic)
     elif opcode == 0xE3 or opcode == 0xBA:
         sft = extract_bits(w0, 8, 8)
         length = extract_bits(w0, 0, 8)
         data = w1
-        
+
         # Decode common high-level macros
         if sft == 16 and length == 1:
             # gsDPSetTextureLOD
@@ -983,33 +978,33 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
                 return "gsDPSetTextureFilter(G_TF_BILERP)"
             elif data == 0x00003000:
                 return "gsDPSetTextureFilter(G_TF_AVERAGE)"
-        
+
         # Fallback to generic macro
         return f"gsSPSetOtherMode(G_SETOTHERMODE_H, {sft}, {length}, 0x{data:08X})"
-    
+
     # gsSPSetOtherMode_L (0xE2 in F3DEX_GBI_2, 0xB9 in classic)
     elif opcode == 0xE2 or opcode == 0xB9:
         sft = extract_bits(w0, 8, 8)
         length = extract_bits(w0, 0, 8)
         data = w1
         return f"gsSPSetOtherMode(G_SETOTHERMODE_L, {sft}, {length}, 0x{data:08X})"
-    
+
     # gsSPGeometryMode (0xD9 in F3DEX_GBI_2)
     elif opcode == 0xD9:
         clearbits = (~w0) & 0xFFFFFF
         setbits = w1
         return f"gsSPGeometryMode(0x{clearbits:08X}, 0x{setbits:08X})"
-    
+
     # gsSPSetGeometryMode (0xB7 classic, 0xD9 F3DEX2 variant)
     elif opcode == 0xB7:
         mode = w1
         return f"gsSPSetGeometryMode(0x{mode:08X})"
-    
+
     # gsSPClearGeometryMode (0xB6)
     elif opcode == 0xB6:
         mode = w1
         return f"gsSPClearGeometryMode(0x{mode:08X})"
-    
+
     # gsDPSetPrimColor (0xFA)
     elif opcode == 0xFA:
         m = extract_bits(w0, 8, 8)
@@ -1019,7 +1014,7 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         b = extract_bits(w1, 8, 8)
         a = extract_bits(w1, 0, 8)
         return f"gsDPSetPrimColor({m}, {l}, {r}, {g}, {b}, {a})"
-    
+
     # gsDPSetEnvColor (0xFB)
     elif opcode == 0xFB:
         r = extract_bits(w1, 24, 8)
@@ -1027,7 +1022,7 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         b = extract_bits(w1, 8, 8)
         a = extract_bits(w1, 0, 8)
         return f"gsDPSetEnvColor({r}, {g}, {b}, {a})"
-    
+
     # gsDPSetTextureImage (0xFD)
     elif opcode == 0xFD:
         fmt = extract_bits(w0, 21, 3)
@@ -1037,7 +1032,7 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         fmt_name = FMT_NAMES.get(fmt, f"0x{fmt:X}")
         siz_name = SIZ_NAMES.get(siz, f"0x{siz:X}")
         return f"gsDPSetTextureImage({fmt_name}, {siz_name}, {width}, 0x{addr:08X})"
-    
+
     # gsDPSetTile (0xF5) - output as raw bytes due to complex parameter encoding
     elif opcode == 0xF5:
         fmt = extract_bits(w0, 21, 3)
@@ -1057,7 +1052,7 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         fmt_name = FMT_NAMES.get(fmt, f"0x{fmt:X}")
         siz_name = SIZ_NAMES.get(siz, f"0x{siz:X}")
         return f"{{{{ 0x{w0:08X}, 0x{w1:08X} }}}}  /* gsDPSetTile({fmt_name}, {siz_name}, {line}, {tmem}, {tile}, {palette}, {ct}, {maskt}, {shiftt}, {cs}, {masks}, {shifts}) */"
-    
+
     # gsDPLoadBlock (0xF3)
     elif opcode == 0xF3:
         uls = extract_bits(w0, 12, 12)
@@ -1066,7 +1061,7 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         lrs = extract_bits(w1, 12, 12)
         dxt = extract_bits(w1, 0, 12)
         return f"gsDPLoadBlock({tile}, {uls}, {ult}, {lrs}, {dxt})"
-    
+
     # gsDPSetTileSize (0xF2) - output as raw bytes due to precision issues
     elif opcode == 0xF2:
         uls = extract_bits(w0, 12, 12)
@@ -1075,33 +1070,33 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         lrs = extract_bits(w1, 12, 12)
         lrt = extract_bits(w1, 0, 12)
         return f"{{{{ 0x{w0:08X}, 0x{w1:08X} }}}}  /* gsDPSetTileSize({tile}, {uls}, {ult}, {lrs}, {lrt}) */"
-    
+
     # gsSPDisplayList (0xDE in F3DEX_GBI_2, 0x06 in classic)
     elif opcode == 0xDE or opcode == 0x06:
         addr = w1
         return f"gsSPDisplayList(0x{addr:08X})"
-    
+
     # gsSPBranchList (0xDE with different flags)
     # Distinguishing from DisplayList requires looking at push/nopush flag
     # For now, treat as DisplayList
-    
+
     # gsSPMatrix (0xDA in F3DEX_GBI_2, 0x01 in classic)
     elif opcode == 0xDA or opcode == 0x01:
         params = extract_bits(w0, 0, 8)
         addr = w1
         return f"gsSPMatrix(0x{addr:08X}, {params})"
-    
+
     # gsSPPopMatrix (0xD8 in F3DEX_GBI_2, 0xBD in classic)
     elif opcode == 0xD8 or opcode == 0xBD:
         n = w1
         return f"gsSPPopMatrix(G_MTX_MODELVIEW, {n})"
-    
+
     # gsDPLoadTLUT (0xF0)
     elif opcode == 0xF0:
         tile = extract_bits(w1, 24, 3)
         count = extract_bits(w1, 14, 10)
         return f"gsDPLoadTLUT({tile}, {count})"
-    
+
     # gsDPSetScissor (0xED)
     elif opcode == 0xED:
         mode = extract_bits(w0, 0, 2)
@@ -1110,7 +1105,7 @@ def decode_gfx_command(w0: int, w1: int, vertex_array_name: str = None, vertex_a
         lrx = extract_bits(w1, 12, 12)
         lry = extract_bits(w1, 0, 12)
         return f"gsDPSetScissor(G_SC_NON_INTERLACE, {ulx}, {uly}, {lrx}, {lry})"
-    
+
     # Unknown command - output as raw hex with comment
     else:
         return "{{0x%08X, 0x%08X}} /* unknown opcode 0x%02X */" % (w0, w1, opcode)
@@ -1120,42 +1115,42 @@ def parse_gfx_array(data: bytes, offset: int, base_addr: int) -> Tuple[List[str]
     """Parse Gfx display list commands until end marker (0xB8 or 0xDF)"""
     if offset == 0:
         return [], 0
-    
+
     commands = []
     pos = offset
     max_commands = 1000  # Safety limit to prevent infinite loops
-    
+
     for _ in range(max_commands):
         if pos + 8 > len(data):
             break
-        
+
         # Read Gfx command (8 bytes)
         w0 = read_u32(data, pos)
         w1 = read_u32(data, pos + 4)
-        
+
         opcode = (w0 >> 24) & 0xFF
-        
+
         # Decode command to macro format
         decoded = decode_gfx_command(w0, w1)
         commands.append(decoded)
         pos += 8
-        
+
         # Stop at B8 (gsSPEndDisplayList) or DF end markers
         if opcode == 0xB8 or opcode == 0xDF:
             break
-    
+
     return commands, pos - offset
 
 
 def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_map: Dict, binary_data: bytes) -> str:
     """Generate complete Model.c source code from parsed model data"""
-    
+
     switches = parsed_model['switches']
     textures = parsed_model['textures']
     nodes = parsed_model['nodes']
     referenced_data = parsed_model.get('referenced_data', {})
     root_offset = parsed_model['root_offset']
-    
+
     lines = []
     lines.append('#include "bondtypes.h"')
     lines.append('#include "bondconstants.h"')
@@ -1163,13 +1158,13 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
     lines.append("")
     lines.append(f"#define TEXTURECOUNT {len(textures)}")
     lines.append("")
-    
+
     # Calculate vertex counts from DisplayList nodes to generate #define statements
     vertex_counts = {}
     collision_vertex_counts = {}
     vertex_array_index = 0
     collision_array_index = 0
-    
+
     for node_offset in sorted(nodes.keys()):
         node = nodes[node_offset]
         # DisplayListCollisionRecord (opcode 24)
@@ -1188,25 +1183,25 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             if node.data.get('vertices'):
                 vertex_counts[vertex_array_index] = len(node.data['vertices'])
                 vertex_array_index += 1
-    
+
     # Generate vertex count defines
     for idx, count in vertex_counts.items():
         lines.append(f"#define VERTEXGROUPCOUNT{idx} {count}")
     for idx, count in collision_vertex_counts.items():
         lines.append(f"#define COLLISIONVERTEXCOUNT{idx} {count}")
     lines.append("")
-    
+
     # Forward declarations (will be populated after structure collection)
     lines.append("// Forward declarations")
-    
+
     # First, declare all ModelNodes
     for node_offset in sorted(nodes.keys()):
         lines.append(f"extern ModelNode ModelNode_0x{node_offset:03x};")
     lines.append("")
-    
+
     # Placeholder for data structure forward declarations (will be filled in later)
     forward_decl_placeholder_index = len(lines)
-    
+
     # For props with switches: generate switch array at start of file
     # Game code expects: filedata[0..numSwitches*4-1] = switches, then textures, then nodes
     if len(switches) > 0:
@@ -1221,7 +1216,7 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                 lines.append(f"    0x00000000,  // NULL")
         lines.append("};")
         lines.append("")
-    
+
     # Generate texture table
     lines.append("//base address is 0x05000000")
     if len(textures) > 0:
@@ -1235,12 +1230,12 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
         # Zero-sized arrays are invalid in C, so don't generate them
         lines.append("// No textures for this prop")
     lines.append("")
-    
+
     # Generate ModelNode tree
     lines.append("// ModelNode tree")
     for node_offset in sorted(nodes.keys()):
         node = nodes[node_offset]
-        
+
         # Format the opcode field - need to include both flag byte and opcode byte
         # In the binary it's stored as u16 big-endian: (flags << 8) | opcode
         # We output it as a compound literal to ensure correct byte layout
@@ -1251,30 +1246,30 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             # Just the opcode for prop models (flags=0)
             opcode_name = f"MODELNODE_OPCODE_{OPCODES.get(node.opcode, 'UNKNOWN')}"
             opcode_value = opcode_name
-        
+
         # Format pointers
         data_ptr = f"&{get_data_symbol_name(node)}" if node.data else "NULL"
         parent_ptr = f"&ModelNode_0x{node.parent_offset:03x}" if node.parent_offset is not None and node.parent_offset >= 0 else "NULL"
         next_ptr = f"&ModelNode_0x{node.next_offset:03x}" if node.next_offset is not None and node.next_offset >= 0 else "NULL"
         prev_ptr = f"&ModelNode_0x{node.prev_offset:03x}" if node.prev_offset is not None and node.prev_offset >= 0 else "NULL"
         child_ptr = f"&ModelNode_0x{node.child_offset:03x}" if node.child_offset is not None and node.child_offset >= 0 else "NULL"
-        
+
         lines.append(f"ModelNode ModelNode_0x{node_offset:03x} = {{{opcode_value}, {data_ptr}, {parent_ptr}, {next_ptr}, {prev_ptr}, {child_ptr}}};")
     lines.append("")
-    
+
     # CRITICAL: IDO compiler places structures in .data section in exact C file declaration order
     # We MUST output all structures sorted by their original binary offset to match the layout
-    
+
     # Step 1: Collect all structures with their (file_offset, code_lines, dependencies)
     all_structures = []
-    
+
     # Map node offset to symbolic names for each data array
     node_to_vtx_name = {}
     node_to_colvtx_name = {}
     node_to_ptusage_name = {}
     node_to_gdl_prim_name = {}
     node_to_gdl_sec_name = {}
-    
+
     # Create mapping from node_offset to vertex/collision array indices
     # This must match the indices generated in the first loop
     node_to_vtx_index = {}
@@ -1296,20 +1291,20 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             if node.data.get('vertices'):
                 node_to_vtx_index[node_offset] = vtx_counter
                 vtx_counter += 1
-    
+
     # Counters for generating unique names
     ptusage_idx = 0
     gdl_prim_idx = 0
     gdl_sec_idx = 0
-    
+
     # Step 2: Process nodes to collect all structures with their offsets
     for node_offset in sorted(nodes.keys()):
         node = nodes[node_offset]
         if not node.data:
             continue
-        
+
         dtype = node.data.get('_type')
-        
+
         # GroupRecord structures
         if dtype == 'GroupRecord':
             struct_lines = []
@@ -1319,7 +1314,7 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    {{{ox}, {oy}, {oz}}}, //origin {{x,y,z}}")
             struct_lines.append(f"    0x{node.data['joint_id']:X}, //JointID")
             mid0 = node.data['matrix_id0']
-            mid1 = node.data['matrix_id1'] 
+            mid1 = node.data['matrix_id1']
             mid2 = node.data['matrix_id2']
             struct_lines.append(f"    0x{mid0 & 0xFFFF:X}, //MatrixID0")
             struct_lines.append(f"    0x{mid1 & 0xFFFF:X}, //MatrixID1")
@@ -1333,7 +1328,7 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    {node.data['bounding_volume_radius']} //BoundingVolumeRadius")
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
-        
+
         # BoundingBoxRecord structures
         elif dtype == 'BoundingBoxRecord':
             struct_lines = []
@@ -1346,9 +1341,9 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    {{{xmin}, {xmax}, {ymin}, {ymax}, {zmin}, {zmax}}}")
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
-            
+
             # Note: Padding is handled by gap detection, not added here
-        
+
         # LODRecord structures
         elif dtype == 'LODRecord':
             struct_lines = []
@@ -1365,7 +1360,7 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
             # Note: Padding is detected and added separately
-        
+
         # BSPRecord structures
         elif dtype == 'BSPRecord':
             struct_lines = []
@@ -1385,7 +1380,7 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    0x{node.data['reserved']:X}, 0x{node.data['rw_data_index']:X} //reserved, RwDataIndex")
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
-        
+
         # SwitchRecord structures
         elif dtype == 'SwitchRecord':
             struct_lines = []
@@ -1397,7 +1392,7 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    0x{node.data['rw_data_index']:X}, 0x{node.data['reserved']:X} //RwDataIndex, reserved")
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
-        
+
         # InterlinkageRecord structures (28 bytes)
         elif dtype == 'InterlinkageRecord':
             struct_lines = []
@@ -1411,7 +1406,7 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    {node.data['scale']} //Scale")
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
-        
+
         # GroupSimpleRecord structures (20 bytes)
         elif dtype == 'GroupSimpleRecord':
             struct_lines = []
@@ -1423,22 +1418,23 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    {node.data['bounding_volume_radius']} //BoundingVolumeRadius")
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
-        
+
         # HeaderRecord structures (16 bytes)
         elif dtype == 'HeaderRecord':
             struct_lines = []
             struct_lines.append(f"ModelRoData_HeaderRecord HeaderRecord_0x{node.data_offset:03x} = ")
             struct_lines.append("{")
-            struct_lines.append(f"    0x{node.data['model_type']:X}, //ModelType")
-            # FirstGroup pointer (points to ModelNode, despite the type name in bondtypes.h)
+            struct_lines.append(f"    0x{node.data['anim_part']:X}, //AnimPart")
+            struct_lines.append(f"    {node.data['matrix_index']}, //MatrixIndex")
+            # FirstGroup points to the first child node in the header subtree.
             first_group_offset = node.data.get('first_group_offset', 0)
-            group_ptr = f"(struct ModelRoData_GroupRecord *)&ModelNode_0x{first_group_offset:03x}" if first_group_offset > 0 else "NULL"
+            group_ptr = f"&ModelNode_0x{first_group_offset:03x}" if first_group_offset > 0 else "NULL"
             struct_lines.append(f"    {group_ptr}, //FirstGroup")
             struct_lines.append(f"    0x{node.data['group1']:X}, 0x{node.data['group2']:X}, //Group1, Group2")
-            struct_lines.append(f"    0x{node.data['rw_data_index']:X} //RwDataIndex")
+            struct_lines.append(f"    0x{node.data['rw_data_index']:X}, 0x{node.data['reserved']:X} //RwDataIndex, reserved")
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
-        
+
         # HeadPlaceholderRecord structures (4 bytes)
         elif dtype == 'HeadPlaceholderRecord':
             struct_lines = []
@@ -1447,7 +1443,7 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    0x{node.data['rw_data_index']:X} //RwDataIndex")
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
-        
+
         # ShadowRecord structures (32 bytes)
         elif dtype == 'ShadowRecord':
             data = node.data
@@ -1456,24 +1452,24 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append("{")
             struct_lines.append(f"    {{{float_to_c(data['pos_x'])}, {float_to_c(data['pos_y'])}}}, //pos")
             struct_lines.append(f"    {{{float_to_c(data['size_x'])}, {float_to_c(data['size_y'])}}}, //size")
-            
+
             # Image pointer
             if data['image_offset'] > 0:
                 struct_lines.append(f"    (void *)(0x05000000 + 0x{data['image_offset']:03x}), //image")
             else:
                 struct_lines.append("    NULL, //image")
-            
+
             # Header pointer - points to a ModelNode with HEADER opcode usually
             if data['header_offset'] > 0:
                 struct_lines.append(f"    (struct ModelRoData_HeaderRecord *)(0x05000000 + 0x{data['header_offset']:03x}), //Header")
             else:
                 struct_lines.append("    NULL, //Header")
-            
+
             struct_lines.append(f"    {float_to_c(data['scale'])}, //Scale")
             struct_lines.append(f"    (void *)0x{data['base_addr']:X} //BaseAddr")
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
-        
+
         # GunfireRecord structures (40 bytes)
         elif dtype == 'GunfireRecord':
             data = node.data
@@ -1503,25 +1499,25 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    0x{data['base_addr']:08X} //BaseAddr")
             struct_lines.append("};")
             all_structures.append((node.data_offset, '\n'.join(struct_lines)))
-        
+
         # DisplayListPrimaryRecord structures (16 bytes) with sub-arrays
         elif dtype == 'DisplayListPrimaryRecord':
             data = node.data
             dl_offset = node.data_offset
-            
+
             # Extract file offsets
             vertices_offset = data.get('vertices_offset', 0)
             primary_offset = data['primary_offset']
-            
+
             vtx_name = None
             prim_name = None
-            
+
             # Vertex array
             if data.get('vertices') and vertices_offset > 0:
                 vtx_name = f"Vertex_0x{vertices_offset:03x}"
                 vtx_index = node_to_vtx_index.get(node_offset, 0)
                 node_to_vtx_name[node_offset] = (vtx_name, vtx_index)
-                
+
                 struct_lines = []
                 struct_lines.append(f"Vertex {vtx_name}[VERTEXGROUPCOUNT{vtx_index}] = ")
                 struct_lines.append("{ //{ {   x,    y,   z}, index,     s,     t,    r,    g,    b,    a }")
@@ -1531,12 +1527,12 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     struct_lines.append(f"    {{ {{ {v.x:4d}, {v.y:4d}, {v.z:4d}}}, 0x{v.flag:X}, {s_str:>6}, {t_str:>6}, 0x{v.r:02X}, 0x{v.g:02X}, 0x{v.b:02X}, 0x{v.a:02X} }},")
                 struct_lines.append("};")
                 all_structures.append((vertices_offset, '\n'.join(struct_lines)))
-            
+
             # Primary Gfx array
             if data['primary_gfx'] and primary_offset > 0:
                 prim_name = f"GDL_0x{primary_offset:03x}"
                 node_to_gdl_prim_name[node_offset] = prim_name
-                
+
                 struct_lines = []
                 struct_lines.append(f"Gfx {prim_name}[] = ")
                 struct_lines.append("{")
@@ -1544,7 +1540,7 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     struct_lines.append(f"    {cmd},")
                 struct_lines.append("};")
                 all_structures.append((primary_offset, '\n'.join(struct_lines)))
-            
+
             # DLPrimary record itself
             struct_lines = []
             struct_lines.append(f"ModelRoData_DisplayListPrimaryRecord DLPrimaryRecord_0x{dl_offset:03x} = ")
@@ -1561,28 +1557,28 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    (void *)0x{data['base_addr']:08X} //BaseAddr")
             struct_lines.append("};")
             all_structures.append((dl_offset, '\n'.join(struct_lines)))
-        
+
         # DisplayListRecord structures (19 bytes) with sub-arrays
         elif dtype == 'DisplayListRecord':
             data = node.data
             dl_offset = node.data_offset
-            
+
             # Extract file offsets for all sub-structures
             vertices_offset = data.get('vertices_offset', 0)
             primary_offset = data['primary_offset']
             secondary_offset = data['secondary_offset']
-            
+
             # Assign unique symbolic names
             vtx_name = None
             prim_name = None
             sec_name = None
-            
+
             # Vertex array
             if data.get('vertices') and vertices_offset > 0:
                 vtx_name = f"Vertex_0x{vertices_offset:03x}"
                 vtx_index = node_to_vtx_index.get(node_offset, 0)
                 node_to_vtx_name[node_offset] = (vtx_name, vtx_index)
-                
+
                 struct_lines = []
                 struct_lines.append(f"Vertex {vtx_name}[VERTEXGROUPCOUNT{vtx_index}] = ")
                 struct_lines.append("{ //{ {   x,    y,   z}, index,     s,     t,    r,    g,    b,    a }")
@@ -1592,13 +1588,13 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     struct_lines.append(f"    {{ {{ {v.x:4d}, {v.y:4d}, {v.z:4d}}}, 0x{v.flag:X}, {s_str:>6}, {t_str:>6}, 0x{v.r:02X}, 0x{v.g:02X}, 0x{v.b:02X}, 0x{v.a:02X} }},")
                 struct_lines.append("};")
                 all_structures.append((vertices_offset, '\n'.join(struct_lines)))
-            
+
             # Primary GFX array
             if data.get('primary_gfx') and primary_offset > 0:
                 prim_name = f"GFX_PRIMARY_0x{primary_offset:03x}"
                 node_to_gdl_prim_name[node_offset] = prim_name
                 gdl_prim_idx += 1
-                
+
                 struct_lines = []
                 struct_lines.append(f"Gfx {prim_name}[] = ")
                 struct_lines.append("{")
@@ -1606,13 +1602,13 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     struct_lines.append(f"    {cmd_str},")
                 struct_lines.append("};")
                 all_structures.append((primary_offset, '\n'.join(struct_lines)))
-            
+
             # Secondary GFX array
             if data.get('secondary_gfx') and secondary_offset > 0:
                 sec_name = f"GFX_SECONDARY_0x{secondary_offset:03x}"
                 node_to_gdl_sec_name[node_offset] = sec_name
                 gdl_sec_idx += 1
-                
+
                 struct_lines = []
                 struct_lines.append(f"Gfx {sec_name}[] = ")
                 struct_lines.append("{")
@@ -1620,22 +1616,22 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     struct_lines.append(f"    {cmd_str},")
                 struct_lines.append("};")
                 all_structures.append((secondary_offset, '\n'.join(struct_lines)))
-            
+
             # Now the DisplayListRecord itself
             struct_lines = []
             struct_lines.append(f"ModelRoData_DisplayListRecord DisplayListRecord_0x{dl_offset:03x} = ")
             struct_lines.append("{")
-            
+
             primary_ref = f"&{node_to_gdl_prim_name[node_offset]}" if node_offset in node_to_gdl_prim_name else "NULL"
             secondary_ref = f"&{node_to_gdl_sec_name[node_offset]}" if node_offset in node_to_gdl_sec_name else "NULL"
-            
+
             struct_lines.append(f"    {primary_ref}, //PrimaryDisplayList")
             struct_lines.append(f"    {secondary_ref}, //SecondaryDisplayList")
-            
+
             # BaseAddr pointer (raw value from binary)
             base_addr = data.get('base_addr', 0)
             struct_lines.append(f"    (void *)0x{base_addr:08X}, //BaseAddr")
-            
+
             # Vertices pointer
             if node_offset in node_to_vtx_name:
                 vtx_ref = f"&{node_to_vtx_name[node_offset][0]}"
@@ -1649,34 +1645,34 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    {data['model_type']} //ModelType")
             struct_lines.append("};")
             all_structures.append((dl_offset, '\n'.join(struct_lines)))
-        
+
         # DisplayListCollisionRecord and all its sub-structures
         elif dtype == 'DisplayListCollisionRecord':
             data = node.data
-            
+
             # DLCollisionRecord itself (32 bytes at node.data_offset)
             dlcoll_offset = node.data_offset
-            
+
             # Extract file offsets for all sub-structures
             vertices_offset = data.get('vertices_offset', 0)
             collision_vertices_offset = data.get('collision_vertices_offset', 0)
             point_usage_offset = data.get('point_usage_offset', 0)
             primary_offset = data['primary_offset']
             secondary_offset = data['secondary_offset']
-            
+
             # Assign unique symbolic names for this node's arrays
             vtx_name = None
             colvtx_name = None
             ptusage_name = None
             prim_name = None
             sec_name = None
-            
+
             # Vertex array
             if data.get('vertices') and vertices_offset > 0:
                 vtx_name = f"Vertex_0x{vertices_offset:03x}"
                 vtx_index = node_to_vtx_index.get(node_offset, 0)
                 node_to_vtx_name[node_offset] = (vtx_name, vtx_index)
-                
+
                 struct_lines = []
                 struct_lines.append(f"Vertex {vtx_name}[VERTEXGROUPCOUNT{vtx_index}] = ")
                 struct_lines.append("{ //{ {   x,    y,   z}, index,     s,     t,    r,    g,    b,    a }")
@@ -1686,13 +1682,13 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     struct_lines.append(f"    {{ {{ {v.x:4d}, {v.y:4d}, {v.z:4d}}}, 0x{v.flag:X}, {s_str:>6}, {t_str:>6}, 0x{v.r:02X}, 0x{v.g:02X}, 0x{v.b:02X}, 0x{v.a:02X} }},")
                 struct_lines.append("};")
                 all_structures.append((vertices_offset, '\n'.join(struct_lines)))
-            
+
             # Collision vertex array
             if data['collision_vertices'] and collision_vertices_offset > 0:
                 colvtx_name = f"Collision_Vertex_0x{collision_vertices_offset:03x}"
                 colvtx_index = node_to_colvtx_index.get(node_offset, 0)
                 node_to_colvtx_name[node_offset] = (colvtx_name, colvtx_index)
-                
+
                 struct_lines = []
                 struct_lines.append(f"Vertex {colvtx_name}[COLLISIONVERTEXCOUNT{colvtx_index}] = ")
                 struct_lines.append("{ //{ {   x,    y,   z}, index,     s,     t,    r,    g,    b,    a }")
@@ -1702,13 +1698,13 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     struct_lines.append(f"    {{ {{ {v.x:4d}, {v.y:4d}, {v.z:4d}}}, 0x{v.flag:X}, {s_str:>6}, {t_str:>6}, 0x{v.r:02X}, 0x{v.g:02X}, 0x{v.b:02X}, 0x{v.a:02X} }},")
                 struct_lines.append("};")
                 all_structures.append((collision_vertices_offset, '\n'.join(struct_lines)))
-            
+
             # Point usage array
             if data['point_usage'] and point_usage_offset > 0:
                 ptusage_name = f"POINT_USAGE_0x{point_usage_offset:03x}"
                 node_to_ptusage_name[node_offset] = (ptusage_name, ptusage_idx)
                 ptusage_idx += 1
-                
+
                 struct_lines = []
                 struct_lines.append(f"s16 {ptusage_name}[VERTEXGROUPCOUNT{node_to_vtx_name[node_offset][1]}] = ")
                 struct_lines.append("{")
@@ -1718,15 +1714,15 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     struct_lines.append(f"    {formatted},")
                 struct_lines.append("};")
                 all_structures.append((point_usage_offset, '\n'.join(struct_lines)))
-                
+
                 # Note: Padding is detected via gap analysis, not added explicitly here
-            
+
             # Primary GFX array
             if data.get('primary_gfx') and primary_offset > 0:
                 prim_name = f"GFX_PRIMARY_0x{primary_offset:03x}"
                 node_to_gdl_prim_name[node_offset] = prim_name
                 gdl_prim_idx += 1
-                
+
                 struct_lines = []
                 struct_lines.append(f"Gfx {prim_name}[] = ")
                 struct_lines.append("{")
@@ -1734,13 +1730,13 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     struct_lines.append(f"    {cmd_str},")
                 struct_lines.append("};")
                 all_structures.append((primary_offset, '\n'.join(struct_lines)))
-            
+
             # Secondary GFX array
             if data.get('secondary_gfx') and secondary_offset > 0:
                 sec_name = f"GFX_SECONDARY_0x{secondary_offset:03x}"
                 node_to_gdl_sec_name[node_offset] = sec_name
                 gdl_sec_idx += 1
-                
+
                 struct_lines = []
                 struct_lines.append(f"Gfx {sec_name}[] = ")
                 struct_lines.append("{")
@@ -1748,31 +1744,31 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     struct_lines.append(f"    {cmd_str},")
                 struct_lines.append("};")
                 all_structures.append((secondary_offset, '\n'.join(struct_lines)))
-            
+
             # Now the DLCollisionRecord itself, which references the arrays above
             struct_lines = []
             struct_lines.append(f"ModelRoData_DisplayList_CollisionRecord DLCollisionRecord_0x{dlcoll_offset:03x} = ")
             struct_lines.append("{")
-            
+
             primary_ref = node_to_gdl_prim_name.get(node_offset, "NULL")
             secondary_ref = node_to_gdl_sec_name.get(node_offset, "NULL")
-            
+
             if node_offset in node_to_vtx_name:
                 vtx_ref_name = node_to_vtx_name[node_offset][0]
                 vtx_count_ref = f"VERTEXGROUPCOUNT{node_to_vtx_name[node_offset][1]}"
             else:
                 vtx_ref_name = "NULL"
                 vtx_count_ref = "0"
-            
+
             if node_offset in node_to_colvtx_name:
                 colvtx_ref_name = node_to_colvtx_name[node_offset][0]
                 colvtx_count_ref = f"COLLISIONVERTEXCOUNT{node_to_colvtx_name[node_offset][1]}"
             else:
                 colvtx_ref_name = "NULL"
                 colvtx_count_ref = "0"
-            
+
             ptusage_ref = node_to_ptusage_name.get(node_offset, ("NULL", -1))[0]
-            
+
             struct_lines.append(f"    {primary_ref}, //primary")
             struct_lines.append(f"    {secondary_ref}, //secondary")
             struct_lines.append(f"    {vtx_ref_name}, {vtx_count_ref}, //vertices,vcount")
@@ -1782,12 +1778,12 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    0x0 //baseaddr")
             struct_lines.append("};")
             all_structures.append((dlcoll_offset, '\n'.join(struct_lines)))
-    
+
     # Step 2.1: Process referenced_data structures (not in ModelNode tree)
     for ref_offset in sorted(referenced_data.keys()):
         ref_data = referenced_data[ref_offset]
         dtype = ref_data.get('_type')
-        
+
         # Only handle GroupRecord for now (main use case)
         if dtype == 'GroupRecord':
             struct_lines = []
@@ -1797,7 +1793,7 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    {{{ox}, {oy}, {oz}}}, //origin {{x,y,z}}")
             struct_lines.append(f"    0x{ref_data['joint_id']:X}, //JointID")
             mid0 = ref_data['matrix_id0']
-            mid1 = ref_data['matrix_id1'] 
+            mid1 = ref_data['matrix_id1']
             mid2 = ref_data['matrix_id2']
             struct_lines.append(f"    0x{mid0 & 0xFFFF:X}, //MatrixID0")
             struct_lines.append(f"    0x{mid1 & 0xFFFF:X}, //MatrixID1")
@@ -1811,29 +1807,29 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
             struct_lines.append(f"    {ref_data['bounding_volume_radius']} //BoundingVolumeRadius")
             struct_lines.append("};")
             all_structures.append((ref_offset, '\n'.join(struct_lines)))
-    
+
     # Step 2.5: Detect padding by finding gaps between sorted structures
     # Mark all structure bytes, find gaps
     if binary_data:
         binary_size = len(binary_data)
         byte_map = [False] * binary_size
-        
+
         # Mark switches (handled separately in Switches.c, not padding)
         switch_size = len(switches) * 4 if switches else 0
         for i in range(switch_size):
             byte_map[i] = True
-        
+
         # Mark textures
         tex_end = switch_size + len(textures) * 12
         for i in range(switch_size, tex_end):
             byte_map[i] = True
-        
+
         # Mark nodes
         nodes_start = tex_end
         nodes_end = nodes_start + len(nodes) * 24
         for i in range(nodes_start, nodes_end):
             byte_map[i] = True
-        
+
         # Mark all structures by their offsets in all_structures list
         for offset, _ in all_structures:
             # Determine size based on what's at this offset
@@ -1843,114 +1839,114 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     continue
                 dtype = node.data.get('_type')
                 data = node.data
-                
+
                 # GroupRecord or BoundingBoxRecord
                 if offset == node.data_offset and dtype in ('GroupRecord', 'BoundingBoxRecord'):
                     for i in range(offset, offset + 28):
                         byte_map[i] = True
-                
+
                 # LODRecord (16 bytes)
                 if offset == node.data_offset and dtype == 'LODRecord':
                     for i in range(offset, offset + 16):
                         byte_map[i] = True
-                
+
                 # BSPRecord (36 bytes)
                 if offset == node.data_offset and dtype == 'BSPRecord':
                     for i in range(offset, offset + 36):
                         byte_map[i] = True
-                
+
                 # SwitchRecord (8 bytes)
                 if offset == node.data_offset and dtype == 'SwitchRecord':
                     for i in range(offset, offset + 8):
                         byte_map[i] = True
-                
+
                 # GroupSimpleRecord (20 bytes)
                 if offset == node.data_offset and dtype == 'GroupSimpleRecord':
                     for i in range(offset, offset + 20):
                         byte_map[i] = True
-                
+
                 # HeaderRecord (16 bytes)
                 if offset == node.data_offset and dtype == 'HeaderRecord':
                     for i in range(offset, offset + 16):
                         byte_map[i] = True
-                
+
                 # DisplayListRecord (19 bytes logical, 20 bytes with compiler padding)
                 if offset == node.data_offset and dtype == 'DisplayListRecord':
                     for i in range(offset, offset + 20):
                         byte_map[i] = True
-                
+
                 # GunfireRecord (40 bytes)
                 if offset == node.data_offset and dtype == 'GunfireRecord':
                     for i in range(offset, offset + 40):
                         byte_map[i] = True
-                
+
                 # ShadowRecord (32 bytes)
                 if offset == node.data_offset and dtype == 'ShadowRecord':
                     for i in range(offset, offset + 32):
                         byte_map[i] = True
-                
+
                 # HeadPlaceholderRecord (4 bytes)
                 if offset == node.data_offset and dtype == 'HeadPlaceholderRecord':
                     for i in range(offset, offset + 4):
                         byte_map[i] = True
-                
+
                 # InterlinkageRecord (28 bytes)
                 if offset == node.data_offset and dtype == 'InterlinkageRecord':
                     for i in range(offset, offset + 28):
                         byte_map[i] = True
-                
+
                 # DisplayListPrimaryRecord (16 bytes)
                 if offset == node.data_offset and dtype == 'DisplayListPrimaryRecord':
                     for i in range(offset, offset + 16):
                         byte_map[i] = True
-                
+
                 # DLCollisionRecord (32 bytes)
                 if offset == node.data_offset and dtype == 'DisplayListCollisionRecord':
                     for i in range(offset, offset + 32):
                         byte_map[i] = True
-                
+
                 # Vertices
                 if data.get('vertices_offset') and offset == data['vertices_offset']:
                     vsize = len(data['vertices']) * 16
                     for i in range(offset, offset + vsize):
                         byte_map[i] = True
-                
+
                 # Collision vertices
                 if data.get('collision_vertices_offset') and offset == data['collision_vertices_offset']:
                     csize = len(data['collision_vertices']) * 16
                     for i in range(offset, offset + csize):
                         byte_map[i] = True
-                
+
                 # Point usage
                 if data.get('point_usage_offset') and offset == data['point_usage_offset']:
                     psize = len(data['point_usage']) * 2
                     for i in range(offset, offset + psize):
                         byte_map[i] = True
-                
+
                 # GFX arrays
                 if data.get('primary_offset') and offset == data['primary_offset']:
                     gsize = len(data['primary_gfx']) * 8
                     for i in range(offset, offset + gsize):
                         byte_map[i] = True
-                
+
                 if data.get('secondary_offset') and offset == data['secondary_offset']:
                     gsize = len(data['secondary_gfx']) * 8
                     for i in range(offset, offset + gsize):
                         byte_map[i] = True
-        
+
         # Find last real structure (handle empty case)
         if all_structures:
             last_offset = max(off for off, _ in all_structures)
         else:
             last_offset = binary_size - 1
-        
+
         # Calculate switch size to skip that region (switches handled separately in Switches.c)
         switch_size = len(switches) * 4 if switches else 0
-        
+
         # Find padding gaps (up to last structure only, SKIP switch region at start)
         # Don't scan past last_offset + 256 bytes to avoid trailing data
         scan_limit = min(last_offset + 256, binary_size)
-        
+
         i = switch_size  # Start AFTER switches
         while i < scan_limit:
             if not byte_map[i]:
@@ -1959,14 +1955,14 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                     i += 1
                 pad_end = i
                 pad_size = pad_end - pad_start
-                
+
                 # ONLY add padding for 4+ byte gaps that are BETWEEN structures (not at the end)
                 # 2-byte gaps are natural compiler alignment - don't add variables for them
                 # Skip padding that extends to near the end of the file (trailing data)
                 if pad_size >= 4 and pad_end < scan_limit - 32:
                     # Read padding bytes
                     pad_bytes = binary_data[pad_start:pad_end]
-                    
+
                     # Generate padding as u32 array for proper alignment
                     if pad_size == 4:
                         val = struct.unpack('>I', pad_bytes)[0]
@@ -1981,22 +1977,22 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                         all_structures.append((pad_start, f"u8 PADDING_0x{pad_start:03x}[{pad_size}] = {{{vals_str}}};"))
             else:
                 i += 1
-    
+
     # Step 2.5.1: REMOVED - Trailing padding generation
     # Trailing padding after arrays is compiler-generated for alignment, not source data
     # The compiler automatically adds padding between structures as needed
     # DO NOT generate PADDING_TRAILING variables - they cause incorrect binary sizes
-    
+
     # Step 2.6: Generate forward declarations with correct names
     forward_decl_lines = []
-    
+
     # Declare referenced data structures (not in ModelNode tree)
     for ref_offset in sorted(referenced_data.keys()):
         ref_data = referenced_data[ref_offset]
         dtype = ref_data.get('_type')
         if dtype == 'GroupRecord':
             forward_decl_lines.append(f"extern ModelRoData_GroupRecord GroupRecord_0x{ref_offset:03x};")
-    
+
     # Declare all data structures
     for node_offset in sorted(nodes.keys()):
         node = nodes[node_offset]
@@ -2026,68 +2022,68 @@ def generate_model_c(prop_name: str, parsed_model: Dict, metadata: Dict, image_m
                 forward_decl_lines.append(f"extern ModelRoData_GunfireRecord GunfireRecord_0x{node.data_offset:03x};")
             elif dtype == 'DisplayListPrimaryRecord':
                 forward_decl_lines.append(f"extern ModelRoData_DisplayListPrimaryRecord DLPrimaryRecord_0x{node.data_offset:03x};")
-                
+
                 # Declare arrays for DisplayListPrimaryRecord
                 if node_offset in node_to_vtx_name:
                     vtx_name, vtx_idx = node_to_vtx_name[node_offset]
                     forward_decl_lines.append(f"extern Vertex {vtx_name}[VERTEXGROUPCOUNT{vtx_idx}];")
-                
+
                 if node_offset in node_to_gdl_prim_name:
                     prim_name = node_to_gdl_prim_name[node_offset]
                     forward_decl_lines.append(f"extern Gfx {prim_name}[];")
             elif dtype == 'DisplayListRecord':
                 forward_decl_lines.append(f"extern ModelRoData_DisplayListRecord DisplayListRecord_0x{node.data_offset:03x};")
-                
+
                 # Declare arrays for DisplayListRecord
                 if node_offset in node_to_vtx_name:
                     vtx_name, vtx_idx = node_to_vtx_name[node_offset]
                     forward_decl_lines.append(f"extern Vertex {vtx_name}[VERTEXGROUPCOUNT{vtx_idx}];")
-                
+
                 if node_offset in node_to_gdl_prim_name:
                     prim_name = node_to_gdl_prim_name[node_offset]
                     forward_decl_lines.append(f"extern Gfx {prim_name}[];")
-                
+
                 if node_offset in node_to_gdl_sec_name:
                     sec_name = node_to_gdl_sec_name[node_offset]
                     forward_decl_lines.append(f"extern Gfx {sec_name}[];")
             elif dtype == 'DisplayListCollisionRecord':
                 forward_decl_lines.append(f"extern ModelRoData_DisplayList_CollisionRecord DLCollisionRecord_0x{node.data_offset:03x};")
-                
+
                 # Declare arrays using the SAME names we assigned during structure collection
                 if node_offset in node_to_vtx_name:
                     vtx_name, vtx_idx = node_to_vtx_name[node_offset]
                     forward_decl_lines.append(f"extern Vertex {vtx_name}[VERTEXGROUPCOUNT{vtx_idx}];")
-                
+
                 if node_offset in node_to_colvtx_name:
                     colvtx_name, colvtx_idx = node_to_colvtx_name[node_offset]
                     forward_decl_lines.append(f"extern Vertex {colvtx_name}[COLLISIONVERTEXCOUNT{colvtx_idx}];")
-                
+
                 if node_offset in node_to_ptusage_name:
                     ptusage_name, _ = node_to_ptusage_name[node_offset]
                     vtx_idx = node_to_vtx_name[node_offset][1]
                     forward_decl_lines.append(f"extern s16 {ptusage_name}[VERTEXGROUPCOUNT{vtx_idx}];")
-                
+
                 if node_offset in node_to_gdl_prim_name:
                     prim_name = node_to_gdl_prim_name[node_offset]
                     forward_decl_lines.append(f"extern Gfx {prim_name}[];")
-                
+
                 if node_offset in node_to_gdl_sec_name:
                     sec_name = node_to_gdl_sec_name[node_offset]
                     forward_decl_lines.append(f"extern Gfx {sec_name}[];")
-    
+
     forward_decl_lines.append("")
-    
+
     # Insert forward declarations at the placeholder position
     lines[forward_decl_placeholder_index:forward_decl_placeholder_index] = forward_decl_lines
-    
+
     # Step 3: Sort ALL structures by their original binary file offset
     all_structures.sort(key=lambda x: x[0])
-    
+
     # Step 4: Output structures in sorted offset order
     for offset, code in all_structures:
         lines.append(code)
         lines.append("")
-    
+
     return "\n".join(lines)
 
 
@@ -2095,7 +2091,7 @@ def get_data_symbol_name(node: ModelNode) -> str:
     """Get the C symbol name for a node's data structure"""
     if not node.data:
         return "NULL"
-    
+
     dtype = node.data.get('_type')
     if dtype == 'GroupRecord':
         return f"GroupRecord_0x{node.data_offset:03x}"
@@ -2131,89 +2127,89 @@ def get_data_symbol_name(node: ModelNode) -> str:
 
 def main():
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Generate Model.c from binary prop files")
     parser.add_argument('props', nargs='*', help="Prop names to process (default: all)")
     parser.add_argument('--dry-run', action='store_true', help="Show what would be done")
     parser.add_argument('--force', action='store_true', help="Overwrite existing Model.c files")
     parser.add_argument('--cleanup', action='store_true', help="Delete source PnameZ.bin files after successful conversion")
     args = parser.parse_args()
-    
+
     # Load image mapping
     image_map = load_image_map()
     print(f"Loaded {len(image_map)} image definitions")
-    
+
     # Find all props
     prop_dir = Path("assets/obseg/prop")
     all_props = []
     prop_name_map = {}  # Map lowercase name to actual binary filename
-    
+
     for bin_file in prop_dir.glob("P*Z.bin"):
         # Extract name between P and Z, preserve original case
         actual_name = bin_file.stem[1:-1]
         lower_name = actual_name.lower()
         all_props.append(lower_name)
         prop_name_map[lower_name] = actual_name
-    
+
     props_to_process = args.props if args.props else all_props
-    
+
     stats = {'processed': 0, 'skipped': 0, 'errors': 0}
-    
+
     for prop_name_input in sorted(props_to_process):
         prop_name_lower = prop_name_input.lower()
-        
+
         # Get the actual case from the binary file
         if prop_name_lower not in prop_name_map:
             print(f"  ✗ {prop_name_input}: Binary file not found")
             stats['errors'] += 1
             continue
-        
+
         actual_prop_name = prop_name_map[prop_name_lower]
         bin_file = prop_dir / f"P{actual_prop_name}Z.bin"
-        
+
         # Find the actual directory name (case-insensitive search)
         prop_subdirs = list(prop_dir.glob(f"{actual_prop_name}"))
         if not prop_subdirs:
             # Try case-insensitive
-            prop_subdirs = [d for d in prop_dir.iterdir() 
+            prop_subdirs = [d for d in prop_dir.iterdir()
                            if d.is_dir() and d.name.lower() == prop_name_lower]
-        
+
         if not prop_subdirs:
             # Try fuzzy match for names with suffixes like _lg
-            prop_subdirs = [d for d in prop_dir.iterdir() 
+            prop_subdirs = [d for d in prop_dir.iterdir()
                            if d.is_dir() and d.name.lower().startswith(prop_name_lower)]
-        
+
         if not prop_subdirs:
             print(f"  ⊘ {actual_prop_name}: Missing metadata directory")
             stats['skipped'] += 1
             continue
-        
+
         actual_dir_name = prop_subdirs[0].name
-        
+
         # Parse metadata using the actual directory name
         metadata = parse_metadata_files(actual_dir_name)
         if not metadata:
             print(f"  ⊘ {actual_prop_name}: Missing metadata files")
             stats['skipped'] += 1
             continue
-        
+
         output_file = prop_dir / actual_dir_name / "Model.c"
         if output_file.exists() and not args.force:
             print(f"  ⊘ {actual_prop_name}: Model.c already exists (use --force)")
             stats['skipped'] += 1
             continue
-        
+
         try:
             # Parse binary
             with open(bin_file, 'rb') as f:
                 binary_data = f.read()
-            
+
             parser = BinaryModelParser(binary_data, metadata, image_map)
             parsed_model = parser.parse()
-            
+
             # Generate C code - use the directory name for output
             c_code = generate_model_c(actual_dir_name, parsed_model, metadata, image_map, binary_data)
-            
+
             if args.dry_run:
                 if len(parsed_model['switches']) > 0:
                     print(f"  ✓ {actual_prop_name}: Would generate Model.c ({len(parsed_model['nodes'])} nodes, {len(parsed_model['textures'])} textures, {len(parsed_model['switches'])} switches)")
@@ -2223,26 +2219,26 @@ def main():
                 output_file.parent.mkdir(parents=True, exist_ok=True)
                 with open(output_file, 'w') as f:
                     f.write(c_code)
-                    
+
                 # Report generation
                 if len(parsed_model['switches']) > 0:
                     print(f"  ✓ {actual_prop_name}: Generated Model.c ({len(parsed_model['nodes'])} nodes, {len(parsed_model['textures'])} textures, {len(parsed_model['switches'])} switches)")
                 else:
                     print(f"  ✓ {actual_prop_name}: Generated Model.c ({len(parsed_model['nodes'])} nodes, {len(parsed_model['textures'])} textures)")
-                
+
                 # Clean up source binary file after successful conversion
                 if args.cleanup and bin_file.exists():
                     bin_file.unlink()
                     print(f"    Cleaned up {bin_file.name}")
-            
+
             stats['processed'] += 1
-            
+
         except Exception as e:
             print(f"  ✗ {actual_prop_name}: Error - {e}")
             stats['errors'] += 1
             import traceback
             traceback.print_exc()
-    
+
     print(f"\n=== Summary ===")
     print(f"Processed: {stats['processed']}")
     print(f"Skipped: {stats['skipped']}")

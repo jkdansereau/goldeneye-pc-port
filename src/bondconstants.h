@@ -229,6 +229,13 @@ typedef enum CHRFLAG
     CHRFLAG_80000000                     = 0x80000000   // unknown
 }CHRFLAG;
 
+enum CHR_RENDER_PART {
+    CHR_RENDERPART_HEAD,
+    CHR_RENDERPART_TORSO,
+    CHR_RENDERPART_LEFT_ARM,
+    CHR_RENDERPART_RIGHT_ARM
+};
+
 // collision detection types
 typedef enum CDTYPE
 {
@@ -287,7 +294,7 @@ BITFLAG(PS_FLAGS2,
 typedef enum PROPFLAG
 {
     PROPFLAG_RENDERPOSTBG                = 0x00000001, // Fall to Ground
-    PROPFLAG_ONSCREEN                    = 0x00000002, //  In Air Rotated 90 Deg Upside-Down
+    PROPFLAG_ONSCREEN                    = 0x00000002, // In Air Rotated 90 Deg Upside-Down
     PROPFLAG_ENABLED                     = 0x00000004, // In Air Upside-Down
     PROPFLAG_00000008                    = 0x00000008, // In Air
     PROPFLAG_00000010                    = 0x00000010, // Scale to Pad Bounds
@@ -296,17 +303,17 @@ typedef enum PROPFLAG
     PROPFLAG_00000080                    = 0x00000080, // Scale Z to Pad Bounds
     PROPFLAG_00000100                    = 0x00000100, // Force Collisions
     PROPFLAG_00000200                    = 0x00000200, // Glass Env Mapping Style
-    PROPFLAG_ILLUMINATED                 = 0x00000400, /* ignore Stan Colour?*/
+    PROPFLAG_ILLUMINATED                 = 0x00000400, // ignore Stan Colour?
     PROPFLAG_00000800                    = 0x00000800, // Free Standing Glass
     PROPFLAG_00001000                    = 0x00001000, // Absolute Position
-    PROPFLAG_AIUNDROPPABLE               = 0x00002000, /* Item Not Droppedz*/
+    PROPFLAG_AIUNDROPPABLE               = 0x00002000, // Item Not Droppedz
     PROPFLAG_ASSIGNEDTOCHR               = 0x00004000, // Assigned to Actor
     PROPFLAG_INSIDEANOTHEROBJ            = 0x00008000, // Embedded Object
     PROPFLAG_FORCEMORTAL                 = 0x00010000, // unknown
     PROPFLAG_INVINCIBLE                  = 0x00020000, // Invincible
     PROPFLAG_00040000                    = 0x00040000, // Allow Pickup (chr_type)
     PROPFLAG_00080000                    = 0x00080000, // Collect Object by Interaction Button Only
-    PROPFLAG_UNCOLLECTABLE               = 0x00100000, /* Item Not Collectable*/
+    PROPFLAG_UNCOLLECTABLE               = 0x00100000, // Item Not Collectable
     PROPFLAG_00200000                    = 0x00200000, // Bounce and Destroy If Shot
     PROPFLAG_00400000                    = 0x00400000, // unknown
     PROPFLAG_00800000                    = 0x00800000, // unknown
@@ -314,21 +321,24 @@ typedef enum PROPFLAG
     PROPFLAG_CANNOT_ACTIVATE             = 0x02000000, // Cannot Activate Door/Object
     PROPFLAG_04000000                    = 0x04000000, // AI Sees Through Door/Object
     PROPFLAG_DOOR_TWOWAY                 = 0x08000000, // Open Away From Player
-    PROPFLAG_WEAPON_LEFTHANDED           = 0x10000000, /* Left-Handed weapon*/
-    PROPFLAG_GLASS_HASPORTAL             = 0x10000000, /* Glass Has Portal*/
+    PROPFLAG_WEAPON_LEFTHANDED           = 0x10000000, // Left-Handed weapon
+    PROPFLAG_GLASS_HASPORTAL             = 0x10000000, // Glass Has Portal
     PROPFLAG_CULL_BEHIND_DOOR            = 0x10000000, // Area Behind Door Invisible
     PROPFLAG_FIXED_MONITOR               = 0x10000000, // Monitor Fixed
     PROPFLAG_CCTV_DISABLED               = 0x10000000, // Disable security camera
     PROPFLAG_IS_DRONE_GUN                = 0x10000000, // drone gun
-    PROPFLAG_DOOR_OPENTOFRONT            = 0x20000000, /* Open Backwards*/
-    PROPFLAG_SPECIAL_FUNC                = 0x20000000, //Special Function
-    PROPFLAG_CONCEAL_GUN                 = 0x20000000, //Conceal Weapon
+    PROPFLAG_DOOR_OPENTOFRONT            = 0x20000000, // Open Backwards
+    PROPFLAG_SPECIAL_FUNC                = 0x20000000, // Special Function
+    PROPFLAG_INMOTION                    = 0x20000000, // projectile/prop is in motion
+    PROPFLAG_CONCEAL_GUN                 = 0x20000000, // Conceal Weapon
     PROPFLAG_MONITOR_RENDERPOSTBG        = 0x40000000,
     PROPFLAG_NO_PORTAL_CLOSE             = 0x40000000, // Area Behind Door Visible
-    PROPFLAG_NO_AMMO                     = 0x40000000,/* No Ammo on pickup */
+    PROPFLAG_NO_AMMO                     = 0x40000000, // No Ammo on pickup
     PROPFLAG_80000000                    = 0x80000000, // Open By Default/Weapon Paired for Player
-    PROPFLAG_IS_DOUBLE                   = 0x80000000
+    PROPFLAG_IS_DOUBLE                   = 0x80000000,
+    PROPFLAG_DOOR_KEEPOPEN               = 0x80000000
 }PROPFLAG;
+
 // prop definition flags
 typedef enum PROPFLAG2
 {
@@ -366,65 +376,40 @@ typedef enum PROPFLAG2
     PROPFLAG2_DOOR_ALTCOORDSYSTEM = 0x80000000  // Massive Explosion (08 Type)/Rotating Disabled Drone Gun (0D Type)
 } PROPFLAG2;
 
+// Flags on DoorRecord.doorFlags (u16, offset 0x98)
 typedef enum DOORFLAG
 {
-    DOORFLAG_0001            = 0x00000001,
+    DOORFLAG_EXTENDEDY       = 0x00000001,
     DOORFLAG_WINDOWED        = 0x00000002,
-    DOORFLAG_0004            = 0x00000004,
-    DOORFLAG_FLIP            = 0x00000008,
-    DOORFLAG_AUTOMATIC       = 0x00000010,
-    DOORFLAG_0020            = 0x00000020,
-    DOORFLAG_ROTATEDPAD      = 0x00000040,
-    DOORFLAG_080             = 0x00000080,
-    DOORFLAG_100             = 0x00000100,
-    DOORFLAG_LONGRANGE       = 0x00000200,
-    DOORFLAG_DAMAGEONCONTACT = 0x00000400, // Lasers
-    DOORFLAG_UNBLOCKABLEOPEN = 0x00000800, // Skip collision checks when opening
-    DOORFLAG_4000            = 0x00004000, // Two Investigation vertical doors after lasers
-    DOORFLAG_CANNOT_ACTIVATE = 0x02000000,
-    DOORFLAG_KEEPOPEN        = 0x80000000
-
+    DOORFLAG_CLIP_TO_BBOX    = 0x00000004, // Clip the mesh to the shrinking/expanding bbox while sliding
+    DOORFLAG_FLIP            = 0x00000008
 } DOORFLAG;
-
-typedef enum DOORMODE
-{
-    DOORMODE_IDLE,
-    DOORMODE_OPENING,
-    DOORMODE_CLOSING,
-    // Waiting for sibling door to close. Eg. Dam gates in GE
-    DOORMODE_WAITING
-} DOORMODE;
 
 typedef enum DOORSTATE
 {
     DOORSTATE_STATIONARY,
-    DOORSTATE_OPENING,// also OPEN but NOT AIlist compatible (02)
+    DOORSTATE_OPENING, // also OPEN but NOT AIlist compatible (02)
     DOORSTATE_CLOSING, // also CLOSE but NOT AIlist compatible (01)
-    DOORSTATE_WAITING
+    DOORSTATE_WAITING  // Waiting for sibling door to close. Eg. Dam gates
 } DOORSTATE;
 
-#define DOORTYPE_SLIDING    0
-// GE only - Bunker flexi door
-#define DOORTYPE_FLEXI1     1
-#define DOORTYPE_FLEXI2     2
-#define DOORTYPE_FLEXI3     3
-#define DOORTYPE_VERTICAL   4
-#define DOORTYPE_SWINGING   5
-// GE only - Caverns
-#define DOORTYPE_EYE        6
-// GE only - Caverns
-#define DOORTYPE_IRIS       7
-// GE only - Surface grate and Train floor panel
-#define DOORTYPE_FALLAWAY   8
-// GE only
-#define DOORTYPE_AZTECCHAIR 9
-// Attack Ship windows
-#define DOORTYPE_HULL       10
-#define DOORTYPE_LASER      11
+typedef enum DOORTYPE
+{
+    DOORTYPE_SLIDING,
+    DOORTYPE_FLEXI1,   // Bunker flexi door
+    DOORTYPE_FLEXI2,
+    DOORTYPE_FLEXI3,
+    DOORTYPE_VERTICAL,
+    DOORTYPE_SWINGING,
+    DOORTYPE_EYE,      // Caverns
+    DOORTYPE_IRIS,     // Caverns
+    DOORTYPE_FALLAWAY, // Surface grate and Train floor panel
+    DOORTYPE_AZTECCHAIR
+} DOORTYPE;
 
 typedef enum DOOR_OPEN_SOUND
 {
-    DOOR_OPEN_SOUND_NONE = 0,
+    DOOR_OPEN_SOUND_NONE,
     DOOR_OPEN_SOUND_01,
     DOOR_OPEN_SOUND_02,
     DOOR_OPEN_SOUND_METAL,
@@ -458,10 +443,13 @@ typedef enum PROJECTILEFLAG
     PROJECTILEFLAG_AIRBORNE    = 0x00000001,
     PROJECTILEFLAG_00000002    = 0x00000002,
     PROJECTILEFLAG_STICKY      = 0x00000004,
+    PROJECTILEFLAG_00000008    = 0x00000008,
     PROJECTILEFLAG_POWERED     = 0x00000010,
     PROJECTILEFLAG_00000020    = 0x00000020,
+    PROJECTILEFLAG_00000040    = 0x00000040,
     PROJECTILEFLAG_LAUNCHING   = 0x00000080,
     PROJECTILEFLAG_00000100    = 0x00000100,
+    PROJECTILEFLAG_00000200    = 0x00000200,
     PROJECTILEFLAG_FALLING     = 0x00000400,
     PROJECTILEFLAG_SLIDING     = 0x00000800,
     PROJECTILEFLAG_00001000    = 0x00001000,
@@ -503,6 +491,17 @@ typedef enum PROPSTATE {
 
 #define PROPSTATE_NORMAL PROPSTATE_NONE
 
+typedef enum STANTILEFLAG
+{
+    STANTILEFLAG_NORMAL      = 0x01,
+    STANTILEFLAG_FORCECROUCH = 0x02,
+    STANTILEFLAG_04          = 0x04,
+    STANTILEFLAG_08          = 0x08,
+    STANTILEFLAG_10          = 0x10,
+    STANTILEFLAG_20          = 0x20,
+    STANTILEFLAG_LADDER      = 0x40
+} STANTILE_FLAG;
+
 BITFLAG(PLAYERFLAG,
         LOCKCONTROLS,
         NOCONTROL,
@@ -512,23 +511,23 @@ BITFLAG(PLAYERFLAG,
 BITFLAG(RUNTIMEBITFLAG,
         00000001,
         00000002,
-        REMOVE, /* removes object when set                                     */
+        REMOVE, /* removes object when set                                         */
         ISRETICK,
         TAGGED,
         THROWING_KNIFE_RELATED,
         EMBEDDED,
-        DEPOSIT, /* depositted (thrown/launching)                               */
+        HASPROJECTILE, /* this object owns a live Projectile record in obj->projectile   */
         00000100,
         BEENOPENED,
-        DESTROYED, /* only set with disabled or destroyed doors                   */
+        DESTROYED, /* only set with disabled or destroyed doors                    */
         00000800,
         00001000,
         PADLOCKEDDOOR,
-        ACTIVATED, /* activated                                                   */
+        ACTIVATED, /* activated                                                    */
         00008000,
         00010000,
-        00020000, /* owner 2bit (0-3) used to                                    */
-        00040000, /* attribute kills to players                                  */
+        00020000, /* owner 2bit (0-3) used to                                      */
+        00040000, /* attribute kills to players                                    */
         HASOWNER,
         00100000,
         00200000,
@@ -544,9 +543,15 @@ BITFLAG(RUNTIMEBITFLAG,
         80000000
 )
 
-#define RUNTIMEBITFLAG_OWNER    0x60000
-#define RUNTIMEBITSHIFT_OWNER   0x11
-#define RUNTIMEBITFLAG_00000001   0x1
+#define RUNTIMEBITFLAG_OWNER          0x60000
+#define RUNTIMEBITSHIFT_OWNER         0x11
+#define RUNTIMEBITFLAG_00000001       0x1
+#define RUNTIMEBITFLAG_00000080       0x00000080
+#define RUNTIMEBITFLAG_00000100       0x00000100
+#define RUNTIMEBITFLAG_00001000       0x00001000
+#define RUNTIMEBITFLAG_00000800       0X00000800
+#define RUNTIMEBITFLAG_PADLOCKEDDOOR  0X00002000
+#define RUNTIMEBITFLAG_HASOWNER       0X00080000
 
 #define WEAPONSTATBITFLAG_00000001 0x1
 /* skip from fire to reload animation; item "disappears" after use, redrawn from off-screen like knives" */
@@ -1523,6 +1528,47 @@ typedef enum GAMEMODE
     GAMEMODE_CHEATS
 } GAMEMODE;
 
+typedef enum GUN_ANIMATION_STATE_IDS
+{
+    GUN_ANIM_STATE_IDLE,
+    GUN_ANIM_STATE_TRIGGER_PRESS,
+    GUN_ANIM_STATE_FIRE,
+    GUN_ANIM_STATE_RECOIL1,
+    GUN_ANIM_STATE_RECOIL2,
+    GUN_ANIM_STATE_SWITCH_LOWER,
+    GUN_ANIM_STATE_SWITCH_SWAP,
+    GUN_ANIM_STATE_SWITCH_HOLD,
+    GUN_ANIM_STATE_SWITCH_RAISE,
+    GUN_ANIM_STATE_RELOAD_START,
+    GUN_ANIM_STATE_RELOAD_LOWER,
+    GUN_ANIM_STATE_RELOAD_SWAP,
+    GUN_ANIM_STATE_RELOAD_RAISE,
+    GUN_ANIM_STATE_DRY_FIRE,
+    GUN_ANIM_STATE_WATCH_LOWER,
+    GUN_ANIM_STATE_WATCH_SWAP,
+    GUN_ANIM_STATE_WATCH_RAISE,
+    GUN_ANIM_STATE_KNIFE_SLASH1_BEGIN, // Slash right to left
+    GUN_ANIM_STATE_KNIFE_SLASH1_STRIKE,
+    GUN_ANIM_STATE_KNIFE_SLASH1_RECOVER,
+    GUN_ANIM_STATE_KNIFE_SLASH2_BEGIN, // Slash left to right
+    GUN_ANIM_STATE_KNIFE_SLASH2_STRIKE,
+    GUN_ANIM_STATE_KNIFE_SLASH2_RECOVER,
+    GUN_ANIM_STATE_THROWKNIFE_DRAW,
+    GUN_ANIM_STATE_THROWKNIFE_THROW,
+    GUN_ANIM_STATE_THROWKNIFE_RECOVER,
+    GUN_ANIM_STATE_GRENADE_THROW,
+    GUN_ANIM_STATE_GRENADE_RECOVER,
+    GUN_ANIM_STATE_MINE_PLACE,
+    GUN_ANIM_STATE_MINE_RECOVER,
+    GUN_ANIM_STATE_PUNCH1_STRIKE,
+    GUN_ANIM_STATE_PUNCH1_RECOVER,
+    GUN_ANIM_STATE_PUNCH2_STRIKE,
+    GUN_ANIM_STATE_PUNCH2_RECOVER,
+    GUN_ANIM_STATE_UNUSED_34,
+    GUN_ANIM_STATE_UNUSED_35,
+    GUN_ANIM_STATE_USE_ITEM
+} GUN_ANIMATION_STATE_IDS;
+
 typedef enum GUNHAND //Canonical name
 {
     GUNRIGHT,
@@ -1865,6 +1911,12 @@ typedef enum MODELNODE_CHILD
     MODELNODE_CHILD_MAX
 } MODELNODE_CHILD;
 
+typedef enum MODEL_GROUP_MTX_BUILD_FLAGS
+{
+    MODELGROUP_MTX_HAS_MATRIX1 = 0x0100,
+    MODELGROUP_MTX_HAS_MATRIX2 = 0x0200
+} MODEL_GROUP_MTX_BUILD_FLAGS;
+
 typedef enum BOND
 {
     BOND_BROSNAN,
@@ -1898,8 +1950,8 @@ typedef enum MPMENU
     MENU_SCORES,
     MENU_PAUSE,
     MENU_EXIT,
-    MENU_6,
-    MENU_7
+    MENU_EXIT_CONFIRM,
+    MENU_FINISHED
 } MPMENU;
 
 typedef enum MPSCENARIOS
@@ -2062,6 +2114,12 @@ typedef enum PLAYER_ID
     PLAYER_3,
     PLAYER_4
 } PLAYER_ID;
+
+typedef enum PORTALFLAGS
+{
+    PORTALFLAG_DISABLED    = 0x01,
+    PORTALFLAG_SPECIAL     = 0x02
+} PORTALFLAGS;
 
 #define SAVESLOT1 0x0
 #define SAVESLOT2 0x1
@@ -2768,15 +2826,15 @@ char *TEXTBANK_LEVEL_INDEX_ToString[] =
 #define GUNAMMOREASON_DAMAGE     0x08
 
 typedef enum WATCH_ANIMATION_STATE_IDS {
-    WATCH_ANIMATION_0x0 = 0,
-    WATCH_ANIMATION_0x1,
-    WATCH_ANIMATION_0x2,
-    WATCH_ANIMATION_0x3,
-    WATCH_ANIMATION_0x4,
-    WATCH_ANIMATION_0x5,
-    WATCH_ANIMATION_0x6,
-    WATCH_ANIMATION_0x7,
-    WATCH_ANIMATION_0x8,
+    WATCH_ANIMATION_0x0,      /* Watch closed, normal play. */
+    WATCH_ANIMATION_0x1,      /* Pause initiated, lower any weapon in left hand. */
+    WATCH_ANIMATION_0x2,      /* Tilt player camera to watch angle. */
+    WATCH_ANIMATION_0x3,      /* Raise left arm. */
+    WATCH_ANIMATION_0x4,      /* Zoom into watch face. */
+    WATCH_ANIMATION_0x5,      /* Watch open, game paused. */
+    WATCH_ANIMATION_0x6,      /* Zoom out from watch face. */
+    WATCH_ANIMATION_0x7,      /* Lower left arm. */
+    WATCH_ANIMATION_0x8,      /* Tilt player camera to where it was before pause initiated, finish pause. */
     WATCH_ANIMATION_0x9,
     WATCH_ANIMATION_0xa,
     WATCH_ANIMATION_0xb,
@@ -2793,7 +2851,6 @@ typedef enum WATCH_BRIEFING_PAGE
     BRIEFING_Q,
     BRIEFING_MONEYPENNY
 } WATCH_BRIEFING_PAGE;
-
 
 typedef enum AWARD {
 
@@ -2815,7 +2872,6 @@ typedef enum AWARD {
     AWARD_TRIPLEKILL       = 0x08000,
     AWARD_QUADKILL         = 0x10000
 } AWARD;
-
 
 typedef enum WAYMODE
 {
@@ -2844,22 +2900,22 @@ typedef enum SPSEGMENT
 
 typedef enum TVCMD
 {
-    TVCMD_STOPSCROLL     = 0x00,
-    TVCMD_SCROLLRELX     = 0x01,
-    TVCMD_SCROLLRELY     = 0x02,
-    TVCMD_SCROLLABSX     = 0x03,
-    TVCMD_SCROLLABSY     = 0x04,
-    TVCMD_SCALEABSX      = 0x05,
-    TVCMD_SCALEABSY      = 0x06,
-    TVCMD_SETTEXTURE     = 0x07,
-    TVCMD_PAUSE          = 0x08,
-    TVCMD_SETCMDLIST     = 0x09,
-    TVCMD_RANDSETCMDLIST = 0x0a,
-    TVCMD_RESTART        = 0x0b,
-    TVCMD_YIELD          = 0x0c,
-    TVCMD_SETCOLOUR      = 0x0d,
-    TVCMD_ROTATEABS      = 0x0e,
-    TVCMD_ROTATEREL      = 0x0f
+    TVCMD_STOPSCROLL,
+    TVCMD_SCROLLRELX,
+    TVCMD_SCROLLRELY,
+    TVCMD_SCROLLABSX,
+    TVCMD_SCROLLABSY,
+    TVCMD_SCALEABSX,
+    TVCMD_SCALEABSY,
+    TVCMD_SETTEXTURE,
+    TVCMD_PAUSE,
+    TVCMD_SETCMDLIST,
+    TVCMD_RANDSETCMDLIST,
+    TVCMD_RESTART,
+    TVCMD_YIELD,
+    TVCMD_SETCOLOUR,
+    TVCMD_ROTATEABS,
+    TVCMD_ROTATEREL
 } TVCMD;
 
 enum CCRMLUT
@@ -2967,6 +3023,7 @@ enum CCRMLUT
         BODY_Natalya_Jungle_Fatigues,
         BODIES_MAX
     } BODIES;
+    
     typedef enum GENDER
     {
         FEMALE,
@@ -4006,6 +4063,7 @@ typedef enum PROJECTILES
         HATTYPE_FURRY,
         HATTYPE_MOON
     } HATTYPE;
+    
     typedef enum INV_ITEM_TYPE
     {
         INV_ITEM_NONE,
@@ -4014,6 +4072,23 @@ typedef enum PROJECTILES
         INV_ITEM_DUAL,
         INV_ITEM_PICKUP
     } INV_ITEM_TYPE;
+
+    /**
+     * Tick operations
+     * The per-prop tick functions like chrTick, objTick, playerTick, explosionTick, explosionSmokeTick
+     * and the collect/interact chain returns a tickop telling the game what to do with the prop it just processed.
+     * 
+     * TICKOP_DISABLE and TICKOP_RETICK are handled but never actually used.
+     */
+     typedef enum TICKOP
+     {
+         TICKOP_NONE,         // Default, do nothing.
+         TICKOP_FREE,         // Deregister, delist, disable and free the prop except for weapons flagged PROPSTATE_RESPAWN which begin their respawn timer instead.
+         TICKOP_DISABLE,      // Deregister, delist and disable the prop, but keep the record.
+         TICKOP_RETICK,       // Delist the prop and reactivate it so it is ticked again this frame.
+         TICKOP_GIVETOPLAYER, // Detach the prop and reparent it to the player prop e.g. collected pickups.
+         TICKOP_CHANGEDLIST   // The tick restructured the prop list (such as being embedded), so prop->prev is stale. The loop resumes from the prev captured before the tick.
+     } TICKOP;
 
     typedef enum ITEM_IDS
     {
@@ -4383,6 +4458,13 @@ typedef enum PROJECTILES
     };
 #endif
 
+    typedef enum INTRO_WEAPON_TYPE 
+    {
+        INTRO_WEAPON_TYPE_NONE,
+        INTRO_WEAPON_TYPE_PISTOL,
+        INTRO_WEAPON_TYPE_RIFLE
+    } INTRO_WEAPON_TYPE;
+    
     typedef enum MISSION_STATE_IDS
     {
         MISSION_STATE_0,
@@ -4422,7 +4504,7 @@ typedef enum PROJECTILES
 
     typedef enum TANK_RUN_STATE
     {
-        TANK_RUN_STATE_NOT_RUNNING = 0,
+        TANK_RUN_STATE_NOT_RUNNING,
         TANK_RUN_STATE_STARTING,
         TANK_RUN_STATE_RUNNING
     } TANK_RUN_STATE;
@@ -4467,6 +4549,14 @@ typedef enum PROJECTILES
         VIDEOMODE_320x240 = MD_NORMAL,
         VIDEOMODE_640x480 = MD_MAXIMUM
     } VIDEOMODE;
+
+    typedef enum ZBUFMODE
+    {
+        ZBUF_OFF,     /* G_RM_AA_*_SURF      (no z-buffer) */
+        ZBUF_SURFACE, /* G_RM_AA_ZB_*_SURF                 */
+        ZBUF_DECAL    /* G_RM_AA_ZB_*_DECAL                */
+    } ZBUFMODE;
+
 #pragma endregion
 
 #if !defined(VERSION_EU)
@@ -4529,6 +4619,7 @@ typedef enum PROJECTILES
 
 #define S32_MAX  2147483647
 #define U32_MAX  4294967295
+#define M_SQRT2_F 1.41412f
 #pragma region Inline Macro Functions
 #ifndef _MATH_EXT_H_
     #define M_TAU_F               6.2831855f
@@ -4747,6 +4838,7 @@ typedef enum PROJECTILES
 #define ALIGN8(val)         (((val) + 0x7 | 0x7) ^ 0x7)
 #define RANDOMFRAC() ((f32) randomGetNext() * 2.3283064e-10f)
 #define MAXFLOAT ((float)3.40282346638528860e+38)
+#define SQ(x) ((x) * (x))
 
 #define HUDHALIGN_RIGHT  0
 #define HUDHALIGN_LEFT   1

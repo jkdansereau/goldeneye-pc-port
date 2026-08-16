@@ -816,8 +816,7 @@ PathRecord *pathFindById(s32 ID)
 }
 
 // forward
-extern void            chrpropDelist(PropRecord *prop);
-extern PadRecord      *dword_CODE_bss_800799F8;
+extern PadRecord      *g_CameraLookAtBondPad;
 extern CutsceneRecord *gBondViewCutscene;
 extern enum CAMERAMODE dword_CODE_bss_80079A18;
 extern s32             dword_CODE_bss_80079A1C;
@@ -2280,7 +2279,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             osSyncPrintf("ai_destroyobj 3 : adddamageobj\n");
     #endif
 
-                            maybe_detonate_object(obj, damage, &obj->runtime_pos, 0x1D, -1);
+                            objApplyDamage(obj, damage, &obj->runtime_pos, 0x1D, -1);
                         }
                     }
                     Offset += sizeof(AiDestroyObjectRecord);
@@ -2336,8 +2335,8 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     ObjectRecord              *obj = objFindByTagId(ai->OBJECT_TAG);
                     if (obj && obj->prop)
                     {
-                        INV_ITEM_TYPE iType = collect_or_interact_object(obj->prop, FALSE);
-                        propExecuteTickOperation(obj->prop, iType);
+                        TICKOP op = propPickupByPlayer(obj->prop, FALSE);
+                        propExecuteTickOperation(obj->prop, op);
                     }
                     Offset += sizeof(AiBondCollectObjectRecord);
                     break;
@@ -2672,7 +2671,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 {
                     AiIFBondHealthLessThanRecord *ai  = AiListp + Offset;
                     float                         val = (ai->HEALTH) / 255.0f;
-                    if (val > bondviewGetCurrentPlayerHealth())
+                    if (val > currentPlayerGetHealth())
                     {
                         Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
@@ -2686,7 +2685,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 {
                     AiIFBondHealthGreaterThanRecord *ai  = AiListp + Offset;
                     float                            val = (ai->HEALTH) / 255.0f;
-                    if (val < bondviewGetCurrentPlayerHealth())
+                    if (val < currentPlayerGetHealth())
                     {
                         Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
@@ -3974,11 +3973,11 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     u16                              padnum = ntohs(ai->PAD);
                     if (isNotBoundPad(padnum))
                     {
-                        dword_CODE_bss_800799F8 = &g_CurrentSetup.pads[padnum];
+                        g_CameraLookAtBondPad = &g_CurrentSetup.pads[padnum];
                     }
                     else
                     {
-                        dword_CODE_bss_800799F8 = (PadRecord *)&g_CurrentSetup.boundpads[getBoundPadNum(padnum)];
+                        g_CameraLookAtBondPad = (PadRecord *)&g_CurrentSetup.boundpads[getBoundPadNum(padnum)];
                     }
                     bondviewSetCameraMode(CAMERAMODE_POSEND);
                     Offset += sizeof(AiCameraLookAtBondFromPadRecord);
@@ -3999,7 +3998,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             /*".\\ported\\chrai.c", 0xc2b, "Assertion failed: cdef->type==PROPDEF_CAMERAPOS") */
                             assert(cdef->type == PROPDEF_CAMERAPOS);
     #endif
-                            dword_CODE_bss_800799F8 = NULL;
+                            g_CameraLookAtBondPad = NULL;
                             gBondViewCutscene       = cdef;
                             dword_CODE_bss_80079A18 = ntohs(ai->LOOK_AT_BOND_FLAG);
                             dword_CODE_bss_80079A1C = ntohs(ai->UNUSED_FLAG);
@@ -4013,7 +4012,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 {
                     AiIFBondYPosLessThanRecord *ai      = AiListp + Offset;
                     f32                         bondpos = (s16)ntohs(ai->Y_POS);
-                    if (get_curplayer_positiondata()->pos.y < bondpos)
+                    if (getCurrentPlayerProp()->pos.y < bondpos)
                     {
                         Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
@@ -4101,7 +4100,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             chr->chrflags   = chr->chrflags | CHRFLAG_INIT;
                             setsubroty(chr->model, FacingDirection);
                             setsuboffset(chr->model, &pos);
-                            chrPositionRelated7F020D94(chr);
+                            chrDetectRooms(chr);
                             if (chr->prop == g_CurrentPlayer->prop)
                             {
                                 g_CurrentPlayer->field_488.collision_position.x = pos.x;
@@ -4193,7 +4192,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         door->openPosition = door->maxFrac;
                         door->openedTime   = g_GlobalTimer;
                         door->openstate    = DOORSTATE_STATIONARY;
-                        door7F052B00(door);
+                        doorUpdateBbox(door);
                         doorActivatePortal(door); // doorActivatePortal
                         door7F053B10(door);
                     }
@@ -4350,7 +4349,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     padnum                  = ntohs(ai->PAD);
                     targetHeight            = (s16)ntohs(ai->Y_POS_OFFSET);
                     start                   = ntohs(ai->INITIAL_ROTATION);
-                    dword_CODE_bss_800799F8 = NULL;
+                    g_CameraLookAtBondPad = NULL;
                     gBondViewCutscene       = NULL;
                     flt_CODE_bss_80079A00   = (start * M_TAU_F) / M_U16_MAX_VALUE_F;   /*unit direction 0 - 1 (increments are 0.000001) */
                     flt_CODE_bss_80079A04   = (speed60 * M_TAU_F) / M_U16_MAX_VALUE_F; /*how many increments per frame */
@@ -4503,7 +4502,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     {
                         sub_GAME_7F03FDA8(obj->prop);
 
-                        if (obj->runtime_bitflags & RUNTIMEBITFLAG_DEPOSIT)
+                        if (obj->runtime_bitflags & RUNTIMEBITFLAG_HASPROJECTILE)
                         {
                             obj->projectile->flags |= 0x601;
                             projectileSetSticky(obj->prop);

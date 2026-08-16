@@ -43,10 +43,11 @@
       build/OUTCODE/src/game/title.o (.text);
       build/OUTCODE/src/game/front.o (.text);
       build/OUTCODE/src/game/rle.o (.text);
-      build/OUTCODE/src/game/unk_01B240.o (.text);
-      build/OUTCODE/src/game/unk_01BAE0.o (.text);
+      build/OUTCODE/src/game/title2.o (.text);
+      build/OUTCODE/src/game/title3.o (.text);
       build/OUTCODE/src/game/blood_animation.o (.text);
       build/OUTCODE/src/game/blood_decrypt.o (.text);
+      build/OUTCODE/src/game/sub_GAME_7F01D1C0.o (.text);
       build/OUTCODE/src/game/file.o (.text);
       build/OUTCODE/src/game/file2.o (.text);
       build/OUTCODE/src/game/chr.o (.text);
@@ -93,9 +94,10 @@
       build/OUTCODE/src/game/player.o (.text);
       build/OUTCODE/src/game/crc.o (.text);
       build/OUTCODE/src/game/chrObjRandom.o (.text);
-      build/OUTCODE/src/game/unk_09B7A0.o (.text);
+      build/OUTCODE/src/game/vtxstore.o (.text);
       build/OUTCODE/src/game/explosion.o (.text);
       build/OUTCODE/src/game/glass.o (.text);
+      build/OUTCODE/src/game/glass2.o (.text);
       build/OUTCODE/src/game/options.o (.text);
       build/OUTCODE/src/game/textrelated.o (.text);
       build/OUTCODE/src/game/stan.o (.text);

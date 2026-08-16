@@ -33,7 +33,6 @@
 #define PREVTAB_TAB_BOTTOM 315.0f
 
 
-
 struct legal_screen_text {
     s32 h_pos;
     s32 v_pos;
@@ -47,18 +46,18 @@ struct mission_folder_setup {
     void * string_ptr;
     u16 folder_text_preset;
     u16 icon_text_preset;
-    int stage_id;
-    int unknown;
-    int type;
-    int mission_num;
+    s32 stage_id;
+    s32 unknown; 
+    s32 type;
+    s32 mission_num;
     void * briefing_name_ptr;
 };
 
 struct MP_game_length_settings {
     u16 text_preset;
     u16 padding;
-    int time;
-    int points;
+    s32 time;
+    s32 points;
 };
 
 struct mp_stage_playercount {
@@ -81,15 +80,15 @@ struct MP_selectable_chars {
     u16 text_preset;
     u8 gender;
     u8 select_photo;
-    short body;
-    short head;
-    float pov;
+    s16 body;
+    s16 head;
+    f32 pov;
 };
 
 struct MP_handicap_menu {
     u16 text_preset;
     u16 padding;
-    float damage_modifier;
+    f32 damage_modifier;
 };
 
 struct MP_controller_configuration_menu {
@@ -108,18 +107,18 @@ struct MP_sight_aim_settings {
 struct intro_char {
     enum BODIES body;
     enum HEADS head;
-    short text1;
-    short text2;
-    short text3;
-    short RESERVED;
-    int flag;
+    s16 text1;
+    s16 text2;
+    s16 text3;
+    s16 RESERVED;
+    s32 flag;
 };
 
 struct intro_animation {
-    int animID;
-    float startframeoffset;
-    float playback_speed;
-    int camera_preset;
+    s32 animID;
+    f32 startframeoffset;
+    f32 playback_speed;
+    s32 camera_preset;
 };
 
 struct solo_target_times {
@@ -130,49 +129,49 @@ struct solo_target_times {
 
 
 
-extern f32 flt_CODE_bss_800695A0;
+extern f32 cast_camera_dist;
 //CODE.bss:800695A4
-extern f32 flt_CODE_bss_800695A4;
+extern f32 cast_camera_dist_start;
 //CODE.bss:800695A8
-extern f32 flt_CODE_bss_800695A8;
+extern f32 cast_camera_dist_end;
 //CODE.bss:800695AC
-extern f32 flt_CODE_bss_800695AC;
+extern f32 cast_camera_angle;
 //CODE.bss:800695B0
-extern f32 flt_CODE_bss_800695B0;
+extern f32 cast_camera_angle_start;
 //CODE.bss:800695B4
-extern f32 flt_CODE_bss_800695B4;
+extern f32 cast_camera_angle_end;
 //CODE.bss:800695B8
-extern f32 flt_CODE_bss_800695B8;
+extern f32 cast_camera_height;
 //CODE.bss:800695BC
-extern f32 flt_CODE_bss_800695BC;
+extern f32 cast_camera_height_start;
 //CODE.bss:800695C0
-extern f32 flt_CODE_bss_800695C0;
+extern f32 cast_camera_height_end;
 //CODE.bss:800695C4                     .align 3
 //CODE.bss:800695C8
-extern struct coord3d flt_CODE_bss_800695C8;
+extern struct coord3d cast_target_smoothed;
 //CODE.bss:800695D4                     .align 3
 //CODE.bss:800695D8
-extern struct coord3d flt_CODE_bss_800695D8;
+extern struct coord3d cast_target_accumulator;
 
 //CODE.bss:800695E4
-extern s32 bss_800695E4;
+extern s32 cast_camera_reset;
 
 //CODE.bss:800695E8
-extern struct coord3d flt_CODE_bss_800695E8;
+extern struct coord3d cast_rootpos_smoothed;
 
 //CODE.bss:800695F4                     .align 3
 //CODE.bss:800695F8
-extern struct coord3d flt_CODE_bss_800695F8;
+extern struct coord3d cast_rootvel_smoothed;
 //CODE.bss:80069604                     .align 3
 //CODE.bss:80069608
-extern struct coord3d flt_CODE_bss_80069608;
+extern struct coord3d cast_rootvel_accumulator;
 
 //CODE.bss:80069614
 extern f32 ninLogoRotRate;
 //CODE.bss:80069618
 extern f32 ninLogoScale;
 //CODE.bss:80069620
-extern coord3d dword_CODE_bss_80069620[0x4];
+extern coord3d folderpositions_camspace[MAX_FOLDER_COUNT];
 
 //CODE.bss:80069650
 extern u8 cheat_available[];
@@ -190,7 +189,7 @@ extern s32 mp_char_cur_select_player[4];
 extern s32 mp_char_prev_select_player[4];
 
 //CODE.bss:80069730
-extern s32 dword_CODE_bss_80069730[4];
+extern s32 mp_char_select_scroll_offset[4];
 
 //CODE.bss:80069740
 extern s32 player_has_selected_char[];
@@ -219,9 +218,9 @@ extern s32 highlight_enemy_reaction;
 //CODE.bss:80069798
 extern s32 highlight_enemy_health;
 //CODE.bss:8006979C
-extern s32 highlight_enemy_accuracy;
-//CODE.bss:800697A0
 extern s32 highlight_enemy_damage;
+//CODE.bss:800697A0
+extern s32 highlight_enemy_accuracy;
 
 //CODE.bss:800697A4                     .align 3
 
@@ -333,12 +332,12 @@ extern u32 full_actor_intro;
 
 void frontChangeMenu(MENU menu, s32 reload);
 s32 get_selected_num_players(void);
-void do_extended_cast_display(s32 flag);
+void do_extended_cast_display(bool doExtended);
 MPSCENARIOS get_scenario(void);
 f32 get_player_mp_handicap(int player);
 f32 get_player_mp_char_height(int player);
-int get_mp_timelimit(void);
-int get_mp_pointlimit(void);
+s32 get_mp_timelimit(void);
+s32 get_mp_pointlimit(void);
 void reset_mp_options_for_scenario(MPSCENARIOS scenarioid);
 void copy_aim_settings_to_playerdata(void);
 void menu_init(void);

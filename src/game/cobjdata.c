@@ -9,5 +9,4 @@
 #include <assets/obseg/chr/chrModelFileRecords.inc.c>
 
 //D:8003E464
-//struct headHat headHat_array_8003E464[] = 
 #include <assets/obseg/chr/chrHeadHats.inc.c>

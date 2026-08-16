@@ -21,13 +21,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
       - name: Bypass Cloudflare for GitHub Action
-        uses: xiaotianxt/bypass-cloudflare-for-github-action@v1.1.1
+        uses: xiaotianxt/bypass-cloudflare-for-github-action@a87c9ac0348806058904e62e5c8e70d8e37b4a65 # v1.1.1
         with:
           cf_zone_id: ${{ secrets.CF_ZONE_ID }}
           cf_api_token: ${{ secrets.CF_API_TOKEN }}
-      - uses: actions/checkout@v2
 
       - name: Install Depedencies
         run: |

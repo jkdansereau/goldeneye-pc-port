@@ -223,7 +223,6 @@ s32 setupRoomTransformationMatrix(s32 room)
 }
 
 
-
 /**
  * Updates the display list with the room matrix for a specific room roomID.
  *
@@ -248,6 +247,7 @@ struct coord3d* getRoomPositionByIndex(s32 roomID)
 {
     return &ptr_bgdata_room_fileposition_list[roomID].pos;
 }
+
 
 /**
  * Retrieves and scales the position of a room by its roomID.

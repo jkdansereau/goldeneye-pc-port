@@ -13,7 +13,7 @@ endif
 default: all
 
 armips: armips.cpp
-	$(CXX) $(CXXFLAGS) -fno-exceptions -fno-rtti -pipe $^ -o $@ -lpthread $(ARMIPS_FLAGS)
+	$(CXX) $(CXXFLAGS) -fmax-errors=2 -fno-exceptions -fno-rtti -pipe $^ -o $@ -lpthread $(ARMIPS_FLAGS)
 
 n64cksum_SOURCES := n64cksum.c utils.c
 n64cksum_CFLAGS := -DN64CKSUM_STANDALONE

@@ -500,10 +500,10 @@ typedef union
     // Very similar but definitely different to the above?
     struct StandTileLocusCallbackRecord
     {
-        s32  unk00;
-        s32  count;
-        s32  bufMax;
-        s32  nearEdgeCount;
+        s32 *rooms;         /* 0x00 */
+        s32 count;          /* 0x04 */
+        s32 bufMax;         /* 0x08 */
+        s32 nearEdgeCount;  /* 0x0c */
     };
 
     typedef struct StandFileFooter
@@ -516,7 +516,7 @@ typedef union
     } StandFileFooter;
 
     typedef s32 (*standTileLocusCallback_A_t)(struct StandTile *, struct StandTileLocusCallbackRecord *);
-    typedef s32 (*standTileLocusCallback_B_t)(StandTile *arg0, s32 arg1, f32 arg2, f32 arg3, s32 arg4, struct StandTileLocusCallbackRecord *arg5);
+    typedef s32 (*standTileLocusCallback_B_t)(StandTile *arg0, s32 arg1, f32 arg2, f32 arg3, f32 arg4, struct StandTileLocusCallbackRecord *arg5);
     typedef s32 (*standTileLocusCallback_C_t)(struct StandTile **, s32, struct StandTileLocusCallbackRecord *);
 
     typedef s32 (*tilePredicate_t)(struct StandTile *);
@@ -556,32 +556,44 @@ typedef union
         int  a;
         char b;
     } AnimTable2;
-    // unknown struct, unknown size.
+
+    typedef struct ModelAnimBitField {
+        u16 bitOffset;
+        u8 bitCount;
+        u8 padding;
+        u16 valueOffset;
+    } ModelAnimBitField;
+
+    typedef struct ModelAnimRootMotionChannel
+    {
+        u16 bitOffset;
+        u8 bitCount;
+        u8 padding;
+        u16 valueOffset;
+    } ModelAnimRootMotionChannel;
+
     typedef struct ModelAnimation
     {
         s32 address;
-        u16 unk04; //nextframe
-        u16 unk06;
-        u16 unk08;
-        u16 unk0A;
+        u16 unk04; // number of frames in the animation
+        u8 unk06;
+        u8 unk07; // bit 0 is a loop flag: 0 means freeze anim at end, 1 means loop anim
+        ModelAnimBitField *bitDescriptors; // 0x08
         u16 unk0C;
         u16 unk0E;
-        int unk10;
-        int unk14;
-        int unk18;
-        int unk1c;
-        int unk20;
-        int unk24;
-        int unk28;
-        int unk2c;
-        int unk30;
-        int unk34;
-        int unk38;
-        int unk3c; //endframe
-
-        // ...
+        u8  *bitStream; // 0x10
+        s32 unk14;
+        s32 unk18;
+        s32 unk1c;
+        s32 unk20;
+        s32 unk24;
+        s32 unk28;
+        s32 unk2c;
+        s32 unk30;
+        s32 unk34;
+        s32 unk38;
+        s32 unk3c; // end frame
     } ModelAnimation;
-
 
     struct object_animation_controller
     {
@@ -635,12 +647,12 @@ typedef union
      */
     typedef struct ModelRenderData
     {
-        Mtxf   *unk_matrix;     /*0x00 */
+        Mtxf   *basemtx;        /*0x00*/ // Canonical name. See instcalcmatrices in model.c.
         bool    zbufferenabled; /*0x04*/
         u32     flags;          /*0x08*/
         Gfx    *gdl;            /*0x0c*/
 
-        Mtxf   *mtxlist;        /*0x10 */
+        Mtxf   *mtxlist;        /*0x10*/ // Canonical name. See instcalcmatrices in model.c.
         u32     unk14;          /*0x14*/
         u32     unk18;          /*0x18*/
         u32     unk1c;          /*0x1c*/
@@ -650,7 +662,7 @@ typedef union
         u32     unk28;          /*0x28*/
         u32     unk2c;          /*0x2c*/
 
-        s32     PropType;          /*0x30*/
+        s32     PropType;       /*0x30*/
         rgba_u8 envcolour;      /*0x34*/
         rgba_u8 fogcolour;      /*0x38*/
         u32     cullmode;       /*0x3c*/
@@ -663,32 +675,47 @@ typedef union
     typedef struct Vertex
     {
         coord16 coord;
-        s16     index; /*0x6 Collisions Only - points to vertex*/
+
+        s16 index; /* 0x6 Collisions Only - points to vertex */
+
         union
         {
             struct
             {
-                s16 s; /*0x8*/
-                s16 t; /*0xa*/
+                s16 s; /* 0x8 */
+                s16 t; /* 0xa */
             };
+
             struct Vertex *LinkedTo;
+
+            /* Collision vertices only: points to related model node. */
+            void *CollisionRelatedNode; /* 0x8 */
         };
+
         union
         {
-            u8 r; /*0xc*/
-            u8 nx;
+            struct
+            {
+                u8 r; /* 0xc */
+                u8 g; /* 0xd */
+                u8 b; /* 0xe */
+                u8 a; /* 0xf */
+            };
+
+            struct
+            {
+                u8 nx; /* 0xc */
+                u8 ny; /* 0xd */
+                u8 nz; /* 0xe */
+                u8 nflag; /* 0xf */
+            };
+
+            struct
+            {
+                s16 CollisionRelatedIndex; /* 0xc */
+                s16 CollisionReserved;     /* 0xe */
+            };
         };
-        union
-        {
-            u8 g; /*0xd*/
-            u8 ny;
-        };
-        union
-        {
-            u8 b; /*0xe*/
-            u8 nz;
-        };
-        u8 a; /*0xf*/
     } Vertex;
 
     #pragma region OpenFlight Records
@@ -814,8 +841,12 @@ typedef union
          */
         typedef struct ModelRoData_HeaderRecord
         {
-            u32                           ModelType;    /*0x0 Legnth of Record (4)*/
-            struct ModelRoData_GroupRecord *FirstGroup; /*0x4 First group in tree*/
+            u16 AnimPart;    /* 0x00 */
+            s16 MatrixIndex; /* 0x02 */
+            union {                                       
+                struct ModelRoData_GroupRecord *FirstGroup;  /* 0x04 */ /*0x4 First group in tree*/
+                ModelNode *FirstGroupNode;
+            }; 
 
             union
             {
@@ -878,7 +909,10 @@ typedef union
                     s16 MatrixID2; /*0x12 never used*/
                 };
             };
-            struct ModelRoData_GroupRecord *ChildGroup;           /*0x14*/
+            union {                                             /*0x14*/
+                struct ModelRoData_GroupRecord *ChildGroup;
+                ModelNode *ChildGroupNode;
+            }; 
             f32                           BoundingVolumeRadius; /*0x18*/
         } ModelRoData_GroupRecord;
 
@@ -1027,11 +1061,15 @@ typedef union
          */
         typedef struct ModelRoData_Op11Record
         {
-            u32 unk0c[16]; /*0x0*/
-            f32 BoundingVolumeRadius;
-            u16 RwDataIndex; /*0x44*/
-            u16 unk46;
-            void* BaseAddr;
+            union {
+                coord3d pos;       /* 0x00 */
+                u32 unk0c[16];     /* 0x00 */
+            };
+
+            f32 BoundingVolumeRadius; /* 0x40 */
+            u16 RwDataIndex;          /* 0x44 */
+            u16 unk46;                /* 0x46 */
+            void *BaseAddr;           /* 0x48 */
         } ModelRoData_Op11Record;
 
         typedef struct ModelRwData_Op11Record
@@ -1066,12 +1104,17 @@ typedef union
          */
         typedef struct ModelRoData_ShadowRecord
         {
-            coord2d                   pos;      /*0x0*/
-            coord2d                   size;     /*0x8*/
-            void                     *image;    /*0x10*/
-            ModelRoData_HeaderRecord *Header;   /*0x14*/
-            f32                       Scale;    /*0x18*/
-            void                     *BaseAddr; /*0x1C*/
+            coord2d pos;      /* 0x00 */
+            coord2d size;     /* 0x08 */
+            void *image;      /* 0x10 */
+
+            union {           /* 0x14 */
+                ModelRoData_HeaderRecord *Header;
+                ModelNode *HeaderNode;
+            };
+
+            f32 Scale;        /* 0x18 */
+            void *BaseAddr;   /* 0x1c */
         } ModelRoData_ShadowRecord;
 
         /**
@@ -1098,29 +1141,59 @@ typedef union
          */
         typedef struct ModelRoData_InterlinkageRecord
         {
-            coord3d pos;      /*0x0*/
-            u32     unknown1; /*0xC*/
-            u32     unknown2; /*0x10*/
-            u32     unknown3; /*0x14*/
-            f32     Scale;    /*0x18*/
+            coord3d pos;      /* 0x00 */
+            coord3d pos2;     /* 0x0c */
+            f32     Scale;    /* 0x18 */
         } ModelRoData_InterlinkageRecord;
 
         /**
          *  Opcode 16
-         *  unused
+         *  unused but referenced
          */
         typedef struct ModelNode_Op16Record
         {
-            coord3d pos;      /*0x0*/
-            u32     unknown1; /*0xC*/
-            u32     unknown2; /*0x10*/
-            f32     Scale;    /*0x14*/
+            coord3d pos;     /* 0x00 */
+            s16 nodeindex0c; /* 0x0c */
+            s16 nodeindex0e; /* 0x0e */
+            s16 nodeindex10; /* 0x10 */
+            s16 unk12;       /* 0x12 */
+            f32 Scale;       /* 0x14 */
         } ModelNode_Op16Record;
 
         /**
          *  Opcode 17
-         *  unused
          */
+        typedef struct ModelRoData_Op17Record
+        {
+            s32        hitpart;     /* 0x00 */
+            f32        radiusSq;    /* 0x04 */
+            coord3d    pos;         /* 0x08 */
+            ModelNode *othernode;   /* 0x14 */
+            f32        scale1;      /* 0x18 */
+            f32        scale2;      /* 0x1c */
+        } ModelRoData_Op17Record;
+
+        typedef struct 
+        {
+            u8 pad0[0x8];
+            struct 
+            {
+                coord3d pos;
+                f32     radiusSq;
+                coord3d rel;
+                coord3d dir;
+            } data;
+        } ModelOp17MainStack;
+
+        typedef struct 
+        {
+            struct 
+            {
+                coord3d axis;
+                f32     scale;
+            } axisAdjustment;
+            u8 pad0[0x0c];
+        } ModelOp17AxisStack;
 
         /**
          *  Opcode 18 0x12
@@ -1397,9 +1470,8 @@ typedef union
          */
         typedef struct Model
         {
-            s16                unk00; /*0x00*/   // objInit() indicates that unk00 is a s16...
-            s16                Type;  /*0x01*/  // but modelInit() indicates that Type is a s16...
-                                                // not sure which is correct.
+            s16                unk00;      /*0x00*/   // objInit() indicates that unk00 is a s16...
+            s16                rwdatalen;  /*0x01*/
 
             struct ChrRecord  *chr;   /*0x04*/
             ModelFileHeader   *obj;   /*0x08 GE Name confirmed*/
@@ -1422,7 +1494,7 @@ typedef union
             s8                animlooping; /*0x26*/
             s8                unk27;
 
-            f32               unk28; // animation related
+            f32               animframe1; /*0x28*/
             f32               unk2c;
 
             /**
@@ -1448,7 +1520,7 @@ typedef union
 
             ModelAnimation   *anim2;
 
-            f32               unk58;
+            f32               animframe2; /* 0x58*/
             f32               unk5c;
 
             /**
@@ -1468,11 +1540,11 @@ typedef union
             f32               unk6c;
             // 0x70
             f32               speed2;
-            s32               unk74;
-            s32               unk78;
+            f32               unk74;
+            f32               unk78;
             f32               unk7c;
             // 0x80
-            s32               unk80;
+            f32               unk80;
 
             /**
              * Related to "anim2", per debug message.
@@ -1480,22 +1552,21 @@ typedef union
             f32               unk84;
 
             f32               unk88;
-            s32               unk8c;
+            f32               unk8c;
             // 0x90
             f32               animloopframe; /*0x90*/
             f32               animloopmerge; /*0x94*/
             s32               animflipfunc; /*0x98*/
             s32               unk9c;
             // 0xa0
-            s32               unka0;
+            s32               unka0; // This is likely a function pointer, see sub_GAME_7F06D490()
             f32               playspeed; // used by ACT_STAND in chrlv
             f32               animrate;
             f32               unkac;
             // 0xb0
             f32               unkb0;
             f32               unkb4;
-            f32               unkb8; // used by ACT_ANIM in chrlv
-            s32               unkbc;
+            f32               anim_translation_scale; // used by ACT_ANIM in chrlv
         } Model;
 
         /*
@@ -1533,10 +1604,61 @@ typedef union
         } ExplosionDetailsRecordEuList;
 #pragma endregion Explosion Stuff
 
+#pragma region Hit Structures
+
+    typedef struct HitThing {
+        coord3d hitpos;     // 0x00
+        coord3d normal;     // 0x0c
+
+        Vertex *vtx0;       // 0x18
+        Vertex *vtx1;       // 0x1c
+        Vertex *vtx2;       // 0x20
+
+        Gfx *tricmd;        // 0x24 - display-list command associated with hit triangle
+
+        s16 unk28;          // 0x28
+        s16 texturenum;     // 0x2a
+
+        s16 tileformat;     // 0x2c
+        s16 tilesize;       // 0x2e
+    } HitThing;
+
+    typedef struct BulletHit {
+        f32 dist;                   // 0x00
+        struct PropRecord *prop;    // 0x04
+        s32 hitpart;                // 0x08
+        struct ModelNode *node;     // 0x0c
+        HitThing hit;               // 0x10, size 0x30
+        s32 room;                   // 0x40
+        struct ModelNode *unk44;    // 0x44
+        struct Model *model;        // 0x48
+        s32 countsAsPenetration;    // 0x4c
+    } BulletHit;
+
+    typedef struct ShotData {
+        coord3d viewOrigin;         // 0x00
+        coord3d viewDir;            // 0x0c
+        ITEM_IDS weapon;            // 0x18
+        coord3d gunpos;             // 0x1c
+        coord3d dir;                // 0x28
+        f32 maxdist;                // 0x34
+        BulletHit hits[10];         // 0x38
+    } ShotData;
+
+    typedef struct ModelHitEntry {
+        struct Model *model;                  /* 0x00 */
+        struct ModelNode *rootnode;           /* 0x04 */
+        f32 sortvalue;                        /* 0x08 */
+        struct ModelHitEntry *next;           /* 0x0c */
+        struct ModelHitEntry *prev;           /* 0x10 */
+    } ModelHitEntry;
+
+#pragma endregion Hit Structures
+
 #pragma region PadAndPaths
     /**
      * Pads hold a location in space and are tied to a specified Stand Tile.
-     * Other attributes include its roation and normal.
+     * Other attributes include its rotation and normal.
      */
     typedef struct PadRecord /*0x2c (44) long confirmed*/
     {
@@ -2176,9 +2298,11 @@ typedef union
     #pragma region GlobalPropDef
 
     /**
+     * Record for bullet/laser beam tracers.
+     * 
      * sizeof = 0x2c = 44 bytes.
      */
-    typedef struct ChrRecord_f180
+    typedef struct BeamRecord
     {
         /***/
         s8      unk00;
@@ -2197,7 +2321,7 @@ typedef union
         f32     unk20;
         f32     unk24;
         f32     unk28;
-    } ChrRecord_f180;
+    } BeamRecord;
 
 
     typedef struct PropDefHeaderRecord
@@ -2227,30 +2351,29 @@ typedef union
     /* unfinished struct, WIP */
     typedef struct ChrRecord
     {
-        s16         chrnum;                      /* 0x0000 */
-        s8          accuracyrating;              /* 0x0002 */
-        s8          speedrating; /* 0x0003 */    //0-100
-        u8          firecount[2];                /* 0x0004 */
-        s8          headnum;                     /* 0x0006 */
-        ACT_TYPE    actiontype : 8; /* 0x0007 */ //force 8bit
-        s8          sleep;                       /* 0x0008 */
-        s8          invalidmove;                 /* 0x0009 */
-        s8          numclosearghs;               /* 0x000A */
-        s8          numarghs;                    /* 0x000B */
-        u8          fadealpha;                   /* 0x000C */
-        s8          arghrating;                  /* 0x000D */
-        s8          aimendcount;                 /* 0x000E */
-        s8          bodynum;                     /* 0x000F */
-        u8          grenadeprob;                 /* 0x0010 */
-        s8          flinchcnt;                   /* 0x0011 */
-        u16         hidden;                      /* 0x0012 */
-        CHRFLAG     chrflags;                    /* 0x0014 */
-        PropRecord *prop;                        /* 0x0018 */
-        Model      *model;                       /* 0x001C */
-        /* 0x0020 */
-        void       *field_20; /* 0x0020 */ //path?
-        f32         chrwidth;              /* 0x0024 */
-        f32         chrheight;             /* 0x0028 */
+        s16             chrnum;                      /* 0x0000 */
+        s8              accuracyrating;              /* 0x0002 */
+        s8              speedrating;                 /* 0x0003 */    //0-100
+        u8              firecount[2];                /* 0x0004 */
+        s8              headnum;                     /* 0x0006 */
+        ACT_TYPE        actiontype : 8;              /* 0x0007 */ //force 8bit
+        s8              sleep;                       /* 0x0008 */
+        s8              invalidmove;                 /* 0x0009 */
+        s8              numclosearghs;               /* 0x000A */
+        s8              numarghs;                    /* 0x000B */
+        u8              fadealpha;                   /* 0x000C */
+        s8              arghrating;                  /* 0x000D */
+        s8              aimendcount;                 /* 0x000E */
+        s8              bodynum;                     /* 0x000F */
+        u8              grenadeprob;                 /* 0x0010 */
+        s8              flinchcnt;                   /* 0x0011 */
+        u16             hidden;                      /* 0x0012 */
+        CHRFLAG         chrflags;                    /* 0x0014 */
+        PropRecord     *prop;                        /* 0x0018 */
+        Model          *model;                       /* 0x001C */
+        ModelHitEntry  *field_20;                    /* 0x0020 */
+        f32             chrwidth;                    /* 0x0024 */
+        f32             chrheight;                   /* 0x0028 */
         union
         {
             struct act_init         act_init;
@@ -2348,55 +2471,37 @@ typedef union
         f32            aimendback;
         f32            aimendsideback;
 
-        /* 0x0160 */
-        // this section needs work, see:
-        // - sub_GAME_7F02BFE4
-        // - disable_sounds_attached_to_player_then_something
-        // there should be some ALSoundState * pointers in here.
-        //
-        PropRecord    *weapons_held[3]; /* handle_positiondata 0x0160 0x0164  0x0168 Right, Left, Hat*/
-        union {
-            s32     fireslot_word;
-            s8      fireslot[2];     /* 0x016C 0x0170*/
-        };
-        int           *ptr_SEbuffer3;
-        int           *ptr_SEbuffer4;
-        int            field_178[2];
-        //int field_17C;
+        PropRecord    *weapons_held[2]; /* handle_positiondata 0x0160 0x0164 Right, Left */
+        struct { /* 0x0168 */
+            ALSoundState *ptr_SEbuffer1;
+            ALSoundState *ptr_SEbuffer2;
+        } field_160[2];
+        s32            field_178[2];  // 0x178-17c
 
         /* 0x0180 */
         /**
          * Method chrlvFireWeaponRelated calls CapBeamLengthAndDecideIfRendered, and passes an address
          * which makes it look like this is an array at ChrRecord offset 180.
         */
-        ChrRecord_f180 unk180[2];
+        BeamRecord beams[2];
 
         PropRecord    *handle_positiondata_hat;
     } ChrRecord;
     // ChrRecord *pChrData; //not Global, local to Object or function
 
+    typedef struct ChrRenderContext {
+        s32 unk00;
+        ChrRecord *chr;
+    } ChrRenderContext;
+
     #pragma region IndividualObjectTypes
 
     typedef struct collision_data
     {
-        s32 edges; // 0x00
-
-        rect4f polygon; // 0x04
-
-        s32 unk24;
-        s32 unk28;
-        s32 unk2C;
-
-        s32 unk30;
-        s32 unk34;
-        s32 unk38;
-        s32 unk3C;
-
-        s32 unk40;
-        f32 top; // 0x44
-
-        // Might be related to collision radius
-        f32 bottom; // 0x48
+        s32 edges;          // 0x00
+        coord2d polygon[8]; // 0x04 - 0x43
+        f32 top;            // 0x44
+        f32 bottom;         // 0x48
     } collision_data;
 
     typedef struct Projectile {
@@ -2418,11 +2523,10 @@ typedef union
 
         u32 unk90;
         f32 unk94;
-        struct ALSoundState* sound1; // 0x98
-        struct ALSoundState* sound2; // 0x9C
+        struct ALSoundState* sounds[2]; // 0x98
 
-        u32 unkA0;
-        u32 unkA4;
+        u32 lastSfxTimer; // 0xa0
+        u32 soundSlot; // 0xa4
         u32 unkA8;
         u32 unkAC;
 
@@ -2441,7 +2545,7 @@ typedef union
         u32 unkD8;
         u32 unkDC;
 
-        u32 unkE0;
+        u32 age; //0xE0
         struct ObjectRecord* obj; // 0xE4;
         s32 unkE8;
     } Projectile;
@@ -2451,6 +2555,23 @@ typedef union
         /*0x004*/ Mtxf matrix;
         /*0x044*/ struct Projectile *projectile;
     } Embedment;
+
+    // Not exactly sure where this belongs or if it may even already have an existing struct
+    typedef struct AttachmentChild {
+        u8 pad00[0x01];
+        u8 flags1;        // 0x01
+        u8 pad02[0x16];
+        f32 unk18;        // 0x18
+    } AttachmentChild;
+
+    // Not exactly sure where this belongs or if it may even already have an existing struct
+    typedef struct AttachedObj {
+        u8 pad00[0x10];
+        AttachmentChild *child;   // 0x10
+        Model *model;             // 0x14
+        Mtxf transform;           // 0x18
+        coord3d position;         // 0x58
+    } AttachedObj;
 
     /**
      * Object (Prop Definition) Record holds common data such as pad and health.
@@ -2797,7 +2918,7 @@ typedef union
          */
         s8                 openstate;
 
-        u8                 unkbd; /*0xbd*/
+        s8                 unkbd; /*0xbd*/
 
         // something related to rendering
         s16                calculatedopacity;      /*0xbe*/
@@ -2965,7 +3086,7 @@ typedef union
 
         /**
          * Offset 0xd0.
-         * Used in object_interaction, setting to zero won't disable.
+         * Used in objTick, setting to zero won't disable.
         */
         s32 is_active; // 0xD0
 
@@ -3593,6 +3714,8 @@ typedef union
     // objtype 48+
     #define EndObjectList PropDefHeaderRecord endme = New_PropDefHeaderRecord(48)
     #pragma endregion IndividualObjectTypes
+
+
 #pragma endregion //Propdefs
 
 #pragma region Intro
@@ -3908,22 +4031,6 @@ typedef struct stagesetup
         u16 half[3];
     };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 typedef struct object_standard {
     s16 scale;
     u8 state;
@@ -4065,23 +4172,16 @@ struct PortalMetric {
     f32 max;
 };
 
-struct FolderSelect {
-    s32 unk00;
-    s32 unk04;
-    s32 unk08;
+struct FolderSelectColour {
+    s32 red;
+    s32 green;
+    s32 blue;
 };
 
 struct damage_display_val {
-    s16 unk00;
-    s16 unk02;
-    s16 unk04;
-    s16 unk06;
-    s16 unk08;
-    s16 unk0A;
-    s8 unk0C;
-    s8 unk0D;
-    s8 unk0E;
-    s8 unk0F;
+    coord16 pos;
+    coord16 normal;
+    rgba_u8 colour;
 };
 
 struct damage_display_parent {

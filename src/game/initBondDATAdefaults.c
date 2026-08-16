@@ -174,7 +174,7 @@ void sets_a_bunch_of_BONDdata_values_to_default(void)
     subcalcpos(&g_CurrentPlayer->model);
     matrix_4x4_set_identity(&identityMatrix);
 
-    renderData.unk_matrix = &identityMatrix;
+    renderData.basemtx = &identityMatrix;
     renderData.mtxlist = &g_CurrentPlayer->bondheadmatrices[0];
 
     subcalcmatrices(&renderData, &g_CurrentPlayer->model);

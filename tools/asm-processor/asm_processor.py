@@ -486,7 +486,7 @@ class GlobalState:
         address = (8 * self.valuectr) & 0x7FFF
         return 'v{} := p{}({}); v{}^ := {};'.format(tp, tp, address, tp, val)
 
-Function = namedtuple('Function', ['text_glabels', 'asm_conts', 'late_rodata_dummy_bytes', 'jtbl_rodata_size', 'late_rodata_asm_conts', 'fn_desc', 'data'])
+Function = namedtuple('Function', ['text_glabels', 'asm_conts', 'late_rodata_dummy_bytes', 'jtbl_rodata_size', 'late_rodata_asm_conts', 'late_rodata_carrier', 'fn_desc', 'data'])
 
 
 class GlobalAsmBlock:
@@ -773,7 +773,17 @@ class GlobalAsmBlock:
                 late_rodata_fn_output.append('')
 
         text_name = None
-        if self.fn_section_sizes['.text'] > 0 or late_rodata_fn_output:
+        late_rodata_carrier = None
+        if self.fn_section_sizes['.text'] == 0 and late_rodata_fn_output:
+            # Keep the dummy constants at this point in the compiler's rodata
+            # stream. The generated function is removed again in fixup_objfile.
+            late_rodata_carrier = state.make_name('late_rodata_carrier')
+            src[0] = ' '.join(
+                [state.func_prologue(late_rodata_carrier)] +
+                late_rodata_fn_output +
+                [state.func_epilogue()]
+            )
+        elif self.fn_section_sizes['.text'] > 0:
             text_name = state.make_name('func')
             src[0] = state.func_prologue(text_name)
             src[self.num_lines] = state.func_epilogue()
@@ -855,6 +865,7 @@ class GlobalAsmBlock:
                 late_rodata_dummy_bytes=late_rodata_dummy_bytes,
                 jtbl_rodata_size=jtbl_rodata_size,
                 late_rodata_asm_conts=self.late_rodata_asm_conts,
+                late_rodata_carrier=late_rodata_carrier,
                 fn_desc=self.fn_desc,
                 data={
                     '.text': (text_name, self.fn_section_sizes['.text']),
@@ -1078,12 +1089,33 @@ def fixup_objfile(objfile_name, functions, asm_prelude, assembler, output_enc, d
     late_rodata_source_name_start = None
     late_rodata_source_name_end = None
 
+    late_rodata_carrier_ranges = []
+    omitted_late_rodata_carriers = set()
+    text_section = objfile.find_section('.text')
+    for function in functions:
+        if function.late_rodata_carrier is None:
+            continue
+        carrier = next(
+            (symbol for symbol in objfile.symbol_entries
+             if symbol.name == function.late_rodata_carrier),
+            None)
+        if carrier is None:
+            # The surrounding preprocessor condition omitted this block.
+            omitted_late_rodata_carriers.add(function.late_rodata_carrier)
+            continue
+        if carrier.st_shndx != text_section.index or carrier.st_size == 0:
+            raise Failure("could not determine generated late rodata carrier size, " + function.fn_desc)
+        late_rodata_carrier_ranges.append(
+            (carrier.st_value, carrier.st_value + carrier.st_size))
+
     # Generate an assembly file with all the assembly we need to fill in. For
     # simplicity we pad with nops/.space so that addresses match exactly, so we
     # don't have to fix up relocations/symbol references.
     all_text_glabels = set()
     func_sizes = {}
     for function in functions:
+        if function.late_rodata_carrier in omitted_late_rodata_carriers:
+            continue
         ifdefed = False
         for sectype, (temp_name, size) in function.data.items():
             if temp_name is None:
@@ -1452,7 +1484,97 @@ def fixup_objfile(objfile_name, functions, asm_prelude, assembler, output_enc, d
                             sh_type=reltab.sh_type, sh_flags=0,
                             sh_link=objfile.symtab.index, sh_info=target.index,
                             sh_addralign=4, sh_entsize=sh_entsize, data=b'')
+                    target.relocated_by.append(target_reltab)
+                    target_reltab.relocations = []
+                target_reltab.relocations.extend(reltab.relocations)
                 target_reltab.data += new_data
+
+        # Data-only .late_rodata blocks use temporary C functions to make IDO
+        # emit their dummy constants at the right point in .rodata. Remove
+        # those functions and close the gaps in later text symbols and
+        # relocation offsets.
+        if late_rodata_carrier_ranges:
+            ranges = sorted(late_rodata_carrier_ranges)
+            for (_, end), (next_start, _) in zip(ranges, ranges[1:]):
+                if end > next_start:
+                    raise Failure("overlapping generated late rodata carriers")
+
+            def removed_before(pos):
+                return sum(end - start for start, end in ranges if end <= pos)
+
+            def inside_carrier(pos):
+                return any(start <= pos < end for start, end in ranges)
+
+            new_text = bytearray()
+            cursor = 0
+            for start, end in ranges:
+                new_text.extend(text_section.data[cursor:start])
+                cursor = end
+            new_text.extend(text_section.data[cursor:])
+            text_section.data = bytes(new_text)
+
+            # REL relocations store their addends in section contents. Adjust
+            # section-relative text pointers (most notably jump tables) before
+            # shifting the symbols they are based on.
+            for target_section in objfile.sections:
+                section_data = bytearray(target_section.data)
+                changed = False
+                for reltab in target_section.relocated_by:
+                    for rel in reltab.relocations:
+                        symbol = new_syms[rel.sym_index]
+                        if symbol.st_shndx != text_section.index or \
+                                rel.rel_type != R_MIPS_32:
+                            continue
+                        addend, = fmt.unpack(
+                            'I', section_data[rel.r_offset:rel.r_offset + 4])
+                        target = symbol.st_value + addend
+                        addend -= (
+                            removed_before(target) -
+                            removed_before(symbol.st_value)
+                        )
+                        section_data[rel.r_offset:rel.r_offset + 4] = \
+                            fmt.pack('I', addend)
+                        changed = True
+                if changed:
+                    target_section.data = bytes(section_data)
+
+            for symbol in new_syms:
+                if symbol.st_shndx != text_section.index:
+                    continue
+                if symbol.st_type == STT_SECTION and symbol.st_value == 0:
+                    continue
+                elif not inside_carrier(symbol.st_value):
+                    symbol.st_value -= removed_before(symbol.st_value)
+
+            text_end = max(
+                (symbol.st_value + symbol.st_size
+                 for symbol in new_syms
+                 if symbol.st_shndx == text_section.index and
+                    symbol.st_type != STT_SECTION),
+                default=0
+            )
+            aligned_text_end = (
+                (text_end + text_section.sh_addralign - 1) //
+                text_section.sh_addralign * text_section.sh_addralign
+            )
+            text_section.data = text_section.data[:aligned_text_end]
+            text_section.data += b'\0' * (aligned_text_end - len(text_section.data))
+            for symbol in new_syms:
+                if symbol.st_shndx == text_section.index and \
+                        symbol.st_type == STT_SECTION and symbol.st_value == 0:
+                    symbol.st_size = len(text_section.data)
+
+            for reltab in text_section.relocated_by:
+                relocations = []
+                for rel in reltab.relocations:
+                    if inside_carrier(rel.r_offset):
+                        continue
+                    rel.r_offset -= removed_before(rel.r_offset)
+                    relocations.append(rel)
+                reltab.relocations = relocations
+                reltab.data = b''.join(rel.to_bin() for rel in relocations)
+
+            objfile.symtab.data = b''.join(symbol.to_bin() for symbol in new_syms)
 
         objfile.write(objfile_name)
     finally:

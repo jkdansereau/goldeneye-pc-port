@@ -317,24 +317,44 @@ void *memaAlloc(u32 amount) {
     return (void*)addr;
 }
 
-
-#ifdef NONMATCHING
-// Find the memaspace of the given address and reduce its size by the given 
+// Find the memaspace of the given address and reduce its size by the given
 // amount. If successful, return the same address, otherwise 0.
-
-// Only regalloc problems left. Called memaGrow in PD
-
-// https://decomp.me/scratch/tGfms 93.83%
-s32 memaGrow(s32 addr, u32 amount)
+s32 memaGrow(u32 addr, u32 amount)
 {
-    memaspace *curr = &g_MemoryAllocations[2];
+    u32        size = 0;
+    s32        new_addr;
+    memaspace *curr;
+    short      __unused_1 = addr + 3;
+    u32        __unused_2;
+    s32        __unused_3;
+    short      __unused_4;
+    short      __unused_5;
+
+    if (addr) {}
+    if (__unused_1) {}
+
+    curr     = &g_MemoryAllocations.spaces[0];
+    new_addr = addr;
+    __unused_2 = !new_addr;
 
     while (curr->addr != -1)
-    {    
-        if (curr->addr == addr && curr->size >= amount)
+    {
+        __unused_1 = __unused_2;
+        if (__unused_1) {}
+
+        __unused_3 = __unused_2 + 1;
+        if ((double)__unused_3) {}
+
+        if (curr->addr == new_addr && curr->size >= amount)
         {
             goto found;
         }
+
+        if (__unused_3) {}
+        __unused_4 = new_addr + 2;
+        if ((double)__unused_4) {}
+        __unused_5 = new_addr + 3;
+        if ((double)__unused_5) {}
 
         curr++;
     }
@@ -345,55 +365,15 @@ found:
     curr->addr += amount;
     curr->size -= amount;
 
-    if (curr->size == 0)
+    size = curr->size;
+
+    if (size == 0)
     {
         curr->addr = 0;
     }
 
-    return addr;
+    return new_addr;
 }
-#else
-GLOBAL_ASM(
-.text
-glabel memaGrow
-/* 00ABA8 70009FA8 3C198006 */  lui   $t9, %hi(g_MemoryAllocations + 0x10) 
-/* 00ABAC 70009FAC 8F393C38 */  lw    $t9, %lo(g_MemoryAllocations + 0x10)($t9)
-/* 00ABB0 70009FB0 3C188006 */  lui   $t8, %hi(g_MemoryAllocations + 0x10) 
-/* 00ABB4 70009FB4 240AFFFF */  li    $t2, -1
-/* 00ABB8 70009FB8 27183C38 */  addiu $t8, %lo(g_MemoryAllocations + 0x10) # addiu $t8, $t8, 0x3c38
-/* 00ABBC 70009FBC 00A03825 */  move  $a3, $a1
-/* 00ABC0 70009FC0 1159000C */  beq   $t2, $t9, .L70009FF4
-/* 00ABC4 70009FC4 03001825 */   move  $v1, $t8
-/* 00ABC8 70009FC8 8F050000 */  lw    $a1, ($t8)
-.L70009FCC:
-/* 00ABCC 70009FCC 54850006 */  bnel  $a0, $a1, .L70009FE8
-/* 00ABD0 70009FD0 8C650008 */   lw    $a1, 8($v1)
-/* 00ABD4 70009FD4 8C660004 */  lw    $a2, 4($v1)
-/* 00ABD8 70009FD8 00C7082B */  sltu  $at, $a2, $a3
-/* 00ABDC 70009FDC 50200008 */  beql  $at, $zero, .L7000A000
-/* 00ABE0 70009FE0 00A75821 */   addu  $t3, $a1, $a3
-/* 00ABE4 70009FE4 8C650008 */  lw    $a1, 8($v1)
-.L70009FE8:
-/* 00ABE8 70009FE8 24630008 */  addiu $v1, $v1, 8
-/* 00ABEC 70009FEC 1545FFF7 */  bne   $t2, $a1, .L70009FCC
-/* 00ABF0 70009FF0 00000000 */   nop   
-.L70009FF4:
-/* 00ABF4 70009FF4 03E00008 */  jr    $ra
-/* 00ABF8 70009FF8 00001025 */   move  $v0, $zero
-
-/* 00ABFC 70009FFC 00A75821 */  addu  $t3, $a1, $a3
-.L7000A000:
-/* 00AC00 7000A000 00C76023 */  subu  $t4, $a2, $a3
-/* 00AC04 7000A004 AC6B0000 */  sw    $t3, ($v1)
-/* 00AC08 7000A008 15800002 */  bnez  $t4, .L7000A014
-/* 00AC0C 7000A00C AC6C0004 */   sw    $t4, 4($v1)
-/* 00AC10 7000A010 AC600000 */  sw    $zero, ($v1)
-.L7000A014:
-/* 00AC14 7000A014 00801025 */  move  $v0, $a0
-/* 00AC18 7000A018 03E00008 */  jr    $ra
-/* 00AC1C 7000A01C 00000000 */   nop   
-)
-#endif
 
 void memaFree(void *addr, s32 size)
 {

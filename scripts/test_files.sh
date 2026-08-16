@@ -66,8 +66,9 @@ do
         mips-linux-gnu-objcopy -j "${SECTION}" -O binary "${FILE}" "${TMP}"
         ACTUAL=$(md5sum -b "${TMP}" | cut -c -32 | tr '[:upper:]' '[:lower:]')
         EXPECTED=$(echo "${MD5}" | tr '[:upper:]' '[:lower:]')
-        FILENAME=$(echo $FILE | sed -E -e 's/build\/[uje]\/src\//src\//g;');
-        VERSION=$(echo $FILE | sed -E -e 's/build\/([uje])\/.*/\1/g;');
+        # derive VERSION (u/j/e) and relative path inside build/<version>/
+        VERSION=$(echo "${FILE}" | sed -E -e 's|build/([uje])(/.*)|\1|')
+        FILENAME=$(echo "${FILE}" | sed -E -e 's|build/[uje]/(.*)|\1|')
 
         if [ "${ACTUAL}" != "${EXPECTED}" ] ; then
             #if [ "${SECTION}" == ".data" ] || [ "${SECTION}" == ".rodata" ] ; then

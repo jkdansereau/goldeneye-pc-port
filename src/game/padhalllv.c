@@ -4,11 +4,11 @@
 #include "chrai.h"
 #include "random.h"
 
-//pd decomp has a filesplit here
-//all ge versions align properly
 
-
-waypoint *sub_GAME_7F08EBD0(coord3d *pos, s32 arg1)
+/**
+ * Unreferenced.
+ */
+waypoint *waypointFindNearestToPos(coord3d *pos, s32 arg1)
 {
     waypoint *head;
     PadRecord *pad;
@@ -44,7 +44,10 @@ waypoint *sub_GAME_7F08EBD0(coord3d *pos, s32 arg1)
 }
 
 
-waypoint* sub_GAME_7F08EC8C(coord3d* pos, s32 arg1, waypoint* arg2)
+/**
+ * Unreferenced.
+ */
+waypoint* waypointRefineNearestToPos(coord3d* pos, s32 arg1, waypoint* arg2)
 {
     PadRecord* pad;
     f32 sqrdist2;
@@ -83,7 +86,7 @@ waypoint* sub_GAME_7F08EC8C(coord3d* pos, s32 arg1, waypoint* arg2)
 }
 
 
-waygroup *sub_GAME_7F08ED60(s32 *groupnums, s32 value)
+waygroup *waygroupFindByDist(s32 *groupnums, s32 value)
 {
     waygroup *groups = g_CurrentSetup.waypointgroups;
 
@@ -95,7 +98,8 @@ waygroup *sub_GAME_7F08ED60(s32 *groupnums, s32 value)
         {
             return group;
         }
-        *groupnums++;
+
+        groupnums++;
     }
 
     return NULL;
@@ -106,7 +110,7 @@ waygroup *sub_GAME_7F08ED60(s32 *groupnums, s32 value)
  * For each group number in the given list assign value to their
  * dist if their dist has no value (ie. is negative).
  */
-void sub_GAME_7F08EDB4(s32 *groupnums, s32 value)
+void waygroupsSetUnvisitedDist(s32 *groupnums, s32 value)
 {
     waygroup *groups = g_CurrentSetup.waypointgroups;
 
@@ -125,13 +129,13 @@ void sub_GAME_7F08EDB4(s32 *groupnums, s32 value)
 
 
 /**
- * Iterate the given groups and find any with an dist matching arg1.
+ * Iterate the given groups and find any with a dist matching arg1.
  * For all groups that match, iterate their neighbouring groups and set their
  * dist to arg1 + 1, but only if their they have no existing dist value.
  *
  * Return true if any matched.
  */
-bool sub_GAME_7F08EE00(struct waygroup *group, s32 arg1)
+bool waygroupsPropagateDist(struct waygroup *group, s32 arg1)
 {
     bool result = FALSE;
 
@@ -140,7 +144,7 @@ bool sub_GAME_7F08EE00(struct waygroup *group, s32 arg1)
         if (group->dist == arg1)
         {
             result = TRUE;
-            sub_GAME_7F08EDB4(group->neighbours, arg1 + 1);
+            waygroupsSetUnvisitedDist(group->neighbours, arg1 + 1);
         }
 
         group++;
@@ -150,7 +154,7 @@ bool sub_GAME_7F08EE00(struct waygroup *group, s32 arg1)
 }
 
 
-bool sub_GAME_7F08EE70(struct waygroup *from, struct waygroup *to, struct waygroup *groups, s32 arg3)
+bool waygroupsFloodDist(struct waygroup *from, struct waygroup *to, struct waygroup *groups, s32 arg3)
 {
     bool result = TRUE;
     struct waygroup *group;
@@ -165,17 +169,17 @@ bool sub_GAME_7F08EE70(struct waygroup *from, struct waygroup *to, struct waygro
 
     for (i = 0; (arg3 || to->dist < 0) && result; i++)
     {
-        result = sub_GAME_7F08EE00(groups, i);
+        result = waygroupsPropagateDist(groups, i);
     }
 
     return result;
 }
 
 
-bool sub_GAME_7F08EF1C(waygroup *from, waygroup *to, waygroup *groups)
+bool waygroupsMarkRoute(waygroup *from, waygroup *to, waygroup *groups)
 {
     u32 stack[2];
-    bool result = sub_GAME_7F08EE70(from, to, groups, 0);
+    bool result = waygroupsFloodDist(from, to, groups, 0);
 
     if (result)
     {
@@ -185,7 +189,7 @@ bool sub_GAME_7F08EF1C(waygroup *from, waygroup *to, waygroup *groups)
         while (i >= 0)
         {
             curto->dist += 10000;
-            curto = sub_GAME_7F08ED60(curto->neighbours, i);
+            curto = waygroupFindByDist(curto->neighbours, i);
             i--;
         }
 
@@ -196,13 +200,16 @@ bool sub_GAME_7F08EF1C(waygroup *from, waygroup *to, waygroup *groups)
 }
 
 
-s32 sub_GAME_7F08EFA0(waygroup* from, waygroup* to, waygroup** arr, s32 arrlen)
+/**
+ * Unreferenced.
+ */
+s32 waygroupFindRoute(waygroup* from, waygroup* to, waygroup** arr, s32 arrlen)
 {
     waygroup **arrptr = arr;
     waygroup *curfrom;
     s32 i;
 
-    if (arrlen >= 2 && g_CurrentSetup.waypointgroups && sub_GAME_7F08EF1C(from, to, g_CurrentSetup.waypointgroups) != 0)
+    if (arrlen >= 2 && g_CurrentSetup.waypointgroups && waygroupsMarkRoute(from, to, g_CurrentSetup.waypointgroups) != 0)
     {
         *arr = from;
         arrptr++;
@@ -213,7 +220,7 @@ s32 sub_GAME_7F08EFA0(waygroup* from, waygroup* to, waygroup** arr, s32 arrlen)
 
         while (i <= to->dist && i < arrlen)
         {
-            curfrom = sub_GAME_7F08ED60(curfrom->neighbours, i);
+            curfrom = waygroupFindByDist(curfrom->neighbours, i);
             *arrptr = curfrom;
             arrptr++;
             i++;
@@ -247,7 +254,7 @@ waypoint *findPadWithDistAndSet(s32 *pointnums, s32 arg1, s32 groupnum)
 }
 
 
-void sub_GAME_7F08F0E8(s32 *pointnums, s32 value, s32 groupnum)
+void waypointsSetUnvisitedDist(s32 *pointnums, s32 value, s32 groupnum)
 {
     waypoint *waypoints = g_CurrentSetup.pathwaypoints;
 
@@ -265,7 +272,7 @@ void sub_GAME_7F08F0E8(s32 *pointnums, s32 value, s32 groupnum)
 }
 
 
-bool sub_GAME_7F08F138(s32 *pointnums, s32 arg1, s32 groupnum)
+bool waypointsPropagateDist(s32 *pointnums, s32 arg1, s32 groupnum)
 {
     bool result = FALSE;
     waypoint *points = g_CurrentSetup.pathwaypoints;
@@ -277,7 +284,7 @@ bool sub_GAME_7F08F138(s32 *pointnums, s32 arg1, s32 groupnum)
         if (arg1 == point->dist && point->neighbours)
         {
             result = TRUE;
-            sub_GAME_7F08F0E8(point->neighbours, arg1 + 1, groupnum);
+            waypointsSetUnvisitedDist(point->neighbours, arg1 + 1, groupnum);
         }
 
         pointnums++;
@@ -299,7 +306,7 @@ void do_BFS_withinPathSet(waypoint *from, waypoint *to, s32 arg2)
     while (*pointnums >= 0)
     {
         point = &points[*pointnums];
-        point->dist = -1;
+        point->dist = -1; // reset waypoint
         pointnums++;
     }
 
@@ -309,12 +316,12 @@ void do_BFS_withinPathSet(waypoint *from, waypoint *to, s32 arg2)
 
     for (i = 0; (arg2 || to->dist < 0) && more; i++)
     {
-        more = sub_GAME_7F08F138(groups[from->groupNum].waypoints, i, from->groupNum);
+        more = waypointsPropagateDist(groups[from->groupNum].waypoints, i, from->groupNum);
     }
 }
 
 
-void sub_GAME_7F08F2CC(waypoint *from, waypoint *to)
+void waypointMarkRoute(waypoint *from, waypoint *to)
 {
     waypoint *curto;
     s32 value;
@@ -336,7 +343,7 @@ void sub_GAME_7F08F2CC(waypoint *from, waypoint *to)
 }
 
 
-s32 sub_GAME_7F08F350(waypoint *from, waypoint *to, waypoint **arr, s32 arrlen)
+s32 waypointFindRouteInGroup(waypoint *from, waypoint *to, waypoint **arr, s32 arrlen)
 {
     waypoint **arrptr = arr;
     waypoint *curfrom;
@@ -344,7 +351,7 @@ s32 sub_GAME_7F08F350(waypoint *from, waypoint *to, waypoint **arr, s32 arrlen)
 
     if (arrlen >= 2)
     {
-        sub_GAME_7F08F2CC(from, to);
+        waypointMarkRoute(from, to);
 
         *arr = from;
         arrptr++;
@@ -419,7 +426,7 @@ s32 waypointFindRoute(waypoint *frompoint, waypoint *topoint, waypoint **arr, s3
         waygroup *fromgroup = &groups[frompoint->groupNum];
         waygroup *togroup = &groups[topoint->groupNum];
 
-        if (sub_GAME_7F08EF1C(fromgroup, togroup, groups))
+        if (waygroupsMarkRoute(fromgroup, togroup, groups))
         {
             waypoint *curfrompoint = frompoint;
             waygroup *curfromgroup = fromgroup;
@@ -428,12 +435,12 @@ s32 waypointFindRoute(waypoint *frompoint, waypoint *topoint, waypoint **arr, s3
             for (i = fromgroup->dist + 1; i <= togroup->dist && arrlen >= 2; i++)
             {
                 s32 numwritten;
-                waygroup *nextfromgroup = sub_GAME_7F08ED60(curfromgroup->neighbours, i);
+                waygroup *nextfromgroup = waygroupFindByDist(curfromgroup->neighbours, i);
                 waypoint *tmppoint;
                 waypoint *nextfrompoint;
 
                 sub_GAME_7F08F438(curfromgroup, nextfromgroup, &tmppoint, &nextfrompoint);
-                numwritten = sub_GAME_7F08F350(curfrompoint, tmppoint, arrptr, arrlen) - 1;
+                numwritten = waypointFindRouteInGroup(curfrompoint, tmppoint, arrptr, arrlen) - 1;
 
                 arrlen -= numwritten;
                 arrptr += numwritten;
@@ -442,7 +449,7 @@ s32 waypointFindRoute(waypoint *frompoint, waypoint *topoint, waypoint **arr, s3
                 curfromgroup = nextfromgroup;
             }
 
-            arrptr += sub_GAME_7F08F350(curfrompoint, topoint, arrptr, arrlen) - 1;
+            arrptr += waypointFindRouteInGroup(curfrompoint, topoint, arrptr, arrlen) - 1;
         }
     }
 
@@ -453,6 +460,10 @@ s32 waypointFindRoute(waypoint *frompoint, waypoint *topoint, waypoint **arr, s3
 }
 
 
+// Resets waypoint distance, seems useless since
+// do_BFS_withinPathSet already does this for its own
+// waypoint group. Even if do_BFS_withinPathSet doesn't
+// reset waypoints outside of its own group, is that really needed?
 void resetWaypointDistances(void)
 {
     waypoint * waypoint;
@@ -466,7 +477,7 @@ void resetWaypointDistances(void)
 }
 
 
-waypoint *sub_GAME_7F08F6B0(s32 *pointnums, s32 arg1)
+waypoint *waypointFindRandomByDist(s32 *pointnums, s32 dist)
 {
 	s32 len = 0;
 	s32 randomindex;
@@ -489,7 +500,7 @@ waypoint *sub_GAME_7F08F6B0(s32 *pointnums, s32 arg1)
     {
 		waypoint *point = &g_CurrentSetup.pathwaypoints[pointnums[i]];
 
-		if (point->dist == arg1)
+		if (point->dist == dist)
         {
 			return point;
 		}
@@ -499,7 +510,7 @@ waypoint *sub_GAME_7F08F6B0(s32 *pointnums, s32 arg1)
     {
 		waypoint *point = &g_CurrentSetup.pathwaypoints[pointnums[i]];
 
-		if (point->dist == arg1)
+		if (point->dist == dist)
         {
 			return point;
 		}
@@ -509,7 +520,7 @@ waypoint *sub_GAME_7F08F6B0(s32 *pointnums, s32 arg1)
 }
 
 
-waygroup *sub_GAME_7F08F908(s32 *groupnums, s32 arg1)
+waygroup *waygroupFindRandomByDist(s32 *groupnums, s32 dist)
 {
     s32 len = 0;
     s32 randomindex;
@@ -521,14 +532,14 @@ waygroup *sub_GAME_7F08F908(s32 *groupnums, s32 arg1)
     }
 
     // Similar to the above function, return a random waygroup
-    // which matches the arg1 criteria.
+    // which matches the dist criteria.
     randomindex = randomGetNext() % len;
 
     for (i = randomindex; i < len; i++)
     {
         waygroup *group = &g_CurrentSetup.waypointgroups[groupnums[i]];
 
-        if (group->dist == arg1)
+        if (group->dist == dist)
         {
             return group;
         }
@@ -538,7 +549,7 @@ waygroup *sub_GAME_7F08F908(s32 *groupnums, s32 arg1)
     {
         waygroup *group = &g_CurrentSetup.waypointgroups[groupnums[i]];
 
-        if (group->dist == arg1)
+        if (group->dist == dist)
         {
             return group;
         }
@@ -548,7 +559,7 @@ waygroup *sub_GAME_7F08F908(s32 *groupnums, s32 arg1)
 }
 
 
-waypoint *sub_GAME_7F08FB90(waypoint *pointa, waypoint *pointb)
+waypoint *waypointFindNextStepToward(waypoint *pointa, waypoint *pointb)
 {
     if (g_CurrentSetup.waypointgroups)
     {
@@ -562,14 +573,14 @@ waypoint *sub_GAME_7F08FB90(waypoint *pointa, waypoint *pointb)
             resetWaypointDistances();
             do_BFS_withinPathSet(pointb, pointa, 1);
 
-            result = sub_GAME_7F08F6B0(pointa->neighbours, -1);
+            result = waypointFindRandomByDist(pointa->neighbours, -1);
 
             if (result)
             {
                 return result;
             }
 
-            result = sub_GAME_7F08F6B0(pointa->neighbours, pointa->dist + 1);
+            result = waypointFindRandomByDist(pointa->neighbours, pointa->dist + 1);
 
             if (result)
             {
@@ -578,11 +589,11 @@ waypoint *sub_GAME_7F08FB90(waypoint *pointa, waypoint *pointb)
         }
         else
         {
-            sub_GAME_7F08EE70(groupb, groupa, g_CurrentSetup.waypointgroups, 0);
+            waygroupsFloodDist(groupb, groupa, g_CurrentSetup.waypointgroups, 0);
 
             if (groupa->dist >= 0)
             {
-                waygroup *tmpgroup = sub_GAME_7F08F908(groupa->neighbours, -1);
+                waygroup *tmpgroup = waygroupFindRandomByDist(groupa->neighbours, -1);
 
                 if (tmpgroup)
                 {
@@ -597,14 +608,14 @@ waypoint *sub_GAME_7F08FB90(waypoint *pointa, waypoint *pointb)
                         return sp44;
                     }
 
-                    if (sub_GAME_7F08F350(pointa, sp48, arr, 3) >= 3)
+                    if (waypointFindRouteInGroup(pointa, sp48, arr, 3) >= 3)
                     {
                         return arr[1];
                     }
                 }
                 else
                 {
-                    waygroup *tmpgroup = sub_GAME_7F08ED60(groupa->neighbours, groupa->dist - 1);
+                    waygroup *tmpgroup = waygroupFindByDist(groupa->neighbours, groupa->dist - 1);
 
                     if (tmpgroup)
                     {
@@ -629,7 +640,10 @@ waypoint *sub_GAME_7F08FB90(waypoint *pointa, waypoint *pointb)
 }
 
 
-void sub_GAME_7F08FD1C(void)
+/**
+ * Unreferenced
+ */
+void waypointDebugTestRandomRoute(void)
 {
     waypoint* waypoints;
     s32 count;

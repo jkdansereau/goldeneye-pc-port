@@ -1,4 +1,5 @@
 #include <ultra64.h>
+#include <os_extension.h>
 #include <memp.h>
 #include "spectrum.h"
 #include "spectrum_hw.h"
@@ -45,6 +46,8 @@ s32 sub_GAME_7F0D37DC(u32 cycles, u8 specA, u8 port, u8 value);
 
 // data
 s8 D_8004EC30 = 0x0;
+extern u8 spec_keyboard_row_caps_z_x_c_v;
+#pragma weak spec_keyboard_row_caps_z_x_c_v = spec_keyboard_buffer
 u8 spec_keyboard_buffer[] = 
 {
     0xFF, 0xFF, 0xFF, 0xFF,
@@ -52,7 +55,7 @@ u8 spec_keyboard_buffer[] =
     0xFF
 };
 
-u8 D_8004EC40 = 0;
+u8 spec_kempston_joystick_state = 0;
 
 s16 D_8004EC44[] = 
 {
@@ -234,406 +237,135 @@ void sub_GAME_7F0D2A84(u8 *spec, u8 *alloc_ptr)
     }
 }
 
-
-
-
-
-#ifdef NONMATCHING
-https://decomp.me/scratch/bXZNh 99.95%
 void spectrum_p1controller_to_kempston(void)
 {
-    s32 sp34;
-    s32 sp30;
-    s32 sp2C;
-    s32 sp28;
-    s32 sp24;
-    s32 sp20;
-    s32 sp1C;
-    s32 temp_v0;
+    s32 kempston_up;
+    s32 kempston_down;
+    s32 kempston_left;
+    s32 kempston_right;
+    s32 kempston_fire;
+    s32 buttons;
+    s32 stick_x;
+    s32 stick_y;
 
-    s32 i;
-    u8 *arr;
+    s32 index;
 
-    sp34 = 0;
-    sp30 = 0;
-    sp2C = 0;
-    sp28 = 0;
-    sp24 = 0;
-    
+    kempston_up = 0;
+    kempston_down = 0;
+    kempston_left = 0;
+    kempston_right = 0;
+    kempston_fire = 0;
+
     joyConsumeSamplesWrapper();
-    sp20 = joyGetButtons(PLAYER_1, ANY_BUTTON);
-    sp1C = joyGetStickXInRange(PLAYER_1, -3, 3);
-    temp_v0 = joyGetStickYInRange(PLAYER_1, -3, 3);
+    buttons = joyGetButtons(PLAYER_1, ANY_BUTTON);
+    stick_x = joyGetStickXInRange(PLAYER_1, -3, 3);
+    stick_y = joyGetStickYInRange(PLAYER_1, -3, 3);
 
-    /* 
-    // It's natural to write something like this for loop, but
-    // this iterates the address each loop iteration. Need to generate
-    // 4 different `sb` at -3, -2, -1, and -4 offset.
-    for (i = 0; i < 9; i++)
+    for (index = 1; index != 9; index += 4)
     {
-        spec_keyboard_buffer[i] = 0xff;
+        spec_keyboard_row_caps_z_x_c_v  = 0xff;
+        spec_keyboard_buffer[index + 1] = 0xff;
+        spec_keyboard_buffer[index + 2] = 0xff;
+        spec_keyboard_buffer[index + 3] = 0xff;
+        spec_keyboard_buffer[index]     = 0xff;
     }
-    //
-    // Maybe there's a double for loop? This will generate the correct `sb`
-    // but also add a lot of other stuff.
-    // for (i = 0; i < 2; i += 4)
-    //     for (j = 1; j < 5; j ++)
-    //         spec_keyboard_buffer[i*4 + j] = 0xff;
-    //
-    // Other things to note are:
-    // 1) the address goes from spec_keyboard_buffer+1 to spec_keyboard_buffer+9.
-    // And the spec_keyboard_buffer[0] uses the `at` register.
-    // 2) spectrum_input_handling function iterates spec_keyboard_buffer from 0 to 8.
-    //
-    // very early disasm looked like the following:
-    // 10780C 7F0D2CDC 3C018005 //  lui   $at, %hi(D_8004EC34) # $at, 0x8005
-    // 107810 7F0D2CE0 3C048005 //  lui   $a0, %hi(D_8004EC34+1) # $a0, 0x8005
-    // 107814 7F0D2CE4 3C058005 //  lui   $a1, %hi(D_8004EC3C+1) # $a1, 0x8005
-    // 107818 7F0D2CE8 8FA70020 //  lw    $a3, 0x20($sp)
-    // 10781C 7F0D2CEC 8FA8001C //  lw    $t0, 0x1c($sp)
-    // 107820 7F0D2CF0 24A5EC3D //  addiu $a1, %lo(D_8004EC3C+1) # addiu $a1, $a1, -0x13c3
-    // 107824 7F0D2CF4 2484EC35 //  addiu $a0, %lo(D_8004EC34+1) # addiu $a0, $a0, -0x13cb
-    // 107828 7F0D2CF8 A02EEC34 //  sb    $t6, %lo(D_8004EC34)($at)
-    */
 
-    // Closest match.
-    // fake match? start at 1???
-    // fake match? i != 9
-    for (i = 1; i != 9; i+=4)
+    if (buttons & Z_TRIG)
     {
-        vvv[0] = 0xff; // hrmm
-
-        // this seems awkward to arrive at this by hand:
-        spec_keyboard_buffer[i+1] = 0xff;
-        spec_keyboard_buffer[i+2] = 0xff;
-        spec_keyboard_buffer[i+3] = 0xff;
-        spec_keyboard_buffer[i] = 0xff;
+        kempston_fire = 1;
     }
-    
-    if (sp20 & Z_TRIG) {
-        sp24 = 1;
+    if ((buttons & (L_JPAD | L_CBUTTONS)) || (stick_x < -1))
+    {
+        kempston_left = 1;
     }
-    if ((sp20 & (L_JPAD | L_CBUTTONS)) || (sp1C < -1)) {
-        sp2C = 1;
+    if ((buttons & (R_JPAD | R_CBUTTONS)) || (stick_x >= 2))
+    {
+        kempston_right = 1;
     }
-    if ((sp20 & (R_JPAD | R_CBUTTONS)) || (sp1C >= 2)) {
-        sp28 = 1;
+    if ((buttons & (U_JPAD | U_CBUTTONS)) || (stick_y >= 2))
+    {
+        kempston_up = 1;
     }
-    if ((sp20 & (U_JPAD | U_CBUTTONS)) || (temp_v0 >= 2)) {
-        sp34 = 1;
+    if ((buttons & (D_JPAD | D_CBUTTONS)) || (stick_y < -1))
+    {
+        kempston_down = 1;
     }
-    if ((sp20 & (D_JPAD | D_CBUTTONS)) || (temp_v0 < -1)) {
-        sp30 = 1;
+    if ((spec_cur_rom_id == ROM_JETPAC) && (buttons & (A_BUTTON | B_BUTTON)))
+    {
+        kempston_up = 1;
     }
-    if ((spec_cur_rom_id == ROM_JETPAC) && (sp20 & (A_BUTTON | B_BUTTON))) {
-        sp34 = 1;
+    if (((spec_cur_rom_id == ROM_ALIEN8) || (spec_cur_rom_id == ROM_KNIGHTLORE)) && (buttons & (A_BUTTON | B_BUTTON)))
+    {
+        kempston_down = 1;
     }
-    if (((spec_cur_rom_id == ROM_ALIEN8) || (spec_cur_rom_id == ROM_KNIGHTLORE)) && (sp20 & (A_BUTTON | B_BUTTON))) {
-        sp30 = 1;
+    if (((spec_cur_rom_id == ROM_SABRE) || (spec_cur_rom_id == ROM_ATIC) || (spec_cur_rom_id == ROM_UNDER) || (spec_cur_rom_id == ROM_COOKIE) || (spec_cur_rom_id == ROM_ALIEN8) || (spec_cur_rom_id == ROM_KNIGHTLORE)) && (buttons & (A_BUTTON | B_BUTTON)))
+    {
+        spec_keyboard_buffer[4] = (u8)(spec_keyboard_buffer[4] & 0xFE);
     }
-    if (((spec_cur_rom_id == ROM_SABRE) || (spec_cur_rom_id == ROM_ATIC) || (spec_cur_rom_id == ROM_UNDER) || (spec_cur_rom_id == ROM_COOKIE) || (spec_cur_rom_id == ROM_ALIEN8) || (spec_cur_rom_id == ROM_KNIGHTLORE)) && (sp20 & (A_BUTTON | B_BUTTON))) {
-        spec_keyboard_buffer[4] = (u8) (spec_keyboard_buffer[4] & 0xFE);
+    if (((spec_cur_rom_id == ROM_JETPAC) || (spec_cur_rom_id == ROM_PSSST)) && (buttons & (A_BUTTON | B_BUTTON)))
+    {
+        spec_keyboard_buffer[3] = (u8)(spec_keyboard_buffer[3] & 0xEF);
     }
-    if (((spec_cur_rom_id == ROM_JETPAC) || (spec_cur_rom_id == ROM_PSSST)) && (sp20 & (A_BUTTON | B_BUTTON))) {
-        spec_keyboard_buffer[3] = (u8) (spec_keyboard_buffer[3] & 0xEF);
+    if ((spec_cur_rom_id == ROM_GUNFRIGHT) && (buttons & (A_BUTTON | B_BUTTON)))
+    {
+        spec_keyboard_buffer[3] = (u8)(spec_keyboard_buffer[3] & 0xFB);
     }
-    if ((spec_cur_rom_id == ROM_GUNFRIGHT) && (sp20 & (A_BUTTON | B_BUTTON))) {
-        spec_keyboard_buffer[3] = (u8) (spec_keyboard_buffer[3] & 0xFB);
-    }
-    if (spec_cur_rom_id == ROM_JETMAN) {
-        if (sp20 & (A_BUTTON | B_BUTTON)) {
-            spec_keyboard_buffer[4] = (u8) (spec_keyboard_buffer[4] & 0xEF);
-        }
-        if (sp20 & A_BUTTON) {
-            spec_keyboard_buffer[0] = (u8) (spec_keyboard_buffer[0] & 0xFD);
-        }
-        if (sp20 & B_BUTTON) {
-            spec_keyboard_buffer[7] = (u8) (spec_keyboard_buffer[7] & 0xFE);
-        }
-    }
-    if (spec_cur_rom_id == ROM_UNDER) {
-        if (sp20 & A_BUTTON) {
-            sp34 = 1;
-        }
-        if (sp20 & B_BUTTON) {
-            spec_keyboard_buffer[7] = (u8) (spec_keyboard_buffer[7] & 0xFE);
-        }
-    }
-    if (spec_cur_rom_id == ROM_ATIC) {
-        if (sp20 & (A_BUTTON | B_BUTTON)) {
-            spec_keyboard_buffer[0] = (u8) (spec_keyboard_buffer[0] & 0xFD);
-        }
-        if (sp20 & L_JPAD) {
-            spec_keyboard_buffer[3] = (u8) (spec_keyboard_buffer[3] & 0xF7);
-        }
-        if (sp20 & D_JPAD) {
-            spec_keyboard_buffer[3] = (u8) (spec_keyboard_buffer[3] & 0xEF);
-        }
-        if (sp20 & R_JPAD) {
-            spec_keyboard_buffer[4] = (u8) (spec_keyboard_buffer[4] & 0xEF);
-        }
-    }
-    
-    if (sp20 & L_TRIG) {
-
-        for (i = 0; i < B_BUTTON; i++)
+    if (spec_cur_rom_id == ROM_JETMAN)
+    {
+        if (buttons & (A_BUTTON | B_BUTTON))
         {
-            ptr_spectrum_roms[i] = 0;
+            spec_keyboard_buffer[4] = (u8)(spec_keyboard_buffer[4] & 0xEF);
+        }
+        if (buttons & A_BUTTON)
+        {
+            spec_keyboard_buffer[0] = (u8)(spec_keyboard_buffer[0] & 0xFD);
+        }
+        if (buttons & B_BUTTON)
+        {
+            spec_keyboard_buffer[7] = (u8)(spec_keyboard_buffer[7] & 0xFE);
         }
     }
-    
-    D_8004EC40 = (sp24 << 4) | (sp34 << 3) | (sp30 << 2) | (sp2C << 1) | sp28;
-}
+    if (spec_cur_rom_id == ROM_UNDER)
+    {
+        if (buttons & A_BUTTON)
+        {
+            kempston_up = 1;
+        }
+        if (buttons & B_BUTTON)
+        {
+            spec_keyboard_buffer[7] = (u8)(spec_keyboard_buffer[7] & 0xFE);
+        }
+    }
+    if (spec_cur_rom_id == ROM_ATIC)
+    {
+        if (buttons & (A_BUTTON | B_BUTTON))
+        {
+            spec_keyboard_buffer[0] = (u8)(spec_keyboard_buffer[0] & 0xFD);
+        }
+        if (buttons & L_JPAD)
+        {
+            spec_keyboard_buffer[3] = (u8)(spec_keyboard_buffer[3] & 0xF7);
+        }
+        if (buttons & D_JPAD)
+        {
+            spec_keyboard_buffer[3] = (u8)(spec_keyboard_buffer[3] & 0xEF);
+        }
+        if (buttons & R_JPAD)
+        {
+            spec_keyboard_buffer[4] = (u8)(spec_keyboard_buffer[4] & 0xEF);
+        }
+    }
 
-#else
-GLOBAL_ASM(
-.text
-glabel spectrum_p1controller_to_kempston
-/* 1077B4 7F0D2C84 27BDFFC8 */  addiu $sp, $sp, -0x38
-/* 1077B8 7F0D2C88 AFBF0014 */  sw    $ra, 0x14($sp)
-/* 1077BC 7F0D2C8C AFA00034 */  sw    $zero, 0x34($sp)
-/* 1077C0 7F0D2C90 AFA00030 */  sw    $zero, 0x30($sp)
-/* 1077C4 7F0D2C94 AFA0002C */  sw    $zero, 0x2c($sp)
-/* 1077C8 7F0D2C98 AFA00028 */  sw    $zero, 0x28($sp)
-/* 1077CC 7F0D2C9C 0C002F43 */  jal   joyConsumeSamplesWrapper
-/* 1077D0 7F0D2CA0 AFA00024 */   sw    $zero, 0x24($sp)
-/* 1077D4 7F0D2CA4 00002025 */  move  $a0, $zero
-/* 1077D8 7F0D2CA8 0C0030C3 */  jal   joyGetButtons
-/* 1077DC 7F0D2CAC 3405FFFF */   li    $a1, 65535
-/* 1077E0 7F0D2CB0 00002025 */  move  $a0, $zero
-/* 1077E4 7F0D2CB4 2405FFFD */  li    $a1, -3
-/* 1077E8 7F0D2CB8 24060003 */  li    $a2, 3
-/* 1077EC 7F0D2CBC 0C00312D */  jal   joyGetStickXInRange
-/* 1077F0 7F0D2CC0 AFA20020 */   sw    $v0, 0x20($sp)
-/* 1077F4 7F0D2CC4 00002025 */  move  $a0, $zero
-/* 1077F8 7F0D2CC8 2405FFFD */  li    $a1, -3
-/* 1077FC 7F0D2CCC 24060003 */  li    $a2, 3
-/* 107800 7F0D2CD0 0C00314A */  jal   joyGetStickYInRange
-/* 107804 7F0D2CD4 AFA2001C */   sw    $v0, 0x1c($sp)
-/* 107808 7F0D2CD8 240E00FF */  li    $t6, 255
-/* 10780C 7F0D2CDC 3C018005 */  lui   $at, %hi(spec_keyboard_buffer)
-/* 107810 7F0D2CE0 3C048005 */  lui   $a0, %hi(spec_keyboard_buffer+1)
-/* 107814 7F0D2CE4 3C058005 */  lui   $a1, %hi(spec_keyboard_buffer+9)
-/* 107818 7F0D2CE8 8FA70020 */  lw    $a3, 0x20($sp)
-/* 10781C 7F0D2CEC 8FA8001C */  lw    $t0, 0x1c($sp)
-/* 107820 7F0D2CF0 24A5EC3D */  addiu $a1, %lo(spec_keyboard_buffer+9) # addiu $a1, $a1, -0x13c3
-/* 107824 7F0D2CF4 2484EC35 */  addiu $a0, %lo(spec_keyboard_buffer+1) # addiu $a0, $a0, -0x13cb
-/* 107828 7F0D2CF8 A02EEC34 */  sb    $t6, %lo(spec_keyboard_buffer)($at)
-/* 10782C 7F0D2CFC 240300FF */  li    $v1, 255
-.L7F0D2D00:
-/* 107830 7F0D2D00 24840004 */  addiu $a0, $a0, 4
-/* 107834 7F0D2D04 A083FFFD */  sb    $v1, -3($a0)
-/* 107838 7F0D2D08 A083FFFE */  sb    $v1, -2($a0)
-/* 10783C 7F0D2D0C A083FFFF */  sb    $v1, -1($a0)
-/* 107840 7F0D2D10 1485FFFB */  bne   $a0, $a1, .L7F0D2D00
-/* 107844 7F0D2D14 A083FFFC */   sb    $v1, -4($a0)
-/* 107848 7F0D2D18 30EF2000 */  andi  $t7, $a3, 0x2000
-/* 10784C 7F0D2D1C 11E00003 */  beqz  $t7, .L7F0D2D2C
-/* 107850 7F0D2D20 30F90202 */   andi  $t9, $a3, 0x202
-/* 107854 7F0D2D24 24180001 */  li    $t8, 1
-/* 107858 7F0D2D28 AFB80024 */  sw    $t8, 0x24($sp)
-.L7F0D2D2C:
-/* 10785C 7F0D2D2C 17200003 */  bnez  $t9, .L7F0D2D3C
-/* 107860 7F0D2D30 30EA0101 */   andi  $t2, $a3, 0x101
-/* 107864 7F0D2D34 2901FFFF */  slti  $at, $t0, -1
-/* 107868 7F0D2D38 10200002 */  beqz  $at, .L7F0D2D44
-.L7F0D2D3C:
-/* 10786C 7F0D2D3C 24090001 */   li    $t1, 1
-/* 107870 7F0D2D40 AFA9002C */  sw    $t1, 0x2c($sp)
-.L7F0D2D44:
-/* 107874 7F0D2D44 15400003 */  bnez  $t2, .L7F0D2D54
-/* 107878 7F0D2D48 30EC0808 */   andi  $t4, $a3, 0x808
-/* 10787C 7F0D2D4C 29010002 */  slti  $at, $t0, 2
-/* 107880 7F0D2D50 14200002 */  bnez  $at, .L7F0D2D5C
-.L7F0D2D54:
-/* 107884 7F0D2D54 240B0001 */   li    $t3, 1
-/* 107888 7F0D2D58 AFAB0028 */  sw    $t3, 0x28($sp)
-.L7F0D2D5C:
-/* 10788C 7F0D2D5C 15800003 */  bnez  $t4, .L7F0D2D6C
-/* 107890 7F0D2D60 30ED0404 */   andi  $t5, $a3, 0x404
-/* 107894 7F0D2D64 28410002 */  slti  $at, $v0, 2
-/* 107898 7F0D2D68 14200002 */  bnez  $at, .L7F0D2D74
-.L7F0D2D6C:
-/* 10789C 7F0D2D6C 24050001 */   li    $a1, 1
-/* 1078A0 7F0D2D70 AFA50034 */  sw    $a1, 0x34($sp)
-.L7F0D2D74:
-/* 1078A4 7F0D2D74 15A00003 */  bnez  $t5, .L7F0D2D84
-/* 1078A8 7F0D2D78 8FA50034 */   lw    $a1, 0x34($sp)
-/* 1078AC 7F0D2D7C 2841FFFF */  slti  $at, $v0, -1
-/* 1078B0 7F0D2D80 10200002 */  beqz  $at, .L7F0D2D8C
-.L7F0D2D84:
-/* 1078B4 7F0D2D84 24060001 */   li    $a2, 1
-/* 1078B8 7F0D2D88 AFA60030 */  sw    $a2, 0x30($sp)
-.L7F0D2D8C:
-/* 1078BC 7F0D2D8C 3C038009 */  lui   $v1, %hi(spec_cur_rom_id)
-/* 1078C0 7F0D2D90 9063E34D */  lbu   $v1, %lo(spec_cur_rom_id)($v1)
-/* 1078C4 7F0D2D94 24040002 */  li    $a0, 2
-/* 1078C8 7F0D2D98 8FA60030 */  lw    $a2, 0x30($sp)
-/* 1078CC 7F0D2D9C 14830005 */  bne   $a0, $v1, .L7F0D2DB4
-/* 1078D0 7F0D2DA0 24020004 */   li    $v0, 4
-/* 1078D4 7F0D2DA4 30EEC000 */  andi  $t6, $a3, 0xc000
-/* 1078D8 7F0D2DA8 11C00002 */  beqz  $t6, .L7F0D2DB4
-/* 1078DC 7F0D2DAC 00000000 */   nop   
-/* 1078E0 7F0D2DB0 24050001 */  li    $a1, 1
-.L7F0D2DB4:
-/* 1078E4 7F0D2DB4 10430002 */  beq   $v0, $v1, .L7F0D2DC0
-/* 1078E8 7F0D2DB8 24010007 */   li    $at, 7
-/* 1078EC 7F0D2DBC 14610004 */  bne   $v1, $at, .L7F0D2DD0
-.L7F0D2DC0:
-/* 1078F0 7F0D2DC0 30EFC000 */   andi  $t7, $a3, 0xc000
-/* 1078F4 7F0D2DC4 11E00002 */  beqz  $t7, .L7F0D2DD0
-/* 1078F8 7F0D2DC8 00000000 */   nop   
-/* 1078FC 7F0D2DCC 24060001 */  li    $a2, 1
-.L7F0D2DD0:
-/* 107900 7F0D2DD0 1060000A */  beqz  $v1, .L7F0D2DFC
-/* 107904 7F0D2DD4 24010001 */   li    $at, 1
-/* 107908 7F0D2DD8 10610008 */  beq   $v1, $at, .L7F0D2DFC
-/* 10790C 7F0D2DDC 24010006 */   li    $at, 6
-/* 107910 7F0D2DE0 10610006 */  beq   $v1, $at, .L7F0D2DFC
-/* 107914 7F0D2DE4 24010009 */   li    $at, 9
-/* 107918 7F0D2DE8 50610005 */  beql  $v1, $at, .L7F0D2E00
-/* 10791C 7F0D2DEC 30F8C000 */   andi  $t8, $a3, 0xc000
-/* 107920 7F0D2DF0 10430002 */  beq   $v0, $v1, .L7F0D2DFC
-/* 107924 7F0D2DF4 24010007 */   li    $at, 7
-/* 107928 7F0D2DF8 14610007 */  bne   $v1, $at, .L7F0D2E18
-.L7F0D2DFC:
-/* 10792C 7F0D2DFC 30F8C000 */   andi  $t8, $a3, 0xc000
-.L7F0D2E00:
-/* 107930 7F0D2E00 13000005 */  beqz  $t8, .L7F0D2E18
-/* 107934 7F0D2E04 3C028005 */   lui   $v0, %hi(spec_keyboard_buffer)
-/* 107938 7F0D2E08 2442EC34 */  addiu $v0, %lo(spec_keyboard_buffer) # addiu $v0, $v0, -0x13cc
-/* 10793C 7F0D2E0C 90590004 */  lbu   $t9, 4($v0)
-/* 107940 7F0D2E10 332900FE */  andi  $t1, $t9, 0xfe
-/* 107944 7F0D2E14 A0490004 */  sb    $t1, 4($v0)
-.L7F0D2E18:
-/* 107948 7F0D2E18 3C028005 */  lui   $v0, %hi(spec_keyboard_buffer)
-/* 10794C 7F0D2E1C 10830003 */  beq   $a0, $v1, .L7F0D2E2C
-/* 107950 7F0D2E20 2442EC34 */   addiu $v0, %lo(spec_keyboard_buffer) # addiu $v0, $v0, -0x13cc
-/* 107954 7F0D2E24 24010008 */  li    $at, 8
-/* 107958 7F0D2E28 14610006 */  bne   $v1, $at, .L7F0D2E44
-.L7F0D2E2C:
-/* 10795C 7F0D2E2C 30EAC000 */   andi  $t2, $a3, 0xc000
-/* 107960 7F0D2E30 51400005 */  beql  $t2, $zero, .L7F0D2E48
-/* 107964 7F0D2E34 24010005 */   li    $at, 5
-/* 107968 7F0D2E38 904B0003 */  lbu   $t3, 3($v0)
-/* 10796C 7F0D2E3C 316C00EF */  andi  $t4, $t3, 0xef
-/* 107970 7F0D2E40 A04C0003 */  sb    $t4, 3($v0)
-.L7F0D2E44:
-/* 107974 7F0D2E44 24010005 */  li    $at, 5
-.L7F0D2E48:
-/* 107978 7F0D2E48 14610006 */  bne   $v1, $at, .L7F0D2E64
-/* 10797C 7F0D2E4C 30EDC000 */   andi  $t5, $a3, 0xc000
-/* 107980 7F0D2E50 51A00005 */  beql  $t5, $zero, .L7F0D2E68
-/* 107984 7F0D2E54 24010003 */   li    $at, 3
-/* 107988 7F0D2E58 904E0003 */  lbu   $t6, 3($v0)
-/* 10798C 7F0D2E5C 31CF00FB */  andi  $t7, $t6, 0xfb
-/* 107990 7F0D2E60 A04F0003 */  sb    $t7, 3($v0)
-.L7F0D2E64:
-/* 107994 7F0D2E64 24010003 */  li    $at, 3
-.L7F0D2E68:
-/* 107998 7F0D2E68 14610010 */  bne   $v1, $at, .L7F0D2EAC
-/* 10799C 7F0D2E6C 30F8C000 */   andi  $t8, $a3, 0xc000
-/* 1079A0 7F0D2E70 13000004 */  beqz  $t8, .L7F0D2E84
-/* 1079A4 7F0D2E74 30EA8000 */   andi  $t2, $a3, 0x8000
-/* 1079A8 7F0D2E78 90590004 */  lbu   $t9, 4($v0)
-/* 1079AC 7F0D2E7C 332900EF */  andi  $t1, $t9, 0xef
-/* 1079B0 7F0D2E80 A0490004 */  sb    $t1, 4($v0)
-.L7F0D2E84:
-/* 1079B4 7F0D2E84 11400004 */  beqz  $t2, .L7F0D2E98
-/* 1079B8 7F0D2E88 30ED4000 */   andi  $t5, $a3, 0x4000
-/* 1079BC 7F0D2E8C 904B0000 */  lbu   $t3, ($v0)
-/* 1079C0 7F0D2E90 316C00FD */  andi  $t4, $t3, 0xfd
-/* 1079C4 7F0D2E94 A04C0000 */  sb    $t4, ($v0)
-.L7F0D2E98:
-/* 1079C8 7F0D2E98 51A00005 */  beql  $t5, $zero, .L7F0D2EB0
-/* 1079CC 7F0D2E9C 24010006 */   li    $at, 6
-/* 1079D0 7F0D2EA0 904E0007 */  lbu   $t6, 7($v0)
-/* 1079D4 7F0D2EA4 31CF00FE */  andi  $t7, $t6, 0xfe
-/* 1079D8 7F0D2EA8 A04F0007 */  sb    $t7, 7($v0)
-.L7F0D2EAC:
-/* 1079DC 7F0D2EAC 24010006 */  li    $at, 6
-.L7F0D2EB0:
-/* 1079E0 7F0D2EB0 14610009 */  bne   $v1, $at, .L7F0D2ED8
-/* 1079E4 7F0D2EB4 30F88000 */   andi  $t8, $a3, 0x8000
-/* 1079E8 7F0D2EB8 13000002 */  beqz  $t8, .L7F0D2EC4
-/* 1079EC 7F0D2EBC 30E44000 */   andi  $a0, $a3, 0x4000
-/* 1079F0 7F0D2EC0 24050001 */  li    $a1, 1
-.L7F0D2EC4:
-/* 1079F4 7F0D2EC4 50800005 */  beql  $a0, $zero, .L7F0D2EDC
-/* 1079F8 7F0D2EC8 24010001 */   li    $at, 1
-/* 1079FC 7F0D2ECC 90590007 */  lbu   $t9, 7($v0)
-/* 107A00 7F0D2ED0 332900FE */  andi  $t1, $t9, 0xfe
-/* 107A04 7F0D2ED4 A0490007 */  sb    $t1, 7($v0)
-.L7F0D2ED8:
-/* 107A08 7F0D2ED8 24010001 */  li    $at, 1
-.L7F0D2EDC:
-/* 107A0C 7F0D2EDC 14610015 */  bne   $v1, $at, .L7F0D2F34
-/* 107A10 7F0D2EE0 30EAC000 */   andi  $t2, $a3, 0xc000
-/* 107A14 7F0D2EE4 11400004 */  beqz  $t2, .L7F0D2EF8
-/* 107A18 7F0D2EE8 30ED0200 */   andi  $t5, $a3, 0x200
-/* 107A1C 7F0D2EEC 904B0000 */  lbu   $t3, ($v0)
-/* 107A20 7F0D2EF0 316C00FD */  andi  $t4, $t3, 0xfd
-/* 107A24 7F0D2EF4 A04C0000 */  sb    $t4, ($v0)
-.L7F0D2EF8:
-/* 107A28 7F0D2EF8 11A00004 */  beqz  $t5, .L7F0D2F0C
-/* 107A2C 7F0D2EFC 30F80400 */   andi  $t8, $a3, 0x400
-/* 107A30 7F0D2F00 904E0003 */  lbu   $t6, 3($v0)
-/* 107A34 7F0D2F04 31CF00F7 */  andi  $t7, $t6, 0xf7
-/* 107A38 7F0D2F08 A04F0003 */  sb    $t7, 3($v0)
-.L7F0D2F0C:
-/* 107A3C 7F0D2F0C 13000004 */  beqz  $t8, .L7F0D2F20
-/* 107A40 7F0D2F10 30EA0100 */   andi  $t2, $a3, 0x100
-/* 107A44 7F0D2F14 90590003 */  lbu   $t9, 3($v0)
-/* 107A48 7F0D2F18 332900EF */  andi  $t1, $t9, 0xef
-/* 107A4C 7F0D2F1C A0490003 */  sb    $t1, 3($v0)
-.L7F0D2F20:
-/* 107A50 7F0D2F20 51400005 */  beql  $t2, $zero, .L7F0D2F38
-/* 107A54 7F0D2F24 30ED0020 */   andi  $t5, $a3, 0x20
-/* 107A58 7F0D2F28 904B0004 */  lbu   $t3, 4($v0)
-/* 107A5C 7F0D2F2C 316C00EF */  andi  $t4, $t3, 0xef
-/* 107A60 7F0D2F30 A04C0004 */  sb    $t4, 4($v0)
-.L7F0D2F34:
-/* 107A64 7F0D2F34 30ED0020 */  andi  $t5, $a3, 0x20
-.L7F0D2F38:
-/* 107A68 7F0D2F38 11A00013 */  beqz  $t5, .L7F0D2F88
-/* 107A6C 7F0D2F3C 3C018005 */   lui   $at, %hi(D_8004EC40)
-/* 107A70 7F0D2F40 3C028009 */  lui   $v0, %hi(ptr_spectrum_roms)
-/* 107A74 7F0D2F44 2442E328 */  addiu $v0, %lo(ptr_spectrum_roms) # addiu $v0, $v0, -0x1cd8
-/* 107A78 7F0D2F48 00001825 */  move  $v1, $zero
-/* 107A7C 7F0D2F4C 24044000 */  li    $a0, 16384
-.L7F0D2F50:
-/* 107A80 7F0D2F50 8C4E0000 */  lw    $t6, ($v0)
-/* 107A84 7F0D2F54 01C37821 */  addu  $t7, $t6, $v1
-/* 107A88 7F0D2F58 A1E00000 */  sb    $zero, ($t7)
-/* 107A8C 7F0D2F5C 8C580000 */  lw    $t8, ($v0)
-/* 107A90 7F0D2F60 0303C821 */  addu  $t9, $t8, $v1
-/* 107A94 7F0D2F64 A3200001 */  sb    $zero, 1($t9)
-/* 107A98 7F0D2F68 8C490000 */  lw    $t1, ($v0)
-/* 107A9C 7F0D2F6C 01235021 */  addu  $t2, $t1, $v1
-/* 107AA0 7F0D2F70 A1400002 */  sb    $zero, 2($t2)
-/* 107AA4 7F0D2F74 8C4B0000 */  lw    $t3, ($v0)
-/* 107AA8 7F0D2F78 01636021 */  addu  $t4, $t3, $v1
-/* 107AAC 7F0D2F7C 24630004 */  addiu $v1, 4 # addiu $v1, $v1, 4
-/* 107AB0 7F0D2F80 1464FFF3 */  bne   $v1, $a0, .L7F0D2F50
-/* 107AB4 7F0D2F84 A1800003 */   sb    $zero, 3($t4)
-.L7F0D2F88:
-/* 107AB8 7F0D2F88 8FAD0024 */  lw    $t5, 0x24($sp)
-/* 107ABC 7F0D2F8C 8FAA002C */  lw    $t2, 0x2c($sp)
-/* 107AC0 7F0D2F90 000578C0 */  sll   $t7, $a1, 3
-/* 107AC4 7F0D2F94 000D7100 */  sll   $t6, $t5, 4
-/* 107AC8 7F0D2F98 8FAD0028 */  lw    $t5, 0x28($sp)
-/* 107ACC 7F0D2F9C 01CFC025 */  or    $t8, $t6, $t7
-/* 107AD0 7F0D2FA0 0006C880 */  sll   $t9, $a2, 2
-/* 107AD4 7F0D2FA4 8FBF0014 */  lw    $ra, 0x14($sp)
-/* 107AD8 7F0D2FA8 03194825 */  or    $t1, $t8, $t9
-/* 107ADC 7F0D2FAC 000A5840 */  sll   $t3, $t2, 1
-/* 107AE0 7F0D2FB0 012B6025 */  or    $t4, $t1, $t3
-/* 107AE4 7F0D2FB4 018D7025 */  or    $t6, $t4, $t5
-/* 107AE8 7F0D2FB8 A02EEC40 */  sb    $t6, %lo(D_8004EC40)($at)
-/* 107AEC 7F0D2FBC 03E00008 */  jr    $ra
-/* 107AF0 7F0D2FC0 27BD0038 */   addiu $sp, $sp, 0x38
-)
-#endif
+    if (buttons & L_TRIG)
+    {
+        for (index = 0; index < B_BUTTON; index++)
+        {
+            ptr_spectrum_roms[index] = 0;
+        }
+    }
+
+    spec_kempston_joystick_state = (kempston_fire << 4) | (kempston_up << 3) | (kempston_down << 2) | (kempston_left << 1) | kempston_right;
+}
 
 
 void init_spectrum_game(s32 arg0)
@@ -830,7 +562,7 @@ u8 spectrum_input_handling(s32 arg0, u8 arg1, u8 arg2)
     
     if (arg2 == 0x1F)
     {
-        return D_8004EC40;
+        return spec_kempston_joystick_state;
     }
     
     return 0xFFU;

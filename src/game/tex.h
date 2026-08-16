@@ -21,7 +21,7 @@ struct image_sound
     /**
      * Number of items in thing2 array.
     */
-    u16 thing2_len;
+    s16 thing2_len;
 };
 
 typedef struct s_bss_8008D148
@@ -49,11 +49,11 @@ typedef struct s_bss_8008D2A8
 } s_bss_8008D2A8;
 
 
-extern struct image_sound *D_8004E86C[];
-
-s32 texGetHeightAtLod(struct tex *tex, s32 lod);
-void texGetDepthAndSize(struct tex *tex, s32 *deptharg, s32 *lenarg);
+extern struct image_sound *g_HitTypeSounds[];
 
 void texCopyGdls(Gfx *arg0, Gfx *arg1, s32 arg2);
+void texGetDepthAndSize(struct tex *tex, s32 *deptharg, s32 *lenarg);
+s32 texGetHeightAtLod(struct tex *tex, s32 lod);
+s32 texLoadFromGdl(Gfx *src, s32 srcsize, Gfx *dst, void *texpool);
 
 #endif

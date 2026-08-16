@@ -7,38 +7,36 @@
 
 #define EXPLOSION_ANIMATION_TABLE_LEN 8
 
-struct struck_animation_table;
+struct StruckAnim;
 
-struct animation_something
+// Per-body-part hits and deaths reaction descriptor.
+struct ChrHitReaction
 {
-    s32 id;
-    s32 field_4;
-    s32 field_8;
-    f32 field_C;
-    s32 field_10;
-    s32 field_14;
-    f32 field_18;
+    s32 hitpart; // HITTARGET key
+    s32 impactPuffCount;
+    s32 unused_8;
+    f32 impactPuffSize;
+    s32 backImpactPuffCount; // Count for the impact puff(s) that appears behind the hit point
+    s32 unused_14;
+    f32 backImpactPuffSize;
 
-    struct struck_animation_table *field_1C;
+    struct StruckAnim *deathAnims;
+    s32 deathAnimCount;
 
-    // maybe count of field_1C
-    s32 field_20;
-
-    struct struck_animation_table *field_24;
-
-    // maybe count of field_24
-    s32 field_28;
+    struct StruckAnim *flinchAnims;
+    s32 flinchAnimCount;
 };
 
-struct struck_animation_table
+// Animations for when characters are wounded or killed.
+struct StruckAnim
 {
-    void *anonymous_0; // This might be pointer to struct of ANIM_DATA_x
-    s32 anonymous_1;
-    f32 anonymous_2;
-    f32 anonymous_3;
-    s32 anonymous_4;
-    f32 sfx1_timer_60;
-    f32 sfx2_timer_60;
+    ModelAnimation *struck_anim;
+    s32 flip; // Mirror flag selecting left/right variant
+    f32 endframe;
+    f32 speed;
+    s32 knockback; // Enables characters to be pushed back when the gun's impact force > 0
+    f32 thudframe1;
+    f32 thudframe2;
 };
 
 struct explosion_death_animation
@@ -60,7 +58,12 @@ struct explosion_anim_group_info
 
 struct weapon_firing_animation_table
 {
-    s32 anim_num;
+    union
+    {
+        s32 offset;
+        struct ModelAnimation *anim;
+    } anim;
+    
     f32 unk04;
     f32 turn_angle_per_frame;
     f32 angle_offset;
@@ -112,28 +115,6 @@ struct anim_group_info
     s32 len;
 };
 
-struct unk_joint_list {
-    Mtxf * unk_matrix;
-    s32 unk04;
-    s32 unk08;
-    Gfx *gdl;
-
-    Mtxf * mtxlist;
-    u32 unk14;
-    u32 unk18;
-    u32 unk1C;
-
-    u32 unk20;
-    u32 unk24;
-    u32 unk28;
-    u32 unk2C;
-
-    s32 PropType;
-    s32 unk34;
-    rgba_u8 unk38;
-    s32 unk3C;
-};
-
 extern s32 objectiveregisters1;
 extern ChrRecord* g_ActiveChrs;
 extern s32 g_ActiveChrsCount;
@@ -144,46 +125,46 @@ extern f32 g_AiHealthModifier;
 extern f32 g_AiReactionSpeed;
 extern s32 g_SeenBondRecentlyGuardCount;
 
-extern struct animation_something D_8002C914[];
+extern struct ChrHitReaction g_HitReactionTable[];
 
-extern struct struck_animation_table D_8002CE54[];
-extern struct struck_animation_table D_8002DF10[];
-extern struct struck_animation_table D_8002CEE0[];
-extern struct struck_animation_table D_8002DF64[];
-extern struct struck_animation_table D_8002CF6C[];
-extern struct struck_animation_table D_8002DFB8[];
-extern struct struck_animation_table D_8002D014[];
-extern struct struck_animation_table D_8002E028[];
-extern struct struck_animation_table D_8002D0A0[];
-extern struct struck_animation_table D_8002E07C[];
-extern struct struck_animation_table D_8002D12C[];
-extern struct struck_animation_table D_8002E0D0[];
-extern struct struck_animation_table D_8002D1D4[];
-extern struct struck_animation_table D_8002E140[];
-extern struct struck_animation_table D_8002D3B0[];
-extern struct struck_animation_table D_8002E23C[];
-extern struct struck_animation_table D_8002D6DC[];
-extern struct struck_animation_table D_8002E300[];
-extern struct struck_animation_table D_8002D768[];
-extern struct struck_animation_table D_8002E354[];
-extern struct struck_animation_table D_8002D7F4[];
-extern struct struck_animation_table D_8002E3A8[];
-extern struct struck_animation_table D_8002D880[];
-extern struct struck_animation_table D_8002E418[];
-extern struct struck_animation_table D_8002D90C[];
-extern struct struck_animation_table D_8002E46C[];
-extern struct struck_animation_table D_8002D998[];
-extern struct struck_animation_table D_8002E4C0[];
-extern struct struck_animation_table D_8002DA24[];
-extern struct struck_animation_table D_8002E530[];
-extern struct struck_animation_table D_8002DCE0[];
-extern struct struck_animation_table D_8002E5BC[];
+extern struct StruckAnim death_left_foot[];
+extern struct StruckAnim flinch_left_foot[];
+extern struct StruckAnim death_left_leg[];
+extern struct StruckAnim flinch_left_leg[];
+extern struct StruckAnim death_left_thigh[];
+extern struct StruckAnim flinch_left_thigh[];
+extern struct StruckAnim death_right_foot[];
+extern struct StruckAnim flinch_right_foot[];
+extern struct StruckAnim death_right_leg[];
+extern struct StruckAnim flinch_right_leg[];
+extern struct StruckAnim death_right_thigh[];
+extern struct StruckAnim flinch_right_thigh[];
+extern struct StruckAnim death_pelvis[];
+extern struct StruckAnim flinch_pelvis[];
+extern struct StruckAnim death_head[];
+extern struct StruckAnim flinch_head[];
+extern struct StruckAnim death_left_hand[];
+extern struct StruckAnim flinch_left_hand[];
+extern struct StruckAnim death_left_arm[];
+extern struct StruckAnim flinch_left_arm[];
+extern struct StruckAnim death_left_shoulder[];
+extern struct StruckAnim flinch_left_shoulder[];
+extern struct StruckAnim death_right_hand[];
+extern struct StruckAnim flinch_right_hand[];
+extern struct StruckAnim death_right_arm[];
+extern struct StruckAnim flinch_right_arm[];
+extern struct StruckAnim death_right_shoulder[];
+extern struct StruckAnim flinch_right_shoulder[];
+extern struct StruckAnim death_chest[];
+extern struct StruckAnim flinch_chest[];
+extern struct StruckAnim death_gun[];
+extern struct StruckAnim flinch_gun[];
+extern struct StruckAnim death_stagger[];
 
-extern struct struck_animation_table D_8002DEBC[];
-extern struct animation_something D_8002CAA0;
-extern struct animation_something D_8002CACC;
-extern struct animation_something D_8002CB24;
-extern struct animation_something D_8002CB50;
+extern struct ChrHitReaction D_8002CAA0;
+extern struct ChrHitReaction D_8002CACC;
+extern struct ChrHitReaction D_8002CB24;
+extern struct ChrHitReaction D_8002CB50;
 
 extern struct weapon_firing_animation_table rifle_firing_animation_group1[];
 extern struct weapon_firing_animation_table rifle_firing_animation_group2[];
@@ -233,9 +214,7 @@ extern s32 player1_guardID;
 extern ChrRecord *g_ChrSlots;
 extern s32 g_NumChrSlots;
 extern ModelRenderData D_8002CC6C;
-extern s32 D_8002CCAC;
-extern s32 D_8002CCB0;
-extern s32 D_8002CCB4;
+extern coord3d D_8002CCAC;
 extern rgba_u8 gBloodColour;
 
 extern f32 D_80030984;
@@ -283,8 +262,8 @@ extern struct explosion_death_animation D_8002E648[];
 
 void        sub_GAME_7F022EE0(s32 param_1);
 void        setanimationdebugflag(s32 param_1);
-void        disable_sounds_attached_to_player_then_something(PropRecord* prop);
-void        chrPositionRelated7F020D94(ChrRecord *);
+void        chrpropCleanupForRemoval(PropRecord* prop);
+void        chrDetectRooms(ChrRecord *);
 void        chrSetMoving(ChrRecord *guard,s32 param_2);
 f32         getAnimationRate(void);
 void        setAnimationRate(f32);
@@ -305,17 +284,23 @@ f32         chrGetChrGround(PropRecord *arg0);
 void        chrDropItems(struct ChrRecord *arg0);
 s32         get_numguards(void);
 Gfx        *chrRenderProp(PropRecord *arg0, Gfx *arg1, s32 arg2);
+
 void        chrAddHealth(ChrRecord *chr, f32 health);
 void        chrSetMaxDamage(ChrRecord *chr, f32 maxdamage);
 s32         propIsOfCdType(PropRecord* prop, s32 cdtypes);
-s32         sub_GAME_7F023194(PropRecord *arg0, struct coord3d *arg1, struct coord2d *arg2, struct coord2d *arg3);
+s32         chrGetOnscreenRenderBounds(PropRecord *arg0, struct coord3d *arg1, struct coord2d *arg2, struct coord2d *arg3);
+void        chrHandleBulletHit(struct ShotData *shot, struct BulletHit *bhit);
+void        propExecuteTickOperation(PropRecord *prop, TICKOP op);
 
 //tentative signature
 s32         sub_GAME_7F01FC10(Model *, coord3d *, coord3d *, f32 *);
-void        sub_GAME_7F0221DC(Model *arg0, s32 arg1, ModelNode *arg2, struct coord3d *arg3);
+void        chrCreateBloodStain(Model *arg0, s32 arg1, ModelNode *arg2, struct coord3d *arg3);
+void        chrpropAddBulletHit(struct ShotData *shotdata, PropRecord *prop, f32 dist, s32 hitpart, ModelNode *node, struct HitThing *hitthing, s32 room, s32 unk44, Model *model, bool countsAsPenetration, s32 blocksFurtherHits);
+void        chrTestHit(PropRecord *prop, ShotData *shotdata);
+void        sub_GAME_7F03E134(PropRecord* p);
 
 #ifdef BUGFIX_R1
-s32 not_in_us_7F0209EC(s32 bodynum, s32 headnum);
+bool chrCanUseDKModeScaling(s32 bodynum, s32 headnum);
 #endif
 
 #endif

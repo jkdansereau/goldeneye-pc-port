@@ -9,10 +9,10 @@
 #define ALIGN16_b(val)        (((val) | 0xf) ^ 0xf)
 
 typedef struct MemoryPool {
-    s32 start;
-    s32 pos;
-    s32 end;
-    s32 prevpos;
+    u8 *start;
+    u8 *pos;
+    u8 *end;
+    u8 *prevpos;
 } MemoryPool;
 
 typedef struct s_mempMVALS { //mempSizes
@@ -39,11 +39,17 @@ enum MEMPOOL
     MEMPOOL_COUNT
 };
 
+typedef enum MEMP_ADD_ENTRY_RESULT
+{
+    MEMP_ADD_ENTRY_SUCCESS = 1,
+    MEMP_ADD_ENTRY_NOT_LAST_ALLOCATION = 2
+} MEMP_ADD_ENTRY_RESULT;
+
 void mempInit(void);
 void mempCheckMemflagTokens(int bstart,int bsize);
 void mempSetBankStarts(s32 banks[8]);
 void *mempAllocBytesInBank(u32 bytes,u8 bank);
-s32 mempAddEntryOfSizeToBank(u8* ptrdata, u32 size, u8 bank);
+MEMP_ADD_ENTRY_RESULT mempAddEntryOfSizeToBank(void *allocation, s32 newsize, u8 poolnum);
 void nulled_mempLoopAllMemBanks(void);
 s32 mempGetBankSizeLeft(u8 bank);
 u32 mempAllocPackedBytesInBank(u32 param_1);

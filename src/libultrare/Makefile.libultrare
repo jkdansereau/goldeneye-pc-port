@@ -74,10 +74,10 @@ LIBULTRA_AUDIO_S_FILES :=
 
 LIBULTRARE_AUDIO_C_FILES := \
     drvrNew \
+    env \
     reverb 
 
-LIBULTRARE_AUDIO_S_FILES := \
-    env 
+LIBULTRARE_AUDIO_S_FILES := 
 
 # #################
 # gt
@@ -187,6 +187,7 @@ LIBULTRARE_IO_C_FILES := \
     pfsisplug \
     pimgr \
     sptask \
+    ultra80069080 \
     vi \
     vimgr \
     vimodepallan1 \

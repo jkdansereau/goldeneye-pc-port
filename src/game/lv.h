@@ -24,10 +24,20 @@
 #define DEFAULT_007_AI_REACTION_SPEED DEFAULT_00_AGENT_AI_REACTION_SPEED
 
 struct LvlMpUnknown {
-    u8 unk_0;
-    u8 unk_1;
-    u8 unk_2;
-    u8 unk_3;
+    union {
+        struct {
+            u8 unk_0;
+            u8 unk_1;
+            u8 unk_2;
+            u8 unk_3;
+        };
+        struct {
+            u32 unk_0_0 : 8;
+            u32 unk_1_3 : 3;
+            u32 unk_1_0 : 3;
+        };
+        u32 word;
+    };
 };
 
 extern s32 D_800483C4;

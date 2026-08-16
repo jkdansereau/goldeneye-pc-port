@@ -5,17 +5,22 @@
 #include <bondtypes.h>
 #include "bondconstants.h"
 
+
+extern s32 g_MaxModelSlots;
+extern s32 g_MaxAnimModelSlots;
+extern s32 g_ModelIsLvResetting;
+
 bool modelmgrCanSlotFitRwdata(Model *modelslot, ModelFileHeader *modeldef);
-void* get_obj_instance_controller_for_header(struct ModelFileHeader* arg0);
+Model* modelmgrInstantiateModel(struct ModelFileHeader* arg0);
 void clear_model_obj(Model* model);
-Model *get_aircraft_obj_instance_controller(ModelFileHeader *);
+Model *modelmgrInstantiateModelWithAnim(ModelFileHeader *);
 void modelAttachHead(Model *, ModelNode*,  ModelFileHeader *);
 void clear_aircraft_model_obj(Model *objinstance);
 void modelSetDistanceDisabled(s32 param_1);
 void modelSetDistanceScale(f32 param_1);
 void set_vtxallocator(s32 param_1);
-void sub_GAME_7F06C474(Model* model, coord3d* coord);
-void sub_GAME_7F06C550(Model* model, coord3d* coord);
+void modelCalculateScaledRootToOriginDir(Model* model, coord3d* coord);
+void modelGetScaledRootToOriginDir(Model* model, coord3d* coord);
 s32 modelFindNodeMtxIndex(ModelNode *node, s32 arg1);
 Mtxf *modelFindNodeMtx(struct Model *model, struct ModelNode *node, s32 arg2);
 Mtxf *getsubmatrix(Model *objinst);
@@ -28,16 +33,13 @@ void setsuboffset(Model *objinst, coord3d *offset);
 f32 getsubroty(Model *objinst);
 void setsubroty(Model *model, f32 angle);
 void modelSetScale(Model *objinst, f32 scale);
-void sub_GAME_7F06CE84(Model* self, f32 arg1);
+void modelSetAnimTranslationScale(Model* model, f32 scale);
 f32 getjointsize(Model *model, ModelNode *node);
 f32 getinstsize(Model *arg0);
 void interpolate3dVectors(vec3d *v, vec3d *w, float frac);
 f32 sub_GAME_7F06D0CC(f32 arg0, f32 angle, f32 mult);
 void sub_GAME_7F06D160(coord3d *arg0, coord3d *arg1, f32 mult);
-
-// arg0: unknown type. arg1: unknown type. arg5: unknown type, maybe struct.
-void sub_GAME_7F06D2E4(s32, s32, ModelSkeleton*, void* anim, s32, s16*);
-
+u16 sub_GAME_7F06D2E4(s32 jointnum, s32 flip, ModelSkeleton *skeleton, ModelAnimation *anim, s32 frame, coord16 *out);
 void sub_GAME_7F06D490(struct Model *arg0, struct ModelNode *arg1);
 void subcalcpos(Model *arg0);
 void process_01_group_heading(ModelRenderData* renderdata, Model* model, ModelNode* node);
@@ -59,12 +61,12 @@ void instcalcmatrices(ModelRenderData* arg0, Model* arg1);
 void subcalcmatrices(ModelRenderData *arg0, struct Model *arg1);
 struct ModelAnimation * objecthandlerGetModelAnim(struct Model* model);
 s8 objecthandlerGetModelGunhand(Model *model);
-f32 objecthandlerGetModelField28(Model *model);
-f32 sub_GAME_7F06F5C4(Model *model);
+f32 modelGetAnimFrame(Model *model);
+f32 modelGetAnimEndFrame(Model *model);
 f32 modelGetAnimSpeed(Model *model);
 f32 modelGetAbsAnimSpeed(Model *model);
 s32 modelConstrainOrWrapAnimFrame(s32 frame, ModelAnimation *anim, f32 endframe);
-void modelCopyAnimForMerge(Model *, f32);
+void modelCopyAnimForMerge(Model *model, f32 timemerge);
 void modelSetAnimation2(Model *, ModelAnimation *, s32, f32, f32, f32);
 void modelSetAnimationWithMerge(Model *model, ModelAnimation *modelAnimation, s32 flip, f32 startframe, f32 speed, f32 timemerge, s32 domerge);
 void modelSetAnimation(Model *model, ModelAnimation *modelAnimation, s32 flip, f32 startframe, f32 speed, f32 merge);
@@ -79,7 +81,7 @@ void modelSetAnimFrame(Model* model, f32 frame);
 void modelSetAnimFrame2(Model* model, f32 frame1, f32 frame2);
 void modelSetAnimMergingEnabled(s32 arg0);
 u32 modelIsAnimMergingEnabled(void);
-void modelTickAnimQuarterSpeed(Model *, s32, s32);
+void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff);
 void modelApplyRenderModeType1(ModelRenderData *renderdata);
 void modelApplyRenderModeType3(ModelRenderData *renderdata, bool isPrimary);
 void modelApplyRenderModeType4(ModelRenderData *renderdata, bool isPrimary);
@@ -101,7 +103,7 @@ void sub_GAME_7F074524(Gfx *param_1,struct Model *param_2, struct ModelNode *par
 void sub_GAME_7F074534(ModelRenderData* data, Model* model, ModelNode* node);
 void subdraw(ModelRenderData *arg0, struct Model *);
 s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused);
-void sub_GAME_7F0755B0(void);
+void modelResetAnimationsScratchBuffer(void);
 void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr);
 void sub_GAME_7F075A90(ModelFileHeader *header, s32 vma, u32 addr);
 s32 modelCalculateRwDataIndexes(ModelNode *basenode);
@@ -112,6 +114,7 @@ void animInit(struct Model *objinst, struct ModelFileHeader *header, u32 *data);
 void modelAttachPart(Model *pmodel, ModelFileHeader *pmodeldef, ModelNode *pnode, ModelFileHeader *cmodeldef);
 void modelIterateDisplayLists(ModelFileHeader *fileheader, ModelNode **nodeptr, Gfx **gdlptr);
 void modelNodeReplaceGdl(u32 arg0, ModelNode *node, Gfx *find, Gfx *replacement);
+bool modelTestRayIntersectsTransformedBBox(ModelRoData_BoundingBoxRecord *bbox, Mtxf *mtx, coord3d *pos, coord3d *dir);
 
 #ifndef VERSION_EU
 void return_null(void);

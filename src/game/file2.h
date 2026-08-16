@@ -22,6 +22,7 @@
 
 #define DEFAULT_OPTIONS (OPTION_AUTOAIM | OPTION_SIGHTONSCREEN | OPTION_LOOKAHEAD | OPTION_DISPLAYAMMO)
 
+extern ChrRecord *g_CurModelChr;
 
 u8 fileGetBondForFolder(u32 folder);
 void fileValidateSaves(void);

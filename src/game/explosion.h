@@ -176,7 +176,7 @@ u8 explosionChrpropSmokeTick(PropRecord* prop);
 u8 explosionChrpropExplosionTick(PropRecord* prop);
 void explosionScreenShake(coord3d* source_pos, coord3d* source_mag, coord3d* result);
 void explosionCreateBulletImpact(struct coord3d *pos, struct coord3d *arg1, s16 impact_type, s16 room, PropRecord *prop, s8 model_render_pos_index, s8 room_clear_flag);
-
+s32 explosionTick(PropRecord* arg0);
 #if defined(VERSION_JP) || defined(VERSION_EU)
 s32 explosionCreate(PropRecord *arg0, struct coord3d *target_pos, StandTile *target_stan, s16 /* enum EXPLOSION_DEF */ explosion_type, s32 arg4, s32 player, u8 *rooms, s32 arg7);
 s32 sub_GAME_7F09C250(s32 arg0, struct coord3d *pos, struct StandTile *stan, s16 arg3, s32 flag4, s32 playernum, u8 *rooms, s32 flag7);
