@@ -50,12 +50,7 @@ $(BUILD_DIR)/$(OBSEGMENT): $(OBSEG_RZ) $(IMAGE_OBJS)
 
 #Build C files in src/
 $(BUILD_DIR)/src/%.o: src/%.c 
-	@if grep -q 'GLOBAL_ASM(' $<; then \
-		$(ASM_PREPROC) $(OPTIMIZATION) $< | $(CC) -c $(CFLAGS) tools/asm-processor/include-stdin.c -o $@ $(OPTIMIZATION); \
-		$(ASM_PREPROC) $(OPTIMIZATION) $< --post-process $@ --assembler "$(AS) $(ASFLAGS)" --asm-prelude tools/asm-processor/prelude.s; \
-	else \
-		$(CC) -c $(CFLAGS) -o $@ $(OPTIMIZATION) $<; \
-	fi
+	$(CC) -c $(CFLAGS) -o $@ $(OPTIMIZATION) $<
 
 
 #Build RamRom

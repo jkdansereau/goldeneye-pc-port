@@ -70,12 +70,15 @@
       build/OUTCODE/src/game/math_floor.o (.bss);
       build/OUTCODE/src/game/math_ceil.o (.bss);
       build/OUTCODE/src/game/gun.o (.bss);
+      build/OUTCODE/src/game/gun_rodata.o (.bss);
+      build/OUTCODE/src/game/gunfire.o (.bss);
       build/OUTCODE/src/game/bondwalk2.o (.bss);
       build/OUTCODE/src/game/objecthandler.o (.bss);
       build/OUTCODE/src/game/model.o (.bss);
       build/OUTCODE/src/game/objecthandler_2.o (.bss);
       build/OUTCODE/src/game/othermodemicrocode.o (.bss);
       build/OUTCODE/src/game/bondview.o (.bss);
+      build/OUTCODE/src/game/bondview2.o (.bss);
       build/OUTCODE/src/game/bondinv.o (.bss);
       build/OUTCODE/src/game/bondhead.o (.bss);
       build/OUTCODE/src/game/padhalllv.o (.bss);
@@ -103,6 +106,7 @@
       build/OUTCODE/src/game/stan.o (.bss);
       build/OUTCODE/src/game/stanintersection.o (.bss);
       build/OUTCODE/src/game/bg.o (.bss);
+      build/OUTCODE/src/game/bg_portal_table.o (.bss);
       build/OUTCODE/src/game/bgapply.o (.bss);
       build/OUTCODE/src/game/bgfog.o (.bss);
       build/OUTCODE/src/game/lightfixture.o (.bss);

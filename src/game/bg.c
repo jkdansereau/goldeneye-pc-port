@@ -73,7 +73,15 @@ extern f32 *dword_CODE_bss_8007FF94;
 extern s_bound_info dword_CODE_bss_8007FFA0[];
 #ifndef VERSION_EU
 extern s32 dword_CODE_bss_8007FF98;
+extern s32 dword_CODE_bss_8007FF9C;
+#else
+extern u32 missingeubytes[4];
+extern s32 eu_bss_8007BFA0;
+extern s32 eu_bss_8007BFA4;
 #endif
+extern s32 dword_CODE_bss_800815f0;
+extern s32 dword_CODE_bss_800815f4;
+extern s32 dword_CODE_bss_800815f8;
 
 #ifdef VERSION_EU
 #define BG_PORTAL_QUEUE_LEN 250
@@ -289,6 +297,32 @@ void bgOrderPortal(s32 portalnum);
 
 void bgInit(void) 
 {
+    if (0)
+    {
+        g_BgPortals = NULL;
+        ptr_bgdata_offsets = 0;
+        dword_CODE_bss_8007FF88 = 0;
+        ptr_bgdata_room_fileposition_list = NULL;
+        dword_CODE_bss_8007FF90 = NULL;
+        dword_CODE_bss_8007FF94 = NULL;
+#ifdef VERSION_EU
+        dword_CODE_bss_8007FFA0[0].roomid = 0;
+        missingeubytes[0] = 0;
+        dword_CODE_bss_800815f0 = 0;
+        dword_CODE_bss_800815f4 = 0;
+        dword_CODE_bss_800815f8 = 0;
+        eu_bss_8007BFA0 = 0;
+        eu_bss_8007BFA4 = 0;
+#else
+        dword_CODE_bss_8007FF98 = 0;
+        dword_CODE_bss_8007FF9C = 0;
+        dword_CODE_bss_8007FFA0[0].roomid = 0;
+        dword_CODE_bss_800815f0 = 0;
+        dword_CODE_bss_800815f4 = 0;
+        dword_CODE_bss_800815f8 = 0;
+#endif
+    }
+
     debTryAdd(&ptr_bg_c_debug_debug_notice_list, "bg_c_debug");
 }
 
@@ -1795,26 +1829,15 @@ char *bgDebPrintROOMID(s32 roomId)
 */
 bg_queued_portal_entry g_BgPortalQueue[BG_PORTAL_QUEUE_LEN];
 
-#ifdef VERSION_EU
-GLOBAL_ASM(
-.bss
-.balign 4
-glabel g_BgPortals
-.space 4
-glabel ptr_bgdata_offsets
-.space 4
-glabel dword_CODE_bss_8007FF88
-.space 4
-glabel ptr_bgdata_room_fileposition_list
-.space 4
-glabel dword_CODE_bss_8007FF90
-.space 4
-glabel dword_CODE_bss_8007FF94
-.space 4
-glabel dword_CODE_bss_8007FFA0
-.space 0xba0
-)
+bg_portal_data_entry *g_BgPortals;
+s32 ptr_bgdata_offsets;
+s32 dword_CODE_bss_8007FF88;
+bg_room_data *ptr_bgdata_room_fileposition_list;
+s32 *dword_CODE_bss_8007FF90;
+f32 *dword_CODE_bss_8007FF94;
 
+#ifdef VERSION_EU
+s_bound_info dword_CODE_bss_8007FFA0[124];
 u32 missingeubytes[4];
 s32 dword_CODE_bss_800815f0;
 s32 dword_CODE_bss_800815f4;
@@ -1822,38 +1845,13 @@ s32 dword_CODE_bss_800815f8;
 s32 eu_bss_8007BFA0;
 s32 eu_bss_8007BFA4;
 #else
-GLOBAL_ASM(
-.bss
-.balign 4
-glabel g_BgPortals
-.space 4
-glabel ptr_bgdata_offsets
-.space 4
-glabel dword_CODE_bss_8007FF88
-.space 4
-glabel ptr_bgdata_room_fileposition_list
-.space 4
-glabel dword_CODE_bss_8007FF90
-.space 4
-glabel dword_CODE_bss_8007FF94
-.space 4
-)
-
 s32 dword_CODE_bss_8007FF98;
 s32 dword_CODE_bss_8007FF9C;
-
-GLOBAL_ASM(
-.bss
-.balign 4
-glabel dword_CODE_bss_8007FFA0
-.space 0x1650
-)
-
+s_bound_info dword_CODE_bss_8007FFA0[204];
 s32 dword_CODE_bss_800815f0;
 s32 dword_CODE_bss_800815f4;
 s32 dword_CODE_bss_800815f8;
 #endif
-
 
 //D:80044868
 BoundVec D_80044868 = {0x7FFF, 0x7FFF, 0x7FFF};
@@ -4279,14 +4277,9 @@ GlobalVisCommand *parse_global_vis_command_list(GlobalVisCommand *cmd, s32 execu
     }
 }
 
-
-GLOBAL_ASM(
-.bss
-.balign 4
-glabel table_for_portals
-.space 0xfa0
-)
-
+#ifndef VERSION_EU
+struct unk_portalstruct table_for_portals[PORTMAX];
+#endif
 
 #define RS_STOP 0
 

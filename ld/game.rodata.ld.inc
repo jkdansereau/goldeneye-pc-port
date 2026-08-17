@@ -70,12 +70,16 @@
       build/OUTCODE/src/game/math_floor.o (.rodata);
       build/OUTCODE/src/game/math_ceil.o (.rodata);
       build/OUTCODE/src/game/gun.o (.rodata);
+      build/OUTCODE/src/game/gun_rodata.o (.rodata);
+      build/OUTCODE/src/game/gunfire.o (.rodata);
+      build/OUTCODE/src/game/gunfire.o (.data);
       build/OUTCODE/src/game/bondwalk2.o (.rodata);
       build/OUTCODE/src/game/objecthandler.o (.rodata);
       build/OUTCODE/src/game/model.o (.rodata);
       build/OUTCODE/src/game/objecthandler_2.o (.rodata);
       build/OUTCODE/src/game/othermodemicrocode.o (.rodata);
       build/OUTCODE/src/game/bondview.o (.rodata);
+      build/OUTCODE/src/game/bondview2.o (.rodata);
       build/OUTCODE/src/game/bondinv.o (.rodata);
       build/OUTCODE/src/game/bondhead.o (.rodata);
       build/OUTCODE/src/game/padhalllv.o (.rodata);

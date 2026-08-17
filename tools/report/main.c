@@ -258,15 +258,18 @@ int main(int argc, char **argv)
 	fprintf(html_out, "<text x=\"363\" y=\"858\">%s</text>\n", missions[cur_mis].part);
 	fprintf(html_out, "<text x=\"363\" y=\"1015\">STATISTICS:</text>\n");
 	fprintf(html_out, "<text x=\"363\" y=\"1172\">Time:</text>\n");
-	fprintf(html_out, "<text x=\"856\" y=\"1172\">%02d:%02d</text>\n", cur_time / 60, cur_time % 60);
-	fprintf(html_out, "<text x=\"363\" y=\"1284\">Target:</text>\n");
+	fprintf(html_out, "<text x=\"856\" y=\"1172\">%02d:%02d</text>  ", cur_time / 60, cur_time % 60);
+	fprintf(html_out, "<text x=\"1180\" y=\"1172\" class=\"failed\">[New Decomp Available]</text>\n");
+    fprintf(html_out, "<text x=\"363\" y=\"1284\">Target:</text>\n");
 	fprintf(html_out, "<text x=\"856\" y=\"1284\">%02d:%02d</text>\n", missions[cur_mis].time / 60,  missions[cur_mis].time % 60);
 	if(cur_obj == cur_mis_objs_max)
 	{
 		fprintf(html_out, "<text x=\"1250\" y=\"1284\">(Best Time: %02d:%02d)</text>\n", cur_time / 60, cur_time % 60);
 	}
-	fprintf(html_out, "<text x=\"363\" y=\"1416\">Decomp:</text>\n");
+	/*
+    fprintf(html_out, "<text x=\"363\" y=\"1416\">Decomp:</text>\n");
 	fprintf(html_out, "<text x=\"856\" y=\"1416\">%0.1f%%</text>\n", PERCENTF(decompiled_words, decompiled_words_max));
+    */
 	if(last_modified_file_arg_active)
 	{
 		fprintf(html_out, "<text x=\"363\" y=\"1520\">Last modified file:</text>\n");

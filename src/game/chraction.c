@@ -44,10 +44,10 @@ f32 chrlvGetGuard007ArghRating                (ChrRecord *self, f32 min, f32 max
 void chrlvKneelingAnimationRelated            (ChrRecord *self);
 void chrlvIdleAnimationRelated7F023E14        (ChrRecord *self, f32 arg1);
 void chrlvKneelingAnimationRelated7F023E48    (ChrRecord *self);
-void chrKneelChooseAnimation                          (ChrRecord *self);
+void chrKneelChooseAnimation                  (ChrRecord *self);
 void chrlvPerformAnimationForActor            (ChrRecord *self, s32 arg1, s32 arg2, s32 arg3, u8 arg4, s32 arg5);
-void chrStartAlarmChooseAnimation      (ChrRecord *self);
-void chrlvThrowGrenadeAnimationRelated        (ChrRecord *self, PropRecord *arg1, s32 arg2, s32 arg3);
+void chrStartAlarmChooseAnimation             (ChrRecord *self);
+void chrlvThrowGrenade                        (ChrRecord *self, PropRecord *prop, GUNHAND hand, s32 startframe);
 void chrlvSpotBondAnimationRelated            (ChrRecord *self, f32 arg1);
 void chrlvActorShuffleFeet                    (ChrRecord *self);
 void chrlvSurrenderAnimationRelated           (ChrRecord *self);
@@ -372,7 +372,10 @@ void chrlvIdleAnimationRelated(ChrRecord *self, f32 duration)
 #define RATE 1.0f
 #endif
 
-void chrlvIdleAnimationRelated7F023A94(ChrRecord *self, f32 mergetime)
+/**
+ * At the end of a character's kneeling animation smoothly merge into their standing animation.
+ */
+void chrlvMergeKneelToStand(ChrRecord *self, f32 mergetime)
 {
     f32 fsleep;
 
@@ -497,7 +500,7 @@ void chrlvKneelingAnimationRelated(ChrRecord *self)
         return;
     }
 
-    chrlvIdleAnimationRelated7F023A94(self, 16.0f);
+    chrlvMergeKneelToStand(self, 16.0f);
 }
 
 
@@ -508,7 +511,7 @@ void chrlvKneelingAnimationRelated(ChrRecord *self)
  */
 void chrlvIdleAnimationRelated7F023E14(ChrRecord *self, f32 arg1)
 {
-    chrlvIdleAnimationRelated7F023A94(self, arg1);
+    chrlvMergeKneelToStand(self, arg1);
     self->act_stand.checkfacingwall = 1;
 }
 
@@ -645,22 +648,26 @@ void chrStartAlarmChooseAnimation(ChrRecord *self)
 
 /**
  * Address 0x7F024238.
+ * 
+ * Play the grenade throw animation. Takes a PropRecord* as an argument but
+ * does not use it.
+ * 
  * PD: chrThrowGrenade
  */
-void chrlvThrowGrenadeAnimationRelated(ChrRecord *self, PropRecord *arg1, s32 arg2, s32 arg3)
+void chrlvThrowGrenade(ChrRecord *self, PropRecord *prop, GUNHAND hand, s32 startframe)
 {
     chrStopFiring(self);
 
     self->actiontype = ACT_THROWGRENADE;
     self->sleep = 0;
 
-    if (arg3 != 0)
+    if (startframe != 0)
     {
-        modelSetAnimation(self->model, (void*)&ptr_animation_table->data[(s32)&ANIM_DATA_fire_throw_grenade], arg2 != 0, 0.0f, chrlvGetGuard007SpeedRating(self, 0.5f, 0.8f), 16.0f);
+        modelSetAnimation(self->model, (void*)&ptr_animation_table->data[(s32)&ANIM_DATA_fire_throw_grenade], hand != 0, 0.0f, chrlvGetGuard007SpeedRating(self, 0.5f, 0.8f), 16.0f);
     }
     else
     {
-        modelSetAnimation(self->model, (void*)&ptr_animation_table->data[(s32)&ANIM_DATA_fire_throw_grenade], arg2 != 0, 84.0f, chrlvGetGuard007SpeedRating(self, 0.5f, 0.8f), 16.0f);
+        modelSetAnimation(self->model, (void*)&ptr_animation_table->data[(s32)&ANIM_DATA_fire_throw_grenade], hand != 0, 84.0f, chrlvGetGuard007SpeedRating(self, 0.5f, 0.8f), 16.0f);
     }
 
     modelSetAnimEndFrame(self->model, 193.0f);
@@ -9327,7 +9334,7 @@ void chrlvActionTick(ChrRecord *self)
         if (self->actiontype == ACT_INIT)
         {
             self->chrflags |= CHRFLAG_INIT;
-            chrlvIdleAnimationRelated7F023A94(self, 0.0f);
+            chrlvMergeKneelToStand(self, 0.0f);
             self->sleep = 0;
         }
 
@@ -10855,14 +10862,14 @@ bool actor_draws_throws_grenade_at_player_if_possible(ChrRecord *self)
 
         if (Right && (RightWep = Right->weapon, RightWep->weaponnum == ITEM_GRENADE))
         {
-            chrlvThrowGrenadeAnimationRelated(self, Right, GUNRIGHT, 0);
+            chrlvThrowGrenade(self, Right, GUNRIGHT, 0);
 
             return TRUE;
         }
 
         if (Left && (LeftWep = Left->weapon, LeftWep->weaponnum == ITEM_GRENADE))
         {
-            chrlvThrowGrenadeAnimationRelated(self, Left, GUNLEFT, 0);
+            chrlvThrowGrenade(self, Left, GUNLEFT, 0);
 
             return TRUE;
         }
@@ -10883,7 +10890,7 @@ bool actor_draws_throws_grenade_at_player_if_possible(ChrRecord *self)
                 NewGrenadeObj = NewGrenadeProp->weapon;
                 NewGrenadeObj->runtime_bitflags |= 0x800; //manual bitflags are more effecient
 
-                chrlvThrowGrenadeAnimationRelated(self, NewGrenadeProp, !Right ? GUNRIGHT : GUNLEFT, 1); //this matches
+                chrlvThrowGrenade(self, NewGrenadeProp, !Right ? GUNRIGHT : GUNLEFT, 1);
 
                 return TRUE;
             }

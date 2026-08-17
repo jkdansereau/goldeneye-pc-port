@@ -29,7 +29,7 @@ $(BUILD_DIR)/$(OBSEG_DIR)/setup/%.o: $(OBSEG_DIR)/setup/$(COUNTRYCODE)/%.c
 	$(CC) -c $(CFLAGS) -o $@ -O2 $<
 
 $(BUILD_DIR)/$(OBSEG_DIR)/setup/%.o: $(OBSEG_DIR)/setup/%.c
-	$(ConvertAIPRINT) $< | $(CC) -c $(CFLAGS) tools/asm-processor/include-stdin.c -o $@ $(OPTIMIZATION)
+	$(ConvertAIPRINT) $< | $(CC) -c $(CFLAGS) tools/include-stdin.c -o $@ $(OPTIMIZATION)
 
 # Generate all file targets
 SETUP_O_FILES := $(foreach name,$(SETUP_NAMES),$(BUILD_DIR)/$(OBSEG_DIR)/setup/$(name).o)

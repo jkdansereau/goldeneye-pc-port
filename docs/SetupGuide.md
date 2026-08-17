@@ -202,9 +202,8 @@ The c compiler can be found in `tools/irix/root/usr/bin/cc`. This splits the com
 
 ### Assembly Preprocessor
 
-There is a (much forked) preprocessor used by many N64 projects, found in `tools/asm-processor/asm_processor.py`. This searches for a line
-beginning with `GLOBAL_ASM(` and a subsequent line beginning with `)` and treats everything in between as assembly. This is bundled with any
-c code in the file and sent to the compiler.
+`GLOBAL_ASM` is retired in this repository, so no asm preprocessor step is used during normal builds.
+Source `.c` files are compiled directly by the IRIX compiler.
 
 ### Code build process
 

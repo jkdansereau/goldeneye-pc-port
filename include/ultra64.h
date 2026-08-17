@@ -18,8 +18,3 @@
 #include <PR/ucode.h>
 
 #endif
-
-//temporary catchall fix since not all files in master include bondgame
-#ifdef __INTELLISENSE__
-#define GLOBAL_ASM(...)
-#endif

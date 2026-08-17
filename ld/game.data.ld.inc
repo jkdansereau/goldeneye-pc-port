@@ -70,12 +70,14 @@
       build/OUTCODE/src/game/math_floor.o (.data);
       build/OUTCODE/src/game/math_ceil.o (.data);
       build/OUTCODE/src/game/gun.o (.data);
+      build/OUTCODE/src/game/gun_rodata.o (.data);
       build/OUTCODE/src/game/bondwalk2.o (.data);
       build/OUTCODE/src/game/objecthandler.o (.data);
       build/OUTCODE/src/game/model.o (.data);
       build/OUTCODE/src/game/objecthandler_2.o (.data);
       build/OUTCODE/src/game/othermodemicrocode.o (.data);
       build/OUTCODE/src/game/bondview.o (.data);
+      build/OUTCODE/src/game/bondview2.o (.data);
       build/OUTCODE/src/game/bondinv.o (.data);
       build/OUTCODE/src/game/bondhead.o (.data);
       build/OUTCODE/src/game/padhalllv.o (.data);

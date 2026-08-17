@@ -484,7 +484,8 @@ def print_default_stats(stats: StatResults, version):
         d_completed_func_count = s.function_count - s.nonmatching_count
         print('\t{:12}\t{:7,} / {:7,} \t{:6.2f}%'.format(s.path, int(d_completed_func_count), int(s.function_count), (percent_complete(d_completed_func_count, s.function_count) * 100)))
     print()
-    print('\ttotal       \t{:7,} / {:7,} \t{:6.2f}%'.format(int(stats.total_nonmatching_count), int(stats.total_function_count), (percent_complete(stats.total_nonmatching_count, stats.total_function_count) * 100)))
+    total_completed_func_count = stats.total_function_count - stats.total_nonmatching_count
+    print('\ttotal       \t{:7,} / {:7,} \t{:6.2f}%'.format(int(total_completed_func_count), int(stats.total_function_count), (percent_complete(total_completed_func_count, stats.total_function_count) * 100)))
     print('__________________________________________________________________')
     print()
 
@@ -714,9 +715,16 @@ def main():
     src_libultrare_completed_list = [
         'ultra80069080.s']
 
+    # files to count as complete, in src/game directory
+    # These are intentionally kept in assembly.
+    src_game_completed_list = [
+        'sub_GAME_7F01D1C0.s',
+        'chrObjRandom.s',
+        'math_sincos.s']
+
     search = []
     search.append(SearchDir('src', False, completed=src_completed_list))
-    search.append(SearchDir('src/game', False))
+    search.append(SearchDir('src/game', False, completed=src_game_completed_list))
     search.append(SearchDir('src/inflate', False))
     search.append(SearchDir('src/libultrare', True, completed=src_libultrare_completed_list))
 
