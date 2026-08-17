@@ -1,0 +1,32 @@
+#ifndef PORT_CONFIG_H
+#define PORT_CONFIG_H
+
+/*
+ * INI configuration (ge007.ini).
+ * Modelled on the PD port's port/include/config.h.
+ *
+ * A tiny key=value store. Options register themselves (usually via a
+ * PD_CONSTRUCTOR) and are loaded from / saved to the ini in the data dir.
+ */
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Load the config file (no-op if it doesn't exist yet). */
+void configLoad(void);
+/* Save the current values back to the config file. */
+void configSave(void);
+
+/* Register an integer option. min/max are clamping bounds (0 = unbounded). */
+void configRegisterInt(const char *key, int *value, int min, int max);
+/* Register a string option (buf must live for the program's lifetime). */
+void configRegisterString(const char *key, char *value, int bufSize);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* PORT_CONFIG_H */

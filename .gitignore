@@ -67,6 +67,11 @@ bin/*
 build/*
 build-*/*
 notes/*
+
+# PC port (see CMakeLists.txt / port/)
+build-pc/
+data/
+ge007.ini
 !build/test.c
 !notes/StyleGuide.md
 #tools
