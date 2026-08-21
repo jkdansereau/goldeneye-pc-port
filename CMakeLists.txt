@@ -16,6 +16,26 @@
 cmake_minimum_required(VERSION 3.16)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
+# The decomp uses the `#define inherits struct` pattern (47x in
+# src/bondtypes.h): a nested `struct Base;` inside a derived struct. GCC
+# treats this as embedding the full base struct (correct layout, matches the
+# N64/IDO behaviour the decomp relies on); Clang treats it as a bare forward
+# declaration (no members) and rejects base-member access. So prefer GCC.
+# (GCC does hard-error on the one struct that declares a member with the same
+# name as an inherited one — CCTVRecord's `pad` — see docs/PCPortResearch.md.)
+# An explicit -DCMAKE_C_COMPILER=... always wins.
+if(NOT DEFINED CMAKE_C_COMPILER)
+  find_program(_GE007_GCC NAMES gcc)
+  if(_GE007_GCC)
+    set(CMAKE_C_COMPILER "${_GE007_GCC}" CACHE FILEPATH "C compiler" FORCE)
+    get_filename_component(_GE007_GCC_DIR "${_GE007_GCC}" DIRECTORY)
+    find_program(_GE007_GXX NAMES g++ PATHS "${_GE007_GCC_DIR}" NO_DEFAULT_PATH)
+    if(_GE007_GXX)
+      set(CMAKE_CXX_COMPILER "${_GE007_GXX}" CACHE FILEPATH "CXX compiler" FORCE)
+    endif()
+  endif()
+endif()
+
 if(APPLE)
   if(CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
     set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "" FORCE)
@@ -110,6 +130,19 @@ configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/versioninfo.h.in"
   "${CMAKE_BINARY_DIR}/port/include/versioninfo.h" @ONLY)
 
+# Host <string.h> path for port/shim/string.h. The N64 include/string.h
+# declares strlen/strchr with `const unsigned char *`, which conflicts with
+# the host declarations that SDL (and other system headers) pull in, and it
+# sits earlier on the include path than the toolchain's own string.h — so the
+# shim cannot use #include_next (it would find the N64 header first). Derive
+# the toolchain include dir from the compiler location (MinGW/MSYS2 layout:
+# bin/../include) and generate an absolute-path include.
+get_filename_component(_PORT_GCC_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
+get_filename_component(PORT_HOST_STRING_H "${_PORT_GCC_DIR}/../include/string.h" ABSOLUTE)
+configure_file(
+  "${CMAKE_SOURCE_DIR}/port/include/hoststring.h.in"
+  "${CMAKE_BINARY_DIR}/port/include/hoststring.h" @ONLY)
+
 # ----------------------------------------------------------------------------
 # Compiler definitions & flags
 # ----------------------------------------------------------------------------
@@ -147,10 +180,27 @@ add_compile_options(
   -Wno-unused-value
   -Wno-unused-variable
 )
+# The decomp was written for IDO's leniency. These downgrade hard errors to
+# warnings so the unmodified game code compiles; each class is a tracked
+# decomp finding (see docs/PCPortResearch.md):
+#   int-conversion: raw 32-bit ROM address constants assigned to pointers
+#     (WIP decomp; genuine 64-bit hazards to fix upstream as phases progress)
+#   incompatible-pointer-types: Mtxf union vs float[4][4], Gfx array idioms
+#   implicit-function-declaration: missing header declarations (e.g.
+#     get_ptr_long_watch_text_for_item, defined in gunfire.c)
+add_compile_options(
+  -Wno-error=int-conversion
+  -Wno-error=incompatible-pointer-types
+  -Wno-error=implicit-function-declaration
+)
 add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-pointer-sign>)
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-function>)
 
+# port/shim first: PC-only shadow headers (bondtypes.h, bondconstants.h,
+# PR/gbi.h) that fix N64-compiler assumptions without touching src/ or
+# include/. Inert in the N64 build (its Makefile never sees port/shim).
 include_directories(
+  "${CMAKE_SOURCE_DIR}/port/shim"
   "${CMAKE_SOURCE_DIR}"
   "${CMAKE_SOURCE_DIR}/include"
   "${CMAKE_SOURCE_DIR}/include/PR"
@@ -225,6 +275,42 @@ set(SRC_LIBULTRARE_DATA
 )
 list(PREPEND SRC_LIBULTRARE_DATA "${CMAKE_SOURCE_DIR}")
 
+# IDO printf engine: src/sprintf.c's sprintf() calls _Printf(prout, dst, fmt,
+# va_list), the internal formatter from libultrare/libc (pure C, no hardware).
+# xlitob/xldtob are its integer-conversion helpers (_Litob/_Ldtob). The
+# _Printf prototype clash between xstdio.h and xprintf.c is resolved by the
+# port/shim/libc/xstdio.h shadow header.
+set(SRC_LIBULTRARE_LIBC
+  src/libultrare/libc/xprintf.c
+  src/libultra/libc/xlitob.c
+  src/libultra/libc/xldtob.c
+)
+list(PREPEND SRC_LIBULTRARE_LIBC "${CMAKE_SOURCE_DIR}")
+
+# ----------------------------------------------------------------------------
+# Asset data — decompiled ROM arrays (pure data, no logic).
+#
+# Single-file assets compile unmodified. The per-model / per-level .c files
+# under assets/obseg/{bg,brief,setup,stan} are NOT compiled: each one defines
+# file-local globals with generic names (`header`, `room_data_table`,
+# `intro`, ...) that the N64 build keeps apart by linking every file into its
+# own ELF (see assets/obseg/Makefile.*). In a single host link they collide.
+# The game loads those blobs from ROM at runtime anyway; their top-level
+# symbols (C*Z, G*Z, P*Z, Tbg_*Z, U*Z, L*E/L*J, bg_*_all_p_seg, ...) are
+# stubbed in port/src/assetstubs.c until Phase 2 ROM loading. The per-model
+# data itself (chr/*/Model.c etc.) is gitignored ROM-derived and absent from
+# this checkout. See docs/PCPortResearch.md §11.
+set(SRC_ASSETS
+  assets/animationtable_data.c
+  assets/animationtable_entries.c
+  assets/font_chardatae.c
+  assets/font_chardataj.c
+  assets/font_dl.c
+  assets/oddtextures.c
+  assets/rarewarelogo.c
+)
+list(PREPEND SRC_ASSETS "${CMAKE_SOURCE_DIR}")
+
 # Engine files in src/ that are platform independent.
 # NOTE: this list is a starting point and must be curated during Phase 1.
 #
@@ -280,6 +366,8 @@ set(SRC
   ${SRC_LIBAUDIO}
   ${SRC_LIBULTRARE_AUDIO}
   ${SRC_LIBULTRARE_DATA}
+  ${SRC_LIBULTRARE_LIBC}
+  ${SRC_ASSETS}
   ${SRC_GU}
   ${SRC_ENGINE}
 )

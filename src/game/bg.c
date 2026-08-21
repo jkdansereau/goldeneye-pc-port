@@ -226,11 +226,15 @@ struct levelentry levelinfotable[] = {
 u32 D_8004481C[] = {0x1000100, 0};
 
 //D:80044824
-s_specialportal specialportalarray[] = {
-    {0x03,
-        {0x2C,0x2E,0x32, 0x37,0x3E,0x3F,0x4E, 0x56,0x59,0x5D,0x72, 0x76,0x79,0x7A,0xFF}},
-    {0x11,
-        {0x00,0x3A,0xFF}}
+/* PC port: the original declared this as `s_specialportal[]` (a struct with a
+ * flexible array member `portallist[]`). C forbids initializing a flexible array
+ * member in a nested context (an array element), which GCC enforces as a hard
+ * error (IDO tolerated it). The code treats this data as a flat byte array
+ * (cast to `u8*` at sub_GAME_7F0B37EC and walked byte-by-byte), so define it as
+ * such. The byte layout is identical. See docs/PCPortResearch.md. */
+u8 specialportalarray[] = {
+    0x03, 0x2C,0x2E,0x32, 0x37,0x3E,0x3F,0x4E, 0x56,0x59,0x5D,0x72, 0x76,0x79,0x7A,0xFF,
+    0x11, 0x00,0x3A,0xFF
 };
 
 /**
@@ -5107,7 +5111,7 @@ s32 bgGetPortalBetweenRooms(s32 room1, s32 room2, coord3d *arg2, coord3d *arg3)
     s32 portalIndex = -1;
 
     #ifndef DEBUG
-        #define osSyncPrintf(x)
+        #define osSyncPrintf(...) /* PC port: variadic (was (x)); IDO tolerated fixed-arg count, GCC does not */
     #endif
 
     for (i = 0; g_BgPortals[i].offset_portal != NULL; i++)

@@ -7,6 +7,9 @@
  *   - g_randomSeed is persisted in replay state (src/game/ramromreplay.c)
  *   - randomGetNext() drives RANDOMFRAC()/RANDOMGETNEXT_F32() (bondconstants.h)
  *
+ * Also ports src/game/chrObjRandom.s: the character-AI PRNG (chroid.c),
+ * which runs the identical transform on its own seed variable.
+ *
  * The assembly operates on the low 32 bits of the seed (the high 32 bits are
  * never read), but the seed is stored as a full u64. We mirror each
  * instruction with explicit masks to guarantee bit-exactness. The initial
@@ -81,4 +84,36 @@ u32 randomGetNextFrom(u64 *seed)
 
     *seed = a3;              /* sd     $a3, ($a0) */
     return (u32)a3;          /* v0 = a3 & 0xFFFFFFFF */
+}
+
+/* --- Character-object PRNG (src/game/chrObjRandom.s) ---------------------- */
+/* Same xorshift as randomGetNext, separate state. Seed is two .words in the   */
+/* .s: 0xAB8D9F77 (hi) / 0x81280783 (lo) — same initial value as g_randomSeed. */
+
+u64 g_chrObjRandomSeed = 0xAB8D9F7781280783ULL;
+
+u32 chrObjRandomGetNext(void)
+{
+    u64 a0 = g_chrObjRandomSeed;
+    u64 a1, a2;
+
+    a2 = dsll32(a0, 0x1f);   /* dsll32 $a2, $a0, 0x1f */
+    a1 = a0 << 0x1f;         /* dsll   $a1, $a0, 0x1f */
+    a2 = a2 >> 0x1f;         /* dsrl   $a2, $a2, 0x1f */
+    a1 = dsrl32(a1, 0);      /* dsrl32 $a1, $a1, 0    */
+    a0 = dsll32(a0, 0xc);    /* dsll32 $a0, $a0, 0xc  */
+    a2 = a2 | a1;            /* or     $a2, $a2, $a1  */
+    a0 = dsrl32(a0, 0);      /* dsrl32 $a0, $a0, 0    */
+    a2 = a2 ^ a0;            /* xor    $a2, $a2, $a0  */
+    a0 = a2 >> 0x14;         /* dsrl   $a0, $a2, 0x14 */
+    a0 = a0 & 0xfff;         /* andi   $a0, $a0, 0xfff*/
+    a0 = a0 ^ a2;            /* xor    $a0, $a0, $a2  */
+
+    g_chrObjRandomSeed = a0; /* sd     $a0, g_chrObjRandomSeed */
+    return (u32)a0;          /* v0 = a0 & 0xFFFFFFFF            */
+}
+
+void chrObjRandomSetSeed(u32 seed)
+{
+    g_chrObjRandomSeed = (u64)seed + 1;   /* daddiu $a0,$a0,1; sd $a0, ... */
 }

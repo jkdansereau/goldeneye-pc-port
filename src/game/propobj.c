@@ -3118,6 +3118,15 @@ u32 monAnim35Taser[] = {
      MONLOOP()
 };
 
+#if defined(PORT)
+/* PC port (docs/PCPortResearch.md §11): monitor-animation jump targets.
+ * MONJUMPTO/MONJUMPCHANCE store an index into this table instead of a raw
+ * address (see chrai.h); the interpreter below resolves it. Must stay after
+ * every monAnim* array definition above. */
+#define _PORT_MONANIM_PTR(name) name,
+const u32 *_PORT_monAnimPtrs[_PORT_MONANIM_COUNT] = { _PORT_MONANIM_LIST(_PORT_MONANIM_PTR) };
+#endif
+
 /**
  * Address 0x80031FD0.
 */
@@ -6858,17 +6867,32 @@ Gfx *process_monitor_animation_microcode(Model *model, ModelNode *node, MonitorR
                 }
                 break;
             case TVCMD_SETCMDLIST:
+#if defined(PORT)
+                save_ptr_monitor_ani_code_to_obj_ani_slot(screen, (u32 *) _PORT_monAnimPtrs[m->time]);
+#else
                 save_ptr_monitor_ani_code_to_obj_ani_slot(screen, (u32 *) m->time);
+#endif
                 break;
             case TVCMD_RANDSETCMDLIST:
+#if defined(PORT)
+                if ((randomGetNext() >> 16) < m->arg2) 
+                {
+                    save_ptr_monitor_ani_code_to_obj_ani_slot(screen, (u32 *) _PORT_monAnimPtrs[m->time]);
+                } 
+                else
+                {
+                    screen->offset += 3;
+                }
+#else
                 if ((randomGetNext() >> 16) < m->arg2) 
                 {
                     save_ptr_monitor_ani_code_to_obj_ani_slot(screen, (u32 *) m->time);
                 } 
-                else 
+                else
                 {
                     screen->offset += 3;
                 }
+#endif
                 break;
             case TVCMD_RESTART:
                 screen->offset = 0;

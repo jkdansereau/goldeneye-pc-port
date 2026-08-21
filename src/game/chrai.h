@@ -74,14 +74,67 @@ Jump to Routine:
 00000009	pppppppp
 [p]ointer to another animation routine where processing resumes
 */
+#if defined(PORT)
+/* PC port (docs/PCPortResearch.md §11): on a 64-bit host the bare array name in
+ * these initializers is a pointer-to-integer conversion, which GCC rejects as a
+ * static initializer ("not computable at load time"). Store an index into
+ * _PORT_monAnimPtrs[] (defined in propobj.c) instead; the script interpreter
+ * (process_monitor_animation_microcode) resolves it under PORT. The on-script
+ * layout is unchanged (12-byte tvcmd words, same opcode bytes). */
+#define _PORT_MONANIM_LIST(X) \
+    X(monAnim03ThreeWavePattern) \
+    X(monAnim04WavePattern) \
+    X(monAnim05GreenTextUp) \
+    X(monAnim06RedTextDown) \
+    X(monAnim07GreenTextDown) \
+    X(monAnim08RedBarGraph) \
+    X(monAnim09BlueBarGraph) \
+    X(monAnim0AGreenBarGraph) \
+    X(monAnim11KarlYelling) \
+    X(monAnim17RandImageEffect) \
+    X(monAnim27RandomEffectScrollRight) \
+    X(monAnim28RandomEffectScrollUpFast) \
+    X(monAnim29RandomEffectScrollUp) \
+    X(monAnim2ARandEffectScrollZoom1) \
+    X(monAnim2ARandEffectScrollZoom2) \
+    X(monAnim2CRandEffectWaitRoute) \
+    X(monAnim2DRandEffectFlash) \
+    X(monAnimRadarSub1) \
+    X(monAnimRadarSub2) \
+    X(monAnimRadarSub3) \
+    X(monRandChanceScrollOrZoom) \
+    X(monRandChanceScrollOrZoomBlue) \
+    X(monRandChanceScrollOrZoomGreen) \
+    X(monRandChanceScrollOrZoomRandRGBN) \
+    X(monRandChanceScrollOrZoomRed) \
+    X(monRandEffectChanceBLUESTARS) \
+    X(monRandEffectChanceEARTHFULL1) \
+    X(monRandEffectChanceEARTHFULL2) \
+    X(monRandEffectChanceEARTHTEXT) \
+    X(monRandEffectChanceGALAXY1) \
+    X(monRandEffectChanceGALAXY2) \
+    X(monRandEffectChanceGALAXY3) \
+    X(monRandEffectChanceSHUTTLE1) \
+    X(monRandEffectChanceSHUTTLE2) \
+    X(monRandEffectChanceTARGETEARTH)
+#define _PORT_MONANIM_ENUM(name) _PORT_MONIDX_##name,
+enum { _PORT_MONANIM_LIST(_PORT_MONANIM_ENUM) _PORT_MONANIM_COUNT };
+extern const u32 *_PORT_monAnimPtrs[_PORT_MONANIM_COUNT];
+#define MONJUMPTO(p) 0x9, _PORT_MONIDX_##p
+#else
 #define MONJUMPTO(p) 0x9, p
+#endif
 /*
 Jump on Chance:
 0000000A	pppppppp	0000xxxx
 [p]ointer to another animation routine where processing resumes
 [x] value to test against a random value.  Jump if rand < xxxx
 */
+#if defined(PORT)
+#define MONJUMPCHANCE(p,x) 0xA, _PORT_MONIDX_##p, x
+#else
 #define MONJUMPCHANCE(p,x) 0xA, p, x
+#endif
 /*
 Loop:
 0000000B

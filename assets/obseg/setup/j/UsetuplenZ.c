@@ -772,7 +772,14 @@ s32 intro[] = {
     /* Type = StartWeapon; index = 2 */
     _mkword(0, _mkshort(0, 1)), 0, -1, 0,
     /* Type = Credits; index = 3 */
+#if defined(PORT)
+    /* PC port (docs/PCPortResearch.md §11): pointer-in-word static initializer
+     * is a hard error on the 64-bit host GCC; the real value comes from ROM
+     * data loading in Phase 2. */
+    _mkword(0, _mkshort(0, 8)), 0,
+#else
     _mkword(0, _mkshort(0, 8)), &credits_data_0,
+#endif
     /* Type = EndIntro; index = 4 */
     _mkword(0, _mkshort(0, 9))
 };

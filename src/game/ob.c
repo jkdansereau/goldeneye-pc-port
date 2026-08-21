@@ -381,7 +381,11 @@ void obBlankResourcesInBank5(void) {
 
 
 
+#if defined(PORT)
+s32 fileGetIndex(char *resname) /* PC port: match the ob.h declaration (u8* vs char* is a hard error in GCC); see docs/PCPortResearch.md §11 */
+#else
 s32 fileGetIndex(u8 *resname)
+#endif
 {
     s32 i;
     s32 stack;

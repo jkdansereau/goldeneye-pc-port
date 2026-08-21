@@ -5,6 +5,9 @@
 #include "thread_config.h"
 #include "bondgame.h"
 #include "speed_graph.h"
+#if defined(PORT)
+#include <string.h> /* PC port: memcpy for the CUSTOM_FX_PARAMS_N copy in audioInit (docs/PCPortResearch.md §11) */
+#endif
 
 /**
  * EU .data, offset from start of data_seg : 0x23A0
@@ -359,7 +362,14 @@ void amCreateAudioManager(ALSynConfig* alconf)
 
     if (alconf->fxType == AL_FX_CUSTOM)
     {
+#if defined(PORT)
+        /* PC port: IDO accepted the C++-style array initializer `= CUSTOM_FX_PARAMS_N`;
+         * GCC rejects it. Copy instead — identical result. See docs/PCPortResearch.md §11 */
+        s32 sp48[CUSTOM_FX_SECTION_COUNT * CUSTOM_FX_SECTION_SIZE + 2];
+        memcpy(sp48, CUSTOM_FX_PARAMS_N, sizeof(sp48));
+#else
         s32 sp48[CUSTOM_FX_SECTION_COUNT * CUSTOM_FX_SECTION_SIZE + 2] = CUSTOM_FX_PARAMS_N;
+#endif
         alconf->params = sp48;
         alInit(&g_AudioManager.g, alconf);
     }

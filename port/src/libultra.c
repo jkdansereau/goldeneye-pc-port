@@ -20,6 +20,7 @@
 #include <PR/os_internal.h>
 #include <PR/rcp.h>
 #include <PR/rdb.h>
+#include <PR/sptask.h>
 
 #include "platform.h"
 #include "system.h"
@@ -44,7 +45,7 @@ u32 osTvType    = OS_TV_MPAL;       /* EU: PAL  (0=PAL 1=NTSC 2=MPAL)      */
 #else
 u32 osTvType    = OS_TV_NTSC;       /* US/JP: NTSC                         */
 #endif
-s32 osResetType = 0;
+u32 osResetType = 0;          /* GE's PR/os.h declares it u32 */
 s32 osViClock   = 0;
 
 /* ------------------------------------------------------------------------ */
@@ -84,14 +85,14 @@ void osStopThread(OSThread *t)    { if (t) t->state = OS_STATE_STOPPED; }
 void osDestroyThread(OSThread *t) { if (t) t->id = 0; }
 void osYieldThread(void)          { /* cooperative: nothing to do */ }
 OSPri osGetThreadPri(OSThread *t) { (void)t; return 0; }
-void osSetThreadPri(OSId id, OSPri prio) { (void)id; (void)prio; }
+void osSetThreadPri(OSThread *t, OSPri prio) { (void)t; (void)prio; }
 
 /* ------------------------------------------------------------------------ */
 /* Message queues — used by the scheduler / VI / controller callbacks.       */
 /* Implement a simple ring buffer; see PD port for the exact semantics.      */
 /* ------------------------------------------------------------------------ */
 
-void osCreateMesgQueue(OSMesgQueue *mq, OSMesg first, int count)
+void osCreateMesgQueue(OSMesgQueue *mq, OSMesg *first, s32 count)
 {
     /* TODO(Phase 1): allocate + init ring buffer. */
     (void)mq; (void)first; (void)count;
@@ -147,7 +148,6 @@ void osViSetMode(OSViMode *vm)
     /* TODO(Phase 2): translate the requested mode into a window/GL viewport. */
     (void)vm;
 }
-void osViSetEffect(OSViEffect ve) { (void)ve; }
 void osViSetSpecialFeatures(u32 f) { (void)f; }
 void osViVSyncCallback(OSMesgQueue *mq, OSMesg msg)
 {
@@ -169,19 +169,27 @@ void osViSetXScale(f32 value) { (void)value; }
 void osViSetEvent(OSMesgQueue *mq, OSMesg msg, u32 retraceCount)
 { (void)mq; (void)msg; (void)retraceCount; }
 
+/* Per-mode VI scale tables. Defined in vi.c on N64 (excluded); fr.c computes
+ * and stores the values at runtime, so zero-init is safe until then. */
+f32 g_ViXScales[2] = { 0.0f, 0.0f };
+f32 g_ViYScales[2] = { 0.0f, 0.0f };
+
 /* ------------------------------------------------------------------------ */
 /* AI (audio) — map onto the port audio layer.                              */
 /* ------------------------------------------------------------------------ */
 
-void osAiSetFrequency(u32 hz)
+s32 osAiSetFrequency(u32 hz)
 {
-    /* TODO(Phase 3): store the output rate; audio.c uses it. */
-    (void)hz;
+    /* TODO(Phase 3): store the output rate; audio.c uses it.
+     * Return the requested rate, as the N64 implementation reports the
+     * frequency actually set. */
+    return (s32)hz;
 }
-void osAiSetNextBuffer(void *buf, u32 size)
+s32 osAiSetNextBuffer(void *buf, u32 size)
 {
     /* TODO(Phase 3): hand the mixed buffer to audioSetNextBuffer(). */
     (void)buf; (void)size;
+    return 1;
 }
 u32 osAiGetLength(void)
 {
@@ -195,17 +203,18 @@ void osAiSetConvert(u32 convert) { (void)convert; }
 /* ------------------------------------------------------------------------ */
 
 void osPiCreateManager(OSMesgQueue *mq, int prio) { (void)mq; (void)prio; }
-int  osPiStartDma(OSPiChannel ch, OSPiMsg *msg, int sync)
+s32 osPiStartDma(OSIoMesg *mesg, s32 prio, s32 direction, u32 addr,
+                 void *buf, u32 size, OSMesgQueue *mq)
 {
     /* TODO(Phase 1): service a read from romdata (cart -> host memory). */
-    (void)ch; (void)msg; (void)sync;
+    (void)mesg; (void)prio; (void)direction; (void)addr; (void)buf;
+    (void)size; (void)mq;
     return 1;
 }
-int  osPiRawStartDma(int direction, void *src, void *dst, u32 size)
+s32 osPiRawStartDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
 {
     /* TODO(Phase 1): copy between ROM image and host memory. */
-    if (src && dst && size) memcpy(dst, src, size);
-    (void)direction;
+    (void)direction; (void)srcPA; (void)dstVA; (void)size;
     return 1;
 }
 u32  osPiGetStatus(void) { return 0; } /* not busy */
@@ -258,15 +267,15 @@ void osContGetReadData(OSContPad *pad)
 
 /* EEPROM: back with a file in the data dir (see B2 — saves are EEPROM-based).
  * TODO(Phase 4): see docs/PCPortResearch.md §7. */
-int osEepromProbe(OSMesgQueue *mq)            { (void)mq; return 0; }
-int osEepromRead(OSMesgQueue *mq, u16 addr, void *buf, u16 size)
-{ (void)mq; (void)addr; (void)buf; (void)size; return 0; }
-int osEepromWrite(OSMesgQueue *mq, u16 addr, void *buf, u16 size)
-{ (void)mq; (void)addr; (void)buf; (void)size; return 0; }
-int osEepromLongRead(OSMesgQueue *mq, u16 addr, void *buf, u16 size)
-{ (void)mq; (void)addr; (void)buf; (void)size; return 0; }
-int osEepromLongWrite(OSMesgQueue *mq, u16 addr, void *buf, u16 size)
-{ (void)mq; (void)addr; (void)buf; (void)size; return 0; }
+s32 osEepromProbe(OSMesgQueue *mq)            { (void)mq; return 0; }
+s32 osEepromRead(OSMesgQueue *mq, u8 addr, u8 *buf)
+{ (void)mq; (void)addr; (void)buf; return 0; }
+s32 osEepromWrite(OSMesgQueue *mq, u8 addr, u8 *buf)
+{ (void)mq; (void)addr; (void)buf; return 0; }
+s32 osEepromLongRead(OSMesgQueue *mq, u8 addr, u8 *buf, int nbytes)
+{ (void)mq; (void)addr; (void)buf; (void)nbytes; return 0; }
+s32 osEepromLongWrite(OSMesgQueue *mq, u8 addr, u8 *buf, int nbytes)
+{ (void)mq; (void)addr; (void)buf; (void)nbytes; return 0; }
 
 /* Memory Pak (PFS) + Rumble Pak (motor): accessory detection only (see B2).
  * The PC has no Memory Pak; report "not plugged in" so the game proceeds
@@ -297,9 +306,9 @@ int   osSpTaskDone(void)        { return 1; }
 /* RDP — bypassed (the software RSP emits GL directly). No-ops.             */
 /* ------------------------------------------------------------------------ */
 
-void osDpSetStatus(u32 set, u32 clear) { (void)set; (void)clear; }
+void osDpSetStatus(u32 status) { (void)status; }
 u32  osDpGetStatus(void) { return 0; }
-int  osDpSetNextBuffer(void *buf, int size) { (void)buf; (void)size; return 1; }
+s32  osDpSetNextBuffer(void *buf, u64 size) { (void)buf; (void)size; return 1; }
 
 /* ------------------------------------------------------------------------ */
 /* Cache — no-op on the host (no split I/D cache to manage).                */
@@ -309,8 +318,8 @@ void osWritebackDCache(void *addr, int size)      { (void)addr; (void)size; }
 void osWritebackDCacheAll(void)                    { }
 void osInvalICache(void *addr, int size)           { (void)addr; (void)size; }
 void osInvalDCache(void *addr, int size)           { (void)addr; (void)size; }
-void *osVirtualToPhysical(void *va)                { return va; }
-void *osPhysicalToVirtual(unsigned int pa)         { return (void *)pa; }
+u32   osVirtualToPhysical(void *va)                { return (u32)(uintptr_t)va; }
+void *osPhysicalToVirtual(u32 pa)                  { return (void *)(uintptr_t)pa; }
 
 /* ------------------------------------------------------------------------ */
 /* Misc                                                                      */
@@ -322,7 +331,7 @@ void osInitialize(void)
      * has already set up video/audio/input/rom in main(). */
 }
 
-void osExit(int code) { sysExit(code); }
+void osExit(void) { sysExit(0); }
 
 u32 osGetFpcCsr(void) { return 0; }
 void osSetFpcCsr(u32 csr) { (void)csr; }
@@ -333,7 +342,7 @@ void osSetFpcCsr(u32 csr) { (void)csr; }
  * decompress step). Unused on the PC but must link.
  */
 u32 __osGetFpcCsr(void) { return 0; }
-void __osSetFpcCsr(u32 csr) { (void)csr; }
+u32 __osSetFpcCsr(u32 csr) { (void)csr; return 0; }
 
 /* TLB unmap (libultra/os/unmaptlb.s). The PC has its own MMU; no-op. */
 void osUnmapTLB(int index) { (void)index; }

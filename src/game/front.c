@@ -2402,7 +2402,11 @@ s32 interface_menu05_fileselect(void)
         frontChangeMenu(MENU_MODE_SELECT, FALSE);
         setCursorPOSforMode(0);
 
+#if defined(PORT)
+        return 0; /* PC port: function is declared s32 but had a bare `return;` (hard error in GCC); the sole caller ignores the value. See docs/PCPortResearch.md §11 */
+#else
         return;
+#endif
     }
 
     // Change to the legal screen if 30 seconds of no input have elapsed

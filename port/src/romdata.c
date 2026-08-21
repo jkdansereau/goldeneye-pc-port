@@ -37,7 +37,9 @@ static const char *romFileName(void)
 
 int romdataInit(void)
 {
-    const char *path = sysResolvePath("$S/" romFileName());
+    static char pathBuf[1024 + 64];
+    snprintf(pathBuf, sizeof(pathBuf), "$S/%s", romFileName());
+    const char *path = sysResolvePath(pathBuf);
 
     /* TODO(Phase 1):
      *  - open + read the whole ROM into `rom`

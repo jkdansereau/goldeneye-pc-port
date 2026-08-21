@@ -8,7 +8,7 @@
 #include "fr.h"
 
 #ifndef DEBUG
-    #define osSyncPrintf()
+    #define osSyncPrintf(...) /* PC port: variadic (was ()); IDO tolerated fixed-arg count, GCC does not */
 #endif
 
 // bss

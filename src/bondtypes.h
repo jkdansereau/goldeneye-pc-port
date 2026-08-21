@@ -3098,7 +3098,19 @@ typedef union
     typedef struct CCTVRecord
     {
         inherits ObjectRecord;
+#ifdef PORT
+        /* PC port: `inherits` expands to `struct ObjectRecord;`, which the host
+         * compiler (GCC) resolves by inlining ObjectRecord's members. ObjectRecord
+         * already has a `pad` member (s16 @0x08, the pad index set by
+         * New_CCTVRecord), so this `pad` (s32 @0x80) is a duplicate name that GCC
+         * rejects as a hard error (IDO tolerates it). The game code's `->pad`
+         * (e.g. setupCctv) refers to the INHERITED pad index @0x08, never to this
+         * member, so renaming it keeps the layout byte-identical. See
+         * docs/PCPortResearch.md. */
+        s32      lookpad; // lookpad
+#else
         s32      pad; // lookpad
+#endif
         Mtxf     unk84;
         f32 unkC4;
         f32 unkC8;

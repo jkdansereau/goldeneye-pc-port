@@ -483,3 +483,195 @@ symbols, in two distinct classes:
   markers must point at the real microcode bytes in the ROM (PD `pd.ld`
   `RSP_TEXT_SEGMENT` model); if audio is CPU-only, the dummies are fine.
   A `TODO(Phase 3)` on the `aspMain*` dummies records this decision.
+
+### D. Host-compiler portability (GCC 16 vs IDO)
+
+The N64 build targets IDO (MIPS). The PC build targets GCC 16 (x86-64). IDO
+tolerates a number of non-standard constructs that the decompilation relies on;
+GCC rejects them as hard errors. Each finding below was verified and resolved
+in the same change. Where a fix could not be made purely in `port/`, the minimal
+`src/` change is `-DPORT`-gated (N64 build untouched) and flagged with a
+`PC port:` comment. These are **portability** fixes, not game-logic changes.
+
+* **D1 — `inherits` = struct inlining + duplicate member name.**
+  `src/bondtypes.h:44` does `#define inherits struct`, so `inherits X;` inside a
+  struct becomes `struct X;`. IDO resolves this by **inlining** X's members into
+  the enclosing struct (C++-style base), which the decomp depends on (offset
+  comments like `CCTVRecord.unk84` at `0x84`, and positional initializers like
+  `New_CCTVRecord(pad)` = `{New_PropDefHeaderRecord(6), 0, pad+0}` only line up
+  with the inlined layout). GCC 16 also inlines `struct X;` (correct layout) but
+  **hard-errors** on duplicate member names; Clang treats `struct X;` as a no-op
+  nested tag (wrong layout). No flag/pragma downgrades the duplicate-name error.
+  A sweep of `bondtypes.h` found exactly **one** parent/child member-name
+  collision: `CCTVRecord` redeclares `pad` (s32 @0x80) which `ObjectRecord` also
+  has (s16 @0x08). The game code's `->pad` (e.g. `setupCctv`, prop.c) is used as
+  the **pad index**, which `New_CCTVRecord` stores at 0x08 (the *inherited* pad),
+  so IDO resolves the ambiguous `->pad` to the inherited one; CCTVRecord's own
+  `pad` (0x80, "lookpad") is never accessed by name. **Resolved:** under `-DPORT`
+  only, CCTVRecord's own `pad` is renamed to `lookpad` (layout byte-identical);
+  the N64 build keeps `pad` (IDO tolerates it).
+* **D2 — `port/shim/PR/gbi.h` needed an include guard.** The shim redefines the
+  `Gfx` union members as little-endian `G*_le` typedefs. With no guard, a TU that
+  includes it twice (directly + via another header) re-creates the anonymous
+  `Gdma_le`/`Gtri_le`/… struct types → "conflicting types for 'Gdma_le'". The real
+  header's guard is `_GBI_H_`; the shim now uses a distinct `_PORT_SHIM_GBI_H_`.
+* **D3 — `New_Vector()`/`New_Coord3d()` called with zero args.** The decomp's
+  macros are declared with exactly 3 params (`x,y,z`) and use the
+  `IF_ELSE(IS_EMPTY(..))` trick to default each to 0, but the game code calls
+  them with **zero** args (`New_Vector()` at chrai.c:1358/1378, `New_Coord3d()`
+  at chrai.c:4491), relying on IDO's leniency with empty macro args. GCC rejects
+  `New_Vector()` against a 3-param macro. A sweep found these are the **only**
+  call sites (all zero-arg). **Resolved in `port/`:** `port/shim/bondtypes.h`
+  redefines both as `#define New_Vector(...) {0,0,0}` / `New_Coord3d(...) {0,0,0}`
+  after including the real header (the shim is found first via the include path).
+* **D4 — local `#define osSyncPrintf()`/`(x)` arg-count mismatch.** Five files
+  locally disable `osSyncPrintf` with a fixed-arity macro (`#define
+  osSyncPrintf()` or `(x)`) but then call it with more args (2–4), relying on
+  IDO's leniency. GCC errors ("passed N arguments, but takes just M").
+  **Resolved:** the five local defines (bg.c, debugmenu_handler.c,
+  debug_camera.c, deb_loadallmodels.c, initexplosioncasing.c) are made variadic
+  (`#define osSyncPrintf(...)`); they still expand to nothing, so behavior is
+  unchanged.
+* **D5 — array-initialized-from-array.** `chraction.c:2485` had `s16 mrs[3] =
+  metal_ricochet_SFX;` (a local array "initialized" by a global array). C requires
+  a constant-expression initializer; IDO treated it as a runtime copy. **
+  Resolved:** replaced with an explicit 3-element copy (no new includes needed).
+* **D6 — flexible array member in a nested context.** `bg.c` declared `s_special
+  portal specialportalarray[]` where `s_specialportal` has a flexible array member
+  (`u8 portallist[]`). C forbids initializing a FAM in a nested context (an array
+  element); GCC enforces it, IDO tolerated it. The code treats the data as a flat
+  byte array (cast to `u8*` in `sub_GAME_7F0B37EC`, walked byte-by-byte). **
+  Resolved:** defined `specialportalarray` as a flat `u8[]` with the identical
+  byte sequence.
+* **D7 — AI X-macro system (`chraidata.c`) — RESOLVED.** The AI command system
+  (`bondaicommands.h` + `aicommands.def` + `CPPLib.h`) uses deep preprocessor
+  metaprogramming (`SWITCH` with 49 fixed params + `IF_VA`/`IS_EMPTY`,
+  `DEFINED(SETUPSUBROUTINES(ID))` token-pasting, `_AI_CMD_POLYMORPH` redefined
+  per-include) that relies on IDO-specific `##`/expansion behavior. GCC rejects
+  several of these (e.g. `pasting ')' and '_'` in `DEFINED(SETUPSUBROUTINES(ID))`,
+  `SWITCH requires 49 arguments, but only 20 given`). Note `src/aicommands2.h`
+  is a **pre-generated** header (from `tools/cmdbuilder.c`) already included by
+  `bondaicommands.h:864`; the failing path is the *raw* `aicommands.def` include
+  (bondconstants.h:731 for the `AI_CMD` enum, chrai.c:172/920 for the command
+  table).
+
+  A general GCC-clean reimplementation of `SWITCH()` was investigated and ruled
+  out: its content arguments are single preprocessor arguments that expand to
+  top-level comma lists, and the C preprocessor cannot detect where one content
+  ends and the next `CASE`/`VAL` begins (arity is not recoverable after
+  expansion). The three active `SWITCH()` call sites in chraidata.c (m_IdleAnimations,
+  m_BashKeyboard, m_RunToBondPersistent) each have a **hand-written equivalent
+  already present in the file behind `#if 0`** — the author's own reference form.
+  Each was verified byte-identical to the IDO expansion of the adjacent `SWITCH`
+  call (including the `IFNewRandomGreaterThan(N, lbl)` == `SetNewRandom()` +
+  `IFRandomGreaterThan(N, lbl)` identity, confirmed against the runtime check in
+  chrai.c:1605). **Resolved:** under `-DPORT` the three `#if 0` blocks are
+  activated (the `SWITCH` calls become dead `#else` branches); `port/shim/bondaicommands.h`
+  keeps the original 49-param `SWITCH` defined but replaces it with a marker
+  that fails loudly if any *new* game code uses `SWITCH()` on the port. See also
+  D8–D11 for the sibling paste/comma issues in the same macro system.
+* **D8 — `MODELSKELETON`/`New_ModelSkeleton` paste failure.** The model-record
+  macros in bondconstants.h write `SKELETON(##NAME##)`-style pastes that IDO
+  tolerates but GCC hard-errors on ("pasting does not give a valid
+  preprocessing token"). **Resolved:** `port/shim/bondconstants.h` re-emits the
+  affected macros with equivalent byte-identical expansions.
+* **D9 — `CPPLib.h` helpers.** The CPPLib metaprogramming header's
+  `IS_EMPTY`/`IF_VA`/`DEFINED` family uses paste tricks that break under GCC.
+  **Resolved:** `port/shim/CPPLib.h` provides a paste-free reimplementation with
+  identical results for every usage in the tree (intercepted via the include
+  path; inert on N64).
+* **D10 — file-record macros paste `&` onto NAME.** `CHRFILERECORD`/
+  `GUNFILERECORD`/`SUIT_LFRECORD` and `GUNSTATS` write `{& ## NAME ## _header, …}`.
+  IDO tolerated the failed `&##NAME` paste; GCC hard-errors. **Resolved:**
+  `port/shim/bondconstants.h` rewrites them with the `&` kept out of the paste;
+  expansion is byte-identical (`&NAME_header`, `&NAME_stats`).
+* **D11 — generated `CALL()` double trailing comma.** The pre-generated
+  `CALL()` (aicommands2.h) concatenates `SetReturnAiList()` and
+  `SetChrAiList()`, each ending in its own trailing comma, then appends its own
+  separator → `…, ,` inside the array initializer. IDO accepted it; GCC
+  hard-errors. The artifact byte is never executed: `AI_SetChrAiList(CHR_SELF)`
+  switches to the called list at offset 0 and `AI_Return` resumes the return
+  list at offset 0 (chrai.c), so anything after the `SetChrAiList` record in a
+  `CALL` is dead. **Resolved:** `port/shim/bondaicommands.h` re-emits `CALL`
+  without the artifact byte.
+* **D12 — 64-bit pointer→integer in static initializers.** On a 32-bit target
+  (MIPS) storing an array address in a 32-bit field is fine; on x86-64 GCC 16
+  makes it a hard error ("initializer element is not computable at load time")
+  that no warning flag suppresses. Two sites, two fixes:
+  * `process_monitor_animation_microcode` jump targets: the monAnim script tables
+    (chrai.h) stored raw `monAnim*` array addresses in the tvcmd word's 32-bit
+    field. **Resolved:** under `-DPORT` the initializers store an *index* into
+    `_PORT_monAnimPtrs[]` (defined in propobj.c after all 35 monAnim arrays, via
+    a shared `_PORT_MONANIM_LIST` x-macro in chrai.h) and the interpreter
+    resolves index→pointer at `TVCMD_SETCMDLIST`/`TVCMD_RANDSETCMDLIST`. On-script
+    layout unchanged (12-byte tvcmd words, same opcode bytes).
+  * `assets/obseg/setup/{u,e,j}/UsetuplenZ.c`: the `intro[]` table stored
+    `&credits_data_0` in an `s32` slot. **Resolved:** PORT-gated replacement with
+    `0` (the N64 initializer is kept in the `#else` branch). The value is only
+    consumed by romCopy-style size arithmetic, which is inert until Phase 2.
+    (These files are currently excluded from the PC build per D16; the patch
+    keeps them compilable should any setup data be pulled into the host link.)
+* **D13 — assorted IDO leniency hard errors.** Small strictness failures with no
+  semantic content:
+  * `front.c:2405`: bare `return;` in an `s32` function (GCC error). The sole
+    caller ignores the value → PORT-gated `return 0;`.
+  * `audi.c` `audioInit`: C++-style array initializer `s32 sp48[…] =
+    CUSTOM_FX_PARAMS_N;` (IDO accepted, GCC rejects) → PORT-gated explicit
+    `memcpy` of the same bytes.
+* **D14 — `_Printf` prototype clash (xstdio.h vs xprintf.c).** The IDO printf
+  engine is compiled for the PC (`src/libultrare/libc/xprintf.c` + helpers
+  `src/libultra/libc/xlitob.c`/`xldtob.c`, added to CMakeLists) because
+  `src/sprintf.c`'s `sprintf()` calls `_Printf` directly. xstdio.h declares it
+  with `u8 *` params; xprintf.c defines it with `char *` — IDO-compatible,
+  GCC-fatal. **Resolved:** `port/shim/libc/xstdio.h` renames the declaration
+  (`_Printf_u8decl`) before pulling in the real header via `#include_next`, so
+  xprintf.c's definition is the sole prototype. The only caller (sprintf.c)
+  doesn't include the header and passes its char*-based outfun, matching the
+  definition exactly.
+* **D15 — host libc lacks IDO/K&R symbols.** MinGW provides none of: `bcopy`/
+  `bzero` (declared in PR/os.h with `int` sizes), `__libm_qnan_f` (quiet-NaN
+  helper used by gu/cosf.c and game/zlib.c), the `tlbmanage*` API (boss.c calls
+  two of them; tlb_manage.c is excluded — N64 TLB management), and
+  `g_ViXScales`/`g_ViYScales` (defined in vi.c on N64, written at runtime by
+  fr.c). Also `chrObjRandomGetNext/SetSeed` + `g_chrObjRandomSeed` live in
+  `src/game/chrObjRandom.s` (not built for PC). **Resolved:** all provided in
+  `port/src/n64stubs.c` / `port/src/libultra.c`; the chrObj PRNG is ported
+  verbatim from chrObjRandom.s into `port/src/random.c` (same xorshift as
+  `randomGetNext`, separate state).
+* **D16 — asset data strategy for the single host link.** The N64 build links
+  each model/level file into its own ELF and `.incbin`s compressed ROM blobs;
+  none of that transfers. Three buckets:
+  * **Compiled for real** (self-contained, unique symbol names):
+    `assets/animationtable_data.c`, `animationtable_entries.c`,
+    `oddtextures.c`, `font_chardatae.c`, `font_chardataj.c`, `font_dl.c`,
+    `rarewarelogo.c` → added to CMakeLists (`SRC_ASSETS`). Real font/image/
+    animation-table data is therefore live in the binary.
+  * **Excluded — symbol collisions:** every `assets/obseg/{bg,brief,setup,stan}/*.c`
+    defines generic file-local globals (`header`, `room_data_table`, `intro`,
+    `padlist`, …) that collide in a single link. The N64 build isolates them by
+    per-file ELF linking; the PC build cannot. Their top-level symbols are
+    stubbed instead.
+  * **Stubbed — ROM-derived / absent:** `port/src/assetstubs.c` defines the 758
+    model/level/text symbols referenced by ob.c's `file_resource_table`
+    (one zero word each), the 14 `ramrom_*` replay pointers (NULL), and the
+    `unknown2`/`unknown2_end` pair (same address → zero-length romCopy in
+    title.c). All `*Segment*` linker-script markers (normally from ge007.ld)
+    are defined as NULL `u32 *` in n64stubs.c, so address arithmetic computes
+    zero lengths and any Phase-1 romCopy is a safe no-op. Real data arrives
+    with ROM loading in Phase 2 (`port/src/romdata.c`), which will also replace
+    the table's address arithmetic.
+* **D17 — fast3d placeholder.** `port/fast3d/` contains only `gfx_api.h`; the
+  real software RSP lands in Phase 2. `port/src/gfxstub.c` provides no-op
+  implementations of every entry point (plus `gfx_current_dimensions`) so
+  video.c links. **Delete it when the real fast3d sources are added** (same
+  symbols → duplicate-definition error if both remain).
+
+### E. Compile + link milestone (status)
+
+All ~235 translation units now compile and the target **links**: clean build
+from scratch is `236/236` steps, zero errors (`ninja ge007 -k 0`), producing
+`ge007.x86_64.exe`. Remaining warnings (~4.5k) are expected IDO-leniency noise
+(int-conversion, implicit declarations, etc.), demoted via the CMake warning
+flags. The binary is not yet runnable end-to-end: gfx is stubbed (D17), asset
+model/level data is zeroed (D16), and ROM loading is still a Phase-2 TODO in
+romdata.c.

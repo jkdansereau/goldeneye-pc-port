@@ -11,7 +11,7 @@
 #include <macro.h>
 
 #ifndef DEBUG
-    #define osSyncPrintf()
+    #define osSyncPrintf(...) /* PC port: variadic (was ()); IDO tolerated fixed-arg count, GCC does not */
 #endif
 
 //i belong in a header, probably to another file
