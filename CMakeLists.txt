@@ -44,7 +44,9 @@ if(APPLE)
   endif()
 endif()
 
-project(ge007 C CXX)
+# ASM is needed for the generated absolute ROM asset symbols
+# (port/src/romassets_<region>.s, see scripts/gen_romassets.py).
+project(ge007 C CXX ASM)
 
 include(TargetArch)
 include(FindPkgConfig)
@@ -99,18 +101,21 @@ message(STATUS "Target platform: ${TARGET_PLATFORM}")
 if(ROMID STREQUAL "ntsc-final")
   set(VERSION_IS_PAL 0)
   set(BIN_REGION "")
+  set(ASSET_REGION "u")
   set(REGION_DEFS
     -DVERSION_US -DLANG_US -DREFRESH_NTSC
     -DLEFTOVERDEBUG -DLEFTOVERSPECTRUM -DBUGFIX_R0 -DBYTEMATCH)
 elseif(ROMID STREQUAL "pal-final")
   set(VERSION_IS_PAL 1)
   set(BIN_REGION ".pal")
+  set(ASSET_REGION "e")
   set(REGION_DEFS
     -DVERSION_EU -DLANG_EU -DREFRESH_PAL
     -DBUGFIX_R1 -DBUGFIX_R2 -DBYTEMATCH)
 elseif(ROMID STREQUAL "jpn-final")
   set(VERSION_IS_PAL 0)
   set(BIN_REGION ".jpn")
+  set(ASSET_REGION "j")
   set(REGION_DEFS
     -DVERSION_JP -DLANG_JP -DREFRESH_NTSC
     -DBUGFIX_R1 -DLEFTOVERDEBUG -DLEFTOVERSPECTRUM -DBYTEMATCH)
@@ -255,6 +260,15 @@ file(GLOB_RECURSE SRC_PORT      "${CMAKE_SOURCE_DIR}/port/src/*.c")
 file(GLOB_RECURSE SRC_PORT_CXX  "${CMAKE_SOURCE_DIR}/port/src/*.cpp")
 file(GLOB_RECURSE SRC_FAST3D    "${CMAKE_SOURCE_DIR}/port/fast3d/*.cpp")
 
+# Generated absolute ROM asset symbols for this region (see
+# scripts/gen_romassets.py). Defines every obseg/ramrom/music label and the
+# ge007.ld segment markers as 0x10000000 + rom_offset, so `&symbol` / romCopy()
+# work once romdata.c maps the .z64 at 0x10000000.
+set(SRC_ROMASSETS "${CMAKE_SOURCE_DIR}/port/src/romassets_${ASSET_REGION}.s")
+if(NOT EXISTS ${SRC_ROMASSETS})
+  message(FATAL_ERROR "Missing ${SRC_ROMASSETS} — run: python3 scripts/gen_romassets.py ${ASSET_REGION}")
+endif()
+
 # Game code — compiled unmodified.
 file(GLOB_RECURSE SRC_GAME "${CMAKE_SOURCE_DIR}/src/game/*.c")
 
@@ -296,10 +310,11 @@ list(PREPEND SRC_LIBULTRARE_LIBC "${CMAKE_SOURCE_DIR}")
 # `intro`, ...) that the N64 build keeps apart by linking every file into its
 # own ELF (see assets/obseg/Makefile.*). In a single host link they collide.
 # The game loads those blobs from ROM at runtime anyway; their top-level
-# symbols (C*Z, G*Z, P*Z, Tbg_*Z, U*Z, L*E/L*J, bg_*_all_p_seg, ...) are
-# stubbed in port/src/assetstubs.c until Phase 2 ROM loading. The per-model
-# data itself (chr/*/Model.c etc.) is gitignored ROM-derived and absent from
-# this checkout. See docs/PCPortResearch.md §11.
+# symbols (C*Z, G*Z, P*Z, Tbg_*Z, U*Z, L*E/L*J, bg_*_all_p_seg, ...) are now
+# absolute cart addresses in the generated romassets_<region>.s (see
+# scripts/gen_romassets.py), backed by the ROM image that romdata.c maps at
+# 0x10000000. The per-model data itself (chr/*/Model.c etc.) is gitignored
+# ROM-derived and absent from this checkout. See docs/PCPortResearch.md §11.
 set(SRC_ASSETS
   assets/animationtable_data.c
   assets/animationtable_entries.c
@@ -361,6 +376,7 @@ list(PREPEND SRC_ENGINE "${CMAKE_SOURCE_DIR}")
 set(SRC
   ${SRC_GAME}
   ${SRC_PORT}
+  ${SRC_ROMASSETS}
   ${SRC_PORT_CXX}
   ${SRC_FAST3D}
   ${SRC_LIBAUDIO}

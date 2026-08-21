@@ -202,20 +202,47 @@ void osAiSetConvert(u32 convert) { (void)convert; }
 /* PI (peripheral) — ROM/cart reads come from the loaded ROM image.         */
 /* ------------------------------------------------------------------------ */
 
+/*
+ * PI DMA is synchronous on the PC: romdata.c maps the .z64 at the N64 cart
+ * base (0x10000000), so an OS_READ from a cart address is a plain memcpy and
+ * the "completion" is already delivered by the time we return. The game's
+ * romReceiveMesg()/osRecvMesg() after every romCopy() is therefore satisfied
+ * trivially (see the message-queue shims below).
+ */
+static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
+{
+    if (size == 0)
+        return;
+    if (direction == OS_READ) {
+        if (!romdataCartAddrValid(srcPA, size)) {
+            sysLogPrintf(LOG_WARNING,
+                         "osPiStartDma: ROM read out of range "
+                         "(src=0x%08X size=0x%X); skipped",
+                         srcPA, size);
+            return;
+        }
+        memcpy(dstVA, (const void *)(uintptr_t)srcPA, size);
+    } else {
+        /* OS_WRITE: the game never writes the cart (saves go to EEPROM via
+         * osEeprom*, shimmed separately). Log once-style and drop. */
+        sysLogPrintf(LOG_WARNING,
+                     "osPiStartDma: cart write dropped (src=0x%08X size=0x%X)",
+                     srcPA, size);
+    }
+}
+
 void osPiCreateManager(OSMesgQueue *mq, int prio) { (void)mq; (void)prio; }
 s32 osPiStartDma(OSIoMesg *mesg, s32 prio, s32 direction, u32 addr,
                  void *buf, u32 size, OSMesgQueue *mq)
 {
-    /* TODO(Phase 1): service a read from romdata (cart -> host memory). */
-    (void)mesg; (void)prio; (void)direction; (void)addr; (void)buf;
-    (void)size; (void)mq;
-    return 1;
+    piServiceDma(direction, addr, buf, size);
+    (void)mesg; (void)prio; (void)mq;
+    return 1; /* done */
 }
 s32 osPiRawStartDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
 {
-    /* TODO(Phase 1): copy between ROM image and host memory. */
-    (void)direction; (void)srcPA; (void)dstVA; (void)size;
-    return 1;
+    piServiceDma(direction, srcPA, dstVA, size);
+    return 1; /* done */
 }
 u32  osPiGetStatus(void) { return 0; } /* not busy */
 

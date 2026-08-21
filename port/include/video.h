@@ -26,6 +26,10 @@ void videoStartFrame(void);
 void videoSubmitCommands(Gfx *cmds);   /* runs the software RSP on the list */
 void videoEndFrame(void);
 
+/* Pump window events; returns 1 when the app should quit. Used by the
+ * Phase 1 demo loop until the scheduler owns the frame boundary. */
+int  videoHandleEvents(void);
+
 /* VSync / framerate control. */
 void videoSetVsync(int enabled);
 void videoSetFramerateLimit(int fps);  /* 0 = unlimited */

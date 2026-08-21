@@ -33,69 +33,25 @@ u32 get_inflateSegmentRomStart(void) { return 0; }
 u32 get_inflateSegmentRomEnd(void)   { return 0; }
 
 /*
- * Linker segment boundary pointers (normally linker-script symbols, declared
- * `extern u32 *` in bondgame.h and assorted game headers). Game code takes
- * their ADDRESSES for size calcs + PI DMA / romCopy; on the PC the values are
- * meaningless until Phase 2 ROM loading remaps them (romdata.c). All defined
- * NULL: address-of gives a valid host pointer, and pairs of NULLs compute to
- * zero-length copies. Complete set = every `*Segment*` symbol referenced by
- * the compiled game sources.
+ * Linker segment boundary symbols.
+ *
+ * The ROM-backed ones (every _XSegment{Start,RomStart,RomEnd,End} from
+ * ge007.ld, plus all obseg/ramrom/music asset labels) are now ABSOLUTE cart
+ * addresses in the generated port/src/romassets_u.s — see
+ * scripts/gen_romassets.py. romdata.c maps the .z64 at 0x10000000 so `&sym`
+ * yields a live address and romCopy() works.
+ *
+ * What remains here are pure-RAM segment symbols that have no ROM presence:
+ * the host's own .bss/.csegment ends and the N64 vaddr markers (only used by
+ * the never-run N64 boot path on the PC).
  */
 u32 *_bssSegmentEnd              = NULL;
-
-u32 *_codeSegmentStart           = NULL;
-u32 *_codeSegmentEnd             = NULL;
-u32 *_codeSegmentRomStart        = NULL;
-u32 *_codeSegmentRomEnd          = NULL;
-
 u32 *_csegmentSegmentStart       = NULL;
 u32 *_csegmentSegmentEnd         = NULL;
-u32 *_cdataSegmentRomStart       = NULL;
-u32 *_cdataSegmentRomEnd         = NULL;
-
 u32 *_inflateSegmentVaddrStart   = NULL;
 u32 *_inflateSegmentVaddrEnd     = NULL;
-u32 *_inflateSegmentRomStart     = NULL;
-u32 *_inflateSegmentRomEnd       = NULL;
-
 u32 *_gameSegmentVaddrStart      = NULL;
 u32 *_gameSegmentVaddrEnd        = NULL;
-u32 *_gameSegmentRomStart        = NULL;
-u32 *_gameSegmentRomEnd          = NULL;
-
-u32 *_animation_dataSegmentRomStart = NULL;
-u32 *_animation_dataSegmentStart    = NULL;
-u32 *_animation_dataSegmentEnd      = NULL;
-u32 *_animation_entriesSegmentRomStart = NULL;
-
-u32 *_alt_startSegmentRomStart   = NULL;
-u32 *_alt_startSegmentStart      = NULL;
-
-/* Font / image / music segment bases (referenced by textrelated.c,
- * image_bank.c, music.c — data for the font/image ones is compiled from
- * assets/; the ROM-base markers themselves come from ge007.ld on N64). */
-u32 *_efontchardataSegmentRomStart   = NULL;
-u32 *_jfontchardataSegmentRomStart   = NULL;
-u32 *_fontbankgothicSegmentStart     = NULL;
-u32 *_fontbankgothicSegmentEnd       = NULL;
-u32 *_fontbankgothicSegmentRomStart  = NULL;
-u32 *_fontzurichboldSegmentStart     = NULL;
-u32 *_fontzurichboldSegmentEnd       = NULL;
-u32 *_fontzurichboldSegmentRomStart  = NULL;
-u32 *_fontdlSegmentRomStart          = NULL;
-u32 *_fontdlSegmentRomEnd            = NULL;
-u32 *_imagesSegmentRomStart          = NULL;
-u32 *_GlobalimagetableSegmentStart   = NULL;
-u32 *_GlobalimagetableSegmentEnd     = NULL;
-u32 *_GlobalimagetableSegmentRomStart = NULL;
-u32 *_instrumentsctlSegmentRomStart  = NULL;
-u32 *_instrumentstblSegmentRomStart  = NULL;
-u32 *_musicsampletblSegmentRomStart  = NULL;
-u32 *_sfxctlSegmentRomStart          = NULL;
-u32 *_sfxtblSegmentRomStart          = NULL;
-u32 *_rarewarelogoSegmentStart       = NULL;
-u32 *_rarewarelogoSegmentEnd         = NULL;
-u32 *_rarewarelogoSegmentRomStart    = NULL;
 
 /* --- Decompressor (src/inflate, not built for PC) ----------------------- */
 /* init() calls this to unpack the data segment. Unused on the PC.         */

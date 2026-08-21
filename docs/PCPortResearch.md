@@ -665,13 +665,71 @@ in the same change. Where a fix could not be made purely in `port/`, the minimal
   implementations of every entry point (plus `gfx_current_dimensions`) so
   video.c links. **Delete it when the real fast3d sources are added** (same
   symbols → duplicate-definition error if both remain).
+* **D18 — GE ROM header offsets.** The N64 header is GE-specific
+  (`src/rom_header.s`): magic `0x80371240` @0x00, ROM name "GOLDENEYE" @0x20,
+  cartridge ID "GE" **@0x3C**, country byte **@0x3E** ('E' US / 'P' EU /
+  'J' JP), version @0x3F. The standard-N64 offsets (ID @0x38, country @0x3A)
+  are wrong for GE — verified against `baserom.u.z64` (hexdump: `... 47 45
+  45 00` at 0x3C–0x3F). romdata.c validates all four fields.
+* **D19 — music table is big-endian in the ROM.** The `.music` section of
+  `assets/music/music.s` (the `RareALSeqBankFile` header + 63 × 8-byte
+  `music_table_entry` records) is stored in the ROM in **big-endian** word
+  order: at 0x419790 the bytes are `00 3f 00 00 | 00 00 01 fc` = BE u16
+  seqCount=63 (= NUM_MUSIC_TRACKS), BE u16 unk=0, then BE u32 offset 508 for
+  the first track. The N64 build evidently assembles that section with
+  big-endian output; the PC port never reassembles it — the CSV offsets are
+  unaffected and `musicSeqPlayerInit()`'s romCopy + `musicSeqFileNew()`
+  patching work on the raw bytes unchanged.
+* **D20 — US music tracks are RLE-compressed in ROM.** The `music_file`
+  macro incbins `build/u/assets/music/<name>.rz` under `.ifdef VERSION_US`, so
+  every M* track lives in the ROM 1172/RLE-compressed; the filelist sizes are
+  the compressed lengths and per-track `end_` symbols = start + csv_size are
+  correct boundaries. Decompression happens at playback (Phase 3 audio), not
+  at load — no Phase-1/2 action needed.
+* **D21 — scanner-prefixed manifest names.** `filelist.<r>.csv` contains
+  entries whose file column is prefixed with the scan origin, e.g.
+  `assets/ge007.u.117880.jfont_dl.bin` (real name `jfont_dl.bin`).
+  gen_romassets.py aliases such names to their suffix after the
+  `ge007.<r>.<hexoffset>.` prefix, so font/image/oddtexture segments resolve.
+* **D22 — CMake silently skips `.s` files without ASM enabled.** The first
+  assembly source in the PC build (`romassets_u.s`) was added to the target
+  but never compiled: `project(ge007 C CXX)` had no ASM language, and CMake
+  does not error on unknown extensions — it just drops them, surfacing only as
+  a wall of undefined asset symbols at link. Fixed with
+  `project(ge007 C CXX ASM)`. Lesson: when adding a new source *extension*,
+  verify the object file actually appears in the build graph.
+* **D23 — absolute cart-address asset symbols (Phase 1 approach).** Instead of
+  zeroed stubs (D16), every ROM asset symbol is now an ABSOLUTE cart address:
+  `scripts/gen_romassets.py` emits `port/src/romassets_<r>.s` defining all
+  obseg labels (in `file_resource_table.inc.c` order — ob.c computes file
+  sizes as `table[i+1].hw_address - table[i].hw_address`, so order matters),
+  ramrom files, music tracks/markers, and the ge007.ld segment markers as
+  `0x10000000 + rom_offset` from `filelist.<r>.csv`. romdata.c maps the .z64
+  at exactly 0x10000000 (VirtualAlloc preferred address), so `&symbol` is a
+  live host pointer and the PI shims (`osPiStartDma`/`osPiRawStartDma` in
+  libultra.c) service reads as bounds-checked memcpys. This makes both DMA'd
+  assets (models, banks) and direct-read assets (fonts, image display lists)
+  work with unmodified game code. `assetstubs.c` is deleted; n64stubs.c keeps
+  only the pure-RAM segment symbols (`_bssSegmentEnd`, `_csegment*`,
+  `_inflate/_gameSegmentVaddr*`). US-only for now: EU/JPN manifests have
+  naming inconsistencies (trailing-Z add/drop, region subdirs) that need the
+  same treatment before those regions build.
 
 ### E. Compile + link milestone (status)
 
-All ~235 translation units now compile and the target **links**: clean build
-from scratch is `236/236` steps, zero errors (`ninja ge007 -k 0`), producing
+All ~235 translation units compile and the target **links**: clean build from
+scratch is `236/236` steps, zero errors (`ninja ge007 -k 0`), producing
 `ge007.x86_64.exe`. Remaining warnings (~4.5k) are expected IDO-leniency noise
 (int-conversion, implicit declarations, etc.), demoted via the CMake warning
-flags. The binary is not yet runnable end-to-end: gfx is stubbed (D17), asset
-model/level data is zeroed (D16), and ROM loading is still a Phase-2 TODO in
-romdata.c.
+flags.
+
+**Phase 1 (boot to window) is done:** `romdata.c` loads and validates the ROM
+(`baserom.u.z64` at the repo root, or a final .z64 in `data/` / next to the
+exe), maps it at cart base 0x10000000 (D23); `video.c` opens an SDL2 640×480
+window with a GL context and clears/presents every frame; `main.c` runs a
+demo loop (ESC quits) in place of `mainproc()`, which is deferred until the
+software RSP + scheduler can service real frames. Verified: ROM header passes
+validation, 12 MB mapped at 0x10000000, window renders for the full test
+duration. Asset symbol spot-checks against the ROM confirm correct offsets
+(e.g. music bank BE seqCount=63 @0x419790, first track offset 508 → Mno_music
+@0x41998C; sfx/instrument banks start with GE's `B1` header).

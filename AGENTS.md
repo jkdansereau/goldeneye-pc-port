@@ -45,7 +45,7 @@ Run `/linkcheck` for this sweep. Record new findings in `docs/PCPortResearch.md`
 
 - **Phase 0 (scaffolding):** done, committed.
 - **Compile+link milestone:** all ~235 TUs compile and `ge007.x86_64.exe` links clean (`ninja ge007 -k 0`, 236/236). Findings D7–D17 in `docs/PCPortResearch.md` §11; asset stubs in `port/src/assetstubs.c`, fast3d no-ops in `port/src/gfxstub.c` (delete when real fast3d lands).
-- **Phase 1 (boot to window):** remaining — ROM loading in `romdata.c` (currently a TODO), run the binary, wire gfx stubs to a real window.
+- **Phase 1 (boot to window):** done — ROM loads/validates/maps at cart base 0x10000000 (`romdata.c`), SDL2 window + GL clear loop (`video.c`), absolute asset symbols from `scripts/gen_romassets.py` → `port/src/romassets_<r>.s` (findings D18–D23).
 - **Phase 2 (rendering):** bring in PD fast3d (replaces `port/src/gfxstub.c`), verify custom CC/RM modes against `gmain.s`, port the scheduler; replace asset stubs with ROM-backed data (D16).
 - **Phase 2 (rendering):** bring in PD fast3d, verify custom CC/RM modes against `gmain.s`, port the scheduler.
 - **Phase 3 (audio + input):** libaudio → SDL; decide the ASP strategy (C2: `aspMain*` dummies in `ucode.c`).

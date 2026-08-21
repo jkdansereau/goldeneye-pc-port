@@ -4,13 +4,16 @@
  * Replaces the N64 boot path (boot.s -> init() -> mainproc() -> bossEntry()).
  * On the PC we:
  *   1. set up system / config / fs / rom
- *   2. load the ROM and map its segments
+ *   2. load the ROM and map it at the cart base (0x10000000)
  *   3. init video (SDL2 + GL), audio, input
  *   4. hand control to the game's mainproc() / bossEntry()
  *
  * Modelled on the PD port's port/src/main.c.
  *
- * STATUS: scaffolding stub — fill in during Phase 1.
+ * STATUS: Phase 1 — ROM loads and maps, a window opens and clears each frame.
+ * Step 4 (mainproc) is deferred until the software RSP (fast3d) and the
+ * scheduler can service the game's rendering/audio threads; see
+ * docs/PCPortResearch.md.
  */
 
 #include <stdlib.h>
@@ -58,18 +61,27 @@ int main(int argc, char **argv)
     mixerInit();
     inputInit();
 
-    /* 4. Hand control to the game.
+    /* 4. Phase 1 demo loop: clear colour until the RSP/scheduler can drive
+     *    real frames (Phase 2). Press ESC or close the window to quit.
      *
-     * mainproc() is defined in src/init.c, which IS compiled for the PC (see
-     * A3 in docs/PCPortResearch.md). init.c's N64-only init() is compiled but
-     * NOT called — its hardware deps (segment starts, decompress, TLB, FPU
-     * CSR) are stubbed in port/src/n64stubs.c, and the libultra OS calls are
-     * shimmed in port/src/libultra.c. mainproc() itself just sets up the
-     * threads and calls schedulerInitThread() + bossEntry().
+     * When fast3d lands, replace this with mainproc(NULL) — defined in
+     * src/init.c (compiled for the PC; see A3 in docs/PCPortResearch.md).
+     * init.c's N64-only init() is never called; its hardware deps are
+     * stubbed in port/src/n64stubs.c and the libultra OS calls are shimmed
+     * in port/src/libultra.c.
      */
-    mainproc(NULL);
+    sysLogPrintf(LOG_INFO, "Phase 1: ROM mapped at 0x%08X (%u bytes); "
+                "demo loop running — ESC to quit",
+                (unsigned)0x10000000, romdataGetRomSize());
+    for (;;) {
+        if (videoHandleEvents())
+            break;
+        videoStartFrame();
+        videoSubmitCommands(NULL);   /* no-op until fast3d lands */
+        videoEndFrame();
+    }
 
-    /* mainproc() normally does not return; clean up if it does. */
+    /* Clean up. */
     inputDestroy();
     mixerDestroy();
     audioDestroy();

@@ -24,10 +24,17 @@ extern "C" {
 int romdataInit(void);
 void romdataDestroy(void);
 
-/* Pointer to the loaded ROM image (start of the .z64). */
+/* Pointer to the loaded ROM image (start of the .z64). When the image is
+ * mapped at the N64 cart base this is 0x10000000 itself. */
 const u8 *romdataGetRom(void);
 /* Size of the loaded ROM in bytes. */
 u32       romdataGetRomSize(void);
+
+/*
+ * True if [addr, addr+size) is a valid cart address (0x10000000+) inside the
+ * mapped image. The PI shims call this before servicing DMA.
+ */
+int romdataCartAddrValid(u32 addr, u32 size);
 
 /*
  * Map an N64 virtual address (0xA0000000 RDRAM space) to the corresponding
