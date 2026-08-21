@@ -317,6 +317,16 @@ sync/flush) is shared.
 * Port `video.c` + a minimal `fast3d` (clear color, present).
 * Goal: load `ge007.u.z64`, open a window, draw a clear color.
 
+### Phase 1.5 — Boot to first frame (ABI reconciliation)
+* Get mainThread through all of `bossInitMainthreadData()` → `bossEntry()` →
+  `bossMainloop()` and render frame 1. This is the current frontier (post-D31).
+* Recurring mechanism: **ROM-data struct ABI/layout fixes** (the D32 pattern) —
+  a 32-bit-pointer struct read as a 64-bit-pointer struct misaligns; convert
+  embedded pointer fields to `u32` + cast at use sites (PD ground truth), then
+  verify the load-time rebase yields valid DRAM addresses. See §H for the
+  step-by-step procedure and the standing "non-negotiable #2 ABI exception."
+* Goal: title screen / first level actually drawn on the GL surface.
+
 ### Phase 2 — RSP / rendering
 * Bring in the PD `fast3d` (gfx_pc / gfx_opengl / gfx_cc / gfx_sdl2).
 * Verify the custom CC/RM modes against `gmain.s`; add a `G_SETTEX` decode
@@ -829,7 +839,7 @@ gameInit — and currently dies inside `langInit()` (D31).
   on MinGW, so multi-frame traces depend entirely on the EBP chain. Symbols
   are recovered offline: `addr2line -e build-pc/ge007.x86_64.exe -f -C
   <base+rel>` (the log's "rel" = address − actual load base).
-* **D31 — langInit SIGSEGV: stack frame clobbered by a truncated-pointer table (OPEN).**
+* **D31 — langInit SIGSEGV: `zlib_huft_build` overflows load_resource's frame via the x86-64-grown `struct huft` (RESOLVED).**
   After D24–D29, mainThread reaches `langInit()` and dies on the **first** file
   load (`_fileNameLoadToBank(LnameX_lookuptable[LGUN][…])` → index 670 →
   `fileIndexLoadToBank` → `mempAllocBytesInBank` → `load_resource`). Crash
@@ -853,9 +863,16 @@ gameInit — and currently dies inside `langInit()` (D31).
     endianness is not an issue in the bitstream). At its entry rz_outbuf =
     ptrdata ✓, rz_inbuf = source+2 ✓, and the huft table base (tl) sits inside
     load_resource's 8 KB local `buffer` (rz_hlist).
-  * **Not** a huft-table overflow: max observed `rz_hufts` = 797 entries ×
-    4 B (`struct huft {u8 e; u8 b; union{u16 n; struct huft *t} v;}`) = 3188 B
-    < 8448 B buffer.
+  * **Root cause (confirmed):** `struct huft {u8 e; u8 b; union{u16 n;
+    struct huft *t} v;}` is **8 B on MIPS** (4-byte pointer in the union) but
+    **16 B on x86-64** (8-byte pointer, 8-aligned). GE's gzip-1.2.4 inflate
+    builds its Huffman tables contiguously into load_resource's fixed local
+    `u8 buffer[0x2100]` (8448 B), sized for the 32-bit layout (~1056 entries);
+    on x86-64 only ~528 entries fit, so a stream needing more (observed
+    `rz_hufts` ≈ 797) writes past the buffer and clobbers load_resource's frame
+    — including the return-address slot. The earlier "truncated-pointer table"
+    reading was a misattribution of this same overflow (the 8-byte `{u32,0x1}`
+    slots are huft records spilling over the frame).
   * Ruled out by code inspection: `mempAddEntryOfSizeToBank` (only touches
     pool pos/prevpos), `fileGetIndex` (reads only), `decompressdata` epilogue
     (returns rz_wp).
@@ -876,13 +893,95 @@ gameInit — and currently dies inside `langInit()` (D31).
     syscalls; gdb could not unwind their stacks further), so the writer is not
     yet identified.
 
-  Next steps: re-run the watchpoint with **`set scheduler-locking on`**
-  (only mainThread runs → any hit is its own) to attribute the write to an
-  exact instruction; if it is load_resource's own spill, that is a GCC
-  miscompilation → compile ob.c at -O0/-Og or add a PORT-gated hook. Also try
-  multiple watchpoints on consecutive slots to catch a sequential table fill
-  mid-flight, and grep the disassembly of the whole chain for stores through
-  s32-typed pointers (`movl …(%reg)` where %reg holds a truncated pointer).
+  **Resolution (fix in `port/`, game code untouched).** Mirrors the Perfect
+  Dark port, which replaces its assembly rzip with a real-zlib C impl
+  (`pd_port/src/lib/rzip_c.c`: `inflateInit2` + `inflate`). We exclude
+  `src/game/decompress.c` + `src/game/zlib.c` from the PC build (CMake
+  `list(REMOVE_ITEM SRC_GAME …)`) and add `port/src/rzdecomp.c`, which backs the
+  two externally-referenced entry points with host zlib:
+  * `decompressdata(src,dst,hlist)` → `inflateInit2(-15)` (raw deflate),
+    `next_in = src+2` (GE's RZ = 2-byte header `0x11 0x72` + raw deflate, no
+    size field), loop on `Z_OK`, return `total_out`.
+  * `rzipGetSomething()` → returns the stored `next_in` (consumed input).
+  A generated `port/include/realzlib.h` (from `realzlib.h.in`) `#include`s the
+  **absolute** host `<zlib.h>` path, because the game's `src/game/zlib.h`
+  shadows `<zlib.h>` on the `-I` path.
+
+  **Verified:** rebuild links clean (238/238); the exe has the new
+  `decompressdata`/`rzipGetSomething` and no `zlib_inflate`/`zlib_huft_build`.
+  Under gdb, mainThread now boots **past langInit** (all language files load)
+  all the way into `bossInitMainthreadData()` (boss.c:233) →
+  `initWeaponAnimGroups` — i.e. the original first-file-load SIGSEGV is gone.
+  The next blocker is D32.
+
+* **D32 — ROM-serialized structs with embedded pointers have divergent N64/x86-64 layout (OPEN).**
+  After the D31 fix, mainThread reaches `bossInitMainthreadData()` and dies in
+  `init_weapon_animation_groups_maybe()` (boss.c:233) → `initWeaponAnimGroups`
+  → … → `modelAnimReadRootMotionValue` (model.c:914), faulting on
+  `desc->bitCount` where `desc = anim->bitDescriptors`.
+
+  **Mechanism.** N64 pointers are 32-bit; x86-64 pointers are 64-bit with
+  8-byte alignment. `struct ModelAnimation` (src/bondtypes.h:575) declares
+  `ModelAnimBitField *bitDescriptors` and `u8 *bitStream`. In the N64 ROM
+  layout these are 4-byte fields at 0x08 and 0x10; on x86-64 the compiler lays
+  them out as 8-byte fields — `ptype /o` (gdb) shows bitDescriptors @0x08, a
+  4-byte hole, then bitStream @**0x18**, sizeof = **80** (vs 64 on N64). The
+  animation data is loaded by `alloc_load_expand_ani_table()`
+  (initanitable.c:263) via `romCopy(ptr_animation_table,
+  &_animation_dataSegmentRomStart, size)` — raw N64-layout bytes.
+  `expand_ani_table_entries()` rebases the **low 32 bits** of
+  bitDescriptors/bitStream but (a) leaves the high 32 bits as adjacent-field
+  junk and (b) writes bitStream's rebase to offset 0x10, which on x86-64 is
+  *not* where the C struct reads bitStream (0x18). Observed under gdb:
+  anim = 0x702adad4 (base 0x702ad8c0 + 0x214), `*(u32*)(anim+8)` = 0xc82bd8c0 →
+  as a 64-bit pointer the high word is junk → SIGSEGV.
+
+  **Scope.** Any ROM-serialized struct that (i) contains a pointer field and
+  (ii) has other fields after it misreads the same way: each 64-bit pointer's
+  high word holds adjacent-field bytes, and every post-pointer field shifts by
+  the pointer-width delta. ModelAnimation is the first hit; bondtypes.h has ~13
+  struct blocks with pointer fields (fewer are actually romCopy'd from ROM).
+
+  **PD ground truth.** PD keeps its ROM-data structs at N64 layout on both
+  targets by storing embedded pointers as **u32** — e.g. `struct animtableentry
+  { … u32 data; }` (pd_port/src/include/types.h:5124) — and casting to a real
+  pointer at the use site. GE's decomp instead uses real pointers in
+  ModelAnimation, so it diverges on x86-64.
+
+  **Resolution — Option 1 chosen (user-approved), in progress.** The user
+  approved the PD pattern after confirming PD does it (`animtableentry.u32 data`,
+  raw-DMA'd then resolved at use sites). Note PD's *exact* mechanism (u32 ROM
+  offset + on-demand DMA cache) differs from GE's rebased-DRAM-pointer
+  ModelAnimation, so we adopt the **principle** (u32 embedded address, cast at
+  use), not PD's code. This required refining non-negotiable #2 (see §H).
+
+  **Part A — struct layout: DONE & proven.** Changed `ModelAnimation`'s two
+  pointer fields to u32 (src/bondtypes.h:575): `u32 bitDescriptors` @0x08,
+  `u32 bitStream` @0x10; added casts at the only use sites (model.c:913/921).
+  `ptype /o` now shows sizeof = **64** with fields at the N64 offsets — layout
+  matches. `expand_ani_table_entries()` writes s32 to 0x08/0x10 via its own
+  `struct anim_entry`, which now aligns exactly (no change needed there).
+
+  **Part B — pointer-rebase correctness: OPEN (next target).** After Part A the
+  *values* are still invalid for the crashing weapon-anim entry (gdb, break at
+  boss.c:233 after `alloc_load_expand_ani_table`): anim = 0x702adad4 = base
+  0x702ad8c0 + 0x214; `bitDescriptors` = 0xf714b067, `bitStream` = 0x000c9100 —
+  neither a V1 address. Two concrete anomalies to debug in
+  `expand_ani_table_entries()` (initanitable.c:233):
+  * `animation_table_ptrs1[]` is a **dense** array of `PTR_ANIM_*` offsets in
+    source, but in memory reads `[0x702ad8dc, 0, 0x702adad4, 0, …]` (zeros at
+    odd indices). The fixup loop `while (*var_v0 != 0)` would stop at the first
+    zero — yet even-index entries show rebased values. Reconcile the array's true
+    post-fixup shape and confirm every entry's unk08/unk10 is actually rebased
+    (the crashing anim is `animation_table_ptrs1[2]`).
+  * Even entry[0]'s `bitStream` comes out wrong (0x882ad8c0 — low 24 bits match
+    base, high byte 0x88≠0x70) while its `bitDescriptors` is correct
+    (0x702ad8c0). Inspect the second fixup loop (`**var_v0 +=
+    &_animation_entriesSegmentRomStart`) for a 32/64-bit or overlap bug.
+
+  The crash site is unchanged (still model.c:914) — Part A is a necessary
+  prerequisite, not a regression. Next session: gdb `expand_ani_table_entries`
+  step-by-step until every entry's bitDescriptors/bitStream is a valid V1 address.
 
 ### G. Phase 2 status (current)
 
@@ -892,8 +991,14 @@ kernel (D24); dual-mapped DRAM + address shims (D25/D26); ASLR off with startup
 sanity check (D27); PI completion messages (D29); SEH-free crash handler with
 thread dumps (D30). The process now boots, maps the ROM, opens the window,
 runs `mainproc()` → `bossInitMainthreadData` through controller init / timers /
-mempool / VI / rsp / stan / game init — and SIGSEGVs inside `langInit()`'s
-first file load (D31). No frames rendered yet.
+mempool / VI / rsp / stan / game init. The D31 langInit file-load SIGSEGV is
+**fixed** (real-zlib decompression, §F/D31): mainThread now loads all language
+files and proceeds into `bossInitMainthreadData()` → `alloc_load_expand_ani_table`
+→ `init_weapon_animation_groups_maybe` (boss.c:233), where it SIGSEGVs on the
+**D32** ROM-struct pointer-width issue. D32 is decomposed: **Part A** (struct
+layout — u32 pointer fields) is DONE & proven; **Part B** (the load-time pointer
+rebase in `expand_ani_table_entries`) is OPEN and is the current blocker. No
+frames rendered yet. See §H for the handoff + plan.
 
 Reference — the file-load chain (for D31 debugging):
 `langInit` (language.c:230) loads 7 text banks via
@@ -918,3 +1023,58 @@ function complete and inspect its return; hardware watchpoints on exact stack
 slots (compute offsets from entry RSP, not RBP — see D31); `addr2line` for
 offline symbolication; objdump + `gcc -E` with exact ninja flags to verify
 shim expansion in compiled code.
+
+### H. Handoff & plan (current session)
+
+**State.** D31 (langInit file-load SIGSEGV) is fixed & verified — mainThread
+boots past all language-file loading into `bossInitMainthreadData()`. The boot
+now dies in `init_weapon_animation_groups_maybe()` on the **D32** ROM-struct
+pointer-width issue. D32 Part A (struct layout) is done; Part B (load-time
+rebase correctness) is the next target. No frames rendered yet.
+
+**D32 repeatable fix procedure** (apply to any ROM-serialized struct that faults
+on a pointer-field read):
+1. At the fault, `ptype /o <Struct>` in gdb. If a pointer field's offset/size
+   diverges from the N64 offset comment (e.g. an 8-byte pointer where N64 has 4),
+   it is this bug class.
+2. Change the embedded pointer fields to `u32` in the struct (keeps N64 layout on
+   x86-64). Add casts at every use site (`(T *)field`). Document as D3x.
+3. Verify the load-time rebase/fixup writes valid **V1** DRAM addresses (< 0x80000000)
+   into those u32 fields; if not, debug the fixup (see Part B below).
+4. Rebuild and confirm the boot advances past this struct to the next init step.
+
+**Next concrete target — D32 Part B.** Make `expand_ani_table_entries()`
+(initanitable.c:233) rebase *every* entry's `bitDescriptors`/`bitStream` to a
+valid V1 address. Gdb plan: break at boss.c:233 (after `alloc_load_expand_ani_table`),
+step through the two fixup loops, and for each `animation_table_ptrs1[i]` /
+`animation_table_ptrs2[i]` entry verify `*(u32*)(entry+8)` and `*(u32*)(entry+16)`
+are in [0x70xxxxxx]. Resolve these two anomalies first:
+* In-memory `animation_table_ptrs1[]` reads `[ptr, 0, ptr, 0, …]` (zeros at odd
+  indices) though the source is a dense `PTR_ANIM_*` list — reconcile the array's
+  true shape vs the `while (*var_v0 != 0)` loop.
+* entry[0]'s `bitStream` = 0x882ad8c0 (high byte 0x88≠0x70) while its
+  `bitDescriptors` = 0x702ad8c0 is correct — inspect the second fixup loop
+  (`**var_v0 += &_animation_entriesSegmentRomStart`) for a 32/64-bit or overlap bug.
+
+**Non-negotiable #2 refinement (applied to AGENTS.md).** The original "game code
+compiles unmodified / fix belongs in port/" is too absolute: pointer-width layout
+cannot be isolated in `port/` (no hook between the romCopy and the first read).
+Refined to "game **logic** is unmodified" with a narrow, documented exception for
+mechanical, semantics-preserving ABI/layout changes forced by the 32→64-bit
+transition (embedded pointers → u32 + cast at use), following PD ground truth. No
+logic/behavior changes; each such edit is logged in §F/D3x.
+
+**Reassessed plan.** The frontier is now **Phase 1.5 — boot to first frame**:
+drive mainThread through the rest of `bossInitMainthreadData` + `bossEntry` to
+`bossMainloop()` and render frame 1, using the D32 procedure each time a
+ROM-data struct faults. Phase 2 (fast3d/CC-RM/scheduler) then makes those frames
+correct. Expect several more D3x ABI fixes (models, textures, other tables) as
+more asset loading is reached — this is now a standing sub-task, not a one-off.
+
+**Environment reminders.** MSYS2 tools in `/c/msys64/mingw64/bin/` (not on PATH —
+prefix `export PATH=…`). Build: `./build-pc.sh ntsc-final`. gdb **launch** mode
+only (attach fails, error 87); symbolicate offline with `addr2line -e
+build-pc/ge007.x86_64.exe -f -C <0x140000000+rel>`. Image base 0x140000000.
+`load_resource`/many init fns use a fake RBP — compute stack offsets from entry
+RSP. The D30 crash handler did **not** write `ge007.crash.log` for the game-thread
+SIGSEGV this session (attribute via gdb instead; worth a separate look).

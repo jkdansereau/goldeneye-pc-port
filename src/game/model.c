@@ -910,7 +910,7 @@ u16 modelAnimReadRootMotionValue(ModelAnimation *anim, s32 fieldIndex, s32 extra
     u8 bitsThisRead;
 
     result = 0;
-    desc = anim->bitDescriptors + fieldIndex;
+    desc = (ModelAnimBitField *)anim->bitDescriptors + fieldIndex; // D32: u32 -> ptr
     bitsRemaining = desc->bitCount;
 
     if (bitsRemaining > 0)
@@ -918,7 +918,7 @@ u16 modelAnimReadRootMotionValue(ModelAnimation *anim, s32 fieldIndex, s32 extra
         totalBitOffset = extraBitOffset + desc->bitOffset;
         byteIndex = totalBitOffset >> 3;
         totalBitOffset &= 7;
-        byteptr = anim->bitStream + byteIndex;
+        byteptr = (u8 *)anim->bitStream + byteIndex; // D32: u32 -> ptr
         bitsThisRead = 8 - totalBitOffset;
 
         if (bitsRemaining >= bitsThisRead)

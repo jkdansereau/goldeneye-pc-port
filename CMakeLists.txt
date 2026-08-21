@@ -266,6 +266,23 @@ if(ZLIB_INCLUDE_DIR)
 endif()
 list(APPEND LIBS "${ZLIB_LIBRARY}")
 
+# Real <zlib.h> for port/src/rzdecomp.c (which backs decompressdata() with real
+# zlib). The game's own src/game/zlib.h sits on the -I path and shadows a plain
+# `#include <zlib.h>` in a port TU, so generate an absolute-path include (same
+# trick as hoststring.h). Prefer find_package(ZLIB)'s dir; fall back to the
+# toolchain include dir (MinGW layout: bin/../include), where
+# mingw-w64-x86_64-zlib installs zlib.h.
+set(PORT_REAL_ZLIB_H "${ZLIB_INCLUDE_DIR}/zlib.h")
+if(NOT EXISTS "${PORT_REAL_ZLIB_H}")
+  set(PORT_REAL_ZLIB_H "${_PORT_GCC_DIR}/../include/zlib.h")
+endif()
+if(NOT EXISTS "${PORT_REAL_ZLIB_H}")
+  message(FATAL_ERROR "Cannot locate the host zlib.h needed by port/src/rzdecomp.c")
+endif()
+configure_file(
+  "${CMAKE_SOURCE_DIR}/port/include/realzlib.h.in"
+  "${CMAKE_BINARY_DIR}/port/include/realzlib.h" @ONLY)
+
 if(NOT GL_LIBRARY)
   if(WIN32)
     set(GL_LIBRARY opengl32)
@@ -313,6 +330,23 @@ set(SRC_DRAM_SYMS "${CMAKE_SOURCE_DIR}/port/src/dram_syms.s")
 
 # Game code — compiled unmodified.
 file(GLOB_RECURSE SRC_GAME "${CMAKE_SOURCE_DIR}/src/game/*.c")
+
+# EXCLUDED from src/game (replaced by port/src/rzdecomp.c, which backs
+# decompressdata()/rzipGetSomething() with real zlib):
+#   decompress.c + zlib.c — GE's custom gzip-1.2.4 inflate builds its Huffman
+#   tables contiguously into a caller-supplied fixed buffer of `struct huft`.
+#   That struct is 8 bytes on MIPS (union holds a 32-bit pointer) but 16 bytes
+#   on x86-64 (union holds a 64-bit pointer), so on a 64-bit host the tables
+#   overflow load_resource's `u8 buffer[0x2100]` and clobber the caller's return
+#   address -> SIGSEGV in langInit()'s first file load (finding D32). Real zlib
+#   manages its own table memory, removing the fixed-buffer assumption. Mirrors
+#   the PD port, which swaps its assembly rzip for a real-zlib-backed rzip_c.c.
+#   The only externally-referenced symbols from these two files are
+#   decompressdata() and rzipGetSomething(); both are provided by
+#   port/src/rzdecomp.c (see the symbol sweep in docs/PCPortResearch.md §F).
+list(REMOVE_ITEM SRC_GAME
+  "${CMAKE_SOURCE_DIR}/src/game/decompress.c"
+  "${CMAKE_SOURCE_DIR}/src/game/zlib.c")
 
 # libaudio (AL) — runs on the CPU, platform independent.
 file(GLOB SRC_LIBAUDIO "${CMAKE_SOURCE_DIR}/src/libultra/audio/*.c")

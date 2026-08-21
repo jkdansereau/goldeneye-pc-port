@@ -578,10 +578,11 @@ typedef union
         u16 unk04; // number of frames in the animation
         u8 unk06;
         u8 unk07; // bit 0 is a loop flag: 0 means freeze anim at end, 1 means loop anim
-        ModelAnimBitField *bitDescriptors; // 0x08
+        u32 bitDescriptors; // 0x08 (PC port D32: was `ModelAnimBitField *`; stored as u32 so the
+                            // ROM-serialized layout matches N64 on x86-64 — cast at use sites)
         u16 unk0C;
         u16 unk0E;
-        u8  *bitStream; // 0x10
+        u32 bitStream; // 0x10 (PC port D32: was `u8 *`; see bitDescriptors note above)
         s32 unk14;
         s32 unk18;
         s32 unk1c;
