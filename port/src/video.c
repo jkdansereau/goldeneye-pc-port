@@ -1,198 +1,211 @@
 /*
- * Video: SDL2 window + OpenGL context + frame pacing.
+ * Video: SDL2 window + OpenGL context + frame pacing on top of fast3d.
  *
- * Owns the GL context that the software RSP (fast3d) renders into. Drives the
- * frame boundary hooks called by the port scheduler (gesched.c).
+ * The window itself lives in port/fast3d/gfx_sdl2.cpp (the wapi backend);
+ * this file wires the rendering API up, owns frame boundaries and FPS stats,
+ * and exposes the small surface the libultra VI shims need.
  *
- * Phase 1: real window + GL context + clear colour, driven by the demo loop
- * in main.c. gfx_* entry points are still the no-ops in gfxstub.c until the
- * PD-derived fast3d lands (Phase 2); videoStartFrame/EndFrame do the GL work
- * directly so a visible frame exists before that.
+ * Modelled on the PD port's port/src/video.c (slimmed: no options menu).
  */
 
-#include <SDL.h>
-#include <GL/gl.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include <PR/ultratypes.h>
+#include <PR/gbi.h>
 
 #include "platform.h"
 #include "system.h"
-#include "config.h"
 #include "video.h"
 
-/* fast3d entry points (see port/fast3d/gfx_api.h). */
-extern void gfx_init(const void *settings);
-extern void gfx_destroy(void);
-extern void gfx_start_frame(void);
-extern void gfx_run(void *commands);
-extern void gfx_end_frame(void);
+#include "../fast3d/gfx_api.h"
+#include "../fast3d/gfx_sdl.h"
+#include "../fast3d/gfx_opengl.h"
 
-static int  initDone = 0;
-static int  vidVsync = 1;
-static int  vidFpsLimit = 0;
-static int  vidFullscreen = 0;
-static int  vidMaximize = 0;
+/* GE's internal resolution: NTSC LAN1 is 640x480; PAL LAN1 shows a
+ * 640x400 area. The window opens at the native size (1:1) by default. */
+#ifdef REFRESH_PAL
+#define GE_NATIVE_W 640
+#define GE_NATIVE_H 400
+#else
+#define GE_NATIVE_W 640
+#define GE_NATIVE_H 480
+#endif
 
-static SDL_Window *vidWindow = NULL;
-static SDL_GLContext vidGL = NULL;
+static struct GfxWindowManagerAPI *wmAPI;
+static struct GfxRenderingAPI *renderingAPI;
+static int initDone = 0;
 
-/* FPS accounting. */
-static uint64_t fpsLastTick = 0;
-static int      fpsFrames = 0;
-static float    fpsValue = 0.0f;
+static u32 frames = 0;
+static double fpsWindowStart = 0.0;
+static int fpsNumFrames = 0;
+static float vidAvgFPS = 0.f;
 
 int videoInit(void)
 {
-    if (initDone)
-        return 0;
+    wmAPI = &gfx_sdl;
+    renderingAPI = &gfx_opengl_api;
 
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        sysLogPrintf(LOG_ERROR, "videoInit: SDL_Init failed: %s",
-                     SDL_GetError());
-        return -1;
-    }
+    gfx_current_native_viewport.width = GE_NATIVE_W;
+    gfx_current_native_viewport.height = GE_NATIVE_H;
+    gfx_current_native_aspect = (float)GE_NATIVE_W / (float)GE_NATIVE_H;
+    gfx_framebuffers_enabled = true;
+    gfx_detail_textures_enabled = false;
+    gfx_msaa_level = 1;
 
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    /* fast3d will want a modern context once it lands; 3.0 core is the floor
-     * the PD port targets. */
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+    struct GfxInitSettings set = {
+        .wapi = wmAPI,
+        .rapi = renderingAPI,
+        .window_settings = {
+            .title = "GoldenEye 007",
+            .width = GE_NATIVE_W,
+            .height = GE_NATIVE_H,
+            .x = 100,
+            .y = 100,
+            .fullscreen = false,
+            .fullscreen_is_exclusive = false,
+            .maximized = false,
+            .centered = true,
+            .allow_hidpi = false,
+        },
+    };
 
-    int w = 640, h = 480;   /* GE's internal resolution (NTSC) */
-    Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
-    if (vidFullscreen)
-        flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+    gfx_init(&set);
 
-    vidWindow = SDL_CreateWindow("GoldenEye 007 (PC port)",
-                                 SDL_WINDOWPOS_CENTERED,
-                                 SDL_WINDOWPOS_CENTERED, w, h, flags);
-    if (!vidWindow) {
-        sysLogPrintf(LOG_ERROR, "videoInit: SDL_CreateWindow failed: %s",
-                     SDL_GetError());
-        return -1;
-    }
-    if (vidMaximize)
-        SDL_MaximizeWindow(vidWindow);
+    /* VSync on; fast3d paces the window itself. */
+    wmAPI->set_swap_interval(1);
 
-    vidGL = SDL_GL_CreateContext(vidWindow);
-    if (!vidGL) {
-        sysLogPrintf(LOG_ERROR, "videoInit: SDL_GL_CreateContext failed: %s",
-                     SDL_GetError());
-        return -1;
-    }
-    SDL_GL_MakeCurrent(vidWindow, vidGL);
-    SDL_GL_SetSwapInterval(vidVsync ? 1 : 0);
+    gfx_set_texture_filter(FILTER_LINEAR);
+    gfx_set_mipmap_filter(MIPMAP_LINEAR);
 
-    /* Phase 1 clear colour: dark blue-grey so the window is visibly alive. */
-    glClearColor(0.10f, 0.12f, 0.16f, 1.0f);
-    glViewport(0, 0, w, h);
-
-    /* fast3d hooks (no-ops until Phase 2). */
-    gfx_init(NULL);
-
-    fpsLastTick = sysGetMicroseconds();
     initDone = 1;
-    sysLogPrintf(LOG_INFO, "videoInit: %dx%d window + GL context up", w, h);
+    sysLogPrintf(LOG_INFO, "video: %dx%d window (native %dx%d)",
+                 (int)gfx_current_dimensions.width, (int)gfx_current_dimensions.height,
+                 GE_NATIVE_W, GE_NATIVE_H);
     return 0;
 }
 
 void videoDestroy(void)
 {
-    if (!initDone)
-        return;
-    gfx_destroy();
-    if (vidGL) {
-        SDL_GL_DeleteContext(vidGL);
-        vidGL = NULL;
+    if (initDone) {
+        gfx_destroy();
+        initDone = 0;
     }
-    if (vidWindow) {
-        SDL_DestroyWindow(vidWindow);
-        vidWindow = NULL;
-    }
-    SDL_Quit();
-    initDone = 0;
-}
-
-/*
- * Pump window events. Returns 1 when the app should quit (window close or
- * ESC). Called by the demo loop until the port scheduler owns the frame
- * boundary (Phase 2).
- */
-int videoHandleEvents(void)
-{
-    SDL_Event e;
-    while (SDL_PollEvent(&e)) {
-        if (e.type == SDL_QUIT)
-            return 1;
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)
-            return 1;
-    }
-    return 0;
 }
 
 void videoStartFrame(void)
 {
-    if (!initDone)
+    if (!initDone) {
         return;
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+    /* Rendering runs on the game's scheduler thread; the GL context was
+     * created on the host main thread. */
+    gfx_sdl_make_context_current();
     gfx_start_frame();
+}
+
+/*
+ * Host-thread SDL event pump.
+ *
+ * On Windows, window messages are only dispatched when the thread that
+ * CREATED the window pumps them — and every game thread can be blocked on a
+ * message queue at any time. So the host main thread (which created the
+ * window in videoInit) must keep pumping; otherwise the window goes
+ * "Not Responding" and ESC/close never arrive. fast3d's own handle_events
+ * (which runs during rendering) remains as a backstop.
+ */
+void videoPumpEvents(void)
+{
+    if (!initDone) {
+        return;
+    }
+    SDL_Event ev;
+    while (SDL_PollEvent(&ev)) {
+        switch (ev.type) {
+        case SDL_QUIT:
+            sysLogPrintf(LOG_INFO, "video: quit requested");
+            exit(0);
+            break;
+        case SDL_KEYDOWN:
+            if (ev.key.keysym.sym == SDLK_ESCAPE) {
+                sysLogPrintf(LOG_INFO, "video: ESC -> quit");
+                exit(0);
+            }
+            break;
+        case SDL_WINDOWEVENT:
+            if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
+                sysLogPrintf(LOG_INFO, "video: window closed");
+                exit(0);
+            } else if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                gfx_sdl_update_cached_size();
+            }
+            break;
+        default:
+            break;
+        }
+    }
 }
 
 void videoSubmitCommands(Gfx *cmds)
 {
-    if (initDone)
-        gfx_run(cmds);
+    if (!initDone) {
+        return;
+    }
+    gfx_run(cmds);
 }
 
 void videoEndFrame(void)
 {
-    if (!initDone)
+    if (!initDone) {
         return;
+    }
     gfx_end_frame();
-    if (vidWindow)
-        SDL_GL_SwapWindow(vidWindow);
 
-    /* FPS accounting. */
-    fpsFrames++;
-    uint64_t now = sysGetMicroseconds();
-    if (now - fpsLastTick >= 1000000) {
-        fpsValue = (float)fpsFrames * 1000000.0f / (float)(now - fpsLastTick);
-        fpsFrames = 0;
-        fpsLastTick = now;
+    ++frames;
+    ++fpsNumFrames;
+
+    double now = wmAPI->get_time();
+    if (fpsWindowStart == 0.0) {
+        fpsWindowStart = now;
+    }
+    if (now - fpsWindowStart >= 1.0) {
+        vidAvgFPS = (float)(fpsNumFrames / (now - fpsWindowStart));
+        fpsNumFrames = 0;
+        fpsWindowStart = now;
     }
 }
 
-void videoSetVsync(int enabled)
+float videoGetFPS(void)
 {
-    vidVsync = enabled;
-    if (initDone && vidWindow)
-        SDL_GL_SetSwapInterval(vidVsync ? 1 : 0);
+    return vidAvgFPS;
 }
-void videoSetFramerateLimit(int fps)   { vidFpsLimit = fps;  /* TODO Phase 2 */ }
-int  videoGetFullscreen(void)          { return vidFullscreen; }
-void videoSetFullscreen(int enabled)
-{
-    vidFullscreen = enabled;
-    if (initDone && vidWindow)
-        SDL_SetWindowFullscreen(vidWindow,
-                                enabled ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
-}
-int  videoGetMaximize(void)            { return vidMaximize; }
-void videoSetMaximize(int enabled)
-{
-    vidMaximize = enabled;
-    if (initDone && vidWindow) {
-        if (enabled)
-            SDL_MaximizeWindow(vidWindow);
-        else
-            SDL_RestoreWindow(vidWindow);
-    }
-}
-float videoGetFPS(void)                { return fpsValue; }
 
-PD_CONSTRUCTOR static void videoConfigInit(void)
+void videoUpdateNativeResolution(s32 w, s32 h)
 {
-    configRegisterInt("Video.Vsync", &vidVsync, 0, 1);
-    configRegisterInt("Video.FramerateLimit", &vidFpsLimit, 0, 240);
-    configRegisterInt("Video.Fullscreen", &vidFullscreen, 0, 1);
-    configRegisterInt("Video.Maximize", &vidMaximize, 0, 1);
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    gfx_current_native_viewport.width = w;
+    gfx_current_native_viewport.height = h;
+    gfx_current_native_aspect = (float)w / (float)h;
+}
+
+s32 videoGetNativeWidth(void)  { return gfx_current_native_viewport.width; }
+s32 videoGetNativeHeight(void) { return gfx_current_native_viewport.height; }
+
+s32 videoCreateFramebuffer(u32 w, u32 h, s32 upscale, s32 autoresize)
+{
+    return gfx_create_framebuffer(w, h, upscale, autoresize);
+}
+
+void videoCopyFramebuffer(s32 dst, s32 src, s32 left, s32 top)
+{
+    /* assume immediate copies always read the front buffer */
+    gfx_copy_framebuffer(dst, src, left, top, false);
+}
+
+void videoResetTextureCache(void)
+{
+    gfx_texture_cache_clear();
 }

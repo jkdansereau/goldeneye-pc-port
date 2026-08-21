@@ -31,6 +31,14 @@
   #define PLATFORM_64BIT 1
 #endif
 
+#if defined(_M_IX86) || defined(__i386__)
+  #define PLATFORM_X86 1
+#elif defined(_M_X64) || defined(__x86_64__)
+  #define PLATFORM_X86_64 1
+#elif defined(__aarch64__)
+  #define PLATFORM_ARM 1
+#endif
+
 /* Constructor attribute: run before main(). */
 #if defined(_MSC_VER)
   #define PD_CONSTRUCTOR
@@ -44,6 +52,7 @@
 enum LogLevel {
     LOG_ERROR = 0,
     LOG_WARNING,
+    LOG_NOTE,
     LOG_INFO,
     LOG_DEBUG,
 };

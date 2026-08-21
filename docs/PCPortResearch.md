@@ -733,3 +733,188 @@ validation, 12 MB mapped at 0x10000000, window renders for the full test
 duration. Asset symbol spot-checks against the ROM confirm correct offsets
 (e.g. music bank BE seqCount=63 @0x419790, first track offset 508 → Mno_music
 @0x41998C; sfx/instrument banks start with GE's `B1` header).
+
+### F. Phase 2 runtime findings (threads, DRAM, addresses)
+
+Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
+threads, compiled GE's real `src/sched.c`, and brought in PD's fast3d software
+RSP (`port/fast3d/`). The boot path now runs: ROM map → DRAM reserve → video
+init → mainThread (real pthread) → bossEntry → bossInitMainthreadData through
+mempool init, VI init, rspInit, joyInit + controller-init timers, stanInit,
+gameInit — and currently dies inside `langInit()` (D31).
+
+* **D24 — setjmp/longjmp green threads are unusable on MinGW x64.** The first
+  kernel used setjmp/longjmp context switches; under Windows x64 + MinGW the
+  longjmp path corrupts FPU/MC state when it interacts with SEH unwinding
+  (observed: STATUS_DATATYPE_MISALIGNMENT-class crash inside a resumed
+  "thread" with garbage register state). PD's port does not use setjmp at all.
+  **Resolved:** `port/src/libultra.c` now runs every game thread as a real
+  pthread (`PortThread` side table, 8 MB stacks). Message queues keep the N64
+  `OSMesgQueue` layout and get a `PortQueue` side table (mutex + condvar, max
+  64 queues); all osSendMesg/osRecvMesg paths lock it. A dedicated tick thread
+  posts one VI retrace per frame (NTSC 60 Hz) and services the software timers
+  (both OS_MESG_NOBLOCK — the tick thread can never deadlock). `idleThread` is
+  intercepted by ID and parked; `mainproc` runs as a real pthread so the host
+  main thread is free to pump SDL/OS events (`videoPumpEvents()` in the host
+  loop — on Windows WndProc only runs on the window-creating thread). The GL
+  context is made current on shedThread per frame via
+  `gfx_sdl_make_context_current()`. Verified live: VI retrace flowing, all 4
+  controller-init timers fire, bossmq loop completes.
+* **D25 — dual-mapped N64 DRAM region.** Game code needs two incompatible
+  address forms of the same RAM: `osVirtualToPhysical`/s32 arithmetic wants
+  live host pointers that fit in a positive s32, while `offset | 0x80000000`
+  rebuilds (bg.c:3184/3322, propobj.c:8578/8699, title.c:476) want a KSEG0
+  view at 0x80000000. **Resolved:** one 8 MB backing store mapped twice —
+  V1 @ 0x70000000 (all game RAM symbols live here) and V2 @ 0x80000000
+  (byte-identical mirror). `port/src/dram.c`: Windows uses
+  `CreateFileMappingW(INVALID_HANDLE_VALUE,…)` + two `MapViewOfFileEx(…, base)`
+  calls (the documented kernel32 API that maps a section at an exact address;
+  `NtMapViewOfSection` fails with STATUS_MEMORY_NOT_ALLOCATED 0xc0000045 and
+  segfaults on wrong SECTION_INHERIT values — do not retry it); POSIX uses
+  memfd + two MAP_SHARED|MAP_FIXED mmaps. Both views sanity-checked to alias.
+  `port/src/dram_syms.s` pins the absolute symbols: `cfb_16` @ 0x70000000
+  (0x4B000), `_bssSegmentEnd` @ 0x70050000 (mempool start), tlb block end @
+  0x702F4400 (= page_align_down(0x803AB400) − 93×0x2000, the exact N64 value;
+  the tlbmanage stub returns it so `mempInit`'s pool size is correct — a NULL
+  return here made the mempool spin in `while(1)` at src/memp.c:164).
+* **D26 — address-width shims (K0 sign-extension).** N64 K0 addresses have bit
+  31 set; passing them through s32 parameters sign-extends to invalid x86-64
+  pointers. With the dual map, live RAM sits below 0x80000000 so identity is
+  safe: `port/shim/PR/R4300.h` → `PHYS_TO_K0(x) = (x)`; `port/shim/PR/os.h` →
+  `OS_K0_TO_PHYSICAL(x) = (u32)((char *)x - 0x70000000)` (GBI w1 words then
+  carry small offsets) and `OS_PHYSICAL_TO_K0(x) = (x)`. fast3d's `seg_addr()`
+  (gfx_pc.cpp) resolves both forms: full host pointers pass through, values <
+  0x800000 get +0x80000000 (landing in V2). Same remap applied to the
+  G_MW_SEGMENT handler.
+* **D27 — ASLR must be OFF for this exe.** `src/bondgame.h:8` declares
+  `extern u32 *_bssSegmentEnd;` (pointer type), so `&_bssSegmentEnd` in game
+  code emits a `.refptr._bssSegmentEnd` slot holding the absolute value with a
+  BASE relocation. Under ASLR the loader rebases it to runtime_base +
+  0x70050000 = garbage, and `mempCheckMemflagTokens` then spins/AVs with
+  poolAreaStart ≈ 0xF0xxxxxx. (On MIPS `&abs_symbol` is the symbol value
+  itself; x86-64/PE cannot do that.) **Resolved:** MINGW link flag
+  `-Wl,--disable-dynamicbase` (note: `--disable-dynamic-base` is NOT
+  recognized by GNU ld 2.47); the image now loads at its preferred base
+  0x140000000 and relocations are no-ops. `main.c` fails loudly at startup if
+  `sysImageBase() != 0x140000000ul` so any future ASLR regression is a clean
+  error, not silent DRAM corruption.
+* **D28 — ninja stale-object hazard with new shim headers.** If a shim header
+  did not exist when a .obj was last built, it is absent from that object's
+  .d dependency file and ninja will NOT rebuild the TU after the header
+  appears — the old (unshimmed) code silently persists. Observed: boss.c.obj
+  still contained `or $0x80000000,%eax` (original PHYS_TO_K0) days after the
+  shim landed. **Rule:** whenever anything under `port/shim/` changes, delete
+  all `.obj` files and full-rebuild. Verify with `gcc -E` using the exact
+  ninja flags (`ninja -C build-pc -t commands <tgt>`) plus objdump of the
+  rebuilt object.
+* **D29 — `osPiStartDma` must post its completion message on every path.** The
+  N64 PI posts the caller's OSMesgPI to mq when a DMA completes; GE never
+  inspects the message but always blocks on it (`romReceiveMesg()` →
+  `osRecvMesg(OS_MESG_BLOCK)` in ramrom.c:44). The shim did the memcpy
+  synchronously and posted nothing → mainThread deadlocked in the first file
+  load. **Resolved:** post unconditionally after `piServiceDma()` (also for
+  skipped/dropped DMAs) with OS_MESG_BLOCK, posting the caller's OSMesgPI.
+* **D30 — crash handler without SEH.** MinGW GCC 16 has no `__try`/`__except`
+  and does not recognize `-fseh-exceptions`, so the unhandled-exception filter
+  cannot rely on structured exceptions to protect symbolication. **Resolved:**
+  `port/src/crash.c` phase 1 writes raw fault info (registers, modules) to
+  `ge007.crash.log` without touching dbghelp (SymInitialize/StackWalk64 can
+  allocate and re-fault inside the filter); phase 2 does a validated manual
+  EBP-chain walk (`-fno-omit-frame-pointer` on all TUs; each frame is [saved
+  RBP, return address], stop if saved_fp ≤ fp or outside thread stack limits).
+  `TerminateProcess` instead of abort (SIGABRT can re-enter the exception
+  machinery). `crashDumpThreads()` (Toolhelp32 snapshot + SuspendThread +
+  GetThreadContext + StackWalk64 per thread) is called from the heartbeat
+  error dump with TID→name matching; StackWalk64 cannot read DWARF unwind info
+  on MinGW, so multi-frame traces depend entirely on the EBP chain. Symbols
+  are recovered offline: `addr2line -e build-pc/ge007.x86_64.exe -f -C
+  <base+rel>` (the log's "rel" = address − actual load base).
+* **D31 — langInit SIGSEGV: stack frame clobbered by a truncated-pointer table (OPEN).**
+  After D24–D29, mainThread reaches `langInit()` and dies on the **first** file
+  load (`_fileNameLoadToBank(LnameX_lookuptable[LGUN][…])` → index 670 →
+  `fileIndexLoadToBank` → `mempAllocBytesInBank` → `load_resource`). Crash
+  signature: RIP = 0x140330003 (inside `.bss`, in `g_Props`), RSP only ~0xD8
+  below langInit's entry RSP (a *shallow* chain — the stack pointer itself is
+  fine), and the frame region above load_resource's return address is filled
+  with 8-byte slots `{u32, 0x00000001}` where each u32 is the **low 32 bits of
+  a live .bss pointer**, alternating between `g_Props` (0x14033xxxx) and
+  `resource_lookup_data_array` (0x14034xxxx). The crash is a `ret` popping one
+  of these truncated pointers as the return address (observed RIP equals the
+  table value exactly, high word 0x00000001). Something in the load chain is
+  storing 64-bit pointers into s32/int storage (fine on 32-bit MIPS,
+  truncating on x86-64) and that storage overlaps a live frame.
+
+  Established facts (all under gdb, `gdb -batch -ex "handle SIGSEGV stop"`):
+  * All arguments at `load_resource` entry are valid: ptrdata=0x702aa400
+    (mempool), srcfile->hw_address=0x108ed250, rom_size=0x720, source=
+    0x702f3ce0. `romCopy` (PI shim memcpy) completes.
+  * `zlib_inflate()` itself **completes normally** (`finish` → returns 0,
+    rz_wp=3872; the RZ stream is plain deflate after a 2-byte header, so
+    endianness is not an issue in the bitstream). At its entry rz_outbuf =
+    ptrdata ✓, rz_inbuf = source+2 ✓, and the huft table base (tl) sits inside
+    load_resource's 8 KB local `buffer` (rz_hlist).
+  * **Not** a huft-table overflow: max observed `rz_hufts` = 797 entries ×
+    4 B (`struct huft {u8 e; u8 b; union{u16 n; struct huft *t} v;}`) = 3188 B
+    < 8448 B buffer.
+  * Ruled out by code inspection: `mempAddEntryOfSizeToBank` (only touches
+    pool pos/prevpos), `fileGetIndex` (reads only), `decompressdata` epilogue
+    (returns rz_wp).
+  * `load_resource` prologue: `push rbp/rdi/rsi/rbx; mov $0x2128,%eax;
+    call ___chkstk_ms; sub %rax,%rsp; lea 0x80(%rsp),%rbp` — RBP is a **fake
+    frame pointer** (RSP+0x80); the real return address is at [RBP+0x20E8].
+    The compiler reuses pushed-register slots as locals (verified: the saved-
+    rbx slot [RBP+0x20D0] legitimately receives `buffer+12`). Watchpoints on
+    RBP-relative offsets are therefore easy to misplace — compute from entry
+    RSP instead.
+  * Hardware watchpoint on the real retaddr slot (set at the first
+    instruction, where [RSP] = retaddr): first write changes it from a valid
+    .text return address to **`buffer+12`** (a pointer into load_resource's
+    own local array), reported RIP at the prologue boundary (`push %rdi`) —
+    i.e. either a concurrent write by another thread (hardware watchpoints are
+    global) or an 8-byte-attributed access. A `thread apply all bt` at that
+    moment showed every other game thread parked (RtlUserThreadStart / sleep
+    syscalls; gdb could not unwind their stacks further), so the writer is not
+    yet identified.
+
+  Next steps: re-run the watchpoint with **`set scheduler-locking on`**
+  (only mainThread runs → any hit is its own) to attribute the write to an
+  exact instruction; if it is load_resource's own spill, that is a GCC
+  miscompilation → compile ob.c at -O0/-Og or add a PORT-gated hook. Also try
+  multiple watchpoints on consecutive slots to catch a sequential table fill
+  mid-flight, and grep the disassembly of the whole chain for stores through
+  s32-typed pointers (`movl …(%reg)` where %reg holds a truncated pointer).
+
+### G. Phase 2 status (current)
+
+Done: PD fast3d integrated (`port/fast3d/`, replaces the deleted gfxstub.c);
+GE's real `src/sched.c` compiled (shedThread runs `__scMain`); real pthread
+kernel (D24); dual-mapped DRAM + address shims (D25/D26); ASLR off with startup
+sanity check (D27); PI completion messages (D29); SEH-free crash handler with
+thread dumps (D30). The process now boots, maps the ROM, opens the window,
+runs `mainproc()` → `bossInitMainthreadData` through controller init / timers /
+mempool / VI / rsp / stan / game init — and SIGSEGVs inside `langInit()`'s
+first file load (D31). No frames rendered yet.
+
+Reference — the file-load chain (for D31 debugging):
+`langInit` (language.c:230) loads 7 text banks via
+`_fileNameLoadToBank(LnameX_lookuptable[bank][j_text_trigger], …, 0x100,
+MEMPOOL_PERMANENT)` → `fileGetIndex` (strcmp over file_resource_table) →
+`fileIndexLoadToBank(index, …)` (ob.c:216): if poolRemaining==0 take
+`mempGetBankSizeLeft(bank)`; `ptrdata = mempAllocBytesInBank(…)`; hw_address
+nonzero → `load_resource(ptrdata, poolRemaining, &file_resource_table[index],
+&resource_lookup_data_array[index])` (ob.c:37): `source = (ptrdata + bytes) −
+((rom_size+7)&−8)`; `romCopy(source, hw_address, rom_size)`;
+`decompressdata(source, ptrdata, buffer)` with `u8 buffer[0x2100]` on the
+stack → sets rz_inbuf=source+2 / rz_outbuf=ptrdata / rz_hlist=buffer →
+`zlib_inflate()` (src/game/zlib.c:668). rom_size for index 670 = 0x720,
+decompressed size = 3872 (0xF20). `file_resource_table` is compiled
+(`assets/obseg/file_resource_table.inc.c`) with hw_address = cart addresses;
+rom_size = adjacent-marker differences computed in obInit.
+
+Debugging techniques that worked: gdb **launch** mode (`gdb -batch -ex
+"handle SIGSEGV stop" -ex run …` — attach fails with error 87); breakpoint
+chains through init functions to bracket the crash; `finish` to let a suspect
+function complete and inspect its return; hardware watchpoints on exact stack
+slots (compute offsets from entry RSP, not RBP — see D31); `addr2line` for
+offline symbolication; objdump + `gcc -E` with exact ninja flags to verify
+shim expansion in compiled code.

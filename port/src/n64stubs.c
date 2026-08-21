@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include <PR/ultratypes.h>
+#include <PR/os.h>
 #include <tlb_manage.h>
 
 /* --- Segment start/end getters (normally linker-script symbols) --------- */
@@ -44,8 +45,11 @@ u32 get_inflateSegmentRomEnd(void)   { return 0; }
  * What remains here are pure-RAM segment symbols that have no ROM presence:
  * the host's own .bss/.csegment ends and the N64 vaddr markers (only used by
  * the never-run N64 boot path on the PC).
+ *
+ * _bssSegmentEnd is NOT here: it is an ABSOLUTE symbol in dram_syms.s
+ * (0x70050000, inside the s32-safe DRAM view — boss.c starts the mempools
+ * at PHYS_TO_K0(osVirtualToPhysical(&_bssSegmentEnd)); see port/src/dram.c).
  */
-u32 *_bssSegmentEnd              = NULL;
 u32 *_csegmentSegmentStart       = NULL;
 u32 *_csegmentSegmentEnd         = NULL;
 u32 *_inflateSegmentVaddrStart   = NULL;
@@ -71,7 +75,15 @@ void resolve_TLBaddress_for_InvalidHit(void) { /* no-op */ }
 /*
  * tlb_manage.c is excluded (it manages the N64's 64-entry TLB for on-demand
  * ROM segment loading). boss.c still calls two of its functions from
- * bossInitMainthreadData(); inert on the PC.
+ * bossInitMainthreadData().
+ *
+ * tlbmanageGetTlbAllocatedBlock() is NOT inert: boss.c:218 uses it as the
+ * END of the mempool area (mempCheckMemflagTokens(start, block - start)).
+ * On the N64 it is page_align_down(&sp_boot) - MAPPING_TABLE_COUNT*PAGE_SIZE
+ * = 0x803AB400 - 93*0x2000 = 0x802F4400 (US .stacks). We keep that exact
+ * OFFSET (+0x2F4400 from the DRAM base) but express it in the s32-safe V1
+ * view (see dram.c): 0x70000000 + 0x2F4400 = 0x702F4400, so [start, block)
+ * is live host memory and survives the s32 paths in src/memp.c.
  */
 void tlbmanageEstablishManagementTable(void) { /* no-op */ }
 void tlbmanageResetCurrentEntriesCount(void)  { /* no-op */ }
@@ -79,7 +91,10 @@ void tlbmanageTranslateLoadRomFromTlbAddress(u32 address)
 {
     (void)address;
 }
-u8 (*tlbmanageGetTlbAllocatedBlock(void))[TLB_BLOCK_SIZE] { return NULL; }
+u8 (*tlbmanageGetTlbAllocatedBlock(void))[TLB_BLOCK_SIZE]
+{
+    return (u8 (*)[TLB_BLOCK_SIZE])0x702F4400;
+}
 
 /* --- K&R libc helpers (IDO provided these; the host libc does not) ------- */
 /* Signatures mirror include/PR/os.h:983 / include/bstring.h exactly.        */
@@ -121,3 +136,18 @@ void osSyncPrintf(const char *fmt, ...)
     vfprintf(stderr, fmt, ap);
     va_end(ap);
 }
+
+/* --- VI manager (src/libultrare/io/vimgr.c, not built for PC) ----------- */
+/* sched.c's osCreateScheduler() calls osCreateViManager(OS_PRIORITY_VIMGR).  */
+/* The N64 VI manager thread serviced video interrupts; on the port the      */
+/* cooperative kernel posts the retrace message itself (port/src/libultra.c), */
+/* so this is a no-op.                                                        */
+void osCreateViManager(OSPri pri) { (void)pri; }
+
+/* --- Crash screen (src/crash.c, not built for PC) ------------------------ */
+/* src/crash.c is the game's TLB-fault diagnostics + rmon-driven crash        */
+/* screen renderer. It depends on rmon and the N64 exception path, neither of */
+/* which exists here; real host faults are caught by port/src/crash.c instead.*/
+/* sched.c only calls this for the debug stderr overlay (off at boot), so a   */
+/* no-op is safe.                                                             */
+void crashRenderFrame(u16 *buffer) { (void)buffer; }

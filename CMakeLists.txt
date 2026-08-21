@@ -148,6 +148,23 @@ configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststring.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hoststring.h" @ONLY)
 
+# Host <stdlib.h> path for port/shim/stdlib.h. The N64 include/stdlib.h
+# typedefs lldiv_t/ldiv_t, which conflict with the host's when both land in
+# one C++ TU (fast3d): MinGW's own sec_api/stdlib_s.h does `#include
+# <stdlib.h>`, which resolves to the N64 header via -I. The shim routes C++
+# TUs to the host header by absolute path (same trick as hoststring.h).
+get_filename_component(PORT_HOST_STDLIB_H "${_PORT_GCC_DIR}/../include/stdlib.h" ABSOLUTE)
+configure_file(
+  "${CMAKE_SOURCE_DIR}/port/include/hoststdlib.h.in"
+  "${CMAKE_BINARY_DIR}/port/include/hoststdlib.h" @ONLY)
+
+# Host <stddef.h> path for port/shim/stddef.h (same reason as stdlib: the N64
+# stub shadows the host header in C++ TUs, hiding max_align_t from cstddef).
+get_filename_component(PORT_HOST_STDDDEF_H "${_PORT_GCC_DIR}/../include/stddef.h" ABSOLUTE)
+configure_file(
+  "${CMAKE_SOURCE_DIR}/port/include/hoststddef.h.in"
+  "${CMAKE_BINARY_DIR}/port/include/hoststddef.h" @ONLY)
+
 # ----------------------------------------------------------------------------
 # Compiler definitions & flags
 # ----------------------------------------------------------------------------
@@ -170,6 +187,11 @@ add_compile_options(
   -fwrapv
   -include "versioninfo.h"
 )
+# Keep frame pointers: dbghelp's StackWalk64 (crash handler + thread dumps)
+# cannot read DWARF unwind info on MinGW, so the EBP chain is the only way to
+# get a real backtrace of a hung/crashed game thread.
+add_compile_options(-fno-omit-frame-pointer)
+
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_options(-Og)
 endif()
@@ -200,6 +222,18 @@ add_compile_options(
 )
 add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-pointer-sign>)
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-function>)
+
+# ASLR must be OFF: dram_syms.s defines absolute symbols (cfb_16 @ 0x70000000,
+# _bssSegmentEnd @ 0x70050000) that the game references through pointer-typed
+# externs (src/bondgame.h: `extern u32 *_bssSegmentEnd`). On x86-64/PE, taking
+# their address emits a .refptr slot holding the absolute value PLUS a base
+# relocation; with ASLR the loader rebases it to runtime_base+0x70050000 =
+# garbage. With DYNAMICBASE disabled the image loads at its preferred base
+# (0x140000000) and the relocations are no-ops. main.c sanity-checks the load
+# base at startup.
+if(MINGW)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--disable-dynamicbase")
+endif()
 
 # port/shim first: PC-only shadow headers (bondtypes.h, bondconstants.h,
 # PR/gbi.h) that fix N64-compiler assumptions without touching src/ or
@@ -244,7 +278,10 @@ endif()
 list(APPEND LIBS "${GL_LIBRARY}")
 
 if(NOT EXTRA_LIBRARIES)
-  if(WIN32)
+  if(MINGW)
+    # MinGW: pthreads for the real-OS-thread kernel (port/src/libultra.c).
+    set(EXTRA_LIBRARIES dbghelp -static-libstdc++ pthread)
+  elseif(WIN32)
     set(EXTRA_LIBRARIES dbghelp -static-libstdc++)
   else()
     set(EXTRA_LIBRARIES stdc++ m dl pthread)
@@ -258,7 +295,8 @@ list(APPEND LIBS "${EXTRA_LIBRARIES}")
 # Port layer (shims + software RSP).
 file(GLOB_RECURSE SRC_PORT      "${CMAKE_SOURCE_DIR}/port/src/*.c")
 file(GLOB_RECURSE SRC_PORT_CXX  "${CMAKE_SOURCE_DIR}/port/src/*.cpp")
-file(GLOB_RECURSE SRC_FAST3D    "${CMAKE_SOURCE_DIR}/port/fast3d/*.cpp")
+file(GLOB_RECURSE SRC_FAST3D    "${CMAKE_SOURCE_DIR}/port/fast3d/*.cpp"
+                               "${CMAKE_SOURCE_DIR}/port/fast3d/glad/*.c")
 
 # Generated absolute ROM asset symbols for this region (see
 # scripts/gen_romassets.py). Defines every obseg/ramrom/music label and the
@@ -268,6 +306,10 @@ set(SRC_ROMASSETS "${CMAKE_SOURCE_DIR}/port/src/romassets_${ASSET_REGION}.s")
 if(NOT EXISTS ${SRC_ROMASSETS})
   message(FATAL_ERROR "Missing ${SRC_ROMASSETS} — run: python3 scripts/gen_romassets.py ${ASSET_REGION}")
 endif()
+
+# Absolute symbols inside the reserved N64-DRAM region (port/src/dram.c):
+# cfb_16 (replaces src/cfb.c) and _bssSegmentEnd (mempool start marker).
+set(SRC_DRAM_SYMS "${CMAKE_SOURCE_DIR}/port/src/dram_syms.s")
 
 # Game code — compiled unmodified.
 file(GLOB_RECURSE SRC_GAME "${CMAKE_SOURCE_DIR}/src/game/*.c")
@@ -344,21 +386,29 @@ list(PREPEND SRC_ASSETS "${CMAKE_SOURCE_DIR}")
 #               extern decls in bondgame.h / audi.c).
 #
 # EXCLUDED (hardware drivers, replaced by port/ shims):
-#   sched.c crash.c rmon.c usb.c tlb_*.c pi.c vi.c motor.c
+#   crash.c rmon.c usb.c tlb_*.c pi.c vi.c motor.c
 #   (there is no src/spectrum.c in this decomp)
 #   All of src/libultra/io/*.c and src/libultrare/io/*.c EXCEPT vitbl.c.
 #   motor.c / pfsinit.c / pfsisplug.c are NOT compiled: joy.c calls
 #   osMotorInit/Start/Stop and osPfsInit/osPfsIsPlug only for accessory
 #   (Rumble Pak / Memory Pak) detection, so they are shimmed as no-ops in
 #   port/src/libultra.c (see B2 — saves are EEPROM, not PFS).
+#
+# sched.c IS compiled (Phase 2): the game's real scheduler runs on the
+# cooperative thread kernel; its hardware leaf calls (osSpTaskLoad/StartGo,
+# osDpSetNextBuffer, osVi*) are shimmed in port/src/libultra.c, which runs
+# the software RSP inline and posts the RSP_DONE/RDP_DONE messages.
 set(SRC_ENGINE
   src/init.c
+  src/sched.c
   src/audi.c
   src/snd.c
   src/music.c
   src/joy.c
   src/fr.c
-  src/cfb.c
+  # src/cfb.c — cfb_16 now lives at 0x80000000 in the reserved DRAM region
+  # (port/src/dram_syms.s) so OS_K0_TO_PHYSICAL(cfb_16[0]) is a small offset
+  # that fast3d can map back; a host-BSS array would truncate to garbage.
   src/stacks.c
   src/boss.c
   src/mema.c
@@ -377,6 +427,7 @@ set(SRC
   ${SRC_GAME}
   ${SRC_PORT}
   ${SRC_ROMASSETS}
+  ${SRC_DRAM_SYMS}
   ${SRC_PORT_CXX}
   ${SRC_FAST3D}
   ${SRC_LIBAUDIO}

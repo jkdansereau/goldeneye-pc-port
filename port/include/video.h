@@ -2,13 +2,15 @@
 #define PORT_VIDEO_H
 
 /*
- * Video: SDL2 window + OpenGL context + frame pacing.
- * Modelled on the PD port's port/include/video.h.
+ * Video: SDL2 window + OpenGL context + frame pacing, on top of fast3d's
+ * window-manager / rendering APIs (port/fast3d).
  *
- * The game's VI (osViSetMode / osViVSyncCallback / osViWaitVSync) is mapped
- * onto this layer. The software RSP (fast3d) renders into the GL context that
- * this layer owns.
+ * The game's VI (osViSetMode / osViSwapBuffer / ...) is mapped onto this
+ * layer by the libultra shims; the software RSP (fast3d) renders into the GL
+ * context owned here.
  */
+
+#include <SDL.h>
 
 #include <PR/ultratypes.h>
 #include <PR/gbi.h>
@@ -21,24 +23,27 @@ extern "C" {
 int  videoInit(void);
 void videoDestroy(void);
 
-/* Frame boundary hooks, driven by the port scheduler (gesched.c). */
+/* Frame boundary hooks, driven by the SP task shim (libultra.c). These run
+ * on the game's scheduler thread. */
 void videoStartFrame(void);
 void videoSubmitCommands(Gfx *cmds);   /* runs the software RSP on the list */
 void videoEndFrame(void);
 
-/* Pump window events; returns 1 when the app should quit. Used by the
- * Phase 1 demo loop until the scheduler owns the frame boundary. */
-int  videoHandleEvents(void);
+/* Host-thread SDL event pump: keeps the window responsive (Windows only
+ * dispatches messages to the creating thread) and handles quit. Called in a
+ * loop from main(). Exits the process on QUIT/ESC/close. */
+void videoPumpEvents(void);
 
-/* VSync / framerate control. */
-void videoSetVsync(int enabled);
-void videoSetFramerateLimit(int fps);  /* 0 = unlimited */
+/* The game's native video mode (NTSC 640x480, PAL 640x400). fast3d scales
+ * N64 screen coordinates into window pixels using this. */
+void videoUpdateNativeResolution(s32 w, s32 h);
+s32  videoGetNativeWidth(void);
+s32  videoGetNativeHeight(void);
 
-/* Window state queries (kept in sync with the options menu). */
-int  videoGetFullscreen(void);
-void videoSetFullscreen(int enabled);
-int  videoGetMaximize(void);
-void videoSetMaximize(int enabled);
+/* Offscreen framebuffers (fast3d GL FBOs) + texture cache control. */
+s32  videoCreateFramebuffer(u32 w, u32 h, s32 upscale, s32 autoresize);
+void videoCopyFramebuffer(s32 dst, s32 src, s32 left, s32 top);
+void videoResetTextureCache(void);
 
 /* Current FPS (measured). */
 float videoGetFPS(void);

@@ -1,29 +1,18 @@
 #ifndef GFX_API_H
 #define GFX_API_H
 
-/*
- * Public API for the software RSP (fast3d).
- *
- * This is the interface the rest of the port (video.c / gesched.c) uses to
- * drive the RSP. It mirrors the PD port's port/fast3d/gfx_api.h.
- *
- * STATUS: scaffolding — the implementation (gfx_pc.cpp etc.) is brought in
- * during Phase 2 by adapting the PD fast3d. See port/fast3d/README.md.
- */
-
 #ifndef __cplusplus
 #include <stdint.h>
 #include <stdbool.h>
 #endif
 
-#include <PR/gbi.h>
+#include "gfx_rendering_api.h"
+#include "gfx_window_manager_api.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-struct GfxRenderingAPI;
-struct GfxWindowManagerAPI;
+struct XYWidthHeight {
+    int16_t x, y;
+    uint32_t width, height;
+};
 
 struct GfxDimensions {
     float internal_mul;
@@ -34,33 +23,36 @@ struct GfxDimensions {
 struct GfxInitSettings {
     struct GfxWindowManagerAPI *wapi;
     struct GfxRenderingAPI *rapi;
-    /* window title / size / fullscreen / etc. — see PD gfx_window_manager_api.h */
-    const char *title;
-    uint32_t width, height;
-    int fullscreen;
-    int vsync;
+    struct GfxWindowInitSettings window_settings;
 };
 
-/* Current draw-area dimensions (before any scaling). */
-extern struct GfxDimensions gfx_current_dimensions;
+extern struct GfxDimensions gfx_current_window_dimensions; // The dimensions of the window
+extern struct GfxDimensions
+    gfx_current_dimensions; // The dimensions of the draw area the game draws to, before scaling (if applicable)
+extern struct XYWidthHeight
+    gfx_current_game_window_viewport; // The area of the window the game is drawn to, (0, 0) is top-left corner
+extern uint32_t gfx_msaa_level;
+extern struct XYWidthHeight gfx_current_native_viewport; // The internal/native video mode of the game
+extern float gfx_current_native_aspect; // The aspect ratio of the above mode
+extern bool gfx_framebuffers_enabled;
+extern bool gfx_detail_textures_enabled;
 
 void gfx_init(const struct GfxInitSettings *settings);
 void gfx_destroy(void);
-
-/* Frame boundary. */
+struct GfxRenderingAPI* gfx_get_current_rendering_api(void);
 void gfx_start_frame(void);
+void gfx_run(Gfx* commands);
 void gfx_end_frame(void);
+void gfx_set_target_fps(int);
+void gfx_set_texture_filter(enum FilteringMode mode);
+void gfx_set_mipmap_filter(enum MipmapFilteringMode mode);
+void gfx_texture_cache_clear(void);
+void gfx_texture_cache_delete(const uint8_t *orig_addr);
+void gfx_texture_cache_delete_range(const uint8_t *start, const uint8_t *end);
+int gfx_create_framebuffer(uint32_t width, uint32_t height, int upscale, int autoresize);
+void gfx_resize_framebuffer(int fb, uint32_t width, uint32_t height, int upscale, int autoresize);
+void gfx_set_framebuffer(int fb, float noise_scale) ;
+void gfx_reset_framebuffer(void);
+void gfx_copy_framebuffer(int fb_dst, int fb_src, int left, int top, int use_back);
 
-/* Run the RSP over a display list (the core of the emulation). */
-void gfx_run(Gfx *commands);
-
-/* Options. */
-void gfx_set_target_fps(int fps);
-void gfx_set_texture_filter(int mode);
-void gfx_set_mipmap_filter(int mode);
-
-#ifdef __cplusplus
-}
 #endif
-
-#endif /* GFX_API_H */
