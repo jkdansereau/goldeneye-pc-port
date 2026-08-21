@@ -5,6 +5,7 @@
 - `n64decomp/007`: WIP decompilation of GoldenEye 007 (N64), byte-matches US/EU/JP ROMs.
 - Active work: **PC port** modelled on the Perfect Dark PC port (same Rare "Indy" engine family).
 - **Read `docs/PCPortResearch.md` first** — architecture, GE-specific RSP deltas, phased plan, and review findings (A1–D32 in §11; current handoff + plan in §H).
+- **Starting a fresh session?** Read `docs/HANDOFF.md` — the paste-ready brief with the immediate task, standing procedure, and environment gotchas.
 
 ## Non-negotiables
 
