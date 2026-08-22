@@ -1238,6 +1238,22 @@ operates on misaligned fields. Needs a D37-style re-layout of the model
 file image (header + switches array + texture table + node tree +
 ModelRoData records). Phase-2 project; see §H.
 
+**D44 (OPEN)** Crash-handler Phase 2 backtrace self-faults before printing.
+`crashStackTraceSym()` in `port/src/crash.c` calls
+`GetCurrentThreadStackLimits(low, high)` passing the NULL pointer *values*
+rather than `&low, &high` (Phase 1's `crashStackTraceRaw` passes them
+correctly). The API writes the stack limits to address 0x0 → access violation
+*inside the SEH filter* → Windows terminates the process without a second
+dispatch. Symptom: `ge007.crash.log` contains only Phase 1 (EXCEPTION/PC/
+MxCsr/thread-stack/MODULE lines) and no `BACKTRACE:` section — verified twice
+live; this is why every D3x fault so far cost a full gdb launch-mode session.
+Fix: one line, `GetCurrentThreadStackLimits(&low, &high)`. The build already
+compiles with `-fno-omit-frame-pointer` (CMakeLists.txt:193), so after the fix
+every crash auto-logs an EBP-chain backtrace to console + ge007.crash.log,
+symbolicable offline with addr2line. Verify: run, confirm `BACKTRACE:` with
+#00..#NN frames appears in the log and the D43 chain (modelPromoteNodeOffsets-
+ToPointers ← load_object_fill_header ← …) is visible without gdb.
+
 ### G. Phase 2 status (current)
 
 Done: PD fast3d integrated (`port/fast3d/`, replaces the deleted gfxstub.c);
@@ -1324,6 +1340,24 @@ validate one small model against ROM ground truth under gdb before generalizing.
 Expect more D32-class ABI fixes as other per-level asset types are first
 touched — standing sub-task, not a one-off.
 
+**Dev-loop measurements + speedups (session of 2026-08-22).** Measured
+iteration costs on the dev box (16 cores): full clean rebuild ≈ 5 s wall
+(239 ninja steps) — the build is NOT a bottleneck, ccache would be wasted
+effort; launch → D43 crash ≈ 3.7 s — runtime wait is negligible. The cost is
+in *diagnosis*: gdb launch-only mode + manual `addr2line` image-base arithmetic
+per fault. Speedups, in priority order: (1) the D44 one-line fix → automatic
+backtrace on every crash; (2) a `tools_pc/sym.sh` wrapper (PC or rel offset →
+add image base 0x140000000 → `addr2line -f -C`); (3) a Python ROM/asset
+inspector (`tools_pc/romdump.py`) that parses ModelFileHeader/ModelNode trees
+straight from the .z64 using the bondtypes.h layout (opcode sequences, node
+links, Data records) — accelerates D43 and every follow-on asset type, and can
+validate re-layout output against ROM ground truth without running the game;
+(4) env-gated framebuffer PPM dumps every N frames + a non-clear-color pixel
+count/diff script — turns "the scene contains actual model geometry" into an
+assert, makes the 30 s soak scriptable, and enables screenshot diffs against
+an emulator (Mupen64Plus with the verified No-Intro dump). NOT worth it
+(measured): ccache, boot fast-forward/skip-to-mainloop hooks.
+
 **Audio (Phase 3 prep).** Bank trees are correctly laid out at boot and the
 libaudio manager + audio thread run without crashing; actual sound output still
 needs an SDL backend for `alDriver`, and the ASP strategy question (C2) remains
@@ -1364,5 +1398,7 @@ prefix `export PATH=…`). Build: `./build-pc.sh ntsc-final`. gdb **launch** mod
 only (attach fails, error 87); symbolicate offline with `addr2line -e
 build-pc/ge007.x86_64.exe -f -C <0x140000000+rel>`. Image base 0x140000000.
 `load_resource`/many init fns use a fake RBP — compute stack offsets from entry
-RSP. The D30 crash handler did **not** write `ge007.crash.log` for the game-thread
-SIGSEGV this session (attribute via gdb instead; worth a separate look).
+RSP. The D30 crash handler writes Phase 1 of `ge007.crash.log` (raw PC/
+registers) but its Phase 2 backtrace self-faults before printing (**D44**,
+one-line fix pending) — until fixed, attribute crashes via gdb; after the fix
+the crash log is the first stop.
