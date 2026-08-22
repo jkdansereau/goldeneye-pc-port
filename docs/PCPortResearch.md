@@ -1569,6 +1569,108 @@ ROM before executing Plan B; record results as D49): see docs/HANDOFF.md
 §Task 1 — eight claims, each with a falsification criterion. If any fires,
 fallback to Plan A with the corrected guard from item 4.
 
+**D49 (REVIEW — Plan B verification: D48 checklist R1–R8 all CONFIRMED)**
+Independent review session executed the D48.6 checklist against code + ROM
+(NTSC `data/ge007.ntsc-final.z64`). **Verdict: 8/8 confirmed — Plan B is
+cleared for execution (HANDOFF Task 2); no fallback to Plan A.** Per item:
+
+1. **R1 RZ format — CONFIRMED.** `decompressdata()` (port/src/rzdecomp.c)
+skips the 2-byte header and raw-deflates (`inflateInit2(-15)`, avail_in ≤
+0x400000). All 512 model files (C*/G*/P*Z in
+`assets/obseg/file_resource_table.inc.c`; table↔`scripts/filelist.u.csv`
+set identity exact, 512=512) start `0x11 0x72` and inflate cleanly.
+Σ round8(compressed) = **1,277,088 B — exactly D48's claimed number**; max
+single-file compressed 0x421E; max decompressed/compressed ratio 4.75.
+2. **R2 romCopy is a host memcpy with no 0x10C00000 limit — CONFIRMED.**
+`romCopy` → `doRomCopy` → `osInvalDCache` (no-op shim) + `osPiStartDma` →
+`piServiceDma` (port/src/libultra.c): the only gate is
+`romdataCartAddrValid()` (port/src/romdata.c:212), then plain memcpy. The ROM
+is VirtualAlloc'd at CART_BASE 0x10000000 sized exactly romSize
+(romdata.c:156-159); nothing in the port layer bounds the region, so placing
+sidecars at [CART_BASE+romSize, …) needs only a reservation-size extension +
+validity-check extension in romdataInit.
+3. **R3 the table is the single chokepoint — CONFIRMED.** All 512 model loads
+funnel through `load_object_fill_header` (src/game/objecthandler_2.c:89) →
+`_fileNameLoadToBank`/`_FileNameLoadToAddr` → `fileIndexLoad*` →
+`load_resource`, which read `hw_address`/`rom_size` from
+`file_resource_table` + `resource_lookup_data_array`. The C*/G*/P*Z symbols
+are `.set` markers in `port/src/romassets_<r>.s` (gen'd by
+`scripts/gen_romassets.py`); no game code dereferences them outside the table
+(grep: all hits are string literals/comments). Callers audited: bondview2.c,
+chr_b.c, ejectedcartridges.c, front.c, gun.c, loadobjectmodel.c.
+4. **R4 obInit runs once, before any model load — CONFIRMED.** `obInit()`
+is called exactly once at src/boss.c:179 inside one-shot
+`bossInitMainthreadData()` (before the infinite main loop); it computes
+`rom_size` from adjacent-entry `hw_address` DELTAS (ob.c:122). `rom_size`/
+`hw_address` are touched only in ob.c. The D43 crash stack was post-obInit.
+A lazy one-shot table patch at the port hook site in
+`load_object_fill_header` is therefore safe.
+5. **R5 buffers fit — CONFIRMED (quantified).** Fresh dst==0 loads: max
+round8(compressed)+8 = 0x4228 ≪ STAGE bank (max 0x24C400 = poolArea 0x2A4400
+− me 352 KiB NTSC; ≥ ~1.3 MB even after conservative pre-model stage usage —
+BG stan ≤ 0xA3E0 per stage). Worst-case post-compaction size across all 512
+files (D_PC + 16·Σ(K_t−1) with K_BOUND {0:38,1:46,2:36,3:18,4:15}) =
+**0x16F74** (Csuit_lf_handZ) — 25× headroom vs a fresh bank. dst!=0 callers:
+every buffer ≥ 0xF000 > 0x4228; `tools_pc/d43_chainbound.py` re-run against
+the CURRENT constants all pass: suit 0x1002C≤0x18000, trigger/watchlaser
+0xED20≤0x17000, wallet 0x105BC≤0x17000, worst weapon GmapZ 0xE91C≤0xF000,
+bondview chain 0x1CE5C≤0x23000, cast rifle/pistol 0x240DC/0x23F24 ≤ 0x25000
+(front.c:7795), logo 0x85000 (initmenus.c:38). `poolRemaining := D_PC` is
+automatic (`load_resource` ← `decompressdata` return, ob.c:61).
+6. **R6 poolRemaining hazard + reset — CONFIRMED.** Mechanism verified in
+current code: `fileIndexLoadToBank` (ob.c:219-247) allocates
+`poolRemaining` when non-zero (the post-compaction P left by fileSetSize),
+and `load_resource` (ob.c:49-53) needs round8(rom_size)+8 ≤ bytes or it sets
+poolRemaining=0 → **silent load failure**. The data CAN trigger it (e.g.
+PlegalpageZ: round8(C)+8 = 0xFC8 > D_PC = 0x5F0; its own path is a custom
+buffer so it is safe, but the condition exists for any file reloaded in the
+same stage). Hazard window = same-stage reloads only: poolRemaining is zeroed
+at stage entry/exit (boss.c:415-417 / 639-641), and all consumers of
+`get_pc_remaining_buffer_for_index` / `get_pc_buffer_remaining_value` run
+post-load+compaction; the PROMOTE walk (sub_GAME_7F075A90) does not touch
+lookup data. The addr path is unaffected (bytes = caller's fixed buffer).
+The one-line poolRemaining=0 reset before `_fileNameLoadToBank`/
+`_FileNameLoadToAddr` in `load_object_fill_header` is **pending** (not yet in
+tree) and closes the hazard for both plans.
+7. **R7 per-region sidecars + directory matching — CONFIRMED (with notes).**
+Region is build-time-fixed: `build-pc.sh` ROMID → CMake ASSET_REGION {u,e,j}
+→ `romassets_<r>.s`; the loaded ROM token (`ge007.<romid>.z64` /
+`baserom.<r>.z64`) uniquely determines the region and romHeaderValid enforces
+the country byte, so romdataInit can derive `data/pcmodels-<region>/` with the
+same token logic (baserom.u → ntsc-final, baserom.e → pal-final). Name sets
+are NOT identical across regions (filelist: u=512, **e=465**, j=512) — the
+generator must map whatever files exist, and the patch loop only patches names
+present in the manifest. Notes: (a) romdataInit has **no JP candidate**
+(GE007_IS_PAL comes from versioninfo.h.in) — PC cannot boot a JP ROM today,
+so JP sidecars are moot until that is added; (b) missing sidecar directory →
+warn + continue in ROM-only mode (Task 2 step 2).
+8. **R8 emission-spec completeness — CONFIRMED (with one explicitness gap).**
+Walked every `ModelRoData_*Record` for the 14 opcodes present in ROM
+(1,2,4,8,9,10,12,13,15,18,21,22,23,24) in src/bondtypes.h: every field is
+covered by Verified facts + D47.13 (pointer-promotion list D47.5; f32 bswap;
+TextureID bswap32; vertex arrays D47.8; GDL slots D47.13). A fresh C probe
+(mingw gcc with the EXACT flags from build-pc/compile_commands.json)
+re-verified all 15 PC record sizes + ModelNode (0x30) + ModelFileHeader
+(0x38) + Vertex (0x10) and every pointer-promotion offset — **no drift** vs
+d43_convert.py's PC_REC / the spec. Gap: Verified facts enumerate bswap for
+f32, vertex-array s16s and the TextureID u32, but do not explicitly enumerate
+the **u16/s16 record scalars** (AnimPart, MatrixIndex, JointID, MatrixIDs,
+Group1/2, RwDataIndex, op4 numVertices@0x10, op24 nv/ncv/ModelType/
+RwDataIndex). Data check: these hold small BE values (JointID 1–11, nv ≤
+73) that raw emission would corrupt (LE read → ×256); all research tooling
+reads them BE (`bu16`/`be16`). The rule follows from the D33 per-field
+endianness convention (u16 → bswap16), so this is an explicitness gap, not a
+missing rule — but Task 2's emit pass must bswap16 every u16/s16 record
+scalar (padding/reserved may be zeroed), and the HANDOFF Verified facts
+should be amended to say so.
+
+Environment notes for Task 2: standalone gcc needs
+`/c/msys64/mingw64/bin:/c/msys64/usr/bin` on PATH (cc1 fails SILENTLY without
+it — exit 1, zero diagnostics), and `-std=c11` is required (the CMake flag;
+under the default gnu23 `typedef s32 bool` in bondtypes.h breaks). Also:
+`include/stddef.h`'s body is `#if 0`'d — offsetof/size_t are unavailable in
+game TUs.
+
 ### G. Phase 2 status (current)
 
 Done: PD fast3d integrated (`port/fast3d/`, replaces the deleted gfxstub.c);

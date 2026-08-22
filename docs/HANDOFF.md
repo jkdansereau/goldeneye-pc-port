@@ -1,30 +1,27 @@
-# Handoff brief — GoldenEye 007 PC port (Phase 2: first frames render; D43 re-planned as offline pre-conversion)
+# Handoff brief — GoldenEye 007 PC port (Phase 2: Plan B review PASSED (D49) — next session executes the offline pre-conversion)
 
 _Paste-ready briefing. Authoritative detail lives in `AGENTS.md` and
 `docs/PCPortResearch.md` (§F/D31–D48 findings, §H handoff); this is the summary
 + the immediate tasks._
 
-## Your job — TWO sessions, in order
+## Your job
 
-- **Session A (next): INDEPENDENT REVIEW of Plan B (finding D48).** Do NOT
-  implement anything. Verify the 8 claims in §Task 1 against code + ROM, each
-  with its falsification criterion. Record results as finding **D49** in
-  `docs/PCPortResearch.md` §F (per-item CONFIRMED/REFUTED + evidence), update
-  this file's status, commit. If every item is confirmed, Session B is green-lit.
-  If any is refuted: record why, then either adjust Plan B per the finding or
-  fall back to Plan A (§Task 3). The goal does not change: get stage geometry
-  on screen.
-- **Session B (after D49 confirms): EXECUTE Plan B** per §Task 2 — Python emit
-  pass + sidecar generation, ~60 lines of port-layer plumbing, one-line hook,
+- ~~Session A: independent review of Plan B (D48)~~ — **DONE (D49, committed):**
+  all 8 checklist items CONFIRMED against code + ROM; Plan B green-lit. One
+  spec amendment recorded there: bswap16 every u16/s16 record scalar on emit
+  (see Verified facts).
+- **Session B (next): EXECUTE Plan B** per §Task 2 — Python emit pass +
+  sidecar generation, ~60 lines of port-layer plumbing, one-line hook,
   build + pixel-assert soak. Commit at each working checkpoint
-  (`PC port: phase 2 — <what>`).
+  (`PC port: phase 2 — <what>`). The goal: get stage geometry on screen.
 
 Work agentically — fix → build (~5 s) → verify → commit at each milestone.
 
 ## Read first (authoritative, in order)
 1. `AGENTS.md` — non-negotiables, critical files, build, verification ritual.
-2. `docs/PCPortResearch.md` **§F/D48** (the plan under review — read fully),
-   then **D47** (converter contract — still ground truth for the emit pass),
+2. `docs/PCPortResearch.md` **§F/D49** (review verdict + quantified fit
+   numbers), **D48** (the plan being executed — read fully), then **D47**
+   (converter contract — still ground truth for the emit pass),
    **D46** (overlap safety + buffer sizing), **D45** (buffer constants),
    **D43** (the model-file task), §2.4 (PD-port copy-candidate audit).
 3. The code paths D48 cites: `port/src/rzdecomp.c`, `port/src/libultra.c`
@@ -44,6 +41,14 @@ Work agentically — fix → build (~5 s) → verify → commit at each mileston
 - Region macros in `CMakeLists.txt` must mirror the N64 Makefile exactly.
 
 ## Current state
+- **D49 (this handoff's predecessor, committed): Plan B review PASSED** — all 8
+  D48 checklist items CONFIRMED with evidence (§F/D49). Quantified: Σ round8(C)
+  = 1,277,088 B; worst-case post-compaction P_final = 0x16F74 vs 0x24C400 stage
+  bank (25× headroom); all dst!=0 buffers pass against current constants;
+  fresh C probe re-verified every PC record size + promotion offset (no drift).
+  Notes: romdataInit has no JP ROM candidate (JP sidecars moot for now);
+  EU region has 465 model files vs 512 (generator maps what exists); the
+  poolRemaining=0 reset is still pending (Task 2 step 3).
 - **D43 status (latest review session, §F/D48):** investigation complete;
   converter spec finalized (D47) and validated 512/512 (`tools_pc/d43_convert.py`,
   max D_PC = 0xB7E0, ratio ≤ 1.31). **The remaining task was re-planned:** the
@@ -71,7 +76,7 @@ Work agentically — fix → build (~5 s) → verify → commit at each mileston
   to the No-Intro good dump (`tools_pc/romverify.exe`). Crash log with real
   backtraces works (D44). Build clean 237/237; full rebuild ~5 s.
 
-## Task 1 — Plan B review checklist (Session A)
+## Task 1 — Plan B review checklist (Session A) — DONE (D49: 8/8 CONFIRMED)
 
 Verify each claim. For each: state CONFIRMED or REFUTED in D49 with the
 evidence you used (file:line, command output). If a falsification criterion
@@ -250,6 +255,7 @@ diff the C output against (convert one file in C, compare with Python output).
 - **Opcodes present: 1,2,4,8,9,10,12,13,15,18,21,22,23,24** (HEADER, GROUP, DL, LOD, BSP, BOX, GUNFIRE, SHADOW, INTERLINK, SWITCH, GROUPSIMPLE, DLPRIMARY, HEADPH, DLCOLLISION). op22 N64: numVertices s32@0, Vertices@4, Primary@8, BaseAddr@0xC (size 0x10); only 5 files have it.
 - Record sizes N64/PC: OP01 0x10/0x18, OP02 0x1C/0x28, OP04 0x14/0x28, OP08 0x10/0x18, OP09 0x24/0x30, OP10 0x1C/0x1C, OP12 0x28/0x30, OP13 0x20/0x30, OP15 0x1C/0x1C, OP17 0x20/0x28, OP18 0x08/0x10, OP21 0x14/0x14, OP22 0x10/0x20, OP23 0x02/0x02, OP24 0x20/0x40 (compiler-verified). Field layouts in `src/bondtypes.h` (ModelRoData_*Record); read N64 fields from packed offsets, emit via the real PC layout — don't hand-compute PC offsets.
 - **f32 fields are big-endian in ROM** — bswap all f32 (record origins, BoundingVolumeRadius, Scale, Min/MaxDistance) and every s16 in vertex arrays; also bswap32 the TextureID u32 in the texture table (texLoad reads `*updateword & 0xffff` as the texture number).
+- **u16/s16 record scalars are big-endian too (D49 amendment)** — bswap16 every u16/s16 scalar field in every record (AnimPart, MatrixIndex, JointID, MatrixIDs, Group1/2, RwDataIndex, op4 numVertices@0x10, op24 nv/ncv/ModelType/RwDataIndex, …); padding/reserved fields may be zeroed. Data-verified: these hold small BE values (JointID 1–11, nv ≤ 73) that raw emission would corrupt ×256 on an LE read.
 - **Vertex arrays must stay 16B-stride** (GDL gSPVertex hardcodes 16B/vertex; propobj.c copies with sizeof(Vertex); model.c:4360 allocates numVertices×4 words). bswap every s16 field BE→LE. Main Vertices array is pure data; **CollisionVertices carry LinkedTo@8 = vma of a ModelNode** — remap to the new node offset (PROMOTE promotes them after rebase).
 - **GDLs:** 8B BE word pairs → 16B LE slots: `w0=bswap32(rom_w0); w1=bswap32(rom_w1)` — **leave w1 raw, NO LSB set** (ROM convention; fast3d's extended seg_addr case handles unmarked segmented addresses — D47.13). GE uses STANDARD libultra GBI numbering (include/PR/gbi.h); opcodes live in the TOP byte of w0. **Opcode-aware remap: only {G_VTX=0x04, G_SETTIMG=0xFD, G_LOADBLOCK=0xF3} carry addresses in w1** (seg-5 → remap low24 via region map). All other opcodes get bswap-only — G_TRI4 (GE extension 0xB1) w1 is 4-bit vertex-index data, NOT an address (D47.6); same for TRI1/TEXTURE/SET*MODE/CLEARGEO/SETGEO/syncs. **G_VTX w0 is GBI1-style** (`04<<24 | dst<<16 | 16·n`, dst=((n−1)<<4)|v0; all 2826 have v0=0, n≤16) — bswap only, no field remap (D47.5). ROM scan: all 2805 seg-5 VTX refs have even offsets → lossless; no nested G_DL in model files.
 - **Marker format:** top byte of w0 = 0xC0; type = `w0 & 7` (only 0/2/3/4 exist); texnum = `w1 & 0xfff`; min = top byte of w1. texLoadFromGdl dispatches on the top byte — PC fix: `(u8)(in->words.w0 >> 24)`. Type-0/1 markers with a valid tex are SKIPPED by the game (no expansion); the rest expand per D45's K table, which D46 verified as a true worst-case bound (no LUT textures exist; 99% of textures have maxlod=0 → TileLods emits nothing; state dedup resets per GDL via sub_GAME_7F0CC4C8).
@@ -358,8 +364,8 @@ as fallback.**
 - Python on this box: no f-strings with nested quotes (< 3.12) — use `%` formatting.
 
 ## Definition of done
-- **Session A:** D49 committed — all 8 checklist items adjudicated with evidence;
-  HANDOFF status updated; if any item refuted, the fallback/adjustment is spelled out.
+- ~~**Session A:** D49 committed~~ — **DONE**: 8/8 CONFIRMED with evidence,
+  HANDOFF updated, committed.
 - **Session B (the milestone proper):** stage objects load without faulting and the
   rendered scene contains actual model geometry per the pixel assert (not just the clear
   color / background), stable under a 30 s+ soak. Committed + pushed to `origin/master`
