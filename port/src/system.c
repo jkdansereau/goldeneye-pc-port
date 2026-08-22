@@ -17,6 +17,11 @@
   #endif
   #include <windows.h>
   #include <io.h>
+  /* D38: <stdlib.h>/<time.h> are shadowed by the decomp's N64 stubs on this
+   * include path; declare the host functions this file uses. */
+  extern long long time(long long *t);
+  extern void abort(void);
+  extern void exit(int status);
 #else
   #define _POSIX_C_SOURCE 199309L
   #include <unistd.h>

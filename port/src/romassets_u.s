@@ -3318,11 +3318,11 @@
 .global _GlobalimagetableSegmentRomStart
 .set _GlobalimagetableSegmentRomStart, 0x1029D160
 .global _GlobalimagetableSegmentRomEnd
-.set _GlobalimagetableSegmentRomEnd, 0x1029DC28
+.set _GlobalimagetableSegmentRomEnd, 0x1029E558
 .global _GlobalimagetableSegmentStart
 .set _GlobalimagetableSegmentStart, 0x1029D160
 .global _GlobalimagetableSegmentEnd
-.set _GlobalimagetableSegmentEnd, 0x1029DC28
+.set _GlobalimagetableSegmentEnd, 0x1029E558
 .global _rarewarelogoSegmentRomStart
 .set _rarewarelogoSegmentRomStart, 0x1029E560
 .global _rarewarelogoSegmentRomEnd

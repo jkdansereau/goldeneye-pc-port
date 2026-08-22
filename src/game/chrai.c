@@ -1083,7 +1083,8 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     else if (AircraftEntityp)
                     {
                         zero = 0; // debug value maybe?
-                        modelSetAnimation(AircraftEntityp->model, animation_table_ptrs2[anim_id], zero, startframe, 0.5f, (s32)ai->INTERPOL_TIME60);
+                        /* D32/D33: table holds s32 offsets; cast at use site. */
+                        modelSetAnimation(AircraftEntityp->model, (ModelAnimation *)animation_table_ptrs2[anim_id], zero, startframe, 0.5f, (s32)ai->INTERPOL_TIME60);
                         if (endframe >= 0)
                         {
                             modelSetAnimEndFrame(AircraftEntityp->model, endframe);

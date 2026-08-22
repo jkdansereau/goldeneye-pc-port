@@ -34,7 +34,10 @@ extern s32 animation_table_ptrs1[];
  * Contains offsets into ptr_animation_table for object/vehicle animations.
  * The index of each value corresponds to `enum AIRCRAFT_ANIMATION`.
  * The value corresponds to (e.g. index=0) PTR_ANIM_helicopter_cradle (same as ANIM_DATA_helicopter_cradle)
+ *
+ * D32/D33: s32 offsets (N64 layout — 4-byte elements on both targets);
+ * cast to ModelAnimation * at the use sites.
 */
-extern struct ModelAnimation * animation_table_ptrs2[];
+extern s32 animation_table_ptrs2[];
 
 #endif

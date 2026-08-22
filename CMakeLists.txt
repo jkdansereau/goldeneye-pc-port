@@ -391,9 +391,13 @@ list(PREPEND SRC_LIBULTRARE_LIBC "${CMAKE_SOURCE_DIR}")
 # scripts/gen_romassets.py), backed by the ROM image that romdata.c maps at
 # 0x10000000. The per-model data itself (chr/*/Model.c etc.) is gitignored
 # ROM-derived and absent from this checkout. See docs/PCPortResearch.md §11.
+# D34 (docs/PCPortResearch.md): animationtable_{data,entries}.c are NOT
+# compiled on PC. Their arrays exist only so that &ANIM_DATA_x evaluates to
+# the record's offset within the animation_data segment (N64 links it at VMA
+# 0); on x86-64 assets/animationtable_data.h redefines them as lvalues at
+# g_pc_animdata_base + offset instead. The data itself comes from ROM via
+# romCopy, exactly like every other asset.
 set(SRC_ASSETS
-  assets/animationtable_data.c
-  assets/animationtable_entries.c
   assets/font_chardatae.c
   assets/font_chardataj.c
   assets/font_dl.c

@@ -20,6 +20,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* D38: <stdio.h>/<stdlib.h> resolve to the decomp's N64 stubs via the include
+ * path; declare the host functions this file uses. */
+extern void *malloc(unsigned long long size);
+extern int snprintf(char *str, unsigned long long maxsize, const char *format, ...);
+
 #include "platform.h"
 
 #if defined(PLATFORM_WINDOWS)
@@ -38,6 +43,16 @@
 static u8  *rom = NULL;        /* heap copy (fallback path) */
 static u32  romSize = 0;
 static int  mappedAtCartBase = 0;
+
+/* D34 (docs/PCPortResearch.md): PE image base, low 32 bits zero. On N64 the
+ * animation_data segment links at VMA 0, so game code computes record
+ * addresses as `(s32)&ANIM_DATA_x + ptr_animation_table` where &ANIM_DATA_x
+ * is a small segment offset. A PE image cannot be placed at a low address,
+ * so assets/animationtable_data.h (PC branch) defines ANIM_DATA_x as an
+ * lvalue at g_pc_animdata_base + offset, making (s32)&ANIM_DATA_x equal the
+ * offset exactly. Set once in romdataInit(); see also the D34 note in that
+ * header. */
+unsigned char *g_pc_animdata_base = NULL;
 
 /* Candidate ROM file names, in priority order. The decomp repo ships the
  * base ROM at the repo root (baserom.<r>.z64); a user-supplied final ROM in
@@ -87,6 +102,22 @@ int romdataInit(void)
     const char *list = romFileCandidates();
     char listBuf[512];
     strcpy(listBuf, list);
+
+    /* D34: derive the PE image base (any symbol's address with its low 32
+     * bits cleared) for the ANIM_DATA_* lvalues. Requires a 4GiB-aligned
+     * image base — always true for the default x64 PE base 0x140000000. */
+    {
+        static char probe;
+        uintptr_t p = (uintptr_t)&probe;
+        uintptr_t hi = p & ~(uintptr_t)0xFFFFFFFFu;
+        if (hi == 0) {
+            sysLogPrintf(LOG_ERROR, "romdataInit: image base 0x%llX is not "
+                         "4GiB-aligned; ANIM_DATA_* offsets would be wrong",
+                         (unsigned long long)p);
+            return -1;
+        }
+        g_pc_animdata_base = (u8 *)hi;
+    }
 
     /* Try each candidate in the data dir, next to the exe, and in the CWD
      * (the decomp repo ships baserom.<r>.z64 at the repo root). */
@@ -194,4 +225,607 @@ const void *romdataMapVa(u32 va)
      * addresses are mapped. Kept for API parity with the PD port. */
     (void)va;
     return NULL;
+}
+
+/*
+ * D33 (docs/PCPortResearch.md): the .z64 file stores structured multi-byte
+ * fields in big-endian byte order; bit-packed data streams are raw. No single
+ * uniform word transform exists (mixed field widths), so the animation_data
+ * segment is converted per field at load time, after romCopy() and before
+ * expand_ani_table_entries() reads/writes the fields as LE:
+ *
+ *   20-byte record at blob+off:
+ *     +0x00 u32 entries-segment offset      -> bswap32
+ *     +0x04 u16 frame count                 -> bswap16
+ *     +0x06 u8  angle bit width             -> identity
+ *     +0x07 u8  loop flag                   -> identity
+ *     +0x08 u32 bitDescriptors blob offset  -> bswap32
+ *     +0x0C u16 bitsPerFrame root motion    -> bswap16
+ *     +0x0E u16 frame size in bits          -> bswap16
+ *     +0x10 u32 bitStream blob offset       -> bswap32
+ *   descriptor array at [bd, bs), 6-byte ModelAnimBitField records:
+ *     +0 u16 bitOffset   -> bswap16
+ *     +2 u8  bitCount    -> identity
+ *     +3 u8  pad         -> identity
+ *     +4 u16 valueOffset -> bswap16
+ *
+ * The entries segment (per-frame joint angles) is left identity — it is
+ * identity-encoded bit-packed data, not consumed at boot.
+ */
+
+static u32 romdataBswap32(u32 v)
+{
+    return ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8) |
+           ((v & 0x00FF0000u) >> 8) | ((v & 0xFF000000u) >> 24);
+}
+
+static u16 romdataBswap16(u16 v)
+{
+    return (u16)((v << 8) | (v >> 8));
+}
+
+static void romdataFixupAnimTable(const s32 *table, u8 *blob, u32 blobSize)
+{
+    while (*table != 0) {
+        s32 off = *table++;
+        if (off == 1)
+            continue; /* null sentinel */
+        if (off < 0 || (u32)off + 20 > blobSize) {
+            sysLogPrintf(LOG_ERROR, "romdataFixupAnimationData: bad record offset 0x%X",
+                         off);
+            continue;
+        }
+
+        u8 *rec = blob + off;
+        *(u32 *)(rec + 0x00) = romdataBswap32(*(const u32 *)(rec + 0x00));
+        *(u16 *)(rec + 0x04) = romdataBswap16(*(const u16 *)(rec + 0x04));
+        /* +0x06/+0x07 are u8: identity */
+        *(u32 *)(rec + 0x08) = romdataBswap32(*(const u32 *)(rec + 0x08));
+        *(u16 *)(rec + 0x0C) = romdataBswap16(*(const u16 *)(rec + 0x0C));
+        *(u16 *)(rec + 0x0E) = romdataBswap16(*(const u16 *)(rec + 0x0E));
+        *(u32 *)(rec + 0x10) = romdataBswap32(*(const u32 *)(rec + 0x10));
+
+        u32 bd = *(const u32 *)(rec + 0x08); /* descriptor array start */
+        u32 bs = *(const u32 *)(rec + 0x10); /* bitStream start           */
+        if (bd == 0 && bs == 0)
+            continue; /* no descriptors/stream */
+        if (!(bd < bs && bs <= blobSize && ((bs - bd) % 6u) == 0u)) {
+            sysLogPrintf(LOG_ERROR, "romdataFixupAnimationData: bad descriptor range [0x%X, 0x%X)",
+                         bd, bs);
+            continue;
+        }
+        for (u32 p = bd; p < bs; p += 6) {
+            *(u16 *)(blob + p)     = romdataBswap16(*(const u16 *)(blob + p));
+            /* +2 bitCount, +3 pad are u8: identity */
+            *(u16 *)(blob + p + 4) = romdataBswap16(*(const u16 *)(blob + p + 4));
+        }
+    }
+}
+
+void romdataFixupAnimationData(u8 *blob, u32 blobSize,
+                               const s32 *tableA, const s32 *tableB)
+{
+    romdataFixupAnimTable(tableA, blob, blobSize);
+    if (tableB != tableA)
+        romdataFixupAnimTable(tableB, blob, blobSize);
+}
+
+/*
+ * D35 (docs/PCPortResearch.md): the music sequence table segment stores its
+ * fields big-endian:
+ *
+ *   header at blob+0 (RareALSeqBankFile):
+ *     +0x0 u16 seqCount          -> bswap16
+ *     +0x2 u16 unk               -> identity (unused)
+ *   entries at blob+4, 8-byte RareALSeqData records:
+ *     +0 u32 address offset      -> bswap32
+ *     +4 u16 uncompressed_len    -> bswap16
+ *     +6 u16 len                 -> bswap16
+ *
+ * Entries are decoded only as far as blobSize allows: the 0x10-byte header
+ * copy decodes the header plus entry 0, and the caller re-copies fresh BE
+ * bytes before the full-size call.
+ */
+void romdataFixupMusicSeqTable(u8 *blob, u32 blobSize)
+{
+    if (blobSize < 4) {
+        sysLogPrintf(LOG_ERROR, "romdataFixupMusicSeqTable: blob too small (%u)",
+                     blobSize);
+        return;
+    }
+
+    *(u16 *)(blob + 0) = romdataBswap16(*(const u16 *)(blob + 0)); /* seqCount */
+
+    u32 count = *(const u16 *)(blob + 0);
+    u32 maxEntries = (blobSize - 4) / 8;
+    if (count > maxEntries) {
+        sysLogPrintf(LOG_ERROR,
+                     "romdataFixupMusicSeqTable: seqCount %u exceeds blob capacity %u",
+                     count, maxEntries);
+        count = maxEntries;
+    }
+
+    for (u32 i = 0; i < count; i++) {
+        u8 *e = blob + 4 + 8 * i;
+        *(u32 *)(e + 0) = romdataBswap32(*(const u32 *)(e + 0));
+        *(u16 *)(e + 4) = romdataBswap16(*(const u16 *)(e + 4));
+        *(u16 *)(e + 6) = romdataBswap16(*(const u16 *)(e + 6));
+    }
+}
+
+/*
+ * D37 (docs/PCPortResearch.md): convert a ROM-serialized libaudio bank tree
+ * (ALBankFile -> ALBank -> ALInstrument -> ALSound -> ALWaveTable /
+ * ALEnvelope / ALKeyMap / ALADPCMloop / ALRawLoop / ALADPCMBook) to
+ * PC-native form. See the header for the contract.
+ *
+ * Why a re-layout rather than an in-place transform: on N64 (4-byte
+ * pointers, BE MIPS) the ROM layout and the C struct layout coincide. On
+ * x86-64 every pointer field doubles to 8 bytes, so each struct's PC image
+ * is larger than its ROM form — and structs are packed back-to-back in ROM,
+ * so a struct's expanded tail overlaps whatever follows it (e.g. the
+ * ALWaveTable book slot at +24 lands inside the ALADPCMBook that sits 12
+ * bytes after the wavetable in ROM). The tree is therefore re-laid out into
+ * a fresh compact image: every sub-struct is placed once, 8-byte aligned,
+ * and each pointer slot stores the sub-struct's NEW offset from the image
+ * start (zero-extended to 64 bits). alBnkfNew()/_bnkfPatch*() then rebase
+ * those offsets to absolute pointers unmodified (ptr + (s32)file). The
+ * caller must allocate romdataAudioBankPcSize() bytes for the image.
+ *
+ * Wavetable `base` fields are offsets into the separate wavetable data
+ * segment, not into this blob: they are byte-swapped and zero-extended but
+ * left as offsets — _bnkfPatchWaveTable() rebases them with its `table`
+ * argument (the cart address of that segment on PC).
+ *
+ * ROM layout (offsets within each struct; multi-byte fields big-endian):
+ *   ALBankFile    +0 s16 revision, +2 s16 bankCount, +4 N x u32 bank offsets
+ *   ALBank        +0 s16 instCount, +2 u8 flags, +3 u8 pad,
+ *                 +4 s32 sampleRate, +8 u32 percussion offset,
+ *                 +12 M x u32 instrument offsets
+ *   ALInstrument  +0..+11 12 x u8, +12 s16 bendRange, +14 s16 soundCount,
+ *                 +16 K x u32 sound offsets
+ *   ALSound       +0 u32 envelope, +4 u32 keyMap, +8 u32 wavetable,
+ *                 +12 u8 pan, +13 u8 volume, +14 u8 flags
+ *   ALWaveTable   +0 u32 base (offset into the wavetable data segment),
+ *                 +4 s32 len, +8 u8 type, +9 u8 flags,
+ *                 adpcm: +12 u32 loop, +16 u32 book; raw: +12 u32 loop
+ *   ALEnvelope    +0/+4/+8 s32 times, +12/+13 u8 volumes
+ *   ALKeyMap      6 x u8 (identity)
+ *   ALADPCMloop   +0/+4/+8 u32 start/end/count, +12 s16[16] state
+ *   ALRawLoop     +0/+4/+8 u32 start/end/count
+ *   ALADPCMBook   +0 s32 order, +4 s32 npredictors,
+ *                 +8 2*order*npredictors*4 x s16 coefficients
+ */
+
+#define AF_UNSET  0xFFFFFFFFu
+
+struct afCtx {
+    const u8 *src;      /* pristine ROM-layout bytes; first srcSize valid */
+    u32       srcSize;
+    u8       *dst;      /* target image buffer (allocSize bytes) */
+    u32       allocSize;
+    int       write;    /* 0 = measure pass, 1 = write pass */
+    u32       pos;      /* write cursor (kept 8-aligned by afReserve) */
+    u8       *visited;  /* [srcSize] per-struct visited marker */
+    u32      *newOff;   /* [srcSize] ROM offset -> image offset (write pass) */
+    s16       revision;
+    s16       bankCount;
+    int       errors;
+};
+
+/* ROM-layout reads are big-endian. */
+static u16 afRd16(const struct afCtx *c, u32 off)
+{
+    return (u16)((c->src[off] << 8) | c->src[off + 1]);
+}
+
+static u32 afRd32(const struct afCtx *c, u32 off)
+{
+    return ((u32)c->src[off] << 24) | ((u32)c->src[off + 1] << 16) |
+           ((u32)c->src[off + 2] << 8) | (u32)c->src[off + 3];
+}
+
+static void afWr16(struct afCtx *c, u32 off, u16 v)
+{
+    c->dst[off] = (u8)v;
+    c->dst[off + 1] = (u8)(v >> 8);
+}
+
+static void afWr32(struct afCtx *c, u32 off, u32 v)
+{
+    /* Host byte order (LE on x86-64): libaudio reads these with plain loads. */
+    c->dst[off] = (u8)v;
+    c->dst[off + 1] = (u8)(v >> 8);
+    c->dst[off + 2] = (u8)(v >> 16);
+    c->dst[off + 3] = (u8)(v >> 24);
+}
+
+/* Zero-extended image-relative offset into an 8-byte pointer slot. */
+static void afWrPtr(struct afCtx *c, u32 off, u32 value)
+{
+    afWr32(c, off, value);
+    c->dst[off + 4] = c->dst[off + 5] = c->dst[off + 6] = c->dst[off + 7] = 0;
+}
+
+/* -1: invalid offset, 0: first visit, 1: already placed. */
+static int afEnter(struct afCtx *c, u32 off)
+{
+    if (off == 0 || off >= c->srcSize)
+        return -1;
+    if (c->visited[off])
+        return 1;
+    c->visited[off] = 1;
+    return 0;
+}
+
+/* Align the cursor, advance it by size, and return the reserved start
+ * (write pass) or 0 (measure pass). */
+static u32 afReserve(struct afCtx *c, u32 size)
+{
+    u32 n = ((c->pos + 7u) & ~7u);
+    c->pos = n + size;
+    return c->write ? n : 0;
+}
+
+/* New image offset of a referenced sub-struct, or 0 if absent/invalid. */
+static u32 afPtr(struct afCtx *c, u32 off)
+{
+    if (off == 0 || off >= c->srcSize)
+        return 0;
+    return (c->newOff[off] != AF_UNSET) ? c->newOff[off] : 0;
+}
+
+static void afFixupBook(struct afCtx *c, u32 o)
+{
+    int r = afEnter(c, o);
+    if (r == 1)
+        return;
+    if (r < 0 || o + 8 > c->srcSize) { c->errors++; return; }
+
+    s32 order = (s32)afRd32(c, o);
+    s32 npred = (s32)afRd32(c, o + 4);
+    u32 size = 8;
+    if (order > 0 && npred > 0) {
+        /* Coefficient array is 2*order*npredictors*ADPCMVSIZE(8) bytes on
+         * disk (see load.c bookSize): that many s16 values. */
+        size += 2u * (u32)order * (u32)npred * 8u;
+    } else {
+        sysLogPrintf(LOG_ERROR,
+                     "romdataFixupAudioBank: bad ADPCM book @0x%X (order %d, npredictors %d)",
+                     o, order, npred);
+    }
+
+    u32 n = afReserve(c, size);
+    if (!c->write)
+        return;
+    c->newOff[o] = n;
+    afWr32(c, n, (u32)order);
+    afWr32(c, n + 4, (u32)npred);
+    if (order > 0 && npred > 0 && o + size <= c->srcSize) {
+        u32 ncoeff = 2u * (u32)order * (u32)npred * 4u;
+        for (u32 i = 0; i < ncoeff; i++)
+            afWr16(c, n + 8 + 2 * i, afRd16(c, o + 8 + 2 * i));
+    }
+}
+
+static void afFixupAdpcmLoop(struct afCtx *c, u32 o)
+{
+    int r = afEnter(c, o);
+    if (r == 1)
+        return;
+    if (r < 0 || o + 44 > c->srcSize) { c->errors++; return; }
+
+    u32 n = afReserve(c, 48);
+    if (!c->write)
+        return;
+    c->newOff[o] = n;
+    for (u32 i = 0; i < 3; i++) /* start/end/count */
+        afWr32(c, n + 4 * i, afRd32(c, o + 4 * i));
+    for (u32 i = 0; i < 16; i++) /* ADPCM_STATE = s16[16] */
+        afWr16(c, n + 12 + 2 * i, afRd16(c, o + 12 + 2 * i));
+}
+
+static void afFixupRawLoop(struct afCtx *c, u32 o)
+{
+    int r = afEnter(c, o);
+    if (r == 1)
+        return;
+    if (r < 0 || o + 12 > c->srcSize) { c->errors++; return; }
+
+    u32 n = afReserve(c, 16);
+    if (!c->write)
+        return;
+    c->newOff[o] = n;
+    for (u32 i = 0; i < 3; i++) /* start/end/count */
+        afWr32(c, n + 4 * i, afRd32(c, o + 4 * i));
+}
+
+static void afFixupEnvelope(struct afCtx *c, u32 o)
+{
+    int r = afEnter(c, o);
+    if (r == 1)
+        return;
+    if (r < 0 || o + 14 > c->srcSize) { c->errors++; return; }
+
+    u32 n = afReserve(c, 16);
+    if (!c->write)
+        return;
+    c->newOff[o] = n;
+    for (u32 i = 0; i < 3; i++) /* ALMicroTime x3 */
+        afWr32(c, n + 4 * i, afRd32(c, o + 4 * i));
+    c->dst[n + 12] = c->src[o + 12]; /* u8 volumes: identity */
+    c->dst[n + 13] = c->src[o + 13];
+}
+
+static void afFixupWaveTable(struct afCtx *c, u32 o)
+{
+    int r = afEnter(c, o);
+    if (r == 1)
+        return;
+    if (r < 0 || o + 20 > c->srcSize) { c->errors++; return; }
+
+    u32 base = afRd32(c, o); /* offset into wavetable data */
+    s32 len  = (s32)afRd32(c, o + 4);
+    u8 type  = c->src[o + 8];
+    u32 loop, book;
+
+    if (type == 0 /* AL_ADPCM_WAVE */) {
+        loop = afRd32(c, o + 12);
+        book = afRd32(c, o + 16);
+        if (loop) afFixupAdpcmLoop(c, loop); /* children first */
+        if (book) afFixupBook(c, book);
+    } else if (type == 1 /* AL_RAW16_WAVE */) {
+        loop = afRd32(c, o + 12);
+        book = 0;
+        if (loop) afFixupRawLoop(c, loop);
+    } else {
+        sysLogPrintf(LOG_ERROR,
+                     "romdataFixupAudioBank: unknown wavetable type %d @0x%X",
+                     type, o);
+        loop = book = 0;
+    }
+
+    u32 n = afReserve(c, 32);
+    if (!c->write)
+        return;
+    c->newOff[o] = n;
+    afWrPtr(c, n, base); /* stays an offset; rebased with `table` */
+    afWr32(c, n + 8, (u32)len);
+    c->dst[n + 12] = type;
+    c->dst[n + 13] = c->src[o + 9]; /* flags: identity */
+    if (type == 0) {
+        afWrPtr(c, n + 16, afPtr(c, loop));
+        afWrPtr(c, n + 24, afPtr(c, book));
+    } else {
+        afWrPtr(c, n + 16, afPtr(c, loop));
+    }
+}
+
+static void afFixupSound(struct afCtx *c, u32 o)
+{
+    int r = afEnter(c, o);
+    if (r == 1)
+        return;
+    if (r < 0 || o + 15 > c->srcSize) { c->errors++; return; }
+
+    u32 env = afRd32(c, o);
+    u32 km  = afRd32(c, o + 4);
+    u32 wt  = afRd32(c, o + 8);
+
+    if (env) afFixupEnvelope(c, env); /* children first */
+    if (km) {
+        int kr = afEnter(c, km);
+        if (kr == -1 || km + 6 > c->srcSize)
+            c->errors++;
+        else if (kr == 0) {
+            u32 kn = afReserve(c, 8);
+            if (c->write) {
+                c->newOff[km] = kn;
+                memcpy(c->dst + kn, c->src + km, 6); /* ALKeyMap: all u8 */
+            }
+        }
+    }
+    if (wt) afFixupWaveTable(c, wt);
+
+    u32 n = afReserve(c, 32);
+    if (!c->write)
+        return;
+    c->newOff[o] = n;
+    afWrPtr(c, n, afPtr(c, env));
+    afWrPtr(c, n + 8, afPtr(c, km));
+    afWrPtr(c, n + 16, afPtr(c, wt));
+    c->dst[n + 24] = c->src[o + 12]; /* pan/volume/flags: identity */
+    c->dst[n + 25] = c->src[o + 13];
+    c->dst[n + 26] = c->src[o + 14];
+}
+
+static void afFixupInst(struct afCtx *c, u32 o)
+{
+    int r = afEnter(c, o);
+    if (r == 1)
+        return;
+    if (r < 0 || o + 16 > c->srcSize) { c->errors++; return; }
+
+    s16 scount = (s16)afRd16(c, o + 14); /* soundCount */
+    u32 maxSounds = (c->srcSize - (o + 16)) / 4;
+    if ((u32)scount > maxSounds) {
+        sysLogPrintf(LOG_ERROR,
+                     "romdataFixupAudioBank: soundCount %d @0x%X exceeds blob capacity %u",
+                     scount, o, maxSounds);
+        scount = (s16)maxSounds;
+    }
+
+    for (u32 i = 0; i < (u32)scount; i++) { /* children first */
+        u32 soff = afRd32(c, o + 16 + 4 * i);
+        if (soff)
+            afFixupSound(c, soff);
+    }
+
+    u32 n = afReserve(c, 16 + 8u * (u32)scount);
+    if (!c->write)
+        return;
+    c->newOff[o] = n;
+    memcpy(c->dst + n, c->src + o, 12); /* 12 x u8: identity */
+    afWr16(c, n + 12, afRd16(c, o + 12)); /* bendRange */
+    afWr16(c, n + 14, (u16)scount);
+    for (u32 i = 0; i < (u32)scount; i++) {
+        u32 soff = afRd32(c, o + 16 + 4 * i);
+        afWrPtr(c, n + 16 + 8 * i, afPtr(c, soff));
+    }
+}
+
+static void afFixupBank(struct afCtx *c, u32 o)
+{
+    int r = afEnter(c, o);
+    if (r == 1)
+        return;
+    if (r < 0 || o + 12 > c->srcSize) { c->errors++; return; }
+
+    s16 icount = (s16)afRd16(c, o); /* instCount */
+    u32 perc   = afRd32(c, o + 8);
+    u32 maxInsts = (c->srcSize - (o + 12)) / 4;
+    if ((u32)icount > maxInsts) {
+        sysLogPrintf(LOG_ERROR,
+                     "romdataFixupAudioBank: instCount %d @0x%X exceeds blob capacity %u",
+                     icount, o, maxInsts);
+        icount = (s16)maxInsts;
+    }
+
+    if (perc) afFixupInst(c, perc); /* children first */
+    for (u32 i = 0; i < (u32)icount; i++) {
+        u32 ioff = afRd32(c, o + 12 + 4 * i);
+        if (ioff)
+            afFixupInst(c, ioff);
+    }
+
+    u32 n = afReserve(c, 16 + 8u * (u32)icount);
+    if (!c->write)
+        return;
+    c->newOff[o] = n;
+    afWr16(c, n, (u16)icount);
+    c->dst[n + 2] = c->src[o + 2]; /* flags: identity */
+    c->dst[n + 3] = c->src[o + 3]; /* pad   : identity */
+    afWr32(c, n + 4, afRd32(c, o + 4)); /* sampleRate */
+    afWrPtr(c, n + 8, afPtr(c, perc));
+    for (u32 i = 0; i < (u32)icount; i++) {
+        u32 ioff = afRd32(c, o + 12 + 4 * i);
+        afWrPtr(c, n + 16 + 8 * i, afPtr(c, ioff));
+    }
+}
+
+/* One pass over the tree. Returns the image size (16-aligned). */
+static u32 afWalk(struct afCtx *c)
+{
+    c->revision = (s16)afRd16(c, 0);
+    c->bankCount = (s16)afRd16(c, 2);
+    if (c->revision != 0x4231 /* AL_BANK_VERSION 'B1' */) {
+        sysLogPrintf(LOG_ERROR,
+                     "romdataFixupAudioBank: bad bank revision 0x%04X",
+                     (u32)c->revision);
+    }
+
+    u32 maxBanks = (c->srcSize - 4) / 4;
+    if ((u32)c->bankCount > maxBanks) {
+        sysLogPrintf(LOG_ERROR,
+                     "romdataFixupAudioBank: bankCount %d exceeds blob capacity %u",
+                     c->bankCount, maxBanks);
+        c->bankCount = (s16)maxBanks;
+    }
+
+    /* The ALBankFile header must sit at image offset 0 (alBnkfNew rebases
+     * bankArray entries relative to the blob start), so reserve it first. */
+    afReserve(c, 8 + 8u * (u32)c->bankCount);
+    for (s16 i = 0; i < c->bankCount; i++) {
+        u32 off = afRd32(c, 4 + 4 * (u32)i);
+        if (off)
+            afFixupBank(c, off);
+    }
+
+    if (c->write) {
+        afWr16(c, 0, (u16)c->revision);
+        afWr16(c, 2, (u16)c->bankCount);
+        for (s16 i = 0; i < c->bankCount; i++) {
+            u32 off = afRd32(c, 4 + 4 * (u32)i);
+            afWrPtr(c, 8 + 8 * (u32)i, afPtr(c, off));
+        }
+    }
+
+    return ((c->pos + 15u) & ~15u);
+}
+
+static void afPass(struct afCtx *c, int write)
+{
+    c->write = write;
+    c->pos = 0;
+    memset(c->visited, 0, c->srcSize);
+    if (c->newOff)
+        for (u32 i = 0; i < c->srcSize; i++)
+            c->newOff[i] = AF_UNSET;
+    afWalk(c);
+}
+
+u32 romdataAudioBankPcSize(const u8 *src, u32 srcSize)
+{
+    if (!src || srcSize < 4)
+        return 0;
+
+    struct afCtx c = { .src = src, .srcSize = srcSize, .dst = NULL,
+                       .allocSize = 0, .write = 0, .pos = 0,
+                       .visited = NULL, .newOff = NULL, .errors = 0 };
+    c.visited = (u8 *)malloc(srcSize);
+    if (!c.visited)
+        return 0;
+    memset(c.visited, 0, srcSize);
+
+    u32 n = afWalk(&c);
+    free(c.visited);
+    return n;
+}
+
+void romdataFixupAudioBank(u8 *blob, u32 srcSize, u32 allocSize)
+{
+    if (!blob || srcSize < 4) {
+        sysLogPrintf(LOG_ERROR, "romdataFixupAudioBank: blob too small (%u)",
+                     srcSize);
+        return;
+    }
+
+    /* The write pass lays the image out over the pristine bytes (dst ==
+     * blob), so both passes must read from an untouched copy. */
+    struct afCtx c = { .src = NULL, .srcSize = srcSize, .dst = blob,
+                       .allocSize = allocSize, .write = 0, .pos = 0,
+                       .visited = NULL, .newOff = NULL, .errors = 0 };
+    c.src = (const u8 *)malloc(srcSize);
+    c.visited = (u8 *)malloc(srcSize);
+    c.newOff = (u32 *)malloc(4 * (size_t)srcSize);
+    if (!c.src || !c.visited || !c.newOff) {
+        free((void *)c.src);
+        free(c.visited);
+        free(c.newOff);
+        sysLogPrintf(LOG_ERROR, "romdataFixupAudioBank: OOM");
+        return;
+    }
+    memcpy((void *)c.src, blob, srcSize);
+
+    /* Measure pass, then write pass over the same arrays. */
+    afPass(&c, 0);
+    if (c.pos > allocSize) {
+        sysLogPrintf(LOG_ERROR,
+                     "romdataFixupAudioBank: image 0x%X exceeds allocation 0x%X",
+                     c.pos, allocSize);
+        free((void *)c.src);
+        free(c.visited);
+        free(c.newOff);
+        return;
+    }
+    afPass(&c, 1);
+
+    free((void *)c.src);
+    free(c.visited);
+    free(c.newOff);
+    if (c.errors) {
+        sysLogPrintf(LOG_ERROR,
+                     "romdataFixupAudioBank: %d out-of-range sub-struct(s)",
+                     c.errors);
+    }
 }

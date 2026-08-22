@@ -362,7 +362,13 @@ def build_segments(region, csv, obseg_resolved, ramrom_files, music_tracks,
     off, size = csv1("animationtable_data.bin")
     seg["animation_data"] = (off, size, True)
     off, size = csv1("Globalimagetable.bin")
-    seg["Globalimagetable"] = (off, size, True)
+    # D39 (docs/PCPortResearch.md): the CSV asset is truncated to the 17 Gfx
+    # display lists (0xAC8). The N64 linker segment (ge007.ld) places ALL of
+    # oddtextures.o (.data) here — Gfx DLs + 32 sImageTableEntry tables =
+    # 0x13F8 bytes. texReset() copies End-Start, so the marker must span the
+    # full linked .data or the image tables are never loaded. Verified by
+    # byte-tiling all 49 symbols against ROM [off, off+0x13F8).
+    seg["Globalimagetable"] = (off, 0x13F8, True)
     off, size = csv1("rarewarelogo.bin")
     seg["rarewarelogo"] = (off, size, True)
     off, size = csv1("usedby7F008DE4.bin")             # assets/romfiles2.s blob

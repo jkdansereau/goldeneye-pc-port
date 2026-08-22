@@ -188,7 +188,8 @@
 */
 f32 g_SoloAmmoMultiplier = 1.0;
 
-extern struct ModelAnimation *animation_table_ptrs2[];
+/* D32/D33: s32 offsets (N64 layout); cast to ModelAnimation * at use sites. */
+extern s32 animation_table_ptrs2[];
 
 struct tvcmd {
     u32 type;
@@ -5718,7 +5719,7 @@ s32 objTick(struct PropRecord *prop)
 #endif
 				temp_s0_6 = render_pad2F4->model;
 
-				if (temp_s0_6->anim == animation_table_ptrs2[1])
+				if (temp_s0_6->anim == (ModelAnimation *)animation_table_ptrs2[1]) /* D32/D33 */
 				{
 					modelSetAnimTranslationScale(temp_s0_6, 10.438f);
 					setsubroty(render_pad2F4->model, M_PI_F);

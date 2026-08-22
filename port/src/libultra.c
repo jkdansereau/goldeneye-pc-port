@@ -43,6 +43,7 @@
 
 #include "platform.h"
 #include "system.h"
+#include "crash.h"   /* D38: crashDumpThreads() */
 #include "video.h"
 #include "audio.h"
 #include "input.h"

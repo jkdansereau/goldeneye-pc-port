@@ -4,6 +4,9 @@
 #include "objecthandler.h"
 #include "bondgame.h"
 
+/* D33: ROM-file endianness fixup for the animation data segment (port layer). */
+#include "romdata.h"
+
 //bss
 
 // Where animation frames are saved. Can possibly hold as much as nine, but the game will ever store four at maximum.
@@ -211,7 +214,11 @@ s32 animation_table_ptrs1[] = {
     0
 };
 
-struct ModelAnimation *animation_table_ptrs2[] = {
+/* D32/D33: stored as s32 offsets (N64 layout) so the array is dense on
+ * x86-64; cast to ModelAnimation * at the use sites. As ModelAnimation*[]
+ * the elements would be 8 bytes wide and expand_ani_table_entries() would
+ * stop at the first zero high word. */
+s32 animation_table_ptrs2[] = {
     PTR_ANIM_helicopter_cradle,
     PTR_ANIM_plane_runway,
     PTR_ANIM_helicopter_takeoff,
@@ -232,11 +239,14 @@ struct anim_entry
 
 void expand_ani_table_entries(s32** arg0)
 {
-    s32** var_v0;
+    /* D33: iterate as s32 * (4 bytes/iter). As s32 ** the loop advanced 8
+     * bytes/iter on x86-64, rebasing only even-indexed entries. Identical
+     * semantics to the N64 original, where both types were 4 bytes wide. */
+    s32 *var_v0;
 
-    var_v0 = arg0;
+    var_v0 = (s32 *)arg0;
     while (*var_v0 != 0) {
-        if (*var_v0 != (s32*)1) {
+        if (*var_v0 != 1) {
             *var_v0 = (s32)((s32)*var_v0 + (s32)(&ptr_animation_table->data));
             ((struct anim_entry *)*var_v0)->unk08 += (s32)&ptr_animation_table->data;
             ((struct anim_entry *)*var_v0)->unk10 += (s32)&ptr_animation_table->data;
@@ -244,9 +254,9 @@ void expand_ani_table_entries(s32** arg0)
         var_v0++;
     }
 
-    for (var_v0 = arg0; *var_v0 != 0; var_v0++) {
-        if (*var_v0 != (s32*)1) {
-            **var_v0 += (s32)&_animation_entriesSegmentRomStart;
+    for (var_v0 = (s32 *)arg0; *var_v0 != 0; var_v0++) {
+        if (*var_v0 != 1) {
+            *(s32 *)*var_v0 += (s32)&_animation_entriesSegmentRomStart;
         }
     }
 }
@@ -263,6 +273,10 @@ void alloc_load_expand_ani_table(void)
     ptr_animation_table = mempAllocBytesInBank(animsDataSegmentSize, MEMPOOL_PERMANENT);
 
     romCopy(ptr_animation_table, &_animation_dataSegmentRomStart, animsDataSegmentSize);
+    /* D33: the ROM file stores the record headers and descriptor arrays
+     * big-endian; convert per field before expand reads/writes them as LE. */
+    romdataFixupAnimationData((u8 *)ptr_animation_table, (u32)animsDataSegmentSize,
+                              animation_table_ptrs1, animation_table_ptrs2);
     expand_ani_table_entries((s32*)&animation_table_ptrs1);
     expand_ani_table_entries((s32*)&animation_table_ptrs2);
 }

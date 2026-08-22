@@ -36,6 +36,9 @@
 #include <inttypes.h>
 #include <excpt.h>
 
+/* D38: MinGW's <windows.h> does not declare this; add it (NT4+ API). */
+extern int GetCurrentThreadStackLimits(PVOID *lpLowAddress, PVOID *lpHighAddress);
+
 static LPTOP_LEVEL_EXCEPTION_FILTER prevExFilter;
 
 static void *crashGetModuleBase(const void *addr)
@@ -69,7 +72,7 @@ static void crashStackTraceRaw(char *msg, PEXCEPTION_POINTERS exinfo)
               (unsigned)(context.FloatSave.ControlWord & 0xffff),
               (unsigned)(context.FloatSave.StatusWord & 0xffff));
     PVOID low = NULL, high = NULL;
-    if (GetCurrentThreadStackLimits(low, high)) {
+    if (GetCurrentThreadStackLimits(&low, &high)) {
         CRASH_MSG("thread stack: %p..%p  Rsp=%p  used=%llu bytes\n",
                   low, high, (void *)context.Rsp,
                   (unsigned long long)((uintptr_t)high - (uintptr_t)context.Rsp));

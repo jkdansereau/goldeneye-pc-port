@@ -39,6 +39,11 @@
 #include <string.h>
 #include "glad.h"
 
+/* D38: on PC <stdlib.h> resolves to the decomp's stub (empty body), so the
+ * host CRT functions used below need explicit declarations. */
+extern void *malloc(unsigned long long size);
+extern void free(void *ptr);
+
 struct gladGLversionStruct GLVersion = { 0, 0 };
 
 #if defined(GL_ES_VERSION_3_0) || defined(GL_VERSION_3_0)

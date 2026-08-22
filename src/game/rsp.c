@@ -273,6 +273,12 @@ void rspGfxTaskStart(Gfx *firstGdl, Gfx *gdl, s32 arg2, OSMesg rspReplyMsg)
     // Toggles the g_gfxTaskSettingsList to point to altnerate tasks.
     // Depends on first assignment taking place (g_gfxTaskSettingsList = g_gfxTaskSettings[0]).
     // Not a typo, but probably not best practice.
+#if defined(__x86_64__)
+    // D32-class: the XOR idiom below truncates exe pointers to u32 on x86-64 and
+    // yields garbage; toggle explicitly (same semantics: list is always &[0] or &[1]).
+    g_gfxTaskSettingsList = (g_gfxTaskSettingsList == &g_gfxTaskSettings[0]) ? &g_gfxTaskSettings[1] : &g_gfxTaskSettings[0];
+#else
     g_gfxTaskSettingsList = (struct GfxInfo_s *)((u32)g_gfxTaskSettingsList ^ (u32) &g_gfxTaskSettings[0] ^ (u32) &g_gfxTaskSettings[1]);
+#endif
 }
 

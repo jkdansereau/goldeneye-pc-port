@@ -330,7 +330,22 @@ static void gfx_sdl_handle_events(void) {
  * there before each frame. extern "C": called from C (port/src/video.c). */
 extern "C" void gfx_sdl_make_context_current(void) {
     if (wnd && ctx) {
+        /* Note: SDL2's MakeCurrent return value is unreliable on this MinGW
+         * toolchain (ABI artifact), so we don't branch on it. A genuine bind
+         * failure will surface later as a GL call returning nothing / shader
+         * compile failure, which is far louder. */
         SDL_GL_MakeCurrent(wnd, ctx);
+    }
+}
+
+/* Release the GL context from the calling (host main) thread. WGL only allows
+ * a context to be current on one thread at a time, and while another thread
+ * still holds it, wglMakeContextCurrent fails with "The requested resource is
+ * in use" (SDL2 reports this via SDL_GetError). The host thread must release
+ * after init so the game's scheduler thread can bind it per frame. */
+extern "C" void gfx_sdl_release_context(void) {
+    if (ctx) {
+        SDL_GL_MakeCurrent(NULL, NULL);
     }
 }
 

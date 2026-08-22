@@ -13,6 +13,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* D38: <stdlib.h> resolves to the decomp's N64 stub (body #if 0'd) via the
+ * include path, so declare the host functions this file uses. */
+extern void *calloc(unsigned long long count, unsigned long long size);
+extern void free(void *ptr);
+
 #include "platform.h"
 #include "fs.h"
 

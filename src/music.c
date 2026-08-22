@@ -8,6 +8,7 @@
 #include "memp.h"
 #include "music.h"
 #include "ramrom.h"
+#include "romdata.h"
 #include "snd.h"
 #include <macro.h>
 
@@ -36,8 +37,26 @@
 /**
  * Bytes allocated by call to mempAllocBytesInBank. This sets up a local heap,
  * the rest of the memory allocations in this file come from this heap.
+ *
+ * D36 (PC port): on x86-64 the libaudio runtime structs (ALVoiceState,
+ * ALChanState, ALEventListItem, ALCSPlayer, ALSeqPlayer, ALSoundState_s) are
+ * larger than their N64 32-bit counterparts because their internal pointers
+ * are 8 bytes. The full init-time demand of this bump heap grows from the
+ * N64 ~0x2E000 budget to 0x31660 (measured under gdb). Bump the budget on PC
+ * only; the N64 value is unchanged. See docs/PCPortResearch.md D36.
+ *
+ * D37 (PC port): the SFX/instrument bank blobs are re-laid out to PC-native
+ * form in this same heap (romdataFixupAudioBank); their images are larger
+ * than the ROM segments (+0x1460 sfx, +0xA70 instruments), and the full
+ * init-time demand measures 0x33530 under gdb. Per-track seq file buffers
+ * allocated later from this heap need N64-equivalent headroom on top, so
+ * budget 0x38000 (init headroom ~19 KiB). PC only.
  */
+#if defined(__x86_64__)
+#define MUSIC_ALLOCATION_BYTES   0x38000
+#else
 #define MUSIC_ALLOCATION_BYTES   0x2E000
+#endif
 #define MUSIC_MEMP_BANK                6
 
 /**
@@ -614,7 +633,9 @@ void musicSeqFileNew(RareALSeqBankFile *file, u8 *base)
      * patch the file so that offsets are pointers
      */
     for (i = 0; i < file->seqCount; i++) {
-        file->seqArray[i].address = (u8 *)((u8 *)file->seqArray[i].address + offset);
+        // D35: address is a u32 embedded value (was pointer-typed); the
+        // rebase math is unchanged, result stays a 32-bit cart address.
+        file->seqArray[i].address += (u32)offset;
     }
 }
 
@@ -664,8 +685,21 @@ void musicSeqPlayerInit(void)
     {
         size = (u32)&_sfxtblSegmentRomStart - (u32)&_sfxctlSegmentRomStart;
 
+#if defined(__x86_64__)
+        // D37: the PC-native bank image is larger than the ROM segment
+        // (4-byte packed offsets become 8-byte pointer slots); allocate the
+        // re-laid-out size, copy only the ROM bytes, then convert.
+        {
+            u32 romSize = size;
+            size = romdataAudioBankPcSize((const u8 *)&_sfxctlSegmentRomStart, size);
+            sfxBank = alHeapAlloc(&g_musicHeap, 1, size);
+            romCopy(sfxBank, &_sfxctlSegmentRomStart, romSize);
+            romdataFixupAudioBank(sfxBank, romSize, size);
+        }
+#else
         sfxBank = alHeapAlloc(&g_musicHeap, 1, size);
         romCopy(sfxBank, &_sfxctlSegmentRomStart, size);
+#endif
         alBnkfNew(sfxBank, (u8 *)&_sfxtblSegmentRomStart);
         g_musicSfxBufferPtr = sfxBank->bankArray[0];
     }
@@ -674,8 +708,19 @@ void musicSeqPlayerInit(void)
     {
         size = (u32)&_instrumentstblSegmentRomStart - (u32)&_instrumentsctlSegmentRomStart;
 
+#if defined(__x86_64__)
+        // D37: as above.
+        {
+            u32 romSize = size;
+            size = romdataAudioBankPcSize((const u8 *)&_instrumentsctlSegmentRomStart, size);
+            instrumentBank = alHeapAlloc(&g_musicHeap, 1, size);
+            romCopy(instrumentBank, &_instrumentsctlSegmentRomStart, romSize);
+            romdataFixupAudioBank(instrumentBank, romSize, size);
+        }
+#else
         instrumentBank = alHeapAlloc(&g_musicHeap, 1, size);
         romCopy(instrumentBank, &_instrumentsctlSegmentRomStart, size);
+#endif
         alBnkfNew(instrumentBank, (u8 *)&_instrumentstblSegmentRomStart);
         g_musicInstrumentBufferPtr = instrumentBank->bankArray[0];
     }
@@ -686,10 +731,15 @@ void musicSeqPlayerInit(void)
     size = 0x10;
     g_musicDataTable = alHeapAlloc(&g_musicHeap, 1, size);
     romCopy(g_musicDataTable, (void *)tblSegmentRomStartAddress, size);
+    // D35: decode the BE header (+0 seqCount) and any entries that fit,
+    // before seqCount is read below.
+    romdataFixupMusicSeqTable(g_musicDataTable, size);
 
     tblSegmentSize = (sizeof(RareALSeqData) * g_musicDataTable->seqCount) + 4;
     g_musicDataTable = alHeapAlloc(&g_musicHeap, 1, tblSegmentSize);
     romCopy(g_musicDataTable, (void *)tblSegmentRomStartAddress, ALIGN16_a(tblSegmentSize));
+    // D35: the copy above reloaded raw BE bytes; decode the full table.
+    romdataFixupMusicSeqTable(g_musicDataTable, ALIGN16_a(tblSegmentSize));
 
     // end auReadSeqFileHeader
 
@@ -813,7 +863,7 @@ void musicTrack1Play(s32 track)
     while (alCSPGetState(g_musicXTrack1SeqPlayer))
         ;
 
-    romAddress = g_musicDataTable->seqArray[g_musicXTrack1CurrentTrackNum].address;
+    romAddress = (void *)g_musicDataTable->seqArray[g_musicXTrack1CurrentTrackNum].address;
 
     if (romAddress < (void*)ROM_MUSIC_START_OFFSET)
     {
@@ -1002,7 +1052,7 @@ void musicTrack2Play(s32 track)
     while (alCSPGetState(g_musicXTrack2SeqPlayer))
         ;
 
-    romAddress = g_musicDataTable->seqArray[g_musicXTrack2CurrentTrackNum].address;
+    romAddress = (void *)g_musicDataTable->seqArray[g_musicXTrack2CurrentTrackNum].address;
 
     if (romAddress < (void*)ROM_MUSIC_START_OFFSET)
     {
@@ -1191,7 +1241,7 @@ void musicTrack3Play(s32 track)
     while (alCSPGetState(g_musicXTrack3SeqPlayer))
         ;
 
-    romAddress = g_musicDataTable->seqArray[g_musicXTrack3CurrentTrackNum].address;
+    romAddress = (void *)g_musicDataTable->seqArray[g_musicXTrack3CurrentTrackNum].address;
 
     if (romAddress < (void*)ROM_MUSIC_START_OFFSET)
     {

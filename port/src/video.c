@@ -79,6 +79,14 @@ int videoInit(void)
     gfx_set_texture_filter(FILTER_LINEAR);
     gfx_set_mipmap_filter(MIPMAP_LINEAR);
 
+    /* The GL context is currently current on this (host main) thread, but all
+     * rendering happens on the game's scheduler thread. WGL only allows a
+     * context to be current on one thread at a time, so release it here; the
+     * scheduler thread re-binds it per frame via gfx_sdl_make_context_current()
+     * (see videoStartFrame). Must come after set_swap_interval above, which
+     * still needs a current context on this thread. */
+    gfx_sdl_release_context();
+
     initDone = 1;
     sysLogPrintf(LOG_INFO, "video: %dx%d window (native %dx%d)",
                  (int)gfx_current_dimensions.width, (int)gfx_current_dimensions.height,

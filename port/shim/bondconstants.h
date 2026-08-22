@@ -23,6 +23,20 @@
 #if defined(PORT)
 #include "src/bondconstants.h"
 
+/*
+ * D38: src/bondconstants.h defines ntohl()/ntohs() as function-like macros
+ * (byte-order helpers over CharArrayTo16/32). In any TU that also parses
+ * <winsock.h> (port files that include <windows.h>, or C++ TUs whose host
+ * headers pull in winsock), those macros expand winsock's own
+ * `u_long WSAAPI ntohl(u_long)` declarations into garbage and the build
+ * breaks. On little-endian x86-64 the host functions have identical
+ * semantics (a byte swap), so neutralize the macros on PC and let calls bind
+ * to real functions: declared in port/include/pc_protos.h, defined in
+ * port/src/pc_netorder.c. Game logic is unchanged (same computed values).
+ */
+#undef ntohl
+#undef ntohs
+
 #ifndef _PORT_BITFLAG_ENUMS_DEFINED
 #define _PORT_BITFLAG_ENUMS_DEFINED
 

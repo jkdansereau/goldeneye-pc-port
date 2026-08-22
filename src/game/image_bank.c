@@ -164,6 +164,74 @@ extern Gfx* globalDL_0x900;
 extern Gfx* globalDL_0x9a8;
 extern Gfx* globalDL_0xa50;
 
+#if defined(__x86_64__)
+/* D39 (docs/PCPortResearch.md): on N64 all 49 symbols above link inside the
+ * Globalimagetable segment at physical 0x02xxxxxx (ge007.ld), so
+ * `globalbank_rdram_offset + (u32)&sym` rebases each onto pGlobalimagetable.
+ * A PE image cannot sit at 0x02xxxxxx, so (u32)&sym is the low 32 bits of an
+ * exe address — garbage. Use each symbol's offset within the segment instead
+ * (verified by byte-tiling all 49 arrays against ROM [0x1029D160, 0x1029E558),
+ * NTSC; offsets are region-independent). pGlobalimagetable is s32-safe (V1
+ * @ 0x70xxxxxx, see port/src/dram.c), so the same u32 math yields the correct
+ * 64-bit pointer. NOTE: this also requires _GlobalimagetableSegmentEnd to span
+ * the full linked .data (Gfx DLs + sImageTableEntry tables = 0x13F8), not just
+ * the 0xAC8-byte CSV asset — see port/src/romassets_u.s. */
+enum {
+    g_pc_gimg_off_s_genericimage = 0xAC8,
+    g_pc_gimg_off_s_impactimages = 0xAD4,
+    g_pc_gimg_off_s_explosion_smokeimages = 0xBC4,
+    g_pc_gimg_off_s_scattered_explosions = 0xC0C,
+    g_pc_gimg_off_s_flareimage1 = 0xC48,
+    g_pc_gimg_off_s_flareimage2 = 0xC54,
+    g_pc_gimg_off_s_flareimage3 = 0xC60,
+    g_pc_gimg_off_s_flareimage4 = 0xC6C,
+    g_pc_gimg_off_s_flareimage5 = 0xC78,
+    g_pc_gimg_off_s_ammo9mmimage = 0xC84,
+    g_pc_gimg_off_s_rifleammoimage = 0xC90,
+    g_pc_gimg_off_s_shotgunammoimage = 0xC9C,
+    g_pc_gimg_off_s_knifeammoimage = 0xCA8,
+    g_pc_gimg_off_s_glammoimage = 0xCB4,
+    g_pc_gimg_off_s_rocketammoimage = 0xCC0,
+    g_pc_gimg_off_s_genericmineammoimage = 0xCCC,
+    g_pc_gimg_off_s_grenadeammoimage = 0xCD8,
+    g_pc_gimg_off_s_magnumammoimage = 0xCE4,
+    g_pc_gimg_off_s_goldengunammoimage = 0xCF0,
+    g_pc_gimg_off_s_remotemineammoimage = 0xCFC,
+    g_pc_gimg_off_s_timedmineammoimage = 0xD08,
+    g_pc_gimg_off_s_proxmineammoimage = 0xD14,
+    g_pc_gimg_off_s_tankammoimage = 0xD20,
+    g_pc_gimg_off_s_crosshairimage = 0xD2C,
+    g_pc_gimg_off_s_betacrosshairimage = 0xD38,
+    g_pc_gimg_off_s_glassoverlayimage = 0xD44,
+    g_pc_gimg_off_s_monitorimages = 0xD5C,
+    g_pc_gimg_off_s_skywaterimages = 0xFB4,
+    g_pc_gimg_off_s_mainfolderimages = 0xFD8,
+    g_pc_gimg_off_s_mpradarimages = 0x1020,
+    g_pc_gimg_off_s_mpcharselimages = 0x102C,
+    g_pc_gimg_off_s_mpstageselimages = 0x132C,
+    g_pc_gimg_off_globalDL_0x000 = 0x0,
+    g_pc_gimg_off_globalDL_0x078 = 0x78,
+    g_pc_gimg_off_globalDL_0x120 = 0x120,
+    g_pc_gimg_off_globalDL_0x1c8 = 0x1C8,
+    g_pc_gimg_off_globalDL_0x270 = 0x270,
+    g_pc_gimg_off_globalDL_0x318 = 0x318,
+    g_pc_gimg_off_globalDL_0x3c0 = 0x3C0,
+    g_pc_gimg_off_globalDL_0x468 = 0x468,
+    g_pc_gimg_off_globalDL_0x510 = 0x510,
+    g_pc_gimg_off_globalDL_0x5b8 = 0x5B8,
+    g_pc_gimg_off_globalDL_0x660 = 0x660,
+    g_pc_gimg_off_globalDL_0x708 = 0x708,
+    g_pc_gimg_off_globalDL_0x7b0 = 0x7B0,
+    g_pc_gimg_off_globalDL_0x858 = 0x858,
+    g_pc_gimg_off_globalDL_0x900 = 0x900,
+    g_pc_gimg_off_globalDL_0x9a8 = 0x9A8,
+    g_pc_gimg_off_globalDL_0xa50 = 0xA50
+};
+#define GIMG_OFF(sym) (0x02000000u + g_pc_gimg_off_##sym) /* == N64 (u32)&sym */
+#else
+#define GIMG_OFF(sym) ((u32)&(sym))
+#endif
+
 void texReset(void)
 {
     u32 size;
@@ -176,56 +244,56 @@ void texReset(void)
     romCopy(pGlobalimagetable, &_GlobalimagetableSegmentRomStart, size);
 
     globalbank_rdram_offset = (u32)pGlobalimagetable + 0xFE000000;
-    genericimage = (void *) (globalbank_rdram_offset + (u32)&s_genericimage);
-    impactimages = (void *) (globalbank_rdram_offset + (u32)&s_impactimages);
-    explosion_smokeimages = (void *) (globalbank_rdram_offset + (u32)&s_explosion_smokeimages);
-    scattered_explosions = (void *) (globalbank_rdram_offset + (u32)&s_scattered_explosions);
-    flareimage1 = (void *) (globalbank_rdram_offset + (u32)&s_flareimage1);
-    flareimage2 = (void *) (globalbank_rdram_offset + (u32)&s_flareimage2);
-    flareimage3 = (void *) (globalbank_rdram_offset + (u32)&s_flareimage3);
-    flareimage4 = (void *) (globalbank_rdram_offset + (u32)&s_flareimage4);
-    flareimage5 = (void *) (globalbank_rdram_offset + (u32)&s_flareimage5);
-    ammo9mmimage = (void *) (globalbank_rdram_offset + (u32)&s_ammo9mmimage);
-    rifleammoimage = (void *) (globalbank_rdram_offset + (u32)&s_rifleammoimage);
-    shotgunammoimage = (void *) (globalbank_rdram_offset + (u32)&s_shotgunammoimage);
-    knifeammoimage = (void *) (globalbank_rdram_offset + (u32)&s_knifeammoimage);
-    glaunchammoimage = (void *) (globalbank_rdram_offset + (u32)&s_glammoimage);
-    rocketammoimage = (void *) (globalbank_rdram_offset + (u32)&s_rocketammoimage);
-    genericmineammoimage = (void *) (globalbank_rdram_offset + (u32)&s_genericmineammoimage);
-    grenadeammoimage = (void *) (globalbank_rdram_offset + (u32)&s_grenadeammoimage);
-    magnumammoimage = (void *) (globalbank_rdram_offset + (u32)&s_magnumammoimage);
-    goldengunammoimage = (void *) (globalbank_rdram_offset + (u32)&s_goldengunammoimage);
-    remotemineammoimage = (void *) (globalbank_rdram_offset + (u32)&s_remotemineammoimage);
-    timedmineammoimage = (void *) (globalbank_rdram_offset + (u32)&s_timedmineammoimage);
-    proxmineammoimage = (void *) (globalbank_rdram_offset + (u32)&s_proxmineammoimage);
-    tankammoimage = (void *) (globalbank_rdram_offset + (u32)&s_tankammoimage);
-    crosshairimage = (void *) (globalbank_rdram_offset + (u32)&s_crosshairimage);
-    betacrosshairimage = (void *) (globalbank_rdram_offset + (u32)&s_betacrosshairimage);
-    glassoverlayimage = (void *) (globalbank_rdram_offset + (u32)&s_glassoverlayimage);
-    monitorimages = (void *) (globalbank_rdram_offset + (u32)&s_monitorimages);
-    skywaterimages = (void *) (globalbank_rdram_offset + (u32)&s_skywaterimages);
-    mainfolderimages = (void *) (globalbank_rdram_offset + (u32)&s_mainfolderimages);
-    mpradarimages = (void *) (globalbank_rdram_offset + (u32)&s_mpradarimages);
-    mpcharselimages = (void *) (globalbank_rdram_offset + (u32)&s_mpcharselimages);
-    mpstageselimages = (void *) (globalbank_rdram_offset + (u32)&s_mpstageselimages);
+    genericimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_genericimage));
+    impactimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_impactimages));
+    explosion_smokeimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_explosion_smokeimages));
+    scattered_explosions = (void *) (globalbank_rdram_offset + GIMG_OFF(s_scattered_explosions));
+    flareimage1 = (void *) (globalbank_rdram_offset + GIMG_OFF(s_flareimage1));
+    flareimage2 = (void *) (globalbank_rdram_offset + GIMG_OFF(s_flareimage2));
+    flareimage3 = (void *) (globalbank_rdram_offset + GIMG_OFF(s_flareimage3));
+    flareimage4 = (void *) (globalbank_rdram_offset + GIMG_OFF(s_flareimage4));
+    flareimage5 = (void *) (globalbank_rdram_offset + GIMG_OFF(s_flareimage5));
+    ammo9mmimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_ammo9mmimage));
+    rifleammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_rifleammoimage));
+    shotgunammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_shotgunammoimage));
+    knifeammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_knifeammoimage));
+    glaunchammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_glammoimage));
+    rocketammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_rocketammoimage));
+    genericmineammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_genericmineammoimage));
+    grenadeammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_grenadeammoimage));
+    magnumammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_magnumammoimage));
+    goldengunammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_goldengunammoimage));
+    remotemineammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_remotemineammoimage));
+    timedmineammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_timedmineammoimage));
+    proxmineammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_proxmineammoimage));
+    tankammoimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_tankammoimage));
+    crosshairimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_crosshairimage));
+    betacrosshairimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_betacrosshairimage));
+    glassoverlayimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_glassoverlayimage));
+    monitorimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_monitorimages));
+    skywaterimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_skywaterimages));
+    mainfolderimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_mainfolderimages));
+    mpradarimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_mpradarimages));
+    mpcharselimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_mpcharselimages));
+    mpstageselimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_mpstageselimages));
 
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x000, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x078, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x120, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x1c8, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x270, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x318, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x3c0, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x468, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x510, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x5b8, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x660, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x708, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x7b0, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x858, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x900, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0x9a8, 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + (u32)&globalDL_0xa50, 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x000), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x078), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x120), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x1c8), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x270), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x318), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x3c0), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x468), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x510), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x5b8), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x660), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x708), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x7b0), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x858), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x900), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x9a8), 0);
+    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0xa50), 0);
 
     texLoad(genericimage, 0);
 

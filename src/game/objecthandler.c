@@ -4,6 +4,15 @@
 #include "model.h"
 
 // bss
+#if defined(__x86_64__)
+// D40: the N64 placeholder chain below (g_ModelHitEntries .. g_ModelHitEntriesPenultimate)
+// forms one contiguous 600 x 20-byte ModelHitEntry pool in CODE.bss. On x86-64
+// ModelHitEntry is 40 bytes (two pointer pairs), so initModelHitEntryFreeList()
+// writes 600*40 bytes from g_ModelHitEntries and overruns the N64-sized placeholders
+// by 12KB into adjacent .bss globals. Size the pool for the real struct on PC; keep
+// the original placeholder chain verbatim on N64.
+char g_ModelHitEntries[600 * sizeof(ModelHitEntry)];
+#else
 //CODE.bss:80076A50
 char g_ModelHitEntries[0xC];
 //CODE.bss:80076A5C
@@ -50,6 +59,7 @@ char dword_CODE_bss_80076ADF;
 char dword_CODE_bss_80076AE0[0x2E28];
 //CODE.bss:80079908
 char g_ModelHitEntriesPenultimate[0x28];
+#endif
 
 //CODE.bss:80079930
 struct AnimModelSlot *g_AnimModelSlots;

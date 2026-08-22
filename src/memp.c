@@ -63,7 +63,22 @@ void mempCheckMemflagTokens(s32 poolAreaStart, s32 poolAreaSize)
     if (poolSizes.me == 0)
     {
         poolSizes.mf = 0;
+#if defined(__x86_64__)
+        /* D36 (PC port): the PERMANENT bank must also hold the enlarged
+         * music heap (MUSIC_ALLOCATION_BYTES in src/music.c, 0x2E000 ->
+         * 0x32000 on x86-64 due to libaudio pointer bloat). Grow the bank on
+         * PC only; STAGE absorbs the difference. N64 value unchanged.
+         * See docs/PCPortResearch.md D36.
+         *
+         * D37 (PC port): MUSIC_ALLOCATION_BYTES grows again to 0x38000 (the
+         * re-laid-out bank images live in the music heap; init demand
+         * measures 0x33530). Pre-music PERMANENT usage is ~0x1BCA0, so the
+         * bank must be at least 0x1BCA0 + 0x38000 plus post-music headroom;
+         * 352/368 KiB leaves ~17-19 KiB. STAGE absorbs the difference. */
+        poolSizes.me = ((j_text_trigger ? 368 : 352) * 1024);
+#else
         poolSizes.me = ((j_text_trigger ? 308 : 296) * 1024);
+#endif
         poolSizes.ml = poolAreaSize - poolSizes.me;
     }
 

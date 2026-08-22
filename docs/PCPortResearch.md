@@ -1053,6 +1053,191 @@ gameInit — and currently dies inside `langInit()` (D31).
   boot (only during rendering). Verify visually in Phase 2 when Bond first
   animates.
 
+**D34** `ANIM_DATA_*` address placeholders break on x86-64. On N64 the
+`animation_data` segment links at VMA 0, so `(s32)&ANIM_DATA_x` is a small
+segment offset; on PC `&ANIM_DATA_x` is a high PE address and the game code's
+ubiquitous s32 truncation yields garbage. Audit: all 82 uses are
+address-taking only (`(s32)&…`, or through `ANIM_FRAC()` /
+`ANIM_FRAC_MUL_FIRST()` in chraction.c/bondview2.c/title.c/
+initBondDATAdefaults.c/initactorpropstuff.c) — no data dereferences, no
+sizeof, no static initializers. Fix: on x86-64 each `ANIM_DATA_x` is
+redefined as an lvalue at `g_pc_animdata_base + offset` where the base is the
+PE image address with its low 32 bits zeroed (derived in `romdataInit()` from
+a static probe; fail-fast if not 4 GiB-aligned), so
+`(s32)&ANIM_DATA_x == PTR_ANIM_x` exactly. Files:
+`assets/animationtable_data.h` (guarded macro branch, N64 externs kept under
+`#else`), `port/src/romdata.c` (`g_pc_animdata_base` + init),
+`CMakeLists.txt` (excludes `assets/animationtable_data.c` +
+`animationtable_entries.c` on PC — the arrays are address-only placeholders;
+the ROM is the data ground truth via romCopy). Verified under gdb:
+`D_80030984 = ANIM_FRAC(ANIM_DATA_walking)` executes; the walking record at
+`ptr_animation_table + 0x4018` has entry field `0x10177dcc`
+(entries base `0x10124AC0` + `PTR_ANIM_ENTRY_walking`) and frame count 0x25;
+after `initWeaponAnimGroups()` the derived globals hold sane floats
+(4.59/11.25/16.71/16.19).
+
+**D35** Music sequence table: pointer-width + endianness.
+`musicSeqPlayerInit()` faulted in `romCopy()` with a NULL destination:
+`tblSegmentSize = sizeof(RareALSeqData) * seqCount + 4` was garbage because
+(1) `RareALSeqData.address` was `u8 *` — sizeof 16 on x86-64 vs the ROM's
+8-byte records — and (2) the header `seqCount` and entry fields are stored
+big-endian in ROM but read as LE (63 → 0x3F00 = 16128). Fix: `address` →
+`u32` (`src/music.h`; sizeof 8 on both platforms) with `(void *)` casts at the
+three use sites in `src/music.c`; new `romdataFixupMusicSeqTable()` in
+`port/src/romdata.c` bswaps `seqCount` + per-entry `address`(u32)/
+`uncompressed_len`(u16)/`len`(u16), called after both romCopys in
+`musicSeqPlayerInit()`. Verified: the header-only (0x10-byte) copy logs the
+expected `seqCount 63 exceeds blob capacity 1` clamp; boot passes the old
+fault.
+
+**D36** Music heap / PERMANENT pool sizing on x86-64. `alCSPNew()` SIGSEGV'd
+because the music bump heap was oversubscribed: x86-64 libaudio runtime
+structs are larger (ALVoiceState 88B, ALSeqPlayer 248B, ALCSPlayer 224B, …)
+and the debug-token state (`tokenFind(1,"-level_")==NULL` →
+`g_DebugAndUpdateStageFlag=1` → stale `-ml0 -me0` tokens) forces the
+fixed-size mempool branch with PERMANENT at 296 KiB. Measured under gdb:
+pre-music PERMANENT usage 0x1BCA0 left 189,280 B for music vs a measured init
+demand of 0x31660 (shortfall 13,056). Fix (PC-only guards): 
+`MUSIC_ALLOCATION_BYTES` 0x2E000 → 0x32000 (`src/music.c`); PERMANENT fixed
+branch 296/308 KiB → 320/340 KiB (`src/memp.c`, non-JP/JP). STAGE absorbs the
+difference. Verified: boot reaches `bossMainloop()`.
+
+**D37** libaudio bank trees must be re-laid out, not patched in place. The
+audio thread SIGSEGV'd in `__initFromBank()` (`b=0xffffffff00000000`):
+`ALBankFile/ALBank/ALInstrument/ALSound/ALWaveTable/…` are serialized in ROM
+as big-endian scalars + 4-byte packed table-relative offsets, while the x86-64
+C structs use 8-byte pointers — so BE values were LE-misread and 4-byte offset
+arrays were walked with 8-byte stride, producing wild rebase pointers in
+`alBnkfNew()`/`_bnkfPatch*()`. In-place conversion is impossible: each struct's
+expanded tail overlaps whatever follows it in ROM (e.g. the ALWaveTable book
+slot at +24 lands inside the ALADPCMBook that sits 12 bytes after the
+wavetable). Fix: `romdataAudioBankPcSize()` + `romdataFixupAudioBank()` in
+`port/src/romdata.c` — a two-pass DFS re-layout into a compact image where
+every sub-struct is placed once (8-byte aligned, children before parents) and
+each pointer slot stores the sub-struct's NEW offset from the image start,
+zero-extended; `alBnkfNew()`/`_bnkfPatch*()` then rebase unmodified
+(`ptr + (s32)file`). `ALWaveTable.base` stays an offset into the separate
+wavetable data segment — `_bnkfPatchWaveTable()` adds its `table` argument,
+verified at runtime (sfx: base+table = 0x102F19A0 =
+`_sfxtblSegmentRomStart`). `music.c` PC branch allocates the re-layout size
+and fixups after romCopy. Memory: bank images grow +0x1460 (sfx) / +0xA70
+(instruments); init-time heap demand measures 0x33530, so 
+`MUSIC_ALLOCATION_BYTES` → 0x38000 and PERMANENT → 352/368 KiB (PC only). 
+Verified under gdb: runtime tree matches ROM ground truth (SFX instCount=1,
+soundCount=261, bendRange=200, sampleRate=22050; INSTR instCount=75; all
+env/keymap/wavetable/book/loop pointers valid heap addresses; book
+order=2 npredictors=1); 25 s soak with every thread alive. Implementation
+bugs caught during bring-up: a double bswap (afRd* already decodes BE),
+afWr32 initially wrote BE, and the size pass used an uninitialized visited
+array (undercount) — all fixed.
+
+**D38** Implicit function declarations truncate pointer returns on x86-64.
+~72 game TUs call ~400 functions with no visible prototype (missing `#include`
+of the declaring header). Under C11 an implicit declaration assumes
+`int f()`: harmless on N64 (32-bit pointers) but on x86-64 it silently
+truncates every pointer return to 32 bits — e.g. `tokenFind()` in
+`set_mt_tex_alloc()` returned a low-32-bit "pointer" that faulted in
+`strtol()`. Fix: a port-layer prototype shim, `port/include/pc_protos.h`
+(398 declarations; one-shot generator `scripts/gen_pcprotos.py` — the committed
+header is the source of truth, hand-adjusted after generation), declaring each
+function with its TRUE return type and an empty parameter list — purely
+additive (only the returned value's width changes). Anchored in
+`port/shim/PR/ucode.h`, the LAST include of `<ultra64.h>`: anchoring earlier
+(e.g. `gbi.h`) poisons libaudio.h because the bondtypes chain reaches
+`snd.h → <PR/libaudio.h>` while ultra64.h is still mid-parse. C-only guard:
+C++ fast3d TUs reach this header via `SDL_stdinc.h → <stdarg.h> →
+port/shim/stdarg.h`, and pulling the bondtypes/bondconstants chain into C++
+brakes on `struct ALSoundState*` in `src/bondtypes.h`; no C++ TU needs a
+fix here. C11 gotcha: an empty parameter name list `()` cannot match a true
+prototype with default-promoted parameters (`s8`/`u8`/`s16`/…), so the 11
+such functions get full prototypes with their TRUE parameter types
+(substituting `int` for `s8` is NOT compatible). Also: `src/bondconstants.h`
+defines function-like macros `ntohl`/`ntohs` over `CharArrayTo32/16`, which
+collide with MinGW `<winsock.h>` in TUs that parse both — neutralized in the
+port shim, real host functions provided in `port/src/pc_netorder.c` with
+winsock-compatible signatures (`u_long` is 64-bit on LLP64!). No game-TU
+edits. Result: build clean, zero warnings; the old `strtol()` crash is gone.
+
+**D39** Globalimagetable rebasing idiom breaks on x86-64. `texReset()` /
+`texLoadFromDisplayList()` compute ROM-layout pointers as
+`globalbank_rdram_offset + (u32)&sym` with
+`globalbank_rdram_offset = (u32)pGlobalimagetable + 0xFE000000`; on N64
+`(u32)&sym` = `0x02000000 + off` and the 0x02 base cancels the 0xFE. On PC
+`(u32)&sym` is a truncated PE address → garbage DL pointers. Fix (in
+`src/game/image_bank.c`, PC branch): an enum of all 49 segment offsets (17
+Gfx display lists + 32 sImageTableEntry tables) and
+`#define GIMG_OFF(sym) (0x02000000u + g_pc_gimg_off_##sym)` — exactly the N64
+`(u32)&sym`; all 49 texReset() sites replaced. No changes needed in
+gunfire.c / texLoad / texSelect: all game RAM is s32-safe (V1 view,
+0x70xxxxxx < 4 GiB), so the u32 math and pointer casts stay lossless.
+Also fixed the segment markers: the CSV asset `Globalimagetable.bin`
+(0xAC8) is TRUNCATED — the real linker segment (`ge007.ld`: oddtextures.o
+`.data`) spans 0x13F8 = Gfx DLs (0xAC8) + ITE tables (0x930); the CSV's
+`rarewarelogo` entry is mis-split (the logo actually starts at ROM
+0x29E560). `_GlobalimagetableSegment{Rom}End` 0x1029DC28 → 0x1029E558 in
+`port/src/romassets_u.s` + a size override in `scripts/gen_romassets.py`
+(regeneration verified stable). All 49 offsets verified against the ROM:
+the symbols tile `[0x29D160, 0x29E558)` exactly with no gaps; `gun.c`
+ammo IconImage values cross-check. Verified under gdb: all 17
+texLoadFromDisplayList diffs correct (0, 0x78, 0x120, …); boot passes
+texReset. Known Phase-2 follow-up: `explosion.c`'s
+`g_ExplosionDisplayLists[]` is a static table of EXE addresses to Gfx arrays
+(16-byte entries on PC) — it must point at the ROM-layout copies in
+pGlobalimagetable before explosions render.
+
+**D40** N64-sized BSS placeholder pool overflows with pointer-stride structs.
+`initModelHitEntryFreeList()` (initunk_005450.c:38, called from
+lvlStageLoad) walks 600 ModelHitEntry records writing next/prev; the
+decompiler-emitted BSS chain in objecthandler.c (`char g_ModelHitEntries[0xC];`
+…dwords… `char g_ModelHitEntriesPenultimate[0x28]`) reproduces N64's
+12 000-byte region (600 × 20 B), but PC ModelHitEntry is 40 bytes → the
+free-list init writes 24 000 bytes, a 12 KB .bss overflow that clobbered
+`is_ramrom_flag` (writer caught with a hardware watchpoint) → the
+demo-replay path in bossMainloop ran with `address_demo_loaded == NULL` →
+SIGSEGV at ramromreplay.c:341. Fix: PC branch declares a properly sized pool
+(`char g_ModelHitEntries[600 * sizeof(ModelHitEntry)]`); the N64 chain stays
+verbatim under `#else`; the sentinel assignment in initunk_005450.c is
+computed directly on PC (`entries[LEN-1].prev = &entries[LEN-2]` — N64's
+g_ModelHitEntriesPenultimate labels the start of entry 598). Verified: no
+more SIGSEGV; boot progresses into GL rendering.
+
+**D41** Cross-thread GL context binding. WGL allows a context to be current
+on only ONE thread at a time. The window+context are created and made
+current on the host main thread (`videoInit → gfx_sdl_init`), but all
+rendering runs on the game's scheduler thread; while main still holds the
+context, `wglMakeContextCurrent` from the game thread fails with "The
+requested resource is in use" — and this SDL2 build (2.32.10, MSYS2)
+swallows it: `SDL_GL_MakeCurrent` returns true on failure / 0 on success
+(an inverted int-as-bool ABI artifact; confirmed by a minimal repro and
+gdb `$1 = 255`). The silent failure left `wglGetCurrentContext() == NULL`
+on the game thread → `glCreateShader` returned 0 → "Vertex shader
+compilation failed" with an empty info log. Fix: new
+`gfx_sdl_release_context()` (`SDL_GL_MakeCurrent(NULL, NULL)`) called at the
+end of `videoInit()` after `set_swap_interval` (the last GL work on main);
+the scheduler thread re-binds per frame via the existing
+gfx_sdl_make_context_current() in videoStartFrame(). Do NOT branch on the
+MakeCurrent return value (unreliable). Verified: frame 1 renders (69.7 ms),
+several frames before the next (separate) fault.
+
+**D42** rsp.c task-settings toggle idiom truncates pointers.
+`g_gfxTaskSettingsList = (GfxInfo_s*)((u32)list ^ (u32)&g_gfxTaskSettings[0]
+^ (u32)&g_gfxTaskSettings[1])` toggles between two adjacent settings structs
+by XOR — fine on 32-bit, but on x86-64 the u32-truncated PE addresses XOR to
+garbage → the next frame's `((GfxInfo_s*)g_gfxTaskSettingsList)->cfb = …`
+(fr.c:458) SIGSEGV'd. Fix: explicit toggle under
+`#if defined(__x86_64__)` (`list == &[0] ? &[1] : &[0]` — same semantics,
+the list is always one of the two); N64 line verbatim under `#else`.
+
+**D43 (OPEN)** Model-file loading ABI mismatch. Stage object load faults in
+`modelPromoteNodeOffsetsToPointers()` (model.c:5688). Model files are
+ROM-serialized with N64 layout (ModelFileHeader 24 B, ModelNode 20 B,
+4-byte pointer fields) but on PC are read as 8-byte-pointer structs (48 B
+each): `load_object_fill_header()` derives RootNode from `numtextures`
+at the wrong offset, and the `PROMOTE` rebase (`(u32)var + diff`) then
+operates on misaligned fields. Needs a D37-style re-layout of the model
+file image (header + switches array + texture table + node tree +
+ModelRoData records). Phase-2 project; see §H.
+
 ### G. Phase 2 status (current)
 
 Done: PD fast3d integrated (`port/fast3d/`, replaces the deleted gfxstub.c);
@@ -1096,21 +1281,53 @@ shim expansion in compiled code.
 
 ### H. Handoff & plan (current session)
 
-**State.** D31 (langInit file-load SIGSEGV) is fixed & verified — mainThread
-boots past all language-file loading into `bossInitMainthreadData()`. The boot
-dies in `init_weapon_animation_groups_maybe()` on the **D32** ROM-struct issue.
-D32 Part A (struct layout) is done. **D32 Part B is now fully root-caused
-(D33):** (1) the ROM file stores the animation segment's structured fields in
-big-endian byte order — a per-field endianness fixup is required at load time;
-(2) `expand_ani_table_entries` has an x86-64 loop-stride bug (`s32**` advances
-8 bytes/iter, rebasing only even-indexed entries). The fix design is complete
-and validated against all 173 ROM entries; **implementation is the immediate
-task** (three small edits — see D33 "Fix design"). No frames rendered yet.
+**State.** Boot is complete AND the first frames render: mainThread runs through
+all of `bossInitMainthreadData()` + `bossEntry()`, enters `bossMainloop()`,
+loads the stage, and fast3d renders real display lists — `[NOTE] frame N rendered
+in … us` logs appear (frame 1 in ~70 ms). Findings **D34–D42** (§F) closed out
+the boot + first-render blockers on top of D31–D33:
+- **D34** `ANIM_DATA_*` → address-only lvalues at PE-image-base + ROM offset.
+- **D35** music seq table: `RareALSeqData.address` → `u32` + BE fixup.
+- **D36** music heap / PERMANENT pool grown for x86-64 libaudio struct bloat.
+- **D37** libaudio bank trees re-laid out to PC-native form (`romdataFixupAudioBank`).
+- **D38** implicit-declaration pointer truncation → `port/include/pc_protos.h`
+  prototype shim (398 decls, generator in build-pc/); build now warning-clean.
+- **D39** Globalimagetable rebasing: per-symbol offsets + `GIMG_OFF()` macro
+  (== N64 `(u32)&sym`, incl. the 0x02000000 base) in image_bank.c; segment end
+  markers extended to the true 0x13F8 size (CSV truncation).
+- **D40** ModelHitEntry BSS pool sized for the 40-byte PC stride (was 12 KB
+  overflow clobbering `is_ramrom_flag`).
+- **D41** GL context released from the host main thread after init so the game
+  thread can bind it (WGL single-thread currency; SDL2 MakeCurrent return value
+  is an inverted ABI artifact — don't branch on it).
+- **D42** rsp.c `g_gfxTaskSettingsList` XOR toggle → explicit toggle on x86-64.
+
 **ROM provenance locked:** the working ROM is byte-identical to the No-Intro
 good dump `GoldenEye 007 (U) [!].z64` (MD5 `70c525880240c1e838b8b1be35666c3b`,
 0xC00000 bytes, country 'E'); embedded header CRCs DCBC50D1/09FD1AA3
 re-computed and matched via `tools/n64cksum.c`'s CIC-6102 routine — see
 `tools_pc/romverify.c` (one-shot re-check) and docs/HANDOFF.md Environment.
+
+**Current blocker — D43: model-file loading ABI mismatch.** After a few frames,
+stage object load faults in `modelPromoteNodeOffsetsToPointers()`
+(model.c:5688). Model files are ROM-serialized with N64 layout (ModelFileHeader
+24 B / ModelNode 20 B, 4-byte pointer fields) but read on PC as 8-byte-pointer
+structs; `load_object_fill_header()` (objecthandler_2.c) derives RootNode from
+`numtextures` at the wrong offset before any rebase. Plan: a D37-style two-pass
+re-layout of the model file image in `port/src/romdata.c` — header, switches
+array, texture table, ModelNode tree (walked via Child/Next/Parent), and the
+per-opcode ModelRoData records — with every embedded pointer rewritten as a
+zero-extended offset from the image start so the existing
+`PROMOTE`/`diff = fileramaddr - vma` rebase works unmodified. Map the record
+types first (bondtypes.h `ModelRoData` union, opcodes in bondconstants.h);
+validate one small model against ROM ground truth under gdb before generalizing.
+Expect more D32-class ABI fixes as other per-level asset types are first
+touched — standing sub-task, not a one-off.
+
+**Audio (Phase 3 prep).** Bank trees are correctly laid out at boot and the
+libaudio manager + audio thread run without crashing; actual sound output still
+needs an SDL backend for `alDriver`, and the ASP strategy question (C2) remains
+open. No work required until rendering is stable.
 
 **D32 repeatable fix procedure** (apply to any ROM-serialized struct that faults
 on a pointer-field read):
@@ -1122,39 +1339,25 @@ on a pointer-field read):
 3. Verify the load-time rebase/fixup writes valid **V1** DRAM addresses (< 0x80000000)
    into those u32 fields; if not, debug the fixup (see Part B below).
 4. Rebuild and confirm the boot advances past this struct to the next init step.
-
-**Next concrete target — implement the D33 fix.** Three edits (full design in
-D33):
-1. `port/src/romdata.c` + `port/include/romdata.h`: add
-   `romdataFixupAnimationData(u8 *blob, u32 blobSize, const s32 *tableA,
-   const s32 *tableB)` — per-field BE→LE transform of the 20-byte records and
-   the [bd, bs) descriptor arrays (u32 → bswap32, u16 → bswap16, u8 identity).
-2. `src/game/initanitable.c` `alloc_load_expand_ani_table()`: call the fixup
-   between `romCopy` and `expand_ani_table_entries` (+ `#include "romdata.h"`).
-3. `src/game/initanitable.c` `expand_ani_table_entries()`: change the loop
-   pointer from `s32**` to `s32 *` so every entry is visited on x86-64.
-
-Then: build (`./build-pc.sh ntsc-final`), verify under gdb (launch mode):
-break at boss.c:233 after `alloc_load_expand_ani_table`; for a sample of
-`animation_table_ptrs1/2[i]` entries confirm `*(u32*)(entry+8)` and
-`*(u32*)(entry+16)` are in [0x70xxxxxx] (blob base + offset) and the record's
-address field is a cart address (0x10xxxxxx); confirm boot advances past
-`init_weapon_animation_groups_maybe`. Commit at the milestone.
+5. If the struct is a *tree* of packed sub-structs (like the libaudio banks, D37,
+   or model files, D43), an in-place BE→LE patch will not fit — the expanded
+   8-byte pointer slots overrun the following ROM data. Re-lay it out into a
+   fresh compact image and rewrite each pointer slot as the sub-struct's new
+   offset (zero-extended), so the existing `ptr + (s32)base` rebase still works.
+6. If the fault is NOT in ROM-loaded data but in an address arithmetic idiom over
+   exe-resident symbols (`(u32)&sym`, XOR toggles, pointer-delta math — D39/D42),
+   guard a PC branch that reproduces the N64 32-bit value exactly (e.g. keep the
+   0x02000000 base) or replace the idiom with an explicit equivalent; N64 line
+   stays verbatim under `#else`.
 
 **Non-negotiable #2 refinement (applied to AGENTS.md).** The original "game code
 compiles unmodified / fix belongs in port/" is too absolute: pointer-width layout
 cannot be isolated in `port/` (no hook between the romCopy and the first read).
 Refined to "game **logic** is unmodified" with a narrow, documented exception for
 mechanical, semantics-preserving ABI/layout changes forced by the 32→64-bit
-transition (embedded pointers → u32 + cast at use), following PD ground truth. No
-logic/behavior changes; each such edit is logged in §F/D3x.
-
-**Reassessed plan.** The frontier is now **Phase 1.5 — boot to first frame**:
-drive mainThread through the rest of `bossInitMainthreadData` + `bossEntry` to
-`bossMainloop()` and render frame 1, using the D32 procedure each time a
-ROM-data struct faults. Phase 2 (fast3d/CC-RM/scheduler) then makes those frames
-correct. Expect several more D3x ABI fixes (models, textures, other tables) as
-more asset loading is reached — this is now a standing sub-task, not a one-off.
+transition (embedded pointers → u32 + cast at use; PC-guarded pool sizing),
+following PD ground truth. No logic/behavior changes; each such edit is logged in
+§F/D3x.
 
 **Environment reminders.** MSYS2 tools in `/c/msys64/mingw64/bin/` (not on PATH —
 prefix `export PATH=…`). Build: `./build-pc.sh ntsc-final`. gdb **launch** mode
