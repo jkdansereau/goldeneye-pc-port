@@ -1494,6 +1494,81 @@ through the real structs (compiler packs); don't hand-compute.
 15. **PointUsage** = 2×numVertices s16 entries, indexed by MAIN-vertex index,
 chain terminated by −1 (chr.c:3309-3331).
 
+**D48 (REVIEW — D43 re-plan: offline pre-conversion "Plan B"; process fix)**
+Independent review session that audited the D47 handoff against code + ROM
+before implementation. Verdict: the remaining task was mis-scoped as a 1:1 C
+port of a script that does not emit bytes; a cheaper, lower-risk path exists
+that reuses the existing ROM load chain. Plan B is now the default; Plan A
+(D47.13 C converter) is the fallback.
+
+1. **`d43_convert.py` does not emit bytes.** It computes the layout/region map
+and validates that every pointer remap resolves (512/512 clean, re-run and
+confirmed this session), but there is no emission pass in ANY language. The
+byte-level contract (PC struct assignment, per-field bswaps, GDL slot writing)
+is unimplemented and unvalidated. "Port d43_convert.py 1:1 to C" would have the
+next session write ~250-300 lines of new emission code in C and debug it at
+runtime (crash → backtrace cycles). The emission must be written once either
+way — do it in Python where iteration is seconds, validate offline, then ship
+the data.
+2. **Plan B: offline pre-conversion through the existing ROM load path.**
+Generate 512 PC-layout RZ sidecar files with a Python emit pass; serve them by
+patching `file_resource_table[i].hw_address` +
+`resource_lookup_data_array[i].rom_size` from the port layer. Verified
+mechanical facts (all re-checkable in <1 h):
+   - **RZ format is trivially reproducible**: 2-byte header (`0x11 0x72`) + raw
+deflate; `decompressdata()` (port/src/rzdecomp.c) skips the header and inflates
+with a generous avail_in bound. A sidecar `[0x11 0x72][raw-deflate(PC image)]`
+works through `load_resource` UNMODIFIED — and it sets `poolRemaining = D_PC`
+automatically (the decompressed size), so no fixup call is needed at all.
+   - **`romCopy` on PC is a host memcpy**: src/ramrom.c → `osPiStartDma` → port
+shim `piServiceDma` (port/src/libultra.c), gated only by
+`romdataCartAddrValid()` (port/src/romdata.c:212). The ROM is VirtualAlloc'd at
+CART_BASE 0x10000000 sized romSize — extend the reservation by the sidecar
+total, place sidecars at [CART_BASE+romSize, …), extend the validity check.
+   - **`file_resource_table` is a plain writable global** (included in
+src/game/ob.c:22). ALL 512 model loads funnel through
+`load_object_fill_header` (dst==0 → `_fileNameLoadToBank`; custom-buffer
+callers in front.c/gun.c/bondview2.c/initmenus.c → `_fileNameLoadToAddr`) —
+both read `hw_address` via `load_resource`. No game code dereferences C*/G*/P*Z
+symbols directly outside the table (verified by grep; symbols exist only in
+the table + romassets_<r>.s markers).
+   - **The patch must run AFTER `obInit()`** (called at src/boss.c:179):
+obInit computes `rom_size` from adjacent-entry hw_address DELTAS (ob.c:122), so
+a pre-obInit patch would corrupt rom_size. Lazy one-shot at the PORT hook site
+in load_object_fill_header is simplest — by first model load, obInit has
+definitely run.
+   - **Footprint**: 512 files = 1,277,088 B compressed total (1.2 MB),
+3,289,344 B decompressed N64 total; PC decompressed ≤ 1.31× per file (D47.12).
+   - **The indy path is NOT used** (`resource_load_from_indy`, ob.c:56): it is
+the N64 host-protocol loader gated by `indy_ready` (src/game/indy_comms.c,
+dormant on PC), and its pPayload placement underflows on reload when
+poolRemaining == pc_size exactly. Table patching reuses the proven ROM path.
+   - **What Plan B eliminates**: the C converter (~300 lines), two-pass staging
++ memmove, staging-space guard, and the "emission bug only visible at runtime"
+risk class. What it keeps (all already committed): ABI edits, fast3d seg-5
+case, D46 buffer sizing — plus the one-line poolRemaining=0 reset (item 3).
+   - **Sidecars are region-specific** (derived from the region ROM); generator
+must take the region and write `data/pcmodels-<region>/`.
+3. **The poolRemaining=0 reset is STILL needed under Plan B.** fileSetSize
+leaves P=R=post-compaction size (ob.c:346-347); a same-stage reload would then
+alloc S_bank' = P_old, which can be < round8(compressed)+8 → `load_resource`
+hits the `source − ptrdata < 8` branch → poolRemaining=0 → silent load
+failure. The D47.4 reset before `_fileNameLoadToBank` covers both plans.
+4. **Plan A flaw (if runtime conversion is kept):** D47.13's staging guard
+"fail if D_PC > avail" is too weak — the staging region [F+R−D_PC, F+R)
+overlaps the live N64 image [F, F+D_N64) whenever S_bank < D_N64 + D_PC, and
+emission would then read corrupted bytes. Correct guard: `D_N64 + D_PC ≤
+avail`. Low probability in practice (files load at stage start; ~2.3 MB bank
+vs ~82 KB worst case), but the stated guard silently misses it.
+5. **Process fix:** the 23 d43_*.py investigation scripts (incl. the reference
+converter) lived in gitignored `build-pc/` — moved to tracked `tools_pc/`
+and committed, so the spec is versioned and reviewable. d43_cover.py's one
+internal path reference updated; converter re-run from new location: ALL CLEAN.
+6. **Review checklist for the next session** (confirm each item against code +
+ROM before executing Plan B; record results as D49): see docs/HANDOFF.md
+§Task 1 — eight claims, each with a falsification criterion. If any fires,
+fallback to Plan A with the corrected guard from item 4.
+
 ### G. Phase 2 status (current)
 
 Done: PD fast3d integrated (`port/fast3d/`, replaces the deleted gfxstub.c);
