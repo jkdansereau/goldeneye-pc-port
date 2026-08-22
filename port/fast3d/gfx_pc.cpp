@@ -2280,6 +2280,14 @@ static void gfx_dp_set_other_mode(uint32_t h, uint32_t l) {
 }
 
 static inline void *seg_addr(uintptr_t w1) {
+    // GE model files reference GDLs (gSPDisplayList) and vertex arrays by raw
+    // VMA 0x05xxxxxx WITHOUT the LSB set; segment 5 is set per-render to the
+    // live host file base by the game's gSPSegment. Resolve it explicitly
+    // before the segmented-address path below (a converter-remapped seg-5 w1
+    // already carries the LSB and takes that path).
+    if ((w1 & 0xFF000000) == 0x05000000 && segmentPointers[5]) {
+        return (void *)(segmentPointers[5] + (w1 & 0x00FFFFFF));
+    }
     // all segmented addresses have the least significant bit set
     if (w1 & 1) {
         // seg 0 is reserved and doesn't count here
@@ -2287,6 +2295,18 @@ static inline void *seg_addr(uintptr_t w1) {
         if (seg && segmentPointers[seg]) {
             const uintptr_t addr = (w1 & 0x00fffffe);
             return (void *)(segmentPointers[seg] + addr);
+        }
+    }
+    // GE's ROM GDLs also carry UNMARKED segmented refs with the LSB clear:
+    // G_MTX w1=0x03xxxxxx (seg 3 = render_pos), G_VTX w1=0x04/0x05xxxxxx
+    // (seg 4 = runtime vtx buffer, seg 5 = file base), G_SETTIMG w1=0x05xxxxxx
+    // (embedded image blob). Convention: segment in bits 24-27, 24-bit offset.
+    // Runtime pointers never land here: DRAM lives at >= 0x70000000 and
+    // K0-physical values are < 0x800000 (nibble 24 == 0).
+    if (w1 < 0x10000000 && ((w1 >> 24) & 0xf)) {
+        const uintptr_t seg = (w1 >> 24) & 0xf;
+        if (segmentPointers[seg]) {
+            return (void *)(segmentPointers[seg] + (w1 & 0x00FFFFFF));
         }
     }
     // GE passes OS_K0_TO_PHYSICAL(ptr) == ptr - 0x80000000 for RAM that lives

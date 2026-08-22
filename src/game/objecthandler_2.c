@@ -100,9 +100,14 @@ void load_object_fill_header(struct ModelFileHeader *objheader, u8 *name, u8* ds
     }
     
     objheader->Switches = (struct ModelNode **)filedata;
-    
+
+#ifdef PORT
+    /* PC port (D43/D45): the switches array is NS x 8B pointer slots, not NS x 4B words. */
+    objheader->Textures = (struct ModelFileTextures *)((u8 *)filedata + sizeof(struct ModelNode *) * objheader->numSwitches);
+#else
     // hmmmmmmmmmmmm
     objheader->Textures = (struct ModelFileTextures *)&((s32*)filedata)[objheader->numSwitches];
+#endif
     
     objheader->RootNode = (struct ModelNode *)&objheader->Textures[objheader->numtextures];
     

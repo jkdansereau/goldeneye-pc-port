@@ -3254,9 +3254,16 @@ after_opcode:
         paintval += 50;
     }
 
+#ifdef PORT
+    /* PC port (D43/D45): CollisionRelatedNode is a raw vma (u32), not a pointer. */
+    relatednode = (ModelNode *)(uintptr_t)((ModelRoData_DisplayList_CollisionRecord *) node)->CollisionVertices[bestindex].CollisionRelatedNode;
+
+    if (((ModelRoData_DisplayList_CollisionRecord *) node)->CollisionVertices[bestindex].CollisionRelatedNode != 0)
+#else
     relatednode = (ModelNode *) ((ModelRoData_DisplayList_CollisionRecord *) node)->CollisionVertices[bestindex].CollisionRelatedNode;
 
     if (((ModelRoData_DisplayList_CollisionRecord *) node)->CollisionVertices[bestindex].CollisionRelatedNode != NULL)
+#endif
     {
         relatedrodata = &relatednode->Data->DisplayListCollisions;
         relatedrwdata = (ModelRwData_DisplayList_CollisionRecord *) modelGetNodeRwData(model, relatednode);

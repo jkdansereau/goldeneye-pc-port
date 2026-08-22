@@ -2067,12 +2067,23 @@ void load_walletbond(void)
 
     if (walletinst[0] == NULL)
     {
+#if defined(PORT)
+        /* PC port (D45): PwalletbondZ expands to 0x1664C; the region ends well
+         * below the +0x28000 DL area of the same buffer. */
+        load_object_fill_header(
+            PitemZ_entries[PROP_WALLETBOND].header,
+            (s8*)PitemZ_entries[PROP_WALLETBOND].filename,
+            (u8*)ptr_logo_and_walletbond_DL,
+            0x17000,
+            0);
+#else
         load_object_fill_header(
             PitemZ_entries[PROP_WALLETBOND].header,
             (s8*)PitemZ_entries[PROP_WALLETBOND].filename,
             (u8*)ptr_logo_and_walletbond_DL,
             0xA000,
             0);
+#endif
 
         modelCalculateRwDataLen(PitemZ_entries[PROP_WALLETBOND].header);
 
@@ -7777,7 +7788,14 @@ void init_menu18_displaycast(void)
     } 
 
     allocSize = 0x19000; 
+#if defined(PORT)
+    /* PC port (D45/D46): cast-screen chain strict bound is 0x240DC (rifle);
+     * D46 overlap-safety analysis: R >= P_conv + 16*M_actual, so the zbuf
+     * below must not be clobbered by marker expansion into [P_conv, R). */
+    bufferRemaining = 0x25000; 
+#else
     bufferRemaining = 0x18160; 
+#endif
 
     if (1);
 

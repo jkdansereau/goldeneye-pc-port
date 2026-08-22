@@ -1305,6 +1305,195 @@ one such frame observed at #02). addr2line takes the full absolute address
 directly (`addr2line -e build-pc/ge007.x86_64.exe -f -C 0x14007a31a`); image
 base is still 0x140000000 (re-verified post-rebuild via nm).
 
+**D45 (OPEN — sizing for D43)** Model-file buffers must grow for PC: the
+GDL region doubles (8 B Gfx slots → 16 B) and texture-marker expansion in
+texLoadFromGdl() emits full RDP setup sequences whose size is data-driven.
+Per-file worst-case final size P_final = B_pc + 2×(D_n64−g1) + 16×Σ_markers
+(K_t−1), where K_t is the exact worst-case command count per marker type t
+(tex.c helpers, maxlod≤8, all texTry* state guards emitting, valid=FALSE —
+the realistic branch since D_800483C4 is a gunfire texture index):
+type0/LOD 37, type1/DETAIL 46, type2/MIPMAP 36, type3/TILE 18,
+type4/TILE_PRESWAP 15 (preamble = PipeSync + gSPTexture ≤ 2; water check ≤ 1).
+Marker type = w0&7 of the 0xC0-top-byte slot. Verified over all 512 model
+files (build-pc/d43_sizes.py). Texture *pixel* data is unaffected by Gfx
+width, so texpool sizes can stay at their N64 values — only the model-file
+regions grow. Required buffer edits (all D40-class ABI-forced size constants,
+semantics unchanged): gun.c:106 size_item_buffer 0x14820→**0x23000**
+(bondview body+head+held-prop chain worst 0x1DB9A; suit pool 0xA0B0 + R
+0x18000 = 0x220B0); gun.c:109 D_80032464 0x7530→**0xF000** (GautoshotZ
+0xE788); gun.c ITEM_SUIT_LF_HAND R 0xBD70→**0x18000** (Csuit_lf_handZ
+0x16F9C) with pool expr size−0x18000; gun.c ITEM_TRIGGER/ITEM_WATCHLASER R
+0xAFD0→**0x17000** (GtriggerZ 0x16030); front.c load_walletbond R 0xA000→
+**0x17000** (PwalletbondZ 0x1664C; stays below the +0x28000 DL region);
+front.c cast screen bufferRemaining 0x18160→**0x1C000** (cast chain worst
+0x19CA0 — zbuf at 0x19000+region must not be clobbered); initmenus.c:34 logo
+buffer 0x78000→**0x7C000** (texpool 0x19000 + region 0x1C000 + zbuf
+440×330×2=0x46B80). Unchanged: title/gunbarrel chain (0x16DF0 ≤ 0x23A00),
+front.c logos (≤0x9BCC ≤ 0x3C000), dst=0 fileLoad path (allocates ALL
+remaining STAGE space and gives the tail back via
+mempAddEntryOfSizeToBank — stage props/NPC bodies are bounded only by live
+STAGE headroom, ~2.3 MB). The converter will also assert P_final ≤ R at load
+time with a clear error instead of overflowing.
+**D46 CORRECTION:** the cast-screen values above are superseded —
+front.c bufferRemaining is **0x25000** (not 0x1C000) and the initmenus.c
+logo buffer is **0x85000** (not 0x7C000); see D46.
+
+**D46 (RESOLVED — overlap safety + final buffer sizing for D43)**
+The GDL expansion in sub_GAME_7F0762E0 is in-place: output starts at the
+first-GDL offset and grows rightward; input is read from the mirror copy
+texCopyGdls() made at the region tail ([A+R−P_conv+g, A+R)). The initial
+gap is R−P_conv and the cumulative output-minus-input excess is ≤
+16·Σ(K_t−1) over markers processed so far (monotone; 0xba "texture
+already set" skips only reduce it). Since Gfx is 16 B for BOTH input and
+output on PC, the no-clobber condition **R ≥ P_conv + 16·M_actual** is
+identical to the fit condition — one constraint, not two. (The N64 game
+satisfies the same identity with 8-B slots.) The converter therefore sets
+`poolRemaining = P_conv = B_pc + 2×(D−g1)` EXACTLY (the pre-expansion
+image; markers are expanded at runtime, consuming [P_conv, R)).
+
+**Strict bound from N64 ground truth.** The N64 game works, so per file
+8·M_a ≤ R_share_N64 − B_n64 − E. PC slots are 2× wide with the same M_a
+(tex.c logic + texture data identical), hence
+**P_final_actual(PC) ≤ B_pc + 2×(R_share_N64 − B_n64)** (E cancels).
+N64 R_share values (game code): suit 0xBD70, trigger/watchlaser 0xAFD0,
+wallet 0xA000, weapons 0x7530, bondview chain 0x14820
+(size_item_buffer), cast chain 0x18160 (front.c bufferRemaining).
+For chains ΣR_share = bufferRemaining EXACTLY: each subsequent load's R
+is the previous file's post-load poolRemaining via
+`get_pc_buffer_remaining_value()` (front.c:7809-7825), so the shares
+tile the N64 budget with no margin assumption beyond "N64 works".
+
+**tex.c expansion state machine** (for reference / any future
+simulation): `sub_GAME_7F0CC4C8()` resets g_TexTileStates[8],
+g_TexTileSizes[8] and g_TexLutMode at the START OF EVERY
+texLoadFromGdl call → texTry*/texSetLutMode dedup only works WITHIN one
+GDL. Per-marker slot counts (lutmodeindex=0): type0/LOD ≤ 2 + 6
+(LoadToTmemAddr: SETTIMG+SETTILE≤1+LoadSync+LoadBlock+PipeSync) + 4
+(TileFromDef: PrimColor+LUT≤1+SETTILE≤1+SETTILESIZE≤1) + 3×min(maxlod,7)
+(TileLods basetile=1) + 3 (CycleType/TxLOD/Detail); type2/MIPMAP ≤ 2 + 6
++ 3×(maxlod + [maxlod==1]); type1 ≤ 2 + 6 (Zero) + 1 (TileSync) + 6 + 4
++ 3×min(maxlod,7) + 3; type3 ≤ 2+6+4+4; type4 ≤ 2+6+4. With LUT formats
+the LoadToTmem* helpers double to ≤12 — see next item.
+
+**Texture scan (build-pc/d43_lutscan.py), all 512 files:** 1071 valid
+texture-table refs (TID < MAX_TEXTURES=3001; the rest are skipped by
+texLoadFromModelFileHeader, and markers whose texnum was never loaded get
+tex==NULL → PipeSync only). Image headers parsed via imagelist.u.csv
+(order = assets/images.def order): **NO LUT textures** (formats 9-12)
+exist in any model file — only format 0 (×1069) and 8 (×2) — so
+lutmodeindex=0 universally and the ≤6-slot LoadToTmem bound holds.
+maxlod distribution {0: 1063, 6: 7, 7: 1} → texWriteTileLods emits
+NOTHING for 99% of markers. The D45 K_BOUND table {0:38, 1:46, 2:36,
+3:18, 4:15} is verified a true worst-case bound under these conditions.
+
+**Strict-bound results (build-pc/d43_chainbound.py):** suit_lf_hand
+0x1002C ≤ 0x18000 ✓; trigger/watchlaser 0xED20 ≤ 0x17000 ✓;
+walletbond 0x105BC ≤ 0x17000 ✓; worst weapon GmapZ 0xE91C ≤ 0xF000 ✓;
+bondview chain (worst body spicebond + headbrosnan + autoshot) 0x1CE5C
+≤ 0x23000 ✓; **cast chain: rifle 0x240DC / pistol 0x23F24 > 0x1C000 —
+SHORT by ~0x8000** (worst: body spicebond B_pc=0x8A14/B_n64=0x7D60 +
+head headbrosnan 0x1D90/0x1D50 + rifle autoshot 0x4828/0x3E28 / pistol
+wppksil 0x45B0/0x3DC8). The D45 worst-K estimate (0x19CA0) was below the
+strict bound because it assumed Rare's N64 buffer had zero margin.
+
+**Resolution (two one-line constant changes, both already PORT-guarded):**
+front.c init_menu18_displaycast bufferRemaining 0x1C000 → **0x25000**
+(covers 0x240DC); initmenus.c logo buffer 0x7C000 → **0x85000**
+(texpool 0x19000 + region 0x25000 + zbuf @ALIGN64(0x3E000) size
+440×330×2=0x46B80 → 0x84B80, rounded). MEMPOOL_STAGE headroom is ample
+(total stage usage at menu init ≈ 0xD0040 vs ~2.3 MB pool). The converter
+should additionally assert `P_conv + 16×Σ_markers(K_t−1) ≤ R` at load
+with a clear error (K_BOUND table; provably ≥ actual expansion).
+
+**D47 (RESOLVED — D43 converter contract finalized; capstone endianness fix)**
+Session that closed every open question on the model-file converter.
+
+1. **Capstone endianness bug (environment gotcha).** All earlier-session
+disassembly of the ROM used capstone's default LITTLE-endian mode against a
+big-endian MIPS image → garbage register flow. MUST use
+`CS_MODE_MIPS32 | CS_MODE_BIG_ENDIAN`. Compaction + accessors were re-disassembled
+cleanly; where BE disassembly is still ambiguous, the byte-matched C in `src/`
+is ground truth.
+2. **Compaction state values (BE disasm of 0x7F0762E0 + byte-matched C).**
+P = entry.poolRemaining, R = entry.rom_remaining, **delta = R − P** (not
+P−R); `texCopyGdls(F+G, F+R−P+G, P−G bytes)`; per-GDL count = off_{i+1}−off_i
+bytes (or P−off_last); final fileSetSize = ((rep&0xFFFFFF)+0xf)&~0xf.
+Both accessors (0x7F0BD11C / 0x7F0BD100) compute `0x80090000 + idx*20` →
+**resource_lookup_data_array actually lives at 0x80090000**; the ob.c comment
+(0x800888B0) is stale.
+3. **memp allocator (src/memp.c).** Bump allocator; `mempAddEntryOfSizeToBank`
+rewinds `pool->pos` for the most recent allocation →
+`fileSetSize(reallocate=1)` returns the post-compaction tail to the bank.
+`load_resource` decompresses INTO ptrdata (=F), reading the compressed source
+from the block's TAIL. Fresh dst==0 load: P := S_bank (all remaining stage
+bank) → F := alloc(S_bank) → R := S_bank → load_resource sets P := D_N64.
+4. **Reload hazard + PC decision.** `fileIndexLoadToBank` takes S_bank only
+when poolRemaining==0; fileSetSize leaves P=R=post-compaction size, so a
+reload within one stage would alloc(P_old) which can be < D_N64 (source
+pointer before the block; decompress past it — latent on N64 too). PC fix:
+PORT-guarded reset of `poolRemaining = 0` immediately before
+`_fileNameLoadToBank` in load_object_fill_header → every load gets fresh-
+bank semantics: staging space = whole remaining bank, steady-state bank
+usage identical (fileSetSize rewinds to the same place).
+5. **G_VTX w0 encoding (ROM-data proven).** GBI1/gDma1p style:
+w0 = 04<<24 | dst<<16 | (16·n), dst = ((n−1)<<4)|v0. All 2826 model-file
+instances have v0=0, n≤16 (batches of ≤16 verts — matches G_TRI4's 4-bit
+indices). fast3d's `gfx_sp_vertex(C0(0,16)/sizeof(Vtx), C0(16,4), …)` is
+correct AS-IS; the converter bswaps w0 only (no field remap). The
+F3DEX_GBI_2 `gsSPVertex` block in GE's gbi.h is a red herring — the asset
+toolchain emits GBI1 style.
+6. **G_TRI4 = standard 4-bit indices.** The "out-of-range seg-5 w1" values
+found by scanning are G_TRI4 index data, not addresses (w1 bits 20-31 hold
+the last two 4-bit indices). **Opcode-aware remap rule: only {G_VTX=0x04,
+G_SETTIMG=0xFD, G_LOADBLOCK=0xF3} carry addresses in w1.** Never remap
+TRI4/TRI1/TEXTURE/SETOTHERMODE/CLEARGEO/SETGEO/syncs.
+7. **Render-time segment bindings (model.c).** seg5 (COL1) = BaseAddr = F on
+every model path; seg4 (VTX) = the record's Vertices base (or a runtime
+buffer in dorottex). Hence G_VTX seg4 w1 = displacement from that array →
+NO remap needed (array order preserved); G_VTX seg5 w1 = absolute file
+offset — 2804/2805 verified to land inside a vertex array at vo+d with
+d%16==0 → remap via the unified region map.
+8. **Vertex format (all 512 files).** Normal: bswap s16 x,y,z,index,s,t;
+bytes @C-F raw (rgba/normal are single bytes). Collision (34,580 verts):
+bswap s16 x,y,z,index; LinkedTo u32@8 is ALWAYS 0 or 0x05xxxxxx (node vma);
+CollisionRelatedIndex s16@C (range −1..113) + reserved s16@E bswapped.
+9. **No embedded texture blobs in any model file** — texconfig TextureID
+seg-5 count = 0 across all 512 (the earlier "3 title files" note was the
+vestigial logo SETTIMG refs already covered by d43_cover.py). No blob
+handling needed in the model converter.
+10. **Zero-count vertex arrays.** PexplosionbitZ is the ONLY file with
+nv=0 and non-null Vertices (0x98); its GDL uploads 16 verts from there via
+absolute seg-5 ref. Rule: emit the array sized up to the next object offset
+(→ [0x98,0x198) = exactly 256B here).
+11. **GDL tight packing is safe.** fast3d `case G_ENDDL: return` — trailing
+junk after ENDDL is never executed at render time. Spans: 2064 tight,
+238 with trailing bytes (1904B total). Converter emits up to and including
+ENDDL; each PC span = exactly 16·slots → compaction counts are exact.
+12. **Reference validator: `build-pc/d43_convert.py`** implements the full
+conversion spec (DFS walk with LOD/SWITCH rewiring, region map, per-opcode
+record conversion, remap checks) and runs it on all 512 files:
+**ALL CLEAN** — every pointer remap resolves, layout invariants hold,
+max D_PC = 0xB7E0, max D_PC/D_N64 ratio = 1.31 → staging headroom is
+trivially satisfied vs the ~2.3 MB stage bank. This script IS the spec for
+the C implementation.
+13. **Final converter contract.** Emit `[switches NS×8B LE][texconfigs NT×12B
+(bswap TextureID; 0x05xxxxxx would remap — never occurs)]` → nodes+records in
+DFS preorder (PC layout via struct assignment; every promoted pointer field
+emitted as zero-extended u64 of 0x05|new_off; Primary/Secondary GDL ptrs
+remapped but NOT "promoted"; BaseAddr emitted 0) → vertex arrays immediately
+after their record (PointUsage = 2×numVertices s16 after op24 CollisionVerts)
+→ **GDLs LAST, contiguous, visit order, 16B LE slots**: w0'=bswap32(w0);
+w1' = bswap32(raw) EXCEPT for seg-5 of {0x04,0xFD,0xF3} → remap low24 via
+the region map; **no LSB set** (ROM convention; fast3d's extended seg_addr
+case handles unmarked segmented addresses). Stage at F+R−D_PC, memmove to
+F. Set `poolRemaining = D_PC` exactly (never touch rom_remaining).
+14. **N64 record field offsets** come from the bondtypes.h comments (which
+preserve N64 offsets); all 14 opcodes present in ROM files — 1,2,4,8,9,10,
+12,13,15,18,21,22,23,24 — verified against RSZ sizes. PC layout: assign
+through the real structs (compiler packs); don't hand-compute.
+15. **PointUsage** = 2×numVertices s16 entries, indexed by MAIN-vertex index,
+chain terminated by −1 (chr.c:3309-3331).
+
 ### G. Phase 2 status (current)
 
 Done: PD fast3d integrated (`port/fast3d/`, replaces the deleted gfxstub.c);

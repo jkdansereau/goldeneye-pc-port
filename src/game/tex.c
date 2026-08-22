@@ -797,7 +797,12 @@ s32 texLoadFromGdl(Gfx *src, s32 srcsize, Gfx *dst, void *texpool)
     Gfx        *in           = src;
     Gfx        *out          = dst;
 
+#ifdef PORT
+    /* PC port (D43): Gfx slots are 16 bytes on x86-64, not 8. */
+    count = srcsize / sizeof(Gfx);
+#else
     count = srcsize >> 3;
+#endif
 
     sub_GAME_7F0CC4C8();
 
@@ -808,7 +813,13 @@ s32 texLoadFromGdl(Gfx *src, s32 srcsize, Gfx *dst, void *texpool)
 
     while (count > 0)
     {
+#ifdef PORT
+        /* PC port (D43): the opcode is the TOP byte of w0 (N64 read the first
+         * memory byte, which big-endian puts there). */
+        switch ((u8)(in->words.w0 >> 24))
+#else
         switch (*(u8 *)in)
+#endif
         {
             case G_NOOP:
                 if (!syncEmitted)
@@ -1008,7 +1019,12 @@ s32 texLoadFromGdl(Gfx *src, s32 srcsize, Gfx *dst, void *texpool)
             case 0xba:
                 if (valid)
                 {
+#ifdef PORT
+                    /* PC port (D43): N64 byte offset 2 of the slot = bits 8..15 of w0. */
+                    if (((s8)((in->words.w0 >> 8) & 0xff) == 17) || ((s8)((in->words.w0 >> 8) & 0xff) == 20) || ((s8)((in->words.w0 >> 8) & 0xff) == 16))
+#else
                     if ((((*(((s8 *)in) + 2)) == 17) || ((*(((s8 *)in) + 2)) == 20)) || ((*(((s8 *)in) + 2)) == 16))
+#endif
                     {
                         in++;
                     }
@@ -1045,7 +1061,12 @@ s32 texLoadFromGdl(Gfx *src, s32 srcsize, Gfx *dst, void *texpool)
 */
 void texCopyGdls(Gfx *arg0, Gfx *arg1, s32 arg2)
 {
+#ifdef PORT
+    /* PC port (D43): Gfx slots are 16 bytes on x86-64, not 8. */
+    arg2 = (arg2 / sizeof(Gfx));
+#else
     arg2 = (arg2 >> 3);
+#endif
     arg0 = arg0 + (arg2 - 1);
     arg1 = arg1 + (arg2 - 1);
 

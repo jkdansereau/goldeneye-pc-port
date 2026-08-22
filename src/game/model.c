@@ -5678,6 +5678,14 @@ void modelResetAnimationsScratchBuffer(void)
     if (var) \
         var = (void *)((u32)var + diff)
 
+#ifdef PORT
+/* PC port (D43/D45): Vertex.LinkedTo is a raw vma (u32), not a pointer —
+ * rebases the same way, keeps sizeof(Vertex) at 16 bytes. */
+#define PROMOTE32(var) \
+    if (var) \
+        var = (u32)((u32)var + diff)
+#endif
+
 void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr)
 {
     s32 diff = fileramaddr - vma;
@@ -5732,7 +5740,11 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
                     PROMOTE(rodata->PointUsage);
                     for (i = 0; i < rodata->numCollisionVertices; i++)
                     {
+#ifdef PORT
+                        PROMOTE32(rodata->CollisionVertices[i].LinkedTo);
+#else
                         PROMOTE(rodata->CollisionVertices[i].LinkedTo);
+#endif
                     }
                     rodata->BaseAddr = (void *)fileramaddr;
                     break;
