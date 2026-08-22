@@ -1284,7 +1284,7 @@ ModelRoData records). Phase-2 project; see §H. Reference implementation:
 PD port's `port/src/preprocess/filemodel.c` — same PROMOTE idiom, same vma
 0x5000000 (§2.4); adapt + per-field validation, not a drop-in copy.
 
-**D44 (OPEN)** Crash-handler Phase 2 backtrace self-faults before printing.
+**D44 (closed 2026-08-22)** Crash-handler Phase 2 backtrace self-faulted before printing.
 `crashStackTraceSym()` in `port/src/crash.c` calls
 `GetCurrentThreadStackLimits(low, high)` passing the NULL pointer *values*
 rather than `&low, &high` (Phase 1's `crashStackTraceRaw` passes them
@@ -1293,12 +1293,17 @@ correctly). The API writes the stack limits to address 0x0 → access violation
 dispatch. Symptom: `ge007.crash.log` contains only Phase 1 (EXCEPTION/PC/
 MxCsr/thread-stack/MODULE lines) and no `BACKTRACE:` section — verified twice
 live; this is why every D3x fault so far cost a full gdb launch-mode session.
-Fix: one line, `GetCurrentThreadStackLimits(&low, &high)`. The build already
-compiles with `-fno-omit-frame-pointer` (CMakeLists.txt:193), so after the fix
-every crash auto-logs an EBP-chain backtrace to console + ge007.crash.log,
-symbolicable offline with addr2line. Verify: run, confirm `BACKTRACE:` with
-#00..#NN frames appears in the log and the D43 chain (modelPromoteNodeOffsets-
-ToPointers ← load_object_fill_header ← …) is visible without gdb.
+Fix: one line, `GetCurrentThreadStackLimits(&low, &high)` — applied.
+The build already compiles with `-fno-omit-frame-pointer` (CMakeLists.txt:193),
+so every crash auto-logs an EBP-chain backtrace to console + ge007.crash.log,
+symbolicable offline with addr2line. **Verified live:** the D43 run now logs
+`BACKTRACE:` with #00 = `modelPromoteNodeOffsetsToPointers` (model.c:5688) and
+#01 = `load_object_fill_header` (objecthandler_2.c:110) — the documented chain,
+no gdb needed. Note: frames beyond the true call chain can be stale stack data
+(the walk validates fp against stack bounds but not ret_addr against .text;
+one such frame observed at #02). addr2line takes the full absolute address
+directly (`addr2line -e build-pc/ge007.x86_64.exe -f -C 0x14007a31a`); image
+base is still 0x140000000 (re-verified post-rebuild via nm).
 
 ### G. Phase 2 status (current)
 

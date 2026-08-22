@@ -6,9 +6,11 @@ the summary + the immediate tasks._
 
 ## Your job
 Two tasks, in order:
-1. **D44 (quick win, ~15 min):** one-line fix to the crash handler so every crash
-   auto-logs a backtrace — see Immediate task 1. This shrinks the D43 debug loop
-   from "gdb launch session per fault" to "read ge007.crash.log".
+1. ~~**D44 (quick win, ~15 min):** one-line fix to the crash handler~~ — **DONE,
+   committed.** Every crash now auto-logs a `BACKTRACE:` section to stdout and
+   `ge007.crash.log`; the D43 chain (#00 model.c:5688 ← #01
+   load_object_fill_header) was confirmed without gdb. The debug loop is now
+   "read ge007.crash.log".
 2. **D43 (main task):** model-file loading ABI mismatch — stage object load faults
    in `modelPromoteNodeOffsetsToPointers()` (src/game/model.c:5688) because ROM model
    files are serialized with N64 layout (4-byte pointer fields) but read on PC as
@@ -41,7 +43,7 @@ Commit message style: `PC port: <phase> — <what>`.
 - **Dev loop measured (16-core box):** full clean rebuild ≈ **5 s** wall; launch → crash
   ≈ **3.7 s**. Neither is a bottleneck — *diagnosis* is (gdb launch-only mode + manual
   addr2line arithmetic per fault). ccache and boot fast-forward are NOT worth it.
-- **D44 identified + root-caused (fix pending):** `crashStackTraceSym()` in
+- **D44 fixed + committed:** `crashStackTraceSym()` in
   `port/src/crash.c` calls `GetCurrentThreadStackLimits(low, high)` — passing NULL pointer
   *values* instead of `&low, &high`. The API writes to address 0x0 *inside the SEH filter*
   → the process dies before printing the backtrace. That's why `ge007.crash.log` contains
@@ -57,17 +59,14 @@ Commit message style: `PC port: <phase> — <what>`.
   sizing, D41 WGL single-thread context currency (`gfx_sdl_release_context()`), D42
   rsp.c pointer-toggle truncation.
 
-## Immediate task 1 — D44: crash-handler one-liner (do this FIRST)
-1. In `port/src/crash.c`, function `crashStackTraceSym()`: change
-   `GetCurrentThreadStackLimits(low, high)` → `GetCurrentThreadStackLimits(&low, &high)`.
-   (Phase 1's `crashStackTraceRaw` already passes `&low, &high` — mirror it.)
-2. Rebuild (`./build-pc.sh ntsc-final`, ~5 s), run the exe unmodified. Expect a
-   `BACKTRACE:` section on stdout AND in `ge007.crash.log` after the Phase 1 lines.
-3. Confirm the logged backtrace shows the D43 chain: #00 at model.c:5688, then
-   `load_object_fill_header` / objecthandler frames above it. That proves the whole
-   diagnosis loop works without gdb. (If a frame's symbol is `?`, that's fine —
-   addr2line offline still resolves it; see `sym` tip below.)
-4. Commit: `PC port: fix crash-handler Phase 2 self-fault, auto-backtrace on crash (D44)`.
+## ~~Immediate task 1 — D44~~ (DONE — committed)
+The one-line fix (`GetCurrentThreadStackLimits(&low, &high)` in
+`crashStackTraceSym()`) is in. Verified: `BACKTRACE:` with #00 at model.c:5688
+and #01 `load_object_fill_header` appears on stdout + in `ge007.crash.log`.
+Caveats learned: (a) frames past the true chain can be stale stack data —
+validate a frame's address is inside `.text` before trusting it; (b) addr2line
+wants the full absolute hex address directly (`addr2line -e
+build-pc/ge007.x86_64.exe -f -C 0x14007a31a`).
 
 ## Immediate task 2 — D43: model-file loading ABI mismatch
 1. Reproduce: run; after a few rendered frames it SIGSEGVs in
@@ -163,9 +162,10 @@ Log each as D3x in §F and note it in AGENTS.md phase status.
   offline with `addr2line -e build-pc/ge007.x86_64.exe -f -C <0x140000000+rel>`. Image base
   is `0x140000000` (re-verify with `info address` after a rebuild). Debug scripts live in
   `build-pc/` (`d37_tree.py`, `d39_*.gdb`, `d41_probe.gdb`, …).
-- Crash log: `ge007.crash.log` (repo root) currently holds Phase 1 only — the backtrace
-  phase self-faults (**D44**, one-line fix, Immediate task 1). Until then attribute crashes
-  via gdb; after the fix the crash log is the first stop for any fault.
+- Crash log: `ge007.crash.log` (repo root) now holds Phase 1 + a `BACKTRACE:`
+  section (**D44** fixed). First stop for any fault; symbolicate with
+  `addr2line -e build-pc/ge007.x86_64.exe -f -C <abs-addr>`. Frames past the
+  true chain may be stale — sanity-check they fall inside `.text`.
 - `objdump -d --disassemble=<fn>` / `objdump -s -j .data` on build-pc/ge007.x86_64.exe is a
   fast way to check what the compiler actually emitted.
 - Many init functions use a fake RBP — compute stack offsets from the **entry RSP**, not RBP.

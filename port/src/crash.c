@@ -100,7 +100,7 @@ static void crashStackTraceSym(char *msg, PEXCEPTION_POINTERS exinfo)
 
 #if defined(PLATFORM_X86_64)
     PVOID low = NULL, high = NULL;
-    if (!GetCurrentThreadStackLimits(low, high)) {
+    if (!GetCurrentThreadStackLimits(&low, &high)) {
         snprintf(msg, CRASH_MAX_MSG, "\nBACKTRACE: (no stack limits)\n");
         return;
     }
