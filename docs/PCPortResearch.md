@@ -962,26 +962,96 @@ gameInit — and currently dies inside `langInit()` (D31).
   matches. `expand_ani_table_entries()` writes s32 to 0x08/0x10 via its own
   `struct anim_entry`, which now aligns exactly (no change needed there).
 
-  **Part B — pointer-rebase correctness: OPEN (next target).** After Part A the
-  *values* are still invalid for the crashing weapon-anim entry (gdb, break at
-  boss.c:233 after `alloc_load_expand_ani_table`): anim = 0x702adad4 = base
-  0x702ad8c0 + 0x214; `bitDescriptors` = 0xf714b067, `bitStream` = 0x000c9100 —
-  neither a V1 address. Two concrete anomalies to debug in
-  `expand_ani_table_entries()` (initanitable.c:233):
-  * `animation_table_ptrs1[]` is a **dense** array of `PTR_ANIM_*` offsets in
-    source, but in memory reads `[0x702ad8dc, 0, 0x702adad4, 0, …]` (zeros at
-    odd indices). The fixup loop `while (*var_v0 != 0)` would stop at the first
-    zero — yet even-index entries show rebased values. Reconcile the array's true
-    post-fixup shape and confirm every entry's unk08/unk10 is actually rebased
-    (the crashing anim is `animation_table_ptrs1[2]`).
-  * Even entry[0]'s `bitStream` comes out wrong (0x882ad8c0 — low 24 bits match
-    base, high byte 0x88≠0x70) while its `bitDescriptors` is correct
-    (0x702ad8c0). Inspect the second fixup loop (`**var_v0 +=
-    &_animation_entriesSegmentRomStart`) for a 32/64-bit or overlap bug.
+  **Part B — pointer-rebase correctness: ROOT-CAUSED (see D33), fix designed,
+  implementation pending.** The garbage values are *not* a bug in
+  `expand_ani_table_entries`'s arithmetic — the rebase is correct N64 code fed
+  wrong bytes, plus one genuine x86-64 ABI stride bug. Both root causes and the
+  full fix design are in **D33** below.
 
-  The crash site is unchanged (still model.c:914) — Part A is a necessary
-  prerequisite, not a regression. Next session: gdb `expand_ani_table_entries`
-  step-by-step until every entry's bitDescriptors/bitStream is a valid V1 address.
+* **D33 — ROM file stores structured fields big-endian; animation load needs a per-field endianness fixup + an x86-64 loop-stride fix (root cause of D32 Part B).**
+
+  **Discovery.** The `.z64` ROM file is not a plain image: multi-byte
+  *structured* fields (record headers, tables) are stored in **big-endian byte
+  order**, while bit-packed data streams are raw. Evidence chain:
+  1. `baserom.u.z64` is byte-for-byte identical to `data/ge007.ntsc-final.z64`;
+     the ROM header is GE-specific (magic `80 37 12 40` from `src/rom_header.s`,
+     BE u32 CRC at 0x10/0x14 written by `tools/n64cksum.c`) — not the standard
+     N64 header layout.
+  2. Build pipeline: `$(LD)` → ELF → `objcopy -O binary --gap-fill=0xff` →
+     RareZip cdata compression (`data_compress.sh`) → `n64cksum`. No byte-swap
+     step; the mips64-elf-gcc toolchain (SGI-style BE default) emits BE bytes.
+  3. `tools/utils.h` documents the convention: `swap_bytes()` = "convert from
+     v64 to z64 ordering", `reverse_endian()` = "convert from n64 to z64
+     ordering" — the project's ".z64" is a word-swapped cart image (community
+     ".n64" format). Real cart = bswap32(file).
+  4. Animation-blob analysis: reading headers as BE u32/u16 yields self-
+     consistent values (frame counts, bit widths 0–31, offsets that tile the
+     blob exactly); LE reads yield garbage.
+
+  **Per-field transform rule** (applied at load time to the `animation_data`
+  segment): u32 fields → bswap32; u16 fields → bswap16; u8 fields → identity;
+  bit-packed streams → identity. No single uniform word transform exists (mixed
+  field widths).
+
+  **Blob layout** (fully mapped; all 173 entries verified): each C array
+  (`animation_table_ptrs1/2` in `src/game/initanitable.c`) is a sequence of
+  20-byte records at the `PTR_ANIM_*` offsets. Record fields: +0x00 address
+  (entries-segment offset, u32), +0x04 frame count (u16), +0x06 angle bit width
+  (u8, used by `modelAnimReadBitsAsU16Angle`), +0x07 loop flag (u8), +0x08
+  bitDescriptors blob offset (u32), +0x0C bitsPerFrame root motion (u16, used by
+  `sub_GAME_7F06D2E4`: `scaled = unk0C * frame`), +0x0E frame size in bits
+  (u16, used by `loadAnimationFrame`: `frameSize = unk0E >> 3`), +0x10
+  bitStream blob offset (u32). Tail (+0x14..+0x3C) is unused by any code — the
+  effective record size is 20 bytes (= `struct anim_entry`, 5×s32). Interleave
+  rule: entry *i*'s payload [descriptors][stream] sits at
+  [PTR_ANIM_{i-1}+0x14, PTR_ANIM_i); all regions are disjoint; stream size =
+  ceil(frameSizeBits × frames / 8) — exact fit on every entry (fire_standing:
+  544 bits × 106 frames → 252 bytes). Descriptor array = `ModelAnimBitField`
+  {u16 bitOffset, u8 bitCount, u8 pad, u16 valueOffset} ×4 (6 bytes each); after
+  the transform all 692 descriptor arrays pack bitOffsets sequentially from 0.
+  Null entries use sentinel **1** (not 0) — `expand_ani_table_entries` skips
+  `*var_v0 == 1`.
+
+  **Validation.** Simulated the full transform in Python over all 173 entries:
+  0 bad descriptor ranges, 0 non-sequential arrays. Root-motion simulation for
+  fire_standing frames 0–3 (widths 6/7/6/0, bitsPerFrame=19) gives smooth
+  per-frame deltas (x = 7, 10, 12, 11; y ≈ 1086–1088) — proving the stream
+  bytes are identity-correct (no transform). The previously observed garbage is
+  reproduced exactly: file bytes `[00 00 01 58]` at fire_standing_fast's bd →
+  LE read 0x58010000 + base 0x702ad8c0 = **0xC82BD8C0**, the exact value seen
+  under gdb. The "zeros at odd indices" observation was a gdb display artifact —
+  the compiled `.data` array is dense (verified by objdump of
+  build-pc/ge007.x86_64.exe).
+
+  **Second root cause: x86-64 stride bug in `expand_ani_table_entries`.** The
+  loops iterate with `s32** var_v0; var_v0++` — +4 bytes/iter on N64, but
+  `s32*` is 8 bytes on x86-64. Verified in the compiled binary (`add $0x8,%rdx`)
+  : only even-indexed entries are rebased; odd entries keep raw small offsets
+  (e.g. fire_standing, index 1, would stay 0x144 → instant SIGSEGV on use).
+  This pattern occurs nowhere else in the compiled set.
+
+  **Fix design (implementation pending — this is the immediate task):**
+  1. New port function `romdataFixupAnimationData(u8 *blob, u32 blobSize,
+     const s32 *tableA, const s32 *tableB)` in `port/src/romdata.c` (+ decl in
+     `port/include/romdata.h`): for each non-null (≠0, ≠1) offset in both
+     tables — bswap the 20-byte record header per-field (u32: +0x00/+0x08/
+     +0x10; u16: +0x04/+0x0C/+0x0E; u8: +0x06/+0x07 untouched); then transform
+     the descriptor array at [bd, bs) step 6 (bswap16 on words 0 and 4 only).
+     Guards: skip if bd==0 && bs==0; require bd < bs ≤ blobSize and
+     (bs−bd) % 6 == 0.
+  2. Call it in `alloc_load_expand_ani_table()` (initanitable.c ~line 265)
+     **between** the `romCopy` and `expand_ani_table_entries` — one line +
+     `#include "romdata.h"` (`port/include` is already on the include path).
+     Mechanical ABI edit per non-negotiable #2; must run *before* expand
+     (expand reads/writes the fields as LE after fixup).
+  3. Fix the stride in `expand_ani_table_entries()` (initanitable.c:233):
+     iterate with `s32 *` instead of `s32**` — mechanical ABI fix, semantics-
+     preserving on N64 where it was already correct.
+
+  **Open item.** The entries segment (per-frame joint angles; file offset
+  0x124AC0, 0x169EC0 bytes) is left as identity for Phase 1.5 — not consumed at
+  boot (only during rendering). Verify visually in Phase 2 when Bond first
+  animates.
 
 ### G. Phase 2 status (current)
 
@@ -1028,9 +1098,14 @@ shim expansion in compiled code.
 
 **State.** D31 (langInit file-load SIGSEGV) is fixed & verified — mainThread
 boots past all language-file loading into `bossInitMainthreadData()`. The boot
-now dies in `init_weapon_animation_groups_maybe()` on the **D32** ROM-struct
-pointer-width issue. D32 Part A (struct layout) is done; Part B (load-time
-rebase correctness) is the next target. No frames rendered yet.
+dies in `init_weapon_animation_groups_maybe()` on the **D32** ROM-struct issue.
+D32 Part A (struct layout) is done. **D32 Part B is now fully root-caused
+(D33):** (1) the ROM file stores the animation segment's structured fields in
+big-endian byte order — a per-field endianness fixup is required at load time;
+(2) `expand_ani_table_entries` has an x86-64 loop-stride bug (`s32**` advances
+8 bytes/iter, rebasing only even-indexed entries). The fix design is complete
+and validated against all 173 ROM entries; **implementation is the immediate
+task** (three small edits — see D33 "Fix design"). No frames rendered yet.
 
 **D32 repeatable fix procedure** (apply to any ROM-serialized struct that faults
 on a pointer-field read):
@@ -1043,18 +1118,23 @@ on a pointer-field read):
    into those u32 fields; if not, debug the fixup (see Part B below).
 4. Rebuild and confirm the boot advances past this struct to the next init step.
 
-**Next concrete target — D32 Part B.** Make `expand_ani_table_entries()`
-(initanitable.c:233) rebase *every* entry's `bitDescriptors`/`bitStream` to a
-valid V1 address. Gdb plan: break at boss.c:233 (after `alloc_load_expand_ani_table`),
-step through the two fixup loops, and for each `animation_table_ptrs1[i]` /
-`animation_table_ptrs2[i]` entry verify `*(u32*)(entry+8)` and `*(u32*)(entry+16)`
-are in [0x70xxxxxx]. Resolve these two anomalies first:
-* In-memory `animation_table_ptrs1[]` reads `[ptr, 0, ptr, 0, …]` (zeros at odd
-  indices) though the source is a dense `PTR_ANIM_*` list — reconcile the array's
-  true shape vs the `while (*var_v0 != 0)` loop.
-* entry[0]'s `bitStream` = 0x882ad8c0 (high byte 0x88≠0x70) while its
-  `bitDescriptors` = 0x702ad8c0 is correct — inspect the second fixup loop
-  (`**var_v0 += &_animation_entriesSegmentRomStart`) for a 32/64-bit or overlap bug.
+**Next concrete target — implement the D33 fix.** Three edits (full design in
+D33):
+1. `port/src/romdata.c` + `port/include/romdata.h`: add
+   `romdataFixupAnimationData(u8 *blob, u32 blobSize, const s32 *tableA,
+   const s32 *tableB)` — per-field BE→LE transform of the 20-byte records and
+   the [bd, bs) descriptor arrays (u32 → bswap32, u16 → bswap16, u8 identity).
+2. `src/game/initanitable.c` `alloc_load_expand_ani_table()`: call the fixup
+   between `romCopy` and `expand_ani_table_entries` (+ `#include "romdata.h"`).
+3. `src/game/initanitable.c` `expand_ani_table_entries()`: change the loop
+   pointer from `s32**` to `s32 *` so every entry is visited on x86-64.
+
+Then: build (`./build-pc.sh ntsc-final`), verify under gdb (launch mode):
+break at boss.c:233 after `alloc_load_expand_ani_table`; for a sample of
+`animation_table_ptrs1/2[i]` entries confirm `*(u32*)(entry+8)` and
+`*(u32*)(entry+16)` are in [0x70xxxxxx] (blob base + offset) and the record's
+address field is a cart address (0x10xxxxxx); confirm boot advances past
+`init_weapon_animation_groups_maybe`. Commit at the milestone.
 
 **Non-negotiable #2 refinement (applied to AGENTS.md).** The original "game code
 compiles unmodified / fix belongs in port/" is too absolute: pointer-width layout
