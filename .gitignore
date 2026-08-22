@@ -70,6 +70,7 @@ notes/*
 
 # PC port (see CMakeLists.txt / port/)
 build-pc/
+tools_pc/*.exe
 data/
 ge007.ini
 !build/test.c

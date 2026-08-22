@@ -96,6 +96,12 @@ fixup loop's pointer stride on x86-64**; rebuild; confirm boot advances. Log eac
   `export PATH="/c/msys64/mingw64/bin:$PATH"`.
 - Build: `./build-pc.sh ntsc-final` (incremental; full rebuild only when `port/shim/`
   changes). ROM is at `data/ge007.ntsc-final.z64` (= `baserom.u.z64`, byte-identical).
+- ROM provenance (verified 2026-08): all three copies are byte-identical to the No-Intro
+  good dump `GoldenEye 007 (U) [!].z64` (kept in `data/`). MD5
+  `70c525880240c1e838b8b1be35666c3b`, SHA-256
+  `2cdcec8a9f0cb6e36337f3ee39d8ad105dc8afa6ba1c02d466e8f5b771f9a162`, 0xC00000 bytes,
+  country 'E' (US). Header CRCs DCBC50D1/09FD1AA3 re-verify with
+  `tools_pc/romverify.exe` (build line in its header comment).
 - gdb: **launch** mode only (`gdb -batch -ex "handle SIGSEGV stop" -ex run …`). Symbolicate
   offline with `addr2line -e build-pc/ge007.x86_64.exe -f -C <0x140000000+rel>`. Image base
   is `0x140000000` (re-verify with `info address` after a rebuild).
