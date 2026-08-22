@@ -14,8 +14,11 @@ Two tasks, in order:
 2. **D43 (main task):** model-file loading ABI mismatch — stage object load faults
    in `modelPromoteNodeOffsetsToPointers()` (src/game/model.c:5688) because ROM model
    files are serialized with N64 layout (4-byte pointer fields) but read on PC as
-   8-byte-pointer structs. Fix it with a D37-style re-layout in `port/src/romdata.c`,
-   then keep pushing rendering forward (more asset types will fault the same way).
+   8-byte-pointer structs. **Investigation is now COMPLETE** (all format details,
+   invariants, and the exact implementation plan are below + in §F/D43). What remains
+   is pure implementation: a two-pass re-layout converter in `port/src/romdata.c`,
+   ~6 one-line mechanical game-code edits, one fast3d seg_addr case, one hook line.
+   Then keep pushing rendering forward (more asset types will fault the same way).
 
 Work agentically — fix → build (~5 s) → verify → commit at each working milestone.
 Commit message style: `PC port: <phase> — <what>`.
@@ -35,7 +38,12 @@ Commit message style: `PC port: <phase> — <what>`.
   as a D3x finding. No behavior changes.
 - Region macros in `CMakeLists.txt` must mirror the N64 Makefile exactly.
 
-## Current state (verified live this session, 2026-08-22)
+## Current state
+- **D43 investigation finished (latest session):** all 512 model files decompress and
+  walk cleanly; layout invariants verified with zero failures; the converter design,
+  every mechanical edit, and the compaction contract are fully pinned down — see the
+  task section below before writing any code. No D43 code has been written yet.
+- (Earlier session, verified live 2026-08-22)
 - **Re-ran the committed build:** frames 1–4 render (`[NOTE] frame N rendered in … us`,
   frame 1 ~21 ms), then FATAL `0xc0000005` at PC `0x14007a31a` =
   `modelPromoteNodeOffsetsToPointers()` model.c:5688 — exactly D43. The black screen you
@@ -68,33 +76,58 @@ validate a frame's address is inside `.text` before trusting it; (b) addr2line
 wants the full absolute hex address directly (`addr2line -e
 build-pc/ge007.x86_64.exe -f -C 0x14007a31a`).
 
-## Immediate task 2 — D43: model-file loading ABI mismatch
-1. Reproduce: run; after a few rendered frames it SIGSEGVs in
-   `modelPromoteNodeOffsetsToPointers()` (model.c:5688) during stage object load via
-   `load_object_fill_header()` (src/game/objecthandler_2.c:89). With D44 fixed, the
-   crash log gives you the call chain for free.
-2. Understand the file format from `bondtypes.h` (`ModelFileHeader`, `ModelNode`,
-   `ModelRoData` union + per-opcode records) and `bondconstants.h`
-   (`MODELNODE_OPCODE_*`). N64 layout: header 24 B, node 20 B, all pointers 4 bytes.
-   **Do NOT design the re-layout from scratch:** PD port's
-   `port/src/preprocess/filemodel.c` (1,114 lines) is a Rare-validated near-analogue —
-   same `PROMOTE` idiom, **same vma 0x5000000**. Read it first; adapt its node walk /
-   placement / record handling. GE's `ModelRoData` union + opcodes differ (PD has
-   stargunfire/headspot/gundl types), so validate every GE record type per-field against
-   bondtypes.h + ROM ground truth.
-3. Implement the two-pass re-layout in `port/src/romdata.c`: walk the node tree
-   (Child/Next/Parent links), place every sub-struct once (8-aligned) in a compact image,
-   rewrite each embedded pointer as a zero-extended offset from the image start, so the
-   existing `PROMOTE` rebase (`diff = fileramaddr - vma`, vma = 0x5000000) works
-   unmodified. Hook it between the romCopy in `load_resource()` and first use (or at the
-   `load_object_fill_header` call sites — choose the narrowest correct hook).
-4. Validate one small model against ROM ground truth before generalizing (opcode
-   sequence, node links, a few Data records). gdb works; or write the optional
-   `tools_pc/romdump.py` inspector (below) and validate statically.
-5. Expect follow-on faults in other asset types (BG/stan/propobj tables) — same
-   procedure; note PD's `preprocess/` module already solves most of them
-   (`filebg.c`, `filetiles.c`, `filepads.c`, `filesetup.c`, …) — see the PD
-   reference section below.
+## Immediate task 2 — D43: model-file loading ABI mismatch (INVESTIGATION DONE — implement)
+
+### Verified facts (all checked against ROM ground truth, all 512 files / 1661 nodes — do NOT re-derive)
+
+**Format / layout:**
+- All 512 C*/G*/P*Z model files (Tbg_*_stanZ backgrounds are a different format/path — later) decompress fine; each file starts directly with the switches array (no in-file header — NS/NT come from the exe `ModelFileHeader` record via `objheader->numSwitches/numtextures`).
+- File layout: `[switches NS×4B][textures NT×12B][root node @ 4NS+12NT]…`; all embedded pointers are vma `0x05xxxxxx` (mask 0xFFFFFF).
+- **Tiling invariant verified, 0 failures in all 512 files** (`build-pc/d43_invariants.py`): `[0,D)` is exactly tiled by {switches, textures, nodes(20B), records(RSZ per opcode), vertex arrays(nv×16B), collision arrays(nc×16B), PointUsage (extends to the next owned object — size varies 8..3248B, NOT derivable from counts), GDLs (each extends to the next GDL start or D)}. Records INTERLEAVE with vertex arrays in character bodies — do not assume "all records before bulk".
+- **Opcodes present: only 1,2,4,8,9,10,18,21,23,24** (HEADER, GROUP, DL, LOD, BSP, BOX, SWITCH, GROUPSIMPLE, HEADPH, DLCOLLISION). Converter handles exactly these; fatal on anything else.
+- N64 record sizes: OP01=0x10, OP02=0x1C, OP04=0x14, OP08=0x10, OP09=0x24, OP10=0x1C, OP18=0x08, OP21=0x14, OP23=0x02, OP24=0x20. Field layouts per opcode are in `src/bondtypes.h` (ModelRoData_*Record) — PC record sizes differ due to pointer padding (e.g. OP04 20B→0x28). Since `port/src/romdata.c` is PC-only, read N64 fields from packed offsets and emit via the real PC structs (or explicit placement) — don't hand-compute PC offsets.
+- **Vertex arrays must stay 16B-stride** (GDL gSPVertex hardcodes 16B/vertex; propobj.c copies with sizeof(Vertex); model.c:4360 allocates numVertices×4 words). bswap every s16 field BE→LE. Main Vertices array is pure data; **CollisionVertices carry LinkedTo@8 = vma of a ModelNode** — remap to the new node offset (PROMOTE promotes them after rebase).
+- **GDLs:** 8B BE word pairs → 16B LE slots: `w0=bswap32(rom_w0); w1=bswap32(rom_w1)`. Set LSB of w1 on segmented commands (PD's gbi.c trick — fast3d's seg_addr requires w1&1 to take the segment path): GE values G_MTX=0x01, G_MOVEMEM=0x03, G_VTX=0x04, G_DL=0x06 + the RDP setimg family (check exact opcodes in include/PR/gbi.h before coding; PD's CMD_IS_SEGMENTED = MOVEMEM/MTX/VTX/COL/DL/SETTIMG/SETCIMG/SETZIMG). Do NOT set LSB on non-segmented commands.
+- PROMOTE contract: emit every promoted pointer as zero-extended u32 (low word of the 8B slot, high word 0); `PROMOTE` (`(u32)var + diff`, vma 0x5000000) then works unmodified. Fields promoted per opcode (model.c switch): all nodes Data/Parent/Next/Prev/Child; OP01 FirstGroup; OP02 ChildGroup; OP04 Vertices; OP08 Affects; OP09 left/rightChild; OP18 Controls; OP24 Vertices/CollisionVertices/PointUsage/CollisionVertices[i].LinkedTo. **NOT promoted:** GDL Primary/Secondary (stay raw 0x05xxxxxx), BaseAddr (game overwrites with fileramaddr).
+
+**Load path (single hook point):**
+- ALL model loads go through `load_object_fill_header()` (objecthandler_2.c:97): dst≠0 → `_fileNameLoadToAddr(name,0,dst,size)` (region = caller's bytes; body/head use 0x14820 per hand — PC image P must fit); else `_fileNameLoadToBank(name,0,0x100,4)` which allocates the ENTIRE remaining MEMPOOL_ME, so expansion D→P always fits and no memp bookkeeping is needed.
+- `fileIndexLoadToAddr` sets `rom_remaining = bytes` (region size) BEFORE load_resource sets `poolRemaining = D`. The compaction function reads both: **the fixup must set ONLY poolRemaining (=P), never rom_remaining.** Do NOT use fileSetSize for this — it clobbers rom_remaining too. Set `resource_lookup_data_array[fileGetIndex(name)].poolRemaining = P` directly (check where the array is declared, likely ob.h).
+- **Hook location:** inside load_object_fill_header, immediately after the filedata assignment and BEFORE Switches/Textures/RootNode setup + sub_GAME_7F075A90 — PROMOTE walks with PC ModelNode stride (40B), so the file must already be re-laid-out. Signature: `u32 romdataFixupModelFile(u8 *blob, const char *name, s16 NS, s16 NT)` returning P; one `#if defined(PORT)` call site.
+
+**Compaction contract (sub_GAME_7F0762E0, objecthandler_2.c:24-83) — the tightest constraint:**
+- It mirrors the GDL region [first_gdl_off, P) into the caller-region's tail headroom, then rewrites each GDL in place via texLoadFromGdl (expands G_SETTEX/G_NOOP into RDP texture commands), writing back starting at the original first-GDL offset; final fileSetSize = end of last rewritten GDL.
+- Per-GDL `count` = byte distance between CONSECUTIVELY VISITED gdls → **GDLs must be packed contiguously at the tail of the PC image, in modelIterateDisplayLists visit order.**
+- `modelIterateDisplayLists` (model.c:6254) **MUTATES the tree while walking**: LOD → `node->Child = LOD.Affects`; SWITCH → `node->Child = Switch.Controls`; BSP → `modelApplyReorderRelationsByArg(node,TRUE)` splices siblings (leftChild group before rightChild). Visit order per DL node: Primary, then Secondary (if non-null and ≠ previous), then DFS Child/Next/Parent.
+- `build-pc/d43_gdlorder.py` implements this exact simulation to verify visit-order adjacency — **has a known bug**: the initial node-collection pass follows only Child links, but the mutable walk reaches nodes via Next → crashes `KeyError: 400`. Fix: also push `n.next` during collection. Run it after fixing; expect all 512 files to pass (consecutive visited GDLs offset-adjacent).
+- Primary/Secondary are NOT promoted (raw 0x05xxxxxx), so modelNodeReplaceGdl's `Primary == find` comparisons work unchanged; after compaction Primary = replacementgdl (raw value, arbitrary parity — see next item).
+
+**Render-time GDL resolution:**
+- The game emits `gSPDisplayList(gdl, rwdata->gdl)` with w1 = raw 0x05xxxxxx; segment 5 (SPSEGMENT_MODEL_COL1) was just set to BaseAddr (= file base) by the preceding gSPSegment. fast3d's `seg_addr` (port/fast3d/gfx_pc.cpp:2282) currently sends 0x05xxxxxx down the "direct pointer" path (invalid). **Port-layer fix:** add a case — top byte 0x05 → `segmentPointers[5] + (w1 & 0xFFFFFF)`.
+- Segments 3/4 (MTX table / vertex buffer) are set by the game per-render via gSPSegment ✓. BG segments (13/14/15) belong to the background path — later task.
+
+### Implementation checklist (in order)
+1. Fix + run `build-pc/d43_gdlorder.py` → confirm visit-order adjacency for all 512 files.
+2. **Mechanical game-code edits (D32 class — document in §F, each semantics-identical on N64):**
+   - `src/bondtypes.h` Vertex: union members `struct Vertex *LinkedTo; void *CollisionRelatedNode;` → `u32 LinkedTo; u32 CollisionRelatedNode;` (sizeof(Vertex) stays 16 both platforms; game heap <4GiB so lossless on PC).
+   - `src/game/model.c`: add `#define PROMOTE32(var) if (var) var = (u32)((u32)var + diff)` beside PROMOTE (~line 5677); line 5735 `PROMOTE(...LinkedTo)` → `PROMOTE32(...)`.
+   - `src/game/chr.c:3257`: cast the now-u32 field `(ModelNode *)(uintptr_t)…`; line 3259 `!= NULL` → `!= 0`. (These are the only 3 use sites of the union.)
+   - `src/game/objecthandler_2.c:103`: `&((s32*)filedata)[objheader->numSwitches]` → `((u8*)filedata + sizeof(ModelNode*) * objheader->numSwitches)` (N64: 4B stride, identical).
+   - `src/game/tex.c`: texCopyGdls `arg2 = (arg2 >> 3)` → `arg2 / sizeof(Gfx)`; texLoadFromGdl `count = srcsize >> 3` → `srcsize / sizeof(Gfx)` and dispatch `switch (*(u8*)in)` → `switch ((u8)(in->words.w0 >> 24))` (N64-identical; those are the ONLY byte-level accesses in that function — everything else already uses words.w0/w1, and the default case copies whole slots).
+3. **fast3d seg_addr** — add the 0x05xxxxxx → segmentPointers[5] case (port layer).
+4. **`romdataFixupModelFile` in `port/src/romdata.c`** (PC-only): two-pass walk — collect all objects + sizes, then emit the PC image in place. Emission order: switches(NS×8B) → textures(NT×12B; bswap TextureID only) → nodes+records in DFS preorder (PC layout; rewrite every promoted pointer field to 0x05xxxxxx|new_offset) → bulk arrays (vertex/collision: bswap s16s, remap LinkedTo; PointUsage: bswap s16s, size = distance to next owned object in the source file) → **GDLs LAST, contiguous, in visit order** (16B LE slots, LSB-set on segmented commands).
+5. **Hook** into load_object_fill_header (`#if defined(PORT)` one-liner + poolRemaining update as above).
+6. **Build, run, verify:** no SIGSEGV in modelPromoteNodeOffsetsToPointers; scene shows actual geometry (not clear color); 30 s+ soak stable. Check PC image sizes vs the ToAddr region (body = 0x14820): extend `build-pc/d43_sizes.py` with a PC-size estimate (nodes 40B, records PC-sized, switches 8B, GDLs ×2) and confirm max fits; if not, D40-class pool growth.
+
+### Helper scripts (build-pc/, written this session)
+- `d43_decode.py` — decompress + decode one model's node tree + GDL command stream.
+- `d43_sizes.py` — decompress all 512, report sizes (total 0x323100; largest body ~34KB).
+- `d43_walk.py` — walks all trees using exe NS/NT (parses all 512 `assets/obseg/**/modelFileHeader.inc.c`); opcode histogram. Note: header names lack the C/G/P prefix and trailing Z (e.g. file `CcamguardZ` → header `camguard`).
+- `d43_invariants.py` — full ownership tiling check (0 failures / 512).
+- `d43_gdlorder.py` — exact visit-order simulation (**collection bug, see above**).
+
+### Follow-on
+Expect later faults in other asset types (BG/stan/propobj tables) — same D32/D37 procedure; PD's `preprocess/` module already solves most of them (`filebg.c`, `filetiles.c`, `filepads.c`, `filesetup.c`, …) — see the PD reference section below.
 
 ## Dev-loop speedups (build these when they pay off, not before)
 Priority order from the last session's measurements:
