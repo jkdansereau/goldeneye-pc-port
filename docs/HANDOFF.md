@@ -68,6 +68,12 @@ build → verify under gdb → commit at each working milestone.
 4. Validate one small model against ROM ground truth under gdb before generalizing
    (opcode sequence, node links, a few Data records).
 5. Expect follow-on faults in other asset types (BG/stan/propobj tables) — same procedure.
+6. D40-class audit (done this session, negative): the dangerous pattern is a raw
+   `char[N]`/`u8[N]` BSS pool sized for N64 that gets cast to a pointer-containing
+   struct and written with PC stride. Only 3 raw byte arrays ≥1 KiB exist in game code
+   (crash/debug buffers — not pools); the 362 `dword_CODE_bss_*` placeholders are
+   mostly scalars or self-sizing typed arrays (e.g. bg.c `s_bound_info[204]`). Re-audit
+   per asset type as loading progresses.
 
 ## Standing procedure (you will hit more of these)
 Every ROM-serialized struct with a pointer field faults the same way once you reach more
