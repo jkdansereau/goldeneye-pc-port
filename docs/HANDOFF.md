@@ -24,6 +24,10 @@ when the user is back: a booting game.
 - Region macros in `CMakeLists.txt` must mirror the N64 Makefile exactly.
 
 ## Current state (verified this session)
+- **ROM dump verified:** the No-Intro good dump `GoldenEye 007 (U) [!].z64` is
+  byte-identical to both dev ROM copies and its header CRCs re-compute clean
+  (`tools_pc/romverify.c`). Fingerprint + provenance in Environment below —
+  trust it, don't re-verify.
 - **D31 FIXED:** langInit file-load crash gone (real-zlib `decompressdata` in
   `port/src/rzdecomp.c`). mainThread boots into `bossInitMainthreadData()`.
 - **D32 Part A DONE:** `ModelAnimation` pointer fields → `u32` (N64 layout, sizeof 64).

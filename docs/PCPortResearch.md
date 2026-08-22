@@ -1106,6 +1106,11 @@ big-endian byte order — a per-field endianness fixup is required at load time;
 8 bytes/iter, rebasing only even-indexed entries). The fix design is complete
 and validated against all 173 ROM entries; **implementation is the immediate
 task** (three small edits — see D33 "Fix design"). No frames rendered yet.
+**ROM provenance locked:** the working ROM is byte-identical to the No-Intro
+good dump `GoldenEye 007 (U) [!].z64` (MD5 `70c525880240c1e838b8b1be35666c3b`,
+0xC00000 bytes, country 'E'); embedded header CRCs DCBC50D1/09FD1AA3
+re-computed and matched via `tools/n64cksum.c`'s CIC-6102 routine — see
+`tools_pc/romverify.c` (one-shot re-check) and docs/HANDOFF.md Environment.
 
 **D32 repeatable fix procedure** (apply to any ROM-serialized struct that faults
 on a pointer-field read):
