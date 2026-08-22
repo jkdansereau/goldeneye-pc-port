@@ -24,7 +24,7 @@
 | `port/src/` | Shims: `libultra.c` (OS API), `gesched.c` (scheduler), `n64stubs.c` (boot/TLB/FPU/rmon), `random.c` (PRNG ported verbatim from `random.s`), `ucode.c` (microcode segment markers), `main.c`, `video.c`, … |
 | `port/fast3d/` | Software RSP (adapted from the PD port). The main Phase 2 work. |
 | `rsp/graphics/gmain.s` | GE's RSP ucode — ground truth for GBI/CC/RM. |
-| `PD_PORT_CHECKOUT` | Perfect Dark PC port checkout — ground truth for the port layer. Its `port/fast3d/` is the starting point for ours. |
+| `PD_PORT_CHECKOUT` | Perfect Dark PC port checkout — **standing reference for this project**: consult it whenever a remaining work item has a PD analogue (same Rare engine family). Port-layer ground truth (`port/fast3d/`, crash/system/video), plus copy candidates: `port/src/preprocess/` (N64→PC asset conversion at load; `filemodel.c` is the D43 near-analogue, same vma 0x5000000) and `mixer.c`/`input.c`/`fs.c` (Phase 3/4 — our stubs were scaffolded to be replaced by these). Caveats: port-layer files only; same family ≠ identical format — validate per field. Full audit: `docs/PCPortResearch.md` §2.4. |
 
 ## Build
 
@@ -48,6 +48,6 @@ Run `/linkcheck` for this sweep. Record new findings in `docs/PCPortResearch.md`
 - **Compile+link milestone:** all ~235 TUs compile and `ge007.x86_64.exe` links clean (`ninja ge007 -k 0`, 236/236). Findings D7–D17 in `docs/PCPortResearch.md` §11; asset stubs in `port/src/assetstubs.c`, fast3d no-ops in `port/src/gfxstub.c` (delete when real fast3d lands).
 - **Phase 1 (boot to window):** done — ROM loads/validates/maps at cart base 0x10000000 (`romdata.c`), SDL2 window + GL clear loop (`video.c`), absolute asset symbols from `scripts/gen_romassets.py` → `port/src/romassets_<r>.s` (findings D18–D23).
 - **Phase 1.5 (boot to first frame):** DONE — boot chain complete AND real frames render (`[NOTE] frame N rendered in … us`). D34–D42 closed the blockers on top of D31–D33: ANIM_DATA lvalues, music seq-table ABI+endianness, music-heap sizing, libaudio bank-tree re-layout, implicit-declaration prototype shim (D38), Globalimagetable rebasing + true segment size (D39), ModelHitEntry pool sizing (D40), cross-thread GL context release (D41), rsp task-settings toggle (D42). ROM dump verified against the No-Intro good dump (byte-identical, header CRCs re-checked — `tools_pc/romverify.c`).
-- **Phase 2 (rendering):** IN PROGRESS — fast3d integrated + first frames render; current blocker is **D43** (model-file loading ABI mismatch: N64-layout ROM model files read as 8-byte-pointer PC structs → D37-style re-layout in `port/src/romdata.c`). Recurring sub-task: ABI/layout fixes per the D32 procedure (§H) as more asset types are first touched.
-- **Phase 3 (audio + input):** libaudio → SDL; decide the ASP strategy (C2: `aspMain*` dummies in `ucode.c`).
-- **Phase 4 (saves + polish):** file-backed EEPROM; PFS/motor already no-op stubs.
+- **Phase 2 (rendering):** IN PROGRESS — fast3d integrated + first frames render; current blocker is **D43** (model-file loading ABI mismatch: N64-layout ROM model files read as 8-byte-pointer PC structs → D37-style re-layout in `port/src/romdata.c`; a Rare-validated near-analogue exists in the PD port's `preprocess/filemodel.c` — §2.4). Recurring sub-task: ABI/layout fixes per the D32 procedure (§H) as more asset types are first touched (PD's `preprocess/` module already solves most of them).
+- **Phase 3 (audio + input):** libaudio → SDL — largely copy-and-adapt from PD (`mixer.c` 722 lines vs our 31-line stub; `input.c` SDL_GameController backend; §2.4); decide the ASP strategy (C2: `aspMain*` dummies in `ucode.c`).
+- **Phase 4 (saves + polish):** file-backed EEPROM — build on PD's `fs.c` (file-backed save dir); PFS/motor already no-op stubs.

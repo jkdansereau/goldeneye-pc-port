@@ -133,6 +133,50 @@ The PC build is **CMake** (the N64 build stays Make + IDO). Dependencies:
 It deliberately **excludes** the N64 I/O drivers (`src/lib/ultra/io/*.c`),
 the boot/TLB assembly, and the RSP microcode (`.s` under `rsp/`).
 
+### 2.4 PD-port copy-candidate audit (session 2026-08-22)
+
+The PD port (`PD_PORT_CHECKOUT`) is a **standing reference**
+for this project (see AGENTS.md): same Rare "Indy"/Bond engine family, and its
+port layer solves the same problem classes we are currently hitting. Audited
+against our remaining work items:
+
+**Direct copy candidates (Phase 3/4 — our stubs were scaffolded to be replaced
+by these):**
+
+| PD file | Lines | Replaces our | Notes |
+|---|---|---|---|
+| `port/src/mixer.c` | 722 | 31-line stub | libaudio→SDL final mixer; same RareAL family. Adapt to GE's `audi.c` wiring (sample rate/buffering) |
+| `port/src/input.c` | 1551 | 48-line stub | SDL_GameController backend: hotplug, rumble, keyboard fallback. Remap the button table to GE's scheme (C-buttons/Z-trig differ from PD) |
+| `port/src/fs.c` | 294 | 81 lines | File-backed save dir (`--savedir`, `$S` path expansion) — foundation for Phase 4 EEPROM/PFS file backing (ours are no-op stubs today) |
+| `port/src/audio.c` | 75 | 70 lines | Near-identical; diff when Phase 3 starts |
+
+**Reference implementations (Phase 2 — the D32/D37/D43 class).** PD's port
+layer has a `port/src/preprocess/` module (~4,125 lines): a per-ROM-segment
+`preprocessfunc` table in their `romdata.c` that converts N64-layout asset data
+to PC-native layout *at load time* — a systematic solution to the problem class
+we have been fixing ad-hoc per asset type.
+- `filemodel.c` (1,114) — the direct **D43** analogue: same `PROMOTE` idiom,
+  **same vma 0x5000000**. NOT a drop-in copy (GE's `ModelRoData` union + opcode
+  set differ — PD has stargunfire/headspot/gundl node types), but the node-walk
+  order, placement/alignment choices, and record handling are Rare-validated
+  against near-identical data: adapt rather than design from scratch.
+- `filebg.c` (524) — BG tables (an expected D43 follow-on fault).
+- `segaudio.c` (362) — audio bank-tree conversion; cross-check for our D37
+  `romdataFixupAudioBank`.
+- `filelang.c`, `filetiles.c`, `filepads.c`, `filesetup.c`, `gbi.c`,
+  `segfonts.c` — the remaining asset types we will hit.
+
+**Not copyable:** GE-specific `ModelRoData` record map; fast3d CC/RM
+ correctness (GE's custom GBI modes vs `gmain.s` do not exist in PD); PD extras
+(`config.c`, `optionsmenu.c`, `mpsetups.c`, `mod.c`) — options menu, MP setup,
+MOD player; not part of 1:1 fidelity.
+
+**Caveats:** copy **port-layer files only** — their decomp was modified for PC
+(e.g. `types.h` keeps N64 offset comments while using real pointers); our
+non-negotiables are unchanged. Same family ≠ identical format: validate every
+copied conversion per-field against GE headers + ROM ground truth (the standing
+D32 procedure).
+
 ---
 
 ## 3. GoldenEye decomp: what we're porting
@@ -1236,7 +1280,9 @@ each): `load_object_fill_header()` derives RootNode from `numtextures`
 at the wrong offset, and the `PROMOTE` rebase (`(u32)var + diff`) then
 operates on misaligned fields. Needs a D37-style re-layout of the model
 file image (header + switches array + texture table + node tree +
-ModelRoData records). Phase-2 project; see §H.
+ModelRoData records). Phase-2 project; see §H. Reference implementation:
+PD port's `port/src/preprocess/filemodel.c` — same PROMOTE idiom, same vma
+0x5000000 (§2.4); adapt + per-field validation, not a drop-in copy.
 
 **D44 (OPEN)** Crash-handler Phase 2 backtrace self-faults before printing.
 `crashStackTraceSym()` in `port/src/crash.c` calls
@@ -1335,10 +1381,14 @@ array, texture table, ModelNode tree (walked via Child/Next/Parent), and the
 per-opcode ModelRoData records — with every embedded pointer rewritten as a
 zero-extended offset from the image start so the existing
 `PROMOTE`/`diff = fileramaddr - vma` rebase works unmodified. Map the record
-types first (bondtypes.h `ModelRoData` union, opcodes in bondconstants.h);
-validate one small model against ROM ground truth under gdb before generalizing.
-Expect more D32-class ABI fixes as other per-level asset types are first
-touched — standing sub-task, not a one-off.
+types (bondtypes.h `ModelRoData` union, opcodes in bondconstants.h) — but do
+NOT design from scratch: PD port's `port/src/preprocess/filemodel.c` (§2.4) is
+a Rare-validated near-analogue (same PROMOTE idiom, same vma 0x5000000); adapt
+its node walk / placement / record handling and validate every GE record type
+per-field against bondtypes.h + ROM ground truth. Expect more D32-class ABI
+fixes as other per-level asset types are first touched — standing sub-task,
+not a one-off; PD's `preprocess/` module already solves most of them
+(`filebg.c`, `filetiles.c`, …).
 
 **Dev-loop measurements + speedups (session of 2026-08-22).** Measured
 iteration costs on the dev box (16 cores): full clean rebuild ≈ 5 s wall
@@ -1361,7 +1411,9 @@ an emulator (Mupen64Plus with the verified No-Intro dump). NOT worth it
 **Audio (Phase 3 prep).** Bank trees are correctly laid out at boot and the
 libaudio manager + audio thread run without crashing; actual sound output still
 needs an SDL backend for `alDriver`, and the ASP strategy question (C2) remains
-open. No work required until rendering is stable.
+open. No work required until rendering is stable. The SDL backend is largely
+copy-and-adapt from PD: `port/src/mixer.c` (722 lines vs our 31-line stub,
+which was scaffolded for it) plus `input.c`/`fs.c` for Phase 3/4 — see §2.4.
 
 **D32 repeatable fix procedure** (apply to any ROM-serialized struct that faults
 on a pointer-field read):

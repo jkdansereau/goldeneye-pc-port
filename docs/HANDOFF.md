@@ -21,8 +21,9 @@ Commit message style: `PC port: <phase> — <what>`.
 ## Read first (authoritative, in order)
 1. `AGENTS.md` — non-negotiables, critical files, build, verification ritual, phase status.
 2. `docs/PCPortResearch.md` §H (handoff + plan), then **§F/D44** (the quick win),
-   **D43** (the open model-file task), **D37** (the libaudio bank-tree re-layout —
-   the pattern to copy), D39–D42 for the first-render fixes, D31–D38 for background.
+   **D43** (the open model-file task), **§2.4** (PD-port copy-candidate audit —
+   read before starting D43 or Phase 3/4), **D37** (the libaudio bank-tree
+   re-layout pattern), D39–D42 for the first-render fixes, D31–D38 for background.
 
 ## Non-negotiables (the ones that bite)
 - N64 build files (`Makefile`, `tools/`, `rsp/`, `ld/`) — never touch.
@@ -76,7 +77,13 @@ Commit message style: `PC port: <phase> — <what>`.
 2. Understand the file format from `bondtypes.h` (`ModelFileHeader`, `ModelNode`,
    `ModelRoData` union + per-opcode records) and `bondconstants.h`
    (`MODELNODE_OPCODE_*`). N64 layout: header 24 B, node 20 B, all pointers 4 bytes.
-3. Implement a D37-style two-pass re-layout in `port/src/romdata.c`: walk the node tree
+   **Do NOT design the re-layout from scratch:** PD port's
+   `port/src/preprocess/filemodel.c` (1,114 lines) is a Rare-validated near-analogue —
+   same `PROMOTE` idiom, **same vma 0x5000000**. Read it first; adapt its node walk /
+   placement / record handling. GE's `ModelRoData` union + opcodes differ (PD has
+   stargunfire/headspot/gundl types), so validate every GE record type per-field against
+   bondtypes.h + ROM ground truth.
+3. Implement the two-pass re-layout in `port/src/romdata.c`: walk the node tree
    (Child/Next/Parent links), place every sub-struct once (8-aligned) in a compact image,
    rewrite each embedded pointer as a zero-extended offset from the image start, so the
    existing `PROMOTE` rebase (`diff = fileramaddr - vma`, vma = 0x5000000) works
@@ -85,7 +92,10 @@ Commit message style: `PC port: <phase> — <what>`.
 4. Validate one small model against ROM ground truth before generalizing (opcode
    sequence, node links, a few Data records). gdb works; or write the optional
    `tools_pc/romdump.py` inspector (below) and validate statically.
-5. Expect follow-on faults in other asset types (BG/stan/propobj tables) — same procedure.
+5. Expect follow-on faults in other asset types (BG/stan/propobj tables) — same
+   procedure; note PD's `preprocess/` module already solves most of them
+   (`filebg.c`, `filetiles.c`, `filepads.c`, `filesetup.c`, …) — see the PD
+   reference section below.
 
 ## Dev-loop speedups (build these when they pay off, not before)
 Priority order from the last session's measurements:
@@ -104,6 +114,23 @@ Priority order from the last session's measurements:
    "the scene contains actual model geometry" into an assert, makes the 30 s soak
    scriptable, and enables screenshot diffs against an emulator (Mupen64Plus with the
    verified No-Intro dump as ground truth).
+
+## PD port as standing reference (always available)
+`PD_PORT_CHECKOUT` is the Perfect Dark PC port — same Rare engine
+family, and the **standing reference/guidance source** for this project (noted in
+AGENTS.md). Consult it whenever a remaining work item has a PD analogue:
+- **Phase 2 asset conversion:** `port/src/preprocess/` (~4,100 lines) — per-ROM-segment
+  N64→PC layout converters hooked from their `romdata.c`. `filemodel.c` = D43 near-analogue
+  (same vma 0x5000000); `filebg.c` (expected follow-on), `segaudio.c` (cross-check for our
+  D37 bank-tree fixup), `filelang.c`, `filetiles.c`, `filepads.c`, `filesetup.c`, `gbi.c`,
+  `segfonts.c`.
+- **Phase 3/4 (copy-and-adapt; our stubs were scaffolded for this):** `port/src/mixer.c`
+  (722 lines vs our 31 — libaudio→SDL mixer), `input.c` (1,551 vs 48 — SDL_GameController
+  backend with hotplug/rumble/keyboard; remap buttons to GE's scheme), `fs.c` (294 vs 81 —
+  file-backed save dir for Phase 4 EEPROM/PFS).
+- **Caveats:** copy port-layer files only (their game code was modified for PC); same
+  family ≠ identical format — validate every conversion per-field against GE headers + ROM
+  ground truth. Full audit: `docs/PCPortResearch.md` §2.4.
 
 ## Standing procedure (you will hit more of these)
 Every ROM-serialized struct with a pointer field faults the same way once you reach more
@@ -149,5 +176,7 @@ Checkpoint A: D44 committed — crash log shows a real backtrace for the D43 fau
 Then the milestone proper: stage objects load without faulting and the rendered scene
 contains actual model geometry (not just the clear color / background), stable under a
 30 s+ soak. After that, Phase 2 makes it look right (fast3d CC/RM correctness vs
-`gmain.s`) and Phase 3 adds sound (libaudio → SDL). Commit + push to `origin/master` at
-each working checkpoint using the message style `PC port: <phase> — <what>`.
+`gmain.s` — GE-specific, no PD analogue) and Phase 3 adds sound + input, largely
+copy-and-adapt from the PD port (see "PD port as standing reference" above). Commit +
+push to `origin/master` at each working checkpoint using the message style
+`PC port: <phase> — <what>`.
