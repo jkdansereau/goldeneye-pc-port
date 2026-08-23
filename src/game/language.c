@@ -4,6 +4,20 @@
 #include "language.h"
 #include "ob.h"
 
+#ifdef PORT
+/* D50: language banks carry a big-endian offset table; decode it in place
+ * after each load (see romdataFixupLangBank). */
+#include "romdata.h"
+extern resource_lookup_data_entry resource_lookup_data_array[]; /* ob.c */
+
+static void langFixupLoadedBank(char *name, void *p)
+{
+    s32 idx = fileGetIndex(name);
+    if (idx >= 0 && resource_lookup_data_array[idx].poolRemaining != 0)
+        romdataFixupLangBank((u8 *)p, resource_lookup_data_array[idx].poolRemaining);
+}
+#endif
+
 // bss
 //CODE.bss:8008C640
 s32 g_LangBanks[45];
@@ -249,6 +263,15 @@ void langInit(void) {
     g_LangBanks[LMPWEAPONS] = _fileNameLoadToBank(LnameX_lookuptable[LMPWEAPONS][j_text_trigger], FILELOADMETHOD_DEFAULT, 0x100, MEMPOOL_PERMANENT);
     g_LangBanks[LOPTIONS] = _fileNameLoadToBank(LnameX_lookuptable[LOPTIONS][j_text_trigger], FILELOADMETHOD_DEFAULT, 0x100, MEMPOOL_PERMANENT);
     g_LangBanks[LMISC] = _fileNameLoadToBank(LnameX_lookuptable[LMISC][j_text_trigger], FILELOADMETHOD_DEFAULT, 0x100, MEMPOOL_PERMANENT);
+#ifdef PORT
+    langFixupLoadedBank(LnameX_lookuptable[LGUN][j_text_trigger], (void *)g_LangBanks[LGUN]);
+    langFixupLoadedBank(LnameX_lookuptable[LTITLE][j_text_trigger], (void *)g_LangBanks[LTITLE]);
+    langFixupLoadedBank(LnameX_lookuptable[LMPMENU][j_text_trigger], (void *)g_LangBanks[LMPMENU]);
+    langFixupLoadedBank(LnameX_lookuptable[LPROPOBJ][j_text_trigger], (void *)g_LangBanks[LPROPOBJ]);
+    langFixupLoadedBank(LnameX_lookuptable[LMPWEAPONS][j_text_trigger], (void *)g_LangBanks[LMPWEAPONS]);
+    langFixupLoadedBank(LnameX_lookuptable[LOPTIONS][j_text_trigger], (void *)g_LangBanks[LOPTIONS]);
+    langFixupLoadedBank(LnameX_lookuptable[LMISC][j_text_trigger], (void *)g_LangBanks[LMISC]);
+#endif
 }
 
 
@@ -354,12 +377,18 @@ struct jpncharpixels *langGetJpnCharPixels(s32 codepoint)
 void langLoadToAddr(u32 id)
 {
     g_LangBanks[id] = _fileNameLoadToBank(LnameX_lookuptable[id][j_text_trigger],1,0x100,MEMPOOL_STAGE);
+#ifdef PORT
+    langFixupLoadedBank(LnameX_lookuptable[id][j_text_trigger], (void *)g_LangBanks[id]);
+#endif
 }
 
 
 void langLoadToBank(int id,u8 *target,int size)
 {
     g_LangBanks[id] = _fileNameLoadToAddr(LnameX_lookuptable[id][j_text_trigger],1,target,size);
+#ifdef PORT
+    langFixupLoadedBank(LnameX_lookuptable[id][j_text_trigger], (void *)g_LangBanks[id]);
+#endif
 }
 
 

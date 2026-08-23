@@ -1506,7 +1506,18 @@ Gfx *constructor_menu00_legalscreen(Gfx *DL)
     s32 i;
     u8 *txt;
     Mtxf tmpmtx;
+#ifdef PORT
+    /* PC port (D50): on N64 this pointer is used uninitialized at the lookat
+     * call below — the R4300 register happens to hold a readable address and
+     * the result is zeroed by `* 0.0f` anyway. The x86-64 compiler folds the
+     * UB read to NULL (cvtsi2ssl 0x4) and faults. Seeding it with the array
+     * the function assigns a few lines later keeps the value deterministic;
+     * v_pos is s32 so `v_pos * 0.0f` is ±0.0f either way — identical lookat.
+     * N64 build untouched (no -DPORT). */
+    struct legal_screen_text *legal_text_ptr = legalpage_text_array;
+#else
     struct legal_screen_text *legal_text_ptr;
+#endif
 
     renderdata = legalscreen_MRD;
     

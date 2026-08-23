@@ -11,6 +11,11 @@
 #include "quaternion.h"
 #include "tex.h"
 
+#ifdef PORT
+#include "pcmodels.h" /* D50: PC-layout model sidecars (Plan B, D48/D49) */
+extern resource_lookup_data_entry resource_lookup_data_array[]; /* ob.c */
+#endif
+
 
 /***
  * Perfect Dark:
@@ -89,6 +94,22 @@ void sub_GAME_7F0762E0(ModelFileHeader *objheader, u8 *name, u8 *dst, struct tex
 void load_object_fill_header(struct ModelFileHeader *objheader, u8 *name, u8* dst, s32 size, struct texpool * buffer)
 {
     void *filedata;
+
+#ifdef PORT
+    /* PC port (D50, Plan B D48/D49): serve PC-layout model sidecars from the
+     * cart extension region. One-shot table patch (safe to call repeatedly);
+     * by first model load obInit() has definitely run (boss.c:179). Must run
+     * before _fileNameLoadTo* below reads hw_address/rom_size. */
+    pcmodelsPatchTable();
+    if (dst == 0) {
+        /* D48.3: a stale poolRemaining from an earlier load of this file
+         * would under-allocate the fresh bank chunk (P_old < round8(C_pc)+8)
+         * and load_resource would fail with poolRemaining=0. Resetting to 0
+         * forces the full-bank allocation; the bump allocator ends at the
+         * same cursor either way (mempAddEntryOfSizeToBank shrinks it back). */
+        resource_lookup_data_array[fileGetIndex((char *)name)].poolRemaining = 0;
+    }
+#endif
 
     if (dst != 0)
     {

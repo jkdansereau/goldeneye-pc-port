@@ -62,6 +62,25 @@ void romdataFixupAnimationData(u8 *blob, u32 blobSize,
 void romdataFixupMusicSeqTable(u8 *blob, u32 blobSize);
 
 /*
+ * D50 (docs/PCPortResearch.md): decode a language bank's big-endian offset
+ * table in place ([u32 offsets x N][text]; see romdata.c). blobSize is the
+ * decompressed bank size (resource_lookup_data_array[].poolRemaining).
+ */
+void romdataFixupLangBank(u8 *blob, u32 blobSize);
+
+/*
+ * D50 (docs/PCPortResearch.md): re-lay out a font segment (struct font:
+ * kerning[169] + chars[94] + glyph pixel data) from the N64 ROM layout to
+ * the PC C layout, shifting the pixel block below the expanded char array.
+ * src/n64Size locate the N64 image (ROM segment); the caller allocates
+ * romdataFontPcSize() bytes, romCopies n64Size of them, then calls
+ * romdataFixupFont(). pixeldata fields are left as relative offsets —
+ * load_font_tables()'s `pixeldata += base` loop promotes them.
+ */
+u32  romdataFontPcSize(const u8 *src, u32 n64Size);
+void romdataFixupFont(u8 *blob, u32 n64Size);
+
+/*
  * D37 (docs/PCPortResearch.md): the libaudio SFX/instrument bank segments
  * (ALBankFile trees: ALBank -> ALInstrument -> ALSound -> ALWaveTable /
  * ALEnvelope / ALKeyMap / ALADPCMloop / ALADPCMBook) are serialized in ROM

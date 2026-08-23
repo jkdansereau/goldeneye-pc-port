@@ -1072,7 +1072,16 @@ void texCopyGdls(Gfx *arg0, Gfx *arg1, s32 arg2)
 
     while (arg2--)
     {
+#ifdef PORT
+        /* PC port (D50): on x86-64 the trailing `long long` union member spans
+         * only the first 8 of 16 slot bytes; assigning it leaves w1 stale.
+         * texLoadFromGdl() then reads the half-copied scratch copy and
+         * propagates garbage w1s into the final GDLs (seg_addr -> OOB read in
+         * import_texture_rgba16). Copy the whole 16-byte slot. */
+        *arg1 = *arg0;
+#else
         arg1->force_structure_alignment = arg0->force_structure_alignment;
+#endif
         arg1--;
         arg0--;
     }

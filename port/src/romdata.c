@@ -37,6 +37,12 @@ extern int snprintf(char *str, unsigned long long maxsize, const char *format, .
 #include "system.h"
 #include "fs.h"
 #include "romdata.h"
+#include "pcmodels.h"
+
+/* D50: struct font/fontchar layouts for the font-segment re-layout. Order
+ * matters (see pcmodels.c): ultra64.h must finish before bondtypes.h. */
+#include <ultra64.h>
+#include "bondtypes.h"
 
 #define CART_BASE   0x10000000u
 
@@ -151,16 +157,24 @@ int romdataInit(void)
             continue;
         }
 
+        /* D50: reserve room for the PC model sidecar image right after the
+         * ROM ([CART_BASE+romSize, ...)); it is loaded below and patched into
+         * file_resource_table after obInit. */
+        u32 sideTotal = pcmodelsReserveSize(img);
+
         /* Map at the cart address so absolute asset symbols are live. */
 #if defined(PLATFORM_WINDOWS)
-        void *at = VirtualAlloc((LPVOID)CART_BASE, romSize,
+        void *at = VirtualAlloc((LPVOID)CART_BASE, romSize + sideTotal,
                                 MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         if (at == (void *)(uintptr_t)CART_BASE) {
             memcpy(at, img, romSize);
             free(img);
             mappedAtCartBase = 1;
             sysLogPrintf(LOG_INFO, "romdataInit: %s (%u bytes) mapped at "
-                         "0x%08X (cart base)", tok, romSize, CART_BASE);
+                         "0x%08X (cart base)%s",
+                         tok, romSize, CART_BASE,
+                         sideTotal ? ", + model sidecars" : "");
+            pcmodelsLoadSidecars(CART_BASE, romSize);
             return 0;
         }
         if (at)
@@ -216,7 +230,8 @@ int romdataCartAddrValid(u32 addr, u32 size)
     if (addr < CART_BASE)
         return 0;
     u32 off = addr - CART_BASE;
-    return off + size <= romSize;
+    /* D50: the model sidecar image extends the valid cart region. */
+    return off + size <= romSize + pcmodelsTotalSize();
 }
 
 const void *romdataMapVa(u32 va)
@@ -258,6 +273,10 @@ static u32 romdataBswap32(u32 v)
     return ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8) |
            ((v & 0x00FF0000u) >> 8) | ((v & 0xFF000000u) >> 24);
 }
+
+/* The port/shim <stddef.h> is the N64 stub for C TUs (no offsetof); this is
+ * the equivalent null-cast idiom. */
+#define ROMDATA_OFFSEXP(T, M) ((u32)&(((T *)0)->M))
 
 static u16 romdataBswap16(u16 v)
 {
@@ -350,6 +369,103 @@ void romdataFixupMusicSeqTable(u8 *blob, u32 blobSize)
         *(u32 *)(e + 0) = romdataBswap32(*(const u32 *)(e + 0));
         *(u16 *)(e + 4) = romdataBswap16(*(const u16 *)(e + 4));
         *(u16 *)(e + 6) = romdataBswap16(*(const u16 *)(e + 6));
+    }
+}
+
+/*
+ * D50 (docs/PCPortResearch.md): a language bank is [u32 offsets x N][text].
+ * Offsets are big-endian and point into the text region; langGet() reads them
+ * little-endian on PC and would build garbage pointers. Scan from the front
+ * and bswap word i while bswap32(word_i) is a plausible offset (strictly past
+ * its own position, before the end of the blob). Zero entries stay zero
+ * ("string not loaded" — langGet returns NULL). The scan stops at the first
+ * text word: printable ASCII byte-swaps to >= 0x20000000, always >= blobSize
+ * (banks are < 64 KB). All-zero placeholder banks (e.g. LameE) bswap nothing.
+ */
+void romdataFixupLangBank(u8 *blob, u32 blobSize)
+{
+    u32 i = 0;
+    while (i * 4 + 4 <= blobSize) {
+        u32 v = romdataBswap32(*(const u32 *)(blob + i * 4));
+        if (v != 0 && (v <= i * 4 || v >= blobSize))
+            break;
+        *(u32 *)(blob + i * 4) = v;
+        i++;
+    }
+}
+
+/*
+ * D50 (docs/PCPortResearch.md): font segments (Zurich Bold, Bank Gothic)
+ * serialize `struct font` in the N64 layout — big-endian scalars, 4-byte
+ * pointers:
+ *   [s32 kerning x 169][fontchar x 94 @ stride 24][glyph pixel data]
+ * where fontchar = {s32 index, baseline, height, width, kerningindex;
+ * u32 pixeldata-offset-from-font-base}. The PC C layout is
+ * {5 s32; u64 pixeldata} @ stride sizeof(fontchar) with chars at
+ * ROMDATA_OFFSEXP(struct font, chars) — and that region overlaps the start of the
+ * pixel data in ROM (chars end 0xB74, pixels start 0xB80, PC chars end
+ * 0xE78), so the re-layout must also shift the pixel data down.
+ *
+ * Transform: bswap kerning in place; memmove the pixel block from
+ * [pixStart, n64Size) to [pcCharsEnd, ...); convert each char entry
+ * (backward — PC stride 32 > N64 stride 24, dst always past src) with
+ * pixeldata stored as a zero-extended RELATIVE offset into the new image,
+ * so load_font_tables()'s existing `pixeldata += base` loop promotes it
+ * (N64 pattern, D37-style). The caller must allocate romdataFontPcSize()
+ * bytes and romCopy only n64Size of them.
+ */
+/* src is the N64-layout image (the ROM segment); n64Size its size. */
+u32 romdataFontPcSize(const u8 *src, u32 n64Size)
+{
+    enum { N64_COFF = 169 * 4, N64_CSTRIDE = 24, NCHARS = 94 };
+    u32 i, n, pixStart = 0;
+
+    if (n64Size <= N64_COFF)
+        return n64Size;
+    n = (n64Size - N64_COFF) / N64_CSTRIDE;
+    if (n > NCHARS)
+        n = NCHARS;
+    for (i = 0; i < n; i++) {
+        u32 o = romdataBswap32(*(const u32 *)(src + N64_COFF + N64_CSTRIDE * i + 20));
+        if (o != 0 && (pixStart == 0 || o < pixStart))
+            pixStart = o;
+    }
+    return (u32)(ROMDATA_OFFSEXP(struct font, chars) + NCHARS * sizeof(struct fontchar))
+         + n64Size - pixStart;
+}
+
+void romdataFixupFont(u8 *blob, u32 n64Size)
+{
+    enum { N64_KERN = 169, N64_COFF = 169 * 4, N64_CSTRIDE = 24, NCHARS = 94 };
+    u32 i, n, pixStart = 0, pcPixOff;
+
+    for (i = 0; i < N64_KERN; i++)
+        *(u32 *)(blob + 4 * i) = romdataBswap32(*(const u32 *)(blob + 4 * i));
+
+    n = (n64Size - N64_COFF) / N64_CSTRIDE;
+    if (n > NCHARS)
+        n = NCHARS;
+    for (i = 0; i < n; i++) {
+        u32 o = romdataBswap32(*(const u32 *)(blob + N64_COFF + N64_CSTRIDE * i + 20));
+        if (o != 0 && (pixStart == 0 || o < pixStart))
+            pixStart = o;
+    }
+
+    pcPixOff = (u32)(ROMDATA_OFFSEXP(struct font, chars) + NCHARS * sizeof(struct fontchar));
+    if (pixStart != 0 && pixStart < n64Size)
+        memmove(blob + pcPixOff, blob + pixStart, n64Size - pixStart);
+
+    for (i = n; i-- > 0;) {
+        const u8 *s = blob + N64_COFF + N64_CSTRIDE * i;
+        u8 *d = blob + ROMDATA_OFFSEXP(struct font, chars) + sizeof(struct fontchar) * i;
+        u32 k, o;
+        for (k = 0; k < 5; k++)
+            *(u32 *)(d + 4 * k) = romdataBswap32(*(const u32 *)(s + 4 * k));
+        o = romdataBswap32(*(const u32 *)(s + 20));
+        if (o != 0 && pixStart != 0 && o >= pixStart)
+            o = pcPixOff + (o - pixStart);
+        *(u32 *)(d + 20) = o; /* zero-extended relative offset */
+        *(u32 *)(d + 24) = 0;
     }
 }
 

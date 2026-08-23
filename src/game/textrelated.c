@@ -4,6 +4,12 @@
 #include "bondtypes.h"
 #include "game/language.h"
 
+#ifdef PORT
+/* D50: font segments are re-laid out from the N64 ROM layout to the PC C
+ * layout (see romdataFixupFont). */
+#include "romdata.h"
+#endif
+
 #define SPACE_WIDTH 5
 
 #define M_COLOR_R(x) (u8)(x >> 0x18)
@@ -109,10 +115,22 @@ void load_font_tables(void)
     text_t = 0;
 
     len = (romptr_t)&_fontbankgothicSegmentEnd - (romptr_t)&_fontbankgothicSegmentStart;
+#ifdef PORT
+	{
+        u32 n64len = len;
+		ptrFontBankGothic = (struct font *)mempAllocBytesInBank(romdataFontPcSize((const u8 *)&_fontbankgothicSegmentRomStart, n64len), MEMPOOL_STAGE);
+		ptrFontBankGothicChars = ptrFontBankGothic->chars;
+
+		romCopy(ptrFontBankGothic, (void *) &_fontbankgothicSegmentRomStart, n64len);
+		romdataFixupFont((u8 *)ptrFontBankGothic, n64len);
+	}
+#else
+    len = (romptr_t)&_fontbankgothicSegmentEnd - (romptr_t)&_fontbankgothicSegmentStart;
 	ptrFontBankGothic = (struct font *)mempAllocBytesInBank(len, MEMPOOL_STAGE);
 	ptrFontBankGothicChars = ptrFontBankGothic->chars;
 
 	romCopy(ptrFontBankGothic, (void *) &_fontbankgothicSegmentRomStart, len);
+#endif
 
     // Convert pointers
 	for (i = 0; i < 94; i++) {
@@ -120,10 +138,22 @@ void load_font_tables(void)
 	}
 
     len = (romptr_t)&_fontzurichboldSegmentEnd - (romptr_t)&_fontzurichboldSegmentStart;
+#ifdef PORT
+	{
+        u32 n64len = len;
+		ptrFontZurichBold = (struct font *)mempAllocBytesInBank(romdataFontPcSize((const u8 *)&_fontzurichboldSegmentRomStart, n64len), MEMPOOL_STAGE);
+		ptrFontZurichBoldChars = ptrFontZurichBold->chars;
+
+		romCopy(ptrFontZurichBold, (void *) &_fontzurichboldSegmentRomStart, n64len);
+		romdataFixupFont((u8 *)ptrFontZurichBold, n64len);
+	}
+#else
+    len = (romptr_t)&_fontzurichboldSegmentEnd - (romptr_t)&_fontzurichboldSegmentStart;
 	ptrFontZurichBold = (struct font *)mempAllocBytesInBank(len, MEMPOOL_STAGE);
 	ptrFontZurichBoldChars = ptrFontZurichBold->chars;
 
 	romCopy(ptrFontZurichBold, (void *) &_fontzurichboldSegmentRomStart, len);
+#endif
 
     // Convert pointers
 	for (i = 0; i < 94; i++) {
