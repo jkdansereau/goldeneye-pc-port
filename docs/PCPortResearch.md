@@ -1664,6 +1664,115 @@ missing rule — but Task 2's emit pass must bswap16 every u16/s16 record
 scalar (padding/reserved may be zeroed), and the HANDOFF Verified facts
 should be amended to say so.
 
+**D50 (RESOLVED — Plan B executed: offline sidecars + port plumbing; boot advances to first model GDL execution)**
+
+Execution session ran HANDOFF Task 2 end-to-end. All 512 NTSC model files
+converted offline and served through the existing load path; frames render
+and model display lists execute. Sub-items (all `#ifdef PORT`-guarded or
+port-layer only; N64 build untouched):
+
+1. **D50.1 Emit pass (`tools_pc/d43_emit.py`, tracked).** Per file:
+decompress the N64 image from the ROM (filelist row); build the node map;
+run the EXACT `modelIterateDisplayLists` visit simulation (LOD/SWITCH
+rewire, BSP splice — d43_gdlorder logic) → gdl_seq; layout `[switches
+NS×8][texconfigs NT×12][DFS nodes 48B + records PC_REC + vertex arrays]
+…[GDLs packed contiguously in gdl_seq order, 16B per N64 slot]`; byte-exact
+emit (bswap32/16; promoted pointers → zero-extended u64 `0x05xxxxxx` VMAs;
+GDL Primary/Secondary raw VMAs, NOT promoted; BaseAddr=0); **round-trip
+re-parse validation of every field against the N64 source + region tiling
+(no gaps)** — 512/512 pass. Compression: `0x11 0x72` + raw deflate level 6
+(`zlib.compressobj(6, DEFLATED, -15)`); escalate to 9 only on a dst!=0 fit
+violation (none occurred). Cross-checks all pass: per-file dst!=0 buffers
+(`round8(C)+8 ≤ buf` AND `D+round8(C) ≤ buf` — inflate overlap safety), G*
+hand-weapon worst case vs 0xF000, cast/title/bondview chain cumulative
+P_final bounds, totals (Σ round8(C) = 1,277,088 B, matches D49). Output:
+**single concatenated image** `data/pcmodels-<region>/pcmodels.bin`
+(sidecars at 16-aligned offsets) + `manifest.csv` (`name,offset,size`,
+decimal — the C parser uses strtol base 10; file_resource_table.inc.c
+order). Deviation from D48's per-file-sidecar sketch: one blob + manifest;
+pcmodels.c copies the whole image to `[CART_BASE+romSize, …)` and patches
+`hw_address = cartBase+romSize+off`. Regenerate:
+`python tools_pc/d43_emit.py [ntsc-final|pal-final|jpn-final|--check-only]`
+(needs the region ROM in data/; sidecars are gitignored with data/).
+2. **D50.2 Port plumbing (`port/src/pcmodels.c` + `port/include/pcmodels.h`,
+new; romdata.c/h extended).** `pcmodelsReserveSize(romImg)` derives
+`data/pcmodels-<region>/` from the ROM country byte (+0x3E), parses the
+manifest, returns total bytes (0 → warn, ROM-only mode); romdataInit
+reserves `romSize + sidecarTotal` at CART_BASE and
+`romdataCartAddrValid` accepts the extension; `pcmodelsLoadSidecars(
+cartBase, romSize)` copies the blob; `pcmodelsPatchTable()` — one-shot,
+called from `load_object_fill_header` (hook block, objecthandler_2.c) after
+obInit has run — redirects every manifest row's
+`file_resource_table[i].hw_address` + sets
+`resource_lookup_data_array[i].rom_size` to the PC compressed size. The same
+hook block resets `poolRemaining = 0` for dst==0 loads (closes the D48.3/R6
+reload hazard). Boot log: `[INFO] pcmodels: table patched (512 model
+entries)`.
+3. **D50.3 Language banks (runtime C fixup).** Banks carry a big-endian
+offset table; `romdataFixupLangBank(blob, decompressedSize)` decodes it in
+place. Called from language.c after each of the 7 langInit loads and lazily
+per-id in the `langGetJpnCharPixels` paths (idempotent via poolRemaining
+check).
+4. **D50.4 Fonts (runtime C fixup).** `load_font_tables` PC branch:
+allocate `romdataFontPcSize()` (PC C layout of struct font: kerning[169] +
+chars[94] + glyph pixel data), romCopy the N64 size, then
+`romdataFixupFont` re-lays out, shifting the pixel block below the expanded
+char array; `pixeldata` fields left as relative offsets — the existing
+`pixeldata += base` loop promotes them.
+5. **D50.5 Legal-screen UB exposure (front.c).**
+`constructor_menu00_legalscreen` reads an uninitialized pointer at a lookat
+call — on N64 the register happens to hold a readable address and the
+result is zeroed by `* 0.0f` anyway; the x86-64 compiler folds the UB read
+to NULL → fault. PORT branch seeds it with `legalpage_text_array` (the
+value assigned a few lines later); identical lookat.
+6. **D50.6 `texCopyGdls` copies only w0 on PC — first model-render crash
+(RESOLVED).** `Gfx` is a union whose last member is `long long int
+force_structure_alignment`: 8 bytes on N64 (= the whole slot), but on x86-64
+the slot is 16 bytes, so `arg1->force_structure_alignment = arg0->…`
+copies only the low half. Compaction flow (sub_GAME_7F0762E0):
+texCopyGdls mirrors the GDL block `[G,D)` to tail scratch `[B−D+G,B)`, then
+texLoadFromGdl reads the scratch and writes expanded output back at
+`[G,…)` via full-slot `*(out++)=*(in++)` — propagating the scratch's stale
+w1s into the final GDLs. **Byte proof:** PlegalpageZ (NS=0, NT=5,
+D=0x2638) loaded at 0x7012EA38; first 64 RAM bytes match the decompressed
+sidecar exactly; the executed GDL at file offset 0x2488 has w0s matching
+the sidecar exactly (0xB10000BA/0xE7000000/0xFD900000/0xE6000000) but RAM
+w1s = 0x50362B58/0x66D73339/0xACAAB819/0x55BDF769 (stale mempool contents;
+pad2 dwords also nonzero) vs sidecar w1s 0x0000A898/0/0x050012C8/0 — the
+garbage G_SETTIMG w1 → `seg_addr` → OOB read in `import_texture_rgba16`.
+Fix: `*arg1 = *arg0;` under `#ifdef PORT` (tex.c). Audit: tex.c is the only
+`force_structure_alignment` use in game code (model.c:1510 is an unrelated
+local 8-byte union); every other Gfx copy is full-struct. Post-fix:
+PlegalpageZ's sub-DLs execute to completion; crash moves on (D51).
+
+**D51 (OPEN — current blocker: `import_texture_i8` SIGSEGV via main-DL G_TEXRECT lazy tile upload)**
+
+Post-D50 run: frames 1–4 log, then SIGSEGV on frame 5 in
+`import_texture_i8` (gfx_pc.cpp:782, `addr[i]`) ← `import_texture(i=0,
+tile=0)` ← `gfx_sp_tri1(128,129,131,is_rect=true)` ←
+`gfx_draw_rectangle(236,92,268,140)` ← `gfx_dp_texture_rectangle` ←
+`G_TEXRECT` case (gfx_run_dl ~line 2472), main DL start 0x70052e80,
+failing opcode slot at +0x260 (0x700530e0). G_TEXRECT carries no source
+address — it blits from RDP texture-memory tiles; the fault is the **lazy
+upload of tile 0** whose stored source pointer is invalid (or the tile was
+never set up this frame → stale `rdp.textures[0]`). Suspects: (a) a
+main-DL G_SETTIMG (0xFD) earlier than +0x260 whose w1 seg_addr
+mis-resolves; (b) tile referenced before setup / across frames; (c) the
+game points the tile source at a ROM/ramrom image that needs a port fixup
+(D50.3/D50.4 class). **Investigation not started.** Note: after the crash,
+0x70052e80 is unreadable from gdb ("Cannot access memory") — dump live at a
+breakpoint, not post-mortem. GE opcode facts verified this session
+(include/PR/gbi.h, non-F3DEX numbering): G_IMMFIRST=−65; DMA G_MTX=1 /
+G_MOVEMEM=3 / G_VTX=4 / G_DL=6; IMM TRI1=0xBF … ENDDL=0xB8;
+GE extension G_TRI4=0xB1 (gbi_extension.h, 8-bit packed indices — NOT an
+address carrier); RDP pass-throughs include G_SETTIMG=0xFD,
+G_SETCIMG=0xFF, **G_TEXRECT=0xE4 / G_TEXRECTFLIP=0xE5** (GE-specific
+values, not libultra's 0x46/0x45). The main DL is game-built per frame with
+gSP* macros (16B slots); the segment table is set via
+`gMoveWd(G_MW_SEGMENT, seg*4, base)` → w0=(0xBC<<24)|(seg*4<<8)|6,
+w1=data; fast3d's gfx_sp_moveword stores data as-is when ≥ 0x800000 else
++0x80000000.
+
 Environment notes for Task 2: standalone gcc needs
 `/c/msys64/mingw64/bin:/c/msys64/usr/bin` on PATH (cc1 fails SILENTLY without
 it — exit 1, zero diagnostics), and `-std=c11` is required (the CMake flag;
@@ -1673,118 +1782,47 @@ game TUs.
 
 ### G. Phase 2 status (current)
 
-Done: PD fast3d integrated (`port/fast3d/`, replaces the deleted gfxstub.c);
-GE's real `src/sched.c` compiled (shedThread runs `__scMain`); real pthread
-kernel (D24); dual-mapped DRAM + address shims (D25/D26); ASLR off with startup
-sanity check (D27); PI completion messages (D29); SEH-free crash handler with
-thread dumps (D30). The process now boots, maps the ROM, opens the window,
-runs `mainproc()` → `bossInitMainthreadData` through controller init / timers /
-mempool / VI / rsp / stan / game init. The D31 langInit file-load SIGSEGV is
-**fixed** (real-zlib decompression, §F/D31): mainThread now loads all language
-files and proceeds into `bossInitMainthreadData()` → `alloc_load_expand_ani_table`
-→ `init_weapon_animation_groups_maybe` (boss.c:233), where it SIGSEGVs on the
-**D32** ROM-struct pointer-width issue. D32 is decomposed: **Part A** (struct
-layout — u32 pointer fields) is DONE & proven; **Part B** (the load-time pointer
-rebase in `expand_ani_table_entries`) is OPEN and is the current blocker. No
-frames rendered yet. See §H for the handoff + plan.
-
-Reference — the file-load chain (for D31 debugging):
-`langInit` (language.c:230) loads 7 text banks via
-`_fileNameLoadToBank(LnameX_lookuptable[bank][j_text_trigger], …, 0x100,
-MEMPOOL_PERMANENT)` → `fileGetIndex` (strcmp over file_resource_table) →
-`fileIndexLoadToBank(index, …)` (ob.c:216): if poolRemaining==0 take
-`mempGetBankSizeLeft(bank)`; `ptrdata = mempAllocBytesInBank(…)`; hw_address
-nonzero → `load_resource(ptrdata, poolRemaining, &file_resource_table[index],
-&resource_lookup_data_array[index])` (ob.c:37): `source = (ptrdata + bytes) −
-((rom_size+7)&−8)`; `romCopy(source, hw_address, rom_size)`;
-`decompressdata(source, ptrdata, buffer)` with `u8 buffer[0x2100]` on the
-stack → sets rz_inbuf=source+2 / rz_outbuf=ptrdata / rz_hlist=buffer →
-`zlib_inflate()` (src/game/zlib.c:668). rom_size for index 670 = 0x720,
-decompressed size = 3872 (0xF20). `file_resource_table` is compiled
-(`assets/obseg/file_resource_table.inc.c`) with hw_address = cart addresses;
-rom_size = adjacent-marker differences computed in obInit.
-
-Debugging techniques that worked: gdb **launch** mode (`gdb -batch -ex
-"handle SIGSEGV stop" -ex run …` — attach fails with error 87); breakpoint
-chains through init functions to bracket the crash; `finish` to let a suspect
-function complete and inspect its return; hardware watchpoints on exact stack
-slots (compute offsets from entry RSP, not RBP — see D31); `addr2line` for
-offline symbolication; objdump + `gcc -E` with exact ninja flags to verify
-shim expansion in compiled code.
+Done through **D50**: PD fast3d integrated (`port/fast3d/`); GE's real
+`src/sched.c` + pthread kernel; dual-mapped DRAM; ROM mapped at cart base;
+SDL2 window; full boot chain (D31–D42); **Plan B executed (D50)** — all 512
+NTSC model files offline-converted to PC-layout RZ sidecars
+(`tools_pc/d43_emit.py` → `data/pcmodels-ntsc-final/pcmodels.bin` +
+manifest.csv), served through the existing load path via a port-layer table
+patch (`port/src/pcmodels.c`, romdata cart-extension, one-shot
+`pcmodelsPatchTable()` + poolRemaining reset hook in
+`load_object_fill_header`); runtime C fixups for language-bank BE offset
+tables (D50.3) and font re-layout (D50.4); legal-screen UB seed (D50.5);
+`texCopyGdls` w1 partial-copy bug fixed and byte-proven (D50.6). Frames 1–4
+render; PlegalpageZ model GDLs execute to completion. **Current blocker:
+D51** — SIGSEGV in `import_texture_i8` via a main-DL G_TEXRECT lazy tile-0
+upload (frame 5); investigation not started, recipe in docs/HANDOFF.md.
+After D51: pixel-assert soak (env-gated PPM dump + pixcount still unbuilt),
+then the next asset type (Tbg_*_stanZ backgrounds) with the same offline
+pattern.
 
 ### H. Handoff & plan (current session)
 
-**State.** Boot is complete AND the first frames render: mainThread runs through
-all of `bossInitMainthreadData()` + `bossEntry()`, enters `bossMainloop()`,
-loads the stage, and fast3d renders real display lists — `[NOTE] frame N rendered
-in … us` logs appear (frame 1 in ~70 ms). Findings **D34–D42** (§F) closed out
-the boot + first-render blockers on top of D31–D33:
-- **D34** `ANIM_DATA_*` → address-only lvalues at PE-image-base + ROM offset.
-- **D35** music seq table: `RareALSeqData.address` → `u32` + BE fixup.
-- **D36** music heap / PERMANENT pool grown for x86-64 libaudio struct bloat.
-- **D37** libaudio bank trees re-laid out to PC-native form (`romdataFixupAudioBank`).
-- **D38** implicit-declaration pointer truncation → `port/include/pc_protos.h`
-  prototype shim (398 decls, generator in build-pc/); build now warning-clean.
-- **D39** Globalimagetable rebasing: per-symbol offsets + `GIMG_OFF()` macro
-  (== N64 `(u32)&sym`, incl. the 0x02000000 base) in image_bank.c; segment end
-  markers extended to the true 0x13F8 size (CSV truncation).
-- **D40** ModelHitEntry BSS pool sized for the 40-byte PC stride (was 12 KB
-  overflow clobbering `is_ramrom_flag`).
-- **D41** GL context released from the host main thread after init so the game
-  thread can bind it (WGL single-thread currency; SDL2 MakeCurrent return value
-  is an inverted ABI artifact — don't branch on it).
-- **D42** rsp.c `g_gfxTaskSettingsList` XOR toggle → explicit toggle on x86-64.
+Full paste-ready brief: **docs/HANDOFF.md** (rewritten this session). Summary:
 
-**ROM provenance locked:** the working ROM is byte-identical to the No-Intro
-good dump `GoldenEye 007 (U) [!].z64` (MD5 `70c525880240c1e838b8b1be35666c3b`,
-0xC00000 bytes, country 'E'); embedded header CRCs DCBC50D1/09FD1AA3
-re-computed and matched via `tools/n64cksum.c`'s CIC-6102 routine — see
-`tools_pc/romverify.c` (one-shot re-check) and docs/HANDOFF.md Environment.
+**State.** Plan B is EXECUTED (D50): offline sidecars for all 512 NTSC model
+files + port-layer plumbing + lang/font runtime fixups + legal-screen UB seed
++ the texCopyGdls w1 fix (D50.6, byte-proven against PlegalpageZ). Boot runs
+to the main loop; frames 1–4 render; model GDLs execute (PlegalpageZ
+sub-DLs complete).
 
-**Current blocker — D43: model-file loading ABI mismatch.** After a few frames,
-stage object load faults in `modelPromoteNodeOffsetsToPointers()`
-(model.c:5688). Model files are ROM-serialized with N64 layout (ModelFileHeader
-24 B / ModelNode 20 B, 4-byte pointer fields) but read on PC as 8-byte-pointer
-structs; `load_object_fill_header()` (objecthandler_2.c) derives RootNode from
-`numtextures` at the wrong offset before any rebase. Plan: a D37-style two-pass
-re-layout of the model file image in `port/src/romdata.c` — header, switches
-array, texture table, ModelNode tree (walked via Child/Next/Parent), and the
-per-opcode ModelRoData records — with every embedded pointer rewritten as a
-zero-extended offset from the image start so the existing
-`PROMOTE`/`diff = fileramaddr - vma` rebase works unmodified. Map the record
-types (bondtypes.h `ModelRoData` union, opcodes in bondconstants.h) — but do
-NOT design from scratch: PD port's `port/src/preprocess/filemodel.c` (§2.4) is
-a Rare-validated near-analogue (same PROMOTE idiom, same vma 0x5000000); adapt
-its node walk / placement / record handling and validate every GE record type
-per-field against bondtypes.h + ROM ground truth. Expect more D32-class ABI
-fixes as other per-level asset types are first touched — standing sub-task,
-not a one-off; PD's `preprocess/` module already solves most of them
-(`filebg.c`, `filetiles.c`, …).
+**Current blocker — D51.** SIGSEGV on frame 5 in `import_texture_i8` via a
+main-DL G_TEXRECT lazy tile-0 upload (gfx_pc.cpp:782; failing opcode slot at
+DL offset +0x260). G_TEXRECT blits from RDP texture-memory tiles, so the fault
+is an invalid/stale tile source — either a mis-resolved main-DL G_SETTIMG,
+a tile used before setup, or a ROM/ramrom image needing a port fixup.
+Investigation not started; the gdb recipe (break live at
+`import_texture_i8`, dump `rdp.textures[0]` + the full main DL — post-mortem
+dumps of 0x70052e80 fail with "Cannot access memory") is in HANDOFF Task 1.
 
-**Dev-loop measurements + speedups (session of 2026-08-22).** Measured
-iteration costs on the dev box (16 cores): full clean rebuild ≈ 5 s wall
-(239 ninja steps) — the build is NOT a bottleneck, ccache would be wasted
-effort; launch → D43 crash ≈ 3.7 s — runtime wait is negligible. The cost is
-in *diagnosis*: gdb launch-only mode + manual `addr2line` image-base arithmetic
-per fault. Speedups, in priority order: (1) the D44 one-line fix → automatic
-backtrace on every crash; (2) a `tools_pc/sym.sh` wrapper (PC or rel offset →
-add image base 0x140000000 → `addr2line -f -C`); (3) a Python ROM/asset
-inspector (`tools_pc/romdump.py`) that parses ModelFileHeader/ModelNode trees
-straight from the .z64 using the bondtypes.h layout (opcode sequences, node
-links, Data records) — accelerates D43 and every follow-on asset type, and can
-validate re-layout output against ROM ground truth without running the game;
-(4) env-gated framebuffer PPM dumps every N frames + a non-clear-color pixel
-count/diff script — turns "the scene contains actual model geometry" into an
-assert, makes the 30 s soak scriptable, and enables screenshot diffs against
-an emulator (Mupen64Plus with the verified No-Intro dump). NOT worth it
-(measured): ccache, boot fast-forward/skip-to-mainloop hooks.
-
-**Audio (Phase 3 prep).** Bank trees are correctly laid out at boot and the
-libaudio manager + audio thread run without crashing; actual sound output still
-needs an SDL backend for `alDriver`, and the ASP strategy question (C2) remains
-open. No work required until rendering is stable. The SDL backend is largely
-copy-and-adapt from PD: `port/src/mixer.c` (722 lines vs our 31-line stub,
-which was scaffolded for it) plus `input.c`/`fs.c` for Phase 3/4 — see §2.4.
+**Next after D51:** build the pixel assert (env-gated PPM dump every N frames
+in port/video.c + `tools_pc/pixcount.py`) and run a 30 s+ soak; then move to
+the next asset type (Tbg_*_stanZ backgrounds) with the same offline pattern —
+PD's `port/src/preprocess/filebg.c` is the per-field reference (§2.4).
 
 **D32 repeatable fix procedure** (apply to any ROM-serialized struct that faults
 on a pointer-field read):
@@ -1821,7 +1859,6 @@ prefix `export PATH=…`). Build: `./build-pc.sh ntsc-final`. gdb **launch** mod
 only (attach fails, error 87); symbolicate offline with `addr2line -e
 build-pc/ge007.x86_64.exe -f -C <0x140000000+rel>`. Image base 0x140000000.
 `load_resource`/many init fns use a fake RBP — compute stack offsets from entry
-RSP. The D30 crash handler writes Phase 1 of `ge007.crash.log` (raw PC/
-registers) but its Phase 2 backtrace self-faults before printing (**D44**,
-one-line fix pending) — until fixed, attribute crashes via gdb; after the fix
-the crash log is the first stop.
+RSP. The D30 crash handler writes `ge007.crash.log` with a working Phase-2
+backtrace (**D44** fixed) — first stop for any fault; frames past the true chain
+may be stale, sanity-check they fall inside `.text`.
