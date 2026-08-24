@@ -3022,6 +3022,19 @@ enum CCRMLUT
         BODY_Male_Pierce_Bond_Tuxedo,
         BODY_Natalya_Jungle_Fatigues,
         BODIES_MAX
+#ifdef PORT
+        /* D65b: same class of bug as D65 (HEADS). ROM tables store 0xFFFFFFFF in
+         * body fields as a "no body" sentinel and the cast-end check compares
+         * `intro_char_table[f].body < 0`. The N64 toolchain gave this enum a
+         * signed underlying type, so the sentinel read as -1. PC GCC 16 picks
+         * unsigned int for enums whose enumerators are all non-negative, which
+         * makes `body < 0` always false and the compiler deletes the reset
+         * branch entirely — the cast screen then renders the terminator entry
+         * (text1 == 0) and langGet(0) dereferences a NULL bank. A negative
+         * enumerator forces the signed underlying type without changing any
+         * existing value or BODIES_MAX. */
+        , BODY_FIXED = -1
+#endif
     } BODIES;
     
     typedef enum GENDER
@@ -3082,8 +3095,19 @@ enum CCRMLUT
         HEAD_COUNT        = HEAD_END - HEAD_START,         // Total number of heads
         HEAD_MALE_COUNT   = HEAD_F_START - HEAD_START,     // Total number of usable randon male heads
         HEAD_FEMALE_COUNT = HEAD_BOND_START - HEAD_F_START, // Total number of usable randon female heads
+#ifdef PORT
+        /* D65: the N64 toolchain treated these sentinels as signed (HEAD_FIXED == -1),
+         * so `head >= 0` guards compiled to real branches. PC GCC picks unsigned int
+         * as this enum's underlying type (0xFFFFFFFF > INT_MAX), which makes every
+         * `head >= 0` always true and turns c_item_entries[HEAD_FIXED] into a wild
+         * 64-bit OOB read (SIGSEGV in init_menu18_displaycast). Negative literals
+         * keep the bit pattern identical while restoring the signed semantics. */
+        HEAD_FIXED        = -1,
+        HEAD_RANDOM       = -97
+#else
         HEAD_FIXED        = 0xFFFFFFFF,
         HEAD_RANDOM       = 0xFFFFFF9F
+#endif
     } HEADS;
 
     //Canonical name and style "ai_destroyobj 2 : (def->obj == PROP_ELVIS_SAUCER)\n"

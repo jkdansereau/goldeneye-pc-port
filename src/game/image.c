@@ -98,14 +98,25 @@ s32 D_800492E4[] =
 {
     0, 0, 0, 0, 0, 0, 0
 };
+#ifdef PORT
+/* D67: match the PORT struct image_entry field order (dataoffset first) —
+ * see src/game/image.h. */
+#define IMAGE(NAME, SZ, HS, HT, F3, F4, F5, F6) \
+    {SZ, HT, HS, F3, F4, F5, F6 },
+#else
 #define IMAGE(NAME, SZ, HS, HT, F3, F4, F5, F6) \
     {HS, HT, SZ, F3, F4, F5, F6 },
+#endif
 
 //D:80049300
 //need way to calculate size at compile time from external data
 struct image_entry g_Textures[] = {
     #include <assets/images.def>
+#ifdef PORT
+    {0xFFFF, HIT_DEFAULT, HIT_DEFAULT, 0, 0, 0, 0}
+#else
     {HIT_DEFAULT, HIT_DEFAULT,0xFFFF,0,0,0,0}
+#endif
 };
 #undef IMAGE
 
@@ -2321,7 +2332,14 @@ void texLoadFromDisplayList(Gfx *gdl, struct texpool *arg1)
     while (bytes[0] != (u8)G_ENDDL)
     {
         // Look for GBI sequence: fd...... abcd....
+#ifdef PORT
+        /* D68 (docs/PCPortResearch.md): after gimgFixupGlobalimagetable() the
+         * 0xABCDxxxx word is stored host-order, so the marker bytes sit at
+         * offsets 6..7 of the Gfx. */
+        if (bytes[0] == G_SETTIMG && bytes[6] == 0xcd && bytes[7] == 0xab)
+#else
         if (bytes[0] == G_SETTIMG && bytes[4] == 0xab && bytes[5] == 0xcd)
+#endif
         {
             texLoad((u32 *)((s32)bytes + 4), arg1);
         }
@@ -2405,6 +2423,14 @@ void texLoad(s32 *updateword, struct texpool *pool)
 
         if (TRUE)
         {
+#ifdef PORT
+            /* TEMP D66: catch oversized texLoad ROM reads. */
+            if (getenv("GE_D63"))
+                osSyncPrintf("D66 texLoad texnum=%d thisoff=%08x nextoff=%08x size=%08x compbuf=%p\n",
+                             g_TexNumToLoad, thisoffset, nextoffset,
+                             (unsigned)(((u32)(nextoffset - thisoffset) + 0x1f) >> 4 << 4),
+                             (void *)alignedcompbuffer);
+#endif
             // Copy the compressed texture to RAM
             romCopy(alignedcompbuffer,
                     (u32) &_imagesSegmentRomStart + (thisoffset & 0xfffffff8),

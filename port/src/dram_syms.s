@@ -16,3 +16,11 @@
 
 .global _bssSegmentEnd
 .set _bssSegmentEnd, 0x70050000
+
+/* D59: animation-frame scratch buffer (src/game/initanitable.c). The game
+ * addresses it through s32 fields (Model.unk34/38/64/68) and loadAnimationFrame
+ * computes its address with a (u32) cast, so on PC it must live below 4 GiB;
+ * the BSS copy at 0x140xxxxxx truncates to wild 0x40xxxxxx. Parked at the top
+ * of DRAM V1 (above the mempool sentinel at +0x2F4400). */
+.global animations_frame_buffer
+.set animations_frame_buffer, 0x707FFD30

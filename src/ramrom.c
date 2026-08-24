@@ -62,6 +62,27 @@ void romCopy(void *target, void *source, u32 size)
  * romCopyAligned
  * aligns data, does a romCopy(), then returns aligned pointer to target
  */
+#ifdef PORT
+/* D66: the N64 build did all of this in s32 (every address fit). On PC the
+ * targets live in .bss above 4 GiB, so `(s32)target` truncates (e.g.
+ * 0x1401C6F00 -> 0x401C6F00) and romCopy DMA's into a wild address. Same
+ * class as D53/D56: pointer-width reconciliation only — the arithmetic and
+ * the returned (aligned + offset) value are unchanged, just 64-bit wide.
+ * Callers assign the result straight to pointers, so it returns void* here
+ * instead of s32. */
+void *romCopyAligned(void *target, void *source, s32 length)
+{
+    uintptr_t target_u = (uintptr_t)target;
+    uintptr_t source_u = (uintptr_t)source;
+    uintptr_t source_aligned = align_addr_even(source_u);
+    uintptr_t source_offset = source_u - source_aligned;
+    uintptr_t target_aligned = ALIGN16_a(target_u);
+
+    romCopy((void *)target_aligned, (void *)source_aligned,
+            (s32)ALIGN16_a(source_offset + length));
+    return (void *)(target_aligned + source_offset);
+}
+#else
 s32 romCopyAligned(void *target, void *source, s32 length)
 {
     s32 target_offset;
@@ -76,6 +97,7 @@ s32 romCopyAligned(void *target, void *source, s32 length)
     romCopy(target_aligned, source_aligned, ALIGN16_a((s32)source_offset + length));
     return ((s32)target_aligned + target_offset);
 }
+#endif
 
 /**
  * 68A8	70005CA8

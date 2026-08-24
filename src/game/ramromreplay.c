@@ -195,7 +195,12 @@ void load_ramrom_from_devtool(void)
 // Address 0x7F0BFE5C NTSC
 void record_player_input_as_packet(struct contsample *arg0, s32 arg1, s32 arg2)
 {
+#ifdef PORT
+    /* D66: 64-bit pointer width — ramrom_data_target lives above 4 GiB in .bss. */
+    uintptr_t temp_t5;
+#else
     s32 temp_t5;
+#endif
     s32 temp_t1;
     s32 var_a0;
     s32 var_a2;
@@ -206,7 +211,11 @@ void record_player_input_as_packet(struct contsample *arg0, s32 arg1, s32 arg2)
     u8 t1;
     s32 others0;
 
+#ifdef PORT
+    temp_t5 = ALIGN16_a((uintptr_t)&ramrom_data_target[0x1f8]);
+#else
     temp_t5 = ALIGN16_a((s32)&ramrom_data_target[0x1f8]);
+#endif
     temp_t1 = ptr_active_demofile->size_cmds;
 
     var_t2 = 0;
@@ -432,7 +441,12 @@ void test_if_recording_demos_this_stage_load(enum LEVELID arg0, enum DIFFICULTY 
 {
     if (g_ramromRecordFlag != 0)
     {
+#ifdef PORT
+        /* D66: 64-bit pointer width — ramrom_data_target lives above 4 GiB in .bss. */
+        ptr_active_demofile = (ramromfilestructure *) ALIGN16_a((uintptr_t)ramrom_data_target);
+#else
         ptr_active_demofile = (ramromfilestructure *) ALIGN16_a((s32)ramrom_data_target);
+#endif
         dword_CODE_bss_8008C5F8 = 0;
         ptr_active_demofile->stagenum = arg0;
         ptr_active_demofile->difficulty = arg1;

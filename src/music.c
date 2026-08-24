@@ -880,6 +880,11 @@ void musicTrack1Play(s32 track)
 
     romCopy(temp_a0, romAddress, trackSizeBytes);
     decompressdata(temp_a0, thing.seqData, &hlist);
+#ifdef PORT
+    /* PC port (D54): the decompressed ALCMidiHdr is big-endian; fix it up
+     * before alCSeqNew reads trackOffset[]/division natively. */
+    romdataFixupCseq(thing.seqData);
+#endif
 
     alCSeqNew(&g_musicXTrack1Seq, g_musicXTrack1SeqData);
     alCSPSetSeq(g_musicXTrack1SeqPlayer, &g_musicXTrack1Seq);
@@ -1069,6 +1074,10 @@ void musicTrack2Play(s32 track)
 
     romCopy(temp_a0, romAddress, trackSizeBytes);
     decompressdata(temp_a0, thing.seqData, &hlist);
+#ifdef PORT
+    /* PC port (D54): see track 1 — fix up the big-endian ALCMidiHdr. */
+    romdataFixupCseq(thing.seqData);
+#endif
 
     alCSeqNew(&g_musicXTrack2Seq, g_musicXTrack2SeqData);
     alCSPSetSeq(g_musicXTrack2SeqPlayer, &g_musicXTrack2Seq);
@@ -1258,6 +1267,10 @@ void musicTrack3Play(s32 track)
 
     romCopy(temp_a0, romAddress, trackSizeBytes);
     decompressdata(temp_a0, thing.seqData, &hlist);
+#ifdef PORT
+    /* PC port (D54): see track 1 — fix up the big-endian ALCMidiHdr. */
+    romdataFixupCseq(thing.seqData);
+#endif
 
     alCSeqNew(&g_musicXTrack3Seq, g_musicXTrack3SeqData);
     alCSPSetSeq(g_musicXTrack3SeqPlayer, &g_musicXTrack3Seq);

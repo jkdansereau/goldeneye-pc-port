@@ -2337,6 +2337,16 @@ s32 bgLoadRoomPrimaryGdl(s32 roomnum, u8 *dst, s32 allocsize)
     roominfo->ptr_expanded_mapping_info = dst;
     roominfo->usize_primary_DL_binary = expanded_size;
 
+#if defined(PORT)
+    /* TEMP D63: log primary GDL load result (env GE_D63=1) */
+    if (getenv("GE_D63")) {
+        u32 *w = (u32 *)dst;
+        osSyncPrintf("D63 bgLoadRoomPrimaryGdl room=%d dst=%p expanded=%d final=%d w0..3=(%08x,%08x,%08x,%08x)\n",
+                     roomnum, (void *)dst, (int)expanded_size, (int)size,
+                     w[0], w[1], w[2], w[3]);
+    }
+#endif
+
     // Return the uncompressed data size.
     return expanded_size;
 }
@@ -2663,8 +2673,12 @@ void bgRoomsTickUnload(void)
  * Ensures the room's bg data is loaded if budget allows, then appends its display list.
  * Also resets the age of rendered rooms so bgRoomsTickUnload won't unload it.
 */
+static int d63bgprimarycount = 0;
+
 Gfx *bgRenderRoomPrimary(Gfx *gdl, s32 room_index)
 {
+    if (getenv("GE_D63") && (d63bgprimarycount++ % 500 == 0))
+        osSyncPrintf("D63 bgRenderRoomPrimary called count=%d room=%d\n", d63bgprimarycount, room_index);
     if (room_index >= g_MaxNumRooms)
     {
         return gdl;
@@ -2689,6 +2703,16 @@ Gfx *bgRenderRoomPrimary(Gfx *gdl, s32 room_index)
         {
             gdl = applyRoomMatrixToDisplayList(gdl, room_index);
 
+#if defined(PORT)
+            /* TEMP D63: log primary GDL at render time (env GE_D63=1) */
+            if (getenv("GE_D63")) {
+                u32 *w = (u32 *)g_BgRoomInfo[room_index].ptr_expanded_mapping_info;
+                osSyncPrintf("D63 bgRenderRoomPrimary room=%d ptr=%p usize=%d w0..3=(%08x,%08x,%08x,%08x)\n",
+                             room_index, (void *)g_BgRoomInfo[room_index].ptr_expanded_mapping_info,
+                             (int)g_BgRoomInfo[room_index].usize_primary_DL_binary,
+                             w[0], w[1], w[2], w[3]);
+            }
+#endif
             gSPSegment(gdl++, SPSEGMENT_BG_VTX, OS_K0_TO_PHYSICAL(g_BgRoomInfo[room_index].vertices));
             gSPDisplayList(gdl++, OS_K0_TO_PHYSICAL(g_BgRoomInfo[room_index].ptr_expanded_mapping_info));
 
@@ -2724,6 +2748,16 @@ Gfx *bgRenderRoomSecondary(Gfx *gdl, s32 room_index)
         {
             gdl = applyRoomMatrixToDisplayList(gdl, room_index);
 
+#if defined(PORT)
+            /* TEMP D63: log secondary GDL at render time (env GE_D63=1) */
+            if (getenv("GE_D63")) {
+                u32 *w = (u32 *)g_BgRoomInfo[room_index].ptr_secondary_expanded_mapping_info;
+                osSyncPrintf("D63 bgRenderRoomSecondary room=%d ptr=%p usize=%d w0..3=(%08x,%08x,%08x,%08x)\n",
+                             room_index, (void *)g_BgRoomInfo[room_index].ptr_secondary_expanded_mapping_info,
+                             (int)g_BgRoomInfo[room_index].usize_secondary_DL_binary,
+                             w[0], w[1], w[2], w[3]);
+            }
+#endif
             gSPSegment(gdl++, SPSEGMENT_BG_VTX, OS_K0_TO_PHYSICAL(g_BgRoomInfo[room_index].vertices));
             gSPDisplayList(gdl++, OS_K0_TO_PHYSICAL(g_BgRoomInfo[room_index].ptr_secondary_expanded_mapping_info));
 

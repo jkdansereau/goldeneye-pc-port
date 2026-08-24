@@ -229,6 +229,24 @@ void rspGfxTaskStart(Gfx *firstGdl, Gfx *gdl, s32 arg2, OSMesg rspReplyMsg)
     OSScTask *sctask;
     OSTask *task;
 
+#ifdef PORT
+    extern void d63Act(const char *tag); /* TEMP D63 */
+    d63Act("rspstart");
+    /* TEMP D63: log task submission (main thread) with tid */
+    if (getenv("GE_D63")) {
+        unsigned long tid = 0;
+#if defined(PLATFORM_WINDOWS)
+        tid = GetCurrentThreadId();
+#else
+        tid = (unsigned long)pthread_self();
+#endif
+        osSyncPrintf("D63 rspGfxTaskStart first=%p last=%p size=%d tid=%lu slot=%08x\n",
+                     (void *)firstGdl, (void *)gdl,
+                     (int)((gdl - firstGdl) * sizeof(Gfx)), tid,
+                     *(const u32 *)0x7012EC38);
+    }
+#endif
+
     sctask = &((struct GfxInfo_s *)g_gfxTaskSettingsList)->task;
     task = &sctask->list;
 
@@ -264,6 +282,12 @@ void rspGfxTaskStart(Gfx *firstGdl, Gfx *gdl, s32 arg2, OSMesg rspReplyMsg)
     sctask->msg = rspReplyMsg;
 
     sctask->framebuffer = (void *) ((struct GfxInfo_s *)g_gfxTaskSettingsList)->cfb;
+
+#if defined(PORT)
+    /* TEMP D63: log the DL range before task submit (env GE_D63=1) */
+    if (getenv("GE_D63"))
+        osSyncPrintf("D63 rspGfxTaskStart firstGdl=%p gdl=%p\n", (void *)firstGdl, (void *)gdl);
+#endif
 
     osWritebackDCacheAll();
 

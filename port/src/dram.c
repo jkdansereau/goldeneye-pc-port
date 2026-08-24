@@ -41,6 +41,8 @@
  *   +0x050000  _bssSegmentEnd    -> mempool start (boss.c:217)
  *   ...            game heap (mempools / dyn / audio buffers)
  *   +0x2F4400  tlb block         -> mempool end (tlbmanageGetTlbAllocatedBlock)
+ *   ...            free
+ *   -0x0002D0  animations_frame_buffer (0x2D0, D59; dram_syms.s absolute sym)
  *   +0x800000  end of region (8 MB, like an 8-MB-RAM N64)
  */
 

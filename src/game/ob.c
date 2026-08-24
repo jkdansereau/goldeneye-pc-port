@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#ifdef PORT
+/* TEMP D69: probe below uses fprintf/getenv. */
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 #include "macro.h"
 #include "ob.h"
 #include <deb.h>
@@ -142,6 +147,15 @@ void obLoadBGFileBytesAtOffset(u8 *bgname, u8 *target, s32 offset, s32 len)
   index = fileGetIndex(bgname);
   fileentry = &file_resource_table[index];
 
+#ifdef PORT
+  /* TEMP D69: trace BG-file loads (env GE_D69=1). */
+  if (getenv("GE_D69"))
+    fprintf(stderr, "D69 obLoadBGFile %s idx=%d rom_size=0x%X hw=0x%08X off=0x%X len=0x%X\n",
+            (const char *)bgname, index,
+            (unsigned)resource_lookup_data_array[index].rom_size,
+            (unsigned)(u32)fileentry->hw_address, (unsigned)offset, (unsigned)len);
+#endif
+
   if (resource_lookup_data_array[index].rom_size != 0)
   {
     //if the size of offset data would exceed file size, loop forever
@@ -194,6 +208,15 @@ void obLoadBGFileBytesAtOffset(u8 *bgname, u8 *target, s32 offset, s32 len)
 
   index = fileGetIndex(bgname);
   fileentry = &file_resource_table[index];
+
+#ifdef PORT
+  /* TEMP D69: trace BG-file loads (env GE_D69=1). */
+  if (getenv("GE_D69"))
+    fprintf(stderr, "D69 obLoadBGFile %s idx=%d rom_size=0x%X hw=0x%08X off=0x%X len=0x%X\n",
+            (const char *)bgname, index,
+            (unsigned)resource_lookup_data_array[index].rom_size,
+            (unsigned)(u32)fileentry->hw_address, (unsigned)offset, (unsigned)len);
+#endif
 
   if (resource_lookup_data_array[index].rom_size != 0)
   {

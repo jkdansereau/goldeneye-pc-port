@@ -102,6 +102,8 @@ static int romHeaderValid(const u8 *h, char *err, size_t errsz)
     return 1;
 }
 
+static u32 romdataBswap32(u32 v); /* defined below; used by the D55 fixup */
+
 int romdataInit(void)
 {
     char err[128] = "";
@@ -175,6 +177,23 @@ int romdataInit(void)
                          tok, romSize, CART_BASE,
                          sideTotal ? ", + model sidecars" : "");
             pcmodelsLoadSidecars(CART_BASE, romSize);
+
+            /* D55 (docs/PCPortResearch.md): the RLE folder-menu background at
+             * `unknown2` (romassets_<r>.s) is stored in the ROM with a
+             * big-endian w/h header (01 B8 01 2B = 440x299), but
+             * rle_expand_8bit() reads it little-endian. The N64 build embeds
+             * this asset into .data via assets/romfiles2.s from an extracted
+             * .bin whose header is byte-swapped (title2.c hardcodes 440x299
+             * row rendering, and this is the only decodable 440x299 RLE
+             * stream in the ROM), so make the cart copy match it: swap the
+             * w/h word in place. The guard makes the fixup a no-op if a
+             * region's copy already reads as a plausible LE size. */
+            {
+                extern void *unknown2; /* absolute cart address */
+                u32 *hdr = (u32 *)&unknown2;
+                if ((u16)*hdr > 512 || (u16)(*hdr >> 16) > 512)
+                    *hdr = romdataBswap32(*hdr);
+            }
             return 0;
         }
         if (at)
@@ -373,6 +392,23 @@ void romdataFixupMusicSeqTable(u8 *blob, u32 blobSize)
 }
 
 /*
+ * D54 (docs/PCPortResearch.md): a decompressed compact-sequence (cseq) file
+ * starts with struct ALCMidiHdr — 16 big-endian u32 trackOffset values plus a
+ * big-endian u32 division. N64 reads them natively; on a little-endian host
+ * alCSeqNew() byte-swaps them (track 0 offset 0x44 becomes 0x44000000),
+ * builds "valid" curLoc pointers ~1 GB past the buffer, and __getTrackByte()
+ * faults. The rest of the stream is byte-oriented (varlens, MIDI bytes, BE
+ * loop offsets assembled byte-by-byte), so only these 17 words need fixing.
+ */
+void romdataFixupCseq(u8 *blob)
+{
+    u32 *hdr = (u32 *)blob;
+    for (u32 i = 0; i < 17; i++) {
+        hdr[i] = romdataBswap32(hdr[i]);
+    }
+}
+
+/*
  * D50 (docs/PCPortResearch.md): a language bank is [u32 offsets x N][text].
  * Offsets are big-endian and point into the text region; langGet() reads them
  * little-endian on PC and would build garbage pointers. Scan from the front
@@ -464,8 +500,11 @@ void romdataFixupFont(u8 *blob, u32 n64Size)
         o = romdataBswap32(*(const u32 *)(s + 20));
         if (o != 0 && pixStart != 0 && o >= pixStart)
             o = pcPixOff + (o - pixStart);
-        *(u32 *)(d + 20) = o; /* zero-extended relative offset */
-        *(u32 *)(d + 24) = 0;
+        /* D51: on PC pixeldata is a u64 at d+24 (fontchar needs 8-align,
+         * sizeof=32) — the N64 u32-at-d+20 layout does not hold. Write the
+         * offset into the pointer and zero-extend it. */
+        *(u32 *)(d + 24) = o;
+        *(u32 *)(d + 28) = 0;
     }
 }
 

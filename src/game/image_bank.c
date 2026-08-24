@@ -2,6 +2,9 @@
 #include <ramrom.h>
 #include <memp.h>
 #include "image_bank.h"
+#ifdef PORT
+#include <gimgfixup.h>
+#endif
 
 // bss
 //8008D0A0
@@ -243,6 +246,13 @@ void texReset(void)
 
     romCopy(pGlobalimagetable, &_GlobalimagetableSegmentRomStart, size);
 
+#ifdef PORT
+    /* D68 (docs/PCPortResearch.md): the ROM copy is N64 big-endian; convert
+     * the CPU-interpreted u32 fields (IMAGESEG Gfx w1 words and
+     * sImageTableEntry.index) to host order before any code reads them. */
+    gimgFixupGlobalimagetable((u8 *)pGlobalimagetable);
+#endif
+
     globalbank_rdram_offset = (u32)pGlobalimagetable + 0xFE000000;
     genericimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_genericimage));
     impactimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_impactimages));
@@ -306,4 +316,11 @@ void texReset(void)
     {
         texLoad(&scattered_explosions[i], 0);
     }
+
+#ifdef PORT
+    /* D68: explosion.c executes the compiled globalDL_0xNNN shadows via
+     * g_ExplosionDisplayLists[]; copy the IMAGESEG words that texLoad()
+     * patched in the ROM copy over into those arrays. */
+    gimgSyncCompiledGlobalDLs((u8 *)pGlobalimagetable);
+#endif
 }

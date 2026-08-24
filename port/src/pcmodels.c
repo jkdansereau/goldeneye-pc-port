@@ -234,3 +234,8 @@ uint32_t pcmodelsTotalSize(void)
 {
     return s_loaded ? s_total : 0;
 }
+
+uintptr_t pcmodelsSidecarBase(void)
+{
+    return s_loaded ? (uintptr_t)s_base : 0;
+}

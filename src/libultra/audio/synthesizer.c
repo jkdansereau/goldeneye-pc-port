@@ -124,6 +124,21 @@ void alSynNew(ALSynth *drvr, ALSynConfig *c)
     /*
      * build the parameter update list
      */
+#ifdef PORT
+    /* PC port (D54): the N64 code type-puns these slots as various AL*Param
+     * structs. On x86-64, ALStartParamAlt is 0x28 bytes (two 64-bit pointers:
+     * next + wave), larger than the slot type ALParam (0x20), so every
+     * start-voice update wrote `wave` into the neighbouring slot and
+     * corrupted the free list. Size each slot for the largest param struct,
+     * preserving the N64 invariant that every param type fits one slot. */
+    params = alHeapAlloc(hp, c->maxUpdates, sizeof(ALStartParamAlt));
+    drvr->paramList = 0;
+    for (i = 0; i < c->maxUpdates; i++) {
+        paramPtr = (ALParam *)((u8 *)params + i * sizeof(ALStartParamAlt));
+        paramPtr->next = drvr->paramList;
+        drvr->paramList = paramPtr;
+    }
+#else
     params = alHeapAlloc(hp, c->maxUpdates, sizeof(ALParam));
     drvr->paramList = 0;
     for (i = 0; i < c->maxUpdates; i++) {
@@ -131,6 +146,7 @@ void alSynNew(ALSynth *drvr, ALSynConfig *c)
         paramPtr->next = drvr->paramList;
         drvr->paramList = paramPtr;
     }
+#endif
     
     drvr->heap = hp;
 }

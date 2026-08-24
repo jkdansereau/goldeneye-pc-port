@@ -18,7 +18,13 @@ void modelAttachHead(Model *, ModelNode*,  ModelFileHeader *);
 void clear_aircraft_model_obj(Model *objinstance);
 void modelSetDistanceDisabled(s32 param_1);
 void modelSetDistanceScale(f32 param_1);
+#ifdef PORT
+/* D59: function pointers must not pass through s32 on PC (the caller passes
+ * &get_ptr_allocated_block_for_vertices, a 0x140xxxxxx code address). */
+void set_vtxallocator(void *param_1);
+#else
 void set_vtxallocator(s32 param_1);
+#endif
 void modelCalculateScaledRootToOriginDir(Model* model, coord3d* coord);
 void modelGetScaledRootToOriginDir(Model* model, coord3d* coord);
 s32 modelFindNodeMtxIndex(ModelNode *node, s32 arg1);

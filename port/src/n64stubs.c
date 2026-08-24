@@ -135,6 +135,7 @@ void osSyncPrintf(const char *fmt, ...)
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
     va_end(ap);
+    fflush(stderr); /* keep probe lines intact across crashes (block-buffered when redirected) */
 }
 
 /* --- VI manager (src/libultrare/io/vimgr.c, not built for PC) ----------- */

@@ -1745,84 +1745,510 @@ Fix: `*arg1 = *arg0;` under `#ifdef PORT` (tex.c). Audit: tex.c is the only
 local 8-byte union); every other Gfx copy is full-struct. Post-fix:
 PlegalpageZ's sub-DLs execute to completion; crash moves on (D51).
 
-**D51 (OPEN — current blocker: `import_texture_i8` SIGSEGV via main-DL G_TEXRECT lazy tile upload)**
+**D51 (RESOLVED — font `pixeldata` fixup wrote the pointer at the wrong offsets; frame-5 `import_texture_i8` SIGSEGV)**
 
-Post-D50 run: frames 1–4 log, then SIGSEGV on frame 5 in
-`import_texture_i8` (gfx_pc.cpp:782, `addr[i]`) ← `import_texture(i=0,
-tile=0)` ← `gfx_sp_tri1(128,129,131,is_rect=true)` ←
-`gfx_draw_rectangle(236,92,268,140)` ← `gfx_dp_texture_rectangle` ←
-`G_TEXRECT` case (gfx_run_dl ~line 2472), main DL start 0x70052e80,
-failing opcode slot at +0x260 (0x700530e0). G_TEXRECT carries no source
-address — it blits from RDP texture-memory tiles; the fault is the **lazy
-upload of tile 0** whose stored source pointer is invalid (or the tile was
-never set up this frame → stale `rdp.textures[0]`). Suspects: (a) a
-main-DL G_SETTIMG (0xFD) earlier than +0x260 whose w1 seg_addr
-mis-resolves; (b) tile referenced before setup / across frames; (c) the
-game points the tile source at a ROM/ramrom image that needs a port fixup
-(D50.3/D50.4 class). **Investigation not started.** Note: after the crash,
-0x70052e80 is unreadable from gdb ("Cannot access memory") — dump live at a
-breakpoint, not post-mortem. GE opcode facts verified this session
-(include/PR/gbi.h, non-F3DEX numbering): G_IMMFIRST=−65; DMA G_MTX=1 /
-G_MOVEMEM=3 / G_VTX=4 / G_DL=6; IMM TRI1=0xBF … ENDDL=0xB8;
-GE extension G_TRI4=0xB1 (gbi_extension.h, 8-bit packed indices — NOT an
-address carrier); RDP pass-throughs include G_SETTIMG=0xFD,
-G_SETCIMG=0xFF, **G_TEXRECT=0xE4 / G_TEXRECTFLIP=0xE5** (GE-specific
-values, not libultra's 0x46/0x45). The main DL is game-built per frame with
-gSP* macros (16B slots); the segment table is set via
+The G_TEXRECT tile-0 upload's source was a **font glyph** (I8, loaded via
+`gDPLoadTextureBlock`). Root cause in `romdataFixupFont`
+(port/src/romdata.c): it wrote each char's pixel pointer at blob offsets
+d+20/d+24, but on PC `struct fontchar.pixeldata` is a **u64 at char offset
++24** — the low word landed in padding and only half the pointer was
+written, so glyph sources resolved to stale/invalid addresses → OOB read in
+`import_texture_i8`. Fix: write the blob-relative offset into d+24 (low)
+and zero-extend d+28 (high). Verified: glyphs load, SIGSEGV gone. The old
+D51 hypothesis list (seg_addr / tile staleness) was wrong; its GE opcode
+facts remain valid reference material (G_IMMFIRST=−65; DMA G_MTX=1 /
+G_MOVEMEM=3 / G_VTX=4 / G_DL=6; IMM TRI1=0xBF … ENDDL=0xB8; GE extension
+G_TRI4=0xB1, 8-bit packed indices — NOT an address carrier; RDP
+pass-throughs G_SETTIMG=0xFD, G_SETCIMG=0xFF, **G_TEXRECT=0xE4 /
+G_TEXRECTFLIP=0xE5** — GE-specific values, not libultra's 0x46/0x45;
+width-1 stored in the 12-bit field, fmt I=4, G_TX_LOADTILE=7; main DL is
+game-built per frame with gSP* macros; segment table via
 `gMoveWd(G_MW_SEGMENT, seg*4, base)` → w0=(0xBC<<24)|(seg*4<<8)|6,
 w1=data; fast3d's gfx_sp_moveword stores data as-is when ≥ 0x800000 else
-+0x80000000.
++0x80000000).
 
-Environment notes for Task 2: standalone gcc needs
+**D52 (RESOLVED — `osGetCount` tick-rate mismatch → non-deterministic post-frame-2 hang)**
+
+Plain runs sometimes hung after frame 2 (kernel watchdog: "no frame rendered
+for 3006180 ms") instead of crashing at frame 5. Root cause:
+port/src/libultra.c `osGetCount()` returned **microseconds** (1M/s), but GE's
+pacing assumes the N64 RSP counter rate ≈ **46.5525 ticks/µs**:
+`MAIN_LOOP_TICK_INTERVAL` = 387,937 ticks (boss.c: NTSC
+`INTERVAL_INTER_MATH - 2688U`; PAL
+`frameDelay*(CYCLES_PER_FRAME-6450)-(INTERVAL_INTER_MATH-3225)`), and
+`waitForNextFrame()` (frametiming.c) waits for
+`(elapsed+interval)/775875` ticks (NTSC frame = 775,875; PAL 931,050). At
+1M/s the steady-state 16,667 µs between retraces < 387,937 → bossMainloop's
+gate never passes → no DL built → hang. Frames 1–2 rendered only because
+stage loading took >388 ms of real time. Fix: `osGetCount()` returns
+`(u32)(((uint64_t)sysGetMicroseconds()*465525ull)/10000ull)` (rate derived
+from GE's own constants: 775875/16666.67µs = 931050/20000µs); wraps every
+~92 s like the HW counter. `osGetTime()` still returns µs (osSetTimer/
+OSTime). PD's port has the same µs implementation but lacks GE's cycle-based
+pacing gate — do not copy it blindly.
+
+**D53 (RESOLVED: model RW-data pool addressing on PC; frame-5 SIGSEGV in `modelInitRwData`)**
+
+Post-D51/D52, the frame-5 SIGSEGV moves to `modelInitRwData`
+(model.c ~6131): first BSP node → `movl $0x0,(%rax)` right after
+`call modelGetNodeRwData` — writing `visible=FALSE` through NULL. Two
+compounding PC layout bugs, both in the D32 class:
+
+- **D53.1 (applied; necessary but not sufficient): `Model.datas` word
+  stride.** `RwDataIndex` values are **4-byte word offsets** into the
+  RW-data pool (`modelCalculateRwDataIndexes` accumulates
+  `len += sizeof(record)/4`; pool = round16(numRecords×4) bytes, allocated
+  in modelmgrInstantiateModel(WithAnim)). On N64 `&data[index]` with
+  `union ModelRwData **data` strides 4 B; on PC it strides 8 B → every
+  non-zero index addresses the wrong record. Fix (3 files, all #ifdef PORT):
+  `Model.datas` → `u32 *datas` (bondtypes.h — layout unchanged: single
+  pointer field); casts in model.c (`modelGetNodeRwData` local + return
+  `(union ModelRwData *)&data[index]`, parent-walk
+  `data=(u32*)tmp->RwDatas`, `modelAttachPart`) and propobj.c:7301/14343.
+- **D53.2 (root-caused; fix designed, NOT applied): `ModelSlot` /
+  `AnimModelSlot` ↔ `Model` type-pun breaks on PC.** The game puns the slot
+  structs and Model in both directions: `slot.unk08@8` ↔ `Model.obj@8` (the
+  **in-use flag** — `modelInit`'s `objinst->obj = header` marks a slot),
+  `slot.unk10@0x10` ↔ `Model.datas@0x10` (RW pool), `slot.unk02@2` ↔
+  `rwdatalen@2`. On N64 all pointers are 4 B → offsets agree. On PC there is
+  no pack pragma — natural alignment (probe-verified with the exact CMake
+  flags, see vsize.c): **Model = 0xE8 B**: chr@8, **obj@0x10**,
+  render_pos@0x18, **datas@0x20**, scale@0x28, attachedto@0x30, anim@0x40;
+  the slot structs still have unk08@8 / unk10@0x10. (An earlier draft of
+  this section said obj@0xC/datas@0x1C — that assumed packed layout and is
+  wrong; the log evidence below only fits the natural-alignment offsets.)
+  Consequences: (a) `modelInit` writes obj@0x10 — the free check reads
+  unk08@8 (low word of Model.chr, never written) → slots are never marked in
+  use → every model reuses slot 0; (b) the legal-screen logo model takes
+  slot 0, then `update_menu00_legalscreen()` (front.c:1430) →
+  `clear_model_obj(logoinst)` writes obj=NULL at @0x10..0x17 — exactly where
+  `slot.unk10@0x10` lives; the next instantiation passes
+  `modelmgrCanSlotFitRwdata` on stale Model.datas@0x20 (non-NULL) + real
+  unk02=20 ≥ 17, then `rwdata = g_ModelSlots[i].unk10` = NULL →
+  `modelInit(model, header, NULL)` → fault. **Log evidence** (TEMP D51 trace
+  in model.c → d52rw.log):
+  ```
+  INST model=0x7020ac48 header=0x140141c40 numRecords=0  rwdata=0x7020b0f8 rwdatalen=20 lvreset=0
+  INST model=0x7020ac48 header=0x140142700 numRecords=17 rwdata=NULL     rwdatalen=20 lvreset=0
+  GND obj=0x7020ac48 datas=NULL idx=0 rwdatalen=-1 op=2 data=NULL res=NULL
+  ```
+  (same Model address both times = slot reuse; 20 = MODEL_SPARE_RWDATALEN
+  spare-slot pool.)
+- **D53.2 fix APPLIED and verified.** objecthandler.h under #ifdef PORT:
+  both slot structs re-laid out on top of the PC struct Model — `unk02`@2,
+  in-use marker `unk08`@**0x10** (low word of Model.obj), pool pointer
+  `unk10`@**0x20** (Model.datas), then `char pad28[sizeof(struct Model)-0x28]`
+  so each slot is exactly sizeof(Model) = 0xE8 (a full Model, including
+  animInit's writes up to PC offset 0xE3, fits). Member names kept; N64
+  layout verbatim under #else. model.c heap fallbacks bumped PORT-guarded:
+  0x20 → sizeof(struct Model) (non-animated), 0xC0 → sizeof(struct
+  AnimModelSlot) (animated). Verified with the d52rw.log probe: both INSTs
+  get valid pools (rwdata=0x7020c778, non-NULL), all 17 records initialize,
+  frame-5 modelInitRwData crash gone; game runs to ~frame 102 and past the
+  Nintendo-logo transition. Note: the bump allocator's `pos` drifts with the
+  new sizes → some slots land on 4-byte boundaries; misaligned 8-byte field
+  stores are functionally fine on x86-64 (individual field accesses, no
+  faults) — accepted without a PORT alignment bump in memp.c.
+
+Size/offset probe: `vsize.c` at repo root (untracked scratch — delete before
+commit) prints sizeof + field offsets of Model / ModelSlot / AnimModelSlot /
+struct player; compile with the CMake include order (port/shim first, then .,
+include, include/PR, src, src/game, src/libultra, port/include) plus
+`-DPORT=1 -DAVOID_UB=1 -std=c11`. Re-run after any slot-struct edit.
+
+Environment notes: standalone gcc needs
 `/c/msys64/mingw64/bin:/c/msys64/usr/bin` on PATH (cc1 fails SILENTLY without
 it — exit 1, zero diagnostics), and `-std=c11` is required (the CMake flag;
 under the default gnu23 `typedef s32 bool` in bondtypes.h breaks). Also:
 `include/stddef.h`'s body is `#if 0`'d — offsetof/size_t are unavailable in
-game TUs.
+game TUs (use pointer-difference arithmetic in probes).
+
+**D54 (RESOLVED: cseq ALCMidiHdr endianness; audio-thread SIGSEGV in
+`__getTrackByte`)**
+
+After D53, the first music load (M_INTROSWOOSH, seq 44) crashed the audio
+thread in `__getTrackByte`. Root cause: a decompressed compact-sequence file
+starts with `struct ALCMidiHdr` — 16 **big-endian** u32 trackOffset values +
+a BE u32 division. N64 reads them natively; on an LE host alCSeqNew() does
+not swap them (track-0 offset 0x44 becomes 0x44000000), builds "valid"
+curLoc pointers ~1 GB past the buffer, and the first track-byte read faults.
+The rest of the stream is byte-oriented (varlens, MIDI bytes, BE loop offsets
+assembled byte-by-byte) so only the 17 header words need fixing. Fix: port-
+layer `romdataFixupCseq(u8 *blob)` (port/src/romdata.c — bswap32 of the first
+17 u32s; declared in port/include/romdata.h), called under #ifdef PORT after
+each of the 3 `decompressdata` calls in musicTrack1Play/2/3 (src/music.c).
+Verified: __getTrackByte crash gone; full 60 s run (exit=124 timeout) with no
+audio fault, past the Nintendo-logo transition.
+
+**D54b (RESOLVED: synthesizer param-slot sizing; audio-thread SIGSEGV in
+`alLoadParam`)**
+
+Next audio crash: `alLoadParam` dereferenced a corrupted free-list slot. Root
+cause: alSynInit's "build the parameter update list" allocates
+`c->maxUpdates` slots of `sizeof(ALParam)` and the game type-puns those slots
+as several AL*Param structs. On N64 all of them are 0x1C bytes (one slot
+each); on x86-64 **ALStartParamAlt is 0x28** (two 8-byte pointers: next +
+wave) vs ALParam = 0x20 — every start-voice update wrote `wave` into the
+neighbouring slot, corrupting the free list. Fix in synthesizer.c alSynInit
+under #ifdef PORT: allocate `maxUpdates * sizeof(ALStartParamAlt)` and stride
+the init loop by that size (cast each slot to ALParam* for the next-pointer
+link); N64 verbatim under #else. Cost +8 B/slot × 0x80 slots = +1 KB vs
+MUSIC_ALLOCATION_BYTES — no alHeapAlloc failure observed. Verified:
+alLoadParam crash gone; full 60 s run clean.
+
+**D55 (RESOLVED: RLE folder-menu background header endianness; SIGSEGV in
+`rle_expand_8bit`)**
+
+After the audio fixes, the game ran to the gun-barrel intro (~frame 654,
+~23 s) and crashed in `rle_expand_8bit` (src/game/rle.c:30, the `*dst++`
+store). Caller: title.c `sub_GAME_7F008DE4` (the initializeGunBarrelIntro path)
+romCopies the asset at
+`unknown2` (romassets_<r>.s, NTSC cart 0x102A4D50, size 0x1A580) and RLE-
+decodes it into a 0x40400-byte buffer. Root cause: the asset is the title
+folder-menu background; its raw ROM header is **big-endian** `01 B8 01 2B`
+(w=440, h=299) + 6 pad bytes + a valid RLE stream (decodes to exactly
+440×299 = 131560 bytes). rle_expand_8bit reads w/h as **LE** u16s (byte-
+matched N64 code): the raw header gives w=47105, h=11009 → remaining ≈
+518 MB written into a 256 KB buffer → SIGSEGV. The N64 build embeds this
+asset into .data via `assets/romfiles2.s` (`.incbin
+"assets/ge007.u.2A4D50.usedby7F008DE4.bin"`) from an extracted .bin whose
+header is byte-swapped — title2.c hardcodes 440-wide I8 rows × 299, and this
+is the only decodable 440×299 RLE stream in the ROM (a full-file 16-bit swap
+was ruled out: it zeroes the first RLE count at +0xC), so only the 4-byte
+header differs between raw ROM and the N64 .bin. Fix (port-layer, romdata.c
+romdataInit, after the cart-base mapping): bswap32 the first word at
+`(u32 *)&unknown2` in place — the image is a writable VirtualAlloc at CART_
+BASE — guarded by "only swap if the LE-read w or h > 512" so an already-LE
+region copy is a no-op. rle.c/title.c untouched (D37/D54 pattern). Verified:
+RLE crash gone; game renders 600+ frames past the gun-barrel background into
+the watch intro, where it hits D56.
+
+**D56 (RESOLVED: watch-intro embedded Model/RW-pool raw offsets into struct
+player; SIGSEGV in `modelSetScale`)**
+
+Post-D55, the game renders 600+ frames (~10 s into the gun-barrel/watch
+intro) then SIGSEGVs in `modelSetScale` (src/game/model.c:778,
+`objinst->scale = scale`) with a garbage Model* (crash-log return frame was
+corrupted; caller inferred — see below). Prime suspect, and the only code
+passing a **raw N64 offset into struct player** as a Model*: `sub_GAME_7F07E7CC`
+(bondview2.c:3102-3116, called from bondview2.c:3400 whenever the pause/watch
+transition completes — every watch-menu open, and during the gun-barrel
+intro):
+```
+animInit((Model *)((u8 *)g_CurrentPlayer + 0x230), itemheader, (u32 *)((u8 *)g_CurrentPlayer + 0x2ec));
+modelSetScale((Model *)((u8 *)g_CurrentPlayer + 0x230), c_item_entries[41].scale * 0.1f);
+modelSetAnimation((Model *)((u8 *)g_CurrentPlayer + 0x230), …ANIM_DATA_bond_watch…);
+*(s32 *)((u8 *)g_CurrentPlayer + 0x220) = 0;   // = step_in_view_watch_animation
+```
+Layout facts (probe-verified where noted):
+- struct Model (bondtypes.h:1482): 8 pointer fields (chr, obj, render_pos,
+  datas [u32* under PORT, D53.1 — note the in-code comment there still says
+  "D52", flagged for rename in HANDOFF Task 3], attachedto,
+  attachedto_objinst, anim, anim2).
+  sizeof_N64 = **0xBC**; sizeof_PC = **0xE8** (vsize probe: chr@8, obj@0x10,
+  render_pos@0x18, datas@0x20, scale@0x28, attachedto@0x30, anim@0x40 — note
+  the 8-byte pointer alignment padding after the two leading s16s).
+- N64 struct player: the **watch Model is embedded at +0x230** (its first
+  word is the anonymous s32 `something_with_watch_object_instance`), size
+  0xBC, so it ends exactly at +0x2EC where the **RW-data pool** begins. The
+  pool region runs to `buttons_pressed`@0x3B4 = **0xC8 bytes** of capacity;
+  every field in [0x2EC, 0x3B4) is an anonymous s32 (no pointers → no extra
+  PC shift inside the region).
+- On PC the embedded Model sits at X = offsetof(struct player,
+  something_with_watch_object_instance) (≥ 0x230 + 5×4: cameratile@0x34,
+  prop@0xA8, bodyModel@0xD4, autoaim_target_y@0x130, autoaim_target_x@0x140
+  are the pointer fields before it) and spans [X, X+0xE8). Remaining capacity
+  before buttons_pressed is only 0x184−0xE8 = **0x9C < 0xC8** → the pool does
+  NOT fit embedded on PC.
+- modelInit stores the pool pointer in `Model.datas` and ALL rwdata access
+  goes through `modelGetNodeRwData(model, node)` via `model->datas` — so
+  redirecting the pool to separate storage is safe; only sub_GAME_7F07E7CC
+  references +0x2EC directly (whole-tree grep).
+- The N64 capacity 0xC8 bounds the watch model's real pool size (the game
+  works on N64), so a fixed static buffer of that size is safe.
+**Applied as designed + verified:** bondview2.c sub_GAME_7F07E7CC under
+#ifdef PORT takes the Model by field name —
+`Model *watch = (Model *)&g_CurrentPlayer->something_with_watch_object_instance;`
+(probe-verified at +0x24C on PC — not 8-aligned; unaligned pointer stores are
+fine on x86-64 per D53.2) and hosts the pool in `static u8 watchRwPool[0xC8]`
+(N64 capacity; N64 embeds it at player+0x2EC); animInit/modelSetScale/
+modelSetAnimation on `watch`; the +0x220 store becomes
+`g_CurrentPlayer->step_in_view_watch_animation = 0;`. N64 raw-offset path kept
+verbatim under #else. Verified: the watch path no longer crashes — but the
+same `modelSetScale` SIGSEGV remained, and an env-gated probe (GE_D56,
+logging `__builtin_return_address(0)` in modelSetScale) proved the real
+caller was **not** the watch path: `initializeGunBarrelIntro` (title.c)
+calling `modelSetScale(NULL, 0.18779343f)` because `setup_chr_instance()` →
+`modelmgrInstantiateModelWithAnim()` returned NULL for BODY_Brosnan_Tuxedo —
+see D57.
+
+**D57 (RESOLVED: pointer-grown rwdata records overflow the N64-sized spare
+pools; `modelmgrInstantiateModelWithAnim` returns NULL → SIGSEGV in
+`modelSetScale(NULL, …)`)**
+
+The Brosnan tuxedo's computed PC `numRecords` is **153** words vs the N64-
+sized anim spare-pool capacity of **140** (`ANIM_MODEL_SPARE_RWDATALEN =
+0x8C`). Cause: two rwdata record structs contain pointer fields and grow 8 →
+16 bytes on x86-64 — `ModelRwData_HeadPlaceholderRecord` (ModelFileHeader* +
+void*) and `ModelRwData_DisplayList_CollisionRecord` (Vertex* + Gfx*). Since
+`modelCalculateRwDataLen()` accumulates sizeof(record)/4 per node, every
+HEAD/DLCOLLISION node adds +2 words vs N64. Fix (two parts, both #ifdef PORT):
+(1) initunk_005520.c: spare capacities grown with headroom —
+`MODEL_SPARE_RWDATALEN 0x14→0x38`, `ANIM_MODEL_SPARE_RWDATALEN 0x8C→0xA8`
+(N64 values kept under #else); (2) model.c: in the non-LvResetting branches
+of both `modelmgrInstantiateModel()` and `modelmgrInstantiateModelWithAnim()`,
+a dynamic slot+pool fallback mirroring the existing LvResetting path
+(`mempAllocBytesInBank(sizeof(struct ModelSlot/AnimModelSlot))` + 16-aligned
+pool of numRecords words) — the slot is untracked (never reused), acceptable
+because with the grown capacities it should not trigger. A u32-field approach
+for the two pointer records was rejected: `ModelFileHeader` pointers there are
+exe-resident globals (>0x80000000 on PC) and would truncate. Verified:
+Brosnan gets a dynamic slot, `modelSetScale` succeeds, game proceeds to
+rendering — where it hits D58.
+
+**D58 (RESOLVED: gun-barrel DL — K0 vertex-pointer idiom + 16-byte Gfx
+overflow of the N64-sized reservation; SIGSEGV in `gfx_sp_vertex`, then FATAL
+"Unknown GBI opcode 0x00")**
+
+Two distinct PC-layout breaks in the same buffer (initializeGunBarrelIntro,
+title.c), both found via env-gated probes (GE_D57: per-command VTX/CALL/JMP
+log + entry-time hexdump of the barrel DL):
+- **Part A (vertex pointer):** title.c passed `barrelDisplayListPtr +
+  0x80000000` to sub_GAME_7F01BFF8, which embeds it verbatim in each G_VTX
+  w1 (GE's gDma1p writes `(uintptr_t)(v)` — no LSB). On N64 the mempool
+  pointer was physical, so +0x80000000 gave the RSP-visible KSEG0 address;
+  on PC it is a V1 pointer (0x70xxxxxx, dram.c) and +0x80000000 lands at
+  0xF0xxxxxx — unresolvable by fast3d's seg_addr() → SIGSEGV reading the
+  vertex array. Fix: rebuild the exact N64 value —
+  `(Vtx *)(OS_K0_TO_PHYSICAL((void *)barrelDisplayListPtr) | 0x80000000u)`
+  (→ 0x80xxxxxx; seg_addr passes it through to the KSEG0 mirror; segments
+  7/8 are never registered, so the unmarked-segment path is skipped).
+- **Part B (DL reservation):** on PC `sizeof(Gfx) == 16` — the union's
+  trailing `long long` (gbi.h documents it: "except on 64-bit, where it is
+  exactly 128 bit"), same class as D50.6. Both writers (`gdl++`) and fast3d
+  (`++cmd`) advance by 16, so all game-written DLs are 16-byte-wide — but
+  the barrel-DL reservation `bufferSize -= 0x100` was sized for N64's 8-byte
+  Gfx. sub_GAME_7F01BFF8 emits 31 Gfx (2×VTX + 28×TRI + ENDDL) = 496 B, so
+  slots 16–30 (second TRI batch + ENDDL) overflowed into the RLE region at
+  +0x300, and sub_GAME_7F008DE4's expand then clobbered them with image data.
+  At render the RSP executed VTX/TRI×14/VTX fine, then hit slot 16 = RLE
+  pixels (w0=0x00000001 → opcode 0x00; fast3d has no G_SPNOOP case) → FATAL.
+  Fix: reserve 0x200 under PORT. The 0x200 vertex reserve still fits
+  (30 Vtx × 16 B = 0x1E0). NOTE for future asset work: any other N64-sized
+  reservation for game-written DLs/vertex arrays must be re-checked against
+  the 16-byte Gfx / 16-byte Vtx widths (recurring class, cf. D50.6/D53.2).
+Verified: barrel DL executes to ENDDL; game proceeds past the gun-barrel
+hole into model rasterization — where it hits D59.
+
+**D59 (OPEN — current blocker: SIGSEGV inside an external GL DLL during the
+first real model rasterization after the gun-barrel hole)**
+
+Post-D58, the barrel DL runs clean (probe-verified: VTX@+0, TRI×14,
+VTX@slot15(+0xF0 in 16-byte form), … ENDDL) and the game crashes shortly
+after with EXCEPTION 0xc0000005 at PC 0x7ff8d42a44d3 — inside a DLL loaded
+at 0x7ff8d4230000 (offset +0x744d3; almost certainly the OpenGL driver,
+not yet confirmed). The crash-log backtrace frame #1 (main+0x227cc0) is a
+BSS symbol (`memoryMesgMB`) — garbage stack, no usable caller. Draw path:
+gfx_flush() (gfx_pc.cpp:299) → `gfx_rapi->draw_triangles(buf_vbo,
+buf_vbo_len, buf_vbo_num_tris)` → gfx_opengl.cpp:813-816
+`glBufferData(GL_ARRAY_BUFFER, sizeof(float)*buf_vbo_len, buf_vbo,
+GL_STREAM_DRAW); glDrawArrays(GL_TRIANGLES, 0, 3*buf_vbo_num_tris)`, where
+`buf_vbo` is the static `float buf_vbo[MAX_BUFFERED*(32*3)]`. Hypotheses:
+(a) buf_vbo overflow while accumulating transformed vertices for the first
+real model (Brosnan) — check the vertex-append site in gfx_pc.cpp (the
+transform loop after ~line 1118) for a missing bounds check against
+MAX_BUFFERED; (b) garbage buf_vbo_len/num_tris; (c) bad texture/shader state
+on first model draw. Next: env-gated probe logging buf_vbo_len/
+buf_vbo_num_tris at every gfx_flush + identify the DLL (PowerShell module
+list during a run, or the GL vendor string in the log).
+
+**D59 RESOLVED (sessions G–I).** The "external GL DLL" crash was not a
+driver bug: it was an msvcrt.dll `memcpy` faulting on a wild source — the
+gun-barrel sub-DL region at `ptr_logo_and_walletbond_DL + 0x200` had been
+clobbered by the unbounded RLE write of D64 (below). With D64 fixed, the
+barrel renders and the game advances; no fast3d/vertex-buffer change was
+needed. The crash handler gained permanent improvements along the way:
+FAULT ADDR (ExceptionInformation[1]), a 16-qword STACK@RSP window, and a
+module list in `ge007.crash.log` (crash.c + psapi).
+
+**D60 RESOLVED — DMA target validation (port layer).**
+`osPiStartDma` (libultra.c) now validates ROM-read targets: the N64 PI can
+DMA to any KSEG address, but on PC an unmapped target is a wild memcpy.
+`dramHostAddrValid()` accepts DRAM V1/V2 and any host-committed region
+(VirtualQuery), so legitimate `.bss`/`.data` targets (e.g.
+`ramrom_data_target`) pass while s32-truncated wild addresses are rejected
+with a logged FATAL instead of a silent crash. Also added the GE_D60
+sidecar-read tracer and GE_D61 per-ROM-read log (`d61dma.log`).
+
+**D62 RESOLVED — OSMesgQueue/OSScMsg layout (port layer).** The shim's
+message-queue bookkeeping had to match the PC struct widths: OSMesgQueue is
+40 bytes on PC (two OSThread* + 3×s32 + OSMesg*), OSScMsg stays 32 bytes.
+Scheduler-thread message flow (retrace/pre-NMI/interrupt/cmd queues in
+`os_scheduler`, g_AudioManager frame/reply queues) verified against those
+layouts.
+
+**D63 — TEMP diagnostics (to strip).** GE_D63-gated probes in gfx_pc.cpp /
+blood_animation.c / front.c / rsp.c tracing the VTX-pool bump pointer
+(`g_GfxMemPos`), the gun-barrel sub-DL slot word, dram-branch targets and
+rspGfxTaskStart hand-off. Used to prove D64's clobber path and to rule out
+VTX-pool overflow; no permanent change.
+
+**D64 RESOLVED — blood RLE sentinel (src/game/blood_animation.c).**
+The N64 build places `die_blood_image_end` in the same section directly
+after `die_blood_image_1[]`; the RLE decoder's guard `bloodImgNxt <
+&die_blood_image_end` relies on that adjacency (only the address is used).
+On PC a zero-init symbol lands in `.bss` ~1 MB away, so the guard never
+fires and the decoder writes unbounded past the array — it clobbered the
+gun-barrel sub-DL at `ptr_logo_and_walletbond_DL + 0x200`, which is what
+surfaced as the D59 "GL DLL" crash. Fixed under #ifdef PORT by defining
+`die_blood_image_end` as one-past-the-end of the array.
+
+**D65 RESOLVED — `enum HEADS` signed sentinels (src/bondconstants.h).**
+The N64 toolchain gave this enum a signed underlying type, so
+`HEAD_FIXED == -1` and `head >= 0` guards were real branches. PC GCC 16
+picks `unsigned int` for enums whose enumerators are all non-negative
+(0xFFFFFFFF > INT_MAX), making every `head >= 0` always true and turning
+`c_item_entries[HEAD_FIXED]` into a wild 64-bit OOB read (SIGSEGV in
+init_menu18_displaycast). Under PORT the sentinels are now negative
+literals (`HEAD_FIXED = -1`, `HEAD_RANDOM = -97`) — identical bit pattern,
+signed semantics restored.
+
+**D65b RESOLVED — `enum BODIES` signed sentinel (src/bondconstants.h).**
+Same class as D65: ROM tables store 0xFFFFFFFF in `body` fields and the
+cast-end check compares `intro_char_table[f].body < 0`; PC's unsigned
+underlying type deleted the reset branch, so the cast screen rendered the
+terminator entry and `langGet(0)` dereferenced a NULL bank. Added
+`BODY_FIXED = -1` under PORT (forces signed underlying type; no existing
+value changes).
+
+**D66 RESOLVED — romCopyAligned pointer width (src/ramrom.c/.h) +
+ramrom replay truncations (src/game/ramromreplay.c).** The N64 build did
+all of `romCopyAligned` in s32; on PC targets live in `.bss` above 4 GiB,
+so `(s32)target` truncated (0x1401C6F00 → 0x401C6F00) and the DMA went to a
+wild address. PORT version uses uintptr_t throughout and returns `void *`
+callers assign straight to pointers. The ramrom replay path had the same
+class of `(s32)` truncation on `ramrom_data_target`.
+
+**D67 RESOLVED — struct image_entry layout (src/game/image.h).** The
+decompiled field order cannot be right: texLoad() reads
+`*(s32*)&entry & 0xFFFFFF` as the data offset (dataoffset must occupy bits
+0-23 of word 0) while chrprop.c indexes entries with an 8-byte stride
+(sizeof == 8). Under PORT the struct is re-declared with all-u32 bitfields
+and `dataoffset : 24` first, so GCC packs it to exactly two words on both
+targets and the raw word read is satisfied. The IMAGE() macro initializer
+order in image.c is adjusted to match under PORT.
+
+**D68 RESOLVED — Globalimagetable endianness (port/src/gimgfixup.c +
+src/game/image_bank.c + src/game/image.c).** The ROM-copied Globalimagetable
+segment (texReset) is N64 big-endian, but PC code reads its CPU-interpreted
+u32 fields natively: the IMAGESEG-marked G_SETTIMG w1 words
+(`IMAGESEG(id) = 0xABCD0000 | id`) and the `sImageTableEntry.index` field of
+all 32 table arrays. Unfixed, texLoad computed texnum from byte-swapped ids
+(e.g. 52651 for IMAGE_SMOKE_11 = 2106) → out-of-range offsets → a 925 KB
+ROM read into the 4000-byte stack compbuffer (FATAL at boot). Fix:
+`gimgFixupGlobalimagetable()` bswaps exactly those u32s in place after the
+romCopy (17 Gfx DLs walked op-by-op for the AB CD marker; table entry
+counts fall out of the D39 symbol layout, 12-byte stride); everything else
+in the segment is byte-level (opcodes, single-byte fields, raw pixel blocks
+referenced via 0x02xxxxxx segmented addresses) and untouched. Two
+consequences handled under PORT: (1) texLoadFromDisplayList's marker scan
+now checks bytes 6..7 (CD AB — the LE encoding of 0xABCDxxxx) instead of
+4..5; (2) explosion.c executes the *compiled* globalDL_0xNNN shadows via
+g_ExplosionDisplayLists[], so `gimgSyncCompiledGlobalDLs()` copies the
+texLoad()-patched IMAGESEG w1 values from the ROM copy into those arrays
+(command j of the 8-byte ROM DL maps to Gfx slot j of the 16-byte compiled
+array; D39 verified them byte-identical). Verified: 137 texLoads with valid
+in-range ids (2106, 2084, …), real offsets/sizes from g_Textures, and the
+game runs the full ~3.5-minute intro (logo → gun barrel → cast) at ~59 fps
+to the first stage load.
+
+**D69 (OPEN — current blocker: BG-file big-endian headers at stage load)**
+
+Post-D68 the game plays through the entire intro and crashes in
+`load_bg_file` (src/game/bg.c:830) when loading the first stage (BUNKER1,
+"bg/bg_sev_all_p.seg", cart 0x10438660). The header IS loaded correctly —
+`obLoadBGFileBytesAtOffset` works: `&fileentry->hw_address[offset]`
+evaluates to `hw_address + offset` (a valid cart address; the compiled
+absolute asset symbols point into the ROM mapped at the cart base, and the
+PI shim memcpys from there). The bug is interpretation: BG-file offsets are
+N64 big-endian u32s in segment-0x0F form. Header word 1 in the ROM is
+`0F 00 00 14` (BE value 0x0F000014 → file offset 0x14 after
+BG_SEG_TO_PTR's `+ 0xF1000000` fold); PC reads it LE as 0x1400000F, so
+`ptr_bgdata_room_fileposition_list = header + 0x1400000F - 0xF000000`
+lands ~0x5 MB past the stack buffer and `...[1].pPointTableBin` faults
+(EXCEPTION 0xc0000005, FAULT ADDR ≈ header + 0x500000F). The whole
+stage-load path (bg .seg headers/room tables + Tbg_*_stanZ geometry files)
+is riddled with BE u32 fields — the same class as D68 but a far larger
+format surface. This is the "next asset type" milestone anticipated in
+AGENTS.md. Strategy options: (a) offline per-region conversion of all bg/*.seg
++ Tbg_*_stanZ files into sidecars (the D43/Plan-B pattern; requires fully
+decoding GE's BG/stan formats from bg.c/stan.c — note PD's
+preprocess/filebg.c describes a *different*, zipped multi-section format;
+same family ≠ identical, validate per field); (b) runtime port-layer fixup
+after each load (same format knowledge, placed in port/). Either way the
+first task is reverse-engineering the formats: header words 0..3 are
+pointers (rooms/portals/bgcmds/lights-style tables per the D69 probe:
+word1=0x14 room-fileposition list), bg_room_data records carry more
+0x0Fxxxxxx offsets (pPointTableBin at record+0x28, see crash disasm), and
+stanZ files go through stanDetermineEOF/stanLoadFile. TEMP D69 probe in
+ob.c (GE_D69) logs name/index/rom_size/hw_address per BG load.
 
 ### G. Phase 2 status (current)
 
-Done through **D50**: PD fast3d integrated (`port/fast3d/`); GE's real
+Done through **D68**: PD fast3d integrated (`port/fast3d/`); GE's real
 `src/sched.c` + pthread kernel; dual-mapped DRAM; ROM mapped at cart base;
 SDL2 window; full boot chain (D31–D42); **Plan B executed (D50)** — all 512
-NTSC model files offline-converted to PC-layout RZ sidecars
-(`tools_pc/d43_emit.py` → `data/pcmodels-ntsc-final/pcmodels.bin` +
-manifest.csv), served through the existing load path via a port-layer table
-patch (`port/src/pcmodels.c`, romdata cart-extension, one-shot
-`pcmodelsPatchTable()` + poolRemaining reset hook in
-`load_object_fill_header`); runtime C fixups for language-bank BE offset
-tables (D50.3) and font re-layout (D50.4); legal-screen UB seed (D50.5);
-`texCopyGdls` w1 partial-copy bug fixed and byte-proven (D50.6). Frames 1–4
-render; PlegalpageZ model GDLs execute to completion. **Current blocker:
-D51** — SIGSEGV in `import_texture_i8` via a main-DL G_TEXRECT lazy tile-0
-upload (frame 5); investigation not started, recipe in docs/HANDOFF.md.
-After D51: pixel-assert soak (env-gated PPM dump + pixcount still unbuilt),
-then the next asset type (Tbg_*_stanZ backgrounds) with the same offline
-pattern.
+NTSC model files offline-converted to PC-layout RZ sidecars, served through
+the existing load path via a port-layer table patch; runtime C fixups for
+language-bank BE offset tables (D50.3) and font re-layout (D50.4);
+legal-screen UB seed (D50.5); `texCopyGdls` w1 partial-copy bug fixed and
+byte-proven (D50.6). **D51–D58 resolved** (font pixeldata fixup, osGetCount
+tick rate, model RW-data pools, cseq BE header, synth param slots, RLE
+folder-menu background, watch-intro raw offsets, spare-pool capacities,
+gun-barrel DL idiom + reservation). **D59 resolved** (the "GL DLL" crash
+was D64's unbounded blood-RLE write clobbering the barrel sub-DL),
+**D60–D62 resolved** (DMA target validation, OSMesgQueue layout),
+**D63** TEMP diagnostics, **D64 resolved** (blood RLE sentinel adjacency),
+**D65/D65b resolved** (HEADS/BODIES enum signed sentinels under PORT),
+**D66 resolved** (romCopyAligned + ramrom replay 64-bit pointer width),
+**D67 resolved** (struct image_entry N64 layout reconstruction),
+**D68 resolved** (Globalimagetable BE→LE fixup for IMAGESEG Gfx words +
+sImageTableEntry.index; compiled globalDL shadows synced after texLoad).
+The game now boots, plays the intro music, and renders the **entire ~3.5-
+minute intro** (Nintendo logo → gun barrel with Brosnan → cast screen) at
+~59 fps, then crashes in `load_bg_file` on the first stage load —
+**D69, the current blocker**: BG-file headers are N64 big-endian
+(segment-0x0F offsets) and PC reads them LE. Details in §F/D59–D69.
+
+**Committed at D68** (this milestone): D51–D68 fixes + TEMP diagnostics
+still present (strip list in HANDOFF Task 3); build is GREEN.
 
 ### H. Handoff & plan (current session)
 
-Full paste-ready brief: **docs/HANDOFF.md** (rewritten this session). Summary:
+Full paste-ready brief: **docs/HANDOFF.md** (rewritten for the D69 session —
+BG/stan format work). Immediate task: reverse-engineer GE's bg .seg +
+Tbg_*_stanZ formats from the decompiled consumers (bg.c, stan.c), then
+choose offline sidecar conversion (Plan-B pattern, D43) vs runtime port-layer
+fixup; PD's preprocess/filebg.c is a reference for the *approach* only — its
+BG format is different (zipped multi-section).
+Summary:
 
-**State.** Plan B is EXECUTED (D50): offline sidecars for all 512 NTSC model
-files + port-layer plumbing + lang/font runtime fixups + legal-screen UB seed
-+ the texCopyGdls w1 fix (D50.6, byte-proven against PlegalpageZ). Boot runs
-to the main loop; frames 1–4 render; model GDLs execute (PlegalpageZ
-sub-DLs complete).
+**State.** D50–D68 all resolved and verified; committed at the D68
+milestone. The game boots, plays intro music, and renders the entire
+~3.5-minute intro (logo → gun barrel with Brosnan → cast screen) at ~59
+fps. TEMP diagnostics from the D51–D69 sessions are still in the tree
+(strip list in HANDOFF Task 3). Build is GREEN.
 
-**Current blocker — D51.** SIGSEGV on frame 5 in `import_texture_i8` via a
-main-DL G_TEXRECT lazy tile-0 upload (gfx_pc.cpp:782; failing opcode slot at
-DL offset +0x260). G_TEXRECT blits from RDP texture-memory tiles, so the fault
-is an invalid/stale tile source — either a mis-resolved main-DL G_SETTIMG,
-a tile used before setup, or a ROM/ramrom image needing a port fixup.
-Investigation not started; the gdb recipe (break live at
-`import_texture_i8`, dump `rdp.textures[0]` + the full main DL — post-mortem
-dumps of 0x70052e80 fail with "Cannot access memory") is in HANDOFF Task 1.
+**Current blocker — D69.** `load_bg_file` (src/game/bg.c:830) faults on
+the first stage load (BUNKER1): BG-file header words are N64 big-endian
+segment-0x0F offsets; PC reads them LE, so the room-fileposition-list
+pointer lands ~5 MB past the stack header buffer. Full analysis +
+strategy options in §F/D69.
 
-**Next after D51:** build the pixel assert (env-gated PPM dump every N frames
-in port/video.c + `tools_pc/pixcount.py`) and run a 30 s+ soak; then move to
-the next asset type (Tbg_*_stanZ backgrounds) with the same offline pattern —
-PD's `port/src/preprocess/filebg.c` is the per-field reference (§2.4).
+**After D69:** get a stage to load + render (bg .seg + Tbg_*_stanZ format
+work — see §H immediate task), then continue the diagnose→fix→verify loop
+through gameplay; strip TEMP diagnostics at each milestone; pixel-assert
+soak (PPM dump + tools_pc/pixcount.py) once a stage is stable.
 
 **D32 repeatable fix procedure** (apply to any ROM-serialized struct that faults
 on a pointer-field read):
@@ -1844,6 +2270,24 @@ on a pointer-field read):
    guard a PC branch that reproduces the N64 32-bit value exactly (e.g. keep the
    0x02000000 base) or replace the idiom with an explicit equivalent; N64 line
    stays verbatim under `#else`.
+7. If two structs are **type-punned** (cast back and forth, e.g. ModelSlot ↔
+   Model), verify their layouts still agree on PC — pointer-width changes break
+   puns silently: fields the game reaches "through" one struct land at wrong
+   offsets in the other (D53.2). Also check any fixed-size allocation that must
+   contain the grown struct (the 0x20-byte model heap fallback, D53).
+8. If a hang (not a crash) appears with no thread making progress, suspect a
+   **timing/pacing gate**: GE's loop gates on `osGetCount()` deltas in N64 RSP
+   counter ticks (~46.5525/µs), not µs (D52).
+9. If the fault is a store through a pointer built from a **raw byte offset
+   into a struct that contains pointers** (`(u8 *)ptr + 0xNNN`, D56): every
+   pointer field before 0xNNN shifts +4 on PC (plus 8-byte alignment padding),
+   so the offset no longer lands on the intended object. Fix under #ifdef PORT
+   via the named field (`&s->field`); if the embedded sub-object has grown
+   (sizeof_PC > sizeof_N64) and its trailing companion storage (e.g. a model
+   RW pool packed right after it in the struct) no longer fits before the next
+   live field, relocate that companion to a static buffer of the N64 capacity —
+   safe when all access goes through a pointer stored in the sub-object at init
+   (modelInit → Model.datas) and only the one site references the raw offset.
 
 **Non-negotiable #2 refinement (applied to AGENTS.md).** The original "game code
 compiles unmodified / fix belongs in port/" is too absolute: pointer-width layout
@@ -1856,9 +2300,16 @@ following PD ground truth. No logic/behavior changes; each such edit is logged i
 
 **Environment reminders.** MSYS2 tools in `/c/msys64/mingw64/bin/` (not on PATH —
 prefix `export PATH=…`). Build: `./build-pc.sh ntsc-final`. gdb **launch** mode
-only (attach fails, error 87); symbolicate offline with `addr2line -e
-build-pc/ge007.x86_64.exe -f -C <0x140000000+rel>`. Image base 0x140000000.
-`load_resource`/many init fns use a fake RBP — compute stack offsets from entry
-RSP. The D30 crash handler writes `ge007.crash.log` with a working Phase-2
-backtrace (**D44** fixed) — first stop for any fault; frames past the true chain
-may be stale, sanity-check they fall inside `.text`.
+only (attach fails, error 87) and it is **far too slow for timing-dependent
+crashes** (a D56-class crash ~10 s in took >300 s under gdb to reach 2 frames —
+DBGHELP symbol loading + the D51 stall-heartbeat thread dumps; don't wait on
+it): prefer env-gated TEMP probes + the built-in crash log, and symbolicate
+offline with `addr2line -e build-pc/ge007.x86_64.exe -f -C <0x140000000+rel>`.
+Image base 0x140000000. `load_resource`/many init fns use a fake RBP — compute
+stack offsets from entry RSP. The D30 crash handler writes `ge007.crash.log`
+with a working Phase-2 backtrace (**D44** fixed) — first stop for any fault;
+frames past the true chain may be stale (a corrupted return address outside the
+module, as in D56, means unwind depth is limited — confirm callers by code-
+path analysis + behavior). Standalone probe compiles need `-std=c11` (without
+it `typedef s32 bool` in bondtypes.h breaks under gnu23) and pointer-difference
+arithmetic instead of offsetof (include/stddef.h is #if 0'd).

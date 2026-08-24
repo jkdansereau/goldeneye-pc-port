@@ -62,6 +62,13 @@ void romdataFixupAnimationData(u8 *blob, u32 blobSize,
 void romdataFixupMusicSeqTable(u8 *blob, u32 blobSize);
 
 /*
+ * D54 (docs/PCPortResearch.md): decode a decompressed compact-sequence file's
+ * big-endian ALCMidiHdr in place (16 x u32 trackOffset + u32 division;
+ * see romdata.c). Call after decompressdata(), before alCSeqNew().
+ */
+void romdataFixupCseq(u8 *blob);
+
+/*
  * D50 (docs/PCPortResearch.md): decode a language bank's big-endian offset
  * table in place ([u32 offsets x N][text]; see romdata.c). blobSize is the
  * decompressed bank size (resource_lookup_data_array[].poolRemaining).

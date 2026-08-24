@@ -1493,7 +1493,21 @@ typedef union
              * List of length model->obj->numMatrices dynamically allocated.
             */
             RenderPosView     *render_pos; /*0x0c*/
+#ifdef PORT
+            /* PC port (D52): `datas` is the model's RW-data pool itself, not an
+             * array of pointers. RwDataIndex values are 4-byte WORD offsets:
+             * modelCalculateRwDataIndexes() accumulates sizeof(record)/4 and
+             * sizes the pool as round16(numRecords*4) bytes (modelmgrInstantiate*
+             *ModelWithAnim). On N64, `union ModelRwData **` strides 4B so
+             * &datas[i] lands on record i; on PC the same type strides 8B and
+             * every non-zero index addresses the wrong record (crash in
+             * modelInitRwData at the first BSP node). u32* keeps the N64 byte
+             * math exactly; use sites cast to the record type. Layout is a
+             * single pointer either way, so struct Model is unchanged. */
+            u32 *datas;
+#else
             union ModelRwData **datas; // array of pointers to modeldata structs /*0x10*/
+#endif
 
             f32               scale;              /*0x14*/
             struct Model     *attachedto;         /*0x18*/

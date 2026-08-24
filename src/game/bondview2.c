@@ -3109,10 +3109,31 @@ void sub_GAME_7F07E7CC(void) {
         return_null();
     }
 #endif
+#ifdef PORT
+    /* PC port (D56, docs/PCPortResearch.md): the watch Model is embedded in
+     * struct player at N64 +0x230 and its RW-data pool at +0x2EC. On x86-64
+     * the pointer fields before 0x230 shift the region to +0x24C (probe:
+     * vsize.c, not 8-aligned — unaligned pointer stores are fine on x86-64,
+     * D53.2), and the grown Model (0xE8 vs 0xBC) leaves only 0x9C of the N64
+     * 0xC8-byte pool capacity in-struct — so take the Model by field name and
+     * host the pool in a static buffer of the N64 capacity. All rwdata access
+     * goes through Model.datas (set by modelInit), so nothing else references
+     * the old raw offsets. */
+    {
+        static u8 watchRwPool[0xC8]; /* N64: embedded at player+0x2EC */
+        Model *watch = (Model *)&g_CurrentPlayer->something_with_watch_object_instance;
+
+        animInit(watch, itemheader, (u32 *)watchRwPool);
+        modelSetScale(watch, c_item_entries[41].scale * 0.10000001f);
+        modelSetAnimation(watch, (ModelAnimation *)&ptr_animation_table->data[(s32)&ANIM_DATA_bond_watch], 0, 0.0f, 0.5f * watch_transition_time, 0.0f);
+        g_CurrentPlayer->step_in_view_watch_animation = 0; /* N64: *(s32*)(player+0x220) */
+    }
+#else
     animInit((Model *)((u8 *)g_CurrentPlayer + 0x230), itemheader, (u32 *)((u8 *)g_CurrentPlayer + 0x2ec));
     modelSetScale((Model *)((u8 *)g_CurrentPlayer + 0x230), c_item_entries[41].scale * 0.10000001f);
     modelSetAnimation((Model *)((u8 *)g_CurrentPlayer + 0x230), (ModelAnimation *)&ptr_animation_table->data[(s32)&ANIM_DATA_bond_watch], 0, 0.0f, 0.5f * watch_transition_time, 0.0f);
     *(s32 *)((u8 *)g_CurrentPlayer + 0x220) = 0;
+#endif
 }
 
 

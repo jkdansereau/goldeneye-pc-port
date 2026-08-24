@@ -193,7 +193,19 @@ u8 die_blood_image_1[] = {
    0xE5, 0xE5, 0xE5, 0xE5
 };
 
+#ifdef PORT
+/* D64: the N64 build places this sentinel in the same section directly after
+ * die_blood_image_1[]; the guard `bloodImgNxt < &die_blood_image_end` and the
+ * completion test rely on that adjacency (the value is never read — only its
+ * address). On PC a zero-init symbol lands in .bss, a different section ~1 MB
+ * away, so the guard never fires and the RLE decoder runs past the array into
+ * adjacent .data, writing unbounded garbage (clobbered the gun-barrel sub-DL
+ * at +0x200 — see docs/PCPortResearch.md §F/D64). Define it as one-past-the-
+ * end of the array instead. Only used in this TU. */
+#define die_blood_image_end (*(const u8 *)(die_blood_image_1 + sizeof(die_blood_image_1)))
+#else
 u8 die_blood_image_end = 0;
+#endif
 
 Gfx *clear_framebuffer_black(Gfx *gdl) 
 {
@@ -219,6 +231,12 @@ Gfx *sub_GAME_7F01C1A4(Gfx *gdl) {
 s32 die_blood_image_routine(s32 arg0) {
    s8 sp37;
    u8* temp_v0_2;
+#ifdef PORT
+   /* TEMP D63: catch VTX-pool overflow into the gun-barrel buffer. */
+   extern u8 *g_GfxMemPos;
+   if (getenv("GE_D63"))
+      osSyncPrintf("D63 blood-routine arg=%d mempos=%p\n", arg0, (void *)g_GfxMemPos);
+#endif
 
    if (arg0 == 0) {
       g_CurrentPlayer->bloodImgCur = die_blood_image_1;
@@ -228,14 +246,39 @@ s32 die_blood_image_routine(s32 arg0) {
       }
    }
 
+#ifdef PORT
+   extern void d63SlotCheck(const char *tag); /* TEMP D63 */
+#endif
    g_CurrentPlayer->bloodImgIdx = (1 - g_CurrentPlayer->bloodImgIdx);
    g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx] = dynAllocate(BLOOD_IMG_WIDTH * BLOOD_IMG_HEIGHT);
    temp_v0_2 = dynAllocate(BLOOD_IMG_WIDTH * BLOOD_IMG_HEIGHT);
+#ifdef PORT
+   if (getenv("GE_D63"))
+      osSyncPrintf("D63 blood: buf=%p temp=%p\n",
+                   (void *)g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx],
+                   (void *)temp_v0_2);
+   d63SlotCheck("blood-a-alloc");
+#endif
    g_CurrentPlayer->bloodImgNxt = decrypt_bleeding_animation_data(g_CurrentPlayer->bloodImgCur, BLOOD_IMG_WIDTH, BLOOD_IMG_HEIGHT, temp_v0_2, &sp37);
+#ifdef PORT
+   d63SlotCheck("blood-b-decrypt");
+#endif
    bloodImgTranspose(temp_v0_2, BLOOD_IMG_WIDTH, BLOOD_IMG_HEIGHT, g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx]);
+#ifdef PORT
+   d63SlotCheck("blood-c-transpose");
+#endif
    sub_GAME_7F01D02C(g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx], BLOOD_IMG_WIDTH, g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx]);
+#ifdef PORT
+   d63SlotCheck("blood-d-d02c");
+#endif
    sub_GAME_7F01CEEC(g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx], BLOOD_IMG_WIDTH, g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx]);
+#ifdef PORT
+   d63SlotCheck("blood-e-ceec");
+#endif
    sub_GAME_7F01CC94(g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx], BLOOD_IMG_WIDTH * BLOOD_IMG_HEIGHT, g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx]);
+#ifdef PORT
+   d63SlotCheck("blood-f-cc94");
+#endif
 
    return (g_CurrentPlayer->bloodImgNxt >= &die_blood_image_end);
 }

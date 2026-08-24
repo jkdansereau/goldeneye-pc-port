@@ -64,6 +64,26 @@ static void crashStackTraceRaw(char *msg, PEXCEPTION_POINTERS exinfo)
     CRASH_MSG("PC: %p (Rip=%p Rsp=%p Rbp=%p)\n",
               exinfo->ExceptionRecord->ExceptionAddress,
               (void *)context.Rip, (void *)context.Rsp, (void *)context.Rbp);
+    CRASH_MSG("REGS: Rax=%p Rcx=%p Rdx=%p Rsi=%p Rdi=%p R8=%p R9=%p R10=%p R11=%p\n",
+              (void *)context.Rax, (void *)context.Rcx, (void *)context.Rdx,
+              (void *)context.Rsi, (void *)context.Rdi, (void *)context.R8,
+              (void *)context.R9, (void *)context.R10, (void *)context.R11);
+    if (exinfo->ExceptionRecord->NumberParameters > 1) {
+        CRASH_MSG("FAULT ADDR: %p\n",
+                  (void *)exinfo->ExceptionRecord->ExceptionInformation[1]);
+    }
+    /* Raw stack window around RSP: survives even when the EBP chain is
+     * broken (tail calls, corrupted frames). 16 qwords up from RSP. */
+    {
+        const uint64_t *sp = (const uint64_t *)context.Rsp;
+        CRASH_MSG("STACK@RSP:");
+        for (int i = 0; i < 16; i++) {
+            char cell[24];
+            snprintf(cell, sizeof(cell), " %p", (void *)sp[i]);
+            CRASH_MSG("%s", cell);
+        }
+        CRASH_MSG("\n");
+    }
     /* FPU state: for STATUS_FLOATING_POINT_* we want to know whether the
      * exception masks were actually cleared (MxCsr bits 7..10 / x87 CW
      * mask bits) or this is a stale status bit. */

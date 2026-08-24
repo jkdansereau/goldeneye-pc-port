@@ -87,7 +87,16 @@ OSTime osGetTime(void)
 
 u32 osGetCount(void)
 {
-    return (u32)osGetTime();
+    /* The N64 RSP core counter advances at ~OS_CPU_COUNTER (~46.5 MHz), NOT
+     * microseconds. GE's pacing assumes this rate: waitForNextFrame() in
+     * frametiming.c waits for 775,875 - 387,937 ticks per NTSC frame (931,050
+     * per PAL frame) and bossMainloop gates DL builds on
+     * MAIN_LOOP_TICK_INTERVAL = 387,937 ticks. Feeding it microseconds made
+     * waitForNextFrame block ~388 ms/frame and the gate never pass in steady
+     * state (hang after the first couple of frames). Scale real time to
+     * 46.5525 ticks/us (= 775875/16666.67us = 931050/20000us, both regions)
+     * and wrap like the 32-bit hardware counter. */
+    return (u32)(((uint64_t)sysGetMicroseconds() * 465525ull) / 10000ull);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -249,6 +258,7 @@ void portKernelInit(void)
 {
     memset(g_pt, 0, sizeof(g_pt));
     g_pqCount = 0;
+    d63WatchdogStart(); /* TEMP D63 */
     /* Anchor the heartbeat clock so the first check doesn't compare against
      * epoch 0 (the host QPC has a large absolute offset). */
     g_lastFrameUs = sysGetMicroseconds();
@@ -379,10 +389,24 @@ void osSetThreadPri(OSThread *t, OSPri prio)
 /* Message queues                                                            */
 /* ------------------------------------------------------------------------ */
 
+/* D59: the lookup/create below MUST be serialized. Two threads first
+ * touching the same (or different) OSMesgQueue concurrently used to race on
+ * g_pqCount and end up with two PortQueues — or one re-initialized slot —
+ * for a single queue. Sends then signal a cond the receiver never waits on
+ * (lost wakeup: permanent stall after frame 2), and re-initing a live mutex
+ * is UB that can corrupt unrelated state (wild-pointer crashes). Boot-time
+ * osCreateMesgQueue() pre-registers most queues, but first-touches still race
+ * for any queue created later or touched before its create call. */
+static pthread_mutex_t s_pqLock = PTHREAD_MUTEX_INITIALIZER;
+
 static PortQueue *portQueueGet(OSMesgQueue *mq)
 {
+    pthread_mutex_lock(&s_pqLock);
     for (int i = 0; i < g_pqCount; ++i) {
-        if (g_pq[i].os == mq) return &g_pq[i];
+        if (g_pq[i].os == mq) {
+            pthread_mutex_unlock(&s_pqLock);
+            return &g_pq[i];
+        }
     }
     if (g_pqCount >= PORT_MAX_QUEUES) {
         sysFatalError("portQueueGet: out of port queue slots");
@@ -392,6 +416,7 @@ static PortQueue *portQueueGet(OSMesgQueue *mq)
     pthread_mutex_init(&pq->lock, NULL);
     pthread_cond_init(&pq->cond, NULL);
     pq->loggedFirstBlock = 0;
+    pthread_mutex_unlock(&s_pqLock);
     return pq;
 }
 
@@ -441,9 +466,162 @@ void osEnqueueMesg(OSMesgQueue *mq, OSMesg msg)
     pthread_mutex_unlock(&pq->lock);
 }
 
+/* TEMP D62: full message-flow trace (env GE_D62=1 -> d62mesg.log). */
+static FILE *s_d62log = NULL;
+static int s_d62opened = 0;
+static pthread_mutex_t s_d62lock = PTHREAD_MUTEX_INITIALIZER;
+static void d62log(const char *op, OSMesgQueue *mq, OSMesg msg)
+{
+    if (!s_d62opened) {
+        s_d62opened = 1;
+        if (getenv("GE_D62"))
+            s_d62log = fopen("d62mesg.log", "w");
+    }
+    if (s_d62log) {
+        pthread_mutex_lock(&s_d62lock);
+        fprintf(s_d62log, "%s mq=%p msg=%p valid=%d/%d first=%d\n",
+                op, (void *)mq, (void *)msg, mq->validCount,
+                mq->msgCount, mq->first);
+        fflush(s_d62log);
+        pthread_mutex_unlock(&s_d62lock);
+    }
+}
+
+/* TEMP D63: watch the gun-barrel sub-DL slot (V1+0x12EC38) for clobbering.
+ * Hooked in osSendMesg/osRecvMesg so both game threads are sampled often. */
+void d63SlotLog(const char *tag)
+{
+    if (!getenv("GE_D63")) return;
+    u32 cur = *(const u32 *)0x7012EC38;
+    sysLogPrintf(LOG_NOTE, "D63 slot %s: word@0x7012ec38=%08x", tag, cur);
+}
+
+/* TEMP D63: log only when the slot value changes (first 8 per tag). */
+void d63SlotCheck(const char *tag)
+{
+    if (!getenv("GE_D63")) return;
+    static const char *s_tags[16];
+    static u32 s_vals[16];
+    static int s_n = 0, s_count = 0;
+    u32 cur = *(const u32 *)0x7012EC38;
+    int i;
+    for (i = 0; i < s_n; i++) {
+        if (s_tags[i] == tag) {
+            if (cur != s_vals[i] && s_count < 64) {
+                sysLogPrintf(LOG_NOTE, "D63 check %s: %08x -> %08x", tag, s_vals[i], cur);
+                s_vals[i] = cur;
+                ++s_count;
+            }
+            return;
+        }
+    }
+    if (s_n < 16) { s_tags[s_n] = tag; s_vals[s_n] = cur; ++s_n; }
+}
+
+/* TEMP D63: timestamped cross-thread activity ring + watchdog thread. */
+typedef struct { uint64_t t; unsigned long tid; const char *tag; } D63Act;
+#define D63_ACT_N 2048
+static D63Act s_d63act[D63_ACT_N];
+static volatile long s_d63actIdx = 0;
+static int s_d63on = -1;
+
+int d63On(void) { if (s_d63on < 0) s_d63on = getenv("GE_D63") != 0; return s_d63on; }
+
+unsigned long d63Tid(void)
+{
+#if defined(PLATFORM_WINDOWS)
+    return GetCurrentThreadId();
+#else
+    return (unsigned long)pthread_self();
+#endif
+}
+
+void d63Act(const char *tag)
+{
+    if (!d63On()) return;
+    long i = s_d63actIdx++;
+    s_d63act[i & (D63_ACT_N - 1)] = (D63Act){ sysGetMicroseconds(), d63Tid(), tag };
+}
+
+static void d63DumpActivity(uint64_t now)
+{
+    long newest = s_d63actIdx - 1;
+    int k;
+    for (k = 47; k >= 0; --k) {
+        long i = newest - k;
+        if (i < 0) break;
+        const D63Act *e = &s_d63act[i & (D63_ACT_N - 1)];
+        sysLogPrintf(LOG_NOTE, "D63   act t=%llu d=%lld tid=%lu %s",
+                     (unsigned long long)e->t,
+                     (long long)(e->t >= now ? (long long)(e->t - now) : -(long long)(now - e->t)),
+                     e->tid, e->tag);
+    }
+}
+
+static void d63WatchdogThread(void *arg)
+{
+    const u32 *slot = (const u32 *)0x7012EC38;
+    u32 last = *slot;
+    int changes = 0;
+    for (;;) {
+        u32 cur = *slot;
+        if (cur != last) {
+            uint64_t now = sysGetMicroseconds();
+            if (changes < 8) {
+                sysLogPrintf(LOG_NOTE, "D63 WATCHDOG t=%llu word@0x7012ec38 %08x -> %08x",
+                             (unsigned long long)now, last, cur);
+                d63DumpActivity(now);
+            }
+            ++changes;
+            last = cur;
+        }
+#if defined(PLATFORM_WINDOWS)
+        Sleep(0); /* yield to same-priority threads */
+#else
+        sched_yield();
+#endif
+    }
+}
+
+void d63WatchdogStart(void)
+{
+    if (!d63On()) return;
+    static pthread_t th;
+    pthread_create(&th, NULL,
+                   (void *(*)(void *))d63WatchdogThread, NULL);
+    pthread_detach(th);
+    sysLogPrintf(LOG_NOTE, "D63 watchdog started");
+}
+
+static void d63WatchGunbarrelSlot(void)
+{
+    if (!d63On()) return;
+    static u32 s_last = 0;
+    static int s_init = 0;
+    static int s_changes = 0;
+    const u32 *slot = (const u32 *)0x7012EC38;
+    u32 cur = *slot;
+    if (!s_init) { s_init = 1; s_last = cur; return; }
+    if (cur != s_last && s_changes < 64) {
+        sysLogPrintf(LOG_NOTE, "D63 clobber-watch: word@0x7012ec38 %08x -> %08x tid=%lu changes=%d",
+                     s_last, cur, d63Tid(), s_changes);
+        s_last = cur;
+        ++s_changes;
+    }
+}
+
 s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
 {
     PortQueue *pq = portQueueGet(mq);
+    d62log("SEND", mq, msg); /* TEMP D62 */
+    d63Act("send"); /* TEMP D63 */
+    d63WatchGunbarrelSlot(); /* TEMP D63 */
+    /* TEMP D51: watch sends to the 32-slot queues (sched cmdQ + client Qs) */
+    if (getenv("GE_D51") && mq->msgCount == 32 && !(g_viRetraceMQ && mq == g_viRetraceMQ)) {
+        void *ra = __builtin_return_address(0);
+        sysLogPrintf(LOG_NOTE, "D51 send32 mq=%p from %p msg=%p valid=%d/%d",
+                     (void *)mq, ra, (void *)msg, mq->validCount, mq->msgCount);
+    }
     pthread_mutex_lock(&pq->lock);
     while (mq->validCount >= mq->msgCount) {
         if (flag != OS_MESG_BLOCK) {
@@ -459,9 +637,26 @@ s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
     return 0;
 }
 
+/* TEMP D60: gfxFrameMsgQ receive watch (env GE_D60=1). The main loop only
+ * acts on msg type 1 (retrace) / 4 (RSP done); anything else means the
+ * message object's .type field was clobbered. */
+extern OSMesgQueue gfxFrameMsgQ; /* src/init.c */
+static void d60logRecv(OSMesgQueue *mq, OSMesg m) {
+    if (mq != &gfxFrameMsgQ || !getenv("GE_D60")) return;
+    static uint64_t n = 0;
+    const u16 type = *(const u16 *)m; /* OSScMsg.type */
+    if (n < 20 || (n % 300) == 0 || (type != 1 && type != 4))
+        sysLogPrintf(LOG_NOTE, "D60 recv #%llu mq=%p msg=%p type=%u",
+                     (unsigned long long)n, (void *)mq, (void *)m, type);
+    ++n;
+}
+
 s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
 {
     PortQueue *pq = portQueueGet(mq);
+    d62log("RECV", mq, 0); /* TEMP D62 */
+    d63Act("recv"); /* TEMP D63 */
+    d63WatchGunbarrelSlot(); /* TEMP D63 */
     pthread_mutex_lock(&pq->lock);
     while (mq->validCount == 0) {
         if (flag != OS_MESG_BLOCK) {
@@ -484,6 +679,7 @@ s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
     mq->first = (mq->first + 1) % mq->msgCount;
     --mq->validCount;
     if (msg) *msg = m;
+    d60logRecv(mq, m); /* TEMP D60 */
     pthread_cond_signal(&pq->cond);
     pthread_mutex_unlock(&pq->lock);
     return 0;
@@ -531,12 +727,22 @@ void osViSetEvent(OSMesgQueue *mq, OSMesg msg, u32 retraceCount)
     g_viRetraceMsg = msg;
 }
 
+/* TEMP D51: instrument the retrace pacemaker */
+static uint64_t g_viPostCount = 0;
 static void portPostVIEvent(void)
 {
     if (g_viRetraceMQ) {
-        osSendMesg(g_viRetraceMQ, g_viRetraceMsg, OS_MESG_NOBLOCK);
+        s32 r = osSendMesg(g_viRetraceMQ, g_viRetraceMsg, OS_MESG_NOBLOCK);
+        if (++g_viPostCount % 60 == 1 || r != 0) {
+            sysLogPrintf(r != 0 ? LOG_ERROR : LOG_NOTE,
+                         "D51 vi post #%llu mq=%p msg=%d valid=%d/%d ret=%d",
+                         (unsigned long long)g_viPostCount, (void *)g_viRetraceMQ,
+                         (int)g_viRetraceMsg, g_viRetraceMQ->validCount,
+                         g_viRetraceMQ->msgCount, r);
+        }
     }
 }
+/* END TEMP D51 */
 
 void osViSetMode(OSViMode *vm)
 {
@@ -604,17 +810,103 @@ void osAiSetConvert(u32 convert) { (void)convert; }
  * completion; osPiStartDma() below replicates that, because the game blocks
  * in romReceiveMesg()/osRecvMesg() after every romCopy().
  */
+/* TEMP D60: identify sidecar model reads (env GE_D60=1). srcPA-base is the
+ * manifest offset; cross-reference data/pcmodels-<region>/manifest.csv for
+ * the file name. */
+extern uintptr_t pcmodelsSidecarBase(void);
+extern uint32_t  pcmodelsTotalSize(void);
+static void d60logSidecarRead(u32 srcPA, void *dstVA, u32 size) {
+    if (!getenv("GE_D60")) return;
+    uintptr_t base = pcmodelsSidecarBase();
+    if (base && srcPA >= base && srcPA < base + pcmodelsTotalSize())
+        sysLogPrintf(LOG_NOTE, "D60 sidecar read off=%llu size=0x%X dst=%p",
+                     (unsigned long long)(srcPA - base), size, dstVA);
+}
+
+/* TEMP D60/D61: a ROM-read DMA target must land in the game DRAM views
+ * (V1/V2) or the current thread's stack (texLoad's compbuffer). Anything
+ * else is unmapped host memory on PC. */
+static FILE *s_d61log = NULL;
+static int s_d61opened = 0;
+
+static int dramHostAddrValid(uintptr_t addr, u32 size)
+{
+    static const uintptr_t bases[2] = { 0x70000000UL, 0x80000000UL };
+    for (int i = 0; i < 2; i++) {
+        if (addr >= bases[i] && addr + size <= bases[i] + 0x00800000UL)
+            return 1;
+    }
+    /* Any other host-committed region is a legitimate DMA target: .bss/.data
+     * buffers (e.g. ramrom_data_target), stack compbuffers, sidecar images.
+     * Truncated wild addresses (0x40xxxxxx from s32 pointer math) are not
+     * committed, so VirtualQuery still catches them. */
+    {
+        MEMORY_BASIC_INFORMATION mbi;
+        if (VirtualQuery((LPCVOID)addr, &mbi, sizeof(mbi)) == sizeof(mbi) &&
+            mbi.State == MEM_COMMIT &&
+            (uintptr_t)mbi.BaseAddress <= addr &&
+            (uintptr_t)mbi.BaseAddress + mbi.RegionSize >= addr + size)
+            return 1;
+    }
+    return 0;
+}
+
 static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
 {
     if (size == 0)
         return;
     if (direction == OS_READ) {
+        d60logSidecarRead(srcPA, dstVA, size); /* TEMP D60 */
         if (!romdataCartAddrValid(srcPA, size)) {
             sysLogPrintf(LOG_WARNING,
                          "osPiStartDma: ROM read out of range "
                          "(src=0x%08X size=0x%X); skipped",
                          srcPA, size);
             return;
+        }
+        /* TEMP D60: validate the DMA target too. The N64 PI happily DMAs to
+         * any KSEG address; on PC an unmapped target is a wild memcpy.
+         * Log the whole call chain (romCopy <- doRomCopy <- osPiStartDma) so
+         * the game-side caller can be symbolicated offline. */
+        /* TEMP D61: log every ROM read (dst/src/size). The last line before
+         * a crash identifies the culprit; dst symbolizes offline via nm. */
+        if (!s_d61opened && getenv("GE_D61")) {
+            s_d61log = fopen("d61dma.log", "w");
+            s_d61opened = 1;
+        }
+        if (s_d61log) {
+            static int d61count = 0;
+            fprintf(s_d61log, "D61 %06d dst=%p src=0x%08X size=0x%X\n",
+                    ++d61count, dstVA, srcPA, size);
+            fflush(s_d61log);
+        }
+        if (!dramHostAddrValid((uintptr_t)dstVA, size)) {
+            /* No __builtin_return_address here: the caller's frame chain is
+             * not always walkable (it faulted). Log the raw stack window
+             * instead — return addresses are in it and symbolicate offline.
+             * The FATAL below re-dumps RSP/registers via the crash handler. */
+            const uint64_t *sp = (const uint64_t *)__builtin_frame_address(0);
+            char win[1200] = "";
+            char *wp = win;
+            for (int i = 0; i < 32; i++) {
+                wp += snprintf(wp, win + sizeof(win) - (wp - win),
+                               " %p", (void *)sp[i]);
+            }
+            {
+                PVOID tlow = NULL, thigh = NULL;
+                GetCurrentThreadStackLimits(&tlow, &thigh);
+                sysLogPrintf(LOG_ERROR,
+                             "D60 thread stack: %p..%p  dst-in-stack=%d\n",
+                             (void *)tlow, (void *)thigh,
+                             ((uintptr_t)dstVA >= (uintptr_t)tlow &&
+                              (uintptr_t)dstVA < (uintptr_t)thigh));
+            }
+            sysLogPrintf(LOG_ERROR,
+                         "D60 BAD DMA TARGET dst=%p src=0x%08X size=0x%X "
+                         "stack@rbp:%s\n",
+                         dstVA, srcPA, size, win);
+            sysFatalError("D60: ROM-read target %p + 0x%X not host-mapped "
+                          "(src=0x%08X)", dstVA, size, srcPA);
         }
         memcpy(dstVA, (const void *)(uintptr_t)srcPA, size);
     } else {
@@ -804,12 +1096,51 @@ void osSpTaskLoad(OSTask *t) { (void)t; /* nothing to load on the host */ }
 
 void osSpTaskStartGo(OSTask *t)
 {
+    d63Act(t->t.type == M_AUDTASK ? "audtask" : "spgo"); /* TEMP D63 */
     if (t->t.type == M_AUDTASK) {
         /* Phase 3: execute the audio ucode against t->t.data_ptr (an Acmd
          * list). For now the task simply completes; libaudio's amMain still
          * runs its per-frame bookkeeping. */
     } else {
         /* Graphics task: run the software RSP on the display list. */
+        /* TEMP D63: log every gfx task's DL pointer (env GE_D63=1) */
+        if (getenv("GE_D63")) {
+            unsigned long tid = 0;
+#if defined(PLATFORM_WINDOWS)
+            tid = GetCurrentThreadId();
+#else
+            tid = (unsigned long)pthread_self();
+#endif
+            sysLogPrintf(LOG_NOTE, "D63 gfx task data_ptr=%p data_size=%d tid=%lu slot=%08x",
+                         (void *)t->t.data_ptr, (int)t->t.data_size, tid,
+                         *(const u32 *)0x7012EC38);
+        }
+#if defined(PORT)
+        /* TEMP D63: find when the fatal G_DL value first appears in the master DL */
+        {
+            static int s_d63seen = 0;
+            if (getenv("GE_D63") && !s_d63seen) {
+                const uint32_t *p = (const uint32_t *)t->t.data_ptr;
+                size_t nwords = t->t.data_size / 4;
+                static int s_d63scancount = 0;
+                if ((s_d63scancount++ % 100) == 0)
+                    sysLogPrintf(LOG_NOTE, "D63 scan running: ptr=%p nwords=%zu", (void *)p, nwords);
+                for (size_t i = 1; i + 1 < nwords; i += 2) {
+                    if (p[i] == 0x0012EC38u) {
+                        s_d63seen = 1;
+                        sysLogPrintf(LOG_NOTE, "D63 fatal-value first seen: frame=%d off=0x%zx words:",
+                                     g_framesRendered + 1, i * 4);
+                        for (int k = -3; k <= 3; ++k) {
+                            long j = (long)i + 2 * k;
+                            if (j >= 0 && j + 1 < (long)nwords)
+                                sysLogPrintf(LOG_NOTE, "D63   [%d] %08x %08x", k, p[j], p[j+1]);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+#endif
         uint64_t t0 = sysGetMicroseconds();
         videoStartFrame();
         gfx_run((Gfx *)t->t.data_ptr);

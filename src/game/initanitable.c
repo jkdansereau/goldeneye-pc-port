@@ -10,7 +10,15 @@
 //bss
 
 // Where animation frames are saved. Can possibly hold as much as nine, but the game will ever store four at maximum.
+#ifdef PORT
+/* D59: relocated into DRAM by port/src/dram_syms.s (absolute symbol at
+ * 0x707FFD30) because loadAnimationFrame() addresses it through s32 fields
+ * and a (u32) cast — PC BSS (0x140xxxxxx) would truncate to a wild pointer.
+ * N64 build keeps the original BSS array. */
+extern char animations_frame_buffer[0x2D0];
+#else
 char animations_frame_buffer[0x2D0];
+#endif
 
 // Msg Queue stuff (unused)
 OSMesgQueue animMsgQ;

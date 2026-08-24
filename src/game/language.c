@@ -404,6 +404,20 @@ void langClearBank(s32 textBank) {
 u8 * langGet(s32 slotID)
 {
     u32 * textbank_ptr = g_LangBanks[slotID >> 10]; /* get the text file bank ID index the text ptr table */
+#ifdef PORT
+    /* TEMP D65: log NULL-bank derefs (cast screen langGet crash). */
+    if (getenv("GE_D63")) {
+        static int d65first = 1;
+        if (d65first) {
+            d65first = 0;
+            for (int b = 0; b < 45; b++)
+                if (g_LangBanks[b])
+                    osSyncPrintf("D65 bank %d = %p\n", b, (void *)g_LangBanks[b]);
+        }
+        if (!textbank_ptr)
+            osSyncPrintf("D65 langGet slotID=0x%08x bank=%d ptr=NULL\n", (unsigned)slotID, slotID >> 10);
+    }
+#endif
     u32 textslot_offset = textbank_ptr[slotID & 0x03FF]; /* load the textbank ptr table then get the slot's offset */
 
     u32 output_slot = textslot_offset; /* add the text slot offset to the base ptr to get the ptr to text file's slot */

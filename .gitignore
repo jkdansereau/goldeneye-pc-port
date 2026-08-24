@@ -124,3 +124,8 @@ _run.log
 ge007.crash.log
 .pi/
 run_out.log
+
+# PC port run/scratch logs
+run_*.log
+d6*.log
+ge007.crash.log

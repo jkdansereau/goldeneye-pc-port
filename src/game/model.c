@@ -1,4 +1,8 @@
 #include <ultra64.h>
+#ifdef PORT /* TEMP D51 */
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 #include <memp.h>
 #include "model.h"
 #include "../rmon.h" /*<PR/rmon.h>*/
@@ -67,7 +71,14 @@ Model *modelmgrInstantiateModel(ModelFileHeader *header)
 
         if (model == NULL) 
         {
+#ifdef PORT
+            /* PC port (D53.2): this buffer is used as a struct Model via the
+             * same type-pun as g_ModelSlots; on PC that struct is 0xE8 bytes,
+             * not the N64 0x20 slot size. */
+            model = mempAllocBytesInBank(sizeof(struct Model), MEMPOOL_STAGE);
+#else
             model = mempAllocBytesInBank(0x20, MEMPOOL_STAGE);
+#endif
         }
 
         if (header->numRecords > 0) 
@@ -91,9 +102,34 @@ Model *modelmgrInstantiateModel(ModelFileHeader *header)
             }
         }
     }
+#ifdef PORT
+    /* PC port (D57, docs/PCPortResearch.md): pointer-grown rwdata records can
+     * push a model's word count past the (grown) spare-pool capacity; fall
+     * back to a dynamic slot+pool exactly like the LvResetting path above.
+     * The slot is not tracked in g_MaxModelSlots, so it is never reused —
+     * acceptable: with the D57 capacities this should not trigger. */
+    if (model == NULL && header->numRecords > 0) 
+    {
+        model = mempAllocBytesInBank(sizeof(struct ModelSlot), MEMPOOL_STAGE);
+        if (model != NULL) 
+        {
+            rwdata = mempAllocBytesInBank((((header->numRecords * 4) + 0xf) | 0xf) ^ 0xf, MEMPOOL_STAGE);
+            rwdatalen = header->numRecords;
+        }
+    }
+#endif
 
     if (model != NULL) 
     {
+#ifdef PORT /* TEMP D51 */
+        if (getenv("GE_D51")) {
+            static FILE *f = NULL;
+            if (!f) { f = fopen("d52rw.log", "a"); setvbuf(f, NULL, _IONBF, 0); }
+            fprintf(f, "INST model=%p header=%p numRecords=%d rwdata=%p rwdatalen=%d lvreset=%d\n",
+                    (void *)model, (void *)header, header->numRecords,
+                    (void *)rwdata, rwdatalen, g_ModelIsLvResetting);
+        }
+#endif
         modelInit(model, header, rwdata);
         ((struct ModelSlot *)model)->unk02 = rwdatalen;
     }
@@ -137,7 +173,13 @@ Model *modelmgrInstantiateModelWithAnim(ModelFileHeader *modelFileHeader)
 
         if (newModel == NULL) 
         {
+#ifdef PORT
+            /* PC port (D53.2): same pun as g_AnimModelSlots — must hold a full
+             * struct Model (0xE8 on PC), not the N64 0xC0 anim-slot size. */
+            newModel = mempAllocBytesInBank(sizeof(struct AnimModelSlot), MEMPOOL_STAGE);
+#else
             newModel = mempAllocBytesInBank(0xc0, MEMPOOL_STAGE);
+#endif
         }
 
         requiredRwdatalen = modelFileHeader->numRecords;
@@ -167,10 +209,46 @@ Model *modelmgrInstantiateModelWithAnim(ModelFileHeader *modelFileHeader)
                 break;
             }
         }
+#ifdef PORT
+        /* PC port (D57, docs/PCPortResearch.md): same fallback as
+         * modelmgrInstantiateModel() — a dynamic slot+pool when no spare
+         * fits the (pointer-grown) rwdata word count. */
+        if (newModel == NULL && requiredRwdatalen > 0)
+        {
+            newModel = mempAllocBytesInBank(sizeof(struct AnimModelSlot), MEMPOOL_STAGE);
+            if (newModel != NULL)
+            {
+                rwdatas = mempAllocBytesInBank((((requiredRwdatalen * 4) + 0xf) | 0xf) ^ 0xf, MEMPOOL_STAGE);
+                rwdatalen = requiredRwdatalen;
+            }
+        }
+#endif
+#ifdef PORT /* TEMP D56: log slot-scan outcome incl. failure */
+        if (getenv("GE_D56")) {
+            fprintf(stderr, "[D56] animInstantiate header=%p numRecords=%d maxslots=%d newModel=%p\n",
+                    (void *)modelFileHeader, modelFileHeader->numRecords,
+                    g_MaxAnimModelSlots, (void *)newModel);
+            if (newModel == NULL) {
+                for (i2 = 0; i2 < g_MaxAnimModelSlots; i2++)
+                    fprintf(stderr, "[D56]   slot%d unk08=%d unk10=%p unk02=%d\n", i2,
+                            g_AnimModelSlots[i2].unk08, g_AnimModelSlots[i2].unk10,
+                            g_AnimModelSlots[i2].unk02);
+            }
+        }
+#endif
     }
 
     if (newModel != NULL) 
     {
+#ifdef PORT /* TEMP D51 */
+        if (getenv("GE_D51")) {
+            static FILE *f = NULL;
+            if (!f) { f = fopen("d52rw.log", "a"); setvbuf(f, NULL, _IONBF, 0); }
+            fprintf(f, "INSTA model=%p header=%p numRecords=%d rwdatas=%p rwdatalen=%d lvreset=%d\n",
+                    (void *)newModel, (void *)modelFileHeader, modelFileHeader->numRecords,
+                    (void *)rwdatas, rwdatalen, g_ModelIsLvResetting);
+        }
+#endif
         animInit(newModel, modelFileHeader, rwdatas);
         newModel->rwdatalen = rwdatalen;
     }
@@ -218,9 +296,16 @@ void sub_GAME_7F06C418(Vew4s32 *src, Vew4s32 *dst) {
 }
 
 
+#ifdef PORT
+/* D59: keep the full 64-bit code address (see model.h). */
+void set_vtxallocator(void *param_1) {
+  vtxallocator = (struct Vertex *(*)(s32 numvertices))param_1;
+}
+#else
 void set_vtxallocator(s32 param_1) {
   vtxallocator = param_1;
 }
+#endif
 
 
 #if defined(LEFTOVERDEBUG)
@@ -383,7 +468,12 @@ f32 sub_GAME_7F06C768(Model *objinst)
 union ModelRwData* modelGetNodeRwData(Model *Objinst, ModelNode *root)
 {
     s32 index  = 0;
+#ifdef PORT
+    /* D52: word-indexed pool access — see bondtypes.h struct Model.datas. */
+    u32 *data = Objinst->datas;
+#else
     union ModelRwData **data = Objinst->datas;
+#endif
 
     switch (root->Opcode & 0xff)
     {
@@ -440,12 +530,29 @@ union ModelRwData* modelGetNodeRwData(Model *Objinst, ModelNode *root)
         if ((root->Opcode & 0xFF) == MODELNODE_OPCODE_HEAD)
         {
             ModelRwData_HeadPlaceholderRecord *tmp = modelGetNodeRwData(Objinst, root);
+#ifdef PORT
+            data = (u32 *)tmp->RwDatas;
+#else
             data = tmp->RwDatas;
+#endif
             break;
         }
     }
 
+#ifdef PORT
+    /* TEMP D51: trace rwdata pool addressing */
+    if (getenv("GE_D51")) {
+        static FILE *f = NULL;
+        if (!f) { f = fopen("d52rw.log", "a"); setvbuf(f, NULL, _IONBF, 0); }
+        fprintf(f, "GND obj=%p datas=%p idx=%d rwdatalen=%d op=%d data=%p res=%p\n",
+                (void *)Objinst, (void *)data, index, Objinst->rwdatalen,
+                root->Opcode & 0xff, (void *)data,
+                (void *)&data[index]);
+    }
+    return (union ModelRwData *)&data[index];
+#else
     return &data[index];
+#endif
 }
 
 
@@ -718,6 +825,14 @@ void setsubroty(Model *model, f32 angle)
 
 void modelSetScale(Model *objinst, f32 scale)
 {
+#ifdef PORT /* TEMP D56: identify the crashing caller */
+    static int d56count = 0;
+    if (getenv("GE_D56")) {
+        fprintf(stderr, "[D56] modelSetScale #%d objinst=%p scale=%.4f ret=%p\n",
+                d56count++, (void *)objinst, scale,
+                __builtin_return_address(0));
+    }
+#endif
     objinst->scale = scale;
 }
 
@@ -4098,6 +4213,13 @@ void modelRenderNodeGundl(ModelRenderData* renderdata, ModelNode* arg1)
                 modelApplyRenderModeType2(renderdata);
             }
 
+#if defined(PORT)
+        /* TEMP D63: log Primary/Secondary before emit (env GE_D63=1) */
+        if (getenv("GE_D63") && ((renderdata->flags & 1) && rodata->Primary))
+            osSyncPrintf("D63 modelRenderNodeGundl Primary=%p Secondary=%p BaseAddr=%p ModelType=%d\n",
+                         (void *)rodata->Primary, (void *)rodata->Secondary,
+                         (void *)rodata->BaseAddr, (int)rodata->ModelType);
+#endif
             gSPDisplayList(renderdata->gdl++, rodata->Primary);
 
             if ((rodata->ModelType == 3) && rodata->Secondary)
@@ -6235,7 +6357,12 @@ void modelAttachPart(Model *pmodel, ModelFileHeader *pmodeldef, ModelNode *pnode
     ModelNode *node;
 
     rwdata->ModelFileHeader = cmodeldef;
+#ifdef PORT
+    /* D52: word-indexed pool offset — see bondtypes.h struct Model.datas. */
+    rwdata->RwDatas = (void *)&pmodel->datas[pmodeldef->numRecords];
+#else
     rwdata->RwDatas = &pmodel->datas[pmodeldef->numRecords];
+#endif
 
     pnode->Child = cmodeldef->RootNode;
 

@@ -470,10 +470,37 @@ void initializeGunBarrelIntro(u8 *gfxBuffer, s32 bufferSize)
     createGunbarrelRenderHole(barrelDisplayListPtr, 0x1E);
     
     gunbarrelgfxListPointer = (Gfx*)gfxBuffer;
+#ifdef PORT
+    /* PC port (D58, docs/PCPortResearch.md): sub_GAME_7F01BFF8 emits 31 Gfx
+     * (2x VTX + 28 TRI + ENDDL). On N64 sizeof(Gfx)==8 so the 0x100 reserve
+     * covers it (248 B); on PC the Gfx union's trailing `long long` makes
+     * sizeof(Gfx)==16, so the same DL is 496 B and overflowed the reserve,
+     * with sub_GAME_7F008DE4's RLE expand then clobbering slots 16-30 (the
+     * second TRI batch + ENDDL) — the RSP ran into RLE pixel data (opcode
+     * 0x00, fatal). Reserve 0x200 so the whole DL stays clear of the RLE
+     * region. (The 0x200 vertex reserve above still fits: 30 Vtx x 16 B =
+     * 0x1E0.) */
+    bufferSize -= 0x200;
+    gfxBuffer += 0x200;
+#else
     bufferSize -= 0x100;
     gfxBuffer += 0x100;
+#endif
     
+#ifdef PORT
+    /* PC port (D58, docs/PCPortResearch.md): on N64 barrelDisplayListPtr is a
+     * physical DRAM address, so +0x80000000 yields the KSEG0 (RSP-visible)
+     * address embedded in each G_VTX w1 by sub_GAME_7F01BFF8. On PC the same
+     * buffer is a V1 pointer (0x70xxxxxx, s32-safe per dram.c), and
+     * +0x80000000 lands at 0xF0xxxxxx — unresolvable by fast3d's seg_addr()
+     * (SIGSEGV in gfx_sp_vertex reading the vertex array). Rebuild the exact
+     * N64 K0 value from the physical offset; seg_addr() passes it through to
+     * the KSEG0 mirror at 0x80000000 (segments 7/8 are never registered, so
+     * the unmarked-segment path is skipped). */
+    sub_GAME_7F01BFF8(gunbarrelgfxListPointer, (Vtx *)(OS_K0_TO_PHYSICAL((void *)barrelDisplayListPtr) | 0x80000000u), 0x1E);
+#else
     sub_GAME_7F01BFF8(gunbarrelgfxListPointer, barrelDisplayListPtr + 0x80000000, 0x1E);
+#endif
     sub_GAME_7F008DE4((u8 **)&gfxBuffer, &bufferSize);
 
     // struct copy
@@ -575,7 +602,19 @@ void clearChrGunModelInstances(void)
 /*
  * Address: 0x7F009254
 */
+#ifdef PORT
+extern void d63SlotCheck(const char *tag); /* TEMP D63 */
+#endif
 Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
+#ifdef PORT
+    d63SlotCheck("gb-render-entry");
+    if (getenv("GE_D63")) {
+        static int n = 0;
+        if ((++n % 200) == 1)
+            osSyncPrintf("D63 gb-render call #%d mode=%d slot=%08x\n",
+                         n, (int)gunbarrel_mode, *(const u32 *)0x7012EC38);
+    }
+#endif
     D_8002A7D0 = (1 - D_8002A7D0);
     switch (gunbarrel_mode - 2)
     {
@@ -608,10 +647,19 @@ Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
         gdl = clear_framebuffer_black(gdl++);
         #endif
         gdl = insert_sniper_sight_eye_intro(gdl++);
+#ifdef PORT
+        d63SlotCheck("gb1-after-sight");
+#endif
         gdl = insert_sight_backdrop_eye_intro(gdl++);
+#ifdef PORT
+        d63SlotCheck("gb1-after-backdrop");
+#endif
         
         if (g_TitleX < 600.0f) {
             gdl = insert_bond_eye_intro(gdl);
+#ifdef PORT
+            d63SlotCheck("gb1-after-bond");
+#endif
         }
         g_TitleX -= XDEC3;
         if (g_TitleX <= -80.0f) {
@@ -627,7 +675,13 @@ Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
         intro_eye_counter--;
         if (intro_eye_counter < 0) {
             gunbarrel_mode++;
+#ifdef PORT
+            d63SlotCheck("gb2-before-blood0");
+#endif
             die_blood_image_routine(0);
+#ifdef PORT
+            d63SlotCheck("gb2-after-blood0");
+#endif
             intro_state_blood_animation = 0;
             intro_eye_counter = 1;
         }
@@ -636,13 +690,25 @@ Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
     case 3:
         intro_eye_counter--;
         if (intro_eye_counter == 0) {
+#ifdef PORT
+            d63SlotCheck("gb3-before-blood1");
+#endif
             intro_state_blood_animation = die_blood_image_routine(1);
+#ifdef PORT
+            d63SlotCheck("gb3-after-blood1");
+#endif
             intro_eye_counter = 2;
         }
         gdl = insert_sniper_sight_eye_intro(gdl);
         gdl = insert_sight_backdrop_eye_intro(gdl);
         gdl = insert_bond_eye_intro(gdl);
+#ifdef PORT
+        d63SlotCheck("gb3-before-bloodDL");
+#endif
         gdl = gunbarrelBloodOverlayDL(gdl);
+#ifdef PORT
+        d63SlotCheck("gb3-after-bloodDL");
+#endif
         if (intro_state_blood_animation != 0) {
             gunbarrel_mode++;
             word_CODE_bss_80069584 = 0;

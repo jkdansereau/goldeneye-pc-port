@@ -8,8 +8,22 @@
 #define MODEL_SPARE_SLOTS          30
 #define ANIM_MODEL_SPARE_SLOTS     10
 
+#ifdef PORT
+/* PC port (D57, docs/PCPortResearch.md): two rwdata record structs contain
+ * pointer fields — ModelRwData_HeadPlaceholderRecord (ModelFileHeader* +
+ * void*) and ModelRwData_DisplayList_CollisionRecord (Vertex* + Gfx*) — so
+ * they grow 8 -> 16 bytes on x86-64. modelCalculateRwDataLen() accumulates
+ * sizeof(record)/4 per node, so every HEAD/DLCOLLISION node adds +2 words
+ * vs N64, and the largest models (e.g. BODY_Brosnan_Tuxedo: 153 words on PC)
+ * no longer fit the N64-sized spare pools below. Grow the spare capacities
+ * with headroom over the measured max; modelmgrInstantiate*() additionally
+ * falls back to a dynamic slot+pool (D57) if a model still exceeds them. */
+#define MODEL_SPARE_RWDATALEN      0x38
+#define ANIM_MODEL_SPARE_RWDATALEN 0xA8
+#else
 #define MODEL_SPARE_RWDATALEN      0x14
 #define ANIM_MODEL_SPARE_RWDATALEN 0x8c
+#endif
 
 
 void modelmgrResetSlotCounts(void)

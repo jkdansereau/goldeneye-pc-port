@@ -81,6 +81,23 @@ s32 dynGetFreeGfx2(Gfx *gdl) {
  */
 Vtx *dynAllocateVertices(s32 count) 
 {
+#ifdef PORT
+    /* TEMP D63: catch the gun-barrel sub-DL clobber with caller context. */
+    if (getenv("GE_D63")) {
+        static u32 s_last = 0;
+        static int s_init = 0;
+        static int s_changes = 0;
+        const u32 *slot = (const u32 *)0x7012EC38;
+        u32 cur = *slot;
+        if (!s_init) { s_init = 1; s_last = cur; }
+        else if (cur != s_last && s_changes < 64) {
+            osSyncPrintf("D63 vtx-alloc clobber: word@0x7012ec38 %08x -> %08x caller=%p mempos=%p\n",
+                         s_last, cur, __builtin_return_address(0), (void *)g_GfxMemPos);
+            s_last = cur;
+            ++s_changes;
+        }
+    }
+#endif
     void *ptr = g_GfxMemPos;
 	g_GfxMemPos += count * sizeof(Vtx);
 	return ptr;
@@ -104,6 +121,10 @@ Light *dynAllocateLights(s32 count)
 }
 
 void *dynAllocate(s32 size) {
+#ifdef PORT
+    extern void d63Act(const char *tag); /* TEMP D63 */
+    d63Act("dyn");
+#endif
     void *ptr = g_GfxMemPos;
 	size = ALIGN16_a(size);
 	g_GfxMemPos += size;
@@ -111,6 +132,28 @@ void *dynAllocate(s32 size) {
 }
 
 void dynSwapBuffers(void) {
+#ifdef PORT
+    /* TEMP D63: log buffer bounds + bump position each frame */
+    if (getenv("GE_D63")) {
+        static int d63dyncount = 0;
+        if ((d63dyncount++ % 100) == 0 || g_GfxMemPos > g_VtxBuffers[g_GfxActiveBufferIndex + 1]) {
+            osSyncPrintf("D63 dynSwap #%d active=%d gfx=[%p..%p) vtx=[%p..%p) mempos=%p\n",
+                         d63dyncount, (int)g_GfxActiveBufferIndex,
+                         (void *)g_GfxBuffers[g_GfxActiveBufferIndex],
+                         (void *)g_GfxBuffers[g_GfxActiveBufferIndex + 1],
+                         (void *)g_VtxBuffers[g_GfxActiveBufferIndex],
+                         (void *)g_VtxBuffers[g_GfxActiveBufferIndex + 1],
+                         (void *)g_GfxMemPos);
+            extern MemoryPool g_mempPools[];
+            for (int b = 0; b < 8; b++) {
+                if (g_mempPools[b].start || g_mempPools[b].end)
+                    osSyncPrintf("D63   pool[%d] start=%p end=%p pos=%p prevpos=%p\n",
+                                 b, (void *)g_mempPools[b].start, (void *)g_mempPools[b].end,
+                                 (void *)g_mempPools[b].pos, (void *)g_mempPools[b].prevpos);
+            }
+        }
+    }
+#endif
     g_GfxActiveBufferIndex = (g_GfxActiveBufferIndex ^ 1);
     g_GfxRequestedDisplayList = FALSE;
     g_GfxMemPos = g_VtxBuffers[g_GfxActiveBufferIndex];

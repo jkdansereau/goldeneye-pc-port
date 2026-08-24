@@ -7298,7 +7298,12 @@ void sub_GAME_7F04AC20(PropRecord *prop, ModelRenderData *mrData, s32 arg2)
 
                 if (nodedata != NULL)
                 {
+#ifdef PORT
+                    /* D52: word-indexed pool access — see bondtypes.h struct Model.datas. */
+                    rwdataSlot = (union ModelRwData **)&obj->model->datas[nodedata->DisplayListCollisions.RwDataIndex];
+#else
                     rwdataSlot = &obj->model->datas[nodedata->DisplayListCollisions.RwDataIndex];
+#endif
 
                     if (nodedata->DisplayListCollisions.Vertices != (Vertex *)*rwdataSlot)
                     {
@@ -14340,7 +14345,12 @@ void sub_GAME_7F056690(void)
                 }
                 if (sub_GAME_7F04B590(s1->model->obj, t0) != 0)
                 {
+#ifdef PORT
+                    /* D52: word-indexed pool access — see bondtypes.h struct Model.datas. */
+                    new_var = (union ModelRwData **)&s3->datas[s0->RwDataIndex];
+#else
                     new_var = &s3->datas[s0->RwDataIndex];
+#endif
                     if ((s32)s0->Vertices != (s32)*new_var)
                     {
                         objFreePermanently(s1, 1);

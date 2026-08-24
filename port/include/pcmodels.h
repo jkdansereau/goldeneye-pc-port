@@ -39,6 +39,9 @@ void     pcmodelsPatchTable(void);
 
 uint32_t pcmodelsTotalSize(void);
 
+/* Cart address where the sidecar image lives (0 if absent). */
+uintptr_t pcmodelsSidecarBase(void);
+
 #ifdef __cplusplus
 }
 #endif

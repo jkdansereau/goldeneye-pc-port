@@ -52,6 +52,30 @@ struct tex {
 	/*0x0c*/ u32 next : 24;
 };
 
+#ifdef PORT
+/* D67 (docs/PCPortResearch.md): N64 layout reconstruction for struct
+ * image_entry. The decompiled field order cannot be right: texLoad() reads
+ * `*(s32*)&entry & 0xFFFFFF` as the data offset (so dataoffset must occupy
+ * bits 0-23 of word 0), while chrprop.c indexes entries with an 8-byte
+ * stride (`(u8*)g_Textures + n*8`, so sizeof == 8). Declaring every field
+ * u32 makes GCC pack the struct into exactly two words on both targets, and
+ * putting dataoffset first satisfies the raw word read. The IMAGE() macro
+ * initializer order is adjusted to match under PORT (see image.c).
+ * NOTE: chrprop.c/propobj.c also read `((u8*)&entry)[0] & 0xf` as a hit
+ * type; with this layout that yields the low nibble of dataoffset, which is
+ * what the N64 binary does too (the .hitSound bitfield is used by the other
+ * hit-sound paths in gunfire.c). */
+struct image_entry
+{
+    u32 dataoffset : 24; // runtime: cumulative start offset within the images segment (image_entries_load converts sizes -> offsets)
+    u32 hitTexture : 4;  // HitType-Texture
+    u32 hitSound   : 4;  // HitType-Sound (should be enum HIT_TYPE, but it needs to be unsigned)
+    u32 flag3 : 4; // Detailflag1 used once with value 0x38D2 (S/T offset of detail)
+    u32 flag4 : 4;
+    u32 flag5 : 4; // DetailFlag2  difference from detail image, to large image, in terms of 2 to the power of value. It is subtracted from the small one, and absolute value or something. (Zoinkity)
+    u32 flag6 : 4;
+};
+#else
 struct image_entry
 {
     u8 hitSound         : 4;  // HitType-Sound (should be enum HIT_TYPE, but it needs to be unsigned)
@@ -62,6 +86,7 @@ struct image_entry
 	u32 flag5 : 4; // DetailFlag2  difference from detail image, to large image, in terms of 2 to the power of value. It is subtracted from the small one, and absolute value or something. (Zoinkity)
 	u32 flag6 : 4;
 };
+#endif
 
 struct texcacheitem {
     s16 texturenum;
