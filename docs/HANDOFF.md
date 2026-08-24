@@ -1,4 +1,4 @@
-# Handoff brief — GoldenEye 007 PC port (Phase 2: Session H — D69 BG/stan stage loading)
+# Handoff brief — GoldenEye 007 PC port (Phase 2: Session H — D72.3 intro-logo pixels + D69 BG/stan stage loading)
 
 _Paste-ready briefing. Authoritative detail lives in `AGENTS.md` and
 `docs/PCPortResearch.md` (§F/D59–D69 findings, §G status, §H procedure); this

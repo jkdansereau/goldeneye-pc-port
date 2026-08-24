@@ -363,7 +363,7 @@ sync/flush) is shared.
 
 ### Phase 1.5 — Boot to first frame (ABI reconciliation)
 * Get mainThread through all of `bossInitMainthreadData()` → `bossEntry()` →
-  `bossMainloop()` and render frame 1. This is the current frontier (post-D31).
+  `bossMainloop()` and render frame 1. (Done — D34–D58; see §G.)
 * Recurring mechanism: **ROM-data struct ABI/layout fixes** (the D32 pattern) —
   a 32-bit-pointer struct read as a 64-bit-pointer struct misaligns; convert
   embedded pointer fields to `u32` + cast at use sites (PD ground truth), then
@@ -2217,38 +2217,56 @@ sImageTableEntry.index; compiled globalDL shadows synced after texLoad).
 The game now boots, plays the intro music, and renders the **entire ~3.5-
 minute intro** (Nintendo logo → gun barrel with Brosnan → cast screen) at
 ~59 fps, then crashes in `load_bg_file` on the first stage load —
-**D69, the current blocker**: BG-file headers are N64 big-endian
+**D69, the milestone blocker**: BG-file headers are N64 big-endian
 (segment-0x0F offsets) and PC reads them LE. Details in §F/D59–D69.
 
-**Committed at D68** (this milestone): D51–D68 fixes + TEMP diagnostics
-still present (strip list in HANDOFF Task 3); build is GREEN.
+**D70–D72 (intro-logo pixel work):** D70 env-gated PPM frame capture
+(`GE_PCDUMP` → `./ppm/`) for numerical visual debugging; **D71 resolved** —
+C-array texture sources (the four rarewarelogo.c RGBA16 images) were
+byte-swapped on LE PC (pink/green logo); port-layer per-source bswap in
+`import_texture`. **D72 resolved** the UV path (GE always uses authored tc[]
+UVs; `lookat_enabled` defaults false) but **D72.3 is OPEN**: all logo
+triangles project off-screen and a flat dark-blue checkerboard triangle
+rasterizes instead — identity pending (GE_DBGUV/GE_DBGTALL traces).
+
+**Committed through D72**: D51–D72 fixes + TEMP diagnostics still present
+(strip list in HANDOFF Task 3); build is GREEN.
 
 ### H. Handoff & plan (current session)
 
-Full paste-ready brief: **docs/HANDOFF.md** (rewritten for the D69 session —
-BG/stan format work). Immediate task: reverse-engineer GE's bg .seg +
-Tbg_*_stanZ formats from the decompiled consumers (bg.c, stan.c), then
-choose offline sidecar conversion (Plan-B pattern, D43) vs runtime port-layer
-fixup; PD's preprocess/filebg.c is a reference for the *approach* only — its
-BG format is different (zipped multi-section).
+Full paste-ready brief: **docs/HANDOFF.md** (two live threads: D72.3
+intro-logo pixels, then D69 BG/stan stage loading). For D69:
+reverse-engineer GE's bg .seg + Tbg_*_stanZ formats from the decompiled
+consumers (bg.c, stan.c), then choose offline sidecar conversion (Plan-B
+pattern, D43) vs runtime port-layer fixup; PD's preprocess/filebg.c is a
+reference for the *approach* only — its BG format is different (zipped
+multi-section).
 Summary:
 
-**State.** D50–D68 all resolved and verified; committed at the D68
-milestone. The game boots, plays intro music, and renders the entire
-~3.5-minute intro (logo → gun barrel with Brosnan → cast screen) at ~59
-fps. TEMP diagnostics from the D51–D69 sessions are still in the tree
-(strip list in HANDOFF Task 3). Build is GREEN.
+**State.** D50–D72 resolved and verified (except D72.3, open); committed
+through the D72 milestone. The game boots, plays intro music, and renders
+the entire ~3.5-minute intro (logo → gun barrel with Brosnan → cast screen)
+at ~59 fps — logo lettering now gold-on-blue (D71/D72) but not yet visible
+(D72.3). TEMP diagnostics from the D51–D72 sessions are still in the tree
+(strip list in HANDOFF Task 3); visual-debug tooling: `GE_PCDUMP` frame
+capture, `GE_DBGUV`/`GE_DBGTALL` UV+triangle traces. Build is GREEN.
 
-**Current blocker — D69.** `load_bg_file` (src/game/bg.c:830) faults on
-the first stage load (BUNKER1): BG-file header words are N64 big-endian
-segment-0x0F offsets; PC reads them LE, so the room-fileposition-list
-pointer lands ~5 MB past the stack header buffer. Full analysis +
-strategy options in §F/D69.
+**Thread 1 — D72.3 (intro logo).** All logo triangles project off-screen
+(clip x=y≈−1.6e11, w<0) while a flat dark-blue (0,0,64) checkerboard
+triangle rasterizes in the lower screen; matrix-format mismatches ruled out
+(§F/D72). Next: identify the checkerboard's triangle via GE_DBGTALL, then
+verify MP matrix + viewport at logo time (title.c load_display_rare_logo).
+
+**Thread 2 — D69 (milestone blocker).** `load_bg_file` (src/game/bg.c:830)
+faults on the first stage load (BUNKER1): BG-file header words are N64
+big-endian segment-0x0F offsets; PC reads them LE, so the
+room-fileposition-list pointer lands ~5 MB past the stack header buffer.
+Full analysis + strategy options in §F/D69.
 
 **After D69:** get a stage to load + render (bg .seg + Tbg_*_stanZ format
-work — see §H immediate task), then continue the diagnose→fix→verify loop
-through gameplay; strip TEMP diagnostics at each milestone; pixel-assert
-soak (PPM dump + tools_pc/pixcount.py) once a stage is stable.
+work), then continue the diagnose→fix→verify loop through gameplay; strip
+TEMP diagnostics at each milestone; pixel-assert soak (PPM dump +
+tools_pc/pixcount.py) once a stage is stable.
 
 **D32 repeatable fix procedure** (apply to any ROM-serialized struct that faults
 on a pointer-field read):
