@@ -12,6 +12,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(_WIN32)
+#include <direct.h>
+#define GE_MKDIR(p) _mkdir(p)
+#else
+#include <sys/stat.h>
+#define GE_MKDIR(p) mkdir(p, 0777)
+#endif
+
 #include <PR/ultratypes.h>
 #include <PR/gbi.h>
 
@@ -169,6 +177,29 @@ void videoEndFrame(void)
         return;
     }
     gfx_end_frame();
+
+    /* TEMP D70 (env-gated, strip per HANDOFF Task 3): GE_PCDUMP="first-last"
+     * or "first-last:step" dumps the presented frame as ./ppm/frame_NNNNNN.ppm
+     * (one frame behind real time — read happens after SwapWindow). Used to
+     * pixel-verify the intro's 3D content. */
+    if (gfx_opengl_pcdump_enabled()) {
+        static int lo = -1, hi = 0, step = 1;
+        if (lo < 0) {
+            const char *v = getenv("GE_PCDUMP");
+            lo = 1; hi = 0x7fffffff; step = 1;
+            sscanf(v, "%d-%d:%d", &lo, &hi, &step);
+            if (sscanf(v, "%d-%d", &lo, &hi) != 2)
+                hi = 0x7fffffff;
+            GE_MKDIR("ppm");
+        }
+        if ((int)frames >= lo && (int)frames <= hi &&
+            ((int)frames - lo) % step == 0) {
+            char path[128];
+            snprintf(path, sizeof(path), "ppm/frame_%06d.ppm", (int)frames);
+            gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_dimensions.width,
+                                      (uint32_t)gfx_current_dimensions.height, path);
+        }
+    }
 
     ++frames;
     ++fpsNumFrames;

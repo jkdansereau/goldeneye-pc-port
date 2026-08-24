@@ -609,6 +609,45 @@ void gfx_texture_cache_delete_range(const uint8_t* start, const uint8_t* end) {
     }
 }
 
+// D71 (docs/PCPortResearch.md): texture sources arrive in two byte conventions.
+// Raw N64 big-endian byte streams: ROM cart map (0x10xxxxxx), model-sidecar
+// blobs (cart extension 0x10Cxxxxx), KSEG0 mirror (0x80xxxxxx) and V1
+// dram/BSS/heap buffers (0x70xxxxxx, e.g. tex.c texture pool, rle_expand_8bit
+// output). C-compiled u32 arrays in the exe image (.data/.rodata,
+// 0x140xxxxxx on MinGW x64) instead store each N64 texel pair as a
+// little-endian u32 — e.g. the rarewarelogo.c RGBA16 images — so the N64 byte
+// order is recovered by bswap32 of every u32. Without this, the logo's gold
+// texels (0xED0F...) decode from the swapped pairs (0x4FCC/0xCC4F) as bright
+// green/pink — the garbled Rareware-logo pixels.
+static bool gfx_tex_source_is_c_array(const uint8_t* addr) {
+    const uintptr_t a = (uintptr_t)addr;
+    if (a >= 0x10000000u && a < 0x20000000u) return false; // cart map + sidecar
+    if (a >= 0x70000000u && a < 0x90000000u) return false; // V1 dram + KSEG0 mirror
+    return true; // exe image: C-compiled array
+}
+
+static std::map<const uint8_t*, std::vector<uint8_t> > s_c_array_tex_norms;
+
+// Returns a pointer to the source in N64 byte order (the original pointer for
+// raw-stream sources, a stable per-source bswapped copy for C arrays).
+// extent is the full image size incl. padded rows (ci8 reads up to it).
+static const uint8_t* gfx_tex_normalize_source(const uint8_t* addr, uint32_t extent) {
+    if (!gfx_tex_source_is_c_array(addr)) return addr;
+    auto it = s_c_array_tex_norms.find(addr);
+    if (it != s_c_array_tex_norms.end()) return it->second.data();
+
+    const uint32_t n = (extent + 3u) & ~3u;
+    std::vector<uint8_t> buf(n);
+    const uint32_t* src = (const uint32_t*)addr;
+    uint32_t* dst = (uint32_t*)buf.data();
+    for (uint32_t i = 0; i < n / 4; i++)
+        dst[i] = PD_BE32(src[i]);
+    if (getenv("GE_D71LOG"))
+        fprintf(stderr, "[D71] normalized C-array texture source %p (%u bytes)\n",
+                (const void*)addr, extent);
+    return s_c_array_tex_norms.emplace(addr, std::move(buf)).first->second.data();
+}
+
 static void import_texture_rgba16(int tile, const LoadedTexture& loaded_texture, bool gen_mipmaps) {
     const uint8_t* addr = loaded_texture.addr;
     const uint32_t size_bytes = loaded_texture.size_bytes;
@@ -905,6 +944,14 @@ static void import_texture(int i, int tile, bool importReplacement) {
         return;
     }
 
+    // D71: importers read raw N64 byte streams; normalize C-array sources.
+    const uint8_t* saved_addr = loaded_texture.addr;
+    loaded_texture.addr =
+        gfx_tex_normalize_source(orig_addr,
+                                 loaded_texture.full_size_bytes > loaded_texture.size_bytes
+                                     ? loaded_texture.full_size_bytes
+                                     : loaded_texture.size_bytes);
+
     if (fmt == G_IM_FMT_RGBA) {
         if (siz == G_IM_SIZ_16b) {
             import_texture_rgba16(tile, loaded_texture, rdp.tex_lod);
@@ -942,6 +989,8 @@ static void import_texture(int i, int tile, bool importReplacement) {
     } else {
         sysFatalError("Bad texture format in tile %d: %02x %02x", tile, fmt, siz);
     }
+
+    loaded_texture.addr = saved_addr;
 }
 
 static void gfx_normalize_vector(float v[3]) {
@@ -1122,43 +1171,19 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
             d->color.g = g > 255 ? 255 : g;
             d->color.b = b > 255 ? 255 : b;
 
-            if (rsp.geometry_mode & G_TEXTURE_GEN) {
-                float dotx = 0, doty = 0;
-                if (rsp.lookat_enabled) {
-                    dotx += vcn->x * rsp.current_lookat_coeffs[0][0];
-                    dotx += vcn->y * rsp.current_lookat_coeffs[0][1];
-                    dotx += vcn->z * rsp.current_lookat_coeffs[0][2];
-                    doty += vcn->x * rsp.current_lookat_coeffs[1][0];
-                    doty += vcn->y * rsp.current_lookat_coeffs[1][1];
-                    doty += vcn->z * rsp.current_lookat_coeffs[1][2];
-                    dotx /= 127.0f;
-                    doty /= 127.0f;
-                } else {
-                    float tvcn[3];
-                    calculate_normal_dir(vcn, tvcn);
-                    dotx = tvcn[0];
-                    doty = tvcn[1];
-                }
-
-                dotx = clampf(dotx, -1.0f, 1.0f);
-                doty = clampf(doty, -1.0f, 1.0f);
-
-                if (rsp.geometry_mode & G_TEXTURE_GEN_LINEAR) {
-                    // Not sure exactly what formula we should use to get accurate values
-                    /*dotx = (2.906921f * dotx * dotx + 1.36114f) * dotx;
-                    doty = (2.906921f * doty * doty + 1.36114f) * doty;
-                    dotx = (dotx + 1.0f) / 4.0f;
-                    doty = (doty + 1.0f) / 4.0f;*/
-                    dotx = acosf(-dotx) /* M_PI */ / 4.0f;
-                    doty = acosf(-doty) /* M_PI */ / 4.0f;
-                } else {
-                    dotx = (dotx + 1.0f) / 4.0f;
-                    doty = (doty + 1.0f) / 4.0f;
-                }
-
-                U = (int32_t)(dotx * rsp.texture_scaling_factor.s);
-                V = (int32_t)(doty * rsp.texture_scaling_factor.t);
-            }
+            /* D72 (docs/PCPortResearch.md): unlike the PD port, GE never
+             * generates texture coordinates from vertex normals. This PD-
+             * inherited block overwrote the authored tc[] UVs on every
+             * lit+textured surface (lookat_enabled defaults to true here),
+             * which smeared the Rareware-logo quads into a diagonal gold
+             * wedge: their corner UVs (0x0010..0x03F0 = full 32x32 coverage)
+             * were replaced by normal-derived values. GE's ground truth:
+             * every DL that could env-map sets gsDPSetTextureLUT(G_TT_NONE),
+             * stage rendering always has a camera lookat yet stage textures
+             * are surface-fixed on hardware, and the logo vertex batches
+             * carry authored atlas-slice UVs. So U/V stay as computed from
+             * tc[] above. (gSPLookAt state is still tracked — it may matter
+             * for lighting fidelity later.) */
         } else {
             d->color.r = vcn->r;
             d->color.g = vcn->g;
@@ -1230,11 +1255,56 @@ static inline int gfx_lod_tile_offset(const int i) {
     return (rdp.tex_lod ? rdp.tex_detail : i);
 }
 
+// TEMP D72: env-gated UV pipeline logging (GE_DBGUV=1).
+static bool gfx_dbg_uv_enabled(void) {
+    static int e = -1;
+    if (e < 0) e = getenv("GE_DBGUV") != nullptr;
+    return e;
+}
+
 static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bool is_rect) {
     struct LoadedVertex* v1 = &rsp.loaded_vertices[vtx1_idx];
     struct LoadedVertex* v2 = &rsp.loaded_vertices[vtx2_idx];
     struct LoadedVertex* v3 = &rsp.loaded_vertices[vtx3_idx];
     struct LoadedVertex* v_arr[3] = { v1, v2, v3 };
+
+    // TEMP D72: GE_DBGTRI=1 — trace triangles; GE_DBGTALL=1 logs all.
+    static int dbg_tri_count = 0;
+    if (gfx_dbg_uv_enabled() && getenv("GE_DBGTALL")) {
+        float sx[3] = { v1->x / (v1->w), v2->x / (v2->w), v3->x / (v3->w) };
+        float sy[3] = { v1->y / (v1->w), v2->y / (v2->w), v3->y / (v3->w) };
+        if (dbg_tri_count++ < 4000) {
+            fprintf(stderr, "[DBGTALL] n=%d scr=(%.0f,%.0f)(%.0f,%.0f)(%.0f,%.0f) col=(%d,%d,%d,%d) clip=(%x,%x,%x)\n",
+                    dbg_tri_count, sx[0], sy[0], sx[1], sy[1], sx[2], sy[2],
+                    v1->color.r, v1->color.g, v1->color.b, v1->color.a,
+                    v1->clip_rej, v2->clip_rej, v3->clip_rej);
+        }
+    }
+    if (gfx_dbg_uv_enabled()) {
+        bool gold = false, blue = false;
+        for (int i = 0; i < 3; i++) {
+            if (v_arr[i]->color.b == 0 && v_arr[i]->color.r > 90) gold = true;
+            if (v_arr[i]->color.b > 100 && v_arr[i]->color.r < 50) blue = true;
+        }
+        if (gold || blue) {
+            float dx1 = v1->x / (v1->w) - v2->x / (v2->w);
+            float dy1 = v1->y / (v1->w) - v2->y / (v2->w);
+            float dx2 = v3->x / (v3->w) - v2->x / (v2->w);
+            float dy2 = v3->y / (v3->w) - v2->y / (v2->w);
+            if (dbg_tri_count++ < 64) {
+                fprintf(stderr, "[DBGTRI] %s cull=%d clip=(%x,%x,%x) cross=%.3f scr=(%.1f,%.1f)(%.1f,%.1f)(%.1f,%.1f) clip4=(%.0f,%.0f,%.0f,%.2f) col=(%d,%d,%d)\n",
+                        gold ? "GOLD" : "BLUE",
+                        rsp.geometry_mode & G_CULL_BOTH,
+                        v1->clip_rej, v2->clip_rej, v3->clip_rej,
+                        dx1 * dy2 - dy1 * dx2,
+                        v1->x / (v1->w), v1->y / (v1->w),
+                        v2->x / (v2->w), v2->y / (v2->w),
+                        v3->x / (v3->w), v3->y / (v3->w),
+                        v1->x, v1->y, v1->z, v1->w,
+                        v1->color.r, v1->color.g, v1->color.b);
+            }
+        }
+    }
 
     if ((rsp.extra_geometry_mode & G_NO_CLIPPING_EXT) == 0) {
         if (v1->clip_rej & v2->clip_rej & v3->clip_rej) {
@@ -1512,6 +1582,22 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
 
             buf_vbo[buf_vbo_len++] = u / tex_width[t];
             buf_vbo[buf_vbo_len++] = v / tex_height[t];
+
+            // TEMP D72: GE_DBGUV=1 — log the UV pipeline per vertex, but
+            // only for C-array (logo) textures so the cap isn't exhausted.
+            if (gfx_dbg_uv_enabled() &&
+                gfx_tex_source_is_c_array(
+                    rdp.loaded_texture[rdp.texture_tile[rdp.first_tile_index + tile].tmem].addr)) {
+                static int dbg_uv_count = 0;
+                if (dbg_uv_count++ < 30000) {
+                    fprintf(stderr, "[DBGUV] v.u=%d v.v=%d shifts=%d shiftt=%d uls=%d ult=%d -> u=%.4f v=%.4f (tex %dx%d)\n",
+                            v_arr[i]->u, v_arr[i]->v, shifts, shiftt,
+                            rdp.texture_tile[rdp.first_tile_index + tile].uls,
+                            rdp.texture_tile[rdp.first_tile_index + tile].ult,
+                            u / tex_width[t], v / tex_height[t],
+                            tex_width[t], tex_height[t]);
+                }
+            }
 
             bool clampS = tm & (1 << 2 * t);
             bool clampT = tm & (1 << (2 * t + 1));
@@ -2671,9 +2757,8 @@ extern "C" void gfx_init(const GfxInitSettings *settings) {
         tex_upload_buffer = (uint8_t*)malloc(max_tex_size * max_tex_size * 4);
     }
 
-    rsp.lookat[0].dir[0] = rsp.lookat[1].dir[1] = 0x7F;
-    rsp.current_lookat_coeffs[0][0] = rsp.current_lookat_coeffs[1][1] = 1.f;
-    rsp.lookat_enabled = true;
+    /* D72: N64 boots with RSP memory zeroed — no lookat until gSPLookAt. */
+    rsp.lookat_enabled = false;
 }
 
 extern "C" void gfx_destroy(void) {

@@ -1048,6 +1048,27 @@ static void gfx_opengl_end_frame(void) {
     glFlush();
 }
 
+/* Frame capture (dev tool, env GE_PCDUMP) — see gfx_opengl.h. TEMP D70: read
+ * the default framebuffer (the window back buffer; the scene renders there
+ * directly at 1:1 window size) and write a P6 PPM. */
+extern "C" bool gfx_opengl_pcdump_enabled(void) {
+    return getenv("GE_PCDUMP") != NULL;
+}
+
+extern "C" bool gfx_opengl_dump_bound_fbo(uint32_t width, uint32_t height, const char* path) {
+    size_t n = (size_t)width * height * 3;
+    uint8_t* pixels = (uint8_t*)malloc(n);
+    if (!pixels) return false;
+    glReadPixels(0, 0, (GLsizei)width, (GLsizei)height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+    FILE* f = fopen(path, "wb");
+    if (!f) { free(pixels); return false; }
+    fprintf(f, "P6\n%u %u\n255\n", width, height);
+    fwrite(pixels, 1, n, f);
+    fclose(f);
+    free(pixels);
+    return true;
+}
+
 static void gfx_opengl_finish_render(void) {
 }
 

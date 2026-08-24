@@ -6,13 +6,21 @@ is the summary + the immediate tasks._
 
 ## Your job
 
-- **Session H:** make the first stage (BUNKER1) load and render. The game now
-  plays the entire ~3.5-minute intro at ~59 fps and crashes in
-  `load_bg_file` because BG-file data is N64 big-endian (D69). This is the
-  "next asset type" milestone: reverse-engineer GE's bg `.seg` +
-  `Tbg_*_stanZ` formats from the decompiled consumers, then convert/fix them
-  for PC. Work agentically: decode → implement → build (~5 s) → verify →
-  commit at each sub-milestone (document findings as D6x in §F).
+- **Session H:** two live threads, both verified reproducible:
+  1. **D72.3 (intro logo pixels):** after D71 (logo byte order) + D72 (tc[]
+     UVs), the Rareware logo still doesn't appear — all its triangles project
+     off-screen, and a flat dark-blue checkerboard triangle (broken
+     rasterization of something else) fills the lower screen instead. Tools
+     are in place: `GE_PCDUMP` frame capture + `GE_DBGUV`/`GE_DBGTALL`
+     traces in gfx_pc.cpp. Find which triangle draws the checkerboard, then
+     check MP matrix + viewport at logo time (title.c
+     load_display_rare_logo).
+  2. **D69 (milestone):** make the first stage (BUNKER1) load and render —
+     BG-file data is N64 big-endian; reverse-engineer GE's bg `.seg` +
+     `Tbg_*_stanZ` formats from the decompiled consumers, then convert/fix
+     for PC.
+  Work agentically: decode → implement → build (~5 s) → verify → commit at
+  each sub-milestone (document findings as D6x/D7x in §F).
 
 ## Current state (verified this session)
 
@@ -37,11 +45,18 @@ is the summary + the immediate tasks._
     tables, counts from D39 layout) after texReset's romCopy; marker scan in
     `texLoadFromDisplayList` moved to bytes 6..7 under PORT; compiled
     globalDL shadows synced after texLoad (`gimgSyncCompiledGlobalDLs`).
+- **D70–D72 (intro logo pixels, latest session):** D70 env-gated PPM frame
+  capture (`GE_PCDUMP` → `./ppm/`, gitignored); D71 RESOLVED — C-array
+  texture sources (the four rarewarelogo.c RGBA16 images) were byte-swapped
+  on LE PC → pink/green logo; port-layer per-source bswap normalizes them.
+  D72 RESOLVED the UV path (GE always uses authored tc[] UVs; lookat defaults
+  off) but **D72.3 OPEN**: all logo triangles project off-screen and a flat
+  dark-blue checkerboard triangle rasterizes instead — see Your job #1.
 - **Runtime:** boots → intro music → full intro (logo, gun barrel w/ Brosnan,
   cast screen) at ~59 fps → **crash in `load_bg_file` (bg.c:830)** on first
   stage load. EXCEPTION 0xc0000005, FAULT ADDR ≈ header buffer + 0x500000F.
-- **Committed at D68** (see git log). TEMP diagnostics from the D51–D69
-  sessions are still in the tree — strip list in Task 3.
+- **Committed through D72** (see git log). TEMP diagnostics from the
+  D51–D72 sessions are still in the tree — strip list in Task 3.
 
 ## The blocker, precisely (D69)
 
@@ -125,6 +140,12 @@ Env-gated probes to remove (grep `GE_D` + `TEMP D`):
   includes.
 - image.c / image_bank.c: D66 texLoad probe if still present.
 - gfx_pc.cpp: D59 seg probes, D63 dram-branch/modelRenderNodeGundl/rspGfxTaskStart.
+- gfx_pc.cpp: D70/D71/D72 TEMP — `GE_DBGUV`/`GE_DBGTALL` UV+triangle loggers
+  (gfx_dbg_uv_enabled + the DBGTRI/DBGTALL blocks in gfx_sp_vertex/gfx_sp_tri1)
+  and the `GE_D71LOG` normalize log. Keep the D71 normalization itself — it's
+  the fix, not a probe.
+- video.c + gfx_opengl.cpp: D70 `GE_PCDUMP` frame capture (videoEndFrame dump
+  hook, gfx_opengl_pcdump_* implementations).
 - blood_animation.c: D63 g_GfxMemPos probe.
 - front.c: D63 menu probes (d63MenuProbe/After + call sites).
 - rsp.c, model.c, initanitable.c, language.c, title.c, ramromreplay.c,

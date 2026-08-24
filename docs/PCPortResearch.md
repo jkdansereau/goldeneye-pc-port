@@ -2289,6 +2289,56 @@ on a pointer-field read):
    safe when all access goes through a pointer stored in the sub-object at init
    (modelInit → Model.datas) and only the one site references the raw offset.
 
+**D70 (dev tooling, TEMP):** env-gated PPM frame capture for numerical visual
+debugging: `GE_PCDUMP="first-last[:step]"` dumps the bound FBO to
+`./ppm/frame_NNNNNN.ppm` from `videoEndFrame()` (`gfx_opengl_pcdump_enabled()`/
+`gfx_opengl_dump_bound_fbo()` implemented in gfx_opengl.cpp). Established the
+intro timeline numerically (legal text f20–100, Rareware logo f380–580,
+iris/gun-barrel f900–1220, red region f1240–1360, cast f1520+) and confirmed
+the user's "pink and green" report at f480 (left half RGB≈(135,78,129), right
+half (82,104,0)). Strip per HANDOFF Task 3.
+
+**D71 (RESOLVED):** the Rareware logo rendered as two flat colors — pink-red
+and bright green — instead of gold lettering. Root cause: the four RGBA16 logo
+images in assets/rarewarelogo.c (`imgRAre_0x0020` etc.) are `u32` C arrays
+compiled into the exe `.data`; on LE PC each N64 texel pair is stored as a
+little-endian u32, so `import_texture_rgba16`'s big-endian u16 read produced
+byte-swapped texels (raw 0xED0F gold → 0x4FCC green + 0x0FED pink — exactly
+the two observed colors). All other texture sources are raw N64 BE byte
+streams (ROM cart map 0x10xxxxxx, model sidecar 0x10Cxxxxx, KSEG0/V1 buffers
+0x70–0x90xxxxxx) and must not be touched. Fix (port/fast3d/gfx_pc.cpp):
+`gfx_tex_source_is_c_array()` classifies by address range;
+`gfx_tex_normalize_source()` bswaps each u32 once per source into a stable
+cached buffer (cache key stays the original address) and `import_texture()`
+decodes from it. Verified: exactly two sources normalized in a full run (the
+logo image banks); logo now renders gold on dark blue. One-shot per-source log
+gated by `GE_D71LOG`.
+
+**D72 (RESOLVED + D72.3 OPEN):** the logo UV path.
+- D72.1: removed the PD-inherited normal/lookat-based UV overwrite in
+  `gfx_sp_vertex()` — GE always uses authored per-vertex `tc[]` UVs: no GE
+  code sets G_TT_BASE/G_TT_CLAMP (only G_TT_NONE), and stage geometry has
+  gSPLookAt set every frame yet N64 textures are fixed to surfaces, so the
+  normal-derived path is wrong for GE in general.
+- D72.2: `rsp.lookat_enabled` now defaults false — N64 boots with RSP memory
+  zeroed; no lookat exists until gSPLookAt writes one (the intro logo has
+  none). GL UV convention confirmed as U.5 (texel×32) from the LUT/rect path,
+  so DL_RAREWARETEXT's identity-scale corner UVs 0x0010..0x03F0 map to full
+  32×32 coverage with a half-texel inset.
+- D72.3 (OPEN): after D71+D72 the logo still does not appear: DBGTRI traces
+  show ALL logo triangles (plate fan + letter quads) project off-screen
+  (clip x=y≈−1.6e11, w<0, screen ≈(32776,32776)), yet the frame shows a large
+  flat dark-blue (0,0,64) region — rows 150..479, cols 1..639 — filled as a
+  PERFECT checkerboard (50/50 pixel parity), i.e. broken rasterization of some
+  big triangle drawn after clear_framebuffer_black. Identity not yet
+  established (`GE_DBGTALL` all-triangle trace captured; analysis pending).
+  Ruled out: matrix-format mismatch — this codebase's guMtxF2L is Rare's
+  modified variant writing the interleaved hi16/lo16 s32 Q15.16 packed format
+  that gfx_sp_matrix decodes exactly (FTOFIX32=×65536); `D_8002A7D0` is a
+  zero-init u32 so `[D_8002A7D0]`==`[0]`; alloc_intro_matrices() runs from
+  initmenus. Next: find the checkerboard's triangle via GE_DBGTALL, then
+  verify MP matrix + viewport at logo time (title.c load_display_rare_logo).
+
 **Non-negotiable #2 refinement (applied to AGENTS.md).** The original "game code
 compiles unmodified / fix belongs in port/" is too absolute: pointer-width layout
 cannot be isolated in `port/` (no hook between the romCopy and the first read).
