@@ -2214,28 +2214,40 @@ was D64's unbounded blood-RLE write clobbering the barrel sub-DL),
 **D67 resolved** (struct image_entry N64 layout reconstruction),
 **D68 resolved** (Globalimagetable BE→LE fixup for IMAGESEG Gfx words +
 sImageTableEntry.index; compiled globalDL shadows synced after texLoad).
-The game now boots, plays the intro music, and renders the **entire ~3.5-
-minute intro** (Nintendo logo → gun barrel with Brosnan → cast screen) at
-~59 fps, then crashes in `load_bg_file` on the first stage load —
+The game now boots, plays the intro music, and renders the **entire intro**
+(Nintendo logo → gun barrel with Brosnan → cast screen; ~frame 2100, ≈2 min
+wall-clock at the current ~20 fps clean-run rate), then crashes in
+`load_bg_file` on the first stage load —
 **D69, the milestone blocker**: BG-file headers are N64 big-endian
 (segment-0x0F offsets) and PC reads them LE. Details in §F/D59–D69.
 
-**D70–D72 (intro-logo pixel work):** D70 env-gated PPM frame capture
+**D70–D74 (intro-logo pixel work):** D70 env-gated PPM frame capture
 (`GE_PCDUMP` → `./ppm/`) for numerical visual debugging; **D71 resolved** —
 C-array texture sources (the four rarewarelogo.c RGBA16 images) were
 byte-swapped on LE PC (pink/green logo); port-layer per-source bswap in
 `import_texture`. **D72 resolved** the UV path (GE always uses authored tc[]
-UVs; `lookat_enabled` defaults false) but **D72.3 is OPEN**: all logo
-triangles project off-screen and a flat dark-blue checkerboard triangle
-rasterizes instead — identity pending (GE_DBGUV/GE_DBGTALL traces).
+UVs; `lookat_enabled` defaults false). **D73 resolved** — root cause of
+D72.3: sinf/cosf `du` double constants are big-endian word pairs, garbage on
+LE PC → guMtxF2L emitted −32768 for every sin/cos entry → logo triangles
+projected off-screen; DVAL() macro fix in guint.h/sinf.c/cosf.c under PORT.
+**D74 resolved** — texture import fallback no longer truncates valid
+gDPLoadBlock data (mip chains + sub-tiled textures), TextureCacheKey gains
+`size_bytes`, and the VBO path now wraps UVs by tile size for WRAP sub-tiles
+(N64 semantics). The logo now renders its four gold letters on the dark-blue
+plate (PPM-verified at frame ~555); a final pixel-perfect comparison against
+N64 reference footage is still open. **D69 remains the milestone blocker**
+(stage load).
 
-**Committed through D72**: D51–D72 fixes + TEMP diagnostics still present
-(strip list in HANDOFF Task 3); build is GREEN.
+**Committed through D74**: D51–D74 fixes; this session's TEMP probes are
+stripped, but previously committed TEMP diagnostics (D63 blocks, GE_D71LOG,
+and the older D51–D66 leftovers) are still in the tree — strip list in
+HANDOFF Task 3. Build is GREEN.
 
 ### H. Handoff & plan (current session)
 
-Full paste-ready brief: **docs/HANDOFF.md** (two live threads: D72.3
-intro-logo pixels, then D69 BG/stan stage loading). For D69:
+Full paste-ready brief: **docs/HANDOFF.md** (primary thread: D69 BG/stan
+stage loading — the milestone blocker; secondary: final pixel check of the
+now-rendering intro logo). For D69:
 reverse-engineer GE's bg .seg + Tbg_*_stanZ formats from the decompiled
 consumers (bg.c, stan.c), then choose offline sidecar conversion (Plan-B
 pattern, D43) vs runtime port-layer fixup; PD's preprocess/filebg.c is a
@@ -2243,25 +2255,28 @@ reference for the *approach* only — its BG format is different (zipped
 multi-section).
 Summary:
 
-**State.** D50–D72 resolved and verified (except D72.3, open); committed
-through the D72 milestone. The game boots, plays intro music, and renders
-the entire ~3.5-minute intro (logo → gun barrel with Brosnan → cast screen)
-at ~59 fps — logo lettering now gold-on-blue (D71/D72) but not yet visible
-(D72.3). TEMP diagnostics from the D51–D72 sessions are still in the tree
-(strip list in HANDOFF Task 3); visual-debug tooling: `GE_PCDUMP` frame
-capture, `GE_DBGUV`/`GE_DBGTALL` UV+triangle traces. Build is GREEN.
+**State.** D50–D74 resolved and verified (D73 = sinf/cosf endianness, D74 =
+texture import fallback + sub-tile UV wrap); committed through the D74
+milestone. The game boots, plays intro music, and renders the entire intro
+(logo → gun barrel with Brosnan → cast screen) — the Rareware logo now shows
+its four gold letters on the dark-blue plate (D71–D74; PPM-verified at frame
+~555, final pixel-perfect check vs N64 footage still open). TEMP diagnostics
+from earlier sessions are still in the tree (strip list in HANDOFF Task 3);
+visual-debug tooling: `GE_PCDUMP` frame capture. Build is GREEN.
 
-**Thread 1 — D72.3 (intro logo).** All logo triangles project off-screen
-(clip x=y≈−1.6e11, w<0) while a flat dark-blue (0,0,64) checkerboard
-triangle rasterizes in the lower screen; matrix-format mismatches ruled out
-(§F/D72). Next: identify the checkerboard's triangle via GE_DBGTALL, then
-verify MP matrix + viewport at logo time (title.c load_display_rare_logo).
-
-**Thread 2 — D69 (milestone blocker).** `load_bg_file` (src/game/bg.c:830)
-faults on the first stage load (BUNKER1): BG-file header words are N64
-big-endian segment-0x0F offsets; PC reads them LE, so the
+**Thread 1 — D69 (milestone blocker, now primary).** `load_bg_file`
+(src/game/bg.c:830) faults on the first stage load (BUNKER1): BG-file header
+words are N64 big-endian segment-0x0F offsets; PC reads them LE, so the
 room-fileposition-list pointer lands ~5 MB past the stack header buffer.
-Full analysis + strategy options in §F/D69.
+Full analysis + strategy options in §F/D69. This is the next milestone:
+decode the bg .seg + Tbg_*_stanZ formats, convert/fix for PC, get a stage to
+load and render.
+
+**Thread 2 — logo final check (low priority).** Compare the rendered logo
+frames (ppm/, frame ~550–560) against N64 reference footage; if any letter
+is still off, re-add a lightweight triangle/texture attribution probe (the
+D74 probes are stripped; the import sizes and sub-tile wrap are verified at
+the data level).
 
 **After D69:** get a stage to load + render (bg .seg + Tbg_*_stanZ format
 work), then continue the diagnose→fix→verify loop through gameplay; strip
@@ -2354,8 +2369,71 @@ gated by `GE_D71LOG`.
   modified variant writing the interleaved hi16/lo16 s32 Q15.16 packed format
   that gfx_sp_matrix decodes exactly (FTOFIX32=×65536); `D_8002A7D0` is a
   zero-init u32 so `[D_8002A7D0]`==`[0]`; alloc_intro_matrices() runs from
-  initmenus. Next: find the checkerboard's triangle via GE_DBGTALL, then
-  verify MP matrix + viewport at logo time (title.c load_display_rare_logo).
+  initmenus. **SUPERSEDED by D73** — the off-screen projection was never a
+  matrix-format or UV problem: guMtxF2L's sinf/cosf inputs were garbage on PC.
+
+**D73 (RESOLVED — root cause of D72.3):** GE's `sinf`/`cosf`
+(src/libultra/gu/sinf.c, cosf.c) build their double constants through the
+`du` bit-union (`{ struct { u32 hi; u32 lo; } word; double d; }`) with
+big-endian word pairs `{hi, lo}` (rpi, pihi, and the P[] polynomial tables).
+On an LE PC the `.d` read has the two words swapped: `rpi.d` ≈ 2^733,
+`pihi.d` ≈ 2^257. Range reduction then overflows: `dn = dx*rpi.d` huge →
+ROUND(dn) saturates in cvttsd2si (n = −2^31) → `dx = dx − dn*pihi.d` ≈ 2^288
+→ xsq ≈ 2^576 → the result overflows float → sinf/cosf return ±inf/NaN.
+FTOFIX32's `(int)(±inf·65536)` is another cvttss2si saturation →
+0x80000000 (−32768). Every sin/cos-derived entry of guMtxF2L became −32768,
+so the Rareware logo's guRotate matrix was garbage and all its triangles
+projected off-screen (the D72.3 symptom; the "checkerboard" was a separate
+large triangle rasterizing over the empty logo region). The logo scene is the
+first visually verifiable consumer of guMtxF2L sin/cos output in the intro;
+other scenes that build matrices via guRotate/guLookAt are affected by the
+same bug and were fixed by this change. Fix (narrow ABI exception — constant
+interpretation only, algorithm verbatim): `duD()` static-inline + `DVAL(x)`
+macro in src/libultra/gu/guint.h under #ifdef PORT re-pack hi/lo into the
+correct LE double; the 5 `.d` reads in sinf.c and 4 in cosf.c now use
+`DVAL(...)`. The N64 build is untouched (#else branch = original expression).
+Only sinf.c/cosf.c use `du` (grep-verified); `fu` (single u32) constants are
+endian-safe. Verified numerically: P decodes to the expected perspective
+matrix, Rot(−40°Y) gives clean cos=0.766/sin=−0.643, and logo vertices clip
+to small finite on-screen NDC values. (tools_pc/mtxtest.c is a standalone
+scratch harness for the matrix-convention question that was ruled out along
+the way — GE stores all matrices transposed; row-vector ≡ column pipeline.)
+
+**D74 (RESOLVED — final pixel check pending):** with D73 in, logo geometry
+was correct but the texture side was still wrong: a dim red-brown blob plus
+a flat vertical bar at the right edge, one letter visible at a time. Three
+port-layer bugs, all in port/fast3d/gfx_pc.cpp (with gfx_pc.h):
+- **Import fallback truncation.** `import_texture`'s old condition
+  `(rdp.tex_lod && tile >= rdp.first_tile_index + rdp.tex_detail) ||
+  !loaded_texture.addr` overwrote valid gDPLoadBlock tmem data with
+  `line_size_bytes * tile.height`. For the logo: letter mip chains 2744 B →
+  2048 B (mips 1–5 dropped), and D_02005FF0's 32×32 → 192 B (32×3, stale
+  tile.height=3 left by `gsDPSetTileSize(0, 46, 116, 124, 124)` in DL
+  D_02004758). Fix: fall back only when `!loaded_texture.addr` (N64 TMem is
+  persistent — a populated slot is the faithful source).
+- **Cache poisoning.** TextureCacheKey lacked the upload size, so the first
+  (truncated) import of an address poisoned every later import. Added
+  `size_bytes` to the key (gfx_pc.h + both key initializers + the bucket-only
+  aggregate in gfx_texture_cache_delete).
+- **Sub-tile UV wrap period.** N64 wraps UVs by the TILE size when a render
+  tile is a sub-region of the image; the port wrapped at the full uploaded
+  image size (GL_REPEAT). D_02004758's 20×3 tile at offset (11.5, 29)
+  therefore sampled row 0 instead of rows 29–31 — the flat bar's color
+  matched texel [0,4] of D_02005FF0 exactly. Fix: per-vertex pre-wrap in the
+  VBO path — for a WRAP sub-tile (`tex_width2 < tex_width`, where
+  `tex_width2 = (lrs−uls+4)/4` is the tile window in texels),
+  `u = fmodf(u, tw); if (u<0) u += tw; u += uls/4.0f` (same for v). Known
+  limitations: half-texel edge bleed at the sub-tile window edges (GL
+  bilinear neighbors may sample just outside [O, O+W)); mirror sub-tiles are
+  not handled (the logo doesn't use them; audit if another scene regresses).
+Verified: runtime import sizes correct (D_02005FF0 = 2048 B, imgRAre =
+2744 B); PPM frame ~555 shows the four-letter RARE band with gold/warm
+colors and per-letter segmentation; clean `GE_PCDUMP` runs are stable past
+1156 frames. Final pixel-perfect confirmation against N64 reference footage
+is still open (see HANDOFF Task 1). All env-gated probes added for D72.3/D74
+(GE_DBGUV/GE_DBGTRI/GE_DBGTALL/GE_DBGMAT/GE_D74IMP/GE_D74DUMP/GE_DBGLOAD)
+were stripped with this change; the previously committed TEMP D63 blocks and
+the GE_D71LOG normalize log remain on the HANDOFF strip list.
 
 **Non-negotiable #2 refinement (applied to AGENTS.md).** The original "game code
 compiles unmodified / fix belongs in port/" is too absolute: pointer-width layout

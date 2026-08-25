@@ -24,6 +24,21 @@ typedef union
 	double	d;
 } du;
 
+#ifdef PORT
+/* The {hi,lo} initializers of du constants are written in big-endian word
+ * order (as on the N64). On a little-endian host the .d member would read
+ * the two words swapped; re-pack them to recover the same double value. */
+static inline double duD(const du u)
+{
+	union { unsigned long long b; double d; } t;
+	t.b = ((unsigned long long)u.word.hi << 32) | (unsigned long long)u.word.lo;
+	return t.d;
+}
+#define DVAL(x)	duD((x))
+#else
+#define DVAL(x)	((x).d)
+#endif
+
 typedef union
 {
 	unsigned int	i;

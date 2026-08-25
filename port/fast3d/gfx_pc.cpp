@@ -568,7 +568,7 @@ void gfx_texture_cache_delete(const uint8_t* orig_addr) {
     }
 
     while (gfx_texture_cache.map.bucket_count() > 0) {
-        TextureCacheKey key = { orig_addr, { 0 }, 0, 0 }; // bucket index only depends on the address
+        TextureCacheKey key = { orig_addr, { 0 }, 0, 0, 0 }; // bucket index only depends on the address
         size_t bucket = gfx_texture_cache.map.bucket(key);
         bool again = false;
         for (auto it = gfx_texture_cache.map.begin(bucket); it != gfx_texture_cache.map.end(bucket); ++it) {
@@ -914,7 +914,12 @@ static void import_texture(int i, int tile, bool importReplacement) {
     const uint32_t tex_flags = loaded_texture.tex_flags;
     const uint8_t palette_index = rdp.texture_tile[tile].palette;
 
-    if ((rdp.tex_lod && tile >= rdp.first_tile_index + rdp.tex_detail) || !loaded_texture.addr) {
+    // D74: only fall back when the tmem slot was never written by a load
+    // command. The old `rdp.tex_lod && tile >= first+detail` branch also
+    // overwrote valid gDPLoadBlock data with line*tile.height, which (a) dropped
+    // mip chains and (b) truncated sub-tiled textures to the sub-tile's row
+    // count (e.g. the Rare-logo D_02005FF0 20x3 tile uploaded as 32x3).
+    if (!loaded_texture.addr) {
         // set up miplevel 0; also acts as a catch-all for when .addr is NULL because my texture loader sucks
         loaded_texture.addr = rdp.texture_to_load.addr;
         loaded_texture.line_size_bytes = rdp.texture_tile[tile].line_size_bytes;
@@ -935,9 +940,10 @@ static void import_texture(int i, int tile, bool importReplacement) {
 
     TextureCacheKey key;
     if (fmt == G_IM_FMT_CI) {
-        key = { orig_addr, { rdp.palette_addrs[0], rdp.palette_addrs[1] }, fmt, siz, palette_index };
+        key = { orig_addr, { rdp.palette_addrs[0], rdp.palette_addrs[1] }, fmt, siz, palette_index,
+                loaded_texture.size_bytes };
     } else {
-        key = { orig_addr, {}, fmt, siz, palette_index };
+        key = { orig_addr, {}, fmt, siz, palette_index, loaded_texture.size_bytes };
     }
 
     if (gfx_texture_cache_lookup(i, key)) {
@@ -1255,56 +1261,11 @@ static inline int gfx_lod_tile_offset(const int i) {
     return (rdp.tex_lod ? rdp.tex_detail : i);
 }
 
-// TEMP D72: env-gated UV pipeline logging (GE_DBGUV=1).
-static bool gfx_dbg_uv_enabled(void) {
-    static int e = -1;
-    if (e < 0) e = getenv("GE_DBGUV") != nullptr;
-    return e;
-}
-
 static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bool is_rect) {
     struct LoadedVertex* v1 = &rsp.loaded_vertices[vtx1_idx];
     struct LoadedVertex* v2 = &rsp.loaded_vertices[vtx2_idx];
     struct LoadedVertex* v3 = &rsp.loaded_vertices[vtx3_idx];
     struct LoadedVertex* v_arr[3] = { v1, v2, v3 };
-
-    // TEMP D72: GE_DBGTRI=1 — trace triangles; GE_DBGTALL=1 logs all.
-    static int dbg_tri_count = 0;
-    if (gfx_dbg_uv_enabled() && getenv("GE_DBGTALL")) {
-        float sx[3] = { v1->x / (v1->w), v2->x / (v2->w), v3->x / (v3->w) };
-        float sy[3] = { v1->y / (v1->w), v2->y / (v2->w), v3->y / (v3->w) };
-        if (dbg_tri_count++ < 4000) {
-            fprintf(stderr, "[DBGTALL] n=%d scr=(%.0f,%.0f)(%.0f,%.0f)(%.0f,%.0f) col=(%d,%d,%d,%d) clip=(%x,%x,%x)\n",
-                    dbg_tri_count, sx[0], sy[0], sx[1], sy[1], sx[2], sy[2],
-                    v1->color.r, v1->color.g, v1->color.b, v1->color.a,
-                    v1->clip_rej, v2->clip_rej, v3->clip_rej);
-        }
-    }
-    if (gfx_dbg_uv_enabled()) {
-        bool gold = false, blue = false;
-        for (int i = 0; i < 3; i++) {
-            if (v_arr[i]->color.b == 0 && v_arr[i]->color.r > 90) gold = true;
-            if (v_arr[i]->color.b > 100 && v_arr[i]->color.r < 50) blue = true;
-        }
-        if (gold || blue) {
-            float dx1 = v1->x / (v1->w) - v2->x / (v2->w);
-            float dy1 = v1->y / (v1->w) - v2->y / (v2->w);
-            float dx2 = v3->x / (v3->w) - v2->x / (v2->w);
-            float dy2 = v3->y / (v3->w) - v2->y / (v2->w);
-            if (dbg_tri_count++ < 64) {
-                fprintf(stderr, "[DBGTRI] %s cull=%d clip=(%x,%x,%x) cross=%.3f scr=(%.1f,%.1f)(%.1f,%.1f)(%.1f,%.1f) clip4=(%.0f,%.0f,%.0f,%.2f) col=(%d,%d,%d)\n",
-                        gold ? "GOLD" : "BLUE",
-                        rsp.geometry_mode & G_CULL_BOTH,
-                        v1->clip_rej, v2->clip_rej, v3->clip_rej,
-                        dx1 * dy2 - dy1 * dx2,
-                        v1->x / (v1->w), v1->y / (v1->w),
-                        v2->x / (v2->w), v2->y / (v2->w),
-                        v3->x / (v3->w), v3->y / (v3->w),
-                        v1->x, v1->y, v1->z, v1->w,
-                        v1->color.r, v1->color.g, v1->color.b);
-            }
-        }
-    }
 
     if ((rsp.extra_geometry_mode & G_NO_CLIPPING_EXT) == 0) {
         if (v1->clip_rej & v2->clip_rej & v3->clip_rej) {
@@ -1567,6 +1528,25 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             u -= rdp.texture_tile[rdp.first_tile_index + tile].uls / 4.0f;
             v -= rdp.texture_tile[rdp.first_tile_index + tile].ult / 4.0f;
 
+            // D74: N64 wraps UVs by the TILE size when a render tile is a
+            // sub-region of the image (uls/ult offset + lrs/lrt window); GL
+            // would wrap at the full uploaded image size instead. Pre-wrap per
+            // vertex (GE/PD triangles never span more than one tile period).
+            {
+                const uint32_t tw = tex_width2[i];
+                const uint32_t th = tex_height2[i];
+                if ((rdp.texture_tile[rdp.first_tile_index + tile].cms & G_TX_WRAP) && tw < tex_width[i]) {
+                    u = fmodf(u, (float)tw);
+                    if (u < 0.0f) u += (float)tw;
+                    u += rdp.texture_tile[rdp.first_tile_index + tile].uls / 4.0f;
+                }
+                if ((rdp.texture_tile[rdp.first_tile_index + tile].cmt & G_TX_WRAP) && th < tex_height[i]) {
+                    v = fmodf(v, (float)th);
+                    if (v < 0.0f) v += (float)th;
+                    v += rdp.texture_tile[rdp.first_tile_index + tile].ult / 4.0f;
+                }
+            }
+
             if (!is_rect) {
                 if (!(rdp.other_mode_h & G_TP_PERSP)) {
                     u *= 0.5f;
@@ -1582,22 +1562,6 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
 
             buf_vbo[buf_vbo_len++] = u / tex_width[t];
             buf_vbo[buf_vbo_len++] = v / tex_height[t];
-
-            // TEMP D72: GE_DBGUV=1 — log the UV pipeline per vertex, but
-            // only for C-array (logo) textures so the cap isn't exhausted.
-            if (gfx_dbg_uv_enabled() &&
-                gfx_tex_source_is_c_array(
-                    rdp.loaded_texture[rdp.texture_tile[rdp.first_tile_index + tile].tmem].addr)) {
-                static int dbg_uv_count = 0;
-                if (dbg_uv_count++ < 30000) {
-                    fprintf(stderr, "[DBGUV] v.u=%d v.v=%d shifts=%d shiftt=%d uls=%d ult=%d -> u=%.4f v=%.4f (tex %dx%d)\n",
-                            v_arr[i]->u, v_arr[i]->v, shifts, shiftt,
-                            rdp.texture_tile[rdp.first_tile_index + tile].uls,
-                            rdp.texture_tile[rdp.first_tile_index + tile].ult,
-                            u / tex_width[t], v / tex_height[t],
-                            tex_width[t], tex_height[t]);
-                }
-            }
 
             bool clampS = tm & (1 << 2 * t);
             bool clampT = tm & (1 << (2 * t + 1));

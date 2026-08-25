@@ -25,6 +25,10 @@ struct TextureCacheKey {
     const uint8_t* palette_addrs[2];
     uint8_t fmt, siz;
     uint8_t palette_index;
+    // D74: the same source address can be loaded with different sizes
+    // (gDPLoadBlock mip chains vs partial loads); include the size so a
+    // truncated first import cannot poison later full imports.
+    uint32_t size_bytes;
 
     bool operator==(const TextureCacheKey&) const noexcept = default;
 
