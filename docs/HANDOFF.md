@@ -15,8 +15,9 @@ is the summary + the immediate tasks._
 - **Secondary (low priority):** final pixel check of the intro logo. D73 +
   D74 fixed it at the data level and PPM frames ~550–560 show four gold
   letters on the dark-blue plate; compare against N64 reference footage if
-  time allows (reference screenshots are at repo root: `Graphics Screenshot
-  2026-08-24 121659.jpg`, `gun barrel.png`).
+  time allows (N64 reference footage screenshots are in `docs/reference/`:
+  `n64-footage-2026-08-24.jpg`, `n64-footage-gun-barrel.png`; captured with
+  the local Mupen64 checkout in `tools_pc/mupen64/`, gitignored).
 - Work agentically: decode → implement → build (~5 s) → verify → commit at
   each sub-milestone (document findings as D7x in §F).
 
@@ -50,6 +51,29 @@ is the summary + the immediate tasks._
   mis-rebased room-fileposition pointer).
 - **Committed through D74.** This session's TEMP probes are all stripped;
   previously committed TEMP diagnostics remain — strip list in Task 3.
+
+## Known issues — open (reported this session; tracked in PCPortResearch.md §F as D75–D77)
+
+Not part of the D69 task, but reported alongside it and **not yet root-caused** (OPEN):
+
+- **D75 (HIGH):** 3D rendering still wrong — Nintendo logo misplacement + intro cutscene
+  player models absent (Rareware logo is fine). Suspected D73 matrix-path scope gap *or* a
+  separate model/RW-pool bug (cf. D56) — the 75a/75b split must be decided first.
+- **D76 (MED):** 2D partial draw — disclaimer screen shows only "game classification" + one
+  line. Suspected incomplete D68 image-table fixup for some entries this screen references.
+- **D77 (LOW):** no audible music on PC despite a clean audio thread. Suspected SDL device /
+  mixer not wired up (distinct from D54/D54b, which only stopped crashes).
+
+**Prioritization guidance (owner, this session):**
+- **D69 (BUNKER1 `load_bg_file` crash) stays the primary milestone task** — do not let the
+  D75–D77 visual/audio items displace it.
+- Among D75–D77: **rendering (D75) is prioritized over audio (D77)** on the assumption the
+  render pipeline is the harder/riskier PC-port work and audio is simpler.
+- **Exception:** first spend one check on Q1 (shared root cause across audio + rendering). If a
+  single blocker affects both, resolve it before splitting effort. Evidence so far says they are
+  independent subsystems → default to render-first.
+- Each fix remains a narrow `#ifdef PORT` ABI/endianness exception documented as its own D7x
+  finding when resolved (N64 build untouched; game logic unmodified).
 
 ## The blocker, precisely (D69)
 
@@ -146,9 +170,9 @@ are already stripped. Previously committed TEMP diagnostics still in the tree
   n64stubs.c, libultra.c, romdata.c: leftover TEMP blocks from D51–D66
   (decide per item; D60's DMA target validation is a permanent safety net and
   should stay).
-- Scratch files at repo root: `run_*.log`, `d62mesg.log`, `all.txt`, `b3.c`,
-  `btest*.c`, `buildtest.txt`, `err.txt`, `gcout.txt`, `preproc.txt`,
-  `vsize.c/.exe`, `scratch-logs/` — delete (add to .gitignore if they recur).
+- Scratch files at repo root (`run_*.log`, `all.txt`, `b3.c`, `buildtest.txt`,
+  etc. from earlier sessions) have been deleted; if new scratch files appear,
+  delete them before committing (patterns are already in .gitignore).
 
 ## Standing procedure (per AGENTS.md)
 

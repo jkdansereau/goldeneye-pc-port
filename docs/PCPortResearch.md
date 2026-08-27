@@ -2435,6 +2435,54 @@ is still open (see HANDOFF Task 1). All env-gated probes added for D72.3/D74
 were stripped with this change; the previously committed TEMP D63 blocks and
 the GE_D71LOG normalize log remain on the HANDOFF strip list.
 
+**D75 (OPEN: 3D rendering — Nintendo logo misplacement + missing intro player models).**
+Post-D74 the Rareware logo is correct (gold letters on dark blue), but two other intro 3D
+elements are still wrong: the **Nintendo logo is not placed correctly**, and the **intro
+cutscene player models do not appear at all**. Two candidate causes — distinguish before
+any fix:
+- **(a) D73 scope gap.** D73 (`DVAL()` in `src/libultra/gu/guint.h`, PORT-only) was
+  documented as fixing *"all scenes using guRotate/guLookAt-derived matrices … not just the
+  logo."* If these elements still fail, either their matrix path bypasses that fix or a
+  second coordinate defect remains.
+- **(b) Separate model/RW-pool path.** The player models specifically may be on the
+  `animInit` + embedded raw-offsets-into-`struct player` path (cf. D56), which is *not* the
+  guMtxF2L sin/cos path — i.e. an independent bug, not "the same coordinate issue."
+
+Files to check: `src/libultra/gu/guint.h`, `src/game/model.c`, `bondview2.c` (animInit /
+modelSetScale sites), `port/fast3d/gfx_pc.cpp`. Verify: determine whether the Nintendo logo
+and intro player models build matrices via guRotate/guLookAt (→ 75a) or another transform
+(→ 75b); capture `GE_PCDUMP` frames across the logo transition and the gun-barrel/cast
+segments to localize.
+
+**D76 (OPEN: 2D graphics — disclaimer/legal screen only partially drawn).**
+On the opening disclaimer (legal text) screen, only the **"game classification"** line and
+**one line below it** draw correctly; the rest of the 2D graphics do not render. Likely the
+same image-table/endianness class as D68 but incomplete: D68 (`port/src/gimgfixup.c`) bswaps
+IMAGESEG Gfx w1 words + `sImageTableEntry.index` after texReset's romCopy and syncs compiled
+globalDL shadows — if a subset of the entries this screen references is missed (or its shadow
+not synced), exactly this "only a couple of lines render" symptom results. Secondary
+possibility: D74 sub-tile UV wrapping, if those lines use WRAP sub-tiles (was 3D-logo
+specific, so lower likelihood). Files to check: `port/src/gimgfixup.c`, `src/game/tex.c`, the
+image-table consumers. Verify: enumerate the image entries the disclaimer screen references and
+confirm each is covered by the D68 fixup; PPM frames f20–f100 (legal-text window per the D70
+timeline).
+
+**D77 (OPEN: audio — music runs in code but no audible output on PC).**
+Intro music is processed without fault, but **nothing reaches the PC speakers.** This is
+distinct from the earlier audio work: D54/D54b only stopped the audio-thread SIGSEGVs
+(`__getTrackByte`, `alLoadParam`); they do not imply the mixed output is routed to a device.
+Per §6 Audio the intended path is libaudio (CPU synth) → PD's `audio.c` (SDL device) +
+`mixer.c`; the likely gap is that the SDL audio device / mixer queue is never opened or fed —
+synthesis runs but the AI-DMA→device handoff never happens. Files to check: `port/src/audio.c`,
+`port/src/mixer.c`, `src/audi.c` (`OUTPUT_RATE`), and the AI shim in `port/src/libultra.c`.
+Verify: confirm an SDL audio device is opened and the mix buffer is written/pushed; check
+`OUTPUT_RATE` match (PD = 22020 Hz stereo s16) and that the AI-DMA shim feeds it.
+
+**Cross-cutting (Q1 — shared blocker?):** before ordering D75 vs D77, spend one check on whether
+any single root cause touches both audio and rendering. Current evidence says **independent**
+(audio = libaudio→SDL device; 3D = fast3d RSP emulation; 2D = image-table fixup + texture
+import) — default to render-first if no shared cause is found.
+
 **Non-negotiable #2 refinement (applied to AGENTS.md).** The original "game code
 compiles unmodified / fix belongs in port/" is too absolute: pointer-width layout
 cannot be isolated in `port/` (no hook between the romCopy and the first read).
