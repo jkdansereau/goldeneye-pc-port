@@ -125,6 +125,9 @@ ge007.crash.log
 .pi/
 run_out.log
 ppm/
+screenshots/
+# local Mupen64 Plus checkout (N64 reference footage); binaries, do not commit
+tools_pc/mupen64/
 
 # PC port run/scratch logs
 run_*.log

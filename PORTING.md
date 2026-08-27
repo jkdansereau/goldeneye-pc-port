@@ -8,9 +8,10 @@ It follows the approach of the
 [Perfect Dark PC port](https://github.com/perfect-dark-pc-port/perfect_dark),
 which ports the same Rare "Indy" engine (a later revision).
 
-> **Status: scaffolding.** The directory structure, build system, and port-layer
-> interfaces are in place. The actual implementation is being brought in phase
-> by phase. See below.
+> **Status: Phase 2 (rendering) in progress.** The game boots on PC, plays the
+> intro music, and renders the entire intro (logo → gun barrel → cast);
+> the current blocker is first stage load (BG-file endianness, finding D69).
+> Current session state and immediate tasks: **[docs/HANDOFF.md](docs/HANDOFF.md)**.
 
 ## Read this first
 
@@ -45,23 +46,23 @@ docs/PCPortResearch.md
 
 The N64 build (`Makefile`, `tools/`, `rsp/`, etc.) is **untouched**.
 
-## Building (once implementation lands)
+## Building
 
 ```sh
 ./build-pc.sh ntsc-final     # or pal-final / jpn-final
 ```
 
-Then put your ROM in `./data/` and run the binary. (The ROM is not
-distributed; you must own the game.)
+Then put your ROM in `./data/` and run the binary from the repo root.
+(The ROM is not distributed; you must own the game.)
 
 ## Phased plan (summary)
 
-| Phase | Goal |
-|-------|------|
-| 0 | Scaffolding (this change) |
-| 1 | Boot to a window: system/fs/rom/config/video + OS shims |
-| 2 | Rendering: bring in fast3d, add `G_SETTEX`, port scheduler |
-| 3 | Audio + input |
-| 4 | Saves + polish (widescreen, mouse-look, FPS, config) |
+| Phase | Goal | Status |
+|-------|------|--------|
+| 0 | Scaffolding: build system + port-layer interfaces | done |
+| 1 (+1.5) | Boot to window / first frame: ROM map, OS shims, ABI reconciliation | done |
+| 2 | Rendering: fast3d software RSP, asset conversion/fixups | **in progress** (full intro renders; stage load = D69) |
+| 3 | Audio + input (SDL device, mixer, gamepad) | not started |
+| 4 | Saves + polish (file-backed EEPROM, widescreen, config) | not started |
 
 Details and risks: [docs/PCPortResearch.md §8–9](docs/PCPortResearch.md).
