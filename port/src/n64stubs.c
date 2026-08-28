@@ -93,7 +93,17 @@ void tlbmanageTranslateLoadRomFromTlbAddress(u32 address)
 }
 u8 (*tlbmanageGetTlbAllocatedBlock(void))[TLB_BLOCK_SIZE]
 {
-    return (u8 (*)[TLB_BLOCK_SIZE])0x702F4400;
+    /* D95: the N64-fidelity ceiling is 0x702F4400 (see above). On PC the
+     * game's structs are larger everywhere (16-byte Gfx, 24-byte struct tex,
+     * pointer-widened records...) so the same per-level -m* budget no longer
+     * fits — MEMPOOL_STAGE OOMs (zbufAllocate spins in mempAllocBytesInBank).
+     * There is ~5 MB of live, mapped, otherwise-unused DRAM between the N64
+     * ceiling and the top of the 8 MB region (only animations_frame_buffer
+     * lives up there, at 0x707FFD30). Reclaim ~4 MB of it for the mempool
+     * area; the extra goes to MEMPOOL_STAGE (boss.c:218 gives STAGE
+     * everything that isn't the fixed PERMANENT bank). Stays well clear of
+     * animations_frame_buffer. */
+    return (u8 (*)[TLB_BLOCK_SIZE])0x70700000;
 }
 
 /* --- K&R libc helpers (IDO provided these; the host libc does not) ------- */
