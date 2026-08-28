@@ -33,16 +33,22 @@ stream-decode + texture-pool layers of D85 are done.
 **D94 fixed (`63204a27`)** the one deterministic pointer bug in that
 cluster — `chrlvInitActAttack`'s `(s32)`-truncated anim-table index.
 
-**The remaining blocker is D95 (OPEN): the `-mgfx` master-DL buffer is
-half-capacity on PC** (16-byte `Gfx` vs N64 8-byte, same byte budget).
-The frame GDL overruns → non-deterministic fault at `0x70800000` (top of
-8 MB DRAM), corrupting other GDLs on the way (the run-to-run "Unknown GBI
-opcode" / seg-9 `0x90000000` faults are all downstream of this). Doubling
-`g_GfxBuffers` stops the overrun (90 s+ clean) **but OOMs `MEMPOOL_STAGE`**
-(zbuf alloc spins in `mempAllocBytesInBank` `while(1)`, `frames=0`).
-Committed `70784f80`, reverted `2a506284`. Fix options in
-`PCPortResearch.md` §F "D95" — the cleanest is likely to `malloc`
-`g_GfxBuffers` on PC (pure CPU-side GBI scratch, outside the N64 pool).
+**D95 (partly addressed):** the `-mgfx` master-DL buffer was half-capacity
+on PC (16-byte `Gfx`). `f35eba91` doubles `g_GfxBuffers`; `933ba52b`
+raises the PC mempool ceiling (`n64stubs.c` `tlbmanageGetTlbAllocatedBlock`
+`0x702F4400 → 0x70700000`, reclaiming ~4 MB of otherwise-unused DRAM) so
+the bigger buffer doesn't OOM `MEMPOOL_STAGE`. `-level_09` now **renders
+~5 frames**.
+
+**Current blocker: a RUNAWAY GDL append at ~frame 5.**
+`bgScissorCurrentPlayerView` (`bg.c:1355`) faults writing at `0x70800000`
+(top of DRAM) — the `gdl` pointer marched off the end. Deterministic at
+~frame 5 **regardless of `-mgfx` size** → a runaway loop, not a
+buffer-size issue. Path: `chrpropsRenderPass` (`chrprop.c:568`) after its
+`chrpropRender(gdl, prop, …)` prop loop — i.e. character/prop model
+rendering, ~when guards finish spawning. Probably the D75(b) animated-
+model path, now reachable in-level. Full analysis: `PCPortResearch.md`
+§F "D95" / "Current blocker".
 
 `data/` was accidentally deleted + fully regenerated this session — if it
 looks wrong, `cp baserom.u.z64 data/ge007.ntsc-final.z64` then rerun

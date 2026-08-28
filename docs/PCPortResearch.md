@@ -3152,19 +3152,38 @@ allocation (`* sizeof(Gfx)/8`) under PORT **stops the overrun** (verified:
 `mempAllocBytesInBank` (`memp.c:204`) spins in its OOM `while(1)` and no
 frame ever renders (`kernel heartbeat: frames=0`; mainThread stuck in
 `lvlRender`→`viClearZBufCurrentPlayer`→`zbufInit`). Committed as
-`70784f80` then **reverted (`2a506284`)**. Real fix options, in rough
-order of cleanliness: (a) allocate `g_GfxBuffers` (and only that — it is
-pure CPU-side GBI scratch that `gfx_run` walks by raw pointer) with plain
-`malloc` on PC instead of from `MEMPOOL_STAGE` — verify nothing does
-`osVirtualToPhysical` on a `gdl` pointer first (`rspGfxTaskStart` PORT
-path sets `task->t.data_ptr = firstGdl` directly, looks safe); (b) enlarge
-the emulated DRAM (`port/src/dram.c` `DRAM_SIZE 0x00800000`) and move the
-`tlbmanageGetTlbAllocatedBlock` ceiling so `MEMPOOL_STAGE` (bounded
-`_bssSegmentEnd .. TLB block`, `boss.c:218`) gains the room; (c) a
-safety-net cap in the append path (a lot of call sites — least clean).
-Also: `struct tex` headers are 24 B vs 16 B on PC (texpool-triage finding)
-— same class, same pool pressure; a real memory-budget pass for the PC
-port would address both.
+`70784f80`, reverted `2a506284`, **re-applied `f35eba91`** alongside the
+mempool-ceiling fix below.
+
+**`malloc`-the-gfx-buffer is NOT viable** — `osVirtualToPhysical` /
+`OS_K0_TO_PHYSICAL` in the port `(u32)`-truncate and subtract
+`0x70000000`, so any pointer that flows through them (sub-DL branches
+built in the gfx buffer, etc.) must live in the `0x70000000` DRAM window.
+
+**Mempool ceiling fix (`933ba52b`, kept).** `port/src/n64stubs.c`'s
+`tlbmanageGetTlbAllocatedBlock` returned the N64-fidelity ceiling
+`0x702F4400`, leaving ~5 MB of live mapped DRAM unused below the 8 MB top
+(only `animations_frame_buffer` @ `0x707FFD30` up there). Raised to
+`0x70700000`; the ~4 MB gain goes to `MEMPOOL_STAGE` (`boss.c:218`). This
++ the re-applied 2x `g_GfxBuffers` removes the OOM hang: `-level_09` now
+**renders ~5 frames** (`frame N rendered` logs, VI posts climbing).
+
+**Current blocker: a RUNAWAY GDL append at ~frame 5, in the prop-render
+path.** `bgScissorCurrentPlayerView` (`bg.c:1355`, `gDPSetScissor(arg0++)`)
+faults writing at `0x70800000` (top of DRAM) — the `gdl` write pointer
+has marched off the end. **Deterministically at ~frame 5, regardless of
+`-mgfx` (tested to 1.6 MB/half)** → not a buffer-size problem, a runaway
+loop. Reached via `chrpropsRenderPass` (`chrprop.c:568` `return
+bgScissorCurrentPlayerViewDefault(gdl)`) after its prop loop
+(`chrprop.c:488` / `533`) calls `chrpropRender(gdl, prop, …)` many times.
+Frame 5 is about when guards/props finish spawning and their (animated,
+skeletal) models first render — this likely IS the D75(b) animated-model
+path breaking, now reachable in-level. Next: probe `gdl` advance per
+`chrpropRender` call / per prop in `chrpropsRenderPass`; a single prop
+with a bad model/anim pointer, or `g_LastOnScreenProp` garbage, or a
+per-node model-GDL walk without a terminator, would do it. `struct tex`
+headers are also 24 B vs 16 B on PC (texpool-triage) — same pool-pressure
+class; a real PC memory-budget pass should cover both.
 
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
