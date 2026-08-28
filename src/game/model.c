@@ -2838,7 +2838,17 @@ void modelSetAnimEndFrame(Model *model, f32 endframe) {
 }
 
 void modelSetAnimFlipFunction(Model *model, void *callback) {
+#ifdef PORT
+    /* D99: `animflipfunc` is an s32 field and is only ever set to
+     * bheadFlipAnimation (initBondDATAdefaults.c, bondhead.c -- both for
+     * g_CurrentPlayer->model). Storing a 64-bit fn pointer truncates it and
+     * the indirect call in modelTickAnim jumps to 0x00010100. Same pattern as
+     * D92/unka0: store a flag, call bheadFlipAnimation directly at the one
+     * call site. */
+    model->animflipfunc = (callback != NULL);
+#else
     model->animflipfunc = callback;
+#endif
 }
 
 
@@ -3529,9 +3539,25 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
                     frame2 = frame;
                     frame = loopframe + frame - limit;
 
-                    if (model->animflipfunc != 0) 
+                    if (model->animflipfunc != 0)
                     {
+#ifdef PORT
+                        /* D99: `animflipfunc` is a 32-bit Model field holding a
+                         * function pointer -- always bheadFlipAnimation (the
+                         * only value modelSetAnimFlipFunction is ever handed:
+                         * initBondDATAdefaults.c:198, bondhead.c:430, both for
+                         * g_CurrentPlayer->model). The (int)truncation drops the
+                         * 0x140000000 module base -> the indirect call jumps to
+                         * 0x00010100 and faults. Same fix pattern as D92/unka0:
+                         * the field stays a truncated-nonzero flag and the one
+                         * call is made directly. */
+                        {
+                            extern void bheadFlipAnimation(void);
+                            bheadFlipAnimation();
+                        }
+#else
                         ((void (*)(void))model->animflipfunc)();
+#endif
                     }
                 }
             }
