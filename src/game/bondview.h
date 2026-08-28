@@ -256,6 +256,22 @@ struct hand
   s32 field_C04;
   s32 volley;  // Number of bullets discharged in a row. For pistols, it's always 1 even if the fire button is held.
   coord3d item_related;
+#ifdef PORT
+  /* D102: the 1st-person weapon model is punned onto `field_B68` and its
+   * RW-data pool onto `modeldatas` (a fixed run at field_B68+0x20). On N64
+   * `sizeof(struct Model)` is ~0xBC and the modelInit()-written header fields
+   * (obj, datas, scale, attachedto...) sit at 4-byte offsets clear of the
+   * pool at +0x20. On x86-64 `struct Model` is 0xE8 (pointer fields widened
+   * 4->8): modelInit() then writes `objinst->datas` (offset 0x20) directly
+   * ONTO `&hand->modeldatas`, so the field and the pool base alias, and the
+   * first rwdata record written by modelInitRwData() clobbers `objinst->datas`
+   * back to garbage (bit 32 set -> modelGetNodeRwData returns 0x1_xxxxxxxx ->
+   * modelInitRwData faults). `objinst->obj` (0x10) likewise lands on
+   * `hand->mtxlist`. Give the model and its pool real, non-overlapping
+   * storage. Same class as D53.2 (watch) / D100 (player gait model). */
+  struct Model weaponModel;
+  u32 weaponRwPool[192]; /* N64 pool was 32 words; PC RW records ~2x */
+#endif
 };
 
 typedef struct InvItem {

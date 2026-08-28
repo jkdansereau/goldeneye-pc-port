@@ -37,6 +37,18 @@
 #include "stan.h"
 #include "gbi_extension.h"
 
+#ifdef PORT
+/* D102: the 1P weapon Model and its RW-data pool were punned onto
+ * hand->field_B68 / hand->modeldatas; on x86-64 struct Model (0xE8) is too
+ * big for that layout and modelInit() aliases objinst->datas onto the pool
+ * base. Use the dedicated struct hand fields (see bondview.h). */
+#define HAND_WEAPON_MODEL(h)   (&(h)->weaponModel)
+#define HAND_WEAPON_RWPOOL(h)  ((s32 *)(h)->weaponRwPool)
+#else
+#define HAND_WEAPON_MODEL(h)   ((Model *)&(h)->field_B68)
+#define HAND_WEAPON_RWPOOL(h)  ((s32 *)&(h)->modeldatas)
+#endif
+
 
 #ifdef REFRESH_PAL
 #define THROWN_ITEM_REFRESH_RATE 50
@@ -612,11 +624,11 @@ void gunUpdateAndFire(GUNHAND handnum)
                 osSyncPrintf("Increase GUNSAVESIZE to %d!!! ", mdlhdr->numRecords);
         }
 #endif
-        model = (Model *) (&hand->field_B68);
+        model = HAND_WEAPON_MODEL(hand);
 
         if (mdlhdr->Switches);
 
-        modelInit(model, mdlhdr, (s32 *) (&hand->modeldatas));
+        modelInit(model, mdlhdr, HAND_WEAPON_RWPOOL(hand));
         sub_GAME_7F05E978(model, 1);
         sub_GAME_7F05EA94(model, hand->field_87E);
         node = mdlhdr->Switches[1];
@@ -625,7 +637,7 @@ void gunUpdateAndFire(GUNHAND handnum)
         {
             if (&node->Data->Switch);
 
-            flashvisptr = ((s32 *) (&hand->modeldatas)) + node->Data->Switch.RwDataIndex;
+            flashvisptr = HAND_WEAPON_RWPOOL(hand) + node->Data->Switch.RwDataIndex;
         }
 
         if (mdlhdr->Switches[3] != NULL)
@@ -634,6 +646,11 @@ void gunUpdateAndFire(GUNHAND handnum)
         }
 
         hand->mtxlist = rwmtx;
+#ifdef PORT
+        /* D102: on N64 hand->mtxlist (field_B68+0x0C) aliases the punned
+         * model's render_pos; with weaponModel in its own storage, set it. */
+        HAND_WEAPON_MODEL(hand)->render_pos = (RenderPosView *)rwmtx;
+#endif
 
         if ((bondwalkItemCheckBitflags(item, WEAPONSTATBITFLAG_MIRROR_DUAL) != 0) && (handnum == GUNLEFT))
         {
@@ -1518,11 +1535,11 @@ void gunRenderFirstPersonGunModels(Gfx **gdlptr)
  
         gSPPerspNormalize(gdl++, matrix_4x4_calc_depth_scale(0.0f, 300.0f));
  
-        if ((*(Model *)&handptr->field_B68).obj->numSwitches >= 0x11 && (*(Model *)&handptr->field_B68).obj->Switches[16] != NULL)
+        if ((*HAND_WEAPON_MODEL(handptr)).obj->numSwitches >= 0x11 && (*HAND_WEAPON_MODEL(handptr)).obj->Switches[16] != NULL)
         {
             union ModelRwData *rwdata;
-            model = (Model *)&handptr->field_B68;
-            rwdata = modelGetNodeRwData(model, (*(Model *)&handptr->field_B68).obj->Switches[17]);
+            model = HAND_WEAPON_MODEL(handptr);
+            rwdata = modelGetNodeRwData(model, (*HAND_WEAPON_MODEL(handptr)).obj->Switches[17]);
  
             if (rwdata != NULL) 
             {
@@ -1532,11 +1549,11 @@ void gunRenderFirstPersonGunModels(Gfx **gdlptr)
             if (item == ITEM_ROCKETLAUNCH) 
             {
                 save_img_index_to_obj_ani_slot(&g_UnknownAnimController, crosshairimage);
-                gdl = process_monitor_animation_microcode(model, (*(Model *)&handptr->field_B68).obj->Switches[16], &g_UnknownAnimController, gdl, 0, 4);
+                gdl = process_monitor_animation_microcode(model, (*HAND_WEAPON_MODEL(handptr)).obj->Switches[16], &g_UnknownAnimController, gdl, 0, 4);
             } 
             else 
             {
-                gdl = process_monitor_animation_microcode(model, (*(Model *)&handptr->field_B68).obj->Switches[16], &g_TaserAnimController, gdl, 0, 1);
+                gdl = process_monitor_animation_microcode(model, (*HAND_WEAPON_MODEL(handptr)).obj->Switches[16], &g_TaserAnimController, gdl, 0, 1);
             }
         }
  
@@ -1577,7 +1594,7 @@ void gunRenderFirstPersonGunModels(Gfx **gdlptr)
             }
         }
  
-        subdraw(&renderdata, (Model *)&handptr->field_B68);
+        subdraw(&renderdata, HAND_WEAPON_MODEL(handptr));
         gdl = renderdata.gdl;
  
         if (bondwalkItemCheckBitflags(item, WEAPONSTATBITFLAG_MIRROR_DUAL) != 0) 
@@ -1585,7 +1602,7 @@ void gunRenderFirstPersonGunModels(Gfx **gdlptr)
             gSPClearGeometryMode(gdl++, G_CULL_BOTH);
         }
  
-        bondviewTransformManyPosToViewMatrix((*(Model *)&handptr->field_B68).render_pos, (*(Model *)&handptr->field_B68).obj->numMatrices);
+        bondviewTransformManyPosToViewMatrix((*HAND_WEAPON_MODEL(handptr)).render_pos, (*HAND_WEAPON_MODEL(handptr)).obj->numMatrices);
         matrix_4x4_7F058C88();
  
         gSPPerspNormalize(gdl++, viGetPerspNorm());
