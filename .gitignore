@@ -133,3 +133,6 @@ tools_pc/mupen64/
 run_*.log
 d6*.log
 ge007.crash.log
+
+# Claude Code local state / agent worktrees
+.claude/
