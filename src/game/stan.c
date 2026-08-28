@@ -2412,6 +2412,22 @@ s32 stanTileDistanceRelated(StandTile **arg0, f32 arg1, f32 arg2, f32 arg3, stru
 {
     s32 i;
 
+#ifdef PORT
+    /* D90: the N64 "HACK" loop below zero-fills 20 s32 words (80 bytes)
+     * starting at arg4 -- far past sizeof(StandTileLocusCallbackRecord)
+     * (16B on N64). On N64 the overrun landed in adjacent stack scratch and
+     * was harmless; on PC the frame layout differs (and locals are pointer-
+     * widened), so the fill clobbered the caller's live stan-tile local --
+     * the walk then started from NULL and faulted in stanIsSpecialBit1Set.
+     * Every consumer of this record only touches the 4 named fields
+     * (cf. sub_GAME_7F0B21B0, which inits them one by one), so clearing
+     * exactly the record is behaviour-preserving. */
+    (void)i;
+    arg4->rooms = NULL;
+    arg4->count = 0;
+    arg4->bufMax = 0;
+    arg4->nearEdgeCount = 0;
+#else
     // HACK:
     for(i=0;;)
     {
@@ -2422,6 +2438,7 @@ s32 stanTileDistanceRelated(StandTile **arg0, f32 arg1, f32 arg2, f32 arg3, stru
         i+=4;
         if (i>15) break;
     }
+#endif
 
     // maybe something like:
     /*

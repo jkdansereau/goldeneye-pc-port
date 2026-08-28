@@ -1,4 +1,8 @@
 #include <ultra64.h>
+#ifdef PORT
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 #include <math.h>
 #include <bondtypes.h>
 #include <boss.h>
@@ -2116,6 +2120,19 @@ s32 bondviewTryMoveToStan(struct coord3d *arg0, StandTile **stan)
     else
     {
         sp90 = g_CurrentPlayer->field_488.current_tile_ptr;
+
+#ifdef PORT
+        if (sp90 == NULL && getenv("GE_D90")) {
+            static int d90n = 0;
+            if (d90n++ < 8)
+                fprintf(stderr, "D90 bondviewTryMoveToStan: current_tile_ptr NULL "
+                        "(prop=%p prop->stan=%p ctp4p=%p pos=%.1f,%.1f,%.1f)\n",
+                        (void *)g_CurrentPlayer->prop,
+                        (void *)(g_CurrentPlayer->prop ? g_CurrentPlayer->prop->stan : NULL),
+                        (void *)g_CurrentPlayer->field_488.current_tile_ptr_for_portals,
+                        arg0->f[0], arg0->f[1], arg0->f[2]);
+        }
+#endif
 
         if (obj_collision_flag)
         {

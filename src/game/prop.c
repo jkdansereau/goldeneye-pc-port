@@ -1387,6 +1387,15 @@ void proplvreset2(enum LEVELID stageId)
 #else
                 init_pathtable_something(pad, pad->plink, &pad->stan);
 #endif
+#ifdef PORT
+                if (getenv("GE_D90")) {
+                    fprintf(stderr, "D90 pad idx=%d plink=%s pos=%.1f,%.1f,%.1f stan=%p%s\n",
+                            (s32)(pad - g_CurrentSetup.pads),
+                            pad->plink ? (char *)pad->plink : "(null)",
+                            pad->pos.f[0], pad->pos.f[1], pad->pos.f[2],
+                            (void *)pad->stan, pad->stan ? "" : "  <-- NULL");
+                }
+#endif
 
                 if (1);
             }

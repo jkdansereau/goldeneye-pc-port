@@ -1,4 +1,8 @@
 #include <ultra64.h>
+#ifdef PORT
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 #include <memp.h>
 #include <bondconstants.h>
 #include <boss.h>
@@ -182,6 +186,15 @@ void bondviewLoadSetupIntroSection(void)
                         && (check_ramrom_flags() == ((struct SetupIntroSpawn*)intro_record)->is_demo_playback))
                     {
                         g_Startpad[startpadcount] = &g_CurrentSetup.pads[((struct SetupIntroSpawn*)intro_record)->index];
+#ifdef PORT
+                        if (getenv("GE_D90")) {
+                            struct SetupIntroSpawn *sp = (struct SetupIntroSpawn *)intro_record;
+                            fprintf(stderr, "D90 SPAWN slot=%d padidx=%d is_demo=%d ramrom=%d stan=%p\n",
+                                    startpadcount, sp->index, sp->is_demo_playback,
+                                    check_ramrom_flags(),
+                                    (void *)g_Startpad[startpadcount]->stan);
+                        }
+#endif
                         startpadcount++;
                     }
 
@@ -457,6 +470,13 @@ void bondviewLoadSetupIntroSection(void)
         g_CurrentPlayer->bondprevpos.f[2] = start_pos.f[2];
 
     g_CurrentPlayer->prop->stan = start_stan;
+#ifdef PORT
+    if (getenv("GE_D90"))
+        fprintf(stderr, "D90 spawn: startpadcount=%d rand_pad_index=%d start_stan=%p prop=%p pos=%.1f,%.1f,%.1f\n",
+                startpadcount, rand_pad_index, (void *)start_stan,
+                (void *)g_CurrentPlayer->prop,
+                start_pos.f[0], start_pos.f[1], start_pos.f[2]);
+#endif
 
     chrpropActivate(g_CurrentPlayer->prop);
     chrpropEnable(g_CurrentPlayer->prop);
