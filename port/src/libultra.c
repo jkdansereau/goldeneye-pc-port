@@ -950,14 +950,36 @@ u32  osPiGetStatus(void) { return 0; } /* not busy */
 
 /*
  * PI device register read (normally src/libultra/io, EXCLUDED). token.c uses
- * it to read the cartridge token string. On the PC there is no cartridge
- * token register; return 0 (no token) so the game proceeds with an empty
- * token.
+ * it to read the cartridge token string in 32-bit words starting at
+ * 0xFFB000. On the PC there is no cartridge token register, so serve the
+ * bytes of the host command line (sysGetTokenString) instead — this makes
+ * N64 debug switches like "-level_09" / "-hard1" work on PC. Each word is
+ * packed so byte N of the string lands at the lower address (matches the
+ * N64's in-order byte delivery once read back through the char buffer).
+ * Any other address reads as 0.
  */
+#define PORT_TOKEN_IO_BASE 0xFFB000u
+
 s32 osPiReadIo(u32 devAddr, u32 *data)
 {
-    (void)devAddr;
-    if (data) *data = 0;
+    if (!data)
+        return 0;
+
+    if (devAddr >= PORT_TOKEN_IO_BASE &&
+        devAddr < PORT_TOKEN_IO_BASE + 0x1000) {
+        const char *tok = sysGetTokenString();
+        u32 off = devAddr - PORT_TOKEN_IO_BASE;
+        u32 len = (u32)strlen(tok);
+        u32 w = 0;
+        for (u32 i = 0; i < 4; ++i) {
+            u8 c = (off + i < len) ? (u8)tok[off + i] : 0;
+            w |= (u32)c << (8 * i);
+        }
+        *data = w;
+        return 0;
+    }
+
+    *data = 0;
     return 0;
 }
 

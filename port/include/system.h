@@ -59,6 +59,10 @@ void sysSetArgs(int argc, char **argv);
 int  sysArgCheck(const char *arg);
 /* Value following the given argument on the command line, or NULL. */
 const char *sysArgGetString(const char *arg);
+/* The host argv[1..] joined with spaces, as the game's "cartridge token
+ * string" (see token.c / osPiReadIo). Lets N64 debug args like "-level_09"
+ * work on PC. Never NULL; empty string if no args. */
+const char *sysGetTokenString(void);
 
 /* --- CPU ---------------------------------------------------------------- */
 

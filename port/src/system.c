@@ -141,6 +141,34 @@ const char *sysArgGetString(const char *arg)
     return NULL;
 }
 
+const char *sysGetTokenString(void)
+{
+    /* The N64 build reads a "token string" of debug switches (-level_XX,
+     * -hardN, -m..., -d, -s, -j) from a cartridge register via osPiReadIo.
+     * On PC there is no such register, so synthesise the same string from
+     * the host command line: argv[1..] joined with single spaces. The N64
+     * buffer is 60 bytes (G_TOKEN_STRING_LEN words); keep well inside it. */
+    static char buf[256];
+    static int  built = 0;
+
+    if (!built) {
+        size_t n = 0;
+        buf[0] = '\0';
+        for (int i = 1; i < g_argc && g_argv[i]; ++i) {
+            size_t len = strlen(g_argv[i]);
+            if (n + len + 2 >= sizeof(buf))
+                break;
+            if (n)
+                buf[n++] = ' ';
+            memcpy(buf + n, g_argv[i], len);
+            n += len;
+            buf[n] = '\0';
+        }
+        built = 1;
+    }
+    return buf;
+}
+
 /* --- CPU ---------------------------------------------------------------- */
 
 #if defined(PLATFORM_WINDOWS)
