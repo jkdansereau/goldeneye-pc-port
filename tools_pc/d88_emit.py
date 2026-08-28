@@ -80,8 +80,10 @@ existing sidecar+manifest are present -- it loads and extends them).
 import csv, struct, zlib, os, re, sys
 
 REGION = "ntsc-final"
-if len(sys.argv) > 1 and sys.argv[1] in ("ntsc-final", "pal-final", "jpn-final"):
-    REGION = sys.argv[1]
+REGEN = "--regen" in sys.argv[1:]
+for _a in sys.argv[1:]:
+    if _a in ("ntsc-final", "pal-final", "jpn-final"):
+        REGION = _a
 
 ROM_PATH = f"data/ge007.{REGION}.z64"
 OUT_DIR = f"data/pccg-{REGION}"
@@ -461,19 +463,8 @@ existing_names = set()
 os.makedirs(OUT_DIR, exist_ok=True)
 bin_path = os.path.join(OUT_DIR, "pccg.bin")
 man_path = os.path.join(OUT_DIR, "manifest.csv")
-if os.path.exists(bin_path) and os.path.exists(man_path):
-    with open(man_path, newline="") as f:
-        r = csv.reader(f)
-        next(r, None)
-        for row in r:
-            if len(row) == 3:
-                manifest.append((row[0], int(row[1]), int(row[2])))
-                existing_names.add(row[0])
-    with open(bin_path, "rb") as f:
-        base = f.read()
-    chunks.append(base)
-    cur_off = len(base)
-    print(f"extending existing sidecar: {len(base)} bytes, {len(manifest)} rows")
+def is_usetup_row(nm):
+    return nm.startswith("Usetup") and nm.endswith("Z")
 
 def emit(name, data):
     global cur_off
@@ -484,6 +475,36 @@ def emit(name, data):
     manifest.append((name, cur_off, len(data)))
     chunks.append(data)
     cur_off += len(data)
+
+if os.path.exists(bin_path) and os.path.exists(man_path):
+    old_rows = []
+    with open(man_path, newline="") as f:
+        r = csv.reader(f)
+        next(r, None)
+        for row in r:
+            if len(row) == 3:
+                old_rows.append((row[0], int(row[1]), int(row[2])))
+    with open(bin_path, "rb") as f:
+        base = f.read()
+    if REGEN:
+        # Drop every Usetup*Z row (manifest entry + its bytes) and rebuild the
+        # sidecar from the surviving d69 rows only, so converter iteration
+        # starts from a clean slate every run. Don't hand-edit manifest.csv.
+        dropped = [nm for (nm, _o, _s) in old_rows if is_usetup_row(nm)]
+        for (nm, o, s) in old_rows:
+            if is_usetup_row(nm):
+                continue
+            emit(nm, base[o:o + s])
+            existing_names.add(nm)
+        print(f"--regen: kept {len(manifest)} d69 rows, dropped "
+              f"{len(dropped)} Usetup*Z rows; sidecar rebuilt to {cur_off} bytes")
+    else:
+        manifest.extend(old_rows)
+        for (nm, _o, _s) in old_rows:
+            existing_names.add(nm)
+        chunks.append(base)
+        cur_off = len(base)
+        print(f"extending existing sidecar: {len(base)} bytes, {len(manifest)} rows")
 
 n_ok = 0
 for name in usetup_names:
