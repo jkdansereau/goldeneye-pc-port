@@ -900,7 +900,20 @@ struct player
 
   // offset 0x594
   s32 standcnt;
+#ifdef PORT
+  /* D100: every use is `&g_CurrentPlayer->model` passed to a
+   * `modelXXX(struct Model *)` fn (animInit, modelTickAnim, modelSetAnimation,
+   * ...) — i.e. this is an INLINE `struct Model`, not a pointer. The decomp
+   * splits it as `Model *model;` + ~45 `s32 field_59C..field_650` (≈ the N64
+   * `sizeof(struct Model)`, ~0xB8). On x86-64 `struct Model` is ~0x2A8 bytes,
+   * so `animInit(&model,…)` wrote 0x2A8 bytes into that 0xB8-byte hole,
+   * overrunning field_654 (the gait RW-data pool below), bondheadmatrices and
+   * the viewport / viewx-viewtop fields — garbage `model->datas` (bit 32 set)
+   * → modelInitRwData fault. Reserve the real struct inline. */
+  struct Model model;
+#else
   Model *model;
+#endif
   s32 field_59C;
   s32 field_5A0;
   s32 field_5A4;
@@ -2335,6 +2348,14 @@ struct player
   s32 field_2A74;
   s32 field_2A78;
   s32 field_2A7C;
+#ifdef PORT
+  /* D100: RW-data pool for the inline gait `model`. The retail code points
+   * animInit at `&g_CurrentPlayer->field_654` — a fixed ~0x80-byte gap sized
+   * for the N64 RW-data record widths. PC RW-data records are ~2x, and with
+   * `model` now a full inline `struct Model` that gap no longer even sits
+   * clear of the struct. Give it its own generously-sized buffer. */
+  u32 gaitRwData[256];
+#endif
 };
 
 struct firing_anim_struct {

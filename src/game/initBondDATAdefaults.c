@@ -96,7 +96,14 @@ void sets_a_bunch_of_BONDdata_values_to_default(void)
     }
 #endif
 
+#ifdef PORT
+    /* D100: see struct player in bondview.h — `model` is a full inline struct
+     * on PC and the RW-data records are wider, so the fixed field_654 gap no
+     * longer works; use the dedicated gaitRwData buffer. */
+    animInit(&g_CurrentPlayer->model, &player_gait_object_header, g_CurrentPlayer->gaitRwData);
+#else
     animInit(&g_CurrentPlayer->model, &player_gait_object_header, &g_CurrentPlayer->field_654);
+#endif
     modelSetScale(&g_CurrentPlayer->model, IDO_POINT_ONE);
 
 #if defined (BUGFIX_R1)
