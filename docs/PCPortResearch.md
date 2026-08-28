@@ -3012,6 +3012,45 @@ session wants to keep moving past it: soften the four `sysFatalError`
 safety-net philosophy as the D85 `bgBuildRoomVtxBounds` bounds check) so
 the frame renders with placeholder textures instead of aborting.
 
+**D93 (RESOLVED — null-room (room 0) NULL-deref sat in front of the D85
+texture wall).** Committed `164d7f99`. On `-level_09` the visible-room
+draw list includes room 0, which has no geometry (`csize_*_DL_binary ==
+0`), so `bgLoadRoomModelData` never assigns `ptr_expanded_mapping_info`
+and it stays NULL. Two consumers then walk it unconditionally:
+`bgApplyDynamicCCRMLUT` (called `start=NULL, end=NULL` → the `end==NULL`
+sentinel-scan branch derefs address 0) and `bgBuildRoomVtxBounds`
+(`while (gdl[i].dma.cmd != G_ENDDL)` on `gdl=NULL`). On N64 address 0 is
+readable RDRAM so both walks wander harmlessly; PC page 0 is unmapped.
+Fixed with narrow `#ifdef PORT` NULL guards (same safety-net class as the
+D85 `bgBuildRoomVtxBounds` vtx-bounds check). `-level_09` now reaches the
+documented D85 `sysFatalError("Bad size for RGBA texture in tile 0: 00")`.
+
+**D85 root cause CONFIRMED (was "not yet root-caused").** The
+decompressed per-room primary/secondary DL blob is **raw N64 data with
+8-byte big-endian `Gfx` slots**, but every PORT-patched consumer
+(`texCopyGdls`/`texLoadFromGdl` in `tex.c`, `bgApplyDynamicCCRMLUT`,
+`bgBuildRoomVtxBounds`) was patched under `#ifdef PORT` to assume 16-byte
+little-endian PC `Gfx` slots — so they stride at 2× the real rate and
+read the middle of each N64 command pair as an opcode (the observed
+`cmd=00,01,02,52…` garbage), and even at the right stride the `w0/w1`
+words are unswapped BE. The model-GDL path is immune only because its
+offline sidecar (`tools_pc/d43_*.py`) pre-widens + byteswaps every GDL;
+D80 explicitly left the per-room DL/point-index blob unconverted.
+**Fix chosen: runtime fixup**, not a sidecar — the blob is RZ-compressed
+inside the bg `.seg` and delta-sized (its size is only the offset delta
+between consecutive rooms' `pPriMappingBin`), so an offline widen would
+force rewriting the whole bg-header offset table / recompression. The
+transform is purely mechanical (8→16 byte widen + `bswap32` each word);
+room GDLs need no pointer remapping (`G_VTX` seg addresses are resolved
+at runtime via `SEGMENT_OFFSET(...) + (u32)vertices`, textures via the
+`G_NOOP`+`texnum` marker). Implemented in `bgLoadRoomPrimaryGdl` /
+`bgLoadRoomSecondaryGdl` between `bgDecompress` and `texCopyGdls`, plus a
+`Vtx` short-field bswap in `bgLoadRoomVtxData` (positions/uv are BE; the
+4 rgba `u8`s are fine). Watch the alloc budget — the PC blob is 2× the
+decompressed size. Also fix the pre-existing bug at `bg.c:2448`:
+`texLoadFromGdl((Gfx *)scratch, (Gfx *)expanded_size, ...)` casts the
+size arg to a pointer.
+
 **Docs-to-commit reminder (session L).** The D88.1–D88.3 work
 (`tools_pc/d88_emit.py`, `port/src/pccg.c`, `src/bondtypes.h`,
 `src/game/bondview2.c`, `src/game/bondview_r.c`) plus the `GE_D88` probes

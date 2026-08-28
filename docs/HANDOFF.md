@@ -6,14 +6,24 @@ _Paste-ready brief. Authoritative context: `AGENTS.md`,
 
 ## READ THIS FIRST — the crash chain is clear; the blocker is now rendering
 
-D88.1–D88.6 + D89 + D90 + D91 + D92 are **committed**. A direct
-`-level_09` boot now loads BUNKER1's full stage setup, runs path-table /
-intro-section setup, spawns the player and chrs, ticks AI, and reaches
-the **first render** — where it hits **D85**: `sysFatalError("Bad size
-for RGBA texture in tile 0: 00")` (`gfx_pc.cpp:967`), i.e. the room GDL
-binary decodes to a garbage GBI stream. This is 3D-pipeline / render-
-milestone work, not a crash-chain fix. Full analysis: `PCPortResearch.md`
-§F **D85 revisited**.
+D88.1–D88.6 + D89 + D90 + D91 + D92 + **D93** are **committed** (D93 =
+`164d7f99`). A direct `-level_09` boot now loads BUNKER1's full stage
+setup, runs path-table / intro-section setup, spawns the player and
+chrs, ticks AI, and reaches the **first render** — where it hits
+**D85**: `sysFatalError("Bad size for RGBA texture in tile 0: 00")`
+(`gfx_pc.cpp:967`), i.e. the room GDL binary decodes to a garbage GBI
+stream. This is 3D-pipeline / render-milestone work, not a crash-chain
+fix.
+
+**D85 is now root-caused (`PCPortResearch.md` §F "D85 root cause
+CONFIRMED").** The decompressed per-room DL blob is raw N64 data (8-byte
+BE `Gfx` slots); all PORT consumers (`texCopyGdls`/`texLoadFromGdl`,
+`bgApplyDynamicCCRMLUT`, `bgBuildRoomVtxBounds`) assume 16-byte LE PC
+`Gfx` slots → 2× stride + unswapped words → garbage opcodes. Fix =
+runtime 8→16 widen + `bswap32` in `bgLoadRoomPrimaryGdl` /
+`bgLoadRoomSecondaryGdl` (between `bgDecompress` and `texCopyGdls`), plus
+a `Vtx` short-field bswap in `bgLoadRoomVtxData`. Implementation in
+progress — check `git log` for a `D85:` commit chain.
 
 - Build: `export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final`
 - Sidecar regen (REQUIRED after this session — D88.5/D88.6 changed the
@@ -47,12 +57,13 @@ milestone work, not a crash-chain fix. Full analysis: `PCPortResearch.md`
    `Model.unka0` `s32` field truncated a stored function pointer.
 
 **Next steps for the resuming session (render milestone):**
-1. **D85** — the room GDL binary decodes to a garbage GBI command stream
-   (`fmt=RGBA siz=0`). Decode what `texLoadFromGdl` does with room-
-   specific opcodes / CC-RM-LUT markers; verify `csize_*_DL_binary`
-   sizing. See §F D85 + "D85 revisited". Quick unblock option: soften the
-   four `sysFatalError("Bad size…")` guards in `gfx_pc.cpp` to
-   skip-with-warning so the frame renders with placeholder textures.
+1. **D85** — root cause confirmed (8-byte N64 `Gfx` vs 16-byte PC `Gfx`
+   in the unconverted per-room DL blob). Runtime widen+bswap fixup being
+   implemented; verify with `GE_D69BB=1` (real GBI opcodes, not
+   00/01/02/52), then `GE_PCDUMP` + `tools_pc/pixcount.py` for
+   non-degenerate BUNKER1 geometry. See §F "D85 root cause CONFIRMED".
+   Fallback if the widen stalls: soften the four `sysFatalError("Bad
+   size…")` guards in `gfx_pc.cpp` to skip-with-warning.
 2. Then the front-end **render bugs (D75)**.
 
 **D88.4 loose end (still open):** `PROPDEF_PC_BYTES` for `VEHICHLE`/
