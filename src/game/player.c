@@ -123,7 +123,18 @@ void initBONDdataforPlayer(s32 player_num)
     assert(players[num]==NULL); //according to assert, this file name is "player.c"
 #endif
     default_hand = D_8003FDA0;
-#if defined(VERSION_US) || defined(VERSION_JP)
+#if defined(PORT)
+    /* D98: the retail builds allocate a hardcoded N64 sizeof(struct player)
+     * (0x2A80 US/JP, 0x2A70 EU). On x86-64 the struct is much larger -- dozens
+     * of pointer fields widened 4->8 bytes -- so the fixed size under-allocates
+     * and every write past ~offset 0x2A08 (field_2A08, actual_health, item
+     * slots, ...) runs off the block. With the player block sitting right
+     * below g_GfxBuffers[0] in MEMPOOL_STAGE, `g_CurrentPlayer->field_2A08 =
+     * ft4` in bondviewRenderDebugBondView scribbled the master display list
+     * (garbage w1 in the zbuf-clear gsDPSetRenderMode -> "Unknown GBI opcode").
+     * Allocate the real PC size, rounded up like the N64 constants. */
+    g_playerPointers[player_num] = mempAllocBytesInBank((sizeof(struct player) + 0xF) & ~0xFU, MEMPOOL_STAGE);
+#elif defined(VERSION_US) || defined(VERSION_JP)
     g_playerPointers[player_num] = mempAllocBytesInBank(0x2A80U, MEMPOOL_STAGE);
 #elif defined(VERSION_EU)
     g_playerPointers[player_num] = mempAllocBytesInBank(0x2A70U, MEMPOOL_STAGE);
