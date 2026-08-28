@@ -134,7 +134,21 @@ void init_path_table_links(void)
             s32 groupNeighbourIndex;
             s32 reverseIndex;
             s32 waypointNum;
+#ifdef PORT
+            /* D89: every use below is `validationGroupCursors[-3]` -- a
+             * constant negative index that a decompiler emitted for what is
+             * really a plain cursor local (the N64 stack frame aliased it
+             * onto an intended slot). GCC proves the [-3] out of bounds of a
+             * 1-element array and compiles it to a trap (SIGILL) on PC.
+             * Point the name 3 elements into a real backing buffer so the
+             * identical `[-3]` expressions land in-bounds; numerically and
+             * behaviourally unchanged, and the N64 build (which keeps the
+             * plain array) is untouched. */
+            waygroup *validationGroupCursors_buf[4];
+            waygroup **validationGroupCursors = validationGroupCursors_buf + 3;
+#else
             waygroup *validationGroupCursors[1];
+#endif
 
             validationGroupIndex = 0;
             validationGroup = groups;

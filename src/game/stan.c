@@ -1358,6 +1358,19 @@ bool sub_GAME_7F0B0914(StandTile **tileStack, f32 start_x, f32 start_z, f32 dest
     s32 nextPointIndex;
     s32 hasLink;
 
+#ifdef PORT
+    /* D89: several callers (e.g. domakedefaultobj, prop.c) pass the address
+     * of a stan pointer that can legitimately be NULL (a pad/boundpad whose
+     * stan name did not resolve). On N64 the walk below then dereferences a
+     * near-NULL address, reads ~0 for pointCount, takes the `crossings == 0`
+     * early-out and returns TRUE; on PC that first read segfaults. Reproduce
+     * the N64-effective result explicitly. */
+    if (*tileStack == NULL)
+    {
+        return TRUE;
+    }
+#endif
+
     start_x *= level_scale;
     start_z *= level_scale;
     dest_x *= level_scale;
