@@ -3,6 +3,8 @@
 /* TEMP D69: probe below uses fprintf/getenv. */
 #include <stdio.h>
 #include <stdlib.h>
+#include "pcmodels.h" /* D50: PC-layout model sidecars */
+#include "pccg.h"     /* D69: PC-layout bg/stan sidecars */
 #endif
 #include "macro.h"
 #include "ob.h"
@@ -133,6 +135,17 @@ void obInit(void)
 
         if (size);
     }
+
+#ifdef PORT
+    /* D69/D50: patch file_resource_table->hw_address / rom_size to point at
+     * the converted PC sidecars now that obInit() has populated the table.
+     * Previously this only happened lazily on the first model load
+     * (load_object_fill_header); a direct "-level_XX" boot loads a stage
+     * before any model loads, so load_bg_file would read raw big-endian ROM
+     * and crash. Both calls are one-shot/idempotent. */
+    pcmodelsPatchTable();
+    pccgPatchTable();
+#endif
 }
 
 
