@@ -78,6 +78,7 @@ produced by d69_emit.py (run d69_emit.py first, or this script alone if the
 existing sidecar+manifest are present -- it loads and extends them).
 """
 import csv, struct, zlib, os, re, sys
+from d88_propdefs import convert_stream as convert_propdefs, PropDefError
 
 REGION = "ntsc-final"
 REGEN = "--regen" in sys.argv[1:]
@@ -303,6 +304,23 @@ def convert_usetup(name, src):
         return None
     regions = tiled
 
+    # ---- convert the propDefs polymorphic record stream (D88.4) ----
+    # Every propDef record grows to its native PC struct size (pointer members
+    # widen 4->8B). Done up front so the growth feeds the cumulative delta.
+    propdefs_pc = None
+    if H["propDefs"]:
+        pd_start = H["propDefs"]
+        pd_end = None
+        for i, (start, end, kind, meta) in enumerate(regions):
+            if kind == 'propdefs':
+                pd_end = end
+                break
+        try:
+            propdefs_pc, _n64len, _pclen = convert_propdefs(src, pd_start, pd_end)
+        except PropDefError as e:
+            errors.append(f"{name}: {e}")
+            return None
+
     # ---- pass 1: compute cumulative delta at each region start ----
     delta_at = {}
     cum = 0x28  # header grows 0x28 -> 0x50
@@ -315,7 +333,9 @@ def convert_usetup(name, src):
             oldsz, newsz, _starts = meta
             n = len(_starts) - 1  # records before terminator
             cum += (n + 1) * (newsz - oldsz)
-        # 'intro', 'propdefs', 'leaf:*' -- no growth
+        elif kind == 'propdefs' and propdefs_pc is not None:
+            cum += len(propdefs_pc) - (end - start)
+        # 'intro', 'leaf:*' -- no growth
 
     def reloc(off):
         """bswapped-original-offset semantics: off is a raw file offset (or
@@ -438,9 +458,12 @@ def convert_usetup(name, src):
         elif kind == 'cstr':
             out[do:do + (end - start)] = src[start:end]
 
-    # ---- emit propdefs + aistreams + any other opaque region verbatim ----
+    # ---- emit propdefs (converted, D88.4) + aistreams / opaque verbatim ----
     for (start, end, kind, meta) in regions:
-        if kind in ('propdefs', 'leaf:aistream', 'gap'):
+        if kind == 'propdefs':
+            do = reloc(start)
+            out[do:do + len(propdefs_pc)] = propdefs_pc
+        elif kind in ('leaf:aistream', 'gap'):
             do = reloc(start)
             out[do:do + (end - start)] = src[start:end]
 
