@@ -50,15 +50,24 @@ other caller already used `s32[8]`). **D97 (`2fbcc556`)** clamps a
 negative `damagetype` (US had no low clamp; EU/JP do) — an OOB
 `g_DamageTypes[]` read when a guard shoots Bond.
 
+**D98 (`fixed`) — the `0xffffb9` corruption was `initBONDdataforPlayer`
+(`player.c`) allocating a hardcoded N64 `sizeof(struct player)` (`0x2A80`).
+PC struct is much bigger → under-alloc → writes past it landed in
+`g_GfxBuffers[0]` (which sits right after the player block), and
+`bondviewRenderDebugBondView`'s `g_CurrentPlayer->field_2A08 = ft4`
+scribbled a master-DL slot. Now allocates the real PC size under
+`#ifdef PORT`.
+
 **Current blocker:** `-level_09` renders **~5 frames** then
-deterministically hits `[FATAL] Unknown GBI opcode 0xffffb9 at
-0x70078330` (a corrupt slot ~0xB0 into the master DL: `w0 b900031d` =
-valid `gsDPSetRenderMode`, `w1 bd8efa35` = garbage). A residual ~7 KB
-master-DL overflow persists (D63 branch trace: write ptr past
-`0x700aa280`), buffer-size-independent — so still a smaller runaway or a
-stray write into a low master-DL slot at frame ~5. Under investigation.
-Also logged: `bondview2.c` other truncation sites. Full analysis:
-`PCPortResearch.md` §F "D95"/"D96".
+**deterministically** (6/6) segfaults at PC `0x00010100` — a garbage
+function-pointer call in `modelTickAnim` (`model.c:3534`,
+`((void(*)(void))model->animflipfunc)()`). `struct Model.animflipfunc`
+(`bondtypes.h:1640`) is declared **`s32`** but stores a real function
+pointer (`modelSetAnimFlipFunction`, `model.c:2841` assigns a `void*` to
+it) → truncated on PC. Same D86/D92 class; `Model.unka0` (0xa0) is
+flagged as another likely function pointer. This is the D75-class
+animated-model path, now the literal render blocker. Full analysis:
+`PCPortResearch.md` §F "D95"/"D96"/"D98".
 
 `data/` was accidentally deleted + fully regenerated this session — if it
 looks wrong, `cp baserom.u.z64 data/ge007.ntsc-final.z64` then rerun
