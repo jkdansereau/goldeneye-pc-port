@@ -3084,24 +3084,37 @@ texture-heavier levels will need a separate header allocation or a
 per-level `-mt` bump. (Enlarging the pool alloc starves `MEMPOOL_STAGE`
 and hangs `mempAllocBytesInBank`'s OOM `while(1)` — don't.)
 
-**D85 remaining (downstream, none are stream-decode):**
-1. **Frame-GDL buffer overrun — now the deterministic wall.**
-   `bgScissorCurrentPlayerView` (`bg.c:1355`, `gDPSetScissor(arg0++,…)`)
-   segfaults writing at `~0x70800000` — the per-frame GDL write pointer
-   has run off the end of the frame display-list buffer, reached via
-   `chrpropsRenderPass` (`chrprop.c:569`) →
-   `bgScissorCurrentPlayerViewDefault`/`F` (`bg.c:1293`/`1311`). Now that
-   rooms emit real geometry the per-frame GDL is far bigger than the
-   port's frame-buffer allocation (or a room GDL missing its `G_ENDDL`
-   drives a runaway copy). Next: size the PC frame GDL buffer / verify
-   room-GDL termination.
-2. **`gfx_sp_matrix` unrelocated segment address.** A room-GDL
-   `gsSPMatrix` carries N64 segment addr `0x90000000`;
-   `gfx_sp_matrix` (`gfx_pc.cpp:1077`, via `gfx_run_dl`) dereferences it
-   raw. Room-GDL matrix/pointer relocation is the next D85 layer after
-   the frame-buffer overrun. (Seen by the texpool-triage fork before the
-   overrun masked it.)
-3. **`bgTestRayIntersectionInRoom`** (`bg.c:3302` `((u32*)gdl)[1]`,
+**D85 texture wall CLEARED (session M-3, verified).** With sidecars
+present and `493c9838`+`6f0208d6` in, `-level_09` **no longer hits
+`Bad size for RGBA texture`** — BUNKER1 renders multiple full frames
+(`GE_D85GDL` probe: `g_BgNumberOfRoomsDrawn=5`, roomids 9/10/11/15/17,
+`b_min/b_max` 0/2, frame GDL advances ~3 KB/frame cleanly). The room-GDL
+stream-decode + texture-pool layers of D85 are done. What remains is a
+cluster of **non-deterministic** crashes newly reachable now that the
+render loop + guard AI actually run in-level (4-run sample: 3 distinct
+fault sites). Treat as a fresh crash-chain, not D85:
+
+1. **`bgScissorCurrentPlayerView` frame-GDL overrun** (`bg.c:1355`,
+   fault `0x70800000` = 1 byte past the 8 MB emulated DRAM). Hits ~1/4
+   runs. The frame GDL write pointer runs off the end — either the PC
+   frame-DL buffer is undersized for real room geometry, or a room GDL
+   without a clean `G_ENDDL` drives a runaway append somewhere upstream
+   (`sub_GAME_7F0B3C8C` double loop over `chrpropsRenderPass` /
+   `bgRenderRoomPrimary`). NOTE: an *earlier* "deterministic overrun"
+   reading was a red herring — it was `data/` sidecars missing (see the
+   `data/` deletion note below), which faults in `load_bg_file:847` on
+   raw BE bg-header bytes.
+2. **`chrlvInitActAttack` bad pointer** (`chraction.c:1316`, fault
+   `~0x40123350`). Hits ~2/4 runs — a guard starting an attack derefs a
+   truncated/garbage pointer (`0x401xxxxx` looks like a 64-bit pointer
+   with the high word lost, cf. D86/D92 class).
+3. **`gfx_sp_matrix` unrelocated segment addr `0x90000000`**
+   (`gfx_pc.cpp:1077` via `gfx_run_dl`). Hits ~1/4 runs — a room-GDL
+   `gsSPMatrix` w1 carries N64 segment 9 unresolved. Room-GDL matrix
+   arg relocation still needed (the widen byte-swaps the words but does
+   not remap seg addresses; `G_VTX` seg-addrs are resolved elsewhere via
+   `SEGMENT_OFFSET`, but `gsSPMatrix` is not).
+4. **`bgTestRayIntersectionInRoom`** (`bg.c:3302` `((u32*)gdl)[1]`,
    `:3383/3388/3521/3526` `*(u8*)gdl`) still reads opcodes/w1 N64-style;
    post-widen the opcode is byte 3 and w1 is `((u32*)gdl)[2]`. Operated
    on garbage before (so "worked"); needs PORT accessors. Hitscan, not
@@ -3110,6 +3123,23 @@ and hangs `mempAllocBytesInBank`'s OOM `while(1)` — don't.)
    (`bgScissorCurrentPlayerViewDefault`, `chrprop.c:569` → `bg.c:1355`,
    write fault ~`0x70800000`). Timing-dependent, masked behind #1.
    Prop/character render path (D75-adjacent), newly reachable.
+
+**`data/` deletion + recovery (session M-3).** `git worktree remove
+--force` on an agent worktree that had a directory *junction*
+`worktree/data → main/data` followed the junction and deleted the real
+`data/` contents (both `.z64` baseroms + `pccg-*`/`pcmodels-*` sidecars).
+`data/` is gitignored so nothing tracked was lost. Recovered:
+`cp baserom.u.z64 data/ge007.ntsc-final.z64` (sha1
+`abe01e4a…` == the canonical `ge007.u.z64` build hash, so byte-identical
+to what was there), then regenerated all three sidecars — `python
+tools_pc/d43_emit.py ntsc-final` (pcmodels, 512), `d69_emit.py
+ntsc-final` (pccg bg/stan, 52), `d88_emit.py ntsc-final --regen` (Usetup,
+→ 73 rows, `pccg.bin` 3605249 B) — all "ALL CHECKS PASSED". **Lesson:
+never junction `data/` into a throwaway worktree; copy it or point the
+generator's `ROM_PATH` at the repo-root baserom.** The extra
+`GoldenEye 007 (U) [!].z64` copy was not restored (unused — runtime and
+generators use `ge007.ntsc-final.z64`, falling back to root
+`baserom.u.z64`).
 
 **Docs-to-commit reminder (session L).** The D88.1–D88.3 work
 (`tools_pc/d88_emit.py`, `port/src/pccg.c`, `src/bondtypes.h`,

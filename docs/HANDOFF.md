@@ -25,13 +25,26 @@ hitting the next wall. D85 is being cleared layer by layer:
   32-byte PC struct smashed BSS → stage pool looked exhausted → no room
   texture resolved). This cleared the `Bad size for RGBA texture` FATAL.
 
-**Current wall: frame-GDL buffer overrun.** `bgScissorCurrentPlayerView`
-(`bg.c:1355`) segfaults writing at `~0x70800000` — the per-frame GDL
-write pointer ran off the frame display-list buffer (rooms now emit real
-geometry; PC frame-GDL buffer likely undersized, or a room GDL missing
-`G_ENDDL` → runaway). Then: `gfx_sp_matrix` room-GDL `gsSPMatrix` seg
-addr `0x90000000` unrelocated; `bgTestRayIntersectionInRoom` N64-style
-opcode reads. See `PCPortResearch.md` §F "D85 remaining".
+**D85 texture wall is CLEARED** (verified this session): `-level_09`
+no longer hits `Bad size for RGBA texture` — BUNKER1 renders multiple
+full frames (5 rooms drawn, frame GDL advances cleanly). The
+stream-decode + texture-pool layers of D85 are done.
+
+**Now a fresh, NON-DETERMINISTIC crash cluster** (newly reachable — the
+render loop + guard AI run in-level now; 4-run sample = 3 distinct
+faults):
+1. `bgScissorCurrentPlayerView` frame-GDL overrun (`bg.c:1355`, fault
+   `0x70800000` = end of 8 MB DRAM) — ~1/4 runs.
+2. `chrlvInitActAttack` bad pointer (`chraction.c:1316`, fault
+   `~0x4012xxxx`, looks like a hi-word-truncated 64-bit ptr, D86/D92
+   class) — ~2/4 runs.
+3. `gfx_sp_matrix` unrelocated seg addr `0x90000000` (`gfx_pc.cpp:1077`)
+   — a room-GDL `gsSPMatrix` w1 not remapped by the widen — ~1/4 runs.
+
+Full triage + the `data/`-deletion recovery note in `PCPortResearch.md`
+§F ("D85 texture wall CLEARED", "`data/` deletion + recovery").
+**Sidecars were regenerated this session** — if `data/` looks wrong,
+rerun all three (`d43_emit.py`, `d69_emit.py`, `d88_emit.py --regen`).
 
 - Build: `export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final`
 - Sidecar regen (REQUIRED after this session — D88.5/D88.6 changed the
