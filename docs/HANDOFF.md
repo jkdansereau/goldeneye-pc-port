@@ -1,43 +1,55 @@
-# Handoff brief — GoldenEye 007 PC port (Phase 2: Session M — D88.4
-# RESOLVED; crash chain to a rendered BUNKER1 frame is CLEAR)
+# Handoff brief — GoldenEye 007 PC port (Phase 2: Session M-2 —
+# BUNKER1 now loads + renders ~2100 frames; next blocker is D90)
 
 _Paste-ready brief. Authoritative context: `AGENTS.md`,
-`docs/PCPortResearch.md` §F (D69, D78-D88), `docs/BRIEF-D69-stage-load.md`._
+`docs/PCPortResearch.md` §F (D69, D78-D90), `docs/BRIEF-D69-stage-load.md`._
 
-## READ THIS FIRST — D88 is done; next is the render bugs
+## READ THIS FIRST — where the load chain stands
 
-D88.1–D88.4 are **committed and verified**. `-level_09` (deterministic
-BUNKER1 repro) now loads the entire stage setup — pads table (D88.1–3) and
-the `propDefs` polymorphic record stream (D88.4) — and **renders 1000+
-frames continuously with zero FATAL/EXCEPTION**. The whole D69→D88 stage-
-load crash chain is clear.
+D88.1–D88.6 + D89 are **committed**. Both a direct `-level_09` boot and
+attract mode now load BUNKER1's full stage setup, run
+`init_path_table_links` / intro-section / path-table setup, **render
+~2100 frames**, and then hit **D90**: the player prop's `stan` pointer is
+NULL, so the first collision tick faults in `stanIsSpecialBit1Set`
+(`stan.c:2364`). Full backtrace + analysis: `PCPortResearch.md` §F **D90**.
 
 - Build: `export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final`
-- Sidecar: `python tools_pc/d88_emit.py ntsc-final --regen` (regenerates the
-  `data/pccg-*` sidecar from the ROM; `data/` is gitignored). `--regen`
-  drops+rebuilds the `Usetup*Z` rows for clean iteration.
-- Repro: `./build-pc/ge007.x86_64.exe -level_09` (from repo root).
+- Sidecar regen (REQUIRED after this session — D88.5/D88.6 changed the
+  converters): `python tools_pc/d69_emit.py ntsc-final && python
+  tools_pc/d88_emit.py ntsc-final --regen`. `data/` is gitignored.
+- Repro (direct BUNKER1): `./build-pc/ge007.x86_64.exe -level_09 -ml0 -me0
+  -mgfx100 -mvtx50 -mt700 -ma150` — the `-m*` args are the per-level
+  memory sizes from `boss.c`'s `memallocstringtable`; a bare `-level_09`
+  boots but crashes early because the `-level_` branch skips the default
+  `-m*` string (TODO: auto-inject in the port). Attract mode (no args)
+  reaches the same D90 crash.
 
-**D88.4 (how it was fixed).** `propDefs` is a flat `s32[]`; each record's
-serialized N64 word count is fixed per `type` byte across all 21 levels
-(verified: the getools C sources tile every region byte-for-byte vs ROM).
-All pointer members are `0` in the file, so records with pointers just grow
-4→8B on PC. Fix = offline **converter grows each record to native PC struct
-layout** (`tools_pc/d88_propdefs.py`, sizes from `d88_layoutprobe.c`), plus
-a `#ifdef PORT` `sizepropdef()` branch returning the matching stride. No
-game-struct changes. Full detail: `PCPortResearch.md` §F D88.4.
+## What this session (M-2) fixed — all committed
 
-**Loose end:** `PROPDEF_PC_BYTES` for `VEHICHLE`/`AIRCRAFT`/`TANK`/`AMMO`/
-`DEPOSIT_IN_ROOM` in `d88_propdefs.py` are placeholder guesses (BUNKER1
-doesn't use them). Add them to `d88_layoutprobe.c` and read off real sizes
-before loading levels that use those types.
+1. **`-level_09` now works.** `osPiReadIo` was stubbed to 0, so the token
+   string was always empty and N64 debug switches were ignored (only
+   attract mode could reach a level). Now built from `argv[1..]`.
+2. **Sidecar tables patched in `obInit()`** instead of lazily at first
+   model load — a direct stage boot loaded raw big-endian ROM before.
+3. **D88.5** — stan tile-name byte-swap in the converter (0/276 →
+   273/273 name matches during pad setup).
+4. **D88.6** — intro CAMERA `lang1c` is a `u16` pair, not an `s32`
+   (fixed the `langGet` NULL-bank crash).
+5. **D89** — `init_path_table_links` `[-3]` OOB → SIGILL fix; NULL-tile
+   guard in `sub_GAME_7F0B0914`.
 
 **Next steps for the resuming session:**
-1. Verify no regression on `-level_09` + a GE_D88 probe run; re-check D88.5
-   (stan tile-name lookups missing during pad setup — see §F, may be a
-   residual endian/width bug in `stanIdHi`/`stanIdLo` derivation).
-2. Attack the **render bugs (D75, below)** and **D85** — now the path to a
-   playable BUNKER1 frame.
+1. **D90** — root-cause why `g_CurrentPlayer->…->prop->stan` is NULL at
+   BUNKER1 spawn (see §F D90). Likely the player start-pad's stan
+   resolution or the `sub_GAME_7F0AFB78` coord fallback. Do NOT blanket-
+   guard stan walkers — this one would fault on N64 too.
+2. Then the **render bugs (D75)** and **D85** — the path to a playable
+   BUNKER1 frame.
+
+**D88.4 loose end (still open):** `PROPDEF_PC_BYTES` for `VEHICHLE`/
+`AIRCRAFT`/`TANK`/`AMMO`/`DEPOSIT_IN_ROOM` in `d88_propdefs.py` are
+placeholder guesses (BUNKER1 doesn't use them). Probe real sizes via
+`d88_layoutprobe.c` before loading levels that use those types.
 
 ## Known rendering bugs (D75 — still open, orthogonal to the D88 crash)
 

@@ -2904,6 +2904,76 @@ pad `plink` name) could be another victim of a residual endian/width bug.
 Re-check after D88.4; do not treat as resolved just because it doesn't
 crash.
 
+**D88.5 (RESOLVED — stan tile-name byte-swap in the converter).** With the
+`GE_D88` probe on, every `stanMatchTileName` call during pad setup missed
+(0 matches / 276 misses). Root cause: `stanMatchTileName` reads a tile's
+packed name id through a `StandTilePoint` alias — `(u16)tile->x ==
+stanIdHi` and `*((u8 *)&tile->y) == stanIdLo`. D78 left the 4-byte
+id/room word as a verbatim byte array on the premise "`id` is provably
+dead", which missed this aliased *scalar* read: on little-endian PC the
+`(u16)` load of the big-endian id-hi bytes comes back byte-swapped.
+Fix (converter, `tools_pc/d69_emit.py` stan path): swap bytes 0–1 of the
+id/room word; byte 2 (`stanIdLo`) and byte 3 (`room`, read as
+`tile->room`) stay put. Verified 273/273 name matches after the fix; pads
+now resolve real stan tiles. Needs sidecar regen. Committed.
+
+**D88.6 (RESOLVED — intro CAMERA `lang1c` is a `u16` pair).**
+`SetupIntroCamera.lang1c` is `union { u16 lang_index[2]; u32 lang_ptr; }`
+and `bondview_r.c:295` reads `lang1c.lang_index[1]`. `d88_emit.py`'s intro
+converter `bswap32`'d the whole word, which swaps element 0 with element 1
+— the consumer then read the wrong language-slot id, indexed `g_LangBanks`
+out of range and crashed in `langGet` (`language.c:421`) on a NULL bank.
+Fix: byte-swap each `u16` of `lang1c` in place; `lang20` (a real `s32`)
+still gets `bswap32`. Needs `d88_emit.py --regen`. Committed.
+
+**D89 (RESOLVED — two crashes between stage-load and first frame).**
+(a) `init_path_table_links` (`initpathtablelinks.c:144`):
+`validationGroupCursors[-3]` is a decomp artifact — a constant negative
+index into a 1-element stack array standing in for a plain cursor local.
+GCC proves it OOB and emits a trap → SIGILL on PC. Fixed under `#ifdef
+PORT` by pointing the name 3 elements into a real 4-element backing buffer
+(identical `[-3]` expressions, now in bounds); N64 build keeps the plain
+array. (b) `sub_GAME_7F0B0914` (`walkTilesBetweenPoints`): callers like
+`domakedefaultobj` pass `&pad->stan`, legitimately NULL when a pad's stan
+name doesn't resolve. On N64 the walk reads ~0 for `pointCount` and
+returns TRUE via the `crossings==0` early-out; on PC the near-NULL read
+faults. Guarded `*tileStack == NULL → return TRUE`. Committed.
+
+**Session-M-2 infra fixes (committed).** Two port-layer gaps that made
+`-level_09` a no-op were fixed: (1) `osPiReadIo` was stubbed to 0 so the
+cartridge-token read always yielded an empty string — N64 debug switches
+were silently ignored and only attract-mode demo playback could reach a
+level. Now synthesised from `argv[1..]` (`sysGetTokenString` in
+`system.c`, served from the 0xFFB000 range in `libultra.c`). (2)
+`pccgPatchTable`/`pcmodelsPatchTable` were called lazily from the first
+model load; a direct `-level_XX` boot loads a stage first and
+`load_bg_file` read raw big-endian ROM. Moved the one-shot calls to the
+end of `obInit()`. NOTE: a bare `-level_09` still needs the per-level
+memory args too (`-ml0 -me0 -mgfx100 -mvtx50 -mt700 -ma150` for BUNKER1,
+from `boss.c`'s `memallocstringtable`) — the `-level_` branch skips the
+default `-m*` string. TODO: auto-inject from `memallocstringtable` in the
+port so bare `-level_XX` works.
+
+**D90 (OPEN — player has no starting stan tile → collision walk faults).**
+After D88.5/D88.6/D89, both `-level_09` and attract mode load BUNKER1,
+render ~2100 frames, then fault in `stanIsSpecialBit1Set`
+(`stan.c:2364`, `arg0->mid.half` with `arg0 == NULL`). Backtrace:
+`bossMainloop` → `lvlViewMoveTick` → `bondviewFrozenMoveBond` →
+`bondviewCalcUpdatePlayerCollision` → `bondviewTrySimpleMovePlayerCollision`
+→ `bondviewTryMoveToStan` → `stanTileDistanceRelated` → `sub_GAME_7F0B1DDC`
+→ `callbackA(tileStack[0], …)` where `tileStack[0] = *startTile =
+g_CurrentPlayer->field_488.current_tile_ptr == NULL`. That field is
+seeded from `g_playerPointers[i]->prop->stan` (`bondview2.c:10217`), so
+the **player prop's `stan` pointer is NULL** — the player's spawn tile
+never resolved. This is NOT the same "N64 tolerates NULL" class as D89(b):
+`stanIsSpecialBit1Set` dereferences `arg0` immediately, so N64 would fault
+here too → `prop->stan` is genuinely supposed to be non-NULL. Next step:
+find where the player prop's `stan` is set at spawn (pad-based placement /
+`propPositionAtPad` / `sub_GAME_7F0AFB78` coord-fallback in
+`init_pathtable_something`) and why it comes back NULL for BUNKER1's
+start pad even though generic pad names now resolve (D88.5). Do NOT
+blanket-guard every stan walker — that would mask this.
+
 **Docs-to-commit reminder (session L).** The D88.1–D88.3 work
 (`tools_pc/d88_emit.py`, `port/src/pccg.c`, `src/bondtypes.h`,
 `src/game/bondview2.c`, `src/game/bondview_r.c`) plus the `GE_D88` probes
