@@ -38,7 +38,7 @@ extern struct fileentry file_resource_table[];
 extern resource_lookup_data_entry resource_lookup_data_array[];
 extern s32 file_entry_max;
 
-#define PCCG_MAX_FILES     128
+#define PCCG_MAX_FILES     256 /* D88: grown to also hold Usetup*Z rows */
 #define PCCG_NAME_LEN      64
 
 struct pccgRow {

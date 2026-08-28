@@ -3929,6 +3929,30 @@ typedef struct SetupIntroCamera
     fs15_16 unk10;                               // yaw in radians
     fs15_16 unk14;                               // pitch in radians
     s32     unk18;                               // pad
+#ifdef PORT
+    /* D88: lang_ptr/prev are ROM-serialized as N64 4-byte pointer-sized
+     * union members / struct members, but are NEVER read from file data --
+     * every use site (bondview_r.c) writes them (via langGet()/list-link)
+     * before the sole subsequent reads (bondview_r.c/bondview2.c). Widening
+     * them to real 8-byte PC pointers would grow sizeof(SetupIntroCamera)
+     * from 40 (0x28) to 56, breaking the intro-record walk's
+     * `(s32)intro_record + sizeof(SetupIntroCamera)` stride (bondview_r.c/
+     * bondview2.c) against the still-40-byte-per-record file data. Kept as
+     * u32 (same class as D79/D53.1); cast to the real pointer type at each
+     * use site under #ifdef PORT. No behavior change -- see D88 in
+     * PCPortResearch.md. */
+    union
+    {
+        u16 lang_index[2];
+        u32 lang_ptr;
+    } lang1c;
+    union
+    {
+        s32 lang_index;
+        u32 lang_ptr;
+    } lang20;
+    u32 prev;
+#else
     union
     {
         u16   lang_index[2];
@@ -3940,6 +3964,7 @@ typedef struct SetupIntroCamera
         char *lang_ptr;
     } lang20;
     struct SetupIntroCamera *prev;
+#endif
 } SetupIntroCamera;
 
 /**

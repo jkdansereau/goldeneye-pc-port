@@ -276,7 +276,12 @@ void bondviewLoadSetupIntroSection(void)
                 {
                     if (get_cur_playernum() == 0)
                     {
+#ifdef PORT
+                        /* D88: prev/lang_ptr are u32 on PORT (see SetupIntroCamera). */
+                        ((struct SetupIntroCamera*)intro_record)->prev = (u32)(uintptr_t)g_CurrentSetupIntroCamera;
+#else
                         ((struct SetupIntroCamera*)intro_record)->prev = g_CurrentSetupIntroCamera;
+#endif
                         g_CurrentSetupIntroCamera = (struct SetupIntroCamera*)intro_record;
                         g_SetupIntroCameraCount = g_SetupIntroCameraCount + 1;
 
@@ -286,11 +291,19 @@ void bondviewLoadSetupIntroSection(void)
                         ((struct SetupIntroCamera*)intro_record)->unk10.fval = ((struct SetupIntroCamera*)intro_record)->unk10.ival / M_U16_MAX_VALUE_F;
                         ((struct SetupIntroCamera*)intro_record)->unk14.fval = ((struct SetupIntroCamera*)intro_record)->unk14.ival / M_U16_MAX_VALUE_F;
 
+#ifdef PORT
+                        ((struct SetupIntroCamera*)intro_record)->lang1c.lang_ptr = (u32)(uintptr_t)langGet(((struct SetupIntroCamera*)intro_record)->lang1c.lang_index[1]);
+#else
                         ((struct SetupIntroCamera*)intro_record)->lang1c.lang_ptr = langGet(((struct SetupIntroCamera*)intro_record)->lang1c.lang_index[1]);
+#endif
 
                         if (((struct SetupIntroCamera*)intro_record)->lang20.lang_index != 0)
                         {
+#ifdef PORT
+                            ((struct SetupIntroCamera*)intro_record)->lang20.lang_ptr = (u32)(uintptr_t)langGet((u16)((struct SetupIntroCamera*)intro_record)->lang20.lang_index);
+#else
                             ((struct SetupIntroCamera*)intro_record)->lang20.lang_ptr = langGet((u16)((struct SetupIntroCamera*)intro_record)->lang20.lang_index);
+#endif
                         }
                     }
 
@@ -358,7 +371,11 @@ void bondviewLoadSetupIntroSection(void)
         while (rand_camera_index > 0)
         {
             rand_camera_index--;
+#ifdef PORT
+            ptr_random06cam_entry = (struct SetupIntroCamera *)(uintptr_t)ptr_random06cam_entry->prev;
+#else
             ptr_random06cam_entry = ptr_random06cam_entry->prev;
+#endif
         }
     }
 
