@@ -33,8 +33,10 @@ Tbg_*_stanZ (RZ-compressed: 0x11 0x72 + raw deflate, decompress/recompress):
   room-offset array slot 4B->8B (array_delta = 4*(N+2), N = entries before
   the NULL terminator). Tile data (from the old array end to EOF) shifts by
   +array_delta as a block; tiles need NO resize (D78 restores the exact
-  N64 8-byte header stride). Per tile: id/room word copied verbatim (D78
-  makes it byte-identical, not a scalar); mid.half/tail.half bswap16;
+  N64 8-byte header stride). Per tile: id/room word gets its idHi half
+  (bytes 0-1) byte-swapped so stanMatchTileName's `(u16)tile->x` alias
+  reads stanIdHi on LE; idLo (byte 2) + room (byte 3) stay put (D88.5).
+  mid.half/tail.half bswap16;
   pointCount (top nibble of raw BE tail half) selects record size via
   list_of_tilesizes (8+8*pointCount); each point (x/y/z s16 + link u16)
   bswap16.
@@ -351,8 +353,15 @@ def convert_stan(name, src):
         if src[src_o:src_o + 4] == b"\x00\x00\x00\x00":
             out[dst_o:dst_o + 4] = b"\x00\x00\x00\x00"
             break
-        # id/room word: verbatim (D78 -- byte array, not a scalar)
-        out[dst_o:dst_o + 4] = src[src_o:src_o + 4]
+        # id/room word. N64 (BE) bytes = [id23:16, id15:8, id7:0, room].
+        # D88.5: stanMatchTileName reads the id via a StandTilePoint alias --
+        # `(u16)tile->x` (a little-endian scalar load of bytes 0-1) must equal
+        # stanIdHi, and `*((u8*)&tile->y)` (byte 2) must equal stanIdLo. So the
+        # idHi half (bytes 0-1) has to be byte-swapped for the LE read; byte 2
+        # (idLo) and byte 3 (room, read as tile->room) stay put. D78's "id is
+        # provably dead" missed this aliased scalar read.
+        w = src[src_o:src_o + 4]
+        out[dst_o:dst_o + 4] = bytes((w[1], w[0], w[2], w[3]))
         midhalf = bs16(src, src_o + 4)
         tailhalf = bs16(src, src_o + 6)
         out[dst_o + 4:dst_o + 6] = bswap16_bytes(midhalf)
