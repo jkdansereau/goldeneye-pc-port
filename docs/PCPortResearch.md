@@ -3124,6 +3124,48 @@ fault sites). Treat as a fresh crash-chain, not D85:
    write fault ~`0x70800000`). Timing-dependent, masked behind #1.
    Prop/character render path (D75-adjacent), newly reachable.
 
+**D94 (RESOLVED — truncating `(s32)` pointer cast in `chrlvInitActAttack`).**
+Committed `63204a27`. `chraction.c:1221`/`1231` compute the firing-anim
+table entry as `(s32)arg1[anim_index]->table + (s32)(idx*sizeof(...))` —
+`table` is `weapon_firing_animation_table (*)[]`, and the `(s32)` cast
+truncates the 64-bit pointer, then the cast back zero-extends, dropping
+the `0x1_00000000` module-base bit → `panim_float ≈ 0x4012xxxx` →
+`panim_float->anim.anim` faults there when a guard starts an attack
+in-level. Replaced both with plain array indexing (`&(*table)[idx]`) under
+`#ifdef PORT` — the code's own comments say that's the intent.
+
+**D95 (OPEN — the `-mgfx` master-DL buffer is half-capacity on PC; the
+naive fix OOMs `MEMPOOL_STAGE`).** `dyn.c:56` sizes `g_GfxBuffers` from
+`-mgfx` (a byte budget from `boss.c`'s per-level `memallocstringtable`,
+sized for N64 8-byte `Gfx`). On x86-64 a `Gfx` is 16 bytes, so the master
+display list holds **half** the commands for the same budget. Every
+render fn appends with a bare `gdl++` and **no bounds check**, so once
+BUNKER1 emits real room geometry the list overruns `g_GfxBuffers[1]`/`[2]`,
+runs off the stage mempool, and faults writing a GBI command at the top
+of the 8 MB emulated DRAM (`0x70800000`) — **non-deterministically**, and
+scribbling GBI across DRAM on the way (the run-to-run `Unknown GBI opcode
+0x3f/0xffffb9` and `gfx_sp_matrix` seg-9 `0x90000000` faults were all
+downstream corruption from this one overrun). Doubling the `g_GfxBuffers`
+allocation (`* sizeof(Gfx)/8`) under PORT **stops the overrun** (verified:
+`-level_09` then runs 90 s+ / 5000+ VI posts, no crash) **but** the extra
+~100 KB starves `MEMPOOL_STAGE` so `zbufAllocate` →
+`mempAllocBytesInBank` (`memp.c:204`) spins in its OOM `while(1)` and no
+frame ever renders (`kernel heartbeat: frames=0`; mainThread stuck in
+`lvlRender`→`viClearZBufCurrentPlayer`→`zbufInit`). Committed as
+`70784f80` then **reverted (`2a506284`)**. Real fix options, in rough
+order of cleanliness: (a) allocate `g_GfxBuffers` (and only that — it is
+pure CPU-side GBI scratch that `gfx_run` walks by raw pointer) with plain
+`malloc` on PC instead of from `MEMPOOL_STAGE` — verify nothing does
+`osVirtualToPhysical` on a `gdl` pointer first (`rspGfxTaskStart` PORT
+path sets `task->t.data_ptr = firstGdl` directly, looks safe); (b) enlarge
+the emulated DRAM (`port/src/dram.c` `DRAM_SIZE 0x00800000`) and move the
+`tlbmanageGetTlbAllocatedBlock` ceiling so `MEMPOOL_STAGE` (bounded
+`_bssSegmentEnd .. TLB block`, `boss.c:218`) gains the room; (c) a
+safety-net cap in the append path (a lot of call sites — least clean).
+Also: `struct tex` headers are 24 B vs 16 B on PC (texpool-triage finding)
+— same class, same pool pressure; a real memory-budget pass for the PC
+port would address both.
+
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
 `worktree/data → main/data` followed the junction and deleted the real

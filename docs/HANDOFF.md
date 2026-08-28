@@ -30,21 +30,24 @@ no longer hits `Bad size for RGBA texture` — BUNKER1 renders multiple
 full frames (5 rooms drawn, frame GDL advances cleanly). The
 stream-decode + texture-pool layers of D85 are done.
 
-**Now a fresh, NON-DETERMINISTIC crash cluster** (newly reachable — the
-render loop + guard AI run in-level now; 4-run sample = 3 distinct
-faults):
-1. `bgScissorCurrentPlayerView` frame-GDL overrun (`bg.c:1355`, fault
-   `0x70800000` = end of 8 MB DRAM) — ~1/4 runs.
-2. `chrlvInitActAttack` bad pointer (`chraction.c:1316`, fault
-   `~0x4012xxxx`, looks like a hi-word-truncated 64-bit ptr, D86/D92
-   class) — ~2/4 runs.
-3. `gfx_sp_matrix` unrelocated seg addr `0x90000000` (`gfx_pc.cpp:1077`)
-   — a room-GDL `gsSPMatrix` w1 not remapped by the widen — ~1/4 runs.
+**D94 fixed (`63204a27`)** the one deterministic pointer bug in that
+cluster — `chrlvInitActAttack`'s `(s32)`-truncated anim-table index.
 
-Full triage + the `data/`-deletion recovery note in `PCPortResearch.md`
-§F ("D85 texture wall CLEARED", "`data/` deletion + recovery").
-**Sidecars were regenerated this session** — if `data/` looks wrong,
-rerun all three (`d43_emit.py`, `d69_emit.py`, `d88_emit.py --regen`).
+**The remaining blocker is D95 (OPEN): the `-mgfx` master-DL buffer is
+half-capacity on PC** (16-byte `Gfx` vs N64 8-byte, same byte budget).
+The frame GDL overruns → non-deterministic fault at `0x70800000` (top of
+8 MB DRAM), corrupting other GDLs on the way (the run-to-run "Unknown GBI
+opcode" / seg-9 `0x90000000` faults are all downstream of this). Doubling
+`g_GfxBuffers` stops the overrun (90 s+ clean) **but OOMs `MEMPOOL_STAGE`**
+(zbuf alloc spins in `mempAllocBytesInBank` `while(1)`, `frames=0`).
+Committed `70784f80`, reverted `2a506284`. Fix options in
+`PCPortResearch.md` §F "D95" — the cleanest is likely to `malloc`
+`g_GfxBuffers` on PC (pure CPU-side GBI scratch, outside the N64 pool).
+
+`data/` was accidentally deleted + fully regenerated this session — if it
+looks wrong, `cp baserom.u.z64 data/ge007.ntsc-final.z64` then rerun
+`d43_emit.py` / `d69_emit.py` / `d88_emit.py --regen` (§F "`data/`
+deletion + recovery").
 
 - Build: `export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final`
 - Sidecar regen (REQUIRED after this session — D88.5/D88.6 changed the
