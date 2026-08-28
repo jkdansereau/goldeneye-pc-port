@@ -2862,11 +2862,34 @@ prop-definition record types (`sizepropdef()` walk in `loadobjectmodel.c`,
 selected by a 1-byte `type` tag). `setupDoor` reads `door->obj` (a
 multi-byte model-id field) straight out of a still-big-endian record →
 out-of-range `PitemZ_entries[]` → segfault. Same class as D87/D88.1, in
-the one region the converter punted on. **Fix**: spec each propDef record
-type's layout, byteswap its multi-byte fields in the converter (and
-`intro` polymorphic records — the docstring flags these as needing bswap
-too, s32 discriminant), audit struct sizes. Expect 1–2 further crashes
-down the prop-setup chain after this (pattern held D86→D87→D88.1→D88.4).
+the one region the converter punted on.
+
+**D88.4 scope (investigated 2026-08-28, not yet fixed):** this is bigger
+than a byteswap. `sizepropdef()` (`loadobjectmodel.c:47`) dispatches on
+the 1-byte `type` tag across ~44 `PROPDEF_*` record types. Many return a
+hardcoded literal word count (N64-accurate, stable) but several return
+`sizeof(SomeRecord)/4` — and those records contain **pointer members**
+(e.g. `ObjectRecord` has `PropRecord *prop` + `Model *model`; `GuardRecord`,
+`DoorRecord` similar), so on PC they grow 4→8B per pointer and the walk
+stride itself changes. So D88.4 needs the full D69/D88.1 treatment for the
+propDefs region:
+1. Byte-accurate spec of every `PROPDEF_*` record actually present in
+   BUNKER1's file (then the other 20 levels).
+2. Converter: per-record delta-relocation (resize pointer-grown records,
+   NUL the embedded runtime pointers) + byteswap every multi-byte field.
+3. Same for the `intro` polymorphic `SetupIntro*` records (s32 type
+   discriminant — the `d88_emit.py` docstring already flags these).
+4. **D88.4b (runtime side):** audit the `sizeof(X)/4` arms of
+   `sizepropdef()` — on PC those now yield the grown size, which must
+   match whatever the converter emits. May need `#ifdef PORT` literal
+   word counts (matching the N64 `#if 1` literals) if the converter keeps
+   records at N64 width instead of growing them. Decide converter-grows
+   vs. converter-keeps-N64-width first; the latter is simpler if nothing
+   dereferences these records with array-index semantics (verify — cf.
+   the D88 converter's reasoning for the sub-tables).
+
+Expect 1–2 further crashes down the prop-setup chain after this (pattern
+held D86→D87→D88.1→D88.4).
 
 **D88.5 (WATCH — stan tile name lookups all miss during pad setup).**
 With the `GE_D88` probe on, every `stanMatchTileName` call from
