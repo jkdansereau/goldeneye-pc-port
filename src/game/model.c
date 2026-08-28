@@ -1467,6 +1467,35 @@ void sub_GAME_7F06DB5C(ModelRenderData *arg0, Model *arg1, ModelNode *arg2, quat
     sp48 = arg1->render_pos;
     sp1C = (s32)arg2->Parent;
 
+#ifdef PORT
+    /* D101: this function stashes `arg2->Parent` (a ModelNode*) and
+     * `&sp48[sp54]` (a RenderPosView*) through the s32 `sp1C` scratch, exactly
+     * the 32-bit-pointer idiom the sibling modelBuildGroupMatrices() was
+     * already cleaned up for. On x86-64 the (s32) cast drops the 0x140000000
+     * module base of a static ModelNode, so modelFindNodeMtx(...,
+     * (ModelNode*)sp1C, 0) dereferences 0x4012xxxx and faults in
+     * modelFindNodeMtxIndex. Do the pointer work at full width (mirrors
+     * modelBuildGroupMatrices' parentnode handling and its 2-arg
+     * g_ModelJointPositionedFunc call). */
+    {
+        ModelNode *parentNode = arg2->Parent;
+        Mtxf *m0 = (Mtxf *)&sp48[sp54];
+
+        sp9C = (parentNode != NULL)
+                   ? modelFindNodeMtx(arg1, parentNode, 0)
+                   : arg0->basemtx;
+
+        if (sp9C != 0) {
+            quaternion_to_transform_matrix(&spA0->Origin, arg3, &sp58);
+            matrix_4x4_multiply_homogeneous(sp9C, &sp58, m0);
+            if (g_ModelJointPositionedFunc != NULL) {
+                g_ModelJointPositionedFunc(sp54, m0);
+            }
+        } else {
+            quaternion_to_transform_matrix(&spA0->Origin, arg3, m0);
+        }
+    }
+#else
     if (*new_var != 0) {
         sp9C = arg0->basemtx;
         sp9C = modelFindNodeMtx(arg1, (ModelNode *)sp1C, 0);
@@ -1484,6 +1513,7 @@ void sub_GAME_7F06DB5C(ModelRenderData *arg0, Model *arg1, ModelNode *arg2, quat
     } else {
         quaternion_to_transform_matrix(&spA0->Origin, arg3, (Mtxf *)&sp48[sp54]);
     }
+#endif
 
     if (spA4 & 0x100) {
         quaternion_7F05BC68(arg3, 0.5f, sp2C);
