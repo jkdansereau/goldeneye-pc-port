@@ -3051,6 +3051,36 @@ decompressed size. Also fix the pre-existing bug at `bg.c:2448`:
 `texLoadFromGdl((Gfx *)scratch, (Gfx *)expanded_size, ...)` casts the
 size arg to a pointer.
 
+**D85 widen fix IMPLEMENTED (committed `ea8a37a0`/`c732425d` = master
+`c732425d`).** `bgWidenRoomGdl()` — in-place back-to-front 8→16 widen +
+`bswap32` per word — runs in `bgLoadRoomPrimaryGdl`/`bgLoadRoomSecondaryGdl`
+right after `bgDecompress`; the doubled size flows into `texCopyGdls`/
+`texLoadFromGdl`/`usize_*_DL_binary`. `bgSwapRoomVtx()` `bswap16`s the 6
+leading `u16`s of each `Vtx` in `bgLoadRoomVtxData`. The `bg.c:2448`
+size-cast-to-pointer bug is fixed under `#ifdef PORT`. Verified: room
+GDLs now decode to real GBI (`GE_D69BB` dump: `E7` RDPPIPESYNC / `BA`
+SETOTHERMODE_H / `B9` SETOTHERMODE_L / `FC` SETCOMBINE / `BB` TEXTURE /
+`B7` SETGEOMETRYMODE), G_NOOP markers decode to sane texnums. Alloc
+budget needs no change (first-load block is `memaGetLongestFree`-sized,
+then shrunk from post-widen `used`).
+
+**D85 remaining (3 downstream issues, none are stream-decode):**
+1. **Room textures never populated — now the deterministic wall.**
+   `texFindInPool` returns NULL for every room texnum →
+   `sysFatalError("Bad size for RGBA texture in tile 0: 00")`
+   (`gfx_pc.cpp:967`). `texLoadFromTextureNum(texnum, texpool)` isn't
+   loading the BUNKER1 room texture bank on the `-level_09` path. Probe
+   `GE_D85TEX=1` (committed in `texLoadFromGdl`). Under triage.
+2. **`bgTestRayIntersectionInRoom`** (`bg.c:3302` `((u32*)gdl)[1]`,
+   `:3383/3388/3521/3526` `*(u8*)gdl`) still reads opcodes/w1 N64-style;
+   post-widen the opcode is byte 3 and w1 is `((u32*)gdl)[2]`. Operated
+   on garbage before (so "worked"); needs PORT accessors. Hitscan, not
+   render — lower priority.
+3. **Frame-GDL buffer overrun in `chrpropsRenderPass`**
+   (`bgScissorCurrentPlayerViewDefault`, `chrprop.c:569` → `bg.c:1355`,
+   write fault ~`0x70800000`). Timing-dependent, masked behind #1.
+   Prop/character render path (D75-adjacent), newly reachable.
+
 **Docs-to-commit reminder (session L).** The D88.1–D88.3 work
 (`tools_pc/d88_emit.py`, `port/src/pccg.c`, `src/bondtypes.h`,
 `src/game/bondview2.c`, `src/game/bondview_r.c`) plus the `GE_D88` probes

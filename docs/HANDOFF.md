@@ -15,15 +15,17 @@ chrs, ticks AI, and reaches the **first render** — where it hits
 stream. This is 3D-pipeline / render-milestone work, not a crash-chain
 fix.
 
-**D85 is now root-caused (`PCPortResearch.md` §F "D85 root cause
-CONFIRMED").** The decompressed per-room DL blob is raw N64 data (8-byte
-BE `Gfx` slots); all PORT consumers (`texCopyGdls`/`texLoadFromGdl`,
-`bgApplyDynamicCCRMLUT`, `bgBuildRoomVtxBounds`) assume 16-byte LE PC
-`Gfx` slots → 2× stride + unswapped words → garbage opcodes. Fix =
-runtime 8→16 widen + `bswap32` in `bgLoadRoomPrimaryGdl` /
-`bgLoadRoomSecondaryGdl` (between `bgDecompress` and `texCopyGdls`), plus
-a `Vtx` short-field bswap in `bgLoadRoomVtxData`. Implementation in
-progress — check `git log` for a `D85:` commit chain.
+**D85 stream-decode is FIXED (committed, master `c732425d`).** The
+per-room DL blob was raw N64 data (8-byte BE `Gfx`); all PORT consumers
+assume 16-byte LE PC `Gfx`. `bgWidenRoomGdl()` (8→16 widen + `bswap32`)
+now runs after `bgDecompress`; `bgSwapRoomVtx()` swaps the `Vtx` table.
+Room GDLs decode to real GBI now. **The `Bad size for RGBA texture`
+FATAL persists but for a NEW reason:** `texFindInPool` returns NULL for
+every room texnum — the BUNKER1 room texture bank isn't loaded on the
+`-level_09` path. That + two lower-priority downstream issues
+(`bgTestRayIntersectionInRoom` N64-style opcode reads; a
+`chrpropsRenderPass` frame-GDL overrun) are the remaining D85 work — see
+`PCPortResearch.md` §F "D85 remaining (3 downstream issues)".
 
 - Build: `export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final`
 - Sidecar regen (REQUIRED after this session — D88.5/D88.6 changed the
