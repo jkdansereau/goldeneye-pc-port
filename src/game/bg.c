@@ -2845,6 +2845,16 @@ void bgBuildRoomVtxBounds(s32 roomID)
 
     gdl = g_BgRoomInfo[roomID].ptr_expanded_mapping_info;
 
+#ifdef PORT
+    /* D85: a room with no primary GDL (csize==0, e.g. the null room 0) leaves
+     * ptr_expanded_mapping_info == NULL. On N64 the command walk below would
+     * read address 0 (valid RDRAM); on PC it segfaults. No GDL means no vertex
+     * batches to bound. */
+    if (gdl == NULL) {
+        return;
+    }
+#endif
+
     vertices = g_BgRoomInfo[roomID].vertices;
     cmdindex = 0;
     numpoints = 0;

@@ -83,6 +83,19 @@ void bgApplyDynamicCCRMLUT(Gfx *start, Gfx *end, enum CCRMLUT lutIndex)
 
     curGfx = start;
 
+#ifdef PORT
+    /* D85: when a room has no primary/secondary GDL (csize==0, e.g. the null
+     * room 0), the caller in bgLoadRoomModelData passes start =
+     * ptr_expanded_mapping_info (NULL) and end = start + usize (== NULL, since
+     * usize==0). The loop condition below then takes the "end == NULL"
+     * sentinel-scan branch and dereferences the NULL start pointer. On N64
+     * address 0 is readable RDRAM so this wanders harmlessly; on PC it
+     * segfaults. An empty range has nothing to patch. */
+    if (start == NULL) {
+        return;
+    }
+#endif
+
     /* Loop until end pointer or sentinel G_ENDDL (when end==NULL) */
     while (((end != NULL) && (curGfx < end)) || ((end == NULL) && (((s8*)curGfx)[0] != (s8)G_ENDDL)))
     {
