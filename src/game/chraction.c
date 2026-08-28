@@ -1218,9 +1218,19 @@ void chrlvInitActAttack(ChrRecord *self, struct anim_group_info **arg1, s32 arg2
     // Something like:
     //     &arg1[anim_index]->table[next_anim]
     //     arg1[anim_index]->table + next_anim
+#ifdef PORT
+    /* D94: the `(s32)...->table + (s32)(idx*sizeof(...))` form truncates a
+     * real 64-bit pointer to 32 bits (then zero-extends on the cast back),
+     * dropping the module load-base high word (0x1_40000000 -> 0x4012xxxx)
+     * and faulting at the `panim_float->anim.anim` read below / in
+     * chrlvInitActAttack. It's plain array indexing -- do it as such (the
+     * code's own comment says so). Behaviour-identical on N64. */
+    panim_float = &(*arg1[anim_index]->table)[next_anim];
+#else
     panim_float = (struct weapon_firing_animation_table *)(
             (s32)arg1[anim_index]->table + (s32)((s32)next_anim * (s32)sizeof(struct weapon_firing_animation_table))
         );
+#endif
 
     if ((self->chrflags & CHRSTART_FORCENOBLOOD)
         && ((s32)panim_float->anim.anim == (s32)&ptr_animation_table->data[(s32)&ANIM_DATA_fire_hip]))
@@ -1228,9 +1238,14 @@ void chrlvInitActAttack(ChrRecord *self, struct anim_group_info **arg1, s32 arg2
         // should be:
         //     panim_float = &arg1[anim_index]->table[(next_anim + 1) % len]
         // where `len = arg1[anim_index]->len`
+#ifdef PORT
+        /* D94: see above -- array index, no pointer truncation. */
+        panim_float = &(*arg1[anim_index]->table)[(next_anim + 1) % arg1[anim_index]->len];
+#else
         panim_float = (struct weapon_firing_animation_table *)(
             (s32)arg1[anim_index]->table + (s32)(((next_anim + 1) % arg1[anim_index]->len) * (s32)sizeof(struct weapon_firing_animation_table))
         );
+#endif
     }
 
     for (i=0; i<2; i++)
