@@ -3168,22 +3168,52 @@ built in the gfx buffer, etc.) must live in the `0x70000000` DRAM window.
 + the re-applied 2x `g_GfxBuffers` removes the OOM hang: `-level_09` now
 **renders ~5 frames** (`frame N rendered` logs, VI posts climbing).
 
-**Current blocker: a RUNAWAY GDL append at ~frame 5, in the prop-render
-path.** `bgScissorCurrentPlayerView` (`bg.c:1355`, `gDPSetScissor(arg0++)`)
-faults writing at `0x70800000` (top of DRAM) — the `gdl` write pointer
-has marched off the end. **Deterministically at ~frame 5, regardless of
-`-mgfx` (tested to 1.6 MB/half)** → not a buffer-size problem, a runaway
-loop. Reached via `chrpropsRenderPass` (`chrprop.c:568` `return
-bgScissorCurrentPlayerViewDefault(gdl)`) after its prop loop
-(`chrprop.c:488` / `533`) calls `chrpropRender(gdl, prop, …)` many times.
-Frame 5 is about when guards/props finish spawning and their (animated,
-skeletal) models first render — this likely IS the D75(b) animated-model
-path breaking, now reachable in-level. Next: probe `gdl` advance per
-`chrpropRender` call / per prop in `chrpropsRenderPass`; a single prop
-with a bad model/anim pointer, or `g_LastOnScreenProp` garbage, or a
-per-node model-GDL walk without a terminator, would do it. `struct tex`
-headers are also 24 B vs 16 B on PC (texpool-triage) — same pool-pressure
-class; a real PC memory-budget pass should cover both.
+The "runaway GDL append at ~frame 5" that D95 chased turned out to be
+**two memory-corruption bugs**, both now fixed:
+
+**D96 (`d86ec483`) — prop room-list stack overflow.**
+`chrpropUpdateRoomList` + helpers build room lists of up to 7 entries,
+then write `prop->rooms[0..n]` + a `0xff` terminator. `PropRecord.rooms`
+and `chrpropsRenderPass`'s `s32 sp48[…]` local are both
+`PROPRECORD_STAN_ROOM_LEN` = **4**. BUNKER1 patrol guards routinely span
+≥4 rooms (`[1a 13 14 10]`, …) → 4 IDs, no terminator inside the array →
+`chraiGetPropRoomIds`'s `for (i=0; self->rooms[i] != 0xff; i++)` walks
+off the end, overflowing the caller's stack frame → garbage `gdl` →
+GBI write fault. Every *other* `chraiGetPropRoomIds` caller already used
+`s32[8]`. Fix: `PROPRECORD_STAN_ROOM_LEN` → 8 under `#ifdef PORT`
+(`bondconstants.h`), + a defensive bound in `chraiGetPropRoomIds`. N64
+unchanged.
+
+**D97 (`2fbcc556`) — `bondviewPlayerTickDamageAndHealth` negative
+`damagetype`.** US build (unlike EU/JP) has no low clamp;
+`damagetype = (s32)(health*8)` goes negative on a lethal hit → OOB
+`g_DamageTypes[]` read → segfault when a guard shoots Bond (~frame 5).
+Extended the EU/JP clamp to PORT.
+
+**D98 (`000ed6af`) — `initBONDdataforPlayer` under-allocates the player
+struct.** It `mempAllocBytesInBank`s a hardcoded `0x2A80` (N64
+`sizeof(struct player)`, `0x2A70` EU). The PC struct is much larger
+(pointer fields widened 4→8). The player block sits directly below
+`g_GfxBuffers[0]` in `MEMPOOL_STAGE`, so writes past ~offset `0x2A08`
+(`bondviewRenderDebugBondView`'s `g_CurrentPlayer->field_2A08 = ft4`,
+run every frame since `debug_render_raster` defaults to `DEB_BOND_VIEW`)
+scribbled the zbuf-clear `gsDPSetRenderMode`'s `w1` onto master-DL slot
+11 → `Unknown GBI opcode 0xffffb9`. Fix: allocate
+`(sizeof(struct player) + 0xF) & ~0xF` under `#ifdef PORT`.
+
+**Current blocker (D99): `modelTickAnim` garbage function-pointer call.**
+`-level_09` renders ~5 frames then **deterministically** (6/6) segfaults
+at PC `0x00010100` — `((void(*)(void))model->animflipfunc)()` at
+`model.c:3534`. `struct Model.animflipfunc` (`bondtypes.h:1640`, "0x98")
+is declared **`s32`** but `modelSetAnimFlipFunction` (`model.c:2840`)
+stores a `void *` in it → truncated on PC. `Model.unka0` (0xa0) is
+flagged as another likely function pointer — same class. `struct Model`
+is offset-sensitive (D52/D86 ROM RW-data pipeline) so a layout change
+needs care; a `#ifdef PORT` companion pointer field is the fallback.
+D75-class (animated/skeletal model path), now the literal render blocker.
+`struct tex` headers 24 B vs 16 B on PC (texpool-triage) is a separate
+still-open pool-pressure item — a real PC memory-budget pass should
+cover it.
 
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
