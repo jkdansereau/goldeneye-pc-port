@@ -46,6 +46,64 @@ s32 getposstan(struct coord3d *pos, StandTile *stan, f32 radius, struct coord3d 
 */
 s32 sizepropdef(PropDefHeaderRecord *pdef)
 {
+#ifdef PORT
+    /* D88.4: the offline Usetup*Z converter (tools_pc/d88_propdefs.py) rewrites
+     * every propDef record from its packed N64 image to its native PC struct
+     * layout -- pointer members widen 4->8B, so records that contain pointers
+     * grow.  The in-place walk stride here must match what the converter
+     * emitted (PROPDEF_PC_BYTES in d88_propdefs.py, / 4).  N64 counts are in
+     * the #else-guarded switch below for reference. */
+    switch (pdef->type)
+    {
+        case PROPDEF_OBJECTIVE_END:
+        case PROPDEF_OBJECTIVE_NULL:
+        case PROPDEF_END:                               return 1;
+        case PROPDEF_DOOR_SCALE:
+        case PROPDEF_OBJECTIVE_DESTROY_OBJECT:
+        case PROPDEF_OBJECTIVE_COMPLETE_CONDITION:
+        case PROPDEF_OBJECTIVE_FAIL_CONDITION:
+        case PROPDEF_OBJECTIVE_COLLECT_OBJECT:
+        case PROPDEF_OBJECTIVE_DEPOSIT_OBJECT:          return 2;
+        case PROPDEF_GUARD_ATTRIBUTE:
+        case PROPDEF_OBJECTIVE_COPY_ITEM:               return 3;
+        case PROPDEF_OBJECTIVE_START:
+        case PROPDEF_OBJECTIVE_PHOTOGRAPH:
+        case PROPDEF_OBJECTIVE_ENTER_ROOM:
+        case PROPDEF_WATCH_MENU_OBJECTIVE_TEXT:         return 4;
+        case PROPDEF_OBJECTIVE_DEPOSIT_OBJECT_IN_ROOM:  return 5;
+        case PROPDEF_LINK:
+        case PROPDEF_SWITCH:
+        case PROPDEF_TAG:
+        case PROPDEF_SAFE_ITEM:                         return 6;
+        case PROPDEF_CAMERAPOS:                         return 7;
+        case PROPDEF_GUARD:
+        case PROPDEF_LOCK_DOOR:                         return 8;
+        case PROPDEF_RENAME:                            return 12;
+        case PROPDEF_PROP:
+        case PROPDEF_ALARM:
+        case PROPDEF_RACK:
+        case PROPDEF_HAT:
+        case PROPDEF_GAS_RELEASING:
+        case PROPDEF_GLASS:
+        case PROPDEF_SAFE:                              return 36;
+        case PROPDEF_KEY:
+        case PROPDEF_MAGAZINE:
+        case PROPDEF_ARMOUR:                            return 38;
+        case PROPDEF_COLLECTABLE:                       return 40;
+        case PROPDEF_TINTED_GLASS:                      return 42;
+        case PROPDEF_VEHICHLE:                          return 44;
+        case PROPDEF_AIRCRAFT:                          return 45;
+        case PROPDEF_AMMO:                              return 50;
+        case PROPDEF_TANK:                              return 56;
+        case PROPDEF_AUTOGUN:                           return 62;
+        case PROPDEF_CCTV:                              return 68;
+        case PROPDEF_MONITOR:                           return 72;
+        case PROPDEF_DOOR:                              return 74;
+        case PROPDEF_MULTI_MONITOR:                     return 166;
+        default:
+            return sizeof(PropDefHeaderRecord) / 4;
+    }
+#endif
     #if 1
     switch (pdef->type)
     {
