@@ -110,6 +110,7 @@ def be32(b, o): return struct.unpack_from(">I", b, o)[0]
 def bs32(b, o): return struct.unpack_from(">i", b, o)[0]
 def bs16(b, o): return struct.unpack_from(">h", b, o)[0]
 def bswap32_bytes(v): return struct.pack("<I", v & 0xFFFFFFFF)
+def bswap16_bytes(v): return struct.pack("<H", v & 0xFFFF)
 def bswap32_bytes_s(v): return struct.pack("<i", v)
 
 FIELD_NAMES = ["pathwaypoints", "waypointgroups", "intro", "propDefs",
@@ -440,9 +441,18 @@ def convert_usetup(name, src):
                     # IntroCamera() macro emission: type,6xcoords/angles,
                     # lang1c,lang20,0 -- but consumed struct is 40B/10 words)
             for k in range(10):
-                v = be32(src, o + 4 * k)
                 do_k = do + 4 * k
-                out[do_k:do_k + 4] = bswap32_bytes(v)
+                if k == 7:
+                    # lang1c is `union { u16 lang_index[2]; u32 lang_ptr; }`.
+                    # bondview_r.c reads lang1c.lang_index[1] (the 2nd u16),
+                    # so the two halves must keep their order -- bswap each
+                    # u16 in place, NOT a whole-word bswap32 (which would
+                    # swap element 0 and element 1). lang20 (k==8) really is
+                    # an s32, so it stays a bswap32. (D88.6)
+                    out[do_k:do_k + 2] = bswap16_bytes(bs16(src, o + 4 * k))
+                    out[do_k + 2:do_k + 4] = bswap16_bytes(bs16(src, o + 4 * k + 2))
+                else:
+                    out[do_k:do_k + 4] = bswap32_bytes(be32(src, o + 4 * k))
         else:
             for k in range(sz // 4):
                 v = be32(src, o + 4 * k)
