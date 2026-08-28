@@ -12,6 +12,8 @@
 #include "tex.h"
 
 #ifdef PORT
+#include <stdio.h>
+#include <stdlib.h>
 #include "pcmodels.h" /* D50: PC-layout model sidecars (Plan B, D48/D49) */
 #include "pccg.h"     /* D69: PC-layout bg/stan sidecars */
 extern resource_lookup_data_entry resource_lookup_data_array[]; /* ob.c */
@@ -136,7 +138,15 @@ void load_object_fill_header(struct ModelFileHeader *objheader, u8 *name, u8* ds
 #endif
     
     objheader->RootNode = (struct ModelNode *)&objheader->Textures[objheader->numtextures];
-    
+
+#if defined(PORT) /* TEMP D86: correlate header identity with the model name at load time */
+    if (getenv("GE_D86")) {
+        fprintf(stderr, "[D86] load_object_fill_header name=%s objheader=%p filedata=%p RootNode=%p numSwitches=%d numtextures=%d\n",
+                (const char *)name, (void *)objheader, (void *)filedata, (void *)objheader->RootNode,
+                objheader->numSwitches, objheader->numtextures);
+        fflush(stderr);
+    }
+#endif
     sub_GAME_7F075A90(objheader, 0x5000000, filedata);
     sub_GAME_7F0762E0(objheader, name, dst, buffer);
 }

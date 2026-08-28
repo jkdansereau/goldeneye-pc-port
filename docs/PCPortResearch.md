@@ -2709,34 +2709,121 @@ room-specific opcodes (`bgApplyDynamicCCRMLUT`/`ptrDynamic_CC_RM_LUT`/
 `DL_LUT_PRIMARY_ADDFOG` suggest room GDLs carry CC/RM-LUT-selection markers
 models don't use) and verify `csize_*_DL_binary` sizing end-to-end.
 
-**D86 (OPEN — new downstream crash in `modelInitRwData` during
-room-triggered model instantiation, found during D69 verification, likely
-unrelated to the bg/stan conversion).** With D85's safety net in,
-`bgBuildRoomVtxBounds` no longer segfaults, but the game reaches a **new**
-crash a little further into room streaming: `modelInitRwData`
-(`model.c:6174`) dereferences a bad `node` pointer, called from
-`modelInit` ← `animInit` (`model.c:6323`/`6331`). This is the existing
-model-loading pipeline (D50-D58, already working for every intro/cast
-model) hitting an edge case that was never exercised before because
-gameplay never progressed this far — most likely a room-instantiated
-object (light fixture / prop / character) whose model load path differs
-from the intro's, or a `RootNode`/pcmodels-table edge case not covered by
-the existing 512-file conversion. **Not yet root-caused** — needs its own
-investigation (probably starts with identifying which model name is being
-loaded at the crash site and whether it's present in
-`data/pcmodels-ntsc-final/manifest.csv`). Filed separately from D75
-(pre-existing 3D-render findings) since it's a hard crash, not a visual
-defect; likely fixable independent of D75/D85.
+**D86 (RESOLVED — `modelInitRwData` crash was a single truncating pointer
+cast in the player's embedded gait/arm model init, unrelated to bg/stan).**
+Root-caused with a new env-gated trace (`GE_D86=1`: node-walk trace in
+`modelInitRwData` + a load-identity probe in `load_object_fill_header`,
+both TEMP, left in place). The trace showed the crash node's low 32 bits
+were `(header_ptr & 0xFFFFFFFF) + 0x1E0` with the high 32 bits zeroed, and
+that this header was **never** loaded via `load_object_fill_header` (no
+matching probe line) — pointing at a statically-embedded model, not a
+dynamically-loaded one. `src/game/initplayergaitobject.c:5` does
+`player_gait_object_header.RootNode = (int)&player_gait_hdr;` — a
+same-width (32-bit) pointer→int→pointer round trip that's a no-op on N64,
+but on PC `(int)` truncates the real 64-bit `&player_gait_hdr` to its low
+32 bits, and the implicit int→pointer conversion back into `RootNode`
+zero-extends it, dropping the executable's load-base high bits (module
+maps at `0x140000000`, so the truncated pointer silently loses the
+`0x1`). `init_player_gait_object()` runs once from `boss.c:236`, and
+`player_gait_object_header` is only used once real gameplay starts
+(`initBondDATAdefaults.c:99` `animInit`s the player's gait model) — never
+exercised while the game only ever got as far as the intro/cast screens.
+Fixed with a `#ifdef PORT` branch in `initplayergaitobject.c` that assigns
+the real pointer directly (behavior-identical to the N64 assignment,
+ABI-width fix only). Verified: BUNKER1 now loads past this point with a
+clean, deterministic repro via `-level_09` (see D88).
 
-**D69 status after D78-D86: the ORIGINAL blocker (`load_bg_file` faulting
+**D87 (RESOLVED — attract-mode demo playback (`ramrom_replay_handler`)
+crashed on a big-endian `ramromfilestructure` read with no byteswap).**
+Found while re-verifying D86: an idle front-end run (no player input)
+eventually calls `select_ramrom_to_play()` (`ramromreplay.c`), which picks
+a random compiled-in demo blob from `ramrom_table[]` (`ramrom_Dam_1`,
+`ramrom_BunkerI_1`, etc. — genuine shipped attract-mode assets, not a
+debug-only feature; the debug-menu replay path, `DEB_REPLAYRAMROM`, is
+structurally unreachable in this `ntsc-final`-equivalent build since
+`DEBUGMENU` isn't defined — confirmed with a `gdb -p <pid>` **attach**
+hardware watchpoint on `is_ramrom_flag`, which resolved cleanly and
+quickly this session; attach mode works fine for a non-timing-dependent
+write, unlike the launch-mode-only guidance logged after the D56 session —
+worth a retry next time attach seems useful). `replay_recorded_ramrom_at_address`
+loads `ramromfilestructure` via `romCopyAligned()`, a raw byte copy (by
+design, D66) from a real ROM-compiled asset — so, like every other
+N64-compiled ROM asset, its multi-byte fields are big-endian, and nothing
+byte-swaps them on read. A real `size_cmds` of 2 (BE bytes `00 00 00 02`)
+read as native LE prints as `33554432` (`0x02000000`); that garbage then
+drives the loop bound and pointer arithmetic in
+`iterate_ramrom_entries_handle_camera_out`/`ramrom_replay_handler`, which
+walks far outside the small `ramrom_blkbuf_2`/`ramrom_blkbuf_3` scratch
+buffers and segfaults reading `temp_v0->stick_x`
+(`ramromreplay.c:301`/`ramrom.c` callers). Root-caused with a new
+env-gated probe (`GE_D87=1`, left in place). Fixed with a `#ifdef PORT`
+`ramromFixupEndian()` in `ramromreplay.c`, called once right after the
+`romCopyAligned()` in `replay_recorded_ramrom_at_address` (same pattern as
+the D54 cseq-header fixup): byte-swaps every multi-byte field
+(`u64`/`u32`/enum fields via `__builtin_bswap64`/`32`, `save_data.options`
+via `bswap16`); `save_data`'s single-byte fields and the `times[]` byte
+array are left alone. The **downstream** per-frame chunks
+(`ramrom_seed`/`ramrom_blockbuf`, read via the same `romCopyAligned`
+pattern in `iterate_ramrom_entries_handle_camera_out`) are all-`u8`
+structs and need no swap. Not BUNKER1-specific — this is a front-end/
+attract-mode path that can select any of the 7 demo locations at random;
+use `-level_09` (see D88) to skip the front end entirely for deterministic
+BUNKER1 testing instead of waiting on/fixing attract mode.
+
+**D88 (OPEN — root-caused, next blocker: per-level `Usetup*Z` "stage
+setup" file is raw N64-endian/width ROM bytes read directly through a
+PC-widened struct, with no conversion at all).** Found immediately after
+D86/D87 while re-verifying BUNKER1 specifically — launch with `-level_09`
+(`boss.c:199-339` decodes `-level_XX` into `g_StageNum`, bypassing the
+front end/attract-mode entirely for a fast, deterministic repro; NTSC
+`LEVELID_BUNKER1 = 9`, and the token's two digit-chars are consumed as raw
+ASCII bytes, so `"09"` → `'0'*10 + '9' - 0x210 = 9`) reaches the exact same
+crash as the random attract-mode run, immediately and reproducibly:
+`proplvreset2` (`prop.c:1306`) segfaults reading
+`g_CurrentSetup.pathwaypoints[i1].padID`. `prop.c:1267-1282` loads the
+level's `"Usetup<name>Z"` file with `_fileNameLoadToBank` (raw ROM bytes,
+**not** run through any PC-layout converter — unlike bg/stan (D69/D80-82)
+and models (D43/D50), this asset type has zero PC porting work done on
+it) into `local_stage`, then rebases 10 top-level fields
+(`pathwaypoints`/`waypointgroups`/`intro`/`propDefs`/`patrolpaths`/
+`ailists`/`pads`/`boundpads`/`padnames`/`boundpadnames`, plus nested
+`neighbours`/`waypoints`/`ailist` pointers inside the sub-tables) with
+`(void *)(((u32) local_stage) + ((u32) local_stage->pathwaypoints))` —
+i.e. by reading the *raw file bytes* directly through the live
+`struct stagesetup` (`bondtypes.h:4091`), whose 10 fields are declared as
+real pointers. This is worse than a plain missing-byteswap bug (cf. D87):
+on N64 those 10 fields are 4 bytes each (40-byte header, correctly
+self-describing "byte offset from file start" per the code's own
+comment), but the PC struct widens every pointer field to 8 bytes (an
+80-byte header) — the same class as D79 (`bg_room_data` pointer growth)
+— so field N's read doesn't even land on the right *bytes* of the file
+past field 0, before even considering that the 4 meaningful bytes it does
+read are big-endian. Confirmed no PORT/byteswap handling exists anywhere
+in `prop.c` (`grep` for `bswap`/`#ifdef PORT` in the file: zero hits).
+**Not fixed this session** — this is format-conversion work at the same
+scale as D69 (a whole ROM asset type needs a byte-accurate spec + either
+an offline converter sidecar, the established preferred pattern per
+AGENTS.md, or a careful runtime fixup pass that parses the raw 40-byte
+N64-packed header by explicit byte offset, byte-swaps each field, and
+writes the results into the PC-widened `stagesetup` struct — plus the
+same treatment for every nested sub-table referenced from it
+(`waypoint`/`waygroup`/`PropDefHeaderRecord`/`PathRecord`/`AIListRecord`/
+`PadRecord`/`BoundPadRecord`/`pname`, each of which likely has its own
+internal offsets/BE fields not yet audited). **This is the actual next
+blocker to a rendered BUNKER1 frame** — reachable deterministically via
+`-level_09` in well under a minute, no attract-mode wait required.
+
+**D69 status after D78-D88: the ORIGINAL blocker (`load_bg_file` faulting
 on first stage load) is fully resolved and verified** — a clean run loads
 BUNKER1's header/room/portal/envdata tables and its full ~1066-tile stan
 file correctly (spot-checked byte-for-byte against the N64 source via the
 `GE_D69STAN` probe: tile room/mid/tail/point values match). The game now
 progresses substantially further than before (through room-streaming
-setup) before hitting D86's separate, newly-exposed crash. D85 (room
-geometry renders wrong, not yet crash-free at the *visual* level) and D86
-(new model-load crash) remain open follow-ups — **the "loads without
+setup, past the old D86 model-init crash and the D87 attract-mode crash)
+before hitting D88's separate, newly-exposed "stage setup" file format
+gap. D85 (room geometry renders wrong, not yet crash-free at the *visual*
+level) and D88 (stage-setup file format, unconverted) remain open
+follow-ups — **the "loads without
 fault" acceptance bar is not yet fully met** (the process still exits via
 crash, just much later in the load sequence), but the converter, port
 wiring, and every ABI fix identified so far are format-verified correct
@@ -2744,10 +2831,20 @@ and committed.
 
 **Environment reminders.** MSYS2 tools in `/c/msys64/mingw64/bin/` (not on PATH —
 prefix `export PATH=…`). Build: `./build-pc.sh ntsc-final`. gdb **launch** mode
-only (attach fails, error 87) and it is **far too slow for timing-dependent
-crashes** (a D56-class crash ~10 s in took >300 s under gdb to reach 2 frames —
-DBGHELP symbol loading + the D51 stall-heartbeat thread dumps; don't wait on
-it): prefer env-gated TEMP probes + the built-in crash log, and symbolicate
+is far too slow for timing-dependent crashes (a D56-class crash ~10 s in took
+>300 s under gdb to reach 2 frames — DBGHELP symbol loading + the D51
+stall-heartbeat thread dumps; don't wait on it): prefer env-gated TEMP probes +
+the built-in crash log for reproducible faults. **Correction (D87 session):**
+gdb **attach** mode (`gdb -batch -x cmds -p <winpid>`, where `<winpid>` is the
+Windows PID from `ps`, 4th column — the game must already be running, e.g.
+launched with `nohup ... &`) works fine and is fast, since the process is
+already warmed up and running at full speed before you attach; a hardware
+watchpoint (`watch *(int*)0xADDR`) caught a global's write in well under a
+minute. Useful for "is this global legitimately written, or corrupted"
+questions on a long-running, non-crashing process — attach once the process
+has been running a while, `continue`, and it'll fire on the very next real
+write. Still avoid gdb for the crash itself if the crash is reproducible via
+the crash log; symbolicate
 offline with `addr2line -e build-pc/ge007.x86_64.exe -f -C <0x140000000+rel>`.
 Image base 0x140000000. `load_resource`/many init fns use a fake RBP — compute
 stack offsets from entry RSP. The D30 crash handler writes `ge007.crash.log`

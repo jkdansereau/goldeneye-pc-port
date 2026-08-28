@@ -6169,6 +6169,13 @@ void modelInitRwData(Model *model, ModelNode *startnode)
 
     while (node)
     {
+#if defined(PORT) /* TEMP D86: trace node walk to catch the bad pointer before deref */
+        if (getenv("GE_D86")) {
+            fprintf(stderr, "[D86] modelInitRwData model=%p header=%p node=%p\n",
+                    (void *)model, (void *)(model ? model->obj : NULL), (void *)node);
+            fflush(stderr);
+        }
+#endif
         u32 type = node->Opcode & 0xFF;
 
         switch (type)

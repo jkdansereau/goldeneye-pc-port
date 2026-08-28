@@ -1,5 +1,9 @@
 
 #include <ultra64.h>
+#ifdef PORT
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 #include "debugmenu_handler.h"
 #include "lv.h"
 #include "initcheattext.h"
@@ -288,6 +292,14 @@ s32 ramrom_replay_handler(struct contsample *arg0, s32 arg1)
     temp_a2 = (s32) ptr_active_demofile->size_cmds;
     temp_t2 = ramrom_blkbuf_2->count;
 
+#if defined(PORT) /* TEMP D87: trace consumer before the crash-site deref */
+    if (getenv("GE_D87")) {
+        fprintf(stderr, "[D87] replay_handler: ramrom_blkbuf_3=%p temp_a2=%d temp_t2=%d arg1=%d\n",
+                (void *)ramrom_blkbuf_3, temp_a2, temp_t2, arg1);
+        fflush(stderr);
+    }
+#endif
+
     for (var_a3 = 0; var_a3 < temp_t2; var_a3++)
     {
         arg1 = (s32) (arg1 + 1) % CONTSAMPLE_LEN;
@@ -347,6 +359,17 @@ void iterate_ramrom_entries_handle_camera_out(void)
     
     ramrom_blkbuf_2 = romCopyAligned(ramrom_data_target + 0x1F8, address_demo_loaded, sizeof(struct ramrom_seed));
 
+#if defined(PORT) /* TEMP D87: trace ramrom block setup */
+    if (getenv("GE_D87")) {
+        fprintf(stderr, "[D87] iterate: address_demo_loaded=%p ramrom_blkbuf_2=%p count=%d speedframes=%d size_cmds=%d\n",
+                (void *)address_demo_loaded, (void *)ramrom_blkbuf_2,
+                ramrom_blkbuf_2 ? ramrom_blkbuf_2->count : -1,
+                ramrom_blkbuf_2 ? ramrom_blkbuf_2->speedframes : -1,
+                ptr_active_demofile ? ptr_active_demofile->size_cmds : -1);
+        fflush(stderr);
+    }
+#endif
+
     var_a3 = ramrom_blkbuf_2->count;
     if (var_a3 > 0)
     {
@@ -354,6 +377,13 @@ void iterate_ramrom_entries_handle_camera_out(void)
             ramrom_data_target + 0x21E,
             address_demo_loaded + 4,
             ptr_active_demofile->size_cmds * sizeof(struct ramrom_blockbuf) * ramrom_blkbuf_2->count);
+#if defined(PORT) /* TEMP D87 */
+        if (getenv("GE_D87")) {
+            fprintf(stderr, "[D87] iterate: ramrom_blkbuf_3=%p len=%d\n", (void *)ramrom_blkbuf_3,
+                    (int)(ptr_active_demofile->size_cmds * sizeof(struct ramrom_blockbuf) * ramrom_blkbuf_2->count));
+            fflush(stderr);
+        }
+#endif
     }
 
     var_a3 = ramrom_blkbuf_2->count;
@@ -502,10 +532,55 @@ void stop_recording_ramrom(void)
     }
 }
 
+#ifdef PORT
+/* PC port (D87, docs/PCPortResearch.md): ramromfilestructure is a compiled-in
+ * ROM asset (the attract-mode demo blobs in `ramrom_table[]` -- ramrom_Dam_1
+ * etc.), so like every other N64-compiled ROM asset its multi-byte fields are
+ * big-endian. romCopyAligned() is a raw byte copy (no endian translation, by
+ * design -- see D66), so on PC every multi-byte field here reads corrupted
+ * (e.g. a real size_cmds of 2 stored as BE 00 00 00 02 reads back as LE
+ * 0x02000000). That garbage then drives loop counts/pointer arithmetic in
+ * iterate_ramrom_entries_handle_camera_out/ramrom_replay_handler, which walks
+ * far outside the small ramrom_blkbuf_2/3 scratch buffers and segfaults.
+ * Byte-swap every multi-byte field once, right after the raw copy -- same
+ * pattern as the D54 cseq-header fixup. save_data's single-byte fields
+ * (chksum1/chksum2/options aside) don't need swapping; `times[]` is a byte
+ * array. */
+static void ramromFixupEndian(ramromfilestructure *f)
+{
+    int i;
+    f->randomseed          = __builtin_bswap64(f->randomseed);
+    f->randomizer           = __builtin_bswap64(f->randomizer);
+    f->stagenum             = (enum LEVELID)__builtin_bswap32((u32)f->stagenum);
+    f->difficulty           = (enum DIFFICULTY)__builtin_bswap32((u32)f->difficulty);
+    f->size_cmds            = __builtin_bswap32(f->size_cmds);
+    f->savefile.chksum1     = (s32)__builtin_bswap32((u32)f->savefile.chksum1);
+    f->savefile.chksum2     = (s32)__builtin_bswap32((u32)f->savefile.chksum2);
+    f->savefile.options     = __builtin_bswap16(f->savefile.options);
+    f->totaltime_ms         = (s32)__builtin_bswap32((u32)f->totaltime_ms);
+    f->filesize             = (s32)__builtin_bswap32((u32)f->filesize);
+    f->mode                 = (enum GAMEMODE)__builtin_bswap32((u32)f->mode);
+    f->slotnum               = __builtin_bswap32(f->slotnum);
+    f->numplayers            = __builtin_bswap32(f->numplayers);
+    f->scenario              = __builtin_bswap32(f->scenario);
+    f->mpstage_sel           = __builtin_bswap32(f->mpstage_sel);
+    f->gamelength            = __builtin_bswap32(f->gamelength);
+    f->mp_weapon_set         = __builtin_bswap32(f->mp_weapon_set);
+    for (i = 0; i < 4; i++) f->mp_char[i]       = __builtin_bswap32(f->mp_char[i]);
+    for (i = 0; i < 4; i++) f->mp_handi[i]      = __builtin_bswap32(f->mp_handi[i]);
+    for (i = 0; i < 4; i++) f->mp_contstyle[i]  = __builtin_bswap32(f->mp_contstyle[i]);
+    f->aim_option            = __builtin_bswap32(f->aim_option);
+    for (i = 0; i < 4; i++) f->mp_flags[i]      = __builtin_bswap32(f->mp_flags[i]);
+}
+#endif
+
 void replay_recorded_ramrom_at_address(ramromfilestructure *demofile)
 {
     address_demo_loaded = demofile;
     ptr_active_demofile = romCopyAligned(&ramrom_data_target, address_demo_loaded, sizeof(struct ramromfilestructure));
+#ifdef PORT
+    ramromFixupEndian(ptr_active_demofile);
+#endif
     address_demo_loaded += sizeof(ramromfilestructure);
     g_ramromPlayBackFlag = 1;
     set_solo_and_ptr_briefing(ptr_active_demofile->stagenum);
