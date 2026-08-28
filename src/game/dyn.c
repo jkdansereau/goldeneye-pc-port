@@ -53,9 +53,26 @@ void dynInitMemory(void) {
         g_VtxSizesByPlayerCount[getPlayerCount() - 1] = strtol(tokenFind(1, "-mvtx"), NULL, 0) * 1024;
     }
 
+#ifdef PORT
+    /* D95: the -mgfx budget (from boss.c's per-level memallocstringtable) is a
+     * byte count sized for N64 8-byte `Gfx` slots. On x86-64 a `Gfx` is 16
+     * bytes, so the same master display list needs 2x the bytes -- otherwise
+     * `gdl` (bumped with a bare `gdl++` by every render fn, no bounds check)
+     * marches past g_GfxBuffers[1]/[2], off the stage mempool, and eventually
+     * faults at the end of the 8 MB emulated DRAM (0x70800000) while writing a
+     * GBI command. Scale by sizeof(Gfx)/8. Vtx/Mtx are 16/64 bytes on both
+     * targets, so g_VtxBuffers is left alone. */
+    {
+        s32 gfxHalf = g_GfxSizesByPlayerCount[getPlayerCount() - 1] * ((s32)sizeof(Gfx) / 8);
+        g_GfxBuffers[0] = mempAllocBytesInBank(gfxHalf * 2, MEMPOOL_STAGE);
+        g_GfxBuffers[1] = (g_GfxBuffers[0] + gfxHalf);
+        g_GfxBuffers[2] = (g_GfxBuffers[1] + gfxHalf);
+    }
+#else
     g_GfxBuffers[0] = mempAllocBytesInBank(g_GfxSizesByPlayerCount[getPlayerCount() - 1] * 2, MEMPOOL_STAGE);
     g_GfxBuffers[1] = (g_GfxBuffers[0] + g_GfxSizesByPlayerCount[getPlayerCount() - 1]);
     g_GfxBuffers[2] = (g_GfxBuffers[1] + g_GfxSizesByPlayerCount[getPlayerCount() - 1]);
+#endif
 
     g_VtxBuffers[0] = mempAllocBytesInBank(g_VtxSizesByPlayerCount[getPlayerCount() - 1] * 2, MEMPOOL_STAGE);
     g_VtxBuffers[1] = (g_VtxBuffers[0] + g_VtxSizesByPlayerCount[getPlayerCount() - 1]);
