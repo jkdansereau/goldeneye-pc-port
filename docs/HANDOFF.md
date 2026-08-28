@@ -1,8 +1,78 @@
-# Handoff brief — GoldenEye 007 PC port (Phase 2: Session K — D86/D87
-# resolved, D88 is the new hard blocker)
+# Handoff brief — GoldenEye 007 PC port (Phase 2: Session L — D88.1-3
+# VERIFIED (uncommitted), D88.4 is the new blocker)
 
 _Paste-ready brief. Authoritative context: `AGENTS.md`,
 `docs/PCPortResearch.md` §F (D69, D78-D88), `docs/BRIEF-D69-stage-load.md`._
+
+## READ THIS FIRST — verified but uncommitted work in the tree
+
+The D88 `Usetup*Z` converter work is now **format-verified and passes the
+`-level_09` repro up to a new, further-along crash (D88.4)** — but it is
+**still uncommitted** (carried through two interrupted sessions). This
+session (2026-08-28) built it, ran it, and confirmed the fix works; it did
+not commit (left to the resuming session so it can bundle D88.4).
+
+`git status` shows:
+- Modified: `port/src/pccg.c`, `src/bondtypes.h`, `src/game/bondview2.c`,
+  `src/game/bondview_r.c`, `src/game/prop.c`, `src/game/stan.c`
+- New/untracked: `tools_pc/d88_emit.py`
+
+**What is verified working (see `PCPortResearch.md` §F D88.1–D88.3):**
+- Tree **compiles green**: `export PATH="/c/msys64/mingw64/bin:$PATH" &&
+  ./build-pc.sh ntsc-final`.
+- `tools_pc/d88_emit.py` (531 lines) is a complete converter; its output
+  is already in `data/pccg-ntsc-final/manifest.csv` (21 `Usetup*Z` rows).
+  `port/src/pccg.c` `PCCG_MAX_FILES` 128→256 lets the sidecar carry them.
+- `-level_09` + `GE_D88=1` confirms `proplvreset2` now walks the **entire
+  pads table correctly** — real plink strings (`p1988e`, `p12295e`, …) and
+  sane BUNKER1 world coords. The old `prop.c:1306` crash is **gone**.
+- `SetupIntroCamera` narrow-`u32` `#ifdef PORT` fields: write-before-read
+  claim **verified** against `bondview_r.c:276-300` (all three fields
+  written — `prev` link + both `langGet()` results — before any read).
+
+**THE NEW BLOCKER — D88.4:** `-level_09` now crashes in `setupDoor`
+(`prop.c:971`) → `modelLoad` (`loadobjectmodel.c:335`), garbage `modelid`
+into `PitemZ_entries[]`. Root cause: `d88_emit.py` deliberately leaves the
+`propDefs` polymorphic record stream as an un-byteswapped passthrough (its
+docstring defers the per-type bswap + PC/N64 `sizeof` audit of ~40
+prop-def record types). `door->obj` is read big-endian → garbage. Same
+class as D87/D88.1. Full detail + fix plan in `PCPortResearch.md` §F
+D88.4. Also see D88.5 (stan tile lookups all miss during pad setup —
+watch, may be a related residual bug).
+
+**Next steps for the resuming session:**
+1. Read `PCPortResearch.md` §F D88.1–D88.5 (fully rewritten this session).
+2. Fix **D88.4**: spec each `propDefs` record type, add per-type byteswap
+   (+ `intro` polymorphic records) to `d88_emit.py`, audit struct sizes.
+   Regenerate the sidecar (delete the Usetup rows from `manifest.csv` +
+   their bytes first, or rebuild from `d69_emit.py`, then re-run
+   `python tools_pc/d88_emit.py ntsc-final`).
+3. Re-run `-level_09`; expect 1–2 more crashes down the prop-setup chain.
+4. Once BUNKER1 loads without fault, **commit** the whole D88 bundle in
+   sub-milestones (format spec → converter → port wiring → probes),
+   §F D-labeling.
+5. Then the render bugs (D75, below) and D85 become the path to a playable
+   frame — see the expanded D75 note below and in §F.
+
+## Known rendering bugs (D75 — still open, orthogonal to the D88 crash)
+
+Even once the crash chain is cleared, the front end has **broken 3D model
+rendering** (user-confirmed this session):
+- Rareware logo: correct (fixed in D73/D74).
+- **Nintendo logo**: renders but **mispositioned**.
+- **Gun-barrel intro**: the **James Bond character model is missing
+  entirely**.
+- **Intro credits / cast roll**: the per-character 3D models **do not
+  appear at all** (names draw, models don't).
+Pattern: textures/text draw; **animated/skeletal character models never
+appear**; static 3D (logos) appears but with a bad transform. Leading
+hypothesis is D75(b) — the animated-model path (`animInit` + raw offsets
+into `struct player`, cf. D56) is broken independently of the D73 matrix
+sin/cos fix. Full triage plan in `PCPortResearch.md` §F D75.
+
+The rest of this document (below) is the **last known-good, committed**
+status as of commit `8c9c6a2c` (D86+D87 resolved) — still accurate except
+D88 is now further along (D88.1–3 done/verified, D88.4 is the live crash).
 
 ## Where things stand
 
@@ -35,7 +105,12 @@ cseq fixup). Not BUNKER1-specific — attract mode picks any of 7 demo
 locations at random, so don't rely on it for BUNKER1-specific testing (see
 `-level_09` below).
 
-**D88 OPEN — root-caused, this is the current hard blocker.** Launch with
+**D88 — SUPERSEDED, see "READ THIS FIRST" at top.** D88.1–D88.3 (header +
+sub-table width/endian conversion) are now done and verified; D88.4
+(`propDefs` byteswap) is the live blocker. The paragraph below is the
+original root-cause writeup, kept for context.
+
+**D88 (original writeup) — root-caused.** Launch with
 `-level_09` (NTSC `LEVELID_BUNKER1 = 9`; `boss.c:199-339` decodes
 `-level_XX` into `g_StageNum`, bypassing the front end/attract-mode
 entirely — fast, deterministic BUNKER1 repro, crashes in well under a

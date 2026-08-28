@@ -2435,11 +2435,22 @@ is still open (see HANDOFF Task 1). All env-gated probes added for D72.3/D74
 were stripped with this change; the previously committed TEMP D63 blocks and
 the GE_D71LOG normalize log remain on the HANDOFF strip list.
 
-**D75 (OPEN: 3D rendering — Nintendo logo misplacement + missing intro player models).**
-Post-D74 the Rareware logo is correct (gold letters on dark blue), but two other intro 3D
-elements are still wrong: the **Nintendo logo is not placed correctly**, and the **intro
-cutscene player models do not appear at all**. Two candidate causes — distinguish before
-any fix:
+**D75 (OPEN: 3D rendering — mispositioned / missing 3D models throughout the
+front end).** Post-D74 the Rareware logo is correct (gold letters on dark
+blue), but every other intro 3D element is still wrong. Confirmed symptoms
+(user observation, 2026-08-28 session L):
+- **Nintendo logo** renders but is **positioned wrong**.
+- **Gun-barrel intro**: the **James Bond figure is entirely missing** (the
+  animated walk-and-shoot character model). Barrel/spiral effect status not
+  separately confirmed.
+- **Intro credits / cast roll**: the per-character 3D models (each shown
+  beside their actor/character name) **do not appear at all** — names draw,
+  models do not.
+Pattern: 2D/texture and text elements draw; **skeletal/animated character
+models never appear**, and non-animated 3D (logos) appears but with a bad
+transform. This strongly suggests **(b) below is the dominant bug** — the
+animated-model path is broken independently of the matrix sin/cos fix. Two
+candidate causes — distinguish before any fix:
 - **(a) D73 scope gap.** D73 (`DVAL()` in `src/libultra/gu/guint.h`, PORT-only) was
   documented as fixing *"all scenes using guRotate/guLookAt-derived matrices … not just the
   logo."* If these elements still fail, either their matrix path bypasses that fix or a
@@ -2812,6 +2823,67 @@ same treatment for every nested sub-table referenced from it
 internal offsets/BE fields not yet audited). **This is the actual next
 blocker to a rendered BUNKER1 frame** — reachable deterministically via
 `-level_09` in well under a minute, no attract-mode wait required.
+
+**D88.1–D88.3 RESOLVED / VERIFIED (2026-08-28, session L).** The
+`Usetup*Z` offline converter (`tools_pc/d88_emit.py`, 531 lines) was
+written and run in a prior interrupted session; this session verified its
+output is correct and consumed at runtime:
+- `port/src/pccg.c` `PCCG_MAX_FILES` grown 128 → 256 so the sidecar image
+  can also carry the 21 `Usetup*Z` rows (manifest now has them, e.g.
+  `UsetuparchZ,3375808,19265`).
+- The converter delta-relocates the 8 growing tables (header 40→80B,
+  waypoint 16→24, waygroup 12→24, PathRecord 8→16, AIListRecord 8→16,
+  PadRecord 44→56, BoundPadRecord 68→80, pname 4→8) and bswaps the s32
+  ID/offset fields — same technique as D80/D81, generalized to many
+  interleaved regions.
+- `src/bondtypes.h` `SetupIntroCamera`: `lang1c`/`lang20`/`prev`
+  ROM-serialized pointer-shaped fields kept narrow (`u32`) under
+  `#ifdef PORT` so `sizeof` stays 40 and the fixed-stride intro-record
+  walk in `bondview_r.c`/`bondview2.c` still matches the 40-byte file
+  records; use sites cast `(char *)(uintptr_t)` at each read. Same class
+  as D79/D53.1. **Write-before-read verified**: `bondviewLoadSetupIntroSection`
+  (`bondview_r.c:276-300`) writes `prev` (list link) and both `lang_ptr`
+  members (via `langGet()`) before the only subsequent reads.
+- **Verified via `-level_09` + `GE_D88=1` probe**: `proplvreset2` now
+  walks the entire pads table correctly — plink name strings (`p1988e`,
+  `p12295e`, …) and sane BUNKER1 world coordinates for every pad; the
+  crash at `prop.c:1306` (`pathwaypoints[i1].padID`) is **gone**.
+
+**D88.4 (OPEN — next blocker: `propDefs` polymorphic record stream left
+un-byteswapped by the converter).** After D88.1–D88.3, `-level_09` runs
+substantially further and now crashes in `setupDoor` (`prop.c:971`) →
+`modelLoad` (`loadobjectmodel.c:335`), faulting on
+`PitemZ_entries[modelid].header->RootNode` with `modelid` garbage (stack
+return address corrupted to an N64-space value `0x7018ab98`). Root cause:
+`d88_emit.py` **deliberately** treats the `propDefs` region as an opaque
+byte passthrough (relocated, bytes untouched) — its docstring defers the
+per-type byteswap and PC-vs-N64 `sizeof` audit of the ~40 polymorphic
+prop-definition record types (`sizepropdef()` walk in `loadobjectmodel.c`,
+selected by a 1-byte `type` tag). `setupDoor` reads `door->obj` (a
+multi-byte model-id field) straight out of a still-big-endian record →
+out-of-range `PitemZ_entries[]` → segfault. Same class as D87/D88.1, in
+the one region the converter punted on. **Fix**: spec each propDef record
+type's layout, byteswap its multi-byte fields in the converter (and
+`intro` polymorphic records — the docstring flags these as needing bswap
+too, s32 discriminant), audit struct sizes. Expect 1–2 further crashes
+down the prop-setup chain after this (pattern held D86→D87→D88.1→D88.4).
+
+**D88.5 (WATCH — stan tile name lookups all miss during pad setup).**
+With the `GE_D88` probe on, every `stanMatchTileName` call from
+`proplvreset2`'s pad loop walks the full ~2599-tile room and returns "no
+match". May be benign at load (a NULL `pad->stan` is tolerated by the
+reset path), but the stan-id derivation (`stanIdHi`/`stanIdLo` from the
+pad `plink` name) could be another victim of a residual endian/width bug.
+Re-check after D88.4; do not treat as resolved just because it doesn't
+crash.
+
+**Docs-to-commit reminder (session L).** The D88.1–D88.3 work
+(`tools_pc/d88_emit.py`, `port/src/pccg.c`, `src/bondtypes.h`,
+`src/game/bondview2.c`, `src/game/bondview_r.c`) plus the `GE_D88` probes
+in `prop.c`/`stan.c` have been format-verified and pass `-level_09` up to
+the D88.4 crash, but **remain uncommitted** (carried through two
+interrupted sessions). Commit in sub-milestones per the usual pattern
+once D88.4 is understood: format spec → converter → port wiring → probes.
 
 **D69 status after D78-D88: the ORIGINAL blocker (`load_bg_file` faulting
 on first stage load) is fully resolved and verified** — a clean run loads

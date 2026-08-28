@@ -1,4 +1,8 @@
 #include <ultra64.h>
+#ifdef PORT
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 #include <memp.h>
 #include "game/mp_weapon.h"
 #include "game/bondview_r.h"
@@ -1358,7 +1362,16 @@ void proplvreset2(enum LEVELID stageId)
                 pad->pos.f[0] *= roompos_1;
                 pad->pos.f[1] *= roompos_1;
                 pad->pos.f[2] *= roompos_1;
-        
+
+#if defined(PORT) && !defined(DEBUG)
+                if (getenv("GE_D88")) {
+                    fprintf(stderr, "D88 pad idx=%d plink=%p str=%s pos=%f,%f,%f\n",
+                            (s32)(pad - g_CurrentSetup.pads), (void *)pad->plink,
+                            pad->plink ? pad->plink : "(null)",
+                            pad->pos.f[0], pad->pos.f[1], pad->pos.f[2]);
+                }
+#endif
+
 #ifdef DEBUG
                 {
                     s32 sret = init_pathtable_something(pad, pad->plink, &pad->stan);

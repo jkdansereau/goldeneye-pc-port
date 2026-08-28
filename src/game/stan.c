@@ -7,6 +7,9 @@
 #include "chr.h"
 #include "stanintersection.h"
 #include "assert.h"
+#ifdef PORT
+#include <stdio.h>
+#endif
 
 void getTileMidPoint(StandTile *tile, coord3d *out);
 
@@ -3052,6 +3055,38 @@ struct StandTilePoint *stanMatchTileName(char *id)
     stanPackId(id, &stanIdHi, &stanIdLo);
 
     tile = stan_prefix->ptr_firstroom;
+
+#ifdef PORT
+    if (getenv("GE_D88")) {
+        s32 iters = 0;
+        StandTilePoint *t0 = tile;
+        fprintf(stderr, "D88 stanMatchTileName id=%s hi=%04x lo=%02x stan_prefix=%p firstroom=%p\n",
+                id, stanIdHi, stanIdLo, (void *)stan_prefix, (void *)tile);
+        while (*(u32 *)tile != 0) {
+            if ((u16)tile->x == stanIdHi) {
+                if (*((u8 *)&tile->y) == stanIdLo) {
+                    fprintf(stderr, "D88   matched after %d iters tile=%p\n", iters, (void *)tile);
+                    return tile;
+                }
+            }
+            tmp = tile->link;
+            tile = (StandTilePoint *)((u8 *)tile +
+                list_of_tilesizes[(tmp >> 12) & 0xf]);
+            iters++;
+            if (iters < 20 || (iters % 5000) == 0) {
+                fprintf(stderr, "D88   iter=%d tile=%p tmp(link)=%04x stride=%d delta_from_start=%lld\n",
+                        iters, (void *)tile, (u16)tmp, list_of_tilesizes[(tmp >> 12) & 0xf],
+                        (long long)((u8 *)tile - (u8 *)t0));
+            }
+            if (iters > 200000) {
+                fprintf(stderr, "D88   ABORT runaway walk\n");
+                return NULL;
+            }
+        }
+        fprintf(stderr, "D88   no match, %d iters\n", iters);
+        return NULL;
+    }
+#endif
 
     while (*(u32 *)tile != 0) {
         if ((u16)tile->x == stanIdHi) {
