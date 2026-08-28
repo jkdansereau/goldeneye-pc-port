@@ -2242,6 +2242,70 @@ u32 bgDecompress(u8* source, u8 *target)
 }
 
 
+#ifdef PORT
+/**
+ * D85: the per-room primary/secondary display-list binaries are raw N64
+ * bytes -- the offline bg converter (D80) deliberately leaves the DL /
+ * point-index tail untouched, and unlike model GDLs (D43/D50, pre-widened
+ * + byte-swapped by the pcmodels sidecar) nothing has converted them for
+ * the PC ABI. On N64 a `Gfx` is two big-endian 32-bit words (8 bytes); on
+ * PC it is `Gfx_le` -- two little-endian `uintptr_t` (16 bytes), opcode in
+ * bits 24-31 of w0 (see port/shim/PR/gbi.h). Every downstream consumer
+ * (texCopyGdls, texLoadFromGdl, bgApplyDynamicCCRMLUT, bgBuildRoomVtxBounds)
+ * already assumes the PC layout, so the freshly decompressed blob must be
+ * widened 8->16 and each word byte-swapped before they touch it.
+ *
+ * The widen is done in place, back to front: slot i reads 8 bytes at
+ * blob + 8*i and writes 16 bytes at blob + 16*i. For i >= 1, 16*i >=
+ * 8*i + 8, so the write never clobbers a slot not yet read (slot 0 is
+ * read and written at offset 0). Returns the widened size in bytes
+ * (2 * n64Size).
+ */
+static s32 bgWidenRoomGdl(u8 *blob, s32 n64Size)
+{
+    s32 n = n64Size >> 3;
+    s32 i;
+
+    for (i = n - 1; i >= 0; i--)
+    {
+        u32 w0 = __builtin_bswap32(((u32 *)blob)[2 * i + 0]);
+        u32 w1 = __builtin_bswap32(((u32 *)blob)[2 * i + 1]);
+
+        ((Gfx *)blob)[i].words.w0 = (uintptr_t)w0;
+        ((Gfx *)blob)[i].words.w1 = (uintptr_t)w1;
+    }
+
+    return n * (s32)sizeof(Gfx);
+}
+
+
+/**
+ * D85: raw N64 room vertex table (Vtx) -- 16 bytes on both N64 and PC (all
+ * shorts / bytes, no pointers), so no widening is needed, but the multi-
+ * byte fields are big-endian and unconverted. Swap the 3 position shorts,
+ * the flag u16 and the 2 texture-coord shorts; the 4 colour bytes (cn[4])
+ * are byte-sized and left alone.
+ */
+static void bgSwapRoomVtx(Vtx *vtx, s32 byteSize)
+{
+    s32 count = byteSize / (s32)sizeof(Vtx);
+    s32 i;
+
+    for (i = 0; i < count; i++)
+    {
+        u16 *w = (u16 *)&vtx[i];
+        /* ob[0..2], flag, tc[0..1] -- first 6 u16s of the 16-byte struct */
+        w[0] = __builtin_bswap16(w[0]);
+        w[1] = __builtin_bswap16(w[1]);
+        w[2] = __builtin_bswap16(w[2]);
+        w[3] = __builtin_bswap16(w[3]);
+        w[4] = __builtin_bswap16(w[4]);
+        w[5] = __builtin_bswap16(w[5]);
+    }
+}
+#endif
+
+
 /**
  * Address: 7F0B5FAC
  *
@@ -2281,6 +2345,11 @@ s32 bgLoadRoomVtxData(s32 roomnum, u8 *dst, s32 len)
 #endif
     obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, dst + (len - alignedsize), offset, alignedsize);
     result = bgDecompress(dst + (len - alignedsize), dst);
+
+#ifdef PORT
+    /* D85: byte-swap the raw N64 Vtx table (16-byte struct, no widening). */
+    bgSwapRoomVtx((Vtx *)dst, result);
+#endif
 
     room->vertices = (Vtx *)dst;
     room->usize_point_index_binary = result;
@@ -2344,6 +2413,12 @@ s32 bgLoadRoomPrimaryGdl(s32 roomnum, u8 *dst, s32 allocsize)
 
     // Decompress from the end-of-buffer location at dst.
     expanded_size = bgDecompress(scratch, dst);
+
+#ifdef PORT
+    /* D85: widen the raw N64 GDL blob (8-byte BE Gfx) to PC Gfx_le
+     * (16-byte LE) in place before any consumer reads it. */
+    expanded_size = bgWidenRoomGdl(dst, expanded_size);
+#endif
 
 #if defined(PORT)
     if (getenv("GE_D69BB")) {
@@ -2436,6 +2511,12 @@ s32 bgLoadRoomSecondaryGdl(s32 roomnum, u8 *dst, s32 allocsize)
     // Decompress from the end-of-buffer location at dst.
     expanded_size = bgDecompress(scratch, dst);
 
+#ifdef PORT
+    /* D85: widen the raw N64 GDL blob (8-byte BE Gfx) to PC Gfx_le
+     * (16-byte LE) in place before any consumer reads it. */
+    expanded_size = bgWidenRoomGdl(dst, expanded_size);
+#endif
+
     /**
      * Copy the decompressed GDL back to the end of the buffer as scratch.
      * texLoadFromGdl can then read from scratch and write the final
@@ -2445,7 +2526,12 @@ s32 bgLoadRoomSecondaryGdl(s32 roomnum, u8 *dst, s32 allocsize)
 
     texCopyGdls((Gfx *)dst, (Gfx *)scratch, expanded_size);
 
+#ifdef PORT
+    /* was `(Gfx *)expanded_size` -- a stray pointer cast of the size arg. */
+    size = texLoadFromGdl((Gfx *)scratch, expanded_size, (Gfx *)dst, NULL);
+#else
     size = texLoadFromGdl((Gfx *)scratch, (Gfx *)expanded_size, (Gfx *)dst, NULL);
+#endif
 
     if (expanded_size < size) {
         expanded_size = size;
