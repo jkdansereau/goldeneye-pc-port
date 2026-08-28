@@ -1615,7 +1615,11 @@ PropRecord *init_GUARDdata_with_set_values(PropRecord *arg0, Model *arg1, struct
     arg0->pos.f[2] = arg2->f[2];
     arg0->stan = arg4;
 
+#ifdef PORT
+    sub_GAME_7F06FF5C(arg1, 1); /* D92: flag only; model.c subcalcpos calls sub_GAME_7F01FC10 directly */
+#else
     sub_GAME_7F06FF5C(arg1, (s32) sub_GAME_7F01FC10);
+#endif
 
     arg1->unk00 = 0xA;
     arg1->chr = var_s0;
@@ -1726,7 +1730,12 @@ PropRecord *init_GUARDdata_with_set_values(PropRecord *arg0, Model *arg1, struct
 /**
  * Address 0x7F0203B8.
  */
+#ifdef PORT
+/* D92: see chr.h -- arg4 must stay a pointer or the ailist is truncated. */
+PropRecord * chrAllocate( Model * arg0, coord3d * arg1, f32 arg2,  StandTile * arg3, struct AIListRecord *arg4)
+#else
 PropRecord * chrAllocate( Model * arg0, coord3d * arg1, f32 arg2,  StandTile * arg3, s32 arg4)
+#endif
 {
     PropRecord * ret;
     s32 phi_a0;

@@ -1187,10 +1187,22 @@ void sub_GAME_7F06D490(Model *model, ModelNode *modelNode)
     sp2c.y = sp38.y;
     sp2c.z = sp38.z;
 
+#ifdef PORT
+    /* D92: `unka0` is a 32-bit Model field that on N64 holds a function
+     * pointer -- always sub_GAME_7F01FC10 (the only value chr.c ever hands
+     * the setter). Widening the field would shift the rest of Model, so on
+     * PC the setter stores a nonzero flag and the single indirect call is
+     * made directly here. */
+    if (model->unka0 && !sub_GAME_7F01FC10(model, &rw->Header.pos, &sp2c, &rw->Header.ground))
+    {
+        return;
+    }
+#else
     if (model->unka0 && !((s32 (*)(Model *, coord3d *, coord3d *, f32 *)) model->unka0)(model, &rw->Header.pos, &sp2c, &rw->Header.ground))
     {
         return;
     }
+#endif
 
     sp38.x = sp2c.x - sp38.x;
     sp38.z = sp2c.z - sp38.z;
