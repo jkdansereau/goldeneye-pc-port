@@ -3212,20 +3212,44 @@ pattern): under `#ifdef PORT` the field is a bool flag and
 `modelTickAnim` calls `bheadFlipAnimation()` directly. `-level_09` now
 reaches VI post ~601 (was ~421).
 
-**Current blocker (D100): `modelInitRwData` bad RW-data pointer.**
-Deterministic (4/4) segfault at `model.c:6298` (`MODELNODE_OPCODE_BSP`
-arm: `&modelGetNodeRwData(model, node)->BSP; rwdata->visible = FALSE;`),
-FAULT ADDR `0x170076434` = a valid player-model DRAM address
-(`0x70075800` + `0xC34`) with **bit 32 set**. `modelGetNodeRwData`
-(`model.c:~470-556`) returns `&data[index]`, where `data` is the D52
-word-indexed `u32 *` `Objinst->datas` pool and `index` is the node's
-`RwDataIndex`. The `|0x1_00000000` means either `index` is huge/garbage
-(a RoData-record `RwDataIndex` at a PC-wrong struct offset, or unswapped
-by the d43 sidecar — check `ModelRoData_BSPRecord` PC layout vs
-`d43_emit.py`'s record widening), or the HEAD-node `Parent`-walk at
-`model.c:527-540` escapes the player model into another model image and
-`data` itself is wild. Pure D52/D86-class. The player's animated/skeletal
-model — D75 territory, now the literal render blocker.
+**D100 (`8eaad547`, PARTIAL) — `struct player.model` is an inline
+`struct Model`, not a pointer.** Every use is `&g_CurrentPlayer->model`
+passed to a `modelXXX(struct Model *)` fn. The decomp splits it as
+`Model *model;` + ~45 `s32 field_59C..field_650` (≈ N64
+`sizeof(struct Model)` ~0xB8). PC `struct Model` is ~0x2A8, so
+`animInit(&model, …)` overran into `field_654` (the gait RW-data pool
+`animInit` was *also* handed), `bondheadmatrices`, and the viewport
+fields → garbage `model->datas` → the bit-32 fault. Fix (PORT only):
+`model` becomes an inline `struct Model`; a dedicated `u32
+gaitRwData[256]` at the end of `struct player` replaces the `&field_654`
+gait pool; `initBondDATAdefaults.c` points `animInit` there. `sizeof`
+grows ~0x2A0 — D98's `sizeof(struct player)` alloc already covers it, and
+`field_59C..field_650` are grep-verified dead (only `field_654` was
+used). **⚠️ LANDMINE this exposes:** `struct player` has raw
+hard-coded-offset accessors above 0x594 that are NOT PORT-adjusted and
+are now further off — `gunfire.c:4934-4945` `THROWMTX/THROWPOS` at
+`g_CurrentPlayer + handoffset + 0xAD8`, used for grenade/knife throwing.
+Those were *already* PC-wrong (PC struct ≠ N64 before D100 too); D100
+doesn't regress a working path, but a real `struct player` PC-offset
+pass is owed. (`bondview2.c:3165` `+0x230` watch model and `+0x2ec` are
+below 0x594 → unaffected.)
+
+**PARTIAL:** D100 clears the gait-model overrun (GE_D51 trace: clean
+pointers) but `-level_09` still crashes at VI post 601, now alternating
+(non-det) between:
+1. `modelInitRwData` (`model.c:6298`) FAULT `0x1_70076514` — same shape,
+   `modelGetNodeRwData` `&data[index]` with a **garbage `index`**
+   (~1.07 e9): `index = root->Data->BSP.RwDataIndex` is a RoData-record
+   field — check `ModelRoData_BSPRecord` / the `Data` union PC layout vs
+   `tools_pc/d43_emit.py`'s op-9 record widening + byteswap. Or the
+   HEAD-node `Parent`-walk (`model.c:527-540`) escaping the model image.
+2. `modelFindNodeMtxIndex` (`model.c:375`) FAULT `0x4012c9c0` — a
+   truncated `ModelNode *` (low 32 of `0x1_4012c9c0`), from
+   `sub_GAME_7F06DB5C` (`model.c:1479`). Another D86/D92-class node-ptr
+   truncation.
+
+Both are the player's animated/skeletal model node walk — D75 territory,
+now the literal render blocker.
 
 **Still open, separate:** `struct tex` headers are 24 B vs 16 B on PC
 (texpool-triage) — pool-pressure; a real PC memory-budget pass should
