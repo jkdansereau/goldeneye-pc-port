@@ -855,6 +855,12 @@ s32 texLoadFromGdl(Gfx *src, s32 srcsize, Gfx *dst, void *texpool)
                 texLoadFromTextureNum(texnum, texpool);
                 tex = texFindInPool(texnum, texpool);
 
+#if defined(PORT)
+                if (getenv("GE_D85TEX"))
+                    osSyncPrintf("D85TEX noop texnum=%d type=%d tex=%p\n",
+                                 (int)texnum, (int)(in->words.w0 & 7), (void *)tex);
+#endif
+
                 if (tex != NULL)
                 {
                     out          = texWriteTextureCmd(out, saved, tex, writeTexFlag);
@@ -1040,6 +1046,14 @@ s32 texLoadFromGdl(Gfx *src, s32 srcsize, Gfx *dst, void *texpool)
                 break;
 
             default:
+#if defined(PORT)
+                if (getenv("GE_D85TEX")) {
+                    u8 op = (u8)(in->words.w0 >> 24);
+                    if (op == 0xFD || op == 0xF5 || op == 0xF3 || op == 0xF2)
+                        osSyncPrintf("D85TEX passthru op=%02x w0=%08x w1=%08x\n",
+                                     op, (u32)in->words.w0, (u32)in->words.w1);
+                }
+#endif
                 *(out++) = *(in++);
                 break;
         }
