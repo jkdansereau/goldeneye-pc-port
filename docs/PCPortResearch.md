@@ -3064,14 +3064,44 @@ SETOTHERMODE_H / `B9` SETOTHERMODE_L / `FC` SETCOMBINE / `BB` TEXTURE /
 budget needs no change (first-load block is `memaGetLongestFree`-sized,
 then shrunk from post-widen `used`).
 
-**D85 remaining (3 downstream issues, none are stream-decode):**
-1. **Room textures never populated — now the deterministic wall.**
-   `texFindInPool` returns NULL for every room texnum →
-   `sysFatalError("Bad size for RGBA texture in tile 0: 00")`
-   (`gfx_pc.cpp:967`). `texLoadFromTextureNum(texnum, texpool)` isn't
-   loading the BUNKER1 room texture bank on the `-level_09` path. Probe
-   `GE_D85TEX=1` (committed in `texLoadFromGdl`). Under triage.
-2. **`bgTestRayIntersectionInRoom`** (`bg.c:3302` `((u32*)gdl)[1]`,
+**D85 texture pool FIXED (committed `2b3ee6e7` → master `6f0208d6`).**
+`ptr_texture_alloc_start` is declared `struct texpool *` but every use
+takes its address and treats the storage *as* a `struct texpool`
+(`texInitPool` writes 4 members through `&…`, `texLoad`/`texFindInPool`
+read them back). N64: 4-byte members, 16-byte struct, works by layout
+luck. PC: 32-byte struct (4 widened pointers) → `texInitPool` smashes
+24 bytes of trailing BSS and `->leftpos`/`->rightpos` read back garbage
+→ stage pool looks permanently exhausted (`texFreeBytesInBuffer() < 0`)
+→ every room `texLoad` bails → `texFindInPool` NULL for every texnum →
+`Bad size for RGBA texture` abort. Fix: `#ifdef PORT` define it as a
+real `struct texpool` (`image.c:14`, `image.h:98`); all call sites
+already `&…` it. Verified: pool fills, ~630 room textures resolve,
+FATAL gone. **Latent (not fixed):** `sizeof(struct tex)` is 24 on PC vs
+16 N64 (widened `u8 *data` + bitfield align); the pool is a dual stack
+(pixels up from `start`, `struct tex` headers down from `end`), so the
+stacks collide ~`bytes/3` early. BUNKER1 `-mt700` doesn't hit it;
+texture-heavier levels will need a separate header allocation or a
+per-level `-mt` bump. (Enlarging the pool alloc starves `MEMPOOL_STAGE`
+and hangs `mempAllocBytesInBank`'s OOM `while(1)` — don't.)
+
+**D85 remaining (downstream, none are stream-decode):**
+1. **Frame-GDL buffer overrun — now the deterministic wall.**
+   `bgScissorCurrentPlayerView` (`bg.c:1355`, `gDPSetScissor(arg0++,…)`)
+   segfaults writing at `~0x70800000` — the per-frame GDL write pointer
+   has run off the end of the frame display-list buffer, reached via
+   `chrpropsRenderPass` (`chrprop.c:569`) →
+   `bgScissorCurrentPlayerViewDefault`/`F` (`bg.c:1293`/`1311`). Now that
+   rooms emit real geometry the per-frame GDL is far bigger than the
+   port's frame-buffer allocation (or a room GDL missing its `G_ENDDL`
+   drives a runaway copy). Next: size the PC frame GDL buffer / verify
+   room-GDL termination.
+2. **`gfx_sp_matrix` unrelocated segment address.** A room-GDL
+   `gsSPMatrix` carries N64 segment addr `0x90000000`;
+   `gfx_sp_matrix` (`gfx_pc.cpp:1077`, via `gfx_run_dl`) dereferences it
+   raw. Room-GDL matrix/pointer relocation is the next D85 layer after
+   the frame-buffer overrun. (Seen by the texpool-triage fork before the
+   overrun masked it.)
+3. **`bgTestRayIntersectionInRoom`** (`bg.c:3302` `((u32*)gdl)[1]`,
    `:3383/3388/3521/3526` `*(u8*)gdl`) still reads opcodes/w1 N64-style;
    post-widen the opcode is byte 3 and w1 is `((u32*)gdl)[2]`. Operated
    on garbage before (so "worked"); needs PORT accessors. Hitscan, not

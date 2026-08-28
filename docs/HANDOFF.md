@@ -6,26 +6,32 @@ _Paste-ready brief. Authoritative context: `AGENTS.md`,
 
 ## READ THIS FIRST — the crash chain is clear; the blocker is now rendering
 
-D88.1–D88.6 + D89 + D90 + D91 + D92 + **D93** are **committed** (D93 =
-`164d7f99`). A direct `-level_09` boot now loads BUNKER1's full stage
-setup, runs path-table / intro-section setup, spawns the player and
-chrs, ticks AI, and reaches the **first render** — where it hits
-**D85**: `sysFatalError("Bad size for RGBA texture in tile 0: 00")`
-(`gfx_pc.cpp:967`), i.e. the room GDL binary decodes to a garbage GBI
-stream. This is 3D-pipeline / render-milestone work, not a crash-chain
-fix.
+D88.1–D88.6 + D89 + D90 + D91 + D92 + **D93** + **D85 (stream-decode &
+texture-pool layers)** are **committed** (master `6f0208d6`). A direct
+`-level_09` boot loads BUNKER1's full stage setup, runs path-table /
+intro-section setup, spawns player+chrs, ticks AI, and now **renders
+room geometry with real textures** (~630 room textures resolve) before
+hitting the next wall. D85 is being cleared layer by layer:
 
-**D85 stream-decode is FIXED (committed, master `c732425d`).** The
-per-room DL blob was raw N64 data (8-byte BE `Gfx`); all PORT consumers
-assume 16-byte LE PC `Gfx`. `bgWidenRoomGdl()` (8→16 widen + `bswap32`)
-now runs after `bgDecompress`; `bgSwapRoomVtx()` swaps the `Vtx` table.
-Room GDLs decode to real GBI now. **The `Bad size for RGBA texture`
-FATAL persists but for a NEW reason:** `texFindInPool` returns NULL for
-every room texnum — the BUNKER1 room texture bank isn't loaded on the
-`-level_09` path. That + two lower-priority downstream issues
-(`bgTestRayIntersectionInRoom` N64-style opcode reads; a
-`chrpropsRenderPass` frame-GDL overrun) are the remaining D85 work — see
-`PCPortResearch.md` §F "D85 remaining (3 downstream issues)".
+- **`164d7f99` D93** — null-room (room 0) NULL-deref guards (was masking
+  the real D85 wall).
+- **`493c9838` D85** — `bgWidenRoomGdl()` (8→16-byte `Gfx` widen +
+  `bswap32`) + `bgSwapRoomVtx()`: the per-room DL blob was raw N64 data
+  (D80 left it unconverted) but all PORT consumers assume 16-byte LE PC
+  `Gfx`. Room GDLs decode to real GBI now. Also fixed the `bg.c:2448`
+  size-cast-to-pointer bug.
+- **`6f0208d6` D85** — `ptr_texture_alloc_start` given real
+  `struct texpool` storage (was a `*` that every call site `&`-took;
+  32-byte PC struct smashed BSS → stage pool looked exhausted → no room
+  texture resolved). This cleared the `Bad size for RGBA texture` FATAL.
+
+**Current wall: frame-GDL buffer overrun.** `bgScissorCurrentPlayerView`
+(`bg.c:1355`) segfaults writing at `~0x70800000` — the per-frame GDL
+write pointer ran off the frame display-list buffer (rooms now emit real
+geometry; PC frame-GDL buffer likely undersized, or a room GDL missing
+`G_ENDDL` → runaway). Then: `gfx_sp_matrix` room-GDL `gsSPMatrix` seg
+addr `0x90000000` unrelocated; `bgTestRayIntersectionInRoom` N64-style
+opcode reads. See `PCPortResearch.md` §F "D85 remaining".
 
 - Build: `export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final`
 - Sidecar regen (REQUIRED after this session — D88.5/D88.6 changed the
