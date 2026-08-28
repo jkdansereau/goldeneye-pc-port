@@ -58,16 +58,21 @@ PC struct is much bigger → under-alloc → writes past it landed in
 scribbled a master-DL slot. Now allocates the real PC size under
 `#ifdef PORT`.
 
-**Current blocker:** `-level_09` renders **~5 frames** then
-**deterministically** (6/6) segfaults at PC `0x00010100` — a garbage
-function-pointer call in `modelTickAnim` (`model.c:3534`,
-`((void(*)(void))model->animflipfunc)()`). `struct Model.animflipfunc`
-(`bondtypes.h:1640`) is declared **`s32`** but stores a real function
-pointer (`modelSetAnimFlipFunction`, `model.c:2841` assigns a `void*` to
-it) → truncated on PC. Same D86/D92 class; `Model.unka0` (0xa0) is
-flagged as another likely function pointer. This is the D75-class
-animated-model path, now the literal render blocker. Full analysis:
-`PCPortResearch.md` §F "D95"/"D96"/"D98".
+**D99 (`253caa23`) fixed** the `animflipfunc` `s32` fn-pointer truncation
+(flag + direct `bheadFlipAnimation()` call under PORT, D92 pattern).
+`-level_09` now reaches **VI post ~601** (was ~421).
+
+**Current blocker (D100):** deterministic (4/4) segfault at
+`modelInitRwData` (`model.c:6298`, `MODELNODE_OPCODE_BSP` case),
+FAULT ADDR `0x170076434` — low 32 bits are a valid player-model DRAM
+address, **bit 32 spuriously set**. `modelGetNodeRwData` (`model.c:~470`,
+returns `&data[index]` where `data` is the D52 word-indexed `u32*`
+`Objinst->datas` pool and `index` is a node `RwDataIndex`) is producing a
+`0x1_00000000`-offset pointer — either `index` is garbage (RoData record
+`RwDataIndex` field at a PC-wrong offset / unswapped), or the HEAD-node
+`Parent` walk (`model.c:527-540`) escapes into another model image. Pure
+D52/D86-class RW-data pointer math on the player's animated model.
+Full analysis: `PCPortResearch.md` §F "D95"–"D99".
 
 `data/` was accidentally deleted + fully regenerated this session — if it
 looks wrong, `cp baserom.u.z64 data/ge007.ntsc-final.z64` then rerun

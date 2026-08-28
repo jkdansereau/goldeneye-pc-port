@@ -3201,18 +3201,34 @@ scribbled the zbuf-clear `gsDPSetRenderMode`'s `w1` onto master-DL slot
 11 → `Unknown GBI opcode 0xffffb9`. Fix: allocate
 `(sizeof(struct player) + 0xF) & ~0xF` under `#ifdef PORT`.
 
-**Current blocker (D99): `modelTickAnim` garbage function-pointer call.**
-`-level_09` renders ~5 frames then **deterministically** (6/6) segfaults
-at PC `0x00010100` — `((void(*)(void))model->animflipfunc)()` at
-`model.c:3534`. `struct Model.animflipfunc` (`bondtypes.h:1640`, "0x98")
-is declared **`s32`** but `modelSetAnimFlipFunction` (`model.c:2840`)
-stores a `void *` in it → truncated on PC. `Model.unka0` (0xa0) is
-flagged as another likely function pointer — same class. `struct Model`
-is offset-sensitive (D52/D86 ROM RW-data pipeline) so a layout change
-needs care; a `#ifdef PORT` companion pointer field is the fallback.
-D75-class (animated/skeletal model path), now the literal render blocker.
-`struct tex` headers 24 B vs 16 B on PC (texpool-triage) is a separate
-still-open pool-pressure item — a real PC memory-budget pass should
+**D99 (`253caa23`) — `modelTickAnim` garbage function-pointer call,
+FIXED.** `struct Model.animflipfunc` (`bondtypes.h:1640`, "0x98") is
+`s32` but `modelSetAnimFlipFunction` (`model.c:2840`) stores a `void *` →
+truncated on PC → `((void(*)(void))animflipfunc)()` at `model.c:3534`
+jumped to `0x00010100` (`bheadFlipAnimation` at module+0x10100). It is
+*only* ever set to `bheadFlipAnimation`, for `g_CurrentPlayer->model`
+(`initBondDATAdefaults.c:198`, `bondhead.c:430`). Fix (D92/`unka0`
+pattern): under `#ifdef PORT` the field is a bool flag and
+`modelTickAnim` calls `bheadFlipAnimation()` directly. `-level_09` now
+reaches VI post ~601 (was ~421).
+
+**Current blocker (D100): `modelInitRwData` bad RW-data pointer.**
+Deterministic (4/4) segfault at `model.c:6298` (`MODELNODE_OPCODE_BSP`
+arm: `&modelGetNodeRwData(model, node)->BSP; rwdata->visible = FALSE;`),
+FAULT ADDR `0x170076434` = a valid player-model DRAM address
+(`0x70075800` + `0xC34`) with **bit 32 set**. `modelGetNodeRwData`
+(`model.c:~470-556`) returns `&data[index]`, where `data` is the D52
+word-indexed `u32 *` `Objinst->datas` pool and `index` is the node's
+`RwDataIndex`. The `|0x1_00000000` means either `index` is huge/garbage
+(a RoData-record `RwDataIndex` at a PC-wrong struct offset, or unswapped
+by the d43 sidecar — check `ModelRoData_BSPRecord` PC layout vs
+`d43_emit.py`'s record widening), or the HEAD-node `Parent`-walk at
+`model.c:527-540` escapes the player model into another model image and
+`data` itself is wild. Pure D52/D86-class. The player's animated/skeletal
+model — D75 territory, now the literal render blocker.
+
+**Still open, separate:** `struct tex` headers are 24 B vs 16 B on PC
+(texpool-triage) — pool-pressure; a real PC memory-budget pass should
 cover it.
 
 **`data/` deletion + recovery (session M-3).** `git worktree remove
