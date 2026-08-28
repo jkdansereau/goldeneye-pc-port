@@ -2451,6 +2451,21 @@ s32 bgLoadRoomPrimaryGdl(s32 roomnum, u8 *dst, s32 allocsize)
     roominfo->usize_primary_DL_binary = expanded_size;
 
 #if defined(PORT)
+    /* TEMP D85: dump the post-texLoadFromGdl primary GDL command stream. */
+    if (getenv("GE_D85DUMP")) {
+        Gfx *g = (Gfx *)dst;
+        s32 k;
+        osSyncPrintf("D85DUMP room=%d dst=%p size=%d\n", roomnum, (void *)dst, (int)size);
+        for (k = 0; k < 400; k++) {
+            u32 w0 = (u32)g[k].words.w0;
+            u32 w1 = (u32)g[k].words.w1;
+            osSyncPrintf("D85DUMP  [%3d] op=%02x w0=%08x w1=%08x\n", k, (u8)(w0 >> 24), w0, w1);
+            if ((u8)(w0 >> 24) == 0xB8) break; /* G_ENDDL */
+        }
+    }
+#endif
+
+#if defined(PORT)
     /* TEMP D63: log primary GDL load result (env GE_D63=1) */
     if (getenv("GE_D63")) {
         u32 *w = (u32 *)dst;
