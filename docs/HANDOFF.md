@@ -40,15 +40,25 @@ raises the PC mempool ceiling (`n64stubs.c` `tlbmanageGetTlbAllocatedBlock`
 the bigger buffer doesn't OOM `MEMPOOL_STAGE`. `-level_09` now **renders
 ~5 frames**.
 
-**Current blocker: a RUNAWAY GDL append at ~frame 5.**
-`bgScissorCurrentPlayerView` (`bg.c:1355`) faults writing at `0x70800000`
-(top of DRAM) — the `gdl` pointer marched off the end. Deterministic at
-~frame 5 **regardless of `-mgfx` size** → a runaway loop, not a
-buffer-size issue. Path: `chrpropsRenderPass` (`chrprop.c:568`) after its
-`chrpropRender(gdl, prop, …)` prop loop — i.e. character/prop model
-rendering, ~when guards finish spawning. Probably the D75(b) animated-
-model path, now reachable in-level. Full analysis: `PCPortResearch.md`
-§F "D95" / "Current blocker".
+**D96 fixed the big runaway (`d86ec483`):** it was a stack-buffer overflow
+in `chraiGetPropRoomIds` (`chrprop.c`) — `PropRecord.rooms` /
+`sp48[PROPRECORD_STAN_ROOM_LEN]` are 4-wide but BUNKER1 patrol guards
+span ≥4 rooms, so the room-id list had no terminator inside the array and
+the read/write ran off the end, corrupting `chrpropsRenderPass`'s frame
+and `gdl`. `PROPRECORD_STAN_ROOM_LEN` → 8 under `#ifdef PORT` (every
+other caller already used `s32[8]`). **D97 (`2fbcc556`)** clamps a
+negative `damagetype` (US had no low clamp; EU/JP do) — an OOB
+`g_DamageTypes[]` read when a guard shoots Bond.
+
+**Current blocker:** `-level_09` renders **~5 frames** then
+deterministically hits `[FATAL] Unknown GBI opcode 0xffffb9 at
+0x70078330` (a corrupt slot ~0xB0 into the master DL: `w0 b900031d` =
+valid `gsDPSetRenderMode`, `w1 bd8efa35` = garbage). A residual ~7 KB
+master-DL overflow persists (D63 branch trace: write ptr past
+`0x700aa280`), buffer-size-independent — so still a smaller runaway or a
+stray write into a low master-DL slot at frame ~5. Under investigation.
+Also logged: `bondview2.c` other truncation sites. Full analysis:
+`PCPortResearch.md` §F "D95"/"D96".
 
 `data/` was accidentally deleted + fully regenerated this session — if it
 looks wrong, `cp baserom.u.z64 data/ge007.ntsc-final.z64` then rerun
