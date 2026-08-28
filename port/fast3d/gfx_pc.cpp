@@ -2373,6 +2373,15 @@ uintptr_t clearMtx;
 /* TEMP D63 (strip before commit) */
 static int s_d63taskcount = 0;
 static int s_d63ctxdump = 0;
+/* D63 dram-branch trace is opt-in: it fires per G_DL and floods -level_09
+ * runs otherwise. Set GE_D63=1 to re-enable. */
+static int d63BranchLogEnabled(void)
+{
+    static int cached = -1;
+    if (cached < 0)
+        cached = getenv("GE_D63") ? 1 : 0;
+    return cached;
+}
 extern "C" void d63RecordBranch(const Gfx *from, const Gfx *to);
 extern "C" void d63DumpTrail(void);
 extern "C" void d63LogLastBranchReread(void);
@@ -2419,7 +2428,7 @@ static void gfx_run_dl(Gfx* cmd) {
                 {
                     const Gfx *tgt = (const Gfx *)seg_addr(cmd->words.w1);
                     uintptr_t ta = (uintptr_t)tgt;
-                    if (ta >= 0x70000000 && ta < 0xA0000000)
+                    if (ta >= 0x70000000 && ta < 0xA0000000 && d63BranchLogEnabled())
                     {
                         sysLogPrintf(LOG_NOTE, "D63 dram-branch t=%d from=%p to=%p first=(%08x,%08x)",
                                      s_d63taskcount++, (const void *)cmd, (const void *)tgt,
