@@ -1,17 +1,19 @@
 # Handoff brief — GoldenEye 007 PC port (Phase 2: Session M-2 —
-# BUNKER1 now loads + renders ~2100 frames; next blocker is D90)
+# whole stage-load → first-frame crash chain CLEAR; next is D85 rendering)
 
 _Paste-ready brief. Authoritative context: `AGENTS.md`,
-`docs/PCPortResearch.md` §F (D69, D78-D90), `docs/BRIEF-D69-stage-load.md`._
+`docs/PCPortResearch.md` §F (D69, D78-D92), `docs/BRIEF-D69-stage-load.md`._
 
-## READ THIS FIRST — where the load chain stands
+## READ THIS FIRST — the crash chain is clear; the blocker is now rendering
 
-D88.1–D88.6 + D89 are **committed**. Both a direct `-level_09` boot and
-attract mode now load BUNKER1's full stage setup, run
-`init_path_table_links` / intro-section / path-table setup, **render
-~2100 frames**, and then hit **D90**: the player prop's `stan` pointer is
-NULL, so the first collision tick faults in `stanIsSpecialBit1Set`
-(`stan.c:2364`). Full backtrace + analysis: `PCPortResearch.md` §F **D90**.
+D88.1–D88.6 + D89 + D90 + D91 + D92 are **committed**. A direct
+`-level_09` boot now loads BUNKER1's full stage setup, runs path-table /
+intro-section setup, spawns the player and chrs, ticks AI, and reaches
+the **first render** — where it hits **D85**: `sysFatalError("Bad size
+for RGBA texture in tile 0: 00")` (`gfx_pc.cpp:967`), i.e. the room GDL
+binary decodes to a garbage GBI stream. This is 3D-pipeline / render-
+milestone work, not a crash-chain fix. Full analysis: `PCPortResearch.md`
+§F **D85 revisited**.
 
 - Build: `export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final`
 - Sidecar regen (REQUIRED after this session — D88.5/D88.6 changed the
@@ -37,14 +39,21 @@ NULL, so the first collision tick faults in `stanIsSpecialBit1Set`
    (fixed the `langGet` NULL-bank crash).
 5. **D89** — `init_path_table_links` `[-3]` OOB → SIGILL fix; NULL-tile
    guard in `sub_GAME_7F0B0914`.
+6. **D90** — `stanTileDistanceRelated`'s 80-byte zero-fill was clobbering
+   the caller's live stan-tile local (16B struct, 80B clear). The
+   player's spawn stan was fine all along.
+7. **D91** — `(s32)&D_800442FC[portalnum]` truncation in bg portal cull.
+8. **D92** — `chrAllocate` `s32` param truncated the ailist pointer;
+   `Model.unka0` `s32` field truncated a stored function pointer.
 
-**Next steps for the resuming session:**
-1. **D90** — root-cause why `g_CurrentPlayer->…->prop->stan` is NULL at
-   BUNKER1 spawn (see §F D90). Likely the player start-pad's stan
-   resolution or the `sub_GAME_7F0AFB78` coord fallback. Do NOT blanket-
-   guard stan walkers — this one would fault on N64 too.
-2. Then the **render bugs (D75)** and **D85** — the path to a playable
-   BUNKER1 frame.
+**Next steps for the resuming session (render milestone):**
+1. **D85** — the room GDL binary decodes to a garbage GBI command stream
+   (`fmt=RGBA siz=0`). Decode what `texLoadFromGdl` does with room-
+   specific opcodes / CC-RM-LUT markers; verify `csize_*_DL_binary`
+   sizing. See §F D85 + "D85 revisited". Quick unblock option: soften the
+   four `sysFatalError("Bad size…")` guards in `gfx_pc.cpp` to
+   skip-with-warning so the frame renders with placeholder textures.
+2. Then the front-end **render bugs (D75)**.
 
 **D88.4 loose end (still open):** `PROPDEF_PC_BYTES` for `VEHICHLE`/
 `AIRCRAFT`/`TANK`/`AMMO`/`DEPOSIT_IN_ROOM` in `d88_propdefs.py` are

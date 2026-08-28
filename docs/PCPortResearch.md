@@ -2954,25 +2954,63 @@ from `boss.c`'s `memallocstringtable`) — the `-level_` branch skips the
 default `-m*` string. TODO: auto-inject from `memallocstringtable` in the
 port so bare `-level_XX` works.
 
-**D90 (OPEN — player has no starting stan tile → collision walk faults).**
-After D88.5/D88.6/D89, both `-level_09` and attract mode load BUNKER1,
-render ~2100 frames, then fault in `stanIsSpecialBit1Set`
-(`stan.c:2364`, `arg0->mid.half` with `arg0 == NULL`). Backtrace:
-`bossMainloop` → `lvlViewMoveTick` → `bondviewFrozenMoveBond` →
-`bondviewCalcUpdatePlayerCollision` → `bondviewTrySimpleMovePlayerCollision`
-→ `bondviewTryMoveToStan` → `stanTileDistanceRelated` → `sub_GAME_7F0B1DDC`
-→ `callbackA(tileStack[0], …)` where `tileStack[0] = *startTile =
-g_CurrentPlayer->field_488.current_tile_ptr == NULL`. That field is
-seeded from `g_playerPointers[i]->prop->stan` (`bondview2.c:10217`), so
-the **player prop's `stan` pointer is NULL** — the player's spawn tile
-never resolved. This is NOT the same "N64 tolerates NULL" class as D89(b):
-`stanIsSpecialBit1Set` dereferences `arg0` immediately, so N64 would fault
-here too → `prop->stan` is genuinely supposed to be non-NULL. Next step:
-find where the player prop's `stan` is set at spawn (pad-based placement /
-`propPositionAtPad` / `sub_GAME_7F0AFB78` coord-fallback in
-`init_pathtable_something`) and why it comes back NULL for BUNKER1's
-start pad even though generic pad names now resolve (D88.5). Do NOT
-blanket-guard every stan walker — that would mask this.
+**D90 (RESOLVED — `stanTileDistanceRelated` zero-fill overran the caller's
+stack).** Symptom: after D88.5/D88.6/D89, `-level_09` loaded BUNKER1 and
+faulted in `stanIsSpecialBit1Set` (`stan.c:2364`, `arg0 == NULL`) on the
+first player collision tick (`bondviewCalcUpdatePlayerCollision` →
+`bondviewTrySimpleMovePlayerCollision` → `bondviewTryMoveToStan` →
+`stanTileDistanceRelated` → `sub_GAME_7F0B1DDC` → `callbackA(NULL, …)`).
+Root cause was NOT the pad→stan resolution (GE_D90 probe confirmed all
+159 BUNKER1 pad names resolve and the player spawn pad #102 has a valid
+stan). It was `stanTileDistanceRelated`'s N64 "HACK" init loop: it
+zero-fills `((s32*)arg4)[0..19]` — **80 bytes** — while
+`sizeof(StandTileLocusCallbackRecord)` is 16B. On N64 the 64-byte overrun
+landed in adjacent stack scratch; on PC the frame layout differs (and
+locals are pointer-widened), so the fill zeroed `bondviewTryMoveToStan`'s
+live `sp90` (= `field_488.current_tile_ptr`) right before it was passed
+as `&sp90` to the walk. Fix: `#ifdef PORT` clears exactly the 4 record
+fields (every consumer only uses those four — cf. `sub_GAME_7F0B21B0`).
+Committed. GE_D90 probes left in place (env-gated).
+
+**D91 (RESOLVED — bg portal-descend truncated an array-element address).**
+`sub_GAME_7F0B7F84` (both variants, `bg.c`): `i = (s32) &D_800442FC[
+portalnum];` then later `*((u8 *) i) = depth;`. The `(s32)` cast drops
+the top 32 bits of the array address on PC, so the byte store faulted
+during portal occlusion culling. `i` is only used as an `if (i);` no-op
+after the cast, so under PORT keep it a plain value and write
+`D_800442FC[portalnum] = (u8) depth;` directly. Committed.
+
+**D92 (RESOLVED — two truncated pointers on the chr/AI spawn path).**
+(a) `chrAllocate`'s 5th parameter was declared `s32` but both call sites
+pass `ailistFindById()`'s `AIRecord *`. The 64-bit pointer was truncated
+binding to `s32 arg4`, then forwarded to
+`init_GUARDdata_with_set_values`'s `AIListRecord *arg5` → `chr->ailist`
+held e.g. `0x40127640` instead of `0x140127640`, and `ai()` faulted on
+`(AiListp + Offset)->cmd` at the first AI tick. Param widened to
+`AIListRecord *` under `#ifdef PORT` (`chr.c` + `chr.h`). (b)
+`Model.unka0` is a 32-bit field that on N64 holds a function pointer —
+always `sub_GAME_7F01FC10` (`chr.c:1618` stores `(s32)sub_GAME_7F01FC10`,
+the only value the setter ever gets). `model.c` `subcalcpos` calls it
+back through a cast → truncated jump target. Widening the field would
+shift the rest of `Model`, so under PORT the setter stores a nonzero flag
+and `subcalcpos` calls `sub_GAME_7F01FC10` directly. Committed.
+
+**D85 revisited (OPEN — now the live blocker on `-level_09`).** With
+D90–D92 in, BUNKER1 loads and ticks all the way to the **first render**,
+which immediately hits `sysFatalError("Bad size for RGBA texture in tile
+0: 00")` (`port/fast3d/gfx_pc.cpp:967`) — a `G_SETTILE` with `fmt=RGBA
+siz=0` (invalid). This is the room-GDL-decodes-to-garbage problem from
+D85 (the raw N64 per-room DL/point-index blob is left unconverted, D80),
+surfacing in the texture path this time rather than
+`bgBuildRoomVtxBounds`. Attract mode's "~2100 frames" never hit this
+because those frames were HUD/menu screens, not room geometry. This is
+the render-milestone work: decode what `texLoadFromGdl` does with
+room-specific opcodes / CC-RM-LUT markers, and verify `csize_*_DL_binary`
+sizing (see the original D85 entry above). Interim option if a fresh
+session wants to keep moving past it: soften the four `sysFatalError`
+"Bad size…" guards in `gfx_pc.cpp` to skip-with-warning (same
+safety-net philosophy as the D85 `bgBuildRoomVtxBounds` bounds check) so
+the frame renders with placeholder textures instead of aborting.
 
 **Docs-to-commit reminder (session L).** The D88.1–D88.3 work
 (`tools_pc/d88_emit.py`, `port/src/pccg.c`, `src/bondtypes.h`,
