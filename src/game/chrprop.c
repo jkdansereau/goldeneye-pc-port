@@ -5,6 +5,9 @@
 #include <bondaicommands.h>
 #include <boss.h>
 #include <limits.h>
+#ifdef PORT
+#include <stdlib.h>
+#endif
 #include <music.h>
 #include <random.h>
 #include <snd.h>
@@ -428,6 +431,10 @@ void chrpropDetach(PropRecord* prop) {
 Gfx *chrpropRender(Gfx * gdl, PropRecord *prop, s32 withalpha)
 {
     u8 type;
+#if defined(PORT)
+    Gfx *gdl_in = gdl;
+    int probe = getenv("GE_D96") != NULL;
+#endif
 
     type = prop->type;
 
@@ -451,6 +458,19 @@ Gfx *chrpropRender(Gfx * gdl, PropRecord *prop, s32 withalpha)
     {
         gdl = bondviewRenderProp(prop, gdl, withalpha);
     }
+
+#if defined(PORT)
+    if (probe) {
+        long long d = (long long)((char*)gdl - (char*)gdl_in);
+        if (d > 0x4000 || d < 0) {
+            osSyncPrintf("D96 chrpropRender RUNAWAY prop=%p type=%d alpha=%d flags=%08x chr=%p obj=%p model=%p delta=0x%llx gdl %p->%p\n",
+                         (void*)prop, (int)type, (int)withalpha, (unsigned)prop->flags,
+                         (void*)prop->chr, (void*)prop->obj,
+                         (void*)(prop->chr ? prop->chr->model : NULL),
+                         (unsigned long long)d, (void*)gdl_in, (void*)gdl);
+        }
+    }
+#endif
 
     return gdl;
 }
@@ -482,6 +502,16 @@ Gfx *chrpropsRenderPass(Gfx *gdl, s32 roomid, s32 renderpass)
             renderpass = 0;
         }
     }
+
+#if defined(PORT)
+    if (getenv("GE_D96")) {
+        s32 n = (s32)((PropRecord **)g_LastOnScreenProp - g_OnScreenPropList);
+        osSyncPrintf("D96 chrpropsRenderPass room=%d pass=%d gdl=%p list=[%p..%p) n=%d cap=%d\n",
+                     (int)roomid, (int)renderpass, (void*)gdl,
+                     (void*)g_OnScreenPropList, (void*)g_LastOnScreenProp, (int)n,
+                     (int)ONSCREEN_PROP_LIST_LEN);
+    }
+#endif
 
     if ((renderpass == 0) || (renderpass == 2))
     {
@@ -1997,6 +2027,15 @@ void chraiGetPropRoomIds(PropRecord *self, s32 *roomids)
     {
         for (i=0; self->rooms[i] != 0xff; i++)
         {
+#if defined(PORT)
+            /* D96: never read/write past the array even if the terminator
+             * is somehow missing (keeps roomids[] within the caller's
+             * s32[PROPRECORD_STAN_ROOM_LEN] buffer -- the last slot is
+             * reserved for the -1 written below). */
+            if (i >= PROPRECORD_STAN_ROOM_LEN - 1) {
+                break;
+            }
+#endif
             roomids[i] = self->rooms[i];
         }
 

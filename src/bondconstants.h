@@ -4624,7 +4624,22 @@ typedef enum PROJECTILES
 #define MAX_CHRWAYPOINTS         6
 #define MAX_WAYMODE              ((s32)WAYMODE_MAGIC)
 #define MAX_TEXTURES             3001
+#ifdef PORT
+/* D96: the room-list producers all work with up to 7 rooms
+ * (chrpropUpdateRoomList's `s32 rooms[7]` scratch, sub_GAME_7F0B21B0 /
+ * sub_GAME_7F0BA2D4 both passed max=7), then chrpropUpdateRoomList writes
+ * `prop->rooms[0..count]` followed by a `0xff`/-1 terminator. With this
+ * field only 4 bytes, a prop overlapping >=4 rooms (common: BUNKER1
+ * patrol guards span 4) writes past it with no terminator inside the
+ * array -- and chraiGetPropRoomIds() then runs `for (i=0; rooms[i]!=0xff;
+ * i++)` off the end, overflowing the caller's `s32 sp48[LEN]` stack
+ * buffer in chrpropsRenderPass and corrupting its frame (garbage `gdl` ->
+ * GBI write fault at the top of DRAM, ~frame 5). Size the field (and the
+ * matching sp48 local) for 7 rooms + terminator. N64 build unchanged. */
+#define PROPRECORD_STAN_ROOM_LEN 8
+#else
 #define PROPRECORD_STAN_ROOM_LEN 4
+#endif
 #define NUMBER_SHOTGUN_BULLETS   5
 
 #ifdef VERSION_EU
