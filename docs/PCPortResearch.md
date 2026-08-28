@@ -2492,6 +2492,141 @@ transition (embedded pointers → u32 + cast at use; PC-guarded pool sizing),
 following PD ground truth. No logic/behavior changes; each such edit is logged in
 §F/D3x.
 
+**D78 (RESOLVED — StandTile bitfield ABI, `#ifdef PORT` layout exception).**
+`StandTile` (`src/bondtypes.h`) declares `u32 id : 24;` immediately followed by
+a non-bitfield `u8 room;`. On MIPS/GCC (N64) these share one 4-byte storage
+unit (id = bits 31:8, room = the low byte) giving an 8-byte tile header
+(id/room word + `mid` u16 + `tail` u16) — the stride `list_of_tilesizes[]`
+(0x20…0x58 = `8 + 8*pointCount`) and `stanFillin`'s `link << 3` addressing
+both hard-depend on. x86 GCC never lets a non-bitfield member share a
+bitfield's storage unit, so the stock declaration compiles to a **10-byte**
+header on PC (`room`@4, `mid`@6, `tail`@8 — confirmed via
+`offsetof()` probe against the real project headers/flags) — every
+`tile->room`/`tile->mid`/`tile->tail`/`tile->points[]` access would silently
+misalign, independent of any byte-swapping. `id` is provably dead (no
+`.id`/`->id` read or write anywhere in the compiled game code — grep-verified
+across `src/`), so under `#ifdef PORT` it is widened to `u8 id[3]` (order
+irrelevant, decorative-only) with `room` immediately following as a plain
+byte. Verified: this restores the exact N64 stride (`room`@3, `mid`@4,
+`tail`@6, `points`@8). Layout-only, no behavior/logic change — same class as
+D53.2. This is a prerequisite for D69 (byte-swapping alone cannot fix stan
+tile reads if the struct itself is misaligned).
+
+**D79 (RESOLVED — `bg_room_data` pointer-width ABI, `#ifdef PORT` layout
+exception).** `bg_room_data` (`src/game/bg.h`) declares `pPointTableBin` /
+`pPriMappingBin` / `pSecMappingBin` as `void *`. These are ROM-serialized as
+plain 4-byte N64 segment-0x0F offset values and are **never dereferenced**
+anywhere in the codebase (grep-verified: every use in `src/game/bg.c` casts
+to `(u32)`/`(s32)`/`(u8*) + int` for arithmetic, never `->` or `*`). On
+x86-64 `void *` is 8 bytes, silently growing the 24-byte N64 room record to
+40 bytes and breaking every `ptr_bgdata_room_fileposition_list[i]` array
+index. Fixed under `#ifdef PORT` by declaring them `u32` instead — verified
+via `sizeof()`/`offsetof()` probe: `sizeof(bg_room_data)` == 24,
+field offsets 0/4/8/12 (matching N64 exactly), so the room table needs no
+resizing in the offline conversion, only in-place bswap32. No behavior
+change (every existing use site already treats the value numerically); same
+class as D53.1/D66.
+
+**D80 (bg `.seg` format spec — converter spec of record).** Header
+(`s32 header[0x10]`, only words 0–4 consulted by `load_bg_file`): word0 must
+be 0 (bswap32, harmless either way); word1/2/3/4 are `0x0Fxxxxxx`
+self-relative offsets (masked `&0xFFFFFF`) to: room-fileposition list,
+portal-data-entry table, envdata table (0 = absent), and an optional f32
+array (only meaningful if word3 != 0). **Table order in the file is not
+index order** — verified across all 34 unique NTSC bg files
+(`bg/*.seg` referenced from `levelinfotable`): word3 (envdata) < word2
+(portal) in every sample; room-table extent = `[word1, min(word2, word3 if
+word3>word1 else word2))`; in every sampled file this divides evenly by 24
+(`bg_room_data` record size) and word4 was always 0 (f32-array path
+unexercised in this ROM — converter asserts word4==0 and errors loudly if a
+future region violates this, rather than silently mishandling it).
+- `bg_room_data` (24B): 3× `u32` offset fields (D79) + `coord3d pos` (3×f32).
+  All 6 words are plain numeric — blanket bswap32, **no resize** (PC stride
+  == N64 stride after D79).
+- `bg_envdata_entry_local` (8B, local to `load_bg_file`): `u8 type` + `pad[3]`
+  (untouched) + `s32 data` (bswap32). Terminated by `type==0`. **Exception:**
+  when `type==ENVIRONMENTDATA_ALT` (100), `data` is not arbitrary — it is
+  compared post-rebase against `g_BgPortals[i].offset_portal`
+  (`getIndexOfPORTALID`), i.e. it lives in the *same offset space* as
+  `bg_portal_data_entry.offset_portal` (the portal point-data blob, below)
+  and must receive the identical `+portal_delta` relocation, in addition to
+  bswap32.
+- `bg_portal_data_entry` (N64 8B: `u32 offset_portal` + 4× `u8`). Unlike
+  `bg_room_data`, `offset_portal` **is** dereferenced pervasively elsewhere in
+  `bg.c` (`->numPoints`, `->point`, portal/room-visibility walks) — declaring
+  it `u32` would require touching dozens of call sites, so it is left as the
+  native `bg_portal_entry *` pointer type (no header edit): PC
+  `sizeof(bg_portal_data_entry)` is **16B** (`offset_portal`@0 8B,
+  `connectedRoom1/2`+`controlbytes1/2`@8-11, 4B pad) — confirmed via probe.
+  The **offline converter** (not game code) re-lays the table at 16B/record
+  (N portal records + 1 zero terminator record), writing `offset_portal` as
+  an 8-byte field: low 4 bytes = bswapped original offset value
+  **+ portal_delta**, high 4 bytes = 0. `portal_delta = 8 * (N+1)` (the extra
+  bytes inserted by 8B→16B growth). The `bg_portal_entry` point-data blob
+  that follows the portal table in the file (target of every
+  `offset_portal`/ALT-envdata value) needs **no per-record resize** — PC
+  `sizeof(bg_portal_entry)` is 16B, identical to N64 (`u8 numPoints` + `pad[3]`
+  + `coord3d point`, no pointer fields) — it is simply relocated by
+  `+portal_delta` as a block, with `numPoints`/`pad` copied verbatim and
+  `point` (3×f32) bswapped. Net effect: the whole `.seg` file grows by
+  exactly `portal_delta` bytes; nothing outside the portal table/blob region
+  needs remapping (room table, envdata, and the header's word1/word3 all sit
+  *before* word2 and are untouched).
+
+**D81 (`Tbg_*_stanZ` format spec — converter spec of record).** RZ-compressed
+(`0x11 0x72` + raw deflate, same scheme as models — decompress/recompress
+around the conversion). Decompressed layout: `struct StanPrefixRecord { s32
+stanfile; StandTile *ptr_firstroom; }` is dereferenced directly against the
+raw loaded buffer (`stanLoadFile`/`stanDetermineEOF` receive the file pointer
+itself as `StanPrefixRecord *`), so — same class as D78/D79 — the struct's
+PC-compiled layout must match the file's byte layout. N64: `stanfile`@0 (4B)
+immediately followed by `ptr_firstroom`@4 (4B pointer). PC: pointer-alignment
+forces an implicit 4B pad after `stanfile`, so `ptr_firstroom` compiles to
+offset **8**, not 4 — and each subsequent room-offset array slot is a real
+8-byte pointer (`stanDetermineEOF`'s `void **roomPtr; roomPtr++` walk and
+in-place `*roomPtr = *roomPtr + delta` rebase already use genuine
+pointer-width semantics — **no code change needed there**, only the file's
+data layout). Converter fix (constant shift, no game-code edit): insert a 4B
+zero pad after `stanfile` (array now starts at file offset 8, matching PC
+struct layout), and widen every room-offset array slot from 4B to 8B (low
+4 bytes = bswapped original file-offset value + `array_delta`, high 4 bytes
+= 0; the terminator NULL slot becomes 8 zero bytes). `array_delta = (8 + 8*
+(N+1)) - (4 + 4*(N+1)) = 4*(N+2)` where N = room-offset entries before the
+terminator. Everything from the old tile-data start to EOF shifts by
+`+array_delta` as a block; **tile records need no resize** (D78 restored the
+exact N64 8-byte header stride, and `StandTilePoint`/`link` addressing is
+already relative to `standTileStart`, computed at runtime — unaffected by
+where the tile-data block sits in the file). Per-tile conversion: the 4-byte
+id/room word is copied **verbatim** (D78 makes the PC struct byte-identical
+to N64 there — no swap needed, it's a byte array not a scalar); `mid.half`
+and `tail.half` (s16, top nibble of `tail` = `pointCount` selecting record
+size via `list_of_tilesizes[]`: `8 + 8*pointCount`, pointCount 3–10 →
+0x20…0x58) are bswap16; each of the `pointCount` `StandTilePoint` entries (8B:
+x/y/z s16 + link u16) are bswap16 per field. The **N64-order (still-BE) tail
+half must be read to size each record** while walking — same discipline as
+the D50 model-node walk. Net: the whole stan file grows by exactly
+`array_delta` bytes before recompression; the RZ-compressed sidecar size
+(recorded in the manifest, patched into `rom_size`) differs from the N64
+compressed size, same as pcmodels (D50) — this is expected and fine, nothing
+in the load path assumes N64 compressed size.
+
+**D82 (converter + port wiring — see `tools_pc/d69_emit.py` /
+`port/src/pccg.c`).** Implements D80/D81 above: per NTSC bg/stan file
+referenced by `levelinfotable`, converts and concatenates into
+`data/pccg-ntsc-final/pccg.bin` + `manifest.csv` (`name,offset,size` decimal,
+`file_resource_table` order) — same manifest shape as `pcmodels.bin`
+(D50/`d43_emit.py`). Port layer (`port/src/pccg.c`, cloned from
+`pcmodels.c`): `pccgReserveSize`/`pccgLoadSidecars`/`pccgPatchTable`, wired
+into `port/src/romdata.c`'s cart-reservation extension alongside
+`pcmodels*`, and `romdataCartAddrValid`/`libultra.c`'s D60 DMA-source bounds
+check extended to cover the pccg byte range. One-shot patch call:
+`pccgPatchTable()` from the same `load_object_fill_header` hook site as
+`pcmodelsPatchTable()` (idempotent, matches every table entry by filename,
+rewrites `hw_address`/`rom_size`). Regenerate: `python tools_pc/d69_emit.py
+[ntsc-final|pal-final|jpn-final]`; only `ntsc-final` regenerated/verified
+this session (PAL/JPN ROMs not present in this environment) — `data/pccg-*/`
+is gitignored like `pcmodels-*`.
+
 **Environment reminders.** MSYS2 tools in `/c/msys64/mingw64/bin/` (not on PATH —
 prefix `export PATH=…`). Build: `./build-pc.sh ntsc-final`. gdb **launch** mode
 only (attach fails, error 87) and it is **far too slow for timing-dependent

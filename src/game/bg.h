@@ -137,9 +137,25 @@ typedef struct bg_portal_data_entry
 
 typedef struct bg_room_data
 {
+#ifdef PORT
+    /* D69: these 3 fields are ROM-serialized as N64 4-byte segment-0x0F
+     * offset values and are NEVER dereferenced as real pointers anywhere in
+     * the codebase (grep-verified: only ever cast to (u32)/(s32)/(u8*)+int
+     * for arithmetic) -- they are opaque numeric offsets wearing a `void *`
+     * type. On x86-64 `void *` is 8 bytes, which would silently grow this
+     * struct from the N64 24-byte record stride to 40 bytes and break every
+     * `ptr_bgdata_room_fileposition_list[i]` array index. Declaring them as
+     * u32 under PORT restores the exact N64 stride (size-preserving offline
+     * conversion, D69/d69_emit.py, stays valid) with no behavior change --
+     * every existing use site already treats the value numerically. */
+    u32 pPointTableBin;
+    u32 pPriMappingBin;
+    u32 pSecMappingBin;
+#else
     void* pPointTableBin;
     void* pPriMappingBin;
     void* pSecMappingBin;
+#endif
     coord3d pos;
 } bg_room_data;
 

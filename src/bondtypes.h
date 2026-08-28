@@ -424,9 +424,28 @@ typedef union
         u16 GroupID : 4;   // a1,a2,a3...z5,z6,z7
         u16 RoomID : 4;    // compared to 0xFF, not -1 in a function. Seen LBUs.
         */
+#ifdef PORT
+        /* D69: on N64 (MIPS/BE), `u32 id:24` followed by a non-bitfield `u8
+         * room` packs into a single 4-byte unit (id in the high 24 bits,
+         * room in the low byte) — the 8-byte-tile-header math baked into
+         * list_of_tilesizes[]/stanFillin's `link << 3` addressing depends on
+         * this exact stride. x86 GCC never shares a bitfield's storage unit
+         * with a following non-bitfield member, so the stock declaration
+         * below compiles to a 10-byte header (room at +4, mid at +6, tail at
+         * +8) — silently misaligning every StandTile field read regardless
+         * of byte-swapping. `id` is provably dead (no `.id`/`->id` read or
+         * write anywhere in the compiled game code), so it is safe to widen
+         * to a plain 3-byte array; this restores the N64 stride (room@3,
+         * mid@4, tail@6, points@8) without touching any StandTile consumer.
+         * Layout-only, no behavior change. */
+        u8  id[3];
+
+        u8  room; // compared to 0xFF, not -1 in a function. Seen LBUs.
+#else
         u32 id : 24;
 
         u8  room; // compared to 0xFF, not -1 in a function. Seen LBUs.
+#endif
 
         union
         {
