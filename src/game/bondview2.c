@@ -6162,7 +6162,12 @@ void bondviewPlayerTickDamageAndHealth(void)
             }
 
 // Ensure we don't read out of bounds of the g_DamageTypes array.
-#if defined(VERSION_EU) || defined(VERSION_JP)
+#if defined(VERSION_EU) || defined(VERSION_JP) || defined(PORT)
+            /* D97: US has no low clamp -- a negative damagetype (health*8 with
+             * health <= 0, i.e. a lethal/near-lethal hit) then indexes
+             * g_DamageTypes[] below zero. N64 US absorbed the small OOB read;
+             * on PC it segfaults (observed ~frame 5 in BUNKER1 when a guard
+             * shoots Bond). EU/JP already clamp here -- do the same on PORT. */
             if (g_CurrentPlayer->damagetype < 0)
             {
                 g_CurrentPlayer->damagetype = 0;
