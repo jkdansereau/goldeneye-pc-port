@@ -38,6 +38,7 @@ extern int snprintf(char *str, unsigned long long maxsize, const char *format, .
 #include "fs.h"
 #include "romdata.h"
 #include "pcmodels.h"
+#include "pccg.h"
 
 /* D50: struct font/fontchar layouts for the font-segment re-layout. Order
  * matters (see pcmodels.c): ultra64.h must finish before bondtypes.h. */
@@ -163,20 +164,25 @@ int romdataInit(void)
          * ROM ([CART_BASE+romSize, ...)); it is loaded below and patched into
          * file_resource_table after obInit. */
         u32 sideTotal = pcmodelsReserveSize(img);
+        /* D69: the bg/stan sidecar image is appended right after the model
+         * sidecar extension. */
+        u32 cgTotal = pccgReserveSize(img);
 
         /* Map at the cart address so absolute asset symbols are live. */
 #if defined(PLATFORM_WINDOWS)
-        void *at = VirtualAlloc((LPVOID)CART_BASE, romSize + sideTotal,
+        void *at = VirtualAlloc((LPVOID)CART_BASE, romSize + sideTotal + cgTotal,
                                 MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
         if (at == (void *)(uintptr_t)CART_BASE) {
             memcpy(at, img, romSize);
             free(img);
             mappedAtCartBase = 1;
             sysLogPrintf(LOG_INFO, "romdataInit: %s (%u bytes) mapped at "
-                         "0x%08X (cart base)%s",
+                         "0x%08X (cart base)%s%s",
                          tok, romSize, CART_BASE,
-                         sideTotal ? ", + model sidecars" : "");
+                         sideTotal ? ", + model sidecars" : "",
+                         cgTotal ? ", + bg/stan sidecars" : "");
             pcmodelsLoadSidecars(CART_BASE, romSize);
+            pccgLoadSidecars(CART_BASE + romSize + pcmodelsTotalSize());
 
             /* D55 (docs/PCPortResearch.md): the RLE folder-menu background at
              * `unknown2` (romassets_<r>.s) is stored in the ROM with a
@@ -249,8 +255,9 @@ int romdataCartAddrValid(u32 addr, u32 size)
     if (addr < CART_BASE)
         return 0;
     u32 off = addr - CART_BASE;
-    /* D50: the model sidecar image extends the valid cart region. */
-    return off + size <= romSize + pcmodelsTotalSize();
+    /* D50/D69: the model + bg/stan sidecar images extend the valid cart
+     * region (concatenated: ROM, then pcmodels, then pccg). */
+    return off + size <= romSize + pcmodelsTotalSize() + pccgTotalSize();
 }
 
 const void *romdataMapVa(u32 va)

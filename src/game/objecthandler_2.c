@@ -13,6 +13,7 @@
 
 #ifdef PORT
 #include "pcmodels.h" /* D50: PC-layout model sidecars (Plan B, D48/D49) */
+#include "pccg.h"     /* D69: PC-layout bg/stan sidecars */
 extern resource_lookup_data_entry resource_lookup_data_array[]; /* ob.c */
 #endif
 
@@ -101,6 +102,10 @@ void load_object_fill_header(struct ModelFileHeader *objheader, u8 *name, u8* ds
      * by first model load obInit() has definitely run (boss.c:179). Must run
      * before _fileNameLoadTo* below reads hw_address/rom_size. */
     pcmodelsPatchTable();
+    /* D69: same one-shot pattern for the bg/stan sidecars -- piggybacks on
+     * this call site purely for a "definitely after obInit()" hook; it has
+     * nothing to do with model loading. */
+    pccgPatchTable();
     if (dst == 0) {
         /* D48.3: a stale poolRemaining from an earlier load of this file
          * would under-allocate the fresh bank chunk (P_old < round8(C_pc)+8)

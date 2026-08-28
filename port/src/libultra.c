@@ -815,12 +815,21 @@ void osAiSetConvert(u32 convert) { (void)convert; }
  * the file name. */
 extern uintptr_t pcmodelsSidecarBase(void);
 extern uint32_t  pcmodelsTotalSize(void);
+/* D69: same diagnostic for the bg/stan sidecar image. */
+extern uintptr_t pccgSidecarBase(void);
+extern uint32_t  pccgTotalSize(void);
 static void d60logSidecarRead(u32 srcPA, void *dstVA, u32 size) {
     if (!getenv("GE_D60")) return;
     uintptr_t base = pcmodelsSidecarBase();
-    if (base && srcPA >= base && srcPA < base + pcmodelsTotalSize())
+    if (base && srcPA >= base && srcPA < base + pcmodelsTotalSize()) {
         sysLogPrintf(LOG_NOTE, "D60 sidecar read off=%llu size=0x%X dst=%p",
                      (unsigned long long)(srcPA - base), size, dstVA);
+        return;
+    }
+    uintptr_t cgBase = pccgSidecarBase();
+    if (cgBase && srcPA >= cgBase && srcPA < cgBase + pccgTotalSize())
+        sysLogPrintf(LOG_NOTE, "D69 pccg sidecar read off=%llu size=0x%X dst=%p",
+                     (unsigned long long)(srcPA - cgBase), size, dstVA);
 }
 
 /* TEMP D60/D61: a ROM-read DMA target must land in the game DRAM views
