@@ -95,7 +95,12 @@ struct texcacheitem {
 };
 
 extern struct texcacheitem g_TexCacheItems[];
+#ifdef PORT
+/* D85: real storage, not a pointer -- see the definition in image.c. */
+extern struct texpool ptr_texture_alloc_start;
+#else
 extern struct texpool *ptr_texture_alloc_start;
+#endif
 extern struct image_entry g_Textures[];
 extern s32 g_TexCacheCount;
 extern u32 bytes;

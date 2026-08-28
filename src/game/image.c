@@ -12,7 +12,22 @@
 
 // bss
 //8008C720
+#ifdef PORT
+/* D85: the decomp declares this as `struct texpool *` (a 4-byte pointer on
+ * N64), but every use takes its address and treats the storage AS a
+ * `struct texpool` -- texInitPool(&ptr_texture_alloc_start, ...) writes all
+ * four members through it, and texLoad/texFindInPool read them back. On N64
+ * `struct texpool` is 16 bytes and this "pointer" global only reserves 4,
+ * so it already relies on the linker leaving the next 12 bytes unused; on
+ * x86-64 the struct is 32 bytes (four widened pointers) and the write
+ * smashes 24 bytes of whatever BSS follows -- and reads of ->leftpos /
+ * ->rightpos (offsets 16, 24) come back as garbage, which is why the stage
+ * texture pool looks permanently exhausted (free < 0) on the -level_09
+ * path. Give it real storage. */
+struct texpool ptr_texture_alloc_start;
+#else
 struct texpool *ptr_texture_alloc_start;
+#endif
 //8008C724
 s32 ptr_texture_alloc_end;
 //8008C728
@@ -2448,6 +2463,13 @@ void texLoad(s32 *updateword, struct texpool *pool)
             // only other option is a crash. GBI commands contain texture IDs
             // instead of pointers, and they must be replaced with pointers.
             if ((!iszlib && (texFreeBytesInBuffer(pool) < 0x10CC)) || (iszlib && texFreeBytesInBuffer(pool) < 0xA28)) {
+#if defined(PORT)
+                /* D85: env-gated -- a room rendering with placeholder textures
+                 * usually means the stage pool filled up here. */
+                if (getenv("GE_D85TEX"))
+                    osSyncPrintf("D85TEX texLoad pool-full texnum=%d iszlib=%d free=%d\n",
+                                 (int)g_TexNumToLoad, (int)iszlib, (int)texFreeBytesInBuffer(pool));
+#endif
                 *updateword = osVirtualToPhysical(pool->start);
                 return;
             }
