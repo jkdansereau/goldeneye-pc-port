@@ -3823,7 +3823,16 @@ void sub_GAME_7F0B7F84(s32 roomnum, s32 portalnum /*canonically p*/, s32 depth, 
         return;
     }
  
+#ifdef PORT
+    /* D91: `(s32)&D_800442FC[portalnum]` truncates the 64-bit array address;
+     * the later `*((u8 *) i) = depth` then stores through a bogus pointer
+     * and faults. `i` is only used as an `if (i);` regalloc no-op after
+     * this, so keep it as a plain value and do the byte store directly at
+     * the write site (below). */
+    i = D_800442FC[portalnum];
+#else
     i = (s32) &D_800442FC[portalnum];
+#endif
 
     if (i);
  
@@ -3896,7 +3905,11 @@ void sub_GAME_7F0B7F84(s32 roomnum, s32 portalnum /*canonically p*/, s32 depth, 
         }
     }
  
+#ifdef PORT
+    D_800442FC[portalnum] = (u8) depth;   /* D91: see the cast site above */
+#else
     *((u8 *) i) = depth;
+#endif
  
     if ((screenbox.min.x < screenbox.max.x) && (screenbox.min.y < screenbox.max.y))
     {
@@ -3964,7 +3977,16 @@ s32 sub_GAME_7F0B7F84(s32 value, s32 roomnum, s32 portalnum /*canonically p*/, s
         return value;
     }
  
+#ifdef PORT
+    /* D91: `(s32)&D_800442FC[portalnum]` truncates the 64-bit array address;
+     * the later `*((u8 *) i) = depth` then stores through a bogus pointer
+     * and faults. `i` is only used as an `if (i);` regalloc no-op after
+     * this, so keep it as a plain value and do the byte store directly at
+     * the write site (below). */
+    i = D_800442FC[portalnum];
+#else
     i = (s32) &D_800442FC[portalnum];
+#endif
 
     if (i);
  
@@ -4037,7 +4059,11 @@ s32 sub_GAME_7F0B7F84(s32 value, s32 roomnum, s32 portalnum /*canonically p*/, s
         }
     }
  
+#ifdef PORT
+    D_800442FC[portalnum] = (u8) depth;   /* D91: see the cast site above */
+#else
     *((u8 *) i) = depth;
+#endif
  
     if ((screenbox.min.x < screenbox.max.x) && (screenbox.min.y < screenbox.max.y))
     {
