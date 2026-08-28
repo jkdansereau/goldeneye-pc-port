@@ -401,6 +401,40 @@ typedef union
     /*
     unused struct for clarity of intent
     */
+#ifdef PORT
+    /* D69 (bitfield ABI, same class as D78): MIPS/GCC (N64) packs the
+     * FIRST-declared bitfield into the HIGH bits of the storage unit;
+     * x86 GCC packs it into the LOW bits. `tile->tail.hdrTail.pointCount`
+     * is read pervasively by stan.c (list_of_tilesizes[] tile-size lookup,
+     * navigation, edge walks) -- with the stock (N64-source-order)
+     * declaration this silently reads the WRONG nibble on PC (verified via
+     * offsetof/union probe against the real project headers: source order
+     * reads the bottom nibble, `pointCount` needs the top one), producing
+     * out-of-range list_of_tilesizes indices and an infinite navigation
+     * loop (list_of_tilesizes[12..15] is out-of-bounds / reads a stray 0,
+     * so `tile` never advances). Declaring the fields in REVERSE order
+     * under PORT makes x86's low-to-high packing land each field in the
+     * same bit position MIPS's high-to-low packing does -- byte-identical
+     * numeric result, no behavior change. `special`/`r`/`g`/`b` are never
+     * read via their bitfield names either (only via `.mid.half >> 0xc`
+     * shifts elsewhere in stan.c), so this is precautionary but free. */
+    typedef struct StandTileHeaderMid
+    {
+        u16 b       : 4;
+        u16 g       : 4;
+        u16 r       : 4;
+        u16 special : 4;// 0=normal 1=kneeling 3=ladder
+    } StandTileHeaderMid;
+
+    typedef struct StandTileHeaderTail
+    {
+        s16 headerE    : 4;
+        s16 headerD    : 4;
+        // Indices of the most extreme points (the resulting triangle should encompass _MOST_ of the tile)
+        s16 headerC    : 4;
+        s16 pointCount : 4; // seen lh, not lhu. Also seen with an explicit unnecessary '& 0xF'
+    } StandTileHeaderTail;
+#else
     typedef struct StandTileHeaderMid
     {
         u16 special : 4;// 0=normal 1=kneeling 3=ladder
@@ -417,6 +451,7 @@ typedef union
         s16 headerD    : 4;
         s16 headerE    : 4;
     } StandTileHeaderTail;
+#endif
 
     typedef struct StandTile
     {

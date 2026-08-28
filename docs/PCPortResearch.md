@@ -2627,6 +2627,121 @@ rewrites `hw_address`/`rom_size`). Regenerate: `python tools_pc/d69_emit.py
 this session (PAL/JPN ROMs not present in this environment) — `data/pccg-*/`
 is gitignored like `pcmodels-*`.
 
+**D83 (RESOLVED — StandTileHeaderMid/StandTileHeaderTail bitfield ABI,
+found during D69 verification).** After D78-D82 landed, a clean run reached
+`stanBuildRoomData` (`stan.c:245`) without faulting, but then **hung
+forever** (kernel heartbeat: no frame rendered, stuck at the same PC across
+repeated snapshots). Root cause: same MIPS-BE-vs-x86-LE bitfield-packing
+class as D78, but in a struct D78 didn't touch. `StandTileHeaderTail {
+s16 pointCount:4; s16 headerC:4; s16 headerD:4; s16 headerE:4; }` — on
+N64/MIPS the FIRST-declared field occupies the HIGH bits (`pointCount` =
+top nibble); x86 GCC packs the first-declared field into the LOW bits
+(`pointCount` = bottom nibble instead). `tile->tail.hdrTail.pointCount` is
+read pervasively (`list_of_tilesizes[]` tile-size lookup used for
+navigation, edge walks, `stanBuildRoomData`'s bounds loop) — with the stock
+declaration this silently read the wrong nibble on PC. An env-gated probe
+(`GE_D69STAN=1` in `stanBuildRoomData`, TEMP, kept) proved it directly:
+tile tail=`0x03dc` (N64: pointCount=0, top nibble) decoded to
+`pointCount=12` on PC (bottom nibble) — `list_of_tilesizes[12]` is
+out-of-bounds (table has 12 entries, 0-11) and happened to read a stray 0,
+so `tile` never advanced — infinite loop. Fixed under `#ifdef PORT` by
+declaring both `StandTileHeaderMid` and `StandTileHeaderTail`'s fields in
+**reverse order**: x86's low-to-high packing then lands each field in the
+same bit position MIPS's high-to-low packing does (byte-identical numeric
+result, verified via a union/probe against `0x03dc` returning
+`pointCount=0`). `StandTileHeaderMid`'s fields (`special`/`r`/`g`/`b`) are
+never read via their bitfield names either (only via `.mid.half >> 0xc`
+elsewhere in stan.c) so that half of the fix is precautionary. Same
+narrow-ABI-exception class as D78; no logic change.
+
+**D84 (RESOLVED — bg.c hand-inlined segment-fold 64-bit-pointer overflow,
+found during D69 verification).** With D83 in, `stanBuildRoomData`
+completed and the game proceeded into room streaming
+(`bgCheckIfRoomModelNeedsLoad` → `bgLoadRoomModelData` →
+`bgLoadRoomVtxData`/`bgLoadRoomPrimaryGdl`/`bgLoadRoomSecondaryGdl`), which
+then **segfaulted** at a fixed, reproducible fault address
+(`0x7104561d`, identical across runs) inside `bgBuildRoomVtxBounds`
+(`bg.c:2852`, reading `vtx[i].v.ob[0]`). Root cause: `bgLoadRoomVtxData` /
+`bgLoadRoomPrimaryGdl` / `bgLoadRoomSecondaryGdl` each hand-roll the
+`BG_SEG_TO_PTR` fold instead of calling the macro:
+`offset = (((u8 *)room->pPointTableBin + ptr_bg_data) - ptr_bg_data) +
+0xf1000000;` (and the Pri/Sec-mapping equivalents). On N64 this "+base
+-base" cancellation is a no-op inside 32-bit pointer arithmetic that wraps
+for free. D79 made `pPointTableBin`/`pPriMappingBin`/`pSecMappingBin`
+plain `u32` fields (never dereferenced, matching every other use site), but
+these three call sites still cast them to `(u8 *)` and did the arithmetic
+as real 64-bit pointers: `+0xf1000000` no longer wraps at 32 bits the way
+`BG_SEG_TO_PTR`'s explicit `(u32)` cast does, so the computed `offset`
+came out roughly 4 GiB too large, corrupting every downstream room-file
+read (compressed-data location and size). Fixed under `#ifdef PORT` by
+doing the fold as plain `u32` math at all three sites, matching
+`BG_SEG_TO_PTR` exactly (`offset = (u32)room->pPointTableBin +
+0xf1000000;`, no pointer involved) — same narrow ABI-exception class as
+D79/D69's original BG_SEG_TO_PTR fix, no logic change. (Root-caused via an
+env-gated probe, `GE_D69BB=1` in `bgBuildRoomVtxBounds`/
+`bgLoadRoomPrimaryGdl`, TEMP, kept — confirmed the compressed room-DL bytes
+now start with the correct `11 72` RZ magic at the right file offset.)
+
+**D85 (OPEN — room primary/secondary DL binaries decode to garbage after
+D84; safety-netted, not crash-fixed at the geometry level).** With D84 in,
+the compressed room DL binary loads and decompresses correctly (verified:
+`11 72` RZ header at the right offset, plausible decompressed size), but
+the **content** `texCopyGdls`/`texLoadFromGdl` produce from it is not a
+valid GBI command stream (`GE_D69BB=1` dump: `cmd=00`, `01`, `02`, `52`...
+none of these are display-list opcodes actually present in the source
+bytes — the raw N64 bytes are untouched by the offline converter (D80: the
+whole per-room DL/point-index blob is a byte stream, deliberately left
+unconverted, out of scope for this milestone) and `texLoadFromGdl` is the
+*same, already-working* model-GDL runtime converter (`bgLoadRoomPrimaryGdl`
+calls it identically to the model-loading path) — so either room GDLs use
+a BG-specific command/marker convention `texLoadFromGdl`'s marker-expansion
+logic doesn't handle, or something upstream of it (compression alignment,
+`csize_primary_DL_binary`/`csize_secondary_DL_binary` delta sizing) is
+still off. Not yet root-caused; full triage is D75-class 3D-pipeline work,
+out of scope for this session. **Crash prevented, not geometry fixed:**
+added a `#ifdef PORT` bounds check in `bgBuildRoomVtxBounds` before every
+`vtx[i]` dereference (`vtxOff`/`vtxEnd` must fit inside
+`usize_point_index_binary`) — a garbage command stream now produces an
+empty/degenerate bounding box for that vertex batch instead of an
+out-of-bounds read, so a bad room fails to render sanely rather than
+segfaulting. Follow-up: decode what `texLoadFromGdl` actually does with
+room-specific opcodes (`bgApplyDynamicCCRMLUT`/`ptrDynamic_CC_RM_LUT`/
+`DL_LUT_PRIMARY_ADDFOG` suggest room GDLs carry CC/RM-LUT-selection markers
+models don't use) and verify `csize_*_DL_binary` sizing end-to-end.
+
+**D86 (OPEN — new downstream crash in `modelInitRwData` during
+room-triggered model instantiation, found during D69 verification, likely
+unrelated to the bg/stan conversion).** With D85's safety net in,
+`bgBuildRoomVtxBounds` no longer segfaults, but the game reaches a **new**
+crash a little further into room streaming: `modelInitRwData`
+(`model.c:6174`) dereferences a bad `node` pointer, called from
+`modelInit` ← `animInit` (`model.c:6323`/`6331`). This is the existing
+model-loading pipeline (D50-D58, already working for every intro/cast
+model) hitting an edge case that was never exercised before because
+gameplay never progressed this far — most likely a room-instantiated
+object (light fixture / prop / character) whose model load path differs
+from the intro's, or a `RootNode`/pcmodels-table edge case not covered by
+the existing 512-file conversion. **Not yet root-caused** — needs its own
+investigation (probably starts with identifying which model name is being
+loaded at the crash site and whether it's present in
+`data/pcmodels-ntsc-final/manifest.csv`). Filed separately from D75
+(pre-existing 3D-render findings) since it's a hard crash, not a visual
+defect; likely fixable independent of D75/D85.
+
+**D69 status after D78-D86: the ORIGINAL blocker (`load_bg_file` faulting
+on first stage load) is fully resolved and verified** — a clean run loads
+BUNKER1's header/room/portal/envdata tables and its full ~1066-tile stan
+file correctly (spot-checked byte-for-byte against the N64 source via the
+`GE_D69STAN` probe: tile room/mid/tail/point values match). The game now
+progresses substantially further than before (through room-streaming
+setup) before hitting D86's separate, newly-exposed crash. D85 (room
+geometry renders wrong, not yet crash-free at the *visual* level) and D86
+(new model-load crash) remain open follow-ups — **the "loads without
+fault" acceptance bar is not yet fully met** (the process still exits via
+crash, just much later in the load sequence), but the converter, port
+wiring, and every ABI fix identified so far are format-verified correct
+and committed.
+
 **Environment reminders.** MSYS2 tools in `/c/msys64/mingw64/bin/` (not on PATH —
 prefix `export PATH=…`). Build: `./build-pc.sh ntsc-final`. gdb **launch** mode
 only (attach fails, error 87) and it is **far too slow for timing-dependent

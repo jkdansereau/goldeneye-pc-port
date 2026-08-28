@@ -2266,7 +2266,19 @@ s32 bgLoadRoomVtxData(s32 roomnum, u8 *dst, s32 len)
     * The seemingly unncessary " + ptr_bg_data - ptr_bg_data" likely comes from paired bgdata pointer/offset macros.
     * Adding 0xf1000000 strips the 0x0f000000 segment tag, yielding a file offset.
     */
+#ifdef PORT
+    /* D69: pPointTableBin is `u32` on PC (D79), not a real pointer -- the
+     * original expression's "+ptr_bg_data -ptr_bg_data" cancellation is a
+     * no-op on N64 (32-bit pointers, wraps for free) but on PC promotes it
+     * to a genuine 64-bit pointer, then `+ 0xf1000000` no longer wraps at
+     * 32 bits the way BG_SEG_TO_PTR's `(u32)` cast does -- the intended
+     * fold (strip the 0x0F segment tag) silently stops happening and
+     * `offset` ends up ~4 GiB too large. Do the fold as plain u32 math
+     * (matching BG_SEG_TO_PTR exactly), no pointer involved. */
+    offset = (u32)ptr_bgdata_room_fileposition_list[roomnum].pPointTableBin + 0xf1000000;
+#else
     offset = (((u8 *)ptr_bgdata_room_fileposition_list[roomnum].pPointTableBin + ptr_bg_data) - ptr_bg_data) + 0xf1000000;
+#endif
     obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, dst + (len - alignedsize), offset, alignedsize);
     result = bgDecompress(dst + (len - alignedsize), dst);
 
@@ -2309,13 +2321,39 @@ s32 bgLoadRoomPrimaryGdl(s32 roomnum, u8 *dst, s32 allocsize)
     // Load the compressed data into the end of the buffer, starting at dst.
     scratch = dst + (allocsize - size);
 
+#ifdef PORT
+    /* D69: see the matching comment in bgLoadRoomVtxData. */
+    fileoffset = (u32)ptr_bgdata_room_fileposition_list[roomnum].pPriMappingBin;
+    fileoffset += 0xf1000000;
+#else
     fileoffset = (s32)((u8 *)ptr_bgdata_room_fileposition_list[roomnum].pPriMappingBin + ptr_bg_data) - ptr_bg_data;
     fileoffset += 0xf1000000;
+#endif
 
     obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, scratch, fileoffset, size);
 
+#if defined(PORT)
+    if (getenv("GE_D69BB")) {
+        osSyncPrintf("D69bb primGdl room=%d fileoffset=%08x size=%d "
+                     "compbytes=%02x%02x%02x%02x%02x%02x%02x%02x\n",
+                     roomnum, (unsigned)fileoffset, (int)size,
+                     scratch[0], scratch[1], scratch[2], scratch[3],
+                     scratch[4], scratch[5], scratch[6], scratch[7]);
+    }
+#endif
+
     // Decompress from the end-of-buffer location at dst.
     expanded_size = bgDecompress(scratch, dst);
+
+#if defined(PORT)
+    if (getenv("GE_D69BB")) {
+        osSyncPrintf("D69bb primGdl room=%d expanded=%d dstbytes="
+                     "%02x%02x%02x%02x%02x%02x%02x%02x\n",
+                     roomnum, (int)expanded_size,
+                     dst[0], dst[1], dst[2], dst[3],
+                     dst[4], dst[5], dst[6], dst[7]);
+    }
+#endif
 
     /**
      * Copy the decompressed GDL back to the end of the buffer as scratch.
@@ -2384,8 +2422,14 @@ s32 bgLoadRoomSecondaryGdl(s32 roomnum, u8 *dst, s32 allocsize)
     // Load the compressed data into the end of the buffer, starting at dst.
     scratch = dst + (allocsize - size);
 
+#ifdef PORT
+    /* D69: see the matching comment in bgLoadRoomVtxData. */
+    fileoffset = (u32)ptr_bgdata_room_fileposition_list[roomnum].pSecMappingBin;
+    fileoffset += 0xf1000000;
+#else
     fileoffset = (s32)((u8 *)ptr_bgdata_room_fileposition_list[roomnum].pSecMappingBin + ptr_bg_data)  - ptr_bg_data;
     fileoffset += 0xf1000000;
+#endif
 
     obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, scratch, fileoffset, size);
 
@@ -2805,13 +2849,35 @@ void bgBuildRoomVtxBounds(s32 roomID)
     cmdindex = 0;
     numpoints = 0;
 
+#if defined(PORT)
+    /* TEMP D69: log the vtx-bounds walk (env GE_D69BB=1) */
+    if (getenv("GE_D69BB")) {
+        osSyncPrintf("D69bb room=%d gdl=%p vertices=%p usizePrim=%d usizePts=%d\n",
+                     roomID, (void *)gdl, (void *)vertices,
+                     (int)g_BgRoomInfo[roomID].usize_primary_DL_binary,
+                     (int)g_BgRoomInfo[roomID].usize_point_index_binary);
+        for (cmdindex = 0; cmdindex < 8; cmdindex++) {
+            osSyncPrintf("D69bb  cmd[%d] cmd=%02x par=%08x addr=%08x\n",
+                         cmdindex, gdl[cmdindex].dma.cmd,
+                         (unsigned)gdl[cmdindex].dma.par,
+                         (unsigned)gdl[cmdindex].dma.addr);
+        }
+    }
+#endif
+
     while (gdl[cmdindex].dma.cmd != G_ENDDL)
     {
-        if (gdl[cmdindex].dma.cmd == G_VTX) 
+        if (gdl[cmdindex].dma.cmd == G_VTX)
         {
             numpoints++;
         }
         cmdindex++;
+        if (cmdindex > 100000) {
+#if defined(PORT)
+            osSyncPrintf("D69bb room=%d runaway cmd walk, aborting\n", roomID);
+            return;
+#endif
+        }
     }
 
     points = memaAlloc(ALIGN16(numpoints * sizeof(RoomVtxBatchBounds)));
@@ -2846,6 +2912,29 @@ void bgBuildRoomVtxBounds(s32 roomID)
             numvertices = ((gdl[cmdindex].dma.par >> 4) & 0xf) + 1;
 
             vtx = (Vtx *)(SEGMENT_OFFSET(gdl[cmdindex].dma.addr) + (u32)vertices);
+
+#if defined(PORT)
+            /* TEMP D69 safety net: the room primary/secondary DL binaries
+             * are raw N64-format bytes (untouched by the offline converter,
+             * D80/D82 -- runtime texLoadFromGdl is supposed to convert them
+             * the same way it converts model GDLs, but that conversion is
+             * not yet verified correct for room-specific GDL content, see
+             * docs/PCPortResearch.md D83). Until that's resolved, a
+             * corrupted command stream can produce a `vtx` pointer far
+             * outside the room's vertex buffer; bounds-check before
+             * dereferencing so a bad room fails to render (skips this
+             * batch) instead of segfaulting the process. */
+            {
+                u32 vtxOff = SEGMENT_OFFSET(gdl[cmdindex].dma.addr);
+                u32 vtxEnd = vtxOff + (u32)numvertices * sizeof(Vtx);
+                if (vtxOff >= (u32)g_BgRoomInfo[roomID].usize_point_index_binary ||
+                    vtxEnd > (u32)g_BgRoomInfo[roomID].usize_point_index_binary) {
+                    numpoints++;
+                    cmdindex++;
+                    continue;
+                }
+            }
+#endif
 
             for (i = 0; i < numvertices; i++)
             {

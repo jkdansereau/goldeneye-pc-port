@@ -258,8 +258,30 @@ void stanBuildRoomData(void)
 
     tile = stan_prefix->ptr_firstroom;
 
+#if defined(PORT)
+    /* TEMP D69: log the tile walk (env GE_D69STAN=1) */
+    if (getenv("GE_D69STAN")) {
+        osSyncPrintf("D69stan start tile=%p firstroom_raw=%p\n",
+                     (void *)tile, (void *)stan_prefix->ptr_firstroom);
+    }
+#endif
+
     while (*(u32 *)tile)
     {
+#if defined(PORT)
+        /* TEMP D69: log the tile walk (env GE_D69STAN=1) */
+        if (getenv("GE_D69STAN")) {
+            static s32 s_n = 0;
+            s32 pc = tile->tail.hdrTail.pointCount & 0xf;
+            if (s_n < 20 || pc == 0 || list_of_tilesizes[pc] == 0)
+                osSyncPrintf("D69stan n=%d tile=%p room=%d mid=%04x "
+                             "tail=%04x pc=%d sz=%d\n",
+                             (int)s_n, (void *)tile, tile->room,
+                             (u16)tile->mid.half, (u16)tile->tail.half,
+                             (int)pc, (int)list_of_tilesizes[pc]);
+            s_n++;
+        }
+#endif
         if (tile->room != lastRoom)
         {
             lastRoom = tile->room;
