@@ -3234,22 +3234,43 @@ doesn't regress a working path, but a real `struct player` PC-offset
 pass is owed. (`bondview2.c:3165` `+0x230` watch model and `+0x2ec` are
 below 0x594 → unaffected.)
 
-**PARTIAL:** D100 clears the gait-model overrun (GE_D51 trace: clean
-pointers) but `-level_09` still crashes at VI post 601, now alternating
-(non-det) between:
-1. `modelInitRwData` (`model.c:6298`) FAULT `0x1_70076514` — same shape,
-   `modelGetNodeRwData` `&data[index]` with a **garbage `index`**
-   (~1.07 e9): `index = root->Data->BSP.RwDataIndex` is a RoData-record
-   field — check `ModelRoData_BSPRecord` / the `Data` union PC layout vs
-   `tools_pc/d43_emit.py`'s op-9 record widening + byteswap. Or the
-   HEAD-node `Parent`-walk (`model.c:527-540`) escaping the model image.
-2. `modelFindNodeMtxIndex` (`model.c:375`) FAULT `0x4012c9c0` — a
-   truncated `ModelNode *` (low 32 of `0x1_4012c9c0`), from
-   `sub_GAME_7F06DB5C` (`model.c:1479`). Another D86/D92-class node-ptr
-   truncation.
+**D101 (`b2234f82`) — `sub_GAME_7F06DB5C` `(s32)` pointer stash, FIXED.**
+The anim2-blend variant of `modelBuildGroupMatrices` did
+`sp1C = (s32)arg2->Parent` then `modelFindNodeMtx(arg1, (ModelNode*)sp1C,
+0)` — the exact 32-bit-pointer idiom the sibling was already cleaned up
+for. `(s32)` drops the `0x140000000` base of a static `ModelNode` →
+`modelFindNodeMtxIndex` deref `0x4012c9c0`. Also stashed `&sp48[sp54]`
+(a `RenderPosView*`) the same way and mis-called `g_ModelJointPositionedFunc`
+with a 3-arg cast. Under `#ifdef PORT`, full-width pointer work + the real
+2-arg callback (mirrors `modelBuildGroupMatrices`).
 
-Both are the player's animated/skeletal model node walk — D75 territory,
-now the literal render blocker.
+**D102 (`1b078f6d`) — 1P weapon `Model` / RW-pool `struct hand` overlap,
+FIXED.** `gunfire.c` punned the weapon `Model` onto `hand->field_B68` and
+its RW-data pool onto `hand->modeldatas` (a fixed run at `field_B68 +
+0x20`). N64 `sizeof(struct Model)` ~0xBC keeps `modelInit`'s header
+writes clear of the pool; PC `struct Model` is 0xE8, so `modelInit`
+writes `objinst->datas` (0x20) **directly onto `&hand->modeldatas`** —
+the field and pool base alias, and the first `modelInitRwData` record
+write clobbers `datas` (bit 32 set) → the `modelInitRwData` fault
+(`0x1_70076514`). `objinst->obj` (0x10) lands on `hand->mtxlist`
+likewise. Fix: `struct hand.weaponModel` (inline `struct Model`) +
+`weaponRwPool[192]` under `#ifdef PORT`, routed through
+`HAND_WEAPON_MODEL`/`HAND_WEAPON_RWPOOL` macros; set
+`weaponModel.render_pos` explicitly (N64 aliased `hand->mtxlist`). Same
+class as D53.2 (watch) / D100 (player gait model). The `d43` record
+layout was ruled out — `GE_D51` proved it was `Objinst->datas` *field*
+corruption, not a garbage `RwDataIndex` (`idx` was 0/1, valid).
+
+**RENDER CHAIN CLEAR (session M-3).** With D93–D102 in, `-level_09` boots
+BUNKER1 and **renders continuously with no fault** (60 s+, 3500+ VI
+posts, full framerate; attract mode also clean). ~46 % non-clear pixels,
+content biased to the lower half of the screen. The
+stage-load→first-frame→in-level crash chain (the blocker since D69) is
+**resolved**. Remaining: **D75** — 3D-model rendering quality
+(animated/skeletal character models), a separate track; and the
+`struct player` / `struct hand` raw-hardcoded-offset landmine above
+(grenade/knife throw). `struct tex` headers 24 B vs 16 B on PC is a
+separate open pool-pressure item — a PC memory-budget pass is owed.
 
 **Still open, separate:** `struct tex` headers are 24 B vs 16 B on PC
 (texpool-triage) — pool-pressure; a real PC memory-budget pass should

@@ -1,94 +1,65 @@
-# Handoff brief — GoldenEye 007 PC port (Phase 2: Session M-2 —
-# whole stage-load → first-frame crash chain CLEAR; next is D85 rendering)
+# Handoff brief — GoldenEye 007 PC port (Phase 2: Session M-3 —
+# STAGE-LOAD → RENDER crash chain CLEAR; BUNKER1 renders, next is D75 model quality)
 
 _Paste-ready brief. Authoritative context: `AGENTS.md`,
-`docs/PCPortResearch.md` §F (D69, D78-D92), `docs/BRIEF-D69-stage-load.md`._
+`docs/PCPortResearch.md` §F (D69, D78-D102), `docs/BRIEF-D69-stage-load.md`._
 
-## READ THIS FIRST — the crash chain is clear; the blocker is now rendering
+## READ THIS FIRST — the crash chain is CLEAR; BUNKER1 renders
 
-D88.1–D88.6 + D89 + D90 + D91 + D92 + **D93** + **D85 (stream-decode &
-texture-pool layers)** are **committed** (master `6f0208d6`). A direct
-`-level_09` boot loads BUNKER1's full stage setup, runs path-table /
-intro-section setup, spawns player+chrs, ticks AI, and now **renders
-room geometry with real textures** (~630 room textures resolve) before
-hitting the next wall. D85 is being cleared layer by layer:
+`-level_09 -ml0 -me0 -mgfx100 -mvtx50 -mt700 -ma150` now **boots BUNKER1
+and renders continuously with no fault** (verified: 60 s+, 3500+ VI posts
+at full framerate; attract mode also clean). The whole stage-load →
+first-frame → in-level crash chain that has been the blocker since D69 is
+resolved. **~46 % non-clear pixels**, but content is biased to the lower
+half of the screen — the remaining work is **D75** (3D-model rendering
+quality: animated/skeletal character models still don't draw right; see
+§F "D75" and "Known rendering bugs" below), NOT a crash.
 
-- **`164d7f99` D93** — null-room (room 0) NULL-deref guards (was masking
-  the real D85 wall).
-- **`493c9838` D85** — `bgWidenRoomGdl()` (8→16-byte `Gfx` widen +
-  `bswap32`) + `bgSwapRoomVtx()`: the per-room DL blob was raw N64 data
-  (D80 left it unconverted) but all PORT consumers assume 16-byte LE PC
-  `Gfx`. Room GDLs decode to real GBI now. Also fixed the `bg.c:2448`
-  size-cast-to-pointer bug.
-- **`6f0208d6` D85** — `ptr_texture_alloc_start` given real
-  `struct texpool` storage (was a `*` that every call site `&`-took;
-  32-byte PC struct smashed BSS → stage pool looked exhausted → no room
-  texture resolved). This cleared the `Bad size for RGBA texture` FATAL.
+**This session's fixes (all committed, master):**
 
-**D85 texture wall is CLEARED** (verified this session): `-level_09`
-no longer hits `Bad size for RGBA texture` — BUNKER1 renders multiple
-full frames (5 rooms drawn, frame GDL advances cleanly). The
-stream-decode + texture-pool layers of D85 are done.
+| # | commit | one-liner |
+|---|--------|-----------|
+| D93 | `164d7f99` | null-room (room 0) NULL-deref guards |
+| D85 | `493c9838` | `bgWidenRoomGdl` (8→16 `Gfx` + `bswap32`) + `bgSwapRoomVtx`; room DLs decode to real GBI; `bg.c:2448` size-cast bug |
+| D85 | `6f0208d6` | `ptr_texture_alloc_start` → real `struct texpool` storage (pool looked exhausted → ~630 room textures now resolve; cleared `Bad size for RGBA texture`) |
+| D94 | `63204a27` | `chrlvInitActAttack` `(s32)`-truncated anim-table index |
+| D95 | `f35eba91` `933ba52b` | 2× `g_GfxBuffers` (16-byte PC `Gfx`) + raise PC mempool ceiling `0x702F4400→0x70700000` (reclaim ~4 MB DRAM) so it doesn't OOM `MEMPOOL_STAGE` |
+| D96 | `d86ec483` | `PROPRECORD_STAN_ROOM_LEN` 4→8 (PORT) — prop room-list stack overflow (guards span ≥4 rooms → no terminator → smashed `chrpropsRenderPass` frame; *this* was the "runaway GDL append") |
+| D97 | `2fbcc556` | clamp negative `damagetype` (US-only OOB `g_DamageTypes[]` read) |
+| D98 | `000ed6af` | `initBONDdataforPlayer` allocate real PC `sizeof(struct player)` (hardcoded `0x2A80` under-alloc scribbled the master DL) |
+| D99 | `253caa23` | `Model.animflipfunc` `s32` fn-ptr truncation (flag + direct call, D92 pattern) |
+| D100 | `8eaad547` | `struct player.model` is an inline `struct Model`, not a `Model*` + 45 filler s32s (PC struct 0x2A8 ≫ 0xB8 hole → `animInit` overran); + dedicated `gaitRwData[]` |
+| D101 | `b2234f82` | `sub_GAME_7F06DB5C` stashed `ModelNode*`/`RenderPosView*` through an `s32` (the idiom its sibling was already fixed for) |
+| D102 | `1b078f6d` | 1P weapon `Model` + RW pool punned onto `struct hand` (PC `Model` 0xE8 ≫ N64 0xBC → `modelInit` aliased `datas` onto the pool); dedicated `weaponModel`/`weaponRwPool` |
 
-**D94 fixed (`63204a27`)** the one deterministic pointer bug in that
-cluster — `chrlvInitActAttack`'s `(s32)`-truncated anim-table index.
-
-**D95 (partly addressed):** the `-mgfx` master-DL buffer was half-capacity
-on PC (16-byte `Gfx`). `f35eba91` doubles `g_GfxBuffers`; `933ba52b`
-raises the PC mempool ceiling (`n64stubs.c` `tlbmanageGetTlbAllocatedBlock`
-`0x702F4400 → 0x70700000`, reclaiming ~4 MB of otherwise-unused DRAM) so
-the bigger buffer doesn't OOM `MEMPOOL_STAGE`. `-level_09` now **renders
-~5 frames**.
-
-**D96 fixed the big runaway (`d86ec483`):** it was a stack-buffer overflow
-in `chraiGetPropRoomIds` (`chrprop.c`) — `PropRecord.rooms` /
-`sp48[PROPRECORD_STAN_ROOM_LEN]` are 4-wide but BUNKER1 patrol guards
-span ≥4 rooms, so the room-id list had no terminator inside the array and
-the read/write ran off the end, corrupting `chrpropsRenderPass`'s frame
-and `gdl`. `PROPRECORD_STAN_ROOM_LEN` → 8 under `#ifdef PORT` (every
-other caller already used `s32[8]`). **D97 (`2fbcc556`)** clamps a
-negative `damagetype` (US had no low clamp; EU/JP do) — an OOB
-`g_DamageTypes[]` read when a guard shoots Bond.
-
-**D98 (`fixed`) — the `0xffffb9` corruption was `initBONDdataforPlayer`
-(`player.c`) allocating a hardcoded N64 `sizeof(struct player)` (`0x2A80`).
-PC struct is much bigger → under-alloc → writes past it landed in
-`g_GfxBuffers[0]` (which sits right after the player block), and
-`bondviewRenderDebugBondView`'s `g_CurrentPlayer->field_2A08 = ft4`
-scribbled a master-DL slot. Now allocates the real PC size under
-`#ifdef PORT`.
-
-**D99 (`253caa23`) fixed** the `animflipfunc` `s32` fn-pointer truncation
-(flag + direct `bheadFlipAnimation()` call under PORT, D92 pattern).
-`-level_09` now reaches **VI post ~601** (was ~421).
-
-**Current blocker (D100):** deterministic (4/4) segfault at
-`modelInitRwData` (`model.c:6298`, `MODELNODE_OPCODE_BSP` case),
-FAULT ADDR `0x170076434` — low 32 bits are a valid player-model DRAM
-address, **bit 32 spuriously set**. `modelGetNodeRwData` (`model.c:~470`,
-returns `&data[index]` where `data` is the D52 word-indexed `u32*`
-`Objinst->datas` pool and `index` is a node `RwDataIndex`) is producing a
-`0x1_00000000`-offset pointer — either `index` is garbage (RoData record
-`RwDataIndex` field at a PC-wrong offset / unswapped), or the HEAD-node
-`Parent` walk (`model.c:527-540`) escapes into another model image. Pure
-D52/D86-class RW-data pointer math on the player's animated model.
-Full analysis: `PCPortResearch.md` §F "D95"–"D99".
-
-`data/` was accidentally deleted + fully regenerated this session — if it
-looks wrong, `cp baserom.u.z64 data/ge007.ntsc-final.z64` then rerun
-`d43_emit.py` / `d69_emit.py` / `d88_emit.py --regen` (§F "`data/`
-deletion + recovery").
+**Recurring pattern this session:** the decomp pun-allocates `struct
+Model` (and `struct player`, `PropRecord`, `struct texpool`, …) into
+N64-sized holes / hardcoded byte counts. Every one is bigger on x86-64
+→ overrun → corruption. Fix = give it real inline storage or
+`sizeof()`-based alloc under `#ifdef PORT`. **Landmine still open**
+(§F D100): `struct player` / `struct hand` have raw hardcoded-offset
+accessors (`gunfire.c` `THROWMTX` at `+0xAD8`, …) that are NOT
+PORT-adjusted — already PC-wrong, a real `struct player` offset pass is
+owed before grenade/knife-throw code works.
 
 - Build: `export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final`
-- Sidecar regen (REQUIRED after this session — D88.5/D88.6 changed the
-  converters): `python tools_pc/d69_emit.py ntsc-final && python
-  tools_pc/d88_emit.py ntsc-final --regen`. `data/` is gitignored.
-- Repro (direct BUNKER1): `./build-pc/ge007.x86_64.exe -level_09 -ml0 -me0
-  -mgfx100 -mvtx50 -mt700 -ma150` — the `-m*` args are the per-level
-  memory sizes from `boss.c`'s `memallocstringtable`; a bare `-level_09`
-  boots but crashes early because the `-level_` branch skips the default
-  `-m*` string (TODO: auto-inject in the port). Attract mode (no args)
-  reaches the same D90 crash.
+- Sidecar regen: `python tools_pc/d43_emit.py ntsc-final && python
+  tools_pc/d69_emit.py ntsc-final && python tools_pc/d88_emit.py
+  ntsc-final --regen`. `data/` is gitignored; if missing,
+  `cp baserom.u.z64 data/ge007.ntsc-final.z64` first (§F "`data/`
+  deletion + recovery").
+- Repro: `./build-pc/ge007.x86_64.exe -level_09 -ml0 -me0 -mgfx100
+  -mvtx50 -mt700 -ma150` — `-m*` are BUNKER1's `boss.c` per-level sizes;
+  a bare `-level_09` skips them and crashes early (TODO: auto-inject).
+
+## Next: D75 — 3D model rendering quality
+
+BUNKER1 renders but character/skeletal models are wrong (see the D75
+section further down, still accurate). `GE_PCDUMP` + `tools_pc/pixcount.py`
+to measure; the animated-model path (`animInit` + `struct player` raw
+offsets, `drawjointlist`, `modelApplyHeadRelations` head/body splice) is
+the prime suspect. `struct tex` headers are 24 B vs 16 B on PC — a
+separate open pool-pressure item; a real PC memory-budget pass is owed.
 
 ## What this session (M-2) fixed — all committed
 
