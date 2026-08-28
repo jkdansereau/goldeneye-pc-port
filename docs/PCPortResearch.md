@@ -2849,47 +2849,51 @@ output is correct and consumed at runtime:
   `p12295e`, …) and sane BUNKER1 world coordinates for every pad; the
   crash at `prop.c:1306` (`pathwaypoints[i1].padID`) is **gone**.
 
-**D88.4 (OPEN — next blocker: `propDefs` polymorphic record stream left
-un-byteswapped by the converter).** After D88.1–D88.3, `-level_09` runs
-substantially further and now crashes in `setupDoor` (`prop.c:971`) →
-`modelLoad` (`loadobjectmodel.c:335`), faulting on
-`PitemZ_entries[modelid].header->RootNode` with `modelid` garbage (stack
-return address corrupted to an N64-space value `0x7018ab98`). Root cause:
-`d88_emit.py` **deliberately** treats the `propDefs` region as an opaque
-byte passthrough (relocated, bytes untouched) — its docstring defers the
-per-type byteswap and PC-vs-N64 `sizeof` audit of the ~40 polymorphic
-prop-definition record types (`sizepropdef()` walk in `loadobjectmodel.c`,
-selected by a 1-byte `type` tag). `setupDoor` reads `door->obj` (a
-multi-byte model-id field) straight out of a still-big-endian record →
-out-of-range `PitemZ_entries[]` → segfault. Same class as D87/D88.1, in
-the one region the converter punted on.
+**D88.4 RESOLVED / VERIFIED (2026-08-28, session M).** The `propDefs`
+polymorphic record stream is now converted N64→PC by the offline sidecar.
+`-level_09` no longer crashes in `setupDoor`/`modelLoad` (or anywhere else)
+— BUNKER1 loads its full stage setup and renders **1000+ frames
+continuously** with zero FATAL/EXCEPTION (only the pre-existing unrelated
+`romdataFixupMusicSeqTable` warning).
 
-**D88.4 scope (investigated 2026-08-28, not yet fixed):** this is bigger
-than a byteswap. `sizepropdef()` (`loadobjectmodel.c:47`) dispatches on
-the 1-byte `type` tag across ~44 `PROPDEF_*` record types. Many return a
-hardcoded literal word count (N64-accurate, stable) but several return
-`sizeof(SomeRecord)/4` — and those records contain **pointer members**
-(e.g. `ObjectRecord` has `PropRecord *prop` + `Model *model`; `GuardRecord`,
-`DoorRecord` similar), so on PC they grow 4→8B per pointer and the walk
-stride itself changes. So D88.4 needs the full D69/D88.1 treatment for the
-propDefs region:
-1. Byte-accurate spec of every `PROPDEF_*` record actually present in
-   BUNKER1's file (then the other 20 levels).
-2. Converter: per-record delta-relocation (resize pointer-grown records,
-   NUL the embedded runtime pointers) + byteswap every multi-byte field.
-3. Same for the `intro` polymorphic `SetupIntro*` records (s32 type
-   discriminant — the `d88_emit.py` docstring already flags these).
-4. **D88.4b (runtime side):** audit the `sizeof(X)/4` arms of
-   `sizepropdef()` — on PC those now yield the grown size, which must
-   match whatever the converter emits. May need `#ifdef PORT` literal
-   word counts (matching the N64 `#if 1` literals) if the converter keeps
-   records at N64 width instead of growing them. Decide converter-grows
-   vs. converter-keeps-N64-width first; the latter is simpler if nothing
-   dereferences these records with array-index semantics (verify — cf.
-   the D88 converter's reasoning for the sub-tables).
+Key facts established:
+- The `propDefs` stream is a flat `s32[]`. Each record's **serialized N64
+  word count is fixed per `type` byte across all 21 levels** — verified by
+  parsing the getools C sources (`assets/obseg/setup/Usetup*Z.c`), which
+  tile every `propDefs` region byte-for-byte against the retail ROM
+  (BUNKER1: 206 records, 6477 words, end offset lands exactly on `intro`).
+  Table: `PROPDEF_N64_WORDS` in `tools_pc/d88_propdefs.py`.
+- Every pointer member inside a serialized record is **`0` in the file**
+  (runtime-populated by the `New_*Record` macros). So there is no
+  garbage-pointer / delta-relocation problem in the file — only that on PC
+  those slots widen 4→8B, growing records that contain pointers and
+  changing the `sizepropdef()` walk stride.
+- The brief's "narrow the trailing pointers `#ifdef PORT`" idea (D88.1
+  pattern) is a **poor fit**: `ObjectRecord.prop`/`.model` are mid-struct,
+  and `ObjectRecord`/`DoorRecord`/`GuardRecord` are used in ~350 runtime
+  sites — narrowing would touch core gameplay code broadly.
+- The `#if 1` branch of `sizepropdef()` was **already N64-correct for every
+  type except `OBJ_COPY_ITEM`** (returned 1, real serialized size 3).
 
-Expect 1–2 further crashes down the prop-setup chain after this (pattern
-held D86→D87→D88.1→D88.4).
+Fix (chosen: **converter grows records to native PC layout**, no struct
+changes):
+1. `tools_pc/d88_propdefs.py` — rewrites each record to its native PC
+   struct size: header word (`u16 extrascale`+`u8 state`+`u8 type`) and
+   `_mkword` half-pairs byte-swapped independently, scalars `bswap32`'d,
+   pointer slots widened to 8 zero bytes (8-aligned), runtime areas
+   zero-filled. Per-type PC size = `PROPDEF_PC_BYTES`, sourced from the
+   compiler-verified `tools_pc/d88_layoutprobe.c` (`sizeof`/`offsetof`
+   against the real port include chain).
+2. `tools_pc/d88_emit.py` — feeds the converted stream + its growth into
+   the cumulative delta so `intro` and every later sub-table shift.
+3. `loadobjectmodel.c` `sizepropdef()` — `#ifdef PORT` branch returns
+   `PROPDEF_PC_BYTES/4` so the in-place walk (`prop.c`,
+   `loadobjectmodel.c`, `objective_status.c`) matches the emitted stride.
+
+`intro` conversion was already correct (blanket per-word `bswap32`; the
+type discriminant is a full `s32`). **Not yet done:** `PROPDEF_PC_BYTES`
+for `VEHICHLE`/`AIRCRAFT`/`TANK`/`AMMO`/`DEPOSIT_IN_ROOM` are placeholder
+guesses (not used by BUNKER1) — probe them before those levels load.
 
 **D88.5 (WATCH — stan tile name lookups all miss during pad setup).**
 With the `GE_D88` probe on, every `stanMatchTileName` call from

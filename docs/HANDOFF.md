@@ -1,58 +1,43 @@
-# Handoff brief — GoldenEye 007 PC port (Phase 2: Session L — D88.1-3
-# VERIFIED (uncommitted), D88.4 is the new blocker)
+# Handoff brief — GoldenEye 007 PC port (Phase 2: Session M — D88.4
+# RESOLVED; crash chain to a rendered BUNKER1 frame is CLEAR)
 
 _Paste-ready brief. Authoritative context: `AGENTS.md`,
 `docs/PCPortResearch.md` §F (D69, D78-D88), `docs/BRIEF-D69-stage-load.md`._
 
-## READ THIS FIRST — verified but uncommitted work in the tree
+## READ THIS FIRST — D88 is done; next is the render bugs
 
-The D88 `Usetup*Z` converter work is now **format-verified and passes the
-`-level_09` repro up to a new, further-along crash (D88.4)** — but it is
-**still uncommitted** (carried through two interrupted sessions). This
-session (2026-08-28) built it, ran it, and confirmed the fix works; it did
-not commit (left to the resuming session so it can bundle D88.4).
+D88.1–D88.4 are **committed and verified**. `-level_09` (deterministic
+BUNKER1 repro) now loads the entire stage setup — pads table (D88.1–3) and
+the `propDefs` polymorphic record stream (D88.4) — and **renders 1000+
+frames continuously with zero FATAL/EXCEPTION**. The whole D69→D88 stage-
+load crash chain is clear.
 
-`git status` shows:
-- Modified: `port/src/pccg.c`, `src/bondtypes.h`, `src/game/bondview2.c`,
-  `src/game/bondview_r.c`, `src/game/prop.c`, `src/game/stan.c`
-- New/untracked: `tools_pc/d88_emit.py`
+- Build: `export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final`
+- Sidecar: `python tools_pc/d88_emit.py ntsc-final --regen` (regenerates the
+  `data/pccg-*` sidecar from the ROM; `data/` is gitignored). `--regen`
+  drops+rebuilds the `Usetup*Z` rows for clean iteration.
+- Repro: `./build-pc/ge007.x86_64.exe -level_09` (from repo root).
 
-**What is verified working (see `PCPortResearch.md` §F D88.1–D88.3):**
-- Tree **compiles green**: `export PATH="/c/msys64/mingw64/bin:$PATH" &&
-  ./build-pc.sh ntsc-final`.
-- `tools_pc/d88_emit.py` (531 lines) is a complete converter; its output
-  is already in `data/pccg-ntsc-final/manifest.csv` (21 `Usetup*Z` rows).
-  `port/src/pccg.c` `PCCG_MAX_FILES` 128→256 lets the sidecar carry them.
-- `-level_09` + `GE_D88=1` confirms `proplvreset2` now walks the **entire
-  pads table correctly** — real plink strings (`p1988e`, `p12295e`, …) and
-  sane BUNKER1 world coords. The old `prop.c:1306` crash is **gone**.
-- `SetupIntroCamera` narrow-`u32` `#ifdef PORT` fields: write-before-read
-  claim **verified** against `bondview_r.c:276-300` (all three fields
-  written — `prev` link + both `langGet()` results — before any read).
+**D88.4 (how it was fixed).** `propDefs` is a flat `s32[]`; each record's
+serialized N64 word count is fixed per `type` byte across all 21 levels
+(verified: the getools C sources tile every region byte-for-byte vs ROM).
+All pointer members are `0` in the file, so records with pointers just grow
+4→8B on PC. Fix = offline **converter grows each record to native PC struct
+layout** (`tools_pc/d88_propdefs.py`, sizes from `d88_layoutprobe.c`), plus
+a `#ifdef PORT` `sizepropdef()` branch returning the matching stride. No
+game-struct changes. Full detail: `PCPortResearch.md` §F D88.4.
 
-**THE NEW BLOCKER — D88.4:** `-level_09` now crashes in `setupDoor`
-(`prop.c:971`) → `modelLoad` (`loadobjectmodel.c:335`), garbage `modelid`
-into `PitemZ_entries[]`. Root cause: `d88_emit.py` deliberately leaves the
-`propDefs` polymorphic record stream as an un-byteswapped passthrough (its
-docstring defers the per-type bswap + PC/N64 `sizeof` audit of ~40
-prop-def record types). `door->obj` is read big-endian → garbage. Same
-class as D87/D88.1. Full detail + fix plan in `PCPortResearch.md` §F
-D88.4. Also see D88.5 (stan tile lookups all miss during pad setup —
-watch, may be a related residual bug).
+**Loose end:** `PROPDEF_PC_BYTES` for `VEHICHLE`/`AIRCRAFT`/`TANK`/`AMMO`/
+`DEPOSIT_IN_ROOM` in `d88_propdefs.py` are placeholder guesses (BUNKER1
+doesn't use them). Add them to `d88_layoutprobe.c` and read off real sizes
+before loading levels that use those types.
 
 **Next steps for the resuming session:**
-1. Read `PCPortResearch.md` §F D88.1–D88.5 (fully rewritten this session).
-2. Fix **D88.4**: spec each `propDefs` record type, add per-type byteswap
-   (+ `intro` polymorphic records) to `d88_emit.py`, audit struct sizes.
-   Regenerate the sidecar (delete the Usetup rows from `manifest.csv` +
-   their bytes first, or rebuild from `d69_emit.py`, then re-run
-   `python tools_pc/d88_emit.py ntsc-final`).
-3. Re-run `-level_09`; expect 1–2 more crashes down the prop-setup chain.
-4. Once BUNKER1 loads without fault, **commit** the whole D88 bundle in
-   sub-milestones (format spec → converter → port wiring → probes),
-   §F D-labeling.
-5. Then the render bugs (D75, below) and D85 become the path to a playable
-   frame — see the expanded D75 note below and in §F.
+1. Verify no regression on `-level_09` + a GE_D88 probe run; re-check D88.5
+   (stan tile-name lookups missing during pad setup — see §F, may be a
+   residual endian/width bug in `stanIdHi`/`stanIdLo` derivation).
+2. Attack the **render bugs (D75, below)** and **D85** — now the path to a
+   playable BUNKER1 frame.
 
 ## Known rendering bugs (D75 — still open, orthogonal to the D88 crash)
 
