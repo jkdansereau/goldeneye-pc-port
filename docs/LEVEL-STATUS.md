@@ -109,6 +109,21 @@ propdefs emit path (retrofitted post-D122; docstring still says "opaque
 passthrough"). Not fixed — see §F/§H D125. **d88_propdefs.py `convert_stream`
 itself and `sizepropdef()` PORT strides are verified correct.**
 
+**Overseer note (M-13, unverified — first task next session):** likely a
+pass-1 delta / region-`end` mismatch in `d88_emit.py` ~L308–340. The
+tiled `propdefs` region's `end` (pd_end, from the region tiling) may not
+equal `pd_start + convert_propdefs()._n64len`. Pass 1 does
+`cum += len(propdefs_pc) - (end - start)` with that `end`; if it is
+**shorter** than the real record-stream length, the cumulative delta is
+under-counted, every subsequent region (aistream / opaque) is placed too
+low, and the emit loop's `out[do:...] = src[...]` for the next region
+**overwrites the tail of `propdefs_pc`** — leaving record 0 intact and the
+rest clobbered, exactly the observed symptom. Cheap confirm: print
+`pd_start`, `pd_end`, `_n64len`, `len(propdefs_pc)`, and the next region's
+`(start, do)` for `UsetupsevbZ`; check `pd_end == pd_start + _n64len`.
+Fix = set the propdefs region `end` to `pd_start + _n64len` (or make
+`convert_propdefs` and the tiler agree on the boundary).
+
 ### C3 — door model / ModelNode walk (2 levels: Aztec, Bunker2)
 `propobj.c:13601` derefs `door->model->obj->RootNode->Child->Child`;
 `:13523` walks the `linkedDoor` list. Fault addrs 0x10 / 0x8 → a null-ish
