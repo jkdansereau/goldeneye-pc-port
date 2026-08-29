@@ -152,6 +152,56 @@ design in §F D117 — NOT implemented. Added `tools_pc/framediff.py`
 to refresh goldens). Validated against the D115 golden set. No C changes,
 no probes left in tree.
 
+**Session M-10 — input playtest + guard-firefight crash chain.**
+
+- **D119 — guard-attack crash FIXED** (`chraction.c`). Every prior
+  `-level_09` run segfaulted ~frame 1200 the instant a BUNKER guard
+  opened fire: `bondwalkItemGetAutomaticFiringRate` (`gun.c:1334`) ←
+  `chrlvInitActAttack`. ~28 sites pun `weapons_held[]->chr` (really a
+  `WeaponObjRecord*`) as `ChrRecord*` and read `.act_<x>.attack_item`,
+  which on N64 aliases `WeaponObjRecord.weaponnum` (act union @0x2C + 84
+  == 0x80). Pointer widening moves the act union to ~0x38 on PC → garbage
+  negative item id → OOB `g_ItemStats` → crash. Fix: `PUN_ATTACK_ITEM()`
+  macro reads `weaponnum` directly; `#else` branch is textually identical
+  to the original → N64 build unchanged. Class-A (D53.2 type-pun) bug.
+- **D120 — blood-stain hang GUARDED, not fixed** (`chr.c:3322`). Next
+  blocker, reachable only after D119: first guard bullet-hit →
+  `chrCreateBloodStain` `PointUsage[]` negative-terminated chain walk
+  cycles forever (VI thread keeps posting, logic thread spins, kernel
+  heartbeat trips). Root cause: `tools_pc/d43_emit.py`'s opcode-0x18
+  `ModelRoData_DisplayList_CollisionRecord` conversion is incomplete —
+  6 pointer fields widen the struct and `PointUsage`/`CollisionVertices`
+  sub-array endianness+stride aren't handled (only `CollisionRelatedNode`
+  got the D43/D45 `u32`-vma treatment). **Interim:** `#ifdef PORT` caps
+  both walk loops at `numVertices+8` iters + bounds-checks `index` → game
+  survives, blood decals may be missing/wrong. **Real fix (next session,
+  own subagent brief):** byte-spec the opcode-0x18 record + PointUsage +
+  CollisionVertex sub-arrays vs a converted guard model, extend
+  `d43_emit.py`. Same shape as D69/D88 converter work.
+- Result: `-level_09` now survives the guard firefight — 45 s+
+  crash-free, frames past 1200 (was: hard segfault ~1200 every run).
+
+**Session M-10 — input playtested (human).** Fixed in `port/src/input.c`:
+(a) mouse-look was a draining accumulator → flicks stayed "pressed" ~8
+frames after you stopped (stuck looking up/down) — now per-poll delta,
+no carryover; (b) horizontal mouse was routed to C-left/right = GE
+*sidestep*, and A/D drove analog stick-X = GE *turn* — swapped: mouse X
+→ stick-X turn (`MOUSE_TURN_GAIN 6.0`), A/D → C-left/right strafe, mouse
+Y → C-up/down look. Core aim/move now works.
+**Open input bugs (documented, deferred — fix in a later pass):**
+- **D118a — mouse yaw slower than pitch.** Horizontal turn (analog
+  stick-X via `MOUSE_TURN_GAIN`) is visibly slower than vertical look
+  (digital C-up/down). Different transfer curves (analog rate-limited vs
+  digital full-press). Needs `MOUSE_TURN_GAIN` bump and/or a matched
+  pitch path; ideally a single tunable `MouseAimSpeed`.
+- **D118b — mouse Y inverted.** Mouse up → looks down, mouse down →
+  looks up (X unaffected). `aimDY`→C-button sign is backwards for GE's
+  pitch convention (or SDL dy sign assumption wrong). Flip the
+  `aimDY >=`/`<=` C-up/C-down assignment (or default `MouseInvertY`).
+  One-line fix once confirmed against GE pitch sign.
+- Still TODO from D118: rebinding, gamepad hotplug, `ge007.ini` not yet
+  created (config defaults are hardcoded).
+
 **Session M-9 (Phase 3) — see §F D118.** SDL input layer implemented.
 `port/src/input.c` is now real: keyboard+mouse and SDL_GameController,
 mapped to GE's N64 pad (analog stick = move, C-buttons = aim, mouse-look

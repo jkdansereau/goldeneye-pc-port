@@ -20,7 +20,10 @@ state.
 - Instances: D53.2 (ModelSlot pun), D56 (watch Model raw offsets), D57
   (rwdata record count), D67 (image_entry), D79 (bg_room_data), D98
   (struct player alloc), D100 (player.model inline Model), D101/D102
-  (ModelNode*/weapon Model puns), D115 (gunfire THROW* raw offsets).
+  (ModelNode*/weapon Model puns), D115 (gunfire THROW* raw offsets),
+  D119 (`weapons_held[]->chr` punned as `ChrRecord*` to read
+  `.act_*.attack_item` — aliased `WeaponObjRecord.weaponnum` at 0x80 on
+  N64 via act-union@0x2C+84; act union moves to ~0x38 on PC).
 - **Open landmine:** raw hardcoded-offset accessors into `struct player`
   / `struct hand` — see `docs/AUDIT-M6-player-offsets.md`.
 
@@ -43,6 +46,9 @@ through a converter or a runtime bswap fixup reads scrambled.
   D112 (`d43_emit.py put_f32` `src[doff:doff+4][::-1]`).
 - Header offset tables / pointers: D54 (cseq ALMidiHdr), D68
   (Globalimagetable), D87 (ramromfilestructure), D88 (Usetup* tables).
+- Negative-terminated index chains (`PointUsage[]`) in converted model
+  rodata cycle forever if element endianness/stride is wrong: D120
+  (opcode-0x18 collision record, `d43_emit.py` — guarded, not fixed).
 - Packed bitfields cross byte boundaries differently: D78 / D83
   (StandTile id/room, header mid/tail).
 - **Rule:** prefer an offline sidecar converter (D43, D69, D88 pattern,

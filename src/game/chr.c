@@ -3316,10 +3316,21 @@ after_opcode:
     if (((ModelRwData_DisplayList_CollisionRecord *) rwdata)->Vertices != ((ModelRoData_DisplayList_CollisionRecord *) node)->Vertices)
     {
         s32 index;
+#ifdef PORT
+        /* D120: PointUsage[] is a negative-terminated "next" chain. On PC the
+         * opcode-0x18 collision record / PointUsage conversion in d43_emit is
+         * incomplete (endianness/stride), so `index` can cycle -> hang after
+         * the first guard bullet-hit. Cap the walk until the converter is
+         * fixed; blood decals may be missing/wrong but the game keeps running. */
+        s32 guard = ((ModelRoData_DisplayList_CollisionRecord *) node)->numVertices + 8;
+        index = ((ModelRoData_DisplayList_CollisionRecord *) node)->CollisionVertices[bestindex].index;
 
+        while (index >= 0 && index < ((ModelRoData_DisplayList_CollisionRecord *) node)->numVertices && guard-- > 0)
+#else
         index = ((ModelRoData_DisplayList_CollisionRecord *) node)->CollisionVertices[bestindex].index;
 
         while (index >= 0)
+#endif
         {
             ((ModelRwData_DisplayList_CollisionRecord *) rwdata)->Vertices[index].a = paintval;
             index = ((ModelRoData_DisplayList_CollisionRecord *) node)->PointUsage[index];
@@ -3329,10 +3340,16 @@ after_opcode:
     if ((relatedrwdata != NULL) && (relatedrwdata->Vertices != relatedrodata->Vertices))
     {
         s32 index;
+#ifdef PORT
+        s32 guard = relatedrodata->numVertices + 8;
+        index = relatedrodata->CollisionVertices[relatedindex].index;
 
+        while (index >= 0 && index < relatedrodata->numVertices && guard-- > 0)
+#else
         index = relatedrodata->CollisionVertices[relatedindex].index;
 
         while (index >= 0)
+#endif
         {
             relatedrwdata->Vertices[index].a = paintval;
             index = relatedrodata->PointUsage[index];

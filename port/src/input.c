@@ -96,6 +96,7 @@
 #define RSTICK_THRESHOLD   0x4000
 #define AIM_ACCUM_CLAMP     8.0
 #define AIM_EMIT_THRESHOLD  0.5
+#define MOUSE_TURN_GAIN     6.0   /* per-poll aimDX units -> stick-X counts */
 
 static int numControllers = 1;
 static int connectedMask   = 0x1;   /* controller 0 always present */
@@ -106,8 +107,13 @@ static int mouseEnabled  = 1;
 static int mouseAimSpeed = 50;      /* /100 -> mouse-px to accumulator units */
 static int mouseInvertY  = 0;
 
-static double aimAccumX = 0.0;
-static double aimAccumY = 0.0;
+/* Per-poll mouse-look deltas. NOT a persistent accumulator: mouse-look is a
+ * displacement device, GE's C-buttons are a rate device. Integrating and
+ * draining turned a flick into a pegged, slowly-recovering "stuck looking
+ * up/down". We now emit a C-button only on polls where the mouse actually
+ * moved that poll; stop moving -> button releases -> GE auto-centres. */
+static double aimDX = 0.0;
+static double aimDY = 0.0;
 
 /* ------------------------------------------------------------------------ */
 
@@ -195,13 +201,8 @@ void inputUpdate(void)
     SDL_GetRelativeMouseState(&dx, &dy);
 
     const double scale = (double)mouseAimSpeed / 100.0;
-    aimAccumX += dx * scale;
-    aimAccumY += dy * scale * (mouseInvertY ? -1.0 : 1.0);
-
-    if (aimAccumX >  AIM_ACCUM_CLAMP) aimAccumX =  AIM_ACCUM_CLAMP;
-    if (aimAccumX < -AIM_ACCUM_CLAMP) aimAccumX = -AIM_ACCUM_CLAMP;
-    if (aimAccumY >  AIM_ACCUM_CLAMP) aimAccumY =  AIM_ACCUM_CLAMP;
-    if (aimAccumY < -AIM_ACCUM_CLAMP) aimAccumY = -AIM_ACCUM_CLAMP;
+    aimDX = dx * scale;
+    aimDY = dy * scale * (mouseInvertY ? -1.0 : 1.0);
 }
 
 static int scaleAxis(int v)
@@ -238,10 +239,15 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         const Uint8 *ks = SDL_GetKeyboardState(NULL);
         Uint32 mb = mouseEnabled ? SDL_GetMouseState(NULL, NULL) : 0;
 
+        /* GE default control (1.1): stick Y = move fwd/back, stick X = turn,
+         * C-left/right = sidestep, C-up/down = look. FPS layout: W/S move,
+         * A/D strafe (C-buttons), mouse X turns (stick X), mouse Y looks. */
         if (keyDown(ks, SDL_SCANCODE_W) || keyDown(ks, SDL_SCANCODE_UP))    sy =  STICK_MAX;
         if (keyDown(ks, SDL_SCANCODE_S) || keyDown(ks, SDL_SCANCODE_DOWN))  sy = -STICK_MAX;
-        if (keyDown(ks, SDL_SCANCODE_A) || keyDown(ks, SDL_SCANCODE_LEFT))  sx = -STICK_MAX;
-        if (keyDown(ks, SDL_SCANCODE_D) || keyDown(ks, SDL_SCANCODE_RIGHT)) sx =  STICK_MAX;
+        if (keyDown(ks, SDL_SCANCODE_A))  button |= GE_CONT_C;   /* strafe left  */
+        if (keyDown(ks, SDL_SCANCODE_D))  button |= GE_CONT_F;   /* strafe right */
+        if (keyDown(ks, SDL_SCANCODE_LEFT))  sx = -STICK_MAX;    /* keyboard turn */
+        if (keyDown(ks, SDL_SCANCODE_RIGHT)) sx =  STICK_MAX;
 
         if ((mb & SDL_BUTTON(SDL_BUTTON_LEFT)) || keyDown(ks, SDL_SCANCODE_LCTRL))
             button |= GE_CONT_G;
@@ -258,12 +264,13 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         if (keyDown(ks, SDL_SCANCODE_RETURN) || keyDown(ks, SDL_SCANCODE_TAB))
             button |= GE_CONT_START;
 
-        /* mouse-aim accumulator -> C-buttons (drained here) */
+        /* Mouse X -> analog turn (stick X, GE yaw is analog, not a C-button).
+         * Mouse Y -> C-up/C-down look (GE pitch has no analog hook). Per-poll,
+         * no carryover: motion this poll only, so releasing stops immediately. */
         if (mouseEnabled) {
-            if (aimAccumX >= AIM_EMIT_THRESHOLD) { button |= GE_CONT_F; aimAccumX -= 1.0; }
-            else if (aimAccumX <= -AIM_EMIT_THRESHOLD) { button |= GE_CONT_C; aimAccumX += 1.0; }
-            if (aimAccumY >= AIM_EMIT_THRESHOLD) { button |= GE_CONT_D; aimAccumY -= 1.0; }
-            else if (aimAccumY <= -AIM_EMIT_THRESHOLD) { button |= GE_CONT_E; aimAccumY += 1.0; }
+            sx += (int)(aimDX * MOUSE_TURN_GAIN);
+            if (aimDY >= AIM_EMIT_THRESHOLD)       button |= GE_CONT_D;
+            else if (aimDY <= -AIM_EMIT_THRESHOLD) button |= GE_CONT_E;
         }
     }
 
