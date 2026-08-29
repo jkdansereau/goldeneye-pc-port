@@ -3523,6 +3523,41 @@ watch-preview Model pool (`watchRwPool[0xC8]`) is N64-sized and the
 inline Model overruns live watch fields. See the audit doc for the full
 table and recommended fix order.
 
+**D116 (session M-7) — the HUD/menu text mirror (D75 class) is a
+per-glyph TEXTURE-space flip, NOT a screen/framebuffer/matrix mirror.**
+Rebuilt at D115 (`14b6b432`), build green, captured `-level_09` frames
+(`GE_PCDUMP="120-600:60"`, `ppm/frame_0003*.ppm`). Findings:
+- The "OBJECTIVE C: FAILED" flash (proportional font,
+  `textrelated.c:textRenderGlyph` → per-glyph `gDPLoadTextureBlock`
+  `G_IM_FMT_I/G_IM_SIZ_8b` + plain `gSPTextureRectangle`, dsdx `0x400`)
+  renders with **string order preserved (O first, D last) but every
+  glyph individually horizontally mirrored**. That signature is a
+  texture-S reversal per glyph, not a block/screen flip.
+- The HUD ammo digits ("83", top-right, upright and correct) use a
+  different font path and are **not** mirrored → the bug is specific to
+  the proportional-font `textRenderGlyph` load/sample path, not global.
+- Static trace found nothing: `gfx_dp_texture_rectangle` / `gfx_draw_rectangle`
+  (`gfx_pc.cpp:2161/2086`) assign `uls`→left corner, `lrs`→right corner
+  with positive dsdx; `import_texture_i8` (`gfx_pc.cpp:810`) uploads
+  linearly; viewport/scissor paths have no X negation; GE's camera
+  (`fr.c:694` `guPerspectiveF` + `matrix_4x4_set_lookat` = standard
+  gluLookAt) is conventional RH (confirms D114).
+- **Consequence for D114:** the unified "shared fast3d screen mirror"
+  hypothesis is at least partly wrong — the text mirror is texture-space.
+  The inverted-guard / mislocated-crate symptoms are either a *separate*
+  defect or the same texture-S flip applied to model textures (an
+  asymmetric guard skin flipped reads as "facing wrong way").
+- **Next (needs a runtime probe, not static):** dump the glyph texrect's
+  tile size / `line_size_bytes` / uploaded texture width vs `curchar->width`
+  for one glyph, and the final S texcoords fast3d hands GL. Suspects:
+  `gDPLoadTextureBlock` 8b `line`/pad (`(curchar->width+7)&0xF8` load
+  width vs real `curchar->width` sample width) interacting with tile
+  wrap; or the compiled-in font blob (`assets/obseg/text/LmiscE.h` /
+  `chars[]` `pixeldata`) being 32-bit word-swapped by the asset step
+  (would reverse 4-texel groups — check whether the mirror is clean or
+  chunked at 4px). Probe artifacts: `ppm/frame_000300.ppm` (obj text),
+  `ppm/frame_000480.ppm` (ammo).
+
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
 `worktree/data → main/data` followed the junction and deleted the real

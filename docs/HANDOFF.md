@@ -76,7 +76,16 @@ storage-room void is NOT closed doors failing to render.
 4. Add an f32 value spot-check to `d43_emit.py`'s verify pass (it only
    checks pointers/opcodes today — the D112 bug passed "ALL CHECKS PASSED").
 
-**Session M-6 (this session) — see §F D113/D114/D115, `docs/PLAN-M6-playable.md`,
+**Session M-7 — see §F D116.** Rebuilt at D115, captured `-level_09`
+frames. The HUD/menu text mirror (D75) is a **per-glyph texture-space
+flip** (string order preserved, each glyph mirrored), NOT a screen or
+matrix mirror — so D114's unified "shared fast3d screen mirror" theory is
+at least partly wrong. Ammo digits (different font path) render correct.
+Needs a runtime glyph-texrect probe (tile size / line_size_bytes /
+uploaded width vs `curchar->width` / final S texcoords); or check the
+compiled-in font blob for a 32-bit word-swap. Artifacts in `ppm/`.
+
+**Session M-6 — see §F D113/D114/D115, `docs/PLAN-M6-playable.md`,
 `docs/AUDIT-M6-player-offsets.md`, `docs/AGENT-WORKFLOW.md`,
 `docs/PORT-LEARNINGS.md`.** D113: portal BFS is correct, not the void.
 D114: matrix chain + converter verified clean, residual = shared fast3d
