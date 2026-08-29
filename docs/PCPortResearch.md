@@ -3613,6 +3613,36 @@ drifting toward a global `GE_D116FLIP` S-swap on every non-flip texrect
   when unset): `textrelated.c` textRenderGlyph / textRenderGlyphOutlined;
   `gfx_pc.cpp` gfx_dp_texture_rectangle.
 
+**D116 code-trace follow-up (session M-7, overseer, static — no build).**
+Traced the rect quad end-to-end through fast3d for the I8 glyph case
+(`cms=2`=CLAMP, `tile.uls=0`, `dsdx=1024`, 8px glyph):
+- `gfx_dp_texture_rectangle` 2187-2211: `ul={x:ulxf, u:uls=0}`,
+  `ur={x:lrxf, u:lrs=256}`, `ll={x:ulxf,u:0}`. `ulxf<lrxf`. Correct pairing.
+- `gfx_sp_tri1(ul, ll, ur, is_rect=true)` -> `gfx_sp_tri1` 1497-1572: for
+  each vtx `u = v->u/32 - tile.uls/4`; the D74 wrap block is gated on
+  `cms & G_TX_WRAP` and G_TX_WRAP==0 so it is a no-op for CLAMP glyphs;
+  `is_rect` skips the persp/filter half-texel. Result: `buf_vbo.u` =
+  `0/8 = 0.0` for left vtx, `256/32 / 8 = 1.0` for right vtx.
+- `gfx_adjust_x_for_aspect_ratio` 1092: `(aspect_ofs*w + x) * aspect_scale
+  / aspect_ratio`. `aspect_scale` (1714) is always a positive aspect
+  ratio; `aspect_ofs` is a monotonic shift. **Cannot invert X.** Ruled out.
+- `buf_vbo` X for a rect = `v->x` verbatim (clip space from
+  `gfx_draw_rectangle` 2105-2111), Y optionally `invert_y`-negated (1504),
+  X never negated.
+So the **entire fast3d 2D texrect -> vertex-buffer path emits a correct,
+non-mirrored quad** (x-left<->u=0, x-right<->u=1). Whatever flips U is
+DOWNSTREAM of `buf_vbo`: the GL vertex/fragment shader, the ortho/MVP the
+backend applies to direct (non-fb) draws, or the sampler. That also means
+it is testable without determinism (static per-quad property).
+- **Still owed (needs a build — currently serialized behind the
+  determinism/framediff agent):** (1) a probe dumping `buf_vbo` (x,u) for
+  one glyph tri right before `glDrawArrays`, to confirm the CPU-side
+  buffer is non-mirrored as traced; (2) render a 1-texel asymmetric test
+  texture on a known screen rect to see which axis GL inverts; (3) check
+  whether 3D world geometry is ALSO X-mirrored (bunker is near-symmetric
+  — need an asymmetric in-world texture or a guard-facing check) to tell
+  a HUD-only (direct-draw) flip from a global one.
+
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
 `worktree/data → main/data` followed the junction and deleted the real
