@@ -856,6 +856,24 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
         ALKeyMap *keyMap;
 
         sound = (soundBank->instArray[0]->soundArray[soundIndex]);
+#ifdef PORT
+        /* C7 / D127: the libaudio subsystem is Phase-3 parked (no real bank
+         * playback yet).  On some levels (Surface1, -level_36) a requested
+         * soundIndex resolves to a bogus ALSound* -- the converted bank tree
+         * (port/src/romdata.c afFixupInst) has fewer/rearranged soundArray
+         * slots than the N64 image -- and sndSetupSound() then faults on
+         * sound->keyMap.  Until audio lands, skip a sound whose pointer is
+         * plainly not a mapped address rather than crash the level.
+         * ALSound lives in game DRAM (~0x7000_0000..) or the cart image
+         * (0x1_4000_0000..); anything else (e.g. 0x0000_5622_0001_0001) is a
+         * byte-scrambled / OOB read. */
+        {
+            uintptr_t sp = (uintptr_t)sound;
+            if (sp < 0x10000 || sp >= 0x400000000ULL) {
+                return NULL;
+            }
+        }
+#endif
 
         newState = sndSetupSound(soundBank, sound);
 
