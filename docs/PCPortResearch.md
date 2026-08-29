@@ -3401,6 +3401,46 @@ table via `bgSwapRoomVtx` or the point-index blob length); front-end
 text draws mirrored. Next: prop/door model rendering (unblocks the void
 AND the missing weapon), then D75(b) skeletal models.
 
+**D108–D112 (session M-5) — the "props emit no geometry" premise was
+stale; the real bug was a converter byte-swap off-by-one, FIXED.**
+Re-probing `chrpropsRenderPass` / `chrpropRender` / `modelRenderNodeDl`
+(`GE_D96*`) showed props *do* emit complete leaf DLs now (~15k
+`nodeDl` EMITs/run, valid `gdl`/`vtx`/`BaseAddr`; fast3d transforms
+~300–600 prop verts/frame with sane `w`). Two separate residual bugs
+were isolated: (1) in the BUNKER storage area the per-frame visible-room
+count drops to 1–2 while `cameramode` goes 1→0 and `g_RoomLoadBudget`
+200→3 — but the 200→3 is *intentional* N64 behaviour
+(`bgRoomVisibilityRelated`: 0xC8 for intro/swirl cams, 3 for FP) and
+`currentPlayerGetProjectionMatrix()` + `g_CurrentPlayer->screensize`
+were both verified valid, so this is a portal-BFS under-reach, still
+open. (2) **Skeletal characters rendered as a "3D line" / not at all**
+(also visible in attract mode): `drawjointlist` → `subcalcmatrices` →
+`modelUpdateMatrices` → `process_02_position` → `modelBuildGroupMatrices`
+produced `render_pos[]` joint matrices with **sane rotations but garbage
+/ 1e27 / NaN positions**. `basemtx` (`camGetWorldToScreenMtxf()`) was a
+clean orthonormal lookat; joint *rotations* from the anim bitstream were
+fine; but `group->Origin` (`ModelRoData_GroupRecord.Origin`, a
+`coord3d`) read as garbage for every joint whose bytes weren't
+zero — while the adjacent `JointID`/`MatrixIDs` (u16/s16) read fine.
+Root cause: **`put_f32` in `tools_pc/d43_emit.py` had an off-by-one in
+its BE→LE byte reversal** — `buf[o:o+4] = src[doff+4:doff:-1]` yields
+bytes `doff+1..doff+4` (dropping the value's MSB, pulling in one byte of
+the next field) instead of `doff..doff+3`. This corrupted *every* f32
+field in converted model rodata (joint `Origin`s, LOD near/far, BSP
+planes, bounding radii) for every sidecar-loaded model; the compiled-in
+front-end intro models (native-LE C structs, not run through the
+converter) were unaffected, which is why the Rareware logo looked right
+but every in-level character collapsed. Fix: `src[doff:doff+4][::-1]`.
+After regen (`python tools_pc/d43_emit.py ntsc-final`), all 20
+`render_pos` entries of a BUNKER guard are coherent (~±60 units around
+the body), monitor screens draw their content, and character models
+render as recognisable humanoids (still some pose/orientation polish
+owed — a guard appears inverted — a separate matrix-handedness item).
+`d43_emit.py`'s verify pass only checks pointers/opcodes, not float
+values — a float spot-check is worth adding. Probes `GE_D96GATE /
+D96DL / D108 / D109 / D110 / D111 / D112 / GE_TRICNT` were all removed
+after the fix.
+
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
 `worktree/data → main/data` followed the junction and deleted the real

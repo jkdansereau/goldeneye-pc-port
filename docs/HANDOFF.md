@@ -40,27 +40,34 @@ the base image and magnified it. `gfx_lod_tile_offset` now returns 0
 (base tile) when detail textures are off. BUNKER1 rooms render crisp.
 See §F "D107".
 
-**Storage-room sky void — root-caused (session M-4), it is the
-prop/model track:** the void is *closed doors* — portals 25/26 are
-correctly `PORTALFLAG_DISABLED`, and `chrpropsRenderPass` runs (`n=3..10`
-props/room) but emits almost no geometry, so the door models that should
-fill those openings never draw. Portal visibility itself is healthy
-post-D106 (room 18 → 8 rooms deep). Fixing prop/door rendering unblocks
-this AND the missing weapon.
+**Skeletal models — FIXED (session M-5, D112).** The "3D line" / missing
+characters were `tools_pc/d43_emit.py`'s `put_f32` reversing the wrong 4
+bytes (`src[doff+4:doff:-1]` → bytes doff+1..doff+4, dropping the MSB),
+corrupting every f32 in converted model rodata (joint `Origin`s, LOD
+distances, BSP planes). Compiled-in front-end models were unaffected
+(native LE), hence "logo fine, every guard broken". Fix: one line,
+`src[doff:doff+4][::-1]`; regen with `python tools_pc/d43_emit.py
+ntsc-final`. BUNKER guards now render as coherent humanoids, monitor
+screens draw content. See §F "D108–D112".
+
+**"props emit no geometry" was a STALE premise** — props/doors emit
+complete leaf DLs (~15k/run, valid ptrs; fast3d transforms them). The
+storage-room void is NOT closed doors failing to render.
 
 **Real remaining work, in order:**
-1. **Prop / character model rendering** — `chrpropsRenderPass` enumerates
-   props but emits no geometry; door models (storage void), weapon model,
-   and skeletal characters all ride this. Overlaps the `struct player`
-   offset pass and D75(b). Start here — highest visual + playability
-   leverage. `GE_D96` probe in `chrprop.c`.
-2. **`struct player` offset pass** — weapon model doesn't draw; gate to
+1. **Portal-BFS under-reach in the storage area** — per-frame visible
+   room count drops to 1–2 in rooms 27–29 (`GE_D104`/probes now removed).
+   `projmatrix` + `screensize` verified valid; the 200→3 `g_RoomLoadBudget`
+   drop is intentional N64 FP-cam behaviour. Likely `bgQueuePortalTraversal`
+   / `bgDetermineVisibleRooms` portal-projection. This is the void.
+2. **Character pose / orientation polish** — post-D112 a BUNKER guard
+   renders but appears inverted; suspect a matrix-handedness / lookat
+   sign item in the joint base matrix. Also the mispositioned static
+   crate prop (top-left in the control room).
+3. **`struct player` offset pass** — weapon model doesn't draw; gate to
    playability (landmine below + D102).
-3. **D75(b)** — animated/skeletal character models (see §F "D75" and
-   "Known rendering bugs"). All three intro-model failures traced to the
-   game `matrixmath.c` → `modelUpdateMatrices`/`process_02_position` →
-   raw `render_pos` `i*0x40` re-pack path (NOT the D73 sin/cos path);
-   static prop = mispositioned, animated `setup_chr_instance` = missing.
+4. Add an f32 value spot-check to `d43_emit.py`'s verify pass (it only
+   checks pointers/opcodes today — this bug passed "ALL CHECKS PASSED").
 
 **This session's fixes (all committed, master):**
 

@@ -490,7 +490,7 @@ def process(name):
     def put_u16(o, v): buf[o:o + 2] = struct.pack("<H", v & 0xFFFF)
     def put_s16(o, v): buf[o:o + 2] = struct.pack("<H", v & 0xFFFF)  # bytes identical to <h
     def put_u32(o, v): buf[o:o + 4] = struct.pack("<I", v & 0xFFFFFFFF)
-    def put_f32(o, doff): buf[o:o + 4] = src[doff + 4:doff:-1]  # bswap32 (4 bytes!)
+    def put_f32(o, doff): buf[o:o + 4] = src[doff:doff + 4][::-1]  # bswap32 (BE->LE)
     def put_ptr(o, old_off):
         if not old_off:
             return
