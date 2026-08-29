@@ -2204,6 +2204,21 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
         ur->v = lrt;
     }
 
+    {
+        static int ge_d116 = -1;
+        if (ge_d116 < 0) ge_d116 = getenv("GE_D116") ? 1 : 0;
+        if (ge_d116) {
+            const auto& tt = rdp.texture_tile[tile];
+            fprintf(stderr,
+                "[D116/f3d] tile=%d flip=%d ul(%d,%d) lr(%d,%d) uls=%d ult=%d dsdx=%d dtdy=%d "
+                "-> lrs=%.2f lrt=%.2f ul.u=%.2f lr.u=%.2f | TILE siz=%d fmt=%d line_bytes=%d "
+                "uls=%d lrs=%d width=%d height=%d cms=%d\n",
+                tile, (int)flip, ulx, uly, lrx, lry, (int)uls, (int)ult, (int)dsdx, (int)dtdy,
+                lrs, lrt, ul->u, lr->u,
+                tt.siz, tt.fmt, tt.line_size_bytes, tt.uls, tt.lrs, tt.width, tt.height, tt.cms);
+        }
+    }
+
     uint8_t saved_tile = rdp.first_tile_index;
     if (saved_tile != tile) {
         rdp.textures_changed[0] = true;

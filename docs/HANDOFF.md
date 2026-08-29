@@ -84,14 +84,22 @@ storage-room void is NOT closed doors failing to render.
 4. Add an f32 value spot-check to `d43_emit.py`'s verify pass (it only
    checks pointers/opcodes today — the D112 bug passed "ALL CHECKS PASSED").
 
-**Session M-7 — see §F D116.** Rebuilt at D115, captured `-level_09`
-frames. The HUD/menu text mirror (D75) is a **per-glyph texture-space
-flip** (string order preserved, each glyph mirrored), NOT a screen or
-matrix mirror — so D114's unified "shared fast3d screen mirror" theory is
-at least partly wrong. Ammo digits (different font path) render correct.
-Needs a runtime glyph-texrect probe (tile size / line_size_bytes /
-uploaded width vs `curchar->width` / final S texcoords); or check the
-compiled-in font blob for a 32-bit word-swap. Artifacts in `ppm/`.
+**Session M-7 — see §F D116 + "D116 probe results".** Ran the glyph
+probe (overseer, after killing a subagent that was drifting toward a
+global texrect S-swap). Corrected finding: the HUD text mirror is a
+**per-quad texture-U flip that is NOT path-specific** — the ammo digits
+"83" are mirrored too (`ppm/frame_000320.ppm`), refuting M-7's earlier
+"proportional-font-specific" claim. Rect *positions* are correct; only
+texture content is X-flipped. Every fast3d stage probed clean (glyph
+bitmap in memory correct, texrect `ul.u=0→lr.u=max`, `import_texture_i8`
+linear, GL shader UV pass-through) — so the flip is in the GL
+vertex-buffer/draw layer OR a shared clip-space-X vs U desync on rect
+quads. **This re-opens D114's shared-mirror hypothesis** (now per-quad
+U/X, not screen-space) and plausibly also explains inverted guards /
+mislocated door props. NEXT: shader/vertex-buffer probe — dump per-vertex
+(x,u) for one glyph quad; render a 1-texel asymmetric test texture to see
+which axis inverts. `GE_D116`-gated probes left in `textrelated.c` +
+`gfx_pc.cpp` (zero-cost).
 
 **Session M-6 — see §F D113/D114/D115, `docs/PLAN-M6-playable.md`,
 `docs/AUDIT-M6-player-offsets.md`, `docs/AGENT-WORKFLOW.md`,

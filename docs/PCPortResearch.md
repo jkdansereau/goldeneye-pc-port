@@ -3558,6 +3558,61 @@ Rebuilt at D115 (`14b6b432`), build green, captured `-level_09` frames
   chunked at 4px). Probe artifacts: `ppm/frame_000300.ppm` (obj text),
   `ppm/frame_000480.ppm` (ammo).
 
+**D116 probe results (session M-7, overseer-run — supersedes the "specific
+to the proportional font" claim above).** Killed a subagent that was
+drifting toward a global `GE_D116FLIP` S-swap on every non-flip texrect
+(mirrors the whole HUD/3D to "fix" glyphs — wrong). Kept its
+`GE_D116`-gated `fprintf` probes in `textrelated.c` (both glyph paths) and
+`gfx_pc.cpp:gfx_dp_texture_rectangle`. Built green at D115, ran
+`-level_09` + `GE_PCDUMP="200-360:40"`. Data:
+- **The ammo digits ARE mirrored too.** `ppm/frame_000320.ppm` top-right:
+  "83" renders with each digit individually X-flipped, digit order
+  preserved; the clip-count glyph left of the mag icon likewise. So the
+  prior session's "ammo digits render correct → bug is `textRenderGlyph`-
+  specific" differentiator is **FALSE at D115**. The mirror is NOT
+  path-specific. (`textRenderGlyphOutlined` is what the level text uses;
+  `-level_09` direct-boot renders no "OBJECTIVE" flash / crosshair at
+  all — only the ammo HUD — so the M-7 "OBJECTIVE C: FAILED" note came
+  from a different scenario/run.)
+- **Rect screen position is correct; only the texture content is flipped.**
+  Ammo HUD sits top-right and renders top-right. So this is a texture-U
+  reversal per quad, not a screen/framebuffer/viewport flip and not a
+  scissor issue.
+- **Every stage probed is clean, yet the output is mirrored:**
+  - glyph bitmap in memory: correctly oriented — dumped `curchar->pixeldata`
+    for 'D' (idx 68, w7/loadw8/h9) row-by-row; stroke on the left, bowl on
+    the right, col 7 = wrap-pad of col 6. Not reversed. Rules out (c) a
+    font-blob word-swap.
+  - `gDPLoadTextureBlock` params: `loadw = (w+7)&0xF8` = 8 (or 16 for w9),
+    `line_bytes` = 8, tile `siz=1 fmt=4 cms=2`. Consistent. No evidence
+    the load-width vs sample-width interaction reverses anything — rules
+    out (b) as the *primary* cause.
+  - fast3d texrect: `ul.u = 0`, `lr.u = <positive max>` (e.g. 256 = 8
+    texels); `ul.x < lr.x`. Corner↔UV pairing is correct
+    (`gfx_dp_texture_rectangle` 2187-2211, `gfx_draw_rectangle` 2113-2136:
+    ul=(ulx,uls), lr=(lrx,lrs)). Rules out (a) at the texrect layer.
+  - `import_texture_i8` (`gfx_pc.cpp:810`): strictly linear byte copy, no
+    row/col reversal.
+  - `gfx_opengl.cpp`: `vTexCoord = aTexCoord` pass-through; no U negation
+    in the vertex/fragment shader; `cms=2`→`GL_CLAMP_TO_EDGE`.
+- **Conclusion:** the U-flip is downstream of everything fast3d computes —
+  in the GL vertex-buffer assembly / draw, OR it is a shared transform on
+  the rect quad's clip-space X that desyncs from U. This **re-opens
+  D114's shared-mirror hypothesis** (relocated from screen-space to
+  per-quad U/X space) and retires the D116 "proportional-font-specific,
+  texture-S load path" framing. Same mechanism plausibly explains the
+  "inverted" guards (mirrored skin) and mislocated door props (D113).
+- **Next:** shader/vertex-buffer-level probe — dump the actual per-vertex
+  (x, u) pairs in the buffer handed to `glDrawArrays` for one glyph quad,
+  and render a 1-texel asymmetric test texture on a known rect to see
+  which axis inverts. Confidence the mirror is a real per-quad U/X flip
+  (not a capture artifact): **high** — reproduced on two independent HUD
+  text paths, rect positions provably correct. Confidence in the
+  GL-layer-vs-shared-transform split: **low** — not yet isolated.
+- Probes left in tree (all `#ifdef PORT` + `getenv("GE_D116")`, zero-cost
+  when unset): `textrelated.c` textRenderGlyph / textRenderGlyphOutlined;
+  `gfx_pc.cpp` gfx_dp_texture_rectangle.
+
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
 `worktree/data → main/data` followed the junction and deleted the real

@@ -8,6 +8,8 @@
 /* D50: font segments are re-laid out from the N64 ROM layout to the PC C
  * layout (see romdataFixupFont). */
 #include "romdata.h"
+#include <stdio.h>
+#include <stdlib.h>
 #endif
 
 #define SPACE_WIDTH 5
@@ -257,6 +259,28 @@ Gfx *textRenderGlyph(Gfx *gdl, s32 *x, s32 *y, struct fontchar *curchar, struct 
                 gDPSetTileSize(gdl++, G_TX_RENDERTILE, 0, 0, (curchar->unkc - 1) << 2, (curchar->height - 1) << 2);
                 */
                 gDPLoadTextureBlock(gdl++, curchar->pixeldata, G_IM_FMT_I, G_IM_SIZ_8b, ((curchar->width + 7) & 0xF8), curchar->height, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, 0, 0);
+#ifdef PORT
+                {
+                    static int ge_d116 = -1;
+                    if (ge_d116 < 0) ge_d116 = getenv("GE_D116") ? 1 : 0;
+                    if (ge_d116) {
+                        const unsigned char *pd = (const unsigned char *)curchar->pixeldata;
+                        int c = curchar->index;
+                        fprintf(stderr,
+                            "[D116] glyph '%c' idx=%d w=%d loadw=%d h=%d *x=%d s=%d t=%d pd=%p row0:",
+                            (c >= 32 && c < 127) ? c : '?', c, curchar->width,
+                            (curchar->width + 7) & 0xF8, curchar->height,
+                            (int)*x, (int)text_s, (int)text_t, (void *)pd);
+                        if (pd) {
+                            int n = ((curchar->width + 7) & 0xF8) * 2;
+                            int i;
+                            if (n > 32) n = 32;
+                            for (i = 0; i < n; i++) fprintf(stderr, " %02x", pd[i]);
+                        }
+                        fprintf(stderr, "\n");
+                    }
+                }
+#endif
             }
             else
             {
@@ -499,6 +523,28 @@ Gfx *textRenderGlyphOutlined(Gfx *gdl, s32 *x, s32 *y, struct fontchar *curchar,
         if (curchar->index < 0x80) {
             gDPSetTextureLUT(gdl++, G_TT_NONE);
             gDPLoadTextureBlock(gdl++, curchar->pixeldata, G_IM_FMT_I, G_IM_SIZ_8b, ((curchar->width + 7) & 0xF8), curchar->height, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, 0, 0);
+#ifdef PORT
+            {
+                static int ge_d116 = -1;
+                if (ge_d116 < 0) ge_d116 = getenv("GE_D116") ? 1 : 0;
+                if (ge_d116) {
+                    const unsigned char *pd = (const unsigned char *)curchar->pixeldata;
+                    int c = curchar->index;
+                    int loadw = (curchar->width + 7) & 0xF8;
+                    int r;
+                    fprintf(stderr, "[D116] O-glyph '%c' idx=%d w=%d loadw=%d h=%d *x=%d pd=%p\n",
+                        (c >= 32 && c < 127) ? c : '?', c, curchar->width, loadw,
+                        curchar->height, (int)*x, (void *)pd);
+                    if (pd) for (r = 0; r < curchar->height && r < 16; r++) {
+                        int i;
+                        fprintf(stderr, "  row%2d:", r);
+                        for (i = 0; i < loadw && i < 24; i++)
+                            fprintf(stderr, " %02x", pd[r * loadw + i]);
+                        fprintf(stderr, "\n");
+                    }
+                }
+            }
+#endif
         } else {
             gDPPipeSync(gdl++);
             gDPSetTextureLUT(gdl++, G_TT_IA16);
