@@ -1,6 +1,14 @@
 # Handoff brief — GoldenEye 007 PC port (Phase 2: Session M-3 —
 # STAGE-LOAD → RENDER crash chain CLEAR; BUNKER1 renders, next is D75 model quality)
 
+## PREFLIGHT — before touching anything (a concrete next-step below is NOT a reason to skip this)
+
+1. `CLAUDE.md` (auto-loaded) + `AGENTS.md` non-negotiables.
+2. This file, top-to-bottom.
+3. `docs/PORT-LEARNINGS.md` — recurring bug classes.
+4. Dispatching a subagent? `docs/AGENT-WORKFLOW.md` FIRST. Every brief needs
+   FILES / BUDGET / ON-EXPIRY / CONSTRAINTS / REPORT (see CLAUDE.md "Dispatch preflight").
+
 _Paste-ready brief. Authoritative context: `AGENTS.md`,
 `docs/PCPortResearch.md` §F (D69, D78-D102), `docs/BRIEF-D69-stage-load.md`._
 
