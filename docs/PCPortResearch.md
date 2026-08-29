@@ -3643,6 +3643,53 @@ it is testable without determinism (static per-quad property).
   — need an asymmetric in-world texture or a guard-facing check) to tell
   a HUD-only (direct-draw) flip from a global one.
 
+**D116 runtime probe part 3 (session M-8, overseer). CONTRADICTION —
+every stage from font-bitmap to GL-draw verified non-mirrored at runtime,
+yet the on-screen glyphs are unambiguously X-flipped. Investigation
+budget-capped; deprioritised (cosmetic, not a playability blocker).**
+Confirmed symptom (zoomed `ppm/frame_000300.ppm`): "OBJECTIVE C: FAILED"
+(via `textRenderGlyphOutlined`) AND the ammo "83" + spare-clip digit (a
+*separate* HUD-number path — `textrelated.c` probes never fire for the
+digit indices) both render with word/column order preserved and every
+glyph individually horizontally mirrored; screen positions correct.
+Runtime probes added (`GE_D116`-gated, `#ifdef PORT`):
+- `[D116/vbo]` in `gfx_sp_tri1` after the per-vertex `buf_vbo` writes:
+  for the OBJECTIVE glyph quads (left edge, `tile.uls=0 lrs=28`,
+  `cms=2`=CLAMP) it prints `vtx0 x=-0.8125 u=0.0` and `vtx2 x=-0.7625
+  u=1.0`. **x-left <-> u=0, x-right <-> u=1. The CPU vertex buffer handed
+  to GL is correct and non-mirrored.**
+- `[D116/i8up]` (since reverted) in `import_texture_i8` dumped the
+  uploaded bytes for glyph 'D' — **byte-identical** to `curchar->pixeldata`
+  in memory (`00 00 0f 37 34 0b 00 00` ...), and the bitmap is correctly
+  oriented (stroke col 1, bowl col 6-7). No flip, no word-swap.
+- GL backend: vertex shader is `gl_Position = aVtxPos` (fast3d does all
+  transform on the CPU — no GL matrix can flip anything);
+  `vTexCoord = aTexCoord` pass-through fragment path; sampler
+  `GL_CLAMP_TO_EDGE`/`GL_NEAREST`; `gfx_opengl_copy_framebuffer` has only
+  a `flip_y`, no X flip; `G_TEXRECT` decode (`gfx_pc.cpp:2602`) extracts
+  `ulx<lrx` correctly; `gfx_adjust_x_for_aspect_ratio` is a positive
+  scale+shift (cannot invert).
+- `GE_D116TEST` (reverted) replaced glyph I8 textures with a
+  left-opaque/right-transparent split; on screen the digit slots came
+  back near-uniform white, not half-and-half — **inconclusive** (the
+  9-pass outline multi-draw and/or the unidentified digit path's sampling
+  window smear the result).
+- **Conclusion + confidence:** the flip is real (HIGH — two independent
+  text paths, clean zoomed capture). It is NOT in: the font asset, the
+  texture upload, the fast3d texrect->vbo math, the GL shaders/sampler,
+  the framebuffer blit (each HIGH, runtime-verified). Where it IS: unknown
+  (LOW). The contradiction means a stage is being mis-modelled — leading
+  candidates now: (a) the render-*tile* setup (`gDPSetTile`/`gDPSetTileSize`
+  S params — probes covered the *load* tile) vs fast3d's tile-window
+  sampling; (b) a GL-driver-level surprise only a real API trace
+  (RenderDoc/apitrace) would show; (c) the dedicated ammo-digit renderer
+  (unidentified — not in `textrelated.c`) emitting mirrored S, with
+  `textRenderGlyphOutlined` doing likewise via a shared lower-level
+  helper. NEXT PERSON: capture one glyph texrect in RenderDoc, or find
+  and read the HUD-number path, before touching fast3d again. Do not
+  exceed ~30 min without one of those in hand. Probe left in tree:
+  `[D116/vbo]` in `gfx_pc.cpp` (`GE_D116`, zero-cost).
+
 **D117 (session M-8) — frame-to-frame nondeterminism root-caused;
 `GE_DETERM` fixed-tick mode assessed NOT-narrow, deferred with a design.
 `tools_pc/framediff.py` added (structural/tolerant).**
