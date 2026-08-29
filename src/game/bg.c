@@ -346,7 +346,20 @@ void sub_GAME_7F0B37EC(void) {
             do {
                 portal = ptr[0];
                 while (ptr[1] >= portal) {
+#ifdef PORT
+                    /* C5 / D128: the raw form hardcodes the N64 8-byte
+                     * bg_portal_data_entry stride + controlbytes1@6; on PC the
+                     * struct is 16B (widened offset_portal ptr) with
+                     * controlbytes1@10, so `[(portal<<3)+6]` scribbled
+                     * PORTALFLAG_SPECIAL into the middle of a portal's
+                     * offset_portal pointer -> garbage 0x0002_0000_xxxx ptr ->
+                     * crash on portal_pts->numPoints (bg.c:5723) whenever a chr
+                     * LOS check walked that portal. Only levels with a
+                     * specialportalarray entry (Control) hit it. */
+                    g_BgPortals[portal].controlbytes1 |= PORTALFLAG_SPECIAL;
+#else
                     ((u8 *)g_BgPortals)[(portal << 3) + 6] |= 2;
+#endif
                     portal++;
                 }
 
