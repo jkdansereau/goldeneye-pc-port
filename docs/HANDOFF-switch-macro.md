@@ -1,3 +1,6 @@
+> **RESOLVED — historical.** D7/D8 closed at the compile+link milestone.
+> Kept for the IDO-vs-GCC preprocessor analysis. Not active work.
+
 # HANDOFF — SWITCH/CALL macro port (D7/D8) — IN PROGRESS
 
 ## Status: BLOCKED on SWITCH expansion mangling (root cause now fully understood)

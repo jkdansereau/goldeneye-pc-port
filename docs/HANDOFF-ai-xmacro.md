@@ -1,3 +1,6 @@
+> **RESOLVED — historical.** D7 closed at the compile+link milestone.
+> Kept for the AI X-macro analysis. Not active work.
+
 # HANDOFF — AI X-macro system (D7), the last build blocker
 
 ## Status

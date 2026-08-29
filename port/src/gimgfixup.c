@@ -112,9 +112,14 @@ void gimgSyncCompiledGlobalDLs(u8 *base)
 
         while (p + 8 <= end && p[0] != (u8)G_ENDDL)
         {
-            /* Post-fixup marker position: LE encoding of 0xABCDxxxx puts
-             * CD AB at byte offsets 6..7. */
-            if (p[6] == 0xCD && p[7] == 0xAB)
+            /* D68/C2: texLoadFromDisplayList() has already replaced every
+             * IMAGESEG w1 word in the ROM copy with a real texture pointer,
+             * so the 0xABCDxxxx marker is gone from `p`. Identify the slots
+             * that need syncing from the COMPILED array instead: a G_SETTIMG
+             * command whose w1 is still an unresolved IMAGESEG marker
+             * (0xABCDxxxx). Copy the ROM copy's resolved word into it. */
+            if ((u8)(dst[j].words.w0 >> 24) == (u8)G_SETTIMG &&
+                (dst[j].words.w1 >> 16) == 0xABCDu)
             {
                 dst[j].words.w1 = *(u32 *)(p + 4);
             }

@@ -53,6 +53,15 @@ through a converter or a runtime bswap fixup reads scrambled.
   (StandTile id/room, header mid/tail).
 - **Rule:** prefer an offline sidecar converter (D43, D69, D88 pattern,
   `tools_pc/d*_emit.py`) over a runtime fixup for a whole format.
+- A one-shot "sync patched values from the ROM copy into a compiled
+  shadow array" pass must key its slot-detection on a field that is still
+  intact *at sync time*. D124: `gimgSyncCompiledGlobalDLs` looked for the
+  `0xABCDxxxx` IMAGESEG marker in the ROM copy — but `texLoad()` had
+  already overwritten every one of those with a real pointer, so the sync
+  silently copied nothing and the compiled `globalDL_0xNNN` explosion
+  DLs kept their link-time markers (latent on *all* levels; only tripped
+  when an explosion/smoke/particle DL is first drawn). Detect the slot
+  from the *destination* (compiled) array, which still holds the marker.
 - A polymorphic-record converter with a per-type handler table + a
   "generic" fallback silently corrupts any type the table forgot: the
   fallback's word-granular bswap is wrong for sub-word fields. D122 —
@@ -63,6 +72,18 @@ through a converter or a runtime bswap fixup reads scrambled.
   *every* `type` byte a level can emit and assert the handler set is
   total; `[u16|u16]` / `[s16|s16]` packed words need a half-swap
   (`_hh_word`), never a 32-bit swap.
+- **D123 corollary:** a pointer-width tail slot is **not always
+  runtime-populated**. Some hold a small *integer id* in the ROM image
+  that game code reads via that same field before overwriting it
+  (`VehichleRecord/AircraftRecord.ailist`: `prop.c:1764/1786` does
+  `x->ailist = ailistFindById(x->ailist)`). A converter that lumps every
+  pointer-width tail slot into one "widen 4→8B, emit zeroes" bucket
+  destroys the id → `ailistFindById(0)` silently returns global list 0
+  (`GAILIST_AIM_AT_BOND`) → `ai()` runs a CHR aim list with a NULL chr →
+  NULL deref in `chrIsNotDeadOrShot`. Before zeroing a widened slot,
+  confirm the setup code writes it unconditionally; if it reads-then-writes,
+  emit the value (`_bswap32` into the low 4 bytes, LE). Decide per field,
+  not per type.
 
 ## C2. Port-layer / SDL shims
 

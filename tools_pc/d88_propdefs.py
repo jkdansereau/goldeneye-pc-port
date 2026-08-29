@@ -86,18 +86,33 @@ OBJ_PC_BYTES = 144
 # D122: ObjectRecord-derived types whose tail (N64 words >= 32) the converter
 # must lay out with pointer widening.  {type: (ptr_word_set, hh_word_set)}.
 #   47 TintedGlassRecord  tail: TintDist,CullDist,calculatedopacity,portalnum,unk90
-#   39 VehichleRecord     ailist*@w32, [u16 aioffset|s16 aireturnlist]@w33, path*@w41, Sound*@w43
-#   40 AircraftRecord     ailist*@w32, [u16|s16]@w33, path*@w43, Sound*@w44
+#   39 VehichleRecord     ailist(id)@w32, [u16 aioffset|s16 aireturnlist]@w33, path*@w41, Sound*@w43
+#   40 AircraftRecord     ailist(id)@w32, [u16|s16]@w33, path*@w43, Sound*@w44
+#   NB w32 (ailist) is a pointer-width slot holding an INT id read by
+#   prop.c before overwrite -> OBJ_ID_WORDS, not ptr_word_set (D123).
 #   45 TankRecord         collision*@w32 (rest scalar; struct locs unconfirmed)
 OBJ_TAIL_DESC = {
     47: (frozenset(),             frozenset()),
-    39: (frozenset((32, 41, 43)), frozenset((33,))),
-    40: (frozenset((32, 43, 44)), frozenset((33,))),
+    39: (frozenset((41, 43)),     frozenset((33,))),
+    40: (frozenset((43, 44)),     frozenset((33,))),
     45: (frozenset((32,)),        frozenset()),
     # 13 AutogunRecord: unkC4*@w49 unkC8*@w50 beam*@w51 (is_active@w52 unkD4@w53)
     13: (frozenset((49, 50, 51)), frozenset()),
     # 20 MultiAmmoCrateRecord: slots[13] of [u16 modelnum][u16 quantity]
     20: (frozenset(),             frozenset(range(32, 45))),
+}
+
+# D123: ObjectRecord-derived tail slots that are pointer-width on PC but hold a
+# pre-populated *integer AI-list id* in the ROM image which game code reads
+# before overwriting (prop.c:1764 `pdef_veh->ailist = ailistFindById(pdef_veh->ailist)`,
+# prop.c:1786 for aircraft).  Unlike path*/Sound* (genuinely runtime-zeroed by
+# prop.c) these must NOT be zeroed by the converter — the id must survive into
+# the low 32 bits of the widened 8-byte slot.  Was in ptr_word_set -> emitted as
+# 8 zero bytes -> ailistFindById(0) -> GAILIST_AIM_AT_BOND -> ai() ran a CHR aim
+# command with ChrEntityp==NULL -> NULL->actiontype crash in chrIsNotDeadOrShot.
+OBJ_ID_WORDS = {
+    39: frozenset((32,)),   # VehichleRecord.ailist @ N64 0x80
+    40: frozenset((32,)),   # AircraftRecord.ailist @ N64 0x80
 }
 
 # Per-type PC struct size (bytes) the converter emits and sizepropdef must
@@ -302,10 +317,15 @@ def convert_record(src, so, type_byte):
         # tail with pointer members widened 4->8B and 8-aligned.
         _emit_object_prefix(out, src, so)
         ptr_words, hh_words = OBJ_TAIL_DESC[type_byte]
+        id_words = OBJ_ID_WORDS.get(type_byte, frozenset())
         pc = OBJ_PC_BYTES
         for i in range(OBJ_N64_WORDS, n64w):
             w = src[so + 4 * i: so + 4 * i + 4]
-            if i in ptr_words:
+            if i in id_words:               # D123: widened slot carrying an int id
+                pc = (pc + 7) & ~7
+                out[pc:pc + 4] = _bswap32(w)  # id -> low 32 bits LE; high 32 = 0
+                pc += 8
+            elif i in ptr_words:
                 pc = (pc + 7) & ~7
                 pc += 8                      # 8 zero bytes already present
             elif i in hh_words:

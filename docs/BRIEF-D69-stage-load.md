@@ -1,3 +1,6 @@
+> **RESOLVED — historical.** D69 is closed (see PCPortResearch.md §F/§H
+> D69, D78–D84). Kept for the bg/stan format spec. Not active work.
+
 # Brief — M1 / D69: Stage (BG/stan) loading for PC
 
 _Paste-ready milestone brief. Authoritative context: `AGENTS.md`,

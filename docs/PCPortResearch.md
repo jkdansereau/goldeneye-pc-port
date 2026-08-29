@@ -790,6 +790,37 @@ duration. Asset symbol spot-checks against the ROM confirm correct offsets
 
 ### F. Phase 2 runtime findings (threads, DRAM, addresses)
 
+**Dxx index — jump to a finding, do not linear-read this section.** §F
+covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
+
+| Range | Topic | Status |
+|---|---|---|
+| D24–D30 | green threads / kernel / crash handler | resolved |
+| D31–D42 | boot ABI: ANIM_DATA, music seq-table, libaudio banks, Globalimagetable rebase, GL context, rsp toggle | resolved |
+| D43–D50 | model-file loading → offline sidecar "Plan B" (`d43_emit.py`); D50.6 texCopyGdls full-slot copy | resolved |
+| D51–D58 | font pixeldata, osGetCount tick rate, model RW pools, cseq BE header, synth slots, RLE menu bg, watch raw offsets, gun-barrel DL | resolved |
+| D59–D68 | intro render: blood-RLE clobber, DMA validate, OSMesgQueue, HEADS/BODIES sentinels, romCopy width, image_entry, Globalimagetable BE→LE | resolved |
+| D69 · D78–D84 | stage load (`load_bg_file`): bg/stan offline sidecar (`d69_emit.py`) + StandTile/bg_room_data ABI | resolved |
+| D70–D74 | intro-logo pixels: C-array bswap, UV path, sinf/cosf `DVAL()`, texture-import truncation | resolved |
+| D75 · D76 · D77 | front-end 3D model transforms · disclaimer screen · audio | OPEN (parked, `GRAPHICS-BACKLOG.md`) |
+| D85 | room primary/secondary DL → `texLoadFromGdl` garbage | OPEN (safety-netted; widen/pool fixes landed, geometry now renders) |
+| D86 · D87 | modelInitRwData truncated ptr · attract-demo BE `ramromfilestructure` | resolved |
+| D88.1–D88.3 · D88.5–D88.6 | `Usetup*Z` header + sub-table width/endian conversion (`d88_emit.py`) | resolved |
+| D88.4 | `propDefs` polymorphic record stream not byteswapped → `setupDoor` crash | **OPEN — cross-level blocker** |
+| D89–D92 | stage-load→frame: stan zero-fill overrun, portal address trunc, chr/AI spawn ptrs | resolved |
+| D93–D102 | struct-pun / hardcoded-size pass: player alloc, player.model inline Model, weapon Model pun, master-DL buffer | resolved (D95 pool bump partial) |
+| D103–D107 | BUNKER1 viewport height, depth-buffer clear (`G_CLEAR_DEPTH_EXT`), portal near-plane, LOD mip tile | resolved |
+| D108–D112 | skeletal models: `d43_emit.py put_f32` byte-reversal bug | resolved |
+| D113–D116 | portal BFS ok · matrix chain ok · player raw-offset audit + `gunfire.c` THROW* · HUD text X-mirror | D116 OPEN (parked — DO NOT re-static-trace) |
+| D117 | frame nondeterminism root-caused; `GE_DETERM` deferred; `framediff.py` structural | resolved (mode deferred) |
+| D118 | SDL input layer (`port/src/input.c`); D118a/b mouse polish open | resolved (polish open) |
+| D119 · D120 | guard-attack `weapons_held[]->chr` pun crash · blood-stain `PointUsage[]` chain hang (guarded, `d43_emit.py` opcode-0x18 gap) | D119 fixed · D120 guarded |
+| D121 | WS1 frictionless per-level boot: bare `-level_XX` injects its `memallocstringtable[]` `-m*` row (`#ifdef PORT` in `boss.c`) | resolved |
+| D122 | per-level prop/item model-load crash (Dam/Facility/Runway `modelLoad`/`modelInitRwData`): `d88_propdefs.py` had no handler for 6 ObjectRecord-derived propDef types (47/39/40/45/13/20) → generic arm half-swapped the `[s16 obj][s16 pad]` word → OOB `PitemZ_entries[]` | converter fixed; residual chr/fast3d crashes on those levels are separate |
+| D123 | crash class C1: `chrIsNotDeadOrShot` NULL deref on 6 levels (Dam/Runway/Frigate/Statue/Streets/Cradle). D122's `OBJ_TAIL_DESC` zeroed the widened `VehichleRecord/AircraftRecord.ailist` slot (w32), but `prop.c:1764/1786` reads a pre-populated int AI-list id there → `ailistFindById(0)` → `GAILIST_AIM_AT_BOND` → `ai()` runs a CHR aim list with `ChrEntityp==NULL` | converter fixed (`OBJ_ID_WORDS`); C1 cleared on all 6, residual crashes are fast3d (C2) |
+| D125 | crash classes C3+C6 (Aztec/Bunker2/Surface2): the converted `propDefs` blob in RAM ≠ `d88_propdefs.py` offline output — after record 0 it is zeros/garbage, so the `sizepropdef()` walk drifts (+101 records by the first door) and every `pdefIndex` lookup (`setupDoor`→`linkedDoor`, `modelLoad` modelid) hits the wrong record. NOT a forgotten-type gap (histogram diff clean). Suspect a destination-offset / `pd_end` / header-reloc bug in `tools_pc/d88_emit.py`'s propdefs emit, not in the converter | **not fixed** — investigation cut for usage reset; next: diff pccg.bin bytes vs `convert_stream`, trace `pd_start/pd_end/do` in d88_emit.py |
+| D124 | crash class C2: fast3d bad texture pointer. **Jungle** (`0xabcd0824`): `gimgSyncCompiledGlobalDLs()` slot-detect keyed on the post-fixup marker, which `texLoad()` had already overwritten → compiled `globalDL_0xNNN` explosion DLs kept link-time `IMAGESEG` words → latent on every level, tripped by the first explosion-DL draw. **Facility** (`0x72181ee8`): separate — model/prop GDL from the `texLoadFromGdl()`/`sub_GAME_7F0762E0` relocation path writes non-16-aligned `dst` (N64 8B vs PC 16B `Gfx` stride mix in `objecthandler_2.c`), open D80/D82/D83 area | Jungle fixed (`port/src/gimgfixup.c`); Facility diagnosed, not fixed |
+
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
 threads, compiled GE's real `src/sched.c`, and brought in PD's fast3d software
 RSP (`port/fast3d/`). The boot path now runs: ROM map → DRAM reserve → video
@@ -2193,7 +2224,10 @@ word1=0x14 room-fileposition list), bg_room_data records carry more
 stanZ files go through stanDetermineEOF/stanLoadFile. TEMP D69 probe in
 ob.c (GE_D69) logs name/index/rom_size/hw_address per BG load.
 
-### G. Phase 2 status (current)
+### G. Phase 2 status snapshot (HISTORICAL — frozen ~D74)
+
+> Stale point-in-time snapshot. **Current status: `docs/HANDOFF.md`.**
+> Finding detail: §F index above + §H below.
 
 Done through **D68**: PD fast3d integrated (`port/fast3d/`); GE's real
 `src/sched.c` + pthread kernel; dual-mapped DRAM; ROM mapped at cart base;
@@ -2243,7 +2277,14 @@ stripped, but previously committed TEMP diagnostics (D63 blocks, GE_D71LOG,
 and the older D51–D66 leftovers) are still in the tree — strip list in
 HANDOFF Task 3. Build is GREEN.
 
-### H. Handoff & plan (current session)
+### H. Finding log continued (D32 procedure, D70–D121)
+
+> This section began as a per-session "handoff & plan" and grew into the
+> D70–D121 finding log. The **D32 repeatable fix procedure** below is
+> permanent reference; the rest is the finding archive (use the §F index).
+> **Current task and plan: `docs/HANDOFF.md` +
+> `docs/PLAN-linear-level-sweep.md`.** Session narrative:
+> `docs/HANDOFF-ARCHIVE.md`.
 
 Full paste-ready brief: **docs/HANDOFF.md** (primary thread: D69 BG/stan
 stage loading — the milestone blocker; secondary: final pixel check of the
@@ -3931,3 +3972,354 @@ module, as in D56, means unwind depth is limited — confirm callers by code-
 path analysis + behavior). Standalone probe compiles need `-std=c11` (without
 it `typedef s32 bool` in bondtypes.h breaks under gnu23) and pointer-difference
 arithmetic instead of offsetof (include/stddef.h is #if 0'd).
+
+---
+
+**D121 (session M-12, WS1) — frictionless per-level boot.** A bare
+`./build-pc/ge007.x86_64.exe -level_XX` with no `-m*` args booted every
+level with the default memory pools and OOM-crashed early in the load
+sequence; you had to hand-copy the per-level `-ml -me -mgfx -mvtx -mt -ma`
+row from `memallocstringtable[]` (`boss.c:101`) onto the command line.
+
+*Root cause.* On N64 the per-stage auto-inject loop in `bossMainloop`
+(`boss.c` ~line 425: `tokenSetString(memallocstringtable[i].string)`)
+supplies that row, but it is gated on `g_DebugAndUpdateStageFlag`. With
+`-level_` present that flag is left to `rmonGetToken()` (`boss.c:178`),
+which the PC stub (`port/src/n64stubs.c`) returns 0 for, so the loop never
+runs.
+
+*Rejected fix.* Setting `g_DebugAndUpdateStageFlag = 1` when `-level_` is
+present (the "mirror `boss.c:199-202`" idea in the old HANDOFF) is **not
+behaviour-preserving on PC**: it makes boot render the full title-stage
+intro (logos → gun-barrel → cast) instead of loading the level directly.
+The flag does more than pick the token row.
+
+*Fix (`#ifdef PORT` in `bossInitMainthreadData`, after the flag's own
+`tokenSetString` block).* When `-level_` is present and no `-m` token was
+given, look up the stage's `memallocstringtable[]` row (same match the N64
+loop does) and `tokenSetString` it — **prefixed with `-level_XX` (and
+`-hard N` if present)**, because `tokenSetString` (`src/token.c:41`)
+`strcpy`s over the whole token buffer; without the prefix `bossMainloop`'s
+`tokenFind(1, "-level_")` returns NULL and it boots the title stage. No
+flag change, no control-flow change.
+
+*Verified.* Bare `-level_09` now loads BUNKER1 directly (85–92 % non-clear
+frame content from frame 30, no intro), matching the old
+`-level_09 -ml0 -me0 -mgfx100 -mvtx50 -mt700 -ma150` repro. Residual
+BUNKER1 prop/`modelLoad` crash is intermittent (D117 nondeterminism +
+D88.4) and pre-existing — out of WS1 scope. HANDOFF repro line updated to
+drop the manual `-m*` list.
+
+**D122 (session M-12) — per-level prop/item model-load crash: propDef
+converter missing handlers for ObjectRecord-derived record types.**
+`-level_33` (Dam), `-level_34` (Facility), `-level_35` (Runway) crashed
+deterministically before frame 1: `modelLoad` (`loadobjectmodel.c:393`,
+`PitemZ_entries[modelid].header->RootNode` with an OOB `modelid` — `Rax`
+held ASCII) and `modelInitRwData` (`model.c:6249`). BUNKER1 (`-level_09`)
+and Silo (`-level_20`) were fine.
+
+*Root cause.* The D88.4 propDef stream converter (`tools_pc/d88_propdefs.py
+convert_record`) had per-type handlers for most record layouts but **four
+`inherits ObjectRecord` types fell through to the generic arm**: 47
+TINTED_GLASS, 39 VEHICHLE, 40 AIRCRAFT, 45 TANK (plus 13 AUTOGUN and 20
+AMMO/MultiAmmoCrate, exposed once the first four were fixed). The generic
+arm bswap32's N64 word 1 as a single 32-bit value, but for an
+ObjectRecord that word is `[s16 obj][s16 pad]` — it needs `_hh_word`
+(swap each half in place). Result: `obj` (the model id, read by
+`domakedefaultobj` at `prop.c:155` → `modelLoad`) landed in the wrong
+half → garbage/OOB index into `PitemZ_entries[]`. The generic arm also
+never widened the ObjectRecord's embedded pointer slots (prop*/model* 4→8
+B), so every tail field was mis-offset too. BUNKER1/Silo use none of
+these six types (verified with a per-level `PROPDEF_N64_WORDS` type
+histogram), which is why they were unaffected — the stream *walk* was
+self-consistent for all 21 levels (`convert_stream` validates region
+length), only the *field contents* of these records were wrong.
+
+*Fix (converter only — `tools_pc/d88_propdefs.py`).* Added `OBJ_TAIL_DESC`
+= {type: (ptr_word_set, hh_word_set)} for types 47/39/40/45/13/20 and a
+handler that emits the real 144-byte PC ObjectRecord prefix
+(`_emit_object_prefix`, which does `obj` correctly) followed by the tail
+with pointer members widened 4→8 B and 8-aligned, `_hh_word` for u16-pair
+words (vehicle aioffset/aireturnlist; ammo-crate `slots[]`), `_bswap32`
+elsewhere. Updated `PROPDEF_PC_BYTES` (39: 176→208, 40: 180→208, 45:
+224→248; 47/13/20 already correct) and the matching
+`sizepropdef()` `#ifdef PORT` arms in `loadobjectmodel.c` (VEHICHLE
+44→52, AIRCRAFT 45→52, TANK 56→62 words; N64 values kept in the trailing
+comment / `#else` `#if 1` switch). No game-logic change. Regenerate:
+`python tools_pc/d88_emit.py ntsc-final --regen` (21/21, ALL CHECKS
+PASSED).
+
+*Verified.* `-level_33/34/35` all get past the model-load chain now (no
+`loadobjectmodel.c:393` / `model.c:6249` crash). BUNKER1 unregressed
+(83–92 % non-clear frame content, frames 80–200). Silo unregressed
+(exercises the new type-20 handler — no crash).
+
+*Residual (separate blockers, out of D122 scope — hand to the level
+sweep).* Dam + Runway now crash later in `chrIsNotDeadOrShot`
+(`chraction.c:4483`, `self` = an image rodata address — guard/chr setup,
+not propDef-related). Facility crashes in `import_texture_i8`
+(`gfx_pc.cpp:821`, bad texture pointer — fast3d). Neither is touched by
+this fix.
+
+*Tail-layout confidence: medium* for 39/40/45 (VehichleRecord/
+AircraftRecord/TankRecord field offsets have "locs need confirming" notes
+in `bondtypes.h`; the pointer-word sets and total sizes are derived from
+the struct as written and may need a nudge if a level actually drives
+tank/vehicle motion). **High** for 47/13/20 (offsets are known) and for
+the crash fix itself (the `obj`-field half-swap is unambiguous).
+
+---
+
+**D123 (session M-13) — crash class C1: `chrIsNotDeadOrShot` NULL deref on
+6 levels (Dam 33, Runway 35, Frigate 26, Statue 22, Streets 29, Cradle
+41). Converter zeroed the vehicle/aircraft `ailist` id. FIXED
+(`tools_pc/d88_propdefs.py` only).**
+
+*Symptom.* Bare `-level_33` etc. crashed before frame 1 in
+`chrIsNotDeadOrShot` (`chraction.c:4483`, `self->actiontype`), fault addr
+0x8 → `self ≈ NULL`. (The log's frame #1 `0x1401296a0` / `chraidata.c:61`
+was a stale stack-scan hit, not a real frame — misled the original
+triage.)
+
+*Real backtrace (gdb):* `objTick` (`propobj.c:5504`) →
+`ai((PropDefHeaderRecord *)poTruck, PROP_TYPE_OBJ)` →
+`ai()` sees `Entityp->type == 39` (PROPDEF_VEHICHLE) so sets
+`VehichleEntityp`, `AiListp = VehichleEntityp->ailist`, `ChrEntityp =
+NULL`. `AiListp` resolved to `m_AimAtBond` (`GAILIST_AIM_AT_BOND` == id 0).
+Its first opcode is `AI_TRYFireOrAimAtTarget` →
+`actor_aim_at_actor(ChrEntityp=NULL,…)` → `chrIsNotDeadOrShot(NULL)`.
+
+*Root cause.* `prop.c:1764` does `pdef_veh->ailist =
+ailistFindById(pdef_veh->ailist)` — it reads the **pre-populated integer
+AI-list id** out of the ROM record (VehichleRecord.ailist @ N64 0x80;
+Dam's is `0x040a` = 1034, a per-level list). But D122's `OBJ_TAIL_DESC`
+put word 32 in `ptr_word_set`, whose handler emits **8 zero bytes** for
+the widened 4→8B slot (correct for `path*`/`Sound*`, which `prop.c`
+overwrites with 0 — but wrong for `ailist`, read before overwrite).
+Result: `ailistFindById(0)` → `isGlobalAIListID(0)` true → global list id 0
+= `GAILIST_AIM_AT_BOND` → a vehicle runs a CHR-only aim list with a NULL
+chr. `AircraftRecord.ailist` (`prop.c:1786`) is identical. BUNKER1/Silo
+emit no vehicle/aircraft propDef → unaffected. All 6 crashing levels have
+a vehicle or aircraft prop.
+
+*Fix (converter only).* New `OBJ_ID_WORDS = {39:{32}, 40:{32}}` in
+`tools_pc/d88_propdefs.py`; the `OBJ_TAIL_DESC` walk now emits
+`_bswap32(w)` into the low 4 bytes of the 8-aligned slot for id words
+(high 4 stay zero), so the u16/s32 id survives into the widened pointer
+field. Words 32 removed from the 39/40 `ptr_word_set`. Struct size
+unchanged → no `sizepropdef()` edit. TANK (45, `collision*`) and AUTOGUN
+(13, `unkC4/unkC8/beam`) left as ptr/zero — verified genuinely
+runtime-populated (`prop.c:1712` / `setupAutogun` `prop.c:694`). Regen:
+`python tools_pc/d88_emit.py ntsc-final --regen` (21/21 ALL CHECKS
+PASSED).
+
+*Verified.* `chrIsNotDeadOrShot` crash gone on all 6. Dam 83%, Statue
+80%, Frigate 68–90%, Cradle 77% non-clear frames, no crash log.
+BUNKER1 (91.7%) + Silo (91.7%) unregressed. Runway and Streets now crash
+**later** in fast3d (`palette_to_rgba32`/`import_texture_i4`
+`gfx_pc.cpp:851`; `gfx_sp_matrix` `gfx_pc.cpp:1046`) — class C2/other
+track, not C1. Frigate/Statue/Cradle/Dam reach a frame cleanly.
+
+*Confidence: high* — root cause reproduced in gdb, fix is a 1-field
+converter change matching the exact `prop.c` read pattern, and the id
+value (0x040a) matches the N64 `UsetupdamZ.c` Vehicle record tail.
+
+**D124 (session M-13) — crash class C2: fast3d handed a garbage texture
+pointer on Facility (`-level_34`) and Jungle (`-level_37`).** Symptom:
+early deterministic crash — Facility `import_texture_i8` `gfx_pc.cpp:821`
+fault `0x72181ee8`; Jungle `gfx_tex_normalize_source` `gfx_pc.cpp:644`
+fault `0xabcd0824` (= `IMAGESEG(0x824)`). Two *different* root causes:
+
+*Jungle — FIXED.* `gimgSyncCompiledGlobalDLs()` (`port/src/gimgfixup.c`,
+D68) is meant to copy the texture pointers that `texLoadFromDisplayList()`
+patched into the ROM copy of the Globalimagetable back into the compiled
+`globalDL_0xNNN` shadow arrays (`assets/oddtextures.c`) that `explosion.c`
+executes via `g_ExplosionDisplayLists[]`. Its slot-detect test was
+`p[6]==0xCD && p[7]==0xAB` — the *post-fixup marker* — but by the time it
+runs `texLoad()` has **already replaced every IMAGESEG w1 in the ROM copy
+with a real pointer**, so that test never matches and the sync copied
+*nothing*. The compiled arrays kept their link-time `IMAGESEG(id) =
+0xABCD0000|id` words; the first explosion/smoke/particle DL that
+Facility/Jungle render feeds `0xABCDxxxx` straight into fast3d
+`seg_addr()` (falls through to `return (void*)w1`) → `import_texture`
+deref. The 7 "working" levels are only working because nothing triggered
+an explosion-DL draw inside the ~22 s capture — **the bug was latent in
+every level.** *Fix:* detect the slot from the **compiled** array instead
+(`dst[j]` is a `G_SETTIMG` whose w1 is still `0xABCDxxxx`), then copy the
+ROM copy's resolved `*(u32*)(p+4)`. `port/src/gimgfixup.c` only; no
+converter/sidecar change. Verified: Jungle now renders ~300 frames
+(91.7% non-clear) before a *separate* downstream crash (`gfx_sp_matrix`
+`gfx_pc.cpp:1046`, bad G_MTX seg addr in the same explosion-DL stream —
+those DLs also carry unconverted `G_MTX` words; follow-up, D75/matrix
+family). BUNKER1 (83%) + Silo (91.7%) unregressed.
+
+*Facility — NOT fixed (separate class).* Fault `0x72181ee8` is a bogus
+`G_SETTIMG` w1 (`fmt=4 siz=2 w=0`, prev cmd an unconsumed `0xba` GE
+tex-macro opcode) in a DL living in V1 DRAM — a **model/prop GDL from the
+runtime `texLoadFromGdl()` relocation path** in `sub_GAME_7F0762E0`
+(`objecthandler_2.c:82`), not a room GDL and not the global bank.
+`GE_C2` probe of `texLoadFromGdl` shows its model-GDL calls (second batch,
+`src≈0x706a****`) write to **non-16-aligned `dst`** (e.g.
+`0x701eac01`, `0x701eb7d5`) — the `replacementgdl`/`name`(=srcsize)
+offset arithmetic in `objecthandler_2.c` still mixes N64 8-byte and PC
+16-byte `Gfx` strides, so converted commands land mid-slot and a
+`G_SETTIMG` w1 reads as garbage. This is the open D80/D82/D83
+"model/room GDL runtime conversion not verified" area — shared infra
+touched by every level; out of C2 budget, left for a dedicated pass.
+BUNKER1/Silo/Jungle don't hit it because their visible prop models
+happen to convert cleanly; Facility's do not.
+
+*Probes:* none left in tree — `GE_C2` scratch prints removed after
+root-cause. *Files touched:* `port/src/gimgfixup.c` (fix),
+`docs/PORT-LEARNINGS.md`, `docs/PCPortResearch.md`, `docs/LEVEL-STATUS.md`.
+*Confidence:* Jungle fix **high** (mechanism proven with a `[C2sync]`
+trace showing 32 slots going `abcd08xx -> 700e****`, verified render).
+Facility diagnosis **medium** (probe evidence strong; exact off-by in
+`objecthandler_2.c` not yet pinned).
+
+**D125 (session M-14) — crash classes C3 + C6: the converted `propDefs`
+blob in RAM does not match `tools_pc/d88_propdefs.py`'s offline output;
+the `sizepropdef()` walk drifts, so every `pdefIndex`-keyed lookup
+(`setupDoor` → `linkedDoor`, `weaponAssignToHome`, `modelLoad(modelid)`)
+gets the wrong record.** NOT root-caused; investigation cut for a usage
+reset. Affects Aztec (`-level_28`, `propobj.c:13523/:13601`), Bunker2
+(`-level_27`, same `door7F054FB4`), Surface2 (`-level_43`,
+`loadobjectmodel.c:393` `PitemZ_entries[modelid].header`).
+
+*Evidence.* Instrumented the `proplvreset2` propDef walk
+(`prop.c:1865`, `#if defined(PORT)` `getenv("GE_C3")` print of
+`pdefIndex / phead->type / sizepropdef(phead) / phead / g_CurrentSetup.propDefs`)
+and the `setupDoor` `linkedDoor` resolve (`prop.c:1206`). On `-level_27`
+(`UsetupsevbZ`, `setup_text_pointers[27]`):
+  - `g_CurrentSetup.propDefs = 0x701ce814`.
+  - Runtime walk: idx0 `type=35` (WATCH_MENU, correct), then idx1–4
+    `type=0`, idx6 `type=112`, idx15 `type=26`, … — i.e. after the first
+    record the blob is **zeros / garbage**, but `sizepropdef` still
+    strides the phantom `type=35` at idx0/5/10 forward 16 B each.
+  - By the first real DOOR the walk has counted **147** records where the
+    offline converter (`convert_stream(UsetupsevbZ)`) puts it at **46**
+    (verified: offline output = 346 records, DOOR at idx 46, self-
+    consistent with `PROPDEF_PC_BYTES` == `sizepropdef()` PORT strides —
+    every type cross-checked against `d88_layoutprobe` sizes, all match).
+  - `setupDoor` then gets `arg2=147` for a stream-index-46 door;
+    `linkedDoorOffset(-1) + 147 = 146` → `setupGetPtrToCommandByIndex(146)`
+    returns a `type=0` record → `door->linkedDoor` garbage → fault
+    walking the linked-door list in `door7F054FB4`. Surface2's C6 is the
+    same mechanism one step earlier: a drifted `pdefIndex`/`modelid`.
+
+*What is NOT the bug (ruled out).* (a) `d88_propdefs.py` `convert_stream`
+itself — self-test passes, offline walk of all 3 crashing levels'
+converted output is clean, DOOR/linkedDoorOffset values correct, stream
+tiles `[propDefs, intro)` exactly (`end=OK` for all 21). (b)
+`sizepropdef()` PORT strides — every `case` equals
+`PROPDEF_PC_BYTES[type]/4` and equals the compiler `sizeof` of the widened
+struct (checked via `d88_layoutprobe`). (c) DOOR converter layout —
+`linkedDoorOffset@144`, `linkedDoor@216`, `unkcc@224`, size 296 all match
+`d88_layoutprobe`; tail pointer-widening walk is correct end-to-end. (d)
+The per-type histogram diff (brief's suggested approach): the 3 crashing
+levels emit no propDef type absent from the 12 passing levels — TINTED_GLASS
+and AUTOGUN appear in passing Caverns/Control too. **This is not a
+forgotten-type converter gap like D122/D123.**
+
+*Best hypothesis (confidence: mechanism high, exact fault medium).* The
+converted `propdefs_pc` bytes produced in `tools_pc/d88_emit.py`
+(`convert_propdefs`, line 320) are **not landing in the sidecar at the
+offset `g_CurrentSetup.propDefs` resolves to**, OR the `propDefs` header
+field is not being relocated to the converted blob's new offset, OR
+`pd_end` (the `'propdefs'` region end from the region-tiling at
+`d88_emit.py:315-318`) is computed wrong so only the first record is
+converted and the rest of the region is left as `bytearray(total_new)`
+zero-fill. The "idx0 correct, then zeros" signature points hard at a
+destination-offset / length bug in `d88_emit.py`'s propdefs emit
+(lines 266-267, 308-338, 471-476), not in `d88_propdefs.py`. Note
+`d88_emit.py`'s module docstring still describes propDefs as an "opaque
+passthrough blob" (stale post-D122) — the emit path was retrofitted and
+may not have been fully reconciled with the region-tiling / delta-reloc
+logic.
+
+*Next step.* Dump the actual bytes at `data/pccg-ntsc-final/pccg.bin` for
+`UsetupsevbZ`'s propDefs region and compare to `convert_stream` output;
+add a `[D88emit]` print of `pd_start / pd_end / len(propdefs_pc) / do`
+(destination offset) in `d88_emit.py`; check whether the `propDefs`
+header word in the emitted file points at `do`. Likely a 1-region
+off-by-one in the sorted region list (intro vs propDefs ordering) or the
+converted blob written at the pre-growth offset.
+
+*Probes:* **none left in tree** — the two `#if defined(PORT)`/`GE_C3`
+scratch prints in `src/game/prop.c` (lines ~1206 and ~1865) and the
+temp scan scripts `tools_pc/c3_scan.py` / `tools_pc/c3_doors.py` were all
+reverted/deleted. *Files touched:* only `docs/PCPortResearch.md` (this
+entry) + `docs/LEVEL-STATUS.md` (one line). No code, no converter, no
+sidecar change — **sidecars do NOT need regen**, tree builds clean at
+`f2beae4b` + M-13 uncommitted set.
+
+**D124-Facility addendum (session M-14 — partial, NOT fixed, out of time).**
+Re-instrumented with a `GE_C2GDL` probe in `sub_GAME_7F0762E0`
+(`objecthandler_2.c`) + a bad-`G_SETTIMG` catcher in fast3d
+(`gfx_pc.cpp` G_SETTIMG case). Both probes **reverted** — tree is clean.
+Findings:
+
+1. *Exact crash cmd.* `-level_34` faults in `import_texture_ia16`
+   (`gfx_pc.cpp:757`, via `import_texture` :955) — NOT `import_texture_i8`
+   as the old note said. The offending command in the relocated model GDL
+   (dList base `0x7007b870`, cmd at `0x70080490`) is:
+   `w0=0xfd900000` (`G_SETTIMG`, fmt=7/rgba? siz per bits, w=0),
+   `w1=0x72181ee8`. `seg_addr(0x72181ee8)` returns it unchanged (top byte
+   0x72 is not a segment) → deref of unmapped DRAM → AV. Preceding slot is
+   `0xba 00 0e 02` (GE tex-load macro, w1=0) then a `00000000` slot.
+2. *`Gfx` stride confirmed.* `Gwords{ uintptr_t w0; uintptr_t w1; }` →
+   on x86-64 `w0`@+0 (8B), `w1`@**+8** (8B), `sizeof(Gfx)==16`. The probe
+   dump (8-byte granular) shows w0 at slot+0 and w1 at slot+8, i.e. the
+   command is genuinely `{0xfd900000, 0x72181ee8}` — the converter wrote a
+   real 16-byte slot, it is not a half-slot artefact.
+3. *`w1` is a bad `tex->data`.* This `G_SETTIMG` is emitted by
+   `gDPSetTextureImage(gdl++, .., tex->data)` inside
+   `texWriteLoadToTmemAddr` / `texWriteLoadToTmemZero` (`tex.c`). So the
+   **texture-pool** entry `tex` returned by `texFindInPool()` has a
+   garbage `.data` (should be a `0x05xxxxxx` seg-5 ref, resolved later by
+   fast3d `segmentPointers[5]`). i.e. the fault is (at least partly) in
+   the `texLoadFromModelFileHeader` → `texLoad` texture-pool path, driven
+   off `objheader->Textures`, **not** solely the `texLoadFromGdl`
+   command-stream copy. This partially contradicts the original
+   D124-Facility hypothesis.
+4. *Alignment smoking gun.* `GE_C2GDL` probe shows **every** model file's
+   `objheader->Switches` base has `((uintptr_t)Switches & 15) == 1`
+   (odd!). `mempAllocBytesInBank` (`memp.c`) does **zero** alignment —
+   `allocation = pool->pos; pool->pos += bytes;` — so a single earlier
+   odd-sized bank alloc leaves the STAGE pool cursor permanently odd and
+   every subsequent model file loads at an odd address. `delta`
+   (`romremaining - pcremaining`, the scratch-relocation offset) is also
+   not 16-aligned (`&15` = 3, 7, 11 across files). `sub_GAME_7F0762E0`
+   then forms `dst = Switches + (replacementgdl & 0x00ffffff)` and
+   `src = Switches + gdloff + delta`; observed `dst&15` = 5, 7, 9, 13.
+   The N64 code assumes the file base is Gfx-aligned (8 on N64). The
+   converted model GDLs the sidecar carries also have per-DL offsets that
+   are only 4/8-aligned (`gdloff0 & 15` = 4, 8, 12), so even a 16-aligned
+   base would not make every DL 16-aligned.
+   - *Note:* an odd/misaligned base is self-consistent between the
+     converter writer (`Switches+off`) and the fast3d reader (seg-5 =
+     `Switches`, `+off`), so it does **not by itself** corrupt command
+     *content* on x86 (unaligned `uintptr_t` loads are tolerated). The
+     bad `tex->data` (#3) must come from an *offset* miscalc, likely the
+     model texture-blob offset assuming N64-sized (8B-Gfx) GDL extent
+     while the PC sidecar's GDLs are pre-expanded to 16B — the texture
+     data then sits at a stale/too-large offset (`0x72181ee8` is ~0x1.9M
+     past the bank end `~0x706a8000`), OR `texLoad` reads a `textures[i]`
+     descriptor at a wrong stride off the odd `objheader->Textures` base
+     (`(u8*)filedata + sizeof(ModelNode*)*numSwitches`, D43/D45 PORT line).
+   - *Next step:* probe `texLoad` (`image.c`) — dump `textures[i]`
+     `TextureID` / offset / resulting `tex->data` for `-level_34`, and
+     dump `objheader->Textures`, `numtextures`, `numSwitches`, and the
+     sidecar's texture-section layout. Compare against `d43_emit.py` /
+     `pcmodels` sidecar builder: does it emit model texture blob offsets
+     in N64 (8B-Gfx) or PC (16B-Gfx) GDL-extent terms? That converter is
+     the likely fix site (offline sidecar per the D43/D69/D88 rule),
+     with a fallback `#ifdef PORT` 16-align of the STAGE pool cursor /
+     the model file base in `mempAllocBytesInBank` or
+     `load_object_fill_header`.
+5. *Files touched this session:* none committed; both probe edits
+   (`src/game/objecthandler_2.c`, `port/fast3d/gfx_pc.cpp`) reverted via
+   `git checkout`. Docs only: this entry + `docs/LEVEL-STATUS.md`.
+   *Confidence:* crash cmd + `Gfx` stride **high**; `tex->data`-is-the-bad-
+   value **high**; root cause of *why* `tex->data` is bad **low–medium**
+   (two candidate mechanisms, neither proven).
