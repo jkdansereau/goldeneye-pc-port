@@ -28,6 +28,16 @@ void inputUpdate(void);
 /* Number of controllers currently "connected" (1..4). */
 int  inputGetNumControllers(void);
 
+/* Bitmask of connected controllers (bit N = controller N). Bit 0 is always
+ * set (keyboard/mouse). Consumed by libultra.c's osContInit. */
+int  inputConnectedMask(void);
+
+/* Compute the N64 button mask + analog stick for controller `idx`.
+ * Returns the 16-bit CONT_* button mask; writes the stick (-80..80) through
+ * the out params. Reads current SDL keyboard/mouse/gamepad state plus the
+ * mouse-aim accumulator maintained by inputUpdate(). */
+unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1005,61 +1005,30 @@ static OSContStatus g_contStatus[MAXCONTROLLERS];
 static OSContPad g_contPad[MAXCONTROLLERS];
 static u8 g_contConnected = 0x1; /* controller 0 connected */
 
-/* Keyboard -> N64 pad for controller 0:
- *   A: Z / Space      B: X            Start: Enter
- *   Z trigger: LCtrl  C-stick: arrows   D-pad: WASD
- */
+/* Snapshot all controllers from the SDL input module (port/src/input.c).
+ * That module owns the keyboard/mouse/gamepad -> N64 mapping and the
+ * mouse-look -> C-button bridge; this just marshals its output into the
+ * OSContPad / OSContStatus arrays joy.c reads via osContGetReadData(). */
 static void contSnapshotFromKeyboard(void)
 {
-    /* SDL2: the keyboard state array is indexed by SCANCODE (512 entries).
-     * Non-ASCII SDLK_* constants carry a 0x40000000 flag (SDLK_UP ==
-     * 0x40000052), so they must be masked to the scancode value before use
-     * as an index — indexing with the raw constant reads ~1 GB past the
-     * array and faults. */
-#define K(key) keys[(key) & 0xFFFF]
-    const uint8_t *keys = SDL_GetKeyboardState(NULL);
-    u16 button = 0;
-    s8 sx = 0, sy = 0;
+    inputUpdate();
 
-    if (!keys) return; /* SDL not ready yet (first frames before videoInit)
-                         * — leave the previous frame's pad state in place. */
+    const s32 mask = inputConnectedMask();
+    g_contConnected = (u8)mask;
 
-    if (K(SDLK_z) || K(SDLK_SPACE)) button |= CONT_A;
-    if (K(SDLK_x))                  button |= CONT_B;
-    if (K(SDLK_LCTRL))              button |= CONT_G; /* Z trigger */
-    if (K(SDLK_RETURN))             button |= CONT_START;
+    for (int i = 0; i < MAXCONTROLLERS; ++i) {
+        const int connected = (mask & (1 << i)) != 0;
+        s8 sx = 0, sy = 0;
+        u16 button = connected ? (u16)inputComputePad(i, &sx, &sy) : 0;
 
-    /* C-stick (arrows) — GE's movement stick. */
-    if (K(SDLK_UP))   sy = -80;
-    if (K(SDLK_DOWN)) sy = 80;
-    if (K(SDLK_LEFT)) sx = -80;
-    if (K(SDLK_RIGHT)) sx = 80;
-
-    /* D-pad (WASD) — separate from the C-stick. */
-    if (K(SDLK_w)) button |= CONT_UP;
-    if (K(SDLK_s)) button |= CONT_DOWN;
-    if (K(SDLK_a)) button |= CONT_LEFT;
-    if (K(SDLK_d)) button |= CONT_RIGHT;
-#undef K
-
-    g_contStatus[0].type = CONT_TYPE_NORMAL;
-    g_contStatus[0].status = 0;
-    g_contStatus[0].errno = 0;
-    /* The pad is kept in a parallel array; joy.c copies it via
-     * osContGetReadData(). */
-    g_contPad[0].button = button;
-    g_contPad[0].stick_x = sx;
-    g_contPad[0].stick_y = sy;
-    g_contPad[0].errno = 0;
-
-    for (int i = 1; i < MAXCONTROLLERS; ++i) {
-        g_contStatus[i].type = 0;
+        g_contStatus[i].type   = connected ? CONT_TYPE_NORMAL : 0;
         g_contStatus[i].status = 0;
-        g_contStatus[i].errno = CONT_NO_RESPONSE_ERROR;
-        g_contPad[i].button = 0;
-        g_contPad[i].stick_x = 0;
-        g_contPad[i].stick_y = 0;
-        g_contPad[i].errno = CONT_NO_RESPONSE_ERROR;
+        g_contStatus[i].errno  = connected ? 0 : CONT_NO_RESPONSE_ERROR;
+
+        g_contPad[i].button  = button;
+        g_contPad[i].stick_x = connected ? sx : 0;
+        g_contPad[i].stick_y = connected ? sy : 0;
+        g_contPad[i].errno   = connected ? 0 : CONT_NO_RESPONSE_ERROR;
     }
 }
 
@@ -1095,7 +1064,9 @@ void osContGetQuery(OSContStatus *status)
 
 void osContGetReadData(OSContPad *pad)
 {
-    *pad = g_contPad[0];
+    /* N64 semantics: fill one OSContPad per controller channel. joy.c passes
+     * g_ContData[0].samples[i].pads (a MAXCONTROLLERS-long array). */
+    memcpy(pad, g_contPad, sizeof(g_contPad));
 }
 
 s32 osContReset(OSMesgQueue *mq, OSContStatus *status)
