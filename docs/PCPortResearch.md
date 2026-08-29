@@ -3643,6 +3643,118 @@ it is testable without determinism (static per-quad property).
   — need an asymmetric in-world texture or a guard-facing check) to tell
   a HUD-only (direct-draw) flip from a global one.
 
+**D117 (session M-8) — frame-to-frame nondeterminism root-caused;
+`GE_DETERM` fixed-tick mode assessed NOT-narrow, deferred with a design.
+`tools_pc/framediff.py` added (structural/tolerant).**
+
+*Root cause — pure frame pacing (variable timestep), NOT PRNG / uninit
+state. Confidence: HIGH.*
+
+GE is a variable-timestep simulation. Per rendered frame it advances game
+logic by `deltaFrames` = *however many 60 Hz ticks of wall-clock elapsed
+since the previous frame*:
+
+- `src/game/frametiming.c:75` `waitForNextFrame()` —
+  `nextFrameTime = (osGetCount() - copy_of_osgetcount_value_1 + 387937)
+  / 775875` (NTSC: 775875 RSP-counter ticks per 1/60 s), loops until
+  `>= frameDelay` (normally 1), then `updateFrameCounters(nextFrameTime)`.
+- `src/game/frametiming.c:46` `updateFrameCounters(deltaFrames)` sets
+  `speedgraphframes = deltaFrames`; everything downstream (physics, AI,
+  animation blends, `g_Vars.lvupdate*`) scales by it.
+- `src/boss.c:456-495` main loop: blocks on `gfxFrameMsgQ` for
+  `OS_SC_RETRACE_MSG` (posted by the port pacemaker), and only builds a
+  new frame once `mainTickElapsed = osGetCount() - copy_of_osgetcount_value_1
+  >= MAIN_LOOP_TICK_INTERVAL` (387937). A two-level gate, both levels
+  keyed on `osGetCount()`.
+
+On the console `osGetCount()` is the CP0 Count register (fixed CPU rate);
+on PC `port/src/libultra.c:88-100` maps it to **real elapsed
+microseconds** scaled to 46.5525 ticks/µs (D52 — required so
+`waitForNextFrame` doesn't block ~388 ms/frame). So `deltaFrames` tracks
+real render time: a frame that took 28 ms advances logic 2 ticks, one
+that took 14 ms advances 1. Machine load, GL driver, vsync phase and the
+~20 fps clean-run rate all jitter this → two runs of the same build take
+different numbers of logic steps to reach "frame N" and their sim
+trajectories diverge. Measured with `framediff.py --exact`: two
+`-level_09` runs differ **32 % (frame 440) – 69 % (frame 200)** of pixels.
+
+Ruled out as *primary*:
+- **PRNG seeding is correct.** `port/src/random.c:22`
+  `g_randomSeed = 0xAB8D9F7781280783ULL` (the two `.word`s from
+  `random.s`), `g_chrObjRandomSeed` likewise (`:93`); the xorshift is a
+  line-by-line port. `randomSetSeed` matches the `.s` (`+1` before
+  store). *However* — because AI/animation code calls `randomGetNext()` a
+  `deltaFrames`-dependent number of times per frame, the PRNG *stream
+  position* still diverges between runs. It is a victim of the pacing
+  jitter, not an independent source.
+- **Uninitialised state:** not investigated exhaustively, but the
+  `--exact` divergence grows smoothly from frame 200→445 rather than
+  being present at frame 1, which is the signature of accumulated
+  timestep drift, not a per-run uninitialised seed.
+
+*`GE_DETERM=1` fixed-tick mode — assessed NOT NARROW, deferred. Confidence
+that it's not narrow: MEDIUM-HIGH.*
+
+The obvious hook — make `osGetCount()` a virtual clock that advances
+exactly 775875 ticks per presented gfx frame (`videoEndFrame` in
+`osSpTaskStartGo`, `port/src/libultra.c:1187`) — deadlocks the `boss.c`
+main loop. That loop only presents a frame *after* the retrace gate
+`mainTickElapsed >= 387937` passes, and with a frame-coupled clock
+`mainTickElapsed` is 0 until a frame is presented → the first in-loop
+frame never renders. `boss.c:442` (`waitForNextFrame()` after
+`lvlStageLoad`, before any frame) hangs the same way. Breaking the
+seal requires the **VI retrace post itself** to drive the virtual clock
+(advance a fixed quantum per `portPostVIEvent`) *and* the pacemaker to be
+frame-gated so it can't enqueue >1 retrace per render (else `deltaFrames`
+jumps to the queue depth). That is a redesign of the port pacing model
+(`portTickThread` / `portPostVIEvent` / `osGetCount`), with real deadlock
+risk in loops that pump retraces without presenting — the `boss.c:448`
+`NOBLOCK` drain, multi-frame stage loads, the pause menu, `front.c`
+menu loops. It is contained in `port/` and env-gatable, but it is not
+"a few lines, obviously correct" — it changes retrace/tick semantics, so
+per AGENTS.md it is written up here rather than patched.
+
+**Recommended design (for a future dedicated pass):**
+1. `GE_DETERM=1` → `portTickThread` stops pacing on wall clock. Instead:
+   a global `g_determFrameReady` flag is set by `videoEndFrame`; the tick
+   thread posts exactly one `OS_SC_RETRACE_MSG` and advances a virtual
+   `g_determTicks += 775875` (931050 PAL) **only** when it sees a new
+   presented frame (or when `g_viRetraceMQ->validCount == 0` and no frame
+   is pending — to service pre-first-frame / load-screen waits, advancing
+   by the same quantum so `waitForNextFrame` sees exactly 1).
+2. `osGetCount()` returns `g_determTicks` verbatim in this mode (no
+   sub-frame interpolation — `store_osgetcount`/profiling just see 0
+   deltas, which is harmless).
+3. Seed `g_determTicks = 775875` at `portKernelInit` so the first
+   `waitForNextFrame` computes `(775875 + 387937)/775875 == 1`.
+4. Leave `osGetTime()` (µs wall clock) alone — audio mixing cadence and
+   the heartbeat watchdog should stay real-time.
+5. Prove with `framediff.py --exact`: two
+   `GE_DETERM=1 GE_PCDUMP=... ` runs must produce ~0 % pixel diff
+   (allow `--tol 2` for GL dithering). Then regenerate
+   `tools_pc/golden/` with `--update` and switch CI to `--exact`.
+Risk to watch: any game loop that calls `waitForNextFrame()` in a context
+where no gfx task will be submitted (true loading spinners) — those need
+the step-1(b) "no frame pending" fallback or they hang.
+
+*`tools_pc/framediff.py` — DONE, committed. Confidence: HIGH (validated).*
+
+Structural/tolerant by default (no determinism to lean on): per-frame it
+computes (a) 16×12 grid-cell mean-RGB delta, (b) whole-frame non-clear
+(non-black, pixcount.py rule) pixel-% swing, (c) a 16×16 aHash Hamming
+distance; fails the frame if any exceeds its threshold. `--mask
+X0,Y0,X1,Y1` (repeatable) drops known-animating regions (HUD) from all
+three. `--exact` mode (per-pixel, `--tol`/`--tol-pct`) is there for a
+future deterministic build. `--update` refreshes the golden set. Reads
+`.ppm` (GE_PCDUMP) and `.png` (golden) on either side; PNG decoder is
+built in (stdlib `zlib`; falls back to PIL for odd formats). Validated:
+two nondeterministic re-runs of HEAD pass structural (worst cell
+dmean 15, phash ≤ 23, non-clear Δ ≈ 0) while `--exact` correctly reports
+32–69 %; a deliberately wrong frame pair fails (18 cells, phash 105).
+Golden set at `tools_pc/golden/frame_0002{00,320,440}.png` is the D115
+baseline — since it is a nondeterministic capture, only structural mode
+is meaningful against it today.
+
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
 `worktree/data → main/data` followed the junction and deleted the real

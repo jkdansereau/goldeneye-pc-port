@@ -72,3 +72,13 @@ through a converter or a runtime bswap fixup reads scrambled.
   writing anything new — same Rare engine family.
 - Don't re-investigate a closed §F finding or re-derive a format spec
   that already has a converter.
+- **The port is NOT frame-deterministic** (D117): `osGetCount()` is
+  wall-clock on PC, and GE is a variable-timestep sim
+  (`frametiming.c waitForNextFrame` → `deltaFrames` = 60 Hz ticks of real
+  time elapsed per render), so "frame N" differs 15–40 % between runs. Use
+  `tools_pc/framediff.py <ppmdir>` (structural: 16×12 grid mean-colour +
+  non-clear-% + aHash, `--mask X0,Y0,X1,Y1` for the HUD, `--update` to
+  refresh `tools_pc/golden/`) — NOT an exact compare. A `GE_DETERM=1`
+  fixed-tick mode was assessed not-narrow (redesigns retrace/tick
+  semantics); design is in §F D117 if someone picks it up, after which
+  `framediff.py --exact` becomes usable.

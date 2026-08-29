@@ -101,6 +101,19 @@ mislocated door props. NEXT: shader/vertex-buffer probe — dump per-vertex
 which axis inverts. `GE_D116`-gated probes left in `textrelated.c` +
 `gfx_pc.cpp` (zero-cost).
 
+**Session M-8 — see §F D117.** Visual-regression tooling. Root-caused the
+frame-to-frame nondeterminism: pure variable-timestep frame pacing
+(`osGetCount()` = wall clock on PC → `frametiming.c waitForNextFrame`
+advances logic a real-time-dependent number of 60 Hz ticks per render).
+PRNG seeding verified correct (`random.c`), not a source. A `GE_DETERM=1`
+fixed-tick mode was assessed **not narrow** (redesigns VI retrace/tick
+semantics, deadlock risk in load-screen loops) and deferred with a full
+design in §F D117 — NOT implemented. Added `tools_pc/framediff.py`
+(structural/tolerant: 16×12 grid mean-colour + non-clear-% + aHash,
+`--mask` for HUD, `--exact` for a future deterministic build, `--update`
+to refresh goldens). Validated against the D115 golden set. No C changes,
+no probes left in tree.
+
 **Session M-6 — see §F D113/D114/D115, `docs/PLAN-M6-playable.md`,
 `docs/AUDIT-M6-player-offsets.md`, `docs/AGENT-WORKFLOW.md`,
 `docs/PORT-LEARNINGS.md`.** D113: portal BFS is correct, not the void.
