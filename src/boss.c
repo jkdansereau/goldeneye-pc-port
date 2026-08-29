@@ -208,6 +208,49 @@ void bossInitMainthreadData(void)
     {
         tokenSetString("          -ml0 -me0 -mgfx100 -mvtx50 -mt700 -ma400");
     }
+#ifdef PORT
+    // D121 (WS1): a bare `-level_XX` on PC otherwise boots with default
+    // pools and OOM-crashes. On N64 the per-stage memallocstringtable[]
+    // loop (boss.c bossMainloop) supplies the right `-m*` row, but it is
+    // gated on g_DebugAndUpdateStageFlag, which `-level_` leaves to
+    // rmonGetToken() -> 0 on PC. Enabling the flag here instead is NOT
+    // equivalent (it routes boot through the title stage). So inject the
+    // stage's row directly, only when no `-m*` args were supplied by hand.
+    // Same lookup the N64 loop does; no control-flow / flag change.
+    // tokenSetString() REPLACES the whole token buffer, so the injected
+    // string must carry `-level_XX` (and `-hard N`) forward or bossMainloop
+    // loses them and boots the title stage instead.
+    else if (tokenFind(1, "-level_") != 0 && tokenFind(1, "-m") == 0)
+    {
+        const unsigned char *lvl = (const unsigned char *)tokenFind(1, "-level_");
+        const char *hard = tokenFind(1, "-hard");
+        s32 wantId = (((s32)(lvl[0] * 10) + (s32)lvl[1]) - 0x210);
+        s32 k;
+
+        for (k = 0; memallocstringtable[k].id != 0; k++)
+        {
+            if (memallocstringtable[k].id == wantId)
+            {
+                static char portTokenBuf[128];
+
+                if (hard != NULL && hard[0] != '\0')
+                {
+                    sprintf(portTokenBuf, "-level_%c%c -hard%c %s",
+                            lvl[0], lvl[1], hard[0],
+                            memallocstringtable[k].string);
+                }
+                else
+                {
+                    sprintf(portTokenBuf, "-level_%c%c %s",
+                            lvl[0], lvl[1], memallocstringtable[k].string);
+                }
+
+                tokenSetString(portTokenBuf);
+                break;
+            }
+        }
+    }
+#endif
 
     if (tokenFind(1, "-m") != 0)
     {
