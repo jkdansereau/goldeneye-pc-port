@@ -85,6 +85,27 @@ through a converter or a runtime bswap fixup reads scrambled.
 - Portal near-plane: z==0 clip points project to ±1e20; x86-64 float
   garbage can come back `min>max` / non-finite and slip past a
   degenerate-box check that clamps to full-screen on N64 (D106).
+- **D74 wrap-block is DEAD CODE** (`gfx_pc.cpp:1546/1551`): guard is
+  `cms & G_TX_WRAP` but `G_TX_WRAP == 0`, so always false (line 1887 does
+  it right with `cms == G_TX_WRAP`). And if it did run it indexes
+  `tex_width2[i]` etc. (arrays `[2]`, per-texunit) with the *vertex* loop
+  index `i` 0..2 → OOB. Latent; harmless for CLAMP glyphs, would matter
+  for wrapped textures on tris. Fix deferred (M-11) — logged in
+  `docs/GRAPHICS-BACKLOG.md`.
+
+## D2. The HUD/model X-mirror (D114/D116) — DO NOT re-static-trace
+
+Sessions M-6/M-7/M-8/M-11 all reached the same wall: `textRenderGlyph`
+→ GBI → fast3d `gfx_dp_texture_rectangle` → `buf_vbo` → GL are **each
+runtime-verified non-mirrored** (`[D116/vbo]` probe: x-left↔u=0), yet
+glyphs render X-flipped. M-11 additionally confirmed the ammo digits use
+the *same* `textrelated.c` path (via `gunfire.c:5906`), no separate
+renderer. Every prior attempt to "fix" it drifts toward a global
+S-swap that mirrors the whole screen — a bad trade for a cosmetic bug.
+**Next attempt needs a RenderDoc/apitrace capture of one glyph texrect
+OR the asymmetric-1-texel-texture experiment — nothing else.** Cosmetic,
+deprioritised below level-progression / crash work. See
+`docs/GRAPHICS-BACKLOG.md`.
 
 ## E. Process / method notes
 

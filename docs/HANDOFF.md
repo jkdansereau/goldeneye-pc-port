@@ -62,6 +62,14 @@ screens draw content. See §F "D108–D112".
 complete leaf DLs (~15k/run, valid ptrs; fast3d transforms them). The
 storage-room void is NOT closed doors failing to render.
 
+**Priority (user, M-11): get BUNKER1 — then every level — playable
+start-to-finish with no crashes. Fix crashes/hangs first; cosmetic
+rendering (D74/D75/D76/D114/D116) is logged in `docs/GRAPHICS-BACKLOG.md`
+and comes later.** D120 (blood-stain converter) is the nearest real
+converter gap; extending `d43_emit.py` for opcode-0x18 is a good
+subagent brief. After BUNKER1: walk the objective/exit path to a level
+transition, then the next stage.
+
 **Real remaining work, in order (updated session M-8):**
 1. **Input layer (Phase 3)** — IN PROGRESS (M-8 agent, §F D118). `port/src/
    input.c` was a stub; only a minimal keyboard path in `libultra.c`
@@ -81,15 +89,15 @@ storage-room void is NOT closed doors failing to render.
    it needs a behavioural arena change, STOP + write up. Direct `-level_09`
    boot may spawn Bond holstered — may need forced weapon state or the
    attract path to get the gun on screen. Gate to playability.
-3. **The HUD/text X-mirror (D116)** — DEPRIORITISED (cosmetic, not a
-   playability blocker). Every stage from font-bitmap to GL-draw
-   runtime-verified non-mirrored, yet glyphs render flipped — a genuine
-   contradiction (§F "D116 runtime probe part 3"). NEXT PERSON: RenderDoc
-   trace of one glyph texrect, or find/read the dedicated ammo-digit HUD
-   path (NOT in `textrelated.c`), before touching fast3d again. Do NOT
-   spend >30 min without one of those in hand. This is the old D114
-   "shared mirror" symptom — inverted guards / misplaced door props are
-   likely the same bug on model skins.
+3. **The HUD/text X-mirror (D116)** — DEPRIORITISED, parked in
+   `docs/GRAPHICS-BACKLOG.md`. M-11 confirmed the ammo digits use the
+   SAME `textrelated.c` path (no separate renderer — the M-8 premise was
+   wrong) and re-hit the same contradiction: every stage verified
+   non-mirrored, glyphs still flip. **Do not re-static-trace.** Next
+   attempt needs a RenderDoc/apitrace capture or the asymmetric-1-texel
+   experiment — nothing else. All cosmetic rendering issues (D74 dead
+   wrap-block, D75/D76/D77) now tracked in `docs/GRAPHICS-BACKLOG.md`;
+   they rank BELOW level-progression and crash work.
 4. **Rest of the `struct player` offset pass** — D115 fixed the HIGH
    `gunfire.c` THROW* bugs; #6 (watch-preview Model pool) + the broader
    audit remain (`docs/AUDIT-M6-player-offsets.md`).
