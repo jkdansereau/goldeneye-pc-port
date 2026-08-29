@@ -1258,7 +1258,15 @@ static void gfx_sp_modify_vertex(uint16_t vtx_idx, uint8_t where, uint32_t val) 
 static inline int gfx_lod_tile_offset(const int i) {
     if (gfx_detail_textures_enabled)
         return ((rdp.tex_lod && !rdp.tex_detail) ? 0 : i);
-    return (rdp.tex_lod ? rdp.tex_detail : i);
+    // D107: GE has no true detail textures (gfx_detail_textures_enabled is
+    // false), but its room GDLs still emit G_TL_LOD + G_TD_DETAIL for
+    // mip-mapped textures. The old `rdp.tex_lod ? rdp.tex_detail : i` then
+    // returned tex_detail (1) for every texel -> fast3d sampled GE's first
+    // mip (tile 1), whose single-LOADBLOCK TMEM slot fast3d never registers
+    // -> a magnified crop of the base image (the "blurry blob" ceilings /
+    // wall panels in BUNKER1). GE loads the whole mip chain at TMEM 0, so
+    // the base render tile is the only correctly-loaded level: always use it.
+    return 0;
 }
 
 static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bool is_rect) {
