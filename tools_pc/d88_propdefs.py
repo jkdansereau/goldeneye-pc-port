@@ -83,6 +83,23 @@ OBJ_PTR_WORDS = (4, 5, 26, 27)
 OBJ_N64_WORDS = 32
 OBJ_PC_BYTES = 144
 
+# D122: ObjectRecord-derived types whose tail (N64 words >= 32) the converter
+# must lay out with pointer widening.  {type: (ptr_word_set, hh_word_set)}.
+#   47 TintedGlassRecord  tail: TintDist,CullDist,calculatedopacity,portalnum,unk90
+#   39 VehichleRecord     ailist*@w32, [u16 aioffset|s16 aireturnlist]@w33, path*@w41, Sound*@w43
+#   40 AircraftRecord     ailist*@w32, [u16|s16]@w33, path*@w43, Sound*@w44
+#   45 TankRecord         collision*@w32 (rest scalar; struct locs unconfirmed)
+OBJ_TAIL_DESC = {
+    47: (frozenset(),             frozenset()),
+    39: (frozenset((32, 41, 43)), frozenset((33,))),
+    40: (frozenset((32, 43, 44)), frozenset((33,))),
+    45: (frozenset((32,)),        frozenset()),
+    # 13 AutogunRecord: unkC4*@w49 unkC8*@w50 beam*@w51 (is_active@w52 unkD4@w53)
+    13: (frozenset((49, 50, 51)), frozenset()),
+    # 20 MultiAmmoCrateRecord: slots[13] of [u16 modelnum][u16 quantity]
+    20: (frozenset(),             frozenset(range(32, 45))),
+}
+
 # Per-type PC struct size (bytes) the converter emits and sizepropdef must
 # return / 4.  For ObjectRecord-derived types this is 144 + tail growth.
 PROPDEF_PC_BYTES = {
@@ -114,10 +131,10 @@ PROPDEF_PC_BYTES = {
     35: 16,   # WATCH_MENU_OBJ_TEXT (4w)
     37: 48,   # RenameObjectRecord
     38: 32,   # LockDoorRecord
-    39: 176,  # VehichleRecord (guess: 44w + tail; refine if a level needs it)
-    40: 180,  # AircraftRecord
+    39: 208,  # VehichleRecord (D122: 144 prefix + widened tail)
+    40: 208,  # AircraftRecord (D122)
     44: 24,   # SafeObjectRecord fragment (5w + next*), refine on use
-    45: 224,  # TankRecord
+    45: 248,  # TankRecord (D122: 144 prefix + 23-word scalar tail + collision*)
     46: 28,   # CutsceneRecord
     47: 168,  # TintedGlassRecord
     48: 4,    # END
@@ -273,6 +290,29 @@ def convert_record(src, so, type_byte):
         for i in range(1, 6):
             out[4 * i:4 * i + 4] = _hh_word(src[so + 4 * i: so + 4 * i + 4])
         # word 6 = Data* -> zero @24 (already; 20-byte u16 block then 8-align pad@20)
+        return bytes(out)
+
+    if type_byte in OBJ_TAIL_DESC:  # D122: ObjectRecord prefix + typed tail
+        # 47 TINTED_GLASS / 39 VEHICHLE / 40 AIRCRAFT / 45 TANK.  These all
+        # `inherits ObjectRecord` but had no handler -> fell through to the
+        # generic arm, which bswap32'd N64 word 1 ([s16 obj][s16 pad]) as one
+        # 32-bit value.  That put `obj` in the wrong half -> garbage modelid ->
+        # OOB PitemZ_entries[] deref crash (loadobjectmodel.c:393 /
+        # model.c:6249).  Emit the real 144B PC ObjectRecord prefix, then the
+        # tail with pointer members widened 4->8B and 8-aligned.
+        _emit_object_prefix(out, src, so)
+        ptr_words, hh_words = OBJ_TAIL_DESC[type_byte]
+        pc = OBJ_PC_BYTES
+        for i in range(OBJ_N64_WORDS, n64w):
+            w = src[so + 4 * i: so + 4 * i + 4]
+            if i in ptr_words:
+                pc = (pc + 7) & ~7
+                pc += 8                      # 8 zero bytes already present
+            elif i in hh_words:
+                out[pc:pc + 4] = _hh_word(w); pc += 4
+            else:
+                out[pc:pc + 4] = _bswap32(w); pc += 4
+        assert pc <= pcb, (type_byte, pc, pcb)
         return bytes(out)
 
     # ---- generic: header-only records (objectives, END, DOOR_SCALE, ...) ----

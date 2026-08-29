@@ -53,6 +53,16 @@ through a converter or a runtime bswap fixup reads scrambled.
   (StandTile id/room, header mid/tail).
 - **Rule:** prefer an offline sidecar converter (D43, D69, D88 pattern,
   `tools_pc/d*_emit.py`) over a runtime fixup for a whole format.
+- A polymorphic-record converter with a per-type handler table + a
+  "generic" fallback silently corrupts any type the table forgot: the
+  fallback's word-granular bswap is wrong for sub-word fields. D122 —
+  `d88_propdefs.py` had no arm for 6 `inherits ObjectRecord` propDef types
+  (TINTED_GLASS/VEHICHLE/AIRCRAFT/TANK/AUTOGUN/AMMO); the generic arm
+  bswap32'd the `[s16 obj][s16 pad]` word as one u32, putting the model id
+  in the wrong half → OOB table deref. When you add a converter, enumerate
+  *every* `type` byte a level can emit and assert the handler set is
+  total; `[u16|u16]` / `[s16|s16]` packed words need a half-swap
+  (`_hh_word`), never a 32-bit swap.
 
 ## C2. Port-layer / SDL shims
 

@@ -91,10 +91,10 @@ s32 sizepropdef(PropDefHeaderRecord *pdef)
         case PROPDEF_ARMOUR:                            return 38;
         case PROPDEF_COLLECTABLE:                       return 40;
         case PROPDEF_TINTED_GLASS:                      return 42;
-        case PROPDEF_VEHICHLE:                          return 44;
-        case PROPDEF_AIRCRAFT:                          return 45;
+        case PROPDEF_VEHICHLE:                          return 52; /* D122: was 44 (N64) */
+        case PROPDEF_AIRCRAFT:                          return 52; /* D122: was 45 (N64) */
         case PROPDEF_AMMO:                              return 50;
-        case PROPDEF_TANK:                              return 56;
+        case PROPDEF_TANK:                              return 62; /* D122: was 56 (N64) */
         case PROPDEF_AUTOGUN:                           return 62;
         case PROPDEF_CCTV:                              return 68;
         case PROPDEF_MONITOR:                           return 72;
