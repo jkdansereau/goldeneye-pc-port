@@ -62,27 +62,32 @@ screens draw content. See §F "D108–D112".
 complete leaf DLs (~15k/run, valid ptrs; fast3d transforms them). The
 storage-room void is NOT closed doors failing to render.
 
-**Real remaining work, in order (updated session M-6):**
-1. **Shared fast3d screen mirror (D114 → D75 class)** — the single most
-   likely cause of: inverted BUNKER guard, mispositioned Nintendo logo,
-   mirrored front-end text, AND the storage-room "void" (D113 proved the
-   portal BFS is correct — the void is the closed-door models obj 153/154
-   rendering outside their doorway). The joint-matrix chain and the model
-   converter were **verified clean** in M-6 (see §F D114); the residual is
-   an X (± Y) flip in `port/fast3d`'s viewport / MP-matrix path vs GE's
-   left-handed screen convention (`gmain.s` / `bondview.c:726`). Suspects:
-   `gfx_calc_and_set_viewport` / `gfx_adjust_viewport_or_scissor`
-   (`gfx_pc.cpp:1739/1771`), `MP_matrix` (`gfx_pc.cpp:1122`). **Rebuild
-   with D112+D115 and eyeball a guard first** — D115 stops a per-shot
-   64-byte scribble that could itself present as "inverted".
-2. **Weapon model doesn't draw (D115 #5)** — D102 pointed `weaponModel.
+**Real remaining work, in order (updated session M-8):**
+1. **Input layer (Phase 3)** — IN PROGRESS (M-8 agent, §F D118). `port/src/
+   input.c` was a stub; only a minimal keyboard path in `libultra.c`
+   (`contSnapshotFromKeyboard`) worked. No C-buttons/mouse-look/gamepad/
+   rebinding. This is the top playability blocker — you cannot aim or
+   properly move. Reference: `pd_port/port/src/input.c`.
+2. **Weapon model doesn't draw (AUDIT-M6 #5)** — D102 pointed `weaponModel.
    render_pos` at a transient `dynAllocate` arena; on N64 it aliased the
-   persistent `hand->mtxlist`. Gate to playability. May fold into #1.
-3. **Rest of the `struct player` offset pass** — D115 fixed the HIGH
+   persistent `hand->mtxlist`. Gate to playability. NEXT AGENT after input.
+3. **The HUD/text X-mirror (D116)** — DEPRIORITISED (cosmetic, not a
+   playability blocker). Every stage from font-bitmap to GL-draw
+   runtime-verified non-mirrored, yet glyphs render flipped — a genuine
+   contradiction (§F "D116 runtime probe part 3"). NEXT PERSON: RenderDoc
+   trace of one glyph texrect, or find/read the dedicated ammo-digit HUD
+   path (NOT in `textrelated.c`), before touching fast3d again. Do NOT
+   spend >30 min without one of those in hand. This is the old D114
+   "shared mirror" symptom — inverted guards / misplaced door props are
+   likely the same bug on model skins.
+4. **Rest of the `struct player` offset pass** — D115 fixed the HIGH
    `gunfire.c` THROW* bugs; #6 (watch-preview Model pool) + the broader
    audit remain (`docs/AUDIT-M6-player-offsets.md`).
-4. Add an f32 value spot-check to `d43_emit.py`'s verify pass (it only
+5. Add an f32 value spot-check to `d43_emit.py`'s verify pass (it only
    checks pointers/opcodes today — the D112 bug passed "ALL CHECKS PASSED").
+6. **GE_DETERM fixed-tick mode (§F D117)** — deferred as not-narrow; would
+   unlock exact-diff regression testing + reproducible timing bugs. Design
+   is written up. Worth doing once the above land.
 
 **Session M-7 — see §F D116 + "D116 probe results".** Ran the glyph
 probe (overseer, after killing a subagent that was drifting toward a
@@ -100,6 +105,17 @@ mislocated door props. NEXT: shader/vertex-buffer probe — dump per-vertex
 (x,u) for one glyph quad; render a 1-texel asymmetric test texture to see
 which axis inverts. `GE_D116`-gated probes left in `textrelated.c` +
 `gfx_pc.cpp` (zero-cost).
+
+**Session M-8 (continued) — D116 part 3 + input layer.** Killed the
+drifting D116 agent, ran the probe as overseer: `buf_vbo` (x,u) for
+glyph quads and the GL texture upload are both runtime-verified
+non-mirrored (x-left<->u=0), GL shader is `gl_Position=aVtxPos` +
+UV-passthrough — every stage clean, yet glyphs render X-flipped
+(contradiction, §F "D116 runtime probe part 3"). Deprioritised as
+cosmetic. `GE_D116` `[D116/vbo]` probe kept in `gfx_pc.cpp`. Then
+dispatched the **input-layer agent** (§F D118, in progress) — top
+playability blocker. `framediff.py` structural mode is the interim
+regression gate (`tools_pc/golden/` is a nondeterministic D115 capture).
 
 **Session M-8 — see §F D117.** Visual-regression tooling. Root-caused the
 frame-to-frame nondeterminism: pure variable-timestep frame pacing
