@@ -136,3 +136,6 @@ ge007.crash.log
 
 # Claude Code local state / agent worktrees
 .claude/
+
+# saved reference webpage assets (keep the .htm, not the sidecar cruft)
+docs/reference/*_files/

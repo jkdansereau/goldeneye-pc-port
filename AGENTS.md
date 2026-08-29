@@ -6,6 +6,7 @@
 - Active work: **PC port** modelled on the Perfect Dark PC port (same Rare "Indy" engine family).
 - **Read `docs/PCPortResearch.md` first** — architecture, GE-specific RSP deltas, phased plan, and review findings (A1–D33 in §11; current handoff + plan in §H).
 - **Starting a fresh session?** Read `docs/HANDOFF.md` — the paste-ready brief with the immediate task, standing procedure, and environment gotchas.
+- **Dispatching subagents?** `docs/AGENT-WORKFLOW.md` — task budgets/deadlines, file partitioning, pre-flight, the standard brief template. Every investigation subagent reads `docs/PORT-LEARNINGS.md` (recurring bug classes) first and appends to it.
 
 ## Non-negotiables
 
