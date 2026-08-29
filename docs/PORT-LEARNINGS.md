@@ -53,6 +53,17 @@ through a converter or a runtime bswap fixup reads scrambled.
   (StandTile id/room, header mid/tail).
 - **Rule:** prefer an offline sidecar converter (D43, D69, D88 pattern,
   `tools_pc/d*_emit.py`) over a runtime fixup for a whole format.
+- **Python slice-assignment width is a silent corruptor** (D125):
+  `out[a:a+8] = b"\x00\x00\x00\x00"` on a `bytearray` does NOT raise — it
+  deletes `(8 - len(rhs))` bytes, shrinking `out` and shifting everything
+  after `a` down. A widened pointer/`stan` slot filled with a 4-byte
+  literal shrank `d88_emit.py`'s output 4 B per pad; once `len(out)` fell
+  below a later region's write offset, `out[off:off+n] = data` clamped to
+  an empty range at the current end and *inserted* there — string blobs
+  drifted, boundpad names truncated (`p138d2`→`8d2`), `stanPackId` rejected
+  → door `model=NULL` → crash. When emitting into a pre-sized bytearray,
+  every `out[a:b] = rhs` MUST have `len(rhs) == b - a`; grep the emitter
+  for width-mismatched slice writes when a converted region lands wrong.
 - A one-shot "sync patched values from the ROM copy into a compiled
   shadow array" pass must key its slot-detection on a field that is still
   intact *at sync time*. D124: `gimgSyncCompiledGlobalDLs` looked for the

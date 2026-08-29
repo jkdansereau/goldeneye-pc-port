@@ -371,7 +371,10 @@ def convert_usetup(name, src):
         out[dst_o + 0x2c:dst_o + 0x30] = b"\x00\x00\x00\x00"
         # stan: dead-on-load (init_pathtable_something always sets it before
         # use, D88 same class as D79) -- zero it, never read from file.
-        out[dst_o + 0x30:dst_o + 0x38] = b"\x00\x00\x00\x00"
+        # NOTE: this slice is 8 bytes wide (widened stan ptr); the RHS MUST be
+        # 8 NUL bytes -- a 4-byte literal here makes `out` SHRINK by 4 per pad
+        # via Python slice-assign semantics, drifting every later region (D125).
+        out[dst_o + 0x30:dst_o + 0x38] = b"\x00\x00\x00\x00\x00\x00\x00\x00"
         if has_bbox:
             for k in range(6):
                 v = be32(src, src_o + 0x2c + 4 * k)

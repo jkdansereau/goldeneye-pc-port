@@ -818,7 +818,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D121 | WS1 frictionless per-level boot: bare `-level_XX` injects its `memallocstringtable[]` `-m*` row (`#ifdef PORT` in `boss.c`) | resolved |
 | D122 | per-level prop/item model-load crash (Dam/Facility/Runway `modelLoad`/`modelInitRwData`): `d88_propdefs.py` had no handler for 6 ObjectRecord-derived propDef types (47/39/40/45/13/20) → generic arm half-swapped the `[s16 obj][s16 pad]` word → OOB `PitemZ_entries[]` | converter fixed; residual chr/fast3d crashes on those levels are separate |
 | D123 | crash class C1: `chrIsNotDeadOrShot` NULL deref on 6 levels (Dam/Runway/Frigate/Statue/Streets/Cradle). D122's `OBJ_TAIL_DESC` zeroed the widened `VehichleRecord/AircraftRecord.ailist` slot (w32), but `prop.c:1764/1786` reads a pre-populated int AI-list id there → `ailistFindById(0)` → `GAILIST_AIM_AT_BOND` → `ai()` runs a CHR aim list with `ChrEntityp==NULL` | converter fixed (`OBJ_ID_WORDS`); C1 cleared on all 6, residual crashes are fast3d (C2) |
-| D125 | crash classes C3+C6 (Aztec/Bunker2/Surface2): the converted `propDefs` blob in RAM ≠ `d88_propdefs.py` offline output — after record 0 it is zeros/garbage, so the `sizepropdef()` walk drifts (+101 records by the first door) and every `pdefIndex` lookup (`setupDoor`→`linkedDoor`, `modelLoad` modelid) hits the wrong record. NOT a forgotten-type gap (histogram diff clean). Suspect a destination-offset / `pd_end` / header-reloc bug in `tools_pc/d88_emit.py`'s propdefs emit, not in the converter | **not fixed** — investigation cut for usage reset; next: diff pccg.bin bytes vs `convert_stream`, trace `pd_start/pd_end/do` in d88_emit.py |
+| D125 | crash classes C3+C6 (Aztec/Bunker2/Surface2): **root cause found (M-16)** — `tools_pc/d88_emit.py:374` assigns a 4-byte literal to an 8-byte slice (`out[dst_o+0x30:dst_o+0x38] = b"\x00…"`, the stan zero-fill in `emit_pad`); every pad/boundpad record silently shrinks the output bytearray by 4 B, and once the tail falls below the boundpad plink string blob, later verbatim leaf writes hit Python out-of-range slice semantics (insert at current end, not relocated offset) → boundpad names drift/truncate (Aztec pad33 `p138d2`→`8d2`) → `stanPackId()` reject → `getposstan()` NULL stan → `setupDoor` leaves door `model=NULL` → crash `propobj.c:13601`. M-14's "propDefs zeros in RAM" was a misread; sidecar propdefs were always correct (M-15) and post-load RAM matches the sidecar byte-for-byte (M-16) | **resolved (M-16b)** — line 374 → 8 NULs; all 21 sidecars regen'd; **Aztec `-level_28` now PASSES** (was C3 CRASH). Bunker2 falls through to a separate DOOR-tail `linkedDoor` layout bug (C3 residual) |
 | D124 | crash class C2: fast3d bad texture pointer. **Jungle** (`0xabcd0824`): `gimgSyncCompiledGlobalDLs()` slot-detect keyed on the post-fixup marker, which `texLoad()` had already overwritten → compiled `globalDL_0xNNN` explosion DLs kept link-time `IMAGESEG` words → latent on every level, tripped by the first explosion-DL draw. **Facility** (`0x72181ee8`): separate — model/prop GDL from the `texLoadFromGdl()`/`sub_GAME_7F0762E0` relocation path writes non-16-aligned `dst` (N64 8B vs PC 16B `Gfx` stride mix in `objecthandler_2.c`), open D80/D82/D83 area | Jungle fixed (`port/src/gimgfixup.c`); Facility diagnosed, not fixed |
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
@@ -4221,29 +4221,52 @@ levels emit no propDef type absent from the 12 passing levels — TINTED_GLASS
 and AUTOGUN appear in passing Caverns/Control too. **This is not a
 forgotten-type converter gap like D122/D123.**
 
-*Best hypothesis (confidence: mechanism high, exact fault medium).* The
-converted `propdefs_pc` bytes produced in `tools_pc/d88_emit.py`
-(`convert_propdefs`, line 320) are **not landing in the sidecar at the
-offset `g_CurrentSetup.propDefs` resolves to**, OR the `propDefs` header
-field is not being relocated to the converted blob's new offset, OR
-`pd_end` (the `'propdefs'` region end from the region-tiling at
-`d88_emit.py:315-318`) is computed wrong so only the first record is
-converted and the rest of the region is left as `bytearray(total_new)`
-zero-fill. The "idx0 correct, then zeros" signature points hard at a
-destination-offset / length bug in `d88_emit.py`'s propdefs emit
-(lines 266-267, 308-338, 471-476), not in `d88_propdefs.py`. Note
-`d88_emit.py`'s module docstring still describes propDefs as an "opaque
-passthrough blob" (stale post-D122) — the emit path was retrofitted and
-may not have been fully reconciled with the region-tiling / delta-reloc
-logic.
+*Best hypothesis (M-14) — DISPROVEN (session M-15).* M-14 guessed the
+converted `propdefs_pc` bytes were not landing in the sidecar at the
+relocated `propDefs` offset (a `d88_emit.py` region-tiling / delta-reloc
+bug, lines ~308-338/471-476). The M-13 overseer note refined this to a
+pass-1 delta / region-`end` mismatch (`pd_end != pd_start + _n64len`).
+**Both are wrong.** New diagnostic `tools_pc/d125_check.py` decompresses
+the *emitted* `data/pccg-ntsc-final/pccg.bin` entry for every Usetup*Z,
+reads the relocated `propDefs` header field, and byte-compares that slice
+to a fresh `convert_stream()`:
 
-*Next step.* Dump the actual bytes at `data/pccg-ntsc-final/pccg.bin` for
-`UsetupsevbZ`'s propDefs region and compare to `convert_stream` output;
-add a `[D88emit]` print of `pd_start / pd_end / len(propdefs_pc) / do`
-(destination offset) in `d88_emit.py`; check whether the `propDefs`
-header word in the emitted file points at `do`. Likely a 1-region
-off-by-one in the sorted region list (intro vs propDefs ordering) or the
-converted blob written at the pre-growth offset.
+  - **All 21 levels: `MATCH`** (Aztec/Bunker2/Surface2 included). The
+    sidecar's propDefs blob, post-RZ-roundtrip, is byte-identical to the
+    converter output, placed exactly where the relocated header field
+    points.
+  - Instrumented `d88_emit.py` (D125_DEBUG, since reverted): for all 21,
+    `tiled_pd_end == H[intro]` exactly, `_n64len == pd_end - pd_start`
+    exactly, the region after `propdefs` in the sorted list is always
+    `intro`, and the growth `pclen - n64len` fed to `cum` is correct.
+    There is **no** region-end/delta bug at `d88_emit.py:308-343`.
+  - Full re-cross-check of `sizepropdef()` PORT strides vs
+    `PROPDEF_PC_BYTES/4`: all 28 types match (as M-14 already found).
+
+**Therefore the offline pipeline (converter → emit → RZ compress) is
+correct end-to-end. The "idx0 correct, then zeros" RAM signature M-14
+observed must originate at or after runtime load** — candidates, in
+rough order: (a) `decompressdata()` truncation — `port/src/rzdecomp.c`
+inflates with `Z_FINISH` and a 4 MiB `avail_out`, loops while `Z_OK`;
+if the deflate stream for these larger converted files hits `Z_BUF_ERROR`
+or `Z_STREAM_END` mid-output the `while (ret == Z_OK)` exits early and
+the tail of `dst` stays zero (needs a probe: log `ret` + `produced` vs
+expected decompressed size for `UsetupsevbZ`); (b) the STAGE bank alloc /
+`mempAllocBytesInBank` giving a buffer that is fine for the N64-size file
+but the converted file is ~15-25% larger — check `mempGetBankSizeLeft`
+at the `_fileNameLoadToBank(strResource, …, 256, MEMPOOL_STAGE)` call
+(`prop.c:1271`) vs the decompressed size; (c) the `prop.c:1280-1308`
+rebase loop or `langLoadToAddr` (`prop.c:1274`, runs right after the
+load, same bank) overwriting the tail of the setup file. M-14's own
+runtime dump had `g_CurrentSetup.propDefs = 0x701ce814` (`&15 == 4`).
+
+*Next step.* Probe `decompressdata()` for `UsetupsevbZ`: print `ret`,
+`produced`, and the first 64 bytes at `dst + 16` (offline record 1
+start). If `produced` < the offline decompressed file size → truncation
+(fix the inflate loop / `avail_in`). If `produced` is correct but the
+bytes are still zero → something overwrites it post-load (bisect
+`langLoadToAddr` / the rebase loop). `tools_pc/d125_check.py` stays in
+tree as the offline-side regression guard.
 
 *Probes:* **none left in tree** — the two `#if defined(PORT)`/`GE_C3`
 scratch prints in `src/game/prop.c` (lines ~1206 and ~1865) and the
@@ -4252,6 +4275,85 @@ reverted/deleted. *Files touched:* only `docs/PCPortResearch.md` (this
 entry) + `docs/LEVEL-STATUS.md` (one line). No code, no converter, no
 sidecar change — **sidecars do NOT need regen**, tree builds clean at
 `f2beae4b` + M-13 uncommitted set.
+
+**D125 addendum (session M-16) — ROOT CAUSE FOUND: `d88_emit.py:374`
+4-byte literal into an 8-byte slice; per-record buffer shrink; out-of-range
+leaf writes insert at the current end → boundpad name blob drift.**
+
+*Crash mechanism (Aztec, `-level_28`), fully traced.* Door idx 226
+(`objid=307`, `pad=33`) is left with `model=NULL`/`prop=NULL` by
+`setupDoor()`: its boundpad's plink name in the sidecar is `"8d2"`
+(original ROM: `"p138d2"`) → `stanPackId()` rejects it (valid = `p`/`q`
++ decimal ≤32767 + letter + optional digit 0-7; probe line `D88
+stanMatchTileName id=8d2 hi=ffff lo=ff` is the failure sentinel) →
+`init_pathtable_something()` returns 0 with `*tile_stack=NULL` →
+`getposstan()` nonzero → `setupDoor` sets `door->prop=NULL`, skips
+`doorInit()` → later tick `door7F054FB4()` (`propobj.c:13601`) derefs
+`door->model->obj`; `Model.obj` sits at PC offset 0x10 (widened `chr`
+ptr) → fault addr 0x10, Rcx=0. Linked-door pair: idx225 (`pad=32`, valid)
+has `linkedDoorOffset=1` → idx226. All 178 regular pads resolve fine; only
+boundpad names are corrupt.
+
+*The bug.* `tools_pc/d88_emit.py` `emit_pad()` line 374:
+`out[dst_o + 0x30:dst_o + 0x38] = b"\x00\x00\x00\x00"` — the stan zero-fill
+assigns a **4-byte** literal to an **8-byte** slice. Python silently allows
+in-range short-RHS slice assignment, so each of Aztec's 179 pads + 148
+boundpads shrinks the output `bytearray` by exactly 4 B (measured: after
+header 0x14d1c → after pads 0x14a50 → after boundpads 0x14800). Later
+verbatim leaf writes (the plink string blob, relocated to ~0x147EC+) then
+target offsets at/past the shrunken tail; for those, Python clamps the
+slice to an empty range **at the current end** and inserts the data there —
+each string lands at the buffer tail instead of its relocated offset,
+drifting earlier with every write. A simulation of exactly this semantics
+reproduces the observed sidecar names byte-for-byte: pad30 `p139d2`
+(intact), pad31 `139d2`, pad32 `37d1`, **pad33 `8d2`**, pad34 `2`,
+pad35 `1`, pad36 `` (empty).
+
+*Why it was missed.* No error is raised; the final file is only
+`(n_pads+n_boundpads)*4 − re-extension` bytes short of `total_new`
+(Aztec: 85276 vs 85145) because later leaf writes re-extend the buffer;
+`d125_check.py` verified only the propDefs slice. M-14's "propDefs zeros in
+RAM" signature was a misread — M-15 already proved sidecar propdefs
+byte-correct, and M-16's post-load RAM dump matched the sidecar byte-for-
+byte (85,145 B), so runtime load is clean too.
+
+*Fix (pending).* Line 374 → `b"\x00\x00\x00\x00\x00\x00\x00\x00"` (8 NULs).
+Audit of every other `out[` write in the file: all remaining slice/RHS
+pairs are width-matched — this is the only one. **All 21 Usetup*Z sidecars
+are affected to varying degrees** (shrink = 4×(pads+boundpads) per level;
+which names drift depends on where the blob lands vs the shrunken tail) —
+regen all: `python tools_pc/d88_emit.py ntsc-final --regen`, then re-run
+`tools_pc/level_sweep.sh` (expect C3 Aztec+Bunker2 to clear; currently-
+passing levels can only improve, but the sweep is the proof).
+
+*Probes in tree (temporary — remove after fix verified):* `GE_D125`
+env-gated prints in `port/src/rzdecomp.c` (decompress ret/produced),
+`src/game/prop.c` (setup header + post-load 0x15000 dump to
+`d125_setupdump.bin` + post-`setupDoor()` door state), `src/game/propobj.c`
+(`door7F054FB4` NULL-model detect+skip, `objInit` failure print, plus temp
+`#ifdef PORT` stdio/stdlib includes). Scratch: `tools_pc/d125_convtest.py`
+(instrumented converter copy — source of the shrink evidence),
+`tools_pc/d125_check.py` (**keep** — offline regression guard),
+`tools_pc/d125_inflate_test.c`, `d125_offs_tmp.c`, `d125_t.c`,
+`d125_run.log`, `d125_setupdump.bin`, `build-pc/d125conv/`.
+
+**D125 addendum (session M-16b) — FIX LANDED.** `d88_emit.py:374` changed
+to 8 NUL bytes (+ a warning comment). Offline proof (Aztec, throwaway
+`d125_proof.py`): the fixed converter's boundpad plink names 30–36 read
+`p139d2 p139d2 p837d1 p138d2 p85a2 p1377b1 p504d2` (= original ROM), 147
+boundpad records recovered (M-14's "46" was the corrupt read — no second
+bug). `d43/d69/d88 --regen` → 21/21; `d125_check.py` → 21/21 propDefs
+still MATCH. Direct re-test: **Aztec `-level_28` PASSES** (91.0%, 900+
+frames, was C3 CRASH at `propobj.c:13601`); Bunker1/Silo unregressed.
+**Bunker2 `-level_27` still crashes** — moved to `door7F054FB4`
+`propobj.c:13536` (`var_s1->openPosition`, `var_s1` = `0xffff…` from
+`linkedDoor`). Separate bug: the DOOR-tail converter in `d88_propdefs.py`
+(`DOOR_TAIL_PTR_WORDS` / `linkedDoorOffset` word 32) vs the compiled PC
+`DoorRecord` layout — `linkedDoor` is resolved from `linkedDoorOffset`
+(`prop.c:1204`), a read-before-write int id like D123's `ailist`; Bunker2
+has linked double-doors, Aztec's are singletons so it dodged it. Folded
+into the converter write-audit (C3 residual). Sweep: 12 → 13/21.
+All M-16 probes reverted, scratch files deleted, `d125_check.py` kept.
 
 **D124-Facility addendum (session M-14 — partial, NOT fixed, out of time).**
 Re-instrumented with a `GE_C2GDL` probe in `sub_GAME_7F0762E0`

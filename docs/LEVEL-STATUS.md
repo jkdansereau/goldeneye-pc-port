@@ -27,16 +27,19 @@ Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` 
 | Runway   | 35 | CRASH | `import_texture_i8` gfx_pc.cpp:821 (fault 0x721b8ee8) — same as Facility | **C2** |
 | Facility | 34 | CRASH | `import_texture_i8` gfx_pc.cpp:821 (fault 0x72181ee8) — model-GDL relocation align bug, D124, NOT fixed | **C2** |
 | Jungle   | 37 | CRASH | `gfx_sp_matrix` gfx_pc.cpp:1046 (fault 0x401c68e0) — C2 texture crash fixed (D124), now explosion-DL `G_MTX` (D75/matrix family) | **C2m** |
-| Aztec    | 28 | CRASH | `door7F054FB4` propobj.c:13601 (`door->model->obj->RootNode->Child->Child`) | **C3** |
-| Bunker2  | 27 | CRASH | `door7F054FB4` propobj.c:13523 (door displacement list walk) | **C3** |
+| Aztec    | 28 | **PASS** 91.0% | — (C3 fixed, D125) | — |
+| Bunker2  | 27 | CRASH | `door7F054FB4` propobj.c:13536 (`var_s1->openPosition`, `var_s1`=0xffff.. from `linkedDoor`) | **C3r** |
 | Depot    | 30 | CRASH | `sub_GAME_7F00324C` prop.c:902 (`sp4C->room` after `walkTilesBetweenPoints`) | **C4** |
 | Control  | 23 | CRASH | `sub_GAME_7F0BA2D4` bg.c:5723 (`portal_pts->numPoints`, via chrprop.c:62) | **C5** |
 | Surface2 | 43 | CRASH | `modelLoad` loadobjectmodel.c:393 (`PitemZ_entries[modelid].header->RootNode`) | **C6** |
 | Surface1 | 36 | CRASH | `sndSetupSound` snd.c:653 (fault 0x56220001…, ascii-ish) | **C7** |
 
-**12 / 21 PASS.** D123 cleared C1 on all 6 (Dam/Frigate/Statue/Cradle/Streets
+**13 / 21 PASS.** D123 cleared C1 on all 6 (Dam/Frigate/Statue/Cradle/Streets
 PASS; Runway falls through to C2). D124 cleared Jungle's texture crash but
-it now hits an explosion-DL matrix crash. 9 crashes remain in 6 classes.
+it now hits an explosion-DL matrix crash. D125 (`d88_emit.py:374` 8-byte
+slice / 4-byte literal → boundpad-name blob drift) cleared C3-Aztec;
+Bunker2 falls through to a separate DOOR-tail `linkedDoor` layout bug
+(C3r). 8 crashes remain in 6 classes.
 
 Notes: Streets passed this run but the C1 agent saw a `gfx_sp_matrix`
 crash — likely the same explosion-DL `G_MTX` (C2m) as Jungle, timing-
@@ -98,41 +101,44 @@ Full write-up + next-step probe plan: PCPortResearch §F D124-Facility
 addendum. Likely fix site: the `d43_emit.py`/`pcmodels` sidecar's model
 texture-blob offsets (N64 8B-Gfx vs PC 16B-Gfx GDL extent).
 
-### C3/C6 update (M-14, D125) — NOT a converter type-gap
-Root cause narrowed: the converted `propDefs` blob in RAM does **not** match
-`tools_pc/d88_propdefs.py`'s offline output (after record 0 it is
-zeros/garbage), so the runtime `sizepropdef()` walk drifts +101 records by
-the first door → `setupDoor`/`modelLoad` get the wrong `pdefIndex`/modelid.
-Histogram diff is clean (no type absent from passing levels). Suspect a
-destination-offset / `pd_end` / header-reloc bug in `tools_pc/d88_emit.py`'s
-propdefs emit path (retrofitted post-D122; docstring still says "opaque
-passthrough"). Not fixed — see §F/§H D125. **d88_propdefs.py `convert_stream`
-itself and `sizepropdef()` PORT strides are verified correct.**
+### C3/C6 update (M-14/M-15, D125) — offline pipeline RULED OUT, bug is runtime
+Symptom: converted `propDefs` blob in RAM does not match the offline output
+(after record 0 it is zeros/garbage), so the runtime `sizepropdef()` walk
+drifts and `setupDoor`/`modelLoad` get the wrong `pdefIndex`/modelid.
 
-**Overseer note (M-13, unverified — first task next session):** likely a
-pass-1 delta / region-`end` mismatch in `d88_emit.py` ~L308–340. The
-tiled `propdefs` region's `end` (pd_end, from the region tiling) may not
-equal `pd_start + convert_propdefs()._n64len`. Pass 1 does
-`cum += len(propdefs_pc) - (end - start)` with that `end`; if it is
-**shorter** than the real record-stream length, the cumulative delta is
-under-counted, every subsequent region (aistream / opaque) is placed too
-low, and the emit loop's `out[do:...] = src[...]` for the next region
-**overwrites the tail of `propdefs_pc`** — leaving record 0 intact and the
-rest clobbered, exactly the observed symptom. Cheap confirm: print
-`pd_start`, `pd_end`, `_n64len`, `len(propdefs_pc)`, and the next region's
-`(start, do)` for `UsetupsevbZ`; check `pd_end == pd_start + _n64len`.
-Fix = set the propdefs region `end` to `pd_start + _n64len` (or make
-`convert_propdefs` and the tiler agree on the boundary).
+**M-15: the offline side is proven correct.** `tools_pc/d125_check.py`
+byte-compares the emitted `pccg.bin` propDefs slice (post-RZ-roundtrip, at
+the relocated header offset) to `convert_stream()` → **MATCH for all 21
+levels**. The M-13 overseer hypothesis (pass-1 delta / `pd_end` mismatch in
+`d88_emit.py` ~L308–340) is **disproven**: instrumented run shows
+`tiled_pd_end == H[intro]` and `_n64len == pd_end - pd_start` exactly for
+all 21, next region always `intro`. `sizepropdef()` PORT strides re-checked
+vs `PROPDEF_PC_BYTES/4` — all 28 match.
 
-### C3 — door model / ModelNode walk (2 levels: Aztec, Bunker2)
-`propobj.c:13601` derefs `door->model->obj->RootNode->Child->Child`;
-`:13523` walks the `linkedDoor` list. Fault addrs 0x10 / 0x8 → a null-ish
-base + field offset. Door prop model not loaded, or `door->model` /
-`->linkedDoor` pointer-width mis-set. Same family as D122 (propDef obj
-half-swap) — Aztec/Bunker2 emit a door subtype BUNKER1/Silo don't, or the
-door propDef `linkedDoor`/`model` field is pointer-width-sized wrong.
-Files: `src/game/propobj.c`, `tools_pc/d88_propdefs.py` (door handler),
-`src/game/prop.c`.
+**→ The corruption is at/after runtime load.** Prime suspect:
+`decompressdata()` truncation in `port/src/rzdecomp.c` for the larger
+converted setup files (the `while (ret == Z_OK)` inflate loop), or the
+STAGE bank buffer / `langLoadToAddr` (`prop.c:1274`) overwriting the tail.
+Next step: probe `decompressdata()` `ret`/`produced` vs expected size for
+`UsetupsevbZ`. See §F/§H D125.
+
+### C3 — Aztec FIXED (D125); Bunker2 residual (C3r)
+**Aztec** was D125 (boundpad plink-name blob drift from the
+`d88_emit.py:374` slice-width bug corrupting `stanPackId` → NULL stan →
+door `model=NULL`). Fixed + regen'd, Aztec PASSES.
+
+**Bunker2 (C3r)** — `door7F054FB4` `propobj.c:13536`, `var_s1` = `0xffff..`
+walked from `linkedDoor`. `door->linkedDoor` is resolved at setup from
+`door->linkedDoorOffset` (`prop.c:1204-1206`, N64 struct word 32 / 0x80) —
+a read-before-write int id, D123's `ailist` pattern. `d88_propdefs.py`'s
+DOOR handler (`DOOR_TAIL_PTR_WORDS`, tail loop from word 32) vs the
+compiled PC `DoorRecord` layout is the suspect: either `linkedDoorOffset`
+lands at the wrong PC byte, or a tail pointer word's 8-align cursor
+diverges from the compiler's struct layout. Bunker2 has linked
+double-doors; Aztec's doors are singletons (`linkedDoorOffset==0`) so it
+never exercised this path. Needs `offsetof`/`sizeof` cross-check of PC
+`DoorRecord` vs the converter cursor. Files: `tools_pc/d88_propdefs.py`,
+`src/bondtypes.h` (DoorRecord), `src/game/prop.c`, `src/game/propobj.c`.
 
 ### C4 — prop tile-walk room deref (1: Depot)
 `prop.c:902` — `*arg1 = sp4C->room` where `sp4C` came back bad from
@@ -156,13 +162,13 @@ id from a propDef record). Fault addr 0x0. Files: `tools_pc/d88_propdefs.py`,
 crash on load, not silence. May be dodge-able with a narrow guard until
 audio lands. Files: `src/snd.c`, `port/src/` audio stubs.
 
-## Next (9 crashes, 6 classes — priority order)
+## Next (8 crashes, 6 classes — priority order)
 1. **C2** Runway + Facility — model-GDL relocation align bug in
    `objecthandler_2.c`/`texLoadFromGdl` (D80/D82/D83 area). Shared infra,
    2 levels + likely helps Jungle/Streets. Biggest win.
-2. **C3** Aztec + Bunker2 — door model / `linkedDoor`; brief
-   `docs/BRIEF-C3-C6-prop-model.md` (dispatch after any `d88_propdefs.py`
-   work settles).
+2. **C3r** Bunker2 — DOOR-tail `linkedDoorOffset`/`linkedDoor` layout in
+   `d88_propdefs.py` vs compiled PC `DoorRecord` (Aztec cleared by D125);
+   fold into the converter write-audit. Brief `docs/BRIEF-C3-C6-prop-model.md`.
 3. **C2m** Jungle (+ Streets intermittent) — explosion-DL `G_MTX`
    (`gfx_sp_matrix`), D75/matrix family.
 4. **C6** Surface2 — `PitemZ_entries` modelid (D122/D123 continuation).

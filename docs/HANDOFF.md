@@ -78,14 +78,45 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
 `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`): the D121 + D122 entries in
 `docs/PCPortResearch.md` §F/§H and this file's edits. Commit or fold in.
 
-## Next task — WS4/WS5: drive the 21-level sweep
+## Next task — converter write-audit (C3r / C4 / C5 / C6)
 
-**WS4 matrix DONE** — `docs/LEVEL-STATUS.md`. **7 / 21 PASS** (Bunker1 09,
-Silo 20, Archives 24, Train 25, Caverns 39, Egypt 32, Cuba 54). 14 crashes
-in 7 classes C1–C7. Reusable sweep runner: `tools_pc/level_sweep.sh`
-(bare `-level_XX`, `GE_PCDUMP="80-260:40"`, 24 s watchdog,
-`taskkill //F //IM ge007.x86_64.exe`; **`export PATH=".../mingw64/bin:$PATH"`
+**D125 is LANDED (M-16b).** `tools_pc/d88_emit.py:374` now writes 8 NUL
+bytes; all 21 `Usetup*Z` sidecars regen'd; **Aztec `-level_28` PASSES**
+(was C3 crash), Bunker1/Silo unregressed, `d125_check.py` 21/21 MATCH.
+M-16 probes reverted, scratch deleted, `d125_check.py` kept. Sweep 12 →
+13/21. Full write-up: §H D125 M-16b.
+
+The last 3 sessions' converter bugs are one family — width/endianness/
+stride errors in `tools_pc/d*_emit.py` (D112 `put_f32`, D120 opcode-0x18,
+D125 slice width). Pi audited every `out[` write in `d88_emit.py`;
+`d43_emit.py` + the BG sidecar emitters never got that pass, and the open
+crashes line up with exactly those files:
+
+- **C3r** Bunker2 — DOOR-tail `linkedDoorOffset`/`linkedDoor` layout in
+  `d88_propdefs.py` vs compiled PC `DoorRecord` (`offsetof`/`sizeof`
+  cross-check; D123 read-before-write-id pattern).
+- **C6** Surface2 — `PitemZ_entries[modelid]` (D122/D123 cont.,
+  `d43_emit.py` / `d88_propdefs.py`).
+- **C4** Depot — BG tile/room table (`prop.c:902`).
+- **C5** Control — BG portal `offset_portal` unresolved/BE (`bg.c:5723`).
+
+Audit `d43_emit.py` + BG sidecar emit paths for slice-width mismatches,
+un-byteswapped fields, N64-vs-PC stride math. Then the structural piece:
+**C2-GDL** (Runway + Facility) — `docs/BRIEF-C2gdl-model-reloc.md`, its
+own focused session. Defer C2m Jungle (matrix), C7 Surface1 (add a narrow
+`#ifdef PORT` `sndSetupSound` load guard only — audio is Phase 3).
+
+Sweep note: `level_sweep.sh` was flaky this session (spurious NO-FRAMES on
+known-good levels under machine load / the 24 s watchdog + D117
+nondeterminism). Verify individual levels with a 35–45 s window and
+`GE_PCDUMP="60-500:40"` when a sweep row looks wrong.
+
+Sweep runner: `tools_pc/level_sweep.sh` (bare `-level_XX`, `GE_PCDUMP="80-260:40"`,
+24 s watchdog, `taskkill //F //IM ge007.x86_64.exe`; **`export PATH=".../mingw64/bin:$PATH"`
 before `addr2line`** — the script's own symbolication no-op'd without it).
+
+The M-13 matrix below is partially superseded by M-14 (see §H D125 for the current
+12/21 status) — treat §H as authoritative.
 
 | Class | Levels | Site |
 |---|---|---|
