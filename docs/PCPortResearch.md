@@ -3359,15 +3359,47 @@ recipscalex/recipscaley` were all confirmed correct (0/10/160/110/
 the z==0 edge case. `GE_D104` probe (visible-room list) left in `bg.c`,
 gated + capped; `GE_D106` probes removed.
 
-**Remaining BUNKER1 render issues (post-D106):** (1) a bounded central
-sky gap at some corridor ends — smaller than pre-D106, likely a
-dropped/degenerate polygon in the D85 room-GDL widening rather than
-visibility; (2) a blurry grey wall/ceiling surface in the storage rooms
-(4 dark blobs, heavily magnified) — a texture-dimension or CI-8/TLUT
-decode issue in `texLoadFromGdl` for a specific room texture (room 1
-uses the same CI-8 + segment-7 TLUT pattern and renders fine, so it is
-texture-specific). Then the `struct player` weapon-model / offset pass,
-then D75(b) skeletal models.
+**D107 (session M-4) — fast3d sampled an unloaded mip tile for GE's LOD
+textures (blurry surfaces), FIXED.** GE room GDLs emit `G_TL_LOD +
+G_TD_DETAIL` for mip-mapped textures, but `gfx_detail_textures_enabled`
+is false for this port. `gfx_lod_tile_offset` (`gfx_pc.cpp:1258`) then
+ran `rdp.tex_lod ? rdp.tex_detail : i` → returned `tex_detail` (1) for
+every texel → fast3d sampled GE's first mip (render tile 1). GE loads
+the whole mip chain with one `G_LOADBLOCK` to TMEM 0 and points tiles
+1..5 at offsets inside it; fast3d keys `loaded_texture[]` by TMEM addr
+and has no entry for tile 1's offset, so `import_texture` fabricated a
+16×16 from the top-left 256 B of the base image and magnified it across
+the polygon — the "blurry brown/grey ceilings & wall panels" in BUNKER1.
+Fix: with detail textures disabled, `gfx_lod_tile_offset` always returns
+0 (the base render tile — the only correctly-loaded level; matches the
+N64 near-surface look). Verified: BUNKER1 ventilation room
+ceilings/walls/light panels render crisp. Single-level textures (racks,
+room 1) were already fine, unaffected. (Root-caused by a subagent — the
+`gfx_detail_textures_enabled=false` + GE's unconditional `G_TD_DETAIL`
+contradiction; hi-confidence, matches every symptom + the
+room-1-vs-storage-room split.) A residual minor vertical squish from
+`G_LOADBLOCK` size including the mip bytes is noted but not fixed.
+
+**Storage-room sky void — root-caused, NOT a visibility bug (session
+M-4).** The large void in rooms 27/28/29 is **closed doors**: portals 25
+and 26 (the storage-area doorways) carry `controlbytes1 & 1`
+(`PORTALFLAG_DISABLED`) at runtime — verified correct: `load_bg_file`
+clears bit 0 for every portal at load (`bg.c:1015`), then
+`bgToggleDataPortalsContrlBytes1Bit1` (`bg.c:5502`) re-sets it for
+doors that start closed. So `sub_GAME_7F0B7F84` correctly refuses to see
+through them (`bg.c:4147`). The bug is that **the door prop/model that
+should fill each closed doorway does not render** — `chrpropsRenderPass`
+(`chrprop.c:482`) *runs* with `n=3..10` props per room (`GE_D96`), but
+the frame GDL barely advances (~7 `Gfx` for 9 props), i.e. props are
+enumerated but emit almost no geometry. This is the prop/character
+model-rendering track (D75(b) + the `struct player`/prop raw-offset
+landmines), not portal/visibility work. Portal visibility itself is
+healthy post-D106 (room 18 → 8 rooms deep; enabled doorways traverse
+correctly). Other residuals: low-frequency stray green/yellow polygons
+(1–2 per room — a degenerate vertex, likely one bad entry per room-vtx
+table via `bgSwapRoomVtx` or the point-index blob length); front-end
+text draws mirrored. Next: prop/door model rendering (unblocks the void
+AND the missing weapon), then D75(b) skeletal models.
 
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*

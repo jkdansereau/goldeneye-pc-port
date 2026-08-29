@@ -33,14 +33,27 @@ degenerate-box check that on N64 clamps it to full-screen. PORT guard in
 `sub_GAME_7F0B5864` treats non-finite / out-of-range bounds as
 full-screen. Visible rooms/frame 1–3 → 2–4. See §F "D106".
 
+**D107 (session M-4)** — blurry ceilings/wall-panels were fast3d sampling
+GE's first mip (render tile 1), whose single-`G_LOADBLOCK` TMEM slot
+fast3d never registers, so `import_texture` fabricated a 16×16 crop of
+the base image and magnified it. `gfx_lod_tile_offset` now returns 0
+(base tile) when detail textures are off. BUNKER1 rooms render crisp.
+See §F "D107".
+
+**Storage-room sky void — root-caused (session M-4), it is the
+prop/model track:** the void is *closed doors* — portals 25/26 are
+correctly `PORTALFLAG_DISABLED`, and `chrpropsRenderPass` runs (`n=3..10`
+props/room) but emits almost no geometry, so the door models that should
+fill those openings never draw. Portal visibility itself is healthy
+post-D106 (room 18 → 8 rooms deep). Fixing prop/door rendering unblocks
+this AND the missing weapon.
+
 **Real remaining work, in order:**
-1. **BUNKER1 render polish** (residual after D106) — (a) a *bounded*
-   central sky gap at some corridor ends: likely a dropped/degenerate
-   polygon in the D85 room-GDL widening; (b) a blurry grey wall/ceiling
-   surface in the storage rooms (heavily magnified texture): a
-   texture-dimension / CI-8+TLUT decode issue in `texLoadFromGdl` for a
-   specific texture (room 1 uses the same pattern and is fine).
-   `GE_D104` visible-room probe + `GE_D85DUMP` in `bg.c`.
+1. **Prop / character model rendering** — `chrpropsRenderPass` enumerates
+   props but emits no geometry; door models (storage void), weapon model,
+   and skeletal characters all ride this. Overlaps the `struct player`
+   offset pass and D75(b). Start here — highest visual + playability
+   leverage. `GE_D96` probe in `chrprop.c`.
 2. **`struct player` offset pass** — weapon model doesn't draw; gate to
    playability (landmine below + D102).
 3. **D75(b)** — animated/skeletal character models (see §F "D75" and
