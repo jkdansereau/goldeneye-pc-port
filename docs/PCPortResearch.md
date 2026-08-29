@@ -819,6 +819,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D122 | per-level prop/item model-load crash (Dam/Facility/Runway `modelLoad`/`modelInitRwData`): `d88_propdefs.py` had no handler for 6 ObjectRecord-derived propDef types (47/39/40/45/13/20) → generic arm half-swapped the `[s16 obj][s16 pad]` word → OOB `PitemZ_entries[]` | converter fixed; residual chr/fast3d crashes on those levels are separate |
 | D123 | crash class C1: `chrIsNotDeadOrShot` NULL deref on 6 levels (Dam/Runway/Frigate/Statue/Streets/Cradle). D122's `OBJ_TAIL_DESC` zeroed the widened `VehichleRecord/AircraftRecord.ailist` slot (w32), but `prop.c:1764/1786` reads a pre-populated int AI-list id there → `ailistFindById(0)` → `GAILIST_AIM_AT_BOND` → `ai()` runs a CHR aim list with `ChrEntityp==NULL` | converter fixed (`OBJ_ID_WORDS`); C1 cleared on all 6, residual crashes are fast3d (C2) |
 | D125 | crash classes C3+C6 (Aztec/Bunker2/Surface2): **root cause found (M-16)** — `tools_pc/d88_emit.py:374` assigns a 4-byte literal to an 8-byte slice (`out[dst_o+0x30:dst_o+0x38] = b"\x00…"`, the stan zero-fill in `emit_pad`); every pad/boundpad record silently shrinks the output bytearray by 4 B, and once the tail falls below the boundpad plink string blob, later verbatim leaf writes hit Python out-of-range slice semantics (insert at current end, not relocated offset) → boundpad names drift/truncate (Aztec pad33 `p138d2`→`8d2`) → `stanPackId()` reject → `getposstan()` NULL stan → `setupDoor` leaves door `model=NULL` → crash `propobj.c:13601`. M-14's "propDefs zeros in RAM" was a misread; sidecar propdefs were always correct (M-15) and post-load RAM matches the sidecar byte-for-byte (M-16) | **resolved (M-16b)** — line 374 → 8 NULs; all 21 sidecars regen'd; **Aztec `-level_28` now PASSES** (was C3 CRASH). Bunker2 falls through to a separate DOOR-tail `linkedDoor` layout bug (C3 residual) |
+| D126 | crash classes C3r/C4/C6 (Bunker2 `-level_27` `door7F054FB4` propobj.c:13523, Depot `-level_30` prop.c:902, Surface2 `-level_43` loadobjectmodel.c:393): the objective sub-records `criteria_picture` (30), `criteria_roomentered` (32), `criteria_deposit` (33), `setup_objective_text` (35) each end in a `T *next` list pointer that the setup walk (`set_parent_cur_obj_*` / `setup_briefing_text_entry_parent`) writes unconditionally. On PC that pointer widens 4→8B and lands 8-aligned at offset 16 → struct is 24B/6w (N64 16/20). `d88_propdefs.py` emitted them at N64 size via the generic arm → the runtime 8-byte `->next` write clobbered the *next* record's header → propdef walk desynced, command indices drifted ~100, `linkedDoorOffset + arg2` resolved to the wrong record → door `linkedDoor` chain walked into garbage. | resolved — `d88_propdefs.py` PROPDEF_PC_BYTES[30/32/33/35]=24 + typed handler; `loadobjectmodel.c` sizepropdef PORT returns 6. Bunker2/Depot/Surface2 now PASS (13→16/21) |
 | D124 | crash class C2: fast3d bad texture pointer. **Jungle** (`0xabcd0824`): `gimgSyncCompiledGlobalDLs()` slot-detect keyed on the post-fixup marker, which `texLoad()` had already overwritten → compiled `globalDL_0xNNN` explosion DLs kept link-time `IMAGESEG` words → latent on every level, tripped by the first explosion-DL draw. **Facility** (`0x72181ee8`): separate — model/prop GDL from the `texLoadFromGdl()`/`sub_GAME_7F0762E0` relocation path writes non-16-aligned `dst` (N64 8B vs PC 16B `Gfx` stride mix in `objecthandler_2.c`), open D80/D82/D83 area | Jungle fixed (`port/src/gimgfixup.c`); Facility diagnosed, not fixed |
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
@@ -4354,6 +4355,39 @@ frames, was C3 CRASH at `propobj.c:13601`); Bunker1/Silo unregressed.
 has linked double-doors, Aztec's are singletons so it dodged it. Folded
 into the converter write-audit (C3 residual). Sweep: 12 → 13/21.
 All M-16 probes reverted, scratch files deleted, `d125_check.py` kept.
+
+**D126 (session M-17) — objective-subrecord `->next` pointer growth desyncs
+the propdef walk (C3r Bunker2 + C4 Depot + C6 Surface2).** The Bunker2
+`door7F054FB4` crash was NOT a DOOR-tail layout bug (the M-16b hypothesis).
+Instrumenting the `proplvreset2` first-loop walk showed `pdefIndex` drifting
+~100 ahead of the offline `convert_stream` record index; a byte dump proved
+the RAM propDefs matched the sidecar exactly *at load* but had record N+1's
+header zeroed *by the time the walk reached it*. Cause: four objective
+sub-record types — `criteria_picture` (30), `criteria_roomentered` (32),
+`criteria_deposit` (33), `setup_objective_text` (35) — are
+`{ s32 x N; T *next; }`. `set_parent_cur_obj_photograph/enter_room/
+deposited_in_room` and `setup_briefing_text_entry_parent` (`objective.c`)
+write `arg0->next` unconditionally while the setup walk visits each record,
+building a runtime linked list. On N64 `next` is a 4-byte word at the end of
+a 16/20-byte record — no spill. On x86-64 the pointer widens to 8B and the
+compiler 8-aligns it at offset 16, so the struct is 24B; the 8-byte
+`->next` store lands at record+16..24, clobbering the *following* record's
+`PropDefHeaderRecord` (type byte at +0x13). Walk desyncs → command indices
+drift → `setupDoor`'s `setupGetPtrToCommandByIndex(linkedDoorOffset + arg2)`
+returns the wrong record → `door->linkedDoor` chain walks into non-door
+memory → crash. Depot (`prop.c:902` tile-walk room) and Surface2
+(`PitemZ_entries[modelid]`, the C6 "D122 continuation") were the same
+desync landing on different downstream derefs. Fix:
+`tools_pc/d88_propdefs.py` `PROPDEF_PC_BYTES[30/32/33/35] = 24` + a typed
+handler emitting the leading s32 words then an 8-byte zero `next`;
+`src/game/loadobjectmodel.c` `sizepropdef` PORT returns 6 for those types
+(N64 `#else` kept). Regen'd all 21 sidecars, `d125_check.py` 21/21 MATCH.
+**Bunker2 `-level_27`, Depot `-level_30`, Surface2 `-level_43` now PASS**
+(91.5% / 79.8% / 70.4%); Bunker1/Silo/Aztec/Archives/Egypt/Train
+unregressed. Sweep 13 → 16/21. Generalisable quirk appended to
+`PORT-LEARNINGS.md` §A. Remaining crashes: C2 Runway/Facility (model-GDL
+align), C2m Jungle (`G_MTX`), C5 Control (BG portal), C7 Surface1
+(`sndSetupSound`).
 
 **D124-Facility addendum (session M-14 — partial, NOT fixed, out of time).**
 Re-instrumented with a `GE_C2GDL` probe in `sub_GAME_7F0762E0`

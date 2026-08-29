@@ -26,6 +26,19 @@ state.
   N64 via act-union@0x2C+84; act union moves to ~0x38 on PC).
 - **Open landmine:** raw hardcoded-offset accessors into `struct player`
   / `struct hand` — see `docs/AUDIT-M6-player-offsets.md`.
+- **D126 corollary — a trailing runtime list pointer in a ROM-serialized
+  record.** If a fixed-size ROM record ends with a `T *next` (or `*child`,
+  `*parent`) that game code *writes* while walking the setup stream
+  (linked-list build), that field is 4B/end-of-record on N64 but widens to
+  8B and 8-aligns on PC — the store spills past the N64 record size into
+  the *next* record and silently corrupts a polymorphic walk downstream
+  (type byte clobbered → wrong strides → wrong command indices → wrong
+  pointer resolution, crashing far away). Offline converter (`d*_emit.py`)
+  MUST emit these at the real PC `sizeof` with the pointer slot widened +
+  the matching `#ifdef PORT` `sizepropdef`/stride. Instances: `d88_propdefs.py`
+  types 30/32/33/35 (`criteria_*` / `setup_objective_text` `->next`),
+  22 (`TagObjectRecord.NextTag`, already handled). Check every record type
+  the walk can see for a `set_parent_*` / `*_entry_parent` writer.
 
 ## B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64
 

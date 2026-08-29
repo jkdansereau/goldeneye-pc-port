@@ -27,19 +27,20 @@ Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` 
 | Runway   | 35 | CRASH | `import_texture_i8` gfx_pc.cpp:821 (fault 0x721b8ee8) — same as Facility | **C2** |
 | Facility | 34 | CRASH | `import_texture_i8` gfx_pc.cpp:821 (fault 0x72181ee8) — model-GDL relocation align bug, D124, NOT fixed | **C2** |
 | Jungle   | 37 | CRASH | `gfx_sp_matrix` gfx_pc.cpp:1046 (fault 0x401c68e0) — C2 texture crash fixed (D124), now explosion-DL `G_MTX` (D75/matrix family) | **C2m** |
-| Aztec    | 28 | **PASS** 91.0% | — (C3 fixed, D125) | — |
-| Bunker2  | 27 | CRASH | `door7F054FB4` propobj.c:13536 (`var_s1->openPosition`, `var_s1`=0xffff.. from `linkedDoor`) | **C3r** |
-| Depot    | 30 | CRASH | `sub_GAME_7F00324C` prop.c:902 (`sp4C->room` after `walkTilesBetweenPoints`) | **C4** |
+| Aztec    | 28 | **PASS** 90.8% | — (C3 fixed, D125) | — |
+| Bunker2  | 27 | **PASS** 91.5% | — (C3r fixed, D126) | — |
+| Depot    | 30 | **PASS** 79.8% | — (C4 fixed, D126) | — |
 | Control  | 23 | CRASH | `sub_GAME_7F0BA2D4` bg.c:5723 (`portal_pts->numPoints`, via chrprop.c:62) | **C5** |
-| Surface2 | 43 | CRASH | `modelLoad` loadobjectmodel.c:393 (`PitemZ_entries[modelid].header->RootNode`) | **C6** |
+| Surface2 | 43 | **PASS** 70.4% | — (C6 fixed, D126) | — |
 | Surface1 | 36 | CRASH | `sndSetupSound` snd.c:653 (fault 0x56220001…, ascii-ish) | **C7** |
 
-**13 / 21 PASS.** D123 cleared C1 on all 6 (Dam/Frigate/Statue/Cradle/Streets
-PASS; Runway falls through to C2). D124 cleared Jungle's texture crash but
-it now hits an explosion-DL matrix crash. D125 (`d88_emit.py:374` 8-byte
-slice / 4-byte literal → boundpad-name blob drift) cleared C3-Aztec;
-Bunker2 falls through to a separate DOOR-tail `linkedDoor` layout bug
-(C3r). 8 crashes remain in 6 classes.
+**16 / 21 PASS.** D123 cleared C1 on all 6. D124 cleared Jungle's texture
+crash (now hits an explosion-DL matrix crash). D125 cleared C3-Aztec.
+**D126** (objective sub-record `->next` pointer widens 4→8B → 8-byte store
+clobbers the next propdef record's header → walk desync → wrong command
+indices) cleared **C3r Bunker2 + C4 Depot + C6 Surface2** in one fix
+(`d88_propdefs.py` types 30/32/33/35 → 24B/6w). 5 crashes remain in 4
+classes: C2 Runway+Facility, C2m Jungle, C5 Control, C7 Surface1.
 
 Notes: Streets passed this run but the C1 agent saw a `gfx_sp_matrix`
 crash — likely the same explosion-DL `G_MTX` (C2m) as Jungle, timing-
@@ -162,20 +163,16 @@ id from a propDef record). Fault addr 0x0. Files: `tools_pc/d88_propdefs.py`,
 crash on load, not silence. May be dodge-able with a narrow guard until
 audio lands. Files: `src/snd.c`, `port/src/` audio stubs.
 
-## Next (8 crashes, 6 classes — priority order)
+## Next (5 crashes, 4 classes — priority order)
 1. **C2** Runway + Facility — model-GDL relocation align bug in
    `objecthandler_2.c`/`texLoadFromGdl` (D80/D82/D83 area). Shared infra,
-   2 levels + likely helps Jungle/Streets. Biggest win.
-2. **C3r** Bunker2 — DOOR-tail `linkedDoorOffset`/`linkedDoor` layout in
-   `d88_propdefs.py` vs compiled PC `DoorRecord` (Aztec cleared by D125);
-   fold into the converter write-audit. Brief `docs/BRIEF-C3-C6-prop-model.md`.
-3. **C2m** Jungle (+ Streets intermittent) — explosion-DL `G_MTX`
-   (`gfx_sp_matrix`), D75/matrix family.
-4. **C6** Surface2 — `PitemZ_entries` modelid (D122/D123 continuation).
-5. **C5** Control — BG portal `offset_portal` resolve.
-6. **C4** Depot — BG tile/room table.
-7. **C7** Surface1 — `sndSetupSound`; parked-audio, may just need a narrow
-   load guard.
+   2 levels + likely helps Jungle. Biggest win.
+2. **C2m** Jungle — explosion-DL `G_MTX` (`gfx_sp_matrix`), D75/matrix
+   family.
+3. **C5** Control — BG portal `g_BgPortals[].offset_portal` unresolved/BE,
+   `bg.c:5723` via `chrprop.c:62`. BG sidecar (`d69_emit.py`).
+4. **C7** Surface1 — `sndSetupSound` `snd.c:653`; parked-audio, may just
+   need a narrow load guard until Phase 3.
 
 Re-run `tools_pc/level_sweep.sh` after each class fix; keep
 `-level_09`/`-level_20` green (`tools_pc/framediff.py`).

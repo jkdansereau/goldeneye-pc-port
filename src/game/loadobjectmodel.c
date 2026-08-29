@@ -66,11 +66,18 @@ s32 sizepropdef(PropDefHeaderRecord *pdef)
         case PROPDEF_OBJECTIVE_DEPOSIT_OBJECT:          return 2;
         case PROPDEF_GUARD_ATTRIBUTE:
         case PROPDEF_OBJECTIVE_COPY_ITEM:               return 3;
-        case PROPDEF_OBJECTIVE_START:
+        case PROPDEF_OBJECTIVE_START:                   return 4;
+        /* D126: criteria_picture / criteria_roomentered / criteria_deposit /
+         * setup_objective_text each end in a T*next list pointer that the setup
+         * walk (set_parent_cur_obj_* / setup_briefing_text_entry_parent) writes
+         * unconditionally.  The pointer widens 4->8B and lands 8-aligned at
+         * offset 16, so the PC struct is 24B / 6 words (N64: 16/20).  Converter
+         * emits the matching stride (tools_pc/d88_propdefs.py PROPDEF_PC_BYTES).
+         * N64 counts were: PHOTOGRAPH/ENTER_ROOM/WATCH_MENU 4, DEPOSIT_IN_ROOM 5. */
         case PROPDEF_OBJECTIVE_PHOTOGRAPH:
         case PROPDEF_OBJECTIVE_ENTER_ROOM:
-        case PROPDEF_WATCH_MENU_OBJECTIVE_TEXT:         return 4;
-        case PROPDEF_OBJECTIVE_DEPOSIT_OBJECT_IN_ROOM:  return 5;
+        case PROPDEF_WATCH_MENU_OBJECTIVE_TEXT:
+        case PROPDEF_OBJECTIVE_DEPOSIT_OBJECT_IN_ROOM:  return 6;
         case PROPDEF_LINK:
         case PROPDEF_SWITCH:
         case PROPDEF_TAG:

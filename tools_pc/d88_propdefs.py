@@ -138,12 +138,12 @@ PROPDEF_PC_BYTES = {
     23: 16,   # OBJECTIVE_START  (4w, no serialized pointer)
     24: 4,    # OBJECTIVE_END
     25: 8, 26: 8, 27: 8, 28: 8, 29: 8,  # OBJ_* (2w)
-    30: 16,   # OBJ_PHOTOGRAPH (4w serialized, lastprop* not serialized)
+    30: 24,   # OBJ_PHOTOGRAPH  (D126: criteria_picture, trailing ->next widens)
     31: 4,    # OBJ_NULL
-    32: 16,   # OBJ_ENTER_ROOM
-    33: 20,   # OBJ_DEPOSIT_IN_ROOM
+    32: 24,   # OBJ_ENTER_ROOM  (D126: criteria_roomentered, trailing ->next widens)
+    33: 24,   # OBJ_DEPOSIT_IN_ROOM (D126: criteria_deposit, trailing ->next widens)
     34: 12,   # OBJ_COPY_ITEM (3w)
-    35: 16,   # WATCH_MENU_OBJ_TEXT (4w)
+    35: 24,   # WATCH_MENU_OBJ_TEXT (D126: setup_objective_text, trailing ->next widens)
     37: 48,   # RenameObjectRecord
     38: 32,   # LockDoorRecord
     39: 208,  # VehichleRecord (D122: 144 prefix + widened tail)
@@ -333,6 +333,26 @@ def convert_record(src, so, type_byte):
             else:
                 out[pc:pc + 4] = _bswap32(w); pc += 4
         assert pc <= pcb, (type_byte, pc, pcb)
+        return bytes(out)
+
+    if type_byte in (30, 32, 33, 35):
+        # D126: objective sub-records with a trailing runtime linked-list pointer
+        #   30 criteria_picture / 32 criteria_roomentered /
+        #   33 criteria_deposit / 35 setup_objective_text
+        # all share the shape `{ s32 x N; T *next; }`.  The `next` word is a
+        # runtime list pointer -- set_parent_cur_obj_* / setup_briefing_text_
+        # entry_parent overwrite it unconditionally during the setup walk -- so
+        # its ROM value is don't-care.  On PC the pointer widens 4->8B and lands
+        # 8-aligned at offset 16 (compiler pads the 3-s32 variants), making the
+        # struct 24B / 6 words (was 16/20 on N64).  Without the grow, that 8-byte
+        # write clobbers the next record's header -> propdef walk desyncs, command
+        # indices drift, linked-door resolution lands on the wrong record
+        # (Bunker2 -level_27 crash in door7F054FB4).  Emit the leading s32 words
+        # then 8 zero bytes for `next`.
+        out[0:4] = _hdr_word(src[so:so + 4])
+        for i in range(1, n64w - 1):
+            out[4 * i:4 * i + 4] = _bswap32(src[so + 4 * i: so + 4 * i + 4])
+        # next* @ offset 16 already zero (bytes 12..15 = alignment pad, also zero)
         return bytes(out)
 
     # ---- generic: header-only records (objectives, END, DOOR_SCALE, ...) ----
