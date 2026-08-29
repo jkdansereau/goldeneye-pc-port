@@ -3802,6 +3802,69 @@ Golden set at `tools_pc/golden/frame_0002{00,320,440}.png` is the D115
 baseline — since it is a nondeterministic capture, only structural mode
 is meaningful against it today.
 
+**D118 (session M-9) — SDL input layer implemented (Phase 3).**
+`port/src/input.c` was an unimplemented stub; input only worked via
+`libultra.c`'s `contSnapshotFromKeyboard()` (Z/Space=A, X=B, LCtrl=Z,
+arrows=stick, WASD=D-pad — no C-buttons, no mouse, no gamepad).
+
+Implemented a focused `input.c` (NOT a full port of pd_port's 1551-line
+module — GE's menu/config code never calls that VK/bind-string API).
+Provides `inputInit/inputUpdate/inputDestroy/inputGetNumControllers`
+plus two helpers for `libultra.c`: `inputConnectedMask()` and
+`inputComputePad(idx, *sx, *sy) -> u16 button`. The N64 button bits are
+duplicated as `GE_CONT_*` in `input.c` rather than `#include <PR/os.h>`
+(its `u8 errno;` field collides with `<errno.h>`'s macro; libultra.c
+only gets away with it via a `#pragma push_macro` dance).
+
+*Binding scheme.* Kbd/mouse (controller 0): WASD or arrows = analog
+stick (move/strafe); mouse motion = C-buttons (aim, see bridge below);
+LMB/LCtrl = Z (fire); RMB/LShift = R (aim mode); Space/Z/E = A;
+X/R/F = B; Q = L; Enter/Tab = Start. Gamepad (SDL_GameController; pad 0
+merges into controller 0, pads 1-3 → controllers 1-3): left stick =
+stick, right stick = C-buttons (digital, 50 % threshold), RT = Z,
+LT = R, A/X = A, B/Y/RB = B, LB = L, D-pad = D-pad, Start = Start.
+
+*Mouse-look → C-button bridge (the subtle part).* GE aims with digital
+C-buttons and has no analog-aim hook reachable without editing `src/`.
+`inputUpdate()` integrates the relative-mouse delta (× `MouseAimSpeed`/
+100) into a per-axis signed accumulator clamped to ±8. Each controller
+poll `inputComputePad()` emits the matching C-button while |accum| ≥ 0.5
+and drains one unit — so a flick holds the C-button for several frames
+(proportional dwell) instead of a single blip. Limitations: still
+digital (GE's own accel curve makes turn speed non-linear in mouse
+speed); fast flicks saturate at ~8 frames of turn; diagonals limited to
+the 8 C-button combos. A real analog path would need an `#ifdef PORT`
+hook in `bondview.c` — left as TODO.
+
+*Wiring.* `contSnapshotFromKeyboard()` in `libultra.c` (SI section) now
+just calls `inputUpdate()` then marshals `inputComputePad()` output into
+`g_contPad[]`/`g_contStatus[]` for all `MAXCONTROLLERS`, and sets
+`g_contConnected` from `inputConnectedMask()`. It is still driven by
+`osContStartReadData`/`osContStartQuery` (once per game logic tick) — no
+new frame hook in `video.c` was needed. `osContGetReadData()` now
+`memcpy`s the whole `g_contPad` array (N64 semantics: one pad per
+channel) instead of only controller 0 — joy.c passes a
+`MAXCONTROLLERS`-long array. `inputInit()` opens the gamepad subsystem +
+all connected controllers and enables relative mouse mode.
+
+*Config.* `ge007.ini` `[Input]` `MouseEnabled` (0/1), `MouseAimSpeed`
+(1..500, default 50), `MouseInvertY` (0/1), via `configRegisterInt` in a
+`PD_CONSTRUCTOR`. `config.c` has no float support so speed is an int
+percent. Key/button REBINDING is not wired (would need the pd_port
+bind-string system or a new mini-parser) — hardcoded scheme + TODO.
+
+*Status.* Build GREEN (`ntsc-final`). Boots `-level_09` crash-free for
+35 s, 900+ frames, `input: ready (mask=0x1, 1 controller(s))` logged.
+`GE_INPUTLOG=1` gates a per-poll `sysLogPrintf` of the OSContPad when
+button/stick are nonzero (zero-cost when unset, kept). Live input
+UNTESTED (headless agent) — needs a human pass: see
+`docs/HANDOFF.md`. Confidence: build/wiring HIGH; in-game feel of the
+mouse→C-button bridge MEDIUM (aim speed tuning likely needed); gamepad
+UNVERIFIED (none present in build env).
+TODO: (1) human playtest + tune `MouseAimSpeed`; (2) key rebinding;
+(3) gamepad hotplug (opened only at init today); (4) optional analog-aim
+`#ifdef PORT` hook in bondview.c for true mouse-look.
+
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
 `worktree/data → main/data` followed the junction and deleted the real

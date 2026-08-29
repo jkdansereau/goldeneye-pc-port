@@ -130,6 +130,22 @@ design in §F D117 — NOT implemented. Added `tools_pc/framediff.py`
 to refresh goldens). Validated against the D115 golden set. No C changes,
 no probes left in tree.
 
+**Session M-9 (Phase 3) — see §F D118.** SDL input layer implemented.
+`port/src/input.c` is now real: keyboard+mouse and SDL_GameController,
+mapped to GE's N64 pad (analog stick = move, C-buttons = aim, mouse-look
+bridged to digital C-buttons via a clamped accumulator, RMB/LT = aim
+mode, LMB/RT = fire). `libultra.c`'s SI section delegates to it (single
+source of controller state; still driven by `osContStartReadData`, no
+new frame hook). Config: `ge007.ini [Input]` MouseEnabled/MouseAimSpeed/
+MouseInvertY. Build GREEN, boots `-level_09` crash-free 35 s.
+**Owed: a human playtest** — live input is untested from the headless
+agent. Manual checklist: (1) WASD moves Bond, mouse turns/looks (tune
+`MouseAimSpeed` in ge007.ini if too fast/slow), LMB fires, RMB enters
+aim mode, Enter opens the pause menu; (2) plug an Xbox pad — left stick
+moves, right stick aims, triggers fire/aim; (3) `GE_INPUTLOG=1` prints
+each nonzero OSContPad poll. Rebinding + gamepad hotplug are TODO (§F
+D118).
+
 **Session M-6 — see §F D113/D114/D115, `docs/PLAN-M6-playable.md`,
 `docs/AUDIT-M6-player-offsets.md`, `docs/AGENT-WORKFLOW.md`,
 `docs/PORT-LEARNINGS.md`.** D113: portal BFS is correct, not the void.

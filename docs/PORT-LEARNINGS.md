@@ -48,6 +48,25 @@ through a converter or a runtime bswap fixup reads scrambled.
 - **Rule:** prefer an offline sidecar converter (D43, D69, D88 pattern,
   `tools_pc/d*_emit.py`) over a runtime fixup for a whole format.
 
+## C2. Port-layer / SDL shims
+
+- `#include <PR/os.h>` in a port `.c`/`.h` that also sees `<errno.h>`
+  breaks: `OSContStatus`/`OSContPad` have a `u8 errno;` field vs errno.h's
+  macro. libultra.c wraps the include in `#pragma push_macro("errno")` /
+  `#undef errno`; cleaner for a new module is to duplicate the handful of
+  `CONT_*` bits it needs (D118 `input.c`).
+- GE aims with **digital C-buttons**, no analog-aim hook outside `src/`.
+  Mouse-look is bridged by integrating the relative-mouse delta into a
+  clamped per-axis accumulator and emitting a C-button per poll while
+  |accum| ≥ 0.5, draining one unit → proportional press *dwell*. Non-linear
+  (GE's own accel curve) but playable (D118).
+- `osContGetReadData(pad)` must fill **one OSContPad per channel**
+  (`MAXCONTROLLERS`-long array), not just controller 0 — joy.c passes the
+  whole `samples[i].pads` array (D118).
+- Controller state has one source: `port/src/input.c`. `libultra.c`'s SI
+  section marshals `inputComputePad()` into `g_contPad[]`; it is driven by
+  `osContStartReadData` (per logic tick), no separate `video.c` frame hook.
+
 ## D. N64 hardware idioms fast3d does not emulate
 
 - Z buffer cleared by pointing the colour image at it + fill-rect → does
