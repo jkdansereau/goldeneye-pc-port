@@ -42,11 +42,16 @@ Non-growing regions (bswap only, or pure byte passthrough, no delta beyond
 the cumulative shift from growth ahead of them in the file):
   - propDefs: a polymorphic byte stream of ~40 prop-definition record types
     selected by a 1-byte `type` tag (sizepropdef() walk in
-    loadobjectmodel.c). NOT byte-swapped or resized by this converter --
-    the walk itself only reads the u8 `type` tag (endian-irrelevant) and
-    calls sizepropdef(), whose native sizeof() is correct as long as PC/N64
-    struct sizes match (out of scope here -- separate finding, D88.4).
-    Treated as an opaque passthrough blob (relocated, bytes untouched).
+    loadobjectmodel.c). STALE COMMENT REMOVED: this is NO LONGER an opaque
+    passthrough. Since D88.4 / D122 / D123 the stream is byte-swapped AND
+    pointer-widened per-record by d88_propdefs.convert_stream() (imported
+    below); each record grows to its native PC struct size and sizepropdef()
+    has matching `#ifdef PORT` strides. See the "convert the propDefs
+    polymorphic record stream" block in build_output().
+    KNOWN BUG (D125, unfixed as of M-13): the converted blob does not land
+    correctly in the emitted file for some levels (Aztec/Bunker2/Surface2) --
+    suspect the pass-1 delta / region-`end` handling here (~L308-340), NOT
+    convert_stream itself. See PCPortResearch.md D125 + docs/LEVEL-STATUS.md.
   - waypoint.neighbours / waygroup.neighbours / waygroup.waypoints /
     PathRecord.waypoints target arrays: plain `s32` ID lists (NOT file
     offsets -- graph node indices), NULL/-1 terminated, walked with real
