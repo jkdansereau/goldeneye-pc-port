@@ -3334,11 +3334,40 @@ bare `G_CLEAR_DEPTH_EXT` Gfx word and returns, skipping the N64 idiom
 colours, sky down to 16 %** — recognisable BUNKER1: textured walls,
 storage racks, floor. 70 s run, crash-free.
 
-**Remaining BUNKER1 render issues (post-D105):** (1) a solid dark-blue
-wedge lower-right — sky showing through a geometry gap (unloaded room /
-missing wall / portal not culled); (2) a blurry brown band across the
-top ~third (mis-rendered ceiling texture, or texfilter/LOD). Then the
-`struct player` weapon-model / offset pass, then D75(b) skeletal models.
+**D106 (session M-4) — portal near-plane projection garbage culled the
+next room, FIXED.** After D105, many camera angles in BUNKER1 showed a
+large flat sky-fill void where an adjacent room should be visible
+through a doorway. A `GE_D104` probe (per-frame visible-room list) showed
+the portal-visibility BFS returning only 1–3 rooms; a `GE_D106` probe in
+`sub_GAME_7F0B7F84` showed the plane-side metric cull (`bg.c:4135/4144`)
+and `zfar` (10000, fine) were NOT the cause — portals were dying in
+`sub_GAME_7F0B5864`'s screen-space projection. When the player straddles
+a portal plane, `sub_GAME_7F0B5528` emits z==0 near-plane clip points and
+`transform3Dto2DWithZScaling` (`bondview.c:730`) uses `inv_z = -1e20`,
+projecting them to ±1e20-scale coords. On N64 the two clip points
+bracket the view symmetrically → the degenerate-box check (`bg.c:1713`)
+or the downstream `screensize` clamp yields a full-screen box and the
+room is kept. On x86-64 the exact garbage can come back `min > max` on
+only one axis (or non-finite), slipping past `bg.c:1713` → portal
+dropped → room vanishes → sky-fill through the doorway. Fix: `#ifdef
+PORT`, any wildly out-of-range / non-finite projected bound is treated
+as degenerate → full `screensize` (matches the N64 outcome). Verified:
+per-frame visible-room count 1–3 → 2–4; rooms past near doorways (r11
+from r27, etc.) now render. `c_screenleft/top/halfwidth/halfheight/
+recipscalex/recipscaley` were all confirmed correct (0/10/160/110/
+190.53/190.53), so the projection *fields* are fine — this was purely
+the z==0 edge case. `GE_D104` probe (visible-room list) left in `bg.c`,
+gated + capped; `GE_D106` probes removed.
+
+**Remaining BUNKER1 render issues (post-D106):** (1) a bounded central
+sky gap at some corridor ends — smaller than pre-D106, likely a
+dropped/degenerate polygon in the D85 room-GDL widening rather than
+visibility; (2) a blurry grey wall/ceiling surface in the storage rooms
+(4 dark blobs, heavily magnified) — a texture-dimension or CI-8/TLUT
+decode issue in `texLoadFromGdl` for a specific room texture (room 1
+uses the same CI-8 + segment-7 TLUT pattern and renders fine, so it is
+texture-specific). Then the `struct player` weapon-model / offset pass,
+then D75(b) skeletal models.
 
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*

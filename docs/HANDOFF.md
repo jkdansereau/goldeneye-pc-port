@@ -25,11 +25,22 @@ emits `G_CLEAR_DEPTH_EXT`. See §F "D104"/"D105". BUNKER1 now renders
 recognisably — textured walls, storage racks, floor (2585 colours, sky
 16 %), 70 s crash-free.
 
+**D106 (session M-4)** — the big sky-void through doorways was the portal
+BFS dropping the next room: a portal straddling the camera near-plane
+projects z==0 clip points to ±1e20 screen coords, and on x86-64 that
+garbage came back `min>max` on one axis, slipping past the
+degenerate-box check that on N64 clamps it to full-screen. PORT guard in
+`sub_GAME_7F0B5864` treats non-finite / out-of-range bounds as
+full-screen. Visible rooms/frame 1–3 → 2–4. See §F "D106".
+
 **Real remaining work, in order:**
-1. **BUNKER1 render polish** — a dark-blue wedge lower-right (sky through
-   a geometry gap: unloaded room / missing wall / portal not culled) and
-   a blurry brown band across the top ~third (mis-rendered ceiling tex /
-   texfilter). `GE_D104` room-render-pass probe + `GE_D85DUMP` in `bg.c`.
+1. **BUNKER1 render polish** (residual after D106) — (a) a *bounded*
+   central sky gap at some corridor ends: likely a dropped/degenerate
+   polygon in the D85 room-GDL widening; (b) a blurry grey wall/ceiling
+   surface in the storage rooms (heavily magnified texture): a
+   texture-dimension / CI-8+TLUT decode issue in `texLoadFromGdl` for a
+   specific texture (room 1 uses the same pattern and is fine).
+   `GE_D104` visible-room probe + `GE_D85DUMP` in `bg.c`.
 2. **`struct player` offset pass** — weapon model doesn't draw; gate to
    playability (landmine below + D102).
 3. **D75(b)** — animated/skeletal character models (see §F "D75" and
