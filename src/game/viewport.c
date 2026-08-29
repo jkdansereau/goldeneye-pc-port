@@ -89,6 +89,21 @@ Gfx *zbufInit(Gfx *gdl) {
 Gfx *zbufClearCurrentPlayer(Gfx *gdl) {
     s32 start_x;
     s32 end_x;
+#ifdef PORT
+    /* D105: fast3d clears only the colour buffer at frame start
+     * (gfx_pc.cpp: clear_framebuffer(true, false)) and treats the N64
+     * "point the colour image at the Z buffer and FILL it" idiom below as a
+     * no-op (gfx_dp_fill_rectangle bails when colour==zbuf; here the K0/masked
+     * address encodings don't even match, so it would instead scribble the
+     * packed-Z fill colour onto the real framebuffer). Without a real depth
+     * clear every in-level frame renders against a stale/garbage depth buffer
+     * and all room geometry fails the Z test -> only skyRender's background
+     * fill survives. Emit the port's dedicated depth-clear opcode instead. */
+    gdl->words.w0 = _SHIFTL(0x44 /* G_CLEAR_DEPTH_EXT */, 24, 8);
+    gdl->words.w1 = 0;
+    gdl++;
+    return gdl;
+#endif
     gDPPipeSync(gdl++);
     gDPSetRenderMode(gdl++, G_RM_NOOP, G_RM_NOOP2);
     gDPSetColorImage(gdl++, G_IM_FMT_RGBA, G_IM_SIZ_16b, z_buffer_width, OS_K0_TO_PHYSICAL(z_buffer));

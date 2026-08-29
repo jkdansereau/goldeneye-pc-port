@@ -16,10 +16,20 @@ single native-resolution/viewport bug (`osViSetMode` hard-coded height
 480 → `RATIO_Y` half of `RATIO_X`), not per-model. Frame is now full
 (91.7 %, correct letterbox + HUD placement). See §F "D103".
 
-**What that revealed:** BUNKER1 renders only a **flat dark-blue fill +
-HUD** — the blue was always the whole picture, just squished. So the real
-remaining work, in order:
-1. **D85 — room geometry** (walls/floor draw as nothing; `GE_D85DUMP`).
+**D105 (session M-4) fixed room geometry** — `zbufClearCurrentPlayer`
+(`viewport.c`) used the N64 "fill the Z buffer as a colour image" idiom,
+which fast3d doesn't emulate, and nothing emitted `G_CLEAR_DEPTH_EXT`, so
+the depth buffer was never cleared and all ~160 k room triangles failed
+the Z test (only `skyRender`'s background fill survived). PORT branch now
+emits `G_CLEAR_DEPTH_EXT`. See §F "D104"/"D105". BUNKER1 now renders
+recognisably — textured walls, storage racks, floor (2585 colours, sky
+16 %), 70 s crash-free.
+
+**Real remaining work, in order:**
+1. **BUNKER1 render polish** — a dark-blue wedge lower-right (sky through
+   a geometry gap: unloaded room / missing wall / portal not culled) and
+   a blurry brown band across the top ~third (mis-rendered ceiling tex /
+   texfilter). `GE_D104` room-render-pass probe + `GE_D85DUMP` in `bg.c`.
 2. **`struct player` offset pass** — weapon model doesn't draw; gate to
    playability (landmine below + D102).
 3. **D75(b)** — animated/skeletal character models (see §F "D75" and

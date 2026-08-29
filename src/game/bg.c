@@ -634,6 +634,36 @@ Gfx *sub_GAME_7F0B3C8C(Gfx *gdl)
                 }
  
                 gSPMatrix(gdl++, osVirtualToPhysical((void*)get_BONDdata_field_10E0()), (G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION));
+#ifdef PORT
+                /* TEMP D104: room render-pass geometry-visibility probe. */
+                if (getenv("GE_D104")) {
+                    static s32 d104n = 0;
+                    if (d104n < 40) {
+                        s32 *mp = (s32 *)(uintptr_t)(u32)get_BONDdata_field_10E0();
+                        s32 *pp = (s32 *)(uintptr_t)(u32)(uintptr_t)currentPlayerGetProjectionMatrix();
+                        osSyncPrintf("D104 room=%d bbox=(%d,%d)-(%d,%d) view l=%d t=%d x=%d y=%d screensize=(%d,%d)-(%d,%d)\n",
+                            dword_CODE_bss_8007FFA0[j].roomid,
+                            (s32)dword_CODE_bss_8007FFA0[j].bbox.min.x, (s32)dword_CODE_bss_8007FFA0[j].bbox.min.y,
+                            (s32)dword_CODE_bss_8007FFA0[j].bbox.max.x, (s32)dword_CODE_bss_8007FFA0[j].bbox.max.y,
+                            (s32)g_CurrentPlayer->viewleft, (s32)g_CurrentPlayer->viewtop,
+                            (s32)g_CurrentPlayer->viewx, (s32)g_CurrentPlayer->viewy,
+                            (s32)g_CurrentPlayer->screensize.min.x, (s32)g_CurrentPlayer->screensize.min.y,
+                            (s32)g_CurrentPlayer->screensize.max.x, (s32)g_CurrentPlayer->screensize.max.y);
+                        if (mp) {
+                            s32 r;
+                            for (r = 0; r < 4; r++) {
+                                f32 e0 = (f32)(s32)((mp[r*2+0] & 0xffff0000) | ((u32)mp[8+r*2+0] >> 16)) / 65536.0f;
+                                f32 e1 = (f32)(s32)((mp[r*2+0] << 16) | (mp[8+r*2+0] & 0xffff)) / 65536.0f;
+                                f32 e2 = (f32)(s32)((mp[r*2+1] & 0xffff0000) | ((u32)mp[8+r*2+1] >> 16)) / 65536.0f;
+                                f32 e3 = (f32)(s32)((mp[r*2+1] << 16) | (mp[8+r*2+1] & 0xffff)) / 65536.0f;
+                                osSyncPrintf("D104   row%d = % .4f % .4f % .4f % .4f\n", r, e0, e1, e2, e3);
+                            }
+                        }
+                        osSyncPrintf("D104   f10E0=%p projm=%p\n", (void *)mp, (void *)pp);
+                        d104n++;
+                    }
+                }
+#endif
                 gdl = fogSetRenderFogColor(
                     bgScissorCurrentPlayerViewF(
                         gdl++,

@@ -3295,10 +3295,50 @@ SCREEN_HEIGHT_MAX(480)`, `fr.c:417`) with a `pal ? 272 : 240` fallback;
 `-level_09` `GE_PCDUMP` frames go from ~46 % / lower-band to **91.7 % /
 bbox (0,20)-(639,459)** — the full 10..230 viewport ×2 with correct
 letterbox, HUD ammo counter correctly placed top-right. Purely a
-transform fix — no per-model work. **Reveals the next layer:** BUNKER1
-still shows only a flat dark-blue fill + HUD, i.e. **no room geometry
-(D85) and no weapon model draw at all** — the blue was always the whole
-picture, just squished. Next: D85 room GDL (walls/floor not drawing).
+transform fix — no per-model work.
+
+**D104 (session M-4) — investigation, folded into D105.** Chased "flat
+dark-blue fill + HUD, no room geometry" after D103. Ruled out (probes +
+subagent trace): segment 0x0E vtx resolution, room-DL chaining/execution,
+per-room scissor (`GE_D104` shows bbox `(1,10)-(319,230)` full-view,
+`viewleft/top/x/y = 0/10/320/220`), the view-projection matrix
+(`field_10E0` decodes to a sane perspective×lookat — rows ≈ unit-scale
+3×3, translate row `518,-22,430,459`), and the room GDL decode (valid
+F3DEX2, no embedded `G_MTX`). A temporary fast3d tri counter proved
+~160 k room triangles WERE being submitted to GL each frame — yet the
+final image was 90 % exactly `(0,16,65)` (BUNKER1's `env->{Red,Green,
+Blue}` sky-fill from `skyRender`, `sky.c:326`, the 1P no-clouds
+`gDPFillRectangle` path). Geometry drawn, invisible → depth. `GE_D104`
+room-render-pass probe left in `bg.c` (capped, gated).
+
+**D105 (session M-4) — depth buffer never cleared, FIXED.**
+`zbufClearCurrentPlayer` (`src/game/viewport.c:89`) clears the N64 Z
+buffer with the classic "point the colour image at the Z buffer and
+`gDPFillRectangle` it with a packed-Z fill colour" idiom. fast3d does
+**not** emulate that: `gfx_dp_fill_rectangle` (`gfx_pc.cpp:2281`) bails
+when `color_image_address == z_buf_address` on the assumption the depth
+clear already happened via `glClear` — but the frame-start clear is
+`clear_framebuffer(true, false)` (`gfx_pc.cpp:2855`), **colour only**.
+fast3d expects the game to emit `G_CLEAR_DEPTH_EXT` (opcode `0x44`,
+`gfx_pc.cpp:2678`) for a real depth clear, and **nothing in GE ever
+emits it** (grep-confirmed). Worse, here the two addresses don't even
+match (`gDPSetDepthImage(z_buffer & ~0x3F)` vs `gDPSetColorImage(
+OS_K0_TO_PHYSICAL(z_buffer))`), so the bail isn't taken and the packed-Z
+fill colour gets scribbled onto the real framebuffer instead. Net: every
+in-level frame renders against a stale/garbage depth buffer, all ~160 k
+room triangles fail the Z test, and only `skyRender`'s background fill
+survives. Fix: `#ifdef PORT` branch in `zbufClearCurrentPlayer` emits a
+bare `G_CLEAR_DEPTH_EXT` Gfx word and returns, skipping the N64 idiom
+(which is a no-op / actively harmful in fast3d anyway). Verified
+`-level_09`: frame goes from 90 % flat sky-colour to **2585 distinct
+colours, sky down to 16 %** — recognisable BUNKER1: textured walls,
+storage racks, floor. 70 s run, crash-free.
+
+**Remaining BUNKER1 render issues (post-D105):** (1) a solid dark-blue
+wedge lower-right — sky showing through a geometry gap (unloaded room /
+missing wall / portal not culled); (2) a blurry brown band across the
+top ~third (mis-rendered ceiling texture, or texfilter/LOD). Then the
+`struct player` weapon-model / offset pass, then D75(b) skeletal models.
 
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
