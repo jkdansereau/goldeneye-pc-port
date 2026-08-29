@@ -54,20 +54,34 @@ screens draw content. See §F "D108–D112".
 complete leaf DLs (~15k/run, valid ptrs; fast3d transforms them). The
 storage-room void is NOT closed doors failing to render.
 
-**Real remaining work, in order:**
-1. **Portal-BFS under-reach in the storage area** — per-frame visible
-   room count drops to 1–2 in rooms 27–29 (`GE_D104`/probes now removed).
-   `projmatrix` + `screensize` verified valid; the 200→3 `g_RoomLoadBudget`
-   drop is intentional N64 FP-cam behaviour. Likely `bgQueuePortalTraversal`
-   / `bgDetermineVisibleRooms` portal-projection. This is the void.
-2. **Character pose / orientation polish** — post-D112 a BUNKER guard
-   renders but appears inverted; suspect a matrix-handedness / lookat
-   sign item in the joint base matrix. Also the mispositioned static
-   crate prop (top-left in the control room).
-3. **`struct player` offset pass** — weapon model doesn't draw; gate to
-   playability (landmine below + D102).
+**Real remaining work, in order (updated session M-6):**
+1. **Shared fast3d screen mirror (D114 → D75 class)** — the single most
+   likely cause of: inverted BUNKER guard, mispositioned Nintendo logo,
+   mirrored front-end text, AND the storage-room "void" (D113 proved the
+   portal BFS is correct — the void is the closed-door models obj 153/154
+   rendering outside their doorway). The joint-matrix chain and the model
+   converter were **verified clean** in M-6 (see §F D114); the residual is
+   an X (± Y) flip in `port/fast3d`'s viewport / MP-matrix path vs GE's
+   left-handed screen convention (`gmain.s` / `bondview.c:726`). Suspects:
+   `gfx_calc_and_set_viewport` / `gfx_adjust_viewport_or_scissor`
+   (`gfx_pc.cpp:1739/1771`), `MP_matrix` (`gfx_pc.cpp:1122`). **Rebuild
+   with D112+D115 and eyeball a guard first** — D115 stops a per-shot
+   64-byte scribble that could itself present as "inverted".
+2. **Weapon model doesn't draw (D115 #5)** — D102 pointed `weaponModel.
+   render_pos` at a transient `dynAllocate` arena; on N64 it aliased the
+   persistent `hand->mtxlist`. Gate to playability. May fold into #1.
+3. **Rest of the `struct player` offset pass** — D115 fixed the HIGH
+   `gunfire.c` THROW* bugs; #6 (watch-preview Model pool) + the broader
+   audit remain (`docs/AUDIT-M6-player-offsets.md`).
 4. Add an f32 value spot-check to `d43_emit.py`'s verify pass (it only
-   checks pointers/opcodes today — this bug passed "ALL CHECKS PASSED").
+   checks pointers/opcodes today — the D112 bug passed "ALL CHECKS PASSED").
+
+**Session M-6 (this session) — see §F D113/D114/D115, `docs/PLAN-M6-playable.md`,
+`docs/AUDIT-M6-player-offsets.md`, `docs/AGENT-WORKFLOW.md`,
+`docs/PORT-LEARNINGS.md`.** D113: portal BFS is correct, not the void.
+D114: matrix chain + converter verified clean, residual = shared fast3d
+mirror (open). D115: player raw-offset audit + `gunfire.c` THROW* fix
+(uncommitted). Build green.
 
 **This session's fixes (all committed, master):**
 

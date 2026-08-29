@@ -4957,9 +4957,23 @@ CasingRecord* casingCreate(ModelFileHeader* header, Mtxf* mtx)
 #define THROWPOS_PREV_OFFSET 0xB48
 #endif
  
+#ifdef PORT
+/* D115: these were raw byte offsets into `struct player` (via `handoffset =
+ * handnum * sizeof(struct hand)` + a hardcoded intra-hand offset). Both the
+ * stride and the base offset are N64-sized; on x86-64 `struct player` and
+ * `struct hand` are much larger (D98/D100/D102), so the raw math lands inside
+ * the inline gait Model / bondhead-matrix region and `matrix_4x4_copy(THROWMTX,
+ * ..)` scribbles 64 bytes of live state on every shot. The offsets are exactly
+ * `hands[handnum].throw_item_pos_related[_prev]` and its translation row, so
+ * use the field accessors directly. See docs/AUDIT-M6-player-offsets.md. */
+#define THROWMTX     (&g_CurrentPlayer->hands[handnum].throw_item_pos_related)
+#define THROWPOS(k)  (g_CurrentPlayer->hands[handnum].throw_item_pos_related.m[3][k])
+#define THROWPREV(k) (g_CurrentPlayer->hands[handnum].throw_item_pos_related_prev.m[3][k])
+#else
 #define THROWMTX     ((Mtxf *) ((u8 *) g_CurrentPlayer + handoffset + THROWMTX_OFFSET))
 #define THROWPOS(k)  (((f32 *) ((u8 *) g_CurrentPlayer + handoffset + THROWPOS_OFFSET))[k])
 #define THROWPREV(k) (((f32 *) ((u8 *) g_CurrentPlayer + handoffset + THROWPOS_PREV_OFFSET))[k])
+#endif
  
 extern const f32 g_CasingSwitchScale;
 extern const f32 g_PistolCasingHorizontalSpeed;

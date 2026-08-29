@@ -3441,6 +3441,88 @@ values — a float spot-check is worth adding. Probes `GE_D96GATE /
 D96DL / D108 / D109 / D110 / D111 / D112 / GE_TRICNT` were all removed
 after the fix.
 
+**D113 (session M-6) — "portal-BFS under-reach / storage-room void" was a
+STALE premise; there is no BFS bug.** A subagent dumped BUNKER1's runtime
+portal table and traced every accept/reject decision of `sub_GAME_7F0B7F84`
+(non-EU/LEFTOVERDEBUG copy, `bg.c:4091`; queue = 5-arg `bgQueuePortalTraversal`
+`bg.c:3843` — confirmed the compiled ones). With the camera in room 29 the
+BFS visits portals 25,26,27,28: portals 25 (r29↔r26) and 26 (r29↔r27)
+carry `PORTALFLAG_DISABLED` (`controlbytes1 & 1`) because door props obj
+153/154 spawn `openPosition==0` → `doorDeactivatePortal`, and nothing
+re-opens them in the fly-through — so they are culled at `bg.c:4138`, a
+site that is **not** `#ifdef PORT`-guarded and behaves identically on N64.
+Result: a stable 3 visible rooms {29,28,25} (D104 probe agrees), which is
+the correct answer for this topology, not "1–2". No s32/pointer
+truncation, no `min>max`/NaN reaching an accept flip, no depth-cap
+(`D_8004489C=0xF`) or visited-set (`>=9`) early-out firing. `sub_GAME_7F0B5864`
+is fine post-D106. **The void = the two closed-door models (obj 153/154)
+filling rooms 26/27's doorways not rendering where they should** —
+`GE_D96` shows room 29's prop pass emits their leaf DLs, so the door
+geometry exists but its world transform puts it outside the doorway,
+leaving the wall hole unoccluded → sky. This is the D114 model-transform
+track, not visibility. No `bg.c` change. Probes reverted.
+
+**D114 (session M-6) — character inversion / mispositioned crate:
+OPEN, matrix chain verified sane, residual is a shared fast3d mirror
+(D75 class).** A subagent statically traced the whole joint-matrix chain
+(`chr.c:2564` → `subcalcmatrices` → `modelUpdateMatrices` →
+`process_02_position` `model.c:1662` → `modelBuildGroupMatrices`
+`model.c:1318` → `matrix_4x4_multiply_homogeneous` →
+`bondviewTransformManyPosToViewMatrix` → `matrix_4x4_f32_to_s32`
+`matrixmath.c:495` → `gfx_sp_matrix`) and an env-gated `GE_D114` probe
+(24 joint builds, 3+ BUNKER guards). Findings: `basemtx` from
+`camGetWorldToScreenMtxf()` is a proper orthonormal right-handed lookat
+(+Y up, `up ≈ (-0.09, 0.96, -0.26)`, `right = up × forward`), scaled by
+`bgGetLevelVisibilityScale()` = 0.1 (also applied to the room path —
+expected); joint `render_pos` are coherent and **upright** (head y ≈ 280
+> pelvis ≈ 230 > limb ends ≈ 132); view-space z negative (in front,
+correct). Converter clean: `put_f32` is now the only float writer and is
+correct post-D112; `matrix_4x4_f32_to_s32` is byte-identical to
+`guMtxF2L`; `matrix_4x4_set_lookat` / `guPerspectiveF` /
+`matrix_4x4_multiply_homogeneous` match N64 and are native-LE. So the
+plan's hypotheses (converter axis/sign, lookat handedness, compose
+order, F2L) are all **disproven**. Leading residual: a horizontal (±
+vertical) mirror in the **shared fast3d viewport / MP-matrix path**, not
+the model path — consistent with the open D75 notes ("front-end text
+draws mirrored", "Nintendo logo mispositioned"): a flip is only visible
+on asymmetric content (humanoid, text, logo) and invisible on a boxy
+room. GE bakes a left-handed screen convention into its own transforms
+(`transform3Dto2DCoords`, `bondview.c:726`: `screenX = center −
+x·invz·scale`); if GE's RSP (`rsp/graphics/gmain.s`) applies an X flip
+that `port/fast3d` does not, every model and room is mirrored. Suspects:
+`gfx_calc_and_set_viewport` / `gfx_adjust_viewport_or_scissor`
+(`gfx_pc.cpp:1739/1771`), `MP_matrix` vertex transform
+(`gfx_pc.cpp:1122`). This is a fast3d-correctness gap → write-up, not a
+narrow ABI patch. Also: **rebuild with D112+D115 and eyeball a guard
+first** — the D115 `gunfire.c` fix stops a per-shot 64-byte scribble into
+the inline-Model / bondhead-matrix region that could itself have caused
+"inverted". The crate: static-prop placement comes via a per-prop
+`basemtx` from the Usetup `PropRecord` position/rotation — check
+`d88_emit.py` separately from the character question. Probe reverted;
+re-apply snippet in the M-6 agent report.
+
+**D115 (session M-6) — `struct player` / `struct hand` raw-offset audit +
+first fix.** Full survey in `docs/AUDIT-M6-player-offsets.md` (10 offset
+sites; 3 live HIGH, 1 dead const block, 2 MED, 4 already-correct).
+**Fixed:** `gunfire.c:4960-4962` `THROWMTX` / `THROWPOS(k)` / `THROWPREV(k)`
+were raw byte offsets — `(u8*)g_CurrentPlayer + handoffset + 0xAD8/0xB08/
+0xB48` with `handoffset = handnum * sizeof(struct hand)`. Both the stride
+(`sizeof(struct hand)` ≈ 0x968 PC vs 0x3B8 N64, D102) and the base offset
+are N64-sized, so on x86-64 the address lands inside the inline gait
+`Model` / bondhead-matrix region of `struct player`, and
+`matrix_4x4_copy(THROWMTX, …)` scribbles 64 bytes of live render state on
+**every shot from a casing-ejecting weapon** (`sub_GAME_7F068508`,
+solo only). The offsets are exactly
+`hands[handnum].throw_item_pos_related[_prev]` and its translation row, so
+the macros now use those field accessors under `#ifdef PORT` (N64 build
+keeps the byte-offset macros unchanged). **Still open (MED):** #5 — the
+D102 weapon-model `render_pos` is pointed at a `dynAllocate`'d transient
+arena that on N64 aliased the persistent `hand->mtxlist`; likely the
+"1P weapon model doesn't draw" cause, may fold into D114. #6 — the D56
+watch-preview Model pool (`watchRwPool[0xC8]`) is N64-sized and the
+inline Model overruns live watch fields. See the audit doc for the full
+table and recommended fix order.
+
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
 `worktree/data → main/data` followed the junction and deleted the real
