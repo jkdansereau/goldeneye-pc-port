@@ -747,9 +747,18 @@ static void portPostVIEvent(void)
 void osViSetMode(OSViMode *vm)
 {
     if (!vm) return;
-    u32 w = vm->comRegs.width;
     int pal = (vm->comRegs.ctrl & OS_VI_BIT_PAL) != 0;
-    s32 h = pal ? 400 : 480; /* visible height for LAN1 modes */
+    /* D103: fast3d's SCREEN_WIDTH/SCREEN_HEIGHT (== the native viewport) must
+     * be the CFB space GE authors its gSPViewport / G_SETSCISSOR / 2D texrect
+     * commands in — that is bufx x bufy (320x240 NTSC, 320x272 PAL), NOT the
+     * visible scanline count.  comRegs.width already carries bufx; recover the
+     * matching CFB height from fldRegs.yScale (GE sets it to
+     * bufy * YSCALE_MAX(0x800) / SCREEN_HEIGHT_MAX(480), fr.c) instead of the
+     * old hard-coded 480/400, which made RATIO_Y half of RATIO_X and squashed
+     * every frame into a half-height band. */
+    u32 w = vm->comRegs.width;
+    s32 h = (s32)(((vm->fldRegs[0].yScale & 0xFFF) * 480u) / 0x800u);
+    if (h <= 0 || h > 480) h = pal ? 272 : 240; /* fallback: LAN1 CFB height */
     if (w > 640) w = 640;
     videoUpdateNativeResolution((s32)w, h);
 }

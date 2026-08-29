@@ -4,16 +4,29 @@
 _Paste-ready brief. Authoritative context: `AGENTS.md`,
 `docs/PCPortResearch.md` §F (D69, D78-D102), `docs/BRIEF-D69-stage-load.md`._
 
-## READ THIS FIRST — the crash chain is CLEAR; BUNKER1 renders
+## READ THIS FIRST — crash chain CLEAR; viewport fixed; room geometry is next
 
-`-level_09 -ml0 -me0 -mgfx100 -mvtx50 -mt700 -ma150` now **boots BUNKER1
-and renders continuously with no fault** (verified: 60 s+, 3500+ VI posts
-at full framerate; attract mode also clean). The whole stage-load →
-first-frame → in-level crash chain that has been the blocker since D69 is
-resolved. **~46 % non-clear pixels**, but content is biased to the lower
-half of the screen — the remaining work is **D75** (3D-model rendering
-quality: animated/skeletal character models still don't draw right; see
-§F "D75" and "Known rendering bugs" below), NOT a crash.
+`-level_09 -ml0 -me0 -mgfx100 -mvtx50 -mt700 -ma150` **boots BUNKER1
+and renders continuously with no fault** (60 s+, 5000+ VI posts at full
+framerate; attract mode also clean). The stage-load → first-frame →
+in-level crash chain (blocker since D69) is resolved.
+
+**D103 (session M-4) fixed the "~46 %, lower half" symptom** — it was a
+single native-resolution/viewport bug (`osViSetMode` hard-coded height
+480 → `RATIO_Y` half of `RATIO_X`), not per-model. Frame is now full
+(91.7 %, correct letterbox + HUD placement). See §F "D103".
+
+**What that revealed:** BUNKER1 renders only a **flat dark-blue fill +
+HUD** — the blue was always the whole picture, just squished. So the real
+remaining work, in order:
+1. **D85 — room geometry** (walls/floor draw as nothing; `GE_D85DUMP`).
+2. **`struct player` offset pass** — weapon model doesn't draw; gate to
+   playability (landmine below + D102).
+3. **D75(b)** — animated/skeletal character models (see §F "D75" and
+   "Known rendering bugs"). All three intro-model failures traced to the
+   game `matrixmath.c` → `modelUpdateMatrices`/`process_02_position` →
+   raw `render_pos` `i*0x40` re-pack path (NOT the D73 sin/cos path);
+   static prop = mispositioned, animated `setup_chr_instance` = missing.
 
 **This session's fixes (all committed, master):**
 

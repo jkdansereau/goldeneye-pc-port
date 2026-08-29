@@ -3276,6 +3276,30 @@ separate open pool-pressure item — a PC memory-budget pass is owed.
 (texpool-triage) — pool-pressure; a real PC memory-budget pass should
 cover it.
 
+**D103 (session M-4) — native-resolution height, FIXED.**
+`port/src/libultra.c` `osViSetMode` hard-coded the fast3d native
+resolution to the *visible scanline count* (`pal ? 400 : 480`) instead of
+the CFB space GE authors its GBI in. fast3d's `SCREEN_WIDTH`/
+`SCREEN_HEIGHT` (`gfx_pc.h`) alias `gfx_current_native_viewport`, and
+`RATIO_X/RATIO_Y` (`gfx_pc.cpp:53-54`) scale the game's 320×240-space
+`gSPViewport`/`G_SETSCISSOR`/2D-texrect coords onto the 640×480 window.
+With height 480 the ratios were asymmetric — `RATIO_X = 640/320 = 2.0`
+but `RATIO_Y = 480/480 = 1.0` — so every viewport/scissor came out a
+220 px band (≈45.8 % of the frame → the "~46 % non-clear" figure),
+placed in the upper GL region and shown (post `invert_y`) in the **lower
+half of the screen**. `gfx_current_native_aspect` was likewise wrong
+(320/480 = 0.67). Fix: recover the real CFB height from
+`vm->fldRegs[0].yScale` (GE sets it to `bufy * YSCALE_MAX(0x800) /
+SCREEN_HEIGHT_MAX(480)`, `fr.c:417`) with a `pal ? 272 : 240` fallback;
+`comRegs.width` already carried `bufx` so width was fine. Verified:
+`-level_09` `GE_PCDUMP` frames go from ~46 % / lower-band to **91.7 % /
+bbox (0,20)-(639,459)** — the full 10..230 viewport ×2 with correct
+letterbox, HUD ammo counter correctly placed top-right. Purely a
+transform fix — no per-model work. **Reveals the next layer:** BUNKER1
+still shows only a flat dark-blue fill + HUD, i.e. **no room geometry
+(D85) and no weapon model draw at all** — the blue was always the whole
+picture, just squished. Next: D85 room GDL (walls/floor not drawing).
+
 **`data/` deletion + recovery (session M-3).** `git worktree remove
 --force` on an agent worktree that had a directory *junction*
 `worktree/data → main/data` followed the junction and deleted the real
