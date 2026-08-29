@@ -68,9 +68,19 @@ storage-room void is NOT closed doors failing to render.
    (`contSnapshotFromKeyboard`) worked. No C-buttons/mouse-look/gamepad/
    rebinding. This is the top playability blocker — you cannot aim or
    properly move. Reference: `pd_port/port/src/input.c`.
-2. **Weapon model doesn't draw (AUDIT-M6 #5)** — D102 pointed `weaponModel.
-   render_pos` at a transient `dynAllocate` arena; on N64 it aliased the
-   persistent `hand->mtxlist`. Gate to playability. NEXT AGENT after input.
+2. **Weapon model doesn't draw (AUDIT-M6 #5)** — NOT STARTED (M-8 agent
+   hit the account session rate-limit before any work; tree untouched).
+   Plan: instrument `gunfire.c` weapon setup (~600-661) + `field_87F`
+   gating (~520/587-598) FIRST with a `GE_D119` printf — does setup even
+   run? Then check `weaponModel.render_pos` = `dynAllocate`'d `rwmtx`
+   lifetime vs the `gunRenderFirstPersonGunModels` (~1605) consumer (on
+   N64 it aliased the persistent `hand->mtxlist`; D102 gave it own
+   storage → arena may recycle). Also `weaponRwPool[192]` capacity vs
+   `modelCalculateRwDataLen(mdlhdr)` on PC, and `flashvisptr` word-index
+   assumption (~640). Narrow `#ifdef PORT` lifetime/sizing fix only — if
+   it needs a behavioural arena change, STOP + write up. Direct `-level_09`
+   boot may spawn Bond holstered — may need forced weapon state or the
+   attract path to get the gun on screen. Gate to playability.
 3. **The HUD/text X-mirror (D116)** — DEPRIORITISED (cosmetic, not a
    playability blocker). Every stage from font-bitmap to GL-draw
    runtime-verified non-mirrored, yet glyphs render flipped — a genuine
@@ -105,6 +115,18 @@ mislocated door props. NEXT: shader/vertex-buffer probe — dump per-vertex
 (x,u) for one glyph quad; render a 1-texel asymmetric test texture to see
 which axis inverts. `GE_D116`-gated probes left in `textrelated.c` +
 `gfx_pc.cpp` (zero-cost).
+
+**Session M-8 wrap — state for next session.** Build GREEN at
+`587c6856`, tree clean. Committed: D116 part-3 writeup + `[D116/vbo]`
+probe (`5ff012b4`), `CLAUDE.md`/preflight (`fd25628a`), D117
+framediff+nondeterminism (`44d9ae98`), D118 input layer
+(`4ac11fe7`/`587c6856`), handoff reprioritisation. `GE_D116` and
+`GE_INPUTLOG` probes are in-tree, `getenv`-gated, zero-cost. Weapon-model
+(#5) agent never ran (rate-limit) — task untouched, plan in item 2 above.
+Pre-existing stash `stash@{0} "d59 probes WIP"` (~300 lines,
+gfx_pc/gfx_opengl/crash.c) is NOT from M-8 — provenance unknown, left as
+found. Next: human input playtest (tune `ge007.ini [Input] MouseAimSpeed`),
+then weapon-model #5.
 
 **Session M-8 (continued) — D116 part 3 + input layer.** Killed the
 drifting D116 agent, ran the probe as overseer: `buf_vbo` (x,u) for
