@@ -11,11 +11,13 @@ M-25 re-sweep (2026-08-30, port-QoL build `863f436b`): **20 / 21 PASS**,
 unchanged. Caverns (39) flagged CRASH `0xc000001d` once under sweep load →
 2/2 clean on retry (D117/D134 concurrent-load flakiness, not a regression).
 Cuba (54) still the only real crash (known D129 credits path, parked).
-**Silo (20) caveat:** the sweep reports PASS because it early-exits on the
-first rendered frames, but a full-length capture wedges consistently at
-~frame 320 on the silo→Bond camera descent (user-reported M-25;
-reproduces identically on a pre-M-25 baseline). Real bug, belongs with the
-camera-transition / in-level playtest work — not caught by a boot sweep.
+**Silo (20):** PASS. A full-length `GE_PCDUMP` capture froze at ~frame 320
+(silo→Bond camera descent) twice — but both those runs, *and* the pre-M-25
+baseline comparison, were on a machine still loaded from the sweep. On an
+idle machine Silo runs fine (user drove it live past ~1800 frames, VI
+pacemaker healthy, no heartbeat stall). Classic D117/D134 load-sensitive
+stall, not a deterministic bug and not an M-25 regression. If it recurs on
+an idle box, count N runs before believing it (PORT-LEARNINGS §E).
 
 Last full re-sweep: 2026-08-29 (M-22), after D134 landed (SP/DP task-done
 event no longer dropped into a full sched interruptQ — the "frame-2 hang"

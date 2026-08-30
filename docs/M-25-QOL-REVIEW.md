@@ -171,10 +171,14 @@ Cannot change the `OSContPad` contract.
 
 ## Known pre-existing bugs noted this session (not addressed — out of scope)
 
-- **Silo (`-level_20`) early freeze** — ~3 s in, when the camera pans from
-  the silo down to the player view, the sim wedges (no crash; frame capture
-  freezes ~frame 320). Reproduces on a clean pre-M-25 build. User-reported
-  M-25. Belongs with the in-level playtest / camera-transition work.
+- **Silo (`-level_20`) capture freeze — likely just D117/D134 load
+  sensitivity, NOT a real bug.** A full-length `GE_PCDUMP` capture froze at
+  ~frame 320 (silo→Bond camera descent) twice, and the pre-M-25 baseline
+  comparison froze too — but all of those ran on a machine still loaded from
+  the 21-level sweep. On an idle machine the user drove Silo live past
+  ~1800 frames with a healthy VI pacemaker and no heartbeat stall. Not an
+  M-25 regression; not currently believed deterministic. Recount N runs on
+  an idle box if it recurs.
 
 ---
 

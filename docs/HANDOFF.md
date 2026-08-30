@@ -304,10 +304,12 @@ behavior exactly.
   (23), `PadLookInvertY`.
 - Verified per commit: build green, `-level_09` crash-free to frame 620 @
   91.6% (unregressed), `-level_20` crash-free.
-- **New bug logged (not fixed — out of scope):** Silo `-level_20` freezes
-  ~3 s in on the silo→Bond camera descent (no crash; capture wedges
-  ~frame 320). Reproduces on a clean pre-M-25 build. User-reported. Goes
-  with the in-level playtest / camera-transition work.
+- **Silo `-level_20` capture freeze — D117/D134 load sensitivity, NOT a
+  real bug and not an M-25 regression.** Full-length captures froze at
+  ~frame 320 (silo→Bond camera descent) twice, but only on a machine still
+  loaded from the sweep (the pre-M-25 baseline froze the same way). On an
+  idle machine the user drove Silo live past ~1800 frames, VI pacemaker
+  healthy, no stall. See `docs/M-25-QOL-REVIEW.md`.
 
 ## Next task (M-24 — Opus 5)
 
