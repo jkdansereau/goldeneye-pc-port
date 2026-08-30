@@ -821,6 +821,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D125 | crash classes C3+C6 (Aztec/Bunker2/Surface2): **root cause found (M-16)** — `tools_pc/d88_emit.py:374` assigns a 4-byte literal to an 8-byte slice (`out[dst_o+0x30:dst_o+0x38] = b"\x00…"`, the stan zero-fill in `emit_pad`); every pad/boundpad record silently shrinks the output bytearray by 4 B, and once the tail falls below the boundpad plink string blob, later verbatim leaf writes hit Python out-of-range slice semantics (insert at current end, not relocated offset) → boundpad names drift/truncate (Aztec pad33 `p138d2`→`8d2`) → `stanPackId()` reject → `getposstan()` NULL stan → `setupDoor` leaves door `model=NULL` → crash `propobj.c:13601`. M-14's "propDefs zeros in RAM" was a misread; sidecar propdefs were always correct (M-15) and post-load RAM matches the sidecar byte-for-byte (M-16) | **resolved (M-16b)** — line 374 → 8 NULs; all 21 sidecars regen'd; **Aztec `-level_28` now PASSES** (was C3 CRASH). Bunker2 falls through to a separate DOOR-tail `linkedDoor` layout bug (C3 residual) |
 | D126 | crash classes C3r/C4/C6 (Bunker2 `-level_27` `door7F054FB4` propobj.c:13523, Depot `-level_30` prop.c:902, Surface2 `-level_43` loadobjectmodel.c:393): the objective sub-records `criteria_picture` (30), `criteria_roomentered` (32), `criteria_deposit` (33), `setup_objective_text` (35) each end in a `T *next` list pointer that the setup walk (`set_parent_cur_obj_*` / `setup_briefing_text_entry_parent`) writes unconditionally. On PC that pointer widens 4→8B and lands 8-aligned at offset 16 → struct is 24B/6w (N64 16/20). `d88_propdefs.py` emitted them at N64 size via the generic arm → the runtime 8-byte `->next` write clobbered the *next* record's header → propdef walk desynced, command indices drifted ~100, `linkedDoorOffset + arg2` resolved to the wrong record → door `linkedDoor` chain walked into garbage. | resolved — `d88_propdefs.py` PROPDEF_PC_BYTES[30/32/33/35]=24 + typed handler; `loadobjectmodel.c` sizepropdef PORT returns 6. Bunker2/Depot/Surface2 now PASS (13→16/21) |
 | D124 | crash class C2: fast3d bad texture pointer. **Jungle** (`0xabcd0824`): `gimgSyncCompiledGlobalDLs()` slot-detect keyed on the post-fixup marker, which `texLoad()` had already overwritten → compiled `globalDL_0xNNN` explosion DLs kept link-time `IMAGESEG` words → latent on every level, tripped by the first explosion-DL draw. **Facility** (`0x72181ee8`): see **D130** — the model-GDL-relocation hypothesis (M-14 addendum) was WRONG; real cause was `romdataFixupFont` | Jungle fixed (`port/src/gimgfixup.c`); Facility → D130 |
+| D131 | crash class C2m (Jungle `-level_37`): fast3d `gfx_sp_matrix` AV on a wild matrix pointer `0x401c68e0` (`gfx_pc.cpp:1046`) ~frame 300, when the first explosion/smoke prop renders. `explosionRenderPropSmoke` builds `gSPMatrix(gdl++, osVirtualToPhysical((void*)&dword_CODE_bss_8007A100), …MODELVIEW)` (+ `applyRoomMatrixToDisplayList`). `osVirtualToPhysical()` is a `u32`-returning shim (`libultra.c:1207`) → truncates the compiled `.bss` symbol's `0x1_00000000` module high word → w1 = `0x40xxxxxx` → `seg_addr()` returns it raw. Same class as D94 (chraction 32-bit ptr truncation), but in a GBI DL word. The projection matrix in the same DL is fine (`get_BONDdata_field_10E0()` is a runtime `0x70xxxxxx` ptr, fits u32); the `gSPDisplayList(&globalDL_0xNNN)` refs are fine (port `Gwords.w1` is 64-bit `uintptr_t`, no macro truncation). ~30 `osVirtualToPhysical(<compiled matrix/vtx symbol>)` sites exist (`explosion.c`, `glass*.c`, `blood_animation.c`, `bondview2.c`) — all latent until that effect first draws. | resolved — `seg_addr()` restores the module high word for any fallthrough w1 in `[0x40000000, 0x70000000)` (module fixed-based at `0x140000000`, no ASLR; DRAM/KSEG0/segmented/phys all handled earlier). Jungle renders to frame 2400+ clean; `-level_20`/`-level_24` unregressed. **18→19/21.** (`-level_09` has a separate pre-existing boot crash, see below.) |
 | D130 | crash class C2 (Facility `-level_34`, Runway `-level_35`): `import_texture_i8` AV on a wild texture pointer (`0x72181ee8`), baked into the HUD glyph DL by `gDPLoadTextureBlock(gdl, curchar->pixeldata, …)` when the level-title string ("Chemical Warfare Facility #2") renders `#`/`"`. Root cause: `romdataFixupFont` (`port/src/romdata.c`) converts the N64 24B fontchar array to the PC 32B array **in place**, forward-field, backward-glyph. PC−N64 stride = 8, so for glyphs 0/1/2 `d` overlaps `s` by less than the 24B read span and an early field write clobbers a later field's source mid-`for k<5` loop → glyph 1's `width` = `bswap(index)` = `0x01000000`, glyph 2's `pixeldata` = `pcPixOff+(index−pixStart)` ≈ `0x020002e8` → `+= font_base` → wild → fast3d AV. On N64 the array is read-only rodata, never re-laid-out, so no bug there. NOT the model-GDL relocation (`sub_GAME_7F0762E0` / `texLoadFromGdl`) the D124-Facility addendum suspected — `gdl` there is still a segmented `0x05xxxxxx` value so the `& 0x00ffffff` masks are correct, and `texLoadFromGdl` never copies a `G_SETTIMG` for these levels. | resolved — stage all 6 N64 fields in a local `f[6]` before writing any. Facility + Runway now PASS (16→18/21). Probes reverted. |
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
@@ -4389,6 +4390,63 @@ unregressed. Sweep 13 → 16/21. Generalisable quirk appended to
 `PORT-LEARNINGS.md` §A. Remaining crashes: C2 Runway/Facility (model-GDL
 align), C2m Jungle (`G_MTX`), C5 Control (BG portal), C7 Surface1
 (`sndSetupSound`).
+
+**D131 (session M-19) — Jungle `-level_37` C2m crash: `osVirtualToPhysical()`
+truncates a compiled-symbol pointer inside a GBI matrix command.** Jungle
+renders ~300 frames then AVs in `gfx_sp_matrix` (`gfx_pc.cpp:1046`,
+`int32_t int_part = addr[…]`) with `addr = 0x401c68e0`. Caller is the `G_MTX`
+case of `gfx_run_dl` → `seg_addr(cmd->words.w1)`.
+
+Probe (`GE_MTXPROBE`, reverted) dumped the faulting DL — a well-formed model
+render sequence in a per-frame DRAM GDL: `gSPMatrix(PROJECTION,LOAD)` w1 =
+`0x700d8070` (valid), `gSPMatrix(MODELVIEW,LOAD)` w1 = `0x401acbe0` (bad),
+`gSPMatrix(MODELVIEW,MUL)` w1 = `0x401c68e0` (bad, the fault), `gSPVertex`
+w1 = `0x700da350` (valid). All lens `0x40`, opcodes sane — the walk is *not*
+desynced, only the modelview-matrix pointers are wrong.
+
+`0x401c68e0` == `(u32)(0x1_401c68e0)` — a compiled-module address with the
+`0x1_00000000` high word dropped (module fixed-based at `0x140000000`, cf.
+D94 `chraction.c:1243` comment). Source: `explosionRenderPropSmoke`
+(`explosion.c:1501`) does
+`gSPMatrix(gdl++, osVirtualToPhysical((void*)&dword_CODE_bss_8007A100),
+G_MTX_NOPUSH|G_MTX_MUL|G_MTX_MODELVIEW)` — `&dword_CODE_bss_8007A100` is a
+compiled `.bss` matrix; `osVirtualToPhysical()` is `(u32)(uintptr_t)va`
+(`libultra.c:1207`), so the store truncates. The `[-1]` LOAD matrix is the
+room matrix from `applyRoomMatrixToDisplayList` (same truncation path).
+Why the projection matrix is fine: `get_BONDdata_field_10E0()` returns a
+runtime `0x70xxxxxx` pointer that survives the `u32` cast. Why
+`gSPDisplayList(&globalDL_0xNNN)` is fine: the port's `Gwords.w1` is a
+64-bit `uintptr_t` (`include/PR/gbi.h:1730`) and `gDma1p` stores the full
+pointer — only `osVirtualToPhysical` truncates.
+
+~30 sites pass a compiled matrix/vtx symbol through `osVirtualToPhysical`
+(`explosion.c`, `glass.c`/`glass2.c`, `blood_animation.c`, `bondview2.c`) —
+each latent until that effect first draws, which is why only Jungle (an
+early scripted explosion) tripped it in the no-input sweep.
+
+**Fix** (`port/fast3d/gfx_pc.cpp` `seg_addr`): at the final fallthrough,
+if `w1 ∈ [0x40000000, 0x70000000)` restore the module high word
+(`(mod_hi | w1)`, `mod_hi` read from this TU's own load address). Everything
+legit that reaches the fallthrough is either DRAM V1 (`≥0x70000000`), KSEG0
+(`≥0x80000000`), an LSB-set / low-nibble segmented address, or a
+sub-`0x800000` physical offset — all handled in earlier branches — so the
+range is unambiguous. Narrow, ABI/pointer-width class (same as D94/D3x).
+Verified: Jungle renders to logic-frame 2400+ crash-free at 91.7% non-clear;
+`-level_20` (Silo) + `-level_24` (Archives) unregressed. **Sweep 18→19/21.**
+
+Not fixed this session: **`-level_09` (BUNKER1) now crashes at boot**
+(`frames=0`, PC `0x1400066fc`, fault `0x00a2fc68` — a stack pointer
+`0x0fa2fc68` with the top nibble masked, i.e. another 28/24-bit segment-mask
+applied to a real pointer). Reproduced on a **clean `git stash` checkout of
+master `0a4b3bae`** → pre-existing regression, not caused by D131 (a
+fast3d-only change cannot affect a pre-first-frame boot crash). Contradicts
+the M-18 handoff's "`-level_09` unregressed" claim; likely fallout from a
+D126/D128 propdef/portal change or an environmental sidecar/ROM mismatch.
+Next session: `git bisect` D125→HEAD against `-level_09`. Silo also shows an
+intermittent hang in the intro fly-down-to-Bond cinematic (user report;
+not always reproducible — ran 300 frames clean here).
+
+---
 
 **D130 (session M-18) — Facility + Runway C2 crash was `romdataFixupFont`,
 NOT the model-GDL relocation.** `-level_34` (and `-level_35`) fault in

@@ -62,6 +62,22 @@ state.
   a level actually feeds a control byte to the HUD text (none do yet; D130
   was a font-relayout bug, not this).
 
+- **D131 corollary — `osVirtualToPhysical()` truncates a compiled-symbol
+  pointer to 32 bits.** The port shim is `(u32)(uintptr_t)va` (`libultra.c`).
+  For a runtime DRAM pointer (`0x70xxxxxx`) the cast is lossless; for a
+  **compiled module symbol** (`.bss`/`.rodata` matrix, e.g.
+  `&dword_CODE_bss_8007A100` in `explosionRenderPropSmoke`) it drops the
+  `0x1_00000000` module high word, so the GBI w1 becomes `0x40xxxxxx` and
+  `seg_addr()` hands fast3d a wild pointer → AV in `gfx_sp_matrix` /
+  `gfx_sp_vertex`. Same class as D94 (`chraction.c:1243`), but in a DL word.
+  ~30 latent sites (`grep 'osVirtualToPhysical(' src/game/{explosion,glass,glass2,blood_animation,bondview2}.c`),
+  each armed only when that effect first draws. Fixed once in `seg_addr()`:
+  restore the high word for a fallthrough `w1 ∈ [0x40000000, 0x70000000)`
+  (module is fixed-based at `0x140000000`; DRAM/KSEG0/segmented/phys are all
+  handled in earlier branches). `gSPDisplayList(&globalDL_0xNNN)` is NOT
+  affected — the port's `Gwords.w1` is 64-bit and `gDma1p` stores the full
+  pointer; only `osVirtualToPhysical` truncates.
+
 ## B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64
 
 Any buffer reservation, `memcpy` size, slot stride, or pool budget
@@ -214,3 +230,13 @@ deprioritised below level-progression / crash work. See
   fixed-tick mode was assessed not-narrow (redesigns retrace/tick
   semantics); design is in §F D117 if someone picks it up, after which
   `framediff.py --exact` becomes usable.
+- **D24-implications — host-scheduling nondeterminism / fake priority
+  semantics:** the pthread kernel does not enforce N64's 0–31 priorities
+  (`osYieldThread` = `Sleep(0)`), so interleavings impossible on console can
+  occur, and frame timing has host jitter. When a flaky timing bug appears
+  (especially Phase 3 audio underruns), reach first for host thread
+  priorities (`SetThreadPriority`: scheduler thread time-critical, tick
+  normal) and the deferred `GE_DETERM` mode (D117) — not for kernel changes.
+- **Watch item: `osYieldThread` = `Sleep(0)`.** The one place we fake
+  cooperative behavior. If a level-sweep hot loop misbehaves under host load,
+  this shim is the first thing to inspect. Keep as-is until then.

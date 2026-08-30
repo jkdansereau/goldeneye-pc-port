@@ -12,7 +12,7 @@ Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` 
 
 | Level | # | Status | Crash site | Class |
 |---|---|---|---|---|
-| Bunker1  | 09 | **PASS** 91.7% | — | — |
+| Bunker1  | 09 | **CRASH (regressed since M-18)** | boot crash `frames=0`, PC `0x1400066fc`, fault `0x00a2fc68` (stack ptr, top nibble masked). Reproduces on clean master `0a4b3bae` → pre-existing, not D131. Bisect D125→HEAD. | **new** |
 | Silo     | 20 | **PASS** 91.7% | — | — |
 | Archives | 24 | **PASS** 91.1% | — | — |
 | Train    | 25 | **PASS** 87.0% | — | — |
@@ -26,7 +26,7 @@ Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` 
 | Cradle   | 41 | **PASS** 55.4% (low — partial render, no crash) | — (C1 fixed, D123) | — |
 | Runway   | 35 | **PASS** | — (D130: `romdataFixupFont` glyph-relayout aliasing) | — |
 | Facility | 34 | **PASS** | — (D130: `romdataFixupFont` corrupted glyph `#`/`"` pixeldata → fast3d AV) | — |
-| Jungle   | 37 | CRASH | `gfx_sp_matrix` gfx_pc.cpp:1046 (fault 0x401c68e0) — renders ~300 frames then explosion-DL `G_MTX` (D75/matrix family); separate from D130 | **C2m** |
+| Jungle   | 37 | **PASS** 91.7% (frame 1500–2400+ crash-free) | — (D131: `osVirtualToPhysical()` truncated a compiled `.bss` matrix ptr in `explosionRenderPropSmoke` → `seg_addr` now restores the module high word) | — |
 | Aztec    | 28 | **PASS** 90.8% | — (C3 fixed, D125) | — |
 | Bunker2  | 27 | **PASS** 91.5% | — (C3r fixed, D126) | — |
 | Depot    | 30 | **PASS** 79.8% | — (C4 fixed, D126) | — |
@@ -34,7 +34,12 @@ Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` 
 | Surface2 | 43 | **PASS** 70.4% | — (C6 fixed, D126) | — |
 | Surface1 | 36 | **PASS** 77.5% | — (C7 guarded, D127) | — |
 
-**20 / 21 PASS** (M-18). D130 cleared C2 Facility + Runway — the crash was
+**19 / 21** (M-19). D131 cleared C2m Jungle (explosion-DL `G_MTX` truncated
+compiled-symbol pointer). **But `-level_09` (Bunker1) regressed to a boot
+crash sometime between M-18 and now** — reproduces on clean master, so it
+is not an M-19 change; bisect D125→HEAD. Net 20→19 until 09 is refixed.
+
+**(M-18) 20 / 21 PASS.** D130 cleared C2 Facility + Runway — the crash was
 `romdataFixupFont` corrupting fontchar glyphs 0/1/2 (in-place 24→32B relayout
 aliases for low indices), NOT the model-GDL relocation the D124-Facility
 addendum suspected. Only Jungle (C2m, explosion-DL `G_MTX`, ~frame 300)

@@ -128,19 +128,52 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
   §F/§H **D130**; PORT-LEARNINGS §A. Verified: -level_34 0/~14, -level_35
   0/4; -level_09/20/24 unregressed.
 
-## Next task — Jungle `-level_37` (C2m, the last crash)
+## Done this session (M-19) — D131 (Jungle), D63 scaffolding removal
 
-Jungle renders **~300 frames** then faults in `gfx_sp_matrix`
-(`gfx_pc.cpp:1046`, fault `0x401c68e0`) — an explosion / particle DL
-`G_MTX` with a bad matrix pointer. D75 / D124-Jungle matrix-family
-territory (compiled/global DL, NOT the per-level model-GDL path — that
-premise is dead, see D130). `docs/BRIEF-C2gdl-model-reloc.md` is now
-mostly obsolete. Likely near `port/src/gimgfixup.c` (D124-Jungle) /
-compiled `globalDL_0xNNN` matrix refs, or fast3d's `seg_addr` for a
-`G_MTX` w1. Then all 21 → hand `docs/LEVEL-PLAYTEST.md` to the user (WS6).
+- **D131** (`port/fast3d/gfx_pc.cpp`) — Jungle `-level_37` C2m crash.
+  `explosionRenderPropSmoke` passes a compiled `.bss` matrix symbol
+  (`&dword_CODE_bss_8007A100`) through `osVirtualToPhysical()` — a
+  `u32`-returning shim — into `gSPMatrix`, truncating the `0x1_00000000`
+  module high word → w1 = `0x401c68e0` → wild deref in `gfx_sp_matrix`
+  when the first explosion draws (~frame 300). NOT `gimgfixup` / the
+  model-GDL path (that premise was already dead per D130). Fix: `seg_addr`
+  restores the module high word for a fallthrough w1 in
+  `[0x40000000, 0x70000000)`. Covers ~30 latent `osVirtualToPhysical(<compiled
+  matrix/vtx symbol>)` sites (explosion/glass/blood/bondview2). Verified:
+  Jungle renders to frame 1500–2400+ crash-free; `-level_20`/`-level_24`
+  unregressed. §F/§H **D131**, PORT-LEARNINGS §A.
+- **D63 scaffolding removed** — dead TEMP D63 probe calls stripped from
+  `port/src/libultra.c` (watchdog thread + activity ring + slot watchers)
+  and the `#ifdef PORT` probe blocks in `blood_animation.c`, `dyn.c`,
+  `front.c`, `rsp.c`, `title.c`. All inert (env-gated / no side effects);
+  build links clean. `port/fast3d/gfx_pc.cpp` D63 trail code left for a
+  later pass. Bug class D24-implications + `osYieldThread` watch item added
+  to PORT-LEARNINGS §E.
 
-Everything else: hand `docs/LEVEL-PLAYTEST.md` to the user for the WS6
-completion pass (real input, per-level objective checklist).
+## Next task — two pre-existing regressions vs the M-18 handoff
+
+Both reproduce on a **clean checkout of master `0a4b3bae`** (proven by
+`git stash` + rebuild), so they predate M-19's changes — a fast3d-only
+edit cannot cause a pre-first-frame boot crash.
+
+1. **`-level_09` (BUNKER1) crashes at boot** — `frames=0`, PC
+   `0x1400066fc`, fault `0x00a2fc68` (= stack ptr `0x0fa2fc68` with the top
+   nibble masked → a 24/28-bit segment mask hitting a real pointer). The
+   M-18 handoff's "`-level_09`/20/24 unregressed" is now false for 09.
+   **Start here:** `git bisect` D125 (`a06eb364`) → HEAD against
+   `./build-pc/ge007.x86_64.exe -level_9` (`frames=0` + crash = bad).
+   Suspect D126 (objective sub-record relayout) or D128 (portal stride).
+2. **Intro renders mostly black** — legal/logo frames are 0–6% non-clear
+   on clean master (`GE_PCDUMP="1-600:60"` + `pixcount.py`). The M-18
+   handoff claims "the entire intro renders". Check `framediff.py` vs
+   `tools_pc/golden/`.
+3. **Silo intro fly-down cinematic hang** (user report M-19) —
+   intermittent; one `-level_20` run went 300 frames clean. May be the
+   same class as #2 or D117 nondeterminism under load.
+
+After those: all 21 load+render → hand `docs/LEVEL-PLAYTEST.md` to the
+user for the WS6 completion pass (real input, per-level objective
+checklist).
 
 **Regen gotcha:** `d69_emit.py` rewrites `data/pccg-<r>/pccg.bin` from
 scratch with only the 52 bg/stan rows — you MUST follow it with

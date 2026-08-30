@@ -2405,6 +2405,23 @@ static inline void *seg_addr(uintptr_t w1) {
     if (w1 < 0x800000) {
         return (void *)(w1 + 0x80000000);
     }
+    // D131: a GBI DL built by game code can reference a COMPILED symbol via
+    // osVirtualToPhysical() (a u32-returning shim), which truncates the
+    // module's 0x1_00000000 high word. Seen in explosionRenderPropSmoke:
+    // gSPMatrix(gdl++, osVirtualToPhysical((void*)&dword_CODE_bss_8007A100),
+    // ..MODELVIEW) -> w1 == 0x40xxxxxx -> wild deref in gfx_sp_matrix. The
+    // module is based at 0x140000000 (fixed, no ASLR), and nothing legit
+    // reaches this fallthrough with a value in [0x40000000, DRAM_V1): DRAM
+    // (>=0x70000000), KSEG0 (>=0x80000000), segmented addrs and sub-0x800000
+    // physical offsets are all handled above. Restore the high word from
+    // this TU's own load address.
+    {
+        static const uintptr_t mod_hi =
+            ((uintptr_t)(void *)&segmentPointers[0]) & 0xffffffff00000000ULL;
+        if (mod_hi && w1 >= 0x40000000 && w1 < 0x70000000) {
+            return (void *)(mod_hi | w1);
+        }
+    }
     return (void *)w1;
 }
 
