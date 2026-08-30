@@ -420,7 +420,19 @@ Gfx *textRender(Gfx *gdl, s32 *x, s32 *y, char *text,
     s32 stack3;
     s32 stack4;
     //s32 stack5;
-    
+
+#ifdef PORT
+    /* D143: langGet() returns NULL for a string slot the current flow has not
+     * loaded (non-DEBUG builds; DEBUG substitutes a placeholder).  The N64
+     * retail flow guarantees every front-end string is resident before it is
+     * drawn; the PC menu flow does not yet, so a missing briefing/objective
+     * string reaches textRender as NULL and faults in the `*text` scan.
+     * Degrade to "draw nothing" like an empty string would. */
+    if (text == NULL) {
+        return gdl;
+    }
+#endif
+
     g_JpnTextTlutNeedsLoad = 1;
 
     savedx = *x;
@@ -683,7 +695,13 @@ Gfx *textRenderOutlined(Gfx *gdl, s32 *x, s32 *y,
     s32 savedx;
     struct fontchar sp74;
     s32 prevchar;
-    
+
+#ifdef PORT
+    if (text == NULL) { /* D143 - see textRender */
+        return gdl;
+    }
+#endif
+
     g_JpnTextTlutNeedsLoad = 1;
 
     savedx = *x;
@@ -756,6 +774,12 @@ void textMeasure(s32 *textheight, s32 *textwidth, char *text, struct fontchar *f
 	longest = 0;
 	*textheight = 0;
 	*textwidth = 0;
+
+#ifdef PORT
+    if (text == NULL) { /* D143 - see textRender */
+        return;
+    }
+#endif
 
     if (lineheight == 0)
     {
@@ -833,6 +857,15 @@ void textWrap(s32 wrapwidth, char *src, char *dst, struct fontchar *chars, struc
 	s32 i;
 	u32 stack;
 	char curword[32];
+
+#ifdef PORT
+    if (src == NULL) { /* D143 - see textRender */
+        if (dst != NULL) {
+            dst[0] = '\0';
+        }
+        return;
+    }
+#endif
 
     while (more == 1) {
 		// Load the next word

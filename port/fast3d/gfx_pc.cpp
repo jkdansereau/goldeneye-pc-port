@@ -1039,6 +1039,21 @@ static void gfx_matrix_mul(float res[4][4], const float a[4][4], const float b[4
 static void gfx_sp_matrix(uint8_t parameters, const int32_t* addr) {
     float matrix[4][4];
 
+    /* D144: a front-end 3D model (MISSION COMPLETE dossier, mode-select
+     * wallets - the D75 family) can emit a gSPMatrix whose pointer field was
+     * never resolved: w1 comes through as 0xFFFF... or another non-canonical
+     * value, and seg_addr() then hands us a wild pointer -> AV reading addr[].
+     * A real N64 matrix pointer always lands in mapped memory. Rather than
+     * crash the menu transition, substitute identity for an unmapped source
+     * (the model draws with the wrong transform - already a parked D75
+     * cosmetic - but the screen and its "Next" -> menu path work). */
+    const bool addr_bad = ((uintptr_t)addr < 0x10000 ||
+                           (uintptr_t)addr >= 0x0000800000000000ULL);
+
+    if (addr_bad) {
+        memset(matrix, 0, sizeof(matrix));
+        matrix[0][0] = matrix[1][1] = matrix[2][2] = matrix[3][3] = 1.0f;
+    } else
 #ifndef GBI_FLOATS
     // Original GBI where fixed point matrices are used
     for (int i = 0; i < 4; i++) {
