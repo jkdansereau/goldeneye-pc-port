@@ -71,6 +71,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <SDL.h>
 
@@ -184,6 +185,126 @@ static void inputOpenPads(void)
             numControllers = i + 1;
         }
     }
+}
+
+/* ------------------------------------------------------------------------
+ * Scripted input (test harness, port-only). GE_INPUTSCRIPT lets a headless
+ * run walk the front-end / pause menus with no human at the keyboard.
+ *
+ *   GE_INPUTSCRIPT="120:START;180:A;240:A;600:SDOWN;900:SNONE,A"
+ *
+ * Each entry is `<frame>:<tok>[,<tok>...]`. Buttons (A B Z START L R UP DOWN
+ * LEFT RIGHT CUP CDOWN CLEFT CRIGHT) pulse for INPUTSCRIPT_PULSE controller
+ * reads from <frame>. Analog-stick tokens (SUP SDOWN SLEFT SRIGHT) are
+ * SUSTAINED: the stick stays deflected until a later entry changes it; SNONE
+ * re-centres it. "Frame" = count of controller-0 reads since launch (roughly
+ * 2 per rendered frame -- watch GE_INPUTLOG to calibrate). Unset env => no
+ * effect; when set it is the ONLY controller-0 input source. */
+#define INPUTSCRIPT_MAX     64
+#define INPUTSCRIPT_PULSE   6
+
+struct scriptEntry { long frame; unsigned mask; int sx, sy; int hasStick; };
+static struct scriptEntry scriptEntries[INPUTSCRIPT_MAX];
+static int  scriptCount   = -1;   /* -1 = not parsed yet, 0 = parsed empty */
+static long scriptFrame   = 0;
+static int  scriptCurSX   = 0;    /* stick set by the last scriptApply() */
+static int  scriptCurSY   = 0;
+
+/* Apply one token to `e`. Buttons: A B Z START L R UP DOWN LEFT RIGHT CUP
+ * CDOWN CLEFT CRIGHT (D-pad/C-buttons). Analog stick: SUP SDOWN SLEFT SRIGHT
+ * (full +/-80 deflection -- moves menu cursors). */
+static void scriptApplyToken(struct scriptEntry *e, const char *s, int n)
+{
+    struct { const char *k; unsigned v; } btn[] = {
+        {"A",GE_CONT_A}, {"B",GE_CONT_B}, {"Z",GE_CONT_G}, {"START",GE_CONT_START},
+        {"L",GE_CONT_L}, {"R",GE_CONT_R}, {"UP",GE_CONT_UP}, {"DOWN",GE_CONT_DOWN},
+        {"LEFT",GE_CONT_LEFT}, {"RIGHT",GE_CONT_RIGHT},
+        {"CUP",GE_CONT_E}, {"CDOWN",GE_CONT_D}, {"CLEFT",GE_CONT_C}, {"CRIGHT",GE_CONT_F},
+    };
+    for (size_t i = 0; i < sizeof(btn)/sizeof(btn[0]); ++i) {
+        if ((int)strlen(btn[i].k) == n && SDL_strncasecmp(btn[i].k, s, n) == 0) {
+            e->mask |= btn[i].v;
+            return;
+        }
+    }
+    e->hasStick = 1;
+    if (n == 3 && SDL_strncasecmp("SUP", s, 3) == 0)      { e->sy =  STICK_MAX; return; }
+    if (n == 5 && SDL_strncasecmp("SDOWN", s, 5) == 0)    { e->sy = -STICK_MAX; return; }
+    if (n == 5 && SDL_strncasecmp("SLEFT", s, 5) == 0)    { e->sx = -STICK_MAX; return; }
+    if (n == 6 && SDL_strncasecmp("SRIGHT", s, 6) == 0)   { e->sx =  STICK_MAX; return; }
+    if (n == 5 && SDL_strncasecmp("SNONE", s, 5) == 0)    { return; }  /* recentre */
+    e->hasStick = 0;
+    sysLogPrintf(LOG_WARNING, "GE_INPUTSCRIPT: unknown token '%.*s'", n, s);
+}
+
+static void scriptParse(void)
+{
+    scriptCount = 0;
+    const char *env = getenv("GE_INPUTSCRIPT");
+    if (!env || !*env) {
+        return;
+    }
+    const char *p = env;
+    while (*p && scriptCount < INPUTSCRIPT_MAX) {
+        char *end = NULL;
+        long fr = strtol(p, &end, 10);
+        if (end == p || *end != ':') {
+            sysLogPrintf(LOG_WARNING, "GE_INPUTSCRIPT: bad entry near '%s'", p);
+            break;
+        }
+        p = end + 1;
+        struct scriptEntry *e = &scriptEntries[scriptCount];
+        e->frame = fr;
+        e->mask = 0;
+        e->sx = e->sy = 0;
+        e->hasStick = 0;
+        while (*p && *p != ';') {
+            const char *tok = p;
+            while (*p && *p != ',' && *p != ';') ++p;
+            scriptApplyToken(e, tok, (int)(p - tok));
+            if (*p == ',') ++p;
+        }
+        if (*p == ';') ++p;
+        scriptCount++;
+    }
+    sysLogPrintf(LOG_INFO, "GE_INPUTSCRIPT: %d entr%s parsed",
+                 scriptCount, scriptCount == 1 ? "y" : "ies");
+}
+
+static int scriptIsActive(void)
+{
+    if (scriptCount < 0) {
+        scriptParse();
+    }
+    return scriptCount > 0;
+}
+
+/* When a script is loaded it is the SOLE source of controller-0 input: real
+ * keyboard/mouse/pad is ignored so headless menu walks are deterministic
+ * (a relative-mouse SDL window with no focus otherwise spews phantom deltas).
+ * Returns the scripted button mask for the current frame; advances the frame
+ * counter (call exactly once per controller-0 read). */
+static unsigned scriptApply(unsigned button)
+{
+    if (!scriptIsActive()) {
+        return button;
+    }
+    unsigned m = 0;
+    long bestStickFrame = -1;
+    for (int i = 0; i < scriptCount; ++i) {
+        long d = scriptFrame - scriptEntries[i].frame;
+        if (d >= 0 && d < INPUTSCRIPT_PULSE) {
+            m |= scriptEntries[i].mask;
+        }
+        /* sustained stick: the latest-starting entry that carried a stick token */
+        if (d >= 0 && scriptEntries[i].hasStick && scriptEntries[i].frame > bestStickFrame) {
+            bestStickFrame = scriptEntries[i].frame;
+            scriptCurSX = scriptEntries[i].sx;
+            scriptCurSY = scriptEntries[i].sy;
+        }
+    }
+    scriptFrame++;
+    return m;
 }
 
 int inputInit(void)
@@ -421,6 +542,12 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
 
     if (stick_x) *stick_x = (signed char)sx;
     if (stick_y) *stick_y = (signed char)sy;
+
+    if (idx == 0 && scriptIsActive()) {
+        button = scriptApply(button);
+        sx = scriptCurSX;
+        sy = scriptCurSY;
+    }
 
     if (configGetInputLog() && (button || sx || sy)) {
         sysLogPrintf(LOG_NOTE, "GE_INPUTLOG cont%d: btn=%04x stick=(%d,%d)",

@@ -1749,6 +1749,16 @@ char *LEVELID_ToString[] = {
 
 typedef enum LEVEL_SOLO_SEQUENCE
 {
+#ifdef PORT
+    /* D142: GCC/mingw gives an all-non-negative enum an *unsigned* underlying
+     * type, so descending loops that rely on the counter going negative to
+     * terminate spin forever -- e.g. `for (s = SP_LEVEL_EGYPT; s >= SP_LEVEL_DAM;
+     * s--)` in fileGetHighestStageDifficultyCompletedForFolder (file2.c:859/887),
+     * which hangs the file-select screen. A never-used negative sentinel forces
+     * the type signed; first real enumerator stays 0, sizeof stays 4, no stored
+     * value changes. Same trick DIFFICULTY already uses (DIFFICULTY_MULTI=-1). */
+    SP_LEVEL__PORT_SIGNED = -1,
+#endif
     SP_LEVEL_DAM,
     SP_LEVEL_FACILITY,
     SP_LEVEL_RUNWAY,
