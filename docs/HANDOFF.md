@@ -335,7 +335,73 @@ prior behaviour. Full review: **`docs/M-26-QOL-REVIEW.md`**.
   boot crash-free 6/6 GE_PCDUMP frames (unregressed); `ge007.ini` gains a
   populated `[Window]` block on exit.
 
-## Done this session (M-27) — front-end/pause bucket: D140 + D141 FIXED
+## Done this session (M-27 continued) — FULL front-end loop works end to end
+
+**User playtested Dam → exit → post-mission report → Facility briefing →
+Start, exactly like the retail game.** No crashes, no hangs. 10 commits
+`bb6ac627`..`0fdb14a3` (all committed).
+
+- **D142** (`src/bondconstants.h`) — GCC/mingw compiles an all-non-negative
+  `enum` as UNSIGNED, so `for (s = SP_LEVEL_EGYPT; s >= SP_LEVEL_DAM; s--)`
+  in `fileGetHighestStageDifficultyCompletedForFolder` never terminated →
+  SELECT FILE screen froze the game. Fix: `#ifdef PORT` negative sentinel
+  in `LEVEL_SOLO_SEQUENCE`. PORT-LEARNINGS §D3.
+- **D143** (`src/game/textrelated.c`) — `langGet()` returns NULL for a
+  string slot the PC menu flow hasn't loaded; `textRender/textMeasure/
+  textWrap` faulted on it. NULL guards → blank text instead of crash.
+  (A string bank still isn't loading — briefing/objective text is blank.
+  Cosmetic, chase later.)
+- **D144 / D146** (`port/fast3d/gfx_pc.cpp`) — a front-end 3D model
+  (MISSION COMPLETE dossier / mode-select wallets, D75 family) emits a
+  malformed compiled sub-DL (`seg5+0x9ee4`): unresolved matrix pointer,
+  then garbage opcodes. D144 = bad matrix ptr → identity; D146 = unknown
+  opcode → end the DL (was `sysFatalError`→`abort()`, no crash log) +
+  `fast3d_ptr_ok()` guards on `gfx_sp_vertex/movemem/set_vertex_colors`.
+  Model renders wrong/absent (GRAPHICS-BACKLOG D149) but the game survives.
+- **D145** (`port/src/video.c`, `gfx_sdl2.cpp`, `input.c`) — bare **ESC was
+  `exit(0)`** in two event handlers; on the debrief screens ESC is the
+  natural "back" key so paging with it quit the game (clean exit, no log,
+  looked like a crash). ESC now = N64 B (back/cancel); quit = window-X /
+  Alt+F4.
+- **D147** (`port/src/libultra.c`) — **the end-of-Dam hang.** `sndPlaySfx`
+  → `alEvtqPostEvent` on the main thread races the `amMain` audio thread
+  in `sndRemoveEvents` on the same `ALEventQueue`; both "lock" with
+  `osSetIntMask(OS_IM_NONE)` which was a **no-op** → list corruption →
+  infinite spin. `osSetIntMask` is now a process-wide **recursive mutex**
+  (`OS_IM_NONE` acquires, `OS_IM_ALL` token releases). Thread dump
+  confirmed. PORT-LEARNINGS §D4. Verified `-level_09` 1200 frames clean.
+
+**New test tooling (committed):**
+- `tools_pc/debug.ps1` — `.\tools_pc\debug.ps1 [-level_09] [-Menu 13]
+  [-NoBuild]`. Builds, runs under gdb, prints FATAL line + backtrace +
+  crash log on exit → `gdb.txt`. Use this for every playtest so a
+  crash/hang always leaves a trace.
+- `GE_INPUTSCRIPT="<frame>:<tok>,…;…"` (`port/src/input.c`) — headless
+  scripted controller-0 input (buttons pulse, `SUP/SDOWN/SLEFT/SRIGHT/
+  SNONE` sustain). Sole input source when set.
+- `GE_STARTMENU=<id>` (+ `_PAGE`, `_DIFF`) (`src/game/lv.c`) — boot
+  straight into a front-end menu (13=MISSION_COMPLETE, 10=BRIEFING,
+  7=MISSION_SELECT, 12=MISSION_FAILED, 6=MODE_SELECT). Skips a save/unlock
+  so it lands on Dam regardless; good for crash-testing a screen, not for
+  reproducing real objective state.
+
+### Still open (cosmetic / not blocking, parked in GRAPHICS-BACKLOG)
+- **D148** — Dam level-end cutscene (Bond rappelling down the dam) doesn't
+  play; cuts straight to the report. Scripted-cutscene / cinematic-camera
+  + rappel anim; D75 family.
+- **D149** — front-end MISSION COMPLETE / mode-select 3D models garbled
+  or absent (the D144/D146 corrupt DL). D75 family.
+- **D143 side effect** — briefing / objective text renders blank (a lang
+  string bank not loaded in the PC menu flow). Find which bank.
+
+### Next
+- Continue the mission list: Facility → Runway → … playtest with
+  `tools_pc/debug.ps1`, same loop. In-level ABI/GBI crashes are the
+  expected work (D122/D135/D147 pattern).
+- The D75 front-end / cutscene 3D-model family (D148/D149) is now the
+  biggest *visible* gap but is cosmetic — below crashes.
+
+<details><summary>M-27 earlier — front-end/pause bucket: D140 + D141 FIXED</summary>
 
 Started the parked "front-end / transitions / pause / watch" bucket.
 **Pressing Start in-level no longer crashes** — the pause / watch menu
@@ -380,6 +446,12 @@ since removed). Cosmetics unchanged and still parked: mirrored watch text
   (the temp probe didn't test exiting the watch); level exit → MISSION
   COMPLETE → debrief → auto-advance; main-menu / mission-select walkthrough
   (WS2); watch objectives page + gadgets.
+
+**Update (M-27 end): the level-exit → MISSION COMPLETE → debrief →
+auto-advance → next briefing → Start loop is DONE and playtested (D142–
+D147).** D139 got exercised for free. Remaining bucket items (unpause /
+watch-page nav) are minor.
+</details>
 
 ## Next task (M-24 — Opus 5)
 
