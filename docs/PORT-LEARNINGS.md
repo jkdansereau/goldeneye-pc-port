@@ -40,6 +40,22 @@ state.
   22 (`TagObjectRecord.NextTag`, already handled). Check every record type
   the walk can see for a `set_parent_*` / `*_entry_parent` writer.
 
+- **D132 corollary — a `union { T *ptr; s32 IndexN; }` field is 8B/8-aligned
+  on PC even when the ROM image only ever stores the `s32`.** `LinkRecord`
+  (`first`/`Index1`), `LockDoorRecord`, `SafeObjectRecord` etc. pack their
+  index words tight (4B) in the N64 setup stream, but the compiler places
+  each `IndexN` in the LOW 4 bytes of an 8-byte-aligned pointer slot
+  (`Index1`@8 not @4, `Index2`@16 not @8, then a trailing `*next`). A
+  converter that lays them at N64 4-byte offsets makes `pdef->Index1` read
+  `Index2`'s value and `Index2` read 0 → the record's validity guard fails
+  and switch-doors / dual weapons / locked doors / safes silently never
+  initialise (usually non-crash, because the failed guard also skips the
+  pointer stores). Fix: emit each `IndexN` at PC offset `8 + 8*(N-1)` and
+  size the record with the widened unions + trailing `*next`
+  (`d88_propdefs.py` types 14/19/38/44 — proposed in §F D132, not yet
+  applied). Grep every ROM-serialized record for `union {` with a pointer
+  arm. NB `[u16 ID][s16 x]` NOT in a union (e.g. `TagObjectRecord`) stays
+  at offset 4 — only the pointer union forces the 8-align.
 - **D130 corollary — in-place N64→PC struct-array re-layout aliases when the
   stride grew less than the read span.** A ROM struct array widened on PC
   (`fontchar` 24→32B, `romdataFixupFont`) is often re-laid-out *in place*:
@@ -237,6 +253,17 @@ deprioritised below level-progression / crash work. See
   (especially Phase 3 audio underruns), reach first for host thread
   priorities (`SetThreadPriority`: scheduler thread time-critical, tick
   normal) and the deferred `GE_DETERM` mode (D117) — not for kernel changes.
+- **"Regression vs. steady state" is decided by a build-and-compare, not by
+  reading an old handoff line** (D133). Handoff prose like "the entire intro
+  renders" is often aspirational — the author's intent, not a measured coverage
+  number. Before bisecting a suspected render regression: `git worktree add` the
+  commit whose handoff made the claim (COPY `data/`, never junction — see the
+  data-dir-junction-hazard memory), build, capture the *same* `GE_PCDUMP`
+  window, `pixcount.py`. A **pixel-identical** non-clear count on a static 2D
+  screen (e.g. the legal/disclaimer framebuffer, 6677 px here) across two
+  independently-built binaries proves the path is unchanged → not a regression,
+  don't bisect. Clean up the worktree with `git worktree remove --force` (safe
+  only because `data/` was copied).
 - **Watch item: `osYieldThread` = `Sleep(0)`.** The one place we fake
   cooperative behavior. If a level-sweep hot loop misbehaves under host load,
   this shim is the first thing to inspect. Keep as-is until then.
