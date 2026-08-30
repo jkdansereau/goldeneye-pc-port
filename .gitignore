@@ -140,3 +140,6 @@ ge007.crash.log
 # saved reference webpage assets (keep the .htm, not the sidecar cruft)
 docs/reference/*_files/
 nohup.out
+
+gdb.txt
+gdb-hang.txt
