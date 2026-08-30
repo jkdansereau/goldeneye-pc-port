@@ -24,9 +24,9 @@ Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` 
 | Statue   | 22 | **PASS** 80.1% | — (C1 fixed, D123) | — |
 | Streets  | 29 | **PASS** 91.6% | — (C1 fixed, D123; no C2 crash this run — timing) | — |
 | Cradle   | 41 | **PASS** 55.4% (low — partial render, no crash) | — (C1 fixed, D123) | — |
-| Runway   | 35 | CRASH (intermittent, ~3/4 runs; `0x1400d1d83`) | `import_texture_i8` — same as Facility | **C2** |
-| Facility | 34 | CRASH | `import_texture_i8` gfx_pc.cpp:821 (fault 0x72181ee8) — model-GDL relocation align bug, D124, NOT fixed | **C2** |
-| Jungle   | 37 | CRASH | `gfx_sp_matrix` gfx_pc.cpp:1046 (fault 0x401c68e0) — C2 texture crash fixed (D124), now explosion-DL `G_MTX` (D75/matrix family) | **C2m** |
+| Runway   | 35 | **PASS** | — (D130: `romdataFixupFont` glyph-relayout aliasing) | — |
+| Facility | 34 | **PASS** | — (D130: `romdataFixupFont` corrupted glyph `#`/`"` pixeldata → fast3d AV) | — |
+| Jungle   | 37 | CRASH | `gfx_sp_matrix` gfx_pc.cpp:1046 (fault 0x401c68e0) — renders ~300 frames then explosion-DL `G_MTX` (D75/matrix family); separate from D130 | **C2m** |
 | Aztec    | 28 | **PASS** 90.8% | — (C3 fixed, D125) | — |
 | Bunker2  | 27 | **PASS** 91.5% | — (C3r fixed, D126) | — |
 | Depot    | 30 | **PASS** 79.8% | — (C4 fixed, D126) | — |
@@ -34,7 +34,13 @@ Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` 
 | Surface2 | 43 | **PASS** 70.4% | — (C6 fixed, D126) | — |
 | Surface1 | 36 | **PASS** 77.5% | — (C7 guarded, D127) | — |
 
-**18 / 21 PASS.** D123 cleared C1 on all 6. D124 cleared Jungle's texture
+**20 / 21 PASS** (M-18). D130 cleared C2 Facility + Runway — the crash was
+`romdataFixupFont` corrupting fontchar glyphs 0/1/2 (in-place 24→32B relayout
+aliases for low indices), NOT the model-GDL relocation the D124-Facility
+addendum suspected. Only Jungle (C2m, explosion-DL `G_MTX`, ~frame 300)
+remains.
+
+**(older) 18 / 21 PASS.** D123 cleared C1 on all 6. D124 cleared Jungle's texture
 crash (now hits an explosion-DL matrix crash). D125 cleared C3-Aztec.
 **D126** (objective sub-record `->next` pointer widens 4→8B → 8-byte store
 clobbers the next propdef record's header → walk desync → wrong command
@@ -167,15 +173,13 @@ id from a propDef record). Fault addr 0x0. Files: `tools_pc/d88_propdefs.py`,
 crash on load, not silence. May be dodge-able with a narrow guard until
 audio lands. Files: `src/snd.c`, `port/src/` audio stubs.
 
-## Next (3 crashes, 1 class)
-1. **C2 / C2-GDL** Runway + Facility — model/prop GDL relocation writes
-   non-16-aligned `dst` (N64 8B `Gfx` vs PC 16B stride) in the
-   `texLoadFromGdl` / `sub_GAME_7F0762E0` path → garbage `G_SETTIMG` w1 →
-   `import_texture_i8` fault. `docs/BRIEF-C2gdl-model-reloc.md` — its own
-   focused session (D80/D82/D83 area).
-2. **C2m** Jungle — renders ~300 frames then an explosion-DL `G_MTX`
-   (`gfx_sp_matrix`), D75/matrix family. May be downstream of the same
-   GDL-reloc infra.
+## Next (1 crash)
+1. **C2m** Jungle `-level_37` — renders ~300 frames then an explosion-DL
+   `G_MTX` (`gfx_sp_matrix` gfx_pc.cpp:1046, fault 0x401c68e0), D75/matrix
+   family. NOT related to D130 (Facility/Runway were a font-relayout bug, now
+   fixed). `docs/BRIEF-C2gdl-model-reloc.md` is now largely obsolete — its
+   model-GDL-relocation premise was disproven (D130); the Jungle crash is a
+   compiled/explosion-DL matrix pointer, closer to D75/D124-Jungle territory.
 
 Everything else loads + renders + survives the no-input window.
 Hand `docs/LEVEL-PLAYTEST.md` to the user for the WS6 completion pass.

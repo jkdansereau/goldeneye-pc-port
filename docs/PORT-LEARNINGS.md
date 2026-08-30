@@ -40,6 +40,28 @@ state.
   22 (`TagObjectRecord.NextTag`, already handled). Check every record type
   the walk can see for a `set_parent_*` / `*_entry_parent` writer.
 
+- **D130 corollary — in-place N64→PC struct-array re-layout aliases when the
+  stride grew less than the read span.** A ROM struct array widened on PC
+  (`fontchar` 24→32B, `romdataFixupFont`) is often re-laid-out *in place*:
+  for glyph `i`, `dst = base + PCstride*i`, `src = base + N64stride*i`, so
+  `dst − src = (PCstride−N64stride)*i`. For small `i` that delta is *less
+  than the per-element field-copy read span*, so `dst` overlaps `src`, and a
+  forward field-by-field `*dst_k = f(*src_k)` loop overwrites a not-yet-read
+  `src_j` (`j > k`). Result: later fields of the first few elements come out
+  as `f(f(earlier field))` — e.g. glyph 1's `width` became `bswap(bswap(index))`.
+  Iterating elements backward does NOT help (the overlap is *within* one
+  element). Fix: read every source field of the element into locals first,
+  then write. Grep every `romdataFixup*` / in-place relayout for a
+  read-write loop whose `dst`/`src` can alias for low indices.
+- **A negative/OOB index into a widened struct array is fatal on PC, benign
+  on N64.** `chars[*text - 0x21]` with a control byte (`*text < 0x21`) reads
+  before `chars[0]`. On N64 that hits the adjacent 4-byte-field kerning table
+  (small values → a garbage-but-TMEM-valid glyph); on PC the struct's 8-byte
+  `pixeldata` reads a wild pointer → fast3d AV. Latent in `textrelated.c`
+  (`textRender*`/`textMeasure` ASCII paths) — a `GLYPH_IDX` clamp fixes it if
+  a level actually feeds a control byte to the HUD text (none do yet; D130
+  was a font-relayout bug, not this).
+
 ## B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64
 
 Any buffer reservation, `memcpy` size, slot stride, or pool budget

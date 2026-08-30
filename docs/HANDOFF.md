@@ -108,18 +108,36 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
   end-credits crash; **Cuba itself loads + renders 300+ frames fine** and
   the credits work through the real front-end flow.
 
-## Next task — C2 / C2-GDL model-GDL relocation (Runway + Facility + Jungle)
+## Done this session (M-18) — 1 fix, 18→20/21 PASS
 
-The last 3 crashes are **one class**: the model / prop GDL relocation
-(`texLoadFromGdl` / `sub_GAME_7F0762E0`, `objecthandler_2.c`) writes
-non-16-aligned `dst` because it mixes N64 8-byte `Gfx` and PC 16-byte
-stride in the `replacementgdl` / `name` offset math → garbage `G_SETTIMG`
-w1 → `import_texture_i8` fault (Runway, Facility). Jungle renders ~300
-frames then hits a related explosion-DL `G_MTX` (`gfx_sp_matrix`).
-**Brief: `docs/BRIEF-C2gdl-model-reloc.md` — its own focused session**
-(D80/D82/D83 area). Files: `src/game/objecthandler_2.c`, `src/game/tex.c`
-(`texLoadFromGdl`), `src/game/model.c` (`modelNodeReplaceGdl`),
-possibly `tools_pc/d43_emit.py` model texture-blob offsets.
+- **D130** (`port/src/romdata.c`, uncommitted) — Facility `-level_34` +
+  Runway `-level_35` C2 crash (`import_texture_i8` AV on wild ptr
+  `0x72181ee8`). Root cause was NOT the model-GDL relocation the
+  D124-Facility addendum / `BRIEF-C2gdl-model-reloc.md` suspected —
+  disproved: `texLoadFromGdl` never copies a `G_SETTIMG` on these levels,
+  `texWriteLoadToTmem*` is never called, and `gdl` in `sub_GAME_7F0762E0`
+  is still a segmented `0x05xxxxxx` value so its `& 0x00ffffff` masks are
+  correct. Real cause: **`romdataFixupFont` corrupts BankGothic/ZurichBold
+  glyph indices 0/1/2** — the in-place N64 24B → PC 32B `fontchar` relayout
+  aliases `dst`/`src` for low glyph indices (stride grew 8B < the 24B field
+  read span), so a field write clobbers a later field's source mid-loop
+  (glyph 1 `width` = `bswap(index)`, glyph 2 `pixeldata` ≈ `0x020002e8` →
+  `+= font_base` → wild). Facility's title "Chemical Warfare Facility #2"
+  renders `#` → `gDPLoadTextureBlock(gdl, curchar->pixeldata=wild, …)` →
+  fast3d AV. Fix: stage all 6 N64 fields in a local `f[6]` before writing.
+  §F/§H **D130**; PORT-LEARNINGS §A. Verified: -level_34 0/~14, -level_35
+  0/4; -level_09/20/24 unregressed.
+
+## Next task — Jungle `-level_37` (C2m, the last crash)
+
+Jungle renders **~300 frames** then faults in `gfx_sp_matrix`
+(`gfx_pc.cpp:1046`, fault `0x401c68e0`) — an explosion / particle DL
+`G_MTX` with a bad matrix pointer. D75 / D124-Jungle matrix-family
+territory (compiled/global DL, NOT the per-level model-GDL path — that
+premise is dead, see D130). `docs/BRIEF-C2gdl-model-reloc.md` is now
+mostly obsolete. Likely near `port/src/gimgfixup.c` (D124-Jungle) /
+compiled `globalDL_0xNNN` matrix refs, or fast3d's `seg_addr` for a
+`G_MTX` w1. Then all 21 → hand `docs/LEVEL-PLAYTEST.md` to the user (WS6).
 
 Everything else: hand `docs/LEVEL-PLAYTEST.md` to the user for the WS6
 completion pass (real input, per-level objective checklist).

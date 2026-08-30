@@ -820,7 +820,8 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D123 | crash class C1: `chrIsNotDeadOrShot` NULL deref on 6 levels (Dam/Runway/Frigate/Statue/Streets/Cradle). D122's `OBJ_TAIL_DESC` zeroed the widened `VehichleRecord/AircraftRecord.ailist` slot (w32), but `prop.c:1764/1786` reads a pre-populated int AI-list id there → `ailistFindById(0)` → `GAILIST_AIM_AT_BOND` → `ai()` runs a CHR aim list with `ChrEntityp==NULL` | converter fixed (`OBJ_ID_WORDS`); C1 cleared on all 6, residual crashes are fast3d (C2) |
 | D125 | crash classes C3+C6 (Aztec/Bunker2/Surface2): **root cause found (M-16)** — `tools_pc/d88_emit.py:374` assigns a 4-byte literal to an 8-byte slice (`out[dst_o+0x30:dst_o+0x38] = b"\x00…"`, the stan zero-fill in `emit_pad`); every pad/boundpad record silently shrinks the output bytearray by 4 B, and once the tail falls below the boundpad plink string blob, later verbatim leaf writes hit Python out-of-range slice semantics (insert at current end, not relocated offset) → boundpad names drift/truncate (Aztec pad33 `p138d2`→`8d2`) → `stanPackId()` reject → `getposstan()` NULL stan → `setupDoor` leaves door `model=NULL` → crash `propobj.c:13601`. M-14's "propDefs zeros in RAM" was a misread; sidecar propdefs were always correct (M-15) and post-load RAM matches the sidecar byte-for-byte (M-16) | **resolved (M-16b)** — line 374 → 8 NULs; all 21 sidecars regen'd; **Aztec `-level_28` now PASSES** (was C3 CRASH). Bunker2 falls through to a separate DOOR-tail `linkedDoor` layout bug (C3 residual) |
 | D126 | crash classes C3r/C4/C6 (Bunker2 `-level_27` `door7F054FB4` propobj.c:13523, Depot `-level_30` prop.c:902, Surface2 `-level_43` loadobjectmodel.c:393): the objective sub-records `criteria_picture` (30), `criteria_roomentered` (32), `criteria_deposit` (33), `setup_objective_text` (35) each end in a `T *next` list pointer that the setup walk (`set_parent_cur_obj_*` / `setup_briefing_text_entry_parent`) writes unconditionally. On PC that pointer widens 4→8B and lands 8-aligned at offset 16 → struct is 24B/6w (N64 16/20). `d88_propdefs.py` emitted them at N64 size via the generic arm → the runtime 8-byte `->next` write clobbered the *next* record's header → propdef walk desynced, command indices drifted ~100, `linkedDoorOffset + arg2` resolved to the wrong record → door `linkedDoor` chain walked into garbage. | resolved — `d88_propdefs.py` PROPDEF_PC_BYTES[30/32/33/35]=24 + typed handler; `loadobjectmodel.c` sizepropdef PORT returns 6. Bunker2/Depot/Surface2 now PASS (13→16/21) |
-| D124 | crash class C2: fast3d bad texture pointer. **Jungle** (`0xabcd0824`): `gimgSyncCompiledGlobalDLs()` slot-detect keyed on the post-fixup marker, which `texLoad()` had already overwritten → compiled `globalDL_0xNNN` explosion DLs kept link-time `IMAGESEG` words → latent on every level, tripped by the first explosion-DL draw. **Facility** (`0x72181ee8`): separate — model/prop GDL from the `texLoadFromGdl()`/`sub_GAME_7F0762E0` relocation path writes non-16-aligned `dst` (N64 8B vs PC 16B `Gfx` stride mix in `objecthandler_2.c`), open D80/D82/D83 area | Jungle fixed (`port/src/gimgfixup.c`); Facility diagnosed, not fixed |
+| D124 | crash class C2: fast3d bad texture pointer. **Jungle** (`0xabcd0824`): `gimgSyncCompiledGlobalDLs()` slot-detect keyed on the post-fixup marker, which `texLoad()` had already overwritten → compiled `globalDL_0xNNN` explosion DLs kept link-time `IMAGESEG` words → latent on every level, tripped by the first explosion-DL draw. **Facility** (`0x72181ee8`): see **D130** — the model-GDL-relocation hypothesis (M-14 addendum) was WRONG; real cause was `romdataFixupFont` | Jungle fixed (`port/src/gimgfixup.c`); Facility → D130 |
+| D130 | crash class C2 (Facility `-level_34`, Runway `-level_35`): `import_texture_i8` AV on a wild texture pointer (`0x72181ee8`), baked into the HUD glyph DL by `gDPLoadTextureBlock(gdl, curchar->pixeldata, …)` when the level-title string ("Chemical Warfare Facility #2") renders `#`/`"`. Root cause: `romdataFixupFont` (`port/src/romdata.c`) converts the N64 24B fontchar array to the PC 32B array **in place**, forward-field, backward-glyph. PC−N64 stride = 8, so for glyphs 0/1/2 `d` overlaps `s` by less than the 24B read span and an early field write clobbers a later field's source mid-`for k<5` loop → glyph 1's `width` = `bswap(index)` = `0x01000000`, glyph 2's `pixeldata` = `pcPixOff+(index−pixStart)` ≈ `0x020002e8` → `+= font_base` → wild → fast3d AV. On N64 the array is read-only rodata, never re-laid-out, so no bug there. NOT the model-GDL relocation (`sub_GAME_7F0762E0` / `texLoadFromGdl`) the D124-Facility addendum suspected — `gdl` there is still a segmented `0x05xxxxxx` value so the `& 0x00ffffff` masks are correct, and `texLoadFromGdl` never copies a `G_SETTIMG` for these levels. | resolved — stage all 6 N64 fields in a local `f[6]` before writing any. Facility + Runway now PASS (16→18/21). Probes reverted. |
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
 threads, compiled GE's real `src/sched.c`, and brought in PD's fast3d software
@@ -4389,7 +4390,58 @@ unregressed. Sweep 13 → 16/21. Generalisable quirk appended to
 align), C2m Jungle (`G_MTX`), C5 Control (BG portal), C7 Surface1
 (`sndSetupSound`).
 
+**D130 (session M-18) — Facility + Runway C2 crash was `romdataFixupFont`,
+NOT the model-GDL relocation.** `-level_34` (and `-level_35`) fault in
+`import_texture_i8` (`gfx_pc.cpp:821`) on `loaded_texture.addr = 0x72181ee8`,
+an un-mapped wild pointer. gdb showed the fault DL is a 2D `G_TEXRECT` block
+(`gfx_dp_texture_rectangle` → `gfx_sp_tri1(is_rect)`), with the wild pointer
+baked into a preceding `G_SETTIMG` w1. Traced back through `GE_C2GDL` probes:
+
+- `texLoadFromGdl` **never copies a `G_SETTIMG` (0xFD)** on these levels, and
+  `texWriteLoadToTmemAddr/Zero` are **never called** — so the M-14 addendum's
+  "model-GDL relocation writes non-16-aligned dst" hypothesis is wrong. A
+  probe in `sub_GAME_7F0762E0` also confirmed `gdl` from
+  `modelIterateDisplayLists` is still a **segmented `0x05xxxxxx` value**
+  (`modelPromoteNodeOffsetsToPointers` does NOT promote DL Primary/Secondary),
+  so the `Switches + (x & 0x00ffffff)` idiom is correct as written.
+- The wild `G_SETTIMG` is emitted by `gDPLoadTextureBlock(gdl,
+  curchar->pixeldata, G_IM_FMT_I, G_IM_SIZ_8b, …)` in
+  `textRenderGlyphOutlined` (`textrelated.c`) while rendering the level-title
+  string "Chemical Warfare Facility #2" — specifically glyph `#` (and `"`).
+- `curchar->pixeldata` for BankGothic/ZurichBold glyph indices **0, 1, 2** is
+  corrupt after `load_font_tables`: glyph 1 `.width = 0x01000000`, glyph 2
+  `.pixeldata = 0x020002e8` (→ `+= font_base` → wild).
+
+Root cause: `romdataFixupFont` (`port/src/romdata.c`) re-lays-out the N64 24B
+`fontchar` array into the PC 32B array **in place** — backward over glyphs,
+forward over the 5 leading `u32` fields per glyph. PC−N64 stride = 8, so
+`d = s + 8*i`; for `i ∈ {0,1,2}` `d` overlaps the 24-byte source read span
+and an early `*(u32*)(d+4k) = bswap(*(u32*)(s+4k))` write clobbers a later
+`k`'s source. Glyph 1 (`Δ=12`): k=3/k=4 read bytes k=0/k=1 already
+overwrote → `width = bswap(bswap(index)) = index = 0x01000000`. Glyph 2
+(`Δ=20`): k=0 writes `s+20`; line 507 then reads `s+20` for the pixeldata
+offset → `o = index = 0x02000000` → `o >= pixStart` → remapped to
+`pcPixOff + (0x02000000 − pixStart) ≈ 0x020002e8`. Confirmed exactly against
+a raw-bytes dump. On N64 the array is read-only rodata — never re-laid-out —
+so no bug there; this is purely a PC-relayout aliasing bug.
+
+Fix: stage all six N64 fields into a local `u32 f[6]` before writing any
+field of `d`. (A previous iteration's write can never touch `s(i)` — for
+`j > i`, `d(j)` starts past `s(i)`'s end — so a full pre-read is safe.)
+`GLYPH_IDX` clamp in `textrelated.c` was tried and reverted: the crashing
+string has no control byte, and a negative-index guard is a separate latent
+concern (logged in PORT-LEARNINGS §A).
+
+**Verification:** `-level_34` 0 crashes / ~14 runs (was ~50–100%); `-level_35`
+0 crashes / 4 runs (was ~3/4). `-level_09`/`-level_20`/`-level_24` unregressed
+(91.3% / 91.7% / 90.8% non-clear). `-level_37` (Jungle) unchanged — still the
+separate C2m `gfx_sp_matrix` explosion-DL `G_MTX` crash at ~frame 300 (D75
+family). Sweep **16 → 18/21**. All probes reverted; only
+`port/src/romdata.c` (11 lines) changed. Confidence: **high** (exact
+byte-level match, deterministic value, 2 levels fixed, no regression).
+
 **D124-Facility addendum (session M-14 — partial, NOT fixed, out of time).**
+*(Superseded by D130 — the model-GDL hypothesis below was wrong.)*
 Re-instrumented with a `GE_C2GDL` probe in `sub_GAME_7F0762E0`
 (`objecthandler_2.c`) + a bad-`G_SETTIMG` catcher in fast3d
 (`gfx_pc.cpp` G_SETTIMG case). Both probes **reverted** — tree is clean.

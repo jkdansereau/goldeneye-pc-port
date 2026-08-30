@@ -501,10 +501,18 @@ void romdataFixupFont(u8 *blob, u32 n64Size)
     for (i = n; i-- > 0;) {
         const u8 *s = blob + N64_COFF + N64_CSTRIDE * i;
         u8 *d = blob + ROMDATA_OFFSEXP(struct font, chars) + sizeof(struct fontchar) * i;
-        u32 k, o;
+        u32 f[6], k, o;
+        /* D130: PC stride (32) - N64 stride (24) = 8, so for the first few
+         * glyphs `d` overlaps `s` by less than the 24-byte read span and a
+         * field write clobbers a later field's source mid-loop (glyph 1's
+         * width came out as bswap(index), glyph 2's pixeldata as
+         * pcPixOff+(index-pixStart) -> wild pointer -> fast3d AV rendering
+         * '#'/'"'). Stage all six N64 fields before writing any. */
+        for (k = 0; k < 6; k++)
+            f[k] = romdataBswap32(*(const u32 *)(s + 4 * k));
         for (k = 0; k < 5; k++)
-            *(u32 *)(d + 4 * k) = romdataBswap32(*(const u32 *)(s + 4 * k));
-        o = romdataBswap32(*(const u32 *)(s + 20));
+            *(u32 *)(d + 4 * k) = f[k];
+        o = f[5];
         if (o != 0 && pixStart != 0 && o >= pixStart)
             o = pcPixOff + (o - pixStart);
         /* D51: on PC pixeldata is a u64 at d+24 (fontchar needs 8-align,
