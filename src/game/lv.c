@@ -1,5 +1,8 @@
 #include <ultra64.h>
 #include <math.h>
+#ifdef PORT
+#include <stdlib.h>
+#endif
 #include <os_extension.h>
 #include <PR/libaudio.h>
 #include <assets/font_dl.h>
@@ -382,6 +385,37 @@ void lvlStageLoad(s32 stage)
     if (stage == LEVELID_TITLE)
     {
         init_menus_or_reset();
+
+#ifdef PORT
+        /* Debug harness: GE_STARTMENU=<id> jumps the front end straight to a
+         * menu on boot (skips intro + folder/mode/mission/difficulty select),
+         * so WS2 screens -- briefing (0x0A), mission-complete (0x0D),
+         * mission-failed (0x0C), mission-select (0x07) -- can be retested in
+         * seconds. GE_STARTMENU_PAGE=<n> picks the mission_folder_setup_entries
+         * row (default 1 = Dam); GE_STARTMENU_DIFF=<0..3> the difficulty.
+         * Not compiled without PORT; no effect unless the env var is set. */
+        {
+            const char *sm = getenv("GE_STARTMENU");
+            if (sm && *sm) {
+                s32 want = (s32)strtol(sm, NULL, 0);
+                const char *pg = getenv("GE_STARTMENU_PAGE");
+                const char *df = getenv("GE_STARTMENU_DIFF");
+                s32 page = pg && *pg ? (s32)strtol(pg, NULL, 0) : 1;
+                s32 diff = df && *df ? (s32)strtol(df, NULL, 0) : DIFFICULTY_AGENT;
+
+                if (page < 1) page = 1;
+                briefingpage = page;
+                selected_stage = mission_folder_setup_entries[page].stage_id;
+                selected_difficulty = (DIFFICULTY)diff;
+                gamemode = GAMEMODE_SOLO;
+                prev_keypresses = TRUE;      /* short-circuit the intro path   */
+                maybe_is_in_menu = TRUE;
+                menu_update = (MENU)want;
+                osSyncPrintf("GE_STARTMENU: menu=0x%x page=%d stage=%d diff=%d\n",
+                             want, page, selected_stage, diff);
+            }
+        }
+#endif
     }
     else
     {
