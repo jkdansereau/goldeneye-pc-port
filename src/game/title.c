@@ -602,12 +602,8 @@ void clearChrGunModelInstances(void)
 /*
  * Address: 0x7F009254
 */
-#ifdef PORT
-extern void d63SlotCheck(const char *tag); /* TEMP D63 */
-#endif
 Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
 #ifdef PORT
-    d63SlotCheck("gb-render-entry");
     if (getenv("GE_D63")) {
         static int n = 0;
         if ((++n % 200) == 1)
@@ -647,19 +643,10 @@ Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
         gdl = clear_framebuffer_black(gdl++);
         #endif
         gdl = insert_sniper_sight_eye_intro(gdl++);
-#ifdef PORT
-        d63SlotCheck("gb1-after-sight");
-#endif
         gdl = insert_sight_backdrop_eye_intro(gdl++);
-#ifdef PORT
-        d63SlotCheck("gb1-after-backdrop");
-#endif
         
         if (g_TitleX < 600.0f) {
             gdl = insert_bond_eye_intro(gdl);
-#ifdef PORT
-            d63SlotCheck("gb1-after-bond");
-#endif
         }
         g_TitleX -= XDEC3;
         if (g_TitleX <= -80.0f) {
@@ -675,13 +662,7 @@ Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
         intro_eye_counter--;
         if (intro_eye_counter < 0) {
             gunbarrel_mode++;
-#ifdef PORT
-            d63SlotCheck("gb2-before-blood0");
-#endif
             die_blood_image_routine(0);
-#ifdef PORT
-            d63SlotCheck("gb2-after-blood0");
-#endif
             intro_state_blood_animation = 0;
             intro_eye_counter = 1;
         }
@@ -690,25 +671,13 @@ Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
     case 3:
         intro_eye_counter--;
         if (intro_eye_counter == 0) {
-#ifdef PORT
-            d63SlotCheck("gb3-before-blood1");
-#endif
             intro_state_blood_animation = die_blood_image_routine(1);
-#ifdef PORT
-            d63SlotCheck("gb3-after-blood1");
-#endif
             intro_eye_counter = 2;
         }
         gdl = insert_sniper_sight_eye_intro(gdl);
         gdl = insert_sight_backdrop_eye_intro(gdl);
         gdl = insert_bond_eye_intro(gdl);
-#ifdef PORT
-        d63SlotCheck("gb3-before-bloodDL");
-#endif
         gdl = gunbarrelBloodOverlayDL(gdl);
-#ifdef PORT
-        d63SlotCheck("gb3-after-bloodDL");
-#endif
         if (intro_state_blood_animation != 0) {
             gunbarrel_mode++;
             word_CODE_bss_80069584 = 0;

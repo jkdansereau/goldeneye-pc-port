@@ -246,9 +246,6 @@ s32 die_blood_image_routine(s32 arg0) {
       }
    }
 
-#ifdef PORT
-   extern void d63SlotCheck(const char *tag); /* TEMP D63 */
-#endif
    g_CurrentPlayer->bloodImgIdx = (1 - g_CurrentPlayer->bloodImgIdx);
    g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx] = dynAllocate(BLOOD_IMG_WIDTH * BLOOD_IMG_HEIGHT);
    temp_v0_2 = dynAllocate(BLOOD_IMG_WIDTH * BLOOD_IMG_HEIGHT);
@@ -257,28 +254,12 @@ s32 die_blood_image_routine(s32 arg0) {
       osSyncPrintf("D63 blood: buf=%p temp=%p\n",
                    (void *)g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx],
                    (void *)temp_v0_2);
-   d63SlotCheck("blood-a-alloc");
 #endif
    g_CurrentPlayer->bloodImgNxt = decrypt_bleeding_animation_data(g_CurrentPlayer->bloodImgCur, BLOOD_IMG_WIDTH, BLOOD_IMG_HEIGHT, temp_v0_2, &sp37);
-#ifdef PORT
-   d63SlotCheck("blood-b-decrypt");
-#endif
    bloodImgTranspose(temp_v0_2, BLOOD_IMG_WIDTH, BLOOD_IMG_HEIGHT, g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx]);
-#ifdef PORT
-   d63SlotCheck("blood-c-transpose");
-#endif
    sub_GAME_7F01D02C(g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx], BLOOD_IMG_WIDTH, g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx]);
-#ifdef PORT
-   d63SlotCheck("blood-d-d02c");
-#endif
    sub_GAME_7F01CEEC(g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx], BLOOD_IMG_WIDTH, g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx]);
-#ifdef PORT
-   d63SlotCheck("blood-e-ceec");
-#endif
    sub_GAME_7F01CC94(g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx], BLOOD_IMG_WIDTH * BLOOD_IMG_HEIGHT, g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx]);
-#ifdef PORT
-   d63SlotCheck("blood-f-cc94");
-#endif
 
    return (g_CurrentPlayer->bloodImgNxt >= &die_blood_image_end);
 }

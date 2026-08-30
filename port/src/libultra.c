@@ -258,7 +258,6 @@ void portKernelInit(void)
 {
     memset(g_pt, 0, sizeof(g_pt));
     g_pqCount = 0;
-    d63WatchdogStart(); /* TEMP D63 */
     /* Anchor the heartbeat clock so the first check doesn't compare against
      * epoch 0 (the host QPC has a large absolute offset). */
     g_lastFrameUs = sysGetMicroseconds();
@@ -487,135 +486,11 @@ static void d62log(const char *op, OSMesgQueue *mq, OSMesg msg)
     }
 }
 
-/* TEMP D63: watch the gun-barrel sub-DL slot (V1+0x12EC38) for clobbering.
- * Hooked in osSendMesg/osRecvMesg so both game threads are sampled often. */
-void d63SlotLog(const char *tag)
-{
-    if (!getenv("GE_D63")) return;
-    u32 cur = *(const u32 *)0x7012EC38;
-    sysLogPrintf(LOG_NOTE, "D63 slot %s: word@0x7012ec38=%08x", tag, cur);
-}
-
-/* TEMP D63: log only when the slot value changes (first 8 per tag). */
-void d63SlotCheck(const char *tag)
-{
-    if (!getenv("GE_D63")) return;
-    static const char *s_tags[16];
-    static u32 s_vals[16];
-    static int s_n = 0, s_count = 0;
-    u32 cur = *(const u32 *)0x7012EC38;
-    int i;
-    for (i = 0; i < s_n; i++) {
-        if (s_tags[i] == tag) {
-            if (cur != s_vals[i] && s_count < 64) {
-                sysLogPrintf(LOG_NOTE, "D63 check %s: %08x -> %08x", tag, s_vals[i], cur);
-                s_vals[i] = cur;
-                ++s_count;
-            }
-            return;
-        }
-    }
-    if (s_n < 16) { s_tags[s_n] = tag; s_vals[s_n] = cur; ++s_n; }
-}
-
-/* TEMP D63: timestamped cross-thread activity ring + watchdog thread. */
-typedef struct { uint64_t t; unsigned long tid; const char *tag; } D63Act;
-#define D63_ACT_N 2048
-static D63Act s_d63act[D63_ACT_N];
-static volatile long s_d63actIdx = 0;
-static int s_d63on = -1;
-
-int d63On(void) { if (s_d63on < 0) s_d63on = getenv("GE_D63") != 0; return s_d63on; }
-
-unsigned long d63Tid(void)
-{
-#if defined(PLATFORM_WINDOWS)
-    return GetCurrentThreadId();
-#else
-    return (unsigned long)pthread_self();
-#endif
-}
-
-void d63Act(const char *tag)
-{
-    if (!d63On()) return;
-    long i = s_d63actIdx++;
-    s_d63act[i & (D63_ACT_N - 1)] = (D63Act){ sysGetMicroseconds(), d63Tid(), tag };
-}
-
-static void d63DumpActivity(uint64_t now)
-{
-    long newest = s_d63actIdx - 1;
-    int k;
-    for (k = 47; k >= 0; --k) {
-        long i = newest - k;
-        if (i < 0) break;
-        const D63Act *e = &s_d63act[i & (D63_ACT_N - 1)];
-        sysLogPrintf(LOG_NOTE, "D63   act t=%llu d=%lld tid=%lu %s",
-                     (unsigned long long)e->t,
-                     (long long)(e->t >= now ? (long long)(e->t - now) : -(long long)(now - e->t)),
-                     e->tid, e->tag);
-    }
-}
-
-static void d63WatchdogThread(void *arg)
-{
-    const u32 *slot = (const u32 *)0x7012EC38;
-    u32 last = *slot;
-    int changes = 0;
-    for (;;) {
-        u32 cur = *slot;
-        if (cur != last) {
-            uint64_t now = sysGetMicroseconds();
-            if (changes < 8) {
-                sysLogPrintf(LOG_NOTE, "D63 WATCHDOG t=%llu word@0x7012ec38 %08x -> %08x",
-                             (unsigned long long)now, last, cur);
-                d63DumpActivity(now);
-            }
-            ++changes;
-            last = cur;
-        }
-#if defined(PLATFORM_WINDOWS)
-        Sleep(0); /* yield to same-priority threads */
-#else
-        sched_yield();
-#endif
-    }
-}
-
-void d63WatchdogStart(void)
-{
-    if (!d63On()) return;
-    static pthread_t th;
-    pthread_create(&th, NULL,
-                   (void *(*)(void *))d63WatchdogThread, NULL);
-    pthread_detach(th);
-    sysLogPrintf(LOG_NOTE, "D63 watchdog started");
-}
-
-static void d63WatchGunbarrelSlot(void)
-{
-    if (!d63On()) return;
-    static u32 s_last = 0;
-    static int s_init = 0;
-    static int s_changes = 0;
-    const u32 *slot = (const u32 *)0x7012EC38;
-    u32 cur = *slot;
-    if (!s_init) { s_init = 1; s_last = cur; return; }
-    if (cur != s_last && s_changes < 64) {
-        sysLogPrintf(LOG_NOTE, "D63 clobber-watch: word@0x7012ec38 %08x -> %08x tid=%lu changes=%d",
-                     s_last, cur, d63Tid(), s_changes);
-        s_last = cur;
-        ++s_changes;
-    }
-}
 
 s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
 {
     PortQueue *pq = portQueueGet(mq);
     d62log("SEND", mq, msg); /* TEMP D62 */
-    d63Act("send"); /* TEMP D63 */
-    d63WatchGunbarrelSlot(); /* TEMP D63 */
     /* TEMP D51: watch sends to the 32-slot queues (sched cmdQ + client Qs) */
     if (getenv("GE_D51") && mq->msgCount == 32 && !(g_viRetraceMQ && mq == g_viRetraceMQ)) {
         void *ra = __builtin_return_address(0);
@@ -655,8 +530,6 @@ s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
 {
     PortQueue *pq = portQueueGet(mq);
     d62log("RECV", mq, 0); /* TEMP D62 */
-    d63Act("recv"); /* TEMP D63 */
-    d63WatchGunbarrelSlot(); /* TEMP D63 */
     pthread_mutex_lock(&pq->lock);
     while (mq->validCount == 0) {
         if (flag != OS_MESG_BLOCK) {
@@ -1107,51 +980,12 @@ void osSpTaskLoad(OSTask *t) { (void)t; /* nothing to load on the host */ }
 
 void osSpTaskStartGo(OSTask *t)
 {
-    d63Act(t->t.type == M_AUDTASK ? "audtask" : "spgo"); /* TEMP D63 */
     if (t->t.type == M_AUDTASK) {
         /* Phase 3: execute the audio ucode against t->t.data_ptr (an Acmd
          * list). For now the task simply completes; libaudio's amMain still
          * runs its per-frame bookkeeping. */
     } else {
         /* Graphics task: run the software RSP on the display list. */
-        /* TEMP D63: log every gfx task's DL pointer (env GE_D63=1) */
-        if (getenv("GE_D63")) {
-            unsigned long tid = 0;
-#if defined(PLATFORM_WINDOWS)
-            tid = GetCurrentThreadId();
-#else
-            tid = (unsigned long)pthread_self();
-#endif
-            sysLogPrintf(LOG_NOTE, "D63 gfx task data_ptr=%p data_size=%d tid=%lu slot=%08x",
-                         (void *)t->t.data_ptr, (int)t->t.data_size, tid,
-                         *(const u32 *)0x7012EC38);
-        }
-#if defined(PORT)
-        /* TEMP D63: find when the fatal G_DL value first appears in the master DL */
-        {
-            static int s_d63seen = 0;
-            if (getenv("GE_D63") && !s_d63seen) {
-                const uint32_t *p = (const uint32_t *)t->t.data_ptr;
-                size_t nwords = t->t.data_size / 4;
-                static int s_d63scancount = 0;
-                if ((s_d63scancount++ % 100) == 0)
-                    sysLogPrintf(LOG_NOTE, "D63 scan running: ptr=%p nwords=%zu", (void *)p, nwords);
-                for (size_t i = 1; i + 1 < nwords; i += 2) {
-                    if (p[i] == 0x0012EC38u) {
-                        s_d63seen = 1;
-                        sysLogPrintf(LOG_NOTE, "D63 fatal-value first seen: frame=%d off=0x%zx words:",
-                                     g_framesRendered + 1, i * 4);
-                        for (int k = -3; k <= 3; ++k) {
-                            long j = (long)i + 2 * k;
-                            if (j >= 0 && j + 1 < (long)nwords)
-                                sysLogPrintf(LOG_NOTE, "D63   [%d] %08x %08x", k, p[j], p[j+1]);
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-#endif
         uint64_t t0 = sysGetMicroseconds();
         videoStartFrame();
         gfx_run((Gfx *)t->t.data_ptr);

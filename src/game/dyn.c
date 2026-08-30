@@ -138,10 +138,6 @@ Light *dynAllocateLights(s32 count)
 }
 
 void *dynAllocate(s32 size) {
-#ifdef PORT
-    extern void d63Act(const char *tag); /* TEMP D63 */
-    d63Act("dyn");
-#endif
     void *ptr = g_GfxMemPos;
 	size = ALIGN16_a(size);
 	g_GfxMemPos += size;

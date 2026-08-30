@@ -230,8 +230,6 @@ void rspGfxTaskStart(Gfx *firstGdl, Gfx *gdl, s32 arg2, OSMesg rspReplyMsg)
     OSTask *task;
 
 #ifdef PORT
-    extern void d63Act(const char *tag); /* TEMP D63 */
-    d63Act("rspstart");
     /* TEMP D63: log task submission (main thread) with tid */
     if (getenv("GE_D63")) {
         unsigned long tid = 0;

@@ -1876,20 +1876,10 @@ Gfx * constructor_menu02_rareware(Gfx * DL) {
 void init_menu03_gunbarrel(void) {
 #ifdef PORT
     d63MenuProbe("gunbarrel");
-    extern void d63SlotLog(const char *tag); /* TEMP D63 */
 #endif
     initializeGunBarrelIntro(ptr_logo_and_walletbond_DL, 0x78000);
-#ifdef PORT
-    d63SlotLog("gb:after-init");
-#endif
     musicTrack1Play(M_INTRO);
-#ifdef PORT
-    d63SlotLog("gb:after-music");
-#endif
     maybe_is_in_menu = TRUE;
-#ifdef PORT
-    d63SlotLog("gb:end");
-#endif
 }
 
 /*
