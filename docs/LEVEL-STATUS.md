@@ -7,8 +7,23 @@ auto-injected, D121), `GE_PCDUMP="80-260:40"`, ~24 s watchdog then
 0x140000000). "render %" = `tools_pc/pixcount.py` non-clear on the last
 captured frame. Binary at `f2beae4b` + this session's build.
 
-Last full re-sweep: 2026-08-29, after D123 (C1) + D124-Jungle (C2) landed.
-Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` (D124).
+Last full re-sweep: 2026-08-29 (M-22), after D134 landed (SP/DP task-done
+event no longer dropped into a full sched interruptQ — the "frame-2 hang"
+that M-13..M-21 wrote off as D117/machine-load flakiness). Build = HEAD
+`a8f27c16`. Optimized `level_sweep.sh` (early-exit once the GE_PCDUMP set
+is on disk / STALL_SECS freeze) — full 21-level sweep now ~7 min.
+
+**M-22 result: 20 / 21 PASS.** Every level loads + renders + survives the
+capture window EXCEPT Cuba. Facility (34) and Jungle (37) — the M-20
+re-verify failures — both PASS cleanly now, confirming D134 was their
+cause. Only remaining crash:
+
+- **Cuba (54)** — `textMeasure` (`textrelated.c:770`) ← `bondviewRenderCredits`
+  (`bondview2.c:8912`), AV @ `0x1400c3b77`, fault addr NULL, after ~frame
+  900. This is the **known D129 residual**: the bare `-level_54` boot
+  reaches the cast/credits scroll referencing a text bank the real
+  front-end flow would have loaded. Not a real-flow blocker; Cuba loads +
+  renders 300+ frames fine. Parked with D76 (`docs/GRAPHICS-BACKLOG.md`).
 
 | Level | # | Status | Crash site | Class |
 |---|---|---|---|---|
