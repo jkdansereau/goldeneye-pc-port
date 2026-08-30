@@ -284,6 +284,31 @@ risk, verification, what to check by playing). Committed `f3ec5170`,
 - **Still TODO (not started):** key rebinding, on-screen (in-render) FPS
   overlay, in-game options menu.
 
+## Done this session (M-25) — 3 commits, port-layer QoL
+
+Free-roam QoL pass, `port/` only, zero `src/` / game-logic change. Full
+review sheet: **`docs/M-25-QOL-REVIEW.md`**. All defaults reproduce prior
+behavior exactly.
+
+- **`9ebed821` — `[Video]` ge007.ini knobs.** `Video.VSync` / `FpsCap` /
+  `MSAA` (1/2/4/8) / `TextureFilter` (0 nearest, 1 bilinear) / `Fullscreen`,
+  wired in `video.c videoInit`. Plus **config auto-migration**: `config.c`
+  now rewrites `ge007.ini` once when the build registers a key the file
+  never had (so a new section actually appears) — an up-to-date file with a
+  user comment is left untouched.
+- **`5a7a1035` — `tools_pc/playtest.sh`** takes a level *name*
+  (`playtest.sh bunker2`) or number, `--list` prints the 21-level table, and
+  a crash now auto-runs `addr2line` on the faulting PCs.
+- **`863f436b` — `[Input]` ge007.ini knobs.** `MouseYScale`,
+  `MouseSmoothing` (0 = off = today), `PadDeadzone` (7000), `PadTriggerPct`
+  (23), `PadLookInvertY`.
+- Verified per commit: build green, `-level_09` crash-free to frame 620 @
+  91.6% (unregressed), `-level_20` crash-free.
+- **New bug logged (not fixed — out of scope):** Silo `-level_20` freezes
+  ~3 s in on the silo→Bond camera descent (no crash; capture wedges
+  ~frame 320). Reproduces on a clean pre-M-25 build. User-reported. Goes
+  with the in-level playtest / camera-transition work.
+
 ## Next task (M-24 — Opus 5)
 
 **Scope call (user, M-23):** D139 (stage unload) + D140 (pause menu / watch)

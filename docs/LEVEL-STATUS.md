@@ -7,6 +7,16 @@ auto-injected, D121), `GE_PCDUMP="80-260:40"`, ~24 s watchdog then
 0x140000000). "render %" = `tools_pc/pixcount.py` non-clear on the last
 captured frame. Binary at `f2beae4b` + this session's build.
 
+M-25 re-sweep (2026-08-30, port-QoL build `863f436b`): **20 / 21 PASS**,
+unchanged. Caverns (39) flagged CRASH `0xc000001d` once under sweep load →
+2/2 clean on retry (D117/D134 concurrent-load flakiness, not a regression).
+Cuba (54) still the only real crash (known D129 credits path, parked).
+**Silo (20) caveat:** the sweep reports PASS because it early-exits on the
+first rendered frames, but a full-length capture wedges consistently at
+~frame 320 on the silo→Bond camera descent (user-reported M-25;
+reproduces identically on a pre-M-25 baseline). Real bug, belongs with the
+camera-transition / in-level playtest work — not caught by a boot sweep.
+
 Last full re-sweep: 2026-08-29 (M-22), after D134 landed (SP/DP task-done
 event no longer dropped into a full sched interruptQ — the "frame-2 hang"
 that M-13..M-21 wrote off as D117/machine-load flakiness). Build = HEAD
