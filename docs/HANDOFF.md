@@ -150,28 +150,34 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
   later pass. Bug class D24-implications + `osYieldThread` watch item added
   to PORT-LEARNINGS §E.
 
-## Next task — two pre-existing regressions vs the M-18 handoff
+## Next task
 
-Both reproduce on a **clean checkout of master `0a4b3bae`** (proven by
-`git stash` + rebuild), so they predate M-19's changes — a fast3d-only
-edit cannot cause a pre-first-frame boot crash.
+1. **`-level_09` (BUNKER1) boot crash — DISPROVEN as a regression** (M-20,
+   coordinator: 3 runs / 1800 frames crash-free on `1fc3cff6`; re-confirmed
+   M-20 this pass: 690+ frames at 91.7% coverage). Was sweep flakiness /
+   D117 nondeterminism under machine load. Do not investigate.
+2. **Intro "renders mostly black" is NOT a regression — it is the known
+   D75/D76 parked-cosmetic steady state** (M-20 / **D133**). Verified by
+   building M-17 (`9ec6121e`, whose handoff claimed "the entire intro
+   renders") in a scratch worktree and capturing the same `GE_PCDUMP`
+   window: coverage is **pixel-identical** to HEAD (legal screen 6677
+   non-clear px = 2.17% both builds; logo-ish frames ~7%; black gaps in
+   between). The 2D/text layers draw; the animated character-model layers
+   (Nintendo-logo transform, gun-barrel Bond, cast models) never appear —
+   exactly D75. The M-17 "entire intro renders" handoff line was
+   aspirational, not a measured state. **Parked below level/crash work
+   (`docs/GRAPHICS-BACKLOG.md`).** Silo (#3, fly-down hang) is the same
+   class or D117 nondeterminism — not a fresh regression.
+3. **Facility `-level_34` + Jungle `-level_37` re-verify FAILED this pass**
+   (M-20, machine lightly loaded). Facility: boot crash `frames=0`, PC
+   `0x1400c3b77` (addr2line unresolved). Jungle: renders frames 1–2 then
+   kernel-heartbeat hang ("no frame rendered", `frames=2`). Both were
+   claimed PASS in M-18/M-19 (D130/D131). **Needs a clean-machine
+   re-verify** before deciding regression vs. flakiness — see
+   `docs/LEVEL-STATUS.md`. `-level_09`/`-level_20` still PASS, so the
+   capture harness is sound.
 
-1. **`-level_09` (BUNKER1) crashes at boot** — `frames=0`, PC
-   `0x1400066fc`, fault `0x00a2fc68` (= stack ptr `0x0fa2fc68` with the top
-   nibble masked → a 24/28-bit segment mask hitting a real pointer). The
-   M-18 handoff's "`-level_09`/20/24 unregressed" is now false for 09.
-   **Start here:** `git bisect` D125 (`a06eb364`) → HEAD against
-   `./build-pc/ge007.x86_64.exe -level_9` (`frames=0` + crash = bad).
-   Suspect D126 (objective sub-record relayout) or D128 (portal stride).
-2. **Intro renders mostly black** — legal/logo frames are 0–6% non-clear
-   on clean master (`GE_PCDUMP="1-600:60"` + `pixcount.py`). The M-18
-   handoff claims "the entire intro renders". Check `framediff.py` vs
-   `tools_pc/golden/`.
-3. **Silo intro fly-down cinematic hang** (user report M-19) —
-   intermittent; one `-level_20` run went 300 frames clean. May be the
-   same class as #2 or D117 nondeterminism under load.
-
-After those: all 21 load+render → hand `docs/LEVEL-PLAYTEST.md` to the
+After that: all 21 load+render → hand `docs/LEVEL-PLAYTEST.md` to the
 user for the WS6 completion pass (real input, per-level objective
 checklist).
 

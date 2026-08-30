@@ -25,8 +25,10 @@ Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` 
 | Streets  | 29 | **PASS** 91.6% | — (C1 fixed, D123; no C2 crash this run — timing) | — |
 | Cradle   | 41 | **PASS** 55.4% (low — partial render, no crash) | — (C1 fixed, D123) | — |
 | Runway   | 35 | **PASS** | — (D130: `romdataFixupFont` glyph-relayout aliasing) | — |
-| Facility | 34 | **PASS** | — (D130: `romdataFixupFont` corrupted glyph `#`/`"` pixeldata → fast3d AV) | — |
-| Jungle   | 37 | **PASS** 91.7% (frame 1500–2400+ crash-free) | — (D131: `osVirtualToPhysical()` truncated a compiled `.bss` matrix ptr in `explosionRenderPropSmoke` → `seg_addr` now restores the module high word) | — |
+| Facility | 34 | **RE-VERIFY** (M-20: boot crash `frames=0` PC `0x1400c3b77`, addr2line unresolved, on `0b5f5d1a`, machine only lightly loaded — was PASS in M-18/D130. Needs a clean-machine re-check before calling it a regression.) | `0x1400c3b77` | — |
+| Facility | 34 | **PASS** (M-18/D130) | — (D130: `romdataFixupFont` corrupted glyph `#`/`"` pixeldata → fast3d AV) | — |
+| Jungle   | 37 | **RE-VERIFY** (M-20: renders frames 1–2 then kernel-heartbeat hang `frames=2`, on `0b5f5d1a` — was PASS in M-19/D131 at frame 2400+. Needs clean-machine re-check.) | frame-2 hang | — |
+| Jungle   | 37 | **PASS** 91.7% (M-19/D131: frame 1500–2400+ crash-free) | — (D131: `osVirtualToPhysical()` truncated a compiled `.bss` matrix ptr in `explosionRenderPropSmoke` → `seg_addr` now restores the module high word) | — |
 | Aztec    | 28 | **PASS** 90.8% | — (C3 fixed, D125) | — |
 | Bunker2  | 27 | **PASS** 91.5% | — (C3r fixed, D126) | — |
 | Depot    | 30 | **PASS** 79.8% | — (C4 fixed, D126) | — |
