@@ -26,6 +26,33 @@
 #include "system.h"
 #include "config.h"
 
+/*
+ * [Debug] knobs mirroring the dev env vars. The env var always wins so
+ * existing scripts (tools_pc/*.sh) are unaffected; the ini is a fallback for
+ * interactive runs. GE_DETERM is design-only (D117) and has no code path, so
+ * it is not mirrored.
+ */
+static char dbgFrameDump[128] = "";   /* mirrors GE_PCDUMP ("lo-hi[:step]") */
+static int  dbgInputLog       = 0;    /* mirrors GE_INPUTLOG                */
+
+PD_CONSTRUCTOR static void configDebugInit(void)
+{
+    configRegisterString("Debug.FrameDump", dbgFrameDump, sizeof(dbgFrameDump));
+    configRegisterInt("Debug.InputLog", &dbgInputLog, 0, 1);
+}
+
+const char *configGetFrameDump(void)
+{
+    const char *e = getenv("GE_PCDUMP");
+    if (e && *e) return e;
+    return dbgFrameDump[0] ? dbgFrameDump : NULL;
+}
+
+int configGetInputLog(void)
+{
+    return getenv("GE_INPUTLOG") ? 1 : dbgInputLog;
+}
+
 #define MAX_OPTIONS 256
 #define INI_PATH    "$S/ge007.ini"
 

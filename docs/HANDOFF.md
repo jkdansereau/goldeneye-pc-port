@@ -328,6 +328,9 @@ prior behaviour. Full review: **`docs/M-26-QOL-REVIEW.md`**.
   SDL relative-scale / warp hints off in `inputInit` — no OS pointer accel.
 - **E — `--help` / `--version`** in `main.c` before `crashInit()`: build
   id, usage, the 21-level `-level_XX` table.
+- **D — `[Debug]` ini flags.** `Debug.FrameDump` (mirrors `GE_PCDUMP`),
+  `Debug.InputLog` (mirrors `GE_INPUTLOG`); env var wins, ini is the
+  fallback. `config.c` `configGetFrameDump()`/`configGetInputLog()`.
 - **Verified:** build green (`ntsc-final`); `-level_09` + `-level_20`
   boot crash-free 6/6 GE_PCDUMP frames (unregressed); `ge007.ini` gains a
   populated `[Window]` block on exit.

@@ -25,6 +25,10 @@ void configRegisterInt(const char *key, int *value, int min, int max);
 /* Register a string option (buf must live for the program's lifetime). */
 void configRegisterString(const char *key, char *value, int bufSize);
 
+/* [Debug] knobs, env-var-or-ini. GE_PCDUMP / GE_INPUTLOG override the ini. */
+const char *configGetFrameDump(void);   /* "lo-hi[:step]" or NULL if unset */
+int         configGetInputLog(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -422,7 +422,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
     if (stick_x) *stick_x = (signed char)sx;
     if (stick_y) *stick_y = (signed char)sy;
 
-    if (getenv("GE_INPUTLOG") && (button || sx || sy)) {
+    if (configGetInputLog() && (button || sx || sy)) {
         sysLogPrintf(LOG_NOTE, "GE_INPUTLOG cont%d: btn=%04x stick=(%d,%d)",
                      idx, button, sx, sy);
     }

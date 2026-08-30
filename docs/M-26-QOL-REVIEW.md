@@ -50,6 +50,22 @@ so nothing changes unless the user opts in.
 - `--help` / `-h` → the above + usage + the 21 solo-level `-level_XX`
   table (matches `tools_pc/level_sweep.sh` / `playtest.sh --list`), exit 0.
 
+## D — `[Debug]` ini flags mirroring the dev env vars
+
+`port/src/config.c`: `Debug.FrameDump` (string, mirrors `GE_PCDUMP`,
+`"lo-hi[:step]"`) and `Debug.InputLog` (int, mirrors `GE_INPUTLOG`).
+`configGetFrameDump()` / `configGetInputLog()` check the env var first
+(existing `tools_pc/*.sh` scripts unaffected), fall back to the ini.
+Consumers switched: `video.c videoEndFrame` (was `gfx_opengl_pcdump_enabled()`
++ `getenv`), `input.c inputComputePad` (was `getenv("GE_INPUTLOG")`).
+`GE_DETERM` is design-only (D117, no code path) so it is not mirrored.
+
+- **Verified:** ini-only `FrameDump = 40-120:20` produces exactly those 5
+  frames; `GE_PCDUMP` still overrides; `-level_09` crash-free.
+- **Cosmetic:** `configSave` emits int and string opts in separate passes,
+  so a section with both (`[Debug]`) prints its header twice. Round-trips
+  fine on reload. Pre-existing quirk, not worth the churn now.
+
 ## Not done (Tier 2/3 from the board)
 
 F (minidump), G (PNG screenshots), H (rumble), I/J (in-render overlay /

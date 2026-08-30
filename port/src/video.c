@@ -259,11 +259,13 @@ void videoEndFrame(void)
     /* TEMP D70 (env-gated, strip per HANDOFF Task 3): GE_PCDUMP="first-last"
      * or "first-last:step" dumps the presented frame as ./ppm/frame_NNNNNN.ppm
      * (one frame behind real time — read happens after SwapWindow). Used to
-     * pixel-verify the intro's 3D content. */
-    if (gfx_opengl_pcdump_enabled()) {
+     * pixel-verify the intro's 3D content. Also honours [Debug] FrameDump in
+     * ge007.ini (env var wins). */
+    const char *pcdump = configGetFrameDump();
+    if (pcdump) {
         static int lo = -1, hi = 0, step = 1;
         if (lo < 0) {
-            const char *v = getenv("GE_PCDUMP");
+            const char *v = pcdump;
             lo = 1; hi = 0x7fffffff; step = 1;
             sscanf(v, "%d-%d:%d", &lo, &hi, &step);
             if (sscanf(v, "%d-%d", &lo, &hi) != 2)
