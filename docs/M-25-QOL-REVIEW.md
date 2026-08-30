@@ -9,7 +9,8 @@ pre-M-25 behavior — a fresh or partial `ge007.ini` changes nothing.
 
 | Commit | Title |
 |---|---|
-| _(this)_ | `[Video]` ge007.ini knobs + config auto-migration |
+| `9ebed821` | `[Video]` ge007.ini knobs + config auto-migration |
+| _(this)_ | `tools_pc/playtest.sh` — name lookup, `--list`, auto-addr2line |
 
 ---
 
@@ -94,6 +95,26 @@ already had a `cannot write` warning path.
    (Alt-Enter still toggles).
 3. `FpsCap = 30` → title-bar fps pins near 30; `VSync = 0` + `FpsCap = 0` →
    uncapped.
+
+---
+
+## 2. `tools_pc/playtest.sh` — usability
+
+Tooling only — not compiled, not in the build. No game-code impact.
+
+- Accepts a **level name** as well as the `-level_XX` number
+  (`playtest.sh bunker2`, `playtest.sh "surface 1"` — case/space/underscore
+  insensitive), via an in-script name→number table (mission order).
+- `playtest.sh --list` prints the 21-level table (`#`, `-level_XX`, name).
+  No-arg / `--help` prints usage + the table.
+- On a crash it now reads `ge007.crash.log` and runs `addr2line` on the top
+  faulting PCs automatically (was: "see log"), and copies the crash log
+  next to the playtest log.
+
+Verified: `--list` output correct; name + number resolution; a real
+`bunker1` launch (killed after 15 s) reports cleanly.
+
+---
 
 ## Still TODO (carried from M-24)
 
