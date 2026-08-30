@@ -197,8 +197,14 @@ void videoPumpEvents(void)
             exit(0);
             break;
         case SDL_KEYDOWN:
-            if (ev.key.keysym.sym == SDLK_ESCAPE) {
-                sysLogPrintf(LOG_INFO, "video: ESC -> quit");
+            /* D145: bare ESC used to exit(0). On the front-end / debrief
+             * screens ESC is the natural "back" key, so a player pressing it
+             * to page back instead quit the whole game (looked like a crash --
+             * clean exit, no crash log). ESC now feeds the N64 B button
+             * (back / cancel) via input.c; quitting is window-close (the X) or
+             * Alt+F4 only. */
+            if ((ev.key.keysym.sym == SDLK_F4) && (ev.key.keysym.mod & KMOD_ALT)) {
+                sysLogPrintf(LOG_INFO, "video: Alt+F4 -> quit");
                 exit(0);
             } else if (ev.key.keysym.sym == SDLK_F12 && !ev.key.repeat) {
                 screenshotReq = 1;

@@ -299,9 +299,9 @@ static void gfx_sdl_handle_events(void) {
                 if (event.key.keysym.sym == SDLK_RETURN && (event.key.keysym.mod & KMOD_ALT)) {
                     // alt-enter received, switch fullscreen state
                     set_fullscreen(!fullscreen_state, true);
-                } else if (event.key.keysym.sym == SDLK_ESCAPE) {
-                    // GE's own menus use the keyboard; ESC on an empty event
-                    // queue is our quit key (matches the Phase 1 demo loop).
+                } else if (event.key.keysym.sym == SDLK_F4 && (event.key.keysym.mod & KMOD_ALT)) {
+                    // D145: Alt+F4 quits; bare ESC no longer does (it is the
+                    // menu "back" key -- see port/src/video.c / input.c).
                     exit(0);
                 }
                 break;

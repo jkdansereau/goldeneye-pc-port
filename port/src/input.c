@@ -435,7 +435,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
             wheelPulse--;
         }
         if (keyDown(ks, SDL_SCANCODE_X) || keyDown(ks, SDL_SCANCODE_R) ||
-            keyDown(ks, SDL_SCANCODE_F))
+            keyDown(ks, SDL_SCANCODE_F) || keyDown(ks, SDL_SCANCODE_ESCAPE)) /* D145: ESC = B (back/cancel) */
             button |= GE_CONT_B;
         if (keyDown(ks, SDL_SCANCODE_Q))
             button |= GE_CONT_L;
