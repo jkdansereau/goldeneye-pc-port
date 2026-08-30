@@ -231,9 +231,12 @@ in the docs-restructure — fold those separately).
   weapon-switch — GE overloads it), `X`/`R`/`F` = B (reload), `Q` = L,
   `Enter`/`Tab` = Start, `Esc` quit. No dedicated weapon key.
 
-## Done this session (M-24) — mouse-look rework + real INI parser (uncommitted)
+## Done this session (M-24) — mouse-look rework + real INI parser + playtest QoL
 
 Pre-playtest QoL, port-layer only, no `src/` / game-logic change.
+**Full review sheet: `docs/M-24-QOL-REVIEW.md`** (rationale, per-change
+risk, verification, what to check by playing). Committed `f3ec5170`,
+`65ed0315`, `33506aee`.
 
 - **`port/src/input.c` mouse-look rework.** Read `bondviewProcessInput` /
   `MoveData`: GE aim is **mode-dependent** — hipfire yaw = analog stick-X,

@@ -13,7 +13,8 @@ export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final
 ```
 
 Controls: `port/src/input.c` — keyboard+mouse or SDL gamepad. Mouse-look is
-mode-aware since M-24 (hold RMB = analog aim). Tune feel in
+mode-aware since M-24 (hold RMB = analog aim). **M-24 input/QoL changes +
+what to verify while playing: `docs/M-24-QOL-REVIEW.md`.** Tune feel in
 `data/ge007.ini` `[Input]` (`MouseAimSpeed` 50, `MouseTurnSpeed` 100,
 `MouseInvertY` 0) with the game closed. Known residual (do not re-log):
 D118a — hipfire pitch is digital vs analog yaw. **F12** = screenshot to
