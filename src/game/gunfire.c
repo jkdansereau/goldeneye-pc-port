@@ -1721,6 +1721,35 @@ Gfx *set_enviro_fog_for_items_in_solo_watch_menu(Gfx *gdl, ITEM_IDS itemid, Mtxf
     {
         for (j = 0; j != 20; j += 4)
         {
+#ifdef PORT
+            /* D140: the raw byte offsets 0x48/0x5c into `Switches` (a ModelNode*
+             * array) assume 4-byte N64 pointers. 0x48/4 = 18, 0x5c/4 = 23; j
+             * steps 0..16 by 4, so k = j>>2 selects Switches[18+k] / [23+k]. On
+             * PC the 8-byte stride made the raw math read misaligned garbage ->
+             * bogus non-NULL ModelNode* -> crash in modelGetNodeRwData. */
+            ModelNode *sw48 = bodymodel->Switches[18 + (j >> 2)];
+            ModelNode *sw5c = bodymodel->Switches[23 + (j >> 2)];
+
+            if (sw48 != NULL)
+            {
+                rwdata = modelGetNodeRwData((Model *) &model, sw48);
+
+                if (rwdata != NULL)
+                {
+                    rwdata->Raw.unk00 = 1;
+                }
+            }
+
+            if (sw5c != NULL)
+            {
+                rwdata = modelGetNodeRwData((Model *) &model, sw5c);
+
+                if (rwdata != NULL)
+                {
+                    rwdata->Raw.unk00 = 1;
+                }
+            }
+#else
             if ((*((ModelNode **) ((((u8 *) bodymodel->Switches) + j) + 0x48))) != NULL)
             {
                 rwdata = modelGetNodeRwData((Model *) &model, *((ModelNode **) ((((u8 *) bodymodel->Switches) + j) + 0x48)));
@@ -1740,6 +1769,7 @@ Gfx *set_enviro_fog_for_items_in_solo_watch_menu(Gfx *gdl, ITEM_IDS itemid, Mtxf
                     rwdata->Raw.unk00 = 1;
                 }
             }
+#endif
         }
     }
 

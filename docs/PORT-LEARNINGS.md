@@ -21,6 +21,11 @@ state.
   (rwdata record count), D67 (image_entry), D79 (bg_room_data), D98
   (struct player alloc), D100 (player.model inline Model), D101/D102
   (ModelNode*/weapon Model puns), D115 (gunfire THROW* raw offsets),
+  D140 (watch Model punned into a `struct player` field-run: PC
+  `sizeof(struct Model)` grows so the "fields" that aliased `.render_pos` /
+  `.scale` / `.animframe1` on N64 no longer overlap → NULL `render_pos` →
+  pause-menu crash; fix = real inline `struct Model` + pool, redirect the
+  named reads to the member — same as D100/D102),
   D119 (`weapons_held[]->chr` punned as `ChrRecord*` to read
   `.act_*.attack_item` — aliased `WeaponObjRecord.weaponnum` at 0x80 on
   N64 via act-union@0x2C+84; act union moves to ~0x38 on PC).
@@ -127,6 +132,14 @@ expressed in N64 `Gfx`/`Vtx` units is **half-size** on PC.
   `g_BgPortals[portal].controlbytes1 |= PORTALFLAG_SPECIAL`). Grep for
   `<< 3` / `* 8` / `+ 6` style raw offsets into any struct that gained a
   pointer field.
+  D141: `set_enviro_fog_for_items_in_solo_watch_menu` (`gunfire.c:1720`)
+  indexed a `ModelNode*` array (`ModelFileHeader.Switches`) as
+  `*(ModelNode**)((u8*)Switches + j + 0x48)` with `j += 4` — the `0x48`/
+  `0x5c` and the step are 4-byte-pointer constants. PC 8-byte stride → wrong
+  + misaligned slot → bogus non-NULL node → crash in `modelGetNodeRwData`.
+  Fix: `Switches[18 + (j>>2)]` / `Switches[23 + (j>>2)]` under `#ifdef PORT`
+  (`0x48/4=18`, `0x5c/4=23`). Grep every `(TYPE**)((u8*)arr + <const>)` and
+  `arr[i << k]` where the array element is a pointer.
 
 ## C. Big-endian rodata / ROM data read on little-endian PC
 

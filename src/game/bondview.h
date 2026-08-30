@@ -708,6 +708,23 @@ struct player
    */
   f32 pause_watch_related_scaled;
 
+#ifdef PORT
+  /* D140 / D56 / D53.2: N64 puns a `struct Model` (0xBC) followed immediately
+   * by its RW-data pool (0xC8) into this 0x184-byte hole (player +0x230 ..
+   * +0x3B4). The decomp splits it as this field + `s32 field_234..field_3B0`;
+   * three of those "fields" are actually watch-Model members read by name:
+   *     watch_scale_destination     == .scale       (Model +0x14)
+   *     pause_watch_related_adjust  == .animframe1   (Model +0x28)
+   *     field_23C                   == .render_pos   (Model +0x0c)
+   * On x86-64 `sizeof(struct Model)` grows (4->8B pointers) so the punned
+   * layout desyncs: field_23C stops overlapping render_pos -> NULL -> crash in
+   * bondviewTransformManyPosToViewMatrix on pause (D140), and the grown Model
+   * overruns the live fields below. Give the Model + pool real inline storage
+   * (D100 gait-model / D102 weapon-model pattern); the three named reads are
+   * redirected to the member at their bondview2.c use sites. */
+  struct Model something_with_watch_object_instance;
+  u32 watchRwPool[192]; /* N64 pool 0xC8 B; PC RW records ~2x (cf. D102) */
+#else
   s32 something_with_watch_object_instance;
 
   s32 field_234;
@@ -811,6 +828,7 @@ struct player
   s32 field_3A8;
   s32 field_3AC;
   s32 field_3B0;
+#endif
 
   /**
    * Copy of buttons pressed.

@@ -50,6 +50,23 @@
 #define OPTLABELS_HINT_Y    0xc3
 #endif
 
+#ifdef PORT
+/* D118d: the watch inventory list has a "slam the stick hard" fast-scroll —
+ * a raw *level* check `joyGetStickY < -0x46` / `>= 0x47` that steps the
+ * cursor one item per frame while held. An N64 stick rarely sustains past
+ * ~0x46 along an axis, so a human taps it; the port's digital sources
+ * (keyboard W/S, and SDL pads which peg at 0x80) sit there every frame ->
+ * runaway scroll (one W press skips several items). Drop the stick term for
+ * the port: stick nav still works via the latched single-step path
+ * (`watch_stick_y_pressed_*`, one step per press) and the -0x1e..-0x45
+ * smooth-scroll band; D-pad / C-buttons keep their edge-detected repeat. */
+#define GE_WATCH_STICK_FASTUP(pad)   0
+#define GE_WATCH_STICK_FASTDOWN(pad) 0
+#else
+#define GE_WATCH_STICK_FASTUP(pad)   (joyGetStickY(pad) >= 0x47)
+#define GE_WATCH_STICK_FASTDOWN(pad) (joyGetStickY(pad) < -0x46)
+#endif
+
 // bss
 Mtx gfx_background_8007B0A0;
 Mtx gfx_background_8007B0E0;
@@ -1024,7 +1041,7 @@ void game_options_inventory_navigation(void)
 
     if (!get_debug_gunwatchpos_flag())
     {
-        if (joyGetButtonsPressedThisFrame(PLAYER_1, U_JPAD | U_CBUTTONS) || joyGetStickY(PLAYER_1) >= 0x47)
+        if (joyGetButtonsPressedThisFrame(PLAYER_1, U_JPAD | U_CBUTTONS) || GE_WATCH_STICK_FASTUP(PLAYER_1))
         {
             if (((s32) watch_inventory_cursor_pos > 0) && !watch_item_is_actively_selected)
             {
@@ -1033,7 +1050,7 @@ void game_options_inventory_navigation(void)
         }
         else
         {
-            if (joyGetButtonsPressedThisFrame(PLAYER_1, D_JPAD | D_CBUTTONS) || joyGetStickY(PLAYER_1) < -0x46)
+            if (joyGetButtonsPressedThisFrame(PLAYER_1, D_JPAD | D_CBUTTONS) || GE_WATCH_STICK_FASTDOWN(PLAYER_1))
             {
                 goto down_body;
             }
@@ -1156,14 +1173,14 @@ void sub_GAME_7F0A611C(f32 *arg0, s32 *arg1, s32 arg2, s32 *arg3, s32 *arg4, s32
 {
     if (!get_debug_gunwatchpos_flag())
     {
-        if (joyGetButtonsPressedThisFrame(PLAYER_1, U_JPAD | U_CBUTTONS) || joyGetStickY(PLAYER_1) >= 0x47)
+        if (joyGetButtonsPressedThisFrame(PLAYER_1, U_JPAD | U_CBUTTONS) || GE_WATCH_STICK_FASTUP(PLAYER_1))
         {
             if ((s32)*arg0 > 0 && arg7)
             {
                 *arg0 -= 1.0f;
             }
         }
-        else if (joyGetButtonsPressedThisFrame(PLAYER_1, D_JPAD | D_CBUTTONS) || joyGetStickY(PLAYER_1) < -0x46)
+        else if (joyGetButtonsPressedThisFrame(PLAYER_1, D_JPAD | D_CBUTTONS) || GE_WATCH_STICK_FASTDOWN(PLAYER_1))
         {
             if ((s32)*arg0 < arg2 - 1 && arg7)
             {

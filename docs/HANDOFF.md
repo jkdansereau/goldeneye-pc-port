@@ -335,6 +335,52 @@ prior behaviour. Full review: **`docs/M-26-QOL-REVIEW.md`**.
   boot crash-free 6/6 GE_PCDUMP frames (unregressed); `ge007.ini` gains a
   populated `[Window]` block on exit.
 
+## Done this session (M-27) — front-end/pause bucket: D140 + D141 FIXED
+
+Started the parked "front-end / transitions / pause / watch" bucket.
+**Pressing Start in-level no longer crashes** — the pause / watch menu
+renders (weapon page verified via a temp `GE_AUTOPAUSE` input probe,
+since removed). Cosmetics unchanged and still parked: mirrored watch text
+(D114/D116), dark/faint weapon model (D75).
+
+- **D140 (FIXED)** `src/game/bondview.h`, `src/game/bondview2.c` —
+  pause-menu crash `bondviewRenderWatch` → `bondviewTransformManyPos-
+  ToViewMatrix(field_23C=NULL)`. `something_with_watch_object_instance`
+  (N64 player +0x230) is a **`struct Model` + RW-pool punned into a
+  0x184-byte field-run**; `field_23C`/`watch_scale_destination`/
+  `pause_watch_related_adjust` are actually `.render_pos`/`.scale`/
+  `.animframe1`. PC `sizeof(struct Model)` grows → the aliases break →
+  NULL `render_pos`. Fix: real inline `struct Model` +
+  `u32 watchRwPool[192]` under `#ifdef PORT`; the 3 named reads redirect to
+  the member via `GE_WATCH_{ANIMFRAME,SCALE,RENDERPOS}` macros (N64 `#else`
+  = verbatim field). D56 branch of `sub_GAME_7F07E7CC` now uses the inline
+  pool. D100/D102 pattern. §F/§H **D140**, PORT-LEARNINGS §A.
+- **D118d (FIXED, feel unconfirmed)** `src/game/options.c` — user bug report:
+  watch inventory list over-scrolls with keyboard W/S (one press skips several
+  items). GE's "slam the stick" fast-scroll is a raw per-frame level check
+  (`joyGetStickY < -0x46`); keyboard/digital pads sit at max every frame.
+  `#ifdef PORT` drops the stick term → list-nav goes through the latched
+  single-step path (one step per press). Build green, `-level_09` unregressed;
+  couldn't verify the feel headlessly (INVENTORY watch page unreachable without
+  page-cycling input) — **needs an in-game check**. Latent sibling in `front.c`
+  menu nav (same `joyGetStick*InRange` level-check pattern). §F **D118d**.
+- **D141 (FIXED)** `src/game/gunfire.c` — the crash D140 exposed.
+  `set_enviro_fog_for_items_in_solo_watch_menu` walks `bodymodel->Switches[]`
+  (a `ModelNode*` array) with raw byte offsets `+0x48`/`+0x5c`, `j += 4`
+  (4-byte-pointer constants) → PC 8-byte stride reads garbage → bogus node
+  → AV in `modelGetNodeRwData`. Fix: `#ifdef PORT` uses
+  `Switches[18 + (j>>2)]` / `Switches[23 + (j>>2)]`. §F **D141**,
+  PORT-LEARNINGS §B (cf. D128).
+- **Verified:** build green (`ntsc-final`); `-level_09` framediff 3/3,
+  `-level_20` crash-free (both unregressed); autopause probe → watch page
+  renders 400+ frames, no `ge007.crash.log`.
+- **D139** (stage-unload, M-23, still UNVERIFIED) not exercised — it needs
+  a real level-exit teardown, not a pause. Next front-end item.
+- **Still in the bucket:** D139 verify; unpause / watch-page navigation
+  (the temp probe didn't test exiting the watch); level exit → MISSION
+  COMPLETE → debrief → auto-advance; main-menu / mission-select walkthrough
+  (WS2); watch objectives page + gadgets.
+
 ## Next task (M-24 — Opus 5)
 
 **Scope call (user, M-23):** D139 (stage unload) + D140 (pause menu / watch)
@@ -366,9 +412,11 @@ during normal `-level_XX` play.
    parser to D135, `~3373-3646`) — do it before a level where wall-shooting
    is heavy (i.e. soon).
 
-**Parked bucket — front-end / transitions (one focused session):**
-- D139 verify (stage unload / `cleanupObjects`)
-- D140 (pause menu → `bondviewRenderWatch` → NULL `field_23C` matrix)
+**Parked bucket — front-end / transitions (STARTED M-27):**
+- ~~D140 (pause menu → `bondviewRenderWatch` → NULL `field_23C`)~~ FIXED M-27
+  (+ D141, the watch-page crash it exposed). Pause now renders.
+- D139 verify (stage unload / `cleanupObjects`) — still needs a real exit
+- unpause / watch-page navigation (M-27 probe only tested opening it)
 - level exit → MISSION COMPLETE → debrief → auto-advance to next briefing
 - main menu / mission-select / difficulty-select playtest (WS2)
 - the watch (objectives page, gadgets) — needed for the WS6 exit/objective
