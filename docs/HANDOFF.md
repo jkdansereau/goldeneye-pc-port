@@ -152,6 +152,16 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
 
 ## Next task
 
+0. **D132 DONE (M-21, commit `fa296b17`)** — propDef union-index slots for
+   types 14/19/38/44 (LINK/SWITCH/LOCK_DOOR/SAFE_ITEM) now emitted at the
+   right PC offsets (`d88_propdefs.py` + `loadobjectmodel.c sizepropdef`
+   PORT). Verified `-level_09` framediff 3/3, `-level_20` == pre-D132
+   baseline (no regression), Archives/Streets/Dam load+render+no-crash.
+   **Now hand the user `docs/LEVEL-PLAYTEST.md` for WS6** (linked props —
+   switch-doors, dual weapons, locked doors, safes — need real input to
+   validate). Also cheap: harden `level_sweep.sh` (watchdog 24→45 s,
+   serialize) — sweep flakiness was severe this pass.
+
 1. **`-level_09` (BUNKER1) boot crash — DISPROVEN as a regression** (M-20,
    coordinator: 3 runs / 1800 frames crash-free on `1fc3cff6`; re-confirmed
    M-20 this pass: 690+ frames at 91.7% coverage). Was sweep flakiness /
