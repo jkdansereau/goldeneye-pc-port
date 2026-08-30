@@ -2757,8 +2757,26 @@ static void gfx_run_dl(Gfx* cmd) {
                                      i * 4, r[i], r[i + 1], r[i + 2], r[i + 3]);
                     }
                 }
-                sysFatalError("Unknown GBI opcode 0x%02x at %p.\nw0 %08x\nw1 %08x", opcode, cmd, cmd->words.w0, cmd->words.w1);
-                break;
+                /* D146: an unknown opcode means the DL walk has desynced or
+                 * this DL is garbage (a front-end 3D model whose display list
+                 * was never built - the D75 / D144 family - lives at a valid
+                 * DRAM address full of junk). Aborting the whole process over
+                 * one bad menu model is the wrong trade for a breadth-first
+                 * port: end this (sub-)DL and let the frame finish. Still
+                 * logged loudly, rate-limited, so a real level-render desync
+                 * is not hidden. */
+                {
+                    static int warned = 0;
+                    if (warned < 20) {
+                        warned++;
+                        sysLogPrintf(LOG_ERROR,
+                            "D146: unknown GBI opcode 0x%02x at %p (w0=%llx w1=%llx) - ending DL",
+                            opcode, (void *)cmd,
+                            (unsigned long long)cmd->words.w0,
+                            (unsigned long long)cmd->words.w1);
+                    }
+                }
+                return;
             }
         }
         ++cmd;
