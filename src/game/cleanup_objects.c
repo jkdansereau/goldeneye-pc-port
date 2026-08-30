@@ -7,15 +7,29 @@
 #include "loadobjectmodel.h"
 
 
+#ifdef PORT
+/* D139: the N64 `(u8)obj[0]` extracts the propDef type because the header word
+ * `[u16 extrascale][u8 state][u8 type]` is big-endian, so `type` is the low
+ * byte. On little-endian PC the low byte is `extrascale`, so this walk never
+ * matched PROPDEF_END (ran off the propDefs blob) and dispatched the switch on
+ * garbage -> objFreePermanently() on non-ObjectRecords -> `obj->prop` reads
+ * float data -> crash in objFreeEmbedmentOrProjectile on stage unload. Every
+ * other propDef consumer (sizepropdef, the proplvreset walks) already uses
+ * `pdef->type` (struct member, offset 3); match them. */
+#define CLEANUP_PDTYPE(o) (((PropDefHeaderRecord *)(o))->type)
+#else
+#define CLEANUP_PDTYPE(o) ((u8)(o)[0])
+#endif
+
 void cleanupObjects(s32 stage)
 {
     u32 *obj = (u32)g_CurrentSetup.propDefs;
-    
+
     if (obj)
     {
-        while ((u8)obj[0] != PROPDEF_END)
+        while (CLEANUP_PDTYPE(obj) != PROPDEF_END)
         {
-            switch ((u8)obj[0])
+            switch (CLEANUP_PDTYPE(obj))
             {
                 case PROPDEF_DOOR:
                 case PROPDEF_PROP:
@@ -75,3 +89,5 @@ void cleanupObjects(s32 stage)
         }
     }
 }
+
+#undef CLEANUP_PDTYPE

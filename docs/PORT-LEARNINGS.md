@@ -102,6 +102,22 @@ expressed in N64 `Gfx`/`Vtx` units is **half-size** on PC.
 - Instances: D50.6 (texCopyGdls copied only w0 of each 16-byte slot),
   D58 (DL reserve 0x100→0x200), D85 (`bgWidenRoomGdl` 8→16 + bswap),
   D95 (2× master-DL buffer + raised mempool ceiling).
+- **D135 corollary — an unported GBI *parser* (not just a buffer size).** Code
+  that walks a DL command stream with raw byte/word indices into an 8-byte N64
+  `Gfx` (`*(s8*)gdl` for the cmd, `((u32*)gdl)[1]` for w1, `((u8*)gdl)[5..7]`
+  for `G_TRI1` vtx indices, `((u32*)gdl)[0/1]` nibble reads for `G_TRI4`) reads
+  the wrong bytes of the PC 16-byte `{u64 w0; u64 w1}` slot and desyncs on the
+  first command → walks off the DL → wild deref. The N64 32-bit words survive
+  in the LOW dword of each 64-bit field, so the mechanical port is: `u32 w0 =
+  (u32)gdl->words.w0; u32 w1 = (u32)gdl->words.w1;` then replace every raw
+  access with the equivalent shift/mask on w0/w1 (BE byte `i` of a word →
+  `(word >> (8*(3-i))) & 0xff`). `gdl++` (advances by `sizeof(Gfx)`) is already
+  correct. Watch `(s32)ptr` truncation in vtx-base math and `x | 0x80000000`
+  KSEG0 folds (identity on PC — just drop the OR, and guard segmented w1).
+  Instances: `bgTestHitOnObj` (`propobj.c`, FIXED); `bg.c` room-geometry
+  hit-test `sub_GAME_…` (`~3373-3646`, still latent — shooting walls).
+  PD ground truth: `pd_port` uses `gdl->dma.cmd` + `GFX_W0_BYTE(i)`/`GFX_W1_BYTE(i)`
+  macros (`3-i` / `11-i` on 64-bit LE).
 - **Also bites RAW hardcoded struct-stride writes, not just Gfx/Vtx.**
   D128: `sub_GAME_7F0B37EC` did `((u8*)g_BgPortals)[(portal<<3)+6] |= 2`
   — the N64 `bg_portal_data_entry` is 8B (`ptr@0, cr1@4..cb2@7`); on PC
@@ -129,6 +145,17 @@ through a converter or a runtime bswap fixup reads scrambled.
   (StandTile id/room, header mid/tail).
 - **Rule:** prefer an offline sidecar converter (D43, D69, D88 pattern,
   `tools_pc/d*_emit.py`) over a runtime fixup for a whole format.
+- **D139 — `(u8)word` / `(s8)word` to grab "the first field" of a struct
+  reads the WRONG byte on LE.** N64 code that does `(u8)obj[0]` (obj a
+  `u32*`) to read a byte-3 field of a big-endian header word — e.g. the
+  propDef type in `[u16 extrascale][u8 state][u8 type]` — gets the low byte,
+  which is the *last* BE field. On LE it's `extrascale`. `cleanupObjects`
+  did this for its walk-termination + type dispatch → never saw
+  `PROPDEF_END` → ran off the blob → freed garbage → crash on stage unload.
+  Fix: use the struct member (`pdef->type`) like every other consumer.
+  Grep for `(u8)*`/`(s8)*`/`& 0xff` on a `u32`/`s32` that's really a
+  serialized multi-field word — especially GBI-word and header-word reads
+  that were never routed through a converter or `#ifdef PORT`.
 - **Python slice-assignment width is a silent corruptor** (D125):
   `out[a:a+8] = b"\x00\x00\x00\x00"` on a `bytearray` does NOT raise — it
   deletes `(8 - len(rhs))` bytes, shrinking `out` and shifting everything

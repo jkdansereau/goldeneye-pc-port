@@ -1037,6 +1037,18 @@ void sndCreatePostEvent(ALSoundState *state, s16 eventType, s32 arg2)
 {
     ALSndpEvent evt;
 
+#ifdef PORT
+    /* D138: libaudio is Phase-3 parked. The audio thread never drains
+     * g_sndPlayerPtr->evtq->allocList, so every positional-sound tick
+     * (chrobjSndCreatePostEvent, called per objTick for each ambient-sound
+     * object) appends an item and alEvtqPostEvent walks the whole list to
+     * insert it -> O(n^2). Facility has enough machinery ambience that after
+     * a few thousand frames one insert takes seconds and the kernel-heartbeat
+     * watchdog trips ("no frame rendered"). Skip event posting until audio
+     * lands (D77); no gameplay effect. */
+    (void) evt; (void) eventType; (void) arg2; (void) state;
+    return;
+#else
     evt.common.type = eventType;
     evt.common.state = state;
     evt.unks32.val8 = arg2;
@@ -1045,6 +1057,7 @@ void sndCreatePostEvent(ALSoundState *state, s16 eventType, s32 arg2)
     {
         alEvtqPostEvent(&g_sndPlayerPtr->evtq, (ALEvent *)&evt, 0);
     }
+#endif
 }
 
 /**

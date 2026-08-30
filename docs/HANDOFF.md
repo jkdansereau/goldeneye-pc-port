@@ -36,8 +36,12 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
 - **Input layer (Phase 3) landed and playtested** (D118, M-9/M-10).
   `port/src/input.c` is real: keyboard+mouse + SDL_GameController → N64
   pad. Core aim/move works. **Open polish bugs (deferred):** D118a mouse
-  yaw slower than pitch; D118b mouse-Y inverted; rebinding / gamepad
-  hotplug / `ge007.ini` generation still TODO.
+  yaw (analog) vs pitch (digital) mismatch; D118b mouse-Y inverted;
+  **D118c — in manual-aim mode, mouse-down → crouch** (mouse Y emits
+  C-down, which game logic maps to crouch/zoom in `insightaimmode`;
+  clean fix = the deferred analog-aim `#ifdef PORT` hook, §F D118);
+  rebinding / gamepad hotplug / `ge007.ini` generation still TODO.
+  Weapon switch on kbd = A button (`Space`/`Z`/`E`) — no dedicated key.
 - **Recent fixes (M-10, `d1e93b76`):** D119 guard-attack crash
   (`weapons_held[]->chr` type-pun) fixed; D120 blood-stain hang guarded
   (not fixed — `d43_emit.py` opcode-0x18 converter gap).
@@ -150,7 +154,108 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
   later pass. Bug class D24-implications + `osYieldThread` watch item added
   to PORT-LEARNINGS §E.
 
-## Next task
+## Done this session (M-23) — WS6 Facility playthrough: D135/D137/D138/D139 FIXED, D136/D140/D118c open
+
+First real human WS6 playtest. User speed-ran Dam OK, then hit a chain of
+crashes on Facility (`-level_34`) — each one a subsystem the 21-level sweep
+never exercises (no weapon fire, no stage unload, no pause menu). Fixed four,
+two new open, Facility now near-complete. **All uncommitted** (folds into the
+docs-restructure commit set with D121/D122/D126/D128/D130/D131/D134).
+
+- **D135 (FIXED)** `src/game/propobj.c` — firefight crash. `bgTestHitOnObj`
+  (bullet-ray vs object triangle geometry, via `propobjFindHit` on every
+  shot that resolves on an object model) is an **unported N64 GBI parser**:
+  raw 8-byte-`Gfx` byte/word indices desync on the PC 16-byte `Gfx` stream →
+  walks off the DL → AV `0x709ae02a`. Ported `#ifdef PORT` to `gdl->words.w0/
+  .w1` shifts (mirrors PD `pd_port/src/game/bg.c:3635`). Second fault after
+  the parser fix: `objHit` `propobj.c:9717` `% impact_sounds->thing2_len` int
+  div-by-0 — the ported texnum-recovery (`*(s16*)(phys(w1)-8)`) returned a
+  bogus `texturenum` → OOB `g_HitTypeSounds[]`. Fixed: PORT texnum branch
+  always `-1` (`isnd_default`, safe; generic impact sound/decal, park w/ D77).
+- **D137 (FIXED)** `src/game/gunfire.c` — right-mouse (raise crosshair) crash.
+  `gunDrawSight` `s32 sp54` holds a `Gfx*` the whole fn (`texSelect`/
+  `display_image_at_position` take `Gfx**`); 4-byte slot → `*(Gfx**)&sp54`
+  splices adjacent stack → wild DL write in `texSetRenderMode`. `#ifdef PORT`:
+  `sp54` is `Gfx *`. §A.
+- **D138 (FIXED)** `src/snd.c` — the "1 room from the end" *freeze* (not a
+  crash — kernel-heartbeat watchdog). `sndCreatePostEvent` →
+  `alEvtqPostEvent` (`libultra/audio/event.c:110`) walks `evtq->allocList`;
+  parked audio thread never drains it, `chrobjSndCreatePostEvent` posts per
+  objTick per ambient-sound object, Facility is dense with machinery → the
+  list walk stalls the main thread. `#ifdef PORT`: `sndCreatePostEvent` is a
+  no-op until audio lands (D77). No gameplay effect.
+- **D139 (FIXED, UNVERIFIED)** `src/game/cleanup_objects.c` — stage-unload
+  crash (`lvlUnloadStageTextData` → `cleanupObjects` → `objFree`, `obj->prop`
+  = packed-float garbage). Root cause: `cleanupObjects` walks propDefs with
+  `(u8)obj[0]` for the type, which works only because the header word
+  `[u16 extrascale][u8 state][u8 type]` is **big-endian** (type = low byte).
+  On LE the low byte is `extrascale` → the walk never matches `PROPDEF_END`,
+  runs off the blob, dispatches the switch on garbage → `objFreePermanently`
+  on non-objects → crash. `#ifdef PORT`: use `((PropDefHeaderRecord*)obj)->
+  type` (offset 3) like every other consumer (`sizepropdef`, proplvreset).
+  **Not confirmed** — when the user hit pause to trigger a fast teardown
+  test, the pause menu itself crashed first (D140). `-level_09` unregressed
+  (91.65%). §F **D139**, PORT-LEARNINGS §C (BE header byte on LE).
+- **D140 (OPEN)** — **pause menu crashes.** `maybe_mp_interface` →
+  `bondviewRenderWatch` (`bondview2.c:8604`) → `bondviewTransformManyPos-
+  ToViewMatrix(g_CurrentPlayer->field_23C = NULL, objheader->numMatrices=9)`
+  → `matrix_4x4_copy(src=0x0)` AV. The watch model's per-node view-matrix
+  cache (`struct player.field_23C`) is never allocated (or `field_23C` is at
+  the wrong PC offset — `struct player` layout, `docs/AUDIT-M6-player-
+  offsets.md`). Blocks the WS6 pause-menu / objective-status checks and the
+  watch gadgets. D75 3D-model-transform family. Files: `src/game/bondview2.c`,
+  `src/bondtypes.h` (`struct player`).
+- **D118c (OPEN, low pri)** — in manual-aim mode, mouse-down → **crouch**.
+  Mouse Y emits C-down; `bondview2.c:5351` maps C-down in `insightaimmode`
+  to `crouchDown`/zoom as well as aim pitch. No input-layer-only fix; needs
+  the deferred analog-aim `#ifdef PORT` hook (§F D118). Documented, parked.
+- **New harness** `tools_pc/repro_gdb.sh <XX>` — nohup-launch a level, attach
+  gdb, dump full `bt full` + locals on the first SIGSEGV/SIGFPE, rolling
+  frame dump to `ppm/`. Needed because `ge007.crash.log`'s own backtrace is
+  `#01 = null` (native unwinder fails). Also `build-pc/d136_cmds.txt` — a
+  gdb cmd file that traces every `objFree` call (`type`/`obj`/`prop`/`model`)
+  then catches the fault; the "last line before FAULT" localises D136-class
+  walk-off bugs. **Attach the winpid via `ps -W | grep ge007.x86_64 |
+  awk '{print $4}'`** — `repro_gdb.sh`'s own `ps -p $!` derivation is wrong.
+- **Follow-up (not done):** the BG room-geometry hit-test in `bg.c`
+  (`~3373-3646`, walks the D85-widened `ptr_expanded_mapping_info`) is the
+  identical unported GBI parser to D135 — latent, fires on shooting
+  walls/floor. Same mechanical port. §F D135 + PORT-LEARNINGS §B.
+- **Controls** (for the new session's own playtesting): kbd — WASD/arrows
+  move, `A`/`D` sidestep, mouse X turn (analog), mouse Y look (digital
+  C-button), LMB/LCtrl fire, RMB/LShift aim, `Space`/`Z`/`E` = A (action AND
+  weapon-switch — GE overloads it), `X`/`R`/`F` = B (reload), `Q` = L,
+  `Enter`/`Tab` = Start, `Esc` quit. No dedicated weapon key.
+
+## Next task (M-24 — Opus 5)
+
+**Immediate:** confirm **D139** — launch `-level_34`, play a few seconds,
+then die or pause→Abort Mission (avoid the watch/pause-menu render until
+D140 is fixed — dying is cleaner). Clean drop to the debrief/next screen =
+D139 confirmed. Then re-run Dam (`-level_33`) end-to-end — its M-22 crash
+was the same `objFreeEmbedmentOrProjectile` site, should be D139.
+
+**Then, in rough priority:**
+1. **D140** — pause-menu / watch-model NULL (`field_23C`). Blocks WS6
+   objective-status checks. Start: is `field_23C` never-allocated or a
+   wrong `struct player` offset? gdb watchpoint / check `AUDIT-M6-player-
+   offsets.md`. Likely D75 family (watch is a 3D model).
+2. **Re-run `tools_pc/level_sweep.sh`** — D135/D138 are cross-level (every
+   level with shootable props / ambient machinery). Sweep is boot+capture
+   only so it won't show combat regressions, but confirm no *boot* breakage
+   and refresh `docs/LEVEL-STATUS.md`.
+3. **Resume WS6** `docs/LEVEL-PLAYTEST.md` — Facility first (finish the
+   objective checklist now that it's completable), then down the mission
+   list. Each new crash is one subsystem deeper; expect more `#ifdef PORT`
+   ABI fixes (D122/D126/D132/D135/D137/D139 pattern).
+4. bg.c hit-test sibling port (follow-up above) — do it before a level
+   where wall-shooting matters (most).
+
+**Verification per fix:** target level boots to ≥1 non-degenerate frame
+(`tools_pc/pixcount.py`), AND `-level_09` + `-level_20` unregressed
+(`tools_pc/framediff.py`). Regen sidecars after any converter change.
+
+<details><summary>M-22 and earlier "Next task" (superseded — §H authoritative)</summary>
 
 -1. **D134 DONE (M-22)** — the frame-2 boot hang that every session since
    M-13 wrote off as "sweep flakiness / D117 / machine load" was a **real,
@@ -160,21 +265,11 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
    permanent stall. Fix in `port/src/libultra.c` (`portPostEventForce` +
    2 reserved slots in `portPostVIEvent`). `-level_09` 6/6 boots to frame 600,
    0 heartbeats (pre-fix 1/3). §F/§H **D134**, PORT-LEARNINGS §E.
-   **Consequence: re-run the full 21-level sweep** — several NO-FRAMES /
-   "hang" rows in `docs/LEVEL-STATUS.md` (incl. the M-20 Facility/Jungle
-   re-verify failures) are probably this and may now pass. `level_sweep.sh`
-   is also hardened this session (45 s watchdog, lockdir serialization,
-   stray-process kill, one retry on NO-FRAMES).
 
 0. **D132 DONE (M-21, commit `fa296b17`)** — propDef union-index slots for
    types 14/19/38/44 (LINK/SWITCH/LOCK_DOOR/SAFE_ITEM) now emitted at the
    right PC offsets (`d88_propdefs.py` + `loadobjectmodel.c sizepropdef`
-   PORT). Verified `-level_09` framediff 3/3, `-level_20` == pre-D132
-   baseline (no regression), Archives/Streets/Dam load+render+no-crash.
-   **Now hand the user `docs/LEVEL-PLAYTEST.md` for WS6** (linked props —
-   switch-doors, dual weapons, locked doors, safes — need real input to
-   validate). Also cheap: harden `level_sweep.sh` (watchdog 24→45 s,
-   serialize) — sweep flakiness was severe this pass.
+   PORT).
 
 1. **`-level_09` (BUNKER1) boot crash — DISPROVEN as a regression** (M-20,
    coordinator: 3 runs / 1800 frames crash-free on `1fc3cff6`; re-confirmed
@@ -204,6 +299,8 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
 After that: all 21 load+render → hand `docs/LEVEL-PLAYTEST.md` to the
 user for the WS6 completion pass (real input, per-level objective
 checklist).
+
+</details>
 
 **Regen gotcha:** `d69_emit.py` rewrites `data/pccg-<r>/pccg.bin` from
 scratch with only the 52 bg/stan rows — you MUST follow it with

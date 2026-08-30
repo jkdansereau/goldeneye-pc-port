@@ -6234,13 +6234,27 @@ void gunSetSightVisible(s32 reason, bool visible)
 
 void gunDrawSight(s32 *gdl) {
 
+#ifdef PORT
+    /* D137: sp54 holds a Gfx* the whole time (`sp54 = *gdl`, then passed as
+     * `&sp54` to texSelect/display_image_at_position which take Gfx**). As an
+     * N64 `s32` it is 4 bytes, so `*(Gfx**)&sp54` reads 4 bytes of adjacent
+     * stack as the pointer high word → wild `gdl` write in texSetRenderMode
+     * when the player raises the crosshair (right-mouse aim). §A. */
+    Gfx *sp54;
+#else
     s32 sp54;
+#endif
     f32 xypos[2];
     f32 halfedxy[2];
 
     if ((g_CurrentPlayer->gunsightmode == 0) && (g_CurrentPlayer->mpmenuon == FALSE)) {
+#ifdef PORT
+        sp54 = *(Gfx **)gdl;
+        texSelect(&sp54, crosshairimage, 4, 0, 0);
+#else
         sp54 = *gdl;
         texSelect(&sp54, crosshairimage, 4, 0, 0);
+#endif
 
         xypos[0] = g_CurrentPlayer->crosshair_angle.f[0];
         xypos[1] = g_CurrentPlayer->crosshair_angle.f[1];
@@ -6254,7 +6268,11 @@ void gunDrawSight(s32 *gdl) {
         halfedxy[1] = halfedxy[1] * g_GunSightAspectRatio;
 #endif
         display_image_at_position(&sp54, &xypos, &halfedxy, 0x20, 0x20, 0, 0, 1, 0xFF, 0xFF, 0xFF, 0x6E, (crosshairimage->level > 0), 0);
+#ifdef PORT
+        *(Gfx **)gdl = sp54;
+#else
         *gdl = sp54;
+#endif
     }
 }
 

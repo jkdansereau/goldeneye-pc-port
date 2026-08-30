@@ -8481,7 +8481,19 @@ bool bgTestHitOnObj(coord3d *arg0, coord3d *arg1, coord3d *arg2, Gfx *gdl, Gfx *
 
     while (1)
     {
+#ifdef PORT
+        /* D135: GE object bullet-hit GBI parser. On PC the model GDL is the
+         * 16-byte Gfx layout (tools_pc/d43_emit.py) with the two N64 32-bit
+         * words preserved in the low dwords of words.w0 / words.w1. Every raw
+         * byte/word index below assumed an 8-byte N64 slot, so it desynced on
+         * the first G_VTX/G_TRI1 and walked off the DL (§B, PORT-LEARNINGS).
+         * Read the words instead; mirrors PD bgTestHitOnObj (pd_port bg.c). */
+        u32 w0 = (u32) gdl->words.w0;
+        u32 w1 = (u32) gdl->words.w1;
+        op = (s8) (w0 >> 24);
+#else
         op = *((s8 *) gdl);
+#endif
         if (op == (s8)G_ENDDL)
         {
             if (gdl2 == 0)
@@ -8501,9 +8513,15 @@ bool bgTestHitOnObj(coord3d *arg0, coord3d *arg1, coord3d *arg2, Gfx *gdl, Gfx *
 
         if (op == G_VTX)
         {
+#ifdef PORT
+            op = (w0 >> 16) & 0xf;
+            padC = w1 & 0x00ffffff;
+            vtxbase = (Vertex *) ((uintptr_t) vertices + (uintptr_t) padC - (op << 4));
+#else
             op = ((u8 *) gdl)[1] & 0xf;
             padC = ((u32 *) gdl)[1] & 0x00ffffff;
             vtxbase = (Vertex *) ((((s32) vertices) + padC) - (op << 4));
+#endif
             gdl++;
 
             continue;
@@ -8514,9 +8532,15 @@ bool bgTestHitOnObj(coord3d *arg0, coord3d *arg1, coord3d *arg2, Gfx *gdl, Gfx *
             bboxMin = D_8003204C;
             bboxMax = D_80032058;
 
+#ifdef PORT
+            idx[0] = ((w1 >> 16) & 0xff) / 10;
+            idx[1] = ((w1 >> 8) & 0xff) / 10;
+            idx[2] = (w1 & 0xff) / 10;
+#else
             idx[0] = ((u8 *) gdl)[5] / 10;
             idx[1] = ((u8 *) gdl)[6] / 10;
             idx[2] = ((u8 *) gdl)[7] / 10;
+#endif
 
             for (i = 0; i < 3; i++)
             {
@@ -8560,6 +8584,28 @@ bool bgTestHitOnObj(coord3d *arg0, coord3d *arg1, coord3d *arg2, Gfx *gdl, Gfx *
                     dy = (f32) (((s32) hitbuf.hitpos.y) - ((s32) arg0->y));
                     dz = (f32) (((s32) hitbuf.hitpos.z) - ((s32) arg0->z));
                     tcmd = gdl;
+#ifdef PORT
+                    if (((u8) ((u32) gdl->words.w0 >> 24) != G_SETTIMG) && (cmdStart < gdl))
+                    {
+                        do
+                        {
+                            tcmd--;
+                            if ((u8) ((u32) tcmd->words.w0 >> 24) == G_SETTIMG)
+                            {
+                                break;
+                            }
+                        } while (cmdStart < tcmd);
+                    }
+
+                    /* N64 recovers the texture number from *(s16*)(phys(w1) - 8).
+                     * That layout is not guaranteed for the port's converted
+                     * model textures / runtime-replaced collision GDLs, and a
+                     * bogus value here indexes g_HitTypeSounds[] OOB (div-by-0
+                     * at :9717). texturenum only flavours the bullet-impact
+                     * sound/decal, so fall back to the generic hit (-1). */
+                    texnum = -1;
+                    (void) tcmd;
+#else
                     if (((*((u8 *) gdl)) != 253) && (cmdStart < gdl))
                     {
                         do
@@ -8583,6 +8629,7 @@ bool bgTestHitOnObj(coord3d *arg0, coord3d *arg1, coord3d *arg2, Gfx *gdl, Gfx *
                         padC = ((u32 *) tcmd)[1] - 8;
                         texnum = *((u16 *) (padC | 0x80000000));
                     }
+#endif
 
                     d = ((dx * dx) + (dy * dy)) + (dz * dz);
 
@@ -8614,6 +8661,32 @@ bool bgTestHitOnObj(coord3d *arg0, coord3d *arg1, coord3d *arg2, Gfx *gdl, Gfx *
                 bboxMin2 = D_80032070;
                 bboxMax2 = D_8003207C;
 
+#ifdef PORT
+                if (s2 == 0)
+                {
+                    idx2[0] = w1 & 0xf;
+                    idx2[1] = (w1 & 0xff) >> 4;
+                    idx2[2] = w0 & 0xf;
+                }
+                else if (s2 == 1)
+                {
+                    idx2[0] = (w1 >> 8) & 0xf;
+                    idx2[1] = (w1 & 0xffff) >> 12;
+                    idx2[2] = (w0 & 0xff) >> 4;
+                }
+                else if (s2 == 2)
+                {
+                    idx2[0] = (w1 >> 16) & 0xf;
+                    idx2[1] = ((w1 >> 16) & 0xff) >> 4;
+                    idx2[2] = (w0 >> 8) & 0xf;
+                }
+                else
+                {
+                    idx2[0] = (w1 >> 24) & 0xf;
+                    idx2[1] = w1 >> 28;
+                    idx2[2] = (w0 & 0xffff) >> 12;
+                }
+#else
                 if (s2 == 0)
                 {
                     idx2[0] = ((u32 *) gdl)[1] & 0xf;
@@ -8638,6 +8711,7 @@ bool bgTestHitOnObj(coord3d *arg0, coord3d *arg1, coord3d *arg2, Gfx *gdl, Gfx *
                     idx2[1] = ((u32 *) gdl)[1] >> 28;
                     idx2[2] = ((u32) ((u16 *) gdl)[1]) >> 12;
                 }
+#endif
 
                 for (i = 0; i < 3; i++)
                 {
@@ -8681,7 +8755,12 @@ bool bgTestHitOnObj(coord3d *arg0, coord3d *arg1, coord3d *arg2, Gfx *gdl, Gfx *
                         dy = (f32) (((s32) hitbuf.hitpos.y) - ((s32) arg0->y));
                         dz = (f32) (((s32) hitbuf.hitpos.z) - ((s32) arg0->z));
                         tcmd = gdl;
-
+#ifdef PORT
+                        /* see the G_TRI1 note above — texturenum recovery from
+                         * the G_SETTIMG w1 is not portable; use generic hit. */
+                        texnum = -1;
+                        (void) tcmd;
+#else
                         if (((*((u8 *) gdl)) != G_SETTIMG) && (cmdStart < gdl))
                         {
                             do
@@ -8704,6 +8783,7 @@ bool bgTestHitOnObj(coord3d *arg0, coord3d *arg1, coord3d *arg2, Gfx *gdl, Gfx *
                             padC = ((u32 *) tcmd)[1] - 8;
                             texnum = *((u16 *) (padC | 0x80000000));
                         }
+#endif
 
                         d = ((dx * dx) + (dy * dy)) + (dz * dz);
 
