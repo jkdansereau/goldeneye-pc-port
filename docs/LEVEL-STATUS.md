@@ -18,29 +18,33 @@ Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` 
 | Train    | 25 | **PASS** 87.0% | — | — |
 | Caverns  | 39 | **PASS** 91.6% | — | — |
 | Egypt    | 32 | **PASS** 90.9% | — | — |
-| Cuba     | 54 | **PASS** 92.5% | — | — |
+| Cuba     | 54 | **PASS** 92.5% (loads+renders 300+ frames; bare-boot end-credits path `bondviewRenderCredits` still faults intermittently — D76/D129, not a real-flow blocker) | — | — |
 | Dam      | 33 | **PASS** 83.3% | — (C1 fixed, D123) | — |
 | Frigate  | 26 | **PASS** 90.4% | — (C1 fixed, D123) | — |
 | Statue   | 22 | **PASS** 80.1% | — (C1 fixed, D123) | — |
 | Streets  | 29 | **PASS** 91.6% | — (C1 fixed, D123; no C2 crash this run — timing) | — |
 | Cradle   | 41 | **PASS** 55.4% (low — partial render, no crash) | — (C1 fixed, D123) | — |
-| Runway   | 35 | CRASH | `import_texture_i8` gfx_pc.cpp:821 (fault 0x721b8ee8) — same as Facility | **C2** |
+| Runway   | 35 | CRASH (intermittent, ~3/4 runs; `0x1400d1d83`) | `import_texture_i8` — same as Facility | **C2** |
 | Facility | 34 | CRASH | `import_texture_i8` gfx_pc.cpp:821 (fault 0x72181ee8) — model-GDL relocation align bug, D124, NOT fixed | **C2** |
 | Jungle   | 37 | CRASH | `gfx_sp_matrix` gfx_pc.cpp:1046 (fault 0x401c68e0) — C2 texture crash fixed (D124), now explosion-DL `G_MTX` (D75/matrix family) | **C2m** |
 | Aztec    | 28 | **PASS** 90.8% | — (C3 fixed, D125) | — |
 | Bunker2  | 27 | **PASS** 91.5% | — (C3r fixed, D126) | — |
 | Depot    | 30 | **PASS** 79.8% | — (C4 fixed, D126) | — |
-| Control  | 23 | CRASH | `sub_GAME_7F0BA2D4` bg.c:5723 (`portal_pts->numPoints`, via chrprop.c:62) | **C5** |
+| Control  | 23 | **PASS** 90.8% | — (C5 fixed, D128) | — |
 | Surface2 | 43 | **PASS** 70.4% | — (C6 fixed, D126) | — |
-| Surface1 | 36 | CRASH | `sndSetupSound` snd.c:653 (fault 0x56220001…, ascii-ish) | **C7** |
+| Surface1 | 36 | **PASS** 77.5% | — (C7 guarded, D127) | — |
 
-**16 / 21 PASS.** D123 cleared C1 on all 6. D124 cleared Jungle's texture
+**18 / 21 PASS.** D123 cleared C1 on all 6. D124 cleared Jungle's texture
 crash (now hits an explosion-DL matrix crash). D125 cleared C3-Aztec.
 **D126** (objective sub-record `->next` pointer widens 4→8B → 8-byte store
 clobbers the next propdef record's header → walk desync → wrong command
 indices) cleared **C3r Bunker2 + C4 Depot + C6 Surface2** in one fix
-(`d88_propdefs.py` types 30/32/33/35 → 24B/6w). 5 crashes remain in 4
-classes: C2 Runway+Facility, C2m Jungle, C5 Control, C7 Surface1.
+(`d88_propdefs.py` types 30/32/33/35 → 24B/6w). **D127** guarded a bogus
+ALSound* in the parked audio path → **C7 Surface1**. **D128** fixed a
+hardcoded-N64-stride portal-flag write → **C5 Control**. **3 crashes
+remain, all one class:** C2 Runway + Facility + C2m Jungle — the model /
+prop GDL relocation misaligns on the 8→16B `Gfx` stride
+(`docs/BRIEF-C2gdl-model-reloc.md`).
 
 Notes: Streets passed this run but the C1 agent saw a `gfx_sp_matrix`
 crash — likely the same explosion-DL `G_MTX` (C2m) as Jungle, timing-
@@ -163,16 +167,18 @@ id from a propDef record). Fault addr 0x0. Files: `tools_pc/d88_propdefs.py`,
 crash on load, not silence. May be dodge-able with a narrow guard until
 audio lands. Files: `src/snd.c`, `port/src/` audio stubs.
 
-## Next (5 crashes, 4 classes — priority order)
-1. **C2** Runway + Facility — model-GDL relocation align bug in
-   `objecthandler_2.c`/`texLoadFromGdl` (D80/D82/D83 area). Shared infra,
-   2 levels + likely helps Jungle. Biggest win.
-2. **C2m** Jungle — explosion-DL `G_MTX` (`gfx_sp_matrix`), D75/matrix
-   family.
-3. **C5** Control — BG portal `g_BgPortals[].offset_portal` unresolved/BE,
-   `bg.c:5723` via `chrprop.c:62`. BG sidecar (`d69_emit.py`).
-4. **C7** Surface1 — `sndSetupSound` `snd.c:653`; parked-audio, may just
-   need a narrow load guard until Phase 3.
+## Next (3 crashes, 1 class)
+1. **C2 / C2-GDL** Runway + Facility — model/prop GDL relocation writes
+   non-16-aligned `dst` (N64 8B `Gfx` vs PC 16B stride) in the
+   `texLoadFromGdl` / `sub_GAME_7F0762E0` path → garbage `G_SETTIMG` w1 →
+   `import_texture_i8` fault. `docs/BRIEF-C2gdl-model-reloc.md` — its own
+   focused session (D80/D82/D83 area).
+2. **C2m** Jungle — renders ~300 frames then an explosion-DL `G_MTX`
+   (`gfx_sp_matrix`), D75/matrix family. May be downstream of the same
+   GDL-reloc infra.
+
+Everything else loads + renders + survives the no-input window.
+Hand `docs/LEVEL-PLAYTEST.md` to the user for the WS6 completion pass.
 
 Re-run `tools_pc/level_sweep.sh` after each class fix; keep
 `-level_09`/`-level_20` green (`tools_pc/framediff.py`).

@@ -78,33 +78,57 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
 `HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`): the D121 + D122 entries in
 `docs/PCPortResearch.md` §F/§H and this file's edits. Commit or fold in.
 
-## Next task — converter write-audit (C3r / C4 / C5 / C6)
+## Done this session (M-17) — 4 commits, 13→18/21 PASS
 
-**D125 is LANDED (M-16b).** `tools_pc/d88_emit.py:374` now writes 8 NUL
-bytes; all 21 `Usetup*Z` sidecars regen'd; **Aztec `-level_28` PASSES**
-(was C3 crash), Bunker1/Silo unregressed, `d125_check.py` 21/21 MATCH.
-M-16 probes reverted, scratch deleted, `d125_check.py` kept. Sweep 12 →
-13/21. Full write-up: §H D125 M-16b.
+- **D126** (`e851e2ab`) — objective sub-records `criteria_picture` (30),
+  `criteria_roomentered` (32), `criteria_deposit` (33),
+  `setup_objective_text` (35) each end in a `T *next` list pointer that
+  `set_parent_cur_obj_*` / `setup_briefing_text_entry_parent` write while
+  walking the setup stream. Widens 4→8B and 8-aligns at offset 16 on PC →
+  struct is 24B/6w (N64 16/20); the old N64-sized emit meant the runtime
+  8-byte `->next` store clobbered the *next* propdef record's header →
+  walk desync → command indices drifted ~100 → `setupDoor` `linkedDoor`
+  resolution landed on the wrong record. Fixed `d88_propdefs.py`
+  (`PROPDEF_PC_BYTES[30/32/33/35]=24` + typed handler) +
+  `loadobjectmodel.c` `sizepropdef` PORT returns 6. **Cleared C3r Bunker2
+  + C4 Depot + C6 Surface2** in one change.
+- **D127** (`1129f63d`) — `sndPlaySfx` guards a bogus `ALSound*` (the
+  converted libaudio bank has fewer/rearranged `soundArray` slots than
+  N64; audio is Phase-3 parked). **Cleared C7 Surface1.**
+- **D128** (`749feb9f`) — `sub_GAME_7F0B37EC` special-portal marker used
+  the hardcoded N64 8-byte `bg_portal_data_entry` stride / `controlbytes1@6`;
+  on PC the struct is 16B with `controlbytes1@10`, so `|= 2` scribbled
+  into the middle of a portal's `offset_portal` pointer → `bg.c:5723`
+  crash on any level with a `specialportalarray` entry. `#ifdef PORT`
+  uses the struct accessor. **Cleared C5 Control.**
+- **D129** (`<this commit>`) — `langGet` bounds-checks the slot id and
+  resolved bank pointer. Bare `-level_XX` boots that reach the
+  cast/credits text path (Cuba, `bondviewRenderCredits`, D76 area)
+  reference banks the menu flow never loaded. Reduces the Cuba bare-boot
+  end-credits crash; **Cuba itself loads + renders 300+ frames fine** and
+  the credits work through the real front-end flow.
 
-The last 3 sessions' converter bugs are one family — width/endianness/
-stride errors in `tools_pc/d*_emit.py` (D112 `put_f32`, D120 opcode-0x18,
-D125 slice width). Pi audited every `out[` write in `d88_emit.py`;
-`d43_emit.py` + the BG sidecar emitters never got that pass, and the open
-crashes line up with exactly those files:
+## Next task — C2 / C2-GDL model-GDL relocation (Runway + Facility + Jungle)
 
-- **C3r** Bunker2 — DOOR-tail `linkedDoorOffset`/`linkedDoor` layout in
-  `d88_propdefs.py` vs compiled PC `DoorRecord` (`offsetof`/`sizeof`
-  cross-check; D123 read-before-write-id pattern).
-- **C6** Surface2 — `PitemZ_entries[modelid]` (D122/D123 cont.,
-  `d43_emit.py` / `d88_propdefs.py`).
-- **C4** Depot — BG tile/room table (`prop.c:902`).
-- **C5** Control — BG portal `offset_portal` unresolved/BE (`bg.c:5723`).
+The last 3 crashes are **one class**: the model / prop GDL relocation
+(`texLoadFromGdl` / `sub_GAME_7F0762E0`, `objecthandler_2.c`) writes
+non-16-aligned `dst` because it mixes N64 8-byte `Gfx` and PC 16-byte
+stride in the `replacementgdl` / `name` offset math → garbage `G_SETTIMG`
+w1 → `import_texture_i8` fault (Runway, Facility). Jungle renders ~300
+frames then hits a related explosion-DL `G_MTX` (`gfx_sp_matrix`).
+**Brief: `docs/BRIEF-C2gdl-model-reloc.md` — its own focused session**
+(D80/D82/D83 area). Files: `src/game/objecthandler_2.c`, `src/game/tex.c`
+(`texLoadFromGdl`), `src/game/model.c` (`modelNodeReplaceGdl`),
+possibly `tools_pc/d43_emit.py` model texture-blob offsets.
 
-Audit `d43_emit.py` + BG sidecar emit paths for slice-width mismatches,
-un-byteswapped fields, N64-vs-PC stride math. Then the structural piece:
-**C2-GDL** (Runway + Facility) — `docs/BRIEF-C2gdl-model-reloc.md`, its
-own focused session. Defer C2m Jungle (matrix), C7 Surface1 (add a narrow
-`#ifdef PORT` `sndSetupSound` load guard only — audio is Phase 3).
+Everything else: hand `docs/LEVEL-PLAYTEST.md` to the user for the WS6
+completion pass (real input, per-level objective checklist).
+
+**Regen gotcha:** `d69_emit.py` rewrites `data/pccg-<r>/pccg.bin` from
+scratch with only the 52 bg/stan rows — you MUST follow it with
+`d88_emit.py --regen` to re-add the 21 `Usetup*Z` rows, or every level
+falls back to the raw N64 setup and crashes identically in
+`proplvreset2`. Always run the full `d43 && d69 && d88 --regen` chain.
 
 Sweep note: `level_sweep.sh` was flaky this session (spurious NO-FRAMES on
 known-good levels under machine load / the 24 s watchdog + D117

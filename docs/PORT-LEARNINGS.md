@@ -48,6 +48,15 @@ expressed in N64 `Gfx`/`Vtx` units is **half-size** on PC.
 - Instances: D50.6 (texCopyGdls copied only w0 of each 16-byte slot),
   D58 (DL reserve 0x100→0x200), D85 (`bgWidenRoomGdl` 8→16 + bswap),
   D95 (2× master-DL buffer + raised mempool ceiling).
+- **Also bites RAW hardcoded struct-stride writes, not just Gfx/Vtx.**
+  D128: `sub_GAME_7F0B37EC` did `((u8*)g_BgPortals)[(portal<<3)+6] |= 2`
+  — the N64 `bg_portal_data_entry` is 8B (`ptr@0, cr1@4..cb2@7`); on PC
+  the widened `offset_portal` ptr makes it 16B (`cr1@8..cb2@11`), so the
+  write landed in the middle of another portal's pointer. Fix = use the
+  struct accessor under `#ifdef PORT` (every other site already does:
+  `g_BgPortals[portal].controlbytes1 |= PORTALFLAG_SPECIAL`). Grep for
+  `<< 3` / `* 8` / `+ 6` style raw offsets into any struct that gained a
+  pointer field.
 
 ## C. Big-endian rodata / ROM data read on little-endian PC
 
