@@ -159,8 +159,9 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
 First real human WS6 playtest. User speed-ran Dam OK, then hit a chain of
 crashes on Facility (`-level_34`) — each one a subsystem the 21-level sweep
 never exercises (no weapon fire, no stage unload, no pause menu). Fixed four,
-two new open, Facility now near-complete. **All uncommitted** (folds into the
-docs-restructure commit set with D121/D122/D126/D128/D130/D131/D134).
+two new open, Facility now near-complete. **Committed `ec51d9c5`** (the
+older D121/D122/D126/D128/D130/D131 write-ups are still uncommitted, tangled
+in the docs-restructure — fold those separately).
 
 - **D135 (FIXED)** `src/game/propobj.c` — firefight crash. `bgTestHitOnObj`
   (bullet-ray vs object triangle geometry, via `propobjFindHit` on every
