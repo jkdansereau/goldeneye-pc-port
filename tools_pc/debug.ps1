@@ -20,6 +20,7 @@ param(
     [int]$Page = 1,
     [int]$Diff = 0,
     [switch]$InputLog,
+    [switch]$NoBuild,
     [string]$Gdb = "C:\msys64\mingw64\bin\gdb.exe",
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$GameArgs
@@ -27,8 +28,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 $exe = "build-pc\ge007.x86_64.exe"
-if (-not (Test-Path $exe)) { throw "build the port first: bash build-pc.sh ntsc-final" }
 if (-not (Test-Path $Gdb)) { throw "gdb not found at $Gdb (pass -Gdb <path>)" }
+
+if (-not $NoBuild) {
+    Write-Host "building (bash build-pc.sh ntsc-final) - pass -NoBuild to skip" -ForegroundColor DarkGray
+    & "C:\msys64\usr\bin\bash.exe" -lc "cd '$($PWD -replace '\\','/')' && export PATH=/c/msys64/mingw64/bin:`$PATH && ./build-pc.sh ntsc-final"
+    if ($LASTEXITCODE -ne 0) { throw "build failed" }
+}
+if (-not (Test-Path $exe)) { throw "no exe - build the port: bash build-pc.sh ntsc-final" }
 
 Remove-Item -ErrorAction SilentlyContinue ge007.crash.log, gdb.txt
 
