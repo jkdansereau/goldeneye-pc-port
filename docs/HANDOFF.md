@@ -230,27 +230,42 @@ in the docs-restructure — fold those separately).
 
 ## Next task (M-24 — Opus 5)
 
-**Immediate:** confirm **D139** — launch `-level_34`, play a few seconds,
-then die or pause→Abort Mission (avoid the watch/pause-menu render until
-D140 is fixed — dying is cleaner). Clean drop to the debrief/next screen =
-D139 confirmed. Then re-run Dam (`-level_33`) end-to-end — its M-22 crash
-was the same `objFreeEmbedmentOrProjectile` site, should be D139.
+**Scope call (user, M-23):** D139 (stage unload) + D140 (pause menu / watch)
+are the same **not-yet-built front-end/transition layer** — level exit →
+debrief → next briefing, pause, the watch. Bare `-level_XX` skips all of it
+and the sweep never touches it. Do **not** build a throwaway exit path just
+to verify D139 — its fix is unambiguous (LE reads the wrong header byte) and
+committed; it'll be exercised for free once that layer is built. Both go in
+a **parked "front-end / transitions / pause / watch" bucket** for one
+dedicated session later (see `docs/PLAN-linear-level-sweep.md` WS2).
 
-**Then, in rough priority:**
-1. **D140** — pause-menu / watch-model NULL (`field_23C`). Blocks WS6
-   objective-status checks. Start: is `field_23C` never-allocated or a
-   wrong `struct player` offset? gdb watchpoint / check `AUDIT-M6-player-
-   offsets.md`. Likely D75 family (watch is a 3D model).
-2. **Re-run `tools_pc/level_sweep.sh`** — D135/D138 are cross-level (every
-   level with shootable props / ambient machinery). Sweep is boot+capture
-   only so it won't show combat regressions, but confirm no *boot* breakage
-   and refresh `docs/LEVEL-STATUS.md`.
-3. **Resume WS6** `docs/LEVEL-PLAYTEST.md` — Facility first (finish the
-   objective checklist now that it's completable), then down the mission
-   list. Each new crash is one subsystem deeper; expect more `#ifdef PORT`
-   ABI fixes (D122/D126/D132/D135/D137/D139 pattern).
-4. bg.c hit-test sibling port (follow-up above) — do it before a level
-   where wall-shooting matters (most).
+**M-24 = keep doing in-level playtesting.** In-level crashes (D135/D137/D138
+type — pointer-width / ABI / GBI-parser bugs) are the real work and show up
+during normal `-level_XX` play.
+
+1. **Resume WS6** `docs/LEVEL-PLAYTEST.md`, bare `-level_XX`. Do the in-level
+   ~80% (spawn, geometry, guards, doors, lifts, switches, pickups, each
+   difficulty-gated objective *registers* COMPLETE via `objective_status`,
+   alarms/reinforcements). **Defer** the exit-trigger / auto-advance / pause /
+   watch checks — those need the parked front-end bucket. Facility first
+   (it's playable start→~end now), then down the mission list.
+2. Each new in-level crash: `tools_pc/repro_gdb.sh <XX>`, get the real
+   `bt full`, expect another `#ifdef PORT` ABI/layout fix
+   (D122/D126/D132/D135/D137/D139 pattern). Log as the next Dxx.
+3. **Re-run `tools_pc/level_sweep.sh`** once — D135/D138 touch shared code
+   paths; sweep is boot-only so it only proves no *boot* regression. Refresh
+   `docs/LEVEL-STATUS.md`.
+4. `bg.c` hit-test sibling port (§F D135 follow-up — identical unported GBI
+   parser to D135, `~3373-3646`) — do it before a level where wall-shooting
+   is heavy (i.e. soon).
+
+**Parked bucket — front-end / transitions (one focused session):**
+- D139 verify (stage unload / `cleanupObjects`)
+- D140 (pause menu → `bondviewRenderWatch` → NULL `field_23C` matrix)
+- level exit → MISSION COMPLETE → debrief → auto-advance to next briefing
+- main menu / mission-select / difficulty-select playtest (WS2)
+- the watch (objectives page, gadgets) — needed for the WS6 exit/objective
+  checks, D75 3D-model-transform family
 
 **Verification per fix:** target level boots to ≥1 non-degenerate frame
 (`tools_pc/pixcount.py`), AND `-level_09` + `-level_20` unregressed
