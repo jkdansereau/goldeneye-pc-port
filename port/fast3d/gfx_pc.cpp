@@ -1123,8 +1123,20 @@ static void gfx_adjust_width_height_for_scale(uint32_t& width, uint32_t& height)
     }
 }
 
+/* D146: a valid mapped-memory pointer check. A desynced / corrupt front-end
+ * DL (D75 family) hands wild pointers to the RSP command handlers; abort()
+ * over one bad menu model is the wrong trade for a breadth-first port. */
+static inline bool fast3d_ptr_ok(const void *p) {
+    uintptr_t v = (uintptr_t)p;
+    return v >= 0x10000 && v < 0x0000800000000000ULL;
+}
+
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* vertices) {
     SUPPORT_CHECK(n_vertices <= MAX_VERTICES);
+
+    if (!fast3d_ptr_ok(vertices) || dest_index + n_vertices > MAX_VERTICES) {
+        return; /* D146 */
+    }
 
     for (size_t i = 0; i < n_vertices; i++, dest_index++) {
         const Vtx* v = &vertices[i];
@@ -1818,6 +1830,9 @@ static void gfx_calc_and_set_viewport(const Vp_t* viewport) {
 }
 
 static void gfx_sp_movemem(uint8_t index, uint8_t offset, const void* data) {
+    if (!fast3d_ptr_ok(data)) {
+        return; /* D146: corrupt DL -> wild pointer */
+    }
     switch (index) {
         case G_MV_VIEWPORT:
             gfx_calc_and_set_viewport((const Vp_t*)data);
@@ -2376,7 +2391,9 @@ static void gfx_sp_set_vertex_colors(uint32_t count, const struct NormalColor *v
     // for (uint32_t i = 0; i < count; ++i) {
     //     rsp.vertex_colors[i] = vcn[i];
     // }
-    rsp.vertex_colors = vcn;
+    if (fast3d_ptr_ok(vcn)) { /* D146: ignore a wild pointer from a corrupt DL */
+        rsp.vertex_colors = vcn;
+    }
 }
 
 static void gfx_dp_set_other_mode(uint32_t h, uint32_t l) {
