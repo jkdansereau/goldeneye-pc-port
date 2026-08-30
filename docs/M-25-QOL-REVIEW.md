@@ -10,7 +10,8 @@ pre-M-25 behavior — a fresh or partial `ge007.ini` changes nothing.
 | Commit | Title |
 |---|---|
 | `9ebed821` | `[Video]` ge007.ini knobs + config auto-migration |
-| _(this)_ | `tools_pc/playtest.sh` — name lookup, `--list`, auto-addr2line |
+| `5a7a1035` | `tools_pc/playtest.sh` — name lookup, `--list`, auto-addr2line |
+| _(this)_ | `[Input]` knobs — mouse Y scale / smoothing, pad deadzone / trigger / invert-Y |
 
 ---
 
@@ -113,6 +114,67 @@ Tooling only — not compiled, not in the build. No game-code impact.
 
 Verified: `--list` output correct; name + number resolution; a real
 `bunker1` launch (killed after 15 s) reports cleanly.
+
+---
+
+## 3. `[Input]` knobs (`port/src/input.c`)
+
+### Rationale
+
+Feel tuning that was hardcoded. Every default is the exact prior constant,
+so a fresh/partial ini changes nothing (verified against a from-baseline
+build — see below).
+
+| Key | Default | Effect |
+|---|---|---|
+| `Input.MouseYScale` | 100 | extra vertical (pitch) sensitivity multiplier, % — applied to the mouse dy before aim/hipfire mapping |
+| `Input.MouseSmoothing` | 0 | 0 = raw deltas (today); 1..90 = exponential low-pass, value = % blend of the previous poll |
+| `Input.PadDeadzone` | 7000 | left-stick deadzone, raw 0..32767 (was `STICK_DEADZONE`) |
+| `Input.PadTriggerPct` | 23 | trigger press point, % of travel (≈ the old `30*256` threshold: 23 × 327 ≈ 7521 vs 7680) |
+| `Input.PadLookInvertY` | 0 | 1 = invert right-stick (look) Y |
+
+`MouseYScale` / `MouseSmoothing` feed through the same mode-aware
+mouse→pad path as the M-24 rework (aim-mode band vs hipfire digital pitch);
+smoothing state is a pair of static doubles, reset implicitly when the
+deltas go to zero. `PadDeadzone` flows through `scaleAxis()` (clamped
+0..30000 so the divisor can't go non-positive). `PadTriggerPct`
+recomputes the threshold from a percentage; `PadLookInvertY` negates `ry`
+before the C-button mapping.
+
+### Review risk
+
+Low. Same class as §1 — read an int, feed an existing code path.
+`scaleAxis` divisor is guarded. Worst case is bad feel, all runtime-tunable.
+Cannot change the `OSContPad` contract.
+
+### Verification
+
+- Build green; the two `input.c` warnings (`fabs` implicit-decl, `getenv`)
+  are **pre-existing** — confirmed identical on a stashed baseline build,
+  not introduced here.
+- `-level_09`: crash-free to frame 620, **91.6% coverage (unregressed)**.
+- `-level_20` (Silo): crash-free; frame capture stops at ~320 —
+  **confirmed identical on the pre-change baseline build** (the known Silo
+  camera-descent freeze the user reported this session, not a regression).
+- New keys land in `[Input]` on next launch via the §1 migration path;
+  existing values (`MouseAimSpeed = 77`) preserved.
+
+### What to check by playing
+
+1. `MouseYScale = 150` → faster vertical look, horizontal unchanged.
+2. `MouseSmoothing = 60` → visibly smoothed / slightly laggy aim; `0` crisp.
+3. `PadDeadzone = 3000` → stick responds to smaller nudges; `12000` → larger
+   dead center. `PadLookInvertY = 1` → inverted pad look. `PadTriggerPct`
+   low → hair trigger.
+
+---
+
+## Known pre-existing bugs noted this session (not addressed — out of scope)
+
+- **Silo (`-level_20`) early freeze** — ~3 s in, when the camera pans from
+  the silo down to the player view, the sim wedges (no crash; frame capture
+  freezes ~frame 320). Reproduces on a clean pre-M-25 build. User-reported
+  M-25. Belongs with the in-level playtest / camera-transition work.
 
 ---
 

@@ -127,6 +127,16 @@ static int mouseGrabbed   = 1;      /* released while the window is unfocused */
 static int mouseAimSpeed  = 50;     /* aim-mode sensitivity, percent */
 static int mouseTurnSpeed = 100;    /* hipfire yaw sensitivity, percent */
 static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
+static int mouseYScale    = 100;    /* extra vertical (pitch) sensitivity, % */
+static int mouseSmoothing = 0;      /* 0 = raw; 1..90 = low-pass strength (%) */
+
+/* Gamepad tuning -- defaults reproduce the old hardcoded constants exactly. */
+static int padDeadzone    = STICK_DEADZONE;   /* left-stick deadzone, raw 0..32767 */
+static int padTriggerPct  = 23;               /* trigger press point, % of travel (~30*256) */
+static int padLookInvertY = 0;                /* 1 = invert right-stick (look) Y */
+
+/* Smoothed mouse delta carried between polls when mouseSmoothing > 0. */
+static double mouseSmDX = 0.0, mouseSmDY = 0.0;
 
 /* Raw relative-mouse delta accumulated since the last inputComputePad(0).
  * NOT a persistent aim accumulator: mouse-look is a displacement device and
@@ -236,11 +246,14 @@ void inputUpdate(void)
 
 static int scaleAxis(int v)
 {
-    if (v > -STICK_DEADZONE && v < STICK_DEADZONE) {
+    int dz = padDeadzone;
+    if (dz < 0) dz = 0;
+    if (dz > 30000) dz = 30000;
+    if (v > -dz && v < dz) {
         return 0;
     }
-    if (v < 0) v += STICK_DEADZONE; else v -= STICK_DEADZONE;
-    int out = (int)((long)v * STICK_MAX / (32767 - STICK_DEADZONE));
+    if (v < 0) v += dz; else v -= dz;
+    int out = (int)((long)v * STICK_MAX / (32767 - dz));
     if (out >  STICK_MAX) out =  STICK_MAX;
     if (out < -STICK_MAX) out = -STICK_MAX;
     return out;
@@ -308,21 +321,35 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
          * aim-mode down = +stick_y. MouseInvertY flips both. */
         if (mouseEnabled) {
             double invert = mouseInvertY ? -1.0 : 1.0;
-            double dyLook = mouseDY * invert;   /* >0 => look down */
+
+            /* Optional exponential low-pass (mouseSmoothing = blend % of the
+             * previous poll). Off (0) => edx/edy are the raw deltas. */
+            double edx = mouseDX, edy = mouseDY;
+            if (mouseSmoothing > 0) {
+                double a = mouseSmoothing / 100.0;
+                if (a > 0.90) a = 0.90;
+                mouseSmDX = mouseSmDX * a + edx * (1.0 - a);
+                mouseSmDY = mouseSmDY * a + edy * (1.0 - a);
+                edx = mouseSmDX;
+                edy = mouseSmDY;
+            }
+            edy *= mouseYScale / 100.0;
+
+            double dyLook = edy * invert;   /* >0 => look down */
 
             if (aimHeld) {
-                double gx = fabs(mouseDX) * (mouseAimSpeed / 100.0) * AIM_GAIN;
-                double gy = fabs(dyLook)  * (mouseAimSpeed / 100.0) * AIM_GAIN;
-                if (fabs(mouseDX) >= AIM_MOVE_THRESH) {
+                double gx = fabs(edx)    * (mouseAimSpeed / 100.0) * AIM_GAIN;
+                double gy = fabs(dyLook) * (mouseAimSpeed / 100.0) * AIM_GAIN;
+                if (fabs(edx) >= AIM_MOVE_THRESH) {
                     int m = 61 + (int)gx; if (m > 60 + AIM_BAND) m = 60 + AIM_BAND;
-                    sx += (mouseDX > 0) ? m : -m;
+                    sx += (edx > 0) ? m : -m;
                 }
                 if (fabs(dyLook) >= AIM_MOVE_THRESH) {
                     int m = 61 + (int)gy; if (m > 60 + AIM_BAND) m = 60 + AIM_BAND;
                     sy += (dyLook > 0) ? m : -m;   /* +stick_y = look down */
                 }
             } else {
-                sx += (int)(mouseDX * (mouseTurnSpeed / 100.0) * MOUSE_TURN_GAIN);
+                sx += (int)(edx * (mouseTurnSpeed / 100.0) * MOUSE_TURN_GAIN);
                 if (dyLook >= MOUSE_PITCH_THRESH)       button |= GE_CONT_E; /* C-up = look down */
                 else if (dyLook <= -MOUSE_PITCH_THRESH) button |= GE_CONT_D; /* C-down = look up */
             }
@@ -345,14 +372,16 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         if (px) sx = px;
         if (py) sy = py;
 
+        if (padLookInvertY) ry = -ry;
         if (rx >  RSTICK_THRESHOLD) button |= GE_CONT_F;
         if (rx < -RSTICK_THRESHOLD) button |= GE_CONT_C;
         if (ry >  RSTICK_THRESHOLD) button |= GE_CONT_D;
         if (ry < -RSTICK_THRESHOLD) button |= GE_CONT_E;
 
-        if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > TRIG_THRESHOLD)
+        int trigPt = padTriggerPct * 327;   /* % of the 0..32767 trigger travel */
+        if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > trigPt)
             button |= GE_CONT_G;
-        if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > TRIG_THRESHOLD)
+        if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > trigPt)
             button |= GE_CONT_R;
 
         if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A) ||
@@ -446,4 +475,9 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
     configRegisterInt("Input.MouseInvertY", &mouseInvertY, 0, 1);
+    configRegisterInt("Input.MouseYScale", &mouseYScale, 1, 500);
+    configRegisterInt("Input.MouseSmoothing", &mouseSmoothing, 0, 90);
+    configRegisterInt("Input.PadDeadzone", &padDeadzone, 0, 30000);
+    configRegisterInt("Input.PadTriggerPct", &padTriggerPct, 1, 99);
+    configRegisterInt("Input.PadLookInvertY", &padLookInvertY, 0, 1);
 }
