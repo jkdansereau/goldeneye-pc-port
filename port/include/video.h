@@ -48,6 +48,10 @@ void videoResetTextureCache(void);
 /* Current FPS (measured). */
 float videoGetFPS(void);
 
+/* Snapshot live window geometry into the config vars (call before configSave
+ * on a clean exit). No-op if the window isn't up. */
+void videoSaveWindowState(void);
+
 #ifdef __cplusplus
 }
 #endif

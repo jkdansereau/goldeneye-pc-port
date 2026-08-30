@@ -57,6 +57,18 @@ static int cfgMSAA          = 1;   /* 1/2/4/8 samples; 1 = off                  
 static int cfgTexFilter     = 1;   /* 0 = nearest (crisp), 1 = bilinear         */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
 
+/*
+ * [Window] persistence. Defaults are sentinels that reproduce the old
+ * hardcoded behaviour (native size, centered): W/H = 0 -> native, X/Y = -1 ->
+ * let SDL centre the window. videoSaveWindowState() writes the live geometry
+ * back into these on a clean exit (see main.c's atexit handler).
+ */
+static int cfgWinW   = 0;
+static int cfgWinH   = 0;
+static int cfgWinX   = -1;
+static int cfgWinY   = -1;
+static int cfgWinMax = 0;
+
 PD_CONSTRUCTOR static void videoConfigInit(void)
 {
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
@@ -64,6 +76,11 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 8);
     configRegisterInt("Video.TextureFilter", &cfgTexFilter,  0, 1);
     configRegisterInt("Video.Fullscreen",    &cfgFullscreen, 0, 1);
+    configRegisterInt("Window.Width",        &cfgWinW,       0, 16384);
+    configRegisterInt("Window.Height",       &cfgWinH,       0, 16384);
+    configRegisterInt("Window.X",            &cfgWinX,      -1, 16384);
+    configRegisterInt("Window.Y",            &cfgWinY,      -1, 16384);
+    configRegisterInt("Window.Maximized",    &cfgWinMax,     0, 1);
 }
 
 static u32 frames = 0;
@@ -88,19 +105,23 @@ int videoInit(void)
     /* MSAA: snap the requested sample count down to a supported power of two. */
     gfx_msaa_level = cfgMSAA >= 8 ? 8 : cfgMSAA >= 4 ? 4 : cfgMSAA >= 2 ? 2 : 1;
 
+    int winW = cfgWinW > 0 ? cfgWinW : GE_NATIVE_W;
+    int winH = cfgWinH > 0 ? cfgWinH : GE_NATIVE_H;
+    int havePos = (cfgWinX >= 0 && cfgWinY >= 0);
+
     struct GfxInitSettings set = {
         .wapi = wmAPI,
         .rapi = renderingAPI,
         .window_settings = {
             .title = "GoldenEye 007",
-            .width = GE_NATIVE_W,
-            .height = GE_NATIVE_H,
-            .x = 100,
-            .y = 100,
+            .width = winW,
+            .height = winH,
+            .x = havePos ? cfgWinX : 100,
+            .y = havePos ? cfgWinY : 100,
             .fullscreen = cfgFullscreen != 0,
             .fullscreen_is_exclusive = false,
-            .maximized = false,
-            .centered = true,
+            .maximized = cfgWinMax != 0,
+            .centered = !havePos,
             .allow_hidpi = false,
         },
     };
@@ -290,6 +311,37 @@ void videoEndFrame(void)
 float videoGetFPS(void)
 {
     return vidAvgFPS;
+}
+
+/*
+ * Snapshot the current window geometry into the [Window] / [Video] config
+ * vars so the next configSave() persists it. Called from main.c's atexit
+ * handler (runs on the host thread, which owns the window). A maximized or
+ * fullscreen window keeps its last restored size/pos on disk; only the
+ * flag is updated.
+ */
+void videoSaveWindowState(void)
+{
+    if (!initDone || !wmAPI) {
+        return;
+    }
+
+    int32_t fs = wmAPI->get_fullscreen_state ? wmAPI->get_fullscreen_state() : 0;
+    int32_t mx = wmAPI->get_maximized_state ? wmAPI->get_maximized_state() : 0;
+    cfgFullscreen = fs ? 1 : 0;
+    cfgWinMax = mx ? 1 : 0;
+
+    if (!fs && !mx && wmAPI->get_dimensions) {
+        uint32_t w = 0, h = 0;
+        int32_t x = 0, y = 0;
+        wmAPI->get_dimensions(&w, &h, &x, &y);
+        if (w > 0 && h > 0) {
+            cfgWinW = (int)w;
+            cfgWinH = (int)h;
+            cfgWinX = x < 0 ? 0 : x;
+            cfgWinY = y < 0 ? 0 : y;
+        }
+    }
 }
 
 void videoUpdateNativeResolution(s32 w, s32 h)

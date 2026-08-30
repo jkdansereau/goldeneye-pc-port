@@ -38,9 +38,58 @@
 extern void mainproc(void *args);
 extern OSThread mainThread; /* src/init.c:75 */
 
+/* name:number pairs for the 21 solo levels (matches tools_pc/level_sweep.sh
+ * and playtest.sh --list). boss.c decodes -level_XX as d0*10 + d1 - 0x210. */
+static const struct { const char *name; const char *num; } kSoloLevels[] = {
+    {"Dam","33"}, {"Facility","34"}, {"Runway","35"}, {"Surface1","36"},
+    {"Bunker1","09"}, {"Silo","20"}, {"Frigate","26"}, {"Surface2","43"},
+    {"Bunker2","27"}, {"Statue","22"}, {"Archives","24"}, {"Streets","29"},
+    {"Depot","30"}, {"Train","25"}, {"Jungle","37"}, {"Control","23"},
+    {"Caverns","39"}, {"Cradle","41"}, {"Aztec","28"}, {"Egypt","32"},
+    {"Cuba","54"},
+};
+
+static void portPrintVersion(void)
+{
+    printf("GoldenEye 007 PC port\n"
+           "  rom      : %s\n"
+           "  platform : %s\n"
+           "  build    : %s\n",
+           GE007_ROMID, GE007_TARGET_PLATFORM, GE007_VERSION_HASH);
+}
+
+static void portPrintHelp(const char *argv0)
+{
+    portPrintVersion();
+    printf("\nusage: %s [options] [-level_XX]\n\n"
+           "  --help            this message\n"
+           "  --version         build id only\n"
+           "  -level_XX         boot straight into a solo level (per-level\n"
+           "                    memory pools are auto-injected)\n\n"
+           "config: ge007.ini in the data dir (written on first run).\n\n"
+           "solo levels (-level_XX):\n", argv0 ? argv0 : "ge007");
+    for (size_t i = 0; i < sizeof(kSoloLevels) / sizeof(kSoloLevels[0]); ++i) {
+        printf("  %-10s -level_%s\n", kSoloLevels[i].name, kSoloLevels[i].num);
+    }
+}
+
+static void portAtExit(void)
+{
+    /* Clean-exit only (exit(0) from videoPumpEvents). Crash/fatal paths call
+     * abort(), which does not run atexit handlers. */
+    videoSaveWindowState();
+    configSave();
+}
+
 int main(int argc, char **argv)
 {
     sysSetArgs(argc, argv);
+
+    if (sysArgCheck("--version")) { portPrintVersion(); return 0; }
+    if (sysArgCheck("--help") || sysArgCheck("-h")) {
+        portPrintHelp(argv[0]);
+        return 0;
+    }
 
     sysLogPrintf(LOG_INFO, "GoldenEye 007 PC port starting "
                 "(%s, %s)", GE007_ROMID, GE007_VERSION_HASH);
@@ -50,6 +99,7 @@ int main(int argc, char **argv)
 
     /* 1. Platform + config + filesystem. */
     configLoad();
+    atexit(portAtExit);   /* persist config + window geometry on clean exit */
 
     /* 2. Load the ROM and map segments. */
     if (romdataInit() != 0) {
