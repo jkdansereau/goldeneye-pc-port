@@ -1194,8 +1194,49 @@ static uint64_t portNextTimerUs(void)
     return earliest;
 }
 
-/* Interrupt mask: no hardware interrupts on the PC. */
-OSIntMask osSetIntMask(OSIntMask mask) { (void)mask; return 0; }
+/* Interrupt mask -> global recursive lock (D147).
+ *
+ * On N64 `osSetIntMask(OS_IM_NONE)` disables interrupts so the following
+ * region cannot be preempted; the paired `osSetIntMask(saved)` restores it.
+ * libaudio relies on this to serialise the event queue (alEvtqPostEvent,
+ * sndRemoveEvents, alEvtqNextEvent, ...) between the game thread and the
+ * audio-manager "interrupt". On PC that audio manager is a real preemptible
+ * thread (amMain), and this shim was a no-op -> both threads mutate the
+ * same ALEventQueue linked list concurrently -> list corruption -> the game
+ * thread spins forever in alEvtqPostEvent's insert walk (hang seen when a
+ * door finishes opening and posts its close SFX, propobj.c objTick).
+ *
+ * Model the mask as one process-wide recursive mutex: OS_IM_NONE acquires,
+ * OS_IM_ALL (the value we hand back, so every paired restore passes it)
+ * releases. Other specific masks (OS_IM_VI in sched.c) are not lock ops and
+ * pass through. The decomp never blocks while holding OS_IM_NONE, so this
+ * cannot deadlock. */
+static pthread_mutex_t s_imLock;
+static pthread_once_t  s_imOnce = PTHREAD_ONCE_INIT;
+
+static void imLockInit(void)
+{
+    pthread_mutexattr_t a;
+    pthread_mutexattr_init(&a);
+    pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&s_imLock, &a);
+    pthread_mutexattr_destroy(&a);
+}
+
+OSIntMask osSetIntMask(OSIntMask mask)
+{
+    pthread_once(&s_imOnce, imLockInit);
+
+    if (mask == OS_IM_NONE) {          /* enter critical section */
+        pthread_mutex_lock(&s_imLock);
+        return OS_IM_ALL;             /* paired restore will pass this back */
+    }
+    if (mask == OS_IM_ALL) {           /* leave critical section */
+        pthread_mutex_unlock(&s_imLock);   /* recursive: EPERM no-op if unheld */
+        return OS_IM_NONE;
+    }
+    return mask;                        /* OS_IM_VI etc: not a lock operation */
+}
 
 /* ------------------------------------------------------------------------ */
 /* PI / VI managers referenced by init.c (pi.c / vi.c are not compiled)     */
