@@ -129,9 +129,9 @@ PROPDEF_PC_BYTES = {
     10: 288,  # MonitorObjRecord
     11: 664,  # MultiMonitorObjRecord
     13: 248,  # AutogunRecord
-    14: 24,   # LinkRecord (3w + next* grown, 8-aligned)
+    14: 32,   # LinkRecord (D132: union{ptr;s32} Index1@8 Index2@16 next*@24)
     18: 12,   # GuardAttributeRecord
-    19: 24,   # SwitchRecord = LinkRecord
+    19: 32,   # SwitchRecord = LinkRecord (D132)
     20: 200,  # MultiAmmoCrateRecord
     21: 152,  # BodyArmourRecord
     22: 24,   # TagObjectRecord
@@ -148,7 +148,7 @@ PROPDEF_PC_BYTES = {
     38: 32,   # LockDoorRecord
     39: 208,  # VehichleRecord (D122: 144 prefix + widened tail)
     40: 208,  # AircraftRecord (D122)
-    44: 24,   # SafeObjectRecord fragment (5w + next*), refine on use
+    44: 40,   # SafeObjectRecord (D132: 3x union{ptr;s32} Index1@8 Index2@16 Index3@24 next*@32)
     45: 248,  # TankRecord (D122: 144 prefix + 23-word scalar tail + collision*)
     46: 28,   # CutsceneRecord
     47: 168,  # TintedGlassRecord
@@ -286,11 +286,16 @@ def convert_record(src, so, type_byte):
         return bytes(out)  # renobj* @40 zero
 
     if type_byte in (14, 19, 38, 44):  # LINK / SWITCH / LOCK_DOOR / SAFE_ITEM
+        # D132: each Index{1,2,3} field shares a union with a pointer, so on
+        # PC it lives in the LOW 4 bytes of an 8B/8-aligned slot at PC offset
+        # 8 + 8*(N-1); the record ends in a *next the setup walk writes.  The
+        # N64 image packs the indices as tight 4-byte words; emitting them
+        # there put Index1 where the compiler reads Index2.
+        nidx = {14: 2, 19: 2, 38: 2, 44: 3}[type_byte]
         out[0:4] = _hdr_word(src[so:so + 4])
-        # remaining serialized words: Index1/Index2 are s32 in file (zero or id);
-        # trailing next* is not serialized.
-        for i in range(1, n64w):
-            out[4 * i:4 * i + 4] = _bswap32(src[so + 4 * i: so + 4 * i + 4])
+        for k in range(nidx):
+            w = src[so + 4 * (k + 1): so + 4 * (k + 1) + 4]
+            out[8 + 8 * k: 12 + 8 * k] = _bswap32(w)   # low 4B, LE; high 4B = 0
         return bytes(out)
 
     if type_byte == 18:  # SetGuardAttribute: hdr + s32 chrnum + [s16 unk8][s8 unkA][s8 GrenadeProb]

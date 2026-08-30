@@ -78,13 +78,17 @@ s32 sizepropdef(PropDefHeaderRecord *pdef)
         case PROPDEF_OBJECTIVE_ENTER_ROOM:
         case PROPDEF_WATCH_MENU_OBJECTIVE_TEXT:
         case PROPDEF_OBJECTIVE_DEPOSIT_OBJECT_IN_ROOM:  return 6;
+        case PROPDEF_TAG:                               return 6;
+        case PROPDEF_CAMERAPOS:                         return 7;
+        /* D132: LINK / SWITCH / LOCK_DOOR declare their Index{1,2} fields as a
+         * union with a pointer, so each is an 8B/8-aligned slot on PC, and the
+         * record ends in a *next the proplvreset2 walk writes -> PC sizeof 32
+         * (8 words).  SAFE_ITEM has 3 such unions + *next -> sizeof 40 (10). */
         case PROPDEF_LINK:
         case PROPDEF_SWITCH:
-        case PROPDEF_TAG:
-        case PROPDEF_SAFE_ITEM:                         return 6;
-        case PROPDEF_CAMERAPOS:                         return 7;
         case PROPDEF_GUARD:
         case PROPDEF_LOCK_DOOR:                         return 8;
+        case PROPDEF_SAFE_ITEM:                         return 10;
         case PROPDEF_RENAME:                            return 12;
         case PROPDEF_PROP:
         case PROPDEF_ALARM:

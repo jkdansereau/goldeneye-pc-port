@@ -4817,7 +4817,23 @@ Depot, sevb, sevx.
 `PROPDEF_PC_BYTES == real compiler sizeof`. D122's totality note flagged
 `[u16|u16]` half-swap but not the `union{ptr; s32}` index-slot case.
 
-### Proposed fix (NOT applied — ABI/layout only, `#ifdef PORT`)
+### APPLIED (M-20, commit pending) — ABI/layout only, `#ifdef PORT`
+
+Fix below applied verbatim. `tools_pc/d88_propdefs.py`: `PROPDEF_PC_BYTES`
+`14/19 -> 32`, `44 -> 40`; the `(14,19,38,44)` handler now emits each
+`Index{k}` into the low 4 B of the 8-aligned slot at PC `8 + 8*k`
+(`nidx = {14:2,19:2,38:2,44:3}`). `loadobjectmodel.c sizepropdef()` PORT
+switch: `LINK/SWITCH/LOCK_DOOR -> return 8`, `SAFE_ITEM -> return 10`,
+`TAG` stays `6`. Regen chain run. Verified: `-level_09` framediff 3/3
+PASS; `-level_20` behaviour byte-identical to a freshly-built pre-D132
+baseline (the `frame_000320` phash delta is pre-existing stale-golden /
+Silo slowdown, NOT a regression — confirmed by building the baseline);
+Archives (`-level_25`, SWITCH+SAFE_ITEM), Streets (`-level_29`, 20x
+LOCK_DOOR), Dam (`-level_33`, SWITCH+LOCK_DOOR) all load + render +
+no-crash. Sweep runs this pass were heavily flaky (level_09 itself
+0-framed on a loaded machine) — pure D117/watchdog noise, no crashes.
+
+### Original proposed fix (as written pre-apply)
 
 `tools_pc/d88_propdefs.py` — `PROPDEF_PC_BYTES`: `14: 24 -> 32`,
 `19: 24 -> 32`, `44: 24 -> 40` (38 stays 32). Replace the
