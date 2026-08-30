@@ -14,6 +14,8 @@ once the game is playable start-to-finish without crashes.
 | **D76** | 2D disclaimer screen only partially drawn. | §F D76. |
 | **D77** | No audible music on PC. | Phase 3 (audio). §F D77. |
 | **D116 (HUD)** | (subset of D114) proportional-font strings + ammo counter mirrored. | Same root cause as D114. |
+| **D148** | Level-end cinematics don't play. Dam: hitting the exit trigger should show Bond rappelling down the dam (the bungee jump); instead it cuts straight to the mission-complete report. | Scripted cutscene / cinematic-camera + Bond rappel anim. Likely D75-family (front-end / cutscene 3D model + anim path). Found M-27 during the first full Dam→Facility playthrough. Progression is unaffected — the report and next briefing load fine. |
+| **D149** | Front-end MISSION COMPLETE / mode-select 3D models (dossier, wallets) render as garbled full-screen geometry or not at all — one of the compiled sub-DLs (seg5+0x9ee4) is malformed, D146 now skips it instead of aborting. | D75 family. §F D146. |
 
 ## Resolved (for reference)
 

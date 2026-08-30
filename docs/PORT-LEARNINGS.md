@@ -272,6 +272,45 @@ OR the asymmetric-1-texel-texture experiment — nothing else.** Cosmetic,
 deprioritised below level-progression / crash work. See
 `docs/GRAPHICS-BACKLOG.md`.
 
+## D3. GCC/mingw makes an all-non-negative `enum` UNSIGNED
+
+The N64 toolchain treats `enum` as signed `int`; GCC on the PC target gives
+an enum whose enumerators are all ≥ 0 an **unsigned** underlying type. Any
+descending loop that relies on the counter going negative to terminate then
+spins forever:
+
+```c
+for (s = SP_LEVEL_EGYPT; s >= SP_LEVEL_DAM /* == 0 */; s--)   // never ends
+```
+
+- Symptom: a silent hang (kernel-heartbeat stall, no crash log) inside a
+  loop over an enum range; the counter holds a huge value in gdb.
+- Instances: **D142** — `LEVEL_SOLO_SEQUENCE` in
+  `fileGetHighestStageDifficultyCompletedForFolder` froze the SELECT FILE
+  screen. `DIFFICULTY` was already safe (`DIFFICULTY_MULTI = -1`).
+- Fix: add a never-used negative sentinel enumerator under `#ifdef PORT`
+  (`SP_LEVEL__PORT_SIGNED = -1`) — forces the type signed, first real
+  enumerator stays 0, `sizeof` stays 4, no stored value changes. Audit any
+  `enum` used as a descending / `>= 0` loop counter or in ROM-serialized
+  structs where signedness matters.
+
+## D4. N64 "interrupts off" is not free on PC — it must be a real lock
+
+`osSetIntMask(OS_IM_NONE) … osSetIntMask(saved)` on N64 makes a region
+atomic w.r.t. every interrupt (audio, VI, SI). libaudio, the scheduler and
+a few others use it as their **only** mutual-exclusion primitive. On PC the
+"audio interrupt" is a real preemptible thread (`amMain`), so a no-op
+`osSetIntMask` shim = no mutual exclusion = concurrent linked-list mutation.
+
+- Symptom: hang (spin) inside a list walk that another thread is editing —
+  e.g. **D147**: `alEvtqPostEvent` (main thread, via `sndPlaySfx` on a door
+  close) vs `sndRemoveEvents` (`amMain`) on the same `ALEventQueue`.
+- Fix: `osSetIntMask` → one process-wide **recursive** mutex.
+  `OS_IM_NONE` acquires; the `OS_IM_ALL` token returned from that call is
+  what every paired restore passes, so `OS_IM_ALL` releases; other specific
+  masks (`OS_IM_VI`) pass through. Safe because the decomp never blocks
+  while holding `OS_IM_NONE` (N64 contract).
+
 ## E. Process / method notes
 
 - Investigation loop is: reproduce → env-gated capped probe → root-cause
