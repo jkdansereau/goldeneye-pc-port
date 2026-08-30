@@ -261,9 +261,16 @@ Pre-playtest QoL, port-layer only, no `src/` / game-logic change.
 - Verified: `-level_09` boots crash-free to 900+ frames @ 91.65% coverage
   (unregressed); `-level_20` crash-free; `ge007.ini` written then re-read
   with no unknown-key warnings. Build green (`ntsc-final`).
+- **`port/src/video.c` QoL:** **F12** takes a screenshot
+  (`ppm/shot_NNN.ppm`, dumped on the render thread via the existing
+  `gfx_opengl_dump_bound_fbo`); window **focus loss frees the mouse**
+  (`inputSetMouseGrab(0)` on `SDL_WINDOWEVENT_FOCUS_LOST`, re-grab on
+  gain) so alt-tab works. `inputSetMouseGrab()` also zeroes the aim delta
+  and suspends mouse reads while released.
+- Alt-Enter fullscreen toggle already existed (`gfx_sdl2.cpp:299`).
 - **Still TODO (not started):** key rebinding, gamepad hotplug
   (`SDL_CONTROLLERDEVICEADDED/REMOVED`), mouse-wheel weapon cycle,
-  screenshot/mouse-release hotkeys, on-screen FPS overlay.
+  on-screen FPS overlay, window-title FPS.
 
 ## Next task (M-24 — Opus 5)
 

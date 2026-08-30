@@ -12,10 +12,14 @@ export PATH="/c/msys64/mingw64/bin:$PATH" && ./build-pc.sh ntsc-final
 ./build-pc/ge007.x86_64.exe -level_XX          # bare — pools auto-injected (D121)
 ```
 
-Controls: `port/src/input.c` — keyboard+mouse or SDL gamepad. Known input
-polish gaps (do not re-log): D118a mouse yaw slower than pitch, D118b
-mouse-Y may feel inverted. Difficulty for a bare `-level_XX` boot defaults
-to Agent; use the menu path (mission select → difficulty) to test 00/007.
+Controls: `port/src/input.c` — keyboard+mouse or SDL gamepad. Mouse-look is
+mode-aware since M-24 (hold RMB = analog aim). Tune feel in
+`data/ge007.ini` `[Input]` (`MouseAimSpeed` 50, `MouseTurnSpeed` 100,
+`MouseInvertY` 0) with the game closed. Known residual (do not re-log):
+D118a — hipfire pitch is digital vs analog yaw. **F12** = screenshot to
+`ppm/shot_NNN.ppm`. Alt-tab away frees the cursor (re-grabs on focus).
+Difficulty for a bare `-level_XX` boot defaults to Agent; use the menu path
+(mission select → difficulty) to test 00/007.
 
 Objective status: `src/game/objective_status.c`
 (`get_status_of_objective()` `:161`); objective propDefs are

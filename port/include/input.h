@@ -38,6 +38,12 @@ int  inputConnectedMask(void);
  * mouse-aim accumulator maintained by inputUpdate(). */
 unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y);
 
+/* Grab/release the mouse (relative-mouse mode). The host event pump calls
+ * this on window focus loss/gain so alt-tabbing frees the cursor. A release
+ * also suspends mouse-aim reads until re-grabbed. No-op if the mouse is
+ * disabled in config. */
+void inputSetMouseGrab(int on);
+
 #ifdef __cplusplus
 }
 #endif

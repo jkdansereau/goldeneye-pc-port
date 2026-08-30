@@ -123,6 +123,7 @@ static int connectedMask   = 0x1;   /* controller 0 always present */
 static SDL_GameController *pads[MAX_PADS];
 
 static int mouseEnabled   = 1;
+static int mouseGrabbed   = 1;      /* released while the window is unfocused */
 static int mouseAimSpeed  = 50;     /* aim-mode sensitivity, percent */
 static int mouseTurnSpeed = 100;    /* hipfire yaw sensitivity, percent */
 static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
@@ -182,6 +183,7 @@ int inputInit(void)
     inputOpenPads();
 
     /* Relative mouse mode for mouse-look. ESC still quits (video.c). */
+    mouseGrabbed = mouseEnabled;
     if (mouseEnabled) {
         SDL_SetRelativeMouseMode(SDL_TRUE);
         /* Drain the initial jump. */
@@ -212,7 +214,7 @@ void inputUpdate(void)
 {
     SDL_GameControllerUpdate();
 
-    if (!mouseEnabled) {
+    if (!mouseEnabled || !mouseGrabbed) {
         return;
     }
 
@@ -377,6 +379,20 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
     }
 
     return button;
+}
+
+void inputSetMouseGrab(int on)
+{
+    int want = on && mouseEnabled;
+    if (want == mouseGrabbed) {
+        return;
+    }
+    mouseGrabbed = want;
+    SDL_SetRelativeMouseMode(want ? SDL_TRUE : SDL_FALSE);
+    if (want) {
+        SDL_GetRelativeMouseState(NULL, NULL);   /* drain the accumulated jump */
+    }
+    mouseDX = mouseDY = 0.0;
 }
 
 int inputConnectedMask(void)

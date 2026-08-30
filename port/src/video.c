@@ -26,6 +26,7 @@
 #include "platform.h"
 #include "system.h"
 #include "video.h"
+#include "input.h"
 
 #include "../fast3d/gfx_api.h"
 #include "../fast3d/gfx_sdl.h"
@@ -46,6 +47,9 @@ static struct GfxRenderingAPI *renderingAPI;
 static int initDone = 0;
 
 static u32 frames = 0;
+/* Set by the host event pump (F12), consumed on the render thread in
+ * videoEndFrame where a GL context is current. */
+static volatile int screenshotReq = 0;
 static double fpsWindowStart = 0.0;
 static int fpsNumFrames = 0;
 static float vidAvgFPS = 0.f;
@@ -147,6 +151,8 @@ void videoPumpEvents(void)
             if (ev.key.keysym.sym == SDLK_ESCAPE) {
                 sysLogPrintf(LOG_INFO, "video: ESC -> quit");
                 exit(0);
+            } else if (ev.key.keysym.sym == SDLK_F12 && !ev.key.repeat) {
+                screenshotReq = 1;
             }
             break;
         case SDL_WINDOWEVENT:
@@ -155,6 +161,10 @@ void videoPumpEvents(void)
                 exit(0);
             } else if (ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 gfx_sdl_update_cached_size();
+            } else if (ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                inputSetMouseGrab(0);   /* free the cursor when alt-tabbed away */
+            } else if (ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
+                inputSetMouseGrab(1);
             }
             break;
         default:
@@ -198,6 +208,21 @@ void videoEndFrame(void)
             snprintf(path, sizeof(path), "ppm/frame_%06d.ppm", (int)frames);
             gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_dimensions.width,
                                       (uint32_t)gfx_current_dimensions.height, path);
+        }
+    }
+
+    if (screenshotReq) {
+        screenshotReq = 0;
+        static int shotNum = 0;
+        char path[128];
+        GE_MKDIR("ppm");
+        snprintf(path, sizeof(path), "ppm/shot_%03d.ppm", shotNum++);
+        if (gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_dimensions.width,
+                                      (uint32_t)gfx_current_dimensions.height, path)) {
+            sysLogPrintf(LOG_INFO, "video: screenshot -> %s "
+                         "(view with tools_pc/ppm2bmp.py)", path);
+        } else {
+            sysLogPrintf(LOG_WARNING, "video: screenshot failed");
         }
     }
 
