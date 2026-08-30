@@ -264,6 +264,21 @@ deprioritised below level-progression / crash work. See
   independently-built binaries proves the path is unchanged → not a regression,
   don't bisect. Clean up the worktree with `git worktree remove --force` (safe
   only because `data/` was copied).
+- **D134 — a dropped `OS_MESG_NOBLOCK` "interrupt" event is a permanent
+  stall, and it looks exactly like D117 flakiness.** The port's SP/DP
+  task-done events shared the scheduler's 8-slot `interruptQ` with the 60 Hz
+  VI pacemaker. A gfx task runs the whole frame *synchronously on the sched
+  thread*, so a slow frame lets the pacemaker fill the queue and the done-post
+  is silently discarded → `curRSPTask` never clears → no further frames
+  (`frames=2` heartbeat, retrace queue pinned `valid=8/8 ret=-1`). Rule:
+  classify every posted event as **droppable** (retrace — N64 drops these too)
+  or **must-arrive** (task done, DMA done); a must-arrive event needs
+  guaranteed delivery, and `OS_MESG_BLOCK` is wrong whenever the poster runs
+  on the queue's only consumer thread (self-deadlock) — drop the oldest
+  droppable message instead, and reserve slots in the pacemaker.
+  **Before blaming a hang on D117 / machine load, run it N times and count**:
+  this reproduced 2 of 3 boots on an idle machine and had been written off as
+  sweep flakiness for ~8 sessions.
 - **Watch item: `osYieldThread` = `Sleep(0)`.** The one place we fake
   cooperative behavior. If a level-sweep hot loop misbehaves under host load,
   this shim is the first thing to inspect. Keep as-is until then.

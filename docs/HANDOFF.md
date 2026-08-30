@@ -152,6 +152,20 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
 
 ## Next task
 
+-1. **D134 DONE (M-22)** — the frame-2 boot hang that every session since
+   M-13 wrote off as "sweep flakiness / D117 / machine load" was a **real,
+   fixed bug**: the SP/DP task-done event was posted `OS_MESG_NOBLOCK` into
+   the sched `interruptQ` that the 60 Hz VI pacemaker also fills, so a slow
+   synchronous fast3d frame let a retrace backlog swallow the done event →
+   permanent stall. Fix in `port/src/libultra.c` (`portPostEventForce` +
+   2 reserved slots in `portPostVIEvent`). `-level_09` 6/6 boots to frame 600,
+   0 heartbeats (pre-fix 1/3). §F/§H **D134**, PORT-LEARNINGS §E.
+   **Consequence: re-run the full 21-level sweep** — several NO-FRAMES /
+   "hang" rows in `docs/LEVEL-STATUS.md` (incl. the M-20 Facility/Jungle
+   re-verify failures) are probably this and may now pass. `level_sweep.sh`
+   is also hardened this session (45 s watchdog, lockdir serialization,
+   stray-process kill, one retry on NO-FRAMES).
+
 0. **D132 DONE (M-21, commit `fa296b17`)** — propDef union-index slots for
    types 14/19/38/44 (LINK/SWITCH/LOCK_DOOR/SAFE_ITEM) now emitted at the
    right PC offsets (`d88_propdefs.py` + `loadobjectmodel.c sizepropdef`

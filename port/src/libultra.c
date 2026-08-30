@@ -579,6 +579,32 @@ void osSetEventMesg(OSEvent e, OSMesgQueue *mq, OSMesg msg)
     }
 }
 
+/* D134: an SP/DP "task done" event must NEVER be dropped.
+ *
+ * These land in the scheduler's 8-slot interruptQ, which the 60 Hz VI
+ * pacemaker also posts VIDEO_MSG into. osSpTaskStartGo runs the whole frame
+ * synchronously on the sched thread (fast3d), so a slow frame (the first two
+ * are 30-80 ms) lets the pacemaker queue several retraces meanwhile. Once the
+ * queue is full the NOBLOCK done-post is silently discarded, __scMain never
+ * clears sc->curRSPTask, the client never gets OS_SC_DONE_MSG, and the main
+ * loop's pendingGfx never clears -> permanent stall at frames=2.
+ *
+ * OS_MESG_BLOCK is NOT the fix: the done event is posted from the sched thread
+ * itself, the only consumer of that queue, so blocking self-deadlocks. Instead
+ * make room by dropping the OLDEST message (always a stale retrace -- retrace
+ * drops are already normal, N64 osViSetEvent posts NOBLOCK too). */
+static void portPostEventForce(OSId e)
+{
+    PortEvent *ev = &g_events[e];
+    if (!ev->used || !ev->mq) return;
+    if (osSendMesg(ev->mq, ev->msg, OS_MESG_NOBLOCK) == 0) return;
+    (void)osDequeueMesg(ev->mq);
+    if (osSendMesg(ev->mq, ev->msg, OS_MESG_NOBLOCK) != 0) {
+        sysLogPrintf(LOG_ERROR, "D134: task-done event %d lost (mq=%p full)",
+                     (int)e, (void *)ev->mq);
+    }
+}
+
 static void portPostEvent(OSId e)
 {
     PortEvent *ev = &g_events[e];
@@ -605,6 +631,10 @@ static uint64_t g_viPostCount = 0;
 static void portPostVIEvent(void)
 {
     if (g_viRetraceMQ) {
+        /* D134: keep two slots free for the SP/DP done events posted at the
+         * end of a synchronous fast3d frame. A retrace posted into a backlog
+         * is stale anyway -- sched has not drained the previous one yet. */
+        if (g_viRetraceMQ->validCount >= g_viRetraceMQ->msgCount - 2) return;
         s32 r = osSendMesg(g_viRetraceMQ, g_viRetraceMsg, OS_MESG_NOBLOCK);
         if (++g_viPostCount % 60 == 1 || r != 0) {
             sysLogPrintf(r != 0 ? LOG_ERROR : LOG_NOTE,
@@ -997,11 +1027,11 @@ void osSpTaskStartGo(OSTask *t)
                          (unsigned long long)(sysGetMicroseconds() - t0));
     }
 
-    portPostEvent(OS_EVENT_SP);
+    portPostEventForce(OS_EVENT_SP);   /* D134: must not be dropped */
     if (t->t.type != M_AUDTASK) {
         /* A gfx task is also its own DP task (sp == dp in __scExec): the
          * DP "finishes" right after the RSP. */
-        portPostEvent(OS_EVENT_DP);
+        portPostEventForce(OS_EVENT_DP);
     }
 }
 
@@ -1022,7 +1052,7 @@ s32  osDpSetNextBuffer(void *buf, u64 size)
 {
     /* DP-only task: "rendering" is done by the time the RSP finished. */
     (void)buf; (void)size;
-    portPostEvent(OS_EVENT_DP);
+    portPostEventForce(OS_EVENT_DP);   /* D134 */
     return 1;
 }
 void osDpGetCounters(u32 *counters)
