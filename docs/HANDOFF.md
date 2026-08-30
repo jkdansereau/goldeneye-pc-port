@@ -311,6 +311,27 @@ behavior exactly.
   idle machine the user drove Silo live past ~1800 frames, VI pacemaker
   healthy, no stall. See `docs/M-25-QOL-REVIEW.md`.
 
+## Done this session (M-26) — port-layer QoL batch (A/B/C/E)
+
+Low-risk QoL, `port/` only, zero `src/` change. All defaults reproduce
+prior behaviour. Full review: **`docs/M-26-QOL-REVIEW.md`**.
+
+- **A — save-on-exit + `[Window]` persistence.** `atexit(portAtExit)` in
+  `main.c` (`videoSaveWindowState()` + `configSave()`), fires on every
+  clean quit (`exit(0)` in `videoPumpEvents`); `abort()` paths skip it.
+  New `[Window]` ini section (`Width/Height/X/Y/Maximized`, sentinels =
+  old behaviour) in `video.c`; `Video.Fullscreen` now round-trips.
+- **B — `level_sweep.sh` STALLED verdict.** Frames rendered then froze
+  with the process still alive → `STALLED (froze at N/M frames)` instead
+  of a bogus PASS (the Silo case). Retried once like NO-FRAMES.
+- **C — raw mouse input.** `Input.MouseRawInput=1` (default 0) sets the
+  SDL relative-scale / warp hints off in `inputInit` — no OS pointer accel.
+- **E — `--help` / `--version`** in `main.c` before `crashInit()`: build
+  id, usage, the 21-level `-level_XX` table.
+- **Verified:** build green (`ntsc-final`); `-level_09` + `-level_20`
+  boot crash-free 6/6 GE_PCDUMP frames (unregressed); `ge007.ini` gains a
+  populated `[Window]` block on exit.
+
 ## Next task (M-24 — Opus 5)
 
 **Scope call (user, M-23):** D139 (stage unload) + D140 (pause menu / watch)

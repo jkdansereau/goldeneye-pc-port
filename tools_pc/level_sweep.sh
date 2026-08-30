@@ -66,18 +66,22 @@ run_level() {
   # known -- exit as soon as the whole dump set is on disk (PASS), or the frame
   # count has been frozen for STALL_SECS (level rendered a bit then wedged), or
   # the process exits on its own (clean exit / crash).
-  local waited=0 fcnt=0 prev=0 stall=0
+  local waited=0 fcnt=0 prev=0 stall=0 stalled=0
   while [ $waited -lt $SWEEP_SECS ] && kill -0 $pid 2>/dev/null; do
     sleep 1; waited=$((waited + 1))
     fcnt=$(ls ppm/*.ppm 2>/dev/null | wc -l)
     [ "$fcnt" -ge "$EXPECT_FRAMES" ] && break
     if [ "$fcnt" -gt 0 ] && [ "$fcnt" -eq "$prev" ]; then
-      stall=$((stall + 1)); [ $stall -ge $STALL_SECS ] && break
+      stall=$((stall + 1))
+      if [ $stall -ge $STALL_SECS ]; then stalled=1; break; fi
     else
       stall=0
     fi
     prev=$fcnt
   done
+  # was the process still alive when we gave up (vs. a clean exit / crash)?
+  local alive=0
+  kill -0 $pid 2>/dev/null && alive=1
   taskkill //F //IM ge007.x86_64.exe > /dev/null 2>&1
   wait $pid 2>/dev/null
   sleep 2
@@ -95,7 +99,14 @@ run_level() {
   last=$(ls ppm/*.ppm 2>/dev/null | tail -1)
   if [ -n "$last" ]; then
     pcnt=$(python tools_pc/pixcount.py "$last" 2>/dev/null | grep -oE 'non-clear [0-9]+ \([0-9.]+%\)')
-    echo "PASS  $pcnt"
+    # frames rendered then froze while the process stayed alive -> STALLED,
+    # not a real PASS (the Silo -level_20 fly-down case, D117/D134 load
+    # sensitivity). A complete dump set is still a genuine PASS.
+    if [ "$stalled" = 1 ] && [ "$alive" = 1 ] && [ "$fcnt" -lt "$EXPECT_FRAMES" ]; then
+      echo "STALLED (froze at $fcnt/$EXPECT_FRAMES frames)  $pcnt"
+    else
+      echo "PASS  $pcnt"
+    fi
   else
     echo "NO-FRAMES"
   fi
@@ -105,18 +116,19 @@ for entry in $LV; do
   name=${entry%%:*}; num=${entry##*:}
   status=$(run_level "$name" "$num")
 
-  # NO-FRAMES is the flaky outcome (D117 + host load) -- retry once before
-  # believing it. A CRASH is deterministic enough to report as-is.
-  if [ "$status" = "NO-FRAMES" ]; then
-    sleep 3
-    retry=$(run_level "$name" "$num")
-    if [ "$retry" = "NO-FRAMES" ]; then
-      status="NO-FRAMES (2 attempts)"
-    else
-      status="$retry  [passed on retry]"
-      [ -f $LOGS/$name.crash.log ] || true
-    fi
-  fi
+  # NO-FRAMES and STALLED are the flaky outcomes (D117 + host load) -- retry
+  # once before believing them. A CRASH is deterministic enough to report as-is.
+  case "$status" in
+    NO-FRAMES|STALLED*)
+      sleep 3
+      retry=$(run_level "$name" "$num")
+      case "$retry" in
+        NO-FRAMES)  status="NO-FRAMES (2 attempts)" ;;
+        STALLED*)   status="$retry (2 attempts)" ;;
+        *)          status="$retry  [passed on retry]" ;;
+      esac
+      ;;
+  esac
 
   echo "$name ($num): $status" | tee -a $OUT
 done

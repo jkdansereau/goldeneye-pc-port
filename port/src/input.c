@@ -129,6 +129,7 @@ static int mouseTurnSpeed = 100;    /* hipfire yaw sensitivity, percent */
 static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
 static int mouseYScale    = 100;    /* extra vertical (pitch) sensitivity, % */
 static int mouseSmoothing = 0;      /* 0 = raw; 1..90 = low-pass strength (%) */
+static int mouseRawInput  = 0;      /* 1 = bypass OS pointer accel for aim    */
 
 /* Gamepad tuning -- defaults reproduce the old hardcoded constants exactly. */
 static int padDeadzone    = STICK_DEADZONE;   /* left-stick deadzone, raw 0..32767 */
@@ -202,6 +203,14 @@ int inputInit(void)
     /* Relative mouse mode for mouse-look. ESC still quits (video.c). */
     mouseGrabbed = mouseEnabled;
     if (mouseEnabled) {
+        if (mouseRawInput) {
+            /* Feed the raw device delta straight through: no OS pointer
+             * acceleration, no warp-based emulation. Must be set before
+             * relative mode is enabled. */
+            SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE, "0");
+            SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "0");
+            sysLogPrintf(LOG_INFO, "input: raw mouse input (no OS pointer accel)");
+        }
         SDL_SetRelativeMouseMode(SDL_TRUE);
         /* Drain the initial jump. */
         SDL_GetRelativeMouseState(NULL, NULL);
@@ -477,6 +486,7 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.MouseInvertY", &mouseInvertY, 0, 1);
     configRegisterInt("Input.MouseYScale", &mouseYScale, 1, 500);
     configRegisterInt("Input.MouseSmoothing", &mouseSmoothing, 0, 90);
+    configRegisterInt("Input.MouseRawInput", &mouseRawInput, 0, 1);
     configRegisterInt("Input.PadDeadzone", &padDeadzone, 0, 30000);
     configRegisterInt("Input.PadTriggerPct", &padTriggerPct, 1, 99);
     configRegisterInt("Input.PadLookInvertY", &padLookInvertY, 0, 1);
