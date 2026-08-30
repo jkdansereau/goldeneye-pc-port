@@ -403,7 +403,29 @@ void langClearBank(s32 textBank) {
  */
 u8 * langGet(s32 slotID)
 {
+#ifdef PORT
+    /* D129: guard an out-of-range language slot id. `slotID >> 10` indexes
+     * g_LangBanks[45]; a bogus/uninitialised id (seen as 0xFFFFFFFF from the
+     * cast/credits text path on Cuba -level_54, bondviewRenderCredits ->
+     * D76 area) indexes wildly OOB -> fault. langGet already returns NULL for
+     * a missing string, so treat an impossible bank index the same way
+     * instead of crashing the level. */
+    if ((u32)slotID >= (45u << 10)) {
+        return NULL;
+    }
+#endif
     u32 * textbank_ptr = g_LangBanks[slotID >> 10]; /* get the text file bank ID index the text ptr table */
+#ifdef PORT
+    /* D129 cont.: g_LangBanks[] is s32 and only populated for banks the
+     * current flow has loaded.  A bare `-level_XX` boot that reaches the
+     * cast/credits text path (Cuba, bondviewRenderCredits, D76) hits a bank
+     * slot that was never filled -> stale/garbage non-NULL value -> fault on
+     * the table read below.  Reject anything that is not a plausible mapped
+     * DRAM address. */
+    if ((uintptr_t)textbank_ptr < 0x10000 || (uintptr_t)textbank_ptr >= 0x400000000ULL) {
+        return NULL;
+    }
+#endif
 #ifdef PORT
     /* TEMP D65: log NULL-bank derefs (cast screen langGet crash). */
     if (getenv("GE_D63")) {
