@@ -814,7 +814,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D108–D112 | skeletal models: `d43_emit.py put_f32` byte-reversal bug | resolved |
 | D113–D116 | portal BFS ok · matrix chain ok · player raw-offset audit + `gunfire.c` THROW* · HUD text X-mirror | D116 OPEN (parked — DO NOT re-static-trace) |
 | D117 | frame nondeterminism root-caused; `GE_DETERM` deferred; `framediff.py` structural | resolved (mode deferred) |
-| D118 | SDL input layer (`port/src/input.c`); D118a/b/c mouse polish open (D118c: aim-mode mouse-down → crouch, digital C-button overload — needs the deferred analog-aim hook) | resolved (polish open) |
+| D118 | SDL input layer (`port/src/input.c`); M-24 mouse-look rework: mode-aware map (aim mode = analog stick, hipfire = digital C-pitch), `config.c` INI now real. D118b/c FIXED; D118a residual (hipfire pitch only) | resolved (D118a residual) |
 | D137 | right-mouse (aim-sight) crash: `gunDrawSight` (`gunfire.c:6235`) `s32 sp54` holds a `Gfx*` the whole function (`sp54 = *gdl`; `texSelect(&sp54,…)`/`display_image_at_position(&sp54,…)` take `Gfx**`). As N64 `s32` it is 4 B, so `*(Gfx**)&sp54` reads 4 B of the adjacent stack float as the pointer high word → `_g = 0x03e4fca0_70081220` → wild DL write in `texSetRenderMode` (`othermodemicrocode.c:177`) the moment the crosshair raises. §A. | FIXED (`src/game/gunfire.c` `#ifdef PORT` — `sp54` is `Gfx *`) |
 | D119 · D120 | guard-attack `weapons_held[]->chr` pun crash · blood-stain `PointUsage[]` chain hang (guarded, `d43_emit.py` opcode-0x18 gap) | D119 fixed · D120 guarded |
 | D121 | WS1 frictionless per-level boot: bare `-level_XX` injects its `memallocstringtable[]` `-m*` row (`#ifdef PORT` in `boss.c`) | resolved |
@@ -3913,26 +3913,45 @@ UNTESTED (headless agent) — needs a human pass: see
 `docs/HANDOFF.md`. Confidence: build/wiring HIGH; in-game feel of the
 mouse→C-button bridge MEDIUM (aim speed tuning likely needed); gamepad
 UNVERIFIED (none present in build env).
-TODO: (1) human playtest + tune `MouseAimSpeed`; (2) key rebinding;
-(3) gamepad hotplug (opened only at init today); (4) optional analog-aim
-`#ifdef PORT` hook in bondview.c for true mouse-look.
+TODO: (1) key rebinding; (2) gamepad hotplug (opened only at init today);
+(3) optional analog-aim `#ifdef PORT` hook in bondview.c — only needed now
+for D118a (fully-analog hipfire pitch) and toggle-aim-scheme correctness.
+[M-24: mouse-look rework + real INI parser done — see "Mouse-look rework"
+below.]
 
-*Open polish bugs (from WS6 playtest, M-22):*
-- **D118a** — mouse yaw (analog, `stick_x += aimDX`) vs pitch (digital
-  C-up/C-down pulse) feel very different; pitch is steppy/slow.
-- **D118b** — mouse-Y may feel inverted (toggle: `ge007.ini [Input]
-  MouseInvertY`).
-- **D118c** — **in manual-aim mode (right-mouse), moving the mouse down to
-  look down makes Bond crouch.** Root cause is the same digital bridge: mouse
-  Y emits `GE_CONT_D` (C-down), and `bondview2.c` `MoveData` maps
-  `C-down` in `insightaimmode` to `crouchDown` (`bondview2.c:5351`) / zoom
-  (`:5340`, DISABLE_CROUCH weapons) as well as free-aim pitch. The C-button
-  is genuinely overloaded by mode in game logic — the only clean fix is the
-  deferred analog-aim `#ifdef PORT` hook (TODO 4), which would drive pitch
-  without touching C-down. Low priority (aim-mode look-down is rare in
-  normal play). No cheap input-layer-only fix — suppressing C-down in aim
-  mode would break intentional crouch/zoom.
-- **D137 (FIXED)** — right-mouse *crash* (not this crouch bug):
+*Mouse-look rework — M-24 (`port/src/input.c`, port-layer only, no `src/`
+change).* Root reading of `bondviewProcessInput`/`MoveData`: GE's aim is
+**mode-dependent** — hipfire (`!insightaimmode`) yaw = analog stick-X,
+pitch = digital C-up/C-down (stick-Y = move, does not pitch); aim mode
+(R held) yaw+pitch = analog stick past ±60 → `(stick-60)/10`, and
+C-up/C-down there = crouch/lean/zoom (`bondview2.c:5340,5351`), *not* aim.
+Also GE's native pitch is inverted (`U_CBUTTONS → speedVertaDown`, i.e.
+C-up looks down, `:5272-5279`). New mapping in `inputComputePad`, keyed on
+our own RMB/LShift state as the hold-to-aim proxy:
+- **aim mode** → push `stick_x`/`stick_y` into the 61..80 band
+  (proportional to per-poll mouse delta × `MouseAimSpeed`/100 × 4), **emit
+  no C-buttons**. Yaw and pitch now identical analog feel.
+- **hipfire** → yaw `stick_x += dx × MouseTurnSpeed/100 × 6`; pitch =
+  digital C-up/C-down on `|dy| ≥ 1.5` px/poll.
+- "mouse-down = look down" by default (accounts for GE's inversion);
+  `MouseInvertY` flips.
+Per-poll deltas, no accumulator (rate device). `ge007.ini [Input]`:
+`MouseEnabled`, `MouseAimSpeed` (50), `MouseTurnSpeed` (100), `MouseInvertY`
+(0) — **now actually parsed** (`config.c` INI load/save implemented, M-24).
+
+- **D118b (FIXED, M-24)** — mouse-Y inversion resolved by the "mouse-down
+  looks down" default above + `MouseInvertY` toggle.
+- **D118c (FIXED, M-24)** — aim + mouse-down → crouch. Fixed *without* a
+  `src/` hook: in aim mode the mouse now drives the analog stick and emits
+  no C-button, so the crouch/lean/zoom mappings are never triggered by
+  look input. (Proxy caveat: a toggle-aim control scheme would need a read
+  of `g_CurrentPlayer->insightaimmode` since RMB-held ≠ aim state there.)
+- **D118a (RESIDUAL, lower)** — in **hipfire only**, yaw (analog) vs pitch
+  (digital C-button) still feel different. Aim mode is now fully analog and
+  consistent. A fully-analog hipfire pitch would need the `#ifdef PORT`
+  `bondview.c` hook (TODO 4). Minor — precise vertical aim in GE happens in
+  aim mode, not hipfire.
+- **D137 (FIXED)** — right-mouse *crash* (not the crouch bug):
   `gunDrawSight` `s32 sp54` truncated a `Gfx*`; see §F D137.
 - Weapon switch on kbd/mouse = the A button (`Space`/`Z`/`E`), same as
   action/use (GE overloads it). No dedicated key; mouse-wheel cycle is a

@@ -206,11 +206,18 @@ through a converter or a runtime bswap fixup reads scrambled.
   macro. libultra.c wraps the include in `#pragma push_macro("errno")` /
   `#undef errno`; cleaner for a new module is to duplicate the handful of
   `CONT_*` bits it needs (D118 `input.c`).
-- GE aims with **digital C-buttons**, no analog-aim hook outside `src/`.
-  Mouse-look is bridged by integrating the relative-mouse delta into a
-  clamped per-axis accumulator and emitting a C-button per poll while
-  |accum| ≥ 0.5, draining one unit → proportional press *dwell*. Non-linear
-  (GE's own accel curve) but playable (D118).
+- GE's aim model is **mode-dependent** (`bondview2.c bondviewProcessInput`):
+  in **hipfire** (`!insightaimmode`) yaw = analog stick-X ("natural turn")
+  and pitch = **digital C-up/C-down only** (stick-Y is move fwd/back); in
+  **aim mode** (R held) yaw *and* pitch are analog — stick pushed past ±60
+  → proportional `(stick-60)/10` — and **C-up/C-down mean crouch/lean/zoom,
+  not aim**. So the mouse→pad map must also be mode-aware: aim mode pushes
+  the stick into the 61..80 band and emits **no** C-buttons (emitting C-down
+  for "look down" while aiming = crouch, D118c); hipfire keeps the digital
+  C-button pitch. `input.c` reads its own RMB/LShift state as the mode proxy
+  (exact for hold-to-aim; a toggle scheme needs `g_CurrentPlayer->
+  insightaimmode`). GE's native pitch is **inverted** (C-up → look down) —
+  hide it so mouse-down looks down; `MouseInvertY` flips (D118, M-24).
 - `osContGetReadData(pad)` must fill **one OSContPad per channel**
   (`MAXCONTROLLERS`-long array), not just controller 0 — joy.c passes the
   whole `samples[i].pads` array (D118).

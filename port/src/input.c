@@ -21,7 +21,7 @@
  *
  * Keyboard + mouse (controller 0):
  *   W/S/A/D or arrows .. analog stick  (move / strafe)
- *   mouse motion ....... C-buttons     (proportional pulse -- see below)
+ *   mouse motion ....... aim           (mode-aware -- see MOUSE-LOOK below)
  *   left mouse / LCtrl . Z trigger     (fire)
  *   right mouse / LShift R trigger     (aim mode)
  *   Space / Z / E ...... A button      (action / use)
@@ -42,23 +42,30 @@
  *   D-pad ............ N64 D-pad
  *   Start ............ Start
  *
- * MOUSE-LOOK -> C-BUTTON BRIDGE
- *   GE has no analog-aim hook we can reach without touching src/ (game
- *   logic). The only lever is OSContPad, so mouse motion is converted to
- *   digital C-button presses. inputUpdate() integrates the relative mouse
- *   delta (scaled by Input.MouseAimSpeed/100) into a signed accumulator per
- *   axis, clamped to +/-AIM_ACCUM_CLAMP. Each poll inputComputePad() emits
- *   the matching C-button while |accum| >= 0.5 and drains one unit. A large
- *   flick therefore holds the C-button down for several frames
- *   (proportional dwell) rather than a single blip.
+ * MOUSE-LOOK (mode-aware, no src/ changes)
+ *   GE's aim model (bondview2.c bondviewProcessInput / MoveData) is
+ *   mode-dependent, so the mouse->pad mapping is too:
  *
- *   Limitations: (a) it is still digital -- GE applies its own accel curve
- *   to a held C-button, so aim speed is not linear in mouse speed;
- *   (b) very fast flicks saturate at the clamp (~8 frames of turn);
- *   (c) diagonal precision is limited to the 8 C-button combinations.
- *   Tunable via ge007.ini [Input] MouseAimSpeed / MouseInvertY. A true
- *   analog aim path would need an #ifdef PORT hook in bondview.c and is
- *   left as a TODO.
+ *   - Hipfire (!insightaimmode): yaw = analog stick-X ("natural turn");
+ *     pitch = DIGITAL C-up/C-down (stick-Y here is move fwd/back and does
+ *     not pitch). Mouse Y emits a C-button on polls where it moved.
+ *   - Aim mode (R / RMB held): yaw AND pitch are analog -- the stick pushed
+ *     past +/-60 gives proportional (stick-60)/10 aim speed. Mouse X/Y push
+ *     the stick into the 61..80 band. We emit NO C-buttons in this mode
+ *     because there they mean crouch / lean / zoom (this was D118c:
+ *     aim + look-down -> crouch).
+ *
+ *   "aim button held" is read from our own RMB/LShift state -- exact for
+ *   the default hold-to-aim scheme; a toggle-aim scheme would need a read
+ *   of g_CurrentPlayer->insightaimmode (still no logic change).
+ *
+ *   GE's native pitch is inverted ("flight" style: C-up -> look down). We
+ *   hide that: mouse-down looks down by default, MouseInvertY flips it.
+ *
+ *   Tunable via ge007.ini [Input]: MouseAimSpeed (aim mode), MouseTurnSpeed
+ *   (hipfire yaw), MouseInvertY, MouseEnabled. Residual: in hipfire, yaw
+ *   (analog) and pitch (digital) still feel different (D118a) -- a fully
+ *   analog hipfire pitch needs an #ifdef PORT hook in bondview.c (TODO).
  * ------------------------------------------------------------------------
  */
 
@@ -94,26 +101,38 @@
 #define STICK_MAX          80
 #define TRIG_THRESHOLD     (30 * 256)
 #define RSTICK_THRESHOLD   0x4000
-#define AIM_ACCUM_CLAMP     8.0
-#define AIM_EMIT_THRESHOLD  0.5
-#define MOUSE_TURN_GAIN     6.0   /* per-poll aimDX units -> stick-X counts */
+/* Mouse-look tuning. GE's aim model is mode-dependent (bondview2.c
+ * bondviewProcessInput):
+ *   - Hipfire (!insightaimmode): yaw = analog stick-X ("natural turn"),
+ *     pitch = DIGITAL C-up/C-down only (stick-Y is move fwd/back here).
+ *   - Aim mode (R held):          yaw AND pitch = analog stick pushed past
+ *     +/-60 -> proportional (stick-60)/10. C-up/C-down mean crouch/lean/
+ *     zoom in this mode, NOT aim -- so we must NOT emit them while aiming
+ *     (that was D118c: aim + mouse-down -> crouch).
+ * GE's native pitch is inverted ("flight" style): C-up -> look down. We
+ * hide that so mouse-down looks down by default; MouseInvertY flips it. */
+#define MOUSE_TURN_GAIN     6.0   /* hipfire: raw px this poll -> stick-X counts */
+#define MOUSE_PITCH_THRESH  1.5   /* hipfire: px/poll before a C-button fires  */
+#define AIM_BAND            20    /* aim mode: usable stick range above the 60 gate */
+#define AIM_GAIN            4.0   /* aim mode: px/poll -> counts into the band  */
+#define AIM_MOVE_THRESH     0.5   /* aim mode: px/poll before the stick moves   */
 
 static int numControllers = 1;
 static int connectedMask   = 0x1;   /* controller 0 always present */
 
 static SDL_GameController *pads[MAX_PADS];
 
-static int mouseEnabled  = 1;
-static int mouseAimSpeed = 50;      /* /100 -> mouse-px to accumulator units */
-static int mouseInvertY  = 0;
+static int mouseEnabled   = 1;
+static int mouseAimSpeed  = 50;     /* aim-mode sensitivity, percent */
+static int mouseTurnSpeed = 100;    /* hipfire yaw sensitivity, percent */
+static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
 
-/* Per-poll mouse-look deltas. NOT a persistent accumulator: mouse-look is a
- * displacement device, GE's C-buttons are a rate device. Integrating and
- * draining turned a flick into a pegged, slowly-recovering "stuck looking
- * up/down". We now emit a C-button only on polls where the mouse actually
- * moved that poll; stop moving -> button releases -> GE auto-centres. */
-static double aimDX = 0.0;
-static double aimDY = 0.0;
+/* Raw relative-mouse delta accumulated since the last inputComputePad(0).
+ * NOT a persistent aim accumulator: mouse-look is a displacement device and
+ * GE's aim is a rate device, so we consume the whole delta each poll and
+ * reset -- stop moving and the stick/ C-button releases immediately. */
+static double mouseDX = 0.0;
+static double mouseDY = 0.0;
 
 /* ------------------------------------------------------------------------ */
 
@@ -200,9 +219,10 @@ void inputUpdate(void)
     int dx = 0, dy = 0;
     SDL_GetRelativeMouseState(&dx, &dy);
 
-    const double scale = (double)mouseAimSpeed / 100.0;
-    aimDX = dx * scale;
-    aimDY = dy * scale * (mouseInvertY ? -1.0 : 1.0);
+    /* Raw px; per-mode sensitivity is applied in inputComputePad(). Accumulate
+     * in case inputUpdate() is polled more than once between pad reads. */
+    mouseDX += dx;
+    mouseDY += dy;
 }
 
 static int scaleAxis(int v)
@@ -251,7 +271,9 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
 
         if ((mb & SDL_BUTTON(SDL_BUTTON_LEFT)) || keyDown(ks, SDL_SCANCODE_LCTRL))
             button |= GE_CONT_G;
-        if ((mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) || keyDown(ks, SDL_SCANCODE_LSHIFT))
+        int aimHeld = (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) ||
+                      keyDown(ks, SDL_SCANCODE_LSHIFT);
+        if (aimHeld)
             button |= GE_CONT_R;
         if (keyDown(ks, SDL_SCANCODE_SPACE) || keyDown(ks, SDL_SCANCODE_Z) ||
             keyDown(ks, SDL_SCANCODE_E))
@@ -264,14 +286,37 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         if (keyDown(ks, SDL_SCANCODE_RETURN) || keyDown(ks, SDL_SCANCODE_TAB))
             button |= GE_CONT_START;
 
-        /* Mouse X -> analog turn (stick X, GE yaw is analog, not a C-button).
-         * Mouse Y -> C-up/C-down look (GE pitch has no analog hook). Per-poll,
-         * no carryover: motion this poll only, so releasing stops immediately. */
+        /* Mouse-look. Mode-dependent (see the tuning-constants comment):
+         *   aim mode  -> push the analog stick past +/-60 for proportional
+         *                yaw + pitch; emit NO C-buttons (they mean crouch here).
+         *   hipfire   -> yaw on analog stick-X; pitch on digital C-up/C-down.
+         * "look down" convention: mouse-down looks down by default; GE's
+         * native pitch is inverted so hipfire down = C-up (GE_CONT_E) and
+         * aim-mode down = +stick_y. MouseInvertY flips both. */
         if (mouseEnabled) {
-            sx += (int)(aimDX * MOUSE_TURN_GAIN);
-            if (aimDY >= AIM_EMIT_THRESHOLD)       button |= GE_CONT_D;
-            else if (aimDY <= -AIM_EMIT_THRESHOLD) button |= GE_CONT_E;
+            double invert = mouseInvertY ? -1.0 : 1.0;
+            double dyLook = mouseDY * invert;   /* >0 => look down */
+
+            if (aimHeld) {
+                double gx = fabs(mouseDX) * (mouseAimSpeed / 100.0) * AIM_GAIN;
+                double gy = fabs(dyLook)  * (mouseAimSpeed / 100.0) * AIM_GAIN;
+                if (fabs(mouseDX) >= AIM_MOVE_THRESH) {
+                    int m = 61 + (int)gx; if (m > 60 + AIM_BAND) m = 60 + AIM_BAND;
+                    sx += (mouseDX > 0) ? m : -m;
+                }
+                if (fabs(dyLook) >= AIM_MOVE_THRESH) {
+                    int m = 61 + (int)gy; if (m > 60 + AIM_BAND) m = 60 + AIM_BAND;
+                    sy += (dyLook > 0) ? m : -m;   /* +stick_y = look down */
+                }
+            } else {
+                sx += (int)(mouseDX * (mouseTurnSpeed / 100.0) * MOUSE_TURN_GAIN);
+                if (dyLook >= MOUSE_PITCH_THRESH)       button |= GE_CONT_E; /* C-up = look down */
+                else if (dyLook <= -MOUSE_PITCH_THRESH) button |= GE_CONT_D; /* C-down = look up */
+            }
         }
+
+        mouseDX = 0.0;
+        mouseDY = 0.0;
     }
 
     /* ---- gamepad ---- */
@@ -348,5 +393,6 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
 {
     configRegisterInt("Input.MouseEnabled", &mouseEnabled, 0, 1);
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
+    configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
     configRegisterInt("Input.MouseInvertY", &mouseInvertY, 0, 1);
 }

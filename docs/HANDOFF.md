@@ -35,13 +35,16 @@ Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
   Committed through `f2beae4b` (M-12: D121 WS1 boot, D122 propDef fix).
 - **Input layer (Phase 3) landed and playtested** (D118, M-9/M-10).
   `port/src/input.c` is real: keyboard+mouse + SDL_GameController → N64
-  pad. Core aim/move works. **Open polish bugs (deferred):** D118a mouse
-  yaw (analog) vs pitch (digital) mismatch; D118b mouse-Y inverted;
-  **D118c — in manual-aim mode, mouse-down → crouch** (mouse Y emits
-  C-down, which game logic maps to crouch/zoom in `insightaimmode`;
-  clean fix = the deferred analog-aim `#ifdef PORT` hook, §F D118);
-  rebinding / gamepad hotplug / `ge007.ini` generation still TODO.
-  Weapon switch on kbd = A button (`Space`/`Z`/`E`) — no dedicated key.
+  pad. Core aim/move works. **M-24 mouse-look rework** (`port/src/input.c`,
+  port-only): mode-aware map — aim mode (RMB) drives the analog stick past
+  ±60 and emits no C-buttons; hipfire keeps digital C-up/C-down pitch.
+  **D118b (mouse-Y inverted) and D118c (aim + mouse-down → crouch) FIXED**;
+  **D118a residual** — hipfire pitch still digital vs analog yaw (minor).
+  `config.c` INI load/save now implemented → `ge007.ini` is written on
+  first run and re-read; `[Input]` `MouseEnabled` / `MouseAimSpeed` (50) /
+  `MouseTurnSpeed` (100) / `MouseInvertY` (0) are live-tunable. Rebinding /
+  gamepad hotplug still TODO. Weapon switch on kbd = A button
+  (`Space`/`Z`/`E`) — no dedicated key.
 - **Recent fixes (M-10, `d1e93b76`):** D119 guard-attack crash
   (`weapons_held[]->chr` type-pun) fixed; D120 blood-stain hang guarded
   (not fixed — `d43_emit.py` opcode-0x18 converter gap).
@@ -227,6 +230,40 @@ in the docs-restructure — fold those separately).
   C-button), LMB/LCtrl fire, RMB/LShift aim, `Space`/`Z`/`E` = A (action AND
   weapon-switch — GE overloads it), `X`/`R`/`F` = B (reload), `Q` = L,
   `Enter`/`Tab` = Start, `Esc` quit. No dedicated weapon key.
+
+## Done this session (M-24) — mouse-look rework + real INI parser (uncommitted)
+
+Pre-playtest QoL, port-layer only, no `src/` / game-logic change.
+
+- **`port/src/input.c` mouse-look rework.** Read `bondviewProcessInput` /
+  `MoveData`: GE aim is **mode-dependent** — hipfire yaw = analog stick-X,
+  pitch = digital C-up/C-down (stick-Y = move, no pitch); aim mode (R held)
+  yaw+pitch = analog stick past ±60, and C-up/C-down there = crouch/lean/
+  zoom, *not* aim. New map keyed on our own RMB/LShift (hold-to-aim proxy):
+  aim mode pushes `stick_x/y` into the 61..80 band and emits **no**
+  C-buttons; hipfire keeps digital C-pitch. GE's native pitch is inverted
+  (C-up→look down) — hidden so mouse-down looks down; `MouseInvertY` flips.
+  - **D118b FIXED** (mouse-Y inversion), **D118c FIXED** (aim+down→crouch —
+    no `src/` hook needed, aim look no longer emits C-down).
+  - **D118a residual**: hipfire pitch digital vs analog yaw. Minor (precise
+    vertical aim is an aim-mode activity). Full fix = the deferred analog
+    `#ifdef PORT` `bondview.c` hook.
+- **`port/src/config.c` — INI load/save implemented** (was a stub that only
+  logged TODO). Parses `$S/ge007.ini` (`[Section]` blocks, `Key = value`,
+  `#`/`;` comments), clamps ints to registered bounds, writes defaults on
+  first run, rewrites on clean exit. Unblocks live tuning of the mouse
+  knobs + all future video options. Note: constructor-registered options
+  present at `configLoad()` time (main.c:52) are captured; anything
+  registered later would miss the first save.
+- **New knob** `Input.MouseTurnSpeed` (hipfire yaw %, default 100), split
+  from `MouseAimSpeed` (aim-mode %, default 50) since they feed different
+  game curves.
+- Verified: `-level_09` boots crash-free to 900+ frames @ 91.65% coverage
+  (unregressed); `-level_20` crash-free; `ge007.ini` written then re-read
+  with no unknown-key warnings. Build green (`ntsc-final`).
+- **Still TODO (not started):** key rebinding, gamepad hotplug
+  (`SDL_CONTROLLERDEVICEADDED/REMOVED`), mouse-wheel weapon cycle,
+  screenshot/mouse-release hotkeys, on-screen FPS overlay.
 
 ## Next task (M-24 — Opus 5)
 
