@@ -1,5 +1,7 @@
 # M-24 — input rework + playtest QoL (review sheet)
 
+> **Follow-up work: `docs/M-25-QOL-REVIEW.md`** (`[Video]` ini knobs, …).
+
 Session M-24, 2026-08-30. Three commits on `master`:
 
 | Commit | Title |

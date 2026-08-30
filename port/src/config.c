@@ -29,8 +29,8 @@
 #define MAX_OPTIONS 256
 #define INI_PATH    "$S/ge007.ini"
 
-struct IntOption   { char key[64]; int *value; int min, max; };
-struct StrOption   { char key[64]; char *value; int bufSize; };
+struct IntOption   { char key[64]; int *value; int min, max; int seen; };
+struct StrOption   { char key[64]; char *value; int bufSize; int seen; };
 
 static struct IntOption intOpts[MAX_OPTIONS];
 static int              numIntOpts = 0;
@@ -91,6 +91,7 @@ static void applyKV(const char *dottedKey, const char *val)
 {
     for (int i = 0; i < numIntOpts; i++) {
         if (ci_eq(intOpts[i].key, dottedKey)) {
+            intOpts[i].seen = 1;
             int v = parseInt(val);
             if (intOpts[i].min != intOpts[i].max) {
                 if (v < intOpts[i].min) v = intOpts[i].min;
@@ -102,6 +103,7 @@ static void applyKV(const char *dottedKey, const char *val)
     }
     for (int i = 0; i < numStrOpts; i++) {
         if (ci_eq(strOpts[i].key, dottedKey)) {
+            strOpts[i].seen = 1;
             strncpy(strOpts[i].value, val, strOpts[i].bufSize - 1);
             strOpts[i].value[strOpts[i].bufSize - 1] = 0;
             return;
@@ -151,6 +153,19 @@ void configLoad(void)
     }
     fclose(f);
     sysLogPrintf(LOG_INFO, "config: loaded %s", path);
+
+    /* Migration: if the running build registers options the on-disk file
+     * never mentioned (a new [Video] knob, say), rewrite the file once so the
+     * defaults are visible and editable. Only triggers when something is
+     * genuinely missing -- an up-to-date file is left untouched (comments and
+     * all). */
+    int missing = 0;
+    for (int i = 0; i < numIntOpts && !missing; i++) missing = !intOpts[i].seen;
+    for (int i = 0; i < numStrOpts && !missing; i++) missing = !strOpts[i].seen;
+    if (missing) {
+        sysLogPrintf(LOG_INFO, "config: adding newly-registered keys to %s", path);
+        configSave();
+    }
 }
 
 /* Section name = everything before the last '.'; "" if the key isn't dotted. */

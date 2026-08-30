@@ -25,6 +25,7 @@
 
 #include "platform.h"
 #include "system.h"
+#include "config.h"
 #include "video.h"
 #include "input.h"
 
@@ -46,6 +47,25 @@ static struct GfxWindowManagerAPI *wmAPI;
 static struct GfxRenderingAPI *renderingAPI;
 static int initDone = 0;
 
+/*
+ * [Video] ge007.ini knobs. Every default reproduces the previously-hardcoded
+ * behaviour, so a fresh config or a missing [Video] section changes nothing.
+ */
+static int cfgVSync         = 1;   /* swap interval: 0 = off, 1 = on            */
+static int cfgFpsCap        = 0;   /* frame cap in fps; 0 = uncapped (vsync)    */
+static int cfgMSAA          = 1;   /* 1/2/4/8 samples; 1 = off                  */
+static int cfgTexFilter     = 1;   /* 0 = nearest (crisp), 1 = bilinear         */
+static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
+
+PD_CONSTRUCTOR static void videoConfigInit(void)
+{
+    configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
+    configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
+    configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 8);
+    configRegisterInt("Video.TextureFilter", &cfgTexFilter,  0, 1);
+    configRegisterInt("Video.Fullscreen",    &cfgFullscreen, 0, 1);
+}
+
 static u32 frames = 0;
 /* Set by the host event pump (F12), consumed on the render thread in
  * videoEndFrame where a GL context is current. */
@@ -64,7 +84,9 @@ int videoInit(void)
     gfx_current_native_aspect = (float)GE_NATIVE_W / (float)GE_NATIVE_H;
     gfx_framebuffers_enabled = true;
     gfx_detail_textures_enabled = false;
-    gfx_msaa_level = 1;
+
+    /* MSAA: snap the requested sample count down to a supported power of two. */
+    gfx_msaa_level = cfgMSAA >= 8 ? 8 : cfgMSAA >= 4 ? 4 : cfgMSAA >= 2 ? 2 : 1;
 
     struct GfxInitSettings set = {
         .wapi = wmAPI,
@@ -75,7 +97,7 @@ int videoInit(void)
             .height = GE_NATIVE_H,
             .x = 100,
             .y = 100,
-            .fullscreen = false,
+            .fullscreen = cfgFullscreen != 0,
             .fullscreen_is_exclusive = false,
             .maximized = false,
             .centered = true,
@@ -85,11 +107,17 @@ int videoInit(void)
 
     gfx_init(&set);
 
-    /* VSync on; fast3d paces the window itself. */
-    wmAPI->set_swap_interval(1);
+    /* VSync + optional fps cap; fast3d paces the window itself. */
+    wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
+    gfx_set_target_fps(cfgFpsCap);   /* 0 = uncapped */
 
-    gfx_set_texture_filter(FILTER_LINEAR);
-    gfx_set_mipmap_filter(MIPMAP_LINEAR);
+    if (cfgTexFilter) {
+        gfx_set_texture_filter(FILTER_LINEAR);
+        gfx_set_mipmap_filter(MIPMAP_LINEAR);
+    } else {
+        gfx_set_texture_filter(FILTER_NONE);
+        gfx_set_mipmap_filter(MIPMAP_NEAREST);
+    }
 
     /* The GL context is currently current on this (host main) thread, but all
      * rendering happens on the game's scheduler thread. WGL only allows a
