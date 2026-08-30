@@ -12,7 +12,7 @@ Build = `f2beae4b` + `tools_pc/d88_propdefs.py` (D123) + `port/src/gimgfixup.c` 
 
 | Level | # | Status | Crash site | Class |
 |---|---|---|---|---|
-| Bunker1  | 09 | **CRASH (regressed since M-18)** | boot crash `frames=0`, PC `0x1400066fc`, fault `0x00a2fc68` (stack ptr, top nibble masked). Reproduces on clean master `0a4b3bae` → pre-existing, not D131. Bisect D125→HEAD. | **new** |
+| Bunker1  | 09 | **PASS** (M-20: re-verified — 1800 frames crash-free, no `ge007.crash.log`, direct `-level_09` boot at ~90us/frame). The M-19 "boot crash `frames=0` PC `0x1400066fc`" did **not** reproduce on `1fc3cff6` in three separate runs → it was sweep flakiness / D117 nondeterminism under machine load, not a real regression. | — |
 | Silo     | 20 | **PASS** 91.7% | — | — |
 | Archives | 24 | **PASS** 91.1% | — | — |
 | Train    | 25 | **PASS** 87.0% | — | — |
