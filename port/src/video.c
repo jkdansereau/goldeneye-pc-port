@@ -155,6 +155,13 @@ void videoPumpEvents(void)
                 screenshotReq = 1;
             }
             break;
+        case SDL_MOUSEWHEEL:
+            inputPostWheel(ev.wheel.y);   /* weapon cycle */
+            break;
+        case SDL_CONTROLLERDEVICEADDED:
+        case SDL_CONTROLLERDEVICEREMOVED:
+            inputRescanPads();
+            break;
         case SDL_WINDOWEVENT:
             if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
                 sysLogPrintf(LOG_INFO, "video: window closed");
@@ -169,6 +176,18 @@ void videoPumpEvents(void)
             break;
         default:
             break;
+        }
+    }
+
+    /* Refresh the window title with the live FPS about once a second. */
+    if (wmAPI && wmAPI->set_window_title) {
+        static double lastTitle = 0.0;
+        double now = wmAPI->get_time();
+        if (now - lastTitle >= 1.0) {
+            lastTitle = now;
+            char title[64];
+            snprintf(title, sizeof(title), "GoldenEye 007  -  %.0f fps", vidAvgFPS);
+            wmAPI->set_window_title(title);
         }
     }
 }

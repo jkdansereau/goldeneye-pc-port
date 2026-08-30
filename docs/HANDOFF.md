@@ -268,9 +268,18 @@ Pre-playtest QoL, port-layer only, no `src/` / game-logic change.
   gain) so alt-tab works. `inputSetMouseGrab()` also zeroes the aim delta
   and suspends mouse reads while released.
 - Alt-Enter fullscreen toggle already existed (`gfx_sdl2.cpp:299`).
-- **Still TODO (not started):** key rebinding, gamepad hotplug
-  (`SDL_CONTROLLERDEVICEADDED/REMOVED`), mouse-wheel weapon cycle,
-  on-screen FPS overlay, window-title FPS.
+- **Gamepad hotplug** — `SDL_CONTROLLERDEVICEADDED/REMOVED` → `inputRescanPads()`
+  (close all + re-open). Caveat: the game latches `inputConnectedMask()` at
+  `osContInit` (boot), so a pad added later merges into controller 0 for
+  play but won't appear as a separate channel — plug it before launch for
+  multi-pad.
+- **Mouse-wheel = weapon cycle** — a notch queues a 2-poll A-button press;
+  GE's default scheme (`invButtons = A_BUTTON`, `bondview2.c:5162/5326`)
+  cycles the weapon forward on a bare A edge. Both wheel directions cycle
+  forward (no clean backward input without the A+fire combo).
+- **Window title shows live FPS** (`wmAPI->set_window_title`, ~1 Hz).
+- **Still TODO (not started):** key rebinding, on-screen (in-render) FPS
+  overlay, in-game options menu.
 
 ## Next task (M-24 — Opus 5)
 

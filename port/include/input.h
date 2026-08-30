@@ -44,6 +44,13 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y);
  * disabled in config. */
 void inputSetMouseGrab(int on);
 
+/* Queue a mouse-wheel weapon-cycle input (one short A-button press). Sign is
+ * ignored -- GE only cycles forward on a bare A edge. */
+void inputPostWheel(int notches);
+
+/* Re-enumerate gamepads after a hotplug (SDL_CONTROLLERDEVICEADDED/REMOVED). */
+void inputRescanPads(void);
+
 #ifdef __cplusplus
 }
 #endif

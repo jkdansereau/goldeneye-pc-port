@@ -135,6 +135,13 @@ static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
 static double mouseDX = 0.0;
 static double mouseDY = 0.0;
 
+/* Mouse-wheel -> weapon cycle: a wheel notch queues a short A-button press
+ * (GE's default scheme cycles the weapon forward on a fresh A edge, invButtons
+ * = A_BUTTON, bondview2.c:5162/5326). Held for a couple of polls so the game
+ * sees a clean press+release edge. */
+#define WHEEL_PULSE_POLLS 2
+static int wheelPulse = 0;
+
 /* ------------------------------------------------------------------------ */
 
 static void inputOpenPads(void)
@@ -280,6 +287,10 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         if (keyDown(ks, SDL_SCANCODE_SPACE) || keyDown(ks, SDL_SCANCODE_Z) ||
             keyDown(ks, SDL_SCANCODE_E))
             button |= GE_CONT_A;
+        if (wheelPulse > 0) {           /* mouse-wheel weapon cycle -> A pulse */
+            button |= GE_CONT_A;
+            wheelPulse--;
+        }
         if (keyDown(ks, SDL_SCANCODE_X) || keyDown(ks, SDL_SCANCODE_R) ||
             keyDown(ks, SDL_SCANCODE_F))
             button |= GE_CONT_B;
@@ -393,6 +404,30 @@ void inputSetMouseGrab(int on)
         SDL_GetRelativeMouseState(NULL, NULL);   /* drain the accumulated jump */
     }
     mouseDX = mouseDY = 0.0;
+}
+
+void inputPostWheel(int notches)
+{
+    if (notches < 0) notches = -notches;   /* both directions cycle forward */
+    if (notches > 0) wheelPulse = WHEEL_PULSE_POLLS;
+}
+
+/* Called from the host event pump on SDL_CONTROLLERDEVICEADDED/REMOVED.
+ * Closes every open pad and re-opens whatever is present now. `connectedMask`
+ * bit 0 (keyboard/mouse) is always kept. Note: the game latches the mask at
+ * osContInit (boot), so a pad added later still merges into controller 0 for
+ * play -- it just won't appear as a separate controller channel. */
+void inputRescanPads(void)
+{
+    for (int i = 0; i < MAX_PADS; ++i) {
+        if (pads[i]) {
+            SDL_GameControllerClose(pads[i]);
+            pads[i] = NULL;
+        }
+    }
+    inputOpenPads();
+    sysLogPrintf(LOG_NOTE, "input: rescanned pads (mask=0x%x, %d controller(s))",
+                 connectedMask, numControllers);
 }
 
 int inputConnectedMask(void)

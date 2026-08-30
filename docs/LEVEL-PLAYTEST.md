@@ -17,7 +17,9 @@ mode-aware since M-24 (hold RMB = analog aim). Tune feel in
 `data/ge007.ini` `[Input]` (`MouseAimSpeed` 50, `MouseTurnSpeed` 100,
 `MouseInvertY` 0) with the game closed. Known residual (do not re-log):
 D118a — hipfire pitch is digital vs analog yaw. **F12** = screenshot to
-`ppm/shot_NNN.ppm`. Alt-tab away frees the cursor (re-grabs on focus).
+`ppm/shot_NNN.ppm`. **Mouse wheel** = cycle weapon. **Alt-Enter** =
+fullscreen. Alt-tab away frees the cursor (re-grabs on focus). Title bar
+shows FPS.
 Difficulty for a bare `-level_XX` boot defaults to Agent; use the menu path
 (mission select → difficulty) to test 00/007.
 
