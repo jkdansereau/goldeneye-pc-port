@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 
 #include <SDL.h>
 
@@ -1194,45 +1195,118 @@ static uint64_t portNextTimerUs(void)
     return earliest;
 }
 
-/* Interrupt mask -> global recursive lock (D147).
+/* Interrupt mask -> global recursive lock (D147), self-healing (D152).
  *
  * On N64 `osSetIntMask(OS_IM_NONE)` disables interrupts so the following
  * region cannot be preempted; the paired `osSetIntMask(saved)` restores it.
  * libaudio relies on this to serialise the event queue (alEvtqPostEvent,
  * sndRemoveEvents, alEvtqNextEvent, ...) between the game thread and the
  * audio-manager "interrupt". On PC that audio manager is a real preemptible
- * thread (amMain), and this shim was a no-op -> both threads mutate the
- * same ALEventQueue linked list concurrently -> list corruption -> the game
+ * thread (amMain), and a no-op shim let both threads mutate the same
+ * ALEventQueue linked list concurrently -> list corruption -> the game
  * thread spins forever in alEvtqPostEvent's insert walk (hang seen when a
  * door finishes opening and posts its close SFX, propobj.c objTick).
  *
- * Model the mask as one process-wide recursive mutex: OS_IM_NONE acquires,
- * OS_IM_ALL (the value we hand back, so every paired restore passes it)
- * releases. Other specific masks (OS_IM_VI in sched.c) are not lock ops and
- * pass through. The decomp never blocks while holding OS_IM_NONE, so this
- * cannot deadlock. */
-static pthread_mutex_t s_imLock;
-static pthread_once_t  s_imOnce = PTHREAD_ONCE_INIT;
+ * Model the mask as one process-wide recursive critical section: OS_IM_NONE
+ * acquires, OS_IM_ALL (the value we hand back, so every paired restore
+ * passes it) releases. Other specific masks (OS_IM_VI in sched.c) are not
+ * lock ops and pass through.
+ *
+ * D152: the recursive-mutex form CAN wedge permanently. libaudio has
+ * unbalanced / early-return mask calls, and a transient host thread can
+ * acquire OS_IM_NONE and exit without the paired OS_IM_ALL, leaving the
+ * lock owned forever -> every later alEvtq* on mainThread + amMain blocks
+ * -> black screen (repro: mission-failed audio fade-out,
+ * sndSetScalerApplyVolumeAllSfxSlot posts a release event per active sound
+ * per frame). Real audio critical sections are microseconds; anything
+ * holding for OS_IM_STUCK_NS is leaked, so a waiter that has blocked that
+ * long STEALS the section (logging the stale owner + the caller so the leak
+ * site can be found and fixed narrowly later). Bookkeeping lives under
+ * s_imMx (only ever held briefly); s_imHeld/s_imOwner/s_imDepth are the
+ * logical lock. */
+#define OS_IM_STUCK_NS  (2000ll * 1000 * 1000)   /* 2 s */
 
-static void imLockInit(void)
+static pthread_mutex_t s_imMx  = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  s_imCv  = PTHREAD_COND_INITIALIZER;
+static int             s_imHeld;
+static unsigned long   s_imOwner;
+static int             s_imDepth;
+
+static unsigned long imSelf(void)
 {
-    pthread_mutexattr_t a;
-    pthread_mutexattr_init(&a);
-    pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
-    pthread_mutex_init(&s_imLock, &a);
-    pthread_mutexattr_destroy(&a);
+    return (unsigned long)(uintptr_t)pthread_self();
+}
+
+static void imAcquire(void *caller)
+{
+    unsigned long self = imSelf();
+    struct timespec now;
+
+    pthread_mutex_lock(&s_imMx);
+
+    if (s_imHeld && s_imOwner == self) {   /* recursive re-entry */
+        s_imDepth++;
+        pthread_mutex_unlock(&s_imMx);
+        return;
+    }
+
+    long long startNs = 0;   /* set on first contended iteration */
+
+    while (s_imHeld) {
+        struct timespec dl;
+        if (startNs == 0) {
+            clock_gettime(CLOCK_REALTIME, &now);
+            startNs = (long long)now.tv_sec * 1000000000ll + now.tv_nsec;
+        }
+        clock_gettime(CLOCK_REALTIME, &now);
+        long long nowNs = (long long)now.tv_sec * 1000000000ll + now.tv_nsec;
+        if (nowNs - startNs >= OS_IM_STUCK_NS) {
+            sysLogPrintf(LOG_ERROR,
+                "D152: osSetIntMask lock stuck >2s -- stealing from owner=%lu "
+                "depth=%d (this caller=%p). A prior OS_IM_NONE was never "
+                "restored; find that call site.",
+                s_imOwner, s_imDepth, caller);
+            break;                          /* fall through, steal it */
+        }
+        /* wake ~10x/s to re-check the steal deadline */
+        long long wakeNs = nowNs + 100ll * 1000 * 1000;
+        dl.tv_sec  = (time_t)(wakeNs / 1000000000ll);
+        dl.tv_nsec = (long)(wakeNs % 1000000000ll);
+        pthread_cond_timedwait(&s_imCv, &s_imMx, &dl);
+    }
+
+    s_imHeld  = 1;
+    s_imOwner = self;
+    s_imDepth = 1;
+    pthread_mutex_unlock(&s_imMx);
+}
+
+static void imRelease(void)
+{
+    unsigned long self = imSelf();
+
+    pthread_mutex_lock(&s_imMx);
+    if (!s_imHeld || s_imOwner != self) {   /* spurious / already stolen: no-op */
+        pthread_mutex_unlock(&s_imMx);
+        return;
+    }
+    if (--s_imDepth <= 0) {
+        s_imHeld  = 0;
+        s_imOwner = 0;
+        s_imDepth = 0;
+        pthread_cond_signal(&s_imCv);
+    }
+    pthread_mutex_unlock(&s_imMx);
 }
 
 OSIntMask osSetIntMask(OSIntMask mask)
 {
-    pthread_once(&s_imOnce, imLockInit);
-
     if (mask == OS_IM_NONE) {          /* enter critical section */
-        pthread_mutex_lock(&s_imLock);
+        imAcquire(__builtin_return_address(0));
         return OS_IM_ALL;             /* paired restore will pass this back */
     }
     if (mask == OS_IM_ALL) {           /* leave critical section */
-        pthread_mutex_unlock(&s_imLock);   /* recursive: EPERM no-op if unheld */
+        imRelease();
         return OS_IM_NONE;
     }
     return mask;                        /* OS_IM_VI etc: not a lock operation */

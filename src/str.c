@@ -1,13 +1,38 @@
 #include "str.h"
 
+#ifdef PORT
+/* D150: strcpy/strncpy/strcat are __nonnull__ builtins to GCC, so a plain
+ * `if (src == NULL)` on the parameter is optimised away as provably-dead.
+ * Launder the pointer through an empty asm so the compiler cannot prove it
+ * non-NULL and the guard survives (-Og elided it otherwise — verified in
+ * the disassembly). */
+static inline const void *ge_launder_ptr(const void *p) {
+    __asm__("" : "+r"(p));
+    return p;
+}
+#define GE_IS_NULL(p) (ge_launder_ptr(p) == NULL)
+#endif
+
 char *strcpy(char *dst, const char *src) {
     unsigned char *ptr = dst;
+#ifdef PORT
+    /* D150: the watch briefing/objective pages assemble their text with
+     * strcpy/strcat(buf, langGet(id)); langGet() returns NULL for a string
+     * bank the PC menu flow never loaded (D129/D143), so a NULL src here
+     * faults. Treat NULL as the empty string (blank text, not a crash) —
+     * same philosophy as the D143 textRender/textMeasure NULL guards.
+     * N64 langGet never returns NULL for these ids, so this is inert there. */
+    if (GE_IS_NULL(src)) { if (!GE_IS_NULL(dst)) *ptr = '\0'; return dst; }
+#endif
     while(*ptr++ = *src++);
     return dst;
 }
 
 char *strncpy(char *dst, const char *src, size_t n) {
     unsigned char *ptr = dst;
+#ifdef PORT
+    if (GE_IS_NULL(src)) { while (n--) *ptr++ = '\0'; return dst; }  /* D150 */
+#endif
     while((*ptr++ = *src++)) { 
         if (--n == 0) {
             break;
@@ -21,6 +46,10 @@ char *strncpy(char *dst, const char *src, size_t n) {
 
 char *strcat(char *dst, const char *src) {
     unsigned char *ptr = dst;
+#ifdef PORT
+    if (GE_IS_NULL(dst)) { return dst; }          /* D150 */
+    if (GE_IS_NULL(src)) { return dst; }          /* D150 — see strcpy note */
+#endif
     while (*ptr) { ptr++; };
     while(*ptr++ = *src++);
     return dst;

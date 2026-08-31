@@ -401,6 +401,74 @@ Start, exactly like the retail game.** No crashes, no hangs. 10 commits
 - The D75 front-end / cutscene 3D-model family (D148/D149) is now the
   biggest *visible* gap but is cosmetic — below crashes.
 
+## Done this session (M-28) — D150 (watch page crash) + D151 (watch text blank)
+
+- **D150** (`src/str.c`, `#ifdef PORT`, uncommitted) — user found a crash
+  opening **level objectives on the watch**. AV in `strcat` (`str.c:25`,
+  NULL src). The watch BRIEF/OBJECTIVES pages (`options.c:3940-4068`) build
+  text with `strcat(buf, langGet(id))`; `langGet` returns NULL on PC for the
+  briefing/objective string banks the in-level watch flow never loads
+  (same missing-bank issue as the D143 "briefing text renders blank" note).
+  Fix: NULL-tolerant `strcpy/strncpy/strcat` under `#ifdef PORT`. Note these
+  are `__nonnull__` builtins to GCC so a plain `if (src==NULL)` is optimised
+  away — the guard laundras the ptr through an empty `__asm__` (`GE_IS_NULL`).
+  Build green; `-level_09` 600+ frames @ 91.67% unregressed. **Watch-page
+  repro is interactive — needs user re-verify.** §F/§H D150, PORT-LEARNINGS §C.
+- **D151** (`src/bondtypes.h`, `#ifdef PORT`, uncommitted) — the D150
+  "objective/briefing text renders blank" consequence, ROOT-CAUSED and fixed.
+  NOT a missing bank: the per-level lang bank IS loaded in-level
+  (`langLoadToAddr`, `prop.c:1274`). The propDef records that carry the watch
+  text (types 35 `WatchMenuObjectiveText`, 23 `ObjectiveStart`) store a plain
+  `s32` slot id in their 3rd word; `struct watchMenuObjectiveText` /
+  `struct objective_entry` decode it as `u16 reserved; u16 text;` and read
+  `text` at offset `0xA` — works only because on BE the id is in the low 16
+  bits. `d88_propdefs.py` `_bswap32`'s the whole word → `text` @0xA reads 0 →
+  `langGet(0)` → NULL → blank. Fix: `text` is a full `u32` at the word offset
+  under `#ifdef PORT` (N64 `u16 reserved; u16 text;` kept under `#else`). No
+  converter change / no sidecar regen. Compiles clean (link needs the running
+  game closed). **Interactive re-verify pending** — open the watch, all of
+  OBJECTIVES / mission background / M / Q / Moneypenny should now show text.
+  §F **D151**, PORT-LEARNINGS §C.
+
+### D152 (OPEN) — mission-failed → permanent black screen = `osSetIntMask` lock deadlock
+User killed Trevelyan in Facility (`Ctrl` = **fire**, no crouch bind) → failed
+the objective → fade to black, never returns; process alive. **Live `gdb.txt`
+inspected** (game left running under `debug.ps1`): NOT the front-end
+mission-failed *screen* — it's a **deadlock on `s_imLock`** (the D147
+recursive-mutex behind `osSetIntMask`). Rendering froze at frame 12600.
+`mainThread` in `sndSetScalerApplyVolumeAllSfxSlot`→`alEvtqPostEvent`→
+`osSetIntMask(OS_IM_NONE)`→`pthread_mutex_lock` (waiting); `amMain` in
+`sndPlayerVoiceHandler`→`alEvtqNextEvent`→same, also waiting; **neither owns the
+lock** → a leaked unbalanced `OS_IM_NONE` (libaudio early-return paths) or a
+transient thread that acquired-and-exited holds it. The mission-failed **audio
+fade-out** (`sndSetScalerApplyVolumeAllSfxSlot` posts `AL_SNDP_RELEASE_EVT` per
+`ALSoundState` per frame) is what exercises the window. D147 family; D147's
+"cannot deadlock" claim is now falsified. §F **D152**, PORT-LEARNINGS §D4.
+**MITIGATED (M-28, `port/src/libultra.c`, port-only, uncommitted).**
+`osSetIntMask` is now a **self-healing** logical lock: same recursive
+acquire/release as the D147 mutex on the normal (microsecond) path, but a
+waiter blocked **> 2 s** (`OS_IM_STUCK_NS`) declares the holder leaked it,
+logs `LOG_ERROR` with the stale owner + the stealing caller's return
+address, and steals the section. A leaked/unbalanced `OS_IM_NONE` (or an
+acquire-and-exit transient thread) can no longer wedge the game forever —
+worst case is a ~2 s audio hiccup + a log line that names the leak. Builds
+clean. Still OPEN: the exact leaking call site (read it from the next
+`D152: ... stealing from owner=` log) + the proper narrow fix (dedicated
+`ALEventQueue` lock). Next: replay the Facility mission-fail; if the steal
+fires, `addr2line` the logged caller.
+Separate minor gap: no crouch keybind (BACKLOG B3/B4).
+
+### D153 — `-level_09` frame ~900 crash = load flakiness, NOT a bug (closed)
+Chased for ~30 min in M-28: `-level_09` crashed `0xc0000005` at a
+nondeterministic frame 900↔1400, 6/6 runs — **but every one was while the
+machine was hammered with concurrent builds + multi-run loops.** On a quiet
+machine `-level_09` ran past frame 2400, 0 heartbeats, no crash. It's the
+D117/D134 host-scheduling flakiness the docs warn about every session (M-25
+Silo ~frame 300 is the same). Not a regression, not D150/D151/D152.
+`romdataFixupMusicSeqTable: seqCount 63 exceeds blob capacity 1` is a benign
+expected warning (header-only first call). **Lesson: never regression-test
+while builds/other game runs are in flight.** §F **D153** (closed).
+
 <details><summary>M-27 earlier — front-end/pause bucket: D140 + D141 FIXED</summary>
 
 Started the parked "front-end / transitions / pause / watch" bucket.

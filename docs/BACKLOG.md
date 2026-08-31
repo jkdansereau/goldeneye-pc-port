@@ -1,5 +1,44 @@
 All of these items should be completed once the main original game is playable from start to finish on PC with no crashing or major issues.
 
+---
+
+## Playtest defects — logged M-28 (2026-08-30), not yet worked
+
+User-reported during free playtest. Suggested priority order below (cheap
+input fixes first, then the texture correctness bug, then the filtering
+feature).
+
+- **B1 — texture filtering / "interlaced" shimmer (feature).** Whole game
+  has an interlaced/shimmering look. Want N64 3-point-filter emulation +
+  bilinear/trilinear handling like the Nightdive / Quake-remaster ports.
+  MVP: one good default filtering mode in `port/fast3d/` (3-point emu
+  shader or clean bilinear). Long-term: full toggle set (see "PC graphics
+  settings" → Quality + stretch goals below). Biggest of the four.
+- **B2 — glitchy textures / wrong colors (correctness bug).** Some
+  textures render with wrong colors / garbage — **very noticeable on
+  Depot (`-level_30`)**, present in many other spots too. Likely a
+  texture-decode/format bug (CI/TLUT, RZ decode `port/src/rzdecomp.c`, or
+  the `import_texture_*` path in `gfx_pc.cpp`). Distinct from B1. Needs
+  investigation — could be a real fidelity blocker, not cosmetic-parked.
+- **B3 — RMB aim far too mouse-sensitive.** Manual-aim (RMB/LShift) mouse
+  sensitivity is way too high. `Input.MouseAimSpeed` (default 50) still
+  overshoots badly. Quick fix: lower default + recheck the aim-band curve
+  in `port/src/input.c` (the 61..80 stick push added M-24). Port-only.
+- **B4 — menu crosshair-cursor screens: PC input is wrong.** Menu screens
+  that use the crosshair cursor don't behave like a PC pointer. The
+  original front-end was PC-style "select a file with the mouse" — menu
+  input should be a **separate mode from in-game input**, not the same
+  analog-stick emulation. Needs a dedicated menu-pointer path in
+  `port/src/input.c` (absolute cursor → menu hit-test) rather than
+  feeding synthetic stick deltas. Port-only.
+- **B5 — no game save on level completion.** On the OG cartridge, finishing
+  a level writes progress to EEPROM (unlocks next mission, records
+  time/difficulty). On PC nothing is saved — progress is lost on quit.
+  This is **Phase 4** (file-backed EEPROM): `osEepromWrite/Read` are
+  currently no-op stubs; build on PD's `fs.c` (file-backed save dir). The
+  save *logic* already runs in the decomp — it just needs real backing
+  storage. Blocks any multi-session campaign playthrough.
+
 ### PC graphics settings
 
 Optional video/rendering options, modelled on the PD port (baseline) with

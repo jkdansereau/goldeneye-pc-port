@@ -169,6 +169,30 @@ through a converter or a runtime bswap fixup reads scrambled.
   Grep for `(u8)*`/`(s8)*`/`& 0xff` on a `u32`/`s32` that's really a
   serialized multi-field word — especially GBI-word and header-word reads
   that were never routed through a converter or `#ifdef PORT`.
+- **D150 — `langGet()` NULL flows into a `str*` primitive.** The watch
+  BRIEF/OBJECTIVES pages (and `front.c` mission text) build their strings with
+  `strcpy`/`strcat(buf, langGet(id))`. `langGet` returns NULL on PC for any
+  bank the current menu flow never loaded (D129/D143); N64 always resolves
+  these ids so the decomp never guards. `strcat(buf, NULL)` then derefs 0.
+  Fix = NULL-tolerant `strcpy/strncpy/strcat` under `#ifdef PORT` in `str.c`
+  (NULL src → empty string, NULL dst → return). **Gotcha:** these are
+  `__nonnull__` **builtins** to GCC — a plain `if (src == NULL)` on the
+  parameter is deleted as provably-dead (confirmed in `-Og` disassembly:
+  no `test` emitted). Launder the pointer through an empty `__asm__("":"+r"(p))`
+  (`GE_IS_NULL()`) so the guard survives. Same class as the D143 textRender
+  NULL guards. Audit any hand-rolled libc primitive in `src/` that a port
+  NULL can reach.
+- **D151 — a ROM-serialized `s32` slot decoded by the struct as `[u16 hi][u16 lo]`
+  reads zero on LE.** N64 code frequently splits a 32-bit setup-stream word into
+  `u16 reserved; u16 realvalue;` where the useful value is always small and lands
+  in the **low 16 bits of the big-endian word**. The offline converter correctly
+  `_bswap32`'s the word (it IS a 32-bit field), which puts the value in the low
+  bytes — but the struct still reads `realvalue` from the *high* offset → 0.
+  Instances: `struct watchMenuObjectiveText.text` / `struct objective_entry.text`
+  (propDef types 35 / 23) — every watch briefing + objective line rendered blank
+  (`langGet(0)` → NULL). Fix: `#ifdef PORT` widens the field to a full `u32` at
+  the word offset; converter unchanged. Grep every ROM-serialized struct for a
+  `u16 reserved`/`u16 pad` immediately before a `u16` the runtime actually reads.
 - **Python slice-assignment width is a silent corruptor** (D125):
   `out[a:a+8] = b"\x00\x00\x00\x00"` on a `bytearray` does NOT raise — it
   deletes `(8 - len(rhs))` bytes, shrinking `out` and shifting everything
@@ -310,6 +334,21 @@ a few others use it as their **only** mutual-exclusion primitive. On PC the
   what every paired restore passes, so `OS_IM_ALL` releases; other specific
   masks (`OS_IM_VI`) pass through. Safe because the decomp never blocks
   while holding `OS_IM_NONE` (N64 contract).
+- **D152 — the recursive-mutex model is fragile; it CAN deadlock.** The
+  "decomp never blocks while holding `OS_IM_NONE`" assumption fails on
+  heavy `ALEventQueue` paths: libaudio has unbalanced / early-`return`
+  `osSetIntMask` calls, and a transient thread can acquire `OS_IM_NONE`
+  and exit without the paired `OS_IM_ALL`, leaving `s_imLock` owned forever
+  → every later `alEvtq*` on `mainThread` + `amMain` blocks in
+  `pthread_mutex_lock` → hang. Seen on the **mission-failed audio
+  fade-out** (`sndSetScalerApplyVolumeAllSfxSlot` → per-frame
+  `alEvtqPostEvent` storm) = permanent black screen. **Mitigation shipped
+  (M-28):** `osSetIntMask` now tracks owner/depth under a short bookkeeping
+  mutex + condvar; a waiter blocked > 2 s **steals** the section and logs
+  the stale owner + the stealing caller's return address. Self-heals any
+  leak (worst case ~2 s audio hiccup). Proper narrow fix (dedicated
+  `ALEventQueue` lock) still owed — do it once the steal-log names the
+  leaking call site. §F D152.
 
 ## E. Process / method notes
 

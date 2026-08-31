@@ -4032,8 +4032,19 @@ struct watchMenuObjectiveText
 {
     u32                            id;
     enum WATCH_BRIEFING_PAGE       menu;
+#ifdef PORT
+    /* D151: the serialized propDefs word here is a plain s32 slot id (see
+     * assets/obseg/setup/Usetup*Z.c `propDefs[]`: `_mkword(0,_mkshort(0,35)),
+     * menu, textid, 0`).  The N64 decode `[u16 reserved][u16 text]` only reads
+     * the id because it lives in the low 16 bits of a big-endian word.  On LE
+     * the offline d88 converter bswap32's the whole word, so the id lands in
+     * `text`'s low bytes only when `text` covers the full word.  Was: watch
+     * BRIEF/OBJECTIVES + M/Q/Moneypenny pages all rendered blank (langGet(0)). */
+    u32                            text;
+#else
     u16                            reserved;
     u16                            text;
+#endif
     struct watchMenuObjectiveText *nextentry;
 };
 // PROPDEF_OBJECTIVE_x (23,24 ) - maybe not a propdef
@@ -4042,8 +4053,12 @@ struct objective_entry
 {
     u32                      id;         // 0
     enum WATCH_BRIEFING_PAGE menu;       // 4
+#ifdef PORT
+    u32                      text;       // 8  (D151: full-word slot id, see above)
+#else
     u16                      reserved;   // 8
     u16                      text;       // a
+#endif
     u16                      unkC;       // c
     u8                       unkD;       // d
     s8                       difficulty; // f
