@@ -401,6 +401,46 @@ Start, exactly like the retail game.** No crashes, no hangs. 10 commits
 - The D75 front-end / cutscene 3D-model family (D148/D149) is now the
   biggest *visible* gap but is cosmetic — below crashes.
 
+## Done this session (M-30) — user batch defect list; 3 commits + docs
+
+User playtest batch report (5 items; #1 disregarded):
+
+- **#4 main-menu hang (file-select → main menu → back → 5fps, no input, force-close).**
+  Crash log was D146 spam + `D63 [1479] from=... No stack`. **Root cause: the
+  D63 debug trail in `gfx_pc.cpp` fired ~10 `sysLogPrintf` lines + a full trail
+  walk on EVERY unknown GBI opcode, unconditionally** — on the D149 corrupt
+  front-end model DL that ran per-frame and collapsed the menu to ~5fps with
+  input starved. **FIXED `d0789358`:** stripped the D63 trail (statics,
+  per-G_DL recording, default-case dump); the rate-limited D146 "ending DL"
+  log (cap 20) stays. Headless: FILE_SELECT / MODE_SELECT / MISSION_SELECT all
+  boot + render 900+ frames clean, 0-1 D146 lines, no hang. `-level_09` 3/3
+  framediff, `-level_20` 91.6% unregressed. **User to re-verify the live
+  menu-nav transition** — the exact folder→mode→back path wasn't reproducible
+  headless, but the per-frame log flood (the "5fps no input") is gone.
+- **#2 file-select mouse only moves side-to-side.** The front-end cursor is
+  stick-driven (`frontUpdateControlStickPosition` reads `joyGetStickX/Y`); the
+  port only fed mouse-X to the stick in menus (mouse-Y → C-buttons, ignored by
+  menus). **FIXED `<menu-pointer commit>`:** `port/src/input.c` — when
+  `current_menu != MENU_RUN_STAGE` (and `!= MENU_INVALID`, so bare `-level_XX`
+  in-game aim is untouched) mouse velocity drives stick X+Y as a pointer, no
+  C-buttons / aim band, LMB=A (select) RMB=B (back). Reads the game global
+  `current_menu` for UI context only (enum MENU is ABI int) — no logic change.
+  New knob `Input.MenuPointerSpeed` (%, default 100). **User to verify feel.**
+- **#5 menu + saving for playtest.** EEPROM saves (`osEeprom*` →
+  `data/ge007.eep`, write-through, M-29 `bf5e4d3d`) audited — sound; progress
+  persists across restart *once the menu works* (#4). No change needed; verify
+  after #4.
+- **#3 "interlaced" textures** (`screenshots/interlaced texture example.jpg` —
+  Bond wallet photo + right panel show alternating-row tearing on the main
+  menu). This is `docs/TEXTURE-GLITCH-ANALYSIS.md` RC1 (G_SETTEX 0xc0 no-op —
+  the wallet-Bond model emits 2830 of them) + RC2 (mip-chain contamination).
+  **NOT fixed** — it's the §6 fix plan in that doc (G_SETTEX impl + base-LOD-
+  only upload + drop glGenerateMipmap). Real fast3d work, parked per M-29
+  priority (textures elevated but investigation/impl-gated). Next: fix-plan
+  item 1 (G_SETTEX dispatch per `rsp/graphics/gmain.s` + `gbi_extension.h`).
+- Regenerated `docs/LEVEL-OBJECTIVES.md` for all 21 solo levels (Track A);
+  committed loose reference docs/tools.
+
 ## Done this session (M-29) — race-to-release plan; audio DEFERRED; 2 commits
 
 **Direction (user, M-29):** ship the solo campaign start→finish, fastest.
