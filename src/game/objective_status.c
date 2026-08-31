@@ -195,6 +195,13 @@ OBJECTIVESTATUS get_status_of_objective(s32 objectiveNum) //#MATCH
                             {
                                 currentstatus = OBJECTIVESTATUS_INCOMPLETE;
                             }
+#ifdef PORT
+                            if (g_savelogObjOnce && getenv("GE_SAVELOG"))
+                                osSyncPrintf("SAVELOG:       DESTROY tag=%d obj=%p prop=%p healthy=%d\n",
+                                             (int)objective->ObjRefID, (void *)obj,
+                                             obj ? (void *)obj->prop : NULL,
+                                             obj ? (int)objIsHealthy(obj) : -1);
+#endif
                             break;
                         }
                         case PROPDEF_OBJECTIVE_COMPLETE_CONDITION:
