@@ -490,7 +490,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                  * C-buttons / aim band. Sign matches aim mode (down => +sy). */
                 double g = MENU_POINTER_GAIN * (menuPointerSpeed / 100.0);
                 sx += (int)(edx * g);
-                sy += (int)(dyLook * g);
+                sy -= (int)(dyLook * g);   /* front-end cursor: +sy = up */
             } else if (aimHeld) {
                 double gx = fabs(edx)    * (mouseAimSpeed / 100.0) * AIM_GAIN;
                 double gy = fabs(dyLook) * (mouseAimSpeed / 100.0) * AIM_GAIN;
