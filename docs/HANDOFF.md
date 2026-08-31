@@ -449,6 +449,21 @@ C1 (mirrored HUD — user unsure it's worth it). Full plan +
   to 6 in `frametiming.c`. **Likely fixes a whole class of post-slow-load
   transition hangs** — de-risks the Track A campaign playtest (every level
   boundary loads assets). Confidence high (stack + arithmetic agree).
+- **`d656823e`+`b4a7fc2a` D156 — Facility outro hang, 2nd occurrence, the
+  ACTUAL fix.** After D155 the user re-ran the playthrough → hung again at
+  end of Facility, same stack but `frames=12962` **frozen constant** (true
+  infinite loop, not D155's spiral). The `while(1)` at `model.c:3131`
+  (`modelSetAnimFrame2WithChrStuff`) steps one anim frame at a time from
+  `framea` to `frameb`; `frameb` = `modelTickAnim`'s accumulated `frame`. A
+  cutscene anim transition with a near-zero blend/`timespeed`/`unkb0`
+  denominator → huge/NaN `model->speed`/`playspeed` → `frameb` huge/NaN →
+  `floorFloatToInt` garbage → ~2^31 iterations. `#ifdef PORT` guards: snap a
+  non-finite/`|x|>=1e6` `frameb` to `framea`, and fall back `frame`/`frame2`
+  to the pre-loop values in `modelTickAnim`. One-shot `stderr` diagnostic
+  dumps the model speed fields when it fires. **User to re-verify the
+  Facility outro.** If it still hangs OR the diagnostic prints, the NaN
+  source is upstream (suspect a D100/D140-style misaligned `Model` field, or
+  the cutscene data). §F D155+D156, PORT-LEARNINGS §E.
 - **D153 reminder cost real time this session:** back-to-back `-level_09`
   runs during builds boot-crash under machine thrash; only regression-test on
   a settled machine (clean run = 600+ frames fine).
