@@ -512,10 +512,16 @@ User playtest batch report (5 items; #1 disregarded):
   block to the SETTILESIZE base height; GL builds correct mips from a correct
   base. Knob `Video.FixMipTextures` (=0 → old behaviour, byte-identical to
   golden). BUNKER1 side-wall textures visibly cleaner with it on; Silo
-  unregressed. **`-level_09`/`-level_20` framediff WILL show "REGRESSION" with
-  the fix on — that's the textures legitimately changing; refresh
-  `tools_pc/golden/` (`framediff.py --update`) once the user confirms the menu
-  + Depot look right.**
+  unregressed. **`-level_09` framediff phash on frames 320/440 is D117 noise,
+  not a regression** — M-30 verified: BUNKER1's intro camera pans continuously
+  for 1000+ frames and its speed varies run-to-run, so *any* fixed capture
+  frame lands on a different pan moment each run (a re-baseline attempt to a
+  "settled" 700-1000 window failed the same way — there is no static window in
+  the intro). Trust `nonclear` (coverage %, stays stable) + the 21-level sweep
+  for `-level_09`/`-level_20`; the golden phash frames are only meaningful for
+  gross breakage. Depot M-30 A/B: RC2 makes the wall panels mildly cleaner,
+  does NOT touch the ceiling blue-speckle (separate B2 light-shaft/UV bug),
+  makes nothing worse. **21/21 sweep PASS with the fix on.**
   - **Still open:** the wallet-Bond *photo* garble is RC1 / D75 front-end model
     family (the model GDL / `texLoadFromGdl` expansion is broken for front-end
     models — fast3d walks into `0xfafbfbfc` garbage, not a missing opcode).
