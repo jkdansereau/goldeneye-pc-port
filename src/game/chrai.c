@@ -33,6 +33,9 @@
 #include <random.h>
 #include <snd.h>
 #include <ultra64.h>
+#ifdef PORT
+#include <stdlib.h>
+#endif
 
 // hack? used to match as called with 2 args, but decompiled code takes 1
 extern s32 objectiveGetStatus_WEAK(s32 objectiveNum, s32);

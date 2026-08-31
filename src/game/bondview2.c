@@ -787,6 +787,14 @@ void bondviewSetCameraMode(s32 arg0)
     g_CameraMode = arg0;
     g_CameraAfterCinema = 0;
 
+#ifdef PORT
+    if (getenv("GE_D160")) {
+        osSyncPrintf("D160: bondviewSetCameraMode(%d) stage=%d IntroSwirl=%d introAnimIdx=%d caller=%p\n",
+                     (int)arg0, (int)bossGetStageNum(), (int)g_IntroSwirl,
+                     (int)g_IntroAnimationIndex, __builtin_return_address(0));
+    }
+#endif
+
     if (g_CameraMode == CAMERAMODE_INTRO)
     {
         if ((ptr_random06cam_entry != NULL) && (get_recording_ramrom_flag() == 0) && (get_is_ramrom_flag() == 0))

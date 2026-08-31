@@ -741,6 +741,11 @@ void bossReturnTitleStage(void) {
     objectivestatusDisableStatusDisplay();
 #endif
 #ifdef PORT
+    if (getenv("GE_D160")) {
+        osSyncPrintf("D160: bossReturnTitleStage ENTER stage=%d allComplete=%d caller=%p\n",
+                     (int)bossGetStageNum(), (int)objectiveIsAllComplete(),
+                     __builtin_return_address(0));
+    }
     if (getenv("GE_SAVELOG")) {
         extern int g_savelogObjOnce;
         g_savelogObjOnce = 1;

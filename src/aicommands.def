@@ -10051,6 +10051,11 @@ _AI_CMD(
 
 _AI_CMD(
     {
+#ifdef PORT
+        if (getenv("GE_D160"))
+            osSyncPrintf("D160: AI EndLevel/exit_level cmd chr=%p cameraBufferToggle=%d\n",
+                         (void *)ChrEntityp, (int)cameraBufferToggle);
+#endif
         if (cameraBufferToggle)
         {
             if (cameraFrameCounter2 == FALSE)
@@ -10172,6 +10177,10 @@ _AI_CMD(
             g_CameraLookAtBondPad = (PadRecord *) &g_CurrentSetup.boundpads[getBoundPadNum(padnum)];
         }
         set_camera_mode(CAMERAMODE_POSEND);
+#ifdef PORT
+        if (getenv("GE_D160"))
+            osSyncPrintf("D160: AI CameraLookAtBondFromPad -> POSEND\n");
+#endif
         Offset += CAT(CAT(AI_, CMDNAME), _LENGTH);
         break;
     })
@@ -10223,8 +10232,21 @@ _AI_CMD(
                 dword_CODE_bss_80079A18 = CharArrayTo16(ai->val,1);
                 dword_CODE_bss_80079A1C = CharArrayTo16(ai->val,3);
                 set_camera_mode(CAMERAMODE_POSEND);
+#ifdef PORT
+                if (getenv("GE_D160"))
+                    osSyncPrintf("D160: AI CameraSwitch tag=%d cdef=%p -> POSEND\n",
+                                 (int)ai->val[0], (void *)cdef);
+#endif
             }
+#ifdef PORT
+            else if (getenv("GE_D160"))
+                osSyncPrintf("D160: AI CameraSwitch tag=%d TagIndex<0 (no cutscene)\n", (int)ai->val[0]);
+#endif
         }
+#ifdef PORT
+        else if (getenv("GE_D160"))
+            osSyncPrintf("D160: AI CameraSwitch tag=%d NOT FOUND\n", (int)ai->val[0]);
+#endif
         Offset += CAT(CAT(AI_, CMDNAME), _LENGTH);
         break;
     })
