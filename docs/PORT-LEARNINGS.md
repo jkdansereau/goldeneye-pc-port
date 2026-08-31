@@ -299,6 +299,12 @@ through a converter or a runtime bswap fixup reads scrambled.
   nothing in fast3d; must emit `G_CLEAR_DEPTH_EXT` (D105).
 - LOD / detail mip tiles: fast3d fabricates a crop when detail textures
   are off → force base tile (D107).
+- **A CI-format tile drawn with the TLUT disabled (`G_TT_NONE`) is not a
+  palette texture** — the N64 RDP feeds the raw TMEM texel straight into the
+  colour pipe, i.e. a CI8+`G_TT_NONE` tile behaves as I8. fast3d's
+  `import_texture()` dispatched purely on `tile.fmt` and did a palette lookup
+  against a stale `rdp.palette` → garbage (D161, GE Depot ceiling = blue
+  speckle). Fix: when `rdp.palette_fmt == G_TT_NONE`, route CI4/CI8 → I4/I8.
 - K0 segment-address folds (`OS_K0_TO_PHYSICAL | 0x80000000`) and
   hand-inlined `BG_SEG_TO_PTR` need the `(u32)` 32-bit wrap the macro has
   (D58, D84).

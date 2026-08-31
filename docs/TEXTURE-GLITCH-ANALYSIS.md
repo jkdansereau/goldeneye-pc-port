@@ -204,6 +204,25 @@ is wrong (decode/swap) or just over-tall (RC2 height). Then RC2 per the
 `rdp.tex_lod`-gated plan above. G_SETTEX / D75 front-end models are a separate,
 larger track.
 
+## 6c. B2 Depot ceiling — ROOT-CAUSED + FIXED (D161, M-31)
+
+The blue-speckle + radial-ray roof was **not** RC2/RC3/RC4/filtering. `GE_TEXDUMP`
+(PPM dump of every uploaded texture + a `fmt/siz/palfmt/palidx/pal[0..3]` log
+line, both env-gated, in `gfx_pc.cpp`/`gfx_opengl.cpp`) identified the surface as
+**one 16×16 CI8 texture uploaded with `rdp.palette_fmt == G_TT_NONE`** — every
+other CI texture that frame had `palfmt == 0x8000` (RGBA16). GE draws the Depot
+roof with `gsDPSetTextureLUT(G_TT_NONE)`: a CI-siz tile with the TLUT disabled is
+a legit N64 idiom meaning "use the raw 8-bit texel as intensity" (≈ I8).
+`import_texture()` ignored `palette_fmt` for `fmt==CI` and did a palette lookup
+against a **stale `rdp.palette`** → 16×16 of blue/magenta noise; the "rays" were
+that noise aliasing on the receding ceiling plane (hence filtering never helped).
+
+**Fix:** `gfx_pc.cpp import_texture()` — `fmt_eff = (fmt==CI && palette_fmt==
+G_TT_NONE) ? I : fmt`, dispatch on `fmt_eff` (CI4→I4, CI8→I8). Narrow (only
+touches currently-garbage surfaces). Depot corridor + control-room ceilings now
+render as clean dark/grey industrial roofs; `-level_09/-30/-34` sweep PASS.
+Full write-up: §F D161.
+
 ## 7. Artifacts (in `CAPTURES_DIR`, outside repo)
 
 | File | What it is |

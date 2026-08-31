@@ -1017,7 +1017,30 @@ static void import_texture(int i, int tile, bool importReplacement) {
         }
     }
 
-    if (fmt == G_IM_FMT_RGBA) {
+    if (getenv("GE_TEXDUMP")) {
+        static int tdc = 0;
+        const uint16_t* pal = (const uint16_t*)rdp.palette;
+        sysLogPrintf(LOG_NOTE,
+            "GE_TEXI[%d] addr=%p fmt=%u siz=%u palfmt=%u palidx=%u size=%u "
+            "tile=%dx%d pal[0..3]=%04x %04x %04x %04x", tdc++, (void*)orig_addr,
+            fmt, siz, rdp.palette_fmt, palette_index, loaded_texture.size_bytes,
+            ((rdp.texture_tile[tile].lrs - rdp.texture_tile[tile].uls) >> 2) + 1,
+            ((rdp.texture_tile[tile].lrt - rdp.texture_tile[tile].ult) >> 2) + 1,
+            pal[0], pal[1], pal[2], pal[3]);
+    }
+
+    /* D161: a CI-format tile drawn with the TLUT disabled (G_TT_NONE) must NOT
+     * do a palette lookup -- the N64 RDP feeds the raw TMEM texel straight into
+     * the colour pipe, i.e. it behaves as a plain intensity (I) texture. GE's
+     * Depot ceiling emits exactly this (CI8 + gsDPSetTextureLUT(G_TT_NONE));
+     * decoding it against the stale rdp.palette produced the blue-speckle roof
+     * (docs/TEXTURE-GLITCH-ANALYSIS.md, B2). Route CI4/CI8 -> I4/I8 here. */
+    uint8_t fmt_eff = fmt;
+    if (fmt == G_IM_FMT_CI && rdp.palette_fmt == G_TT_NONE) {
+        fmt_eff = G_IM_FMT_I;
+    }
+
+    if (fmt_eff == G_IM_FMT_RGBA) {
         if (siz == G_IM_SIZ_16b) {
             import_texture_rgba16(tile, loaded_texture, rdp.tex_lod);
         } else if (siz == G_IM_SIZ_32b) {
@@ -1025,7 +1048,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
         } else {
             sysFatalError("Bad size for RGBA texture in tile %d: %02x", tile, siz);
         }
-    } else if (fmt == G_IM_FMT_IA) {
+    } else if (fmt_eff == G_IM_FMT_IA) {
         if (siz == G_IM_SIZ_4b) {
             import_texture_ia4(tile, loaded_texture, rdp.tex_lod);
         } else if (siz == G_IM_SIZ_8b) {
@@ -1035,7 +1058,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
         } else {
             sysFatalError("Bad size for IA texture in tile %d: %02x", tile, siz);
         }
-    } else if (fmt == G_IM_FMT_CI) {
+    } else if (fmt_eff == G_IM_FMT_CI) {
         if (siz == G_IM_SIZ_4b) {
             import_texture_ci4(tile, loaded_texture, rdp.tex_lod);
         } else if (siz == G_IM_SIZ_8b) {
@@ -1043,7 +1066,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
         } else {
             sysFatalError("Bad size for CI texture in tile %d: %02x", tile, siz);
         }
-    } else if (fmt == G_IM_FMT_I) {
+    } else if (fmt_eff == G_IM_FMT_I) {
         if (siz == G_IM_SIZ_4b) {
             import_texture_i4(tile, loaded_texture, rdp.tex_lod);
         } else if (siz == G_IM_SIZ_8b) {

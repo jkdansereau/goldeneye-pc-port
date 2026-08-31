@@ -695,6 +695,23 @@ static void gfx_opengl_select_texture(int tile, GLuint texture_id, bool linear_f
 }
 
 static void gfx_opengl_upload_texture(const uint8_t* rgba32_buf, uint32_t width, uint32_t height, bool gen_mipmaps) {
+#ifdef PORT
+    /* GE_TEXDUMP: PPM-dump every uploaded texture (first N) for B2/D161 triage. */
+    if (getenv("GE_TEXDUMP")) {
+        static int td = 0;
+        if (td < 400 && width && height && width < 4096 && height < 4096) {
+            char nm[128];
+            snprintf(nm, sizeof nm, "texdump/t%03d_%ux%u_mip%d.ppm", td++, width, height, (int)gen_mipmaps);
+            FILE* f = fopen(nm, "wb");
+            if (f) {
+                fprintf(f, "P6\n%u %u\n255\n", width, height);
+                for (uint32_t p = 0; p < width * height; p++)
+                    fwrite(rgba32_buf + 4 * p, 1, 3, f);
+                fclose(f);
+            }
+        }
+    }
+#endif
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba32_buf);
 	if (gen_mipmaps || current_filter_mode == FILTER_THREE_POINT) {
 		glGenerateMipmap(GL_TEXTURE_2D);
