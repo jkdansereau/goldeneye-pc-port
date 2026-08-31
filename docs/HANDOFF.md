@@ -401,7 +401,31 @@ Start, exactly like the retail game.** No crashes, no hangs. 10 commits
 - The D75 front-end / cutscene 3D-model family (D148/D149) is now the
   biggest *visible* gap but is cosmetic — below crashes.
 
-## Done this session (M-30) — user batch defect list; 3 commits + docs
+## Done this session (M-30) — user batch defect list; commits + docs
+
+### OPEN BLOCKER (M-30) — campaign progression not persisting
+User completed Dam, hit "previous" from the debrief to mission select,
+**Facility still locked**. `data/ge007.eep` has zero completion times → the
+unlock save isn't landing (or is wiped on reload). Chain:
+`bossReturnTitleStage` (`objectiveIsAllComplete()` gate) →
+`end_of_mission_briefing` (`briefingpage`/`selected_difficulty` guard) →
+`fileUnlockStageInFolderAtDifficulty` → `fileOverwriteSaveSlotWithNewSave`
+(needs a slot with `SAVEFLAG_DORESET`) → `fileWriteSave` (`fileGamePakProbe`)
+→ EEPROM; then `fileValidateSaves` CRC-checks every slot on menu re-entry and
+`fileResetSave`s any mismatch.
+**Diagnostic committed:** `GE_SAVELOG=1` env var (`#ifdef PORT`, no logic
+change) traces every link. **Next session: have the user run one Dam
+completion under `GE_SAVELOG=1` (via `tools_pc/debug.ps1`, stderr → gdb.txt)
+and read which link fails.** Leading suspects: (a) `objectiveIsAllComplete()`
+false on PC — propDef/objective decode, D126/D151 family; (b) CRC mismatch on
+reload wiping the slot — `fileGenerateCRC` / `randomGetNextFrom` on the s64
+poly; (c) no free DORESET slot. Also noted but not chased:
+`fileSetDifficultyStageTime` `offset = ((diff*20)+levelid)*10` indexes
+`times[]` up to `[98/99]` but the array is `u8 times[76]` — OOB for
+high level/difficulty combos (writes into the next slot's checksum). Not the
+Dam/Agent case (index 0) but a latent save-corruption bug.
+
+## Done this session (M-30) — user batch defect list; earlier items
 
 User playtest batch report (5 items; #1 disregarded):
 
