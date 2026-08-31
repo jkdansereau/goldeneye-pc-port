@@ -114,7 +114,6 @@
  * hide that so mouse-down looks down by default; MouseInvertY flips it. */
 #define MOUSE_TURN_GAIN     6.0   /* hipfire: raw px this poll -> stick-X counts */
 #define MOUSE_PITCH_THRESH  1.5   /* hipfire: px/poll before a C-button fires  */
-#define AIM_BAND            20    /* aim mode: usable stick range above the 60 gate */
 #define AIM_GAIN            4.0   /* aim mode: px/poll -> counts into the band  */
 #define AIM_MOVE_THRESH     0.5   /* aim mode: px/poll before the stick moves   */
 
@@ -125,7 +124,8 @@ static SDL_GameController *pads[MAX_PADS];
 
 static int mouseEnabled   = 1;
 static int mouseGrabbed   = 1;      /* released while the window is unfocused */
-static int mouseAimSpeed  = 50;     /* aim-mode sensitivity, percent */
+static int mouseAimSpeed  = 25;     /* aim-mode sensitivity, percent (B3: was 50, overshot) */
+static int aimBand        = 20;     /* aim mode: usable stick range above the 60 gate */
 static int mouseTurnSpeed = 100;    /* hipfire yaw sensitivity, percent */
 static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
 static int mouseYScale    = 100;    /* extra vertical (pitch) sensitivity, % */
@@ -471,11 +471,11 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                 double gx = fabs(edx)    * (mouseAimSpeed / 100.0) * AIM_GAIN;
                 double gy = fabs(dyLook) * (mouseAimSpeed / 100.0) * AIM_GAIN;
                 if (fabs(edx) >= AIM_MOVE_THRESH) {
-                    int m = 61 + (int)gx; if (m > 60 + AIM_BAND) m = 60 + AIM_BAND;
+                    int m = 61 + (int)gx; if (m > 60 + aimBand) m = 60 + aimBand;
                     sx += (edx > 0) ? m : -m;
                 }
                 if (fabs(dyLook) >= AIM_MOVE_THRESH) {
-                    int m = 61 + (int)gy; if (m > 60 + AIM_BAND) m = 60 + AIM_BAND;
+                    int m = 61 + (int)gy; if (m > 60 + aimBand) m = 60 + aimBand;
                     sy += (dyLook > 0) ? m : -m;   /* +stick_y = look down */
                 }
             } else {
@@ -609,6 +609,7 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
 {
     configRegisterInt("Input.MouseEnabled", &mouseEnabled, 0, 1);
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
+    configRegisterInt("Input.AimBand", &aimBand, 5, 40);
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
     configRegisterInt("Input.MouseInvertY", &mouseInvertY, 0, 1);
     configRegisterInt("Input.MouseYScale", &mouseYScale, 1, 500);

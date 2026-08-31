@@ -1567,6 +1567,13 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             // sub-region of the image (uls/ult offset + lrs/lrt window); GL
             // would wrap at the full uploaded image size instead. Pre-wrap per
             // vertex (GE/PD triangles never span more than one tile period).
+            // NOTE (SMALL-FIXES B1, DEFERRED): this block's guard is dead
+            // (`& G_TX_WRAP` == `& 0`) and its indices are OOB (`[i]` is the
+            // vertex, arrays are per-texunit [2]). Correcting it to
+            // `(cms & G_TX_CLAMP) == 0` + `[t]` activates never-run code and
+            // crashed -level_09 at boot (0 frames) -- needs the hoist-out-of-
+            // -loop rework + per-level visual verification, not an in-place
+            // one-liner. Left inert for now.
             {
                 const uint32_t tw = tex_width2[i];
                 const uint32_t th = tex_height2[i];
