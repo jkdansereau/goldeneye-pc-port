@@ -439,6 +439,16 @@ C1 (mirrored HUD — user unsure it's worth it). Full plan +
   probe** to identify what draws it (params in the brief). This is a
   RenderDoc/probe-class investigation — D114/D116 rabbit-hole family, needs
   a focused session, not inline.
+- **`7d7f5fb2` D155 — Facility outro-cutscene "hang" FIXED.** User report.
+  `waitForNextFrame()` passed `deltaFrames` unclamped; on the port
+  `osGetCount()` is wall-clock (D117) so a real-time stall at the
+  cutscene→debrief asset load (worse with a local LLM thrashing the box)
+  made it balloon to hundreds → `g_ClockTimer` huge → `modelTickAnim`
+  `while(numticks--)` × N chrs + dozens of `for(i<g_ClockTimer)` sim loops
+  → multi-second frame → heartbeat "hang" + spiral. Fix: `#ifdef PORT` clamp
+  to 6 in `frametiming.c`. **Likely fixes a whole class of post-slow-load
+  transition hangs** — de-risks the Track A campaign playtest (every level
+  boundary loads assets). Confidence high (stack + arithmetic agree).
 - **D153 reminder cost real time this session:** back-to-back `-level_09`
   runs during builds boot-crash under machine thrash; only regression-test on
   a settled machine (clean run = 600+ frames fine).
