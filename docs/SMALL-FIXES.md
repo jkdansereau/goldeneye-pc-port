@@ -156,17 +156,20 @@ the lock likely has to go inside `event.c` under `#ifdef PORT` (ABI-exception
 class, document as Dxx). Keep the self-healing lock either way until audio
 (Phase 3) lands.
 
-### B3. D120 — blood-stain hang: extend `d43_emit.py` for opcode-0x18
+### B3. D120 — blood-stain hang: extend `d43_emit.py` for opcode-0x18 — **DONE (M-30)**
 
-**Status:** guarded, not fixed (`src/game/chr.c:~3322` caps the
-`PointUsage[]` / `CollisionVertices` walk at `numVertices+8` + bounds-checks
-`index`). Blood decals may be missing/wrong; the game survives.
-
-**Root cause:** `tools_pc/d43_emit.py`'s opcode-0x18
-`ModelRoData_DisplayList_CollisionRecord` conversion is incomplete — 6 pointer
-fields widen the struct on PC, and the `PointUsage` / `CollisionVertices`
-sub-arrays' endianness + stride are not handled (only `CollisionRelatedNode`
-got the D43/D45 u32-vma treatment).
+**Status:** FIXED (`tools_pc/d43_emit.py`, commit `da98cdf1` + validation
+`4a7ab609`). The `CollisionVertices` sub-array + its `.index` /
+`CollisionRelatedNode` / `CollisionRelatedIndex` fields were already converted
+(`op24_is_collision` path). The real gap was narrower than this note assumed:
+**`PointUsage[]` was reserved in the layout pass (`add_region(puo, 2*nv)`) but
+the emit pass never wrote it → all-zero → `chr.c`'s decal walk
+`index = PointUsage[index]` cycled 0→0** (capped by the guard). Fix:
+`op24_pointusage[puo] = nv` + a byteswap loop in the emit pass. Converter now
+validates: 1469 regions / 70177 `s16` entries round-trip, every index
+< numVertices, none all-zero. The `chr.c` guard is kept as a safety net.
+**Verify:** BUNKER1 firefight — blood decals on shot guards should appear, no
+hang. Regen chain must be re-run for the sidecar to update.
 
 **Procedure:**
 1. Byte-spec the record: dump one converted guard model's opcode-0x18 region
@@ -417,14 +420,33 @@ for kernel changes. See PORT-LEARNINGS §E.
 
 ---
 
-## Suggested order if working through this list
+## Status (updated M-30)
 
-1. **A1 + A2** (verify-only; closes two open rows, ~an hour on a quiet box).
-2. **B4** (one-line default + optional knob; immediate user-facing win).
-3. **D2** (cleanup commit; keeps the tree honest).
-4. **B1** (D74 — small, self-contained, un-lats a real OOB).
-5. **B6 + B5** (menu input, one pass over the area).
-6. **B2** (needs the user's Facility replay to get the log line).
-7. **B3** (converter work; good standalone subagent brief).
-8. **C1–C4** only after crashes/levels are done (parked by priority decision);
-   C1 first — it's the most visible remaining cosmetic defect.
+- **B3 / D120** — DONE (PointUsage emit + validation).
+- **B4** — DONE (M-29 `0bd0ceec`).
+- **B5** — DONE (M-30, front-end mouse-pointer mode). **B6** — investigated,
+  the `front.c` stick checks are already edge-gated / toggle-guarded, not a
+  real over-scroll (unlike the fixed options.c watch case). No-op.
+- **RC4** (palette off-by-one, was in `C` / TEXTURE-GLITCH-ANALYSIS) —
+  RETRACTED: the current RGBA5551 decode is correct.
+- **A2 / D139** — likely closeable: M-27's Dam→Facility playthrough ran a
+  real `lvlUnloadStageTextData` → `cleanupObjects` with no teardown crash
+  after the fix. Confirm the commit landed, then close the §F row.
+- **D2 (D63 scaffolding strip)** — the `port/fast3d/gfx_pc.cpp` trail is
+  stripped (M-30 `d0789358`). The remaining `#if defined(PORT)` `GE_D63`
+  probe blocks in ~10 `src/game/*.c` files are inert but **some sibling
+  `getenv`/`static` lines nearby are NOT `#if defined(PORT)`-guarded** (e.g.
+  `bg.c:2880` `d63bgprimarycount`) — a strip pass must verify N64-build
+  safety first (Non-Negotiable #1). Low value; defer.
+
+## Suggested order for what's left
+
+1. **A1** (D154 wall-shoot GBI parser) — needs a firefight-into-a-wall
+   playtest, then close/commit.
+2. **B1** (D74 wrap-block) — the in-place fix boot-crashes; needs the
+   hoist-out-of-vertex-loop rework + per-level visual check. Cosmetic, gate
+   behind a config flag like RC2. Risky, low priority.
+3. **B2** (Depot ceiling blue-speckle) — RC2 didn't touch it; needs `GE_DTEX`
+   / RenderDoc on that specific surface. RC1 (wallet-Bond) is the D75
+   front-end-model track.
+4. **C1–C4** cosmetics — after in-level crashes / campaign playtest.
