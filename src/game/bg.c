@@ -2873,12 +2873,8 @@ void bgRoomsTickUnload(void)
  * Ensures the room's bg data is loaded if budget allows, then appends its display list.
  * Also resets the age of rendered rooms so bgRoomsTickUnload won't unload it.
 */
-static int d63bgprimarycount = 0;
-
 Gfx *bgRenderRoomPrimary(Gfx *gdl, s32 room_index)
 {
-    if (getenv("GE_D63") && (d63bgprimarycount++ % 500 == 0))
-        osSyncPrintf("D63 bgRenderRoomPrimary called count=%d room=%d\n", d63bgprimarycount, room_index);
     if (room_index >= g_MaxNumRooms)
     {
         return gdl;

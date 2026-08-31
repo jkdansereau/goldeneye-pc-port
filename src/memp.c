@@ -209,26 +209,6 @@ void *mempAllocBytesInBank(u32 bytes, u8 poolnum)
 
     if (needmemallocation);
 
-#ifdef PORT
-    /* TEMP D63: map allocations around the gun-barrel buffer base 0x7012EA38. */
-    if (getenv("GE_D63")) {
-        u8 *a = allocation;
-        if ((a >= (u8 *)0x70129000 && a < (u8 *)0x7012EA38) ||
-            (a >= (u8 *)0x7012D000 && a < (u8 *)0x7012F500)) {
-            static u32 s_seen[64];
-            static u32 s_sizes[64];
-            int i, n = 0;
-            for (i = 0; i < 64 && s_seen[i]; i++) {
-                if (s_seen[i] == (u32)a && s_sizes[i] == bytes) return allocation;
-            }
-            for (n = 0; n < 64 && s_seen[n]; n++);
-            if (n < 64) { s_seen[n] = (u32)a; s_sizes[n] = bytes; }
-            osSyncPrintf("D63 alloc %p size=%x ra=%p\n", (void *)a, bytes,
-                         __builtin_return_address(0));
-        }
-    }
-#endif
-
     return allocation;
 }
 

@@ -231,12 +231,6 @@ Gfx *sub_GAME_7F01C1A4(Gfx *gdl) {
 s32 die_blood_image_routine(s32 arg0) {
    s8 sp37;
    u8* temp_v0_2;
-#ifdef PORT
-   /* TEMP D63: catch VTX-pool overflow into the gun-barrel buffer. */
-   extern u8 *g_GfxMemPos;
-   if (getenv("GE_D63"))
-      osSyncPrintf("D63 blood-routine arg=%d mempos=%p\n", arg0, (void *)g_GfxMemPos);
-#endif
 
    if (arg0 == 0) {
       g_CurrentPlayer->bloodImgCur = die_blood_image_1;
@@ -249,12 +243,6 @@ s32 die_blood_image_routine(s32 arg0) {
    g_CurrentPlayer->bloodImgIdx = (1 - g_CurrentPlayer->bloodImgIdx);
    g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx] = dynAllocate(BLOOD_IMG_WIDTH * BLOOD_IMG_HEIGHT);
    temp_v0_2 = dynAllocate(BLOOD_IMG_WIDTH * BLOOD_IMG_HEIGHT);
-#ifdef PORT
-   if (getenv("GE_D63"))
-      osSyncPrintf("D63 blood: buf=%p temp=%p\n",
-                   (void *)g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx],
-                   (void *)temp_v0_2);
-#endif
    g_CurrentPlayer->bloodImgNxt = decrypt_bleeding_animation_data(g_CurrentPlayer->bloodImgCur, BLOOD_IMG_WIDTH, BLOOD_IMG_HEIGHT, temp_v0_2, &sp37);
    bloodImgTranspose(temp_v0_2, BLOOD_IMG_WIDTH, BLOOD_IMG_HEIGHT, g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx]);
    sub_GAME_7F01D02C(g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx], BLOOD_IMG_WIDTH, g_CurrentPlayer->bloodImgBufPtrArray[g_CurrentPlayer->bloodImgIdx]);

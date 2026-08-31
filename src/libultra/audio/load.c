@@ -23,11 +23,6 @@
 #include "synthInternals.h"
 #include <os.h>
 #include <R4300.h>
-#ifdef PORT
-/* TEMP D54 probe — delete before commit. */
-#include <stdio.h>
-#include <stdlib.h>
-#endif
 
 #ifndef MIN
 #   define MIN(a,b) (((a)<(b))?(a):(b))
@@ -364,19 +359,6 @@ alLoadParam(void *filter, s32 paramID, void *param)
     
     switch (paramID) {
         case (AL_FILTER_SET_WAVETABLE):
-#ifdef PORT
-            /* TEMP D54 probe — delete before commit. */
-            if (getenv("GE_D54")) {
-                ALWaveTable *wt = (ALWaveTable *) param;
-                fprintf(stderr, "D54 SET_WAVETABLE wt=%p base=%p len=%d type=%d book=%p\n",
-                        (void *)wt,
-                        wt ? (void *)wt->base : 0,
-                        wt ? wt->len : -1,
-                        wt ? wt->type : -1,
-                        (wt && wt->type == AL_ADPCM_WAVE) ? (void *)wt->waveInfo.adpcmWave.book : 0);
-                fflush(stderr);
-            }
-#endif
             a->table = (ALWaveTable *) param;
             a->memin = (s32) a->table->base;
             a->sample = 0;

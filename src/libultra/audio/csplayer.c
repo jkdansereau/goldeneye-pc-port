@@ -43,11 +43,6 @@
 #include "seqp.h"
 #include "cseqp.h"
 #include "cseq.h"
-#ifdef PORT
-/* TEMP D54 probe — delete before commit. */
-#include <stdio.h>
-#include <stdlib.h>
-#endif
 
 
 static ALMicroTime      __CSPVoiceHandler(void *node);
@@ -447,16 +442,6 @@ static void __CSPHandleMIDIMsg(ALCSPlayer *seqp, ALEvent *event)
 		    break;
 
                 sound = __lookupSoundQuick((ALSeqPlayer*)seqp, key, vel, chan);
-#ifdef PORT
-                /* TEMP D54 probe — delete before commit. */
-                if (getenv("GE_D54")) {
-                    fprintf(stderr, "D54 NOTEON seqp=%p chan=%d key=%d vel=%d sound=%p wt=%p inst=%p\n",
-                            (void *)seqp, chan, key, vel, (void *)sound,
-                            sound ? (void *)sound->wavetable : 0,
-                            (void *)seqp->chanState[chan].instrument);
-                    fflush(stderr);
-                }
-#endif
                 ALFlagFailIf(!sound, seqp->debugFlags & NO_SOUND_ERR_MASK,
 			 ERR_ALSEQP_NO_SOUND); 
                 
