@@ -404,6 +404,12 @@ Start, exactly like the retail game.** No crashes, no hangs. 10 commits
 ## Done this session (M-30) — user batch defect list; commits + docs
 
 ### M-30 state / next
+**⚠ Before the next playtest: `./build-pc.sh ntsc-final` AND the full sidecar
+regen** (`python tools_pc/d43_emit.py ntsc-final && python tools_pc/d69_emit.py
+ntsc-final && python tools_pc/d88_emit.py ntsc-final --regen`) — D120 changed
+`d43_emit.py` (PointUsage) and needs the regen; `debug.ps1` rebuilds the exe
+but does NOT regen sidecars. (Done on this session's machine already.)
+
 **Campaign progression + saving works (D157, user-confirmed).** The user can
 now do the full Track A playthrough — each level boundary exercises the same
 save path. `GE_UNLOCK_ALL=1` jumps to any level; `GE_SAVELOG=1` traces the
