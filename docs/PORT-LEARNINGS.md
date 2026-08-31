@@ -321,6 +321,18 @@ through a converter or a runtime bswap fixup reads scrambled.
   `import_texture()` dispatched purely on `tile.fmt` and did a palette lookup
   against a stale `rdp.palette` → garbage (D161, GE Depot ceiling = blue
   speckle). Fix: when `rdp.palette_fmt == G_TT_NONE`, route CI4/CI8 → I4/I8.
+- **RC3 / D167 — GL `GL_REPEAT` wraps at the uploaded image size; the N64 RDP
+  wraps a render tile at `1<<masks` (`= ceil(log2(dim))` for GE, `texDimensionToMask`).**
+  Equal for power-of-two textures, so this is invisible almost everywhere — but a
+  non-PoT wrapping surface (Depot's 65×65 / 96×48 room textures) repeats at the
+  next power of two on console and one image-width too soon in the port ("textures
+  repeat oddly", squashed pattern, wrong seam). fast3d didn't even keep `masks`/
+  `maskt`. Fix lives behind `Video.WrapFix` (default OFF, `GE_WRAPFIX` env
+  override): store the mask, fold the UV at `1<<mask` in the hoisted per-texunit
+  pre-wrap block, clamp the no-real-texels `[dim,1<<mask)` overflow band to the
+  edge. The overflow band is a TMEM smear on real hardware — not exactly emulable
+  in a fixed GL sampler, so this is an approximation. Any new fast3d UV/wrap work:
+  the tile `mask` fields are the wrap period, NOT the tile-window or image size.
 - K0 segment-address folds (`OS_K0_TO_PHYSICAL | 0x80000000`) and
   hand-inlined `BG_SEG_TO_PTR` need the `(u32)` 32-bit wrap the macro has
   (D58, D84).
@@ -332,8 +344,9 @@ through a converter or a runtime bswap fixup reads scrambled.
   it right with `cms == G_TX_WRAP`). And if it did run it indexes
   `tex_width2[i]` etc. (arrays `[2]`, per-texunit) with the *vertex* loop
   index `i` 0..2 → OOB. Latent; harmless for CLAMP glyphs, would matter
-  for wrapped textures on tris. Fix deferred (M-11) — logged in
-  `docs/GRAPHICS-BACKLOG.md`.
+  for wrapped textures on tris. Reworked M-30 (hoisted out of the vertex loop,
+  indexed by texunit, gated on `Video.WrapFix`); RC3/D167 adds the non-PoT
+  mask-period case to the same block. Still default OFF.
 
 ## D2. The HUD/model X-mirror (D114/D116) — DO NOT re-static-trace
 

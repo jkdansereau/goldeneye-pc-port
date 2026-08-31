@@ -18,7 +18,7 @@
 |---|-------|----------|----------|-----------|
 | RC1 | `G_SETTEX` (0xc0) is a **no-op** in fast3d | `port/fast3d/gfx_pc.cpp:2443` (`case G_NOOP`) | #3 character/model artifacts | implement the command |
 | RC2 | **Mip-chain contamination**: base + all LODs uploaded as one GL image | `src/game/tex.c:330` (`texGetDepthAndSize` sums all LODs) → `gfx_dp_load_block`/`import_texture_*` | #1, #2 noise bands, wrong scale, minification garbage | upload base level only; disable GL mips |
-| RC3 | **Wrong wrap period**: N64 wraps at `2^ceil(log2(dim))`, GL wraps at uploaded image size; D74 pre-wrap block is dead (`G_TX_WRAP == 0`, `include/PR/gbi.h:391`) | `port/fast3d/gfx_pc.cpp` UV math in `gfx_sp_tri1` + D74 guard | #1 "repeats oddly", squash/stretch on non-PoT dims | mask-based wrap period (fix D74 guard, extend to T axis) |
+| RC3 | **Wrong wrap period**: N64 wraps at `2^ceil(log2(dim))`, GL wraps at uploaded image size; D74 pre-wrap block is dead (`G_TX_WRAP == 0`, `include/PR/gbi.h:391`) | `port/fast3d/gfx_pc.cpp` UV math in `gfx_sp_tri1` + D74 guard | #1 "repeats oddly", squash/stretch on non-PoT dims | mask-based wrap period (fix D74 guard, extend to T axis) — **DONE, D167, behind `Video.WrapFix` default OFF; see §6d** |
 | RC4 | **Palette off-by-one** in `palette_to_rgba32` | `port/fast3d/gfx_pc.cpp:835` | subtle hue shift on all CI textures (grays survive; red→orange-ish, blue→cyan-ish) | 1-line-class fix per channel |
 
 ### RC1 — G_SETTEX no-op (character artifacts)
@@ -222,6 +222,28 @@ G_TT_NONE) ? I : fmt`, dispatch on `fmt_eff` (CI4→I4, CI8→I8). Narrow (only
 touches currently-garbage surfaces). Depot corridor + control-room ceilings now
 render as clean dark/grey industrial roofs; `-level_09/-30/-34` sweep PASS.
 Full write-up: §F D161.
+
+## 6d. RC3 non-PoT wrap period — IMPLEMENTED (D167, M-31), default OFF
+
+`gfx_dp_set_tile` now stores `masks`/`maskt` on the tile (was dropped). The
+hoisted per-texunit pre-wrap block in `gfx_sp_tri1` (the reworked D74 block —
+already lifted out of the vertex loop at M-30, indexed by texunit `t`) gained a
+branch: when the render tile is WRAP (no CLAMP/MIRROR) and `1<<mask != tex_width`,
+fold the UV at the N64 period `1<<mask`, then clamp the `[dim, 1<<mask)` overflow
+band (no real texels — a TMEM smear on console) to the last texel. All behind the
+existing `Video.WrapFix` knob (`GE_WRAPFIX` env overrides it for testing).
+
+**Captures** (`-level_09/-30/-34/-20`, WrapFix OFF vs ON, `GE_PCDUMP` 6-frame
+windows): no crashes, 6/6 frames each; Silo ~pixel-identical (phash 0–11),
+Facility 180–260 pixel-identical, Depot shows small localized texel changes on
+ceiling/wall cells (dmean 5–9, no structural break). Large per-run frame deltas
+are all D117 intro-camera-pan nondeterminism.
+
+**Default kept OFF** — no regression, but a headless structural diff can't confirm
+the Depot ceiling looks *better*. To finish RC3: run Depot with `Video.WrapFix=1`
+and eyeball the corrugated roof / repeating wall panels vs default; flip the
+default in `port/src/video.c` (`cfgWrapFix = 1`) if clean. The overflow-band clamp
+is an approximation of console TMEM-smear behaviour, not an exact emulation.
 
 ## 7. Artifacts (in `CAPTURES_DIR`, outside repo)
 

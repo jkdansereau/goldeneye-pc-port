@@ -56,7 +56,7 @@ static int cfgFpsCap        = 0;   /* frame cap in fps; 0 = uncapped (vsync)    
 static int cfgMSAA          = 1;   /* 1/2/4/8 samples; 1 = off                  */
 static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N64 3-point + trilinear */
 static int cfgFixMipTex     = 1;   /* RC2: clip mip-contaminated texture uploads to base height */
-static int cfgWrapFix       = 0;   /* D74: sub-tile UV pre-wrap (opt-in, never-run path) */
+static int cfgWrapFix       = 0;   /* D74 sub-tile UV pre-wrap + RC3/D167 non-PoT mask-period wrap (opt-in; GE_WRAPFIX env overrides) */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
 
 /*

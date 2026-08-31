@@ -167,6 +167,7 @@ static struct RDP {
         uint8_t fmt;
         uint8_t siz;
         uint8_t cms, cmt;
+        uint8_t masks, maskt; /* RC3: N64 tile mask; wrap period = 1<<mask */
         uint8_t shifts, shiftt;
         uint16_t uls, ult, lrs, lrt; // U10.2
         uint16_t width, height;      // in texels
@@ -1568,8 +1569,9 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             uint32_t tex_height1 = tex_height[i] << (cmt & G_TX_MIRROR);
 
             if (g_wrap_fix && !(cms & G_TX_MIRROR)) {
-                /* wrap tile (clamp bit not set) whose window is smaller than
-                 * the uploaded image -> pre-fmod the UVs at the window size. */
+                /* (a) sub-tile window: wrap tile (clamp bit not set) whose
+                 * uls..lrs window is smaller than the uploaded image -> pre-fmod
+                 * the UVs at the window size. */
                 if (!(cms & G_TX_CLAMP) && tex_width2[i] > 0 && tex_width2[i] < tex_width[i]) {
                     wrap_s[i]   = true;
                     wrap_tw[i]  = (float)tex_width2[i];
@@ -1579,6 +1581,33 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
                     wrap_t[i]   = true;
                     wrap_th[i]  = (float)tex_height2[i];
                     wrap_ult[i] = rdp.texture_tile[tile].ult / 4.0f;
+                }
+                /* (b) RC3 non-power-of-two wrap period: the N64 RDP masks the
+                 * texel coordinate at 1<<mask (GE sets mask = ceil(log2(dim)),
+                 * texDimensionToMask), so a non-PoT tile repeats at the NEXT
+                 * power of two, not at its image size the way GL GL_REPEAT does.
+                 * Fold the UV at the N64 period; the [dim, 1<<mask) overflow
+                 * band (TMEM smear on console) is clamped to the last texel so
+                 * it reads as an edge streak instead of a bogus early repeat. */
+                {
+                    uint8_t mks = rdp.texture_tile[tile].masks;
+                    uint8_t mkt = rdp.texture_tile[tile].maskt;
+                    if (!wrap_s[i] && !(cms & G_TX_CLAMP) && mks >= 1 && mks <= 14) {
+                        float period = (float)(1u << mks);
+                        if (period != (float)tex_width[i] && tex_width[i] > 0) {
+                            wrap_s[i]   = true;
+                            wrap_tw[i]  = period;
+                            wrap_uls[i] = 0.0f;
+                        }
+                    }
+                    if (!wrap_t[i] && !(cmt & G_TX_CLAMP) && mkt >= 1 && mkt <= 14) {
+                        float period = (float)(1u << mkt);
+                        if (period != (float)tex_height[i] && tex_height[i] > 0) {
+                            wrap_t[i]   = true;
+                            wrap_th[i]  = period;
+                            wrap_ult[i] = 0.0f;
+                        }
+                    }
                 }
             }
 
@@ -1681,11 +1710,18 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
                 u = fmodf(u, wrap_tw[t]);
                 if (u < 0.0f) u += wrap_tw[t];
                 u += wrap_uls[t];
+                /* RC3: when the N64 wrap period (wrap_tw) exceeds the uploaded
+                 * image width, the [width, period) band has no real texels --
+                 * clamp it to the edge rather than let GL_REPEAT restart the
+                 * image early. Never triggers for the sub-tile-window case
+                 * (wrap_tw + wrap_uls stay within tex_width). */
+                if (tex_width[t] > 0 && u > (float)tex_width[t]) u = (float)tex_width[t] - 0.5f;
             }
             if (wrap_t[t]) {
                 v = fmodf(v, wrap_th[t]);
                 if (v < 0.0f) v += wrap_th[t];
                 v += wrap_ult[t];
+                if (tex_height[t] > 0 && v > (float)tex_height[t]) v = (float)tex_height[t] - 0.5f;
             }
 
             if (!is_rect) {
@@ -2041,6 +2077,8 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
     rdp.texture_tile[tile].siz = siz;
     rdp.texture_tile[tile].cms = cms;
     rdp.texture_tile[tile].cmt = cmt;
+    rdp.texture_tile[tile].masks = masks; /* RC3 */
+    rdp.texture_tile[tile].maskt = maskt; /* RC3 */
     rdp.texture_tile[tile].shifts = shifts;
     rdp.texture_tile[tile].shiftt = shiftt;
     rdp.texture_tile[tile].line_size_bytes = line * 8;
@@ -3055,7 +3093,10 @@ extern "C" void gfx_set_mipmap_filter(enum MipmapFilteringMode mode) {
 }
 
 extern "C" void gfx_set_fix_mip_textures(int on) { g_fix_mip_textures = !!on; }
-extern "C" void gfx_set_wrap_fix(int on) { g_wrap_fix = !!on; }
+extern "C" void gfx_set_wrap_fix(int on) {
+    const char* e = getenv("GE_WRAPFIX"); /* RC3 test override */
+    g_wrap_fix = e ? (atoi(e) != 0) : !!on;
+}
 
 extern "C" int gfx_create_framebuffer(uint32_t width, uint32_t height, int upscale, int autoresize) {
     int fb = gfx_rapi->create_framebuffer();
