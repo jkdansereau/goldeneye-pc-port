@@ -341,6 +341,7 @@ def process(name):
                 vtx_regions.append((cvo, ncv)); dstpos = add_region(cvo, 16 * ncv, dstpos)
             if nv and puo:
                 dstpos = add_region(puo, 2 * nv, dstpos)
+                op24_pointusage[puo] = nv
         elif op == 22:
             nv = struct.unpack_from(">i", src, data)[0]; vo = be32o(src, data + 4)
             if nv and vo:
@@ -629,6 +630,16 @@ def process(name):
         else:
             emit_main_vtx(vo, nv, npos)
 
+    # D120: PointUsage[] -- an `s16` next-index chain (numVertices entries,
+    # negative-terminated).  Plain byteswap, no remap.
+    for puo, punv in op24_pointusage.items():
+        pnpos = remap(puo)
+        if pnpos is None:
+            errors.append(f"{name}: PointUsage {puo:#x} not in region map")
+            continue
+        for k in range(punv):
+            put_s16(pnpos + 2 * k, be16(src, puo + 2 * k))
+
     # GDLs (pack order: unvisited first, then visit order), 16B LE slots
     for g in all_gdls:
         end = gdl_end(src, D, g)
@@ -675,6 +686,11 @@ def process(name):
 
 # collision-vertex set (filled during layout; emit pass needs it)
 op24_is_collision = {}
+# D120: opcode-0x18 PointUsage arrays -> {old_off: numVertices}.  Reserved in
+# layout (add_region) but the emit pass must byteswap the s16 index chain or the
+# runtime blood-decal walk (chr.c PointUsage[index]) cycles (guarded, not fixed,
+# until now).
+op24_pointusage = {}
 
 def validate(name, src, D, NS, NT, nodes, R0, placed, all_gdls, buf, D_PC,
              regions, node_newoff, rec_newoff, gdl_newoff, remap, inv_remap):
@@ -764,6 +780,7 @@ stats["table_models"] = len(model_names)
 for name in model_names:
     # reset per-file collision set before layout (populated below)
     op24_is_collision.clear()
+    op24_pointusage.clear()
     process(name)
 
 if errors:

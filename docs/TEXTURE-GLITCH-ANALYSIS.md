@@ -63,19 +63,24 @@
   `G_TX_WRAP == 0` (`include/PR/gbi.h:391`) — dead code (already parked in
   `docs/GRAPHICS-BACKLOG.md`).
 
-### RC4 — Palette off-by-one (subtle global hue shift)
+### RC4 — Palette off-by-one — **RETRACTED (M-30): the current code is correct.**
 
-`port/fast3d/gfx_pc.cpp:835`:
+The "N64 RGBA16 spec" line below is **ARGB1555**, which is *not* what the N64 uses.
+N64 `G_IM_FMT_RGBA` / `G_IM_SIZ_16b` is **RGBA5551**: `RRRRR GGGGG BBBBB A`
+(R = bits 15-11, G = 10-6, B = 5-1, A = bit 0).
 
 ```c
-// fast3d (current):   r = v>>11;        g = (v>>6)&0x1f;  b = (v>>1)&0x1f;  a = v&1
-// N64 RGBA16 spec:    r = (v>>10)&0x1f; g = (v>>5)&0x1f;  b = v&0x1f;       a = v>>15
+// fast3d (current, CORRECT): r = v>>11; g = (v>>6)&0x1f; b = (v>>1)&0x1f; a = v&1
+// the "spec" line here was wrong: r = (v>>10)&0x1f; g = (v>>5)&0x1f; b = v&0x1f; a = v>>15
 ```
 
-Channels are read one bit off (alpha treated as LSB). Grays (r≈g≈b) survive nearly intact —
-which is why BUNKER1 looks "mostly right" (it's gray/brown) — but saturated hues shift.
-Format mapping itself was verified correct: `TEXFORMAT_RGBA16_CI8/CI4` → `G_TT_RGBA16`,
-`IA16_CI8/CI4` → `G_TT_IA16` (`src/game/image.c:71–104`).
+Both `palette_to_rgba32` (`gfx_pc.cpp:~835`) and `import_texture_rgba16`
+(`~651`) use the same RGBA5551 decode and agree with each other. The palette is
+`PD_BE16`-swapped at load (`gfx_dp_load_tlut`), so `palentry` is already
+correctly ordered. **Applying the "fix" would rotate every channel and move
+alpha to the wrong bit — do not do it.** If a hue problem is ever confirmed
+in-game, it is upstream (TLUT byte order at the converter, or a wrong
+`rdp.palette_fmt`), not this function.
 
 ## 3. Depot-specific analysis ("why blue ground, only there?")
 
