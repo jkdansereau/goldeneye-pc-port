@@ -3117,6 +3117,27 @@ void modelSetAnimFrame2WithChrStuff(Model *model, f32 framea, f32 frameb, f32 fr
                 forward = 1;
             }
 
+#ifdef PORT
+            /* D156: this loop steps the root-motion accumulation one anim
+             * frame at a time from framea to frameb. If frameb arrives NaN or
+             * blown up -- a cutscene anim whose speed/timespeed math in
+             * modelTickAnim produced a huge/non-finite model->speed, which
+             * feeds `frame` and lands here -- then floorFloatToInt(frameb)
+             * yields garbage and the loop walks ~2^31 steps -> permanent hang
+             * (seen at the Facility outro cutscene: mainThread pinned here for
+             * minutes, frames=N frozen). The animation has at most anim->unk04
+             * frames, so a valid step is tiny; if frameb is non-finite or
+             * absurd, snap it to framea (loop then does ~0 iterations) and let
+             * the single modelConstrainOrWrapAnimFrame at :3211 clamp frameb
+             * to a real frame. N64 was fixed-timestep with bounded speeds and
+             * never reached this. `!(x > -1e6 && x < 1e6)` is also true for
+             * NaN. */
+            if (!(frameb > -1.0e6f && frameb < 1.0e6f))
+            {
+                frameb = framea;
+            }
+#endif
+
             if (forward)
             {
                 curframe = floorFloatToInt(framea) + 1;
@@ -3595,9 +3616,26 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
             numticks--;
         }
 
-        if (update_chrstuff) 
+#ifdef PORT
+        /* D156: if the per-tick `frame += playspeed * speed` accumulation
+         * went non-finite or absurd (bad cutscene anim speed/timespeed math),
+         * don't let it reach modelSetAnimFrame2* -- it would drive the
+         * frame-interpolation loop for ~2^31 steps (Facility outro hang) and
+         * poison model->animframe1 for every later frame. Fall back to the
+         * pre-loop frame; the anim just holds instead of hanging. */
+        if (!(frame > -1.0e6f && frame < 1.0e6f))
         {
-            if (model->anim2 != NULL) 
+            frame = model->animframe1;
+        }
+        if (!(frame2 > -1.0e6f && frame2 < 1.0e6f))
+        {
+            frame2 = model->animframe2;
+        }
+#endif
+
+        if (update_chrstuff)
+        {
+            if (model->anim2 != NULL)
             {
                 modelSetAnimFrame2WithChrStuff(model, model->animframe1, frame, model->animframe2, frame2);
             } 

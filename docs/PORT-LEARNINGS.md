@@ -423,3 +423,19 @@ a few others use it as their **only** mutual-exclusion primitive. On PC the
   "number of elapsed ticks" value run unbounded is the same latent trap — grep
   for `g_ClockTimer` / `speedgraphframes` / `lvupdate*` consumers that loop.
   §F **D155**.
+- **D156 — a NaN / blown-up `f32` frame or speed drives an unbounded
+  frame-stepping loop → hang.** `modelSetAnimFrame2WithChrStuff`'s `while (1)`
+  (`model.c:3131`) walks one anim frame at a time from `framea` to `frameb`;
+  `frameb` comes from `modelTickAnim`'s `frame += playspeed * speed` per tick.
+  A cutscene anim transition with a near-zero blend/`timespeed`/`unkb0`
+  denominator (`model.c:3436`/`:3477`, guarded `> 0` but not against tiny
+  values) makes `model->speed`/`playspeed` huge or NaN → `frameb` huge/NaN →
+  `floorFloatToInt` garbage → ~2^31 iterations → frozen (`frames=N` constant
+  in the hang dump, distinct from D155's slowly-incrementing spiral). Fix:
+  `#ifdef PORT` finiteness+magnitude guards (`!(x > -1e6f && x < 1e6f)` also
+  catches NaN) on `frameb` before the loop and on `frame`/`frame2` before they
+  reach `model` state. **When an N64 float pipeline feeds a loop bound or an
+  array index on PC, guard it** — the console's fixed timestep + bounded
+  anim/physics data never produced the degenerate value, so the decomp never
+  checks. Suspect a misaligned `Model`/struct field (D100/D140 pun family) as
+  the NaN source before blaming the data. §F **D156**.
