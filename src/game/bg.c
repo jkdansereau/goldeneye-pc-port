@@ -3370,14 +3370,39 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
 
     gdl = (Gfx *) g_BgRoomInfo[roomnum].ptr_expanded_mapping_info;
     gdl = &gdl[point->gdlindex];
+#ifdef PORT
+    #define BGCMD(g) ((s32)(u8)(g)->dma.cmd)
+#else
+    #define BGCMD(g) (*((u8 *) (g)))
+#endif
+#ifdef PORT
+    /* D154: this room-geometry ray/hit-test is an unported N64 GBI parser --
+     * raw ((u8*)gdl)[k] / ((u32*)gdl)[i] byte/word indexing assumes the 8-byte
+     * N64 Gfx, but the room DL here is the 16-byte PC Gfx (D85 bgWidenRoomGdl +
+     * texLoadFromGdl). Same class + fix as D135 (propobj.c bgTestHitOnObj):
+     * recover the two N64 32-bit words from the low dwords of words.w0/.w1 and
+     * re-express every raw access; the G_VTX header fields go through the .dma
+     * view exactly like bgBuildRoomVtxBounds. Fires on shooting walls/floor.
+     * texturenum recovery (a KSEG0 deref 8 bytes before the texture data) is
+     * not valid for the port's converted GDLs -> return -1 like D135; it only
+     * flavours the bullet-impact decal/sound (parked with D77). */
+    vtxoff = gdl->dma.par & 0xf;
+    temp.vertices = (Vertex *)g_BgRoomInfo[roomnum].vertices;
+    vtxbase = (Vertex *)((uintptr_t)temp.vertices + ((u32)gdl->words.w1 & 0x00ffffff));
+#else
     vtxoff = ((u8 *) gdl)[1] & 0xf;
     temp.vertices = (Vertex *)g_BgRoomInfo[roomnum].vertices;
     vtxbase = (Vertex *)((s32)temp.vertices + (((u32 *)gdl)[1] & 0x00ffffff));
+#endif
     temp.roominfo = &g_BgRoomInfo[roomnum];
     bestScore = 0x7FFFFFFF;
     found = 0;
     gdl++;
+#ifdef PORT
+    op = (s8) gdl->dma.cmd;
+#else
     op = *((s8 *) gdl);
+#endif
 
     if ((op != G_VTX) && (op != ((s8) G_ENDDL)))
     {
@@ -3390,9 +3415,15 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                 bboxMin = D_80044868;
                 bboxMax = D_80044874;
                 score = dist;
+#ifdef PORT
+                idx[0] = ((s32)(((u32)gdl->words.w1 >> 16) & 0xff) / 10) - vtxoff;
+                idx[1] = ((s32)(((u32)gdl->words.w1 >>  8) & 0xff) / 10) - vtxoff;
+                idx[2] = ((s32)(((u32)gdl->words.w1      ) & 0xff) / 10) - vtxoff;
+#else
                 idx[0] = (((u8 *) gdl)[5] / 10) - vtxoff;
                 idx[1] = (((u8 *) gdl)[6] / 10) - vtxoff;
                 idx[2] = (((u8 *) gdl)[7] / 10) - vtxoff;
+#endif
                 i = 0;
                 
                 do
@@ -3450,12 +3481,12 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                         score = dist;
                         found = 1;
 
-                        if (((*((u8 *) gdl)) != G_SETTIMG) && (dist || vtxbase || 1) && (((Gfx *) local.roominfo->ptr_expanded_mapping_info) < gdl))
+                        if (((BGCMD(gdl)) != G_SETTIMG) && (dist || vtxbase || 1) && (((Gfx *) local.roominfo->ptr_expanded_mapping_info) < gdl))
                         {
                             do
                             {
                                 tcmd--;
-                                if ((*((u8 *) tcmd)) == G_SETTIMG)
+                                if ((BGCMD(tcmd)) == G_SETTIMG)
                                 {
                                     break;
                                 }
@@ -3469,8 +3500,12 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                         }
                         else
                         {
+                            #ifdef PORT
+                            texnum = -1;  /* D154: KSEG0 texnum deref invalid for converted GDLs (cf. D135) */
+#else
                             temp.word = ((u32 *) tcmd)[1] - 8;
                             texnum = *((u16 *) (temp.word | 0x80000000));
+#endif
                         }
 
                         if (check_if_imageID_is_light(texnum))
@@ -3510,6 +3545,40 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                         bboxMin2 = D_80044880;
                         bboxMax2 = D_8004488C;
 
+#ifdef PORT
+                        /* D154: G_TRI4 vertex-DMEM index nibbles, recovered
+                         * from the two N64 words (words.w0/.w1 low dwords).
+                         * N64 byte k = w0[k] for k<4 (MSB-first), w1[k-4]
+                         * for k>=4; N64 u16 j = w0/w1 halfword MSB-first. */
+                        {
+                        const u32 gw0 = (u32) gdl->words.w0;
+                        const u32 gw1 = (u32) gdl->words.w1;
+                        if (s2 == 0)
+                        {
+                            idx2[0] = ((s32)( gw1        & 0xf)) - vtxoff;   /* w1 & 0xf */
+                            idx2[1] = ((s32)((gw1 >>  4) & 0xf)) - vtxoff;   /* byte7 >> 4 */
+                            idx2[2] = ((s32)( gw0        & 0xf)) - vtxoff;   /* w0 & 0xf */
+                        }
+                        else if (s2 == 1)
+                        {
+                            idx2[0] = ((s32)((gw1 >>  8) & 0xf)) - vtxoff;   /* byte6 & 0xf */
+                            idx2[1] = ((s32)((gw1 >> 12) & 0xf)) - vtxoff;   /* u16[3] >> 12 */
+                            idx2[2] = ((s32)((gw0 >>  4) & 0xf)) - vtxoff;   /* byte3 >> 4 */
+                        }
+                        else if (s2 == 2)
+                        {
+                            idx2[0] = ((s32)((gw1 >> 16) & 0xf)) - vtxoff;   /* u16[2] & 0xf */
+                            idx2[1] = ((s32)((gw1 >> 20) & 0xf)) - vtxoff;   /* byte5 >> 4 */
+                            idx2[2] = ((s32)((gw0 >>  8) & 0xf)) - vtxoff;   /* byte2 & 0xf */
+                        }
+                        else
+                        {
+                            idx2[0] = ((s32)((gw1 >> 24) & 0xf)) - vtxoff;   /* byte4 & 0xf */
+                            idx2[1] = ((s32)((gw1 >> 28) & 0xf)) - vtxoff;   /* w1 >> 28 */
+                            idx2[2] = ((s32)((gw0 >> 12) & 0xf)) - vtxoff;   /* u16[1] >> 12 */
+                        }
+                        }
+#else
                         if (s2 == 0)
                         {
                             idx2[0] = (((u32 *) gdl)[1] & 0xf) - vtxoff;
@@ -3534,6 +3603,7 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                             idx2[1] = (((u32 *) gdl)[1] >> 28) - vtxoff;
                             idx2[2] = (((u32) ((u16 *) gdl)[1]) >> 12) - vtxoff;
                         }
+#endif
 
                         i = 0;
 
@@ -3588,12 +3658,12 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                                 score = dist;
                                 found = 1;
 
-                                if (((*((u8 *) gdl)) != G_SETTIMG) && (dist || vtxbase || 1) && (((Gfx *) local.roominfo->ptr_expanded_mapping_info) < gdl))
+                                if (((BGCMD(gdl)) != G_SETTIMG) && (dist || vtxbase || 1) && (((Gfx *) local.roominfo->ptr_expanded_mapping_info) < gdl))
                                 {
                                     do
                                     {
                                         tcmd--;
-                                        if ((*((u8 *) tcmd)) == G_SETTIMG)
+                                        if ((BGCMD(tcmd)) == G_SETTIMG)
                                         {
                                             break;
                                         }
@@ -3607,8 +3677,12 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                                 }
                                 else
                                 {
+                                    #ifdef PORT
+                                    texnum = -1;  /* D154: KSEG0 texnum deref invalid for converted GDLs (cf. D135) */
+#else
                                     temp.word = ((u32 *) tcmd)[1] - 8;
                                     texnum = *((u16 *) (temp.word | 0x80000000));
+#endif
                                 }
 
                                 if (check_if_imageID_is_light(texnum))
@@ -3643,10 +3717,17 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
             }
 
             gdl++;
+#ifdef PORT
+            op = (s8) gdl->dma.cmd;
+#else
             op = *((s8 *) gdl);
+#endif
         }
         while ((op != G_VTX) && (op != ((s8) G_ENDDL)));
     }
+#ifdef PORT
+    #undef BGCMD
+#endif
 
     return found;
 }

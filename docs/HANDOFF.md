@@ -458,6 +458,22 @@ clean. Still OPEN: the exact leaking call site (read it from the next
 fires, `addr2line` the logged caller.
 Separate minor gap: no crouch keybind (BACKLOG B3/B4).
 
+### D154 (WRITTEN, UNVERIFIED, UNCOMMITTED) — `bg.c` room hit-test GBI parser port
+`bgTestRayIntersectionInRoom` (`src/game/bg.c:3331`) is the D135 sibling the
+docs kept flagging: an unported N64 GBI parser (`((u8*)gdl)[k]` / `((u32*)gdl)[i]`
+byte/word indexing) walking the 16-byte PC room DL as if it were 8-byte N64
+`Gfx`. Fires on **shooting walls/floor** (`bgTestBulletHitBackground`), which no
+level-sweep exercises. Ported under `#ifdef PORT` (N64 path verbatim under
+`#else`): header fields via the `.dma` view like `bgBuildRoomVtxBounds`; G_TRI1
++ G_TRI4 vertex-index nibbles recovered from `(u32)gdl->words.w0/.w1`
+(derivation table cross-checked twice); `texturenum` -> -1 like D135 (KSEG0
+deref invalid for converted GDLs; only flavours the impact decal/sound, D77).
+Builds clean. **NOT verified** — a no-input capture never calls this function,
+so it needs a real firefight into a wall on an **idle** machine; couldn't get a
+clean run this session (D153/driver-crash under machine thrash — see below).
+Next session: build, `-level_09`, fire at a wall, confirm no crash + `-level_09`
+framediff green, then commit. §F **D154**.
+
 ### D153 — `-level_09` frame ~900 crash = load flakiness, NOT a bug (closed)
 Chased for ~30 min in M-28: `-level_09` crashed `0xc0000005` at a
 nondeterministic frame 900↔1400, 6/6 runs — **but every one was while the
