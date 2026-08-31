@@ -63,6 +63,38 @@ except `bg.c`'s `GE_D63` lines which are not `#ifdef PORT`-guarded).
   D114/D116 HUD/text X-mirror (**DO NOT re-static-trace** — see
   PORT-LEARNINGS §D2), D74 dead wrap-block.
 
+## Done this session (M-31/M-32) — 6-agent parallel burst #2 (2026-08-31)
+
+6 worktree subagents, files partitioned; 5 merged to `master`
+(`0c918ab4`..`1753ac7a` cherry-picked, then a reconciliation commit).
+Combined tree builds clean (240/240); `-level_09`/`-level_20` render
+crash-free (framediff phash = documented D117 intro-pan noise, nonclear
+coverage stable to 0.04pp); 6/6 texture-heavy levels (Depot/Facility/
+Runway/Archives/Streets/Caverns) boot+render+no-crash.
+
+| Item | Result | Verified |
+|---|---|---|
+| **D154** (`bg.c`) | Existing wall-shoot GBI-parser port was mostly right, but `vtxoff = gdl->dma.par & 0xf` was **always 0** — the PC `Gdma_le` shim maps `.par` to word0 bits 0-23 (packed length), not the N64 params byte. Fixed → `((u32)gdl->words.w0 >> 16) & 0xf`. Also ported a sibling raw parser: `bgTestBulletHitBackground` G_SETTILE back-scan (~3841). `GE_D154=1` diag added. | build 242/242; **playtest-gated** (needs firefight into a wall on an idle machine) |
+| **D152+** (`snd.c`, `libultra.c`) | Audit: every compiled-audio `osSetIntMask(OS_IM_NONE)` is **balanced** — the §F "unbalanced early-return" guess was wrong. Real fixes: `sndSetSfxSlotVolume` now holds the mask across its `ALSoundState` walk (matches its twin `sndDeactivateAllSfxByFlag`) + `sndApplyVolumeAllSfxSlot` batches its loop under one recursive hold (kills the mission-failed fade lock-storm); `portThreadWrapper` → `imThreadExitRelease()` releases an orphaned lock on thread exit (kills the transient-thread-died leak + pthread-id-reuse re-wedge). Steal-lock kept as backstop. | build 240/240; `-level_09/-20` crash-free; **fade-out repro playtest-gated** |
+| **RC3 / D167** (`gfx_pc.cpp`) | fast3d never stored the N64 tile `mask` — wrapped every repeating texture at GL image size, not `1<<mask` (wrong period on Depot's 65×65 / 96×48 surfaces). Fixed behind `Video.WrapFix` (**default OFF** = byte-identical to golden). `GE_WRAPFIX=0/1` override. | per-level captures clean, no regression; **needs a human eyeball on Depot with `Video.WrapFix=1` before default-on** |
+| **D75** (docs) | Option (a) — D73 gu/float-endian scope gap — **ruled out** (`gu/*` + `matrixmath.c` fully endian-clean; Rareware logo exercises the whole path and renders fine). Two independent bugs: Bug 1 (logo misplaced, photo 180°) = the parked D114/D116 fast3d mirror; Bug 2 (gun-barrel/cast models **absent**) = independent, likely `model->render_pos` → transient `dynAllocate` arena (D115 item #5). Needs a runtime probe. | write-up only |
+| **D160 / D148** (docs) | "propDef command-index walk desync" hypothesis **DISPROVEN** — exhaustive static trace: every record type Dam emits has `converter PC bytes == sizepropdef()×4`, stream tiles byte-exact, walk in lockstep, all 21 levels clean. Dam rappel cutscene is runtime AI-script / `CAMERAMODE_POSEND` cinematic render (D75 family). `GE_D160=1` diag already ships. | needs live Dam-to-exit playthrough |
+| **Docs** | `TEXTURE-GLITCH-ANALYSIS.md` §0 status table reconciled (RC2 FIXED / RC4 RETRACTED / D159+D161 FIXED / RC3 done-behind-knob); new `docs/GE-ENV-PROBES.md` (full env-var table); GE_D63 strip-safety checklist (all inert; only `bg.c:2876/2880` is a bare non-PORT `static` + entry log worth deleting for N64 hygiene). | — |
+
+**Worktree-harness note:** 3 of the 6 agent worktrees were created from a
+**stale commit** (`0a4b3bae`, ~30 behind); a mid-flight `git reset --hard
+master` per agent recovered them. Watch for this on future bursts — check
+each agent's HEAD in its first report.
+
+### Next
+- **D75 Bug 2** — runtime `GE_PCDUMP` + capped probe on the front-end
+  animated-model `render_pos` / `dynAllocate` path (the one in-scope lead).
+- **RC3** — eyeball Depot with `Video.WrapFix=1`, flip `cfgWrapFix=1` in
+  `port/src/video.c` if clean.
+- **D154 / D152+ / D160** — all playtest-gated; verify during the campaign
+  playthrough (wall-shoot / mission-fail / Dam exit).
+- Strip the `bg.c:2876/2880` bare D63 entry log.
+
 ## Done this session (M-12) — 2 commits
 
 - **WS1 / D121 (`02c12068`)** — bare `./build-pc/ge007.x86_64.exe

@@ -239,6 +239,17 @@ through a converter or a runtime bswap fixup reads scrambled.
   candidate (same family as the K0-fold and interrupt-mask shims), not game
   logic — audit `image.c` / `tex.c` for others (`texAlignIndices` row padding is
   load-bearing and must stay; the swap is not).
+- **D160 — a "propDef command-index walk desync" is only possible when `sizepropdef()`
+  and the offline converter disagree on a record size.** Since D122/D126/D132 closed
+  every gap, `d88_propdefs.PROPDEF_PC_BYTES[t] == sizepropdef()×4` for all 48 types,
+  the propDef stream tiles byte-exactly, and `setupGetPtrToCommandByIndex` /
+  `tagGetCommandIndex` (`object = sizepropdef(object)+object`, `sizeof(PropDefHeaderRecord)==4`)
+  walk in lockstep with the converter. Before hypothesising a propDef walk desync for a
+  new symptom (M-31 exhaustively re-verified: every record type, all 21 levels,
+  byte-exact tiling), run the stride cross-check first — if it's clean, the bug is
+  elsewhere. The Dam rappel cutscene (D148) reached this wall: data path proven intact;
+  residual cause is runtime AI-script control-flow / `CAMERAMODE_POSEND` cinematic
+  render (D75 family). `GE_D160=1` diagnostic ships; needs a live Dam-to-exit playthrough.
 - **D151 — a ROM-serialized `s32` slot decoded by the struct as `[u16 hi][u16 lo]`
   reads zero on LE.** N64 code frequently splits a 32-bit setup-stream word into
   `u16 reserved; u16 realvalue;` where the useful value is always small and lands
