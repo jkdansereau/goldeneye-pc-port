@@ -100,6 +100,20 @@
 #define MAX_PADS            4
 #define STICK_DEADZONE      7000
 #define STICK_MAX          80
+
+/* Front-end pointer mode: GE's menu cursor ("crosshair") is stick-driven
+ * (front.c frontUpdateControlStickPosition reads joyGetStickX/Y and
+ * integrates a screen position). During a running stage current_menu ==
+ * MENU_RUN_STAGE (11, src/bondconstants.h enum MENU); every other value is
+ * a front-end / briefing / debrief / cheat screen where the mouse should
+ * feel like a pointer, not a look-axis. We read the game global directly
+ * (enum MENU is ABI int) -- UI-context only, no logic change.
+ * MENU_INVALID (-1) means the front end never ran (bare -level_XX boot):
+ * treat that as in-game so direct-launch mouse-look is unaffected. */
+extern int current_menu;
+#define GE_MENU_RUN_STAGE  11
+#define GE_MENU_INVALID    (-1)
+#define MENU_POINTER_GAIN  1.5
 #define TRIG_THRESHOLD     (30 * 256)
 #define RSTICK_THRESHOLD   0x4000
 /* Mouse-look tuning. GE's aim model is mode-dependent (bondview2.c
@@ -127,6 +141,7 @@ static int mouseGrabbed   = 1;      /* released while the window is unfocused */
 static int mouseAimSpeed  = 25;     /* aim-mode sensitivity, percent (B3: was 50, overshot) */
 static int aimBand        = 20;     /* aim mode: usable stick range above the 60 gate */
 static int mouseTurnSpeed = 100;    /* hipfire yaw sensitivity, percent */
+static int menuPointerSpeed = 100;  /* front-end cursor speed, percent */
 static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
 static int mouseYScale    = 100;    /* extra vertical (pitch) sensitivity, % */
 static int mouseSmoothing = 0;      /* 0 = raw; 1..90 = low-pass strength (%) */
@@ -410,6 +425,8 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
     if (idx == 0) {
         const Uint8 *ks = SDL_GetKeyboardState(NULL);
         Uint32 mb = mouseEnabled ? SDL_GetMouseState(NULL, NULL) : 0;
+        int menuMode = (current_menu != GE_MENU_RUN_STAGE &&
+                        current_menu != GE_MENU_INVALID);
 
         /* GE default control (1.1): stick Y = move fwd/back, stick X = turn,
          * C-left/right = sidestep, C-up/down = look. FPS layout: W/S move,
@@ -467,7 +484,14 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
 
             double dyLook = edy * invert;   /* >0 => look down */
 
-            if (aimHeld) {
+            if (menuMode) {
+                /* Front-end pointer: drive the menu cursor on both axes from
+                 * mouse velocity (returns to rest when the mouse stops), no
+                 * C-buttons / aim band. Sign matches aim mode (down => +sy). */
+                double g = MENU_POINTER_GAIN * (menuPointerSpeed / 100.0);
+                sx += (int)(edx * g);
+                sy += (int)(dyLook * g);
+            } else if (aimHeld) {
                 double gx = fabs(edx)    * (mouseAimSpeed / 100.0) * AIM_GAIN;
                 double gy = fabs(dyLook) * (mouseAimSpeed / 100.0) * AIM_GAIN;
                 if (fabs(edx) >= AIM_MOVE_THRESH) {
@@ -483,6 +507,13 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                 if (dyLook >= MOUSE_PITCH_THRESH)       button |= GE_CONT_E; /* C-up = look down */
                 else if (dyLook <= -MOUSE_PITCH_THRESH) button |= GE_CONT_D; /* C-down = look up */
             }
+        }
+
+        if (menuMode && mouseEnabled) {
+            /* Clicks are select / back in the front end, not fire / aim. */
+            button &= ~(GE_CONT_G | GE_CONT_R);
+            if (mb & SDL_BUTTON(SDL_BUTTON_LEFT))  button |= GE_CONT_A;
+            if (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) button |= GE_CONT_B;
         }
 
         mouseDX = 0.0;
@@ -611,6 +642,7 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
     configRegisterInt("Input.AimBand", &aimBand, 5, 40);
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
+    configRegisterInt("Input.MenuPointerSpeed", &menuPointerSpeed, 10, 500);
     configRegisterInt("Input.MouseInvertY", &mouseInvertY, 0, 1);
     configRegisterInt("Input.MouseYScale", &mouseYScale, 1, 500);
     configRegisterInt("Input.MouseSmoothing", &mouseSmoothing, 0, 90);
