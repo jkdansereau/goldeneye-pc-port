@@ -26,6 +26,10 @@
 #include "title2.h"
 #include "title3.h"
 
+#ifdef PORT
+#include <stdlib.h>
+#endif
+
 
 extern signed short sins(unsigned short x);
 
@@ -266,6 +270,22 @@ Gfx *sub_GAME_7F007F30(Gfx *gdl, s32 count, Mtxf *matrix)
     renderData.zbufferenabled = FALSE;
     renderData.gdl = gdl;
     renderData.flags = 1;
+#ifdef PORT
+    {
+        extern u8 *g_GfxMemPos;
+        static int s_d75n = 0;
+        if (getenv("GE_D75") && s_d75n < 8) {
+            osSyncPrintf("D75 gb#%d chrMI=%p obj=%p nMtx=%d rp=%p | gunMI=%p obj=%p nMtx=%d rp=%p | mtxlist=%p gfxpos=%p o2p(rp_chr)=%08x\n",
+                s_d75n, chrModelInstance, chrModelInstance->obj,
+                (int)chrModelInstance->obj->numMatrices, chrModelInstance->render_pos,
+                gunModelInstance, gunModelInstance->obj,
+                (int)gunModelInstance->obj->numMatrices, gunModelInstance->render_pos,
+                renderData.mtxlist, (void *)g_GfxMemPos,
+                (unsigned)osVirtualToPhysical(chrModelInstance->render_pos));
+            s_d75n++;
+        }
+    }
+#endif
     drawjointlist(&renderData, entry);
 
     renderData.flags = 2;

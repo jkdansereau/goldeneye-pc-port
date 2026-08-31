@@ -33,12 +33,12 @@ Two classes:
 | Env var | File:line | Finding / what it logged | Status |
 |---|---|---|---|
 | `GE_D51` | `port/src/libultra.c:496`, `src/game/model.c:125,244,544` | msgQ 32-slot overflow watch / ModelSlot layout | dead (D51 closed) |
-| `GE_D54` | `src/libultra/audio/seqplayer.c:468`, `load.c:369`, `csplayer.c:452` | music seq-table ABI / endianness (`ALMidiHdr`) | dead (D54 closed) |
+| `GE_D54` | — (all blocks stripped M-32, commit `49ce620a`) | music seq-table ABI / endianness (`ALMidiHdr`) | dead (D54 closed) — fully removed |
 | `GE_D56` | `src/game/model.c:227,830` | watch `Model` raw-offset reads | dead (D56 closed) |
 | `GE_D60` | `port/src/libultra.c:521,735` | gfx frame msgQ delivery trace | dead (D60 closed) |
 | `GE_D61` | `port/src/libultra.c:795` (`s_d61opened`) | opens a one-shot log file | dead (D61 closed) |
 | `GE_D62` | `port/src/libultra.c:477` | osRecvMesg trace | dead (D62 closed) |
-| `GE_D63` | `src/memp.c:214`, `src/game/bg.c:2525,2880,2908,2953`, `blood_animation.c:237,253`, `dyn.c:103,150`, `front.c:1410,1416,7814,7889,8083,8091,8099,8366`, `image.c:2453`, `language.c:431`, `model.c:4340`, `rsp.c:234,286`, `title.c:607` | gun-barrel sub-DL clobber hunt (D63/D64/D65/D66 — the labels drift within the blocks). **Also `port/fast3d/gfx_pc.cpp` had a D63 branch-trail — stripped M-30, commit `d0789358`.** | dead (D63 closed) — **strip candidate**, see §3 assessment in the session report / PORT-LEARNINGS §E. NB `bg.c:2876/2880` are **not `#ifdef PORT`-guarded** |
+| `GE_D63` | remaining: `src/game/bg.c:2525,2908,2953`, `front.c:1410,1416,7814,7889,8083,8091,8099,8366`, `image.c:2453`, `language.c:431`, `model.c:4340`, `title.c:607` | gun-barrel sub-DL clobber hunt (D63/D64/D65/D66 — the labels drift within the blocks). Stripped M-30 (`d0789358`, `gfx_pc.cpp` trail). Stripped M-32 (`49ce620a`): `memp.c`, `bg.c:2880` (incl. the bare non-PORT `d63bgprimarycount` static + entry log), `blood_animation.c`, `dyn.c`, `rsp.c`. **Remaining blocks are all `#ifdef PORT` + getenv-guarded and inert — strip candidates for a later pass.** | dead (D63 closed) — partially removed |
 | `GE_D69` | `src/game/ob.c:165,227` | stage-load (D69) object trace | dead (D69 closed) |
 | `GE_D69BB` | `src/game/bg.c:2460,2479,3020` | D69 bg-binary layout trace | dead |
 | `GE_D69STAN` | `src/game/stan.c:266,276` | D69 stan-tile trace | dead |
@@ -47,19 +47,18 @@ Two classes:
 | `GE_D86` | `src/game/model.c:6295`, `src/game/objecthandler_2.c:143` | D86 model rwdata trace | dead (D86 closed) |
 | `GE_D87` | `src/game/ramromreplay.c:296,363,381` | D87 `ramromfilestructure` endianness | dead (D87 closed) |
 | `GE_D88` | `src/game/prop.c:1367`, `src/game/stan.c:3090` | D88 `Usetup*Z` propDef stream | dead (D88 family closed; D88.4 resolved) |
-| `GE_D90` | `src/game/bondview_r.c:190,474`, `src/game/bondview2.c:2146`, `src/game/prop.c:1391` | D90 bondview / prop NULL trace | dead (D90 closed) |
+| `GE_D90` | remaining: `src/game/bondview2.c:2146`, `src/game/prop.c:1391` (bondview_r.c blocks stripped M-32, `49ce620a`) | D90 bondview / prop NULL trace | dead (D90 closed) — partially removed |
 | `GE_D96` | `src/game/chrprop.c:436,507` (cached `probe`) | D96 chrprop trace | dead (D96 closed) |
 | `GE_D104` | `src/game/bg.c:654` (rate-limited, `d104c`) | D104 depth-clear trace | dead (D104 closed) |
 | `GE_D71LOG` | `port/fast3d/gfx_pc.cpp:645` | D71 fast3d trace | dead (D71 closed) |
+| `GE_D75` | `src/game/title.c` `sub_GAME_7F007F30` (capped 8) | D75 Bug 2 gun-barrel model probe: logs `chrModelInstance`/`gunModelInstance` ptr+obj+numMatrices, `render_pos`, `renderData.mtxlist`, `g_GfxMemPos`, `osVirtualToPhysical(render_pos)` | **LIVE** (D75 Bug 2 OPEN — see §F "D75 Bug 2 — RUNTIME PROBE") |
 
 ## Notes
 
-- `GE_D63` in `bg.c` at lines 2876 (`static int d63bgprimarycount = 0;`) and
-  2880-2881 (`if (getenv("GE_D63") && (d63bgprimarycount++ % 500 == 0))`) is
-  **outside any `#ifdef PORT`** — it currently compiles into the N64 build
-  path too. Every other `GE_D63` block is `#ifdef PORT` / `#if defined(PORT)`
-  wrapped. When these are stripped, that one needs the whole 3-line span
-  removed, not just an inner block.
+- The bare non-`#ifdef PORT` `GE_D63` block in `bgRenderRoomPrimary`
+  (`d63bgprimarycount` static + entry log, was ~`bg.c:2876/2880`) was
+  removed M-32 (`49ce620a`). Every remaining `GE_D63` block is
+  `#ifdef PORT` / `#if defined(PORT)` wrapped and inert.
 - `[Debug]` ini keys (`Debug.FrameDump`, `Debug.InputLog`) mirror
   `GE_PCDUMP` / `GE_INPUTLOG` as a fallback (env var wins) — M-26,
   `port/src/config.c`.

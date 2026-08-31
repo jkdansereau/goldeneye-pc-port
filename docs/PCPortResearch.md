@@ -802,7 +802,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D59–D68 | intro render: blood-RLE clobber, DMA validate, OSMesgQueue, HEADS/BODIES sentinels, romCopy width, image_entry, Globalimagetable BE→LE | resolved |
 | D69 · D78–D84 | stage load (`load_bg_file`): bg/stan offline sidecar (`d69_emit.py`) + StandTile/bg_room_data ABI | resolved |
 | D70–D74 | intro-logo pixels: C-array bswap, UV path, sinf/cosf `DVAL()`, texture-import truncation | resolved |
-| D75 · D77 | front-end 3D model transforms · audio | OPEN (parked). **M-32 triage (see §F "D75 ADDENDUM"): (a) D73-scope-gap RULED OUT (gu tree fully endian-clean). Splits in two: Bug 1 = logo/photo transform = the parked D114/D116 fast3d viewport mirror (not game code). Bug 2 = absent animated models = category (b), lead suspect `render_pos`=transient `dynAllocate` arena (D115 MED #5), in-scope fix candidate.** |
+| D75 · D77 | front-end 3D model transforms · audio | OPEN (parked). **M-32 triage (see §F "D75 ADDENDUM"): (a) D73-scope-gap RULED OUT (gu tree fully endian-clean). Splits in two: Bug 1 = logo/photo transform = the parked D114/D116 fast3d viewport mirror (not game code). Bug 2 = absent animated models = category (b). M-32b runtime probe (`GE_D75=1`): `render_pos`/`dynAllocate`-arena hypothesis RULED OUT (render_pos valid + fresh each frame), model instances valid (nMtx 21/1), zero fast3d DL warnings — failure is downstream in `drawjointlist`/`dotube` vtx/node-DL resolution or an off-screen `basemtx`. Needs a drawjointlist-level probe.** |
 | D76 · D164 | disclaimer/legal screen only draws line 1 — **root-caused (M-31)**: `constructor_menu00_legalscreen` text loop bounds `legal_text_end` on `&legalscreen_MRD`, a linker-adjacency assumption that mingw breaks (`legalscreen_MRD` links 0x60 *before* `legalpage_text_array`) → `do{}while(ptr<end)` runs once. NOT an image-table bug (screen references zero `sImageTableEntry`). | fix proposed (not applied — `front.c` owned by another agent) |
 | D159 | front-end wallet-Bond photo "interlaced"/combed (RC1 / D149) — `texSwapAltRowBytes` odd-row 8-byte pre-swap (N64 RDP odd-line TMEM XOR compensation) not reversed by fast3d | FIXED (`#ifdef PORT` no-op the swap in `image.c`) |
 | D161 | Depot (`-level_30`) ceiling = bright-blue speckle + radial rays (B2). A CI8 tile drawn with `gsDPSetTextureLUT(G_TT_NONE)` was decoded against the stale `rdp.palette` → garbage. Fix: `#ifdef`-free narrow route CI→I when `palette_fmt == G_TT_NONE` in `gfx_pc.cpp import_texture()`. | FIXED (`port/fast3d/gfx_pc.cpp`) |
@@ -2656,6 +2656,54 @@ real, in-scope lead at `title.c:220` `(s32)&symbol` truncation +
 `render_pos`=`dynAllocate` arena lifetime — next session should build with a
 `#ifdef PORT` `(uintptr_t)` cast there and a capped probe, not a static pass.
 Confidence overall: **medium** (triage solid, no runtime confirmation).
+
+**D75 Bug 2 — RUNTIME PROBE (session M-32b, `GE_D75=1` in `title.c`
+`sub_GAME_7F007F30`, kept env-gated).** Booted the bare front end
+(`GE_D75=1 GE_PCDUMP="1-1200:120"`, no `-level`) and captured through the
+gun-barrel sequence. Findings:
+
+- **Visually confirmed:** the gun-barrel spiral circles (2D backdrop DL)
+  render fine; the animated **Bond chr model AND the gun model are
+  entirely absent** — no silhouette, no muzzle. `chrModelInstance`
+  (`obj=0x14012da80`, `numMatrices=21`) and `gunModelInstance`
+  (`obj=0x140148620`, `numMatrices=1`) are **both non-NULL with valid
+  `obj` pointers and sane matrix counts** — so mechanism (2) "model file
+  not loaded / manifest row missing" is **ruled out**.
+- **`render_pos` is NOT stale / clobbered — mechanism (1) as stated is
+  ruled out.** Per-frame `chrModelInstance->render_pos` alternates cleanly
+  between `0x700a8f10` and `0x700a3f10` (delta `0x5000` = the double-buffer
+  swap). On each frame `render_pos` == the `renderData.mtxlist` base that
+  `dynAllocate(21<<6)` returned *that same frame* (`gfxpos 0x700a9490` −
+  `0x540` chr − `0x40` gun = `0x700a8f10` exactly), i.e. it points at the
+  freshly-`subcalcmatrices`-written matrices, exactly as on N64. It is a
+  real low-DRAM (`0x700xxxxx`) address; `osVirtualToPhysical(render_pos)`
+  returns it **unchanged** (no D131 truncation). Nothing overwrites the
+  arena between the write and the draw within the frame.
+- **fast3d logs ZERO DL warnings** during the whole sequence (no
+  "ending DL" / unknown-opcode / `fast3d_ptr_ok` / bad-matrix-substitution
+  lines) — so Bug 2 is **not** the D144/D146 corrupt-front-end-sub-DL
+  family either. The Bond/gun DL is submitted and consumed silently but
+  emits no visible geometry.
+- Mechanism (3), the `(s32)&ANIM_DATA_bond_eye_fire` truncation, was not
+  the probe's focus but the model has valid matrices regardless, so a
+  broken anim would at worst freeze a pose, not delete the model.
+
+**Where that leaves Bug 2:** the failure is **downstream of matrix setup**
+— inside `drawjointlist` / `modelRenderNodeDl` / `dotube` for these
+title-screen `Model` instances: either the joint **vertex / node-DL
+segmented-pointer resolution** produces no tris, or the model is
+transformed off-screen / to zero scale by `renderData.basemtx`
+(`= matrix` from `manipulateGunbarrelAndLogoMatrices`, which folds
+compiled DL pointers through `OS_K0_TO_PHYSICAL` at `title.c:121/123/138`
+— a D58/D84-class `(u32)`-wrap candidate, though the backdrop DLs it
+feeds *do* render). **Next probe:** inside `drawjointlist`/`dotube` at the
+gun-barrel frame, log the resolved `vtx`/`nodeDl` pointers and whether
+`modelRenderNodeDl` emits any `gSPVertex`/`gSP1Triangle`, plus the
+composed `basemtx * render_pos` for joint 0 (is it in the view frustum?).
+Confidence the cause is joint vtx/DL resolution vs off-screen transform:
+**low** — needs the drawjointlist-level probe. The `render_pos`-arena
+in-scope fix hypothesised above is **no longer the lead** — do not land a
+persistent `render_pos` buffer, it would not change anything.
 
 **D76 (OPEN: 2D graphics — disclaimer/legal screen only partially drawn). ROOT-CAUSED (M-31) → D164.**
 The image-table/D68 hypothesis is **wrong**: the legal screen (`constructor_menu00_legalscreen`,
