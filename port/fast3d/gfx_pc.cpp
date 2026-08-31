@@ -2466,22 +2466,6 @@ static inline void *seg_addr(uintptr_t w1) {
 
 uintptr_t clearMtx;
 
-/* TEMP D63 (strip before commit) */
-static int s_d63taskcount = 0;
-static int s_d63ctxdump = 0;
-/* D63 dram-branch trace is opt-in: it fires per G_DL and floods -level_09
- * runs otherwise. Set GE_D63=1 to re-enable. */
-static int d63BranchLogEnabled(void)
-{
-    static int cached = -1;
-    if (cached < 0)
-        cached = getenv("GE_D63") ? 1 : 0;
-    return cached;
-}
-extern "C" void d63RecordBranch(const Gfx *from, const Gfx *to);
-extern "C" void d63DumpTrail(void);
-extern "C" void d63LogLastBranchReread(void);
-
 static void gfx_run_dl(Gfx* cmd) {
     // puts("dl");
     int dummy = 0;
@@ -2520,29 +2504,6 @@ static void gfx_run_dl(Gfx* cmd) {
                 gfx_sp_vertex(C0(0, 16) / sizeof(Vtx), C0(16, 4), (const Vtx*)seg_addr(cmd->words.w1));
                 break;
             case G_DL: {
-                /* TEMP D63: record the branch trail for post-mortem */
-                {
-                    const Gfx *tgt = (const Gfx *)seg_addr(cmd->words.w1);
-                    uintptr_t ta = (uintptr_t)tgt;
-                    if (ta >= 0x70000000 && ta < 0xA0000000 && d63BranchLogEnabled())
-                    {
-                        sysLogPrintf(LOG_NOTE, "D63 dram-branch t=%d from=%p to=%p first=(%08x,%08x)",
-                                     s_d63taskcount++, (const void *)cmd, (const void *)tgt,
-                                     tgt->words.w0, tgt->words.w1);
-                        /* Context: 4 commands before the parent G_DL */
-                        if (ta == 0x8012EC38 && s_d63ctxdump < 3)
-                        {
-                            for (int k = 4; k >= 0; --k)
-                            {
-                                const Gfx *c = cmd - k;
-                                sysLogPrintf(LOG_NOTE, "D63   ctx[%d]=%p (%08x,%08x)",
-                                             k, (const void *)c, c->words.w0, c->words.w1);
-                            }
-                            ++s_d63ctxdump;
-                        }
-                    }
-                }
-                d63RecordBranch(cmd, (const Gfx *)seg_addr(cmd->words.w1));
                 if (C0(16, 1) == 0) {
                     // Push return address
                     Gfx* subGFX = (Gfx*)seg_addr(cmd->words.w1);
@@ -2763,24 +2724,7 @@ static void gfx_run_dl(Gfx* cmd) {
             case G_RDPTILESYNC:
                 break;
             default: {
-                /* TEMP D63: dump context around the garbage command */
-                uint32_t *w = (uint32_t *)cmd;
-                sysLogPrintf(LOG_ERROR,
-                    "D63 unknown opcode 0x%02x at %p (dlstart=%p); words[-2..+2]:",
-                    opcode, (void *)cmd, (void *)dListStart);
-                for (int i = -2; i <= 2; ++i)
-                    sysLogPrintf(LOG_ERROR, "D63   [%d] %p = %08x %08x",
-                                 i, (void *)&w[i], w[i * 2], w[i * 2 + 1]);
-                d63DumpTrail();
-                d63LogLastBranchReread();
-                /* TEMP D63: dump the sub-DL region to see the 0xFF extent. */
-                if (getenv("GE_D63")) {
-                    uint32_t *r = (uint32_t *)dListStart;
-                    for (int i = 0; i < 128; i += 4) {
-                        sysLogPrintf(LOG_ERROR, "D63 region +%03x: %08x %08x %08x %08x",
-                                     i * 4, r[i], r[i + 1], r[i + 2], r[i + 3]);
-                    }
-                }
+                (void)dListStart;
                 /* D146: an unknown opcode means the DL walk has desynced or
                  * this DL is garbage (a front-end 3D model whose display list
                  * was never built - the D75 / D144 family - lives at a valid
@@ -3071,51 +3015,3 @@ extern "C" void gfx_reset_framebuffer(void) {
     active_fb = framebuffers.end();
 }
 
-/* TEMP D63: G_DL branch trail for post-mortem (strip before commit) */
-#include <cstdio>
-#define D63_TRAIL_SIZE 4096
-static struct { const Gfx *from; const Gfx *to; uintptr_t w1; } s_d63trail[D63_TRAIL_SIZE];
-static int s_d63count = 0;
-
-extern "C" void d63RecordBranch(const Gfx *from, const Gfx *to) {
-    int idx = s_d63count % D63_TRAIL_SIZE;
-    s_d63trail[idx].from = from;
-    s_d63trail[idx].to = to;
-    s_d63trail[idx].w1 = from->words.w1;
-    ++s_d63count;
-}
-
-extern "C" void d63LogLastBranchReread(void) {
-    if (s_d63count > 0) {
-        int li = (s_d63count - 1) % D63_TRAIL_SIZE;
-        const Gfx *lf = s_d63trail[li].from;
-        sysLogPrintf(LOG_ERROR, "D63 last-branch re-read: from=%p now w0=%08x w1=%llx (w1@rec was %llx) to=%p",
-                     (const void *)lf, lf->words.w0,
-                     (unsigned long long)lf->words.w1,
-                     (unsigned long long)s_d63trail[li].w1,
-                     (const void *)s_d63trail[li].to);
-    }
-}
-
-extern "C" void d63DumpTrail(void) {
-    int n = 24;
-    if (s_d63count < n) n = s_d63count;
-    sysLogPrintf(LOG_ERROR, "D63 branch trail (last %d of %d):", n, s_d63count);
-    for (int i = s_d63count - n; i < s_d63count; ++i)
-        sysLogPrintf(LOG_ERROR, "D63   [%d] from=%p w1@rec=%llx to=%p",
-                     i % D63_TRAIL_SIZE, (const void *)s_d63trail[i % D63_TRAIL_SIZE].from,
-                     (unsigned long long)s_d63trail[i % D63_TRAIL_SIZE].w1,
-                     (const void *)s_d63trail[i % D63_TRAIL_SIZE].to);
-    /* Also: every branch whose target is in the DRAM views, to reconstruct
-     * the sub-DL chain that led to the fault. */
-    int span = s_d63count < D63_TRAIL_SIZE ? s_d63count : D63_TRAIL_SIZE;
-    sysLogPrintf(LOG_ERROR, "D63 DRAM-targeted branches (last %d):", span);
-    for (int i = s_d63count - span; i < s_d63count; ++i)
-    {
-        int idx = i % D63_TRAIL_SIZE;
-        uintptr_t to = (uintptr_t)s_d63trail[idx].to;
-        if (to >= 0x70000000 && to < 0xA0000000)
-            sysLogPrintf(LOG_ERROR, "D63   [%d] from=%p to=%p",
-                         idx, (const void *)s_d63trail[idx].from, (const void *)to);
-    }
-}
