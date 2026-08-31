@@ -130,6 +130,25 @@ extern int current_menu;
 #define MOUSE_PITCH_THRESH  1.5   /* hipfire: px/poll before a C-button fires  */
 #define AIM_GAIN            4.0   /* aim mode: px/poll -> counts into the band  */
 #define AIM_MOVE_THRESH     0.5   /* aim mode: px/poll before the stick moves   */
+#define HIP_PITCH_FULL      6.0   /* hipfire pitch: |px/poll| for a solid C hold (D166) */
+
+/* Item 1 (D165) — front-end 1:1 pointer. front.c frontUpdateControlStickPosition
+ * INTEGRATES the stick as a velocity into a screen-pixel cursor position
+ * (cursor_h_pos += (stickx*0.075 +/- 0.5) * delta, deadzone +/-5, clamp +/-70,
+ * cursor clamped into the ~320x240 virtual screen rect minus a 20px margin).
+ * Feeding it mouse *velocity* therefore gives velocity^2 feel. Instead we run a
+ * P-controller: keep our own estimate of where the game cursor is (menuEst*,
+ * integrated with the SAME recurrence as front.c), accumulate a target from
+ * mouse motion, and emit stick = clamp(GAIN*(target-est)). The estimate re-syncs
+ * to the real cursor whenever the target is held at a screen edge. */
+#define MENU_CURSOR_LO      20.0
+#define MENU_CURSOR_HI_H    300.0
+#define MENU_CURSOR_HI_V    220.0
+#define MENU_CURSOR_MID_H   160.0
+#define MENU_CURSOR_MID_V   120.0
+#define MENU_P_GAIN         6.0    /* stick = GAIN*(target-est); 0.075*GAIN<1 => no overshoot */
+#define MENU_EST_DELTA      1.0    /* deltaEst per poll (front.c integrates ~1 tick/frame) */
+#define MENU_MOUSE_TO_PX    1.0    /* device px -> virtual cursor px (x MenuPointerSpeed/100) */
 
 static int numControllers = 1;
 static int connectedMask   = 0x1;   /* controller 0 always present */
@@ -168,6 +187,35 @@ static double mouseDY = 0.0;
  * sees a clean press+release edge. */
 #define WHEEL_PULSE_POLLS 2
 static int wheelPulse = 0;
+
+/* Item 1 (D165) — front-end pointer P-controller state. */
+static int    menuPointerMode  = 1;    /* 0 = legacy velocity, 1 = 1:1 pointer */
+static int    hipfirePitchSpeed = 100; /* D166: hipfire pitch pulse rate, percent */
+static double menuEstH = 0.0, menuEstV = 0.0;   /* estimate of the game cursor (virtual px) */
+static double menuTgtH = 0.0, menuTgtV = 0.0;   /* mouse-driven target (virtual px)         */
+static int    menuPrevActive = 0;
+static double hipPitchPhase = 0.0;              /* D166: hipfire pitch pulse phase 0..1     */
+
+/* Integrate one poll of our cursor estimate with front.c's exact recurrence
+ * (frontUpdateControlStickPosition): the game receives `stick` as an s8, applies
+ * a +/-5 deadzone with a -5 offset, clamps to +/-70, then
+ * cursor += (stick*0.075 +/- 0.5) * delta, and clamps the cursor to [lo, hi]. */
+static double menuCursorStep(double est, double stick, double lo, double hi)
+{
+    if (stick > 127.0)  stick = 127.0;
+    if (stick < -128.0) stick = -128.0;
+    double x = (double)(int)stick;
+    if (x < -5.0)      x += 5.0;
+    else if (x >= 6.0) x -= 5.0;
+    else               x = 0.0;
+    if (x >= 71.0) x = 70.0;
+    else if (x < -70.0) x = -70.0;
+    if (x > 0.0)      est += (x * 0.075 + 0.5) * MENU_EST_DELTA;
+    else if (x < 0.0) est += (x * 0.075 - 0.5) * MENU_EST_DELTA;
+    if (est > hi) est = hi;
+    else if (est < lo) est = lo;
+    return est;
+}
 
 /* ------------------------------------------------------------------------ */
 
@@ -484,13 +532,45 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
 
             double dyLook = edy * invert;   /* >0 => look down */
 
-            if (menuMode) {
-                /* Front-end pointer: drive the menu cursor on both axes from
-                 * mouse velocity (returns to rest when the mouse stops), no
-                 * C-buttons / aim band. Sign matches aim mode (down => +sy). */
+            if (menuMode && !menuPointerMode) {
+                /* Legacy velocity mode (Input.MenuPointerMode = 0): mouse
+                 * velocity -> stick. Kept as a fallback; integrates as
+                 * velocity^2 through front.c (D165). */
                 double g = MENU_POINTER_GAIN * (menuPointerSpeed / 100.0);
                 sx += (int)(edx * g);
                 sy -= (int)(dyLook * g);   /* front-end cursor: +sy = up */
+            } else if (menuMode) {
+                /* Front-end 1:1 pointer (D165): P-controller onto a
+                 * mouse-accumulated target. */
+                if (!menuPrevActive) {
+                    menuEstH = menuTgtH = MENU_CURSOR_MID_H;
+                    menuEstV = menuTgtV = MENU_CURSOR_MID_V;
+                    hipPitchPhase = 0.0;
+                }
+                double s = (menuPointerSpeed / 100.0) * MENU_MOUSE_TO_PX;
+                menuTgtH += edx    * s;
+                menuTgtV += dyLook * s;   /* dyLook > 0 => cursor moves down (+V) */
+                if (menuTgtH < MENU_CURSOR_LO)   menuTgtH = MENU_CURSOR_LO;
+                if (menuTgtH > MENU_CURSOR_HI_H) menuTgtH = MENU_CURSOR_HI_H;
+                if (menuTgtV < MENU_CURSOR_LO)   menuTgtV = MENU_CURSOR_LO;
+                if (menuTgtV > MENU_CURSOR_HI_V) menuTgtV = MENU_CURSOR_HI_V;
+
+                double effH = MENU_P_GAIN * (menuTgtH - menuEstH);
+                double effV = MENU_P_GAIN * (menuTgtV - menuEstV);
+                if (effH >  70.0) effH =  70.0; else if (effH < -70.0) effH = -70.0;
+                if (effV >  70.0) effV =  70.0; else if (effV < -70.0) effV = -70.0;
+
+                menuEstH = menuCursorStep(menuEstH, effH, MENU_CURSOR_LO, MENU_CURSOR_HI_H);
+                menuEstV = menuCursorStep(menuEstV, effV, MENU_CURSOR_LO, MENU_CURSOR_HI_V);
+
+                sx += (int)(effH + (effH >= 0.0 ? 0.5 : -0.5));
+                sy -= (int)(effV + (effV >= 0.0 ? 0.5 : -0.5));  /* game sticky = -sy; sticky>0 drives cursor +V */
+
+                if (configGetInputLog()) {
+                    sysLogPrintf(LOG_NOTE,
+                        "GE_INPUTLOG menuptr est=(%.1f,%.1f) tgt=(%.1f,%.1f) eff=(%.1f,%.1f) stick=(%d,%d)",
+                        menuEstH, menuEstV, menuTgtH, menuTgtV, effH, effV, sx, sy);
+                }
             } else if (aimHeld) {
                 double gx = fabs(edx)    * (mouseAimSpeed / 100.0) * AIM_GAIN;
                 double gy = fabs(dyLook) * (mouseAimSpeed / 100.0) * AIM_GAIN;
@@ -504,8 +584,22 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                 }
             } else {
                 sx += (int)(edx * (mouseTurnSpeed / 100.0) * MOUSE_TURN_GAIN);
-                if (dyLook >= MOUSE_PITCH_THRESH)       button |= GE_CONT_E; /* C-up = look down */
-                else if (dyLook <= -MOUSE_PITCH_THRESH) button |= GE_CONT_D; /* C-down = look up */
+                /* D166: hipfire pitch as C-button pulses whose frequency scales
+                 * with mouse-Y speed -- fast mouse = solid hold, slow = sparse
+                 * taps -- so it feels closer to the analog yaw. Aim mode (above)
+                 * is untouched. */
+                double sp = fabs(dyLook);
+                if (sp >= MOUSE_PITCH_THRESH) {
+                    double duty = sp * (hipfirePitchSpeed / 100.0) / HIP_PITCH_FULL;
+                    if (duty > 1.0) duty = 1.0;
+                    hipPitchPhase += duty;
+                    if (hipPitchPhase >= 1.0) {
+                        hipPitchPhase -= 1.0;
+                        button |= (dyLook > 0) ? GE_CONT_E : GE_CONT_D; /* E=C-up=look down */
+                    }
+                } else {
+                    hipPitchPhase = 0.0;
+                }
             }
         }
 
@@ -515,6 +609,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
             if (mb & SDL_BUTTON(SDL_BUTTON_LEFT))  button |= GE_CONT_A;
             if (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) button |= GE_CONT_B;
         }
+        menuPrevActive = menuMode;
 
         mouseDX = 0.0;
         mouseDY = 0.0;
@@ -643,6 +738,8 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.AimBand", &aimBand, 5, 40);
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
     configRegisterInt("Input.MenuPointerSpeed", &menuPointerSpeed, 10, 500);
+    configRegisterInt("Input.MenuPointerMode", &menuPointerMode, 0, 1);
+    configRegisterInt("Input.HipfirePitchSpeed", &hipfirePitchSpeed, 10, 500);
     configRegisterInt("Input.MouseInvertY", &mouseInvertY, 0, 1);
     configRegisterInt("Input.MouseYScale", &mouseYScale, 1, 500);
     configRegisterInt("Input.MouseSmoothing", &mouseSmoothing, 0, 90);

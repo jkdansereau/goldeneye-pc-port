@@ -416,6 +416,16 @@ save path. `GE_UNLOCK_ALL=1` jumps to any level; `GE_SAVELOG=1` traces the
 save chain if a later level misbehaves.
 
 Fixed + committed this session (all on `master`, unpushed):
+- **D165 / D166** (M-31, `port/src/input.c`, port-only) — input polish.
+  D165: the front-end cursor is now a true ~1:1 pointer (P-controller
+  estimating the game cursor through `front.c`'s own integrator) instead of
+  the M-30 velocity² feel; `Input.MenuPointerMode` (default 1) falls back to
+  the old mode, `Input.MenuPointerSpeed` scales it, `GE_INPUTLOG` traces
+  `menuptr est/tgt/eff/stick`. D166: hipfire mouse pitch is speed-proportional
+  C-button pulses, not a digital threshold (`Input.HipfirePitchSpeed`).
+  Build green; `-level_09` + `GE_STARTMENU=6` smoke crash-free. **User
+  feel-check owed** (headless can't drive the mouse) — tune MenuPointerSpeed
+  up if the menu sweep feels short.
 - **D157** — campaign never unlocked (objective-difficulty byte read at the
   wrong offset on LE). Root-caused + user-confirmed. §F D157.
 - **RC2** (`Video.FixMipTextures`, default on) — LOD textures were uploaded

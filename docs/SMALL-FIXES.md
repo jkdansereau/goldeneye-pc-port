@@ -424,7 +424,14 @@ for kernel changes. See PORT-LEARNINGS §E.
 
 - **B3 / D120** — DONE (PointUsage emit + validation).
 - **B4** — DONE (M-29 `0bd0ceec`).
-- **B5** — DONE (M-30, front-end mouse-pointer mode). **B6** — investigated,
+- **B5** — DONE (M-30 velocity mode; **M-31 D165** replaced it with a true
+  ~1:1 P-controller pointer — `Input.MenuPointerMode` 1=pointer default,
+  0=old velocity). Feel-check owed.
+- **B7 / D118a** — DONE (M-31 **D166**, cheaper port-only alternative):
+  hipfire pitch is now speed-proportional C-button pulses, not a digital
+  threshold. `Input.HipfirePitchSpeed` tunes it. The full game-side analog
+  hook remains unimplemented (not needed unless the pulse still feels off).
+- **B6** — investigated,
   the `front.c` stick checks are already edge-gated / toggle-guarded, not a
   real over-scroll (unlike the fixed options.c watch case). No-op.
 - **RC4** (palette off-by-one, was in `C` / TEXTURE-GLITCH-ANALYSIS) —
