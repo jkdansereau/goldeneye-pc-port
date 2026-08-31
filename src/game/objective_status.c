@@ -299,12 +299,13 @@ OBJECTIVESTATUS get_status_of_objective(s32 objectiveNum) //#MATCH
 #ifdef PORT
                     if (g_savelogObjOnce && getenv("GE_SAVELOG")) {
                         u32 *rw = (u32 *)objective;
-                        osSyncPrintf("SAVELOG:     crit obj=%d type=%d ObjRefID=%d(0x%x) "
-                                     "TextID=0x%x stride=%d words=[%08x %08x %08x] curstat=%d\n",
+                        osSyncPrintf("SAVELOG:     crit obj=%d type=%d ObjRefID=%d "
+                                     "TextID=0x%x MinDif=%d stride=%d words=[%08x %08x %08x %08x] "
+                                     "curstat=%d\n",
                                      objectiveNum, (int)objective->type, (int)objective->ObjRefID,
-                                     (unsigned)objective->ObjRefID, (unsigned)objective->TextID,
+                                     (unsigned)objective->TextID, (int)objective->MinDificulty,
                                      (int)sizepropdef((PropDefHeaderRecord *)objective),
-                                     rw[0], rw[1], rw[2], (int)currentstatus);
+                                     rw[0], rw[1], rw[2], rw[3], (int)currentstatus);
                     }
 #endif
                     if (status == OBJECTIVESTATUS_COMPLETE)

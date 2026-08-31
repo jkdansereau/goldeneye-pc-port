@@ -156,7 +156,9 @@ def dump_level(levelid, lav_name):
         nblocks += 1
         idx = bs32(buf, off + 4)
         textid = be32(buf, off + 8)
-        diff = buf[off + 12]
+        # MinDificulty is a big-endian s32 at word 3 (offset 0xC); the value
+        # lives in its low byte == offset 0xF.
+        diff = buf[off + 15]
         print(f"Objective {idx}  [briefing text id {textid}]  min difficulty: "
               f"{DIFF_NAMES.get(diff, diff)}")
         j = i + 1

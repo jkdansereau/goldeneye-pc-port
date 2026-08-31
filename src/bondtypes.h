@@ -4055,13 +4055,21 @@ struct objective_entry
     enum WATCH_BRIEFING_PAGE menu;       // 4
 #ifdef PORT
     u32                      text;       // 8  (D151: full-word slot id, see above)
+    /* D157: the setup converter (d88_propdefs.py) bswap32's word 3 of the
+       type-23 record (MissionObjectiveRecord.MinDificulty).  On N64 (BE) the
+       difficulty is the low byte of that word == offset 0xF; after the swap it
+       lands at 0xC on LE.  N64 layout kept under #else. */
+    s8                       difficulty; // c
+    u8                       _md_b2;     // d
+    u8                       unkD;       // e  (N64 0xD, post-swap)
+    u8                       _md_b0;     // f
 #else
     u16                      reserved;   // 8
     u16                      text;       // a
-#endif
     u16                      unkC;       // c
     u8                       unkD;       // d
     s8                       difficulty; // f
+#endif
 };
 #pragma endregion Objectives
 
