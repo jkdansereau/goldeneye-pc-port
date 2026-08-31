@@ -401,6 +401,43 @@ Start, exactly like the retail game.** No crashes, no hangs. 10 commits
 - The D75 front-end / cutscene 3D-model family (D148/D149) is now the
   biggest *visible* gap but is cosmetic — below crashes.
 
+## Done this session (M-29) — race-to-release plan; audio DEFERRED; 2 commits
+
+**Direction (user, M-29):** ship the solo campaign start→finish, fastest.
+Three tracks: A = full 21-level playtest (release gate, user batch-reports a
+defect list from a solo playthrough); B = **audio DEFERRED** — ship silent,
+add sound post-launch (`docs/AUDIO-PLAN.md` stays valid for later, do NOT
+start it); C = solo quick wins, priority: **B2 textures** > B3 blood-stain
+converter > B5/B6 menu input > C2 (D75 models) > C4 (D148 cutscene) >
+C1 (mirrored HUD — user unsure it's worth it). Full plan +
+`docs/SMALL-FIXES.md` mapping in the `m29-release-push` memory.
+
+- **`0bd0ceec`** — aim sensitivity (SMALL-FIXES B4 / BACKLOG B3):
+  `Input.MouseAimSpeed` default 50→25 (overshot), new `Input.AimBand` knob
+  (5..40, def 20). Port-only, `ge007.ini`-tunable. Needs playtest feel check.
+- **`bf5e4d3d`** — file-backed EEPROM saves (BACKLOG B5 / Phase 4):
+  `osEeprom*` in `port/src/libultra.c` now back `data/ge007.eep` (2 KB /
+  16Kbit, lazy-load + write-through, PD pattern). `osEepromProbe` →
+  `EEPROM_TYPE_16K`. Verified: game writes the file (checksum @blk 0 +
+  save_data @blk 4), `-level_09` unregressed, persists across runs.
+  Campaign progress now survives quit.
+- **SMALL-FIXES B1 (D74 wrap block) — DEFERRED.** The in-place one-liner
+  (`G_TX_CLAMP` test + `[t]` index) activates never-run code and boot-crashes
+  `-level_09` (0 frames). Left inert with a NOTE in `gfx_pc.cpp`. Needs the
+  hoist-out-of-vertex-loop rework + per-level visual check.
+- **B2 (Depot wrong textures) — DIAGNOSED, not fixed.** `docs/BRIEF-B2-depot-
+  textures.md`. Captured `-level_30` frames: the roof/ceiling renders as
+  blue + green speckle + radial rays. Decode path (TLUT bswap,
+  `palette_to_rgba32`, `import_texture_*`) audited clean. **Leading
+  hypothesis: this is mostly BACKLOG B1** (grazing-angle aliasing from
+  missing N64 3-point filtering + a stubbed mip chain), not a decode bug.
+  Recommendation: do B1 (filtering + mips, PD/Nightdive reference) as its own
+  focused effort — highest-leverage single graphics fix, likely collapses B2
+  into it. Next diagnostic = `GE_DTEX` probe of the ceiling texture params.
+- **D153 reminder cost real time this session:** back-to-back `-level_09`
+  runs during builds boot-crash under machine thrash; only regression-test on
+  a settled machine (clean run = 600+ frames fine).
+
 ## Done this session (M-28) — D150 (watch page crash) + D151 (watch text blank)
 
 - **D150** (`src/str.c`, `#ifdef PORT`, uncommitted) — user found a crash
