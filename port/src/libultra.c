@@ -281,6 +281,8 @@ void portKernelInit(void)
 /* Threads                                                                   */
 /* ------------------------------------------------------------------------ */
 
+void imThreadExitRelease(void);   /* D152: defined in the interrupt-mask section below */
+
 /* pthread entry wrapper. */
 static void *portThreadWrapper(void *arg)
 {
@@ -302,6 +304,7 @@ static void *portThreadWrapper(void *arg)
     }
 
     pt->entry(pt->arg);
+    imThreadExitRelease();   /* D152: don't leak an OS_IM_NONE section on exit */
     pt->exited = 1;
     if (pt->os) pt->os->state = OS_STATE_STOPPED;
     return NULL;
@@ -1343,6 +1346,32 @@ static void imRelease(void)
         return;
     }
     if (--s_imDepth <= 0) {
+        s_imHeld  = 0;
+        s_imOwner = 0;
+        s_imDepth = 0;
+        pthread_cond_signal(&s_imCv);
+    }
+    pthread_mutex_unlock(&s_imMx);
+}
+
+/* D152: a host thread that returns from its entry function while still
+ * "inside" an OS_IM_NONE section (an unbalanced acquire on a code path only
+ * that transient thread takes, or an osStopThread that let it bail early)
+ * would leave s_imHeld owned forever -> mainThread + amMain both wedge in
+ * alEvtq* until the 2 s steal fires, and can re-wedge every cycle once a new
+ * host thread reuses the dead thread's pthread id (imAcquire then
+ * mis-detects recursion). The steal-lock recovers from it but with a visible
+ * hitch; releasing the orphaned section the instant its owner dies removes
+ * the hitch entirely. Called from portThreadWrapper on thread exit. */
+void imThreadExitRelease(void)
+{
+    unsigned long self = imSelf();
+    pthread_mutex_lock(&s_imMx);
+    if (s_imHeld && s_imOwner == self) {
+        sysLogPrintf(LOG_ERROR,
+            "D152: thread %lu exited still holding osSetIntMask section "
+            "(depth=%d) -- releasing the orphan. An OS_IM_NONE on this "
+            "thread's path was never restored.", self, s_imDepth);
         s_imHeld  = 0;
         s_imOwner = 0;
         s_imDepth = 0;

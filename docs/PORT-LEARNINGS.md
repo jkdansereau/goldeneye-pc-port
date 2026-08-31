@@ -402,6 +402,36 @@ a few others use it as their **only** mutual-exclusion primitive. On PC the
   leak (worst case ~2 s audio hiccup). Proper narrow fix (dedicated
   `ALEventQueue` lock) still owed — do it once the steal-log names the
   leaking call site. §F D152.
+- **D152 addendum (M-31 static audit).** Every `osSetIntMask(OS_IM_NONE)` in
+  the *compiled* audio code was audited: `event.c` (`alEvtqNextEvent`,
+  `alEvtqPostEvent` — its lone early `return` at `event.c:86` **does** restore
+  first —, `alEvtqFlush`, `alEvtqFlushType`), `csplayer.c` `__CSPRepostEvent`,
+  `synaddplayer.c` `alSynAddPlayer`, `snd.c` `sndRemoveEvents` / `sndSetupSound`
+  / `sndDeactivateAllSfxByFlag`. **All balanced on every path** — the §F guess
+  "libaudio has unbalanced early-return mask paths" is *not* borne out. Two
+  real problems remain and were fixed `#ifdef PORT`:
+  (1) `sndSetSfxSlotVolume` (`snd.c`) walks the live `ALSoundState` list and
+  posts to the shared `ALEventQueue` **without** holding `OS_IM_NONE` — unlike
+  its structural twin `sndDeactivateAllSfxByFlag`, which does. On PC that is an
+  unguarded walk racing `amMain` *and* one lock acquire/release per matching
+  sound; during the mission-failed fade (`sndSetScalerApplyVolumeAllSfxSlot`
+  → `sndApplyVolumeAllSfxSlot` → this, per frame) that is a per-frame
+  lock-acquire storm — exactly what the §F dump means by "hammers the queue
+  hard enough that the lock is left owned." Fix: hold the mask once across the
+  whole walk (nested `alEvtqPostEvent` then hits the recursive fast path);
+  also wrap `sndApplyVolumeAllSfxSlot`'s slot loop so the whole update is one
+  recursive hold.
+  (2) The actual leak is the "transient thread acquired `OS_IM_NONE` and
+  exited" case (the dump shows `New Thread`/`exited` churn). `portThreadWrapper`
+  now calls `imThreadExitRelease()` after the thread's entry returns: if that
+  thread still owns `s_imHeld`, release the orphaned section immediately (+
+  `LOG_ERROR`). Removes the wedge *and* the 2 s steal hitch, and stops the
+  re-wedge that happens when a new host thread reuses the dead thread's
+  pthread id and `imAcquire` mis-detects recursion. Steal-lock stays as the
+  last-resort backstop for a genuinely unbalanced same-thread path.
+  **Rule:** when two sibling functions walk the same list and post to the same
+  queue, they must take the same lock — grep for one holding `OS_IM_NONE` and
+  the other not.
 
 ## D5. Loop bounds that assume linker adjacency of two file-scope globals
 

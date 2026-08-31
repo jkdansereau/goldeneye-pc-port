@@ -1075,11 +1075,21 @@ u16 sndGetSfxSlotFirstNaturalVolume(void)
 void sndApplyVolumeAllSfxSlot(u16 volume)
 {
     u8 i;
+#ifdef PORT
+    /* D152: collapse the per-slot sndSetSfxSlotVolume() lock acquisitions
+     * into one recursive hold for the whole update (the fade-out calls this
+     * every frame). One real lock acquire/release per frame instead of
+     * SFX_SLOT_COUNT * (active sounds). No behaviour change. */
+    OSIntMask mask = osSetIntMask(OS_IM_NONE);
+#endif
 
     for (i = 0; i < SFX_SLOT_COUNT; i++)
     {
         sndSetSfxSlotVolume(i, volume);
     }
+#ifdef PORT
+    osSetIntMask(mask);
+#endif
 }
 
 /**
@@ -1110,6 +1120,26 @@ void sndSetSfxSlotVolume(u8 sfxIndex, u16 volume)
 
     ALSndpEvent evt;
     ALSoundState *item;
+#ifdef PORT
+    /* D152: this walks the live ALSoundState list and posts to the shared
+     * ALEventQueue, exactly like its sibling sndDeactivateAllSfxByFlag() --
+     * which DOES take OS_IM_NONE around its walk. The omission here is benign
+     * on N64 (alEvtqPostEvent masks internally, and the audio job is a
+     * cooperative RSP task) but not on PC: the audio manager (amMain) is a
+     * real preemptible thread, so the unguarded walk both races a concurrent
+     * list mutation AND takes/drops the interrupt-mask lock (D147/D152)
+     * once per matching sound. During the mission-failed audio fade-out
+     * (sndSetScalerApplyVolumeAllSfxSlot -> sndApplyVolumeAllSfxSlot -> here,
+     * every frame, over every active sound) that is dozens of lock
+     * acquire/release per frame on the game thread, each a fresh window to
+     * collide with amMain and eat the 2 s steal-lock timeout -> the frame
+     * never renders -> permanent black screen. Hold the mask once across the
+     * whole walk: the nested alEvtqPostEvent() calls then hit the recursive
+     * fast path (depth++) and open no new contention window, and the walk is
+     * atomic w.r.t. amMain as the N64 "interrupts off" intent requires.
+     * Concurrency-correctness only; no behaviour change. */
+    OSIntMask mask = osSetIntMask(OS_IM_NONE);
+#endif
 
     item = (ALSoundState *)D_800243E4.node.next;
 
@@ -1131,4 +1161,7 @@ void sndSetSfxSlotVolume(u8 sfxIndex, u16 volume)
 
         item = (ALSoundState *)item->link.next;
     }
+#ifdef PORT
+    osSetIntMask(mask);
+#endif
 }
