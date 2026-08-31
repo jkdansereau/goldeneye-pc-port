@@ -195,13 +195,6 @@ OBJECTIVESTATUS get_status_of_objective(s32 objectiveNum) //#MATCH
                             {
                                 currentstatus = OBJECTIVESTATUS_INCOMPLETE;
                             }
-#ifdef PORT
-                            if (g_savelogObjOnce && getenv("GE_SAVELOG"))
-                                osSyncPrintf("SAVELOG:       DESTROY tag=%d obj=%p prop=%p healthy=%d\n",
-                                             (int)objective->ObjRefID, (void *)obj,
-                                             obj ? (void *)obj->prop : NULL,
-                                             obj ? (int)objIsHealthy(obj) : -1);
-#endif
                             break;
                         }
                         case PROPDEF_OBJECTIVE_COMPLETE_CONDITION:
@@ -297,16 +290,17 @@ OBJECTIVESTATUS get_status_of_objective(s32 objectiveNum) //#MATCH
                         }
                     }
 #ifdef PORT
-                    if (g_savelogObjOnce && getenv("GE_SAVELOG")) {
-                        u32 *rw = (u32 *)objective;
+                    /* GE_SAVELOG: one line per objective criterion the walk visits
+                       (type / ref id / stride / status) -- gated by g_savelogObjOnce
+                       so only the bossReturnTitleStage completion check logs, not
+                       the per-frame poll. */
+                    if (g_savelogObjOnce && getenv("GE_SAVELOG"))
                         osSyncPrintf("SAVELOG:     crit obj=%d type=%d ObjRefID=%d "
-                                     "TextID=0x%x MinDif=%d stride=%d words=[%08x %08x %08x %08x] "
-                                     "curstat=%d\n",
+                                     "MinDif=%d stride=%d curstat=%d\n",
                                      objectiveNum, (int)objective->type, (int)objective->ObjRefID,
-                                     (unsigned)objective->TextID, (int)objective->MinDificulty,
+                                     (int)objective->MinDificulty,
                                      (int)sizepropdef((PropDefHeaderRecord *)objective),
-                                     rw[0], rw[1], rw[2], rw[3], (int)currentstatus);
-                    }
+                                     (int)currentstatus);
 #endif
                     if (status == OBJECTIVESTATUS_COMPLETE)
                     {
