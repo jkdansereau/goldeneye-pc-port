@@ -1,5 +1,8 @@
 #include <os_extension.h>
 #include <PR/os.h>
+#ifdef PORT
+#include <stdlib.h>
+#endif
 #include "bondview.h"
 #include <bondconstants.h>
 #include <bondgame.h>
@@ -736,6 +739,11 @@ void bossReturnTitleStage(void) {
 #ifdef BUGFIX_R1
     display_objective_status_text_on_status_change();
     objectivestatusDisableStatusDisplay();
+#endif
+#ifdef PORT
+    if (getenv("GE_SAVELOG"))
+        osSyncPrintf("SAVELOG: bossReturnTitleStage stage=%d objectiveIsAllComplete=%d\n",
+                     (int)bossGetStageNum(), (int)objectiveIsAllComplete());
 #endif
     if ((bossGetStageNum() != LEVELID_CUBA) && (objectiveIsAllComplete() != 0x0)) {
         end_of_mission_briefing();

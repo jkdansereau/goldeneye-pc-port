@@ -9,6 +9,15 @@
 #include "front.h"
 #include "cheat.h"
 
+#ifdef PORT
+/* GE_SAVELOG=1: trace the campaign-unlock -> EEPROM write/validate chain
+ * (progression not persisting across restart -- M-30). No logic change. */
+#include <stdlib.h>
+#define SAVELOG(...) do { if (getenv("GE_SAVELOG")) osSyncPrintf("SAVELOG: " __VA_ARGS__); } while (0)
+#else
+#define SAVELOG(...) ((void)0)
+#endif
+
 
 // bss
 //CODE.bss:80069920
@@ -80,9 +89,21 @@ void fileWriteSave(save_data *save)
     {
         if ( fileGamePakProbe())
         {
+            s32 slot = (s32)(save - &saves[SAVESLOT1]);
             fileGenerateCRC(&save->completion_bitflags, save + 1, save);
+            SAVELOG("fileWriteSave slot=%d block=%d size=%d bitflags=%02x crc=%08x,%08x\n",
+                    slot, (int)((((u32)(slot * 0x60)) >> 3) + 4), (int)sizeof(save_data),
+                    save->completion_bitflags, save->chksum1, save->chksum2);
             joyGamePakLongWrite((((u32)((save - &saves[SAVESLOT1]) * 0x60) >> 3) + 4), save, sizeof(save_data)); // 0x60 = sizeof(save_data) be sure to manually update if save changes
         }
+        else
+        {
+            SAVELOG("fileWriteSave: fileGamePakProbe() FALSE -- no EEPROM, save dropped\n");
+        }
+    }
+    else
+    {
+        SAVELOG("fileWriteSave: save ptr out of saves[] range -- dropped\n");
     }
 }
 
@@ -531,6 +552,11 @@ void fileValidateSaves(void)
                 checksumOK2 = FALSE;
             }
 
+            SAVELOG("fileValidateSaves slot %d: bitflags=%02x stored_crc=%08x,%08x "
+                    "calc_crc=%08x,%08x -> %s\n", (int)i, saves[i].completion_bitflags,
+                    saves[i].chksum1, saves[i].chksum2, crc[0], crc[1],
+                    checksumOK2 ? "OK" : "BAD -> RESET (progress wiped)");
+
             if (!checksumOK2)
             {
                 fileResetSave(&saves[i]);
@@ -740,6 +766,8 @@ void fileOverwriteSaveSlotWithNewSave(save_data *save1, save_data *save2)
 
     slot = 0;
     folder_with_flag = fileGetSaveFlagDoReset_any_folder();
+    SAVELOG("fileOverwriteSaveSlotWithNewSave: DoReset slot = %d %s\n", folder_with_flag,
+            folder_with_flag < 0 ? "(NO FREE SLOT -- write skipped!)" : "");
 
     if (folder_with_flag >= 0)
     {
@@ -771,6 +799,10 @@ void fileOverwriteSaveSlotWithNewSave(save_data *save1, save_data *save2)
  */
 void fileUnlockStageInFolderAtDifficulty(s32 foldernum, LEVEL_SOLO_SEQUENCE stage, DIFFICULTY difficulty, s32 newtime)
 {
+    SAVELOG("fileUnlockStageInFolderAtDifficulty folder=%d stage=%d diff=%d time=%d "
+            "(DoResetSlot=%d)\n", (int)foldernum, (int)stage, (int)difficulty, (int)newtime,
+            (int)fileGetSaveFlagDoReset_any_folder());
+
     if ((foldernum >= 0) && (foldernum < MAX_FOLDER_COUNT) &&
         (stage >= SP_LEVEL_DAM) && (stage < SP_LEVEL_MAX) &&
         (difficulty >= DIFFICULTY_AGENT) && (difficulty < DIFFICULTY_MAX))
@@ -778,6 +810,7 @@ void fileUnlockStageInFolderAtDifficulty(s32 foldernum, LEVEL_SOLO_SEQUENCE stag
         save_data new_save = BLANKSAVEDATA;
 
         save_data *save = fileGetSaveForFoldernum(foldernum);
+        SAVELOG("  existing save for folder %d: %s\n", (int)foldernum, save ? "found" : "NULL");
         s32 i;
         if (save) {
             new_save = *save;

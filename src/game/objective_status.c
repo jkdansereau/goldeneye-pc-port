@@ -7,6 +7,9 @@
 #include "PR/os.h"
 #include "str.h"
 #include "bondview.h"
+#ifdef PORT
+#include <stdlib.h>
+#endif
 
 //Public variables - move to header
 // bss
@@ -320,6 +323,12 @@ bool objectiveIsAllComplete(void)
     {
         objdiff = get_difficulty_for_objective(objective);
         curdiff = lvlGetSelectedDifficulty();
+#ifdef PORT
+        if (getenv("GE_SAVELOG"))
+            osSyncPrintf("SAVELOG:   obj %d/%d objdiff=%d curdiff=%d status=%d\n",
+                         objective, objectiveGetCount(), (int)objdiff, (int)curdiff,
+                         (int)get_status_of_objective(objective));
+#endif
         if ((objdiff <= curdiff) && (get_status_of_objective(objective) != OBJECTIVESTATUS_COMPLETE))
         {
             return FALSE;
