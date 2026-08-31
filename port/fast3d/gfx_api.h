@@ -47,6 +47,7 @@ void gfx_set_target_fps(int);
 void gfx_set_texture_filter(enum FilteringMode mode);
 void gfx_set_mipmap_filter(enum MipmapFilteringMode mode);
 void gfx_set_fix_mip_textures(int on);
+void gfx_set_wrap_fix(int on);
 void gfx_texture_cache_clear(void);
 void gfx_texture_cache_delete(const uint8_t *orig_addr);
 void gfx_texture_cache_delete_range(const uint8_t *start, const uint8_t *end);

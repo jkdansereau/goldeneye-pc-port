@@ -911,6 +911,10 @@ static void import_texture_ci8(int tile, const LoadedTexture& loaded_texture, bo
  * Video.FixMipTextures = 0 restores the raw over-tall upload. */
 bool g_fix_mip_textures = true;
 
+/* D74 sub-tile UV pre-wrap (see gfx_sp_tri). Opt-in (never-run path); default
+ * off. Video.WrapFix = 1. */
+bool g_wrap_fix = false;
+
 static void import_texture(int i, int tile, bool importReplacement) {
     LoadedTexture& loaded_texture = rdp.loaded_texture[rdp.texture_tile[tile].tmem];
     const uint8_t fmt = rdp.texture_tile[tile].fmt;
@@ -1486,6 +1490,17 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
     uint32_t tm = 0;
     uint32_t tex_width[2], tex_height[2], tex_width2[2], tex_height2[2];
 
+    /* D74 (Video.WrapFix): per-texunit pre-wrap window. N64 wraps a render
+     * tile's UVs at the TILE period (uls/ult + lrs/lrt window) when the tile
+     * is a sub-region of the uploaded image; GL wraps at the full image size.
+     * Computed once per texunit here (needs the ORIGINAL cms/cmt, before the
+     * CLAMP-clearing below) and applied per vertex in the loop. Opt-in --
+     * this path never ran before (the old guard was `cms & G_TX_WRAP` ==
+     * `& 0`), so it is new behaviour. */
+    bool  wrap_s[2] = { false, false }, wrap_t[2] = { false, false };
+    float wrap_tw[2] = { 0, 0 }, wrap_th[2] = { 0, 0 };
+    float wrap_uls[2] = { 0, 0 }, wrap_ult[2] = { 0, 0 };
+
     for (int i = 0; i < 2; i++) {
         // TODO: fix this; for now just ignore smaller mips
         const uint32_t tile = rdp.first_tile_index + gfx_lod_tile_offset(i);
@@ -1528,6 +1543,21 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
 
             uint32_t tex_width1 = tex_width[i] << (cms & G_TX_MIRROR);
             uint32_t tex_height1 = tex_height[i] << (cmt & G_TX_MIRROR);
+
+            if (g_wrap_fix && !(cms & G_TX_MIRROR)) {
+                /* wrap tile (clamp bit not set) whose window is smaller than
+                 * the uploaded image -> pre-fmod the UVs at the window size. */
+                if (!(cms & G_TX_CLAMP) && tex_width2[i] > 0 && tex_width2[i] < tex_width[i]) {
+                    wrap_s[i]   = true;
+                    wrap_tw[i]  = (float)tex_width2[i];
+                    wrap_uls[i] = rdp.texture_tile[tile].uls / 4.0f;
+                }
+                if (!(cmt & G_TX_CLAMP) && tex_height2[i] > 0 && tex_height2[i] < tex_height[i]) {
+                    wrap_t[i]   = true;
+                    wrap_th[i]  = (float)tex_height2[i];
+                    wrap_ult[i] = rdp.texture_tile[tile].ult / 4.0f;
+                }
+            }
 
             if ((cms & G_TX_CLAMP) && ((cms & G_TX_MIRROR) || tex_width1 != tex_width2[i])) {
                 tm |= 1 << 2 * i;
@@ -1618,30 +1648,21 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             u -= rdp.texture_tile[rdp.first_tile_index + tile].uls / 4.0f;
             v -= rdp.texture_tile[rdp.first_tile_index + tile].ult / 4.0f;
 
-            // D74: N64 wraps UVs by the TILE size when a render tile is a
-            // sub-region of the image (uls/ult offset + lrs/lrt window); GL
-            // would wrap at the full uploaded image size instead. Pre-wrap per
-            // vertex (GE/PD triangles never span more than one tile period).
-            // NOTE (SMALL-FIXES B1, DEFERRED): this block's guard is dead
-            // (`& G_TX_WRAP` == `& 0`) and its indices are OOB (`[i]` is the
-            // vertex, arrays are per-texunit [2]). Correcting it to
-            // `(cms & G_TX_CLAMP) == 0` + `[t]` activates never-run code and
-            // crashed -level_09 at boot (0 frames) -- needs the hoist-out-of-
-            // -loop rework + per-level visual verification, not an in-place
-            // one-liner. Left inert for now.
-            {
-                const uint32_t tw = tex_width2[i];
-                const uint32_t th = tex_height2[i];
-                if ((rdp.texture_tile[rdp.first_tile_index + tile].cms & G_TX_WRAP) && tw < tex_width[i]) {
-                    u = fmodf(u, (float)tw);
-                    if (u < 0.0f) u += (float)tw;
-                    u += rdp.texture_tile[rdp.first_tile_index + tile].uls / 4.0f;
-                }
-                if ((rdp.texture_tile[rdp.first_tile_index + tile].cmt & G_TX_WRAP) && th < tex_height[i]) {
-                    v = fmodf(v, (float)th);
-                    if (v < 0.0f) v += (float)th;
-                    v += rdp.texture_tile[rdp.first_tile_index + tile].ult / 4.0f;
-                }
+            // D74 (Video.WrapFix, opt-in): pre-wrap UVs at the tile-window
+            // period when the render tile is a sub-region of the uploaded
+            // image. Flags/sizes are precomputed per texunit above (indexed by
+            // `t`, not the vertex `i`). The old in-place version was inert
+            // (guard `cms & G_TX_WRAP` == `& 0`) and OOB (`tex_width2[i]` with
+            // `i` = vertex). See SMALL-FIXES B1.
+            if (wrap_s[t]) {
+                u = fmodf(u, wrap_tw[t]);
+                if (u < 0.0f) u += wrap_tw[t];
+                u += wrap_uls[t];
+            }
+            if (wrap_t[t]) {
+                v = fmodf(v, wrap_th[t]);
+                if (v < 0.0f) v += wrap_th[t];
+                v += wrap_ult[t];
             }
 
             if (!is_rect) {
@@ -3011,6 +3032,7 @@ extern "C" void gfx_set_mipmap_filter(enum MipmapFilteringMode mode) {
 }
 
 extern "C" void gfx_set_fix_mip_textures(int on) { g_fix_mip_textures = !!on; }
+extern "C" void gfx_set_wrap_fix(int on) { g_wrap_fix = !!on; }
 
 extern "C" int gfx_create_framebuffer(uint32_t width, uint32_t height, int upscale, int autoresize) {
     int fb = gfx_rapi->create_framebuffer();
