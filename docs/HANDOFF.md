@@ -403,6 +403,25 @@ Start, exactly like the retail game.** No crashes, no hangs. 10 commits
 
 ## Done this session (M-30) — user batch defect list; commits + docs
 
+### M-30b — 6-agent parallel burst (2026-08-31), all merged + verified
+
+7 commits `84a8693e`..`1b69c8ba`. Merged tree builds clean; `-level_09/-20/-30/-34/-37/-28`
+render + no crash; menu + Depot visually verified; Agent D's 21/21 with-input
+(walk+fire) sweep crash-free. Three texture-pipeline fixes compose correctly.
+
+| Dxx | Fix | Verified |
+|---|---|---|
+| **D158** | KF7 muzzle-flash `((f32*)stackpad2)[-8]` negative-stack write → `0xc000001d` on fire. Real `#ifdef PORT` local. | Caverns survives sustained KF7 fire; stackpad audit found no others |
+| **D159** | `texSwapAltRowBytes` (odd-row byte-swap for an N64 RDP TMEM XOR fast3d doesn't emulate) scrambled every ~1:1-viewed texture = the user's "interlaced textures". `#ifdef PORT` skip. | menu wallet-photo: comb → clean portrait; `-level_09` unregressed |
+| **D161** | Depot ceiling: 16×16 CI8 tile drawn with TLUT off (`G_TT_NONE`) → fast3d did a palette lookup on stale palette → blue speckle / radial rays. Decode CI+`G_TT_NONE` as intensity. | Depot ceiling: blue garbage → dark industrial roof; `-30/09/34` pass |
+| **D164** | Legal/disclaimer screen drew 1 line — `legal_text_end = &legalscreen_MRD` assumed linker adjacency (false on mingw). `#ifdef PORT` bound on the array. | high-confidence static (nm-verified); needs a boot to eyeball |
+| **D165** | Front-end mouse cursor: velocity² feel → P-controller 1:1 pointer. `Input.MenuPointerMode` (def 1), `Input.MenuPointerSpeed`. | build + menu smoke; user feel-check pending |
+| **D166** | Hipfire vertical aim: fixed digital threshold → speed-proportional C-button duty cycle. `Input.HipfirePitchSpeed`. | build; user feel-check pending |
+| **D160** | Dam rappel cutscene (D148) not root-caused — `GE_D160=1` diagnostic shipped. Hypothesis: propDef command-index walk desync (D122/D132 family). | **needs: user runs Dam to exit with `$env:GE_D160=1`, pastes `D160:` lines** |
+
+Also this session (pre-burst): D157 (campaign unlock — user-confirmed), RC2
+(`Video.FixMipTextures`), D120 (PointUsage), D74 (`Video.WrapFix` opt-in).
+
 ### M-30 state / next
 **⚠ Before the next playtest: `./build-pc.sh ntsc-final` AND the full sidecar
 regen** (`python tools_pc/d43_emit.py ntsc-final && python tools_pc/d69_emit.py
