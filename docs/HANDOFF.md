@@ -413,13 +413,30 @@ unlock save isn't landing (or is wiped on reload). Chain:
 (needs a slot with `SAVEFLAG_DORESET`) → `fileWriteSave` (`fileGamePakProbe`)
 → EEPROM; then `fileValidateSaves` CRC-checks every slot on menu re-entry and
 `fileResetSave`s any mismatch.
-**Diagnostic committed:** `GE_SAVELOG=1` env var (`#ifdef PORT`, no logic
-change) traces every link. **Next session: have the user run one Dam
-completion under `GE_SAVELOG=1` (via `tools_pc/debug.ps1`, stderr → gdb.txt)
-and read which link fails.** Leading suspects: (a) `objectiveIsAllComplete()`
-false on PC — propDef/objective decode, D126/D151 family; (b) CRC mismatch on
-reload wiping the slot — `fileGenerateCRC` / `randomGetNextFrom` on the s64
-poly; (c) no free DORESET slot. Also noted but not chased:
+**M-30 GE_SAVELOG run 1 (user's gdb.txt) — narrowed:**
+`bossReturnTitleStage stage=33` (Dam) fires with **`objectiveIsAllComplete=0`**
+→ `end_of_mission_briefing` never called → no unlock write. `fileValidateSaves`
+/ CRC / DORESET-slot all fine (first-boot fresh-save init, expected). So the
+blocker is **objective-completion detection**: `objectiveIsAllComplete()` bails
+at obj 0 (`get_status_of_objective(0) != COMPLETE`). Dam obj 0 = 4×
+DESTROY_OBJECT (ALARM tags). This is D126/D151 propDef-decode family — either
+`objective->ObjRefID` at the wrong byte offset on LE (criteria records
+`_bswap32`'d, `MissionObjectiveRecord.ObjRefID` s32@4 vs the criterion's
+`u16` tag), or the `sizepropdef` walk stride is off for a criterion type.
+Note `sizepropdef(PROPDEF_OBJECTIVE_START)` PC-branch returns **4** and
+`d88_propdefs.py` emits **16 B** for type 23 — but `MissionObjectiveRecord`
+(bondtypes.h) is header+ObjRefID+TextID+MinDificulty+`*nextentry` = 20 B N64
+/ 24 B PC. If `nextentry` is real+serialized, both the stride and the
+converter are 1-2 words short → whole-stream desync. (`struct objective_entry`,
+the other view of type 23, is only 16 B and has no nextentry — the two
+structs disagree; the "// maybe wrong..." comment flags it.)
+**Diagnostic committed (`<crit dump commit>`):** `GE_SAVELOG=1` now also dumps
+each criterion's `type / ObjRefID / TextID / sizepropdef stride / first 3
+words / currentstatus` (gated by `g_savelogObjOnce` so it only fires on the
+`bossReturnTitleStage` call, not the per-frame poll).
+**Next: user does ONE genuine full Dam completion (all objectives, walk out
+the exit) under `GE_SAVELOG=1`; the `SAVELOG: crit ...` lines pin the exact
+field/stride that's wrong.** Also noted but not chased:
 `fileSetDifficultyStageTime` `offset = ((diff*20)+levelid)*10` indexes
 `times[]` up to `[98/99]` but the array is `u8 times[76]` — OOB for
 high level/difficulty combos (writes into the next slot's checksum). Not the
