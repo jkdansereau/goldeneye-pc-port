@@ -368,6 +368,16 @@ void gunUpdateAndFire(GUNHAND handnum)
     s32 sw7mtxidx;
     s32 shellidx;
     u8 stackpad2[4];
+#ifdef PORT
+    /* D157-adjacent: `((f32 *)stackpad2)[-8]` (lines below) is a decomp
+     * register-allocation stackpad hack — a scratch f32 the N64 compiler
+     * placed 32 bytes *below* stackpad2. GCC's x86-64 stack layout is
+     * different, so that negative index writes into an unrelated slot
+     * (return-address / saved-reg area) → 0xc000001d illegal-instruction on
+     * the KF7-muzzle-flash path (found firing on Caverns, M-30). Use a real
+     * local; N64 keeps the stackpad expression under #else. */
+    f32 kf7_flashscale;
+#endif
 
     flashvisptr = NULL;
     flashdata = NULL;
@@ -814,9 +824,17 @@ void gunUpdateAndFire(GUNHAND handnum)
                         flashpos.x = (((((f32 *) nodepos)[0] * flashmtx.m[0][0]) + (((f32 *) nodepos)[1] * flashmtx.m[1][0])) + (((f32 *) nodepos)[2] * flashmtx.m[2][0])) + flashmtx.m[3][0];
                         flashpos.y = (((((f32 *) nodepos)[0] * flashmtx.m[0][1]) + (((f32 *) nodepos)[1] * flashmtx.m[1][1])) + (((f32 *) nodepos)[2] * flashmtx.m[2][1])) + flashmtx.m[3][1];
                         flashpos.z = (((((f32 *) nodepos)[0] * flashmtx.m[0][2]) + (((f32 *) nodepos)[1] * flashmtx.m[1][2])) + (((f32 *) nodepos)[2] * flashmtx.m[2][2])) + flashmtx.m[3][2];
+#ifdef PORT
+                        kf7_flashscale = IDO_POINT_ONE * flashscale;
+#else
                         ((f32 *) stackpad2)[-8] = IDO_POINT_ONE * flashscale;
+#endif
                         matrix_4x4_align(&flash2mtx, (randomGetNext() * (1.0f / M_U32_MAX_VALUE_F)) * M_TAU_F, -flashpos.x, -flashpos.y, -flashpos.z);
+#ifdef PORT
+                        matrix_scalar_multiply(kf7_flashscale, flash2mtx.m[0]);
+#else
                         matrix_scalar_multiply(((f32 *) stackpad2)[-8], flash2mtx.m[0]);
+#endif
                         matrix_4x4_set_rotation_axis_angle(&aimmtx, 0, gunofs.x - hand->field_A38, gunofs.y - hand->field_A3C, gunofs.z - hand->field_A40);
                         matrix_4x4_multiply_in_place(&aimmtx, &flash2mtx);
                         matrix_row_3_scalar_multiply(flashext, flash2mtx.m[0]);
