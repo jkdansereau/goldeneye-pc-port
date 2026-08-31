@@ -165,6 +165,16 @@ through a converter or a runtime bswap fixup reads scrambled.
 - `f32` values are BE **word pairs** — a naive byte reversal off-by-one
   corrupts every float: D73 (sinf/cosf `du` pairs → `DVAL()` macro),
   D112 (`d43_emit.py put_f32` `src[doff:doff+4][::-1]`).
+  - **D73 scope is now settled (M-32 D75 triage):** the whole
+    `src/libultra/gu/` tree is endian-clean — only `sinf.c`/`cosf.c` used the
+    `du` union and both are `DVAL()`-wrapped; `rotate/perspective/ortho/
+    lookat/scale/translate/mtxutil/normalize/align` use plain float literals
+    or pure integer bit-packing (`FTOFIX32`+shift/mask). The game's own
+    `matrixmath.c` (`matrix_4x4_set_lookat*`, `_set_projection`,
+    `_f32_to_s32`) is likewise native-LE (D114). **Do not re-audit gu or
+    matrixmath for a "float endianness" bug** — if a matrix comes out wrong
+    on PC the cause is upstream data, a struct-field pun (D100/D140/D156), or
+    a fast3d gap (D114/D116 viewport mirror), never these files.
 - Header offset tables / pointers: D54 (cseq ALMidiHdr), D68
   (Globalimagetable), D87 (ramromfilestructure), D88 (Usetup* tables).
 - Negative-terminated index chains (`PointUsage[]`) in converted model

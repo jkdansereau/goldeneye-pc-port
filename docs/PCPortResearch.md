@@ -802,7 +802,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D59–D68 | intro render: blood-RLE clobber, DMA validate, OSMesgQueue, HEADS/BODIES sentinels, romCopy width, image_entry, Globalimagetable BE→LE | resolved |
 | D69 · D78–D84 | stage load (`load_bg_file`): bg/stan offline sidecar (`d69_emit.py`) + StandTile/bg_room_data ABI | resolved |
 | D70–D74 | intro-logo pixels: C-array bswap, UV path, sinf/cosf `DVAL()`, texture-import truncation | resolved |
-| D75 · D77 | front-end 3D model transforms · audio | OPEN (parked, `GRAPHICS-BACKLOG.md`) |
+| D75 · D77 | front-end 3D model transforms · audio | OPEN (parked). **M-32 triage (see §F "D75 ADDENDUM"): (a) D73-scope-gap RULED OUT (gu tree fully endian-clean). Splits in two: Bug 1 = logo/photo transform = the parked D114/D116 fast3d viewport mirror (not game code). Bug 2 = absent animated models = category (b), lead suspect `render_pos`=transient `dynAllocate` arena (D115 MED #5), in-scope fix candidate.** |
 | D76 · D164 | disclaimer/legal screen only draws line 1 — **root-caused (M-31)**: `constructor_menu00_legalscreen` text loop bounds `legal_text_end` on `&legalscreen_MRD`, a linker-adjacency assumption that mingw breaks (`legalscreen_MRD` links 0x60 *before* `legalpage_text_array`) → `do{}while(ptr<end)` runs once. NOT an image-table bug (screen references zero `sImageTableEntry`). | fix proposed (not applied — `front.c` owned by another agent) |
 | D159 | front-end wallet-Bond photo "interlaced"/combed (RC1 / D149) — `texSwapAltRowBytes` odd-row 8-byte pre-swap (N64 RDP odd-line TMEM XOR compensation) not reversed by fast3d | FIXED (`#ifdef PORT` no-op the swap in `image.c`) |
 | D161 | Depot (`-level_30`) ceiling = bright-blue speckle + radial rays (B2). A CI8 tile drawn with `gsDPSetTextureLUT(G_TT_NONE)` was decoded against the stale `rdp.palette` → garbage. Fix: `#ifdef`-free narrow route CI→I when `palette_fmt == G_TT_NONE` in `gfx_pc.cpp import_texture()`. | FIXED (`port/fast3d/gfx_pc.cpp`) |
@@ -2543,6 +2543,119 @@ modelSetScale sites), `port/fast3d/gfx_pc.cpp`. Verify: determine whether the Ni
 and intro player models build matrices via guRotate/guLookAt (→ 75a) or another transform
 (→ 75b); capture `GE_PCDUMP` frames across the logo transition and the gun-barrel/cast
 segments to localize.
+
+**D75 ADDENDUM (session M-32) — triage: (a) is DISPROVEN, the defect splits
+into two independent bugs, both outside `src/libultra/gu` and `src/game/model.c`.**
+Static-only pass (no runtime probe; ~1 build-budget spent on reading + rebase
+onto M-30b master which carries D159/D164/D165/D166).
+
+- **(a) D73 scope gap — RULED OUT, high confidence.** The whole
+  `src/libultra/gu/` tree is endian-clean post-D73. Audited every file:
+  `rotate.c` (`guRotateF`/`guRotate`), `perspective.c` (`guPerspectiveF`),
+  `translate.c`, `scale.c`, `ortho.c`, `lookat.c`, `mtxutil.c` (`guMtxF2L`),
+  `normalize.c`, `align.c`. Only `sinf.c`/`cosf.c` ever use the `du` bit-union,
+  and those 9 reads are `DVAL()`-wrapped under `#ifdef PORT`; every other gu
+  file uses plain `float` literals (`3.1415926/180.0` etc.) or pure integer
+  bit-packing (`FTOFIX32` + shift/mask — byte-order independent). The Rareware
+  logo exercises the *entire* gu matrix pipeline front-end
+  (`guPerspective`+`guLookAt`+`guRotate`+`guTranslate`+`guMtxF2L`,
+  `title.c load_display_rare_logo`) and renders correctly. So no front-end
+  matrix path that goes through gu is broken. **Future sessions: do not
+  re-audit gu for D75.** (Recorded in PORT-LEARNINGS §C.)
+
+- **Bug 1 — non-animated `logoinst` models (Nintendo logo, GE logo,
+  front.c wallets/Bond photo): wrong transform / 180° flip. Almost certainly
+  the D114/D116 shared fast3d viewport/MP-matrix mirror — NOT in scope,
+  NOT game code.** These do NOT use gu at all: `front.c` builds `basemtx`
+  with `matrix_4x4_set_lookat_target(&m, 0,0,3000/4000, 0,0,0, 0,1,0)`
+  (`matrixmath.c:643` → `matrix_4x4_set_lookat`), copies it into a
+  `dynAllocate`d `render_pos`, calls `model.c subdraw`, then
+  `matrix_4x4_f32_to_s32` in place (`front.c:1774/2023/2304/2929`, all
+  identical). `matrix_4x4_set_lookat*` / `matrix_4x4_set_projection` /
+  `matrix_4x4_f32_to_s32` are pure float/int math, native-LE, byte-identical
+  in behaviour to the gu equivalents (D114 already verified this for the
+  in-level path and disproved converter-axis / lookat-handedness / F2L as the
+  cause). D159 (M-31) fixed the *texture* comb on the wallet photo and its
+  addendum explicitly notes the residual **"still 180°-rotated"** — a pure
+  two-axis negation, i.e. exactly the symptom D114's write-up predicts for a
+  hidden X- or Y-flip in `gfx_calc_and_set_viewport` /
+  `gfx_adjust_viewport_or_scissor` / the `MP_matrix` vertex transform
+  (`gfx_pc.cpp` ~1122/1739/1771). Confidence the logo/photo transform bug is
+  the D114/D116 fast3d flip: **medium-high**. This is a `port/fast3d`
+  correctness gap — the fix needed is the one D2 of PORT-LEARNINGS gates
+  behind a RenderDoc/apitrace capture of one texrect (or the asymmetric
+  1-texel-texture experiment). No `src/` change will fix it and static
+  tracing it is BANNED (PORT-LEARNINGS §D2). Parked exactly as before.
+
+- **Bug 2 — animated character models (gun-barrel Bond, cast-roll models)
+  entirely absent: category (b), an independent model-instantiation /
+  `render_pos` lifetime bug, NOT a transform bug. Root cause not pinned
+  (needs runtime probing).** Key discriminator: **in-level skeletal guards DO
+  render as humanoids** (`-level_09`, M-12) through the *identical* joint
+  path — `subcalcmatrices`→`modelUpdateMatrices`(`process_02_position` etc.)
+  →`drawjointlist`→`modelRenderNodeDl`. So the joint math, `matrix_4x4_f32_to_s32`,
+  and `gfx_sp_matrix` decode are all proven. What the front-end animated path
+  does *differently* from the working in-level path:
+  1. `renderData.mtxlist = dynAllocate(numMatrices << 6)` — the per-frame GFX
+     arena (`dyn.c:140`, bump-allocated inside `g_VtxBuffers[0]` /
+     MEMPOOL_STAGE emulated DRAM), then `instcalcmatrices`/`subcalcmatrices`
+     set `model->render_pos = (RenderPosView*)arg0->mtxlist` (`model.c:2409`)
+     and the joint matrices are written there and converted **in place**
+     f32→s32 by the caller (`title.c:281`, `front.c:1568` …). D115 MED item
+     **#5** already flags this exact mechanism: *"the D102 weapon-model
+     `render_pos` is pointed at a `dynAllocate`'d transient arena that on N64
+     aliased the persistent `hand->mtxlist`; likely the '1P weapon model
+     doesn't draw' cause."* The gun-barrel Bond uses the same
+     dynAllocate→render_pos pattern (`title.c:253/257`). If the arena is
+     swapped / overwritten between the `f32_to_s32` write and the
+     `gSPSegment(3, osVirtualToPhysical(render_pos))` bind in `subdraw`
+     (`model.c:5346`) / `drawjointlist`, every joint matrix is garbage →
+     model collapses to a point / projects off-screen → "absent".
+  2. `chrModelInstance` / `gunModelInstance` are stand-alone `Model`s created
+     for the intro (`title.c initializeGunBarrelIntro`), not the in-level
+     `chr`/`prop` pool — check they are non-NULL, `obj->numMatrices > 0`, and
+     the model file actually loaded (the `pcmodels` sidecar must contain the
+     Bond/cast model files; a missing manifest row → `hw_address` unpatched →
+     load serves N64-layout or fails).
+  3. `modelSetAnimation(chrModelInstance, (ModelAnimation*)((s32)&ANIM_DATA_bond_eye_fire + (s32)&ptr_animation_table->data), …)` (`title.c:220`, and `title.c:542`).
+     Looks like a truncation risk but is **probably already covered by D34**:
+     the PC branch of `assets/animationtable_data.h` defines `ANIM_DATA_*` as
+     an lvalue at `g_pc_animdata_base + offset`, so `(s32)&ANIM_DATA_*` is the
+     bare offset, and `ptr_animation_table` points into low (<4 GiB, bit-31-clear)
+     emulated DRAM, so the `(s32)` sum and the cast back to a 64-bit pointer are
+     lossless. Verify anyway with a probe (cheap), but do not lead with it.
+  Confidence this is category (b) and not (a): **high**. Confidence on the
+  exact mechanism (1 vs 2): **low** — pick with a `GE_PCDUMP` + a capped
+  env-gated probe logging `chrModelInstance`, `obj->numMatrices`,
+  `render_pos`, `g_GfxMemPos`, and the first joint matrix at the gun-barrel
+  frame. **Lead with mechanism 1** (`render_pos` = transient `dynAllocate`
+  arena, D115 MED #5) — it also explains why the *in-level* path works (there
+  `render_pos` is a persistent per-chr pool, not the gfx arena). An in-scope
+  fix would give the front-end animated models a persistent `render_pos`
+  buffer (`#ifdef PORT`) instead of the swapped arena, mirroring the D100/D102
+  inline-pool pattern.
+
+- **D144/D146 "seg5+0x9ee4 malformed sub-DL" is a DL-walk desync, not a
+  transform bug** — "unresolved matrix pointer then garbage opcodes" is the
+  D135 signature (a previous command decoded at the wrong width/offset
+  desyncs everything after). seg5 = model COL1/BaseAddr (§11.7), so a G_MTX
+  landing on seg5 means the walk is already lost, not that a matrix pointer
+  is "unresolved". d43_emit.py's opcode-aware remap (§11.6) deliberately does
+  **not** touch G_MTX w1; if a front-end model GDL span is emitted with a
+  wrong slot count or a `G_TRI*` / GE tex-macro (`0xba`, cf. D124 Facility)
+  is mis-sized, the following `G_MTX` reads garbage. This is
+  `tools_pc/d43_emit.py` + `port/fast3d/gfx_pc.cpp` territory — outside this
+  task's file scope. Recommend a dedicated converter/fast3d agent dump the
+  raw bytes of the `logoinst`/`walletinst` model GDL at `seg5+0x9ee4` with
+  `GE_DBG*` and diff the PC span against `build-pc/d43_convert.py`'s
+  reference output for that file.
+
+**Net for D75:** (a) closed. Bug 1 (logo/photo transform) folds into the
+parked D114/D116 fast3d-mirror item. Bug 2 (absent animated models) is a
+real, in-scope lead at `title.c:220` `(s32)&symbol` truncation +
+`render_pos`=`dynAllocate` arena lifetime — next session should build with a
+`#ifdef PORT` `(uintptr_t)` cast there and a capped probe, not a static pass.
+Confidence overall: **medium** (triage solid, no runtime confirmation).
 
 **D76 (OPEN: 2D graphics — disclaimer/legal screen only partially drawn). ROOT-CAUSED (M-31) → D164.**
 The image-table/D68 hypothesis is **wrong**: the legal screen (`constructor_menu00_legalscreen`,
