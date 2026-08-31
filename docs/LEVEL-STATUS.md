@@ -7,6 +7,16 @@ auto-injected, D121), `GE_PCDUMP="80-260:40"`, ~24 s watchdog then
 0x140000000). "render %" = `tools_pc/pixcount.py` non-clear on the last
 captured frame. Binary at `f2beae4b` + this session's build.
 
+**M-30 re-sweep (2026-08-31, build after D157/D120/RC2): 21 / 21 PASS — no
+crash logs.** First all-green sweep incl. Cuba (54) — the D129 credits-path
+crash no longer reproduces on a bare `-level_54` boot (Cuba rendered 92.5%
+crash-free through the window). Verifies that the M-30 changes — D157
+(objective difficulty byte-offset), RC2 (`Video.FixMipTextures` mip-upload
+clip, default on), D120 (`d43_emit.py` PointUsage emit), the `GE_SAVELOG`/
+`GE_UNLOCK_ALL` `#ifdef PORT` diagnostics, and the front-end mouse-pointer
+mode — introduced no level-load regression. Machine was idle; `level_sweep.sh`
+default window/watchdog.
+
 M-25 re-sweep (2026-08-30, port-QoL build `863f436b`): **20 / 21 PASS**,
 unchanged. Caverns (39) flagged CRASH `0xc000001d` once under sweep load →
 2/2 clean on retry (D117/D134 concurrent-load flakiness, not a regression).
