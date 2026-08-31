@@ -182,6 +182,23 @@ through a converter or a runtime bswap fixup reads scrambled.
   (`GE_IS_NULL()`) so the guard survives. Same class as the D143 textRender
   NULL guards. Audit any hand-rolled libc primitive in `src/` that a port
   NULL can reach.
+- **D157 — a small value in the LOW BYTE of a BE `s32` word, read as `s8` at
+  the word's last offset, reads 0 on LE after the converter byte-swaps it.**
+  Same family as D151/D139. `struct objective_entry.difficulty` is `s8` at
+  offset 0xF; the underlying type-23 propDef word 3
+  (`MissionObjectiveRecord.MinDificulty`) is a BE `s32` whose value (0..3) sits
+  in byte 0xF on N64. `d88_propdefs.py` `_bswap32`'s the word (correct — it IS a
+  32-bit field), moving the value to byte 0xC on LE, so the `s8`@0xF read yields
+  0 for *every* objective. Consequence was total: `get_difficulty_for_objective`
+  → 0 for all → `objectiveIsAllComplete()` on Agent evaluated objectives that
+  should be difficulty-gated out → never TRUE → `end_of_mission_briefing()` (the
+  campaign-unlock EEPROM write) never fired → **no solo level ever unlocked the
+  next.** Fix: reorder the struct's post-swap tail under `#ifdef PORT` so the
+  named byte reads offset 0xC. **Grep every struct that reads a sub-`s32` field
+  as `s8`/`u8`/`s16`/`u16` at a NON-zero in-word offset — after a converter
+  bswap that offset is wrong.** Offline tools have the same trap
+  (`dump_objectives.py` read byte 0xC = BE high byte = always 0).
+
 - **D151 — a ROM-serialized `s32` slot decoded by the struct as `[u16 hi][u16 lo]`
   reads zero on LE.** N64 code frequently splits a 32-bit setup-stream word into
   `u16 reserved; u16 realvalue;` where the useful value is always small and lands

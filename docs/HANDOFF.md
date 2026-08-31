@@ -403,7 +403,25 @@ Start, exactly like the retail game.** No crashes, no hangs. 10 commits
 
 ## Done this session (M-30) — user batch defect list; commits + docs
 
-### OPEN BLOCKER (M-30) — campaign progression not persisting
+### BLOCKER (M-30) — campaign progression not persisting — **ROOT-CAUSED + FIXED (D157), needs playtest confirm**
+`D157` (`src/bondtypes.h`, `#ifdef PORT`): the type-23 objective record's
+`MinDificulty` is a BE `s32` at word 3; `d88_propdefs.py` bswap32's it, so on
+LE the value moved from byte 0xF to 0xC, but `struct objective_entry.difficulty`
+still read `s8`@0xF → **0 for every objective**. `get_difficulty_for_objective()`
+returned Agent(0) for all → `objectiveIsAllComplete()` on Agent evaluated
+objectives that should be difficulty-gated out (Dam "Neutralize all alarms" =
+Secret Agent, "Install covert modem" = 00 Agent) → always incomplete →
+`end_of_mission_briefing()` (the unlock write) never ran. **User was right —
+you don't shoot an alarm on Agent Dam.** Fixed the struct tail order under
+`#ifdef PORT`; also fixed `dump_objectives.py` (same byte-offset bug — it
+showed "Agent" for everything). **Next: user replays Dam on Agent (just reach
+the exit) under `GE_SAVELOG=1`; expect `MinDif=1/2/2/0` on the crit lines,
+`objectiveIsAllComplete=1`, a `fileWriteSave slot=N ... TIMES` line, and
+Facility unlocked in mission-select.** If obj 3 (Agent, flag 0x1000) still
+shows incomplete, the level isn't setting that stage flag on exit — separate
+issue. `GE_UNLOCK_ALL=1` remains the playtest workaround meanwhile.
+
+<details><summary>Original M-30 blocker writeup (superseded by D157)</summary>
 User completed Dam, hit "previous" from the debrief to mission select,
 **Facility still locked**. `data/ge007.eep` has zero completion times → the
 unlock save isn't landing (or is wiped on reload). Chain:
@@ -441,6 +459,7 @@ field/stride that's wrong.** Also noted but not chased:
 `times[]` up to `[98/99]` but the array is `u8 times[76]` — OOB for
 high level/difficulty combos (writes into the next slot's checksum). Not the
 Dam/Agent case (index 0) but a latent save-corruption bug.
+</details>
 
 ## Done this session (M-30) — user batch defect list; earlier items
 
