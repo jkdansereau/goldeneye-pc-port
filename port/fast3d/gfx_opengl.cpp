@@ -54,7 +54,7 @@ static uint32_t frame_count;
 static std::vector<Framebuffer> framebuffers;
 static size_t current_framebuffer;
 static float current_noise_scale;
-static int current_anisotropy_level;
+static int current_anisotropy_level = 4;   /* B1: sane default (0 was invalid for GL_TEXTURE_MAX_ANISOTROPY) */
 static FilteringMode current_filter_mode = FILTER_LINEAR;
 static MipmapFilteringMode current_mipmap_filter_mode = MIPMAP_LINEAR;
 static bool current_textures_linear_filter[2] = {false, false};
@@ -720,9 +720,16 @@ static void gfx_opengl_set_sampler_parameters(int tile, bool linear_filter, uint
         // MIPMAP_DISABLED   MIPMAP_NEAREST               MIPMAP_LINEAR
         {  GL_NEAREST,       GL_NEAREST_MIPMAP_NEAREST,   GL_NEAREST_MIPMAP_LINEAR  }, // FILTER_NONE
         {  GL_LINEAR,        GL_LINEAR_MIPMAP_NEAREST,    GL_LINEAR_MIPMAP_LINEAR   }, // FILTER_BILINEAR
-        {  GL_NEAREST,       GL_NEAREST,                  GL_NEAREST                }, // FILTER_THREE_POINT
+        {  GL_NEAREST,       GL_LINEAR_MIPMAP_NEAREST,    GL_LINEAR_MIPMAP_LINEAR   }, // FILTER_THREE_POINT
     };
 
+    // B1: the shader does 3-point on magnification; for minification let the
+    // hardware do trilinear mips. THREE_POINT force-generates mips at upload
+    // (see gfx_opengl_upload_texture) so it can always sample them here -- this
+    // is what kills the grazing-angle shimmer (Depot roof, docs/BRIEF-B2).
+    if (current_filter_mode == FILTER_THREE_POINT) {
+        mipmaps = true;
+    }
     mipmaps = mipmaps && (current_mipmap_filter_mode != MIPMAP_DISABLED);
     const int mip_idx = mipmaps ? current_mipmap_filter_mode : 0;
     const GLint min_filter = linear_filter ? min_filters[current_filter_mode][mip_idx] : GL_NEAREST;

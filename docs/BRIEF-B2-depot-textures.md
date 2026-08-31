@@ -18,7 +18,18 @@ recorded. Companion: `docs/BACKLOG.md` B1/B2, `docs/SMALL-FIXES.md` C-section.
 Frames: `ppm/frame_0007..1150` this session (regenerate with
 `GE_PCDUMP="700-1600:150" ./build-pc/ge007.x86_64.exe -level_30`).
 
-## Leading hypothesis (revised M-29): this is mostly B1, not a decode bug
+## UPDATE (M-29, later): filtering RULED OUT
+
+Enabling N64 3-point filtering + trilinear mips + 4x anisotropy game-wide
+(the B1 work, now default) **did not change the Depot roof** — the blue
+speckle + radial rays render identically at 640x480 native. So this is NOT
+grazing-angle aliasing. It is a real texture-data / UV / effect bug on that
+specific surface. The radial rays converging to a point look like either a
+broken texture matrix (rotating/scrolling tc), garbage UVs on the ceiling
+geometry, or a mis-rendered light-shaft effect (wrong blend/opacity). Needs
+the `GE_DTEX` probe below to identify what draws it.
+
+## (superseded) earlier hypothesis: grazing-angle aliasing / B1
 
 The radial-ray + sparkle pattern is the **classic grazing-angle aliasing**
 signature of a high-frequency texture sampled with point/bilinear filtering

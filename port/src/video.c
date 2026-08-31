@@ -54,7 +54,7 @@ static int initDone = 0;
 static int cfgVSync         = 1;   /* swap interval: 0 = off, 1 = on            */
 static int cfgFpsCap        = 0;   /* frame cap in fps; 0 = uncapped (vsync)    */
 static int cfgMSAA          = 1;   /* 1/2/4/8 samples; 1 = off                  */
-static int cfgTexFilter     = 1;   /* 0 = nearest (crisp), 1 = bilinear         */
+static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N64 3-point + trilinear */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
 
 /*
@@ -74,7 +74,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 8);
-    configRegisterInt("Video.TextureFilter", &cfgTexFilter,  0, 1);
+    configRegisterInt("Video.TextureFilter", &cfgTexFilter,  0, 2);
     configRegisterInt("Video.Fullscreen",    &cfgFullscreen, 0, 1);
     configRegisterInt("Window.Width",        &cfgWinW,       0, 16384);
     configRegisterInt("Window.Height",       &cfgWinH,       0, 16384);
@@ -132,7 +132,15 @@ int videoInit(void)
     wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
     gfx_set_target_fps(cfgFpsCap);   /* 0 = uncapped */
 
-    if (cfgTexFilter) {
+    /* Texture filtering. 1 = bilinear (default, matches prior behaviour),
+     * 0 = crisp nearest, 2 = N64 3-point emulation + trilinear mips (opt-in;
+     * more console-authentic but softens textures at normal distance -- did
+     * NOT fix the Depot roof, see docs/BRIEF-B2-depot-textures.md). All keep
+     * point-sampled tiles (HUD, G_TF_POINT) crisp via the per-tile flag. */
+    if (cfgTexFilter >= 2) {
+        gfx_set_texture_filter(FILTER_THREE_POINT);
+        gfx_set_mipmap_filter(MIPMAP_LINEAR);
+    } else if (cfgTexFilter == 1) {
         gfx_set_texture_filter(FILTER_LINEAR);
         gfx_set_mipmap_filter(MIPMAP_LINEAR);
     } else {
