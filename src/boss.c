@@ -741,9 +741,13 @@ void bossReturnTitleStage(void) {
     objectivestatusDisableStatusDisplay();
 #endif
 #ifdef PORT
-    if (getenv("GE_SAVELOG"))
+    if (getenv("GE_SAVELOG")) {
+        extern int g_savelogObjOnce;
+        g_savelogObjOnce = 1;
         osSyncPrintf("SAVELOG: bossReturnTitleStage stage=%d objectiveIsAllComplete=%d\n",
                      (int)bossGetStageNum(), (int)objectiveIsAllComplete());
+        g_savelogObjOnce = 0;
+    }
 #endif
     if ((bossGetStageNum() != LEVELID_CUBA) && (objectiveIsAllComplete() != 0x0)) {
         end_of_mission_briefing();

@@ -9,6 +9,9 @@
 #include "bondview.h"
 #ifdef PORT
 #include <stdlib.h>
+/* set by bossReturnTitleStage so the (per-frame-polled) objective logs only
+ * fire on the one call that actually gates the level-complete save. */
+int g_savelogObjOnce = 0;
 #endif
 
 //Public variables - move to header
@@ -286,6 +289,17 @@ OBJECTIVESTATUS get_status_of_objective(s32 objectiveNum) //#MATCH
                             break;
                         }
                     }
+#ifdef PORT
+                    if (g_savelogObjOnce && getenv("GE_SAVELOG")) {
+                        u32 *rw = (u32 *)objective;
+                        osSyncPrintf("SAVELOG:     crit obj=%d type=%d ObjRefID=%d(0x%x) "
+                                     "TextID=0x%x stride=%d words=[%08x %08x %08x] curstat=%d\n",
+                                     objectiveNum, (int)objective->type, (int)objective->ObjRefID,
+                                     (unsigned)objective->ObjRefID, (unsigned)objective->TextID,
+                                     (int)sizepropdef((PropDefHeaderRecord *)objective),
+                                     rw[0], rw[1], rw[2], (int)currentstatus);
+                    }
+#endif
                     if (status == OBJECTIVESTATUS_COMPLETE)
                     {
                         if (currentstatus != OBJECTIVESTATUS_COMPLETE)
@@ -324,7 +338,7 @@ bool objectiveIsAllComplete(void)
         objdiff = get_difficulty_for_objective(objective);
         curdiff = lvlGetSelectedDifficulty();
 #ifdef PORT
-        if (getenv("GE_SAVELOG"))
+        if (g_savelogObjOnce && getenv("GE_SAVELOG"))
             osSyncPrintf("SAVELOG:   obj %d/%d objdiff=%d curdiff=%d status=%d\n",
                          objective, objectiveGetCount(), (int)objdiff, (int)curdiff,
                          (int)get_status_of_objective(objective));
