@@ -1,6 +1,13 @@
 #include <ultra64.h>
 #include "frametiming.h"
 
+#ifdef PORT
+/* Max frames of simulation catch-up per rendered frame (D155). 6 ~= 100 ms
+ * at 60 Hz: covers a legitimately slow frame without letting a multi-second
+ * stall spiral the anim/sim loops. */
+#define FRAMETIMING_PORT_MAX_CATCHUP 6
+#endif
+
 // data
 s32 lastFrameCounter = -1;
 s32 currentFrameCounter = 0;
@@ -85,6 +92,28 @@ void waitForNextFrame(void) //maybe WaitForTick
   } while (nextFrameTime < frameDelay);
 
   frameDelay = 1;
+
+#ifdef PORT
+  /* D155: osGetCount() is wall-clock on the PC port (D117), not a VI-locked
+   * hardware counter. A real-time stall -- an asset load at a cutscene/stage
+   * boundary, a host-scheduling hitch, another process hammering the machine
+   * -- makes nextFrameTime balloon to hundreds or thousands of "frames". The
+   * N64 was physically VI-bound and never produced more than a couple.
+   * Feeding a huge deltaFrames downstream is catastrophic: it becomes
+   * g_ClockTimer, which drives modelTickAnim()'s `while (numticks-- > 0)`
+   * loop once per character per render AND dozens of `for (i = 0; i <
+   * g_ClockTimer; i++)` sim loops (bondhead/bondview2/explosion/...). One
+   * frame then takes seconds of catch-up -> the kernel-heartbeat watchdog
+   * trips ("hang" at the Facility outro-cutscene end), and the slow frame
+   * feeds an even larger delta next time -> unrecoverable spiral. Clamp to a
+   * small catch-up bound; after a hitch the sim just resumes at roughly
+   * real-time pace, exactly as the console did when it dropped frames under
+   * load. Timing-compensation class, cf. D117/D134. */
+  if (nextFrameTime > FRAMETIMING_PORT_MAX_CATCHUP) {
+    nextFrameTime = FRAMETIMING_PORT_MAX_CATCHUP;
+  }
+#endif
+
   updateFrameCounters(nextFrameTime);
 }
 

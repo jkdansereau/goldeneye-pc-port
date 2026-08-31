@@ -407,3 +407,19 @@ a few others use it as their **only** mutual-exclusion primitive. On PC the
 - **Watch item: `osYieldThread` = `Sleep(0)`.** The one place we fake
   cooperative behavior. If a level-sweep hot loop misbehaves under host load,
   this shim is the first thing to inspect. Keep as-is until then.
+- **D155 — an unclamped per-frame `deltaFrames` from wall-clock `osGetCount()`
+  spirals the sim into a "hang".** The N64 was VI-locked so `waitForNextFrame()`
+  never returned more than ~2 elapsed frames. On the port `osGetCount()` is
+  wall-clock (D117), so any real-time stall (asset load at a stage/cutscene
+  boundary, host thrash) makes `nextFrameTime` → hundreds/thousands. That value
+  flows through `speedgraphframes` → `g_ClockTimer` and drives *every*
+  `modelTickAnim` `while (numticks--)` and `for (i=0; i<g_ClockTimer; i++)` loop
+  in the sim → one render becomes seconds of catch-up → heartbeat "hang", and
+  the slow frame feeds an even bigger delta next time → unrecoverable. Symptom
+  in a hang dump: `mainThread` parked in `modelTickAnim`/`modelConstrainOrWrap
+  AnimFrame` under `chrTick`/`playerTick`/`lvlRender` across every dump. Fix:
+  clamp `nextFrameTime` under `#ifdef PORT` in `waitForNextFrame()`
+  (`FRAMETIMING_PORT_MAX_CATCHUP` = 6). Any other place the port lets an N64
+  "number of elapsed ticks" value run unbounded is the same latent trap — grep
+  for `g_ClockTimer` / `speedgraphframes` / `lvupdate*` consumers that loop.
+  §F **D155**.
