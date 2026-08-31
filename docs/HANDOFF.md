@@ -26,6 +26,15 @@ rabbit-holes. Instead:
 
 Full workstream breakdown (WS1–WS6) in `docs/PLAN-linear-level-sweep.md`.
 
+## Diagnostic env probes
+
+All `GE_*` env-var probes in the tree are catalogued in
+**`docs/GE-ENV-PROBES.md`** (var → file:line → what it does → live/dead).
+Live tooling: `GE_PCDUMP`, `GE_INPUTSCRIPT`, `GE_STARTMENU`, `GE_UNLOCK_ALL`,
+`GE_INPUTLOG`, `GE_SAVELOG`, `GE_D160`, `GE_DTEX`, `GE_TEXDUMP`. The rest are
+closed-finding `GE_Dxx` scaffolding (strip candidates; all env-gated and inert,
+except `bg.c`'s `GE_D63` lines which are not `#ifdef PORT`-guarded).
+
 ## Where things stand
 
 - **BUNKER1 (`-level_09`) is playable-ish.** Loads, renders recognisably
