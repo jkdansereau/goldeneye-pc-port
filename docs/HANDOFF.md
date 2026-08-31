@@ -430,14 +430,24 @@ User playtest batch report (5 items; #1 disregarded):
   `data/ge007.eep`, write-through, M-29 `bf5e4d3d`) audited — sound; progress
   persists across restart *once the menu works* (#4). No change needed; verify
   after #4.
-- **#3 "interlaced" textures** (`screenshots/interlaced texture example.jpg` —
-  Bond wallet photo + right panel show alternating-row tearing on the main
-  menu). This is `docs/TEXTURE-GLITCH-ANALYSIS.md` RC1 (G_SETTEX 0xc0 no-op —
-  the wallet-Bond model emits 2830 of them) + RC2 (mip-chain contamination).
-  **NOT fixed** — it's the §6 fix plan in that doc (G_SETTEX impl + base-LOD-
-  only upload + drop glGenerateMipmap). Real fast3d work, parked per M-29
-  priority (textures elevated but investigation/impl-gated). Next: fix-plan
-  item 1 (G_SETTEX dispatch per `rsp/graphics/gmain.s` + `gbi_extension.h`).
+- **#3 "interlaced" textures** (`screenshots/interlaced texture example.jpg`).
+  **RC2 (mip contamination) FIXED, default on** (`<rc2 commit>`,
+  `port/fast3d/gfx_pc.cpp`). New `GE_DTEX=1` probe confirmed it: every LOD
+  texture uploaded ~1.3x too tall (64x64 I4 → 64x87), the extra rows being mip
+  bytes rendered as image rows. `import_texture()` now clips a full-width LOD
+  block to the SETTILESIZE base height; GL builds correct mips from a correct
+  base. Knob `Video.FixMipTextures` (=0 → old behaviour, byte-identical to
+  golden). BUNKER1 side-wall textures visibly cleaner with it on; Silo
+  unregressed. **`-level_09`/`-level_20` framediff WILL show "REGRESSION" with
+  the fix on — that's the textures legitimately changing; refresh
+  `tools_pc/golden/` (`framediff.py --update`) once the user confirms the menu
+  + Depot look right.**
+  - **Still open:** the wallet-Bond *photo* garble is RC1 / D75 front-end model
+    family (the model GDL / `texLoadFromGdl` expansion is broken for front-end
+    models — fast3d walks into `0xfafbfbfc` garbage, not a missing opcode).
+    Separate larger track — see `docs/TEXTURE-GLITCH-ANALYSIS.md` §6b.
+  - RC4 (palette off-by-one, `gfx_pc.cpp:835`) and RC3 (wrap period) still
+    open — small, in the same doc §6.
 - Regenerated `docs/LEVEL-OBJECTIVES.md` for all 21 solo levels (Track A);
   committed loose reference docs/tools.
 
