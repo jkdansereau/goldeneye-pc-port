@@ -367,6 +367,24 @@ a few others use it as their **only** mutual-exclusion primitive. On PC the
   `ALEventQueue` lock) still owed — do it once the steal-log names the
   leaking call site. §F D152.
 
+## D5. Loop bounds that assume linker adjacency of two file-scope globals
+
+N64 decomp sometimes ends an array walk with `end = &nextGlobal;` where
+`nextGlobal` is the *next* file-scope definition in the `.c`. The N64
+toolchain emits `.data`/`.bss` in source order so `&nextGlobal ==
+array + ARRAY_COUNT(array)`; mingw/GCC on the PC target **reorders**
+globals, so `end` can land before the array (loop runs 0–1 times) or far
+past it (walk off the end).
+
+- Instance: **D164** — `constructor_menu00_legalscreen` (`front.c`) bounds
+  the 12-line legal-screen text loop on `&legalscreen_MRD`, which mingw
+  links 0x60 bytes *before* `legalpage_text_array` → only line 1 renders
+  (== the D76 "disclaimer half-drawn" bug; it was never an image-table
+  issue). Fix: `#ifdef PORT` uses `array + ARRAY_COUNT(array)`.
+- Grep for `= &` / `(TYPE *)&` on the RHS of a loop-terminator compare, and
+  any `for`/`while`/`do` whose end pointer is the address of a *different*
+  symbol than the one being iterated.
+
 ## E. Process / method notes
 
 - Investigation loop is: reproduce → env-gated capped probe → root-cause
