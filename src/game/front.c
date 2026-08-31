@@ -1574,8 +1574,15 @@ Gfx *constructor_menu00_legalscreen(Gfx *DL)
     DL = microcode_constructor(DL);
     
     legal_text_ptr = legalpage_text_array;
+#ifdef PORT
+    /* D164: N64 relied on the linker placing legalscreen_MRD immediately after
+     * legalpage_text_array; mingw/GCC reorders file-scope globals so that
+     * address is bogus (lands 0x60 before the array) -> loop ran once. */
+    legal_text_end = legalpage_text_array + (sizeof(legalpage_text_array) / sizeof(legalpage_text_array[0]));
+#else
     legal_text_end = (struct legal_screen_text *)&legalscreen_MRD;
-    
+#endif
+
     do
     {
         DL = display_aligned_white_text_to_screen(DL, legal_text_ptr->h_pos, legal_text_ptr->v_pos, legal_text_ptr->halign, legal_text_ptr->valign, langGet(legal_text_ptr->txtID), ptrFontZurichBoldChars, ptrFontZurichBold);

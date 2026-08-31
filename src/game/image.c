@@ -2196,6 +2196,16 @@ void texSwapAltRowBytes(u8 *dst, s32 width, s32 height, s32 format)
 	u32 *row = (u32 *)dst;
 	s32 tmp;
 
+#ifdef PORT
+	/* D159: this pre-swaps odd texture rows in 8-byte groups to compensate for
+	 * the N64 RDP's odd-line TMEM address XOR (bit 2) during 4-byte-word block
+	 * loads. fast3d does not emulate that XOR, so the pre-swap leaves odd rows
+	 * scrambled in the uploaded image -- the "interlaced" wallet-Bond photo and
+	 * other large I4/I8/IA8 front-end textures. Skip it: fast3d wants a plain
+	 * linear image. (Hardware-quirk compensation -> port layer.) */
+	return;
+#endif
+
 	switch (format) {
 	case TEXFORMAT_RGBA32:
 	case TEXFORMAT_RGB24:

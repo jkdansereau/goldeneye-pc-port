@@ -199,6 +199,20 @@ through a converter or a runtime bswap fixup reads scrambled.
   bswap that offset is wrong.** Offline tools have the same trap
   (`dump_objectives.py` read byte 0xC = BE high byte = always 0).
 
+- **D159 — an N64 "pre-swap for the RDP" texture massage is poison on PC because
+  fast3d doesn't emulate the RDP.** `texSwapAltRowBytes` (`image.c`) pairwise-swaps
+  the 8-byte (`u32`) groups of every **odd** texture row before upload, to cancel
+  the N64 RDP's odd-line TMEM address XOR (address bit 2) that fires during
+  4-byte-word `gDPLoadBlock` loads of I/IA/RGBA16 formats. fast3d has **zero**
+  odd-row handling, so the pre-swapped odd rows upload scrambled → an 8-texel
+  "venetian blind" / interlace comb. Invisible on small or distant textures,
+  glaring on large 1:1 front-end images (wallet-Bond photo, passport crest).
+  Fix: `#ifdef PORT` no-op the function — fast3d wants a plain linear image.
+  General rule: any `src/` routine whose comment or shape says "for the RDP /
+  TMEM / N64 hardware" and that reorders/massages bytes is a **port-layer**
+  candidate (same family as the K0-fold and interrupt-mask shims), not game
+  logic — audit `image.c` / `tex.c` for others (`texAlignIndices` row padding is
+  load-bearing and must stay; the swap is not).
 - **D151 — a ROM-serialized `s32` slot decoded by the struct as `[u16 hi][u16 lo]`
   reads zero on LE.** N64 code frequently splits a 32-bit setup-stream word into
   `u16 reserved; u16 realvalue;` where the useful value is always small and lands
