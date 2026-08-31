@@ -766,6 +766,27 @@ def validate(name, src, D, NS, NT, nodes, R0, placed, all_gdls, buf, D_PC,
                 break
             j += 1; o += 8
 
+    # D120: PointUsage[] round-trips + is a sane index chain (each entry is an
+    # s16 in [-32768, numVertices) -- an index into the same array, or negative
+    # to terminate).  A zero-filled region (the pre-M-30 bug) trivially passes
+    # the range test but every entry == 0 -> flag that too.
+    for puo, punv in op24_pointusage.items():
+        pn = remap(puo)
+        if pn is None:
+            err(f"PointUsage {puo:#x} not in region map"); continue
+        allzero = True
+        for k in range(punv):
+            want = struct.unpack_from(">h", src, puo + 2 * k)[0]
+            got = struct.unpack_from("<h", buf, pn + 2 * k)[0]
+            if got != want:
+                err(f"PointUsage {puo:#x}[{k}]: {got} != {want}")
+            if got != 0:
+                allzero = False
+            if got >= punv:
+                err(f"PointUsage {puo:#x}[{k}] = {got} >= numVertices {punv}")
+        if allzero and punv > 1:
+            err(f"PointUsage {puo:#x}: all {punv} entries zero (emit gap?)")
+
 # PC pointer offsets per (op, n64 field) — for round-trip validation
 PC_PTR_OFF = {
     1: {4: 8}, 2: {0x14: 24}, 3: {0x14: 24}, 8: {8: 8},
