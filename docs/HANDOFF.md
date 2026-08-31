@@ -403,7 +403,20 @@ Start, exactly like the retail game.** No crashes, no hangs. 10 commits
 
 ## Done this session (M-30) — user batch defect list; commits + docs
 
-### BLOCKER (M-30) — campaign progression not persisting — **ROOT-CAUSED + FIXED (D157), needs playtest confirm**
+### BLOCKER (M-30) — campaign progression not persisting — **FIXED (D157), CONFIRMED by user playtest**
+User replayed Dam on Agent post-fix: `gdb.txt` shows `obj 0 objdiff=1` /
+`obj 1,2 objdiff=2` (skipped on Agent) / `obj 3 objdiff=0 status=1` →
+`objectiveIsAllComplete=1` → `end_of_mission_briefing` → `fileUnlockStage...
+stage=0 diff=0` → `fileWriteSave slot=0 bitflags=10`. `data/ge007.eep` slot 0
+now carries the Dam completion time; the Agent checkmark shows in mission-
+select **and persists across a kill + restart**. Campaign progression works.
+(`GE_SAVELOG` diagnostics — `#ifdef PORT`, env-gated — left in
+`objective_status.c` / `boss.c` / `file.c` / `file2.c` for now; strip once a
+few more level boundaries are playtested. `dump_objectives.py` per-criterion
+`MinDif=` is only valid on the `type=23` lines — garbage on 2-word sub-records,
+harmless.)
+
+<details><summary>D157 root cause</summary>
 `D157` (`src/bondtypes.h`, `#ifdef PORT`): the type-23 objective record's
 `MinDificulty` is a BE `s32` at word 3; `d88_propdefs.py` bswap32's it, so on
 LE the value moved from byte 0xF to 0xC, but `struct objective_entry.difficulty`
@@ -420,6 +433,7 @@ the exit) under `GE_SAVELOG=1`; expect `MinDif=1/2/2/0` on the crit lines,
 Facility unlocked in mission-select.** If obj 3 (Agent, flag 0x1000) still
 shows incomplete, the level isn't setting that stage flag on exit — separate
 issue. `GE_UNLOCK_ALL=1` remains the playtest workaround meanwhile.
+</details>
 
 <details><summary>Original M-30 blocker writeup (superseded by D157)</summary>
 User completed Dam, hit "previous" from the debrief to mission select,
