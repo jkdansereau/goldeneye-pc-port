@@ -425,15 +425,20 @@ C1 (mirrored HUD — user unsure it's worth it). Full plan +
   (`G_TX_CLAMP` test + `[t]` index) activates never-run code and boot-crashes
   `-level_09` (0 frames). Left inert with a NOTE in `gfx_pc.cpp`. Needs the
   hoist-out-of-vertex-loop rework + per-level visual check.
-- **B2 (Depot wrong textures) — DIAGNOSED, not fixed.** `docs/BRIEF-B2-depot-
-  textures.md`. Captured `-level_30` frames: the roof/ceiling renders as
-  blue + green speckle + radial rays. Decode path (TLUT bswap,
-  `palette_to_rgba32`, `import_texture_*`) audited clean. **Leading
-  hypothesis: this is mostly BACKLOG B1** (grazing-angle aliasing from
-  missing N64 3-point filtering + a stubbed mip chain), not a decode bug.
-  Recommendation: do B1 (filtering + mips, PD/Nightdive reference) as its own
-  focused effort — highest-leverage single graphics fix, likely collapses B2
-  into it. Next diagnostic = `GE_DTEX` probe of the ceiling texture params.
+- **B1 3-point filtering — wired up as opt-in (`a418f4d0`), NOT default.**
+  The sm64ex 3-point shader path existed but was unreachable + its min-filter
+  row was mip-less. Fixed the row (trilinear), aniso default 0→4, exposed
+  `Video.TextureFilter=2`. **Default stays 1 (bilinear)** — 3-point softens
+  textures at normal distance and (tested) did NOT fix the Depot roof.
+- **B2 (Depot wrong textures) — filtering RULED OUT, still not fixed.**
+  `docs/BRIEF-B2-depot-textures.md`. The roof renders as blue speckle +
+  radial rays converging to a point; identical with 3-point+trilinear+aniso
+  at 640×480 native, so NOT grazing aliasing. Decode path (TLUT bswap,
+  `palette_to_rgba32`, `import_texture_*`) audited clean. It's a texture-data
+  / UV / light-shaft-effect bug on that surface. **Next step: `GE_DTEX`
+  probe** to identify what draws it (params in the brief). This is a
+  RenderDoc/probe-class investigation — D114/D116 rabbit-hole family, needs
+  a focused session, not inline.
 - **D153 reminder cost real time this session:** back-to-back `-level_09`
   runs during builds boot-crash under machine thrash; only regression-test on
   a settled machine (clean run = 600+ frames fine).
