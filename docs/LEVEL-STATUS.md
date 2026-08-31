@@ -228,3 +228,41 @@ Hand `docs/LEVEL-PLAYTEST.md` to the user for the WS6 completion pass.
 
 Re-run `tools_pc/level_sweep.sh` after each class fix; keep
 `-level_09`/`-level_20` green (`tools_pc/framediff.py`).
+
+---
+
+## With-input crash sweep (M-30, 2026-08-31)
+
+Scripted controller-0 input (walk fwd + fire pulses + turns) via
+`GE_INPUTSCRIPT`, ~46-70 s per level, `GE_PCDUMP` capture. Checks
+`ge007.crash.log` + VI-pacemaker health. Machine was loaded (concurrent
+agents) → frame progression slow on some runs but VI posts steady = no
+hang. All retried on a settled machine where slow.
+
+| # | Level    | With-input result |
+|---|----------|-------------------|
+| 33 | Dam      | PASS (frame 300+ dump, no crash) |
+| 09 | Bunker1  | PASS (VI pacemaker healthy, no crash; slow under load) |
+| 20 | Silo     | PASS (VI pacemaker healthy, no crash; slow under load) |
+| 23 | Control  | PASS (frame 600+, no crash) |
+| 32 | Egypt    | PASS (frame 600, no crash — first run was load-slow, clean on retry) |
+| 54 | Cuba     | PASS (frame 1200+, no crash) |
+| 39 | Caverns  | PASS — **D158 (KF7 muzzle-flash `stackpad2[-8]`) holds**, fire no longer crashes |
+
+Earlier this session (per M-30 handoff), with-input PASS:
+Facility 34, Runway 35, Surface1 36, Frigate 26, Statue 22, Bunker2 27,
+Surface2 43, Streets 29, Depot 30, Train 25, Jungle 37, Cradle 41, Aztec 28.
+
+**With-input sweep: 21/21 crash-free.** No new ABI/layout crashes found.
+
+### stackpad / negative-stack-index audit
+`grep -rnE '\)\[-[0-9]|[a-z0-9_]\[-[0-9]+\]|stackpad' src/game/*.c src/*.c`:
+only `gunfire.c:830/836` (`((f32*)stackpad2)[-8]`) is a true decomp
+register-alloc stackpad hack — already fixed by D158 (`#ifdef PORT`
+real local `kf7_flashscale`). `front.c:5246-47` declares `s32 stackpad;`
+locals but never negative-indexes them (benign, and front.c is off-limits).
+All other `[-N]` hits are legitimate pointer walks (`gun.c` spline
+`current[-1]`, `stan.c` `stack[-1]`, `initpathtablelinks.c`
+`validationGroupCursors[-3]` already D89-handled, `options.c` `vtx[-1]`,
+`decompress.c` `src[-1]`). `othermodemicrocode.c:368 (aa)[-4]` is a
+texture-pool pointer walk, not a stack hack. **No further stackpad bugs.**
