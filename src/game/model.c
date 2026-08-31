@@ -3625,6 +3625,22 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
          * pre-loop frame; the anim just holds instead of hanging. */
         if (!(frame > -1.0e6f && frame < 1.0e6f))
         {
+            static s32 ge_d156_logged = 0;
+            if (!ge_d156_logged)
+            {
+                ge_d156_logged = 1;
+                fprintf(stderr,
+                    "[D156] bad anim frame guarded: frame=%g animframe1=%g "
+                    "speed=%g playspeed=%g newspeed=%g oldspeed=%g "
+                    "timespeed=%g elapsespeed=%g unkb0=%g unk88=%g anim=%p\n",
+                    (double)frame, (double)model->animframe1,
+                    (double)model->speed, (double)model->playspeed,
+                    (double)model->newspeed, (double)model->oldspeed,
+                    (double)model->timespeed, (double)model->elapsespeed,
+                    (double)model->unkb0, (double)model->unk88,
+                    (void *)model->anim);
+                fflush(stderr);
+            }
             frame = model->animframe1;
         }
         if (!(frame2 > -1.0e6f && frame2 < 1.0e6f))
