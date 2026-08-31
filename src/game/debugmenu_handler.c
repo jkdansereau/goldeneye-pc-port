@@ -1,4 +1,7 @@
 #include <ultra64.h>
+#ifdef PORT
+#include <stdlib.h>
+#endif
 #include "debugmenu_handler.h"
 #include "initgamedata.h"
 #include <boss.h>
@@ -1087,6 +1090,15 @@ s32 get_debug_enable_agent_levels_flag(void) {
 }
 
 s32 get_debug_enable_all_levels_flag(void) {
+#ifdef PORT
+    /* GE_UNLOCK_ALL=1: mission-select shows every solo level (playtest aid while
+     * the objective-completion -> save-unlock chain is being fixed, M-30). */
+    {
+        static int c = -1;
+        if (c < 0) c = getenv("GE_UNLOCK_ALL") ? 1 : 0;
+        if (c) return 1;
+    }
+#endif
 #if defined(LEFTOVERDEBUG)
     return debug_enable_all_levels_flag;
 #else
