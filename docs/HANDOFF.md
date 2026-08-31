@@ -403,6 +403,43 @@ Start, exactly like the retail game.** No crashes, no hangs. 10 commits
 
 ## Done this session (M-30) — user batch defect list; commits + docs
 
+### M-30 state / next
+**Campaign progression + saving works (D157, user-confirmed).** The user can
+now do the full Track A playthrough — each level boundary exercises the same
+save path. `GE_UNLOCK_ALL=1` jumps to any level; `GE_SAVELOG=1` traces the
+save chain if a later level misbehaves.
+
+Fixed + committed this session (all on `master`, unpushed):
+- **D157** — campaign never unlocked (objective-difficulty byte read at the
+  wrong offset on LE). Root-caused + user-confirmed. §F D157.
+- **RC2** (`Video.FixMipTextures`, default on) — LOD textures were uploaded
+  ~1.3× too tall; clip to base-tile height. Modest visual win, no regression.
+- **D120** — `d43_emit.py` now emits the opcode-0x18 `PointUsage[]` chain
+  (was zero-filled → blood-decal walk cycled, guarded). Interactive verify
+  pending (BUNKER1 firefight).
+- **Menu #4** — stripped the per-frame D63 log flood that collapsed the
+  front-end to 5fps (`d0789358`).
+- **Menu #2** — front-end mouse-pointer mode (`current_menu != RUN_STAGE` →
+  mouse drives the cursor both axes, LMB=A/RMB=B); Y-invert fixed.
+- **RC4 RETRACTED** — the palette decode is correct RGBA5551, the analysis
+  doc's "spec" was ARGB1555. Don't "fix" it.
+- **21/21 level sweep PASS** (first all-green incl. Cuba) — no regressions.
+
+Still open / next:
+- **D148** (Dam exit rappel cutscene doesn't play) — user will see it right
+  after Dam. D75 front-end/cutscene-model family, cosmetic, deep. Not started.
+- **RC1 / wallet-Bond photo garble** — D75 family (`texLoadFromGdl` model-GDL
+  expansion broken for front-end models). `TEXTURE-GLITCH-ANALYSIS.md` §6b.
+- **Depot ceiling blue-speckle** — B2 light-shaft/UV bug on that surface;
+  RC2 didn't touch it. Needs `GE_DTEX`/RenderDoc on the specific surface.
+- **D154** (`bg.c` wall-shoot GBI parser, committed `072b5c44`) — needs a
+  firefight-into-a-wall to verify, then close.
+- In-level ABI/GBI crashes as the campaign playtest proceeds (D122/D135
+  pattern) — the expected work.
+- Latent: `fileSetDifficultyStageTime` `times[]` OOB read for 007-difficulty
+  late levels (retail has it too; edge case, don't fix without growing
+  `save_data` which breaks EEPROM layout).
+
 ### BLOCKER (M-30) — campaign progression not persisting — **FIXED (D157), CONFIRMED by user playtest**
 User replayed Dam on Agent post-fix: `gdb.txt` shows `obj 0 objdiff=1` /
 `obj 1,2 objdiff=2` (skipped on Agent) / `obj 3 objdiff=0 status=1` →
