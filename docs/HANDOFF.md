@@ -63,6 +63,49 @@ except `bg.c`'s `GE_D63` lines which are not `#ifdef PORT`-guarded).
   D114/D116 HUD/text X-mirror (**DO NOT re-static-trace** — see
   PORT-LEARNINGS §D2), D74 dead wrap-block.
 
+## Done this session (M-32b) — tactical follow-up (2026-08-31)
+
+3 commits on `master` (`49ce620a`, `7071b110`, + this reconciliation).
+
+- **Debug-scaffolding strip (`49ce620a`).** Removed inert env-gated
+  `GE_D54`/`GE_D63`/`GE_D90` probe blocks from compiled `src/`
+  (`memp.c`, `bg.c` incl. the bare non-PORT `d63bgprimarycount` static +
+  entry log, `blood_animation.c`, `dyn.c`, `rsp.c`, `bondview_r.c`,
+  `csplayer.c`, `load.c`, `seqplayer.c`; 161 lines). `GE_D54`/`GE_D90` now
+  fully gone; `GE_D63` partially (remaining blocks all `#ifdef PORT` +
+  getenv, inert — strip candidates for later). Build green; `-level_09` +
+  `-level_20` render crash-free (19 frames each). `docs/GE-ENV-PROBES.md`
+  updated.
+- **D75 Bug 2 runtime probe (`7071b110`).** `GE_D75=1` in `title.c`
+  `sub_GAME_7F007F30`. Booted bare front end through the gun-barrel:
+  Bond + gun models absent; **both Model instances valid** (nMtx 21/1);
+  **`render_pos` valid + fresh each frame** (== that frame's `dynAllocate`
+  mtxlist base, clean double-buffer, o2p unchanged) → the "stale arena"
+  hypothesis (D115 #5) is **RULED OUT** — do not land a persistent
+  `render_pos` buffer. **Zero fast3d DL warnings** → not D144/D146 either.
+  Failure is downstream in `drawjointlist`/`dotube` vtx/node-DL resolution
+  or an off-screen `basemtx`. Next: a drawjointlist-level probe. Full
+  write-up: §F "D75 Bug 2 — RUNTIME PROBE".
+- **RC3 Depot eyeball — INCONCLUSIVE, default stays OFF.** Captured Depot
+  (`-level_30`) with `GE_WRAPFIX=1` vs `0`. Depot is too dark in the
+  boot-camera area to judge the non-PoT (65×65 / 96×48) ceiling/panel
+  surfaces the fix targets; the visible corrugated-container walls look
+  unchanged and un-regressed with the fix on. Not enough signal to flip
+  `cfgWrapFix=1`. Needs a **live human eyeball** on Depot with
+  `Video.WrapFix=1` (walk to a lit area / the ceiling), or a `GE_DTEX`
+  capture on the specific surface. `port/src/video.c` `cfgWrapFix` unchanged.
+- **Sidecars regenerated** (`d43_emit.py` / `d69_emit.py` / `d88_emit.py
+  --regen`, ntsc-final) — ready for a campaign playtest.
+
+### Next (M-32b)
+- **RC3** — human eyeball Depot with `Video.WrapFix=1`; flip `cfgWrapFix=1`
+  in `port/src/video.c` if a lit non-PoT surface is visibly better and
+  `-09/-20/-34` don't regress.
+- **D75 Bug 2** — drawjointlist/`dotube`-level probe (resolved vtx/nodeDl
+  ptrs, whether any tris emit, composed `basemtx*render_pos` for joint 0).
+- **D143** blank briefing/objective text — untouched this session.
+- **D154 / D152+ / D160** — still playtest-gated.
+
 ## Done this session (M-31/M-32) — 6-agent parallel burst #2 (2026-08-31)
 
 6 worktree subagents, files partitioned; 5 merged to `master`
