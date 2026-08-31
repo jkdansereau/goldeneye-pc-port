@@ -3386,7 +3386,13 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
      * texturenum recovery (a KSEG0 deref 8 bytes before the texture data) is
      * not valid for the port's converted GDLs -> return -1 like D135; it only
      * flavours the bullet-impact decal/sound (parked with D77). */
-    vtxoff = gdl->dma.par & 0xf;
+    /* D154 addendum (M-30): the N64 line reads BYTE 1 of word0 -- bits 16-23,
+     * the G_VTX params byte ((n-1)<<4 | v0) -- so vtxoff = v0. The prior port
+     * used gdl->dma.par, but the PC Gdma_le shim maps `par` to bits 0-23 of
+     * word0 (the packed length field), so `& 0xf` yielded 0 (len == 16*n is
+     * always 16-aligned), silently forcing vtxoff = 0. Extract byte 1
+     * explicitly from the recovered 32-bit word0 instead. */
+    vtxoff = ((u32)gdl->words.w0 >> 16) & 0xf;
     temp.vertices = (Vertex *)g_BgRoomInfo[roomnum].vertices;
     vtxbase = (Vertex *)((uintptr_t)temp.vertices + ((u32)gdl->words.w1 & 0x00ffffff));
 #else
@@ -3402,6 +3408,23 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
     op = (s8) gdl->dma.cmd;
 #else
     op = *((s8 *) gdl);
+#endif
+
+#ifdef PORT
+    /* D154 diagnostic: GE_D154=1 logs the parsed command / vtx-index stream
+     * for the first 64 invocations. This function only runs when a bullet
+     * resolves against background geometry, so it is invisible to the
+     * no-input level sweep -- verification of the GBI parse is playtest-gated
+     * (shoot a wall/floor on an idle machine and eyeball this stream). */
+    {
+        static s32 d154_calls = 0;
+        d154_calls++;
+        if (d154_calls <= 64 && getenv("GE_D154")) {
+            osSyncPrintf("D154 call#%d room=%d gdlidx=%d vtxoff=%d op=%d hdr w0=%08x w1=%08x\n",
+                         d154_calls, (int)roomnum, (int)point->gdlindex, (int)vtxoff,
+                         (int)op, (unsigned)(u32)gdl[-1].words.w0, (unsigned)(u32)gdl[-1].words.w1);
+        }
+    }
 #endif
 
     if ((op != G_VTX) && (op != ((s8) G_ENDDL)))
@@ -3423,6 +3446,11 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                 idx[0] = (((u8 *) gdl)[5] / 10) - vtxoff;
                 idx[1] = (((u8 *) gdl)[6] / 10) - vtxoff;
                 idx[2] = (((u8 *) gdl)[7] / 10) - vtxoff;
+#endif
+#ifdef PORT
+                if (getenv("GE_D154"))
+                    osSyncPrintf("D154   TRI1 w1=%08x idx=%d,%d,%d\n",
+                                 (unsigned)(u32)gdl->words.w1, (int)idx[0], (int)idx[1], (int)idx[2]);
 #endif
                 i = 0;
                 
@@ -3603,6 +3631,12 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                             idx2[1] = (((u32 *) gdl)[1] >> 28) - vtxoff;
                             idx2[2] = (((u32) ((u16 *) gdl)[1]) >> 12) - vtxoff;
                         }
+#endif
+#ifdef PORT
+                        if (getenv("GE_D154"))
+                            osSyncPrintf("D154   TRI4 s2=%d w0=%08x w1=%08x idx2=%d,%d,%d\n",
+                                         (int)s2, (unsigned)(u32)gdl->words.w0, (unsigned)(u32)gdl->words.w1,
+                                         (int)idx2[0], (int)idx2[1], (int)idx2[2]);
 #endif
 
                         i = 0;
@@ -3838,28 +3872,61 @@ bool bgTestBulletHitBackground(coord3d *from, coord3d *to, s32 roomnum, struct H
     {
         point = (RoomVtxBatchBounds *)hit->tricmd;
 
-        if (((u8 *)((Gfx*)point))[0] != G_SETTILE) 
+#ifdef PORT
+        /* D154 sibling (M-30): unported N64 GBI parser walking the same
+         * D85-widened 16-byte room DL. On N64 ((u8*)gdl)[0] is the opcode
+         * byte and ((u8*)gdl)[1] is byte 1 of word0; on PC those raw indices
+         * read the low bytes of the 64-bit word0 (garbage). Recover the
+         * opcode from bits 24-31 of the 32-bit word0, byte 1 from bits 16-23.
+         * tilesize keeps the N64 (w0 << 11) >> 30 = bits 19-20 idiom but must
+         * force 32-bit width first (words.w0 is 64-bit on PC). ABI/GBI-parse
+         * only, no behaviour change. */
+        if ((((u32)((Gfx*)point)->words.w0 >> 24) & 0xff) != G_SETTILE)
         {
-            while ((Gfx *)g_BgRoomInfo[roomnum].ptr_expanded_mapping_info < ((Gfx*)point)) 
+            while ((Gfx *)g_BgRoomInfo[roomnum].ptr_expanded_mapping_info < ((Gfx*)point))
             {
                 point = (RoomVtxBatchBounds *)((Gfx *)point - 1);
-                if (((u8 *)((Gfx*)point))[0] == G_SETTILE) 
+                if ((((u32)((Gfx*)point)->words.w0 >> 24) & 0xff) == G_SETTILE)
                 {
                     break;
                 }
             }
         }
 
-        if (((Gfx*)point) == g_BgRoomInfo[roomnum].ptr_expanded_mapping_info) 
+        if (((Gfx*)point) == g_BgRoomInfo[roomnum].ptr_expanded_mapping_info)
         {
             hit->tileformat = -1;
             hit->tilesize = -1;
-        } 
-        else 
+        }
+        else
+        {
+            hit->tileformat = (((u32)((Gfx*)point)->words.w0 >> 16) & 0xff) >> 5;
+            hit->tilesize = ((u32)((Gfx*)point)->words.w0 << 11) >> 30;
+        }
+#else
+        if (((u8 *)((Gfx*)point))[0] != G_SETTILE)
+        {
+            while ((Gfx *)g_BgRoomInfo[roomnum].ptr_expanded_mapping_info < ((Gfx*)point))
+            {
+                point = (RoomVtxBatchBounds *)((Gfx *)point - 1);
+                if (((u8 *)((Gfx*)point))[0] == G_SETTILE)
+                {
+                    break;
+                }
+            }
+        }
+
+        if (((Gfx*)point) == g_BgRoomInfo[roomnum].ptr_expanded_mapping_info)
+        {
+            hit->tileformat = -1;
+            hit->tilesize = -1;
+        }
+        else
         {
             hit->tileformat = ((u32)((u8 *)((Gfx*)point))[1]) >> 5;
             hit->tilesize = (((Gfx*)point)->words.w0 << 11) >> 30;
         }
+#endif
     }
 
     return found;

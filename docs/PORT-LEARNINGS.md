@@ -119,10 +119,26 @@ expressed in N64 `Gfx`/`Vtx` units is **half-size** on PC.
   `(word >> (8*(3-i))) & 0xff`). `gdl++` (advances by `sizeof(Gfx)`) is already
   correct. Watch `(s32)ptr` truncation in vtx-base math and `x | 0x80000000`
   KSEG0 folds (identity on PC — just drop the OR, and guard segmented w1).
-  Instances: `bgTestHitOnObj` (`propobj.c`, FIXED); `bg.c` room-geometry
-  hit-test `sub_GAME_…` (`~3373-3646`, still latent — shooting walls).
+  Instances: `bgTestHitOnObj` (`propobj.c`, FIXED); `bgTestRayIntersectionInRoom`
+  + `bgTestBulletHitBackground` tail (`bg.c`, D154 — ported M-28, re-audited +
+  bug-fixed M-30, playtest-gated).
   PD ground truth: `pd_port` uses `gdl->dma.cmd` + `GFX_W0_BYTE(i)`/`GFX_W1_BYTE(i)`
   macros (`3-i` / `11-i` on 64-bit LE).
+- **D154 corollary — the PC `Gdma_le` shim's `.par` is NOT the N64 params byte.**
+  When porting a room/model DL GBI parser, only `.dma.cmd` is safe to read
+  through the `port/shim/PR/gbi.h` `Gfx` union: that shim lays `Gdma_le` out as
+  `par:24` (bits 0-23 of word0 = the *packed length* from `gDma1p`), `cmd:8`
+  (bits 24-31). The N64 `Gdma` has `cmd:8` (byte 0) then `par:8` (**byte 1**,
+  bits 16-23 = the `((n-1)<<4)|v0` G_VTX params). So an N64 `((u8*)gdl)[1]` /
+  N64-semantics `.dma.par` becomes `((u32)gdl->words.w0 >> 16) & 0xff` on PC —
+  **`gdl->dma.par` gives bits 0-23 (length), and `& 0xf` on it is always 0**
+  because `len == 16*n`. The original D154 port had exactly this bug (vtxoff
+  forced to 0). Same trap latent in `bgBuildRoomVtxBounds` (`gdl.dma.par>>4&0xf`
+  reads PC bits 4-7, not N64 bits 20-23 — currently tolerated). Rule: for
+  anything but the opcode, extract the bit-field explicitly from
+  `(u32)gdl->words.w0` / `.w1`, don't trust the named `.dma.*` sub-fields.
+  Also: a `words.w0 << k >> m` bit-extract idiom that relied on 32-bit
+  truncation on N64 must be `(u32)`-cast first on PC (`words.w0` is 64-bit).
 - **Also bites RAW hardcoded struct-stride writes, not just Gfx/Vtx.**
   D128: `sub_GAME_7F0B37EC` did `((u8*)g_BgPortals)[(portal<<3)+6] |= 2`
   — the N64 `bg_portal_data_entry` is 8B (`ptr@0, cr1@4..cb2@7`); on PC
