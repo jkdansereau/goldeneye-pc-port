@@ -55,6 +55,7 @@ static int cfgVSync         = 1;   /* swap interval: 0 = off, 1 = on            
 static int cfgFpsCap        = 0;   /* frame cap in fps; 0 = uncapped (vsync)    */
 static int cfgMSAA          = 1;   /* 1/2/4/8 samples; 1 = off                  */
 static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N64 3-point + trilinear */
+static int cfgFixMipTex     = 1;   /* RC2: clip mip-contaminated texture uploads to base height */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
 
 /*
@@ -75,6 +76,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 8);
     configRegisterInt("Video.TextureFilter", &cfgTexFilter,  0, 2);
+    configRegisterInt("Video.FixMipTextures", &cfgFixMipTex, 0, 1);
     configRegisterInt("Video.Fullscreen",    &cfgFullscreen, 0, 1);
     configRegisterInt("Window.Width",        &cfgWinW,       0, 16384);
     configRegisterInt("Window.Height",       &cfgWinH,       0, 16384);
@@ -137,6 +139,8 @@ int videoInit(void)
      * more console-authentic but softens textures at normal distance -- did
      * NOT fix the Depot roof, see docs/BRIEF-B2-depot-textures.md). All keep
      * point-sampled tiles (HUD, G_TF_POINT) crisp via the per-tile flag. */
+    gfx_set_fix_mip_textures(cfgFixMipTex);
+
     if (cfgTexFilter >= 2) {
         gfx_set_texture_filter(FILTER_THREE_POINT);
         gfx_set_mipmap_filter(MIPMAP_LINEAR);

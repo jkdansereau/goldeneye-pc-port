@@ -907,6 +907,10 @@ static void import_texture_ci8(int tile, const LoadedTexture& loaded_texture, bo
 	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
 }
 
+/* RC2 mip-contamination clamp (see import_texture). Default on;
+ * Video.FixMipTextures = 0 restores the raw over-tall upload. */
+bool g_fix_mip_textures = true;
+
 static void import_texture(int i, int tile, bool importReplacement) {
     LoadedTexture& loaded_texture = rdp.loaded_texture[rdp.texture_tile[tile].tmem];
     const uint8_t fmt = rdp.texture_tile[tile].fmt;
@@ -934,6 +938,33 @@ static void import_texture(int i, int tile, bool importReplacement) {
         loaded_texture.orig_size_bytes = loaded_texture.size_bytes;
     }
 
+    /* RC2 (docs/TEXTURE-GLITCH-ANALYSIS.md): GE's texGetDepthAndSize() sums the
+     * base level + every LOD mip into one gDPLoadBlock, so the block byte count
+     * (-> upload height = size_bytes / row) runs ~1.3x taller than the base
+     * image and the mip bytes render as garbage rows below it ("interlaced"
+     * textures on the menu / Depot). Only when LOD is active (rdp.tex_lod) AND
+     * the load is a plain full-width block (not a windowed gfx_dp_load_tile,
+     * which legitimately has extra rows -- the D74 sub-tile / Rare-logo case):
+     * clip to the SETTILESIZE base-tile height. GL then builds correct mips
+     * from a correct base image. */
+    if (g_fix_mip_textures && rdp.tex_lod &&
+        loaded_texture.line_size_bytes == loaded_texture.full_image_line_size_bytes) {
+        const uint32_t row = rdp.texture_tile[tile].line_size_bytes;
+        const uint32_t tile_h =
+            ((uint32_t)(rdp.texture_tile[tile].lrt - rdp.texture_tile[tile].ult) >> 2) + 1;
+        if (row && tile_h > 1) {
+            uint32_t base_bytes = row * tile_h;
+            if (siz == G_IM_SIZ_32b)
+                base_bytes <<= 1; /* mirrors the 32b height fixup above */
+            if (base_bytes < loaded_texture.size_bytes) {
+                loaded_texture.size_bytes = base_bytes;
+                if (loaded_texture.full_size_bytes > base_bytes)
+                    loaded_texture.full_size_bytes = base_bytes;
+                loaded_texture.orig_size_bytes = base_bytes;
+            }
+        }
+    }
+
     const RawTexMetadata* metadata = &loaded_texture.raw_tex_metadata;
     const uint8_t* orig_addr = loaded_texture.addr;
     SUPPORT_CHECK(orig_addr);
@@ -957,6 +988,30 @@ static void import_texture(int i, int tile, bool importReplacement) {
                                  loaded_texture.full_size_bytes > loaded_texture.size_bytes
                                      ? loaded_texture.full_size_bytes
                                      : loaded_texture.size_bytes);
+
+    /* GE_DTEX: dump the load parameters for the first N textures of a frame so
+     * RC2 (mip-chain contamination -> over-tall upload) can be told apart from a
+     * decode/row-swap bug. tile_h = base-tile height from SETTILESIZE; if the
+     * computed upload height is much larger, the excess rows are LOD mip data.
+     * docs/TEXTURE-GLITCH-ANALYSIS.md sec 6b. */
+    if (getenv("GE_DTEX")) {
+        static int dtexCount = 0;
+        if (dtexCount < 64) {
+            const uint32_t row = rdp.texture_tile[tile].line_size_bytes;
+            const uint32_t up_h = row ? (loaded_texture.size_bytes / row) : 0;
+            const uint32_t tile_h =
+                ((rdp.texture_tile[tile].lrt - rdp.texture_tile[tile].ult) >> 2) + 1;
+            const uint32_t tile_w =
+                ((rdp.texture_tile[tile].lrs - rdp.texture_tile[tile].uls) >> 2) + 1;
+            sysLogPrintf(LOG_NOTE,
+                "GE_DTEX[%d] addr=%p fmt=%u siz=%u lod=%d  tile=%ux%u  row=%u "
+                "size=%u -> upload=%ux%u%s",
+                dtexCount++, (void *)orig_addr, fmt, siz, (int)rdp.tex_lod,
+                tile_w, tile_h, row, loaded_texture.size_bytes,
+                row ? (row >> (siz ? siz - 1 : 0)) : 0, up_h,
+                (up_h > tile_h + 1) ? "  <-- OVER-TALL (mip contamination?)" : "");
+        }
+    }
 
     if (fmt == G_IM_FMT_RGBA) {
         if (siz == G_IM_SIZ_16b) {
@@ -2954,6 +3009,8 @@ extern "C" void gfx_set_mipmap_filter(enum MipmapFilteringMode mode) {
     reset_texture_state();
     gfx_rapi->set_mipmap_filter(mode);
 }
+
+extern "C" void gfx_set_fix_mip_textures(int on) { g_fix_mip_textures = !!on; }
 
 extern "C" int gfx_create_framebuffer(uint32_t width, uint32_t height, int upscale, int autoresize) {
     int fb = gfx_rapi->create_framebuffer();

@@ -154,6 +154,51 @@ Each item gets its own Dxx entry in `docs/PCPortResearch.md` §F/§H at commit t
 (proposed: next free labels after D126 — check the §F index first; a stray "D160" appears
 once in the doc and may need reconciling).
 
+## 6b. M-30 follow-up — implementation notes (before you touch RC2)
+
+Re-checked against the current tree while chasing the user's "interlaced
+textures" screenshot (`screenshots/interlaced texture example.jpg` — main menu,
+wallet-Bond photo + right panel show alternating-row tearing).
+
+- **RC1 (G_SETTEX) is not a simple `case` add.** `src/game/tex.c texLoadFromGdl`
+  already *expands* every G_SETTEX (opcode 0xc0 == `G_NOOP` slot) in a model GDL
+  into a full standard load sequence (`texLoadFromTextureNum` + `texFindInPool` +
+  `texWriteTextureCmd`) written into a replacement GDL, and
+  `src/game/objecthandler_2.c` (`~line 82`) drives that per display list at model
+  load + `modelNodeReplaceGdl`s the node. It **is** `#ifdef PORT`-ported. So on PC
+  the RSP/fast3d should normally *not* see raw G_SETTEX. The user's crash log
+  showed fast3d walking into `0xfafbfbfc…` garbage (opcode 0x00, **not** 0xc0) —
+  i.e. the model GDL pointer / expansion is broken for the front-end wallet
+  models, not "an opcode is missing." This is the **D75 front-end-model family**
+  (D80/D82/D83 model-GDL relocation, `objecthandler_2.c`), not a fast3d opcode
+  gap. Implementing G_SETTEX in fast3d would be a fallback that only helps models
+  that reach it with an otherwise-intact DL.
+- **RC2 (mip contamination) — the naive height clamp was already tried and
+  reverted.** `gfx_pc.cpp import_texture()` ~line 917 has a comment: a prior
+  branch that set height = `line * tile.height` was removed because it "dropped
+  mip chains" and "truncated sub-tiled textures" (Rare-logo `D_02005FF0` 20×3
+  tile uploaded as 32×3). So the fix must distinguish "extra rows are mip levels"
+  (drop) from "tile is a window into a larger image" (keep). The signal is
+  `rdp.tex_lod` (passed to every `import_texture_*` as `gen_mipmaps`): when LOD is
+  on and `size_bytes/row > tile_height`, the excess is mip data → clamp height to
+  `((lrt-ult)>>2)+1` from `rdp.texture_tile[tile]` **and** pass `gen_mipmaps=false`
+  (don't let GL build mips from the stacked image). When `rdp.tex_lod` is off,
+  keep today's behaviour. Verify against the Rare logo (sub-tile case) + Depot
+  floor (mip case) + BUNKER1 (regression).
+- **The alternating-row look specifically** may also be `texSwapAltRowBytes`
+  (`image.c:2191`, §4: applied to *every* level of *every* texture on *every*
+  path — odd rows get adjacent u32 groups pairwise swapped). The game swaps the
+  RAM buffer *before* upload, so fast3d should read the swapped bytes — confirm
+  fast3d isn't reading a pre-swap copy, or double-swapping. This is the
+  RenderDoc / §6-item-5 dump task; do that before editing.
+
+**Bottom line (M-30):** #3 is not a grind-fix. Highest-leverage next step is
+§6-item-5 (env-gated dump of the actual uploaded GL image + tile setup for the
+first ~10 texLoads on the main menu and on Depot) to see whether the base image
+is wrong (decode/swap) or just over-tall (RC2 height). Then RC2 per the
+`rdp.tex_lod`-gated plan above. G_SETTEX / D75 front-end models are a separate,
+larger track.
+
 ## 7. Artifacts (in `CAPTURES_DIR`, outside repo)
 
 | File | What it is |
