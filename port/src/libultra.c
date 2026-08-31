@@ -980,17 +980,69 @@ s32 osContReset(OSMesgQueue *mq, OSContStatus *status)
     return 0;
 }
 
-/* EEPROM: file-backed saves land in Phase 4. For now report "no eeprom"
- * so the game proceeds without save functionality. */
-s32 osEepromProbe(OSMesgQueue *mq)            { (void)mq; return -1; }
+/* EEPROM: file-backed 16Kbit save (Phase 4, BACKLOG B5). GE addresses the
+ * device in 8-byte blocks (src/game/file2.c: checksum @block 0, five
+ * save_data slots from block 4). Backed by $S/ge007.eep, loaded lazily on
+ * first access and rewritten on every write. Pattern mirrors the PD port
+ * (pd_port/port/src/libultra.c). */
+#define GE_EEP_BLOCKS  EEP16K_MAXBLOCKS          /* 256 */
+#define GE_EEP_SIZE    (GE_EEP_BLOCKS * 8)       /* 2048 bytes */
+#define GE_EEP_PATH    "$S/ge007.eep"
+
+static u8   s_eeprom[GE_EEP_SIZE];
+static int  s_eepromLoaded = 0;
+
+static void geEepromLoad(void)
+{
+    if (s_eepromLoaded) return;
+    s_eepromLoaded = 1;
+    const char *path = sysResolvePath(GE_EEP_PATH);
+    FILE *fp = fopen(path, "rb");
+    if (fp) {
+        fread(s_eeprom, 1, GE_EEP_SIZE, fp);
+        fclose(fp);
+        sysLogPrintf(LOG_INFO, "eeprom: loaded %s", path);
+    } else {
+        memset(s_eeprom, 0, GE_EEP_SIZE);
+        sysLogPrintf(LOG_INFO, "eeprom: no %s yet (fresh save)", path);
+    }
+}
+
+static void geEepromStore(void)
+{
+    const char *path = sysResolvePath(GE_EEP_PATH);
+    FILE *fp = fopen(path, "wb");
+    if (fp) {
+        fwrite(s_eeprom, 1, GE_EEP_SIZE, fp);
+        fclose(fp);
+    } else {
+        sysLogPrintf(LOG_ERROR, "eeprom: cannot write %s", path);
+    }
+}
+
+static s32 geEepromRW(u8 block, u8 *buf, int nbytes, int write)
+{
+    u32 off = (u32)block * 8;
+    if (!buf || nbytes < 0 || off + (u32)nbytes > GE_EEP_SIZE) return -1;
+    geEepromLoad();
+    if (write) {
+        memcpy(s_eeprom + off, buf, nbytes);
+        geEepromStore();
+    } else {
+        memcpy(buf, s_eeprom + off, nbytes);
+    }
+    return 0;
+}
+
+s32 osEepromProbe(OSMesgQueue *mq) { (void)mq; return EEPROM_TYPE_16K; }
 s32 osEepromRead(OSMesgQueue *mq, u8 addr, u8 *buf)
-{ (void)mq; (void)addr; (void)buf; return 0; }
+{ (void)mq; return geEepromRW(addr, buf, 8, 0); }
 s32 osEepromWrite(OSMesgQueue *mq, u8 addr, u8 *buf)
-{ (void)mq; (void)addr; (void)buf; return 0; }
+{ (void)mq; return geEepromRW(addr, buf, 8, 1); }
 s32 osEepromLongRead(OSMesgQueue *mq, u8 addr, u8 *buf, int nbytes)
-{ (void)mq; (void)addr; (void)buf; (void)nbytes; return 0; }
+{ (void)mq; return geEepromRW(addr, buf, nbytes, 0); }
 s32 osEepromLongWrite(OSMesgQueue *mq, u8 addr, u8 *buf, int nbytes)
-{ (void)mq; (void)addr; (void)buf; (void)nbytes; return 0; }
+{ (void)mq; return geEepromRW(addr, buf, nbytes, 1); }
 
 /* Memory Pak (PFS) + Rumble Pak (motor): no accessories on the PC. */
 s32 osPfsInit(OSMesgQueue *queue, OSPfs *pfs, int channel)
