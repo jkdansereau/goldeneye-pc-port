@@ -18,6 +18,11 @@ versions and hashes.
 
 ### Port build
 
+> **Only the Windows (MSYS2 MINGW64) path is tested.** The Debian/Ubuntu and
+> macOS columns below are best-effort guidance — the port has never been built
+> or run on Linux or macOS. Expect to fix build breaks yourself on those
+> platforms.
+
 | Need | Windows (MSYS2 MINGW64) | Debian/Ubuntu | macOS (Homebrew) |
 |------|------------------------|---------------|------------------|
 | toolchain | `mingw-w64-x86_64-toolchain` | `build-essential` | Xcode CLT / `gcc` |

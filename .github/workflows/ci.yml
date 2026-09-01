@@ -12,6 +12,10 @@ on:
 # assets: the PC-port tooling, the generated ROM-asset symbol files, and a
 # CMake configure of all three regions (which checks REGION_DEFS, the source
 # list, and that SDL2 / zlib / OpenGL are discoverable).
+#
+# This is a configure-only smoke test. It does NOT compile or run the port, and
+# it running on ubuntu is NOT a statement that the port builds or works on
+# Linux — it has only ever been built and tested on Windows (MSYS2).
 
 jobs:
   validate:

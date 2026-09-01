@@ -25,6 +25,13 @@ timers, save storage) is shimmed in a dedicated `port/` layer.
   <br><em>In-engine captures &mdash; Archives and Bunker&nbsp;1 running in the port.</em>
 </p>
 
+> **Not playable yet.** This is a work-in-progress research port. The intro and
+> menus render and all 21 solo levels load, but it is **not** a complete or
+> reliably playable game: there is **no audio**, the front-end 3D models and
+> some text are broken, input has known rough edges, and you should expect
+> crashes and glitches once you are past the level intro. Treat it as a
+> technical demo of the porting work, not a way to play GoldenEye.
+
 ## Background
 
 This port is primarily a **research project on agentic software development** —
@@ -106,8 +113,12 @@ the front end into the early game. It is not finished and it is not stable.
   conversions) are tracked in
   [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md) and parked
   below crash/level work.
-- Only `x86_64` Windows and Linux are exercised regularly. No macOS/ARM
-  testing yet; no controller rebinding UI; no widescreen.
+- **Platform testing is Windows-only.** All development and playtesting has
+  been on `x86_64` Windows (MSYS2/MINGW64). The CMake build has Linux and macOS
+  paths and is *intended* to be portable, but the port has had **zero
+  functional testing on Linux or macOS** — the Linux build is provided as-is
+  and unverified at runtime. No ARM testing; no controller rebinding UI; no
+  widescreen.
 
 ## Requirements
 
@@ -150,6 +161,9 @@ cd goldeneye-pc-port
 ```
 
 ### Linux
+
+> **Untested.** No one has built or run the port on Linux. The steps below are
+> the intended path, not a verified one — expect to fix build issues yourself.
 
 ```sh
 sudo apt install build-essential cmake python3 libsdl2-dev zlib1g-dev libgl1-mesa-dev
