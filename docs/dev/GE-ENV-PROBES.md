@@ -17,7 +17,7 @@ Two classes:
 
 | Env var | File:line | What it does | Status |
 |---|---|---|---|
-| `GE_PCDUMP` | `port/fast3d/gfx_opengl.cpp:1079` (`is_pcdump`), `gfx_opengl.cpp:700`, `port/src/video.c:188`, `port/src/config.c:46` (`configGetFrameDump`) | Per-frame framebuffer PPM dump to `$PCDUMP` dir (verification-ritual golden captures, `tools_pc/framediff.py`/`pixcount.py`). Also settable via `[Debug] FrameDump` ini (env wins). | **live** |
+| `GE_PCDUMP` | `port/fast3d/gfx_opengl.cpp:1079` (`is_pcdump`), `gfx_opengl.cpp:700`, `port/src/video.c:188`, `port/src/config.c:46` (`configGetFrameDump`) | Per-frame framebuffer PPM dump to `$PCDUMP` dir (verification-ritual golden captures, `tools_pc/framediff.py`/`pixcount.py`). Also settable via `[Debug] FrameDump` ini (env wins). **M-33/D168: the writer now emits rows top-to-bottom — captures before that fix are vertically flipped.** | **live** |
 | `GE_INPUTSCRIPT` | `port/src/input.c:306` | Headless scripted controller-0 input: `"<frame>:<tok>,…;…"` (`SUP/SDOWN/SLEFT/SRIGHT/SNONE` sustain, buttons pulse). Sole input source when set. | **live** |
 | `GE_INPUTLOG` | `port/src/input.c:329`, `port/src/config.c:53` (`configGetInputLog`) | Logs computed pad state (buttons + stick) each poll when non-zero. Also `[Debug] InputLog` ini. Also traces D165 `menuptr est/tgt/eff/stick`. | **live** |
 | `GE_STARTMENU` (+ `GE_STARTMENU_PAGE`, `GE_STARTMENU_DIFF`) | `src/game/lv.c:398-402` (`#ifdef PORT`) | Boot straight into a front-end menu id (13=MISSION_COMPLETE, 10=BRIEFING, 7=MISSION_SELECT, 12=MISSION_FAILED, 6=MODE_SELECT); `_PAGE`=folder row (def 1=Dam), `_DIFF`=0..3. Crash-test a screen fast. | **live** |
@@ -26,7 +26,7 @@ Two classes:
 | `GE_D160` | `src/boss.c:744`, `src/game/bondview2.c:791`, `src/aicommands.def:10055,10181,10236,10242,10247` (all `#ifdef PORT`) | Dam exit-cutscene (D148/D160) diagnostic: trace points in `bossReturnTitleStage`, `bondviewSetCameraMode`, and AI cmds `EndLevel`/`exit_level`/`CameraLookAtBondFromPad`/`CameraSwitch`. **Investigation in progress** — user owes a `GE_D160=1` Dam run. | **live** |
 | `GE_DTEX` | `port/fast3d/gfx_pc.cpp:1001` | Per-`import_texture` param log (dims / line / size / lod / gen_mipmaps). Used to root-cause RC2 and D159. Kept as an inert diagnostic. | **live** (RC2/RC3 not finished) |
 | `GE_TEXDUMP` | `port/fast3d/gfx_pc.cpp:1020`, `port/fast3d/gfx_opengl.cpp:700` | PPM dump of every uploaded texture + a `fmt/siz/palfmt/palidx/pal[0..3]` line. Root-caused D161 (Depot ceiling). Kept as an inert diagnostic. | **live** (RC3 not finished) |
-| `GE_D116` | `port/fast3d/gfx_pc.cpp:1710,2362`, `src/game/textrelated.c:265,541` (cached `ge_d116`) | HUD/text X-mirror (D114/D116) vbo/uv trace. Bug is **parked / DO-NOT-re-static-trace** (PORT-LEARNINGS §D2) but the probe is cheap (cached int) — leave until that cosmetic bug is picked up with RenderDoc. | idle (parked bug) |
+| `GE_D116` | `port/fast3d/gfx_pc.cpp:1710,2362`, `src/game/textrelated.c:265,541` (cached `ge_d116`) | HUD/text "X-mirror" (D114/D116) vbo/uv trace. **D114/D116 CLOSED — NOT A BUG (M-33/D168): the captures were upside-down, not mirrored.** Probe is now dead scaffolding — strip on the next cleanup pass. | dead (D114/D116 closed) |
 
 ## Dxx diagnostic probes — finding closed unless noted
 

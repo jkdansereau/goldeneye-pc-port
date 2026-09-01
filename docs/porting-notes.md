@@ -176,8 +176,10 @@ through a converter or a runtime bswap fixup reads scrambled.
     `matrixmath.c` (`matrix_4x4_set_lookat*`, `_set_projection`,
     `_f32_to_s32`) is likewise native-LE (D114). **Do not re-audit gu or
     matrixmath for a "float endianness" bug** — if a matrix comes out wrong
-    on PC the cause is upstream data, a struct-field pun (D100/D140/D156), or
-    a fast3d gap (D114/D116 viewport mirror), never these files.
+    on PC the cause is upstream data, a struct-field pun (D100/D140/D156),
+    never these files. (The "D114/D116 viewport mirror" example is withdrawn —
+    M-33/D168 showed D114/D116 were an upside-down `GE_PCDUMP` capture, not a
+    real flip.)
 - Header offset tables / pointers: D54 (cseq ALMidiHdr), D68
   (Globalimagetable), D87 (ramromfilestructure), D88 (Usetup* tables).
 - Negative-terminated index chains (`PointUsage[]`) in converted model
@@ -372,19 +374,23 @@ through a converter or a runtime bswap fixup reads scrambled.
   indexed by texunit, gated on `Video.WrapFix`); RC3/D167 adds the non-PoT
   mask-period case to the same block. Still default OFF.
 
-## D2. The HUD/model X-mirror (D114/D116) — DO NOT re-static-trace
+## D2. The HUD/model "X-mirror" (D114/D116) — RESOLVED: it was an upside-down capture
 
-Sessions M-6/M-7/M-8/M-11 all reached the same wall: `textRenderGlyph`
-→ GBI → fast3d `gfx_dp_texture_rectangle` → `buf_vbo` → GL are **each
-runtime-verified non-mirrored** (`[D116/vbo]` probe: x-left↔u=0), yet
-glyphs render X-flipped. M-11 additionally confirmed the ammo digits use
-the *same* `textrelated.c` path (via `gunfire.c:5906`), no separate
-renderer. Every prior attempt to "fix" it drifts toward a global
-S-swap that mirrors the whole screen — a bad trade for a cosmetic bug.
-**Next attempt needs a RenderDoc/apitrace capture of one glyph texrect
-OR the asymmetric-1-texel-texture experiment — nothing else.** Cosmetic,
-deprioritised below level-progression / crash work. See
-`docs/dev/GRAPHICS-BACKLOG.md`.
+**M-33 (finding D168).** There was no mirror. `gfx_opengl_dump_bound_fbo`
+(`port/fast3d/gfx_opengl.cpp`) wrote `glReadPixels` output — bottom-row-first,
+GL origin — straight into a top-row-first P6 PPM, so **every `GE_PCDUMP` and
+F12 capture was vertically flipped**. Sessions M-6/M-7/M-8/M-11 kept finding
+`textRenderGlyph` → GBI → fast3d → `buf_vbo` → GL **each verified
+non-mirrored** — because nothing *was* mirrored; they were staring at
+upside-down screenshots of asymmetric content (text, ammo digits, guard skins,
+the Nintendo logo) and reading "inverted" as "X-mirrored". The developer
+confirms the game renders correctly on real hardware.
+
+The lesson worth keeping: **when every stage of a pipeline probes clean but
+the output "looks wrong", suspect the observation tool before adding a
+correction.** A cosmetic defect that no probe can localise after four sessions
+is a strong signal that the defect isn't in the code. Fix: PPM writer now
+emits rows top-to-bottom; `tools_pc/golden/*.png` were flipped to match.
 
 ## D3. GCC/mingw makes an all-non-negative `enum` UNSIGNED
 

@@ -7,6 +7,16 @@ Companion artifacts: `<local-path>` (outside repo).
 
 ## 0. Current status (M-31) — READ THIS FIRST
 
+> **M-33 overlay (D168):** every `GE_PCDUMP` / F12 screenshot this doc's
+> analysis relied on was **vertically flipped** — the PPM writer never reversed
+> `glReadPixels` rows. This is what the D114/D116 "HUD/text X-mirror" finding
+> actually was (now closed, not a bug). It also contaminates the **RC1** row
+> below: the wallet-Bond photo's "180°-rotated / mis-transformed" description
+> was made from an upside-down capture, so at least the vertical component is
+> the capture bug, not the model transform. Re-judge RC1 from a fresh
+> right-way-up capture before doing any more work on it. Writer fixed
+> (`port/fast3d/gfx_opengl.cpp`).
+
 The 2026-08-29 body below is the original diagnosis. Several root causes have
 since been fixed or retracted. Authoritative current state:
 

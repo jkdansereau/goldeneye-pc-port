@@ -1087,7 +1087,15 @@ extern "C" bool gfx_opengl_dump_bound_fbo(uint32_t width, uint32_t height, const
     FILE* f = fopen(path, "wb");
     if (!f) { free(pixels); return false; }
     fprintf(f, "P6\n%u %u\n255\n", width, height);
-    fwrite(pixels, 1, n, f);
+    /* D168: glReadPixels() returns rows bottom-to-top (GL framebuffer origin is
+     * bottom-left); PPM P6 is top-row-first. Emit rows in reverse so the capture
+     * is the right way up. Previously written unreversed -> every GE_PCDUMP was
+     * vertically flipped (the source of the bogus D114/D116 "text X-mirror"). */
+    {
+        size_t stride = (size_t)width * 3;
+        for (uint32_t row = 0; row < height; row++)
+            fwrite(pixels + (size_t)(height - 1 - row) * stride, 1, stride, f);
+    }
     fclose(f);
     free(pixels);
     return true;
