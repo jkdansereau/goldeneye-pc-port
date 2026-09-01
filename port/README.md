@@ -4,8 +4,8 @@ This directory contains the PC port layer: the code that lets the (unmodified)
 GoldenEye game sources run on a modern host instead of N64 hardware.
 
 It mirrors the layout of the [Perfect Dark PC
-port](https://github.com/perfect-dark-pc-port/perfect_dark), which ports the
-same Rare engine family. See `docs/PCPortResearch.md` (repo root) for the full
+port](https://github.com/fgsfdsfgs/perfect_dark), which ports the
+same Rare engine family. See `docs/internals.md` (repo root) for the full
 research write-up and phased plan.
 
 ## Layout
@@ -66,5 +66,5 @@ exact command encodings.
 
 **Scaffolding only.** The files in `src/` and `fast3d/` are stubs that define
 the interfaces and mark the work to be done. The actual implementation is
-brought in phase by phase (see `docs/PCPortResearch.md` §8), largely by
+brought in phase by phase (see `docs/internals.md` §8), largely by
 adapting the PD port's `port/` layer.

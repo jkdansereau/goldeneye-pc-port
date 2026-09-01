@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+    paths-ignore: [ '**.md', 'docs/**', 'LICENSE', 'NOTICE' ]
+  pull_request:
+  workflow_dispatch:
+
+# The full port build needs assets extracted from a copyrighted ROM, which CI
+# does not have. This job validates everything that does NOT depend on those
+# assets: the PC-port tooling, the generated ROM-asset symbol files, and a
+# CMake configure of all three regions (which checks REGION_DEFS, the source
+# list, and that SDL2 / zlib / OpenGL are discoverable).
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake python3 libsdl2-dev zlib1g-dev libgl1-mesa-dev
+
+      - name: Byte-compile Python tooling
+        run: python3 -m compileall -q scripts tools_pc
+
+      - name: Regenerate ROM-asset symbol files
+        run: |
+          python3 scripts/gen_romassets.py u
+          python3 scripts/gen_romassets.py e
+          python3 scripts/gen_romassets.py j
+          git diff --stat -- port/src/romassets_u.s
+
+      - name: CMake configure (all regions)
+        run: |
+          for r in ntsc-final pal-final jpn-final; do
+            echo "::group::configure $r"
+            cmake -S . -B "build-$r" -DROMID="$r"
+            echo "::endgroup::"
+          done

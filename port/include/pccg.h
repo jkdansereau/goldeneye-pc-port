@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-/* D69 (docs/PCPortResearch.md): PC-layout stage bg/*.seg + Tbg_*_stanZ
+/* D69 (docs/internals.md): PC-layout stage bg/*.seg + Tbg_*_stanZ
  * sidecars -- same Plan-B pattern as D50/pcmodels.c.
  *
  * N64 bg/*.seg and Tbg_*_stanZ files are big-endian images with internal

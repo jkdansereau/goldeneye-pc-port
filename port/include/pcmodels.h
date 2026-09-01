@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-/* D50 (docs/PCPortResearch.md): PC-layout model sidecars — Plan B (D48/D49).
+/* D50 (docs/internals.md): PC-layout model sidecars — Plan B (D48/D49).
  *
  * N64 ROM model files are 32-bit-pointer big-endian images the PC build
  * cannot read in place (D37/D43). tools_pc/d43_emit.py converts all of them

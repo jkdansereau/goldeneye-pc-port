@@ -14,7 +14,7 @@
  * libultra.c needs.
  *
  * ------------------------------------------------------------------------
- * BINDING SCHEME (documented in docs/PCPortResearch.md sec F "D118")
+ * BINDING SCHEME (documented in docs/internals.md sec F "D118")
  *
  * GE's default "1.1" control style: analog stick = move/strafe, the four
  * C-buttons = aim/turn/look (DIGITAL on N64), R = aim mode, Z = fire.

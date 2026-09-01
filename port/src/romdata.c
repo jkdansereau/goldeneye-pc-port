@@ -51,7 +51,7 @@ static u8  *rom = NULL;        /* heap copy (fallback path) */
 static u32  romSize = 0;
 static int  mappedAtCartBase = 0;
 
-/* D34 (docs/PCPortResearch.md): PE image base, low 32 bits zero. On N64 the
+/* D34 (docs/internals.md): PE image base, low 32 bits zero. On N64 the
  * animation_data segment links at VMA 0, so game code computes record
  * addresses as `(s32)&ANIM_DATA_x + ptr_animation_table` where &ANIM_DATA_x
  * is a small segment offset. A PE image cannot be placed at a low address,
@@ -184,7 +184,7 @@ int romdataInit(void)
             pcmodelsLoadSidecars(CART_BASE, romSize);
             pccgLoadSidecars(CART_BASE + romSize + pcmodelsTotalSize());
 
-            /* D55 (docs/PCPortResearch.md): the RLE folder-menu background at
+            /* D55 (docs/internals.md): the RLE folder-menu background at
              * `unknown2` (romassets_<r>.s) is stored in the ROM with a
              * big-endian w/h header (01 B8 01 2B = 440x299), but
              * rle_expand_8bit() reads it little-endian. The N64 build embeds
@@ -269,7 +269,7 @@ const void *romdataMapVa(u32 va)
 }
 
 /*
- * D33 (docs/PCPortResearch.md): the .z64 file stores structured multi-byte
+ * D33 (docs/internals.md): the .z64 file stores structured multi-byte
  * fields in big-endian byte order; bit-packed data streams are raw. No single
  * uniform word transform exists (mixed field widths), so the animation_data
  * segment is converted per field at load time, after romCopy() and before
@@ -356,7 +356,7 @@ void romdataFixupAnimationData(u8 *blob, u32 blobSize,
 }
 
 /*
- * D35 (docs/PCPortResearch.md): the music sequence table segment stores its
+ * D35 (docs/internals.md): the music sequence table segment stores its
  * fields big-endian:
  *
  *   header at blob+0 (RareALSeqBankFile):
@@ -399,7 +399,7 @@ void romdataFixupMusicSeqTable(u8 *blob, u32 blobSize)
 }
 
 /*
- * D54 (docs/PCPortResearch.md): a decompressed compact-sequence (cseq) file
+ * D54 (docs/internals.md): a decompressed compact-sequence (cseq) file
  * starts with struct ALCMidiHdr — 16 big-endian u32 trackOffset values plus a
  * big-endian u32 division. N64 reads them natively; on a little-endian host
  * alCSeqNew() byte-swaps them (track 0 offset 0x44 becomes 0x44000000),
@@ -416,7 +416,7 @@ void romdataFixupCseq(u8 *blob)
 }
 
 /*
- * D50 (docs/PCPortResearch.md): a language bank is [u32 offsets x N][text].
+ * D50 (docs/internals.md): a language bank is [u32 offsets x N][text].
  * Offsets are big-endian and point into the text region; langGet() reads them
  * little-endian on PC and would build garbage pointers. Scan from the front
  * and bswap word i while bswap32(word_i) is a plausible offset (strictly past
@@ -438,7 +438,7 @@ void romdataFixupLangBank(u8 *blob, u32 blobSize)
 }
 
 /*
- * D50 (docs/PCPortResearch.md): font segments (Zurich Bold, Bank Gothic)
+ * D50 (docs/internals.md): font segments (Zurich Bold, Bank Gothic)
  * serialize `struct font` in the N64 layout — big-endian scalars, 4-byte
  * pointers:
  *   [s32 kerning x 169][fontchar x 94 @ stride 24][glyph pixel data]
@@ -524,7 +524,7 @@ void romdataFixupFont(u8 *blob, u32 n64Size)
 }
 
 /*
- * D37 (docs/PCPortResearch.md): convert a ROM-serialized libaudio bank tree
+ * D37 (docs/internals.md): convert a ROM-serialized libaudio bank tree
  * (ALBankFile -> ALBank -> ALInstrument -> ALSound -> ALWaveTable /
  * ALEnvelope / ALKeyMap / ALADPCMloop / ALRawLoop / ALADPCMBook) to
  * PC-native form. See the header for the contract.

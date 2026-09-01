@@ -1,5 +1,5 @@
 /*
- * PC port shim for PR/R4300.h (see docs/PCPortResearch.md).
+ * PC port shim for PR/R4300.h (see docs/internals.md).
  *
  * On the N64, PHYS_TO_K0 turns a physical address into a KSEG0 virtual
  * address by OR'ing in 0x80000000. On the PC port the game's working RAM

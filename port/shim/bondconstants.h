@@ -1,5 +1,5 @@
 /*
- * PC port shim for bondconstants.h (see docs/PCPortResearch.md).
+ * PC port shim for bondconstants.h (see docs/internals.md).
  *
  * The real header is src/bondconstants.h. Its BITFLAG macro is only defined
  * under `#ifdef __sgi` (the N64/IDO compiler); on other compilers it is a

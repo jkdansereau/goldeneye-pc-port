@@ -93,7 +93,7 @@ uint32_t pccgReserveSize(const uint8_t *romImg)
     if (!pccgFindDataFile(rel, s_binPath, sizeof(s_binPath))) {
         sysLogPrintf(LOG_WARNING,
                      "pccg: %s not found -- stage loads will fault; run "
-                     "\"python tools_pc/d69_emit.py\" (see docs/HANDOFF.md)",
+                     "\"python tools_pc/d69_emit.py\" (see docs/building.md)",
                      rel);
         return 0;
     }

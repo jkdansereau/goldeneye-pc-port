@@ -1,5 +1,5 @@
 /*
- * GE adaptation header for fast3d (see docs/PCPortResearch.md).
+ * GE adaptation header for fast3d (see docs/internals.md).
  *
  * fast3d was written against Perfect Dark's extended GBI set
  * (pd_port/src/include/gbiex.h + PD's include/PR/gbi.h). GoldenEye shares the

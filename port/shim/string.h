@@ -1,5 +1,5 @@
 /*
- * PC port shim for include/string.h (see docs/PCPortResearch.md §11 D12).
+ * PC port shim for include/string.h (see docs/internals.md §11 D12).
  *
  * The N64 header declares:
  *

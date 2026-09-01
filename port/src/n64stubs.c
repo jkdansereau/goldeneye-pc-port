@@ -1,7 +1,7 @@
 /*
  * N64-boot-specific symbol stubs.
  *
- * We compile src/init.c (for mainproc() — see A3 in docs/PCPortResearch.md),
+ * We compile src/init.c (for mainproc() — see A3 in docs/internals.md),
  * but its N64-only init() is never called on the PC. The compiler still needs
  * the symbols init() references to resolve at link time, so this file provides
  * inert stubs for the ones that are NOT part of the libultra OS API (those

@@ -9,7 +9,7 @@
  * `#include <stdlib.h>`, which resolves to the N64 header via -I), and the
  * lldiv_t/ldiv_t typedefs then conflict with the host's. The shim routes C++
  * TUs to the host header by absolute path (generated hoststdlib.h, same
- * trick as port/shim/string.h — see docs/PCPortResearch.md §11 D12).
+ * trick as port/shim/string.h — see docs/internals.md §11 D12).
  *
  * Inert in the N64 build (port/shim is not on its include path).
  */

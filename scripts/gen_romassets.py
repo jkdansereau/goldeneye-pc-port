@@ -362,7 +362,7 @@ def build_segments(region, csv, obseg_resolved, ramrom_files, music_tracks,
     off, size = csv1("animationtable_data.bin")
     seg["animation_data"] = (off, size, True)
     off, size = csv1("Globalimagetable.bin")
-    # D39 (docs/PCPortResearch.md): the CSV asset is truncated to the 17 Gfx
+    # D39 (docs/internals.md): the CSV asset is truncated to the 17 Gfx
     # display lists (0xAC8). The N64 linker segment (ge007.ld) places ALL of
     # oddtextures.o (.data) here — Gfx DLs + 32 sImageTableEntry tables =
     # 0x13F8 bytes. texReset() copies End-Start, so the marker must span the

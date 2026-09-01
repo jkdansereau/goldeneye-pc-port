@@ -9,7 +9,7 @@
  *   4. start the thread kernel and run the game's mainproc() as a real OS
  *      thread (it IS the N64 mainThread) — which runs bossEntry(), the real
  *      game loop. The game's own scheduler (src/sched.c) drives frames; see
- *      docs/PCPortResearch.md.
+ *      docs/internals.md.
  *   5. the host main thread then owns SDL event pumping for the lifetime of
  *      the process (Windows only dispatches window messages to the creating
  *      thread, and every game thread can be blocked on a queue).

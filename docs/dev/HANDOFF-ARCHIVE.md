@@ -1,7 +1,7 @@
 # HANDOFF ARCHIVE — session-by-session narrative
 
 > **Reference only.** Current state, next task, and environment live in
-> `docs/HANDOFF.md`; per-finding detail in `docs/PCPortResearch.md` §F/§H
+> `docs/HANDOFF.md`; per-finding detail in `docs/internals.md` §F/§H
 > (indexed at the top of §F). This file is the frozen accumulation of
 > prior sessions' handoff briefs (through session M-11), kept so the
 > reasoning behind a fix is recoverable. Everything below is as-written
@@ -16,12 +16,12 @@
 
 1. `CLAUDE.md` (auto-loaded) + `AGENTS.md` non-negotiables.
 2. This file, top-to-bottom.
-3. `docs/PORT-LEARNINGS.md` — recurring bug classes.
-4. Dispatching a subagent? `docs/AGENT-WORKFLOW.md` FIRST. Every brief needs
+3. `docs/porting-notes.md` — recurring bug classes.
+4. Dispatching a subagent? `docs/dev-process.md` FIRST. Every brief needs
    FILES / BUDGET / ON-EXPIRY / CONSTRAINTS / REPORT (see CLAUDE.md "Dispatch preflight").
 
 _Paste-ready brief. Authoritative context: `AGENTS.md`,
-`docs/PCPortResearch.md` §F (D69, D78-D102), `docs/BRIEF-D69-stage-load.md`._
+`docs/internals.md` §F (D69, D78-D102), `docs/BRIEF-D69-stage-load.md`._
 
 **NEW DIRECTION (2026-08-29): `docs/PLAN-linear-level-sweep.md`** — pivot
 to breadth-first: fix the boot→intro→menu→level-select path to
@@ -117,7 +117,7 @@ transition, then the next stage.
    they rank BELOW level-progression and crash work.
 4. **Rest of the `struct player` offset pass** — D115 fixed the HIGH
    `gunfire.c` THROW* bugs; #6 (watch-preview Model pool) + the broader
-   audit remain (`docs/AUDIT-M6-player-offsets.md`).
+   audit remain (`docs/dev/AUDIT-M6-player-offsets.md`).
 5. Add an f32 value spot-check to `d43_emit.py`'s verify pass (it only
    checks pointers/opcodes today — the D112 bug passed "ALL CHECKS PASSED").
 6. **GE_DETERM fixed-tick mode (§F D117)** — deferred as not-narrow; would
@@ -244,8 +244,8 @@ each nonzero OSContPad poll. Rebinding + gamepad hotplug are TODO (§F
 D118).
 
 **Session M-6 — see §F D113/D114/D115, `docs/PLAN-M6-playable.md`,
-`docs/AUDIT-M6-player-offsets.md`, `docs/AGENT-WORKFLOW.md`,
-`docs/PORT-LEARNINGS.md`.** D113: portal BFS is correct, not the void.
+`docs/dev/AUDIT-M6-player-offsets.md`, `docs/dev-process.md`,
+`docs/porting-notes.md`.** D113: portal BFS is correct, not the void.
 D114: matrix chain + converter verified clean, residual = shared fast3d
 mirror (open). D115: player raw-offset audit + `gunfire.c` THROW* fix
 (uncommitted). Build green.
@@ -345,7 +345,7 @@ Pattern: textures/text draw; **animated/skeletal character models never
 appear**; static 3D (logos) appears but with a bad transform. Leading
 hypothesis is D75(b) — the animated-model path (`animInit` + raw offsets
 into `struct player`, cf. D56) is broken independently of the D73 matrix
-sin/cos fix. Full triage plan in `PCPortResearch.md` §F D75.
+sin/cos fix. Full triage plan in `findings.md` §F D75.
 
 The rest of this document (below) is the **last known-good, committed**
 status as of commit `8c9c6a2c` (D86+D87 resolved) — still accurate except
@@ -501,7 +501,7 @@ locations attract mode happens to pick).
   (`gdb -batch -x cmds.txt -p <winpid>`, `<winpid>` = 4th column of
   `ps -p <bashpid>`) works well and is fast for "watch a global for a
   legitimate vs. corrupted write" questions on an already-running,
-  not-yet-crashed process — see `docs/PCPortResearch.md` §F environment
+  not-yet-crashed process — see `docs/internals.md` §F environment
   reminders for the exact recipe used to root-cause D87.
 
 ## Non-negotiables (unchanged, see AGENTS.md)
@@ -509,7 +509,7 @@ locations attract mode happens to pick).
 1. N64 build files untouched.
 2. Game logic unmodified except narrow, documented `#ifdef PORT`
    ABI/layout exceptions (D86/D87 this session, both logged in
-   `PCPortResearch.md` §F). D88 is explicitly **not** patched with a
+   `findings.md` §F). D88 is explicitly **not** patched with a
    quick inline hack — it needs the same disciplined
    spec-then-convert/fixup treatment as D69, logged as an open finding
    instead per AGENTS.md's "stop and write it up" guidance for anything

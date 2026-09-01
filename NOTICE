@@ -1,0 +1,48 @@
+GoldenEye 007 PC port
+=====================
+
+WHAT IS AND ISN'T COVERED BY THIS PROJECT'S LICENSE
+--------------------------------------------------
+
+The MIT License in the LICENSE file covers the original work in this
+repository:
+
+  * the port layer            port/
+  * the PC build system        CMakeLists.txt, cmake/, build-pc.sh
+  * PC-port tooling            tools_pc/
+  * documentation              docs/, README.md
+
+Third-party code vendored into the port layer keeps its own license:
+
+  * port/fast3d/  - software RSP adapted from the Perfect Dark port /
+    libultraship / sm64-port lineage; see port/fast3d/LICENSE.txt.
+  * port/fast3d/glad/ - generated OpenGL loader (glad), public domain / MIT.
+
+It does NOT cover:
+
+  * src/, include/, assets/, Makefile, tools/, rsp/, ld/, and the other
+    files inherited from the GoldenEye 007 decompilation
+    (https://github.com/n64decomp/007). The upstream project is published
+    without an explicit license; those files are included here on the same
+    basis, unmodified except where a PC-port ABI fix is marked `#ifdef PORT`
+    and documented in docs/dev/findings.md. This repository is a downstream
+    fork of that decompilation with a PC port added on top.
+
+    As is standard for console decompilation projects, some game data is
+    present as re-expressed source (animation tables, display lists, data
+    tables) inherited verbatim from the upstream repository. The bulk game
+    assets -- textures, audio, models, level geometry, in-game text -- are
+    NOT included and are extracted from your own ROM at build time.
+
+NO NINTENDO / RARE CONTENT IS DISTRIBUTED HERE
+---------------------------------------------
+
+This repository contains NO copyrighted ROM data, game assets (textures,
+models, levels, audio, text), or Nintendo/Rare code. Building a playable
+executable requires a GoldenEye 007 Nintendo 64 ROM that you legally own;
+the build extracts the required assets from that ROM on your own machine.
+
+GoldenEye 007 is a trademark of its respective rights holders. This project
+is a non-commercial, fan-made preservation and porting effort, and is not
+affiliated with or endorsed by Nintendo, Rare, MGM, EON Productions, Danjaq,
+or any other rights holder.

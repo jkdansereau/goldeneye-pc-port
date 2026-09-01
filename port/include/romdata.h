@@ -37,7 +37,7 @@ u32       romdataGetRomSize(void);
 int romdataCartAddrValid(u32 addr, u32 size);
 
 /*
- * D33 (docs/PCPortResearch.md): the .z64 file stores structured multi-byte
+ * D33 (docs/internals.md): the .z64 file stores structured multi-byte
  * fields in big-endian byte order (bit-packed streams are raw). Per-field
  * BE->LE transform of the animation data segment after romCopy() and before
  * expand_ani_table_entries(): u32 -> bswap32, u16 -> bswap16, u8 -> identity.
@@ -52,7 +52,7 @@ void romdataFixupAnimationData(u8 *blob, u32 blobSize,
                                const s32 *tableA, const s32 *tableB);
 
 /*
- * D35 (docs/PCPortResearch.md): the music sequence table segment ( RareALSeqBankFile )
+ * D35 (docs/internals.md): the music sequence table segment ( RareALSeqBankFile )
  * stores its fields big-endian: +0 u16 seqCount, then 8-byte entries at +4:
  * u32 address offset, u16 uncompressed_len, u16 len. Per-field BE->LE
  * transform after romCopy(). Entries are decoded only as far as blobSize
@@ -62,21 +62,21 @@ void romdataFixupAnimationData(u8 *blob, u32 blobSize,
 void romdataFixupMusicSeqTable(u8 *blob, u32 blobSize);
 
 /*
- * D54 (docs/PCPortResearch.md): decode a decompressed compact-sequence file's
+ * D54 (docs/internals.md): decode a decompressed compact-sequence file's
  * big-endian ALCMidiHdr in place (16 x u32 trackOffset + u32 division;
  * see romdata.c). Call after decompressdata(), before alCSeqNew().
  */
 void romdataFixupCseq(u8 *blob);
 
 /*
- * D50 (docs/PCPortResearch.md): decode a language bank's big-endian offset
+ * D50 (docs/internals.md): decode a language bank's big-endian offset
  * table in place ([u32 offsets x N][text]; see romdata.c). blobSize is the
  * decompressed bank size (resource_lookup_data_array[].poolRemaining).
  */
 void romdataFixupLangBank(u8 *blob, u32 blobSize);
 
 /*
- * D50 (docs/PCPortResearch.md): re-lay out a font segment (struct font:
+ * D50 (docs/internals.md): re-lay out a font segment (struct font:
  * kerning[169] + chars[94] + glyph pixel data) from the N64 ROM layout to
  * the PC C layout, shifting the pixel block below the expanded char array.
  * src/n64Size locate the N64 image (ROM segment); the caller allocates
@@ -88,7 +88,7 @@ u32  romdataFontPcSize(const u8 *src, u32 n64Size);
 void romdataFixupFont(u8 *blob, u32 n64Size);
 
 /*
- * D37 (docs/PCPortResearch.md): the libaudio SFX/instrument bank segments
+ * D37 (docs/internals.md): the libaudio SFX/instrument bank segments
  * (ALBankFile trees: ALBank -> ALInstrument -> ALSound -> ALWaveTable /
  * ALEnvelope / ALKeyMap / ALADPCMloop / ALADPCMBook) are serialized in ROM
  * as big-endian scalars with 4-byte packed table-relative offsets where the

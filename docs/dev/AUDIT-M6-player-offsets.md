@@ -116,9 +116,9 @@ RW pool dedicated storage, and `gunRenderFirstPersonGunModels` /
 
 ## §F pointer
 
-Add to `docs/PCPortResearch.md` §F after D112: *“**D115 (audit)** —
+Add to `docs/internals.md` §F after D112: *“**D115 (audit)** —
 `struct player`/`struct hand` raw-offset pass: see
-`docs/AUDIT-M6-player-offsets.md`. Live HIGH bugs = `gunfire.c` THROWMTX/POS/PREV
+`docs/dev/AUDIT-M6-player-offsets.md`. Live HIGH bugs = `gunfire.c` THROWMTX/POS/PREV
 macros (`+handoffset+0xAD8/0xB08/0xB48`), not PORT-adjusted; fix = field
 accessors. MED = D102 weapon `render_pos` transient-arena aliasing (likely
 the ‘weapon model doesn’t draw’ cause) and the D56 watch-Model pool

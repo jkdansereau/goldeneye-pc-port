@@ -1,5 +1,5 @@
 /*
- * PC port shim for bondtypes.h (see docs/PCPortResearch.md).
+ * PC port shim for bondtypes.h (see docs/internals.md).
  *
  * The real header is src/bondtypes.h. It includes game/chrobjdata.h at line 31,
  * but chrobjdata.h declares extern arrays of ItemModelFileRecord /
@@ -27,7 +27,7 @@
  * rejects `New_Vector()` against a 3-parameter macro ("requires 3 arguments,
  * but only 1 given"). The game code only ever calls them with 0 args (to make
  * a zero vector/coord), so redefine to accept any arg count and expand to a
- * zero initializer. See docs/PCPortResearch.md. */
+ * zero initializer. See docs/internals.md. */
 #undef New_Vector
 #undef New_Coord3d
 #define New_Vector(...) {0, 0, 0}

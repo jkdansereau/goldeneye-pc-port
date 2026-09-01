@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot D38 generator for port/include/pc_protos.h (see docs/PCPortResearch.md §F/D38).
+"""One-shot D38 generator for port/include/pc_protos.h (see docs/internals.md §F/D38).
 
 Pipeline (all inputs were captured from a PC build of the decomp):
   1. Compile the game TUs and collect `implicit function declaration` warnings
@@ -50,7 +50,7 @@ for n in sorted(names):
 hdr = '''/*
  * pc_protos.h - PC-port-only prototypes for implicitly declared functions.
  *
- * D38 (docs/PCPortResearch.md section F): the decomp has ~72 translation units
+ * D38 (docs/internals.md section F): the decomp has ~72 translation units
  * that call ~400 functions without any visible prototype (missing #include of
  * the declaring header). Under C11 an implicit declaration assumes `int f()`,
  * which on N64 (MIPS, 32-bit pointers) is harmless, but on x86-64 it silently

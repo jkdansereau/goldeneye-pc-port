@@ -1,5 +1,5 @@
 /*
- * PC port shim for PR/gbi.h (see docs/PCPortResearch.md).
+ * PC port shim for PR/gbi.h (see docs/internals.md).
  *
  * The real header (include/PR/gbi.h) already has 64-bit-ready Gwords and
  * gSP* macros that pack full 64-bit pointers into words.w1. However, the

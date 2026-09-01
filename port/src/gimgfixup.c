@@ -1,5 +1,5 @@
 /*
- * gimgfixup.c - D68 (docs/PCPortResearch.md): Globalimagetable endianness
+ * gimgfixup.c - D68 (docs/internals.md): Globalimagetable endianness
  * fixup for the PC port. See port/include/gimgfixup.h for the rationale.
  *
  * The offset tables below must stay in lockstep with the g_pc_gimg_off_*

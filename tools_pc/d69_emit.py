@@ -3,7 +3,7 @@
 to PC layout and write a concatenated sidecar image + manifest.csv (same
 shape/pattern as tools_pc/d43_emit.py / port/src/pcmodels.c).
 
-Format spec: docs/PCPortResearch.md D78-D82. Summary:
+Format spec: docs/internals.md D78-D82. Summary:
 
 bg/*.seg (raw, uncompressed on ROM; stays uncompressed on PC):
   header (0x40B, only words 0-4 consulted): word0 must be 0 (bswap32,

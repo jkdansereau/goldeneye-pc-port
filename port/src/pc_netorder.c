@@ -1,5 +1,5 @@
 /*
- * pc_netorder.c - D38: host byte-order helpers (see docs/PCPortResearch.md).
+ * pc_netorder.c - D38: host byte-order helpers (see docs/internals.md).
  *
  * src/bondconstants.h implements ntohl()/ntohs() as function-like macros over
  * CharArrayTo16/32 ("rewrite these to use char array as system provided funcs

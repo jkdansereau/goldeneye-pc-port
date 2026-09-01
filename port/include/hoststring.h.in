@@ -4,6 +4,6 @@
  * Includes the HOST <string.h> by absolute path so that port/shim/string.h
  * can bypass the N64 include/string.h (which declares strlen/strchr with
  * `const unsigned char *` and conflicts with the host declarations that SDL
- * and other system headers pull in). See docs/PCPortResearch.md §11 D12. */
+ * and other system headers pull in). See docs/internals.md §11 D12. */
 #include "@PORT_HOST_STRING_H@"
 #endif

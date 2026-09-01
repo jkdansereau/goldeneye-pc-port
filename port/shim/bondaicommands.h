@@ -1,5 +1,5 @@
 /*
- * PC port shim for bondaicommands.h (see docs/PCPortResearch.md §11 D7).
+ * PC port shim for bondaicommands.h (see docs/internals.md §11 D7).
  *
  * The real header is src/bondaicommands.h. It was written for the N64/IDO
  * preprocessor, which is more lenient than GCC in two ways that break the
@@ -88,7 +88,7 @@
  * marker that produces an obvious error if new game code ever uses it here.
  */
 #undef SWITCH
-#define SWITCH(...) _PORT_SWITCH_NOT_SUPPORTED_ON_PORT /* D7: use a #ifdef PORT hand-written equivalent in chraidata.c style; see docs/PCPortResearch.md §11 */
+#define SWITCH(...) _PORT_SWITCH_NOT_SUPPORTED_ON_PORT /* D7: use a #ifdef PORT hand-written equivalent in chraidata.c style; see docs/internals.md §11 */
 
 /* --- D11: CALL() without the double trailing comma ------------------------
  *

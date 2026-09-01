@@ -1,9 +1,12 @@
-# PORT-LEARNINGS — recurring N64→PC bug classes
+# Porting notes — recurring N64→PC bug classes
 
-One-screen index into `docs/PCPortResearch.md` §F. **Every investigation
-subagent reads this first and appends any new generalisable quirk.**
-Details, evidence, and the fix for each instance live in §F under the
-cited Dxx label.
+A one-screen field guide to the bug classes that keep recurring when running
+big-endian 32-bit N64 game code, unmodified, on a little-endian 64-bit host.
+Each entry cites a `Dxx` label; the full evidence and fix for that instance
+live in [`dev/findings.md`](dev/findings.md) under the same label.
+
+If you are debugging a crash in this port, read this first — the odds are
+good that you are looking at one of these.
 
 ## A. Pointer-width struct growth (32→64) — the dominant class
 
@@ -30,7 +33,7 @@ state.
   `.act_*.attack_item` — aliased `WeaponObjRecord.weaponnum` at 0x80 on
   N64 via act-union@0x2C+84; act union moves to ~0x38 on PC).
 - **Open landmine:** raw hardcoded-offset accessors into `struct player`
-  / `struct hand` — see `docs/AUDIT-M6-player-offsets.md`.
+  / `struct hand` — see `docs/dev/AUDIT-M6-player-offsets.md`.
 - **D126 corollary — a trailing runtime list pointer in a ROM-serialized
   record.** If a fixed-size ROM record ends with a `T *next` (or `*child`,
   `*parent`) that game code *writes* while walking the setup stream
@@ -381,7 +384,7 @@ S-swap that mirrors the whole screen — a bad trade for a cosmetic bug.
 **Next attempt needs a RenderDoc/apitrace capture of one glyph texrect
 OR the asymmetric-1-texel-texture experiment — nothing else.** Cosmetic,
 deprioritised below level-progression / crash work. See
-`docs/GRAPHICS-BACKLOG.md`.
+`docs/dev/GRAPHICS-BACKLOG.md`.
 
 ## D3. GCC/mingw makes an all-non-negative `enum` UNSIGNED
 
@@ -492,7 +495,7 @@ past it (walk off the end).
   `tools_pc/pixcount.py` vs `docs/reference/n64-footage-*`).
 - gdb **launch** mode is too slow for timing-dependent faults; gdb
   **attach** to an already-running process is fine and fast.
-- Check `PD_PORT_CHECKOUT` for the PD analogue before
+- Check the [Perfect Dark port](https://github.com/fgsfdsfgs/perfect_dark) for the PD analogue before
   writing anything new — same Rare engine family.
 - Don't re-investigate a closed §F finding or re-derive a format spec
   that already has a converter.

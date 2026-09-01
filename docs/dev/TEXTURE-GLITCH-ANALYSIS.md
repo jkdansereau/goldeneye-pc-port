@@ -1,7 +1,7 @@
 # Texture Glitch Analysis — PC Port
 
 **Original diagnosis:** 2026-08-29 (read-only) · **Status table refreshed:** 2026-08-31 (M-31)
-Companion artifacts: `CAPTURES_DIR` (outside repo).
+Companion artifacts: `<local-path>` (outside repo).
 
 ---
 
@@ -185,7 +185,7 @@ Useful ground truth for whoever implements the fixes:
    the first N texLoads (~10 lines in fast3d) → one Depot run gives true ground truth and a
    before/after reference (also settles H-C if it ever resurfaces).
 
-Each item gets its own Dxx entry in `docs/PCPortResearch.md` §F/§H at commit time
+Each item gets its own Dxx entry in `docs/internals.md` §F/§H at commit time
 (proposed: next free labels after D126 — check the §F index first; a stray "D160" appears
 once in the doc and may need reconciling).
 
@@ -275,7 +275,7 @@ and eyeball the corrugated roof / repeating wall panels vs default; flip the
 default in `port/src/video.c` (`cfgWrapFix = 1`) if clean. The overflow-band clamp
 is an approximation of console TMEM-smear behaviour, not an exact emulation.
 
-## 7. Artifacts (in `CAPTURES_DIR`, outside repo)
+## 7. Artifacts (in `<local-path>`, outside repo)
 
 | File | What it is |
 |------|-----------|

@@ -1,7 +1,7 @@
 /*
  * pc_protos.h - PC-port-only prototypes for implicitly declared functions.
  *
- * D38 (docs/PCPortResearch.md section F): the decomp has ~72 translation units
+ * D38 (docs/internals.md section F): the decomp has ~72 translation units
  * that call ~400 functions without any visible prototype (missing #include of
  * the declaring header). Under C11 an implicit declaration assumes `int f()`,
  * which on N64 (MIPS, 32-bit pointers) is harmless, but on x86-64 it silently

@@ -1,5 +1,5 @@
 /*
- * PC port shim for include/CPPLib.h (see docs/PCPortResearch.md §11 D9).
+ * PC port shim for include/CPPLib.h (see docs/internals.md §11 D9).
  *
  * CPPLib's emptiness test pastes its argument into a macro name:
  *

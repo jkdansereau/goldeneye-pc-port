@@ -3,7 +3,7 @@
 
 #include <PR/ultratypes.h>
 
-/* D68 (docs/PCPortResearch.md): endianness fixup for the Globalimagetable
+/* D68 (docs/internals.md): endianness fixup for the Globalimagetable
  * segment after texReset()'s romCopy(). The N64 CPU is big-endian, so every
  * u32 in the ROM copy is BE-encoded; PC consumers read them natively (LE).
  *

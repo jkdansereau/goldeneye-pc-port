@@ -6,7 +6,7 @@ Compares a directory of candidate frames against a golden baseline
 
 WHY STRUCTURAL / TOLERANT BY DEFAULT
 -----------------------------------
-The PC port is NOT frame-deterministic (see docs/PCPortResearch.md
+The PC port is NOT frame-deterministic (see docs/internals.md
 Section F "D117"): logic advances a wall-clock-variable number of 60Hz
 ticks per rendered frame (src/game/frametiming.c waitForNextFrame /
 boss.c mainTickElapsed gate driven by osGetCount(), which the port maps

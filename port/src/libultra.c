@@ -9,7 +9,7 @@
  *    osRecvMesg() waits on a per-queue condition variable. (An earlier
  *    setjmp/longjmp green-thread kernel corrupted FPU state across longjmps
  *    on Windows x64/MinGW — synthetic STATUS_FLOATING_POINT_INVALID_OPERATION
- *    crashes at PC=0; see docs/PCPortResearch.md.)
+ *    crashes at PC=0; see docs/internals.md.)
  *  - RSP tasks (osSpTaskStartGo) run the software RSP (fast3d) inline and
  *    post the RSP_DONE / RDP_DONE messages sched.c waits for.
  *  - VI retrace is a vsync-paced tick posted by a dedicated kernel thread,

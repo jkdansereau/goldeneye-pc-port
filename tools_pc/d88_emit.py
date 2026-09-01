@@ -4,7 +4,7 @@ to PC layout, appending them to the same pccg.bin/manifest.csv sidecar image
 produced by d69_emit.py (port/src/pccg.c already serves any filename listed
 in the manifest, so this script just needs to add rows).
 
-Format spec: docs/PCPortResearch.md D88.x. Summary:
+Format spec: docs/internals.md D88.x. Summary:
 
 `struct stagesetup` (bondtypes.h) is a 10-pointer-field header (40B on N64,
 80B on PC -- pointers grow 4->8B) whose fields store plain (non-segment)
@@ -20,7 +20,7 @@ room-offset array, generalized to many interleaved regions).
 
 Verified against BUNKER1 (UsetupsevbunkerZ) by full byte-level ROM
 reconstruction (offsets/counts cross-checked against every pointer field in
-the file -- see tools_pc/d88_emit.py history / PCPortResearch.md D88.2):
+the file -- see tools_pc/d88_emit.py history / internals.md D88.2):
 the file's leftover byte-stream regions (propDefs polymorphic prop-def
 table, AI opcode streams, pad/boundpad `plink` name strings, pad/boundpad
 name (`pname`) strings) all sit BETWEEN and interleaved with the 8 growing
@@ -51,7 +51,7 @@ the cumulative shift from growth ahead of them in the file):
     KNOWN BUG (D125, unfixed as of M-13): the converted blob does not land
     correctly in the emitted file for some levels (Aztec/Bunker2/Surface2) --
     suspect the pass-1 delta / region-`end` handling here (~L308-340), NOT
-    convert_stream itself. See PCPortResearch.md D125 + docs/LEVEL-STATUS.md.
+    convert_stream itself. See internals.md D125 + docs/LEVEL-STATUS.md.
   - waypoint.neighbours / waygroup.neighbours / waygroup.waypoints /
     PathRecord.waypoints target arrays: plain `s32` ID lists (NOT file
     offsets -- graph node indices), NULL/-1 terminated, walked with real

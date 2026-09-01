@@ -1,6 +1,6 @@
 /*
  * PC-port replacement for src/game/decompress.c + src/game/zlib.c, which are
- * EXCLUDED from the build (see CMakeLists.txt and docs/PCPortResearch.md §F D32).
+ * EXCLUDED from the build (see CMakeLists.txt and docs/internals.md §F D32).
  *
  * GE's RZ files are: a 2-byte header (0x11 0x72) followed by a raw deflate
  * stream that ends with an end-of-block marker. The original decompressdata()

@@ -101,7 +101,7 @@ uint32_t pcmodelsReserveSize(const uint8_t *romImg)
     if (!pcmodelsFindDataFile(rel, s_binPath, sizeof(s_binPath))) {
         sysLogPrintf(LOG_WARNING,
                      "pcmodels: %s not found — model loads will fail; run "
-                     "\"python tools_pc/d43_emit.py\" (see docs/HANDOFF.md)",
+                     "\"python tools_pc/d43_emit.py\" (see docs/building.md)",
                      rel);
         return 0;
     }

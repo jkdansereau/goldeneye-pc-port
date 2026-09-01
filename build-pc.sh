@@ -5,7 +5,7 @@
 # Usage:
 #   ./build-pc.sh [ntsc-final|pal-final|jpn-final]
 #
-# Dependencies (see docs/PCPortResearch.md):
+# Dependencies (see docs/internals.md):
 #   - CMake >= 3.16
 #   - SDL2 dev
 #   - zlib dev

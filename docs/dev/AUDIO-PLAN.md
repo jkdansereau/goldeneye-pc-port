@@ -1,9 +1,9 @@
 # Audio Plan — Phase 3 (libaudio → SDL)
 
 Status: **draft for evaluation** (written read-only; no code changes made).
-Supersedes the audio paragraphs of §6 in `docs/PCPortResearch.md` as the plan of record
+Supersedes the audio paragraphs of §6 in `docs/internals.md` as the plan of record
 for closing **D77** (no audible music/sound on PC). Companion docs: `docs/HANDOFF.md`,
-`docs/PORT-LEARNINGS.md`.
+`docs/porting-notes.md`.
 
 ---
 
@@ -88,7 +88,7 @@ problem.
 | `aEnvMixer` | env.c:410/414 | yes — `aEnvMixerImpl` |
 | `aADPCMdec` | load.c:483 | yes — `aADPCMdecImpl` (SSE4.1/NEON/scalar) |
 
-PD reference = `PD_PORT_CHECKOUT` +
+PD reference = the Perfect Dark port `port/src/mixer.c` +
 `port/include/mixer.h`. Reusable: the DSP *math* (ADPCM 8-coefficient loop filter,
 resample table + interpolation, envelope ramping, clamps). **Not** reusable as-is:
 signatures and argument conventions (naudio ABI ≠ IDO ABI, §5.3).
@@ -305,16 +305,16 @@ Record as a new Dxx finding when implemented (next free label after D127).
   aSaveBuffer` (+`aSegment` no-op) in `mixer.c`, reusing PD's DSP math where the ABI
   maps. **Milestone: SFX audible (gunshots, doors); dry music plays.** Expect at least
   one Dxx-class finding here (state-layout or endianness surprise is the usual bug
-  class — see `docs/PORT-LEARNINGS.md`).
+  class — see `docs/porting-notes.md`).
 - **Phase 3 — FX.** `aPoleFilter` + validate the full `reverb.c` chorus path against
   the disassembly. **Milestone: music matches N64 character (chorus/reverb present, no
   pumping); close D77.**
 - **Phase 4 — Polish & bookkeeping.** Resolve Q1; remove/adjust temporary probes and
   `GE_DAUDIO` defaults; latency/buffer tuning (`Audio.BufferSize`, `QueueLimit`);
   host thread-priority tuning per A3 *only if* underruns were observed in Phases 2–3;
-  record findings in `docs/PCPortResearch.md` §F/§H (next Dxx after D127) + update the
+  record findings in `docs/internals.md` §F/§H (next Dxx after D127) + update the
   §F index, `AGENTS.md` Phase 3 status, `docs/HANDOFF.md`; append recurring bug classes
-  to `docs/PORT-LEARNINGS.md`.
+  to `docs/porting-notes.md`.
 
 ## 11. Verification ritual (audio-specific, on top of the standard one in AGENTS.md)
 

@@ -277,7 +277,7 @@ void videoEndFrame(void)
     }
     gfx_end_frame();
 
-    /* TEMP D70 (env-gated, strip per HANDOFF Task 3): GE_PCDUMP="first-last"
+    /* TEMP D70 (env-gated, debug-only, env-gated): GE_PCDUMP="first-last"
      * or "first-last:step" dumps the presented frame as ./ppm/frame_NNNNNN.ppm
      * (one frame behind real time — read happens after SwapWindow). Used to
      * pixel-verify the intro's 3D content. Also honours [Debug] FrameDump in

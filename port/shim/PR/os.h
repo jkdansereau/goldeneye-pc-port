@@ -1,5 +1,5 @@
 /*
- * PC port shim for PR/os.h — DRAM address conversions (see docs/PCPortResearch.md).
+ * PC port shim for PR/os.h — DRAM address conversions (see docs/internals.md).
  *
  * The game's working RAM lives in the s32-safe DRAM view at 0x70000000
  * ("V1"), with a byte-identical KSEG0 mirror at 0x80000000 ("V2"); see

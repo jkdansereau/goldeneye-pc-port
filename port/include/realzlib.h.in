@@ -5,6 +5,6 @@
  * the real zlib (inflateInit2/inflate) without picking up the game's own
  * src/game/zlib.h, which sits on the -I search path and shadows a plain
  * `#include <zlib.h>` in a port TU. Same absolute-path trick as hoststring.h.
- * See docs/PCPortResearch.md §F (D32). */
+ * See docs/internals.md §F (D32). */
 #include "@PORT_REAL_ZLIB_H@"
 #endif

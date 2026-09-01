@@ -5,7 +5,7 @@
 # game C sources (src/game, src) for a modern host (Windows/Linux/macOS)
 # against the PC shims in `port/`. The N64 build is untouched.
 #
-# See docs/PCPortResearch.md for the architecture and plan.
+# See docs/internals.md for the architecture and plan.
 # Modelled on the Perfect Dark PC port (perfect-dark-pc-port/perfect_dark).
 #
 # Usage:
@@ -22,7 +22,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 # N64/IDO behaviour the decomp relies on); Clang treats it as a bare forward
 # declaration (no members) and rejects base-member access. So prefer GCC.
 # (GCC does hard-error on the one struct that declares a member with the same
-# name as an inherited one — CCTVRecord's `pad` — see docs/PCPortResearch.md.)
+# name as an inherited one — CCTVRecord's `pad` — see docs/internals.md.)
 # An explicit -DCMAKE_C_COMPILER=... always wins.
 if(NOT DEFINED CMAKE_C_COMPILER)
   find_program(_GE007_GCC NAMES gcc)
@@ -209,7 +209,7 @@ add_compile_options(
 )
 # The decomp was written for IDO's leniency. These downgrade hard errors to
 # warnings so the unmodified game code compiles; each class is a tracked
-# decomp finding (see docs/PCPortResearch.md):
+# decomp finding (see docs/internals.md):
 #   int-conversion: raw 32-bit ROM address constants assigned to pointers
 #     (WIP decomp; genuine 64-bit hazards to fix upstream as phases progress)
 #   incompatible-pointer-types: Mtxf union vs float[4][4], Gfx array idioms
@@ -343,7 +343,7 @@ file(GLOB_RECURSE SRC_GAME "${CMAKE_SOURCE_DIR}/src/game/*.c")
 #   the PD port, which swaps its assembly rzip for a real-zlib-backed rzip_c.c.
 #   The only externally-referenced symbols from these two files are
 #   decompressdata() and rzipGetSomething(); both are provided by
-#   port/src/rzdecomp.c (see the symbol sweep in docs/PCPortResearch.md §F).
+#   port/src/rzdecomp.c (see the symbol sweep in docs/internals.md §F).
 list(REMOVE_ITEM SRC_GAME
   "${CMAKE_SOURCE_DIR}/src/game/decompress.c"
   "${CMAKE_SOURCE_DIR}/src/game/zlib.c")
@@ -390,8 +390,8 @@ list(PREPEND SRC_LIBULTRARE_LIBC "${CMAKE_SOURCE_DIR}")
 # absolute cart addresses in the generated romassets_<region>.s (see
 # scripts/gen_romassets.py), backed by the ROM image that romdata.c maps at
 # 0x10000000. The per-model data itself (chr/*/Model.c etc.) is gitignored
-# ROM-derived and absent from this checkout. See docs/PCPortResearch.md §11.
-# D34 (docs/PCPortResearch.md): animationtable_{data,entries}.c are NOT
+# ROM-derived and absent from this checkout. See docs/internals.md §11.
+# D34 (docs/internals.md): animationtable_{data,entries}.c are NOT
 # compiled on PC. Their arrays exist only so that &ANIM_DATA_x evaluates to
 # the record's offset within the animation_data segment (N64 links it at VMA
 # 0); on x86-64 assets/animationtable_data.h redefines them as lvalues at
@@ -413,7 +413,7 @@ list(PREPEND SRC_ASSETS "${CMAKE_SOURCE_DIR}")
 #   init.c    — provides mainproc() (the game's real main entry) + the thread
 #               setup helpers. Its N64-only init() is compiled but NOT called;
 #               the N64 symbols init() references are stubbed in
-#               port/src/n64stubs.c (see A3 in docs/PCPortResearch.md).
+#               port/src/n64stubs.c (see A3 in docs/internals.md).
 #   cfb.c     — defines cfb_16 (the framebuffer), referenced by fr.c and game
 #               code (bondview2.c, front.c). Pure data.
 #   stacks.c  — thread-stack arrays (sp_boot/sp_rmon/sp_idle/sp_shed/sp_main/

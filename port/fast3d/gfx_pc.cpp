@@ -610,7 +610,7 @@ void gfx_texture_cache_delete_range(const uint8_t* start, const uint8_t* end) {
     }
 }
 
-// D71 (docs/PCPortResearch.md): texture sources arrive in two byte conventions.
+// D71 (docs/internals.md): texture sources arrive in two byte conventions.
 // Raw N64 big-endian byte streams: ROM cart map (0x10xxxxxx), model-sidecar
 // blobs (cart extension 0x10Cxxxxx), KSEG0 mirror (0x80xxxxxx) and V1
 // dram/BSS/heap buffers (0x70xxxxxx, e.g. tex.c texture pool, rle_expand_8bit
@@ -1287,7 +1287,7 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
             d->color.g = g > 255 ? 255 : g;
             d->color.b = b > 255 ? 255 : b;
 
-            /* D72 (docs/PCPortResearch.md): unlike the PD port, GE never
+            /* D72 (docs/internals.md): unlike the PD port, GE never
              * generates texture coordinates from vertex normals. This PD-
              * inherited block overwrote the authored tc[] UVs on every
              * lit+textured surface (lookat_enabled defaults to true here),
