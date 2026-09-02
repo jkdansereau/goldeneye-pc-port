@@ -623,6 +623,15 @@ void video_related_8(void)
 
 void viShake(f32 intensity)
 {
+#ifdef PORT
+    /* WI-3 route-(b), findings D181: Game.ScreenShakeIntensity scales all
+     * explosion / effect screen shake. Default 1.0f => this multiply is a
+     * no-op and every headless golden dump stays byte-identical; 0.0f
+     * disables shake, up to 10.0f exaggerates it. Opt-in via ge007.ini;
+     * N64 build (no -DPORT) keeps the original line verbatim below. */
+    extern f32 portScreenShakeScale;
+    intensity *= portScreenShakeScale;
+#endif
     if (intensity > 14.0f)
     {
         intensity = 14.0f;
