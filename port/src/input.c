@@ -161,14 +161,29 @@ extern float cursor_h_pos, cursor_v_pos;
 #define MENU_EST_DELTA      1.0    /* deltaEst per poll (front.c integrates ~1 tick/frame) */
 #define MENU_MOUSE_TO_PX    1.0    /* device px -> virtual cursor px (x MenuPointerSpeed/100) */
 
+static void applyGrab(int want);
+static void reconcileGrab(int menuMode);
+
 static int numControllers = 1;
 static int connectedMask   = 0x1;   /* controller 0 always present */
 
 static SDL_GameController *pads[MAX_PADS];
 
 static int mouseEnabled   = 1;
-static int mouseGrabbed   = 1;      /* released while the window is unfocused */
-static int mouseAimSpeed  = 25;     /* aim-mode sensitivity, percent (B3: was 50, overshot) */
+static int mouseGrabbed    = 1;     /* released while the window is unfocused */
+
+/* WI-1: Quake-style click-to-lock cursor capture.
+ *   MouseCaptureMode 0 (default) = legacy: cursor is grabbed whenever the
+ *     window has focus and MouseEnabled is set (prior behaviour, byte-exact).
+ *   MouseCaptureMode 1 = native-PC: the cursor is free until you click in the
+ *     game window; ESC (or focus loss, or opening a menu) frees it again.
+ *     Re-entering a stage while still "armed" re-locks automatically so
+ *     unpausing / starting a level does not need a click.
+ * Controller input is entirely independent of all of this. */
+static int mouseCaptureMode = 0;
+static int captureArmed     = 0;   /* user has clicked to lock (capture mode) */
+static int windowFocused    = 1;
+static int mouseAimSpeed  = 16;     /* aim-mode sensitivity, percent (B3: 50 -> 25 M-29 -> 16; still overshot at 25) */
 static int aimBand        = 20;     /* aim mode: usable stick range above the 60 gate */
 static int mouseTurnSpeed = 100;    /* hipfire yaw sensitivity, percent */
 static int menuPointerSpeed = 100;  /* front-end cursor speed, percent */
@@ -395,8 +410,9 @@ int inputInit(void)
     }
     inputOpenPads();
 
-    /* Relative mouse mode for mouse-look. ESC still quits (video.c). */
-    mouseGrabbed = mouseEnabled;
+    /* Relative mouse mode for mouse-look. In click-to-lock mode we start
+     * released and wait for a click in the window (video.c -> inputNotifyClick). */
+    mouseGrabbed = mouseEnabled && !mouseCaptureMode;
     if (mouseEnabled) {
         if (mouseRawInput) {
             /* Feed the raw device delta straight through: no OS pointer
@@ -406,7 +422,7 @@ int inputInit(void)
             SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_MODE_WARP, "0");
             sysLogPrintf(LOG_INFO, "input: raw mouse input (no OS pointer accel)");
         }
-        SDL_SetRelativeMouseMode(SDL_TRUE);
+        SDL_SetRelativeMouseMode(mouseGrabbed ? SDL_TRUE : SDL_FALSE);
         /* Drain the initial jump. */
         SDL_GetRelativeMouseState(NULL, NULL);
     }
@@ -486,6 +502,15 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         Uint32 mb = mouseEnabled ? SDL_GetMouseState(NULL, NULL) : 0;
         int menuMode = (current_menu != GE_MENU_RUN_STAGE &&
                         current_menu != GE_MENU_INVALID);
+
+        reconcileGrab(menuMode);
+
+        /* Click-to-lock, in a stage, cursor free: the mouse buttons must not
+         * reach the game (no phantom fire) -- the first click only re-locks
+         * (handled in video.c -> inputNotifyClick). Menus keep their buttons. */
+        if (mouseCaptureMode && !mouseGrabbed && !menuMode) {
+            mb = 0;
+        }
 
         /* GE default control (1.1): stick Y = move fwd/back, stick X = turn,
          * C-left/right = sidestep, C-up/down = look. FPS layout: W/S move,
@@ -575,9 +600,33 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                     menuEstV = menuTgtV = cursor_v_pos;
                     hipPitchPhase = 0.0;
                 }
+                /* WI-2: with click-to-lock the front end has a real free OS
+                 * cursor. Map its absolute window position straight onto the
+                 * virtual front-end rect so the game crosshair tracks it 1:1
+                 * (no drift -- the P-controller below just chases this target).
+                 * The relative-delta path (legacy / grabbed) is unchanged. */
+                int haveAbs = 0;
+                if (mouseCaptureMode && !mouseGrabbed) {
+                    int mx = 0, my = 0;
+                    SDL_GetMouseState(&mx, &my);
+                    SDL_Window *w = SDL_GetMouseFocus();
+                    int ww = 0, wh = 0;
+                    if (w) SDL_GetWindowSize(w, &ww, &wh);
+                    if (ww > 0 && wh > 0) {
+                        double fx = (double)mx / (double)ww;
+                        double fy = (double)my / (double)wh;
+                        if (fx < 0.0) fx = 0.0; else if (fx > 1.0) fx = 1.0;
+                        if (fy < 0.0) fy = 0.0; else if (fy > 1.0) fy = 1.0;
+                        menuTgtH = loH + fx * (hiH - loH);
+                        menuTgtV = loV + fy * (hiV - loV);
+                        haveAbs = 1;
+                    }
+                }
                 double s = (menuPointerSpeed / 100.0) * MENU_MOUSE_TO_PX;
-                menuTgtH += edx    * s;
-                menuTgtV += dyLook * s;   /* dyLook > 0 => cursor moves down (+V) */
+                if (!haveAbs) {
+                    menuTgtH += edx    * s;
+                    menuTgtV += dyLook * s;   /* dyLook > 0 => cursor moves down (+V) */
+                }
                 if (menuTgtH < loH) menuTgtH = loH;
                 if (menuTgtH > hiH) menuTgtH = hiH;
                 if (menuTgtV < loV) menuTgtV = loV;
@@ -711,9 +760,9 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
     return button;
 }
 
-void inputSetMouseGrab(int on)
+static void applyGrab(int want)
 {
-    int want = on && mouseEnabled;
+    want = want && mouseEnabled;
     if (want == mouseGrabbed) {
         return;
     }
@@ -724,6 +773,51 @@ void inputSetMouseGrab(int on)
     }
     mouseDX = mouseDY = 0.0;
 }
+
+/* Reconcile the SDL grab state with what the current mode wants. Called once
+ * per controller-0 poll (menuMode known there) and from the notify hooks. */
+static void reconcileGrab(int menuMode)
+{
+    int want;
+    if (!mouseCaptureMode) {
+        want = windowFocused;                              /* legacy */
+    } else {
+        want = captureArmed && windowFocused && !menuMode; /* click-to-lock */
+    }
+    applyGrab(want);
+}
+
+/* video.c focus events. In legacy mode this directly grabs/releases; in
+ * capture mode it just records focus and lets reconcileGrab() decide. */
+void inputSetMouseGrab(int on)
+{
+    windowFocused = on ? 1 : 0;
+    reconcileGrab(0);   /* menuMode re-checked on the next poll anyway */
+}
+
+/* A mouse click landed in the game window (video.c). In click-to-lock mode
+ * this arms + grabs; otherwise it is ignored (the game sees the click). */
+void inputNotifyClick(void)
+{
+    if (mouseCaptureMode && mouseEnabled && windowFocused) {
+        captureArmed = 1;
+        reconcileGrab(0);
+    }
+}
+
+/* ESC pressed (video.c). In click-to-lock mode, releases the cursor and
+ * reports 1 so the caller can swallow the key; otherwise reports 0. */
+int inputReleaseCapture(void)
+{
+    if (mouseCaptureMode && mouseGrabbed) {
+        captureArmed = 0;
+        applyGrab(0);
+        return 1;
+    }
+    return 0;
+}
+
+int inputMouseCaptureActive(void) { return mouseCaptureMode && !mouseGrabbed; }
 
 void inputPostWheel(int notches)
 {
@@ -762,6 +856,7 @@ int inputGetNumControllers(void)
 PD_CONSTRUCTOR static void inputConfigInit(void)
 {
     configRegisterInt("Input.MouseEnabled", &mouseEnabled, 0, 1);
+    configRegisterInt("Input.MouseCaptureMode", &mouseCaptureMode, 0, 1);
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
     configRegisterInt("Input.AimBand", &aimBand, 5, 40);
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);

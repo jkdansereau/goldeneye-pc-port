@@ -71,8 +71,16 @@ static int cfgWinX   = -1;
 static int cfgWinY   = -1;
 static int cfgWinMax = 0;
 
+/*
+ * [Game] gameplay-cosmetic knobs (route-(b) hooks in src/, findings D181).
+ * portScreenShakeScale multiplies every viShake() amplitude (src/fr.c).
+ * 1.0f = original behaviour (headless golden dumps unaffected).
+ */
+f32 portScreenShakeScale = 1.0f;
+
 PD_CONSTRUCTOR static void videoConfigInit(void)
 {
+    configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 8);
@@ -223,7 +231,17 @@ void videoPumpEvents(void)
                 exit(0);
             } else if (ev.key.keysym.sym == SDLK_F12 && !ev.key.repeat) {
                 screenshotReq = 1;
+            } else if (ev.key.keysym.sym == SDLK_ESCAPE && !ev.key.repeat) {
+                /* WI-1: in click-to-lock mode ESC frees the captured cursor
+                 * (and is swallowed); otherwise it falls through to input.c
+                 * where it feeds the N64 B button (D145). */
+                inputReleaseCapture();
             }
+            break;
+        case SDL_MOUSEBUTTONDOWN:
+            /* WI-1: a click in the window (re)locks the cursor in
+             * click-to-lock mode; a no-op otherwise. */
+            inputNotifyClick();
             break;
         case SDL_MOUSEWHEEL:
             inputPostWheel(ev.wheel.y);   /* weapon cycle */
