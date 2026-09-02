@@ -3068,6 +3068,12 @@ extern "C" void gfx_start_frame(void) {
 
 uint32_t num_dls = 0;
 
+/* F10 port-layer options overlay (port/src/optionsoverlay.c). Returns a
+ * self-contained 2D display list to draw on top of the game's frame, or NULL
+ * when the overlay is closed -- in which case nothing is appended and the
+ * frame is byte-identical to before (golden dumps unaffected). */
+extern "C" Gfx* optionsOverlayEmit(void);
+
 extern "C" void gfx_run(Gfx* commands) {
     ++num_dls;
     gfx_sp_reset();
@@ -3091,6 +3097,12 @@ extern "C" void gfx_run(Gfx* commands) {
     rendering_state.viewport = {};
     rendering_state.scissor = {};
     gfx_run_dl(commands);
+    {
+        Gfx* overlay = optionsOverlayEmit();
+        if (overlay != nullptr) {
+            gfx_run_dl(overlay);
+        }
+    }
     gfx_flush();
     gfxFramebuffer = 0;
 

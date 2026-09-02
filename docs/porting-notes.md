@@ -387,6 +387,22 @@ through a converter or a runtime bswap fixup reads scrambled.
 
 ## D. N64 hardware idioms fast3d does not emulate
 
+- **Appending a port-owned 2D overlay to the game frame: hook inside
+  `gfx_run()`, not `videoSubmitCommands`.** `gfx_run()` (`gfx_pc.cpp`) is
+  monolithic — it does `start_frame` → `gfx_run_dl` → `gfx_flush` →
+  `end_frame` → `swap_buffers_begin` in one call, and the game DL is executed
+  from `osSpTaskStartGo` (`libultra.c`), *not* through `videoSubmitCommands`
+  (which is dead). So a second `gfx_run()` per frame is not possible (it swaps
+  buffers). The clean seam is a one-line C hook between `gfx_run_dl(commands)`
+  and `gfx_flush()` that runs a second `gfx_run_dl()` on a port-built DL when
+  non-NULL (D184, F10 options overlay). The overlay DL is self-sufficient:
+  `gDPPipeSync` + `gDPSetCycleType(G_CYC_1CYCLE)` + `gDPSetTexturePersp(G_TP_NONE)`
+  + a full-screen `gDPSetScissor` + `microcode_constructor()` (the game's own
+  2D combiner/rendermode prologue), then `gDPFillRectangle` / `textRender`
+  (game symbols, extern'd like `input.c` externs `current_menu` — UI, not
+  logic). 2D pixel space is `viGetX()` x `viGetY()`. Return NULL when the
+  overlay is closed so the frame is byte-for-byte unchanged.
+
 - Z buffer cleared by pointing the colour image at it + fill-rect → does
   nothing in fast3d; must emit `G_CLEAR_DEPTH_EXT` (D105).
 - LOD / detail mip tiles: fast3d fabricates a crop when detail textures

@@ -79,6 +79,7 @@
 #include "system.h"
 #include "config.h"
 #include "input.h"
+#include "optionsoverlay.h"
 
 /* N64 button bits (from PR/os.h -- duplicated here to avoid pulling os.h,
  * whose `u8 errno;` field collides with <errno.h>'s macro). */
@@ -495,6 +496,17 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
     int sx = 0, sy = 0;
 
     if (idx < 0 || idx >= MAX_PADS) {
+        if (stick_x) *stick_x = 0;
+        if (stick_y) *stick_y = 0;
+        return 0;
+    }
+
+    /* F10 options overlay: while it is open, controller 0 is fully swallowed
+     * (neutral pad, no stick) and the nav keys / wheel drive the overlay
+     * instead. Mirrors the WI-1 "cursor free in a stage -> withhold input"
+     * pattern. Controllers 1-3 are untouched. */
+    if (idx == 0 && optionsOverlayIsOpen()) {
+        optionsOverlayHandleInput();
         if (stick_x) *stick_x = 0;
         if (stick_y) *stick_y = 0;
         return 0;
