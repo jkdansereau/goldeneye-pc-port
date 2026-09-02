@@ -113,6 +113,17 @@
 extern int current_menu;
 #define GE_MENU_RUN_STAGE  11
 #define GE_MENU_INVALID    (-1)
+/* D169: the front-end cursor lives in the game's virtual-screen field, which
+ * is 440x330 in the front end -- not the 320x240 the pointer P-controller
+ * assumed. Read the live field so the mouse pointer can reach the whole
+ * mission-select grid. These are plain non-static engine accessors
+ * (src/game/bondview.c) and globals (src/game/front.c); UI geometry only, no
+ * logic change. */
+extern float getPlayer_c_screenwidth(void);
+extern float getPlayer_c_screenheight(void);
+extern float getPlayer_c_screenleft(void);
+extern float getPlayer_c_screentop(void);
+extern float cursor_h_pos, cursor_v_pos;
 #define MENU_POINTER_GAIN  1.5
 #define TRIG_THRESHOLD     (30 * 256)
 #define RSTICK_THRESHOLD   0x4000
@@ -542,18 +553,35 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
             } else if (menuMode) {
                 /* Front-end 1:1 pointer (D165): P-controller onto a
                  * mouse-accumulated target. */
+                /* D169: clamp bounds from the live virtual screen
+                 * (front.c frontUpdateControlStickPosition clamps the real
+                 * cursor to [screenleft+20, screenleft+screenwidth-20] x
+                 * [screentop+20, screentop+screenheight-20]); fall back to the
+                 * old 320x240 constants if the front-end screen isn't set. */
+                double loH = MENU_CURSOR_LO, hiH = MENU_CURSOR_HI_H;
+                double loV = MENU_CURSOR_LO, hiV = MENU_CURSOR_HI_V;
+                {
+                    double sw = getPlayer_c_screenwidth(),  sh = getPlayer_c_screenheight();
+                    double sl = getPlayer_c_screenleft(),   st = getPlayer_c_screentop();
+                    if (sw > 200.0 && sw < 2000.0 && sh > 150.0 && sh < 2000.0) {
+                        loH = sl + 20.0;  hiH = sl + sw - 20.0;
+                        loV = st + 20.0;  hiV = st + sh - 20.0;
+                    }
+                }
                 if (!menuPrevActive) {
-                    menuEstH = menuTgtH = MENU_CURSOR_MID_H;
-                    menuEstV = menuTgtV = MENU_CURSOR_MID_V;
+                    /* Seed the estimate from the real menu cursor, not a
+                     * 320x240 centre guess. */
+                    menuEstH = menuTgtH = cursor_h_pos;
+                    menuEstV = menuTgtV = cursor_v_pos;
                     hipPitchPhase = 0.0;
                 }
                 double s = (menuPointerSpeed / 100.0) * MENU_MOUSE_TO_PX;
                 menuTgtH += edx    * s;
                 menuTgtV += dyLook * s;   /* dyLook > 0 => cursor moves down (+V) */
-                if (menuTgtH < MENU_CURSOR_LO)   menuTgtH = MENU_CURSOR_LO;
-                if (menuTgtH > MENU_CURSOR_HI_H) menuTgtH = MENU_CURSOR_HI_H;
-                if (menuTgtV < MENU_CURSOR_LO)   menuTgtV = MENU_CURSOR_LO;
-                if (menuTgtV > MENU_CURSOR_HI_V) menuTgtV = MENU_CURSOR_HI_V;
+                if (menuTgtH < loH) menuTgtH = loH;
+                if (menuTgtH > hiH) menuTgtH = hiH;
+                if (menuTgtV < loV) menuTgtV = loV;
+                if (menuTgtV > hiV) menuTgtV = hiV;
 
                 double effH = MENU_P_GAIN * (menuTgtH - menuEstH);
                 double effV = MENU_P_GAIN * (menuTgtV - menuEstV);
