@@ -43,6 +43,7 @@ timers, save storage) is shimmed in a dedicated `port/` layer.
 - [Background](#background)
 - [How this differs from the other GoldenEye PC projects](#how-this-differs-from-the-other-goldeneye-pc-projects)
 - [Status](#status)
+- [Download](#download)
 - [Requirements](#requirements)
 - [Building](#building) · [Windows (MSYS2)](#windows-msys2) · [Linux](#linux)
 - [Running](#running) · [Default controls](#default-controls)
@@ -183,6 +184,16 @@ the front end into the early game. It is not finished and it is not stable.
   functional testing on Linux or macOS** — the Linux build is provided as-is
   and unverified at runtime. No ARM testing; no controller rebinding UI; no
   widescreen.
+
+## Download
+
+Pre-built **Windows x86-64** bundles are published under
+[Releases](../../releases) as marked pre-releases — the engine executable plus
+its runtime DLLs, no ROM and no game assets. You still supply your own ROM (see
+[Requirements](#requirements)) and drop it in `data/` as described in the
+bundled README. Every download is a research alpha with the caveats in
+[Status](#status) above; there is no stable build yet. To build from source
+instead, see [Building](#building).
 
 ## Requirements
 
@@ -375,17 +386,21 @@ This is a non-commercial fan preservation/research project, in the same
 category as the many other N64 decompilation and native-port repositories on
 GitHub. It follows the same conventions they do:
 
-- **No ROM and no bulk game assets are distributed.** Textures, audio, models,
-  level data and in-game text are extracted from a ROM *you already own*, on
-  *your* machine, at build time.
+- **No ROM and no game assets are distributed** — not in this repository and
+  not in any release. Textures, audio, models, level data and in-game text are
+  extracted from a ROM *you already own*, on *your* machine (at build time for
+  a source build; at first run for a pre-built binary).
 - The repository is a fork of the public
   [GoldenEye 007 decompilation](https://github.com/n64decomp/007) and inherits
   its contents unmodified (see [`NOTICE`](NOTICE) for what that includes).
 - No official logos, box art, or marketing assets are used. "GoldenEye 007",
   "007", "James Bond" and related marks belong to their respective owners
   (Nintendo, Microsoft/Rare, MGM, Danjaq, EON Productions).
-- No binaries containing game data are distributed. Any build you make is
-  personal to you.
+- **Pre-built binaries** offered under [Releases](../../releases) contain only
+  the engine — the `port/` layer plus the compiled decompilation, with no game
+  data of any kind — bundled with permissively-licensed runtime libraries
+  (SDL2, zlib, the MinGW runtime; their licenses travel in the download). Any
+  build, yours or ours, is useless without a ROM you supply.
 
 This project is **not affiliated with, endorsed by, or sponsored by** Nintendo,
 Rare, Microsoft, MGM, Danjaq, EON Productions, or any rights holder in

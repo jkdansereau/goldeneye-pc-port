@@ -72,6 +72,9 @@ notes/*
 build-pc/
 tools_pc/*.exe
 data/
+# release bundles built by tools_pc/bundle-win.sh (repo root only; the
+# packaging template lives in tools_pc/dist/ and IS tracked)
+/dist/
 ge007.ini
 !build/test.c
 !notes/StyleGuide.md

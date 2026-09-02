@@ -1,0 +1,65 @@
+# GoldenEye 007 PC Port — @VERSION@ (alpha)
+
+A native PC port of the original Nintendo 64 *GoldenEye 007*, compiled from the
+[GoldenEye 007 decompilation](https://github.com/n64decomp/007).
+
+> **Very early research alpha — not a playable game.**
+> The intro and menus render and all 21 solo missions load, but there is
+> **no audio**, some 3D models and text are broken, ladders don't work yet
+> (and can block progression on some levels), and you should expect crashes and
+> glitches past the level intro. This is a technical demo of the porting work.
+>
+> If you just want to *play* GoldenEye on PC, use one of the Xbox 360
+> recompilation projects instead — see the project page.
+
+Project & source: <https://github.com/jkdansereau/goldeneye-pc-port>
+
+---
+
+## 1. You must supply your own ROM
+
+This package contains **no Nintendo code and no game data**. You need a
+*GoldenEye 007* Nintendo 64 ROM that **you legally own**, big-endian `.z64`,
+NTSC-U (US):
+
+| ROM filename | SHA-1 |
+|---|---|
+| `ge007.ntsc-final.z64` | `abe01e4aeb033b6c0836819f549c791b26cfde83` |
+
+Only the US ROM is supported in this alpha.
+
+## 2. Run
+
+1. Unzip this folder anywhere.
+2. Make a `data` folder next to `ge007.x86_64.exe`.
+3. Copy your ROM into it, named exactly: `data\ge007.ntsc-final.z64`
+4. Run `ge007.x86_64.exe` **from this folder**.
+
+Configuration is written to `ge007.ini` on first run.
+
+> If the game exits immediately reporting missing data, your ROM's assets need
+> the one-time extraction step described under "Building" in the project README
+> — the alpha binary expects the same asset layout a source build produces.
+
+## 3. Controls (defaults)
+
+| Action | Keyboard / mouse |
+|---|---|
+| Move / strafe | `W` `A` `S` `D` / arrows |
+| Aim / look | mouse |
+| Fire | left mouse / `LCtrl` |
+| Aim mode | right mouse / `LShift` |
+| Use / accept | `Space` / `E` |
+| Reload / cancel | `R` / `F` |
+| Start | `Enter` / `Tab` |
+
+Mouse sensitivity and Y-inversion are in the `[Input]` section of `ge007.ini`.
+
+## 4. Legal
+
+Non-commercial fan preservation / research project. **Not** affiliated with,
+endorsed by, or sponsored by Nintendo, Rare, Microsoft, MGM, Danjaq, or EON
+Productions. No ROM, game assets, or official logos are distributed.
+
+See `licenses/` for the port's MIT license, the upstream project `NOTICE`, and
+the third-party library licenses (SDL2, zlib, the MinGW runtime).

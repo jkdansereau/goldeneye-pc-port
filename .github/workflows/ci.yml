@@ -3,7 +3,9 @@ name: CI
 on:
   push:
     branches: [ main, master ]
-    paths-ignore: [ '**.md', 'docs/**', 'LICENSE', 'NOTICE' ]
+    tags: [ 'v*' ]
+    # No paths-ignore here: tag pushes must always build so a release can be
+    # cut even when the tagged commit only touched docs. PRs keep the filter.
   pull_request:
     paths-ignore: [ '**.md', 'docs/**', 'LICENSE', 'NOTICE' ]
   workflow_dispatch:
@@ -18,7 +20,7 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Two jobs:
+# Three jobs:
 #
 #   validate      — ubuntu, configure-only. Byte-compiles the tooling,
 #                   regenerates the US ROM-asset symbol file, and CMake-
@@ -28,9 +30,16 @@ concurrency:
 #                   works on Linux.
 #
 #   windows-build — windows/MSYS2, the real supported platform. Compiles and
-#                   links the full executable. Neither the ROM nor extracted
-#                   assets are needed to BUILD (they are runtime-only), so CI
-#                   builds but never runs the port.
+#                   links the full executable, then packages the distributable
+#                   bundle (exe + runtime DLLs + README + licenses, NO ROM /
+#                   assets) via tools_pc/bundle-win.sh and uploads it. Neither
+#                   the ROM nor extracted assets are needed to BUILD (they are
+#                   runtime-only), so CI builds but never runs the port.
+#
+#   release       — tags only (v*). Downloads the bundle from windows-build and
+#                   attaches it to a DRAFT pre-release for that tag. Draft, so a
+#                   human does the ROM smoke-test and hits Publish. This is the
+#                   only job granted contents: write.
 
 jobs:
   validate:
@@ -88,6 +97,8 @@ jobs:
             mingw-w64-x86_64-SDL2
             mingw-w64-x86_64-zlib
             mingw-w64-x86_64-python
+            zip
+            unzip
 
       - name: Regenerate ROM-asset symbol file (US)
         run: python scripts/gen_romassets.py u
@@ -95,14 +106,63 @@ jobs:
       - name: Build (ntsc-final)
         run: ./build-pc.sh ntsc-final
 
-      - name: Upload executable
+      # Package the distributable bundle on every run so the release path is
+      # always exercised. On a tag build VERSION is the tag; otherwise it is a
+      # throwaway CI string. bundle-win.sh hard-fails if a ROM image or an
+      # oversized blob ends up inside the bundle.
+      - name: Package Windows bundle
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            V="${GITHUB_REF_NAME}"
+          else
+            V="0.0.0-ci.${GITHUB_SHA::7}"
+          fi
+          tools_pc/bundle-win.sh "$V"
+
+      - name: Upload bundle
         uses: actions/upload-artifact@v7
         with:
-          name: ge007-ntsc-final
-          path: build-pc/ge007*
+          name: goldeneye-pc-port-win64
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256
           if-no-files-found: error
           retention-days: 14
 
-      # CI builds the executable but does not run it — running the port needs a
-      # ROM, which CI does not provide. Runtime checks (the -level_09 soak, a
-      # golden-frame diff) would run on a self-hosted runner instead. Not planned.
+      # CI builds and packages the executable but does not run it — running the
+      # port needs a ROM, which CI does not provide. Runtime checks (the
+      # -level_09 soak, a golden-frame diff) would run on a self-hosted runner
+      # instead. Not planned.
+
+  # Tags only. Attach the packaged bundle to a DRAFT pre-release so a human can
+  # do the ROM smoke-test before publishing. This job — and only this job —
+  # gets contents: write.
+  release:
+    if: github.ref_type == 'tag'
+    needs: [ validate, windows-build ]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: goldeneye-pc-port-win64
+          path: dist
+
+      - name: Create or update draft pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.zip dist/*.zip.sha256 --clobber
+          else
+            gh release create "$TAG" dist/*.zip dist/*.zip.sha256 \
+              --draft --prerelease \
+              --title "GoldenEye 007 PC Port $TAG" \
+              --notes-file .github/release-notes.md
+          fi
