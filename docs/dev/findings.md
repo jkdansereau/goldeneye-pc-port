@@ -4677,8 +4677,9 @@ Touched: `src/game/stan.c` (macro + `stanCheckLinkedSpecialTile` +
 All `#ifdef PORT`, N64 path kept verbatim under `#else`. Candidate root-cause
 came from an M-36 subagent; parts 1/3 were its work, part 2 (the local size)
 found on review. **Verified:** build links clean; `-level_09` framediff 3/3;
-`-level_36` (Surface, has mandatory ladders) boots crash-free. **Interactive
-climb test owed** — headless can't drive the climb input.
+`-level_36` (Surface, has mandatory ladders) boots crash-free.
+**Interactive climb test — DONE (M-37): user confirmed climbing works
+in-game.** Merged to `main` via PR #5 (`955349db`).
 
 porting-notes.md §C (pointer-width in ROM/record structs).
 
