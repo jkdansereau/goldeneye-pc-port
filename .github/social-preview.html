@@ -1,0 +1,147 @@
+<!doctype html>
+<!--
+  Source for .github/social-preview.png — the repo's GitHub "Social preview"
+  card (Settings → General → Social preview). 1280×640.
+
+  Regenerate the PNG with headless Chrome/Edge (any Chromium):
+
+    chrome --headless --disable-gpu --hide-scrollbars \
+           --force-device-scale-factor=1 --virtual-time-budget=6000 \
+           --window-size=1280,640 \
+           --screenshot=social-preview.png \
+           "$(pwd)/social-preview.html"
+
+  --virtual-time-budget waits for the Google Fonts (Tinos, Arimo) to load.
+  If your Chromium blocks file:// font loads, serve the folder first
+  (`python -m http.server` and point --screenshot at the localhost URL).
+
+  Design + rationale: .github/social-preview.md
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400&family=Arimo:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1280px; height:640px; overflow:hidden; }
+  body {
+    position:relative;
+    background:#4c4f3c;
+    font-family:'Arimo','Helvetica Neue',Arial,sans-serif;
+  }
+  /* rough concrete/stone surround, like the GE briefing screen.
+     Layered SVG fractal-noise: broad blotches (dark), mid mottle (light),
+     fine tooth. */
+  .concrete { position:absolute; inset:0; z-index:0;
+    background-color:#5c5f48;
+    background-image:
+      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='520'%20height='520'%3E%3Cfilter%20id='a'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.007'%20numOctaves='4'%20seed='19'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200.55%200.5%200.4%200%20-0.5'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23a)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='520'%20height='520'%3E%3Cfilter%20id='b'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.02'%20numOctaves='4'%20seed='4'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200.82%200%200%200%200%200.83%200%200%200%200%200.72%200.4%200.38%200.32%200%20-0.42'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23b)'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='200'%20height='200'%3E%3Cfilter%20id='c'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.12'%20numOctaves='2'%20seed='8'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200.4%200.4%200.4%200%20-0.55'/%3E%3C/filter%3E%3Crect%20width='100%25'%20height='100%25'%20filter='url(%23c)'/%3E%3C/svg%3E");
+    background-size:520px 520px,520px 520px,200px 200px;
+  }
+  .concrete::after { content:""; position:absolute; inset:0;
+    background:radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(12,14,8,.30) 100%); }
+
+  /* file tabs on the right edge */
+  .tabs { position:absolute; right:26px; top:70px; bottom:70px; width:58px;
+    display:flex; flex-direction:column; align-items:stretch; z-index:4; }
+  .tab { flex:1; margin:5px 0; background:linear-gradient(90deg,#8f8f86,#c4c4bb);
+    border:2px solid #5b5b52; border-left:none;
+    box-shadow:2px 3px 6px rgba(0,0,0,.4);
+    display:flex; align-items:center; justify-content:center; }
+  .tab span { writing-mode:vertical-rl; text-orientation:mixed;
+    font-family:'Arimo',sans-serif; font-weight:700; font-size:15px;
+    letter-spacing:4px; color:#3b3b33; transform:rotate(180deg); }
+  .reticle { position:absolute; right:34px; top:246px; width:44px; height:44px; z-index:5; }
+  .reticle::before, .reticle::after { content:""; position:absolute; background:#c62828; }
+  .reticle::before { left:50%; top:-6px; width:3px; height:56px; margin-left:-1.5px; }
+  .reticle::after { top:50%; left:-6px; height:3px; width:56px; margin-top:-1.5px; }
+  .reticle i { position:absolute; inset:4px; border:3px solid #c62828; border-radius:50%; }
+
+  /* the parchment card */
+  .card { position:absolute; left:40px; top:40px; right:96px; bottom:40px;
+    background:#d9d4b0;
+    background-image:
+      repeating-radial-gradient(circle at 30% 20%, rgba(150,140,95,.10) 0 6px, rgba(120,112,72,.05) 6px 13px),
+      repeating-linear-gradient(4deg, rgba(140,130,90,.08) 0 3px, transparent 3px 9px);
+    box-shadow:0 6px 24px rgba(0,0,0,.5), inset 0 0 60px rgba(150,138,95,.35);
+    padding:44px 58px 40px; overflow:hidden; z-index:2; }
+
+  /* faint watermark, upper right */
+  .crest { position:absolute; right:44px; top:30px; width:190px; height:190px;
+    opacity:.10; }
+  .crest .ring { position:absolute; inset:0; border:9px solid #3a3320; border-radius:50%; }
+  .crest .ring2 { position:absolute; inset:34px; border:4px solid #3a3320; border-radius:50%; }
+  .crest .bar { position:absolute; left:50%; top:6%; width:6px; height:88%;
+    margin-left:-3px; background:#3a3320; transform:rotate(30deg); transform-origin:center; }
+  .crest .bar2 { transform:rotate(-30deg); }
+  .crest .bar3 { transform:rotate(90deg); }
+
+  .h1 { font-family:'Tinos','Times New Roman',serif; font-weight:700;
+    font-size:62px; line-height:1.02; color:#1c1a12; letter-spacing:1px; }
+  .h1 .r { color:#a01818; }
+  .h1 small { display:inline-block; font-size:44px; font-weight:700; letter-spacing:3px;
+    color:#a01818; margin-top:4px; border-bottom:5px solid #a01818; padding-bottom:1px; }
+
+  .meta { font-size:25px; line-height:1.45; color:#1c1a12; margin-top:14px; }
+  .rep { font-size:26px; font-weight:700; color:#1c1a12; margin-top:14px; letter-spacing:1px; }
+
+  .rows { margin-top:8px; font-size:25px; line-height:1.5; color:#1c1a12; }
+  .rows .status { color:#a01818; font-weight:700; }
+  .statusline { font-size:26px; margin-bottom:10px; }
+  .stats { display:grid; grid-template-columns:auto 1fr; column-gap:22px; row-gap:4px;
+    max-width:1000px; }
+  .stats .k { white-space:nowrap; font-weight:700; }
+
+  .foot { position:absolute; left:58px; bottom:26px; font-size:17px;
+    color:#4a4432; letter-spacing:.5px; }
+
+  /* diagonal CLASSIFIED stamp */
+  .classified { position:absolute; left:-30px; bottom:40px; right:0;
+    text-align:center; transform:rotate(-16deg); transform-origin:left bottom;
+    font-family:'Arimo',sans-serif; font-weight:700; font-size:104px;
+    letter-spacing:12px; color:rgba(172,40,40,.16); z-index:6; }
+</style>
+</head>
+<body>
+  <div class="concrete"></div>
+
+  <div class="card">
+    <div class="crest">
+      <div class="ring"></div><div class="ring2"></div>
+      <div class="bar"></div><div class="bar bar2"></div><div class="bar bar3"></div>
+    </div>
+
+    <div class="h1">GOLDENEYE <span class="r">007</span><br><small>PC&nbsp;PORT</small></div>
+
+    <div class="meta">
+      Mission: Native PC port of GoldenEye, compiled from the N64 decomp project
+    </div>
+
+    <div class="rep">REPORT:</div>
+
+    <div class="rows">
+      <div class="statusline">Status: <span class="status">PHASE 2 OF 4 &mdash; RENDERING</span></div>
+      <div class="stats">
+        <span class="k">Statistics:</span><span>21 / 21 solo missions load &amp; render</span>
+        <span></span><span>~230 game-code units, compiled unmodified</span>
+        <span></span><span>~17k lines C/C++ &nbsp;&middot;&nbsp; ~6k Python  (port layer + tools)</span>
+        <span></span><span>162 bugs root-caused &nbsp;&middot;&nbsp; built in ~2 weeks, part-time</span>
+      </div>
+    </div>
+
+    <div class="foot">github.com/jkdansereau/goldeneye-pc-port</div>
+
+    <div class="classified">CLASSIFIED</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab"><span>NEXT</span></div>
+    <div class="tab"><span>PREVIOUS</span></div>
+  </div>
+  <div class="reticle"><i></i></div>
+</body>
+</html>

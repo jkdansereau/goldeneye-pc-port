@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+title: "GoldenEye 007 PC Port — a two-agent AI development case study"
+message: >-
+  If you reference this project or its write-up on AI-agent collaboration,
+  please cite it using the metadata below.
+type: software
+authors:
+  - family-names: Dansereau
+    given-names: James
+repository-code: "https://github.com/jkdansereau/goldeneye-pc-port"
+abstract: >-
+  A work-in-progress native PC port of GoldenEye 007 (Rare, 1997, Nintendo 64),
+  built on the GoldenEye 007 decompilation, and a research project on AI-agent
+  collaboration in a large, unfamiliar, low-level codebase: how two coding
+  agents (a local open-weight model and a hosted frontier model), directed by
+  one person part-time, were driven through ~230 translation units of unmodified
+  big-endian MIPS game code and made to run on a 64-bit desktop. Covers software
+  RSP emulation, N64-to-x86-64 ABI reconciliation, and a shared-artifact handoff
+  workflow between agents.
+keywords:
+  - goldeneye-007
+  - nintendo-64
+  - n64
+  - decompilation
+  - pc-port
+  - game-porting
+  - reverse-engineering
+  - agentic-development
+  - ai-agents
+  - llm
+  - coding-agents
+  - software-renderer
+  - mips
+  - opengl
+license: MIT

@@ -1,0 +1,16 @@
+# GitHub Pages config. Site is served from the /docs folder on the default
+# branch (Settings -> Pages -> Deploy from a branch -> main / docs).
+title: GoldenEye 007 PC Port
+description: >-
+  A native PC port of the original Nintendo 64 GoldenEye 007, built from its
+  decompiled source, and a case study in AI-agent collaboration on a large
+  low-level codebase.
+theme: jekyll-theme-cayman
+show_downloads: false
+
+# jekyll-relative-links (on by default for Pages) rewrites the .md links in
+# these docs to .html so cross-links work on the published site.
+
+# Rolling local working files - not useful as published pages.
+exclude:
+  - HANDOFF.md

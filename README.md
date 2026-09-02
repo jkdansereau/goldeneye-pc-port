@@ -1,18 +1,26 @@
-# GoldenEye 007 — PC port
+# GoldenEye 007 PC Port
 
+[![CI](https://github.com/jkdansereau/goldeneye-pc-port/actions/workflows/ci.yml/badge.svg)](https://github.com/jkdansereau/goldeneye-pc-port/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_2_of_4_(rendering)-orange)
 ![tested on](https://img.shields.io/badge/tested_on-Windows_x86--64-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![built with](https://img.shields.io/badge/built_with-coding_agents-8A2BE2)
 
-A work-in-progress native port of **GoldenEye 007** (Rare, 1997) to modern
-desktop platforms, built on top of the
-[GoldenEye decompilation](https://github.com/n64decomp/007).
+**A work-in-progress native PC port of _GoldenEye 007_ (Rare, 1997, Nintendo 64),
+built on the [GoldenEye 007 decompilation](https://github.com/n64decomp/007).**
+It is first and foremost a **research project on AI-agent collaboration in a
+large, unfamiliar, low-level codebase** — how far two coding agents (a local
+open-weight model and Claude), driven by one person part-time, can be pushed
+through ~230 translation units of unmodified big-endian MIPS game code and made
+to run on a 64-bit desktop. **Current status: Phase 2 of 4 (rendering).** The
+port boots, renders the full intro and front end, and loads all 21 solo
+missions; there is no audio yet and it is not a playable game. See
+[Status](#status) and [Background](#background).
 
-It follows the architecture of the
+Technically, it follows the architecture of the
 [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) — the same
 Rare "Indy" engine family, one hardware generation apart. The unmodified game C
-sources are compiled for the host; the N64's Reality Signal Processor is
+sources are compiled for the host; the N64's Reality Signal Processor (RSP) is
 emulated in software; every other hardware surface (video, audio, input,
 timers, save storage) is shimmed in a dedicated `port/` layer.
 
@@ -33,6 +41,7 @@ timers, save storage) is shimmed in a dedicated `port/` layer.
 ## Contents
 
 - [Background](#background)
+- [How this differs from the other GoldenEye PC projects](#how-this-differs-from-the-other-goldeneye-pc-projects)
 - [Status](#status)
 - [Requirements](#requirements)
 - [Building](#building) · [Windows (MSYS2)](#windows-msys2) · [Linux](#linux)
@@ -46,10 +55,11 @@ timers, save storage) is shimmed in a dedicated `port/` layer.
 
 ## Background
 
-This port is primarily a **research project on agentic software development** —
-how far coding agents can be driven, by one person, through a large and
-unfamiliar low-level codebase (~230 translation units of unmodified
-big-endian MIPS game code, made to run on a 64-bit desktop).
+Beyond the port itself, this is primarily a **research project on agentic
+software development** — specifically, on AI-agent collaboration in a large,
+unfamiliar, low-level codebase: how far coding agents can be driven, by one
+person working part-time, through ~230 translation units of unmodified
+big-endian MIPS game code, made to run on a 64-bit desktop.
 
 It used two agents:
 
@@ -106,7 +116,31 @@ asset converters — then both agents ran the debugging phase together:
 
 Full write-up, timeline chart, and an honest "what worked / what didn't":
 [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md). The
-workflow itself: [`docs/dev-process.md`](docs/dev-process.md).
+workflow itself: [`docs/dev-process.md`](docs/dev-process.md). To cite this
+project or its findings, use [`CITATION.cff`](CITATION.cff) (GitHub's "Cite
+this repository" menu).
+
+## How this differs from the other GoldenEye PC projects
+
+This is a **native port of the original 1997 Nintendo 64 game, built from its
+actual reconstructed source code** — the same lineage as the Perfect Dark PC
+port. The other well-known "GoldenEye on PC" projects are something different:
+they machine-translate the shipped binary of the *unreleased Xbox 360 XBLA
+remaster* — a different game, a different codebase, no shared code with this.
+
+| | This project | [GoldenEye-Recomp](https://github.com/SunJaycy/GoldenEye-Recomp) / [Steam Deck build](https://github.com/couchk1ng/GoldenEye-Recomp-SteamDeck) |
+|---|---|---|
+| **What it ports** | The original **Nintendo 64** game (1997) | The **Xbox 360 XBLA** HD remaster (built ~2007, never released) |
+| **How** | **Decompilation-based source port** — human-reconstructed C, compiled for the host; game logic runs as written | **Static binary recompilation** — the shipped machine code is auto-translated to C; no source-level understanding |
+| **Lineage** | [GoldenEye 007 decompilation](https://github.com/n64decomp/007) + [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) engine family | Xbox 360 "…Recompiled" static-recompilation family |
+| **Renderer** | Software RSP → OpenGL | Hardware (Vulkan) |
+| **Status** | WIP, Phase 2 — renders and loads all 21 levels; no audio; not playable end to end | Playable full game, higher frame rates, online multiplayer |
+| **Why it exists** | A [case study in AI-agent collaboration](#background) on a hard low-level codebase; the port is the target, not a product | A polished, playable PC release of the remaster |
+
+**If you just want to play GoldenEye on PC today, use one of the recompilation
+projects — they are finished and this is not.** What is interesting here is the
+other half: getting the *original* game running from source, and how much of
+that work was driven by AI agents.
 
 ## Status
 
@@ -275,11 +309,15 @@ docs/               see below
 
 ## Documentation
 
+Key docs are also published as a site:
+**<https://jkdansereau.github.io/goldeneye-pc-port/>**.
+
 | Doc | What's in it |
 |---|---|
 | [`docs/building.md`](docs/building.md) | Full build + asset-extraction guide. |
 | [`docs/internals.md`](docs/internals.md) | Architecture, the RSP-emulation approach, GE-vs-PD engine differences, the phased plan. |
 | [`docs/porting-notes.md`](docs/porting-notes.md) | The recurring N64→PC bug classes hit during the port, with fixes. |
+| [`docs/dev/game-behavior-reference.md`](docs/dev/game-behavior-reference.md) | How the retail N64 game is meant to behave — combat/AI model, difficulty scaling, per-level objectives, timers, weapon data, original-game quirks. Playtest reference. |
 | [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md) | The research angle: the two-agent setup, timeline, handoff workflow, and an assessment of what did and didn't work. |
 | [`docs/dev-process.md`](docs/dev-process.md) | The investigation workflow in detail — budgets, file partitioning, the finding-log discipline. |
 | [`docs/dev/`](docs/dev/) | The raw engineering record: the full finding log, per-level status, graphics backlog, playtest matrices. |
