@@ -438,6 +438,28 @@ void romdataFixupLangBank(u8 *blob, u32 blobSize)
 }
 
 /*
+ * D178 (docs/dev/findings.md): a briefing segment (Ubrief*Z, assets/obseg/
+ * brief/) serializes `struct BriefStruct` = { u16 brief[4];
+ * { u16 textid; u16 enabled_difficulty; } objective[10] } — 24 big-endian
+ * u16 in ROM, loaded raw by load_briefing_text_for_stage() with no
+ * converter. On a little-endian host every field is byte-swapped:
+ * textid = getStringID(LDAM, 4) = 0x2C04 reads as 0x042C -> langGet()
+ * resolves bank 1 slot 44 (never loaded) -> NULL -> blank objective text,
+ * and enabled_difficulty 0x0001 (Secret Agent) reads as 0x0100 = 256 so
+ * `selected_difficulty >= enabled_difficulty` filters the line out entirely.
+ * Same for brief[0..3] (the Overview / M / Q / Moneypenny pages, D143).
+ * Fixed size (48 bytes), so a straight u16 swap of the whole struct.
+ */
+void romdataFixupBriefing(u8 *blob)
+{
+    u32 i;
+    for (i = 0; i < ROMDATA_BRIEFING_U16S; i++) {
+        u16 v = *(const u16 *)(blob + 2 * i);
+        *(u16 *)(blob + 2 * i) = (u16)((v >> 8) | (v << 8));
+    }
+}
+
+/*
  * D50 (docs/internals.md): font segments (Zurich Bold, Bank Gothic)
  * serialize `struct font` in the N64 layout — big-endian scalars, 4-byte
  * pointers:

@@ -60,10 +60,11 @@ static int cfgWrapFix       = 0;   /* D74 sub-tile UV pre-wrap + RC3/D167 non-Po
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
 
 /*
- * [Window] persistence. Defaults are sentinels that reproduce the old
- * hardcoded behaviour (native size, centered): W/H = 0 -> native, X/Y = -1 ->
- * let SDL centre the window. videoSaveWindowState() writes the live geometry
- * back into these on a clean exit (see main.c's atexit handler).
+ * [Window] persistence. W/H = 0 -> auto (gfx_sdl2 fits a 4:3 window into ~85%
+ * of the desktop); X/Y = -1 -> let SDL centre the window.
+ * videoSaveWindowState() writes the live geometry back into these on a clean
+ * exit (see main.c's atexit handler), so after the first run the file pins
+ * whatever size you left it at.
  */
 static int cfgWinW   = 0;
 static int cfgWinH   = 0;
@@ -71,8 +72,16 @@ static int cfgWinX   = -1;
 static int cfgWinY   = -1;
 static int cfgWinMax = 0;
 
+/*
+ * [Game] gameplay-cosmetic knobs (route-(b) hooks in src/, findings D181).
+ * portScreenShakeScale multiplies every viShake() amplitude (src/fr.c).
+ * 1.0f = original behaviour (headless golden dumps unaffected).
+ */
+f32 portScreenShakeScale = 1.0f;
+
 PD_CONSTRUCTOR static void videoConfigInit(void)
 {
+    configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 8);
@@ -109,8 +118,8 @@ int videoInit(void)
     /* MSAA: snap the requested sample count down to a supported power of two. */
     gfx_msaa_level = cfgMSAA >= 8 ? 8 : cfgMSAA >= 4 ? 4 : cfgMSAA >= 2 ? 2 : 1;
 
-    int winW = cfgWinW > 0 ? cfgWinW : GE_NATIVE_W;
-    int winH = cfgWinH > 0 ? cfgWinH : GE_NATIVE_H;
+    int winW = cfgWinW > 0 ? cfgWinW : 0;   /* 0 -> gfx_sdl2 auto-fits to the desktop */
+    int winH = cfgWinH > 0 ? cfgWinH : 0;
     int havePos = (cfgWinX >= 0 && cfgWinY >= 0);
 
     struct GfxInitSettings set = {
@@ -223,7 +232,17 @@ void videoPumpEvents(void)
                 exit(0);
             } else if (ev.key.keysym.sym == SDLK_F12 && !ev.key.repeat) {
                 screenshotReq = 1;
+            } else if (ev.key.keysym.sym == SDLK_ESCAPE && !ev.key.repeat) {
+                /* WI-1: in click-to-lock mode ESC frees the captured cursor
+                 * (and is swallowed); otherwise it falls through to input.c
+                 * where it feeds the N64 B button (D145). */
+                inputReleaseCapture();
             }
+            break;
+        case SDL_MOUSEBUTTONDOWN:
+            /* WI-1: a click in the window (re)locks the cursor in
+             * click-to-lock mode; a no-op otherwise. */
+            inputNotifyClick();
             break;
         case SDL_MOUSEWHEEL:
             inputPostWheel(ev.wheel.y);   /* weapon cycle */
