@@ -392,7 +392,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D169 | **Front-end mouse pointer can't reach the outer cells of the mission/level-select grid — only an inner ~3×3 selectable (M-33, developer bug report).** The D165 pointer P-controller in `port/src/input.c` is hard-coded to a **320×240** virtual field (`MENU_CURSOR_HI_H`/`_HI_V` = 300/220, `MENU_CURSOR_MID_H`/`_MID_V` = 160/120, `input.c:145-149`), but GE's front end runs at **440×330** (`front.c:8570` `viSetViewSize(440,330)`; default cursor home 220/165 `front.c:285`). `frontUpdateControlStickPosition` clamps the real cursor to `[20,420]×[20,310]` (`front.c:1195-1217`); the mission-select hit-test grid spans x 73…352 / y 62…270 with outer split points 317 / 235.5 (`front.c:516,519,3180,3194`). The port clamps its pointer *target* and *estimate* to 300/220 (`input.c:553-564`) → the stick zeroes out once both saturate → the game's `cursor_h_pos`/`cursor_v_pos` park at ≈300/220, short of the two outer columns and the bottom row. File-select / mode-select / main-menu are unaffected because their hit targets (centred folder boxes, the `x=126` mode list, the `x=106` difficulty list) all sit inside the 320×240 sub-box. Not the D118d `joyGetStickY`-threshold class — this is a virtual-resolution constant mismatch, closer to D164 (a front-end layout constant wrong on the PC path). Also note: the "re-syncs whenever the target is held at a screen edge" comment at `input.c:141-143` describes behaviour the code doesn't implement — the only estimator reset is the activation re-home (`input.c:545-549`), so once pinned at the clamp the estimate never recovers. Confidence: **medium-high** (constants + clamp math unambiguous in source; static-only, no build/run this session; exact reachable block "~4×3" vs the reported "3×3" within tolerance). | **FIXED (M-33, `port/src/input.c`, port-only, no `#ifdef PORT`).** The `menuMode` pointer branch now derives its clamp bounds from the live virtual screen — `[screenleft+20, screenleft+screenwidth-20] × [screentop+20, screentop+screenheight-20]` via `getPlayer_c_screenwidth/height/left/top()` (`src/game/bondview.c:880-895`) — falling back to the old 320×240 constants when the front-end screen isn't set (`sw` outside 200…2000). The estimator seed on activation is now the real `cursor_h_pos`/`cursor_v_pos` (`front.c:285`, externed in `front.h`) instead of the 160/120 centre guess. `MENU_CURSOR_HI_H/_V` / `MID_H/_V` kept only as the fallback. **Verified:** builds + links clean (`getPlayer_c_screen*` and `cursor_[hv]_pos` all resolve — non-static engine symbols, as expected); `GE_STARTMENU=7` mission-select boots crash-free 600+ frames; `-level_09` unregressed (framediff 3/3 within threshold, 91.6% nonclear). The in-level path is untouched (menu-only branch). **Interactive feel-check still owed** — headless input can't drive the mouse pointer, so "every grid tile is now reachable" is inferred from the corrected clamp math, not observed. `Input.MenuPointerMode=0` (legacy velocity) and the constant fallback remain as escape hatches. |
 | D178 | **Pre-mission briefing screen: objectives blank / missing, briefing pages blank (also the D143 "briefing text blank" side effect) — FIXED (M-36).** Root cause: the briefing segment (`Ubrief*Z`, source `assets/obseg/brief/*.c`) is a raw ROM image of `struct BriefStruct` = `{ u16 brief[4]; struct { u16 textid; u16 enabled_difficulty; } objective[10]; }` (48 bytes), loaded by `front.c load_briefing_text_for_stage()` via `_fileNameLoadToAddr()` — **no converter and no BE→LE fixup anywhere in the chain**. On the LE host all 24 `u16` read byte-swapped. Measured on Dam (`GE_D178=1`): raw `brief=002c,012c,022c,032c obj0=042c/0100 obj3=072c/0000` vs correct `2c00,2c01,2c02,2c03 / 2c04/0001 / 2c07/0000`. Two independent symptoms follow: (a) `textid` `0x2C04` (= `getStringID(LDAM,4)`, bank 11 slot 4) reads as `0x042C` → bank 1 slot 44, never loaded → `langGet()` NULL → **blank text** (this is exactly the D143 residual, `front.c:6732` and `brief[0..3]` at `front.c:6855-6867`); (b) `enabled_difficulty` `0x0001` (Secret Agent) reads as `0x0100 = 256`, so `selected_difficulty >= enabled_difficulty` (`front.c:6729`) is false for every difficulty-gated objective — on Agent only the one `DIFFICULTY_AGENT`(0) objective survived the filter, which is why a single bare "a." bullet printed. **Fix:** `romdataFixupBriefing()` in `port/src/romdata.c` (+ `port/include/romdata.h`), called from a `#ifdef PORT` block in `load_briefing_text_for_stage()` right after the load — the same shape as `langFixupLoadedBank()` in `language.c` (BE-serialized-struct reconciliation, semantics-preserving, no game logic touched). `GE_D178=1` prints the raw and fixed words. **Verified:** Dam briefing on Agent now shows "a. Bungee jump from platform"; on `GE_STARTMENU_DIFF=3` (00 Agent) all four (Neutralize all alarms / Install covert modem / Intercept data backup / Bungee jump from platform), correct difficulty gating. `-level_09` framediff 3/3; `GE_STARTMENU=7`/`=13` crash-free. | **FIXED (M-36)** — high confidence |
 | D175 | **In-game stutter / brief hang during normal play** (user QA report): opening a door on Runway (`-level_35`, mission 3) and also observed on Surface. Self-recovered; no backtrace captured. Likely one of the known transient-hang classes (D155 catch-up spiral / D156 anim NaN loop / D134 task-done event / D147-D152 audio-lock steal) or a benign new-room texture-import frame spike on door open. See `GRAPHICS-BACKLOG.md` D175 for the gdb pattern-match sheet. | Observed, not investigated |
-| D176 | **Surface exterior renders wrong (`-level_36`), two independent defects.** **(a)** sky solid black — env data is correct (`Clouds=1`, warm `CloudRGB`), the cloud-sky path runs, but `skyRenderTri`/`skyRenderFull` emit nothing → see "D176(a)" below, partial, not root-caused. **(b)** cliff/rock walls = grey diagonal static — NOT a texture decode bug (D183 disproved the shear hypothesis, 0/166 loads strided); re-scope from ROM ground truth of the wall texnum. See `GRAPHICS-BACKLOG.md` D176. | (a) partial / (b) open — both M-36 |
+| D176 | **Surface exterior renders wrong (`-level_36`), two independent defects.** **(a)** sky solid black — env data is correct (`Clouds=1`, warm `CloudRGB`), the cloud-sky path runs, but `skyRenderTri`/`skyRenderFull` emit only `G_RDPHALF_*` immediates which `gfx_pc.cpp:2901` deliberately no-ops → **root-caused M-37** (see "D176(a) — M-37 UPDATE"); fix = decode the RDPHALF sky-tri stream in fast3d. **(b)** cliff/rock walls = grey diagonal static — NOT a texture decode bug (D183 disproved the shear hypothesis, 0/166 loads strided); re-scope from ROM ground truth of the wall texnum (M-37: inconclusive, leaning tiling-density). See `GRAPHICS-BACKLOG.md` D176. | (a) root-caused, fix owed / (b) open |
 | D177 | **Ladders non-functional — progression blocker (user QA report) — FIXED (M-36).** Not the input path and not the ladder state machine: `MoveBond` gates the ladder-collision path on `stanGetLocusCount(&curLocus)`, which was pinned at 0 on PC. `stanCheckLinkedSpecialTile` writes the LADDER signal via raw `outFlags[1] = 1` into a `struct StandTileLocusCallbackRecord` whose first member `s32 *rooms` is pointer-widened on PC → `[1]` is the high half of `rooms`, and `count` (moved +4→+8) is never written. Compounded by `curLocus` being declared as the 8-byte placeholder `move_bond_temp_struct` (too small for the widened record) and a `(s32)coords` pointer-truncation AV waiting in `stanGetMoveBondCollisionTiles`. **Fix:** `#ifdef PORT` — write record fields by name, declare `curLocus` as the real struct, `PORT_PTRADD` for the truncating cast (`src/game/stan.c`, `src/game/bondview2.c`; no game logic). Full detail: §F "D177". | **FIXED (M-36)** — high confidence; interactive climb test owed |
 | D174 | **"No blood effect" (user QA report).** Likely the unverified D120 decal fix: `d43_emit.py` now emits the opcode-0x18 `PointUsage[]` chain, but it was never interactively verified and requires a full sidecar regen to take effect (`debug.ps1` does not regen). Spray path is D172 (draws, wrong colour) — total absence would be new. See `GRAPHICS-BACKLOG.md` D174. | Observed; first step = BUNKER1 firefight with regenerated sidecars |
 | D183 | **M-36 Family A ("texture line/pitch shear") is DISPROVEN for the Surface repro (`-level_36`).** The importers' pitch assumption is real but never fires there; the Surface cliff "grey static" is not a shear. Full evidence + what the walls actually are: §F "D183" below. A defensive, provably-no-op de-stride landed in `import_texture()` anyway (covers the `gfx_dp_load_tile` case the `SUPPORT_CHECK`s assert against), plus `GE_DTEX` STRIDED marker + `GE_TEXRAW` raw-source dump. | Hypothesis DISPROVEN + diagnostics shipped; D176(b)/D182(2) still OPEN |
@@ -4556,6 +4556,24 @@ Remaining candidates, in order:
    still be a real `gfx_dp_load_tile` strided case (front-end `texLoadFromGdl`
    paths do use windowed loads). The defensive fix in §5 would cover it if so.
 
+**M-37 UPDATE (inconclusive, ~8-min timebox):** the §7 offline decoder + logs
+live *outside* this checkout — a full offline ROM decode was not achievable.
+Static findings: Surface's bg is `bg/bg_sevx_all_p.seg` (`bg.c:201`); the wall
+texture is a `u16` image ID *embedded in the bg GDL stream*, not a static
+per-level texnum list, so it cannot be grepped — needs a runtime `GE_DTEX`/
+`GE_TEXRAW` correlation. `assets/images.def` has no rock/cliff names (only
+`STATIC_NOISE 0x389`); Surface-named entries are mission-select thumbnails.
+Leaning **"real texture / tiling-density" (candidate 2), low-med confidence** —
+D183's own measurement (constant full alpha 0x0F + full-range noise intensity,
+zero residual structure at any pitch) is the signature of an intentional grey
+rock-detail tile, not a mis-decoded structured image. Decisive next steps:
+(i) grep the *converted* `bg_sevx_all_p` GDL for opcode `0xC0` (`G_SETTEX`) —
+settles the one remaining "wrong bind" scenario (stale tile state, TEXTURE-
+GLITCH-ANALYSIS §2 RC1) offline; (ii) headless `-level_36` `GE_DTEX/TEXRAW=1`
+logging the image ID bound to the cliff tris, look it up in `g_Textures[]`,
+read + decode that ROM range per §4. Scratch note: M-37 session scratchpad
+`D176b-rom-groundtruth.md`.
+
 ### 5. What shipped (`port/fast3d/gfx_pc.cpp` only)
 
 - **De-stride in `import_texture()`**, before the format dispatch: when
@@ -4635,6 +4653,51 @@ sunset cloud gradient. Headless `-level_36` + `GE_D176=1` probe
 `GE_D176=1` probe left in tree (`#ifdef PORT`, env-gated, inert):
 `src/game/bgfog.c` + `src/game/sky.c`. Separate from D176(b) (the tree/rock
 "grey static", Family A / a different investigation).
+
+### D176(a) — M-37 UPDATE: ROOT-CAUSED (static analysis, high confidence)
+
+The emit path is not "wrong" — **the PC software RSP deliberately discards it.**
+`port/fast3d/gfx_pc.cpp:2901`:
+
+```cpp
+case (uint8_t)G_RDPHALF_1:
+case (uint8_t)G_RDPHALF_2:
+case (uint8_t)G_RDPHALF_CONT:
+    // on N64 skyRender uses these to render some types of skies and skybox water
+    // by issuing low-level ucode commands G_TRI_FILL and G_TRI_SHADE_TXTR
+    // the port renders the sky in a different manner
+    break;
+```
+
+`skyRenderTri` / `skyRenderFull` build their geometry **exclusively** as
+`gImmp1(gdl++, G_RDPHALF_1 / G_RDPHALF_CONT / G_RDPHALF_2, …)` pairs — a bespoke
+packed triangle-raster stream (command byte in bits 24–31 = `G_TRI_SHADE_TXTR`/
+`G_TRI_FILL`, `0x00800000` backface flag, subpixel Y coords, then S15.16 edge X +
+dX/dY slopes via `sub_GAME_7F094298`, then per-vertex RGBA shade + S/T/W tex-coord
+gradients, `G_RDPHALF_2` terminator) that GE's modified RSP ucode (`gmain.s`)
+interprets. There is **no** `gSPVertex`/`gSP*Triangle` fallback and **no**
+fill-rect on the textured case-12 branch — only `viSetFillColor(env->RGB)` sets
+FILL state that nothing consumes. → dropped → solid black.
+
+Explains every prior observation: `!Clouds` levels use a plain `gDPFillRectangle`
+(→ work today); `Clouds` levels (Surface, Statue `-level_22`, Frigate `-level_29`,
+Dam exterior) go through the RDPHALF stream (→ black). The projector
+`sub_GAME_7F097388` is pure float math off endian-clean matrices — not the bug.
+
+**No PD-port shortcut:** `pd_port/port/fast3d/gfx_pc.cpp:2512` has the identical
+no-op + comment and PD's `sky.c` emits the same stream; no port-side sky
+replacement exists anywhere in the PD tree. The comment is aspirational in both.
+
+**Fix (Phase 2, ~1 session, genuine new fast3d code):** decode the RDPHALF stream
+in `gfx_pc.cpp` — accumulate words, on a `G_RDPHALF_1` carrying a tri opcode start
+a primitive, synthesise screen-space `LoadedVertex[3]` (bypass model/proj
+transform like the 2D `gSPTextureRectangle` path; screen XY = value/4 − viewport;
+shade + ST from integrating the slopes over the vertex delta), rasterise with the
+current combiner/tile, close on `G_RDPHALF_2`. Full stream spec + the alternative
+`#ifdef PORT` sky.c option in the M-37 scratch note.
+
+Cheap first step: headless `-level_22` / `-level_29` — confirm also black (proves
+emit path, not a Surface asset).
 
 ---
 
