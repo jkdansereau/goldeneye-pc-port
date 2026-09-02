@@ -11,7 +11,7 @@ keep the port faithful to the original game.
    belong to the N64 build and are never touched for PC work. If PC code seems
    to need a behavioural change in the game, the fix belongs in `port/`.
 
-2. **Narrow ABI exception.** The 32->64-bit transition forces a small class of
+2. **Narrow ABI exception.** The 32→64-bit transition forces a small class of
    mechanical, semantics-preserving edits to ROM-serialized structs (storing an
    embedded 32-bit pointer as `u32` and casting at the use site). These are
    allowed, must be guarded with `#ifdef PORT`, must change no behaviour, and
@@ -35,6 +35,6 @@ keep the port faithful to the original game.
 ## Where to look
 
 - `docs/internals.md` — how the port is structured.
-- `docs/porting-notes.md` — the recurring bug classes; check here before
-  debugging a crash, you are likely looking at a known pattern.
+- `docs/porting-notes.md` — the recurring bug classes. Check here before
+  debugging a crash; you are likely looking at a known pattern.
 - `docs/dev/` — the full finding log and per-level status.

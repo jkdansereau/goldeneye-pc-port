@@ -1,12 +1,28 @@
 # Porting notes — recurring N64→PC bug classes
 
-A one-screen field guide to the bug classes that keep recurring when running
-big-endian 32-bit N64 game code, unmodified, on a little-endian 64-bit host.
-Each entry cites a `Dxx` label; the full evidence and fix for that instance
-live in [`dev/findings.md`](dev/findings.md) under the same label.
+A field guide to the bug classes that keep recurring when running big-endian
+32-bit N64 game code, unmodified, on a little-endian 64-bit host. Terse by
+design — each entry compresses a full investigation to a symptom, a fix, and a
+grep heuristic for finding siblings. Each entry cites a `Dxx` label; the full
+evidence and fix for that instance live in [`dev/findings.md`](dev/findings.md)
+under the same label. Skim the section headers; read the classes relevant to
+the task at hand.
 
 If you are debugging a crash in this port, read this first — the odds are
 good that you are looking at one of these.
+
+## Contents
+
+- [A. Pointer-width struct growth (32→64) — the dominant class](#a-pointer-width-struct-growth-3264--the-dominant-class)
+- [B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64](#b-16-byte-pc-gfx--vtx-vs-8-byte-n64)
+- [C. Big-endian rodata / ROM data read on little-endian PC](#c-big-endian-rodata--rom-data-read-on-little-endian-pc)
+- [C2. Port-layer / SDL shims](#c2-port-layer--sdl-shims)
+- [D. N64 hardware idioms fast3d does not emulate](#d-n64-hardware-idioms-fast3d-does-not-emulate)
+- [D2. The HUD/model "X-mirror" — RESOLVED](#d2-the-hudmodel-x-mirror-d114d116--resolved-it-was-an-upside-down-capture)
+- [D3. GCC/mingw makes an all-non-negative `enum` UNSIGNED](#d3-gccmingw-makes-an-all-non-negative-enum-unsigned)
+- [D4. N64 "interrupts off" must be a real lock on PC](#d4-n64-interrupts-off-is-not-free-on-pc--it-must-be-a-real-lock)
+- [D5. Loop bounds that assume linker adjacency of two globals](#d5-loop-bounds-that-assume-linker-adjacency-of-two-file-scope-globals)
+- [E. Process / method notes](#e-process--method-notes)
 
 ## A. Pointer-width struct growth (32→64) — the dominant class
 

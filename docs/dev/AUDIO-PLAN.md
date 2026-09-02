@@ -7,6 +7,24 @@ for closing **D77** (no audible music/sound on PC). Companion docs: `docs/HANDOF
 
 ---
 
+## Contents
+
+1. [Goal and scope](#1-goal-and-scope)
+2. [Current state](#2-current-state-verified-by-reading-not-assumption)
+3. [The GE pipeline in one paragraph](#3-the-ge-pipeline-in-one-paragraph)
+4. [How the PD port does it](#4-how-the-pd-port-does-it-ground-truth-comparison)
+5. [Architecture options](#5-architecture-options-evaluate-all-recommendation-marked) — options A/B/C + sub-decisions A1–A3
+6. [DMEM layout](#6-dmem-layout-ido-from-srclibultraaudiosynthinternalsh5771)
+7. [Shims and ABI fixes required](#7-shims-and-abi-fixes-required) — incl. [7.1 `K0_TO_PHYS` bug](#71-bug-found-k0_to_phys-is-unshimmed-and-corrupts-pointers-on-pc)
+8. [Phase 0 — recon](#8-phase-0--recon-do-first-informs-everything)
+9. [Open questions](#9-open-questions-decide-before-phase-1)
+10. [Phases and milestones](#10-phases-and-milestones)
+11. [Verification ritual (audio-specific)](#11-verification-ritual-audio-specific-on-top-of-the-standard-one-in-agentsmd)
+12. [Risks / unknowns](#12-risks--unknowns)
+13. [Key references](#13-key-references)
+
+---
+
 ## 1. Goal and scope
 
 Make GoldenEye's audio audible on the PC port with 1:1 fidelity to the N64 pipeline:

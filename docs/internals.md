@@ -17,6 +17,27 @@ platforms.
 
 ---
 
+## Contents
+
+1. [Executive summary](#1-executive-summary)
+2. [What the PD port actually does (the reference architecture)](#2-what-the-pd-port-actually-does-the-reference-architecture)
+   — [2.1 Emulate the RSP, bypass the RDP](#21-the-key-architectural-insight-emulate-the-rsp-bypass-the-rdp)
+   · [2.2 How the RSP is invoked](#22-how-the-rsp-is-invoked)
+   · [2.3 Build system](#23-build-system)
+   · [2.4 PD-port copy-candidate audit](#24-pd-port-copy-candidate-audit-session-2026-08-22)
+3. [GoldenEye decomp: what we're porting](#3-goldeneye-decomp-what-were-porting)
+   — [3.1 Entry / main loop](#31-entry--main-loop)
+   · [3.2 The two libultra trees](#32-the-two-libultra-trees-srclibultra-and-srclibultrare)
+4. [N64 hardware surfaces that must be shimmed](#4-n64-hardware-surfaces-that-must-be-shimmed)
+5. [GE-specific graphics differences vs PD (the RSP work)](#5-ge-specific-graphics-differences-vs-pd-the-rsp-work)
+6. [Audio](#6-audio)
+7. [Input & saves](#7-input--saves)
+8. [Recommended plan](#8-recommended-plan) — phases 0–4
+9. [Open questions / risks](#9-open-questions--risks)
+10. [References](#10-references)
+
+---
+
 ## 1. Executive summary
 
 * **Feasibility: HIGH.** GoldenEye and Perfect Dark share the same Rare

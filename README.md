@@ -1,5 +1,10 @@
 # GoldenEye 007 — PC port
 
+![status](https://img.shields.io/badge/status-Phase_2_of_4_(rendering)-orange)
+![tested on](https://img.shields.io/badge/tested_on-Windows_x86--64-blue)
+![license](https://img.shields.io/badge/license-MIT-green)
+![built with](https://img.shields.io/badge/built_with-coding_agents-8A2BE2)
+
 A work-in-progress native port of **GoldenEye 007** (Rare, 1997) to modern
 desktop platforms, built on top of the
 [GoldenEye decompilation](https://github.com/n64decomp/007).
@@ -11,26 +16,33 @@ sources are compiled for the host; the N64's Reality Signal Processor is
 emulated in software; every other hardware surface (video, audio, input,
 timers, save storage) is shimmed in a dedicated `port/` layer.
 
+> [!IMPORTANT]
 > **You must supply your own GoldenEye 007 ROM.** This repository contains no
 > Nintendo code or assets, and no ROM. Nothing here is distributable as a
 > playable game — see [Requirements](#requirements) and [Legal](#legal).
 
 <p align="center">
-  <img src="docs/img/archives-1.png" width="49%" alt="Archives level rendering in the port">
-  <img src="docs/img/bunker1-1.png" width="49%" alt="Bunker 1 rendering in the port">
-  <br>
-  <img src="docs/img/archives-2.png" width="32%" alt="Guards in the Archives level">
-  <img src="docs/img/bunker1-2.png" width="32%" alt="Bunker 1 with HUD">
-  <img src="docs/img/bunker1-3.png" width="32%" alt="Bunker 1 storage room">
-  <br><em>In-engine captures &mdash; Archives and Bunker&nbsp;1 running in the port.</em>
+  <img src="docs/img/attract-bunker1.png" width="32%" alt="Bunker 1 intro camera">
+  <img src="docs/media/goldeneye-demo.gif" width="32%" alt="~15 s of the port running: mission dossier, Facility, Silo, Jungle, Archives">
+  <img src="docs/img/attract-dam.png" width="32%" alt="Dam intro camera">
+  <br><em>In-engine, running in the port — Bunker&nbsp;1 and Dam attract views, and a
+  ~15&nbsp;s clip (no audio yet, Phase&nbsp;3): mission dossier &rarr; Facility &rarr; Silo &rarr;
+  Jungle &rarr; Archives.</em>
 </p>
 
-> **Not playable yet.** This is a work-in-progress research port. The intro and
-> menus render and all 21 solo levels load, but it is **not** a complete or
-> reliably playable game: there is **no audio**, the front-end 3D models and
-> some text are broken, input has known rough edges, and you should expect
-> crashes and glitches once you are past the level intro. Treat it as a
-> technical demo of the porting work, not a way to play GoldenEye.
+## Contents
+
+- [Background](#background)
+- [Status](#status)
+- [Requirements](#requirements)
+- [Building](#building) · [Windows (MSYS2)](#windows-msys2) · [Linux](#linux)
+- [Running](#running) · [Default controls](#default-controls)
+- [How it works](#how-it-works)
+- [Project layout](#project-layout)
+- [Documentation](#documentation)
+- [Credits](#credits)
+- [Legal](#legal)
+- [License](#license)
 
 ## Background
 
@@ -55,33 +67,42 @@ It used two agents:
 The two **handed work back and forth** through shared written artifacts:
 
 ```mermaid
-flowchart LR
-    H["human<br/>direction · integration<br/>build + playtest"]
+flowchart TD
+    H["human<br/>direction · integration · playtest"]
     C["Claude<br/>(Claude Code)"]
     Q["Qwen 3.8<br/>(pi, local RTX 5090)"]
-    D[("shared artifacts<br/>finding log · bug-class notes · handoff doc")]
+    D[("shared artifacts<br/>findings · notes · handoff doc")]
     H -->|"scoped task + budget"| C
     H -->|"scoped task + budget"| Q
-    C <-->|read / append| D
-    Q <-->|read / append| D
-    C -.->|"hit usage limit ->"| Q
-    Q -.->|"needs deeper reasoning ->"| C
-    C -->|"patch + write-up"| H
-    Q -->|"patch + write-up"| H
+    C -->|"patch + write-up"| D
+    Q -->|"patch + write-up"| D
+    C <-.->|handoff| Q
+    D --> H
 ```
 
 The handoff document was originally a session-to-session note; it became the
 **interface between the two models** — when Claude hit a usage limit
 mid-problem, the local model picked the task up from that state and continued.
 
-**By the numbers:** ~2 weeks, one person part-time · 217 commits · 160
-root-caused bugs logged · ~30 handoff sessions · `#ifdef PORT` ABI edits in 63
-game-source files · ~17k lines of port layer + ~6k lines of Python asset
-tooling. By day 4 the full ~230-unit codebase compiled and linked; by day 8
-the intro rendered; by **day 13 all 21 solo missions ran crash-free**; by
-day 14 the front end was playable end to end. Estimated effort split
-(milestone-weighted): **~60% Claude / ~40% local model** — the local model
-built the entire foundation (build, boot, RSP wiring, converters).
+**By the numbers:**
+
+| Metric | Value |
+|---|---|
+| Timeline | ~2 weeks, one person part-time |
+| Commits | ~223 |
+| Root-caused bugs logged | 162 (`D1`–`D169`; some later merged or withdrawn) |
+| Handoff sessions | ~33 |
+| ABI edits to game code | 63 files, all `#ifdef PORT` |
+| Port layer / tooling | ~17k lines C/C++ · ~6k lines Python |
+| Effort split (milestone-weighted) | ~60% Claude · ~40% local model |
+
+The local model built the entire foundation — build, boot chain, RSP wiring,
+asset converters — then both agents ran the debugging phase together:
+
+- **Day 4** — the full ~230-unit codebase compiles and links
+- **Day 8** — the whole intro renders
+- **Day 13** — all 21 solo missions run crash-free
+- **Day 14** — front end playable end to end
 
 Full write-up, timeline chart, and an honest "what worked / what didn't":
 [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md). The
@@ -89,13 +110,21 @@ workflow itself: [`docs/dev-process.md`](docs/dev-process.md).
 
 ## Status
 
+> [!WARNING]
+> **Not playable yet.** This is a work-in-progress research port. The intro and
+> menus render and all 21 solo levels load, but it is **not** a complete or
+> reliably playable game: there is **no audio**, the front-end 3D models and
+> some text are broken, input has known rough edges, and you should expect
+> crashes and glitches once you are past the level intro. Treat it as a
+> technical demo of the porting work, not a way to play GoldenEye.
+
 **Phase 2 of 4 (rendering).** The port boots, renders, and is playable through
 the front end into the early game. It is not finished and it is not stable.
 
 **Working**
 
-- Boot -> Rare/Nintendo logos -> gun-barrel -> cast intro, fully rendered.
-- Front end: main menu -> mission select -> difficulty -> briefing -> mission start.
+- Boot → Rare/Nintendo logos → gun-barrel → cast intro, fully rendered.
+- Front end: main menu → mission select → difficulty → briefing → mission start.
 - **All 21 solo missions load, render, and survive an unattended play window
   without crashing** (see [`docs/dev/LEVEL-STATUS.md`](docs/dev/LEVEL-STATUS.md)).
 - Software RSP (fast3d): textured world geometry, skeletal characters, HUD,
@@ -107,8 +136,9 @@ the front end into the early game. It is not finished and it is not stable.
 **Not yet working**
 
 - **Audio** — not implemented (Phase 3). The game runs silent.
-- Front-end 3D models (spinning Nintendo logo, gun-barrel Bond, cast) are
-  mispositioned or absent.
+- Some front-end 3D models — the spinning Nintendo logo, and the MISSION
+  COMPLETE / mode-select models — are mispositioned or absent. (The
+  gun-barrel Bond intro renders correctly.)
 - Assorted cosmetic defects (some text layout, a few incomplete asset
   conversions) are tracked in
   [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md) and parked
@@ -173,7 +203,8 @@ cd goldeneye-pc-port
 ./build-pc.sh ntsc-final
 ```
 
-The executable is written to `build-pc/ge007.x86_64` (Windows: `.exe`).
+The executable is written to `build-pc/ge007.x86_64` (on Windows,
+`build-pc/ge007.x86_64.exe`).
 
 ## Running
 
@@ -187,16 +218,16 @@ Configuration is written to `ge007.ini` on first run.
 
 ### Default controls
 
-| Action            | Keyboard / mouse        | Controller            |
-|-------------------|-------------------------|-----------------------|
-| Move / strafe     | `W` `A` `S` `D` / arrows | Left stick            |
-| Aim / look        | Mouse                   | Right stick           |
-| Fire (Z)          | Left mouse / `LCtrl`    | Right trigger         |
-| Aim mode (R)      | Right mouse / `LShift`  | Left trigger          |
-| Use / accept (A)  | `Space` / `E`           | A / X                 |
-| Reload / cancel (B)| `R` / `F`              | B / Y / RB            |
-| L trigger         | `Q`                     | LB                    |
-| Start             | `Enter` / `Tab`         | Start                 |
+| Action              | Keyboard / mouse         | Controller    |
+|---------------------|--------------------------|---------------|
+| Move / strafe       | `W` `A` `S` `D` / arrows  | Left stick    |
+| Aim / look          | Mouse                    | Right stick   |
+| Fire (Z)            | Left mouse / `LCtrl`     | Right trigger |
+| Aim mode (R)        | Right mouse / `LShift`   | Left trigger  |
+| Use / accept (A)    | `Space` / `E` / `X`            | A / X         |
+| Reload / cancel (B) | `R` / `F`                | B / Y / RB    |
+| L trigger           | `Q`                      | LB            |
+| Start               | `Enter` / `Tab`          | Start         |
 
 Mouse sensitivity, Y-inversion and the aim/turn split are tunable in the
 `[Input]` section of `ge007.ini`.
@@ -217,7 +248,7 @@ touch N64 hardware is redirected into `port/`:
 - **`port/src/{video,audio,input,fs,romdata,config}.c`** — the SDL2 / OpenGL /
   filesystem backends.
 
-The 32->64-bit transition forces a small, catalogued class of mechanical
+The 32→64-bit transition forces a small, catalogued class of mechanical
 ABI-only edits to ROM-serialized structs (pointer-width reconciliation); these
 change no behaviour and are documented individually.
 
@@ -244,21 +275,15 @@ docs/               see below
 
 ## Documentation
 
-- [`docs/building.md`](docs/building.md) — full build + asset-extraction guide.
-- [`docs/internals.md`](docs/internals.md) — architecture, the RSP-emulation
-  approach, GE-vs-PD engine differences, the phased plan.
-- [`docs/porting-notes.md`](docs/porting-notes.md) — the recurring N64->PC bug
-  classes hit during the port, with fixes.
-- [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md) — the
-  research angle: the two-agent setup, timeline, handoff workflow, and a
-  candid assessment of what did and didn't work.
-- [`docs/dev-process.md`](docs/dev-process.md) — the investigation workflow in
-  detail (budgets, file partitioning, the finding-log discipline).
-- [`docs/dev/`](docs/dev/) — the raw engineering record: the full finding log,
-  per-level status, graphics backlog, playtest matrices.
-- [`docs/SetupGuide.md`](docs/SetupGuide.md),
-  [`docs/StructureGuide.md`](docs/StructureGuide.md),
-  [`docs/StyleGuide.md`](docs/StyleGuide.md) — inherited from the decompilation.
+| Doc | What's in it |
+|---|---|
+| [`docs/building.md`](docs/building.md) | Full build + asset-extraction guide. |
+| [`docs/internals.md`](docs/internals.md) | Architecture, the RSP-emulation approach, GE-vs-PD engine differences, the phased plan. |
+| [`docs/porting-notes.md`](docs/porting-notes.md) | The recurring N64→PC bug classes hit during the port, with fixes. |
+| [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md) | The research angle: the two-agent setup, timeline, handoff workflow, and an assessment of what did and didn't work. |
+| [`docs/dev-process.md`](docs/dev-process.md) | The investigation workflow in detail — budgets, file partitioning, the finding-log discipline. |
+| [`docs/dev/`](docs/dev/) | The raw engineering record: the full finding log, per-level status, graphics backlog, playtest matrices. |
+| [`docs/SetupGuide.md`](docs/SetupGuide.md), [`docs/StructureGuide.md`](docs/StructureGuide.md), [`docs/StyleGuide.md`](docs/StyleGuide.md) | Inherited from the decompilation. |
 
 ## Credits
 
@@ -267,7 +292,7 @@ This port is a thin layer on a large amount of other people's work.
 **Prior work it is built on**
 
 - The [GoldenEye 007 decompilation](https://github.com/n64decomp/007) — years of
-  effort by kholdfuzion, Larry Ficken, and the project's contributors; plus
+  effort by Larry Ficken ("kholdfuzion") and the project's contributors; plus
   zoinkity's GoldenEye documentation, which the decomp started from. This port
   is a fork of that repository.
 - The [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark)
@@ -298,8 +323,11 @@ This port is a thin layer on a large amount of other people's work.
 
 **Tools and models used to develop the port**
 
-- [Qwen 3.8](https://github.com/QwenLM/Qwen) (Alibaba Qwen team);
-  [Unsloth](https://unsloth.ai) (the GGUF quantisation and Unsloth Desktop).
+- Qwen 3.8 (Alibaba Qwen team), run locally as the
+  [`unsloth/Qwen3.8-27B-GGUF`](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF)
+  `UD-Q4_K_XL` quant;
+  [Unsloth](https://unsloth.ai) (the GGUF quantisation and Unsloth Desktop,
+  used as the local model server).
 - [pi](https://pi.dev/) — the local coding-agent harness.
 - [Claude / Claude Code](https://claude.com/claude-code) (Anthropic).
 

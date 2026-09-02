@@ -40,14 +40,14 @@ more room.
 
 Lewis's agents recorded generalisable IDO quirks in a learnings file; later
 agents read it and did better. Our equivalent is
-[`porting-notes.md`](porting-notes.md) — the recurring N64->PC bug classes,
-one screen, each entry an index into the full [`dev/findings.md`](dev/findings.md)
+[`porting-notes.md`](porting-notes.md) — the recurring N64→PC bug classes,
+each entry a terse index into the full [`dev/findings.md`](dev/findings.md)
 log. Every investigation brief links it, and every investigation ends by
 appending any new generalisable quirk.
 
 The classes it currently tracks:
 
-- pointer-width struct growth (32->64) in ROM-serialized or pun-allocated
+- pointer-width struct growth (32→64) in ROM-serialized or pun-allocated
   structs — the dominant class;
 - 16-byte host `Gfx`/`Vtx` vs 8-byte N64 — reservation and copy sizing;
 - big-endian rodata read on a little-endian host: `f32` word-pairs, header

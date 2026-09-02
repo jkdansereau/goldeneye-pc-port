@@ -4,8 +4,8 @@
 
 - `n64decomp/007`: WIP decompilation of GoldenEye 007 (N64), byte-matches US/EU/JP ROMs.
 - Active work: **PC port** modelled on the Perfect Dark PC port (same Rare "Indy" engine family).
-- **Reference docs:** `docs/internals.md` — architecture, GE-specific RSP deltas, phased plan (§1–§10). `docs/dev/findings.md` — the `Dxx` finding log (§F + §H, indexed at the top of §F); read the entry you need, don't linear-read. `docs/porting-notes.md` — the recurring N64→PC bug classes, one screen.
-- **Current status:** the README "Status" section. Current task + environment: `docs/HANDOFF.md` (a rolling local working file).
+- **Reference docs:** `docs/internals.md` — architecture, GE-specific RSP deltas, phased plan (§1–§10). `docs/dev/findings.md` — the `Dxx` finding log (§F + §H, indexed at the top of §F); read the entry you need, don't linear-read. `docs/porting-notes.md` — the recurring N64→PC bug classes (dense; skim the headers, read what's relevant).
+- **Current status:** the README "Status" section, and `docs/dev/LEVEL-STATUS.md` for the per-level sweep. Current task + environment: `docs/HANDOFF.md` (a rolling local working file — may be absent in a fresh clone; fall back to the README "Status" section).
 - **Dispatching subagents?** `docs/dev-process.md` — task budgets/deadlines, file partitioning, pre-flight, the standard brief template. Every investigation subagent reads `docs/porting-notes.md` first and appends to it.
 
 ## Non-negotiables
@@ -55,7 +55,7 @@ Run `/linkcheck` for this sweep. Record new findings in `docs/dev/findings.md` �
   start) is functional; file-backed EEPROM saves work. Cosmetic defects are
   parked in `docs/dev/GRAPHICS-BACKLOG.md`.
 - **Phase 3 (audio + input):** input layer done (`port/src/input.c`); polish
-  bugs open (D118*, D169). Audio not started — libaudio → SDL, copy-and-adapt
-  from the PD port's `mixer.c`.
+  bugs open (D118* mouse-look residuals; interactive feel-checks owed). Audio
+  not started — libaudio → SDL, copy-and-adapt from the PD port's `mixer.c`.
 - **Phase 4 (saves + polish):** file-backed EEPROM done; widescreen, config,
   rebinding UI outstanding.

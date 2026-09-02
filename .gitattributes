@@ -1,6 +1,8 @@
 * text=auto eol=lf
 *.png binary
 *.jpg binary
+*.gif binary
+*.mp4 binary
 *.z64 binary
 *.exe binary
 *.bin binary

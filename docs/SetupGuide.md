@@ -88,9 +88,23 @@ This project can compile the ROM's C code in one of two ways, controlled by the 
   [qemu-irix](https://github.com/n64decomp/qemu-irix/releases) user-mode emulator instead. Slower, but useful as a
   lower-risk reference if you ever suspect the recompiled toolchain is misbehaving.
 
+> **The IRIX IDO binaries are not distributed with this repository.** They are
+> proprietary SGI software and only ever ran on IRIX/MIPS. Neither `tools/irix/`
+> nor `tools/SGIImageViewer.exe` is committed here; the **PC port does not need
+> them at all** (asset extraction uses `tools/extractor`, and the port itself
+> builds with CMake + your host compiler). You only need the IDO toolchain to
+> build the actual **N64 ROM** or to regenerate `tools/ido5.3_recomp`. To get it:
+> obtain the IDO 5.3 tree from an IRIX 5.3 installation, from
+> [`decompals/ido-static-recomp`](https://github.com/decompals/ido-static-recomp)
+> (which documents where its input binaries come from), or from the N64
+> decompilation community, and place it at `tools/irix/root/` (with `cc` etc.
+> under `tools/irix/root/usr/bin/`). `tools/SGIImageViewer.exe` is an optional
+> convenience only.
+
 The recompiled toolchain isn't checked into git — it's generated locally the first time it's needed, from the
-original IDO binaries in `tools/irix/root`. A plain `make` from the repo root builds it automatically if it's
-missing (wired up via `tools/Makefile`), so most people never need to run this step by hand. To build it explicitly
+original IDO binaries in `tools/irix/root` (see the note above on obtaining those). A plain `make` from the repo
+root builds it automatically if it's missing (wired up via `tools/Makefile`), so most people never need to run
+this step by hand. To build it explicitly
 (e.g. to watch its own build output, or force a rebuild after changing it):
 
 ```bash

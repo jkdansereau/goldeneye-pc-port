@@ -1,8 +1,9 @@
 # HANDOFF ARCHIVE — session-by-session narrative
 
-> **Reference only.** Current state, next task, and environment live in
-> `docs/HANDOFF.md`; per-finding detail in `docs/internals.md` §F/§H
-> (indexed at the top of §F). This file is the frozen accumulation of
+> **Reference only.** Current state lives in the [README](../../README.md)
+> "Status" section and `docs/dev/LEVEL-STATUS.md`; per-finding detail is in
+> [`findings.md`](findings.md) §F/§H (indexed at the top of §F). This file
+> is the frozen accumulation of
 > prior sessions' handoff briefs (through session M-11), kept so the
 > reasoning behind a fix is recoverable. Everything below is as-written
 > at the time and may be superseded.

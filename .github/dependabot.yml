@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # Keep the GitHub Actions used by .github/workflows/ up to date. Opens a PR
+  # when a new version of an action is released; review and merge like any other.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

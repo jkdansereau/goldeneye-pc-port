@@ -76,6 +76,12 @@ ge007.ini
 !build/test.c
 !notes/StyleGuide.md
 #tools
+# Original SGI IRIX 5.3 IDO toolchain (proprietary SGI binaries) and the SGI
+# image viewer are NOT distributed with this repo. They are only needed to
+# build the N64 ROM or to regenerate tools/ido5.3_recomp; the PC port does not
+# use them. See docs/SetupGuide.md "Recompile IDO" for how to obtain them.
+tools/irix/
+tools/SGIImageViewer.exe
 tools/extractor/*.o
 tools/extractor/extractor
 tools/aaa_rip/main.o
@@ -117,7 +123,6 @@ assets/obseg/em/data/under.seg
 
 scripts/local/
 scripts/make/local/
-scripts/__pycache__/generate_prop_model_c.cpython-310.pyc
 
 # PC port debug/session artifacts
 _run.log

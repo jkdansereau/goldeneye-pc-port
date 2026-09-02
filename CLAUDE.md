@@ -12,15 +12,16 @@ Context is scarce. Load by tier; do not blind-read whole files.
 
 - **Tier 0 — always (auto-loaded):** `CLAUDE.md`, `AGENTS.md`. Nothing
   else auto-loads.
-- **Tier 1 — every session start, read fully (both are short):**
+- **Tier 1 — every session start:**
   `docs/HANDOFF.md` (current state + next task + environment — a rolling
   local working file; may be absent in a fresh clone, in which case read
-  the README "Status" section instead),
-  `docs/porting-notes.md` (recurring bug classes).
+  the README "Status" section instead) — read fully;
+  `docs/porting-notes.md` (recurring bug classes) — skim the section
+  headers, read the classes relevant to the task.
 - **Tier 2 — on demand only, do NOT read start-to-finish:**
-  - `docs/internals.md` — architecture / RSP deltas / phased plan (§1–§10
-    of the old research doc). Read the section you need.
-  - `docs/dev/findings.md` — the `Dxx` finding log (§11 + §F + §H).
+  - `docs/internals.md` — architecture / RSP deltas / phased plan (§1–§10).
+    Read the section you need.
+  - `docs/dev/findings.md` — the `Dxx` finding log (§F + §H).
     **Jump to a specific `Dxx` via the index at the top of §F.** Never
     linear-read.
   - `docs/dev/HANDOFF-ARCHIVE.md` — prior-session narrative (M-2…). Only
@@ -33,8 +34,9 @@ Context is scarce. Load by tier; do not blind-read whole files.
 Having a concrete "next step" from the handoff is NOT license to skip this.
 
 1. Read the Tier 1 docs: `docs/HANDOFF.md` (immediate task, standing
-   procedure, environment gotchas) and `docs/porting-notes.md`
-   (recurring bug classes — you will re-derive catalogued bugs if you don't).
+   procedure, environment gotchas — or the README "Status" section if it is
+   absent) and `docs/porting-notes.md` (recurring bug classes — you will
+   re-derive catalogued bugs if you don't).
 2. Skim the README "Status" section for where the project stands.
 3. If you may dispatch a subagent this session, read `docs/dev-process.md`
    NOW — not at dispatch time.

@@ -35,10 +35,13 @@ versions and hashes.
 ### Asset extraction (decompilation toolchain)
 
 The extraction scripts need `binutils-mips-linux-gnu` (or an equivalent MIPS
-binutils), `make`, `git`, `python3`, and `qemu-irix` for the IRIX IDO
-compiler. On Windows this is easiest under WSL or a Linux VM. Full details and
-alternatives (Docker, the recompiled IDO toolchain) are in
-[`SetupGuide.md`](SetupGuide.md).
+binutils), `make`, `git`, and `python3`. They build a small host-compiled
+`tools/extractor` and slice blobs straight out of the ROM — **no IDO / IRIX
+toolchain is involved in extraction or in the PC build.** (The IDO toolchain is
+only needed to build the N64 ROM itself, and its proprietary SGI binaries are
+not distributed here — see [`SetupGuide.md`](SetupGuide.md) "Recompile IDO".)
+On Windows this is easiest under WSL or a Linux VM. Full details and
+alternatives (Docker) are in [`SetupGuide.md`](SetupGuide.md).
 
 ---
 

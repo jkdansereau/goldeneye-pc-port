@@ -1,0 +1,71 @@
+name: Bug report (build or run)
+description: A build failure, crash, hang, or rendering/audio/input defect in the PC port
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a report. First, please check:
+
+        - The port is **Phase 2 of 4** — rendering is incomplete and many
+          cosmetic defects are already tracked in
+          [`docs/dev/GRAPHICS-BACKLOG.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/GRAPHICS-BACKLOG.md).
+          Search open issues and that file before filing.
+        - Only the **Windows / MSYS2 MINGW64** build is tested. Linux and
+          macOS are best-effort — build breaks there are expected.
+        - Do **not** attach a ROM, extracted assets, or any game data.
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: Output of `git rev-parse --short HEAD`
+      placeholder: 311fd012
+    validations:
+      required: true
+  - type: dropdown
+    id: region
+    attributes:
+      label: Region / ROMID
+      options: [ntsc-final, pal-final, jpn-final]
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS / environment
+      description: e.g. "Windows 10, MSYS2 MINGW64" or "Ubuntu 22.04, native gcc"
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Which stage fails?
+      options:
+        - Asset extraction
+        - CMake configure
+        - Compile / link
+        - Runtime — crash or hang
+        - Runtime — wrong rendering / audio / input
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened vs. what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands, flags (e.g. `-level_09`), and what you did in-game.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Paste the terminal error, and `ge007.crash.log` if the port crashed.
+        For a rendering defect, attach a screenshot.
+      render: text

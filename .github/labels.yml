@@ -1,0 +1,58 @@
+# Source of truth for this repo's issue/PR labels.
+# GitHub does not read this file automatically. Apply it with the gh commands
+# in the comment block at the bottom, or wire up a label-sync action later.
+#
+# `bug` and `documentation` are GitHub defaults and are kept as-is.
+
+- name: bug
+  color: d73a4a
+  description: Something is broken
+
+- name: rendering
+  color: 5319e7
+  description: Graphics / fast3d / RSP output defect (see docs/dev/GRAPHICS-BACKLOG.md)
+
+- name: audio
+  color: 1d76db
+  description: Sound / music / libaudio (Phase 3)
+
+- name: input
+  color: 0e8a16
+  description: Keyboard / mouse / controller
+
+- name: build
+  color: fbca04
+  description: CMake / MSYS2 / toolchain / CI
+
+- name: asset-extraction
+  color: c2e0c6
+  description: ROM asset extraction pipeline (scripts/, tools/extractor)
+
+- name: upstream
+  color: bfd4f2
+  description: Originates in the n64decomp/007 decompilation, not the port — may belong upstream
+
+- name: abi-64bit
+  color: fef2c0
+  description: 32-to-64-bit pointer-width / struct-layout issue (the #ifdef PORT exception)
+
+- name: needs-repro
+  color: e99695
+  description: Cannot reproduce yet; waiting on more detail
+
+- name: wontfix
+  color: ffffff
+  description: Out of scope or working as intended
+
+# Apply with the GitHub CLI (run once, after the repo exists):
+#
+#   gh label create rendering       -c 5319e7 -d "Graphics / fast3d / RSP output defect"
+#   gh label create audio           -c 1d76db -d "Sound / music / libaudio (Phase 3)"
+#   gh label create input           -c 0e8a16 -d "Keyboard / mouse / controller"
+#   gh label create build           -c fbca04 -d "CMake / MSYS2 / toolchain / CI"
+#   gh label create asset-extraction -c c2e0c6 -d "ROM asset extraction pipeline"
+#   gh label create upstream        -c bfd4f2 -d "Originates in the decompilation, not the port"
+#   gh label create abi-64bit       -c fef2c0 -d "32-to-64-bit pointer-width / struct-layout issue"
+#   gh label create needs-repro     -c e99695 -d "Cannot reproduce yet; waiting on more detail"
+#
+# `bug` and `wontfix` already exist as GitHub defaults.
