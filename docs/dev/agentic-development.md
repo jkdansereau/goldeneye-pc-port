@@ -1,4 +1,10 @@
-# Agentic development: goal, method, timeline, assessment
+# Agentic development: a two-agent experiment
+
+*A GoldenEye 007 N64→desktop port, taken from "builds a ROM" to "playable front
+end" in about two weeks — driven mostly by two coding agents, a local
+open-weight model and a hosted frontier model, handing work back and forth
+through shared written notes under one person's direction. This is the goal,
+the method, the timeline, and an honest read on what did and didn't work.*
 
 ## Why this project exists
 
@@ -26,10 +32,10 @@ and forth** through shared written artifacts, directed by one human.
 
 | | |
 |---|---|
-| Local agent | `unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL` on a single **NVIDIA RTX 5090**, driven mainly through the **[pi](https://pi.dev/)** coding agent. Unsloth Desktop (a newer local agentic-coding harness) was also trialed but not used significantly. |
+| Local agent | `unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL` on a single **NVIDIA RTX 5090**, driven mainly through the **[pi](https://pi.dev/)** coding agent. Unsloth Desktop (Unsloth's local model runtime, which can drive agents such as Claude Code) was also trialed but not used significantly. |
 | Hosted agent | **Claude**, via **Claude Code**, on a Claude Pro subscription — mostly **Sonnet 5**, with **Opus 5** used as an escalation tier for the hardest problems and whenever there was subscription budget to spend on it |
 | Human | one person: direction, work partitioning, integration, and every build / playtest / frame-capture the agents could not run |
-| Base | fork of the [GoldenEye 007 decompilation](https://github.com/n64decomp/007) (years of prior work by Larry Ficken / "KholdFuzion" and contributors) |
+| Base | fork of the [GoldenEye 007 decompilation](https://github.com/n64decomp/007) (years of prior work by Larry Ficken ("kholdfuzion") and contributors) |
 | Reused | the [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark)'s `fast3d` software RSP — same Rare engine family |
 
 The port is the GoldenEye-specific porting work **on top of** those two
@@ -56,13 +62,13 @@ gantt
     OS shims, threads, fast3d integration :2026-08-21, 2d
     First rendered frames                 :m4, 2026-08-22, 1d
     Offline asset-conversion pipeline     :2026-08-22, 2d
-    Entire intro renders (logos->cast)    :m5, 2026-08-24, 1d
+    Entire intro renders (logos to cast)  :m5, 2026-08-24, 1d
     section Both agents - handoff workflow
     Claude joins                          :milestone, 2026-08-27, 0d
     Stage load; Bunker 1 renders + firefight :2026-08-27, 2d
-    21 solo levels: load + render + no-crash :m6, 2026-08-29, 1d
+    21 solo levels load + render + no-crash  :m6, 2026-08-29, 1d
     SDL input layer (kbd/mouse/gamepad)   :2026-08-29, 1d
-    Front-end flow menu->briefing->start  :m7, 2026-08-30, 1d
+    Front-end flow (menu to briefing to start) :m7, 2026-08-30, 1d
     File-backed EEPROM saves              :2026-08-31, 1d
 ```
 
@@ -75,26 +81,22 @@ gantt
 - **Day 11** (27 Aug): second agent joins.
 - **Day 13** (29 Aug): **all 21 solo missions load, render, and survive an
   unattended play window without crashing.**
-- **Day 14** (30–31 Aug): front end playable end to end (menu -> mission
-  select -> difficulty -> briefing -> start); file-backed saves.
+- **Day 14** (30–31 Aug): front end playable end to end (menu → mission
+  select → difficulty → briefing → start); file-backed saves.
 
 So roughly **two weeks**, one person part-time, to take a decompilation from
 "builds an N64 ROM" to "boots on desktop, renders every solo level, playable
 through the front end into the early game" — with audio and a set of cosmetic
 issues still outstanding.
 
-We are not aware of a prior Nintendo 64 native PC port developed primarily
-through coding agents, or of one reaching this state on this timeline. That is
-a statement about how little precedent there is, not a claim of a record.
-
 ## By the numbers
 
 | | |
 |---|---|
 | Calendar time | 16 days (16 Aug – 1 Sep 2026), one person part-time |
-| Commits on the port | 217 |
-| Root-caused bugs logged | 160 (`D1`–`D167` in [`findings.md`](findings.md)) |
-| Handoff sessions | ~30 (`M-2` … `M-32`) |
+| Commits on the port | ~223 |
+| Root-caused bugs logged | 162 (`D1`–`D169` in [`findings.md`](findings.md); some later merged or withdrawn) |
+| Handoff sessions | ~33 (`M-2` … `M-33`) |
 | Game-source files given `#ifdef PORT` ABI edits | 63 files, 241 blocks |
 | New port-layer / tooling files | 128 |
 | Port layer | ~17,000 lines C/C++ (`port/`) |
@@ -108,19 +110,23 @@ xychart-beta
     title "Commits per day"
     x-axis ["8/16", "8/17", "8/20", "8/21", "8/22", "8/23", "8/24", "8/27", "8/28", "8/29", "8/30", "8/31", "9/1"]
     y-axis "commits" 0 --> 60
-    bar [1, 2, 2, 6, 9, 2, 4, 7, 57, 39, 39, 46, 3]
+    bar [1, 2, 2, 6, 9, 2, 4, 7, 57, 39, 39, 46, 9]
 ```
 
-The 8/25–8/26 gap is between phases; the jump on 8/28 is the second agent
-joining, plus the parallel multi-agent "bursts" used near the end.
+Days with no commits are omitted. The 8/25–8/26 gap is between phases; the
+step up from 8/28 onward is the collaborative phase in full swing, including
+the parallel multi-agent "bursts" used near the end.
 
 ### Who did what
 
 ```mermaid
-pie showData title "Commits by phase"
-    "Phase A - local model, solo (16-24 Aug)" : 26
-    "Phase B - collaborative (27 Aug-1 Sep)" : 191
+pie showData title "Commits by agent (raw count)"
+    "Claude" : 161
+    "Local model (Qwen 3.8 / pi)" : 62
 ```
+
+(Phase A — the first 26 commits, to 24 Aug — was entirely the local model,
+solo; from 27 Aug on the two agents worked in parallel.)
 
 | Milestone / workstream | Primary agent | Weight |
 |---|---|---|
@@ -130,7 +136,7 @@ pie showData title "Commits by phase"
 | Offline asset-conversion architecture + first converters (`tools_pc/`) | local model | large |
 | Intro rendering (logos → gun-barrel → cast) | local model | medium |
 | Stage load unblocked (`D69`–`D87`) | Claude | medium |
-| 21-level crash sweep — ~12 crash classes root-caused (`D88`–`D167`) | Claude | large |
+| 21-level crash sweep — ~12 crash classes root-caused (`D88`–`D169`) | Claude | large |
 | SDL input layer (keyboard / mouse / gamepad, mouse-look) | Claude | medium |
 | Front-end flow (menu → briefing → start), EEPROM saves | Claude | medium |
 | Parallel struct-layout / converter static audits | local model | medium |
@@ -138,14 +144,15 @@ pie showData title "Commits by phase"
 | The hardest structural bugs (matrix handedness, format specs) | Claude | — |
 | Every build, playtest, frame capture, integration, and direction | human | — |
 
-**Estimated effort split.** By raw commit count it is ~28% local model /
-~72% Claude (Phase A entirely local, ~15–20% of Phase B local). Weighting by
-milestone difficulty rather than commit count — the foundation the local model
-built is a heavier third of the project than its commit count suggests — the
-developer's estimate is roughly:
+**Estimated effort split.** The raw commit count above (~28% local / ~72%
+Claude) undercounts the local model: Phase A landed the build system and boot
+chain in relatively few, large commits, and the local model kept contributing
+~15–20% of Phase B in parallel. Weighting by milestone difficulty rather than
+raw commits — the foundation is a heavier third of the project than its commit
+share suggests — the developer's estimate is roughly:
 
 ```mermaid
-pie showData title "Estimated agent effort (milestone-weighted)"
+pie showData title "Agent effort, milestone-weighted"
     "Claude" : 60
     "Local model (Qwen 3.8 / pi)" : 40
 ```
@@ -163,8 +170,8 @@ This is the part worth paying attention to.
 
 ```mermaid
 flowchart LR
-    H[Human: direction, integration,<br/>build + playtest verification]
-    C[Claude / Claude Code<br/>frontier, hosted]
+    H["Human: direction, integration,<br/>build + playtest verification"]
+    C["Claude / Claude Code<br/>frontier, hosted"]
     Q["Qwen 3.8 via pi<br/>open-weight, local RTX 5090"]
     D[(Shared artifacts:<br/>HANDOFF.md · findings.md · porting-notes.md)]
 
@@ -172,10 +179,10 @@ flowchart LR
     H -->|scopes task, budget, files| Q
     C <-->|reads / appends| D
     Q <-->|reads / appends| D
-    C -.->|usage limit reached ->| Q
-    Q -.->|hard structural bug ->| C
-    C -->|patch + writeup| H
-    Q -->|patch + writeup| H
+    C -.->|usage limit reached| Q
+    Q -.->|hard structural bug| C
+    C -->|patch + write-up| H
+    Q -->|patch + write-up| H
 ```
 
 Both agents worked against the **same three written artifacts**, which is what
@@ -187,12 +194,12 @@ let them substitute for each other:
    usage limit mid-problem, the local model picked the task up from the
    HANDOFF state and continued; when the local model hit a bug that needed
    deeper structural reasoning, it wrote up where it was and Claude took over.
-2. **`findings.md`** — the chronological finding log. 160 numbered entries,
+2. **`findings.md`** — the chronological finding log. 162 numbered entries,
    each a root cause with `file:line` evidence and the fix. New agents (either
    model) are pointed at the relevant entries before they start.
 3. **`porting-notes.md`** — the append-only "recurring bug classes" file. The
    single highest-leverage artifact: it stopped both models from
-   re-deriving the same class of N64->PC bug over and over.
+   re-deriving the same class of N64→PC bug over and over.
 
 Around these, the working rules (full detail in
 [`../dev-process.md`](../dev-process.md)):
@@ -200,7 +207,7 @@ Around these, the working rules (full detail in
 - **file-partitioned tasks** — each agent's task scoped to a disjoint set of
   files so patches never collided;
 - **visible budgets** — every investigation task carried an explicit
-  "N build->run cycles" limit and a defined fallback (revert probes, write up
+  "N build→run cycles" limit and a defined fallback (revert probes, write up
   with a confidence rating);
 - **the human owns verification** — building, running the game, capturing a
   frame, and judging it against N64 reference footage was never delegated.

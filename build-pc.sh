@@ -5,14 +5,14 @@
 # Usage:
 #   ./build-pc.sh [ntsc-final|pal-final|jpn-final]
 #
-# Dependencies (see docs/internals.md):
+# Dependencies (see docs/building.md):
 #   - CMake >= 3.16
 #   - SDL2 dev
 #   - zlib dev
 #   - OpenGL dev (opengl32 on Windows, GL on Linux, OpenGL.framework on macOS)
 #
 # Example (Linux):
-#   sudo apt install cmake libsdl2-dev zlib1g-dev libgl4-mesa-dev
+#   sudo apt install cmake libsdl2-dev zlib1g-dev libgl1-mesa-dev
 # Example (macOS):
 #   brew install cmake sdl2 zlib
 # Example (Windows/MSYS2):

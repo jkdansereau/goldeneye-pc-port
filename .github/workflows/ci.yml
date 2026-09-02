@@ -2,26 +2,42 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main, master ]
     paths-ignore: [ '**.md', 'docs/**', 'LICENSE', 'NOTICE' ]
   pull_request:
+    paths-ignore: [ '**.md', 'docs/**', 'LICENSE', 'NOTICE' ]
   workflow_dispatch:
 
-# The full port build needs assets extracted from a copyrighted ROM, which CI
-# does not have. This job validates everything that does NOT depend on those
-# assets: the PC-port tooling, the generated ROM-asset symbol files, and a
-# CMake configure of all three regions (which checks REGION_DEFS, the source
-# list, and that SDL2 / zlib / OpenGL are discoverable).
+# Minimal token: CI only reads the repo and uploads build artifacts, neither of
+# which needs write access. Fork PRs run untrusted build scripts on the runner,
+# so keep the granted scope as small as possible and never expose secrets here.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Two jobs:
 #
-# This is a configure-only smoke test. It does NOT compile or run the port, and
-# it running on ubuntu is NOT a statement that the port builds or works on
-# Linux — it has only ever been built and tested on Windows (MSYS2).
+#   validate      — ubuntu, configure-only. Checks the PC-port tooling, the
+#                   generated ROM-asset symbol files, and a CMake configure of
+#                   all three regions (REGION_DEFS, the source list, and that
+#                   SDL2 / zlib / OpenGL are discoverable). Does NOT compile;
+#                   running on ubuntu is NOT a claim the port works on Linux.
+#
+#   windows-build — windows/MSYS2, the real supported platform. Compiles and
+#                   links the full executable. Neither the ROM nor extracted
+#                   assets are needed to BUILD (they are runtime-only), so CI
+#                   builds but never runs the port.
 
 jobs:
   validate:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: |
@@ -45,3 +61,49 @@ jobs:
             cmake -S . -B "build-$r" -DROMID="$r"
             echo "::endgroup::"
           done
+
+  # Real Windows (MSYS2 MINGW64) build — the only platform the port is
+  # developed and tested on. This compiles and LINKS the full executable.
+  #
+  # No ROM and no extracted assets are needed to build: the compiled asset set
+  # is a handful of committed pure-data .c files plus the generated
+  # address-constant romassets_<region>.s. The ROM (.z64) and the ROM-derived
+  # blobs are runtime-only dependencies — CI cannot run the game, only build it.
+  windows-build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-SDL2
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-python
+
+      - name: Regenerate ROM-asset symbol file (US)
+        run: python scripts/gen_romassets.py u
+
+      - name: Build (ntsc-final)
+        run: ./build-pc.sh ntsc-final
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ge007-ntsc-final
+          path: build-pc/ge007*
+          if-no-files-found: error
+          retention-days: 14
+
+      # CI builds the executable but does not run it — running the port needs a
+      # ROM, which CI does not provide. Runtime checks (the -level_09 soak, a
+      # golden-frame diff) would run on a self-hosted runner instead. Not planned.

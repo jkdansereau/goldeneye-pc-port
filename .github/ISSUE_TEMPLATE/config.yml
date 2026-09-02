@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Build & setup guide
+    url: https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/building.md
+    about: Read this first for build/extraction problems — most are covered here.
+  - name: Known rendering defects
+    url: https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/GRAPHICS-BACKLOG.md
+    about: Cosmetic / rendering issues already known and tracked. Check before filing.
+  - name: Security vulnerability
+    url: https://github.com/jkdansereau/goldeneye-pc-port/security/advisories/new
+    about: Report memory-safety / build-pipeline vulnerabilities privately, not as a public issue.
+  - name: Rights-holder concern
+    url: https://github.com/jkdansereau/goldeneye-pc-port/blob/main/NOTICE
+    about: If you represent a rights holder, see NOTICE and open an issue titled accordingly.
