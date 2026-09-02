@@ -8,6 +8,19 @@ description: >-
 theme: jekyll-theme-cayman
 show_downloads: false
 
+# Canonical site location - used by jekyll-seo-tag (canonical URLs, og: tags)
+# and jekyll-sitemap (absolute URLs in sitemap.xml).
+url: https://jkdansereau.github.io
+baseurl: /goldeneye-pc-port
+
+# Both are on the GitHub Pages plugin whitelist - no Gemfile needed.
+# jekyll-seo-tag: per-page <title>/description/canonical/OpenGraph via {% seo %}
+#   (already emitted by the Cayman layout).
+# jekyll-sitemap: generates /sitemap.xml for Search Console / Bing submission.
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
 # jekyll-relative-links (on by default for Pages) rewrites the .md links in
 # these docs to .html so cross-links work on the published site.
 
