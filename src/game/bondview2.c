@@ -7179,7 +7179,19 @@ void MoveBond(s8 stick_x, s8 stick_y, u16 buttons, u16 oldbuttons)
         f32 nd; // canonical name
         f32 ftemp_7;
         f32 sp240;
+#ifdef PORT
+        /* D177: `move_bond_temp_struct` is a 2-word "placeholder while
+         * matching" (bondview.h) -- every use of curLocus below just passes
+         * &curLocus to stanTileDistanceRelated / stanGetLocusCount, i.e. it
+         * IS a StandTileLocusCallbackRecord. On N64 both are 8 bytes so the
+         * placeholder happens to fit; on PC the record is larger (8-byte
+         * `s32 *rooms` + 3 s32) and stan's field writes -- the D90 zero-fill
+         * and the D177 `count`/`rooms` stores -- overflowed the 8-byte local.
+         * Declaring the real type sizes it correctly. Layout-only. */
+        struct StandTileLocusCallbackRecord curLocus;
+#else
         struct move_bond_temp_struct curLocus;
+#endif
         struct move_bond_collision bondCollision;
         f32 shorten; // canonical name
         f32 headpos_x;

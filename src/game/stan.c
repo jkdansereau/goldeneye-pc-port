@@ -9,6 +9,15 @@
 #include "assert.h"
 #ifdef PORT
 #include <stdio.h>
+#include <stdint.h>
+/* D177: the decomp's `(coord3d *)((s32)ptr + byteOffset)` idiom is a no-op
+ * cast on the N64's 32-bit pointers but truncates a 64-bit stack address on
+ * PC (the high half is lost -> writes land on a garbage address -> AV).
+ * uintptr_t reproduces the arithmetic exactly at either pointer width;
+ * layout-only, no behaviour change. */
+#define PORT_PTRADD(type, base, off) ((type)((uintptr_t)(base) + (uintptr_t)(off)))
+#else
+#define PORT_PTRADD(type, base, off) ((type)((s32)(base) + (off)))
 #endif
 
 void getTileMidPoint(StandTile *tile, coord3d *out);
@@ -2380,6 +2389,25 @@ s32 stanCheckLinkedSpecialTile(StandTile *tile, s32 pointIdx, s32 arg2, s32 arg3
     StandTile *target;
     s32 mid;
 
+#ifdef PORT
+    /* D177 (pointer-width ABI, same class as D79/D90): `outFlags` is really
+     * the caller's `struct StandTileLocusCallbackRecord` (sub_GAME_7F0B1DDC
+     * passes `record` straight through as this callback's last argument).
+     * That struct's first member is `s32 *rooms` -- 4 bytes on N64, 8 on PC
+     * -- so the decomp's raw `s32` indexing only matches the N64 layout:
+     * `outFlags[0]` == `rooms` and `outFlags[1]` == `count` there, but on
+     * x86-64 `outFlags[1]` lands in the UPPER HALF of the `rooms` pointer and
+     * `count` (now at +8) is never written. `count` is exactly what
+     * `stanGetLocusCount()` returns and what MoveBond tests before running
+     * the ladder-collision path -- so the ladder branch fired but the player
+     * code never saw it, and Bond could never climb. Writing through the
+     * named fields reproduces the N64 semantics at either pointer width.
+     * (FORCECROUCH still worked by luck: on little-endian the low half of
+     * `rooms` is at offset 0 and `stanGetLocusField0` truncates it back.) */
+    struct StandTileLocusCallbackRecord *outRecord =
+        (struct StandTileLocusCallbackRecord *)outFlags;
+#endif
+
     link = tile->points[pointIdx].link;
 
     if ((link >> 4) != 0) {
@@ -2388,7 +2416,11 @@ s32 stanCheckLinkedSpecialTile(StandTile *tile, s32 pointIdx, s32 arg2, s32 arg3
         mid = target->mid.half;
 
         if (g_StanTileSpecialFlags[mid >> 0xc] & STANTILEFLAG_FORCECROUCH) {
+#ifdef PORT
+            outRecord->rooms = (s32 *)1;
+#else
             outFlags[0] = 1;
+#endif
             return 1;
         }
 
@@ -2396,7 +2428,11 @@ s32 stanCheckLinkedSpecialTile(StandTile *tile, s32 pointIdx, s32 arg2, s32 arg3
 
         if (g_StanTileSpecialFlags[mid >> 0xc] & STANTILEFLAG_LADDER) {
             dword_CODE_bss_8007BA0C = target;
+#ifdef PORT
+            outRecord->count = 1;
+#else
             outFlags[1] = 1;
+#endif
             return 0;
         }
     }
@@ -2536,13 +2572,13 @@ void stanGetMoveBondCollisionTiles(StandTile **tile1, StandTile **tile2, coord3d
                             stanGetTileOrderedPointWorldPos(
                                 linktile,
                                 ((j >> 2) + k) % 3,
-                                (coord3d *)((s32)coords + (((j + k) & 3) * 0xc)));
+                                PORT_PTRADD(coord3d *, coords, ((j + k) & 3) * 0xc));
                         }
 
                         stanGetTileOrderedPointWorldPos(
                             curtileStore,
                             curtilePointI,
-                            (coord3d *)((s32)coords + (((j + 3) & 3) * 0xc)));
+                            PORT_PTRADD(coord3d *, coords, ((j + 3) & 3) * 0xc));
 
                         j++;
 
