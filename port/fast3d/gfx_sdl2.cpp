@@ -7,6 +7,7 @@
 
 #include "gfx_window_manager_api.h"
 #include "gfx_screen_config.h"
+#include "input.h"
 
 static SDL_Window* wnd;
 static SDL_GLContext ctx;
@@ -98,6 +99,22 @@ static void gfx_sdl_init(const struct GfxWindowInitSettings *set) {
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         sysFatalError("Could not init SDL:\n%s", SDL_GetError());
+    }
+
+    // Auto window size: a width/height <= 0 means "pick a sensible default from
+    // the desktop" rather than the 640x480 native res. Fit a 4:3 window into
+    // ~85% of the primary desktop -- big enough to actually judge mouse/menu
+    // behaviour, and 4:3 so the pointer maps onto the render with no letterbox.
+    if (window_width <= 0 || window_height <= 0) {
+        SDL_DisplayMode dm;
+        if (SDL_GetDesktopDisplayMode(0, &dm) == 0 && dm.w > 0 && dm.h > 0) {
+            int maxw = (int)(dm.w * 0.85);
+            int maxh = (int)(dm.h * 0.85);
+            if (maxw * 3 > maxh * 4) { window_height = maxh; window_width = maxh * 4 / 3; }
+            else                     { window_width = maxw; window_height = maxw * 3 / 4; }
+        }
+        if (window_width < 640 || window_height < 480) { window_width = 640; window_height = 480; }
+        sysLogPrintf(LOG_INFO, "SDL: auto window size %dx%d", window_width, window_height);
     }
 
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
@@ -303,7 +320,20 @@ static void gfx_sdl_handle_events(void) {
                     // D145: Alt+F4 quits; bare ESC no longer does (it is the
                     // menu "back" key -- see port/src/video.c / input.c).
                     exit(0);
+                } else if (event.key.keysym.sym == SDLK_ESCAPE && !event.key.repeat) {
+                    // WI-1: this render-thread pump and port/src/video.c's
+                    // host-thread pump both drain the same SDL queue, so either
+                    // one can be the loop that dequeues a given ESC keydown.
+                    // Handle it here too or click-to-lock's ESC-to-free races
+                    // (and usually loses to this loop, which runs every frame).
+                    inputReleaseCapture();
                 }
+                break;
+            case SDL_MOUSEBUTTONDOWN:
+                inputNotifyClick();   // WI-1: (re)lock in click-to-lock mode
+                break;
+            case SDL_MOUSEWHEEL:
+                inputPostWheel(event.wheel.y);   // weapon cycle
                 break;
             case SDL_WINDOWEVENT:
                 if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
@@ -316,6 +346,10 @@ static void gfx_sdl_handle_events(void) {
                     // We listen specifically for main window close because closing main window
                     // on macOS does not trigger SDL_Quit.
                     exit(0);
+                } else if (event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                    inputSetMouseGrab(0);   // free + show cursor on alt-tab (also handled by video.c's pump; whichever dequeues it)
+                } else if (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
+                    inputSetMouseGrab(1);
                 }
                 break;
             case SDL_QUIT:

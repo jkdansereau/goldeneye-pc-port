@@ -163,6 +163,7 @@ extern float cursor_h_pos, cursor_v_pos;
 
 static void applyGrab(int want);
 static void reconcileGrab(int menuMode);
+static void applyCursorVisibility(void);
 
 static int numControllers = 1;
 static int connectedMask   = 0x1;   /* controller 0 always present */
@@ -180,7 +181,7 @@ static int mouseGrabbed    = 1;     /* released while the window is unfocused */
  *     Re-entering a stage while still "armed" re-locks automatically so
  *     unpausing / starting a level does not need a click.
  * Controller input is entirely independent of all of this. */
-static int mouseCaptureMode = 0;
+static int mouseCaptureMode = 1;   /* WI-1 default: Quake-style click-to-lock + 1:1 menu pointer. 0 = legacy always-grab. */
 static int captureArmed     = 0;   /* user has clicked to lock (capture mode) */
 static int windowFocused    = 1;
 static int mouseAimSpeed  = 16;     /* aim-mode sensitivity, percent (B3: 50 -> 25 M-29 -> 16; still overshot at 25) */
@@ -221,6 +222,7 @@ static double menuEstH = 0.0, menuEstV = 0.0;   /* estimate of the game cursor (
 static double menuTgtH = 0.0, menuTgtV = 0.0;   /* mouse-driven target (virtual px)         */
 static int    menuPrevActive = 0;
 static double hipPitchPhase = 0.0;              /* D166: hipfire pitch pulse phase 0..1     */
+static int    lastMenuMouseX = -1, lastMenuMouseY = -1;  /* WI-2: last abs cursor seen in a menu */
 
 /* Integrate one poll of our cursor estimate with front.c's exact recurrence
  * (frontUpdateControlStickPosition): the game receives `stick` as an s8, applies
@@ -427,6 +429,8 @@ int inputInit(void)
         SDL_GetRelativeMouseState(NULL, NULL);
     }
 
+    applyCursorVisibility();   /* hide the OS cursor if we start focused */
+
     sysLogPrintf(LOG_INFO, "input: ready (mask=0x%x, %d controller(s), aimSpeed=%d)",
                  connectedMask, numControllers, mouseAimSpeed);
     return connectedMask;
@@ -576,13 +580,29 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                 sx += (int)(edx * g);
                 sy -= (int)(dyLook * g);   /* front-end cursor: +sy = up */
             } else if (menuMode) {
-                /* Front-end 1:1 pointer (D165): P-controller onto a
-                 * mouse-accumulated target. */
-                /* D169: clamp bounds from the live virtual screen
-                 * (front.c frontUpdateControlStickPosition clamps the real
-                 * cursor to [screenleft+20, screenleft+screenwidth-20] x
-                 * [screentop+20, screentop+screenheight-20]); fall back to the
-                 * old 320x240 constants if the front-end screen isn't set. */
+                /* Front-end menu pointer.
+                 *
+                 * front.c frontUpdateControlStickPosition() is the game's cursor
+                 * integrator: it reads joyGetStickX/Y, applies a +/-5 deadband,
+                 * clamps the stick to +/-70, then does
+                 *   cursor_h_pos += (stick*0.075 +/- 0.5) * timerDelta
+                 * and clamps cursor_h/v_pos into [screenleft+20 ..
+                 * screenleft+screenwidth-20] x [screentop+20 ..
+                 * screentop+screenheight-20]. That integrator caps the cursor at
+                 * ~5.75 virtual px per poll, so feeding it a stick derived from
+                 * an absolute mouse position (D165/D169 P-controller) is
+                 * unavoidably laggy/floaty and desyncs from the real cursor.
+                 *
+                 * With click-to-lock (MouseCaptureMode=1) the front end has a
+                 * real free OS cursor, so we know exactly where the pointer is.
+                 * Write cursor_h/v_pos DIRECTLY from the absolute mouse position
+                 * whenever the mouse moved, and emit a zero stick so the game's
+                 * integrator adds nothing (stick 0 -> deadband). When the mouse
+                 * is idle we leave the cursor alone and let the keyboard stick
+                 * (WASD/arrows, added above) drive it through the game as usual.
+                 * cursor_h/v_pos are the plain front.c UI globals every menu
+                 * hit-test already reads -- no logic change, just where the
+                 * pointer is placed. */
                 double loH = MENU_CURSOR_LO, hiH = MENU_CURSOR_HI_H;
                 double loV = MENU_CURSOR_LO, hiV = MENU_CURSOR_HI_V;
                 {
@@ -593,18 +613,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                         loV = st + 20.0;  hiV = st + sh - 20.0;
                     }
                 }
-                if (!menuPrevActive) {
-                    /* Seed the estimate from the real menu cursor, not a
-                     * 320x240 centre guess. */
-                    menuEstH = menuTgtH = cursor_h_pos;
-                    menuEstV = menuTgtV = cursor_v_pos;
-                    hipPitchPhase = 0.0;
-                }
-                /* WI-2: with click-to-lock the front end has a real free OS
-                 * cursor. Map its absolute window position straight onto the
-                 * virtual front-end rect so the game crosshair tracks it 1:1
-                 * (no drift -- the P-controller below just chases this target).
-                 * The relative-delta path (legacy / grabbed) is unchanged. */
+
                 int haveAbs = 0;
                 if (mouseCaptureMode && !mouseGrabbed) {
                     int mx = 0, my = 0;
@@ -613,40 +622,65 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                     int ww = 0, wh = 0;
                     if (w) SDL_GetWindowSize(w, &ww, &wh);
                     if (ww > 0 && wh > 0) {
-                        double fx = (double)mx / (double)ww;
-                        double fy = (double)my / (double)wh;
-                        if (fx < 0.0) fx = 0.0; else if (fx > 1.0) fx = 1.0;
-                        if (fy < 0.0) fy = 0.0; else if (fy > 1.0) fy = 1.0;
-                        menuTgtH = loH + fx * (hiH - loH);
-                        menuTgtV = loV + fy * (hiV - loV);
                         haveAbs = 1;
+                        if (!menuPrevActive) {
+                            /* just entered a menu: adopt the current pointer as
+                             * the baseline, don't yank the cursor this frame */
+                            lastMenuMouseX = mx;
+                            lastMenuMouseY = my;
+                        }
+                        if (mx != lastMenuMouseX || my != lastMenuMouseY) {
+                            double fx = (double)mx / (double)ww;
+                            double fy = (double)my / (double)wh;
+                            if (fx < 0.0) fx = 0.0; else if (fx > 1.0) fx = 1.0;
+                            if (fy < 0.0) fy = 0.0; else if (fy > 1.0) fy = 1.0;
+                            cursor_h_pos = (float)(loH + fx * (hiH - loH));
+                            cursor_v_pos = (float)(loV + fy * (hiV - loV));
+                            sx = 0;   /* pointer owns the cursor this poll */
+                            sy = 0;
+                        }
+                        lastMenuMouseX = mx;
+                        lastMenuMouseY = my;
                     }
                 }
-                double s = (menuPointerSpeed / 100.0) * MENU_MOUSE_TO_PX;
+
                 if (!haveAbs) {
+                    /* Legacy relative path (MouseCaptureMode=0, cursor grabbed):
+                     * P-controller onto a mouse-accumulated target (D165/D169).
+                     * D180: clamp the estimate to the same live rect as the
+                     * target -- D169 widened the target clamp but left the
+                     * estimate pinned to the old 320x240 constants, so the
+                     * right/bottom of the menu was unreachable and the
+                     * controller wound up into never-settling drift. */
+                    if (!menuPrevActive) {
+                        menuEstH = menuTgtH = cursor_h_pos;
+                        menuEstV = menuTgtV = cursor_v_pos;
+                        hipPitchPhase = 0.0;
+                    }
+                    double s = (menuPointerSpeed / 100.0) * MENU_MOUSE_TO_PX;
                     menuTgtH += edx    * s;
-                    menuTgtV += dyLook * s;   /* dyLook > 0 => cursor moves down (+V) */
+                    menuTgtV += dyLook * s;
+                    if (menuTgtH < loH) menuTgtH = loH;
+                    if (menuTgtH > hiH) menuTgtH = hiH;
+                    if (menuTgtV < loV) menuTgtV = loV;
+                    if (menuTgtV > hiV) menuTgtV = hiV;
+
+                    double effH = MENU_P_GAIN * (menuTgtH - menuEstH);
+                    double effV = MENU_P_GAIN * (menuTgtV - menuEstV);
+                    if (effH >  70.0) effH =  70.0; else if (effH < -70.0) effH = -70.0;
+                    if (effV >  70.0) effV =  70.0; else if (effV < -70.0) effV = -70.0;
+
+                    menuEstH = menuCursorStep(menuEstH, effH, loH, hiH);
+                    menuEstV = menuCursorStep(menuEstV, effV, loV, hiV);
+
+                    sx += (int)(effH + (effH >= 0.0 ? 0.5 : -0.5));
+                    sy -= (int)(effV + (effV >= 0.0 ? 0.5 : -0.5));
                 }
-                if (menuTgtH < loH) menuTgtH = loH;
-                if (menuTgtH > hiH) menuTgtH = hiH;
-                if (menuTgtV < loV) menuTgtV = loV;
-                if (menuTgtV > hiV) menuTgtV = hiV;
-
-                double effH = MENU_P_GAIN * (menuTgtH - menuEstH);
-                double effV = MENU_P_GAIN * (menuTgtV - menuEstV);
-                if (effH >  70.0) effH =  70.0; else if (effH < -70.0) effH = -70.0;
-                if (effV >  70.0) effV =  70.0; else if (effV < -70.0) effV = -70.0;
-
-                menuEstH = menuCursorStep(menuEstH, effH, MENU_CURSOR_LO, MENU_CURSOR_HI_H);
-                menuEstV = menuCursorStep(menuEstV, effV, MENU_CURSOR_LO, MENU_CURSOR_HI_V);
-
-                sx += (int)(effH + (effH >= 0.0 ? 0.5 : -0.5));
-                sy -= (int)(effV + (effV >= 0.0 ? 0.5 : -0.5));  /* game sticky = -sy; sticky>0 drives cursor +V */
 
                 if (configGetInputLog()) {
                     sysLogPrintf(LOG_NOTE,
-                        "GE_INPUTLOG menuptr est=(%.1f,%.1f) tgt=(%.1f,%.1f) eff=(%.1f,%.1f) stick=(%d,%d)",
-                        menuEstH, menuEstV, menuTgtH, menuTgtV, effH, effV, sx, sy);
+                        "GE_INPUTLOG menuptr abs=%d cursor=(%.1f,%.1f) stick=(%d,%d)",
+                        haveAbs, (double)cursor_h_pos, (double)cursor_v_pos, sx, sy);
                 }
             } else if (aimHeld) {
                 double gx = fabs(edx)    * (mouseAimSpeed / 100.0) * AIM_GAIN;
@@ -787,12 +821,25 @@ static void reconcileGrab(int menuMode)
     applyGrab(want);
 }
 
+/* Hide the OS cursor while the game window is focused (normal PC-game
+ * behaviour): in a stage the mouse drives the look axis, and in menus GE draws
+ * its own crosshair that now tracks the pointer 1:1 -- a visible OS arrow on
+ * top is just clutter. Show it again when focus is lost so the desktop behaves
+ * normally. Relative-mouse mode hides the cursor too, but only while grabbed;
+ * this covers the free-but-focused states (menus, pre-click stage). */
+static void applyCursorVisibility(void)
+{
+    int hide = windowFocused && mouseEnabled;
+    SDL_ShowCursor(hide ? SDL_DISABLE : SDL_ENABLE);
+}
+
 /* video.c focus events. In legacy mode this directly grabs/releases; in
  * capture mode it just records focus and lets reconcileGrab() decide. */
 void inputSetMouseGrab(int on)
 {
     windowFocused = on ? 1 : 0;
     reconcileGrab(0);   /* menuMode re-checked on the next poll anyway */
+    applyCursorVisibility();
 }
 
 /* A mouse click landed in the game window (video.c). In click-to-lock mode
