@@ -27,7 +27,7 @@ baseline comparison, were on a machine still loaded from the sweep. On an
 idle machine Silo runs fine (user drove it live past ~1800 frames, VI
 pacemaker healthy, no heartbeat stall). Classic D117/D134 load-sensitive
 stall, not a deterministic bug and not an M-25 regression. If it recurs on
-an idle box, count N runs before believing it (PORT-LEARNINGS §E).
+an idle box, count N runs before believing it (porting-notes.md §E).
 
 Last full re-sweep: 2026-08-29 (M-22), after D134 landed (SP/DP task-done
 event no longer dropped into a full sched interruptQ — the "frame-2 hang"
@@ -45,7 +45,7 @@ cause. Only remaining crash:
   900. This is the **known D129 residual**: the bare `-level_54` boot
   reaches the cast/credits scroll referencing a text bank the real
   front-end flow would have loaded. Not a real-flow blocker; Cuba loads +
-  renders 300+ frames fine. Parked with D76 (`docs/GRAPHICS-BACKLOG.md`).
+  renders 300+ frames fine. Parked with D76 (`docs/dev/GRAPHICS-BACKLOG.md`).
 
 | Level | # | Status | Crash site | Class |
 |---|---|---|---|---|
@@ -117,7 +117,7 @@ Dam/Frigate/Statue/Cradle now PASS; Runway/Streets fall through to C2.
 Reached from `chraidata.c:61` (`m_AimAtBond[]` AI-list region — backtrace
 frame is inside the global AI-list rodata blob, i.e. the return address
 was corrupted OR an AI-list entry is being called as a function pointer).
-Pointer-width / BE-rodata family (PORT-LEARNINGS §A / §C): a per-level
+Pointer-width / BE-rodata family (porting-notes.md §A / §C): a per-level
 `Usetup*Z` guard record (`GuardRecord` type 9 / `GuardAttributeRecord`
 type 18) or chr-spawn pointer not converted / not pointer-width-adjusted,
 OR the AI-list bytecode pointers in `chraidata.c` rodata are BE and get
@@ -150,7 +150,7 @@ a dedicated pass. Files: `src/game/objecthandler_2.c`, `src/game/tex.c`
 `texLoad`), not solely the GDL command-stream copy. Every model file
 loads at an odd (`&15==1`) `objheader->Switches` base
 (`mempAllocBytesInBank` does no alignment) and `delta&15` != 0.
-Full write-up + next-step probe plan: PCPortResearch §F D124-Facility
+Full write-up + next-step probe plan: findings.md §F D124-Facility
 addendum. Likely fix site: the `d43_emit.py`/`pcmodels` sidecar's model
 texture-blob offsets (N64 8B-Gfx vs PC 16B-Gfx GDL extent).
 
@@ -224,7 +224,7 @@ audio lands. Files: `src/snd.c`, `port/src/` audio stubs.
    compiled/explosion-DL matrix pointer, closer to D75/D124-Jungle territory.
 
 Everything else loads + renders + survives the no-input window.
-Hand `docs/LEVEL-PLAYTEST.md` to the user for the WS6 completion pass.
+Hand `docs/dev/LEVEL-PLAYTEST.md` to the user for the WS6 completion pass.
 
 Re-run `tools_pc/level_sweep.sh` after each class fix; keep
 `-level_09`/`-level_20` green (`tools_pc/framediff.py`).

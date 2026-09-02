@@ -3187,7 +3187,7 @@ typedef union
          * rejects as a hard error (IDO tolerates it). The game code's `->pad`
          * (e.g. setupCctv) refers to the INHERITED pad index @0x08, never to this
          * member, so renaming it keeps the layout byte-identical. See
-         * docs/PCPortResearch.md. */
+         * docs/dev/findings.md. */
         s32      lookpad; // lookpad
 #else
         s32      pad; // lookpad
@@ -3940,7 +3940,7 @@ typedef struct SetupIntroCamera
      * bondview2.c) against the still-40-byte-per-record file data. Kept as
      * u32 (same class as D79/D53.1); cast to the real pointer type at each
      * use site under #ifdef PORT. No behavior change -- see D88 in
-     * PCPortResearch.md. */
+     * findings.md. */
     union
     {
         u16 lang_index[2];

@@ -1,6 +1,6 @@
 # LEVEL-PLAYTEST — WS6 human completion-validation checklist
 
-Run **after** `docs/LEVEL-STATUS.md` is all-21 load+render PASS. This is
+Run **after** `docs/dev/LEVEL-STATUS.md` is all-21 load+render PASS. This is
 the part that needs real input — a human plays each level start to finish
 and confirms it matches retail. Findings feed a WS5-style triage round
 (log each as a crash-class row or a new Dxx candidate).

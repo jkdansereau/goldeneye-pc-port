@@ -6,7 +6,7 @@
 #include "bondgame.h"
 #include "speed_graph.h"
 #if defined(PORT)
-#include <string.h> /* PC port: memcpy for the CUSTOM_FX_PARAMS_N copy in audioInit (docs/PCPortResearch.md §11) */
+#include <string.h> /* PC port: memcpy for the CUSTOM_FX_PARAMS_N copy in audioInit (docs/dev/findings.md §11) */
 #endif
 
 /**
@@ -364,7 +364,7 @@ void amCreateAudioManager(ALSynConfig* alconf)
     {
 #if defined(PORT)
         /* PC port: IDO accepted the C++-style array initializer `= CUSTOM_FX_PARAMS_N`;
-         * GCC rejects it. Copy instead — identical result. See docs/PCPortResearch.md §11 */
+         * GCC rejects it. Copy instead — identical result. See docs/dev/findings.md §11 */
         s32 sp48[CUSTOM_FX_SECTION_COUNT * CUSTOM_FX_SECTION_SIZE + 2];
         memcpy(sp48, CUSTOM_FX_PARAMS_N, sizeof(sp48));
 #else

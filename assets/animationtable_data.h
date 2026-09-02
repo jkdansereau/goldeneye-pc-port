@@ -198,7 +198,7 @@
 // as the defines above, which is to index into ptr_animation_table.
 
 #if defined(__x86_64__)
-/* D34 (docs/PCPortResearch.md): on N64 this segment links at VMA 0
+/* D34 (docs/dev/findings.md): on N64 this segment links at VMA 0
  * (ge007.ld), so &ANIM_DATA_x is the record's offset within the
  * animation_data segment and game code re-bases it with
  * `(s32)&ANIM_DATA_x + ptr_animation_table`. A PE image cannot be placed

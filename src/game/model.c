@@ -103,7 +103,7 @@ Model *modelmgrInstantiateModel(ModelFileHeader *header)
         }
     }
 #ifdef PORT
-    /* PC port (D57, docs/PCPortResearch.md): pointer-grown rwdata records can
+    /* PC port (D57, docs/dev/findings.md): pointer-grown rwdata records can
      * push a model's word count past the (grown) spare-pool capacity; fall
      * back to a dynamic slot+pool exactly like the LvResetting path above.
      * The slot is not tracked in g_MaxModelSlots, so it is never reused —
@@ -210,7 +210,7 @@ Model *modelmgrInstantiateModelWithAnim(ModelFileHeader *modelFileHeader)
             }
         }
 #ifdef PORT
-        /* PC port (D57, docs/PCPortResearch.md): same fallback as
+        /* PC port (D57, docs/dev/findings.md): same fallback as
          * modelmgrInstantiateModel() — a dynamic slot+pool when no spare
          * fits the (pointer-grown) rwdata word count. */
         if (newModel == NULL && requiredRwdatalen > 0)

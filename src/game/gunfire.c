@@ -5013,7 +5013,7 @@ CasingRecord* casingCreate(ModelFileHeader* header, Mtxf* mtx)
  * the inline gait Model / bondhead-matrix region and `matrix_4x4_copy(THROWMTX,
  * ..)` scribbles 64 bytes of live state on every shot. The offsets are exactly
  * `hands[handnum].throw_item_pos_related[_prev]` and its translation row, so
- * use the field accessors directly. See docs/AUDIT-M6-player-offsets.md. */
+ * use the field accessors directly. See docs/dev/AUDIT-M6-player-offsets.md. */
 #define THROWMTX     (&g_CurrentPlayer->hands[handnum].throw_item_pos_related)
 #define THROWPOS(k)  (g_CurrentPlayer->hands[handnum].throw_item_pos_related.m[3][k])
 #define THROWPREV(k) (g_CurrentPlayer->hands[handnum].throw_item_pos_related_prev.m[3][k])

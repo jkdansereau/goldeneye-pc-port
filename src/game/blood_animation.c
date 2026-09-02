@@ -200,7 +200,7 @@ u8 die_blood_image_1[] = {
  * address). On PC a zero-init symbol lands in .bss, a different section ~1 MB
  * away, so the guard never fires and the RLE decoder runs past the array into
  * adjacent .data, writing unbounded garbage (clobbered the gun-barrel sub-DL
- * at +0x200 — see docs/PCPortResearch.md §F/D64). Define it as one-past-the-
+ * at +0x200 — see docs/dev/findings.md §F/D64). Define it as one-past-the-
  * end of the array instead. Only used in this TU. */
 #define die_blood_image_end (*(const u8 *)(die_blood_image_1 + sizeof(die_blood_image_1)))
 #else

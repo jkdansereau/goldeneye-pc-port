@@ -2476,7 +2476,7 @@ s32 interface_menu05_fileselect(void)
         setCursorPOSforMode(0);
 
 #if defined(PORT)
-        return 0; /* PC port: function is declared s32 but had a bare `return;` (hard error in GCC); the sole caller ignores the value. See docs/PCPortResearch.md §11 */
+        return 0; /* PC port: function is declared s32 but had a bare `return;` (hard error in GCC); the sole caller ignores the value. See docs/dev/findings.md §11 */
 #else
         return;
 #endif

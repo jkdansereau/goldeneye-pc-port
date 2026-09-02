@@ -3120,7 +3120,7 @@ u32 monAnim35Taser[] = {
 };
 
 #if defined(PORT)
-/* PC port (docs/PCPortResearch.md §11): monitor-animation jump targets.
+/* PC port (docs/dev/findings.md §11): monitor-animation jump targets.
  * MONJUMPTO/MONJUMPCHANCE store an index into this table instead of a raw
  * address (see chrai.h); the interpreter below resolves it. Must stay after
  * every monAnim* array definition above. */
@@ -8486,7 +8486,7 @@ bool bgTestHitOnObj(coord3d *arg0, coord3d *arg1, coord3d *arg2, Gfx *gdl, Gfx *
          * 16-byte Gfx layout (tools_pc/d43_emit.py) with the two N64 32-bit
          * words preserved in the low dwords of words.w0 / words.w1. Every raw
          * byte/word index below assumed an 8-byte N64 slot, so it desynced on
-         * the first G_VTX/G_TRI1 and walked off the DL (§B, PORT-LEARNINGS).
+         * the first G_VTX/G_TRI1 and walked off the DL (§B, porting-notes.md).
          * Read the words instead; mirrors PD bgTestHitOnObj (pd_port bg.c). */
         u32 w0 = (u32) gdl->words.w0;
         u32 w1 = (u32) gdl->words.w1;

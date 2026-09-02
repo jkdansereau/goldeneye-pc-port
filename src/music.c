@@ -43,7 +43,7 @@
  * larger than their N64 32-bit counterparts because their internal pointers
  * are 8 bytes. The full init-time demand of this bump heap grows from the
  * N64 ~0x2E000 budget to 0x31660 (measured under gdb). Bump the budget on PC
- * only; the N64 value is unchanged. See docs/PCPortResearch.md D36.
+ * only; the N64 value is unchanged. See docs/dev/findings.md D36.
  *
  * D37 (PC port): the SFX/instrument bank blobs are re-laid out to PC-native
  * form in this same heap (romdataFixupAudioBank); their images are larger

@@ -770,7 +770,7 @@ s32 intro[] = {
     _mkword(0, _mkshort(0, 1)), 0, -1, 0,
     /* Type = Credits; index = 3 */
 #if defined(PORT)
-    /* PC port (docs/PCPortResearch.md §11): pointer-in-word static initializer
+    /* PC port (docs/dev/findings.md §11): pointer-in-word static initializer
      * is a hard error on the 64-bit host GCC; the real value comes from ROM
      * data loading in Phase 2. */
     _mkword(0, _mkshort(0, 8)), 0,

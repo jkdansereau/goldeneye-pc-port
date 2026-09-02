@@ -75,7 +75,7 @@ Jump to Routine:
 [p]ointer to another animation routine where processing resumes
 */
 #if defined(PORT)
-/* PC port (docs/PCPortResearch.md §11): on a 64-bit host the bare array name in
+/* PC port (docs/dev/findings.md §11): on a 64-bit host the bare array name in
  * these initializers is a pointer-to-integer conversion, which GCC rejects as a
  * static initializer ("not computable at load time"). Store an index into
  * _PORT_monAnimPtrs[] (defined in propobj.c) instead; the script interpreter

@@ -491,7 +491,7 @@ void initializeGunBarrelIntro(u8 *gfxBuffer, s32 bufferSize)
     
     gunbarrelgfxListPointer = (Gfx*)gfxBuffer;
 #ifdef PORT
-    /* PC port (D58, docs/PCPortResearch.md): sub_GAME_7F01BFF8 emits 31 Gfx
+    /* PC port (D58, docs/dev/findings.md): sub_GAME_7F01BFF8 emits 31 Gfx
      * (2x VTX + 28 TRI + ENDDL). On N64 sizeof(Gfx)==8 so the 0x100 reserve
      * covers it (248 B); on PC the Gfx union's trailing `long long` makes
      * sizeof(Gfx)==16, so the same DL is 496 B and overflowed the reserve,
@@ -508,7 +508,7 @@ void initializeGunBarrelIntro(u8 *gfxBuffer, s32 bufferSize)
 #endif
     
 #ifdef PORT
-    /* PC port (D58, docs/PCPortResearch.md): on N64 barrelDisplayListPtr is a
+    /* PC port (D58, docs/dev/findings.md): on N64 barrelDisplayListPtr is a
      * physical DRAM address, so +0x80000000 yields the KSEG0 (RSP-visible)
      * address embedded in each G_VTX w1 by sub_GAME_7F01BFF8. On PC the same
      * buffer is a V1 pointer (0x70xxxxxx, s32-safe per dram.c), and

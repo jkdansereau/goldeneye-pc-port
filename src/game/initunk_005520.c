@@ -9,7 +9,7 @@
 #define ANIM_MODEL_SPARE_SLOTS     10
 
 #ifdef PORT
-/* PC port (D57, docs/PCPortResearch.md): two rwdata record structs contain
+/* PC port (D57, docs/dev/findings.md): two rwdata record structs contain
  * pointer fields — ModelRwData_HeadPlaceholderRecord (ModelFileHeader* +
  * void*) and ModelRwData_DisplayList_CollisionRecord (Vertex* + Gfx*) — so
  * they grow 8 -> 16 bytes on x86-64. modelCalculateRwDataLen() accumulates

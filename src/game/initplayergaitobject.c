@@ -3,7 +3,7 @@
 
 void init_player_gait_object(void) {
 #ifdef PORT
-  /* PC port (D86, docs/PCPortResearch.md): the N64 source does `(int)&player_gait_hdr`,
+  /* PC port (D86, docs/dev/findings.md): the N64 source does `(int)&player_gait_hdr`,
    * a same-width (32<-32) pointer->int->pointer round trip that's a no-op on N64.
    * On PC the int cast truncates a real 64-bit pointer to its low 32 bits, and the
    * implicit int->pointer conversion back into RootNode zero-extends it, producing a

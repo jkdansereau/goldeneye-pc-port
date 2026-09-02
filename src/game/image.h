@@ -53,7 +53,7 @@ struct tex {
 };
 
 #ifdef PORT
-/* D67 (docs/PCPortResearch.md): N64 layout reconstruction for struct
+/* D67 (docs/dev/findings.md): N64 layout reconstruction for struct
  * image_entry. The decompiled field order cannot be right: texLoad() reads
  * `*(s32*)&entry & 0xFFFFFF` as the data offset (so dataoffset must occupy
  * bits 0-23 of word 0), while chrprop.c indexes entries with an 8-byte

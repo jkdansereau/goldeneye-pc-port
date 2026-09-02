@@ -68,7 +68,7 @@ void mempCheckMemflagTokens(s32 poolAreaStart, s32 poolAreaSize)
          * music heap (MUSIC_ALLOCATION_BYTES in src/music.c, 0x2E000 ->
          * 0x32000 on x86-64 due to libaudio pointer bloat). Grow the bank on
          * PC only; STAGE absorbs the difference. N64 value unchanged.
-         * See docs/PCPortResearch.md D36.
+         * See docs/dev/findings.md D36.
          *
          * D37 (PC port): MUSIC_ALLOCATION_BYTES grows again to 0x38000 (the
          * re-laid-out bank images live in the music heap; init demand

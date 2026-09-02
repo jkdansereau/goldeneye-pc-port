@@ -2358,7 +2358,7 @@ void texLoadFromDisplayList(Gfx *gdl, struct texpool *arg1)
     {
         // Look for GBI sequence: fd...... abcd....
 #ifdef PORT
-        /* D68 (docs/PCPortResearch.md): after gimgFixupGlobalimagetable() the
+        /* D68 (docs/dev/findings.md): after gimgFixupGlobalimagetable() the
          * 0xABCDxxxx word is stored host-order, so the marker bytes sit at
          * offsets 6..7 of the Gfx. */
         if (bytes[0] == G_SETTIMG && bytes[6] == 0xcd && bytes[7] == 0xab)

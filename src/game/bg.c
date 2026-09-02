@@ -231,7 +231,7 @@ u32 D_8004481C[] = {0x1000100, 0};
  * member in a nested context (an array element), which GCC enforces as a hard
  * error (IDO tolerated it). The code treats this data as a flat byte array
  * (cast to `u8*` at sub_GAME_7F0B37EC and walked byte-by-byte), so define it as
- * such. The byte layout is identical. See docs/PCPortResearch.md. */
+ * such. The byte layout is identical. See docs/dev/findings.md. */
 u8 specialportalarray[] = {
     0x03, 0x2C,0x2E,0x32, 0x37,0x3E,0x3F,0x4E, 0x56,0x59,0x5D,0x72, 0x76,0x79,0x7A,0xFF,
     0x11, 0x00,0x3A,0xFF
@@ -3081,7 +3081,7 @@ void bgBuildRoomVtxBounds(s32 roomID)
              * D80/D82 -- runtime texLoadFromGdl is supposed to convert them
              * the same way it converts model GDLs, but that conversion is
              * not yet verified correct for room-specific GDL content, see
-             * docs/PCPortResearch.md D83). Until that's resolved, a
+             * docs/dev/findings.md D83). Until that's resolved, a
              * corrupted command stream can produce a `vtx` pointer far
              * outside the room's vertex buffer; bounds-check before
              * dereferencing so a bad room fails to render (skips this

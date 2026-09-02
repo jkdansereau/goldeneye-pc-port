@@ -19,7 +19,7 @@
 typedef struct
 {
     // address is offset from the start of .sbk file.
-    // D35 (docs/PCPortResearch.md): stored as the 32-bit embedded value, not a
+    // D35 (docs/dev/findings.md): stored as the 32-bit embedded value, not a
     // host pointer. As `u8 *` this struct is 16 bytes on x86-64 while the ROM
     // records are 8 (u32 + 2x u16); cast to a real pointer at the use sites.
     u32 address;

@@ -149,7 +149,7 @@ u8 m_StandardGuard[] = {
     return to List set by SetReturnAiList - If not set will crash
  */
 u8 m_IdleAnimations[] = {
-#ifdef PORT /* D7: SWITCH() is IDO-specific metaprogramming GCC cannot expand; the hand-written form below is its byte-identical expansion (see docs/PCPortResearch.md §11) */
+#ifdef PORT /* D7: SWITCH() is IDO-specific metaprogramming GCC cannot expand; the hand-written form below is its byte-identical expansion (see docs/dev/findings.md §11) */
     IFNewRandomGreaterThan(50, lblNext) /* generate annd compare random seed to see which animation to play */
     PlayAnimation(ANIM_yawning, 0, 193, ANIM_IDLE_POSE_WHEN_COMPLETE | ANIM_PLAY_SFX, ANIM_DEFAULT_INTERPOLATION)
         GotoNext(lblDone) /* jump to end, we're done */
@@ -213,7 +213,7 @@ u8 m_IdleAnimations[] = {
     return to List set by SetReturnAiList - If not set will crash
  */
 u8 m_BashKeyboard[] = {
-#ifdef PORT /* D7: SWITCH() is IDO-specific metaprogramming GCC cannot expand; the hand-written form below is its byte-identical expansion (see docs/PCPortResearch.md §11) */
+#ifdef PORT /* D7: SWITCH() is IDO-specific metaprogramming GCC cannot expand; the hand-written form below is its byte-identical expansion (see docs/dev/findings.md §11) */
     IFNewRandomGreaterThan(60, lblNext)
     PlayAnimation(ANIM_keyboard_right_hand1, 0, 69, 0x00, ANIM_DEFAULT_INTERPOLATION)
     GotoNext(lblDone) /* jump to end, we're done */
@@ -588,7 +588,7 @@ u8 m_RunToBondPersistent[] = {
 
     /*DO*/
     Label(lblMaybeThrowGrenade)
-#ifdef PORT /* D7: SWITCH() is IDO-specific metaprogramming GCC cannot expand; the hand-written form below is its byte-identical expansion (see docs/PCPortResearch.md §11) */
+#ifdef PORT /* D7: SWITCH() is IDO-specific metaprogramming GCC cannot expand; the hand-written form below is its byte-identical expansion (see docs/dev/findings.md §11) */
             IFNewRandomGreaterThan(10, lblNext)
             TRYThrowingGrenade(lblDone) /* depends on chr->grenadeprob value */
 

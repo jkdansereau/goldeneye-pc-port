@@ -533,7 +533,7 @@ void stop_recording_ramrom(void)
 }
 
 #ifdef PORT
-/* PC port (D87, docs/PCPortResearch.md): ramromfilestructure is a compiled-in
+/* PC port (D87, docs/dev/findings.md): ramromfilestructure is a compiled-in
  * ROM asset (the attract-mode demo blobs in `ramrom_table[]` -- ramrom_Dam_1
  * etc.), so like every other N64-compiled ROM asset its multi-byte fields are
  * big-endian. romCopyAligned() is a raw byte copy (no endian translation, by

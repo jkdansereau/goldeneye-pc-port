@@ -51,7 +51,7 @@ the cumulative shift from growth ahead of them in the file):
     KNOWN BUG (D125, unfixed as of M-13): the converted blob does not land
     correctly in the emitted file for some levels (Aztec/Bunker2/Surface2) --
     suspect the pass-1 delta / region-`end` handling here (~L308-340), NOT
-    convert_stream itself. See internals.md D125 + docs/LEVEL-STATUS.md.
+    convert_stream itself. See internals.md D125 + docs/dev/LEVEL-STATUS.md.
   - waypoint.neighbours / waygroup.neighbours / waygroup.waypoints /
     PathRecord.waypoints target arrays: plain `s32` ID lists (NOT file
     offsets -- graph node indices), NULL/-1 terminated, walked with real

@@ -943,7 +943,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
         loaded_texture.orig_size_bytes = loaded_texture.size_bytes;
     }
 
-    /* RC2 (docs/TEXTURE-GLITCH-ANALYSIS.md): GE's texGetDepthAndSize() sums the
+    /* RC2 (docs/dev/TEXTURE-GLITCH-ANALYSIS.md): GE's texGetDepthAndSize() sums the
      * base level + every LOD mip into one gDPLoadBlock, so the block byte count
      * (-> upload height = size_bytes / row) runs ~1.3x taller than the base
      * image and the mip bytes render as garbage rows below it ("interlaced"
@@ -998,7 +998,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
      * RC2 (mip-chain contamination -> over-tall upload) can be told apart from a
      * decode/row-swap bug. tile_h = base-tile height from SETTILESIZE; if the
      * computed upload height is much larger, the excess rows are LOD mip data.
-     * docs/TEXTURE-GLITCH-ANALYSIS.md sec 6b. */
+     * docs/dev/TEXTURE-GLITCH-ANALYSIS.md sec 6b. */
     if (getenv("GE_DTEX")) {
         static int dtexCount = 0;
         if (dtexCount < 64) {
@@ -1035,7 +1035,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
      * the colour pipe, i.e. it behaves as a plain intensity (I) texture. GE's
      * Depot ceiling emits exactly this (CI8 + gsDPSetTextureLUT(G_TT_NONE));
      * decoding it against the stale rdp.palette produced the blue-speckle roof
-     * (docs/TEXTURE-GLITCH-ANALYSIS.md, B2). Route CI4/CI8 -> I4/I8 here. */
+     * (docs/dev/TEXTURE-GLITCH-ANALYSIS.md, B2). Route CI4/CI8 -> I4/I8 here. */
     uint8_t fmt_eff = fmt;
     if (fmt == G_IM_FMT_CI && rdp.palette_fmt == G_TT_NONE) {
         fmt_eff = G_IM_FMT_I;

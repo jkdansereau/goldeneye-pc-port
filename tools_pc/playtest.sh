@@ -1,5 +1,5 @@
 #!/bin/bash
-# Playtest launcher for docs/LEVEL-PLAYTEST.md (WS6 human validation).
+# Playtest launcher for docs/dev/LEVEL-PLAYTEST.md (WS6 human validation).
 #
 # Usage:
 #   ./tools_pc/playtest.sh <level> [difficulty-note]   launch a level
@@ -17,7 +17,7 @@ set -e
 cd "$(dirname "$0")/.."
 export PATH="/c/msys64/mingw64/bin:$PATH"
 
-# name -> -level_XX  (mission order; docs/LEVEL-PLAYTEST.md)
+# name -> -level_XX  (mission order; docs/dev/LEVEL-PLAYTEST.md)
 LEVELS=(
   "dam:33" "facility:34" "runway:35" "surface1:36" "bunker1:09" "silo:20"
   "frigate:26" "surface2:43" "bunker2:27" "statue:22" "archives:24"
@@ -64,7 +64,7 @@ fi
 LOG="build-pc/playtest_L${LEVEL}_$(date +%H%M%S).log"
 echo "== playtest level ${LEVEL} (difficulty: ${DIFF}) =="
 echo "== log: ${LOG}"
-echo "== checklist: docs/LEVEL-PLAYTEST.md — spawn, geometry, guards,"
+echo "== checklist: docs/dev/LEVEL-PLAYTEST.md — spawn, geometry, guards,"
 echo "==   doors/pickups/objectives, alarms, exit -> MISSION COMPLETE, auto-advance"
 
 rm -f ge007.crash.log

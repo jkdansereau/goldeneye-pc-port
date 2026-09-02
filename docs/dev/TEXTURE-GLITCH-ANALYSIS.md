@@ -25,7 +25,7 @@ since been fixed or retracted. Authoritative current state:
 | **RC2** — mip-chain contamination (LOD rows uploaded as image rows) | open | **FIXED** — `import_texture()` clips a full-width LOD block to the SETTILESIZE base height; GL builds correct mips. Knob `Video.FixMipTextures` (**default on**; `=0` = old byte-identical-to-golden behaviour). | `port/fast3d/gfx_pc.cpp`; §F RC2 |
 | **RC4** — palette "off-by-one" in `palette_to_rgba32` | proposed 1-line fix | **RETRACTED** — the current decode is correct **RGBA5551**; the "spec" line in §2 was ARGB1555. Applying the "fix" rotates every channel + moves alpha. **Do not touch.** | `gfx_pc.cpp:~835`; §2 RC4, §F |
 | **D159** ("interlaced" / venetian-blind textures, esp. front-end photos) | not yet identified | **FIXED** — `texSwapAltRowBytes` (N64 RDP odd-line TMEM XOR compensation, which fast3d does not emulate) is a `#ifdef PORT` no-op. This was the user's "interlaced textures" report. | `src/game/image.c`; §F D159 |
-| **D161** — Depot (`-level_30`) ceiling blue speckle + radial rays (was §3 "blue ground" / B2) | attributed to RC2+RC3+RC4+fog | **FIXED** — a 16×16 **CI8 tile drawn with `G_TT_NONE`** (TLUT disabled) was palette-looked-up against a stale `rdp.palette`. fast3d now routes CI+`G_TT_NONE` → I (intensity). Not RC2/RC3/RC4/filtering. | `port/fast3d/gfx_pc.cpp import_texture()`; §F D161, PORT-LEARNINGS §D |
+| **D161** — Depot (`-level_30`) ceiling blue speckle + radial rays (was §3 "blue ground" / B2) | attributed to RC2+RC3+RC4+fog | **FIXED** — a 16×16 **CI8 tile drawn with `G_TT_NONE`** (TLUT disabled) was palette-looked-up against a stale `rdp.palette`. fast3d now routes CI+`G_TT_NONE` → I (intensity). Not RC2/RC3/RC4/filtering. | `port/fast3d/gfx_pc.cpp import_texture()`; §F D161, porting-notes.md §D |
 | **RC1** — wallet-Bond photo (mode-select / folder screen) garble | "implement G_SETTEX" | **PARTIALLY OPEN.** The *interlace comb* is gone (D159). The photo now renders as a recognisable grayscale portrait but is still **180°-rotated / mis-transformed** → **D75 front-end-model family** (model-GDL transform, not a fast3d opcode gap — `texLoadFromGdl` already expands G_SETTEX on PC, see §6b). Parked, cosmetic, below crash work. | §6b; GRAPHICS-BACKLOG D149; §F D75/D80/D82/D83 |
 | **RC3** — wrap-period mismatch (non-PoT dims "repeat oddly") | open | **IN PROGRESS.** The dead D74 pre-wrap block is now opt-in as `Video.WrapFix` (M-29, **not default** — the naive one-liner activates never-run code and boot-crashes `-level_09`; needs the hoist-out-of-vertex-loop rework + per-level visual check). | `gfx_pc.cpp`; GRAPHICS-BACKLOG B1; §F D74 |
 | RC1 (original) — G_SETTEX (0xc0) is `G_NOOP` in fast3d | "implement the command" | **NOT the blocker.** `src/game/tex.c texLoadFromGdl` already expands every G_SETTEX into a standard load sequence under `#ifdef PORT`; fast3d normally never sees raw 0xc0. See §6b. | §6b |
@@ -95,7 +95,7 @@ against this table.
   horizontally; with RC2 the vertical period is ~2× too long and half of it is noise.
 - The D74 pre-wrap UV block never runs: guard tests `cms & G_TX_WRAP` but
   `G_TX_WRAP == 0` (`include/PR/gbi.h:391`) — dead code (already parked in
-  `docs/GRAPHICS-BACKLOG.md`).
+  `docs/dev/GRAPHICS-BACKLOG.md`).
 
 ### RC4 — Palette off-by-one — **RETRACTED (M-30): the current code is correct.**
 

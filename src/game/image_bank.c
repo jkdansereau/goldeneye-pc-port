@@ -168,7 +168,7 @@ extern Gfx* globalDL_0x9a8;
 extern Gfx* globalDL_0xa50;
 
 #if defined(__x86_64__)
-/* D39 (docs/PCPortResearch.md): on N64 all 49 symbols above link inside the
+/* D39 (docs/dev/findings.md): on N64 all 49 symbols above link inside the
  * Globalimagetable segment at physical 0x02xxxxxx (ge007.ld), so
  * `globalbank_rdram_offset + (u32)&sym` rebases each onto pGlobalimagetable.
  * A PE image cannot sit at 0x02xxxxxx, so (u32)&sym is the low 32 bits of an
@@ -247,7 +247,7 @@ void texReset(void)
     romCopy(pGlobalimagetable, &_GlobalimagetableSegmentRomStart, size);
 
 #ifdef PORT
-    /* D68 (docs/PCPortResearch.md): the ROM copy is N64 big-endian; convert
+    /* D68 (docs/dev/findings.md): the ROM copy is N64 big-endian; convert
      * the CPU-interpreted u32 fields (IMAGESEG Gfx w1 words and
      * sImageTableEntry.index) to host order before any code reads them. */
     gimgFixupGlobalimagetable((u8 *)pGlobalimagetable);
