@@ -57,17 +57,43 @@ int configGetInputLog(void)
 #define INI_PATH    "$S/ge007.ini"
 
 struct IntOption   { char key[64]; int *value; int min, max; int seen; };
+struct UIntOption  { char key[64]; unsigned int *value; unsigned int min, max; int seen; };
+struct FloatOption { char key[64]; float *value; float min, max; int seen; };
 struct StrOption   { char key[64]; char *value; int bufSize; int seen; };
 
-static struct IntOption intOpts[MAX_OPTIONS];
-static int              numIntOpts = 0;
-static struct StrOption strOpts[MAX_OPTIONS];
-static int              numStrOpts = 0;
+static struct IntOption   intOpts[MAX_OPTIONS];
+static int                numIntOpts = 0;
+static struct UIntOption  uintOpts[MAX_OPTIONS];
+static int                numUIntOpts = 0;
+static struct FloatOption floatOpts[MAX_OPTIONS];
+static int                numFloatOpts = 0;
+static struct StrOption   strOpts[MAX_OPTIONS];
+static int                numStrOpts = 0;
 
 void configRegisterInt(const char *key, int *value, int min, int max)
 {
     if (numIntOpts >= MAX_OPTIONS) return;
     struct IntOption *o = &intOpts[numIntOpts++];
+    strncpy(o->key, key, sizeof(o->key) - 1);
+    o->value = value;
+    o->min = min;
+    o->max = max;
+}
+
+void configRegisterUInt(const char *key, unsigned int *value, unsigned int min, unsigned int max)
+{
+    if (numUIntOpts >= MAX_OPTIONS) return;
+    struct UIntOption *o = &uintOpts[numUIntOpts++];
+    strncpy(o->key, key, sizeof(o->key) - 1);
+    o->value = value;
+    o->min = min;
+    o->max = max;
+}
+
+void configRegisterFloat(const char *key, float *value, float min, float max)
+{
+    if (numFloatOpts >= MAX_OPTIONS) return;
+    struct FloatOption *o = &floatOpts[numFloatOpts++];
     strncpy(o->key, key, sizeof(o->key) - 1);
     o->value = value;
     o->min = min;
@@ -92,6 +118,12 @@ static int parseInt(const char *s)
     int v = 0;
     while (*s >= '0' && *s <= '9') v = v * 10 + (*s++ - '0');
     return v * sign;
+}
+
+static float parseFloat(const char *s)
+{
+    while (*s == ' ' || *s == '\t') s++;
+    return (float)atof(s);
 }
 
 static int lc(int c) { return (c >= 'A' && c <= 'Z') ? c + 32 : c; }
@@ -125,6 +157,31 @@ static void applyKV(const char *dottedKey, const char *val)
                 if (v > intOpts[i].max) v = intOpts[i].max;
             }
             *intOpts[i].value = v;
+            return;
+        }
+    }
+    for (int i = 0; i < numUIntOpts; i++) {
+        if (ci_eq(uintOpts[i].key, dottedKey)) {
+            uintOpts[i].seen = 1;
+            long p = parseInt(val);
+            unsigned int v = (p < 0) ? 0u : (unsigned int)p;
+            if (uintOpts[i].min != uintOpts[i].max) {
+                if (v < uintOpts[i].min) v = uintOpts[i].min;
+                if (v > uintOpts[i].max) v = uintOpts[i].max;
+            }
+            *uintOpts[i].value = v;
+            return;
+        }
+    }
+    for (int i = 0; i < numFloatOpts; i++) {
+        if (ci_eq(floatOpts[i].key, dottedKey)) {
+            floatOpts[i].seen = 1;
+            float v = parseFloat(val);
+            if (floatOpts[i].min != floatOpts[i].max) {
+                if (v < floatOpts[i].min) v = floatOpts[i].min;
+                if (v > floatOpts[i].max) v = floatOpts[i].max;
+            }
+            *floatOpts[i].value = v;
             return;
         }
     }
@@ -188,6 +245,8 @@ void configLoad(void)
      * all). */
     int missing = 0;
     for (int i = 0; i < numIntOpts && !missing; i++) missing = !intOpts[i].seen;
+    for (int i = 0; i < numUIntOpts && !missing; i++) missing = !uintOpts[i].seen;
+    for (int i = 0; i < numFloatOpts && !missing; i++) missing = !floatOpts[i].seen;
     for (int i = 0; i < numStrOpts && !missing; i++) missing = !strOpts[i].seen;
     if (missing) {
         sysLogPrintf(LOG_INFO, "config: adding newly-registered keys to %s", path);
@@ -223,42 +282,36 @@ void configSave(void)
     fputs("# GoldenEye 007 PC port config. Edit while the game is closed;\n"
           "# rewritten (comments dropped) on a clean exit.\n", f);
 
-    /* Emit grouped by section, preserving registration order within each.
-     * O(n^2) over a handful of options -- fine. */
-    char done[MAX_OPTIONS] = {0};
-    for (int i = 0; i < numIntOpts; i++) {
+    /* Flatten every registered option into one list (type-tagged), then emit
+     * section-grouped in registration order so mixed int/float/string keys in
+     * the same [Section] stay together. O(n^2) over a handful of options. */
+    enum { T_INT, T_UINT, T_FLOAT, T_STR };
+    struct { const char *key; int type, idx; } all[MAX_OPTIONS * 4];
+    int n = 0;
+    for (int i = 0; i < numIntOpts; i++)   all[n].key = intOpts[i].key,   all[n].type = T_INT,   all[n++].idx = i;
+    for (int i = 0; i < numUIntOpts; i++)  all[n].key = uintOpts[i].key,  all[n].type = T_UINT,  all[n++].idx = i;
+    for (int i = 0; i < numFloatOpts; i++) all[n].key = floatOpts[i].key, all[n].type = T_FLOAT, all[n++].idx = i;
+    for (int i = 0; i < numStrOpts; i++)   all[n].key = strOpts[i].key,   all[n].type = T_STR,   all[n++].idx = i;
+
+    char done[MAX_OPTIONS * 4] = {0};
+    for (int i = 0; i < n; i++) {
         if (done[i]) continue;
         char sec[64];
         const char *leaf;
-        splitKey(intOpts[i].key, sec, sizeof(sec), &leaf);
+        splitKey(all[i].key, sec, sizeof(sec), &leaf);
         (void)leaf;
         fprintf(f, "\n[%s]\n", sec[0] ? sec : "General");
-        for (int j = i; j < numIntOpts; j++) {
+        for (int j = i; j < n; j++) {
             char sj[64];
             const char *lj;
-            splitKey(intOpts[j].key, sj, sizeof(sj), &lj);
-            if (ci_eq(sj, sec)) {
-                fprintf(f, "%s = %d\n", lj, *intOpts[j].value);
-                done[j] = 1;
-            }
-        }
-    }
-
-    char sdone[MAX_OPTIONS] = {0};
-    for (int i = 0; i < numStrOpts; i++) {
-        if (sdone[i]) continue;
-        char sec[64];
-        const char *leaf;
-        splitKey(strOpts[i].key, sec, sizeof(sec), &leaf);
-        (void)leaf;
-        fprintf(f, "\n[%s]\n", sec[0] ? sec : "General");
-        for (int j = i; j < numStrOpts; j++) {
-            char sj[64];
-            const char *lj;
-            splitKey(strOpts[j].key, sj, sizeof(sj), &lj);
-            if (ci_eq(sj, sec)) {
-                fprintf(f, "%s = %s\n", lj, strOpts[j].value);
-                sdone[j] = 1;
+            splitKey(all[j].key, sj, sizeof(sj), &lj);
+            if (!ci_eq(sj, sec)) continue;
+            done[j] = 1;
+            switch (all[j].type) {
+            case T_INT:   fprintf(f, "%s = %d\n",  lj, *intOpts[all[j].idx].value);   break;
+            case T_UINT:  fprintf(f, "%s = %u\n",  lj, *uintOpts[all[j].idx].value);  break;
+            case T_FLOAT: fprintf(f, "%s = %g\n",  lj, (double)*floatOpts[all[j].idx].value); break;
+            case T_STR:   fprintf(f, "%s = %s\n",  lj, strOpts[all[j].idx].value);    break;
             }
         }
     }

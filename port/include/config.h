@@ -20,8 +20,12 @@ void configLoad(void);
 /* Save the current values back to the config file. */
 void configSave(void);
 
-/* Register an integer option. min/max are clamping bounds (0 = unbounded). */
+/* Register an integer option. min==max disables clamping. */
 void configRegisterInt(const char *key, int *value, int min, int max);
+/* Register an unsigned option. min==max disables clamping. */
+void configRegisterUInt(const char *key, unsigned int *value, unsigned int min, unsigned int max);
+/* Register a float option. min==max disables clamping. */
+void configRegisterFloat(const char *key, float *value, float min, float max);
 /* Register a string option (buf must live for the program's lifetime). */
 void configRegisterString(const char *key, char *value, int bufSize);
 
