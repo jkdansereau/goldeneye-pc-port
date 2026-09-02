@@ -57,8 +57,8 @@ but re-confirm the exact "a." + blank shape in a real briefing.
 
 | Family | Bugs | Root cause (hypothesis) | Files | ROI |
 |---|---|---|---|---|
-| **A — fast3d texture line/pitch shear** | D176(b) Surface walls; D182(2) file-select bg; possibly faint briefing-paper noise | importers assume `line == full_image_line`; shear on non-PoT / sub-rect tiles. **Not D159.** | `port/fast3d/gfx_pc.cpp` `import_texture_*` | **HIGH** — one fix, several visible bugs. Medium difficulty. |
-| **B — front-end string bank not loaded** | D178 briefing objectives blank (confirmed); D143 briefing text blank; D151 watch objective text (re-verify) | `langGet()` → NULL; the bank the PC briefing flow needs isn't loaded/mapped | `src/game/textrelated.c`, lang bank load in the front-end flow (`lv.c` `langClearBank`/`langGetLangBankIndexFromStagenum`) | **HIGH** — every mission briefing. Medium difficulty (trace the bank). |
+| **A — fast3d texture line/pitch shear** | D176(b) Surface walls; D182(2) file-select bg | **HYPOTHESIS DISPROVEN (D183, `4b71435d`).** 0/166 texture loads on `-level_36` are strided; the wall texture is a 32×32 IA8 whose ROM bytes are genuinely a noise field, decoded correctly. A golden-safe de-stride + `GE_TEXRAW`/`GE_DTEX` diagnostics landed anyway (latent hardening). **D176(b)/D182(2) still OPEN** — next: ROM ground-truth decode of the wall texnum (`TEXTURE-GLITCH-ANALYSIS.md` §7) → likely a tiling-density / UV-scale / `shifts`/`shiftt`-LOD issue (RC3/D167 family) or a wrong-texture bind, not a decode bug. | `port/fast3d/gfx_pc.cpp` | was HIGH, **now needs re-scoping** |
+| **B — front-end string bank not loaded** | D178 briefing objectives blank; D143 briefing text blank | **FIXED (D178, `cd1ed574`).** Not a bank-load problem — the `Ubrief*Z` segment is a raw 48-byte BE ROM image loaded with no converter; all 24 `u16` (string ids + difficulty gates) read byte-swapped on LE → `langGet()` NULL → blank, and `>=` difficulty gate always-false → objectives vanish. `romdataFixupBriefing()` swaps in place. Verified: all 4 Dam objectives render at 00 Agent with correct gating. **D143 was a symptom of this** — annotate it superseded. D151 (watch objective text) still owed a re-verify. | `port/src/romdata.c`, `src/game/front.c` (`#ifdef PORT`) | **DONE** |
 | **C — D75 front-end / cutscene 3D models** | D75 Nintendo logo; D148 Dam rappel cutscene; D149 MISSION COMPLETE / mode-select models; D182(1) file-select Bond image "renders once"; D173 3rd-person Bond floats; 1P weapon viewmodel absent | mixed: compiled sub-DL corruption (D144/D146), model transform/geometry, `render_pos` arena lifetime, constructor-runs-once | `port/fast3d/gfx_pc.cpp`, `title.c`, `bondview*.c`, model path | **LOW** per fix, deep. **DEFER** (agreed COA). |
 | **D — blood / particle** | D172 spray magenta/cyan; D174 no blood decals | D172: CC-mode / texture-format decode in the fast3d sprite path. D174: likely D120 `PointUsage[]` — **only takes effect after a full sidecar regen** (`d43 && d69 && d88 --regen`); verify that first. | `blood_animation.c`, fast3d sprite path; `tools_pc/d43_emit.py` | **MEDIUM**. D174 may already be fixed — regen + BUNKER1 firefight to confirm before touching code. |
 | **E — transient hang / anim speed / clip** | D175 door-open stutter (Runway/Surface); D170 NPC flee runs not walks; D171 Silo grey-triangle sweep | D175: matches D155/D156/D134/D147 known classes (benign texture-import spike most likely). D170: D155/D156 wall-clock `deltaFrames` anim speed-up, or just scripted. D171: near-plane clip fan (D106 family). | frametiming clamp, `chrTick`/AI, portal near-plane | **LOW–MED** — needs interactive repro + N64 reference footage. **DEFER**. |
@@ -66,18 +66,29 @@ but re-confirm the exact "a." + blank shape in a real briefing.
 
 ---
 
-## Recommended next steps (per agreed COA — fix families, not bugs)
+## Results (2 subagents, integrated + verified on branch HEAD)
 
-1. **Family A** — teach the `import_texture_*` path to honour `line_size_bytes`
-   independently of `full_image_line_size_bytes` (copy row-by-row with the
-   real source pitch). Verify: Surface `-level_36` walls, file-select
-   round-trip, and the golden `-level_09` framediff (must stay 3/3). Likely
-   clears D176(b) + D182(2) together.
-2. **Family B** — trace the briefing objective string: which `langGet(slot)`
-   returns NULL, which bank owns that slot, why the front-end flow hasn't
-   loaded it. One bank load likely clears D178 + D143 + the D151 re-verify.
-3. Then reassess C/D/E with the user.
+- **Family B → FIXED** (`cd1ed574`). Byte-swapped raw briefing segment. Also
+  explains D143. High confidence.
+- **Family A → hypothesis disproven** (`4b71435d`, D183). D176(b) is not a
+  texture decode bug. Golden-safe de-stride + diagnostics shipped for the
+  latent case. **D176(b) / D182(2) remain open and need re-scoping** — start
+  from the ROM ground-truth decode of the wall texnum; suspect
+  tiling-density / UV / per-LOD `shifts`/`shiftt` (RC3/D167 family) or a
+  wrong-texture bind.
 
-These two are good candidates for two disjoint subagents (Family A =
-`port/fast3d/gfx_pc.cpp`; Family B = `src/game/textrelated.c` + lang load) —
-see `docs/dev-process.md` for the brief template.
+Harness note: both agent worktrees were created from `def0e0ac` (the M-35
+branch point, ~5 commits stale — the M-31 stale-worktree bug again). No harm
+this round: the integrator re-applied both patches onto branch HEAD and
+verified there. Check `git worktree list` HEADs on the next burst.
+
+## Next
+
+1. **D176(b) re-scope** — offline decode the Surface wall texnum from ROM
+   (`TEXTURE-GLITCH-ANALYSIS.md` §7). Structured rock in ROM → wrong bind or
+   UV/tiling; noise in ROM → not our bug (or a shift-LOD density issue).
+2. **D176(a)** black sky — untouched, separate investigation.
+3. **D182** — re-test the file-select round-trip now that `GE_TEXPITCH` /
+   `GE_TEXRAW` exist; the "renders once" half (D182-1) is Family C.
+4. Reassess C/D/E with the user. D174 (blood) is the cheapest — just needs a
+   sidecar regen + BUNKER1 firefight to confirm the D120 fix.
