@@ -409,6 +409,27 @@ through a converter or a runtime bswap fixup reads scrambled.
   indexed by texunit, gated on `Video.WrapFix`); RC3/D167 adds the non-PoT
   mask-period case to the same block. Still default OFF.
 
+- **`assert()`-based `SUPPORT_CHECK` is a silent no-op in the release build.**
+  `port/fast3d/gfx_pc.cpp:39` defines `SUPPORT_CHECK(x)` as `assert(x)`, and the
+  PC build compiles with `NDEBUG`. Every `SUPPORT_CHECK` in the file therefore
+  documents an assumption that is *never* enforced — when it is violated the
+  code silently reads wrong data instead of aborting. Seven of them assert
+  `full_image_line_size_bytes == line_size_bytes` in the `import_texture_*`
+  family (D183); treat any `SUPPORT_CHECK` as a **TODO comment**, not a guard.
+  Corollary for triage: "there is an assert for that, so it can't be happening"
+  is never valid reasoning in fast3d.
+
+- **Diagnosing a "wrong texture" needs the *raw importer input*, not the
+  uploaded RGBA.** `GE_TEXDUMP` dumps the post-decode image, which cannot
+  distinguish "the decoder is wrong" from "the source bytes are garbage".
+  `GE_TEXRAW=1` (D183) dumps the bytes as handed to `import_texture_*`. The
+  cheap offline test on such a dump: compute the mean vertical
+  neighbour-difference at every candidate row pitch — a correctly-pitched real
+  image has a sharp minimum at its true pitch (≈0.2–0.7 on a 0–15 nibble
+  scale), a pitch/shear bug has the minimum at a *different* pitch, and genuine
+  noise data is flat (~3.7) at every pitch. That three-way split settles
+  decode-vs-pitch-vs-source-data in one pass with no rebuild.
+
 ## D2. The HUD/model "X-mirror" (D114/D116) — RESOLVED: it was an upside-down capture
 
 **M-33 (finding D168).** There was no mirror. `gfx_opengl_dump_bound_fbo`

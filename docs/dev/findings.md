@@ -395,6 +395,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D176 | **Skybox broken on Surface** (user QA report; which of `-level_36`/`-level_43` unconfirmed). Symptom unspecified — missing/black sky, bad transform (D75 family), or sky-tile texture import. See `GRAPHICS-BACKLOG.md` D176. | Observed, not investigated |
 | D177 | **Ladders don't work** (user QA report): climbing is non-functional and **blocks progression on some levels**. FUNCTIONAL bug, not cosmetic — ranks above the graphics backlog. Untested by every harness so far (level sweep is boot-only; no scripted ladder input). Suspects: player ladder state machine in `bondview2.c`/chr physics (struct-offset family D100/D140), or the climb input mapping (A-button hold?) not reaching the game on the PC input path. **Next:** repro on a level with a mandatory ladder, check whether the player's ladder state ever changes (probe) vs the input never registering (`GE_INPUTLOG`). | Observed, NOT investigated — high priority (progression blocker) |
 | D174 | **"No blood effect" (user QA report).** Likely the unverified D120 decal fix: `d43_emit.py` now emits the opcode-0x18 `PointUsage[]` chain, but it was never interactively verified and requires a full sidecar regen to take effect (`debug.ps1` does not regen). Spray path is D172 (draws, wrong colour) — total absence would be new. See `GRAPHICS-BACKLOG.md` D174. | Observed; first step = BUNKER1 firefight with regenerated sidecars |
+| D183 | **M-36 Family A ("texture line/pitch shear") is DISPROVEN for the Surface repro (`-level_36`).** The importers' pitch assumption is real but never fires there; the Surface cliff "grey static" is not a shear. Full evidence + what the walls actually are: §F "D183" below. A defensive, provably-no-op de-stride landed in `import_texture()` anyway (covers the `gfx_dp_load_tile` case the `SUPPORT_CHECK`s assert against), plus `GE_DTEX` STRIDED marker + `GE_TEXRAW` raw-source dump. | Hypothesis DISPROVEN + diagnostics shipped; D176(b)/D182(2) still OPEN |
 | D173 | **Third-person Bond model spawns too high** (user QA report): the player-representing figure at level start floats well above the ground "a lot of the time" while the actual player spawn is correct; same on the Cuba end credits — JB ~6 ft in the air above Natalya. D75 animated-model family but a *position* defect, not absence (M-33: gun-barrel Bond renders fine). Suspects: intro/credits puppet chr spawn position vs model base transform; anim root-motion accumulation (`modelSetAnimFrame2WithChrStuff`, cf. D156); packed-float `coord3d` decode in intro setup. "Player spawning OK" localises it to the render-side model, not `g_CurrentPlayer`. See `GRAPHICS-BACKLOG.md` D173. | Observed, not investigated |
 | D179 | **Packaged build crashes after the logos — the D43/D69 model + bg sidecars are ROM-derived and absent from any build that has no ROM (M-34, alpha-release QA).** The first `goldeneye-pc-port-*-win64.zip` from CI (bundle-win.sh) shows the Rare/Nintendo logos (compiled-in `assets/rarewarelogo.c`) then AVs at `0x6b157a88`/`0x70157a88` — symbolised: `modelPromoteNodeOffsetsToPointers` (`model.c`) ← `load_object_fill_header` (`objecthandler_2.c`) ← first prop/item model load. Root cause is **not** a code regression: the port loads PC-layout model geometry from `data/pcmodels-<region>/{pcmodels.bin,manifest.csv}` and stage bg/stan from `data/pccg-<region>/{pccg.bin,manifest.csv}`, both produced offline by `tools_pc/d43_emit.py` / `d69_emit.py` from the ROM (see `port/src/pcmodels.c` / `pccg.c`; `pcmodelsReserveSize` logs *"pcmodels.bin not found — model loads will fail"* and returns 0). CI has no ROM so it never runs the emit scripts, and the two `data/` dirs are (correctly) gitignored ROM-derived game data — **cannot be committed or shipped** (converted Nintendo/Rare geometry, DLs, collision, stan nav; = distributing assets). A local build with those dirs present runs clean (verified M-34: 1741 frames, `romdataInit ... mapped at 0x10000000`, `pcmodels: 512 sidecars`, `pccg: 73 sidecars`, no crash — so `0x10000000` is *not* the problem here). The `docs/building.md` sidecar-gen step was also missing entirely. **Fix = release-side, backlogged** (`docs/BACKLOG.md` → "Alpha release"): bundle the emit scripts + their committed inputs as a pure-stdlib-Python asset-prep tool the user runs once against their own ROM (~5 MB output, no MIPS toolchain). Secondary/latent: the fixed-address `VirtualAlloc((LPVOID)0x10000000)` in `romdata.c` has no working fallback (`"using heap copy — direct ROM reads will fail"` then limps into the same crash) — didn't bite M-34 but will on a machine where something occupies `0x10000000`; harden separately (reserve earliest in `main`, or retry low bases and derive all segment math from the base obtained). | Diagnosed, not fixed — release packaging gap + latent `romdata.c` fallback |
 | D180 | **Native-PC input pass (M-XX QoL run, `qol/native-pc-input-menu`, port-only).** Three parts, all config-gated with default = prior behaviour: **(WI-1) `Input.MouseCaptureMode`** (0 = legacy always-grab; 1 = Quake-style click-to-lock) in `port/src/input.c` + `port/src/video.c` — in mode 1 the OS cursor is free until a click lands in the game window (`SDL_MOUSEBUTTONDOWN` → `inputNotifyClick`), and ESC / focus-loss / entering any front-end menu (`current_menu != MENU_RUN_STAGE`) frees it again; re-entering a stage while still "armed" re-locks so unpausing needs no click. `reconcileGrab()` runs once per controller-0 poll. Mouse buttons are suppressed from the game while the cursor is free in-stage (no phantom fire). Controller paths untouched. **(WI-2) absolute-cursor menu tracking** — when capture mode is on and the cursor is free in a menu, the D165/D169 pointer P-controller takes its target from the real cursor's absolute window position mapped onto the live virtual front-end rect (`getPlayer_c_screen*`), giving true 1:1 tracking instead of the relative-delta estimator. Relative path unchanged for legacy/grabbed. **(B3) `Input.MouseAimSpeed` default 25 → 16** (aim mode still overshot at 25 per the backlog). | LANDED, port-only, no `#ifdef PORT`. Build 241/241, `-level_09` framediff 3/3 within threshold (unregressed), `GE_STARTMENU` menu boot crash-free. **Feel-checks owed** (headless can't drive the mouse): click-to-lock ergonomics, absolute menu tracking, the new aim-speed default. |
@@ -4466,6 +4467,124 @@ Findings:
    *Confidence:* crash cmd + `Gfx` stride **high**; `tex->data`-is-the-bad-
    value **high**; root cause of *why* `tex->data` is bad **low–medium**
    (two candidate mechanisms, neither proven).
+
+---
+
+## D183 — M-36 "Family A" texture line/pitch shear: DISPROVEN on `-level_36` (M-36)
+
+**Brief:** fix the "diagonal grey static / comb interlacing" attributed to
+`import_texture_*` assuming `full_image_line_size_bytes == line_size_bytes`
+(`docs/dev/M-36-TRIAGE.md` Family A; bugs D176(b) Surface walls, D182(2)
+file-select spiral). Repro: `-level_36` Surface, headless `GE_PCDUMP`.
+
+### 1. The pitch hypothesis does not fire on Surface — measured, not argued
+
+`full_image_line_size_bytes != line_size_bytes` can only be produced by
+**`gfx_dp_load_tile`** (`gfx_pc.cpp:2166`, a windowed sub-rect load).
+`gfx_dp_load_block` (`:2139`) sets `line = full = size_bytes` unconditionally,
+so the two are equal by construction.
+
+GE loads *every* texture through `gDPLoadBlock`: `texWriteLoadToTmemZero` /
+`texWriteLoadToTmemAddr` (`src/game/tex.c:492,617`) emit
+`gDPSetTextureImage` + `gDPSetTile(…, line = 0, …)` + `gDPLoadBlock` and never
+a `gDPLoadTile`. Confirmed at runtime: `GE_DTEX` (now prints `line=`/`full=`
+and a `<-- STRIDED` marker) over a Surface run — **0 of 64** logged imports
+strided; the full `GE_TEXDUMP` set — **0 of 166**. So no importer on this level
+ever does the flat-read-of-a-strided-source that the hypothesis needs.
+
+### 2. The importers' width/height/pitch math is *verified correct*
+
+New probe `GE_TEXRAW=1` (with `GE_TEXDUMP=1`) writes the raw source bytes
+handed to each importer to `texdump/rNNN_f<fmt>_s<siz>_<w>x<h>.bin`. Scanning
+each dump's vertical neighbour-difference over every candidate row pitch
+4…128 finds the true pitch of the source image:
+
+| texture | fmt/siz | tile | pitch fast3d uses | best-scoring pitch | vdiff |
+|---|---|---|---|---|---|
+| `r030` | IA8 | 54×54 | 56 | **56** | 0.22 (smooth) |
+| `r021` | CI8 | 32×32 | 32 | **32** | 0.72 (smooth) |
+| `r031` (the wall) | IA8 | 32×32 | 32 | none — flat ~3.7 at *every* pitch | — |
+
+The importers pick exactly the pitch the data is stored at. (The 54→56 case is
+`texAlignIndices`/`texChannelsToPixels` 8-byte row alignment,
+`src/game/image.c:340,1740` — handled correctly today.)
+
+Also re-tested and re-confirmed: applying `texSwapAltRowBytes`' odd-row u32-pair
+swap to these dumps makes vdiff **worse** (0.22 → 1.57 on `r030`). **D159's
+`#ifdef PORT` no-op is correct; do not re-enable it.**
+
+### 3. What the Surface walls actually are
+
+The cliff/perimeter wall texture is `GE_TEXI` fmt=3 siz=1 = **IA8, 32×32,
+block size exactly 1024 B (no LOD chain)**. Its source bytes are a
+high-frequency grey noise field: intensity nibble mean 6.5, full 0–15 range,
+horizontal neighbour diff 2.98 / vertical 4.06 (uniform random ≈ 5.3); alpha
+nibble is a constant 15. There is no pitch, no row swap and no bit-depth
+reinterpretation that turns it into a coherent image — the *data itself* is
+noise-like. It is decoded and uploaded faithfully; the on-screen "static" is
+that texture tiled at ≈1 texel per pixel on the wall faces.
+
+Two filtering theories were tested and **both failed** (temporary
+`GE_MINFIX` probe in `gfx_opengl.cpp`, since reverted):
+
+- forcing mip minification when the game point-samples
+  (`gfx_opengl.cpp:752` `linear_filter ? … : GL_NEAREST`) — **no pixel change**;
+  the walls are already `linear_filter == true`.
+- forcing `mipmaps = true` on every sampler apply — **no change to the walls**,
+  and it *regressed* the 2D HUD ammo digits to white blocks.
+
+So the walls already get `GL_LINEAR_MIPMAP_LINEAR`. Not a filter bug.
+
+### 4. Where D176(b) actually goes next (unresolved)
+
+Remaining candidates, in order:
+
+1. **The wrong texture is bound to those faces.** The next decisive step is ROM
+   ground truth: decode Surface's texnums offline (the
+   `TEXTURE-GLITCH-ANALYSIS.md` §7 toolchain) and check whether *any* Surface
+   texture is this 32×32 IA8 noise field, or whether the rock wall should be a
+   different, larger, structured texture. If it exists in ROM as-is, D176(b) may
+   be **not a bug at all** (GE's Surface cliffs are a mottled grey rock) and the
+   user report is really about *tiling density*.
+2. **UV / tiling scale** — the texture repeats far too densely across each wall
+   face. That is RC3/`Video.WrapFix` territory (D167) plus the `shifts`/`shiftt`
+   the game sets per LOD tile in `texWriteTileLods` (`tex.c:596` passes
+   `shifts = shiftt = lod`), which fast3d stores but the LOD-tile selection
+   (D107 "always base tile") may be mismatching.
+3. **D182(2)** (file-select spiral after re-entry) is *not* covered by this
+   finding — it was never reproduced here, and it is the one symptom that could
+   still be a real `gfx_dp_load_tile` strided case (front-end `texLoadFromGdl`
+   paths do use windowed loads). The defensive fix in §5 would cover it if so.
+
+### 5. What shipped (`port/fast3d/gfx_pc.cpp` only)
+
+- **De-stride in `import_texture()`**, before the format dispatch: when
+  `full_image_line_size_bytes > line_size_bytes`, compact the strided rows into
+  a contiguous scratch buffer and hand every importer a row-packed image with
+  `line == full`. This is the correct behaviour the seven `SUPPORT_CHECK
+  (full_image_line_size_bytes == line_size_bytes)` asserts (`gfx_pc.cpp:689,
+  710, 739, 765, 791, 818, 866`) merely assert against — and those asserts
+  compile out in the release build, so today the wrong read is silent. Only the
+  CI8 importer strides correctly on its own (`:893`); it becomes a no-op stride
+  after this change. **Strictly a no-op whenever `full == line`, which is
+  166/166 loads on Surface and every `gDPLoadBlock` in the game** — hence
+  golden-safe. Unverified as a *fix* (nothing in the current repro exercises it);
+  kept because it is provably-correct and removes a latent silent-corruption path.
+- **`GE_DTEX`** now prints `line=`/`full=` and flags `<-- STRIDED (pitch shear?)`.
+- **`GE_TEXRAW=1`** (alongside `GE_TEXDUMP=1`) dumps raw importer-input bytes.
+
+### 6. Verification
+
+- `-level_09` golden framediff: **3/3 within threshold** (200/320/440;
+  worst dmean 10.4, phash 21/1/4) — unchanged.
+- `-level_36` before/after: **visually identical** (as expected — the de-stride
+  never fires there). The wall static is unchanged and remains open.
+
+*Confidence:* "Family A pitch shear is not the Surface bug" — **high**
+(runtime-counted, 0/166). "The wall texture is decoded correctly" — **high**
+(independent offline pitch scan of the raw importer input). "The shipped
+de-stride is golden-safe" — **high**. "What D176(b) really is" — **low**;
+needs ROM ground truth for that texnum.
 
 ---
 

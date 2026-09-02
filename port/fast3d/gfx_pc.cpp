@@ -916,6 +916,17 @@ bool g_fix_mip_textures = true;
  * off. Video.WrapFix = 1. */
 bool g_wrap_fix = false;
 
+/* D183 source-pitch de-stride (see import_texture). Default on;
+ * GE_TEXPITCH=0 restores the old flat read for A/B. */
+static bool gfx_tex_pitch_fix(void) {
+    static int cached = -1;
+    if (cached < 0) {
+        const char* e = getenv("GE_TEXPITCH");
+        cached = (e && e[0] == '0') ? 0 : 1;
+    }
+    return cached != 0;
+}
+
 static void import_texture(int i, int tile, bool importReplacement) {
     LoadedTexture& loaded_texture = rdp.loaded_texture[rdp.texture_tile[tile].tmem];
     const uint8_t fmt = rdp.texture_tile[tile].fmt;
@@ -988,11 +999,41 @@ static void import_texture(int i, int tile, bool importReplacement) {
 
     // D71: importers read raw N64 byte streams; normalize C-array sources.
     const uint8_t* saved_addr = loaded_texture.addr;
+    const uint32_t saved_full_line = loaded_texture.full_image_line_size_bytes;
     loaded_texture.addr =
         gfx_tex_normalize_source(orig_addr,
                                  loaded_texture.full_size_bytes > loaded_texture.size_bytes
                                      ? loaded_texture.full_size_bytes
                                      : loaded_texture.size_bytes);
+
+    /* D183: honour the source row pitch. gfx_dp_load_tile can load a
+     * sub-rectangle of a wider texture image: successive texel rows then sit
+     * full_image_line_size_bytes apart in RAM while only line_size_bytes of
+     * each row belong to the tile. Every import_texture_* except the CI8 one
+     * reads the source flat (they only assert line == full -- and the asserts
+     * compile out in the release build), so row r starts r*(full-line) bytes
+     * early -> a progressive diagonal shear that reads as grey static /
+     * "comb interlacing" (D176(b) Surface cliff walls, D182(2) file-select
+     * spiral). Compact the strided rows into a contiguous scratch buffer once
+     * here, so every importer sees line == full and no importer needs to know
+     * about pitch. No-op when the load was already row-packed (gDPLoadBlock,
+     * and any full-width gDPLoadTile), which is the overwhelming majority --
+     * hence golden-safe. */
+    std::vector<uint8_t> destride_buf;
+    if (gfx_tex_pitch_fix()) {
+        const uint32_t src_line = loaded_texture.line_size_bytes;
+        const uint32_t src_full = loaded_texture.full_image_line_size_bytes;
+        if (src_line && src_full > src_line && loaded_texture.size_bytes > src_line) {
+            const uint32_t rows = loaded_texture.size_bytes / src_line;
+            destride_buf.resize((size_t)rows * src_line);
+            for (uint32_t r = 0; r < rows; r++) {
+                memcpy(&destride_buf[(size_t)r * src_line],
+                       loaded_texture.addr + (size_t)r * src_full, src_line);
+            }
+            loaded_texture.addr = destride_buf.data();
+            loaded_texture.full_image_line_size_bytes = src_line;
+        }
+    }
 
     /* GE_DTEX: dump the load parameters for the first N textures of a frame so
      * RC2 (mip-chain contamination -> over-tall upload) can be told apart from a
@@ -1010,11 +1051,15 @@ static void import_texture(int i, int tile, bool importReplacement) {
                 ((rdp.texture_tile[tile].lrs - rdp.texture_tile[tile].uls) >> 2) + 1;
             sysLogPrintf(LOG_NOTE,
                 "GE_DTEX[%d] addr=%p fmt=%u siz=%u lod=%d  tile=%ux%u  row=%u "
-                "size=%u -> upload=%ux%u%s",
+                "line=%u full=%u size=%u -> upload=%ux%u%s%s",
                 dtexCount++, (void *)orig_addr, fmt, siz, (int)rdp.tex_lod,
-                tile_w, tile_h, row, loaded_texture.size_bytes,
+                tile_w, tile_h, row, loaded_texture.line_size_bytes,
+                loaded_texture.full_image_line_size_bytes,
+                loaded_texture.size_bytes,
                 row ? (row >> (siz ? siz - 1 : 0)) : 0, up_h,
-                (up_h > tile_h + 1) ? "  <-- OVER-TALL (mip contamination?)" : "");
+                (up_h > tile_h + 1) ? "  <-- OVER-TALL (mip contamination?)" : "",
+                (loaded_texture.full_image_line_size_bytes !=
+                 loaded_texture.line_size_bytes) ? "  <-- STRIDED (pitch shear?)" : "");
         }
     }
 
@@ -1028,6 +1073,17 @@ static void import_texture(int i, int tile, bool importReplacement) {
             ((rdp.texture_tile[tile].lrs - rdp.texture_tile[tile].uls) >> 2) + 1,
             ((rdp.texture_tile[tile].lrt - rdp.texture_tile[tile].ult) >> 2) + 1,
             pal[0], pal[1], pal[2], pal[3]);
+        /* GE_TEXRAW=1 additionally writes the raw source bytes handed to the
+         * importer (texdump/rNNN_f<fmt>_s<siz>_<w>x<h>.bin) -- lets a decode
+         * bug be told apart from a source-data bug offline (D183). */
+        if (tdc <= 400 && getenv("GE_TEXRAW")) {
+            char nm[160];
+            snprintf(nm, sizeof nm, "texdump/r%03d_f%u_s%u_%ux%u.bin", tdc - 1, fmt, siz,
+                     ((rdp.texture_tile[tile].lrs - rdp.texture_tile[tile].uls) >> 2) + 1,
+                     ((rdp.texture_tile[tile].lrt - rdp.texture_tile[tile].ult) >> 2) + 1);
+            FILE* bf = fopen(nm, "wb");
+            if (bf) { fwrite(loaded_texture.addr, 1, loaded_texture.size_bytes, bf); fclose(bf); }
+        }
     }
 
     /* D161: a CI-format tile drawn with the TLUT disabled (G_TT_NONE) must NOT
@@ -1080,6 +1136,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
     }
 
     loaded_texture.addr = saved_addr;
+    loaded_texture.full_image_line_size_bytes = saved_full_line;
 }
 
 static void gfx_normalize_vector(float v[3]) {
