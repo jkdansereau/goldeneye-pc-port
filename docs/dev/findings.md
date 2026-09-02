@@ -393,7 +393,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D178 | **Pre-mission briefing screen: objectives blank / missing, briefing pages blank (also the D143 "briefing text blank" side effect) — FIXED (M-36).** Root cause: the briefing segment (`Ubrief*Z`, source `assets/obseg/brief/*.c`) is a raw ROM image of `struct BriefStruct` = `{ u16 brief[4]; struct { u16 textid; u16 enabled_difficulty; } objective[10]; }` (48 bytes), loaded by `front.c load_briefing_text_for_stage()` via `_fileNameLoadToAddr()` — **no converter and no BE→LE fixup anywhere in the chain**. On the LE host all 24 `u16` read byte-swapped. Measured on Dam (`GE_D178=1`): raw `brief=002c,012c,022c,032c obj0=042c/0100 obj3=072c/0000` vs correct `2c00,2c01,2c02,2c03 / 2c04/0001 / 2c07/0000`. Two independent symptoms follow: (a) `textid` `0x2C04` (= `getStringID(LDAM,4)`, bank 11 slot 4) reads as `0x042C` → bank 1 slot 44, never loaded → `langGet()` NULL → **blank text** (this is exactly the D143 residual, `front.c:6732` and `brief[0..3]` at `front.c:6855-6867`); (b) `enabled_difficulty` `0x0001` (Secret Agent) reads as `0x0100 = 256`, so `selected_difficulty >= enabled_difficulty` (`front.c:6729`) is false for every difficulty-gated objective — on Agent only the one `DIFFICULTY_AGENT`(0) objective survived the filter, which is why a single bare "a." bullet printed. **Fix:** `romdataFixupBriefing()` in `port/src/romdata.c` (+ `port/include/romdata.h`), called from a `#ifdef PORT` block in `load_briefing_text_for_stage()` right after the load — the same shape as `langFixupLoadedBank()` in `language.c` (BE-serialized-struct reconciliation, semantics-preserving, no game logic touched). `GE_D178=1` prints the raw and fixed words. **Verified:** Dam briefing on Agent now shows "a. Bungee jump from platform"; on `GE_STARTMENU_DIFF=3` (00 Agent) all four (Neutralize all alarms / Install covert modem / Intercept data backup / Bungee jump from platform), correct difficulty gating. `-level_09` framediff 3/3; `GE_STARTMENU=7`/`=13` crash-free. | **FIXED (M-36)** — high confidence |
 | D175 | **In-game stutter / brief hang during normal play** (user QA report): opening a door on Runway (`-level_35`, mission 3) and also observed on Surface. Self-recovered; no backtrace captured. Likely one of the known transient-hang classes (D155 catch-up spiral / D156 anim NaN loop / D134 task-done event / D147-D152 audio-lock steal) or a benign new-room texture-import frame spike on door open. See `GRAPHICS-BACKLOG.md` D175 for the gdb pattern-match sheet. | Observed, not investigated |
 | D176 | **Surface exterior renders wrong (`-level_36`), two independent defects.** **(a)** sky solid black — env data is correct (`Clouds=1`, warm `CloudRGB`), the cloud-sky path runs, but `skyRenderTri`/`skyRenderFull` emit nothing → see "D176(a)" below, partial, not root-caused. **(b)** cliff/rock walls = grey diagonal static — NOT a texture decode bug (D183 disproved the shear hypothesis, 0/166 loads strided); re-scope from ROM ground truth of the wall texnum. See `GRAPHICS-BACKLOG.md` D176. | (a) partial / (b) open — both M-36 |
-| D177 | **Ladders don't work** (user QA report): climbing is non-functional and **blocks progression on some levels**. FUNCTIONAL bug, not cosmetic — ranks above the graphics backlog. Untested by every harness so far (level sweep is boot-only; no scripted ladder input). Suspects: player ladder state machine in `bondview2.c`/chr physics (struct-offset family D100/D140), or the climb input mapping (A-button hold?) not reaching the game on the PC input path. **Next:** repro on a level with a mandatory ladder, check whether the player's ladder state ever changes (probe) vs the input never registering (`GE_INPUTLOG`). | Observed, NOT investigated — high priority (progression blocker) |
+| D177 | **Ladders non-functional — progression blocker (user QA report) — FIXED (M-36).** Not the input path and not the ladder state machine: `MoveBond` gates the ladder-collision path on `stanGetLocusCount(&curLocus)`, which was pinned at 0 on PC. `stanCheckLinkedSpecialTile` writes the LADDER signal via raw `outFlags[1] = 1` into a `struct StandTileLocusCallbackRecord` whose first member `s32 *rooms` is pointer-widened on PC → `[1]` is the high half of `rooms`, and `count` (moved +4→+8) is never written. Compounded by `curLocus` being declared as the 8-byte placeholder `move_bond_temp_struct` (too small for the widened record) and a `(s32)coords` pointer-truncation AV waiting in `stanGetMoveBondCollisionTiles`. **Fix:** `#ifdef PORT` — write record fields by name, declare `curLocus` as the real struct, `PORT_PTRADD` for the truncating cast (`src/game/stan.c`, `src/game/bondview2.c`; no game logic). Full detail: §F "D177". | **FIXED (M-36)** — high confidence; interactive climb test owed |
 | D174 | **"No blood effect" (user QA report).** Likely the unverified D120 decal fix: `d43_emit.py` now emits the opcode-0x18 `PointUsage[]` chain, but it was never interactively verified and requires a full sidecar regen to take effect (`debug.ps1` does not regen). Spray path is D172 (draws, wrong colour) — total absence would be new. See `GRAPHICS-BACKLOG.md` D174. | Observed; first step = BUNKER1 firefight with regenerated sidecars |
 | D183 | **M-36 Family A ("texture line/pitch shear") is DISPROVEN for the Surface repro (`-level_36`).** The importers' pitch assumption is real but never fires there; the Surface cliff "grey static" is not a shear. Full evidence + what the walls actually are: §F "D183" below. A defensive, provably-no-op de-stride landed in `import_texture()` anyway (covers the `gfx_dp_load_tile` case the `SUPPORT_CHECK`s assert against), plus `GE_DTEX` STRIDED marker + `GE_TEXRAW` raw-source dump. | Hypothesis DISPROVEN + diagnostics shipped; D176(b)/D182(2) still OPEN |
 | D173 | **Third-person Bond model spawns too high** (user QA report): the player-representing figure at level start floats well above the ground "a lot of the time" while the actual player spawn is correct; same on the Cuba end credits — JB ~6 ft in the air above Natalya. D75 animated-model family but a *position* defect, not absence (M-33: gun-barrel Bond renders fine). Suspects: intro/credits puppet chr spawn position vs model base transform; anim root-motion accumulation (`modelSetAnimFrame2WithChrStuff`, cf. D156); packed-float `coord3d` decode in intro setup. "Player spawning OK" localises it to the render-side model, not `g_CurrentPlayer`. See `GRAPHICS-BACKLOG.md` D173. | Observed, not investigated |
@@ -4635,6 +4635,52 @@ sunset cloud gradient. Headless `-level_36` + `GE_D176=1` probe
 `GE_D176=1` probe left in tree (`#ifdef PORT`, env-gated, inert):
 `src/game/bgfog.c` + `src/game/sky.c`. Separate from D176(b) (the tree/rock
 "grey static", Family A / a different investigation).
+
+---
+
+## D177 — Ladders non-functional: `count`/`rooms` land in the high half of a widened pointer (M-36)
+
+**FIXED (M-36).** Climbing was completely dead — `MoveBond`
+(`src/game/bondview2.c`) probes for a ladder tile every frame via
+`stanTileDistanceRelated(&curLocus)` and gates the whole ladder-collision
+path on `stanGetLocusCount(&curLocus)`, which was always 0 on PC.
+
+Two compounding pointer-width ABI bugs (same class as D79/D90), all in the
+stan navigation layer — **no game logic touched**:
+
+1. **The ladder signal was written into the wrong half of a pointer.**
+   `stanCheckLinkedSpecialTile` receives the caller's
+   `struct StandTileLocusCallbackRecord` typed as `s32 *outFlags` and does
+   raw `outFlags[0] = 1` (FORCECROUCH) / `outFlags[1] = 1` (LADDER). The
+   record's first member is `s32 *rooms` — 4 bytes on N64, **8 on PC** — so
+   on x86-64 `outFlags[1]` is the *upper* 4 bytes of `rooms`, and `count`
+   (which moved from +4 to +8) never gets written. `stanGetLocusCount()`
+   reads `record->count` → still 0 → ladder path never runs. FORCECROUCH
+   survived by luck (LE low half of `rooms` is at +0, and
+   `stanGetLocusField0` truncates it back). Fix: `#ifdef PORT` cast to the
+   real struct and write `->rooms` / `->count` by name.
+2. **`curLocus` was too small to hold the record.** It was declared
+   `struct move_bond_temp_struct` — a 2-word "placeholder while matching"
+   (`bondview.h`). 8 bytes on N64 = exactly the record; on PC the record is
+   larger, so `stanTileDistanceRelated`'s field writes (the D90 zero-fill)
+   and the fixed `count` store overflowed the local. Fix: `#ifdef PORT`
+   declare it as the real `struct StandTileLocusCallbackRecord`.
+3. **`stanGetMoveBondCollisionTiles` would have AV'd on the first climb.**
+   Once the ladder path actually runs it calls
+   `stanGetTileOrderedPointWorldPos(…, (coord3d *)((s32)coords + off))` —
+   `(s32)coords` truncates the 64-bit `&bondCollision` stack pointer → the
+   four quad corners written through a garbage address. Fix: `PORT_PTRADD`
+   macro (`uintptr_t` arithmetic), added at the top of `stan.c`.
+
+Touched: `src/game/stan.c` (macro + `stanCheckLinkedSpecialTile` +
+`stanGetMoveBondCollisionTiles`), `src/game/bondview2.c` (`curLocus` type).
+All `#ifdef PORT`, N64 path kept verbatim under `#else`. Candidate root-cause
+came from an M-36 subagent; parts 1/3 were its work, part 2 (the local size)
+found on review. **Verified:** build links clean; `-level_09` framediff 3/3;
+`-level_36` (Surface, has mandatory ladders) boots crash-free. **Interactive
+climb test owed** — headless can't drive the climb input.
+
+porting-notes.md §C (pointer-width in ROM/record structs).
 
 ---
 

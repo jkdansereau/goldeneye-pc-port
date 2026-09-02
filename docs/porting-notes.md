@@ -118,6 +118,21 @@ state.
   affected — the port's `Gwords.w1` is 64-bit and `gDma1p` stores the full
   pointer; only `osVirtualToPhysical` truncates.
 
+- **D177 — a struct passed as `s32 *` and integer-indexed past a leading
+  pointer member.** `stanCheckLinkedSpecialTile` takes the caller's
+  `struct StandTileLocusCallbackRecord { s32 *rooms; s32 count; … }` typed
+  as `s32 *outFlags` and does `outFlags[1] = 1`. On N64 `[1]` is `count`; on
+  PC `rooms` is 8 bytes so `[1]` is its *high half* and `count` moved to
+  `[2]` — the write is silently lost, the reader (`->count`) sees 0. Two
+  tells for this class: (a) a function parameter typed `s32 *` / `u32 *` /
+  `void *` that is really a named struct (check what the caller passes and
+  what other consumers cast it to); (b) the matching stack local declared as
+  a small "placeholder while matching" struct whose N64 size equals the real
+  record — it silently under-allocates once any member widens. Fix both:
+  cast to the real type + write fields by name, and declare the local as the
+  real struct, under `#ifdef PORT`. (`[0]`/`rooms` often still works by luck
+  on LE — low half at +0 — which masks the bug for one of the two fields.)
+
 ## B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64
 
 Any buffer reservation, `memcpy` size, slot stride, or pool budget
