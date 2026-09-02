@@ -30,6 +30,15 @@ $ErrorActionPreference = "Stop"
 $exe = "build-pc\ge007.x86_64.exe"
 if (-not (Test-Path $Gdb)) { throw "gdb not found at $Gdb (pass -Gdb <path>)" }
 
+# The exe links MSYS2 mingw64 DLLs (SDL2, libgcc, libstdc++, libwinpthread,
+# zlib). Run from a plain PowerShell those aren't on PATH and the game dies at
+# startup with 0xc0000135 (DLL not found) -- gdb reports "During startup program
+# exited with code 0xc0000135". Prepend the mingw64 bin dir so it resolves.
+$MingwBin = Split-Path $Gdb
+if ((Test-Path $MingwBin) -and (($env:PATH -split ';') -notcontains $MingwBin)) {
+    $env:PATH = "$MingwBin;$env:PATH"
+}
+
 if (-not $NoBuild) {
     Write-Host "building (bash build-pc.sh ntsc-final) - pass -NoBuild to skip" -ForegroundColor DarkGray
     & "C:\msys64\usr\bin\bash.exe" -lc "cd '$($PWD -replace '\\','/')' && export PATH=/c/msys64/mingw64/bin:`$PATH && ./build-pc.sh ntsc-final"
@@ -64,7 +73,12 @@ $gdbArgs = @(
 ) + $GameArgs
 
 Write-Host "launching under gdb - play until it crashes, output -> gdb.txt" -ForegroundColor Green
+# gdb writes progress to stderr; with ErrorActionPreference=Stop + 2>&1 that
+# raises NativeCommandError noise mid-run. Relax it just for the launch.
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 & $Gdb @gdbArgs 2>&1 | Tee-Object -FilePath gdb.txt | Out-Null
+$ErrorActionPreference = $prevEAP
 
 Write-Host "`n===================== RESULT =====================" -ForegroundColor Yellow
 $fatal = Select-String -Path gdb.txt -Pattern "FATAL|Unknown GBI|assertion|abort\(\)" | Select-Object -First 5
