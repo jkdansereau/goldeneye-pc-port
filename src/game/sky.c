@@ -1,5 +1,9 @@
 #include <ultra64.h>
 #include <memp.h>
+#ifdef PORT
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 #include "sky.h"
 #include "player.h"
 #include "unk_092E50.h"
@@ -317,6 +321,18 @@ Gfx *skyRender(Gfx *gdl)
     sp430 = FALSE;
     env = fogGetCurrentEnvironmentp();
 
+#ifdef PORT
+    if (getenv("GE_D176")) {
+        static int n = 0;
+        if (n++ < 4)
+            fprintf(stderr, "D176 sky: Clouds=%d RGB=%d,%d,%d SkyImageId=%d CloudRGB=%.1f,%.1f,%.1f "
+                    "CloudRepeat=%.2f players=%d IsWater=%d\n",
+                    env->Clouds, env->Red, env->Green, env->Blue, env->SkyImageId,
+                    (double)env->CloudRed, (double)env->CloudGreen, (double)env->CloudBlue,
+                    (double)env->CloudRepeat, getPlayerCount(), env->IsWater);
+    }
+#endif
+
     if (!fogGetCurrentEnvironmentp()->Clouds)
     {
         if (getPlayerCount() == 1)
@@ -360,6 +376,24 @@ Gfx *skyRender(Gfx *gdl)
     sp534 = skyIsScreenCornerInSky(&sp698, &sp638, &sp588);
     sp530 = skyIsScreenCornerInSky(&sp68c, &sp62c, &sp584);
     sp52c = skyIsScreenCornerInSky(&sp680, &sp620, &sp580);
+
+#ifdef PORT
+    if (getenv("GE_D176")) {
+        static int m = 0;
+        if (m++ < 3) {
+            coord3d *eye = bondviewGetCurrentPlayersPosition();
+            fprintf(stderr, "D176 corners: WaterConcavity=%.3f eye=(%.1f,%.1f,%.1f)\n"
+                "  c0 ray=(%.3f,%.3f,%.3f) inSky=%d\n  c1 ray=(%.3f,%.3f,%.3f) inSky=%d\n"
+                "  c2 ray=(%.3f,%.3f,%.3f) inSky=%d\n  c3 ray=(%.3f,%.3f,%.3f) inSky=%d\n",
+                (double)fogGetCurrentEnvironmentp()->WaterConcavity,
+                (double)eye->x,(double)eye->y,(double)eye->z,
+                (double)sp6a4.f[0],(double)sp6a4.f[1],(double)sp6a4.f[2], sp538,
+                (double)sp698.f[0],(double)sp698.f[1],(double)sp698.f[2], sp534,
+                (double)sp68c.f[0],(double)sp68c.f[1],(double)sp68c.f[2], sp530,
+                (double)sp680.f[0],(double)sp680.f[1],(double)sp680.f[2], sp52c);
+        }
+    }
+#endif
 
     skyIsCornerInWater(&sp6a4, &sp5e4, &sp56c);
     skyIsCornerInWater(&sp698, &sp5d8, &sp568);

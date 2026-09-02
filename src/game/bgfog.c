@@ -7,6 +7,10 @@
 #include "bondview.h"
 #include "bgfog.h"
 #include <limits.h>
+#ifdef PORT
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 
 /**
  * Address 0x800825C0.
@@ -451,9 +455,23 @@ void fogLoadLevelEnvironment(s32 level_id, s32 arg1)
 
             fogLoadCurrentEnvironment(g_EnvironmentFoundp);
 
+#ifdef PORT
+            if (getenv("GE_D176"))
+                fprintf(stderr, "D176 fog: matched fog_tables Id=%d (level_id=%d np=%d) "
+                        "Sky.Clouds=%d Sky.RGB=%d,%d,%d sizeof(EnvironmentRecord)=%d\n",
+                        phi_v1->Id, level_id, num_players, phi_v1->Sky.Clouds,
+                        phi_v1->Sky.Red, phi_v1->Sky.Green, phi_v1->Sky.Blue,
+                        (int)sizeof(EnvironmentRecord));
+#endif
             return;
         }
     }
+
+#ifdef PORT
+    if (getenv("GE_D176"))
+        fprintf(stderr, "D176 fog: NO fog_tables match for level_id=%d (np=%d) -> fogless fallback\n",
+                level_id, num_players);
+#endif
 
     if (1) // possibly if(level_id != 26) or another blanked printf
     {
