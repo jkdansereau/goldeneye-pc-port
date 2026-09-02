@@ -325,6 +325,25 @@ through a converter or a runtime bswap fixup reads scrambled.
   emit the value (`_bswap32` into the low 4 bytes, LE). Decide per field,
   not per type.
 
+- **Audit for ROM segments loaded raw with no fixup at all** (D178). Every
+  `_fileNameLoadToAddr()` / `_fileNameLoadToBank()` call site loads a raw
+  big-endian ROM image; the ones with a `struct` overlay need a BE→LE pass
+  and there is nothing in the load path that supplies one — the fixups are
+  bolted on per call site (`langFixupLoadedBank()` in `language.c`,
+  `romdataFixup*()` in `port/src/romdata.c`). The briefing segment
+  (`Ubrief*Z` = `u16 brief[4]` + 10 × `{u16 textid; u16 difficulty}`) had
+  none for a year, and its failure mode is silent and *split*: a swapped
+  string id (`0x2C04` → `0x042C`) still passes `!= 0`, so the loop body
+  runs and `langGet()` quietly returns NULL → **blank text, not a crash**
+  (that was the whole of the D143 "briefing/objective text is blank"
+  residual); and a swapped small enum (`0x0001` → `0x0100 = 256`) turns a
+  `>=` difficulty gate into an always-false filter, so lines silently
+  *vanish* rather than render wrong. When a screen renders its own
+  chrome/headers correctly but the file-driven rows are empty, suspect the
+  raw file, not the renderer: dump the first words of the loaded blob and
+  look for a byte-mirrored constant you can recognise from the asset `.c`
+  source in `assets/obseg/`.
+
 ## C2. Port-layer / SDL shims
 
 - `#include <PR/os.h>` in a port `.c`/`.h` that also sees `<errno.h>`

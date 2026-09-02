@@ -76,6 +76,16 @@ void romdataFixupCseq(u8 *blob);
 void romdataFixupLangBank(u8 *blob, u32 blobSize);
 
 /*
+ * D178 (docs/dev/findings.md): byte-swap a briefing segment (Ubrief*Z) in
+ * place. `struct BriefStruct` is 24 big-endian u16 (u16 brief[4] +
+ * 10 x { u16 textid; u16 enabled_difficulty }) loaded raw from ROM by
+ * front.c load_briefing_text_for_stage(); without this every string id and
+ * difficulty gate is byte-swapped -> blank briefing / objective text.
+ */
+#define ROMDATA_BRIEFING_U16S 24
+void romdataFixupBriefing(u8 *blob);
+
+/*
  * D50 (docs/internals.md): re-lay out a font segment (struct font:
  * kerning[169] + chars[94] + glyph pixel data) from the N64 ROM layout to
  * the PC C layout, shifting the pixel block below the expanded char array.

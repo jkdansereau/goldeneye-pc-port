@@ -38,6 +38,10 @@
 #include "assets/obseg/text/LtitleE.h"
 #include "matrixmath.h"
 #include "bg.h"
+#ifdef PORT
+#include <stdio.h>
+#include "romdata.h" /* D178: briefing-segment byte-order fixup */
+#endif
 #include "chrai.h"
 #include "title.h"
 #include <assets/font_dl.h>
@@ -6571,6 +6575,30 @@ void load_briefing_text_for_stage(void)
     // alright
     argg = 0x200;
     ptrbriefingdata = _fileNameLoadToAddr(mission_folder_setup_entries[briefingpage].briefing_name_ptr, FILELOADMETHOD_DEFAULT, (u8 *) temp_s0, argg);
+
+#ifdef PORT
+    /* D178: the Ubrief*Z segment is a raw ROM image of `struct BriefStruct`
+     * (24 big-endian u16, no converter).  On a little-endian host every
+     * string id and difficulty gate reads byte-swapped -> langGet() misses
+     * and the objective/briefing text renders blank (D143).  Decode in
+     * place, mirroring langFixupLoadedBank() in language.c. */
+    if (ptrbriefingdata) {
+        if (getenv("GE_D178")) {
+            const u16 *w = (const u16 *)ptrbriefingdata;
+            fprintf(stderr, "D178 %s raw brief=%04x,%04x,%04x,%04x obj0=%04x/%04x obj3=%04x/%04x seldiff=%d\n",
+                    (const char *)mission_folder_setup_entries[briefingpage].briefing_name_ptr,
+                    w[0], w[1], w[2], w[3], w[4], w[5], w[10], w[11],
+                    (int)selected_difficulty);
+        }
+        romdataFixupBriefing((u8 *)ptrbriefingdata);
+        if (getenv("GE_D178")) {
+            const u16 *w = (const u16 *)ptrbriefingdata;
+            fprintf(stderr, "D178 %s fix brief=%04x,%04x,%04x,%04x obj0=%04x/%04x obj3=%04x/%04x\n",
+                    (const char *)mission_folder_setup_entries[briefingpage].briefing_name_ptr,
+                    w[0], w[1], w[2], w[3], w[4], w[5], w[10], w[11]);
+        }
+    }
+#endif
 
     // what is this
     temp_s0 += argg / 8;
