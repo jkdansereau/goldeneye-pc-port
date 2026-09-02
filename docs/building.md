@@ -1,12 +1,16 @@
 # Building the PC port
 
-Building has two stages:
+Stages:
 
-1. **Extract assets from your ROM** — a one-time step that uses the
+1. **Extract assets from your ROM** (§2) — a one-time step using the
    decompilation's own toolchain to pull levels, models, textures, fonts and
-   music out of your ROM into `assets/`.
-2. **Build the port** — a CMake build that compiles the game sources plus the
-   `port/` layer into a native executable.
+   music into `assets/`. *(Only needed to regenerate the committed data files;
+   a plain `git clone` already has what the PC build compiles.)*
+2. **Build the port** (§3) — a CMake build compiling the game sources plus the
+   `port/` layer into a native executable. Needs no ROM.
+3. **Generate the PC asset sidecars** (§4) — two pure-Python converters turn
+   ROM model / stage data into the PC-layout `data/pcmodels-*` / `data/pccg-*`
+   files the port loads at runtime. **Required to run.**
 
 You need a GoldenEye 007 N64 ROM you legally own (`.z64`, big-endian). See the
 [Requirements table in the README](../README.md#requirements) for accepted
@@ -96,17 +100,47 @@ builds are named `ge007.pal-final.x86_64` / `ge007.jpn-final.x86_64`.
 
 ---
 
-## 4. Run
+## 4. Generate the PC asset sidecars (required to run)
+
+The port does **not** read model geometry or stage bg/stan data from the raw
+ROM at runtime — it reads them from PC-layout *sidecar* files under `data/`,
+produced offline by two converters. **Without them the game shows the intro
+logos and then crashes** in `modelPromoteNodeOffsetsToPointers` (finding D179).
+
+Put your ROM in `data/` first (same file the game runs from):
 
 ```sh
 mkdir -p data
-cp /path/to/your/rom.z64 data/ge007.ntsc-final.z64
+cp /path/to/your/rom.z64 data/ge007.ntsc-final.z64     # or pal-final / jpn-final
+```
+
+Then run both emit passes for that region:
+
+```sh
+python3 tools_pc/d43_emit.py ntsc-final     # -> data/pcmodels-ntsc-final/{pcmodels.bin,manifest.csv}   (~1.3 MB)
+python3 tools_pc/d69_emit.py ntsc-final     # -> data/pccg-ntsc-final/{pccg.bin,manifest.csv}           (~3.6 MB)
+```
+
+These are **pure-stdlib Python 3** (no MIPS toolchain, independent of the
+step-2 asset extraction) and read only the ROM plus files already committed to
+the repo (`scripts/filelist.u.csv`, `assets/obseg/file_resource_table.inc.c`,
+`assets/**/ModelFileHeader.inc.c`, the bg/stan `.inc.c`). Output is a
+deterministic function of the ROM. Re-run after any change to `d43_emit.py` /
+`d69_emit.py` or the model/bg converters (`d43_*`, `d69_*`).
+
+> `data/pcmodels-*/` and `data/pccg-*/` are gitignored ROM-derived game data —
+> never commit or redistribute them.
+
+---
+
+## 5. Run
+
+```sh
 ./build-pc/ge007.x86_64          # run from the repo root
 ```
 
-The port maps the ROM at the N64 cart address at runtime, so the ROM file
-itself is still required to run — not just to build. `ge007.ini` is written
-next to the working directory on first launch.
+The ROM in `data/` (from step 4) and the sidecars are both required at
+runtime. `ge007.ini` is written under `data/` on first launch.
 
 ### Useful flags / env
 
