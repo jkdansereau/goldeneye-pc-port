@@ -3,10 +3,9 @@
 > ⚠️ **Very early research alpha. Not a playable game.**
 > The intro and menus render and all 21 solo missions load, but:
 > - **no audio** (Phase 3, not started);
-> - some front-end 3D models and some text are broken (the spinning Nintendo
->   logo, MISSION COMPLETE / mode-select models, some briefing objective text);
+> - some front-end 3D models are broken (the spinning Nintendo logo, the
+>   MISSION COMPLETE / mode-select models);
 > - outdoor levels render with a **black sky**;
-> - the in-HUD **weapon icon is missing** (the ammo count still shows);
 > - expect crashes and glitches once past the level intro.
 >
 > This is a technical demo of the porting work. If you want to *play* GoldenEye
