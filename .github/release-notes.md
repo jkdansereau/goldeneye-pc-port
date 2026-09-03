@@ -3,31 +3,53 @@
 > ⚠️ **Very early research alpha. Not a playable game.**
 > The intro and menus render and all 21 solo missions load, but:
 > - **no audio** (Phase 3, not started);
-> - some front-end 3D models and some text are broken;
-> - **ladders don't work** and can block progression on some levels;
+> - some front-end 3D models and some text are broken (the spinning Nintendo
+>   logo, MISSION COMPLETE / mode-select models, some briefing objective text);
+> - outdoor levels render with a **black sky**;
+> - the in-HUD **weapon icon is missing** (the ammo count still shows);
 > - expect crashes and glitches once past the level intro.
 >
 > This is a technical demo of the porting work. If you want to *play* GoldenEye
 > on PC, use one of the Xbox 360 recompilation projects instead — see the
 > [project README](https://github.com/jkdansereau/goldeneye-pc-port#how-this-differs-from-the-other-goldeneye-pc-projects).
 
-### Download
+### Downloads
 
-`goldeneye-pc-port-<version>-win64.zip` — the engine executable, its runtime
-DLLs, a README, and license texts. **Windows x86-64 only.** No ROM, no game
-assets.
+| File | Platform |
+|---|---|
+| `goldeneye-pc-port-<version>-win64.zip` | Windows x86-64 |
+| `goldeneye-pc-port-<version>-linux-x86_64.tar.gz` | Linux x86-64 |
+
+Each contains the engine executable, a README, license texts, and the
+`prepare-assets` tool. **No ROM, no game assets.** The Windows bundle also
+carries its runtime DLLs; the Linux bundle links against your distro's SDL2 /
+zlib / libGL (`sudo apt install libsdl2-2.0-0 zlib1g libgl1`, or the equivalent).
+
+Windows development and playtesting is the primary path; the Linux build boots
+and renders (tested on WSLg) but has had far less exercise.
 
 ### Running it
 
 You supply your own **NTSC-U GoldenEye 007 N64 ROM** (`.z64`, big-endian,
-`SHA-1 abe01e4aeb033b6c0836819f549c791b26cfde83`). Unzip, put the ROM in a
-`data/` folder next to the exe as `ge007.ntsc-final.z64`, run the exe from that
-folder. Full steps in the bundled `README.md`.
+`SHA-1 abe01e4aeb033b6c0836819f549c791b26cfde83`). Only the US ROM is supported
+in this alpha.
+
+1. Unpack the archive.
+2. Make a `data/` folder next to the executable and put the ROM in it as
+   `ge007.ntsc-final.z64`.
+3. Run the one-time asset step (needs Python 3.8+):
+   `python3 prepare-assets/prepare-assets.py`
+   — it reads your ROM and writes the two `data/pc*-ntsc-final/` folders the
+   engine needs. Standard library only; a few seconds.
+4. Run the executable **from that folder**.
+
+Full steps are in the bundled `README.md`.
 
 ### Verify the download
 
 ```
 sha256sum -c goldeneye-pc-port-<version>-win64.zip.sha256
+sha256sum -c goldeneye-pc-port-<version>-linux-x86_64.tar.gz.sha256
 ```
 
 ### Source & docs

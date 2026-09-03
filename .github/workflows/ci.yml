@@ -10,7 +10,12 @@ on:
     # Docs-only branch pushes are instead skipped by the `changes` job below,
     # which reports the build jobs as "skipped" (green for branch protection).
   pull_request:
-    paths-ignore: [ '**.md', 'docs/**', 'LICENSE', 'NOTICE' ]
+    # No paths-ignore here either: a docs-only PR must still trigger the
+    # workflow so the required checks report a status. The `changes` job
+    # below diffs the PR against its base and, for a docs-only PR, reports
+    # the build jobs as "skipped" — which branch protection accepts as
+    # success. With paths-ignore the workflow never ran and the required
+    # checks stayed "expected" forever, wedging every docs PR (M-44).
   workflow_dispatch:
 
 # Minimal token: CI only reads the repo and uploads build artifacts, neither of
@@ -26,8 +31,11 @@ concurrency:
 # Jobs:
 #
 #   linux-build   — ubuntu, system GCC. Actually compiles + links (unlike
-#                   validate). Surfaces GCC-on-Linux strictness gaps MinGW
-#                   misses. Not a runtime claim; not a required check yet.
+#                   validate), then packages the Linux bundle (exe + README +
+#                   licenses + prepare-assets, NO ROM / assets / bundled libs)
+#                   via tools_pc/bundle-linux.sh and uploads it. Surfaces
+#                   GCC-on-Linux strictness gaps MinGW misses. Not a runtime
+#                   claim; not a required check yet.
 #
 #   validate      — ubuntu, configure-only. Byte-compiles the tooling,
 #                   regenerates the US ROM-asset symbol file, and CMake-
@@ -43,16 +51,17 @@ concurrency:
 #                   the ROM nor extracted assets are needed to BUILD (they are
 #                   runtime-only), so CI builds but never runs the port.
 #
-#   release       — tags only (v*). Downloads the bundle from windows-build and
-#                   attaches it to a DRAFT pre-release for that tag. Draft, so a
-#                   human does the ROM smoke-test and hits Publish. This is the
-#                   only job granted contents: write.
+#   release       — tags only (v*). Downloads the Windows + Linux bundles and
+#                   attaches both to a DRAFT pre-release for that tag. Draft, so
+#                   a human does the ROM smoke-test on each platform and hits
+#                   Publish. This is the only job granted contents: write.
 
 jobs:
-  # Did this push touch anything outside docs / licenses? Branch pushes to main
-  # get no workflow-level paths-ignore (see the `on:` comment), so this is where
-  # a docs-only merge is filtered out. Tags and pull_request events always build.
-  # Mirrors the pull_request paths-ignore globs: **.md, docs/**, LICENSE, NOTICE.
+  # Did this change touch anything outside docs / licenses? No workflow-level
+  # paths-ignore exists (see the `on:` comments), so this job is the single
+  # place a docs-only push OR pull request is filtered out — a PR is diffed
+  # against its base sha, a branch push against `github.event.before`. Tag
+  # builds always run. Docs globs: **.md, docs/**, LICENSE, NOTICE.
   changes:
     runs-on: ubuntu-22.04
     outputs:
@@ -65,15 +74,20 @@ jobs:
 
       - id: filter
         run: |
-          if [ "${{ github.event_name }}" != "push" ] || [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base='${{ github.event.pull_request.base.sha }}'
+            head='${{ github.event.pull_request.head.sha }}'
+          elif [ "${{ github.event_name }}" != "push" ] || [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          else
+            base='${{ github.event.before }}'
+            head='${{ github.sha }}'
+          fi
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null || ! git cat-file -e "${head}^{commit}" 2>/dev/null; then
+            echo "no usable base ${base}/head ${head} — building to be safe"
             echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          base='${{ github.event.before }}'
-          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            echo "no usable base ${base} — building to be safe"
-            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          changed="$(git diff --name-only "$base" '${{ github.sha }}')"
+          changed="$(git diff --name-only "$base" "$head")"
           echo "Changed files:"; echo "$changed"
           if echo "$changed" | grep -qvE '(\.md$|^docs/|^LICENSE$|^NOTICE$)'; then
             echo "code=true"  >> "$GITHUB_OUTPUT"
@@ -153,6 +167,29 @@ jobs:
           ls -la build-linux/ge007* || true
           file build-linux/ge007* || true
 
+      # Package the Linux bundle on every run so the release path stays
+      # exercised. No shared libs are bundled — the README tells the user to
+      # install SDL2 / zlib / libGL from their distro. Same ROM / size guards
+      # as the Windows bundle.
+      - name: Package Linux bundle
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            V="${GITHUB_REF_NAME}"
+          else
+            V="0.0.0-ci.${GITHUB_SHA::7}"
+          fi
+          tools_pc/bundle-linux.sh "$V"
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: goldeneye-pc-port-linux-x86_64
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   # Real Windows (MSYS2 MINGW64) build — the only platform the port is
   # developed and tested on. This compiles and LINKS the full executable.
   #
@@ -219,12 +256,12 @@ jobs:
       # -level_09 soak, a golden-frame diff) would run on a self-hosted runner
       # instead. Not planned.
 
-  # Tags only. Attach the packaged bundle to a DRAFT pre-release so a human can
-  # do the ROM smoke-test before publishing. This job — and only this job —
-  # gets contents: write.
+  # Tags only. Attach the packaged Windows + Linux bundles to a DRAFT
+  # pre-release so a human can do the ROM smoke-test on each platform before
+  # publishing. This job — and only this job — gets contents: write.
   release:
     if: github.ref_type == 'tag'
-    needs: [ changes, validate, windows-build ]
+    needs: [ changes, validate, windows-build, linux-build ]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -238,15 +275,21 @@ jobs:
           name: goldeneye-pc-port-win64
           path: dist
 
+      - uses: actions/download-artifact@v7
+        with:
+          name: goldeneye-pc-port-linux-x86_64
+          path: dist
+
       - name: Create or update draft pre-release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF_NAME}"
+          ASSETS=(dist/*.zip dist/*.zip.sha256 dist/*.tar.gz dist/*.tar.gz.sha256)
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/*.zip dist/*.zip.sha256 --clobber
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
-            gh release create "$TAG" dist/*.zip dist/*.zip.sha256 \
+            gh release create "$TAG" "${ASSETS[@]}" \
               --draft --prerelease \
               --title "GoldenEye 007 PC Port $TAG" \
               --notes-file .github/release-notes.md
