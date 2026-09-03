@@ -581,6 +581,31 @@ past it (walk off the end).
   any `for`/`while`/`do` whose end pointer is the address of a *different*
   symbol than the one being iterated.
 
+## D6. Non-void function with no `return` — latent until `-O2`
+
+The decomp has a handful of functions declared to return a value (often
+`Gfx *`) whose body ends without a `return` — the IDO/N64 build happened to
+leave the intended value in `$v0` (usually the result of a tail call), and
+the caller's `x = f(...)` kept working by luck. GCC on the PC target does
+too **at `-Og`**, but at **`-O2`** the return register is genuinely
+undefined and the caller reads garbage. When the value is a display-list
+cursor, the caller then keeps writing the DL from a stale offset and
+overwrites whatever the function just emitted — the emitted primitive
+silently disappears.
+
+- Instance: **D187** — `set_rgba_redirect_generate_microcode()`
+  (`src/game/gunfire.c`), the sole emitter of the HUD ammo-type icon.
+  Invisible under `-Og`; vanished the day release switched to `-O2`
+  (`34885535`). Fix: `return` the tail call under `#ifdef AVOID_UB`
+  (`#else` keeps the N64 body verbatim).
+- The one currently flagged in-source is `grep -rn "missing a \"return\"" src/`
+  (just `gunfire.c` today). Others may exist without the banner — suspect this
+  class whenever an `-O2` build drops a small on-screen element that an `-Og`
+  build shows. One-line `#ifdef AVOID_UB` fix each.
+- Not caught headless by a symbol/link check or a default-config framediff
+  (the missing primitive is often small). Needs an `-O2` build + an eyeball
+  or a targeted crop diff.
+
 ## E. Process / method notes
 
 - Investigation loop is: reproduce → env-gated capped probe → root-cause
