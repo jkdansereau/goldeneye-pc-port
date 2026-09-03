@@ -401,6 +401,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D179 | **Packaged build crashes after the logos — the D43/D69 model + bg sidecars are ROM-derived and absent from any build that has no ROM (M-34, alpha-release QA).** The first `goldeneye-pc-port-*-win64.zip` from CI (bundle-win.sh) shows the Rare/Nintendo logos (compiled-in `assets/rarewarelogo.c`) then AVs at `0x6b157a88`/`0x70157a88` — symbolised: `modelPromoteNodeOffsetsToPointers` (`model.c`) ← `load_object_fill_header` (`objecthandler_2.c`) ← first prop/item model load. Root cause is **not** a code regression: the port loads PC-layout model geometry from `data/pcmodels-<region>/{pcmodels.bin,manifest.csv}` and stage bg/stan from `data/pccg-<region>/{pccg.bin,manifest.csv}`, both produced offline by `tools_pc/d43_emit.py` / `d69_emit.py` from the ROM (see `port/src/pcmodels.c` / `pccg.c`; `pcmodelsReserveSize` logs *"pcmodels.bin not found — model loads will fail"* and returns 0). CI has no ROM so it never runs the emit scripts, and the two `data/` dirs are (correctly) gitignored ROM-derived game data — **cannot be committed or shipped** (converted Nintendo/Rare geometry, DLs, collision, stan nav; = distributing assets). A local build with those dirs present runs clean (verified M-34: 1741 frames, `romdataInit ... mapped at 0x10000000`, `pcmodels: 512 sidecars`, `pccg: 73 sidecars`, no crash — so `0x10000000` is *not* the problem here). The `docs/building.md` sidecar-gen step was also missing entirely. **Fix = release-side, backlogged** (`docs/BACKLOG.md` → "Alpha release"): bundle the emit scripts + their committed inputs as a pure-stdlib-Python asset-prep tool the user runs once against their own ROM (~5 MB output, no MIPS toolchain). Secondary/latent: the fixed-address `VirtualAlloc((LPVOID)0x10000000)` in `romdata.c` has no working fallback (`"using heap copy — direct ROM reads will fail"` then limps into the same crash) — didn't bite M-34 but will on a machine where something occupies `0x10000000`; harden separately (reserve earliest in `main`, or retry low bases and derive all segment math from the base obtained). | Diagnosed, not fixed — release packaging gap + latent `romdata.c` fallback |
 | D180 | **Native-PC input pass (M-XX QoL run, `qol/native-pc-input-menu`, port-only).** Three parts, all config-gated with default = prior behaviour: **(WI-1) `Input.MouseCaptureMode`** (0 = legacy always-grab; 1 = Quake-style click-to-lock) in `port/src/input.c` + `port/src/video.c` — in mode 1 the OS cursor is free until a click lands in the game window (`SDL_MOUSEBUTTONDOWN` → `inputNotifyClick`), and ESC / focus-loss / entering any front-end menu (`current_menu != MENU_RUN_STAGE`) frees it again; re-entering a stage while still "armed" re-locks so unpausing needs no click. `reconcileGrab()` runs once per controller-0 poll. Mouse buttons are suppressed from the game while the cursor is free in-stage (no phantom fire). Controller paths untouched. **(WI-2) absolute-cursor menu tracking** — when capture mode is on and the cursor is free in a menu, the D165/D169 pointer P-controller takes its target from the real cursor's absolute window position mapped onto the live virtual front-end rect (`getPlayer_c_screen*`), giving true 1:1 tracking instead of the relative-delta estimator. Relative path unchanged for legacy/grabbed. **(B3) `Input.MouseAimSpeed` default 25 → 16** (aim mode still overshot at 25 per the backlog). | LANDED, port-only, no `#ifdef PORT`. Build 241/241, `-level_09` framediff 3/3 within threshold (unregressed), `GE_STARTMENU` menu boot crash-free. **Feel-checks owed** (headless can't drive the mouse): click-to-lock ergonomics, absolute menu tracking, the new aim-speed default. |
 | D181 | **`Game.ScreenShakeIntensity` — first route-(b) `src/` gameplay-cosmetic hook (M-XX QoL run).** `src/fr.c viShake()` gains a single `#ifdef PORT` line — `intensity *= portScreenShakeScale;` (extern `f32`, defined + `configRegisterFloat`'d 0.0–10.0 in `port/src/video.c`) — before the existing clamp. Default `1.0f` ⇒ exact no-op, every headless golden dump byte-unaffected; `0.0` disables explosion/effect screen shake, up to `10.0` exaggerates it. N64 build (no `-DPORT`) keeps the original line verbatim. Precedent per `docs/BACKLOG.md` "Fun features → screen-shake intensity slider" and AGENTS.md #2's documented-exception path. Same policy class as a future FOV hook. | LANDED behind config, default = original. Build green. |
+| D184 | **F10 port-layer options overlay — the approach-(C) surface from `OPTIONS-MENU-PLAN.md` (M-37).** New `port/src/optionsoverlay.c` + `port/include/optionsoverlay.h`: an immediate-mode overlay drawn as its own fast3d 2D DL, appended after the game DL in `gfx_pc.cpp gfx_run()` (`optionsOverlayEmit()` → NULL when closed ⇒ **zero bytes appended, golden dumps byte-identical**). F10 toggles (`video.c videoPumpEvents`, next to F12); while open, `input.c inputComputePad(0)` returns a neutral pad and routes arrows/enter/wheel/mouse-buttons to `optionsOverlayHandleInput()` (mirrors the WI-1/D180 swallow). ESC closes; `configSave()` on close. `config.c` gains `configForEachOption()` + a `configSetOptionMeta()` label/step/enum side table (no per-key knowledge in config.c). Live knobs (VSync/FpsCap/TextureFilter via `videoRequestLiveConfig()`; mouse + screen-shake via the registered pointer) apply immediately; MSAA tagged "(restart)". v1 rows per plan §3: VSync, FpsCap, MSAA, TextureFilter, MouseAimSpeed, MouseTurnSpeed, MouseInvertY, MouseCaptureMode, ScreenShakeIntensity. | **LANDED, port-only, no `#ifdef PORT` in `src/`.** Build links 241/241. **Runtime verification NOT run this session** — the headless env kills the GUI process after ~8 s and `gfx_opengl_dump_bound_fbo` writes 0-byte PPMs here, so framediff / 60 s soak / overlay-frame eyeball are all owed on an interactive machine. Overlay-closed no-op is code-evident (emit returns NULL before touching the DL buffer). |
 | D85 | room primary/secondary DL → `texLoadFromGdl` garbage | OPEN (safety-netted; widen/pool fixes landed, geometry now renders) |
 | D86 · D87 | modelInitRwData truncated ptr · attract-demo BE `ramromfilestructure` | resolved |
 | D88.1–D88.3 · D88.5–D88.6 | `Usetup*Z` header + sub-table width/endian conversion (`d88_emit.py`) | resolved |
@@ -4902,8 +4903,9 @@ Touched: `src/game/stan.c` (macro + `stanCheckLinkedSpecialTile` +
 All `#ifdef PORT`, N64 path kept verbatim under `#else`. Candidate root-cause
 came from an M-36 subagent; parts 1/3 were its work, part 2 (the local size)
 found on review. **Verified:** build links clean; `-level_09` framediff 3/3;
-`-level_36` (Surface, has mandatory ladders) boots crash-free. **Interactive
-climb test owed** — headless can't drive the climb input.
+`-level_36` (Surface, has mandatory ladders) boots crash-free.
+**Interactive climb test — DONE (M-37): user confirmed climbing works
+in-game.** Merged to `main` via PR #5 (`955349db`).
 
 porting-notes.md §C (pointer-width in ROM/record structs).
 
@@ -5180,3 +5182,59 @@ golden + a Streets/Dam/Archives load.
 Docs only: this subsection + the §F index rows (D88.4 status, new D132
 row). No code changed; the proposed diff above is not applied. No temp
 probe scripts left.
+
+## D185 — fresh `d69_emit.py` run yields a game-crashing `data/pccg-<region>/` (M-38)
+
+**Status: OPEN — alpha-release blocker.** (Add to the §F index.)
+
+**Symptom.** `python tools_pc/d69_emit.py ntsc-final` in this repo writes
+`data/pccg-ntsc-final/pccg.bin` = 3346895 B (52 sidecars, 1856-B manifest),
+prints `ALL CHECKS PASSED`, and `-level_09` / `-level_20` then segfault before
+frame 1 (`EXCEPTION: 0xc0000005`, faulting return address is an ASCII
+model-name string). The pre-migration working sidecar
+(`C:/Users/james/Source/Repos/007/data/pccg-ntsc-final/pccg.bin`, 3604378 B,
+2421-B manifest) drops into this tree and `-level_09` runs crash-free.
+
+**Isolation done (M-38).**
+- Not the romdata M-38 change: baseline (stashed) crashes identically.
+- Not the build: same exe, only the `data/pccg-ntsc-final/` bytes swapped.
+- `tools_pc/d69_emit.py` is byte-identical between the public repo and the
+  pre-migration repo `007` (only a doc-path comment differs).
+- The migration commit `52539d10 "Prepare for public release"` normalised the
+  committed d69 inputs from CRLF to LF: `scripts/filelist.u.csv` (−812 B, one
+  CR/line) and `assets/obseg/file_resource_table.inc.c`.
+- **Restoring CR to both inputs did NOT restore the 3604378-B output** → line
+  endings are not the (whole) cause. Some other part of the d69 input closure
+  regressed in the history rewrite, or the working sidecar predates a real
+  d69/​input change and 3346895 is a separate second bug.
+- `d43_emit.py` is unaffected (its `find_row` tries `name`, `name[1:]`,
+  `name[:-1]`, `name[1:-1]` — tolerant of a mangled basename; `d69`'s
+  `fl_by_base.get(basename)` is exact).
+
+**Impact.** `docs/building.md` tells users to run `d69_emit.py`; M-38's
+`prepare-assets.py` does the same. Both currently produce a broken game on a
+clean checkout. The committed `data/` dirs (carried from pre-migration) hide it.
+
+**Next.** Diff the sidecar *name* set: pre-migration `manifest.csv` vs a fresh
+run's — find which bg/stan entries d69 now drops, trace through `find_row` →
+`file_resource_table.inc.c` → `filelist.u.csv`. Fix so a fresh run reproduces
+3604378 B / 2421-B manifest; re-verify `-level_09`/`-20` crash-free. Do NOT
+regenerate `data/pccg-ntsc-final/` before the fix (it holds the working copy).
+
+### D185 — RESOLVED (M-38): not a d69 regression, a missing d88 step
+
+`d88_emit.py` **appends** the 21 `Usetup*Z` per-level stage-setup files
+(object placement, AI opcode streams, pads/nav) to the same
+`data/pccg-<region>/pccg.bin` + `manifest.csv` that `d69_emit.py` writes
+(52 bg/stan rows → 74 after d88). The M-38 `prepare-assets.py` first shipped
+ran only d43 + d69, so every level loaded with no setup data → instant
+segfault. The "working" pre-migration sidecar was simply a complete
+d43+d69+d88 output; nothing regressed in d69 or its inputs.
+
+Fix (commit `4491db3f`): `prepare-assets.py` runs d43 → d69 → `d88 --regen`;
+`bundle-win.sh` vendors `d88_emit.py` + its only local import
+`d88_propdefs.py`. Verified: fresh 3-script run from an assembled bundle is
+byte-identical to the known-good `pccg.bin` (3604378 B) / `pcmodels.bin`;
+`-level_09` + `-level_20` boot crash-free. The CRLF→LF observation on
+`filelist.u.csv` / `file_resource_table.inc.c` is real but a red herring for
+this crash (d69 tolerates it; output unchanged).

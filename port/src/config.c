@@ -109,6 +109,81 @@ void configRegisterString(const char *key, char *value, int bufSize)
     o->bufSize = bufSize;
 }
 
+/* ------------------------------------------------------------------------
+ * Option metadata side table + enumeration (F10 options overlay). config.c
+ * gains no knowledge of specific keys: the overlay calls configSetOptionMeta()
+ * for each row it draws, and configForEachOption() joins that against the
+ * registered options.
+ * ---------------------------------------------------------------------- */
+struct OptionMeta {
+    char key[64];
+    const char *label;
+    double step;
+    const char *const *enumNames;
+};
+static struct OptionMeta metaOpts[MAX_OPTIONS];
+static int               numMetaOpts = 0;
+
+static const struct OptionMeta *findMeta(const char *key)
+{
+    for (int i = 0; i < numMetaOpts; i++) {
+        if (strcmp(metaOpts[i].key, key) == 0) {
+            return &metaOpts[i];
+        }
+    }
+    return NULL;
+}
+
+void configSetOptionMeta(const char *key, const char *label, double step,
+                         const char *const *enumNames)
+{
+    struct OptionMeta *m = NULL;
+    for (int i = 0; i < numMetaOpts; i++) {
+        if (strcmp(metaOpts[i].key, key) == 0) {
+            m = &metaOpts[i];
+            break;
+        }
+    }
+    if (!m) {
+        if (numMetaOpts >= MAX_OPTIONS) return;
+        m = &metaOpts[numMetaOpts++];
+        strncpy(m->key, key, sizeof(m->key) - 1);
+        m->key[sizeof(m->key) - 1] = 0;
+    }
+    m->label = label;
+    m->step = step;
+    m->enumNames = enumNames;
+}
+
+void configForEachOption(ConfigOptionCb cb, void *ctx)
+{
+    if (!cb) return;
+    for (int i = 0; i < numIntOpts; i++) {
+        const struct OptionMeta *m = findMeta(intOpts[i].key);
+        cb(intOpts[i].key, CONFIG_OPT_INT, intOpts[i].value,
+           (double)intOpts[i].min, (double)intOpts[i].max,
+           m ? m->step : 0.0, m ? m->label : NULL, m ? m->enumNames : NULL, ctx);
+    }
+    for (int i = 0; i < numUIntOpts; i++) {
+        const struct OptionMeta *m = findMeta(uintOpts[i].key);
+        cb(uintOpts[i].key, CONFIG_OPT_UINT, uintOpts[i].value,
+           (double)uintOpts[i].min, (double)uintOpts[i].max,
+           m ? m->step : 0.0, m ? m->label : NULL, m ? m->enumNames : NULL, ctx);
+    }
+    for (int i = 0; i < numFloatOpts; i++) {
+        const struct OptionMeta *m = findMeta(floatOpts[i].key);
+        cb(floatOpts[i].key, CONFIG_OPT_FLOAT, floatOpts[i].value,
+           (double)floatOpts[i].min, (double)floatOpts[i].max,
+           m ? m->step : 0.0, m ? m->label : NULL, m ? m->enumNames : NULL, ctx);
+    }
+    for (int i = 0; i < numStrOpts; i++) {
+        const struct OptionMeta *m = findMeta(strOpts[i].key);
+        cb(strOpts[i].key, CONFIG_OPT_STR, strOpts[i].value,
+           0.0, 0.0, m ? m->step : 0.0, m ? m->label : NULL,
+           m ? m->enumNames : NULL, ctx);
+    }
+}
+
 static int parseInt(const char *s)
 {
     while (*s == ' ' || *s == '\t') s++;
