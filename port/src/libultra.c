@@ -173,8 +173,14 @@ static uint64_t portNextTimerUs(void);
 
 static void portHeartbeatCheck(void)
 {
+    /* A real hang is a permanent stall; transient >3 s gaps are normal on a
+     * slow/software-GL/debugger setup (level loads, gdb pauses, SIGTERM
+     * teardown) and were spamming ge007.crash.log with dozens of thread
+     * dumps. Use a longer window and stop after a few reports. */
+    static int fired = 0;
     uint64_t now = sysGetMicroseconds();
-    if (now - g_lastFrameUs > 3000000 && now - g_lastHeartbeatUs > 2000000) {
+    if (fired < 3 && now - g_lastFrameUs > 8000000 && now - g_lastHeartbeatUs > 5000000) {
+        fired++;
         g_lastHeartbeatUs = now;
         sysLogPrintf(LOG_ERROR,
             "kernel heartbeat: no frame rendered for %llu ms (frames=%d); state:",
