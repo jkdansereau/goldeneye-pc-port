@@ -456,6 +456,15 @@ static int32_t gfx_sdl_get_target_fps(void) {
 }
 
 static void gfx_sdl_set_target_fps(int fps) {
+    /* D186: the pacing wait below runs inline on the game's scheduler thread
+     * (libultra.c osSpTaskStartGo -> gfx_run -> swap_buffers_begin), so a low
+     * cap stalls VI-retrace delivery and throttles the whole sim, not just
+     * presentation. Until pacing is moved off that thread, refuse caps low
+     * enough to be user-visible as a slowdown: treat 1..29 as uncapped. */
+    if (fps > 0 && fps < 30) {
+        sysLogPrintf(LOG_WARNING, "gfx_sdl: ignoring FpsCap=%d (< 30 throttles the sim); running uncapped", fps);
+        fps = 0;
+    }
     target_fps = fps;
 }
 
