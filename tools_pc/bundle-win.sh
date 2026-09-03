@@ -78,6 +78,26 @@ for l in SDL2 zlib gcc-libs libwinpthread mingw-w64; do
   [ -d "$MINGW/share/licenses/$l" ] && cp -r "$MINGW/share/licenses/$l" "$OUT/licenses/$l"
 done
 
+# --- asset-prep tool -------------------------------------------------
+# The port needs two ROM-derived directories (data/pcmodels-<region>/ and
+# data/pccg-<region>/) that we cannot ship. prepare-assets.py regenerates
+# them from the user's own ROM using only the Python standard library. It is
+# assembled fresh from the tree here so it can never drift from the emit
+# scripts. The vendored inputs are decomp layout/symbol metadata (.inc.c /
+# .csv), NOT game assets (no textures, audio, models, levels, or text).
+PREP="$OUT/prepare-assets"
+mkdir -p "$PREP/vendor/scripts" "$PREP/vendor/assets/obseg"
+cp tools_pc/dist/prepare-assets/prepare-assets.py "$PREP/"
+cp tools_pc/d43_emit.py tools_pc/d69_emit.py       "$PREP/"
+cp scripts/filelist.u.csv                          "$PREP/vendor/scripts/"
+cp assets/obseg/file_resource_table.inc.c          "$PREP/vendor/assets/obseg/"
+# d43_emit.py os.walk()s assets/ for every *modelFileHeader.inc.c — preserve paths.
+( cd . && find assets -iname 'modelfileheader.inc.c' -print0 \
+    | xargs -0 -I{} cp --parents {} "$PREP/vendor/" )
+nmh="$(find "$PREP/vendor/assets" -iname 'modelfileheader.inc.c' | wc -l)"
+echo "    + prepare-assets/ (emit scripts + $nmh model headers)"
+[ "$nmh" -gt 400 ] || { echo "error: prepare-assets vendored only $nmh model headers — expected ~512" >&2; exit 1; }
+
 # --- guard: no ROM / game data snuck in --------------------------------
 if find "$OUT" -type f \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' \) | grep -q .; then
   echo "error: bundle contains a ROM image — aborting" >&2
