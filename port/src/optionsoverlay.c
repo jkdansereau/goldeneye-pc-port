@@ -22,6 +22,15 @@
 #include <SDL.h>
 
 #include <PR/ultratypes.h>
+/* gbi.h's gDP* DL macros use _SHIFTL/_SHIFTR but do not define them -- game TUs
+ * get them from <ultra64.h>/<PR/mbi.h>, which also drags in N64 OS headers that
+ * shadow libc here. Define the two pure macros locally (verbatim from mbi.h) so
+ * this stays a plain port TU. Without them GCC/ld fails "undefined reference to
+ * _SHIFTL" (MinGW's chain happens to provide it). */
+#ifndef _SHIFTL
+#define _SHIFTL(v, s, w) ((u32)(((u32)(v) & ((0x01 << (w)) - 1)) << (s)))
+#define _SHIFTR(v, s, w) ((u32)(((u32)(v) >> (s)) & ((0x01 << (w)) - 1)))
+#endif
 #include <PR/gbi.h>
 
 #include "platform.h"
