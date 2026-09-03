@@ -26,8 +26,11 @@ concurrency:
 # Jobs:
 #
 #   linux-build   — ubuntu, system GCC. Actually compiles + links (unlike
-#                   validate). Surfaces GCC-on-Linux strictness gaps MinGW
-#                   misses. Not a runtime claim; not a required check yet.
+#                   validate), then packages the Linux bundle (exe + README +
+#                   licenses + prepare-assets, NO ROM / assets / bundled libs)
+#                   via tools_pc/bundle-linux.sh and uploads it. Surfaces
+#                   GCC-on-Linux strictness gaps MinGW misses. Not a runtime
+#                   claim; not a required check yet.
 #
 #   validate      — ubuntu, configure-only. Byte-compiles the tooling,
 #                   regenerates the US ROM-asset symbol file, and CMake-
@@ -43,10 +46,10 @@ concurrency:
 #                   the ROM nor extracted assets are needed to BUILD (they are
 #                   runtime-only), so CI builds but never runs the port.
 #
-#   release       — tags only (v*). Downloads the bundle from windows-build and
-#                   attaches it to a DRAFT pre-release for that tag. Draft, so a
-#                   human does the ROM smoke-test and hits Publish. This is the
-#                   only job granted contents: write.
+#   release       — tags only (v*). Downloads the Windows + Linux bundles and
+#                   attaches both to a DRAFT pre-release for that tag. Draft, so
+#                   a human does the ROM smoke-test on each platform and hits
+#                   Publish. This is the only job granted contents: write.
 
 jobs:
   # Did this push touch anything outside docs / licenses? Branch pushes to main
@@ -153,6 +156,29 @@ jobs:
           ls -la build-linux/ge007* || true
           file build-linux/ge007* || true
 
+      # Package the Linux bundle on every run so the release path stays
+      # exercised. No shared libs are bundled — the README tells the user to
+      # install SDL2 / zlib / libGL from their distro. Same ROM / size guards
+      # as the Windows bundle.
+      - name: Package Linux bundle
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            V="${GITHUB_REF_NAME}"
+          else
+            V="0.0.0-ci.${GITHUB_SHA::7}"
+          fi
+          tools_pc/bundle-linux.sh "$V"
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: goldeneye-pc-port-linux-x86_64
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   # Real Windows (MSYS2 MINGW64) build — the only platform the port is
   # developed and tested on. This compiles and LINKS the full executable.
   #
@@ -219,12 +245,12 @@ jobs:
       # -level_09 soak, a golden-frame diff) would run on a self-hosted runner
       # instead. Not planned.
 
-  # Tags only. Attach the packaged bundle to a DRAFT pre-release so a human can
-  # do the ROM smoke-test before publishing. This job — and only this job —
-  # gets contents: write.
+  # Tags only. Attach the packaged Windows + Linux bundles to a DRAFT
+  # pre-release so a human can do the ROM smoke-test on each platform before
+  # publishing. This job — and only this job — gets contents: write.
   release:
     if: github.ref_type == 'tag'
-    needs: [ changes, validate, windows-build ]
+    needs: [ changes, validate, windows-build, linux-build ]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -238,15 +264,21 @@ jobs:
           name: goldeneye-pc-port-win64
           path: dist
 
+      - uses: actions/download-artifact@v7
+        with:
+          name: goldeneye-pc-port-linux-x86_64
+          path: dist
+
       - name: Create or update draft pre-release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF_NAME}"
+          ASSETS=(dist/*.zip dist/*.zip.sha256 dist/*.tar.gz dist/*.tar.gz.sha256)
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/*.zip dist/*.zip.sha256 --clobber
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
-            gh release create "$TAG" dist/*.zip dist/*.zip.sha256 \
+            gh release create "$TAG" "${ASSETS[@]}" \
               --draft --prerelease \
               --title "GoldenEye 007 PC Port $TAG" \
               --notes-file .github/release-notes.md
