@@ -147,6 +147,14 @@ int videoInit(void)
 
     /* VSync + optional fps cap; fast3d paces the window itself. */
     wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
+    /* D186: a low cap does not just drop frames -- the pacing wait blocks the
+     * scheduler thread and throttles the sim with it. Normalise a bad
+     * ge007.ini value (e.g. dinged to 10 via the options overlay) to uncapped
+     * so it persists sane on the next configSave(). */
+    if (cfgFpsCap > 0 && cfgFpsCap < 30) {
+        sysLogPrintf(LOG_WARNING, "video: Video.FpsCap=%d too low (throttles the sim); using 0 (uncapped)", cfgFpsCap);
+        cfgFpsCap = 0;
+    }
     gfx_set_target_fps(cfgFpsCap);   /* 0 = uncapped */
 
     /* Texture filtering. 1 = bilinear (default, matches prior behaviour),
