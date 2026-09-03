@@ -4742,6 +4742,126 @@ current combiner/tile, close on `G_RDPHALF_2`. Full stream spec + the alternativ
 Cheap first step: headless `-level_22` / `-level_29` — confirm also black (proves
 emit path, not a Surface asset).
 
+### D176(a) — M-43 UPDATE: full stream decode + two implementation paths (static analysis)
+
+The M-37 scratch note (`D176a-sky-rootcause.md`) was never committed. This is the
+recovered, complete spec, re-derived from `src/game/sky.c` and `include/PR/gbi.h`.
+No build, no run — analysis only. **Implementation is still owed and is a full
+session; this entry exists so the next pass starts from the format, not a
+grep.**
+
+**What the stream actually is.** `skyRenderTri` (`sky.c:1480`, textured tris),
+`skyRenderFull` (`sky.c:1976`, textured quads = 2 tris) and the untextured
+`G_TRI_FILL` path emit a **verbatim N64 RDP triangle command**, byte-for-byte,
+chopped into 32-bit halves and carried as `gImmp1(G_RDPHALF_1 / _CONT / _2, word)`
+pairs. GE's modified RSP ucode (`rsp/graphics/gmain.s`) does nothing clever with
+them — it copies the words into a DMEM scratch buffer and DMAs the assembled
+command straight to the RDP as a `G_TRI_FILL` (0xc8) or `G_TRI_SHADE_TXTR` (0xce)
+edge-walked triangle. So "decode the stream" == "own an RDP triangle rasteriser
+with edge + shade + S/T/W coefficient planes." fast3d has no such thing (it is an
+RSP-level vertex/`gSP*Triangle` interpreter); `pd_port` has the identical no-op.
+
+**Word-by-word layout** (all values are S15.16 or int/frac-split 16.16 unless
+noted; `sub_GAME_7F094298(f)` = clamp ±32767.9 then `(s32)(f * 65536)`, i.e. a
+float→S15.16 fixed convert):
+
+1. *Edge header* — 2 words:
+   - `w0 = (opcode<<24) | (backface ? 0x00800000 : 0) | (s32)YL`
+     where opcode is `G_TRI_SHADE_TXTR` or `G_TRI_FILL`, backface = `sp444 < 0`
+     (signed double area after the 3-way `unk2c` vertex sort), `YL = sp47c->unk2c`
+     (lowest vertex, screen-Y × 4, subpixel).
+   - `w1 = ((s32)YM << 16) | (s32)YL_mid` → actually `(s32)sp480->unk2c << 16 |
+     (s32)sp484->unk2c` = `YM<<16 | YH` (mid, high). N64 order is YL/YM/YH; here
+     the code sorts so `sp484 ≤ sp480 ≤ sp47c` on `unk2c`, then emits
+     hi=sp484, mid=sp480, lo=sp47c.
+2. *Edge slopes* — 3 word-pairs, `(X.16.16 , dXdy.16.16)` for the L, M, H edges:
+   - `(7F094298(sp480->unk28 * 0.25), 7F094298(sp384))` — XL, DxLDy
+   - `(7F094298(sp410),               7F094298(sp394))` — XH, DxHDy
+   - `(7F094298(sp408),               7F094298(sp38c))` — XM, DxMDy
+   `sp384/38c/394` are the edge inverse-slopes (`dx/dy`) clamped to ±1877;
+   `sp408/sp410` are the H/M edge X starting values back-stepped to the YH
+   scanline (`sp37c` = sub-pixel fraction of `sp484->unk2c * 0.25`).
+   `*0.25` because `unk28/unk2c` are stored ×4.
+   **`skyRenderTri` returns here if `!textured`** (G_TRI_FILL: header + edges
+   only).
+3. *Shade coefficients* (textured only) — 8 word-pairs = the RDP shade DMEM
+   block: RGBA base, DrDx/DgDx/DbDx/DaDx, DrDe.., DrDy.. each as an int-parts
+   word then a frac-parts word (`(v & 0xffff0000) | (next & 0xffff0000) >> 16`
+   packs two ints; the matching `<<16 | (next & 0xffff)` packs the fracs). Values:
+   `sp210[0..3]` = colour at origin, `sp290[0..3]` = d/dx, `sp2b0[0..3]` = d/dy,
+   `sp230[0..3]` = d/de, all run through `7F094298`. Colours are the per-vertex
+   `SkyRelated38.rgba` barycentrically solved to a plane via `sp440`
+   (= 1/doubled-area) and the `sp3c8..sp3d4` edge deltas.
+4. *Texture coefficients* (textured only) — 8 word-pairs, same int/frac packing,
+   for S, T, W: `sp210[4..6]`, `sp290[4..6]`, `sp2b0[4..6]`, `sp230[4..6]`, each
+   scaled by `sp190` (an LOD/overflow clamp: `1/max(perspective-corrected
+   gradient magnitude / 1024, 1)`). The final pair is emitted with
+   `G_RDPHALF_2` (not `_CONT`) — **that is the stream terminator.**
+
+Total data words: **2 + 6 + 16 + 16 = 40** for `G_TRI_SHADE_TXTR` (20 RDPHALF
+pairs), **2 + 6 = 8** for `G_TRI_FILL`. The 2-word "header" is exactly the raw
+N64 RDP triangle command's word0 (`[cmd 8b][backface 1b @23]...[YL 14b]`) +
+word1 (`[YM 14b][YH 14b]`) — matches the canonical hardware format; the shade
+and texture blocks are the standard 16-word int-halves-then-frac-halves RDP
+coefficient layout (cross-checked M-43 against `include/PR/gbi.h` immediate-word
+packing conventions — the low-level RDP tri macros themselves are RSP-internal
+and not in this tree's `gbi.h`).
+
+`skyRenderFull` is the same but solves the plane over 4 corner verts and emits
+the quad as two RDP tris sharing the coefficient blocks; its own header pair also
+ends the first tri and a second header starts the second.
+
+**Vertex data available upstream** (before the DL): `sub_GAME_7F097388`
+(`sky.c:1398`) fully projects each sky corner and writes `SkyRelated38`:
+`unk28` = screen X ×4, `unk2c` = screen Y ×4 (minus `WaterConcavity*4`),
+`unk30` = screen Z (0..0x7fff), `unk34` = 1/w, `unk20/unk24` = S/T, `rgba` =
+per-vertex colour. **This is a complete screen-space vertex.** The projection is
+pure float math off endian-clean matrices — not the bug, and reusable as-is.
+
+---
+
+**Path A — RDP triangle rasteriser in `port/fast3d/gfx_pc.cpp` (port-only, "correct").**
+At `case G_RDPHALF_*` (`gfx_pc.cpp:~2901`): accumulate words into a small buffer;
+when a `G_RDPHALF_1` carries a `0xc8`/`0xce` opcode start a command, close on
+`G_RDPHALF_2`. Then either (a) feed a real edge-walk rasteriser writing into the
+current render target with the active combiner/tile, or (b) **invert the plane
+equations** — you have YH/YM/YL, the three edge X-at-Y and slopes, so recover the
+3 screen (x,y); evaluate the RGBA and STW planes at those 3 points to get 3
+`LoadedVertex` (already-projected: set `.x/.y` from screen coords mapped to
+NDC-ish like the `gDPTextureRectangle` path, `.z` from a fixed sky depth, `.w`
+from `unk34`), then hand to the existing `gfx_sp_tri` / GL path with a forced
+"2D, no model matrix" flag. (b) is a few hundred lines and reuses the whole
+existing combiner/texture pipeline; (a) means a new software rasteriser. Prefer
+(b). Cost: ~1 session, genuinely new code, verifiable headless.
+
+**Path B — swap the emit in `src/game/sky.c` behind `#ifdef PORT` ("cheap").**
+`skyRenderTri` / `skyRenderFull` already hold 3–4 fully-projected screen-space
+`SkyRelated38` verts. Under `#ifdef PORT`, skip the whole RDPHALF block and emit
+a normal `gSPVertex` of screen-space `Vtx` (XYZ from `unk28/2c/30` ÷4, ST from
+`unk20/24`, RGBA from the struct) + `gSP1Triangle` / `gSP2Triangles`, with a
+`G_TEXTURE`/combiner setup mirroring what the RDP path implied
+(`SHADE,ENV,TEXEL0,ENV`, `texSelect(&skywaterimages[SkyImageId], …)` already runs
+just before). fast3d already eats screen-space verts (that is the front-end / HUD
+path). ~30–60 lines, no new fast3d code. **Cost: a few hours.** Tension with the
+"no game-logic edits" rule — but this is a pure N64-RSP-idiom substitution (same
+class as the `G_TRI4` and dynamic-lighting `#ifdef PORT`s already in `src/`), it
+changes no behaviour on N64 (`#else` keeps the stream verbatim), and it is
+exactly the "if a game file seems to need a behavioural change, the fix belongs
+in `port/`" *narrow* exception for a hardware idiom that cannot be isolated in
+`port/` without reimplementing the RDP. Document as D176(a) in §F if taken.
+
+**Recommendation:** Path B first — it lights up every cloud-sky level
+(Surface `-level_36`, Statue `-level_22`, Frigate `-level_29`, Dam exterior) for
+a few hours' work and de-risks Path A by giving a visual ground truth. Path A
+stays the "right" long-term answer if Path B's screen-space verts show
+seams/precision artefacts vs. the RDP's subpixel edge walk. Either way the
+verification target is **`-level_22` (Statue, night) frame ~360, no input** — the
+M-42 clean headless black-sky repro.
+
+**Cheap first step (unchanged, still not done):** headless `-level_22` /
+`-level_29` — confirm also black, proving it is the shared emit path and not a
+Surface-only asset.
+
 ---
 
 ## D177 — Ladders non-functional: `count`/`rooms` land in the high half of a widened pointer (M-36)
