@@ -283,10 +283,19 @@ elseif(UNIX AND NOT APPLE)
   # and link no-PIE so the image keeps its preferred load address.
   add_compile_options(-fno-pie)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
-  # (No -Ttext-segment: pushing the image above 4GiB needs -mcmodel=large and
-  # breaks the R_X86_64_32 relocs. romdataInit handles the low no-PIE base
-  # 0x400000 by using a fixed 4GiB-aligned g_pc_animdata_base sentinel — the
-  # ANIM_DATA_* lvalues are only ever address-taken, never dereferenced.)
+  # Move the image base to 0x20000000. The default no-PIE base 0x400000 puts
+  # .data/.bss symbols around 0x00500000-0x00600000, which COLLIDES with the
+  # N64 address ranges fast3d's seg_addr() decodes: a game-built display list
+  # that embeds `&symbol` (via the osVirtualToPhysical identity shim) hands
+  # seg_addr a value < 0x800000, which it treats as a K0-physical DRAM offset
+  # and remaps to 0x80xxxxxx (zeroed DRAM mirror) -> "unknown GBI opcode 0x00"
+  # -> black screen. 0x20000000 sits in the gap between the segmented-address
+  # space (< 0x10000000), the cart map (0x10000000), the D131 module range
+  # ([0x40000000,0x70000000)) and DRAM (>= 0x70000000); seg_addr passes such
+  # addresses through untouched. Still < 2GiB so -mcmodel=small / R_X86_64_32
+  # relocations are fine (unlike a 0x140000000 base, which needs mcmodel=large).
+  # This is the ELF analogue of the Windows build's fixed 0x140000000 base.
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Ttext-segment=0x20000000")
 endif()
 
 # port/shim first: PC-only shadow headers (bondtypes.h, bondconstants.h,
