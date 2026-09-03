@@ -447,7 +447,9 @@ s32 texLoadFromGdl();
 s32 texReadUncompressed();
 void texSelect();
 s32 texShrinkNonPaletted();
-long long time();
+#if defined(_WIN32)
+long long time(); /* MinGW: <time.h> is shadowed by the N64 stub here; POSIX gets the real one */
+#endif
 const char * tokenFind();
 s32 tokenReadIo();
 void transform3Dto2DWithZScaling();

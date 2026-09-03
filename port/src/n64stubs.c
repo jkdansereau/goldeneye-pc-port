@@ -106,10 +106,14 @@ u8 (*tlbmanageGetTlbAllocatedBlock(void))[TLB_BLOCK_SIZE]
     return (u8 (*)[TLB_BLOCK_SIZE])0x70700000;
 }
 
-/* --- K&R libc helpers (IDO provided these; the host libc does not) ------- */
-/* Signatures mirror include/PR/os.h:983 / include/bstring.h exactly.        */
+/* --- K&R libc helpers (IDO provided these; MinGW's libc does not) -------- */
+/* Signatures mirror include/PR/os.h:983 / include/bstring.h exactly.
+ * glibc still exports bcopy/bzero (declared in <strings.h> with size_t), so
+ * on the POSIX port we use those and must NOT redefine them here. */
+#if defined(_WIN32)
 void bcopy(const void *src, void *dst, int n) { memmove(dst, src, (size_t)n); }
 void bzero(void *s, int n)                     { memset(s, 0, (size_t)n); }
+#endif
 
 /* --- libm internals (IDO's libm exposed these; MinGW's does not) --------- */
 /* Quiet NaN float, used by gu/cosf.c and game/zlib.c. The VALUE is the same  */

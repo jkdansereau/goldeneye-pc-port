@@ -1,3 +1,8 @@
+/* POSIX: enable clock_gettime(CLOCK_REALTIME/MONOTONIC) and pthread_getattr_np. */
+#if !defined(_WIN32) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE 1
+#endif
+
 /*
  * libultra OS shims for the PC port, plus the cooperative thread kernel.
  *
@@ -765,6 +770,7 @@ static int dramHostAddrValid(uintptr_t addr, u32 size)
      * buffers (e.g. ramrom_data_target), stack compbuffers, sidecar images.
      * Truncated wild addresses (0x40xxxxxx from s32 pointer math) are not
      * committed, so VirtualQuery still catches them. */
+#if defined(PLATFORM_WINDOWS)
     {
         MEMORY_BASIC_INFORMATION mbi;
         if (VirtualQuery((LPCVOID)addr, &mbi, sizeof(mbi)) == sizeof(mbi) &&
@@ -774,6 +780,13 @@ static int dramHostAddrValid(uintptr_t addr, u32 size)
             return 1;
     }
     return 0;
+#else
+    /* No cheap committed-memory probe on POSIX; this is a TEMP D60 diagnostic.
+     * Be permissive so legitimate .bss/stack/sidecar DMA targets are not
+     * flagged as fatal (a genuinely wild target still faults in the memcpy). */
+    (void)size;
+    return 1;
+#endif
 }
 
 static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
@@ -817,6 +830,7 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
                 wp += snprintf(wp, win + sizeof(win) - (wp - win),
                                " %p", (void *)sp[i]);
             }
+#if defined(PLATFORM_WINDOWS)
             {
                 PVOID tlow = NULL, thigh = NULL;
                 GetCurrentThreadStackLimits(&tlow, &thigh);
@@ -826,6 +840,22 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
                              ((uintptr_t)dstVA >= (uintptr_t)tlow &&
                               (uintptr_t)dstVA < (uintptr_t)thigh));
             }
+#else
+            {
+                pthread_attr_t at;
+                void *sbase = NULL;
+                size_t ssize = 0;
+                if (pthread_getattr_np(pthread_self(), &at) == 0) {
+                    pthread_attr_getstack(&at, &sbase, &ssize);
+                    pthread_attr_destroy(&at);
+                }
+                sysLogPrintf(LOG_ERROR,
+                             "D60 thread stack: %p..%p  dst-in-stack=%d\n",
+                             sbase, (void *)((uintptr_t)sbase + ssize),
+                             ((uintptr_t)dstVA >= (uintptr_t)sbase &&
+                              (uintptr_t)dstVA < (uintptr_t)sbase + ssize));
+            }
+#endif
             sysLogPrintf(LOG_ERROR,
                          "D60 BAD DMA TARGET dst=%p src=0x%08X size=0x%X "
                          "stack@rbp:%s\n",
