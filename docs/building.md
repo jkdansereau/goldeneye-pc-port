@@ -102,10 +102,12 @@ builds are named `ge007.pal-final.x86_64` / `ge007.jpn-final.x86_64`.
 
 ## 4. Generate the PC asset sidecars (required to run)
 
-The port does **not** read model geometry or stage bg/stan data from the raw
-ROM at runtime — it reads them from PC-layout *sidecar* files under `data/`,
-produced offline by two converters. **Without them the game shows the intro
-logos and then crashes** in `modelPromoteNodeOffsetsToPointers` (finding D179).
+The port does **not** read model geometry, stage bg/stan data, or per-level
+setup data from the raw ROM at runtime — it reads them from PC-layout *sidecar*
+files under `data/`, produced offline by three converters. **Without them the
+game shows the intro logos and then crashes** in
+`modelPromoteNodeOffsetsToPointers` (finding D179) or on the first level load
+(missing stage setup).
 
 Put your ROM in `data/` first (same file the game runs from):
 
@@ -114,11 +116,13 @@ mkdir -p data
 cp /path/to/your/rom.z64 data/ge007.ntsc-final.z64     # or pal-final / jpn-final
 ```
 
-Then run both emit passes for that region:
+Then run all three emit passes for that region, **in this order** (d88 appends
+to d69's output):
 
 ```sh
-python3 tools_pc/d43_emit.py ntsc-final     # -> data/pcmodels-ntsc-final/{pcmodels.bin,manifest.csv}   (~1.3 MB)
-python3 tools_pc/d69_emit.py ntsc-final     # -> data/pccg-ntsc-final/{pccg.bin,manifest.csv}           (~3.6 MB)
+python3 tools_pc/d43_emit.py ntsc-final          # -> data/pcmodels-ntsc-final/{pcmodels.bin,manifest.csv}  (~1.3 MB)
+python3 tools_pc/d69_emit.py ntsc-final          # -> data/pccg-ntsc-final/{pccg.bin,manifest.csv}          (bg + stan)
+python3 tools_pc/d88_emit.py ntsc-final --regen  #    appends the 21 per-level Usetup*Z stage-setup files -> ~3.6 MB
 ```
 
 These are **pure-stdlib Python 3** (no MIPS toolchain, independent of the
@@ -126,7 +130,11 @@ step-2 asset extraction) and read only the ROM plus files already committed to
 the repo (`scripts/filelist.u.csv`, `assets/obseg/file_resource_table.inc.c`,
 `assets/**/ModelFileHeader.inc.c`, the bg/stan `.inc.c`). Output is a
 deterministic function of the ROM. Re-run after any change to `d43_emit.py` /
-`d69_emit.py` or the model/bg converters (`d43_*`, `d69_*`).
+`d69_emit.py` / `d88_emit.py` or the model/bg converters (`d43_*`, `d69_*`,
+`d88_propdefs.py`).
+
+> The release bundle ships `prepare-assets/prepare-assets.py`, which runs all
+> three passes against your ROM automatically — see the bundled `README.md`.
 
 > `data/pcmodels-*/` and `data/pccg-*/` are gitignored ROM-derived game data —
 > never commit or redistribute them.
