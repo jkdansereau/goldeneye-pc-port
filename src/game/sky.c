@@ -14,6 +14,9 @@
 #include "othermodemicrocode.h"
 #include "fr.h"
 #include "image_bank.h"
+#ifdef PORT
+#include "dyn.h"
+#endif
 
 #define SKYABS(val) (val >= 0.0f ? (val) : -(val))
 
@@ -1474,6 +1477,78 @@ bool skyVerticesAreTheSame(SkyRelated38 *arg0, SkyRelated38 *arg1)
     return sqrtf((f0 * f0) + (f1 * f1)) < 1.0f ? TRUE : FALSE;
 }
 
+#ifdef PORT
+/*
+ * D176(a) Path B (M-46) -- black-sky fix. Full rationale in
+ * docs/dev/findings.md section F, "D176(a)".
+ *
+ * skyRenderTri / skyRenderFull normally build their geometry as a verbatim
+ * N64 RDP triangle command, chopped into 32-bit halves and carried as
+ * gImmp1(G_RDPHALF_1 / _CONT / _2, word) pairs for GE's modified RSP ucode
+ * (rsp/graphics/gmain.s) to reassemble and DMA to the RDP as an edge-walked
+ * G_TRI_FILL / G_TRI_SHADE_TXTR. The PC software RSP (port/fast3d) has no RDP
+ * triangle rasteriser and deliberately drops G_RDPHALF_* (gfx_pc.cpp), so
+ * every cloud-sky level rendered a solid black upper half.
+ *
+ * The SkyRelated38 verts handed to these functions are already fully
+ * screen-space projected by sub_GAME_7F097388:
+ *   unk28 = screenX * 4, unk2c = screenY * 4, unk30 = screenZ (0..0x7fff),
+ *   unk34 = 1/w, unk20 / unk24 = S / T, r/g/b/a = per-vertex colour.
+ * Under PORT we skip the RDPHALF encode entirely and re-emit the same
+ * triangle(s) as an ordinary gSPVertex + gSP*Triangle batch under a
+ * pixel-space ortho projection the software RSP can consume. The combiner
+ * (SHADE,ENV,TEXEL0,ENV), env colour and texSelect(&skywaterimages[...])
+ * are all already emitted by the caller. This is a pure N64-RSP-idiom
+ * substitution (same class as the G_TRI4 / dynamic-lighting PORT branches
+ * elsewhere in src/): the N64 (#else) path below is byte-for-byte unchanged.
+ */
+static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
+{
+    Vtx *vtx = dynAllocateVertices(nverts < 3 ? 3 : nverts);
+    Mtx *proj = dynAllocateMatrix();
+    Mtx *mv = dynAllocateMatrix();
+    f32 l = getPlayer_c_screenleft();
+    f32 t = getPlayer_c_screentop();
+    f32 r = l + getPlayer_c_screenwidth();
+    f32 b = t + getPlayer_c_screenheight();
+    s32 i;
+
+    guOrtho(proj, l, r, b, t, -32768.0f, 32768.0f, 1.0f);
+    guMtxIdent(mv);
+
+    for (i = 0; i < nverts; i++)
+    {
+        vtx[i].v.ob[0] = (s16) (v[i]->unk28 * 0.25f);
+        vtx[i].v.ob[1] = (s16) (v[i]->unk2c * 0.25f);
+        vtx[i].v.ob[2] = (s16) (v[i]->unk30 * 0.25f);
+        vtx[i].v.flag  = 0;
+        vtx[i].v.tc[0] = (s16) (v[i]->unk20 * 32.0f);
+        vtx[i].v.tc[1] = (s16) (v[i]->unk24 * 32.0f);
+        vtx[i].v.cn[0] = (u8) v[i]->r;
+        vtx[i].v.cn[1] = (u8) v[i]->g;
+        vtx[i].v.cn[2] = (u8) v[i]->b;
+        vtx[i].v.cn[3] = (u8) v[i]->a;
+    }
+
+    gSPMatrix(gdl++, osVirtualToPhysical(proj), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
+    gSPMatrix(gdl++, osVirtualToPhysical(mv), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPClearGeometryMode(gdl++, G_LIGHTING | G_CULL_BOTH | G_FOG);
+    gSPSetGeometryMode(gdl++, G_SHADE | G_SHADING_SMOOTH);
+    gSPVertex(gdl++, osVirtualToPhysical(vtx), nverts, 0);
+
+    if (nverts >= 4)
+    {
+        gSP2Triangles(gdl++, 0, 1, 3, 0, 3, 2, 0, 0);
+    }
+    else
+    {
+        gSP1Triangle(gdl++, 0, 1, 2, 0);
+    }
+
+    return gdl;
+}
+#endif
+
 /*
 * Address: 0x7F097818
 */
@@ -1619,6 +1694,18 @@ Gfx *skyRenderTri(Gfx *gdl, SkyRelated38 *arg1, SkyRelated38 *arg2, SkyRelated38
 
     sp440 = 1.0f / sp444;
 
+#ifdef PORT
+    {
+        /* D176(a) Path B: re-emit as screen-space geometry (see skyPortRenderPoly).
+         * skyRenderTri is only ever called textured in this file; `textured` is
+         * honoured only in that the caller has set the textured combiner. */
+        SkyRelated38 *portv[3];
+        portv[0] = arg1;
+        portv[1] = arg2;
+        portv[2] = arg3;
+        return skyPortRenderPoly(gdl, portv, 3);
+    }
+#else
     sp484 = arg1;
     sp480 = arg2;
     sp47c = arg3;
@@ -1966,6 +2053,7 @@ Gfx *skyRenderTri(Gfx *gdl, SkyRelated38 *arg1, SkyRelated38 *arg2, SkyRelated38
         gImmp1(gdl++, G_RDPHALF_1, (spb8 & 0x0000ffff) << 16 | (spb4 & 0x0000ffff));
         gImmp1(gdl++, G_RDPHALF_2, (spb0 & 0x0000ffff) << 16 | (spac & 0x0000ffff));
     }
+#endif
 
     return gdl;
 }
@@ -2120,6 +2208,18 @@ Gfx *skyRenderFull(Gfx *gdl, SkyRelated38 *arg1, SkyRelated38 *arg2, SkyRelated3
 
     sp484 = 1.0f / sp488;
 
+#ifdef PORT
+    {
+        /* D176(a) Path B: re-emit the sky quad as screen-space geometry
+         * (see skyPortRenderPoly). arg1..arg4 are TL,TR,BL,BR corners. */
+        SkyRelated38 *portv[4];
+        portv[0] = arg1;
+        portv[1] = arg2;
+        portv[2] = arg3;
+        portv[3] = arg4;
+        return skyPortRenderPoly(gdl, portv, 4);
+    }
+#else
     sp4cc = arg1;
     sp4c8 = arg2;
     sp4c4 = arg3;
@@ -2484,6 +2584,7 @@ Gfx *skyRenderFull(Gfx *gdl, SkyRelated38 *arg1, SkyRelated38 *arg2, SkyRelated3
         gImmp1(gdl++, G_RDPHALF_1, (spb0 & 0x0000ffff) << 16 | (spac & 0x0000ffff));
         gImmp1(gdl++, G_RDPHALF_2, (spa8 & 0x0000ffff) << 16 | (spa4 & 0x0000ffff));
     }
+#endif
 
     return gdl;
 }
