@@ -5056,3 +5056,21 @@ run's — find which bg/stan entries d69 now drops, trace through `find_row` →
 `file_resource_table.inc.c` → `filelist.u.csv`. Fix so a fresh run reproduces
 3604378 B / 2421-B manifest; re-verify `-level_09`/`-20` crash-free. Do NOT
 regenerate `data/pccg-ntsc-final/` before the fix (it holds the working copy).
+
+### D185 — RESOLVED (M-38): not a d69 regression, a missing d88 step
+
+`d88_emit.py` **appends** the 21 `Usetup*Z` per-level stage-setup files
+(object placement, AI opcode streams, pads/nav) to the same
+`data/pccg-<region>/pccg.bin` + `manifest.csv` that `d69_emit.py` writes
+(52 bg/stan rows → 74 after d88). The M-38 `prepare-assets.py` first shipped
+ran only d43 + d69, so every level loaded with no setup data → instant
+segfault. The "working" pre-migration sidecar was simply a complete
+d43+d69+d88 output; nothing regressed in d69 or its inputs.
+
+Fix (commit `4491db3f`): `prepare-assets.py` runs d43 → d69 → `d88 --regen`;
+`bundle-win.sh` vendors `d88_emit.py` + its only local import
+`d88_propdefs.py`. Verified: fresh 3-script run from an assembled bundle is
+byte-identical to the known-good `pccg.bin` (3604378 B) / `pcmodels.bin`;
+`-level_09` + `-level_20` boot crash-free. The CRLF→LF observation on
+`filelist.u.csv` / `file_resource_table.inc.c` is real but a red herring for
+this crash (d69 tolerates it; output unchanged).
