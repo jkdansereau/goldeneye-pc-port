@@ -164,7 +164,17 @@ configure_file(
 
 # Host <stddef.h> path for port/shim/stddef.h (same reason as stdlib: the N64
 # stub shadows the host header in C++ TUs, hiding max_align_t from cstddef).
-get_filename_component(PORT_HOST_STDDDEF_H "${_PORT_GCC_DIR}/../include/stddef.h" ABSOLUTE)
+# stddef.h is compiler-internal, not in bin/../include: on a native Linux GCC
+# it lives under lib/gcc/<triple>/<ver>/include. Ask the compiler where it is;
+# fall back to the MinGW bin/../include layout.
+execute_process(
+  COMMAND "${CMAKE_C_COMPILER}" -print-file-name=include/stddef.h
+  OUTPUT_VARIABLE _PORT_GCC_STDDEF OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+if(_PORT_GCC_STDDEF AND EXISTS "${_PORT_GCC_STDDEF}")
+  get_filename_component(PORT_HOST_STDDDEF_H "${_PORT_GCC_STDDEF}" ABSOLUTE)
+else()
+  get_filename_component(PORT_HOST_STDDDEF_H "${_PORT_GCC_DIR}/../include/stddef.h" ABSOLUTE)
+endif()
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststddef.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hoststddef.h" @ONLY)
