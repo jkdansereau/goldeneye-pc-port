@@ -225,7 +225,11 @@ add_compile_options(
 # get a real backtrace of a hung/crashed game thread.
 add_compile_options(-fno-omit-frame-pointer)
 
-if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+# Optimisation: the software RSP + software rasteriser in port/fast3d are the
+# hot path and are very sensitive to -O level (the difference between ~1 fps
+# and playable). Non-Debug builds keep the CMAKE_BUILD_TYPE optimisation
+# (RelWithDebInfo => -O2); only an explicit Debug build drops to -Og.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_compile_options(-Og)
 endif()
 
