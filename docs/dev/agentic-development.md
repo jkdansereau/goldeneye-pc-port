@@ -3,7 +3,7 @@
 *A case study in AI-agent collaboration on a large, low-level codebase. A
 GoldenEye 007 Nintendo 64 → desktop port, taken from "builds a ROM" to
 "playable front end" in about two weeks — driven mostly by two coding agents (a
-local open-weight model, Qwen 3, on a single RTX 5090, and a hosted frontier
+local open-weight model, Qwen 3.8, on a single RTX 5090, and a hosted frontier
 model, Claude / Claude Code), handing work back and forth through shared
 written notes under one person's part-time direction. This is the goal, the
 method, the timeline, and an honest read on what did and didn't work.*

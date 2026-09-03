@@ -5,7 +5,10 @@ on:
     branches: [ main, master ]
     tags: [ 'v*' ]
     # No paths-ignore here: tag pushes must always build so a release can be
-    # cut even when the tagged commit only touched docs. PRs keep the filter.
+    # cut even when the tagged commit only touched docs, and a workflow that
+    # never triggers would leave a required status check pending forever.
+    # Docs-only branch pushes are instead skipped by the `changes` job below,
+    # which reports the build jobs as "skipped" (green for branch protection).
   pull_request:
     paths-ignore: [ '**.md', 'docs/**', 'LICENSE', 'NOTICE' ]
   workflow_dispatch:
@@ -46,7 +49,42 @@ concurrency:
 #                   only job granted contents: write.
 
 jobs:
+  # Did this push touch anything outside docs / licenses? Branch pushes to main
+  # get no workflow-level paths-ignore (see the `on:` comment), so this is where
+  # a docs-only merge is filtered out. Tags and pull_request events always build.
+  # Mirrors the pull_request paths-ignore globs: **.md, docs/**, LICENSE, NOTICE.
+  changes:
+    runs-on: ubuntu-22.04
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - id: filter
+        run: |
+          if [ "${{ github.event_name }}" != "push" ] || [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          base='${{ github.event.before }}'
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "no usable base ${base} — building to be safe"
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          changed="$(git diff --name-only "$base" '${{ github.sha }}')"
+          echo "Changed files:"; echo "$changed"
+          if echo "$changed" | grep -qvE '(\.md$|^docs/|^LICENSE$|^NOTICE$)'; then
+            echo "code=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "docs-only push — skipping build"
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   validate:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
@@ -123,6 +161,8 @@ jobs:
   # address-constant romassets_<region>.s. The ROM (.z64) and the ROM-derived
   # blobs are runtime-only dependencies — CI cannot run the game, only build it.
   windows-build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
     defaults:
       run:
@@ -184,7 +224,7 @@ jobs:
   # gets contents: write.
   release:
     if: github.ref_type == 'tag'
-    needs: [ validate, windows-build ]
+    needs: [ changes, validate, windows-build ]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
