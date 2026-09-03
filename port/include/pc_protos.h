@@ -201,6 +201,11 @@ void fileUpdateSelectedBondInSave();
 s32 fogGetPropDistColor();
 void fogLoadLevelEnvironment();
 void free();
+/* D38: the N64 <stdlib.h> stub declares neither, and unlike MinGW a strict
+ * host GCC does not leak them — so getenv()'s 64-bit pointer return is
+ * truncated to int (crashed configGetFrameDump on Linux). */
+char * getenv();
+void * realloc();
 int frontGetPlayersFavoriteWeaponInHand();
 void generate_player_thrown_grenade();
 void generate_player_thrown_knife();

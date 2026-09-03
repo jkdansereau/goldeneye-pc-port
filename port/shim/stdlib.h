@@ -17,4 +17,15 @@
 #include "hoststdlib.h"
 #else
 #include "include/stdlib.h"
+#if !defined(_WIN32)
+/* The N64 stub declares only lldiv_t/ldiv_t + lldiv/ldiv. MinGW's other CRT
+ * headers leak getenv() etc.; a strict host GCC (Linux/macOS) does not, so
+ * getenv()'s 64-bit pointer return is assumed int and truncated (crashed
+ * configGetFrameDump). Declare the pointer-returning stragglers the port +
+ * game code use that nothing else declares. K&R form = compatible with any
+ * real prototype. (malloc/calloc/free are in port/include/pc_protos.h and
+ * a few port TUs' own local decls — not repeated here to avoid conflicts.) */
+extern char *getenv();
+extern void *realloc();
+#endif
 #endif
