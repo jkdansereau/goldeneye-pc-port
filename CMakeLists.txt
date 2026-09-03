@@ -152,6 +152,15 @@ configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststring.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hoststring.h" @ONLY)
 
+# Host <sched.h> path for port/shim/sched.h. The decomp's src/sched.h is on
+# the include path and shadows the system header; libstdc++'s <thread>/gthr
+# headers in the fast3d C++ TUs need the real <sched.h> (cpu_set_t,
+# sched_yield). Both MinGW and Linux keep <sched.h> at bin/../include.
+get_filename_component(PORT_HOST_SCHED_H "${_PORT_GCC_DIR}/../include/sched.h" ABSOLUTE)
+configure_file(
+  "${CMAKE_SOURCE_DIR}/port/include/hostsched.h.in"
+  "${CMAKE_BINARY_DIR}/port/include/hostsched.h" @ONLY)
+
 # Host <stdlib.h> path for port/shim/stdlib.h. The N64 include/stdlib.h
 # typedefs lldiv_t/ldiv_t, which conflict with the host's when both land in
 # one C++ TU (fast3d): MinGW's own sec_api/stdlib_s.h does `#include
