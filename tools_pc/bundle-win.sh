@@ -118,10 +118,28 @@ if [ "$BYTES" -gt "$LIMIT" ]; then
 fi
 
 # --- zip + checksum --------------------------------------------------
-( cd dist && rm -f "${NAME}.zip" "${NAME}.zip.sha256" \
-          && zip -qr "${NAME}.zip" "$NAME" \
-          && sha256sum "${NAME}.zip" > "${NAME}.zip.sha256" )
+# Prefer InfoZIP `zip`; fall back to 7-Zip or PowerShell Compress-Archive so a
+# stock MSYS2 MINGW64 shell (which ships neither `zip` nor `unzip`) still works.
+zip_dir() {  # $1 = archive name, $2 = dir to add (both relative to dist/)
+  if command -v zip >/dev/null 2>&1; then
+    ( cd dist && zip -qr "$1" "$2" )
+  elif command -v 7z >/dev/null 2>&1; then
+    ( cd dist && 7z a -tzip -bso0 -bsp0 "$1" "$2" >/dev/null )
+  elif [ -x "/c/Program Files/7-Zip/7z.exe" ]; then
+    ( cd dist && "/c/Program Files/7-Zip/7z.exe" a -tzip -bso0 -bsp0 "$1" "$2" >/dev/null )
+  elif command -v powershell >/dev/null 2>&1; then
+    ( cd dist && powershell -NoProfile -Command \
+        "Compress-Archive -Force -Path '$2' -DestinationPath '$1'" )
+  else
+    echo "error: need one of: zip, 7z, or powershell to package the bundle" >&2
+    exit 1
+  fi
+}
+( cd dist && rm -f "${NAME}.zip" "${NAME}.zip.sha256" )
+zip_dir "${NAME}.zip" "$NAME"
+( cd dist && sha256sum "${NAME}.zip" > "${NAME}.zip.sha256" )
 
 echo "==> dist/${NAME}.zip  ($(du -h "dist/${NAME}.zip" | cut -f1))"
 cat "dist/${NAME}.zip.sha256"
-( cd dist && unzip -l "${NAME}.zip" ) 2>/dev/null || find "$OUT" -type f | sed "s#^dist/##" | sort
+( cd dist && unzip -l "${NAME}.zip" ) 2>/dev/null \
+  || find "$OUT" -type f | sed "s#^dist/##" | sort
