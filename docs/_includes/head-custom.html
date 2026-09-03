@@ -250,4 +250,39 @@
     .page-header { padding: 3rem 1rem 2.75rem; }
     .main-content { padding-top: 2rem; }
   }
+
+  /* ---- Mermaid diagrams ------------------------------------------------ */
+  /* Kramdown renders ```mermaid fences as <pre><code class="language-mermaid">.
+     The script below hands their text to mermaid and swaps in the SVG. Keep
+     the pre unstyled (no dark code background) while it waits to render. */
+  .main-content pre.mermaid,
+  .main-content pre > code.language-mermaid {
+    background: transparent;
+    border: 0;
+    color: var(--ink);
+    padding: 0;
+  }
+  .main-content pre.mermaid { text-align: center; overflow-x: auto; }
+  .main-content pre.mermaid:not([data-processed]) { visibility: hidden; }
 </style>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+  // Move each ```mermaid code block's text into a <pre class="mermaid"> that
+  // mermaid.run() recognises.
+  const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  document.querySelectorAll("pre > code.language-mermaid").forEach((code) => {
+    const pre = document.createElement("pre");
+    pre.className = "mermaid";
+    pre.textContent = code.textContent;
+    code.parentElement.replaceWith(pre);
+  });
+
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "loose", // our own docs; needed for <br/> in node labels
+    theme: dark ? "dark" : "neutral",
+  });
+  mermaid.run({ querySelector: "pre.mermaid" });
+</script>
