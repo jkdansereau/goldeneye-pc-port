@@ -70,7 +70,13 @@ fi
 [ "$missing" -eq 0 ] || { echo "error: exe needs MinGW DLLs that were not bundled (see above)" >&2; exit 1; }
 
 # --- docs + licenses ---------------------------------------------------
-sed "s/@VERSION@/${VERSION}/g" tools_pc/dist/README.md.in > "$OUT/README.md"
+EXE_NAME="$(basename "$EXE")"
+sed -e "s|@VERSION@|${VERSION}|g" \
+    -e "s|@PLATFORM@|Windows x86-64|g" \
+    -e "s|@EXE@|${EXE_NAME}|g" \
+    -e "s|@DEPS@||g" \
+    -e "s|@LICENSE_EXTRA@|, the MinGW runtime|g" \
+    tools_pc/dist/README.md.in > "$OUT/README.md"
 cp NOTICE  "$OUT/licenses/NOTICE"
 cp LICENSE "$OUT/licenses/LICENSE-port-MIT.txt"
 [ -f port/fast3d/LICENSE.txt ] && cp port/fast3d/LICENSE.txt "$OUT/licenses/LICENSE-fast3d.txt"
