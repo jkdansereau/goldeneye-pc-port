@@ -1083,7 +1083,15 @@ extern "C" bool gfx_opengl_dump_bound_fbo(uint32_t width, uint32_t height, const
     size_t n = (size_t)width * height * 3;
     uint8_t* pixels = (uint8_t*)malloc(n);
     if (!pixels) return false;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glReadBuffer(GL_BACK);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glFinish();
     glReadPixels(0, 0, (GLsizei)width, (GLsizei)height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+    {
+        GLenum e = glGetError();
+        if (e) sysLogPrintf(LOG_WARNING, "dump_bound_fbo: glReadPixels err 0x%x (%ux%u)", (unsigned)e, width, height);
+    }
     FILE* f = fopen(path, "wb");
     if (!f) { free(pixels); return false; }
     fprintf(f, "P6\n%u %u\n255\n", width, height);
@@ -1199,7 +1207,11 @@ bool gfx_opengl_start_draw_to_framebuffer(int fb_id, float noise_scale) {
         if (noise_scale != 0.0f) {
             current_noise_scale = 1.0f / noise_scale;
         }
-        glBindFramebuffer(GL_FRAMEBUFFER, fb.fbo);
+        /* fb_id 0 is the on-screen target: bind the window's default
+         * framebuffer (GL name 0), not framebuffers[0].fbo (a generated but
+         * attachment-less FBO -> incomplete -> nothing renders on a strict
+         * GL implementation like Mesa/llvmpipe). */
+        glBindFramebuffer(GL_FRAMEBUFFER, fb_id == 0 ? 0 : fb.fbo);
         current_framebuffer = fb_id;
         return true;
     } else {
