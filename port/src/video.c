@@ -28,6 +28,7 @@
 #include "config.h"
 #include "video.h"
 #include "input.h"
+#include "optionsoverlay.h"
 
 #include "../fast3d/gfx_api.h"
 #include "../fast3d/gfx_sdl.h"
@@ -94,6 +95,110 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Window.X",            &cfgWinX,      -1, 16384);
     configRegisterInt("Window.Y",            &cfgWinY,      -1, 16384);
     configRegisterInt("Window.Maximized",    &cfgWinMax,     0, 1);
+}
+
+/* Set by videoRequestLiveConfig() (F10 overlay, host thread); consumed on the
+ * scheduler thread in videoStartFrame() where the GL context is bound. */
+static volatile int liveCfgDirty = 0;
+
+static void videoApplyTexFilter(void)
+{
+    if (cfgTexFilter >= 2) {
+        gfx_set_texture_filter(FILTER_THREE_POINT);
+        gfx_set_mipmap_filter(MIPMAP_LINEAR);
+    } else if (cfgTexFilter == 1) {
+        gfx_set_texture_filter(FILTER_LINEAR);
+        gfx_set_mipmap_filter(MIPMAP_LINEAR);
+    } else {
+        gfx_set_texture_filter(FILTER_NONE);
+        gfx_set_mipmap_filter(MIPMAP_NEAREST);
+    }
+}
+
+/* Re-apply the live-tunable [Video] knobs (VSync / FpsCap / TextureFilter).
+ * MSAA and Fullscreen are FBO/window rebuilds -> "(restart)" in the overlay. */
+void videoRequestLiveConfig(void)
+{
+    liveCfgDirty = 1;
+}
+
+/* --- F10 overlay: window / fullscreen changes, deferred to the host thread ---
+ * optionsOverlayHandleInput() runs on the scheduler thread; SDL_SetWindowSize /
+ * SDL_SetWindowFullscreen pump the Win32 message loop and must run on the
+ * window's creating thread. The overlay posts a request here; the host-thread
+ * event pump drains it in videoDrainWindowRequests(). */
+static volatile int winReqKind = 0;          /* 0 none, 1 resize, 2 fullscreen */
+static volatile int winReqA = 0, winReqB = 0;
+
+void videoRequestWindowSize(int w, int h)
+{
+    winReqA = w; winReqB = h; winReqKind = 1;
+}
+
+void videoRequestFullscreen(int on)
+{
+    winReqA = on ? 1 : 0; winReqKind = 2;
+}
+
+void videoGetWindowSize(int *w, int *h)
+{
+    uint32_t ww = 0, hh = 0; int32_t x = 0, y = 0;
+    if (initDone && wmAPI && wmAPI->get_dimensions) {
+        wmAPI->get_dimensions(&ww, &hh, &x, &y);
+    }
+    if (w) *w = (int)ww;
+    if (h) *h = (int)hh;
+}
+
+void videoGetDesktopSize(int *w, int *h)
+{
+    SDL_DisplayMode m;
+    memset(&m, 0, sizeof(m));
+    if (SDL_GetDesktopDisplayMode(0, &m) != 0 || m.w <= 0 || m.h <= 0) {
+        m.w = 1920; m.h = 1080;
+    }
+    if (w) *w = m.w;
+    if (h) *h = m.h;
+}
+
+int videoIsFullscreen(void)
+{
+    return (initDone && wmAPI && wmAPI->get_fullscreen_state)
+         ? (wmAPI->get_fullscreen_state() ? 1 : 0) : 0;
+}
+
+static void videoDrainWindowRequests(void)
+{
+    int kind = winReqKind;
+    if (!kind || !wmAPI) {
+        winReqKind = 0;
+        return;
+    }
+    winReqKind = 0;
+
+    if (kind == 1) {
+        int w = winReqA, h = winReqB;
+        int32_t px = 100, py = 100;
+        if (wmAPI->get_fullscreen_state && wmAPI->get_fullscreen_state()) {
+            if (wmAPI->set_fullscreen) wmAPI->set_fullscreen(false);
+            cfgFullscreen = 0;
+        }
+        if (wmAPI->get_centered_positions) {
+            wmAPI->get_centered_positions(w, h, &px, &py);
+        }
+        if (wmAPI->set_dimensions) {
+            wmAPI->set_dimensions((uint32_t)w, (uint32_t)h, px, py);
+        }
+        gfx_sdl_update_cached_size();
+        cfgWinW = w; cfgWinH = h;
+        sysLogPrintf(LOG_INFO, "video: window -> %dx%d", w, h);
+    } else if (kind == 2) {
+        int on = winReqA;
+        if (wmAPI->set_fullscreen) wmAPI->set_fullscreen(on != 0);
+        gfx_sdl_update_cached_size();
+        cfgFullscreen = on ? 1 : 0;
+        sysLogPrintf(LOG_INFO, "video: fullscreen %s", on ? "on" : "off");
+    }
 }
 
 static u32 frames = 0;
@@ -165,16 +270,7 @@ int videoInit(void)
     gfx_set_fix_mip_textures(cfgFixMipTex);
     gfx_set_wrap_fix(cfgWrapFix);
 
-    if (cfgTexFilter >= 2) {
-        gfx_set_texture_filter(FILTER_THREE_POINT);
-        gfx_set_mipmap_filter(MIPMAP_LINEAR);
-    } else if (cfgTexFilter == 1) {
-        gfx_set_texture_filter(FILTER_LINEAR);
-        gfx_set_mipmap_filter(MIPMAP_LINEAR);
-    } else {
-        gfx_set_texture_filter(FILTER_NONE);
-        gfx_set_mipmap_filter(MIPMAP_NEAREST);
-    }
+    videoApplyTexFilter();
 
     /* The GL context is currently current on this (host main) thread, but all
      * rendering happens on the game's scheduler thread. WGL only allows a
@@ -209,6 +305,17 @@ void videoStartFrame(void)
     /* Rendering runs on the game's scheduler thread; the GL context was
      * created on the host main thread. */
     gfx_sdl_make_context_current();
+
+    if (liveCfgDirty) {
+        liveCfgDirty = 0;
+        wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
+        gfx_set_target_fps(cfgFpsCap);   /* 0 = uncapped */
+        videoApplyTexFilter();
+        sysLogPrintf(LOG_INFO, "video: live config applied "
+                     "(vsync=%d fpscap=%d texfilter=%d)",
+                     cfgVSync, cfgFpsCap, cfgTexFilter);
+    }
+
     gfx_start_frame();
 }
 
@@ -227,6 +334,11 @@ void videoPumpEvents(void)
     if (!initDone) {
         return;
     }
+
+    /* Apply any window/fullscreen change the F10 overlay posted from the
+     * scheduler thread (must run here, on the window's creating thread). */
+    videoDrainWindowRequests();
+
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
@@ -246,20 +358,33 @@ void videoPumpEvents(void)
                 exit(0);
             } else if (ev.key.keysym.sym == SDLK_F12 && !ev.key.repeat) {
                 screenshotReq = 1;
+            } else if (ev.key.keysym.sym == SDLK_F10 && !ev.key.repeat) {
+                optionsOverlayToggle();   /* F10: port-layer options overlay */
             } else if (ev.key.keysym.sym == SDLK_ESCAPE && !ev.key.repeat) {
-                /* WI-1: in click-to-lock mode ESC frees the captured cursor
-                 * (and is swallowed); otherwise it falls through to input.c
-                 * where it feeds the N64 B button (D145). */
-                inputReleaseCapture();
+                /* Overlay open: ESC closes it (and is swallowed). Otherwise
+                 * WI-1: in click-to-lock mode ESC frees the captured cursor
+                 * (and is swallowed); else it falls through to input.c where
+                 * it feeds the N64 B button (D145). */
+                if (optionsOverlayIsOpen()) {
+                    optionsOverlayToggle();
+                } else {
+                    inputReleaseCapture();
+                }
             }
             break;
         case SDL_MOUSEBUTTONDOWN:
             /* WI-1: a click in the window (re)locks the cursor in
              * click-to-lock mode; a no-op otherwise. */
-            inputNotifyClick();
+            if (!optionsOverlayIsOpen()) {
+                inputNotifyClick();
+            }
             break;
         case SDL_MOUSEWHEEL:
-            inputPostWheel(ev.wheel.y);   /* weapon cycle */
+            if (optionsOverlayIsOpen()) {
+                optionsOverlayScroll(ev.wheel.y);   /* move the selection */
+            } else {
+                inputPostWheel(ev.wheel.y);   /* weapon cycle */
+            }
             break;
         case SDL_CONTROLLERDEVICEADDED:
         case SDL_CONTROLLERDEVICEREMOVED:

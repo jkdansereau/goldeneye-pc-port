@@ -33,6 +33,39 @@ void configRegisterString(const char *key, char *value, int bufSize);
 const char *configGetFrameDump(void);   /* "lo-hi[:step]" or NULL if unset */
 int         configGetInputLog(void);
 
+/* ------------------------------------------------------------------------
+ * Option enumeration (for the F10 port-layer options overlay).
+ *
+ * configForEachOption() walks every registered option; configSetOptionMeta()
+ * attaches display metadata (label / adjust step / enum-value names) keyed by
+ * the dotted key. Meta is an optional side table -- config.c stays ignorant of
+ * which specific keys exist; the overlay populates it at init time.
+ * ---------------------------------------------------------------------- */
+enum {
+    CONFIG_OPT_INT = 0,
+    CONFIG_OPT_UINT,
+    CONFIG_OPT_FLOAT,
+    CONFIG_OPT_STR,
+};
+
+/* key      : dotted option key
+ * type     : CONFIG_OPT_*
+ * ptr      : &int / &unsigned / &float / char* (the live variable)
+ * min,max  : registered clamp bounds (min==max -> unclamped)
+ * step     : adjust step from the meta side table (0 if none)
+ * label    : display label from the meta side table (NULL if none)
+ * enumNames: NULL-terminated value-name list from the meta side table (or NULL)
+ * ctx      : opaque pointer passed straight through
+ */
+typedef void (*ConfigOptionCb)(const char *key, int type, void *ptr,
+                               double min, double max, double step,
+                               const char *label, const char *const *enumNames,
+                               void *ctx);
+
+void configForEachOption(ConfigOptionCb cb, void *ctx);
+void configSetOptionMeta(const char *key, const char *label, double step,
+                         const char *const *enumNames);
+
 #ifdef __cplusplus
 }
 #endif

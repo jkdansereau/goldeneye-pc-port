@@ -79,6 +79,7 @@
 #include "system.h"
 #include "config.h"
 #include "input.h"
+#include "optionsoverlay.h"
 
 /* N64 button bits (from PR/os.h -- duplicated here to avoid pulling os.h,
  * whose `u8 errno;` field collides with <errno.h>'s macro). */
@@ -500,6 +501,17 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         return 0;
     }
 
+    /* F10 options overlay: while it is open, controller 0 is fully swallowed
+     * (neutral pad, no stick) and the nav keys / wheel drive the overlay
+     * instead. Mirrors the WI-1 "cursor free in a stage -> withhold input"
+     * pattern. Controllers 1-3 are untouched. */
+    if (idx == 0 && optionsOverlayIsOpen()) {
+        optionsOverlayHandleInput();
+        if (stick_x) *stick_x = 0;
+        if (stick_y) *stick_y = 0;
+        return 0;
+    }
+
     /* ---- keyboard + mouse: controller 0 only ---- */
     if (idx == 0) {
         const Uint8 *ks = SDL_GetKeyboardState(NULL);
@@ -865,6 +877,22 @@ int inputReleaseCapture(void)
 }
 
 int inputMouseCaptureActive(void) { return mouseCaptureMode && !mouseGrabbed; }
+
+/* F10 options overlay: while it owns controller 0 the inputComputePad poll
+ * early-returns before reconcileGrab()/applyCursorVisibility(), so whatever
+ * grab state was live when F10 was pressed (relative mode + hidden cursor in a
+ * stage) would persist and the mouse UI would be unusable. Force the cursor
+ * free + visible every poll; the normal reconcile resumes once the overlay
+ * closes and the early-return no longer fires. */
+void inputSuspendForOverlay(void)
+{
+    if (mouseGrabbed) {
+        mouseGrabbed = 0;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
+        mouseDX = mouseDY = 0.0;
+    }
+    SDL_ShowCursor(SDL_ENABLE);
+}
 
 void inputPostWheel(int notches)
 {
