@@ -47,6 +47,14 @@
 #define _PORT_SHIM_STDDEF_TYPES
 typedef __SIZE_TYPE__    size_t;
 typedef __PTRDIFF_TYPE__ ptrdiff_t;
+/* SDL's headers (SDL_stdinc.h, SDL_hidapi.h) and glibc's <bits/wchar2.h>
+ * reference wchar_t, which in C is a library typedef owned by the compiler's
+ * shadowed <stddef.h>. Provide it from the builtin, guarded by the same
+ * macro GCC/glibc use so a real <stddef.h> reached later is a no-op. */
+#ifndef _WCHAR_T
+#define _WCHAR_T
+typedef __WCHAR_TYPE__ wchar_t;
+#endif
 #ifndef NULL
 #define NULL ((void *)0)
 #endif
