@@ -187,13 +187,13 @@ the front end into the early game. It is not finished and it is not stable.
 
 ## Download
 
-Pre-built **Windows x86-64** bundles are published under
-[Releases](../../releases) as marked pre-releases — the engine executable plus
-its runtime DLLs, no ROM and no game assets. You still supply your own ROM (see
-[Requirements](#requirements)) and drop it in `data/` as described in the
-bundled README. Every download is a research alpha with the caveats in
-[Status](#status) above; there is no stable build yet. To build from source
-instead, see [Building](#building).
+There are no pre-built binaries yet. The project is Phase 2 WIP with the
+caveats in [Status](#status) above — nothing runs end to end — so the only way
+to try it is to build it yourself; see [Building](#building). You supply your
+own ROM (see [Requirements](#requirements)) and drop it in `data/` before
+building. Pre-release **Windows x86-64** bundles (engine executable plus
+runtime DLLs, no ROM or game assets) may be published under
+[Releases](../../releases) once the port is playable.
 
 ## Requirements
 
@@ -388,19 +388,19 @@ GitHub. It follows the same conventions they do:
 
 - **No ROM and no game assets are distributed** — not in this repository and
   not in any release. Textures, audio, models, level data and in-game text are
-  extracted from a ROM *you already own*, on *your* machine (at build time for
-  a source build; at first run for a pre-built binary).
+  extracted from a ROM *you already own*, on *your* machine, at build time.
 - The repository is a fork of the public
   [GoldenEye 007 decompilation](https://github.com/n64decomp/007) and inherits
   its contents unmodified (see [`NOTICE`](NOTICE) for what that includes).
 - No official logos, box art, or marketing assets are used. "GoldenEye 007",
   "007", "James Bond" and related marks belong to their respective owners
   (Nintendo, Microsoft/Rare, MGM, Danjaq, EON Productions).
-- **Pre-built binaries** offered under [Releases](../../releases) contain only
-  the engine — the `port/` layer plus the compiled decompilation, with no game
-  data of any kind — bundled with permissively-licensed runtime libraries
-  (SDL2, zlib, the MinGW runtime; their licenses travel in the download). Any
-  build, yours or ours, is useless without a ROM you supply.
+- **If** pre-built binaries are published under [Releases](../../releases) in
+  the future, they will contain only the engine — the `port/` layer plus the
+  compiled decompilation, with no game data of any kind — bundled with
+  permissively-licensed runtime libraries (SDL2, zlib, the MinGW runtime; their
+  licenses travel in the download). No such release exists yet, and any build —
+  yours or ours — is useless without a ROM you supply.
 
 This project is **not affiliated with, endorsed by, or sponsored by** Nintendo,
 Rare, Microsoft, MGM, Danjaq, EON Productions, or any rights holder in
