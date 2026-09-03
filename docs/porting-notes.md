@@ -602,6 +602,15 @@ past it (walk off the end).
   fixed-tick mode was assessed not-narrow (redesigns retrace/tick
   semantics); design is in §F D117 if someone picks it up, after which
   `framediff.py --exact` becomes usable.
+- **Anything blocking on the scheduler thread throttles the whole sim**
+  (D186, cf. D134). The gfx task runs synchronously on `src/sched.c`'s
+  thread, and that same thread delivers VI-retrace events; any `sysSleep` /
+  busy-wait on that path (frame-rate cap, a lock, an asset load) stops
+  retrace delivery, so every game thread blocked on `osRecvMesg(retraceQ)`
+  stalls with it. On console the CPU never waits on RSP/RDP/VI. A PC frame
+  cap must therefore drop *presented* frames without sleeping that thread —
+  `Video.FpsCap < 30` is currently just refused (clamped to uncapped) as a
+  stopgap.
 - **D24-implications — host-scheduling nondeterminism / fake priority
   semantics:** the pthread kernel does not enforce N64's 0–31 priorities
   (`osYieldThread` = `Sleep(0)`), so interleavings impossible on console can

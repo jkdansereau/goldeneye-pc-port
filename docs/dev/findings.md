@@ -386,6 +386,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D161 | Depot (`-level_30`) ceiling = bright-blue speckle + radial rays (B2). A CI8 tile drawn with `gsDPSetTextureLUT(G_TT_NONE)` was decoded against the stale `rdp.palette` → garbage. Fix: `#ifdef`-free narrow route CI→I when `palette_fmt == G_TT_NONE` in `gfx_pc.cpp import_texture()`. | FIXED (`port/fast3d/gfx_pc.cpp`) |
 | D165 · D166 | input-layer polish (M-31, port-only, `port/src/input.c`): D165 front-end cursor is now a true ~1:1 pointer (P-controller estimating the game cursor via front.c's own integrator) instead of velocity²; D166 hipfire mouse pitch emits speed-proportional C-button pulses instead of a fixed digital threshold. | FIXED |
 | D180 · D181 | native-PC input pass (QoL run, `qol/native-pc-input-menu`): D180 = `Input.MouseCaptureMode` click-to-lock + absolute-cursor menu tracking + aim-speed default retune (`port/src/input.c`, `video.c`, port-only); D181 = `Game.ScreenShakeIntensity` route-(b) hook in `src/fr.c viShake` (`#ifdef PORT`, default 1.0 = no-op). | LANDED, config-gated, feel-checks owed |
+| D186 | **`Video.FpsCap` throttles the sim, not just presentation (M-39 diag, M-42 clamp).** The frame-pacing `sysSleep`+busy-wait in `sync_framerate_with_timer` (`port/fast3d/gfx_sdl2.cpp`) runs inline on the scheduler thread (`osSpTaskStartGo`→`gfx_run`→`swap_buffers_begin`), so a low cap blocks VI-retrace delivery and drags every game thread down to the cap rate (no N64 analogue — RSP/RDP are separate silicon). **Landed:** `0 < FpsCap < 30` → treated as `0` (uncapped) + warning, at both `videoInit` (normalises a bad `ge007.ini` for the next `configSave`) and `gfx_sdl_set_target_fps` (covers the F10-overlay live path); caps ≥ 30 unchanged. Verified: default `FpsCap=0` framediff 3/3 golden-identical; `FpsCap=10` now runs at the uncapped rate; `FpsCap=60` still paces. **Owed:** move pacing off the scheduler thread so any cap only drops presented frames. See §F "D186" + porting-notes.md §E. | CLAMP LANDED (`port/fast3d/gfx_sdl2.cpp`, `port/src/video.c`); real fix owed |
 | D152+ | D152 addendum (M-31): static audit of every compiled-audio `osSetIntMask(OS_IM_NONE)` — **all balanced**, no unbalanced early-return. Real fixes: `sndSetSfxSlotVolume` now holds the mask across its list walk (matches its twin `sndDeactivateAllSfxByFlag`) + `sndApplyVolumeAllSfxSlot` batches the slot loop under one recursive hold (kills the fade-out lock-acquire storm); `portThreadWrapper` calls `imThreadExitRelease()` on thread exit (kills the "transient thread acquired `OS_IM_NONE` and died" leak + the pthread-id-reuse re-wedge). Steal-lock kept as backstop. | FIXED (`src/snd.c`, `port/src/libultra.c`, `#ifdef PORT`) — fade-out repro playtest-gated, not headless-verified |
 | RC3 · D167 | **Non-power-of-two texture wrap period (`docs/dev/TEXTURE-GLITCH-ANALYSIS.md` §6 RC3 — "textures repeat oddly", residual Depot-ceiling noise after D161).** The N64 RDP masks the texel coordinate of a wrapping render tile at `1<<mask`, and GE sets `mask = texDimensionToMask(dim) = ceil(log2(dim))` (`src/game/tex.c:361`), so a non-PoT tile (Depot's 65×65 / 96×48 / 56×56 room surfaces) repeats at the **next power of two**, not at its image size the way GL `GL_REPEAT` does → the pattern is squashed/stretched and the seam lands in the wrong place. fast3d never stored `masks`/`maskt` at all (`gfx_dp_set_tile` dropped them) and wrapped purely at the uploaded image dimension. **Fix (`port/fast3d/gfx_pc.cpp`, behind the existing `Video.WrapFix` knob, default OFF):** store `masks`/`maskt` on the tile; in the hoisted per-texunit pre-wrap block in `gfx_sp_tri1` (D74 block — already lifted out of the vertex loop, indexed by texunit `t` not vertex `i`), when the tile is WRAP (no CLAMP/MIRROR bit) and `1<<mask != tex_width`, fold the UV at the N64 period `1<<mask` and clamp the `[dim, 1<<mask)` overflow band (which is a TMEM smear on console, no real texels) to the last texel so it reads as an edge streak instead of a bogus early image restart. `GE_WRAPFIX=0/1` env override added (env wins over the ini, matching `Debug.FrameDump`). **Per-level captures (`-level_09`/`-30`/`-34`/`-20`, WrapFix OFF vs ON, `GE_PCDUMP` 6-frame windows):** no crashes, 6/6 frames each; on settled/comparable frames Silo is ~pixel-identical (phash 0–11), Facility 180–260 pixel-identical, Depot shows small localized texel changes on ceiling/wall cells (dmean 5–9, no structural break); the large per-run deltas are all the D117 intro-camera-pan nondeterminism, not the fix. Default kept **OFF** — no regression, but a headless structural diff can't confirm the Depot ceiling actually looks *better*; needs a human eyeball with `Video.WrapFix=1`. Default-off is byte-identical to golden (all new behaviour is inside `if (g_wrap_fix)`). D74's dead in-vertex-loop wrap block was already reworked/hoisted at M-30; this only adds the mask-period trigger. Confidence: **medium** (mechanism correct; overflow-band handling is an approximation, not exact TMEM-smear emulation; visual win unconfirmed). porting-notes.md §D. | KNOB ADDED, default OFF (`port/fast3d/gfx_pc.cpp`). Needs user visual check on Depot. |
 | D168 | **`GE_PCDUMP` / F12 PPM captures were vertically flipped — the entire source of the bogus D114/D116 "HUD/text X-mirror" (M-33, developer-confirmed).** `gfx_opengl_dump_bound_fbo` (`port/fast3d/gfx_opengl.cpp`) wrote `glReadPixels` output straight to a P6 PPM. GL framebuffer origin is bottom-left; PPM P6 is top-row-first — so every capture (and the `tools_pc/golden/` set, and every screenshot pasted into the finding log since M-6) was upside-down. On real hardware / an actual screen the game renders correctly (developer confirmed). The successive D114→D116 "shared fast3d mirror" investigations — each of which found *every probed stage clean yet the output "mirrored"* — were reading an inverted capture and pattern-matching upside-down asymmetric content (text, guards, the Nintendo logo) as "mirrored". Fix: emit PPM rows bottom-to-top. `tools_pc/golden/*.png` flipped in place to match (see `tools_pc/golden/README.md`); regenerate from a real run when convenient. **Not runtime-verified this session** (no ROM / toolchain in the migrated tree — see the migration note) — needs a fresh capture to confirm text reads normally. Confidence: **high** (mechanism is unambiguous; developer has hardware confirmation the screen is correct). porting-notes.md §D2. | FIXED (`port/fast3d/gfx_opengl.cpp`); D114 / D116 reclassified as capture-orientation artifacts (below). |
@@ -4468,6 +4469,47 @@ Findings:
    *Confidence:* crash cmd + `Gfx` stride **high**; `tex->data`-is-the-bad-
    value **high**; root cause of *why* `tex->data` is bad **low–medium**
    (two candidate mechanisms, neither proven).
+
+---
+
+## D186 — `Video.FpsCap` throttles the whole sim, not just presentation (M-39 diagnosed, M-42 clamp landed)
+
+**Symptom (M-39, user report):** window title read "GoldenEye 007 - 1 fps";
+the game had become a slideshow. Root cause was `Video.FpsCap = 10` in the
+(gitignored) `data/ge007.ini` `[Video]` section — almost certainly dinged down
+via the F10 options overlay (D184) during testing; ESC-close calls
+`configSave()` so it persisted.
+
+**Mechanism.** `gfx_set_target_fps(cfgFpsCap)` feeds `sync_framerate_with_timer()`
+in `port/fast3d/gfx_sdl2.cpp`, which does `sysSleep(left)` + a `sysCpuRelax()`
+busy-wait. That wait runs **inline on the game's scheduler thread**:
+`src/sched.c __scExec` → `osSpTaskStartGo` (`port/src/libultra.c:1119`) →
+`gfx_run` → `gfx_sdl_swap_buffers_begin` → `sync_framerate_with_timer`, and only
+*after* it returns does `osSpTaskStartGo` post `OS_EVENT_SP`/`OS_EVENT_DP`. While
+that thread is parked in the pacing wait it is not delivering VI-retrace events
+either, so every game thread blocked on `osRecvMesg(retraceQ)` stalls with it —
+the sim is dragged down to the render-cap rate. On console the RSP/RDP are
+separate silicon and VI retrace is unconditional, so a "render cap" cannot slow
+the CPU; there is no N64 analogue. Verified M-39 (`-level_09`, fixed 35 s
+window): `FpsCap=10` → 5 frames; `FpsCap=30` → 5; `FpsCap=60` → frame ~300;
+`FpsCap=0` → frame 900+.
+
+**Landed (M-42, clamp only — `port/fast3d/gfx_sdl2.cpp` + `port/src/video.c`):**
+any `0 < FpsCap < 30` is treated as `0` (uncapped) with a one-line warning, at
+both the config-load site (`videoInit`, so a bad ini is normalised and persists
+sane on the next `configSave()`) and the fast3d chokepoint (`gfx_sdl_set_target_fps`,
+which also covers the live path from the F10 overlay). Caps ≥ 30 are unchanged.
+Verified: `-level_09` framediff 3/3 within threshold at the default `FpsCap=0`
+(golden-identical); with `FpsCap=10` the sim now runs to VI post ~1740 in a
+30 s window (≈ the `FpsCap=0` rate) instead of ~300; `FpsCap=60` still paces
+(~56/s, no warning).
+
+**Still OWED (the real fix):** move the frame-pacing wait off the scheduler
+thread so *any* cap only drops/duplicates presented frames without blocking
+retrace delivery (e.g. pace in the host event-pump thread, or gate the swap
+without sleeping the RSP path). Until then a low cap is refused rather than
+supported. Same timing-compensation family as D117 / D134 / D155.
+porting-notes.md §E.
 
 ---
 
