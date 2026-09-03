@@ -4699,6 +4699,21 @@ current combiner/tile, close on `G_RDPHALF_2`. Full stream spec + the alternativ
 Cheap first step: headless `-level_22` / `-level_29` — confirm also black (proves
 emit path, not a Surface asset).
 
+### D176(a) — M-42: `-level_22` headless repro CONFIRMED
+
+`-level_22` (Statue Park, night) at frame ~360, **bare boot, no input** — the
+spawn/intro camera already faces the horizon: the entire upper half of the
+frame is **pure black** `(0,0,0)` where N64 shows a moonlit sky; the park
+pillars and ground render fine, HUD present. Confirms the defect is the shared
+cloud-sky emit path (RDPHALF stream dropped), not a Surface-specific asset.
+`-level_22` frame 360 is the cleanest headless verification target for the
+RDPHALF-decoder fix — no `GE_INPUTSCRIPT` needed.
+
+Note: `-level_36` / `-level_43` (Surface) bare-boot intro cameras point **down
+at the terrain**, so a no-input capture there does not frame the sky. `-level_29`
+(Streets, night) top-of-frame reads dim `(29,24,22)` not pure black — needs a
+visual check to distinguish "dark night sky drawn" from "partial".
+
 ---
 
 ## D177 — Ladders non-functional: `count`/`rooms` land in the high half of a widened pointer (M-36)
