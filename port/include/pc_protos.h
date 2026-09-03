@@ -389,9 +389,10 @@ s32 sizepropdef();
 Gfx * skyRender();
 void skySetStageNum();
 void skyTick();
-/* Exact match of GCC's built-in (and MSVCRT) prototype; size_t is
- * `unsigned long long` on this MinGW toolchain. */
-int snprintf(char *, unsigned long long, const char *, ...);
+/* Match the C library prototype. size_t (from <PR/ultratypes.h> above) is
+ * `unsigned long long` on MinGW but `unsigned long` on Linux/glibc — spelling
+ * it `size_t` keeps this compatible with both libcs' <stdio.h>. */
+int snprintf(char *, size_t, const char *, ...);
 PropRecord * something_with_generating_object();
 void speedgraphInit();
 void speedgraphMarkerUpdate();
