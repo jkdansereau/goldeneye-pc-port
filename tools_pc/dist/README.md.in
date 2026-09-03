@@ -5,10 +5,9 @@ A native PC port of the original Nintendo 64 *GoldenEye 007*, compiled from the
 
 > **Very early research alpha — not a playable game.**
 > The intro and menus render and all 21 solo missions load, but there is
-> **no audio**, some 3D models and text are broken, outdoor levels render with
-> a black sky, the in-HUD weapon icon is missing, and you should expect crashes
-> and glitches past the level intro. This is a technical demo of the porting
-> work.
+> **no audio**, some front-end 3D models are broken, outdoor levels render with
+> a black sky, and you should expect crashes and glitches past the level intro.
+> This is a technical demo of the porting work.
 >
 > If you just want to *play* GoldenEye on PC, use one of the Xbox 360
 > recompilation projects instead — see the project page.
