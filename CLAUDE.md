@@ -66,3 +66,28 @@ Full template: `docs/dev-process.md` -> "Investigation-brief template".
 - **Per batch / integration checkpoint:** one 60s `-level_09` crash-free run.
 - Subagents on small disjoint subsystems (input, audio, saves, converters)
   don't run the game — the overseer verifies.
+
+## Local Qwen dispatch (cost-free, data-local worker)
+
+A local Qwen3.8-27B is wired in via the `delegate-local` MCP server (see
+`C:\Users\james\Source\Repos\20260902-qwen38claudepair`). Use it as a
+*subagent whose compute runs on-machine* for scoped, checkable work — the lead
+still owns judgment, planning, and the verification gate.
+
+- **Tools:** `local_backend_status()` (run once before first dispatch),
+  `list_local_agents()`, `delegate_to_local_agent(agent_name, task, workdir, max_turns?, max_tokens?)`.
+- **Workers** (`~/.claude/agents/`): `repo-mapper` (read-only ingest/map),
+  `mechanical-coder`, `test-writer`, `triage` (read-only root-cause + patch),
+  `refactor-bot`.
+- **Dispatch when ALL hold:** narrow blast radius, clear spec, output checkable
+  by a build/test/diff. Keep on Claude: ABI/handedness/format reasoning, novel
+  debugging, anything you can't cheaply verify.
+- **Backend reality:** ~1 inference slot, slow per token — dispatch
+  **sequentially**, `max_tokens` ~4–8K, treat as batch work. Needs the LiteLLM
+  proxy (`litellm/run.ps1`) + Unsloth Studio both up.
+- **Windows quirk:** the worker's shell is `cmd.exe`, not bash — its agent
+  prompt tells it to use `read_file`/`findstr`, not `cat`/`grep`. Always
+  spot-check the returned artifact against the real files before integrating;
+  the 27B will confidently fabricate if a read fails.
+- Fits the **dispatch preflight** rules above (FILES / BUDGET / ON EXPIRY /
+  CONSTRAINTS / REPORT) — write the `task` string to that shape.
