@@ -606,6 +606,31 @@ silently disappears.
   (the missing primitive is often small). Needs an `-O2` build + an eyeball
   or a targeted crop diff.
 
+## D7. `va_list` is an ARRAY type on x86-64 SysV — never take `&` of a by-value `va_list` param
+
+On Windows x64 `va_list` is a scalar (`char *`), so passing a `va_list`
+parameter by value and later taking its address (`&args`) to hand a helper a
+"pointer to the list" happens to work. On the **x86-64 System V ABI**
+(Linux/macOS) `va_list` is `__va_list_tag[1]` — an array — so a by-value
+`va_list` parameter has already decayed to `__va_list_tag *`. `&args` is then
+the address of the *local pointer slot*, not the argument list, and a helper
+doing `va_arg(*args, …)` walks garbage → segfault. Latent at `-Og`, fatal at
+`-O2`.
+
+- Instance: **D188** — the IDO printf engine `_Printf`
+  (`src/libultrare/libc/xprintf.c`) passed `&args` to `_Putfld`; crashed at
+  boot on Linux `-O2` via `bossInitMainthreadData` → `sprintf`. Fix: under
+  `#ifdef PORT`, thread a real `va_list *` from the top (`sprintf.c` passes
+  `&args` of an actual `va_list` object; `_Printf` takes `va_list *` and
+  passes it straight through). `#else` keeps the ROM-matching body.
+- Rule: to share one arg-walk between functions, pass `va_list *` explicitly
+  from the outermost `va_start` scope. Never `&` a `va_list` that arrived as
+  a parameter. `va_copy` into a fresh local is the other portable option when
+  the callee must not disturb the caller's position.
+- Same "works on MinGW, UB on SysV, exposed at `-O2`" shape as D6 — suspect
+  this class for any Linux-only crash whose backtrace runs through
+  `xprintf`/`_Putfld`/`vsnprintf`-alikes.
+
 ## E. Process / method notes
 
 - Investigation loop is: reproduce → env-gated capped probe → root-cause
