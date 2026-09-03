@@ -52,10 +52,24 @@ include(TargetArch)
 include(FindPkgConfig)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_EXTENSIONS OFF)
+# GNU extensions ON: strict -std=c11/-std=c++20 define __STRICT_ANSI__, which
+# disables glibc's _DEFAULT_SOURCE and hides POSIX symbols the port needs
+# (clock_gettime/CLOCK_REALTIME in port/src/libultra.c, mmap flags, etc.).
+# -std=gnu11/gnu++20 is GCC's own default and what MinGW was already using.
+set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Opt-in ccache launcher. The game sources are frozen (1:1 with the decomp),
+# so ccache makes branch-switch / worktree rebuilds nearly free. No-op when
+# ccache is not installed.
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+  set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+  set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+  message(STATUS "ccache enabled: ${CCACHE_PROGRAM}")
+endif()
 
 # Default build type
 if(NOT CMAKE_BUILD_TYPE AND NOT EXISTS ${CMAKE_BINARY_DIR}/CMakeCache.txt)
@@ -148,6 +162,15 @@ configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststring.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hoststring.h" @ONLY)
 
+# Host <sched.h> path for port/shim/sched.h. The decomp's src/sched.h is on
+# the include path and shadows the system header; libstdc++'s <thread>/gthr
+# headers in the fast3d C++ TUs need the real <sched.h> (cpu_set_t,
+# sched_yield). Both MinGW and Linux keep <sched.h> at bin/../include.
+get_filename_component(PORT_HOST_SCHED_H "${_PORT_GCC_DIR}/../include/sched.h" ABSOLUTE)
+configure_file(
+  "${CMAKE_SOURCE_DIR}/port/include/hostsched.h.in"
+  "${CMAKE_BINARY_DIR}/port/include/hostsched.h" @ONLY)
+
 # Host <stdlib.h> path for port/shim/stdlib.h. The N64 include/stdlib.h
 # typedefs lldiv_t/ldiv_t, which conflict with the host's when both land in
 # one C++ TU (fast3d): MinGW's own sec_api/stdlib_s.h does `#include
@@ -160,7 +183,17 @@ configure_file(
 
 # Host <stddef.h> path for port/shim/stddef.h (same reason as stdlib: the N64
 # stub shadows the host header in C++ TUs, hiding max_align_t from cstddef).
-get_filename_component(PORT_HOST_STDDDEF_H "${_PORT_GCC_DIR}/../include/stddef.h" ABSOLUTE)
+# stddef.h is compiler-internal, not in bin/../include: on a native Linux GCC
+# it lives under lib/gcc/<triple>/<ver>/include. Ask the compiler where it is;
+# fall back to the MinGW bin/../include layout.
+execute_process(
+  COMMAND "${CMAKE_C_COMPILER}" -print-file-name=include/stddef.h
+  OUTPUT_VARIABLE _PORT_GCC_STDDEF OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+if(_PORT_GCC_STDDEF AND EXISTS "${_PORT_GCC_STDDEF}")
+  get_filename_component(PORT_HOST_STDDDEF_H "${_PORT_GCC_STDDEF}" ABSOLUTE)
+else()
+  get_filename_component(PORT_HOST_STDDDEF_H "${_PORT_GCC_DIR}/../include/stddef.h" ABSOLUTE)
+endif()
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststddef.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hoststddef.h" @ONLY)
@@ -223,6 +256,25 @@ add_compile_options(
 add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-pointer-sign>)
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-function>)
 
+# The decomp's `#define inherits struct` idiom (src/bondtypes.h) makes the base
+# struct an unnamed tagged member and accesses its fields directly
+# (obj->type where type lives in the embedded PropRecord). GCC targeting
+# *-w64-mingw32 enables this via -fms-extensions implicitly; a native Linux/
+# macOS GCC does not, so `'ObjectRecord' has no member named 'type'`. Enable
+# the Plan 9 extensions explicitly there (superset of -fms-extensions: also the
+# automatic base-pointer conversion the idiom relies on). C only — the decomp
+# is C; fast3d C++ does not use `inherits`.
+if(NOT MINGW)
+  add_compile_options($<$<COMPILE_LANGUAGE:C>:-fplan9-extensions>)
+  # GCC 14 promoted several long-standing C leniencies to hard errors
+  # (int<->pointer for a known prototype, incompatible-pointer arg types,
+  # implicit int/function). The WIP decomp still trips these (e.g.
+  # append_text_picked_up's vestigial u8* params in propobj.c). -fpermissive
+  # downgrades them to warnings — the C counterpart of the -Wno-error lines
+  # above, and the documented path for building older C against GCC 14+.
+  add_compile_options($<$<COMPILE_LANGUAGE:C>:-fpermissive>)
+endif()
+
 # ASLR must be OFF: dram_syms.s defines absolute symbols (cfb_16 @ 0x70000000,
 # _bssSegmentEnd @ 0x70050000) that the game references through pointer-typed
 # externs (src/bondgame.h: `extern u32 *_bssSegmentEnd`). On x86-64/PE, taking
@@ -233,6 +285,27 @@ add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-function>)
 # base at startup.
 if(MINGW)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--disable-dynamicbase")
+elseif(UNIX AND NOT APPLE)
+  # Linux equivalent of the ASLR-off requirement above: dram_syms.s defines
+  # absolute symbols at 0x70000000 referenced through pointer-typed externs. A
+  # PIE build (GCC's default on modern distros) emits GOT/relative relocations
+  # for them — R_X86_64_32S link errors, or a runtime rebase to garbage. Build
+  # and link no-PIE so the image keeps its preferred load address.
+  add_compile_options(-fno-pie)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
+  # Move the image base to 0x20000000. The default no-PIE base 0x400000 puts
+  # .data/.bss symbols around 0x00500000-0x00600000, which COLLIDES with the
+  # N64 address ranges fast3d's seg_addr() decodes: a game-built display list
+  # that embeds `&symbol` (via the osVirtualToPhysical identity shim) hands
+  # seg_addr a value < 0x800000, which it treats as a K0-physical DRAM offset
+  # and remaps to 0x80xxxxxx (zeroed DRAM mirror) -> "unknown GBI opcode 0x00"
+  # -> black screen. 0x20000000 sits in the gap between the segmented-address
+  # space (< 0x10000000), the cart map (0x10000000), the D131 module range
+  # ([0x40000000,0x70000000)) and DRAM (>= 0x70000000); seg_addr passes such
+  # addresses through untouched. Still < 2GiB so -mcmodel=small / R_X86_64_32
+  # relocations are fine (unlike a 0x140000000 base, which needs mcmodel=large).
+  # This is the ELF analogue of the Windows build's fixed 0x140000000 base.
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Ttext-segment=0x20000000")
 endif()
 
 # port/shim first: PC-only shadow headers (bondtypes.h, bondconstants.h,

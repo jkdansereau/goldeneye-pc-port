@@ -100,6 +100,10 @@ static u32 frames = 0;
 /* Set by the host event pump (F12), consumed on the render thread in
  * videoEndFrame where a GL context is current. */
 static volatile int screenshotReq = 0;
+
+/* Pre-swap capture hook (defined below, registered in videoInit). */
+static void videoPreSwapCapture(void);
+extern void (*gfx_pre_swap_hook)(void);
 static double fpsWindowStart = 0.0;
 static int fpsNumFrames = 0;
 static float vidAvgFPS = 0.f;
@@ -171,6 +175,8 @@ int videoInit(void)
      * (see videoStartFrame). Must come after set_swap_interval above, which
      * still needs a current context on this thread. */
     gfx_sdl_release_context();
+
+    gfx_pre_swap_hook = videoPreSwapCapture;
 
     initDone = 1;
     sysLogPrintf(LOG_INFO, "video: %dx%d window (native %dx%d)",
@@ -289,18 +295,13 @@ void videoSubmitCommands(Gfx *cmds)
     gfx_run(cmds);
 }
 
-void videoEndFrame(void)
+/* Runs from gfx_sdl_swap_buffers_begin with the composited frame still in the
+ * back buffer, just before SDL_GL_SwapWindow. Reading the back buffer after
+ * the swap is undefined on buffer-exchange drivers (Mesa/WSLg) -> black. */
+static void videoPreSwapCapture(void)
 {
-    if (!initDone) {
-        return;
-    }
-    gfx_end_frame();
-
-    /* TEMP D70 (env-gated, debug-only, env-gated): GE_PCDUMP="first-last"
-     * or "first-last:step" dumps the presented frame as ./ppm/frame_NNNNNN.ppm
-     * (one frame behind real time — read happens after SwapWindow). Used to
-     * pixel-verify the intro's 3D content. Also honours [Debug] FrameDump in
-     * ge007.ini (env var wins). */
+    /* GE_PCDUMP="first-last" / "first-last:step" -> ./ppm/frame_NNNNNN.ppm.
+     * Also honours [Debug] FrameDump in ge007.ini (env var wins). */
     const char *pcdump = configGetFrameDump();
     if (pcdump) {
         static int lo = -1, hi = 0, step = 1;
@@ -335,6 +336,14 @@ void videoEndFrame(void)
             sysLogPrintf(LOG_WARNING, "video: screenshot failed");
         }
     }
+}
+
+void videoEndFrame(void)
+{
+    if (!initDone) {
+        return;
+    }
+    gfx_end_frame();
 
     ++frames;
     ++fpsNumFrames;

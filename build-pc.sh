@@ -22,7 +22,7 @@
 set -euo pipefail
 
 ROMID="${1:-ntsc-final}"
-BUILD_DIR="build-pc"
+BUILD_DIR="${BUILD_DIR:-build-pc}"
 
 echo "==> Configuring PC port (ROMID=${ROMID})"
 cmake -S . -B "${BUILD_DIR}" -DROMID="${ROMID}"

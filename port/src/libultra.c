@@ -173,8 +173,14 @@ static uint64_t portNextTimerUs(void);
 
 static void portHeartbeatCheck(void)
 {
+    /* A real hang is a permanent stall; transient >3 s gaps are normal on a
+     * slow/software-GL/debugger setup (level loads, gdb pauses, SIGTERM
+     * teardown) and were spamming ge007.crash.log with dozens of thread
+     * dumps. Use a longer window and stop after a few reports. */
+    static int fired = 0;
     uint64_t now = sysGetMicroseconds();
-    if (now - g_lastFrameUs > 3000000 && now - g_lastHeartbeatUs > 2000000) {
+    if (fired < 3 && now - g_lastFrameUs > 8000000 && now - g_lastHeartbeatUs > 5000000) {
+        fired++;
         g_lastHeartbeatUs = now;
         sysLogPrintf(LOG_ERROR,
             "kernel heartbeat: no frame rendered for %llu ms (frames=%d); state:",
@@ -334,6 +340,29 @@ void osCreateThread(OSThread *t, OSId id, void (*entry)(void *), void *arg,
     t->state = OS_STATE_STOPPED;
 }
 
+#if !defined(_WIN32)
+#include <sys/mman.h>
+/* The decomp aligns/compares stack-buffer pointers by truncating to u32
+ * (e.g. `(u32)compbuffer` in image.c texLoad) — an N64 assumption. glibc
+ * puts pthread stacks above 4 GiB, so those truncations corrupt. Force each
+ * game-thread stack into the low 2 GiB with MAP_32BIT so every such idiom
+ * works exactly as on the console. Windows pthread stacks are already low. */
+static void *portAllocLowStack(size_t sz)
+{
+#if defined(MAP_32BIT)
+    void *p = mmap(NULL, sz, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT
+#if defined(MAP_STACK)
+                   | MAP_STACK
+#endif
+                   , -1, 0);
+    if (p != MAP_FAILED)
+        return p;
+#endif
+    return NULL;
+}
+#endif
+
 void osStartThread(OSThread *t)
 {
     PortThread *pt = portFind(t);
@@ -344,7 +373,15 @@ void osStartThread(OSThread *t)
     pthread_attr_t attr;
     int rc;
     pthread_attr_init(&attr);
+#if !defined(_WIN32)
+    void *lowStack = portAllocLowStack(PORT_THREAD_STACK);
+    if (lowStack)
+        pthread_attr_setstack(&attr, lowStack, PORT_THREAD_STACK);
+    else
+        pthread_attr_setstacksize(&attr, PORT_THREAD_STACK);
+#else
     pthread_attr_setstacksize(&attr, PORT_THREAD_STACK);
+#endif
     rc = pthread_create(&pt->th, &attr, portThreadWrapper, pt);
     pthread_attr_destroy(&attr);
     if (rc != 0) {
@@ -765,6 +802,7 @@ static int dramHostAddrValid(uintptr_t addr, u32 size)
      * buffers (e.g. ramrom_data_target), stack compbuffers, sidecar images.
      * Truncated wild addresses (0x40xxxxxx from s32 pointer math) are not
      * committed, so VirtualQuery still catches them. */
+#if defined(PLATFORM_WINDOWS)
     {
         MEMORY_BASIC_INFORMATION mbi;
         if (VirtualQuery((LPCVOID)addr, &mbi, sizeof(mbi)) == sizeof(mbi) &&
@@ -774,6 +812,13 @@ static int dramHostAddrValid(uintptr_t addr, u32 size)
             return 1;
     }
     return 0;
+#else
+    /* No cheap committed-memory probe on POSIX; this is a TEMP D60 diagnostic.
+     * Be permissive so legitimate .bss/stack/sidecar DMA targets are not
+     * flagged as fatal (a genuinely wild target still faults in the memcpy). */
+    (void)size;
+    return 1;
+#endif
 }
 
 static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
@@ -817,6 +862,7 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
                 wp += snprintf(wp, win + sizeof(win) - (wp - win),
                                " %p", (void *)sp[i]);
             }
+#if defined(PLATFORM_WINDOWS)
             {
                 PVOID tlow = NULL, thigh = NULL;
                 GetCurrentThreadStackLimits(&tlow, &thigh);
@@ -826,6 +872,12 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
                              ((uintptr_t)dstVA >= (uintptr_t)tlow &&
                               (uintptr_t)dstVA < (uintptr_t)thigh));
             }
+#else
+            /* TEMP D60 diagnostic: no portable committed-stack query without
+             * _GNU_SOURCE (pthread_getattr_np); the raw stack window above and
+             * the crash handler's register dump are enough to symbolicate. */
+            sysLogPrintf(LOG_ERROR, "D60 thread stack: (n/a on POSIX)\n");
+#endif
             sysLogPrintf(LOG_ERROR,
                          "D60 BAD DMA TARGET dst=%p src=0x%08X size=0x%X "
                          "stack@rbp:%s\n",

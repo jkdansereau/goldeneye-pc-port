@@ -402,6 +402,39 @@ static void crashHandler(int sig, siginfo_t *siginfo, void *ctx)
     sysFatalError("Crash!\n\n%s", msg);
 }
 
+/* D38: called by the kernel heartbeat watchdog (port/src/libultra.c) when a
+ * hang is detected. A full cross-thread backtrace on POSIX would need a
+ * signal-based stack-walk of every peer thread; for now log the live thread
+ * roster plus the calling (watchdog) thread's own backtrace, which is enough
+ * to see the watchdog fired and which threads were still up. */
+void crashDumpThreads(const unsigned long *tids, const char **names, int count)
+{
+    char msg[CRASH_MAX_MSG + 1] = { 0 };
+    unsigned msglen = 0;
+
+    CRASH_MSG("THREAD DUMP (%d live):\n", count);
+    for (int i = 0; i < count; ++i) {
+        CRASH_MSG("  tid=0x%lx  %s\n", tids ? tids[i] : 0UL,
+                  (names && names[i]) ? names[i] : "?");
+    }
+    CRASH_MSG("\nWATCHDOG THREAD BACKTRACE:\n");
+    {
+        void *frames[CRASH_MAX_FRAMES] = { NULL };
+        const int nframes = backtrace(frames, CRASH_MAX_FRAMES);
+        char **strings = (nframes > 0) ? backtrace_symbols(frames, nframes) : NULL;
+        for (int i = 0; i < nframes; ++i) {
+            CRASH_MSG("#%02d: %s\n", i,
+                      (strings && strings[i]) ? strings[i] : "?");
+        }
+        free(strings);
+    }
+    sysLogPrintf(LOG_ERROR, "%s", msg);
+    {
+        FILE *f = fopen(CRASH_LOG_FNAME, "ab");
+        if (f) { fprintf(f, "%s", msg); fclose(f); }
+    }
+}
+
 #endif /* PLATFORM_WINDOWS / PLATFORM_LINUX */
 
 int g_CrashEnabled = 0;
