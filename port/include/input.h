@@ -54,6 +54,10 @@ void inputNotifyClick(void);
 int  inputReleaseCapture(void);
 int  inputMouseCaptureActive(void);
 
+/* F10 options overlay: force the OS cursor free + visible while the overlay
+ * owns the mouse. Safe to call every poll. */
+void inputSuspendForOverlay(void);
+
 /* Queue a mouse-wheel weapon-cycle input (one short A-button press). Sign is
  * ignored -- GE only cycles forward on a bare A edge. */
 void inputPostWheel(int notches);

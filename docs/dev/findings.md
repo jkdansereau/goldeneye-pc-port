@@ -401,6 +401,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D179 | **Packaged build crashes after the logos — the D43/D69 model + bg sidecars are ROM-derived and absent from any build that has no ROM (M-34, alpha-release QA).** The first `goldeneye-pc-port-*-win64.zip` from CI (bundle-win.sh) shows the Rare/Nintendo logos (compiled-in `assets/rarewarelogo.c`) then AVs at `0x6b157a88`/`0x70157a88` — symbolised: `modelPromoteNodeOffsetsToPointers` (`model.c`) ← `load_object_fill_header` (`objecthandler_2.c`) ← first prop/item model load. Root cause is **not** a code regression: the port loads PC-layout model geometry from `data/pcmodels-<region>/{pcmodels.bin,manifest.csv}` and stage bg/stan from `data/pccg-<region>/{pccg.bin,manifest.csv}`, both produced offline by `tools_pc/d43_emit.py` / `d69_emit.py` from the ROM (see `port/src/pcmodels.c` / `pccg.c`; `pcmodelsReserveSize` logs *"pcmodels.bin not found — model loads will fail"* and returns 0). CI has no ROM so it never runs the emit scripts, and the two `data/` dirs are (correctly) gitignored ROM-derived game data — **cannot be committed or shipped** (converted Nintendo/Rare geometry, DLs, collision, stan nav; = distributing assets). A local build with those dirs present runs clean (verified M-34: 1741 frames, `romdataInit ... mapped at 0x10000000`, `pcmodels: 512 sidecars`, `pccg: 73 sidecars`, no crash — so `0x10000000` is *not* the problem here). The `docs/building.md` sidecar-gen step was also missing entirely. **Fix = release-side, backlogged** (`docs/BACKLOG.md` → "Alpha release"): bundle the emit scripts + their committed inputs as a pure-stdlib-Python asset-prep tool the user runs once against their own ROM (~5 MB output, no MIPS toolchain). Secondary/latent: the fixed-address `VirtualAlloc((LPVOID)0x10000000)` in `romdata.c` has no working fallback (`"using heap copy — direct ROM reads will fail"` then limps into the same crash) — didn't bite M-34 but will on a machine where something occupies `0x10000000`; harden separately (reserve earliest in `main`, or retry low bases and derive all segment math from the base obtained). | Diagnosed, not fixed — release packaging gap + latent `romdata.c` fallback |
 | D180 | **Native-PC input pass (M-XX QoL run, `qol/native-pc-input-menu`, port-only).** Three parts, all config-gated with default = prior behaviour: **(WI-1) `Input.MouseCaptureMode`** (0 = legacy always-grab; 1 = Quake-style click-to-lock) in `port/src/input.c` + `port/src/video.c` — in mode 1 the OS cursor is free until a click lands in the game window (`SDL_MOUSEBUTTONDOWN` → `inputNotifyClick`), and ESC / focus-loss / entering any front-end menu (`current_menu != MENU_RUN_STAGE`) frees it again; re-entering a stage while still "armed" re-locks so unpausing needs no click. `reconcileGrab()` runs once per controller-0 poll. Mouse buttons are suppressed from the game while the cursor is free in-stage (no phantom fire). Controller paths untouched. **(WI-2) absolute-cursor menu tracking** — when capture mode is on and the cursor is free in a menu, the D165/D169 pointer P-controller takes its target from the real cursor's absolute window position mapped onto the live virtual front-end rect (`getPlayer_c_screen*`), giving true 1:1 tracking instead of the relative-delta estimator. Relative path unchanged for legacy/grabbed. **(B3) `Input.MouseAimSpeed` default 25 → 16** (aim mode still overshot at 25 per the backlog). | LANDED, port-only, no `#ifdef PORT`. Build 241/241, `-level_09` framediff 3/3 within threshold (unregressed), `GE_STARTMENU` menu boot crash-free. **Feel-checks owed** (headless can't drive the mouse): click-to-lock ergonomics, absolute menu tracking, the new aim-speed default. |
 | D181 | **`Game.ScreenShakeIntensity` — first route-(b) `src/` gameplay-cosmetic hook (M-XX QoL run).** `src/fr.c viShake()` gains a single `#ifdef PORT` line — `intensity *= portScreenShakeScale;` (extern `f32`, defined + `configRegisterFloat`'d 0.0–10.0 in `port/src/video.c`) — before the existing clamp. Default `1.0f` ⇒ exact no-op, every headless golden dump byte-unaffected; `0.0` disables explosion/effect screen shake, up to `10.0` exaggerates it. N64 build (no `-DPORT`) keeps the original line verbatim. Precedent per `docs/BACKLOG.md` "Fun features → screen-shake intensity slider" and AGENTS.md #2's documented-exception path. Same policy class as a future FOV hook. | LANDED behind config, default = original. Build green. |
+| D184 | **F10 port-layer options overlay — the approach-(C) surface from `OPTIONS-MENU-PLAN.md` (M-37).** New `port/src/optionsoverlay.c` + `port/include/optionsoverlay.h`: an immediate-mode overlay drawn as its own fast3d 2D DL, appended after the game DL in `gfx_pc.cpp gfx_run()` (`optionsOverlayEmit()` → NULL when closed ⇒ **zero bytes appended, golden dumps byte-identical**). F10 toggles (`video.c videoPumpEvents`, next to F12); while open, `input.c inputComputePad(0)` returns a neutral pad and routes arrows/enter/wheel/mouse-buttons to `optionsOverlayHandleInput()` (mirrors the WI-1/D180 swallow). ESC closes; `configSave()` on close. `config.c` gains `configForEachOption()` + a `configSetOptionMeta()` label/step/enum side table (no per-key knowledge in config.c). Live knobs (VSync/FpsCap/TextureFilter via `videoRequestLiveConfig()`; mouse + screen-shake via the registered pointer) apply immediately; MSAA tagged "(restart)". v1 rows per plan §3: VSync, FpsCap, MSAA, TextureFilter, MouseAimSpeed, MouseTurnSpeed, MouseInvertY, MouseCaptureMode, ScreenShakeIntensity. | **LANDED, port-only, no `#ifdef PORT` in `src/`.** Build links 241/241. **Runtime verification NOT run this session** — the headless env kills the GUI process after ~8 s and `gfx_opengl_dump_bound_fbo` writes 0-byte PPMs here, so framediff / 60 s soak / overlay-frame eyeball are all owed on an interactive machine. Overlay-closed no-op is code-evident (emit returns NULL before touching the DL buffer). |
 | D85 | room primary/secondary DL → `texLoadFromGdl` garbage | OPEN (safety-netted; widen/pool fixes landed, geometry now renders) |
 | D86 · D87 | modelInitRwData truncated ptr · attract-demo BE `ramromfilestructure` | resolved |
 | D88.1–D88.3 · D88.5–D88.6 | `Usetup*Z` header + sub-table width/endian conversion (`d88_emit.py`) | resolved |
@@ -4756,6 +4757,126 @@ at the terrain**, so a no-input capture there does not frame the sky. `-level_29
 (Streets, night) top-of-frame reads dim `(29,24,22)` not pure black — needs a
 visual check to distinguish "dark night sky drawn" from "partial".
 
+### D176(a) — M-43 UPDATE: full stream decode + two implementation paths (static analysis)
+
+The M-37 scratch note (`D176a-sky-rootcause.md`) was never committed. This is the
+recovered, complete spec, re-derived from `src/game/sky.c` and `include/PR/gbi.h`.
+No build, no run — analysis only. **Implementation is still owed and is a full
+session; this entry exists so the next pass starts from the format, not a
+grep.**
+
+**What the stream actually is.** `skyRenderTri` (`sky.c:1480`, textured tris),
+`skyRenderFull` (`sky.c:1976`, textured quads = 2 tris) and the untextured
+`G_TRI_FILL` path emit a **verbatim N64 RDP triangle command**, byte-for-byte,
+chopped into 32-bit halves and carried as `gImmp1(G_RDPHALF_1 / _CONT / _2, word)`
+pairs. GE's modified RSP ucode (`rsp/graphics/gmain.s`) does nothing clever with
+them — it copies the words into a DMEM scratch buffer and DMAs the assembled
+command straight to the RDP as a `G_TRI_FILL` (0xc8) or `G_TRI_SHADE_TXTR` (0xce)
+edge-walked triangle. So "decode the stream" == "own an RDP triangle rasteriser
+with edge + shade + S/T/W coefficient planes." fast3d has no such thing (it is an
+RSP-level vertex/`gSP*Triangle` interpreter); `pd_port` has the identical no-op.
+
+**Word-by-word layout** (all values are S15.16 or int/frac-split 16.16 unless
+noted; `sub_GAME_7F094298(f)` = clamp ±32767.9 then `(s32)(f * 65536)`, i.e. a
+float→S15.16 fixed convert):
+
+1. *Edge header* — 2 words:
+   - `w0 = (opcode<<24) | (backface ? 0x00800000 : 0) | (s32)YL`
+     where opcode is `G_TRI_SHADE_TXTR` or `G_TRI_FILL`, backface = `sp444 < 0`
+     (signed double area after the 3-way `unk2c` vertex sort), `YL = sp47c->unk2c`
+     (lowest vertex, screen-Y × 4, subpixel).
+   - `w1 = ((s32)YM << 16) | (s32)YL_mid` → actually `(s32)sp480->unk2c << 16 |
+     (s32)sp484->unk2c` = `YM<<16 | YH` (mid, high). N64 order is YL/YM/YH; here
+     the code sorts so `sp484 ≤ sp480 ≤ sp47c` on `unk2c`, then emits
+     hi=sp484, mid=sp480, lo=sp47c.
+2. *Edge slopes* — 3 word-pairs, `(X.16.16 , dXdy.16.16)` for the L, M, H edges:
+   - `(7F094298(sp480->unk28 * 0.25), 7F094298(sp384))` — XL, DxLDy
+   - `(7F094298(sp410),               7F094298(sp394))` — XH, DxHDy
+   - `(7F094298(sp408),               7F094298(sp38c))` — XM, DxMDy
+   `sp384/38c/394` are the edge inverse-slopes (`dx/dy`) clamped to ±1877;
+   `sp408/sp410` are the H/M edge X starting values back-stepped to the YH
+   scanline (`sp37c` = sub-pixel fraction of `sp484->unk2c * 0.25`).
+   `*0.25` because `unk28/unk2c` are stored ×4.
+   **`skyRenderTri` returns here if `!textured`** (G_TRI_FILL: header + edges
+   only).
+3. *Shade coefficients* (textured only) — 8 word-pairs = the RDP shade DMEM
+   block: RGBA base, DrDx/DgDx/DbDx/DaDx, DrDe.., DrDy.. each as an int-parts
+   word then a frac-parts word (`(v & 0xffff0000) | (next & 0xffff0000) >> 16`
+   packs two ints; the matching `<<16 | (next & 0xffff)` packs the fracs). Values:
+   `sp210[0..3]` = colour at origin, `sp290[0..3]` = d/dx, `sp2b0[0..3]` = d/dy,
+   `sp230[0..3]` = d/de, all run through `7F094298`. Colours are the per-vertex
+   `SkyRelated38.rgba` barycentrically solved to a plane via `sp440`
+   (= 1/doubled-area) and the `sp3c8..sp3d4` edge deltas.
+4. *Texture coefficients* (textured only) — 8 word-pairs, same int/frac packing,
+   for S, T, W: `sp210[4..6]`, `sp290[4..6]`, `sp2b0[4..6]`, `sp230[4..6]`, each
+   scaled by `sp190` (an LOD/overflow clamp: `1/max(perspective-corrected
+   gradient magnitude / 1024, 1)`). The final pair is emitted with
+   `G_RDPHALF_2` (not `_CONT`) — **that is the stream terminator.**
+
+Total data words: **2 + 6 + 16 + 16 = 40** for `G_TRI_SHADE_TXTR` (20 RDPHALF
+pairs), **2 + 6 = 8** for `G_TRI_FILL`. The 2-word "header" is exactly the raw
+N64 RDP triangle command's word0 (`[cmd 8b][backface 1b @23]...[YL 14b]`) +
+word1 (`[YM 14b][YH 14b]`) — matches the canonical hardware format; the shade
+and texture blocks are the standard 16-word int-halves-then-frac-halves RDP
+coefficient layout (cross-checked M-43 against `include/PR/gbi.h` immediate-word
+packing conventions — the low-level RDP tri macros themselves are RSP-internal
+and not in this tree's `gbi.h`).
+
+`skyRenderFull` is the same but solves the plane over 4 corner verts and emits
+the quad as two RDP tris sharing the coefficient blocks; its own header pair also
+ends the first tri and a second header starts the second.
+
+**Vertex data available upstream** (before the DL): `sub_GAME_7F097388`
+(`sky.c:1398`) fully projects each sky corner and writes `SkyRelated38`:
+`unk28` = screen X ×4, `unk2c` = screen Y ×4 (minus `WaterConcavity*4`),
+`unk30` = screen Z (0..0x7fff), `unk34` = 1/w, `unk20/unk24` = S/T, `rgba` =
+per-vertex colour. **This is a complete screen-space vertex.** The projection is
+pure float math off endian-clean matrices — not the bug, and reusable as-is.
+
+---
+
+**Path A — RDP triangle rasteriser in `port/fast3d/gfx_pc.cpp` (port-only, "correct").**
+At `case G_RDPHALF_*` (`gfx_pc.cpp:~2901`): accumulate words into a small buffer;
+when a `G_RDPHALF_1` carries a `0xc8`/`0xce` opcode start a command, close on
+`G_RDPHALF_2`. Then either (a) feed a real edge-walk rasteriser writing into the
+current render target with the active combiner/tile, or (b) **invert the plane
+equations** — you have YH/YM/YL, the three edge X-at-Y and slopes, so recover the
+3 screen (x,y); evaluate the RGBA and STW planes at those 3 points to get 3
+`LoadedVertex` (already-projected: set `.x/.y` from screen coords mapped to
+NDC-ish like the `gDPTextureRectangle` path, `.z` from a fixed sky depth, `.w`
+from `unk34`), then hand to the existing `gfx_sp_tri` / GL path with a forced
+"2D, no model matrix" flag. (b) is a few hundred lines and reuses the whole
+existing combiner/texture pipeline; (a) means a new software rasteriser. Prefer
+(b). Cost: ~1 session, genuinely new code, verifiable headless.
+
+**Path B — swap the emit in `src/game/sky.c` behind `#ifdef PORT` ("cheap").**
+`skyRenderTri` / `skyRenderFull` already hold 3–4 fully-projected screen-space
+`SkyRelated38` verts. Under `#ifdef PORT`, skip the whole RDPHALF block and emit
+a normal `gSPVertex` of screen-space `Vtx` (XYZ from `unk28/2c/30` ÷4, ST from
+`unk20/24`, RGBA from the struct) + `gSP1Triangle` / `gSP2Triangles`, with a
+`G_TEXTURE`/combiner setup mirroring what the RDP path implied
+(`SHADE,ENV,TEXEL0,ENV`, `texSelect(&skywaterimages[SkyImageId], …)` already runs
+just before). fast3d already eats screen-space verts (that is the front-end / HUD
+path). ~30–60 lines, no new fast3d code. **Cost: a few hours.** Tension with the
+"no game-logic edits" rule — but this is a pure N64-RSP-idiom substitution (same
+class as the `G_TRI4` and dynamic-lighting `#ifdef PORT`s already in `src/`), it
+changes no behaviour on N64 (`#else` keeps the stream verbatim), and it is
+exactly the "if a game file seems to need a behavioural change, the fix belongs
+in `port/`" *narrow* exception for a hardware idiom that cannot be isolated in
+`port/` without reimplementing the RDP. Document as D176(a) in §F if taken.
+
+**Recommendation:** Path B first — it lights up every cloud-sky level
+(Surface `-level_36`, Statue `-level_22`, Frigate `-level_29`, Dam exterior) for
+a few hours' work and de-risks Path A by giving a visual ground truth. Path A
+stays the "right" long-term answer if Path B's screen-space verts show
+seams/precision artefacts vs. the RDP's subpixel edge walk. Either way the
+verification target is **`-level_22` (Statue, night) frame ~360, no input** — the
+M-42 clean headless black-sky repro.
+
+**Cheap first step (unchanged, still not done):** headless `-level_22` /
+`-level_29` — confirm also black, proving it is the shared emit path and not a
+Surface-only asset.
+
 ---
 
 ## D177 — Ladders non-functional: `count`/`rooms` land in the high half of a widened pointer (M-36)
@@ -4797,8 +4918,9 @@ Touched: `src/game/stan.c` (macro + `stanCheckLinkedSpecialTile` +
 All `#ifdef PORT`, N64 path kept verbatim under `#else`. Candidate root-cause
 came from an M-36 subagent; parts 1/3 were its work, part 2 (the local size)
 found on review. **Verified:** build links clean; `-level_09` framediff 3/3;
-`-level_36` (Surface, has mandatory ladders) boots crash-free. **Interactive
-climb test owed** — headless can't drive the climb input.
+`-level_36` (Surface, has mandatory ladders) boots crash-free.
+**Interactive climb test — DONE (M-37): user confirmed climbing works
+in-game.** Merged to `main` via PR #5 (`955349db`).
 
 porting-notes.md §C (pointer-width in ROM/record structs).
 
@@ -5075,3 +5197,59 @@ golden + a Streets/Dam/Archives load.
 Docs only: this subsection + the §F index rows (D88.4 status, new D132
 row). No code changed; the proposed diff above is not applied. No temp
 probe scripts left.
+
+## D185 — fresh `d69_emit.py` run yields a game-crashing `data/pccg-<region>/` (M-38)
+
+**Status: OPEN — alpha-release blocker.** (Add to the §F index.)
+
+**Symptom.** `python tools_pc/d69_emit.py ntsc-final` in this repo writes
+`data/pccg-ntsc-final/pccg.bin` = 3346895 B (52 sidecars, 1856-B manifest),
+prints `ALL CHECKS PASSED`, and `-level_09` / `-level_20` then segfault before
+frame 1 (`EXCEPTION: 0xc0000005`, faulting return address is an ASCII
+model-name string). The pre-migration working sidecar
+(`C:/Users/james/Source/Repos/007/data/pccg-ntsc-final/pccg.bin`, 3604378 B,
+2421-B manifest) drops into this tree and `-level_09` runs crash-free.
+
+**Isolation done (M-38).**
+- Not the romdata M-38 change: baseline (stashed) crashes identically.
+- Not the build: same exe, only the `data/pccg-ntsc-final/` bytes swapped.
+- `tools_pc/d69_emit.py` is byte-identical between the public repo and the
+  pre-migration repo `007` (only a doc-path comment differs).
+- The migration commit `52539d10 "Prepare for public release"` normalised the
+  committed d69 inputs from CRLF to LF: `scripts/filelist.u.csv` (−812 B, one
+  CR/line) and `assets/obseg/file_resource_table.inc.c`.
+- **Restoring CR to both inputs did NOT restore the 3604378-B output** → line
+  endings are not the (whole) cause. Some other part of the d69 input closure
+  regressed in the history rewrite, or the working sidecar predates a real
+  d69/​input change and 3346895 is a separate second bug.
+- `d43_emit.py` is unaffected (its `find_row` tries `name`, `name[1:]`,
+  `name[:-1]`, `name[1:-1]` — tolerant of a mangled basename; `d69`'s
+  `fl_by_base.get(basename)` is exact).
+
+**Impact.** `docs/building.md` tells users to run `d69_emit.py`; M-38's
+`prepare-assets.py` does the same. Both currently produce a broken game on a
+clean checkout. The committed `data/` dirs (carried from pre-migration) hide it.
+
+**Next.** Diff the sidecar *name* set: pre-migration `manifest.csv` vs a fresh
+run's — find which bg/stan entries d69 now drops, trace through `find_row` →
+`file_resource_table.inc.c` → `filelist.u.csv`. Fix so a fresh run reproduces
+3604378 B / 2421-B manifest; re-verify `-level_09`/`-20` crash-free. Do NOT
+regenerate `data/pccg-ntsc-final/` before the fix (it holds the working copy).
+
+### D185 — RESOLVED (M-38): not a d69 regression, a missing d88 step
+
+`d88_emit.py` **appends** the 21 `Usetup*Z` per-level stage-setup files
+(object placement, AI opcode streams, pads/nav) to the same
+`data/pccg-<region>/pccg.bin` + `manifest.csv` that `d69_emit.py` writes
+(52 bg/stan rows → 74 after d88). The M-38 `prepare-assets.py` first shipped
+ran only d43 + d69, so every level loaded with no setup data → instant
+segfault. The "working" pre-migration sidecar was simply a complete
+d43+d69+d88 output; nothing regressed in d69 or its inputs.
+
+Fix (commit `4491db3f`): `prepare-assets.py` runs d43 → d69 → `d88 --regen`;
+`bundle-win.sh` vendors `d88_emit.py` + its only local import
+`d88_propdefs.py`. Verified: fresh 3-script run from an assembled bundle is
+byte-identical to the known-good `pccg.bin` (3604378 B) / `pcmodels.bin`;
+`-level_09` + `-level_20` boot crash-free. The CRLF→LF observation on
+`filelist.u.csv` / `file_resource_table.inc.c` is real but a red herring for
+this crash (d69 tolerates it; output unchanged).
