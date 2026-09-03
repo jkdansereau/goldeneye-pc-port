@@ -4877,6 +4877,65 @@ M-42 clean headless black-sky repro.
 `-level_29` — confirm also black, proving it is the shared emit path and not a
 Surface-only asset.
 
+### D176(a) — M-46: Path B implemented (`src/game/sky.c`, `#ifdef PORT`)
+
+Path B is in. `src/game/sky.c` only; N64 path kept byte-for-byte under `#else`.
+
+**What changed.** A new file-scope `#ifdef PORT` helper `skyPortRenderPoly(gdl,
+SkyRelated38 **v, nverts)` and an early `#ifdef PORT` return in both
+`skyRenderTri` (3 verts, `arg1..arg3`) and `skyRenderFull` (4 verts,
+`arg1..arg4`), placed right after the `sp444/sp488 == 0` degenerate-area guard
+and `1.0f / area` so all shared early-outs still run. The helper:
+
+- `dynAllocateVertices(n)` + two `dynAllocateMatrix()` from the vtx pool
+  (same lifetime idiom as the bondview2 watch-gauge ortho overlay and
+  explosion.c billboards).
+- `guOrtho(proj, l, l+w, t+h, t, -32768, 32768, 1)` where `l/t/w/h =
+  getPlayer_c_screen{left,top,width,height}()` — maps the already-projected
+  pixel coords 1:1 into clip space, Y flipped (screen-down → NDC-up); identity
+  modelview. `gSPMatrix` LOAD PROJECTION then MODELVIEW. `bg.c` reloads the
+  perspective projection at the top of `bgLevelRender` (lines 638/689/…), so
+  leaving ortho loaded after `skyRender` is safe.
+- Per vertex: `ob = {unk28, unk2c, unk30} * 0.25` (the `*4` subpixel scale the
+  RDP path used); `tc = {unk20, unk24} * 32` (standard N64 S10.5); `cn = rgba`
+  from the struct.
+- `gSPClearGeometryMode(G_LIGHTING|G_CULL_BOTH|G_FOG)` +
+  `gSPSetGeometryMode(G_SHADE|G_SHADING_SMOOTH)`, then `gSPVertex` +
+  `gSP1Triangle(0,1,2)` (tri) / `gSP2Triangles(0,1,3, 0,3,2)` (quad, winding
+  irrelevant with culling off). Combiner (`SHADE,ENV,TEXEL0,ENV`), env colour
+  and `texSelect(&skywaterimages[SkyImageId/WaterImageId], 1,0,2)` are already
+  emitted by the caller immediately before — the helper does not touch them.
+
+**Verified.** `src/game/sky.c` compiles clean under the real PC build flags
+(`gcc.exe … -DPORT=1 -std=gnu11 -Wall`, exit 0, no new warnings) with the
+worktree's `build-pc/` CMake configuration. Full link + run NOT done: the
+worktree has no `data/` ROM so assets can't be extracted here. Every symbol the
+helper uses (`dynAllocate*`, `guOrtho`, `guMtxIdent`, `gSPVertex`,
+`gSP{1,2}Triangle{,s}`, `osVirtualToPhysical`) is already linked by the compiled
+set, so link is expected clean.
+
+**Owed to a human (cannot headless-verify):**
+1. Eyeball `-level_22` (Statue, night) frame ~360, bare boot no input — the
+   M-42 black-sky repro. Expect a rendered moonlit sky in the upper half.
+   Also spot-check `-level_36` (Surface), `-level_29` (Streets).
+2. **Untested risk — texture scale.** `tc = unk20/unk24 * 32` is the
+   conventional guess; `unk20/unk24` come out of `sub_GAME_7F097388` as
+   `unk0c * (65535/65536)` with `unk0c ≈ worldX*0.1` for clouds. If the sky
+   texture is tiled wrong / smeared, the fix is localised to the two `tc[]`
+   lines in `skyPortRenderPoly` (multiplier, or an explicit `gSPTexture`
+   scaling override) — no other code moves.
+3. **Untested risk — ortho Z / depth.** `ob[2] = unk30*0.25` in `[0,8192]`
+   under an `[-32768,32768]` ortho; sky renders first into a cleared buffer so
+   depth ordering should not matter, but if the sky Z-fights or is culled,
+   drop `ob[2]` to 0.
+4. Seam/precision check vs the N64 RDP subpixel edge-walk (the Path A
+   motivation) — only relevant once it renders at all.
+
+**Confidence:** MODERATE. The emit-path substitution is sound and matches the
+established screen-space-overlay idiom; compile is clean. The two numeric
+unknowns (texture scale, and whether fast3d's viewport transform composes with
+this ortho exactly as the projection math intends) need one visual check.
+
 ---
 
 ## D177 — Ladders non-functional: `count`/`rooms` land in the high half of a widened pointer (M-36)

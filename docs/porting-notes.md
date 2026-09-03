@@ -403,6 +403,14 @@ through a converter or a runtime bswap fixup reads scrambled.
   logic). 2D pixel space is `viGetX()` x `viGetY()`. Return NULL when the
   overlay is closed so the frame is byte-for-byte unchanged.
 
+- **Verbatim RDP triangle commands chopped into `gImmp1(G_RDPHALF_1/_CONT/_2)`
+  pairs** (GE's `skyRenderTri`/`skyRenderFull` hand-build an edge-walked
+  `G_TRI_FILL`/`G_TRI_SHADE_TXTR` for the modified RSP ucode to reassemble) are
+  silently dropped by fast3d — it has no RDP triangle rasteriser. Substitute a
+  normal `gSPVertex` + `gSP*Triangle` batch behind `#ifdef PORT`: if the game
+  code already screen-space-projected the verts, re-emit them under a
+  `guOrtho(l,r,b,t,…)` + identity modelview matching the projection's pixel
+  extents, `#else` keeps the stream verbatim (D176(a), M-46).
 - Z buffer cleared by pointing the colour image at it + fill-rect → does
   nothing in fast3d; must emit `G_CLEAR_DEPTH_EXT` (D105).
 - LOD / detail mip tiles: fast3d fabricates a crop when detail textures
