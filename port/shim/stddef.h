@@ -26,5 +26,14 @@
 #undef __need_wint_t
 #include "hoststddef.h"
 #else
-#include "include/stddef.h"
+/*
+ * C TUs: the N64 include/stddef.h is an empty stub (its active body defines
+ * neither size_t nor ptrdiff_t nor NULL). MinGW leaked those in transitively
+ * through its CRT headers, so the stub was harmless there; glibc/GCC defines
+ * them ONLY in the compiler's own <stddef.h>, so a C TU on Linux that relies
+ * on <stddef.h> (e.g. include/PR/ultratypes.h's non-N64 path) fails to
+ * compile. Route C TUs to the host header too — purely additive, the active
+ * N64 stub typedefs nothing that could clash.
+ */
+#include "hoststddef.h"
 #endif

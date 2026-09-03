@@ -233,6 +233,14 @@ add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-function>)
 # base at startup.
 if(MINGW)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--disable-dynamicbase")
+elseif(UNIX AND NOT APPLE)
+  # Linux equivalent of the ASLR-off requirement above: dram_syms.s defines
+  # absolute symbols at 0x70000000 referenced through pointer-typed externs. A
+  # PIE build (GCC's default on modern distros) emits GOT/relative relocations
+  # for them — R_X86_64_32S link errors, or a runtime rebase to garbage. Build
+  # and link no-PIE so the image keeps its preferred load address.
+  add_compile_options(-fno-pie)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
 endif()
 
 # port/shim first: PC-only shadow headers (bondtypes.h, bondconstants.h,
