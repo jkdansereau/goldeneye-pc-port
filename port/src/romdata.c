@@ -23,7 +23,7 @@
 /* D38: <stdio.h>/<stdlib.h> resolve to the decomp's N64 stubs via the include
  * path; declare the host functions this file uses. */
 extern void *malloc(unsigned long long size);
-extern int snprintf(char *str, unsigned long long maxsize, const char *format, ...);
+extern int snprintf(char *str, size_t maxsize, const char *format, ...);
 
 #include "platform.h"
 
@@ -157,10 +157,11 @@ int romdataInit(void)
         uintptr_t p = (uintptr_t)&probe;
         uintptr_t hi = p & ~(uintptr_t)0xFFFFFFFFu;
         if (hi == 0) {
-            sysLogPrintf(LOG_ERROR, "romdataInit: image base 0x%llX is not "
-                         "4GiB-aligned; ANIM_DATA_* offsets would be wrong",
-                         (unsigned long long)p);
-            return -1;
+            /* Low image base (Linux no-PIE loads at 0x400000). The ANIM_DATA_*
+             * lvalues are only ever address-taken — `(s32)&ANIM_DATA_x` yields
+             * the offset, never a dereference — so g_pc_animdata_base just has
+             * to be some 4GiB-aligned address whose low 32 bits are zero. */
+            hi = (uintptr_t)0x100000000ull;
         }
         g_pc_animdata_base = (u8 *)hi;
     }

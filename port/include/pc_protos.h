@@ -201,6 +201,11 @@ void fileUpdateSelectedBondInSave();
 s32 fogGetPropDistColor();
 void fogLoadLevelEnvironment();
 void free();
+/* D38: the N64 <stdlib.h> stub declares neither, and unlike MinGW a strict
+ * host GCC does not leak them — so getenv()'s 64-bit pointer return is
+ * truncated to int (crashed configGetFrameDump on Linux). */
+char * getenv();
+void * realloc();
 int frontGetPlayersFavoriteWeaponInHand();
 void generate_player_thrown_grenade();
 void generate_player_thrown_knife();
@@ -389,9 +394,10 @@ s32 sizepropdef();
 Gfx * skyRender();
 void skySetStageNum();
 void skyTick();
-/* Exact match of GCC's built-in (and MSVCRT) prototype; size_t is
- * `unsigned long long` on this MinGW toolchain. */
-int snprintf(char *, unsigned long long, const char *, ...);
+/* Match the C library prototype. size_t (from <PR/ultratypes.h> above) is
+ * `unsigned long long` on MinGW but `unsigned long` on Linux/glibc — spelling
+ * it `size_t` keeps this compatible with both libcs' <stdio.h>. */
+int snprintf(char *, size_t, const char *, ...);
 PropRecord * something_with_generating_object();
 void speedgraphInit();
 void speedgraphMarkerUpdate();
@@ -446,7 +452,9 @@ s32 texLoadFromGdl();
 s32 texReadUncompressed();
 void texSelect();
 s32 texShrinkNonPaletted();
-long long time();
+#if defined(_WIN32)
+long long time(); /* MinGW: <time.h> is shadowed by the N64 stub here; POSIX gets the real one */
+#endif
 const char * tokenFind();
 s32 tokenReadIo();
 void transform3Dto2DWithZScaling();

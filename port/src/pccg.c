@@ -22,7 +22,7 @@
 #include <string.h>
 
 extern void *malloc(unsigned long long size);
-extern int   snprintf(char *str, unsigned long long maxsize, const char *format, ...);
+extern int   snprintf(char *str, size_t maxsize, const char *format, ...);
 
 #include "platform.h"
 #include "system.h"
