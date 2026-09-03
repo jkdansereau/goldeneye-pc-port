@@ -89,6 +89,7 @@ PREP="$OUT/prepare-assets"
 mkdir -p "$PREP/vendor/scripts" "$PREP/vendor/assets/obseg"
 cp tools_pc/dist/prepare-assets/prepare-assets.py "$PREP/"
 cp tools_pc/d43_emit.py tools_pc/d69_emit.py       "$PREP/"
+cp tools_pc/d88_emit.py tools_pc/d88_propdefs.py   "$PREP/"   # d88 = per-level stage setup (+ its only local import)
 cp scripts/filelist.u.csv                          "$PREP/vendor/scripts/"
 cp assets/obseg/file_resource_table.inc.c          "$PREP/vendor/assets/obseg/"
 # d43_emit.py os.walk()s assets/ for every *modelFileHeader.inc.c — preserve paths.

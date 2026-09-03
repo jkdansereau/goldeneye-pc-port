@@ -41,10 +41,15 @@ ROM_SHA1 = {
     "2a5dade32f7fad6c73c659d2026994632c1b3174": "jpn-final",   # NTSC-J (JP)
 }
 
+# (script, args, produces) — run in order. d88 has no output of its own: it
+# appends the 21 per-level stage-setup files to the pccg dir d69 just made,
+# and --regen makes that idempotent.
 EMIT_STEPS = (
-    ("d43_emit.py", "pcmodels"),  # models / display lists  -> data/pcmodels-<region>/
-    ("d69_emit.py", "pccg"),      # collision + stan nav    -> data/pccg-<region>/
+    ("d43_emit.py", (),          "pcmodels-{region}/pcmodels.bin"),
+    ("d69_emit.py", (),          "pccg-{region}/pccg.bin"),
+    ("d88_emit.py", ("--regen",), "pccg-{region}/pccg.bin"),
 )
+OUTPUT_DIRS = ("pcmodels-{region}", "pccg-{region}")
 
 
 def die(msg):
@@ -95,9 +100,11 @@ def main():
 
     if not VENDOR.is_dir():
         die(f"missing {VENDOR} -- this script must stay inside the 'prepare-assets' folder from the zip.")
-    for script, _ in EMIT_STEPS:
+    for script, _extra, _produces in EMIT_STEPS:
         if not (HERE / script).is_file():
             die(f"missing {HERE / script}")
+    if not (HERE / "d88_propdefs.py").is_file():
+        die(f"missing {HERE / 'd88_propdefs.py'} (imported by d88_emit.py)")
 
     bundle_root = Path(args.out).expanduser().resolve() if args.out else HERE.parent
 
@@ -118,23 +125,28 @@ def main():
     if not (staged_rom.exists() and staged_rom.stat().st_size == rom.stat().st_size):
         shutil.copy2(rom, staged_rom)
 
-    out_dirs = []
-    for script, tag in EMIT_STEPS:
-        src = work / "data" / f"{tag}-{region}"
-        if src.exists():
-            shutil.rmtree(src)
-        print(f"prepare-assets: running  {script} {region} ...")
-        r = subprocess.run([sys.executable, str(HERE / script), region], cwd=work)
+    # Fresh start so a re-run is deterministic (d69 recreates its dir; d88
+    # --regen edits it in place).
+    for d in OUTPUT_DIRS:
+        p = work / "data" / d.format(region=region)
+        if p.exists():
+            shutil.rmtree(p)
+
+    for script, extra, produces in EMIT_STEPS:
+        argv = [sys.executable, str(HERE / script), region, *extra]
+        print(f"prepare-assets: running  {' '.join(argv[1:])} ...")
+        r = subprocess.run(argv, cwd=work)
         if r.returncode != 0:
             die(f"{script} exited {r.returncode}")
-        if not (src / f"{tag}.bin").is_file():
-            die(f"{script} did not produce {src / (tag + '.bin')}")
-        out_dirs.append((src, tag))
+        want = work / "data" / produces.format(region=region)
+        if not want.is_file():
+            die(f"{script} did not produce {want}")
 
     dest_data = bundle_root / "data"
     dest_data.mkdir(parents=True, exist_ok=True)
-    for src, tag in out_dirs:
-        dest = dest_data / f"{tag}-{region}"
+    for d in OUTPUT_DIRS:
+        src = work / "data" / d.format(region=region)
+        dest = dest_data / d.format(region=region)
         if dest.resolve() == src.resolve():
             continue
         if dest.exists():
