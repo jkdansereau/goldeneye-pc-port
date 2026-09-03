@@ -32,6 +32,11 @@ extern int snprintf(char *str, unsigned long long maxsize, const char *format, .
     #define WIN32_LEAN_AND_MEAN
   #endif
   #include <windows.h>
+#else
+  /* POSIX: mmap the ROM at the fixed cart address (mirrors the VirtualAlloc
+   * path). <sys/mman.h> is a host header the decomp include path does not
+   * shadow. */
+  #include <sys/mman.h>
 #endif
 
 #include "system.h"
@@ -50,6 +55,9 @@ extern int snprintf(char *str, unsigned long long maxsize, const char *format, .
 static u8  *rom = NULL;        /* heap copy (fallback path) */
 static u32  romSize = 0;
 static int  mappedAtCartBase = 0;
+#if !defined(PLATFORM_WINDOWS)
+static unsigned long long mappedLen = 0;  /* munmap() needs the length */
+#endif
 
 /* D34 (docs/internals.md): PE image base, low 32 bits zero. On N64 the
  * animation_data segment links at VMA 0, so game code computes record
@@ -104,6 +112,35 @@ static int romHeaderValid(const u8 *h, char *err, size_t errsz)
 }
 
 static u32 romdataBswap32(u32 v); /* defined below; used by the D55 fixup */
+
+/* The caller has placed a writable region of (romSize + sidecars) bytes at
+ * CART_BASE. Populate it, load the sidecars, apply the D55 RLE-header fixup,
+ * and mark the ROM live. Shared by the Windows (VirtualAlloc) and POSIX (mmap)
+ * fixed-address paths so the post-map logic can never drift between them. */
+static int romdataFinishCartMap(const char *tok, u8 *img,
+                                u32 sideTotal, u32 cgTotal)
+{
+    memcpy((void *)(uintptr_t)CART_BASE, img, romSize);
+    free(img);
+    mappedAtCartBase = 1;
+    sysLogPrintf(LOG_INFO, "romdataInit: %s (%u bytes) mapped at 0x%08X "
+                 "(cart base)%s%s", tok, romSize, CART_BASE,
+                 sideTotal ? ", + model sidecars" : "",
+                 cgTotal ? ", + bg/stan sidecars" : "");
+    pcmodelsLoadSidecars(CART_BASE, romSize);
+    pccgLoadSidecars(CART_BASE + romSize + pcmodelsTotalSize());
+
+    /* D55: the RLE folder-menu background at `unknown2` has a big-endian w/h
+     * header that rle_expand_8bit() reads little-endian; match the N64 .data
+     * copy by swapping it in place (no-op if it already reads as LE). */
+    {
+        extern void *unknown2; /* absolute cart address */
+        u32 *hdr = (u32 *)&unknown2;
+        if ((u16)*hdr > 512 || (u16)(*hdr >> 16) > 512)
+            *hdr = romdataBswap32(*hdr);
+    }
+    return 0;
+}
 
 int romdataInit(void)
 {
@@ -168,51 +205,44 @@ int romdataInit(void)
          * sidecar extension. */
         u32 cgTotal = pccgReserveSize(img);
 
-        /* Map at the cart address so absolute asset symbols are live. */
+        /* Map at the cart address so absolute asset symbols are live. On
+         * failure both paths fall through to the heap copy below (degraded:
+         * anything that dereferences a cart address directly, rather than via
+         * romdataGetRom()/the PI shims, will read wrong memory). */
+        {
+            u32 maplen = romSize + sideTotal + cgTotal;
 #if defined(PLATFORM_WINDOWS)
-        void *at = VirtualAlloc((LPVOID)CART_BASE, romSize + sideTotal + cgTotal,
-                                MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-        if (at == (void *)(uintptr_t)CART_BASE) {
-            memcpy(at, img, romSize);
-            free(img);
-            mappedAtCartBase = 1;
-            sysLogPrintf(LOG_INFO, "romdataInit: %s (%u bytes) mapped at "
-                         "0x%08X (cart base)%s%s",
-                         tok, romSize, CART_BASE,
-                         sideTotal ? ", + model sidecars" : "",
-                         cgTotal ? ", + bg/stan sidecars" : "");
-            pcmodelsLoadSidecars(CART_BASE, romSize);
-            pccgLoadSidecars(CART_BASE + romSize + pcmodelsTotalSize());
-
-            /* D55 (docs/internals.md): the RLE folder-menu background at
-             * `unknown2` (romassets_<r>.s) is stored in the ROM with a
-             * big-endian w/h header (01 B8 01 2B = 440x299), but
-             * rle_expand_8bit() reads it little-endian. The N64 build embeds
-             * this asset into .data via assets/romfiles2.s from an extracted
-             * .bin whose header is byte-swapped (title2.c hardcodes 440x299
-             * row rendering, and this is the only decodable 440x299 RLE
-             * stream in the ROM), so make the cart copy match it: swap the
-             * w/h word in place. The guard makes the fixup a no-op if a
-             * region's copy already reads as a plausible LE size. */
-            {
-                extern void *unknown2; /* absolute cart address */
-                u32 *hdr = (u32 *)&unknown2;
-                if ((u16)*hdr > 512 || (u16)(*hdr >> 16) > 512)
-                    *hdr = romdataBswap32(*hdr);
-            }
-            return 0;
-        }
-        if (at)
-            VirtualFree(at, 0, MEM_RELEASE);
-        sysLogPrintf(LOG_WARNING, "romdataInit: could not reserve 0x%08X; "
-                     "using heap copy — direct ROM reads will fail",
-                     CART_BASE);
+            void *at = VirtualAlloc((LPVOID)CART_BASE, maplen,
+                                    MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+            if (at == (void *)(uintptr_t)CART_BASE)
+                return romdataFinishCartMap(tok, img, sideTotal, cgTotal);
+            if (at)
+                VirtualFree(at, 0, MEM_RELEASE);
+            sysLogPrintf(LOG_WARNING, "romdataInit: could not reserve 0x%08X; "
+                         "using heap copy — direct ROM reads will fail",
+                         CART_BASE);
 #else
-        /* Best effort: fixed-hint mmap. If the hint is refused we fall back
-         * to a heap copy (same limitation as above). */
-        sysLogPrintf(LOG_WARNING, "romdataInit: fixed-address mapping not "
-                     "implemented on this platform; using heap copy");
+            /* POSIX: anonymous fixed-address mmap. MAP_FIXED_NOREPLACE (Linux
+             * 4.17+) fails instead of clobbering an existing mapping; where it
+             * is unavailable the plain hint is advisory and the == check below
+             * catches a relocated result. */
+            int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+#ifdef MAP_FIXED_NOREPLACE
+            flags |= MAP_FIXED_NOREPLACE;
 #endif
+            void *at = mmap((void *)(uintptr_t)CART_BASE, maplen,
+                            PROT_READ | PROT_WRITE, flags, -1, 0);
+            if (at != MAP_FAILED && at == (void *)(uintptr_t)CART_BASE) {
+                mappedLen = maplen;
+                return romdataFinishCartMap(tok, img, sideTotal, cgTotal);
+            }
+            if (at != MAP_FAILED)
+                munmap(at, maplen);
+            sysLogPrintf(LOG_WARNING, "romdataInit: could not map 0x%08X "
+                         "(ASLR/kernel refused the fixed address); using heap "
+                         "copy — direct ROM reads will fail", CART_BASE);
+#endif
+        }
 
         rom = img;
         return 0;
@@ -225,12 +255,15 @@ int romdataInit(void)
 
 void romdataDestroy(void)
 {
-#if defined(PLATFORM_WINDOWS)
     if (mappedAtCartBase) {
+#if defined(PLATFORM_WINDOWS)
         VirtualFree((LPVOID)CART_BASE, 0, MEM_RELEASE);
+#else
+        munmap((void *)(uintptr_t)CART_BASE, (size_t)mappedLen);
+        mappedLen = 0;
+#endif
         mappedAtCartBase = 0;
     }
-#endif
     free(rom);
     rom = NULL;
     romSize = 0;
