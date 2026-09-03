@@ -878,6 +878,22 @@ int inputReleaseCapture(void)
 
 int inputMouseCaptureActive(void) { return mouseCaptureMode && !mouseGrabbed; }
 
+/* F10 options overlay: while it owns controller 0 the inputComputePad poll
+ * early-returns before reconcileGrab()/applyCursorVisibility(), so whatever
+ * grab state was live when F10 was pressed (relative mode + hidden cursor in a
+ * stage) would persist and the mouse UI would be unusable. Force the cursor
+ * free + visible every poll; the normal reconcile resumes once the overlay
+ * closes and the early-return no longer fires. */
+void inputSuspendForOverlay(void)
+{
+    if (mouseGrabbed) {
+        mouseGrabbed = 0;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
+        mouseDX = mouseDY = 0.0;
+    }
+    SDL_ShowCursor(SDL_ENABLE);
+}
+
 void inputPostWheel(int notches)
 {
     if (notches < 0) notches = -notches;   /* both directions cycle forward */

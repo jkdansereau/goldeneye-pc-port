@@ -52,6 +52,16 @@ float videoGetFPS(void);
  * the next frame start. Called by the F10 options overlay after an edit. */
 void videoRequestLiveConfig(void);
 
+/* F10 options overlay -> window/fullscreen changes. The overlay input handler
+ * runs on the scheduler thread; SDL window ops must run on the thread that
+ * created the window, so these only post a request that videoPumpEvents()
+ * (host thread) applies. The Get* helpers are read-only and thread-safe. */
+void videoRequestWindowSize(int w, int h);
+void videoRequestFullscreen(int on);
+void videoGetWindowSize(int *w, int *h);
+void videoGetDesktopSize(int *w, int *h);
+int  videoIsFullscreen(void);
+
 /* Snapshot live window geometry into the config vars (call before configSave
  * on a clean exit). No-op if the window isn't up. */
 void videoSaveWindowState(void);
