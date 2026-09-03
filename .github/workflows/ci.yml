@@ -79,8 +79,16 @@ jobs:
   # MinGW does not flag. The port has never been run on Linux — a green build
   # here is a "does it compile + link" signal only, not a runtime claim.
   # Not a required check yet; flip it to required once it is reliably green.
+  #
+  # Toolchain: ubuntu-24.04 + gcc-14. The port is developed on MinGW GCC 16;
+  # pinning a recent GCC here keeps the first bring-up focused on real
+  # portability gaps rather than a decade of accumulated old-GCC pedantry.
+  # (A "does it build on the GCC a typical distro ships" pass can come later.)
   linux-build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    env:
+      CC: gcc-14
+      CXX: g++-14
     steps:
       - uses: actions/checkout@v7
         with:
@@ -89,7 +97,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake python3 \
+          sudo apt-get install -y build-essential gcc-14 g++-14 cmake python3 \
             libsdl2-dev zlib1g-dev libgl1-mesa-dev
 
       - name: Regenerate ROM-asset symbol file (US)
@@ -97,6 +105,7 @@ jobs:
 
       - name: Configure (ntsc-final)
         run: cmake -S . -B build-linux -DROMID=ntsc-final
+             -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
 
       - name: Build (ntsc-final)
         run: cmake --build build-linux -j"$(nproc)"

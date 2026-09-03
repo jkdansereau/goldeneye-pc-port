@@ -223,6 +223,18 @@ add_compile_options(
 add_compile_options($<$<COMPILE_LANGUAGE:C>:-Wno-pointer-sign>)
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-function>)
 
+# The decomp's `#define inherits struct` idiom (src/bondtypes.h) makes the base
+# struct an unnamed tagged member and accesses its fields directly
+# (obj->type where type lives in the embedded PropRecord). GCC targeting
+# *-w64-mingw32 enables this via -fms-extensions implicitly; a native Linux/
+# macOS GCC does not, so `'ObjectRecord' has no member named 'type'`. Enable
+# the Plan 9 extensions explicitly there (superset of -fms-extensions: also the
+# automatic base-pointer conversion the idiom relies on). C only — the decomp
+# is C; fast3d C++ does not use `inherits`.
+if(NOT MINGW)
+  add_compile_options($<$<COMPILE_LANGUAGE:C>:-fplan9-extensions>)
+endif()
+
 # ASLR must be OFF: dram_syms.s defines absolute symbols (cfb_16 @ 0x70000000,
 # _bssSegmentEnd @ 0x70050000) that the game references through pointer-typed
 # externs (src/bondgame.h: `extern u32 *_bssSegmentEnd`). On x86-64/PE, taking
