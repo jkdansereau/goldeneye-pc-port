@@ -159,7 +159,7 @@ void sub_GAME_7F09BAC4(s32 find, s32 replacement) {
             while (var_a1 != NULL) {
                 val = var_a1->Opcode & 0xFF;
                 if (val == 0x18) {
-                    temp_v0_2 = modelGetNodeRwData(var_v0->chrflags, var_a1);
+                    temp_v0_2 = modelGetNodeRwData((Model*)var_v0->chrflags, var_a1);
                     if (find == *temp_v0_2) {
                         *temp_v0_2 = replacement;
                     }
