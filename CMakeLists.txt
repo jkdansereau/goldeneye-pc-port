@@ -283,6 +283,10 @@ elseif(UNIX AND NOT APPLE)
   # and link no-PIE so the image keeps its preferred load address.
   add_compile_options(-fno-pie)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
+  # (No -Ttext-segment: pushing the image above 4GiB needs -mcmodel=large and
+  # breaks the R_X86_64_32 relocs. romdataInit handles the low no-PIE base
+  # 0x400000 by using a fixed 4GiB-aligned g_pc_animdata_base sentinel — the
+  # ANIM_DATA_* lvalues are only ever address-taken, never dereferenced.)
 endif()
 
 # port/shim first: PC-only shadow headers (bondtypes.h, bondconstants.h,

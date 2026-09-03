@@ -334,6 +334,29 @@ void osCreateThread(OSThread *t, OSId id, void (*entry)(void *), void *arg,
     t->state = OS_STATE_STOPPED;
 }
 
+#if !defined(_WIN32)
+#include <sys/mman.h>
+/* The decomp aligns/compares stack-buffer pointers by truncating to u32
+ * (e.g. `(u32)compbuffer` in image.c texLoad) — an N64 assumption. glibc
+ * puts pthread stacks above 4 GiB, so those truncations corrupt. Force each
+ * game-thread stack into the low 2 GiB with MAP_32BIT so every such idiom
+ * works exactly as on the console. Windows pthread stacks are already low. */
+static void *portAllocLowStack(size_t sz)
+{
+#if defined(MAP_32BIT)
+    void *p = mmap(NULL, sz, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT
+#if defined(MAP_STACK)
+                   | MAP_STACK
+#endif
+                   , -1, 0);
+    if (p != MAP_FAILED)
+        return p;
+#endif
+    return NULL;
+}
+#endif
+
 void osStartThread(OSThread *t)
 {
     PortThread *pt = portFind(t);
@@ -344,7 +367,15 @@ void osStartThread(OSThread *t)
     pthread_attr_t attr;
     int rc;
     pthread_attr_init(&attr);
+#if !defined(_WIN32)
+    void *lowStack = portAllocLowStack(PORT_THREAD_STACK);
+    if (lowStack)
+        pthread_attr_setstack(&attr, lowStack, PORT_THREAD_STACK);
+    else
+        pthread_attr_setstacksize(&attr, PORT_THREAD_STACK);
+#else
     pthread_attr_setstacksize(&attr, PORT_THREAD_STACK);
+#endif
     rc = pthread_create(&pt->th, &attr, portThreadWrapper, pt);
     pthread_attr_destroy(&attr);
     if (rc != 0) {

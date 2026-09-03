@@ -2435,7 +2435,14 @@ void texLoad(s32 *updateword, struct texpool *pool)
 
     if (tex == NULL)
     {
+#ifdef PORT
+        /* compbuffer is a stack array; (u32) truncates the 64-bit host stack
+         * address (glibc pthread stacks live above 4GiB). Align at full
+         * pointer width -- same result on N64, correct on the port. */
+        alignedcompbuffer = (u8 *) (((uintptr_t)compbuffer + 0xF) & ~(uintptr_t)0xF);
+#else
         alignedcompbuffer = (u8 *) (((u32)compbuffer + 0xF) >> 4 << 4);
+#endif
 
         if (alignedcompbuffer);
         if (tex);
