@@ -1,8 +1,3 @@
-/* POSIX: enable clock_gettime(CLOCK_REALTIME/MONOTONIC) and pthread_getattr_np. */
-#if !defined(_WIN32) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE 1
-#endif
-
 /*
  * libultra OS shims for the PC port, plus the cooperative thread kernel.
  *
@@ -841,20 +836,10 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
                               (uintptr_t)dstVA < (uintptr_t)thigh));
             }
 #else
-            {
-                pthread_attr_t at;
-                void *sbase = NULL;
-                size_t ssize = 0;
-                if (pthread_getattr_np(pthread_self(), &at) == 0) {
-                    pthread_attr_getstack(&at, &sbase, &ssize);
-                    pthread_attr_destroy(&at);
-                }
-                sysLogPrintf(LOG_ERROR,
-                             "D60 thread stack: %p..%p  dst-in-stack=%d\n",
-                             sbase, (void *)((uintptr_t)sbase + ssize),
-                             ((uintptr_t)dstVA >= (uintptr_t)sbase &&
-                              (uintptr_t)dstVA < (uintptr_t)sbase + ssize));
-            }
+            /* TEMP D60 diagnostic: no portable committed-stack query without
+             * _GNU_SOURCE (pthread_getattr_np); the raw stack window above and
+             * the crash handler's register dump are enough to symbolicate. */
+            sysLogPrintf(LOG_ERROR, "D60 thread stack: (n/a on POSIX)\n");
 #endif
             sysLogPrintf(LOG_ERROR,
                          "D60 BAD DMA TARGET dst=%p src=0x%08X size=0x%X "

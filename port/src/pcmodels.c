@@ -24,7 +24,7 @@
 /* D38: <stdlib.h>/<string.h> resolve to the decomp's N64 stubs via the
  * include path; declare the host functions this file uses. */
 extern void *malloc(unsigned long long size);
-extern int   snprintf(char *str, unsigned long long maxsize, const char *format, ...);
+extern int   snprintf(char *str, size_t maxsize, const char *format, ...);
 
 #include "platform.h"
 #include "system.h"

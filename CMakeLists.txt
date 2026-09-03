@@ -52,9 +52,13 @@ include(TargetArch)
 include(FindPkgConfig)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_EXTENSIONS OFF)
+# GNU extensions ON: strict -std=c11/-std=c++20 define __STRICT_ANSI__, which
+# disables glibc's _DEFAULT_SOURCE and hides POSIX symbols the port needs
+# (clock_gettime/CLOCK_REALTIME in port/src/libultra.c, mmap flags, etc.).
+# -std=gnu11/gnu++20 is GCC's own default and what MinGW was already using.
+set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Default build type
