@@ -20,7 +20,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Three jobs:
+# Jobs:
+#
+#   linux-build   — ubuntu, system GCC. Actually compiles + links (unlike
+#                   validate). Surfaces GCC-on-Linux strictness gaps MinGW
+#                   misses. Not a runtime claim; not a required check yet.
 #
 #   validate      — ubuntu, configure-only. Byte-compiles the tooling,
 #                   regenerates the US ROM-asset symbol file, and CMake-
@@ -69,6 +73,38 @@ jobs:
 
       - name: CMake configure (ntsc-final)
         run: cmake -S . -B build-ntsc -DROMID=ntsc-final
+
+  # Linux (Ubuntu, system GCC) compile job. Unlike `validate` this actually
+  # runs `cmake --build`, so it surfaces the GCC-on-Linux strictness gaps that
+  # MinGW does not flag. The port has never been run on Linux — a green build
+  # here is a "does it compile + link" signal only, not a runtime claim.
+  # Not a required check yet; flip it to required once it is reliably green.
+  linux-build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake python3 \
+            libsdl2-dev zlib1g-dev libgl1-mesa-dev
+
+      - name: Regenerate ROM-asset symbol file (US)
+        run: python3 scripts/gen_romassets.py u
+
+      - name: Configure (ntsc-final)
+        run: cmake -S . -B build-linux -DROMID=ntsc-final
+
+      - name: Build (ntsc-final)
+        run: cmake --build build-linux -j"$(nproc)"
+
+      - name: Show binary
+        run: |
+          ls -la build-linux/ge007* || true
+          file build-linux/ge007* || true
 
   # Real Windows (MSYS2 MINGW64) build — the only platform the port is
   # developed and tested on. This compiles and LINKS the full executable.
