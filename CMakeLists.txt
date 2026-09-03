@@ -233,6 +233,13 @@ add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-function>)
 # is C; fast3d C++ does not use `inherits`.
 if(NOT MINGW)
   add_compile_options($<$<COMPILE_LANGUAGE:C>:-fplan9-extensions>)
+  # GCC 14 promoted several long-standing C leniencies to hard errors
+  # (int<->pointer for a known prototype, incompatible-pointer arg types,
+  # implicit int/function). The WIP decomp still trips these (e.g.
+  # append_text_picked_up's vestigial u8* params in propobj.c). -fpermissive
+  # downgrades them to warnings — the C counterpart of the -Wno-error lines
+  # above, and the documented path for building older C against GCC 14+.
+  add_compile_options($<$<COMPILE_LANGUAGE:C>:-fpermissive>)
 endif()
 
 # ASLR must be OFF: dram_syms.s defines absolute symbols (cfb_16 @ 0x70000000,
