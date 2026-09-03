@@ -10,7 +10,12 @@ on:
     # Docs-only branch pushes are instead skipped by the `changes` job below,
     # which reports the build jobs as "skipped" (green for branch protection).
   pull_request:
-    paths-ignore: [ '**.md', 'docs/**', 'LICENSE', 'NOTICE' ]
+    # No paths-ignore here either: a docs-only PR must still trigger the
+    # workflow so the required checks report a status. The `changes` job
+    # below diffs the PR against its base and, for a docs-only PR, reports
+    # the build jobs as "skipped" — which branch protection accepts as
+    # success. With paths-ignore the workflow never ran and the required
+    # checks stayed "expected" forever, wedging every docs PR (M-44).
   workflow_dispatch:
 
 # Minimal token: CI only reads the repo and uploads build artifacts, neither of
@@ -49,10 +54,11 @@ concurrency:
 #                   only job granted contents: write.
 
 jobs:
-  # Did this push touch anything outside docs / licenses? Branch pushes to main
-  # get no workflow-level paths-ignore (see the `on:` comment), so this is where
-  # a docs-only merge is filtered out. Tags and pull_request events always build.
-  # Mirrors the pull_request paths-ignore globs: **.md, docs/**, LICENSE, NOTICE.
+  # Did this change touch anything outside docs / licenses? No workflow-level
+  # paths-ignore exists (see the `on:` comments), so this job is the single
+  # place a docs-only push OR pull request is filtered out — a PR is diffed
+  # against its base sha, a branch push against `github.event.before`. Tag
+  # builds always run. Docs globs: **.md, docs/**, LICENSE, NOTICE.
   changes:
     runs-on: ubuntu-22.04
     outputs:
@@ -65,15 +71,20 @@ jobs:
 
       - id: filter
         run: |
-          if [ "${{ github.event_name }}" != "push" ] || [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base='${{ github.event.pull_request.base.sha }}'
+            head='${{ github.event.pull_request.head.sha }}'
+          elif [ "${{ github.event_name }}" != "push" ] || [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          else
+            base='${{ github.event.before }}'
+            head='${{ github.sha }}'
+          fi
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null || ! git cat-file -e "${head}^{commit}" 2>/dev/null; then
+            echo "no usable base ${base}/head ${head} — building to be safe"
             echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          base='${{ github.event.before }}'
-          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            echo "no usable base ${base} — building to be safe"
-            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          changed="$(git diff --name-only "$base" '${{ github.sha }}')"
+          changed="$(git diff --name-only "$base" "$head")"
           echo "Changed files:"; echo "$changed"
           if echo "$changed" | grep -qvE '(\.md$|^docs/|^LICENSE$|^NOTICE$)'; then
             echo "code=true"  >> "$GITHUB_OUTPUT"
