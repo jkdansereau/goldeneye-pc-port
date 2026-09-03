@@ -220,6 +220,18 @@ add_compile_options(
   -fwrapv
   -include "versioninfo.h"
 )
+# The decompiled game code has a class of latent fixed-size stack-buffer
+# over/under-runs (e.g. stan.c sub_GAME_7F0B1DDC's tileStack, bondview2.c
+# bondviewCalcIntroSwirlCamera's pointbuf[10] indexed [-3..11]) that write a
+# few words into adjacent stack scratch. On the N64, and on the MinGW/Windows
+# build (no default stack protector), this is harmless in practice — verified
+# stable over thousands of frames. Only Ubuntu's gcc default
+# (-fstack-protector-strong) turns these into a fatal __stack_chk_fail at
+# stage load / first frames. Match the N64 and MinGW builds so the same code
+# runs the same way; the genuinely understood cases are still fixed properly
+# under #ifdef PORT (D189). A hardened Linux build would need the whole class
+# swept first — tracked in docs/dev/findings.md.
+add_compile_options(-fno-stack-protector)
 # Keep frame pointers: dbghelp's StackWalk64 (crash handler + thread dumps)
 # cannot read DWARF unwind info on MinGW, so the EBP chain is the only way to
 # get a real backtrace of a hung/crashed game thread.
