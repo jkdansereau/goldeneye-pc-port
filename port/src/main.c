@@ -115,6 +115,7 @@ int main(int argc, char **argv)
      *     loader loads at 0x140000000 and those relocations are no-ops; if we
      *     ever got relocated, every such slot would be silently corrupted.
      *     Fail loudly instead. */
+#if defined(PLATFORM_WINDOWS)
     if (sysImageBase() != 0x140000000ul) {
         sysLogPrintf(LOG_ERROR,
             "image loaded at %p, expected preferred base 0x140000000; "
@@ -122,6 +123,11 @@ int main(int argc, char **argv)
             (void *)sysImageBase());
         return 1;
     }
+#else
+    /* Linux/ELF no-PIE: dram_syms.s absolute symbols resolve to their literal
+     * values independent of the image base (no .refptr indirection), so the
+     * load address is not constrained. sysImageBase() is a stub here anyway. */
+#endif
 
     /* 2b. Reserve the N64-DRAM region: s32-safe view @ 0x70000000 (cfb_16,
      *     mempools) + KSEG0 mirror @ 0x80000000 (see port/src/dram.c). */

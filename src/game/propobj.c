@@ -9921,7 +9921,14 @@ void sub_GAME_7F04F244(PropRecord* prop, rect4f** polygon, s32* edges, f32* top,
 }
 
 
+#ifdef PORT
+/* GCC 14 rejects the vestigial u8* params (enum/int -> pointer is a hard
+   error, not downgraded by -fpermissive). param2/param3 are unused; match
+   the two callsites' actual types. Codegen-neutral. */
+void append_text_picked_up(u8 *buffer, AMMOTYPE param2, u32 param3)
+#else
 void append_text_picked_up(u8 *buffer,u8 * param2,u8 * param3)
+#endif
 {
   u8 *str;
 

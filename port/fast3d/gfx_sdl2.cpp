@@ -427,9 +427,18 @@ static inline void sync_framerate_with_timer(void) {
     previous_time = t;
 }
 
+/* Optional hook run with the freshly-composited frame still in the back
+ * buffer, immediately before the swap. video.c uses it for GE_PCDUMP /
+ * screenshots: reading the back buffer AFTER SDL_GL_SwapWindow is undefined
+ * on buffer-exchange drivers (Mesa, WSLg) and yields a black capture. */
+extern "C" void (*gfx_pre_swap_hook)(void) = NULL;
+
 static void gfx_sdl_swap_buffers_begin(void) {
     if (target_fps) {
         sync_framerate_with_timer();
+    }
+    if (gfx_pre_swap_hook) {
+        gfx_pre_swap_hook();
     }
     SDL_GL_SwapWindow(wnd);
 }

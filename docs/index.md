@@ -13,7 +13,7 @@ graphics coprocessor in software. It follows the architecture of the
 
 It is also a **research project on AI-agent collaboration in a large,
 unfamiliar, low-level codebase**: two coding agents — a local open-weight model
-(Qwen 3) on a single RTX 5090, and Claude / Claude Code — driven by one person
+(Qwen 3.8) on a single RTX 5090, and Claude / Claude Code — driven by one person
 part-time through ~230 translation units of unmodified big-endian MIPS game
 code, handing work back and forth through shared written notes.
 

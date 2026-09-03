@@ -980,9 +980,16 @@ extern void		osAckRamromWrite(void);
 
 /* byte string operations */
 
+#if defined(PORT) && !defined(_WIN32)
+/* On the Linux/macOS port these resolve to the host libc; glibc <strings.h>
+ * declares them with size_t sizes, which conflict with the N64 `int`
+ * prototypes below (GCC 14 hard error). Use the host declarations. */
+#include <strings.h>
+#else
 extern void     bcopy(const void *, void *, int);
 extern int      bcmp(const void *, const void *, int);
 extern void     bzero(void *, int);
+#endif
 
 /* Miscellaneous operations */
 
