@@ -631,6 +631,34 @@ doing `va_arg(*args, …)` walks garbage → segfault. Latent at `-Og`, fatal at
   this class for any Linux-only crash whose backtrace runs through
   `xprintf`/`_Putfld`/`vsnprintf`-alikes.
 
+## D8. Latent fixed-size stack-buffer over/under-runs — fatal only under a stack protector
+
+The decomp has a class of local scratch buffers that game code writes a few
+slots past (or before) the declared bounds — e.g. a traversal stack whose
+bail check is looser than its array size, or `&buf[i*3]` with `i` starting at
+-1. The N64 build and the MinGW/Windows build have **no stack protector**, so
+the overrun lands in adjacent stack scratch and is (in practice) harmless —
+the Windows build is stable over thousands of frames. **Ubuntu's gcc default
+is `-fstack-protector-strong`**, which places a canary right after the buffer
+and turns every such overrun into a fatal `*** stack smashing detected ***`
+`__stack_chk_fail`.
+
+- Instances (D189): `stan.c` `sub_GAME_7F0B1DDC` `StandTile *tileStack[39]`
+  (bail is `if (cat >= 41)`, checked once per outer loop → writes `[40..]`);
+  `bondview2.c` `bondviewCalcIntroSwirlCamera` `f32 pointbuf[10]` written
+  `[-3 .. 11]`.
+- Fix policy: **`-fno-stack-protector` globally** (`CMakeLists.txt`) so Linux
+  matches the N64 and MinGW builds — the code is byte-matched to the ROM and
+  cannot be "fixed" per site without diverging. Where a case is cleanly
+  bounded and the buffer is pure local scratch (never escapes, no ABI role),
+  widening it under `#ifdef PORT` is also fine (`tileStack[64]`).
+- A hardened Linux build (re-enabling the protector) would need the whole
+  class swept first. Grep heuristic for new instances: any Linux-only
+  `__stack_chk_fail` / `__fortify_fail` in the backtrace, in a `sub_GAME_*` or
+  other byte-matched function, during stage load or the first few frames.
+- Distinct from D7 (`va_list` UB) and D6 (missing `return`) but the same
+  "works on N64 + MinGW, fatal on hardened Linux" shape.
+
 ## E. Process / method notes
 
 - Investigation loop is: reproduce → env-gated capped probe → root-cause

@@ -2162,7 +2162,22 @@ void getTileEdgePoints(StandTile *tile, s32 pointI, coord3d *currPntRtn, coord3d
 StanCollisionResult sub_GAME_7F0B1DDC(StandTile **startTile, f32 x, f32 z, f32 radius, standTileLocusCallback_A_t callbackA, standTileLocusCallback_B_t callbackB, standTileLocusCallback_C_t callbackC, struct StandTileLocusCallbackRecord *record)
 {
     s32 i;
+#ifdef PORT
+    /* D189: the ROM sizes this local scratch stack at [39] but its own bail
+     * check is `if (cat >= 41)`, tested only once per outer iteration (after a
+     * whole tile's edges are appended), so `cat` can legitimately reach
+     * 40 + pointCount and `tileStack[cat] = ...` writes several slots past the
+     * end. On N64 that clobbered adjacent stack scratch and (usually) got away
+     * with it; on x86-64 the pointers are 8 bytes and gcc's
+     * -fstack-protector-strong canary sits right after the array, so a dense
+     * tile region (BUNKER1 -level_09 prop room-list setup hits ~40 tiles)
+     * aborts the process. Widen the scratch buffer — pure local, never escapes
+     * (callbackC ignores it), no behaviour change. `pointCount` is a 4-bit
+     * field so 40 + 15 is the true worst case; 64 covers it with margin. */
+    StandTile *tileStack[64];
+#else
     StandTile *tileStack[39];
+#endif
     StandTile *tile;
     StandTile *linkedTile;
     s32 visitedCount;
@@ -2212,7 +2227,13 @@ StanCollisionResult sub_GAME_7F0B1DDC(StandTile **startTile, f32 x, f32 z, f32 r
                     {
                         if ((callbackB == NULL || !callbackB(tile, pointI, edgeDist, pointDistA, pointDistB, record)) && (tile->points[pointI].link >> 4))
                         {
-                            linkedTile = ((u32) standTileStart) + (tile->points[pointI].link << 3);
+                            /* D189: use the 64-bit-safe PORT_PTRADD like D177
+                             * did for the sibling link-resolve sites in this
+                             * file (the stan blob happens to map below 4 GiB
+                             * so the bare `(u32)` cast is currently lossless,
+                             * but this keeps the idiom consistent). #else is
+                             * byte-identical to the original cast. */
+                            linkedTile = PORT_PTRADD(StandTile *, standTileStart, tile->points[pointI].link << 3);
                             for (i = cat - 1; i >= 0; i--)
                             {
                                 if (linkedTile == tileStack[i])
