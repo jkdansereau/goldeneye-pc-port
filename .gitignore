@@ -68,6 +68,14 @@ build/*
 build-*/*
 notes/*
 
+# Local working / planning notes — rolling drafts, not published, not tracked.
+# docs/HANDOFF.md and docs/BACKLOG.md are the long-standing pair (also in
+# .git/info/exclude); docs/dev/notes/ is the drop for everything else
+# (roadmaps, session plans, scratch triage).
+docs/HANDOFF.md
+docs/BACKLOG.md
+docs/dev/notes/
+
 # PC port (see CMakeLists.txt / port/)
 build-pc/
 tools_pc/*.exe

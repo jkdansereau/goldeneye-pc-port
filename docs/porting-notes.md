@@ -31,7 +31,7 @@ N64-sized hole / hardcoded byte count, is **larger on x86-64**. Reading it
 from ROM bytes misaligns; allocating it N64-sized overruns adjacent
 state.
 
-- Symptom: garbage pointer deref, corrupted neighbour field, delayed
+- Symptom: garbage pointer deref, corrupted neighbor field, delayed
   fault far from the cause.
 - Fix: store embedded ROM addresses as `u32`, cast at use site (PD ground
   truth); or give real inline storage / `sizeof()`-based alloc under
@@ -403,13 +403,13 @@ through a converter or a runtime bswap fixup reads scrambled.
   logic). 2D pixel space is `viGetX()` x `viGetY()`. Return NULL when the
   overlay is closed so the frame is byte-for-byte unchanged.
 
-- Z buffer cleared by pointing the colour image at it + fill-rect → does
+- Z buffer cleared by pointing the color image at it + fill-rect → does
   nothing in fast3d; must emit `G_CLEAR_DEPTH_EXT` (D105).
 - LOD / detail mip tiles: fast3d fabricates a crop when detail textures
   are off → force base tile (D107).
 - **A CI-format tile drawn with the TLUT disabled (`G_TT_NONE`) is not a
   palette texture** — the N64 RDP feeds the raw TMEM texel straight into the
-  colour pipe, i.e. a CI8+`G_TT_NONE` tile behaves as I8. fast3d's
+  color pipe, i.e. a CI8+`G_TT_NONE` tile behaves as I8. fast3d's
   `import_texture()` dispatched purely on `tile.fmt` and did a palette lookup
   against a stale `rdp.palette` → garbage (D161, GE Depot ceiling = blue
   speckle). Fix: when `rdp.palette_fmt == G_TT_NONE`, route CI4/CI8 → I4/I8.
@@ -455,7 +455,7 @@ through a converter or a runtime bswap fixup reads scrambled.
   distinguish "the decoder is wrong" from "the source bytes are garbage".
   `GE_TEXRAW=1` (D183) dumps the bytes as handed to `import_texture_*`. The
   cheap offline test on such a dump: compute the mean vertical
-  neighbour-difference at every candidate row pitch — a correctly-pitched real
+  neighbor-difference at every candidate row pitch — a correctly-pitched real
   image has a sharp minimum at its true pitch (≈0.2–0.7 on a 0–15 nibble
   scale), a pitch/shear bug has the minimum at a *different* pitch, and genuine
   noise data is flat (~3.7) at every pitch. That three-way split settles
@@ -674,7 +674,7 @@ and turns every such overrun into a fatal `*** stack smashing detected ***`
   wall-clock on PC, and GE is a variable-timestep sim
   (`frametiming.c waitForNextFrame` → `deltaFrames` = 60 Hz ticks of real
   time elapsed per render), so "frame N" differs 15–40 % between runs. Use
-  `tools_pc/framediff.py <ppmdir>` (structural: 16×12 grid mean-colour +
+  `tools_pc/framediff.py <ppmdir>` (structural: 16×12 grid mean-color +
   non-clear-% + aHash, `--mask X0,Y0,X1,Y1` for the HUD, `--update` to
   refresh `tools_pc/golden/`) — NOT an exact compare. A `GE_DETERM=1`
   fixed-tick mode was assessed not-narrow (redesigns retrace/tick

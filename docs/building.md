@@ -13,8 +13,8 @@ Stages:
    files the port loads at runtime. **Required to run.**
 
 You need a GoldenEye 007 N64 ROM you legally own (`.z64`, big-endian). See the
-[Requirements table in the README](../README.md#requirements) for accepted
-versions and hashes.
+[Requirements table in the README](https://github.com/jkdansereau/goldeneye-pc-port#requirements)
+for accepted versions and hashes.
 
 ---
 
@@ -157,5 +157,5 @@ runtime. `ge007.ini` is written under `data/` on first launch.
 | `-level_NN` | boot straight into a solo level (e.g. `-level_09` = Bunker 1) |
 | `GE_PCDUMP="first-last:step"` | dump rendered frames as PPM (debugging) |
 
-More diagnostic switches are catalogued in
+More diagnostic switches are cataloged in
 [`dev/GE-ENV-PROBES.md`](dev/GE-ENV-PROBES.md).

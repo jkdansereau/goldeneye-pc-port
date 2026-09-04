@@ -1,7 +1,7 @@
 # How this port is developed
 
 Most of this port's work is not writing code — it is **diagnosis**: figuring
-out which N64 hardware or ABI behaviour a piece of unmodified game code is
+out which N64 hardware or ABI behavior a piece of unmodified game code is
 silently relying on, and satisfying it in the `port/` layer without touching
 the game's logic. A lot of that diagnosis is done with LLM coding agents, and
 the workflow below is what makes that productive rather than chaotic.
@@ -14,7 +14,7 @@ It is adapted from Chris Lewis's write-up
 [*"Decompiling a Nintendo 64 Game in 84 Days"*](https://blog.chrislewis.au/decompiling-a-nintendo-64-game-in-84-days/)
 (Snowboard Kids, 2026), an AI-assisted decompilation that ran several times
 faster than its predecessor. That project bit-matches compiler output;
-this one matches runtime behaviour, so the mechanics differ — but the
+this one matches runtime behavior, so the mechanics differ — but the
 project-structure lessons carry over directly.
 
 ## 1. Every investigation task gets a visible budget

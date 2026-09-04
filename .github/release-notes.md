@@ -1,15 +1,20 @@
-## GoldenEye 007 PC Port — alpha
+## GoldenEye 007 PC Port — v0.1.0 alpha
 
-> ⚠️ **Very early research alpha. Not a playable game.**
-> The intro and menus render and all 21 solo missions load, but:
-> - **no audio** (Phase 3, not started);
+> ⚠️ **Research alpha. Playable, not polished.**
+> The full single-player campaign runs. In a full-campaign playtest on this
+> build, **19 of 21 missions were completable start to finish**. Known issues:
+> - **no audio** (Phase 3, not started) — the game runs silent;
+> - **two levels crash mid-mission** — Bunker ii and Statue (one root cause, D191);
+> - **AI characters move too slowly**, which breaks Cradle (the final level)
+>   via Trevelyan's scripted behavior (D193);
+> - **cutscenes frequently glitch** — skipped, wrong camera, misplaced actors (D148/D160);
 > - some front-end 3D models are broken (the spinning Nintendo logo, the
 >   MISSION COMPLETE / mode-select models);
 > - outdoor levels render with a **black sky**;
-> - expect crashes and glitches once past the level intro.
+> - mouse aim and some textures/transparency have rough edges.
 >
-> This is a technical demo of the porting work. If you want to *play* GoldenEye
-> on PC, use one of the Xbox 360 recompilation projects instead — see the
+> If you just want to *play* GoldenEye on PC today, use one of the Xbox 360
+> recompilation projects instead — see the
 > [project README](https://github.com/jkdansereau/goldeneye-pc-port#how-this-differs-from-the-other-goldeneye-pc-projects).
 
 ### Downloads
