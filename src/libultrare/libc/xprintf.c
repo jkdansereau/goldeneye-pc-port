@@ -35,8 +35,23 @@ static char spaces[] = "                                ";
 static char zeroes[] = "00000000000000000000000000000000";
 
 static void _Putfld(printf_struct *pf, va_list *pap, char code, char *ac);
+#ifdef PORT
+/* x86-64 System V makes va_list an array type, so a by-value va_list
+ * parameter decays to a pointer: `&args` below would be the address of
+ * _Printf's local pointer slot, not the argument list, and _Putfld()'s
+ * `va_arg(*args, ...)` then walks garbage (crash seen at
+ * bossInitMainthreadData -> sprintf -> _Putfld; same UB class as D187,
+ * latent at -Og, fatal at -O2). Thread a real va_list* through instead.
+ * The only PC caller is src/sprintf.c. The N64 build is semantically
+ * unaffected (scalar va_list) but this file byte-matches the ROM, so the
+ * change is guarded. */
+int _Printf(outfun prout, char *arg, const char *fmt, va_list *argsp)
+{
+#define args (*argsp)
+#else
 int _Printf(outfun prout, char *arg, const char *fmt, va_list args)
 {
+#endif
     printf_struct x;
     const char *s;
     char c;
@@ -96,7 +111,11 @@ int _Printf(outfun prout, char *arg, const char *fmt, va_list args)
             x.length = 'L';
             ++s;
         }
+#ifdef PORT
+        _Putfld(&x, argsp, *s, ac);
+#else
         _Putfld(&x, &args, *s, ac);
+#endif
         x.width -= x.n0 + x.num_leading_zeros + x.part2_len + x.num_mid_zeros + x.part3_len + x.num_trailing_zeros;
         if (!(x.flags & FLAGS_MINUS))
             PAD(spaces, x.width);
@@ -112,6 +131,9 @@ int _Printf(outfun prout, char *arg, const char *fmt, va_list args)
     }
     return 0;
 }
+#ifdef PORT
+#undef args
+#endif
 
 static void _Putfld(printf_struct *x, va_list *args, char type, char *buff)
 {
