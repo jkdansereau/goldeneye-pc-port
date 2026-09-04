@@ -1,21 +1,25 @@
 # GoldenEye 007 PC Port
 
 [![CI](https://github.com/jkdansereau/goldeneye-pc-port/actions/workflows/ci.yml/badge.svg)](https://github.com/jkdansereau/goldeneye-pc-port/actions/workflows/ci.yml)
-![status](https://img.shields.io/badge/status-Phase_2_of_4_(rendering)-orange)
-![tested on](https://img.shields.io/badge/tested_on-Windows_x86--64-blue)
+![status](https://img.shields.io/badge/status-alpha_v0.1.0_(Phase_2_of_4)-orange)
+![tested on](https://img.shields.io/badge/tested_on-Windows_%2B_Linux_x86--64-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![built with](https://img.shields.io/badge/built_with-coding_agents-8A2BE2)
 
-**A work-in-progress native PC port of _GoldenEye 007_ (Rare, 1997, Nintendo 64),
-built on the [GoldenEye 007 decompilation](https://github.com/n64decomp/007).**
-It is first and foremost a **research project on AI-agent collaboration in a
-large, unfamiliar, low-level codebase** — how far two coding agents (a local
+**A native PC port of _GoldenEye 007_ (Rare, 1997, Nintendo 64), compiled from
+the [GoldenEye 007 decompilation](https://github.com/n64decomp/007) — the
+original N64 game running from reconstructed source, not the Xbox 360 remaster.**
+The first alpha, **[v0.1.0](../../releases)**, is out for Windows and Linux: it
+boots, renders the full intro and front end, and runs all 21 solo missions — in
+a full-campaign playtest 19 of the 21 were completable start to finish (two
+levels still crash). **There is no audio yet** and rough edges remain; this is
+Phase 2 of 4. See [Status](#status) and [Background](#background).
+
+It is also a **research project on AI-agent collaboration in a large,
+unfamiliar, low-level codebase** — how far two coding agents (a local
 open-weight model and Claude), driven by one person part-time, can be pushed
 through ~230 translation units of unmodified big-endian MIPS game code and made
-to run on a 64-bit desktop. **Current status: Phase 2 of 4 (rendering).** The
-port boots, renders the full intro and front end, and loads all 21 solo
-missions; there is no audio yet and it is not a playable game. See
-[Status](#status) and [Background](#background).
+to run on a 64-bit desktop. See [Background](#background).
 
 Technically, it follows the architecture of the
 [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) — the same
@@ -38,8 +42,22 @@ timers, save storage) is shimmed in a dedicated `port/` layer.
   Jungle &rarr; Archives.</em>
 </p>
 
+## Quick start
+
+You supply your own **NTSC-U GoldenEye 007 N64 ROM** (`.z64`, big-endian) — no
+ROM or game asset is included or distributed. Then:
+
+1. Download the Windows or Linux bundle from [Releases](../../releases) and unpack it.
+2. Make a `data/` folder next to the executable and drop the ROM in as `ge007.ntsc-final.z64`.
+3. Run the one-time asset step: `python3 prepare-assets/prepare-assets.py` (Python 3.8+, stdlib only).
+4. Launch the executable from that folder.
+
+Building from source instead: see [Building](#building). Read the
+[Status](#status) caveats first — this is an early alpha.
+
 ## Contents
 
+- [Quick start](#quick-start)
 - [Background](#background)
 - [How this differs from the other GoldenEye PC projects](#how-this-differs-from-the-other-goldeneye-pc-projects)
 - [Status](#status)
@@ -73,7 +91,7 @@ It used two agents:
 - **Claude** (via **Claude Code** — mostly **Sonnet 5**, with **Opus 5** as an
   escalation tier for the hardest bugs), which joined on 27 Aug 2026 for a
   collaborative phase: the 21-level load/render/no-crash sweep, the ABI/layout
-  finding catalogue, the SDL input layer, and the front-end flow.
+  finding catalog, the SDL input layer, and the front-end flow.
 
 The two **handed work back and forth** through shared written artifacts:
 
@@ -99,11 +117,11 @@ mid-problem, the local model picked the task up from that state and continued.
 
 | Metric | Value |
 |---|---|
-| Timeline | ~2 weeks, one person part-time |
-| Commits | ~223 |
-| Root-caused bugs logged | 162 (`D1`–`D169`; some later merged or withdrawn) |
-| Handoff sessions | ~33 |
-| ABI edits to game code | 63 files, all `#ifdef PORT` |
+| Timeline | ~3 weeks, one person part-time |
+| Commits | ~320 |
+| Root-caused bugs logged | ~190 (`D1`–`D196`; some later merged or withdrawn) |
+| Handoff sessions | ~49 |
+| ABI edits to game code | 69 files, all `#ifdef PORT` |
 | Port layer / tooling | ~17k lines C/C++ · ~6k lines Python |
 | Effort split (milestone-weighted) | ~60% Claude · ~40% local model |
 
@@ -114,6 +132,7 @@ asset converters — then both agents ran the debugging phase together:
 - **Day 8** — the whole intro renders
 - **Day 13** — all 21 solo missions run crash-free
 - **Day 14** — front end playable end to end
+- **Week 3** — v0.1.0 alpha; a full-campaign playtest completes 19 of 21 missions
 
 Full write-up, timeline chart, and an honest "what worked / what didn't":
 [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md). The
@@ -135,7 +154,7 @@ remaster* — a different game, a different codebase, no shared code with this.
 | **How** | **Decompilation-based source port** — human-reconstructed C, compiled for the host; game logic runs as written | **Static binary recompilation** — the shipped machine code is auto-translated to C; no source-level understanding |
 | **Lineage** | [GoldenEye 007 decompilation](https://github.com/n64decomp/007) + [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) engine family | Xbox 360 "…Recompiled" static-recompilation family |
 | **Renderer** | Software RSP → OpenGL | Hardware (Vulkan) |
-| **Status** | WIP, Phase 2 — renders and loads all 21 levels; no audio; not playable end to end | Playable full game, higher frame rates, online multiplayer |
+| **Status** | WIP, Phase 2, alpha v0.1.0 — runs all 21 levels, 19/21 completable in a full playthrough; no audio; rough edges | Playable full game, higher frame rates, online multiplayer |
 | **Why it exists** | A [case study in AI-agent collaboration](#background) on a hard low-level codebase; the port is the target, not a product | A polished, playable PC release of the remaster |
 
 **If you just want to play GoldenEye on PC today, use one of the recompilation
@@ -146,54 +165,64 @@ that work was driven by AI agents.
 ## Status
 
 > [!WARNING]
-> **Not playable yet.** This is a work-in-progress research port. The intro and
-> menus render and all 21 solo levels load, but it is **not** a complete or
-> reliably playable game: there is **no audio**, the front-end 3D models and
-> some text are broken, input has known rough edges, and you should expect
-> crashes and glitches once you are past the level intro. Treat it as a
-> technical demo of the porting work, not a way to play GoldenEye.
+> **Alpha — playable, not polished.** This is a work-in-progress research port.
+> It runs the full single-player campaign, but there is **no audio**, some
+> front-end 3D models and cutscenes are broken, AI characters move too slowly,
+> input has known rough edges, and two levels (Bunker ii, Statue) still crash.
+> Treat it as an early alpha of the porting work, not a finished way to play
+> GoldenEye.
 
-**Phase 2 of 4 (rendering).** The port boots, renders, and is playable through
-the front end into the early game. It is not finished and it is not stable.
+**Phase 2 of 4 (rendering). First alpha: [v0.1.0](../../releases).** The port
+boots, renders, and plays through the front end and the campaign. It is not
+finished and it is not fully stable.
 
 **Working**
 
 - Boot → Rare/Nintendo logos → gun-barrel → cast intro, fully rendered.
 - Front end: main menu → mission select → difficulty → briefing → mission start.
-- **All 21 solo missions load, render, and survive an unattended play window
-  without crashing** (see [`docs/dev/LEVEL-STATUS.md`](docs/dev/LEVEL-STATUS.md)).
+- **All 21 solo missions load and render.** In a full-campaign playtest on the
+  packaged Windows build, **19 of 21 were completable start to finish**; Bunker
+  ii and Statue crash mid-level (one root cause, tracked as D191). See
+  [`docs/dev/LEVEL-STATUS.md`](docs/dev/LEVEL-STATUS.md).
 - Software RSP (fast3d): textured world geometry, skeletal characters, HUD,
   the GE-specific color-combiner / render modes and `G_TRI4`.
 - Input: keyboard + mouse (with mode-aware mouse-look) and SDL game
   controllers, mapped onto the N64 pad. Tunable via `ge007.ini`.
 - File-backed EEPROM saves.
+- **Windows and Linux** (`x86_64`). Windows is the primary development and
+  playtest path; the Linux build boots, renders, and passes the level sweep,
+  with far less human playtime.
 
 **Not yet working**
 
 - **Audio** — not implemented (Phase 3). The game runs silent.
+- **AI pacing** — scripted and combat AI characters travel to their
+  destinations noticeably slower than on N64. This breaks Cradle (the final
+  level) via Trevelyan's scripted progression. Top post-alpha fix (D193).
+- **Cutscenes** — frequently glitch: skipped, wrong camera, misplaced or
+  hovering actors, wrong timing (D148/D160).
 - Some front-end 3D models — the spinning Nintendo logo, and the MISSION
   COMPLETE / mode-select models — are mispositioned or absent. (The
   gun-barrel Bond intro renders correctly.)
-- Assorted cosmetic defects (some text layout, a few incomplete asset
-  conversions) are tracked in
-  [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md) and parked
-  below crash/level work.
-- **Platform testing is Windows-only.** All development and playtesting has
-  been on `x86_64` Windows (MSYS2/MINGW64). The CMake build has Linux and macOS
-  paths and is *intended* to be portable, but the port has had **zero
-  functional testing on Linux or macOS** — the Linux build is provided as-is
-  and unverified at runtime. No ARM testing; no controller rebinding UI; no
-  widescreen.
+- Outdoor levels render with a **black sky**; assorted other cosmetic defects
+  are tracked in
+  [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
+- No macOS or ARM support; no controller rebinding UI; no widescreen.
+
+Next up: audio (Phase 3), the AI-pacing fix, and the two remaining level
+crashes. Cosmetic defects are tracked in
+[`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
 
 ## Download
 
-There are no pre-built binaries yet. The project is Phase 2 WIP with the
-caveats in [Status](#status) above — nothing runs end to end — so the only way
-to try it is to build it yourself; see [Building](#building). You supply your
-own ROM (see [Requirements](#requirements)) and drop it in `data/` before
-building. Pre-release **Windows x86-64** bundles (engine executable plus
-runtime DLLs, no ROM or game assets) may be published under
-[Releases](../../releases) once the port is playable.
+Pre-built **Windows** and **Linux** `x86_64` bundles are published under
+[Releases](../../releases), starting with **v0.1.0**. Each contains the engine
+executable, its runtime libraries, and the one-time `prepare-assets` tool —
+**no ROM and no game assets**. See [Quick start](#quick-start) for the four
+steps to get it running, [Requirements](#requirements) for accepted ROMs, and
+[Status](#status) for the alpha caveats.
+
+You can also build it yourself; see [Building](#building).
 
 ## Requirements
 
@@ -293,9 +322,9 @@ touch N64 hardware is redirected into `port/`:
 - **`port/src/{video,audio,input,fs,romdata,config}.c`** — the SDL2 / OpenGL /
   filesystem backends.
 
-The 32→64-bit transition forces a small, catalogued class of mechanical
+The 32→64-bit transition forces a small, cataloged class of mechanical
 ABI-only edits to ROM-serialized structs (pointer-width reconciliation); these
-change no behaviour and are documented individually.
+change no behavior and are documented individually.
 
 Where it diverges from the Perfect Dark port: GoldenEye's N64 serialized asset
 formats (level setup, models, backgrounds) are converted **offline** by a set
@@ -395,12 +424,11 @@ GitHub. It follows the same conventions they do:
 - No official logos, box art, or marketing assets are used. "GoldenEye 007",
   "007", "James Bond" and related marks belong to their respective owners
   (Nintendo, Microsoft/Rare, MGM, Danjaq, EON Productions).
-- **If** pre-built binaries are published under [Releases](../../releases) in
-  the future, they will contain only the engine — the `port/` layer plus the
-  compiled decompilation, with no game data of any kind — bundled with
-  permissively-licensed runtime libraries (SDL2, zlib, the MinGW runtime; their
-  licenses travel in the download). No such release exists yet, and any build —
-  yours or ours — is useless without a ROM you supply.
+- **Pre-built binaries** published under [Releases](../../releases) contain
+  only the engine — the `port/` layer plus the compiled decompilation, with no
+  game data of any kind — bundled with permissively-licensed runtime libraries
+  (SDL2, zlib, the MinGW runtime; their licenses travel in the download). Any
+  build — yours or ours — is useless without a ROM you supply.
 
 This project is **not affiliated with, endorsed by, or sponsored by** Nintendo,
 Rare, Microsoft, MGM, Danjaq, EON Productions, or any rights holder in

@@ -17,8 +17,10 @@ unfamiliar, low-level codebase**: two coding agents — a local open-weight mode
 part-time through ~230 translation units of unmodified big-endian MIPS game
 code, handing work back and forth through shared written notes.
 
-**Status:** Phase 2 of 4 (rendering). Boots, renders the full intro and front
-end, loads all 21 solo missions. No audio yet; not playable end to end.
+**Status:** Phase 2 of 4 (rendering); first alpha **v0.1.0** released. Runs the
+full single-player campaign — 19 of 21 missions completable start to finish in
+a full-campaign playtest, two levels still crash mid-mission. No audio yet; AI pacing
+and cutscenes are rough.
 
 - **[Project repository and README](https://github.com/jkdansereau/goldeneye-pc-port)** — build instructions, requirements, status, how it compares to the Xbox 360 recompilation projects.
 
@@ -28,5 +30,5 @@ end, loads all 21 solo missions. No audio yet; not playable end to end.
 - **[Development process](dev-process.md)** — how work was scoped, partitioned, and budgeted across agents; the finding-log discipline.
 - **[Internals](internals.md)** — architecture, the software RSP-emulation approach, GoldenEye-vs-Perfect-Dark engine differences, the phased plan.
 - **[Porting notes](porting-notes.md)** — the recurring Nintendo 64 → PC bug classes hit during the port, with fixes.
-- **[Game-behaviour reference](dev/game-behavior-reference.md)** — how the retail N64 game is meant to behave: combat/AI model, difficulty scaling, per-level objectives, timers, weapon data, and the original game's known quirks.
+- **[Game-behavior reference](dev/game-behavior-reference.md)** — how the retail N64 game is meant to behave: combat/AI model, difficulty scaling, per-level objectives, timers, weapon data, and the original game's known quirks.
 - **[Building](building.md)** — full build and asset-extraction guide.

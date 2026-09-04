@@ -1,14 +1,14 @@
-# GoldenEye 007 — game-behaviour reference
+# GoldenEye 007 — game-behavior reference
 
 Community-documented account of how the retail N64 game is *supposed* to
 behave: the combat/AI/stealth model, difficulty scaling, per-level objective
 sets, timers, weapon data, and the original game's known quirks and glitches.
 
 **Status of this document.** This is secondary source material, not ground
-truth. The decompiled game code in `src/` is authoritative for behaviour (see
+truth. The decompiled game code in `src/` is authoritative for behavior (see
 `AGENTS.md`). Use this doc to know *what correct looks like* when playtesting
 the port — which objectives a level must expose, what a timer value should be,
-whether a weird behaviour you just saw is an original-game quirk or a port
+whether a weird behavior you just saw is an original-game quirk or a port
 regression.
 
 **Sources** (subjective commentary stripped; mechanical/factual data only):
@@ -20,7 +20,7 @@ regression.
 
 Distilled from `goldeneye_007_reference.md` (the full raw walkthrough dump);
 the walkthrough's per-stage tactical routes were dropped as not
-behaviour-defining.
+behavior-defining.
 
 ---
 
@@ -78,11 +78,11 @@ Relative to the lower tiers:
   never alert.
 - **Security cameras**: if a camera acquires the player it raises an alert
   that **spawns black-clad guards** armed with DD44s and KF7s. Shoot the
-  camera centre for a one-shot kill.
+  camera center for a one-shot kill.
 - **Retreating** breaks pursuit — most guards stop following after a set
   distance, letting the player reload / heal / reposition.
 
-### AI line-of-sight & animation quirks (exploitable, i.e. defining behaviour)
+### AI line-of-sight & animation quirks (exploitable, i.e. defining behavior)
 
 - A guard behind a **wall, low barrier or railing cannot shoot** the player,
   even point-blank — it must path around the obstacle. **Exception:** a guard
@@ -97,7 +97,7 @@ Relative to the lower tiers:
 
 ## 3. Player state
 
-| System | Behaviour |
+| System | Behavior |
 |---|---|
 | Health | restored by health packs; no regen. 00 Agent pool ≈ 8 KF7 hits (§1). |
 | Body armour | separate absorbing layer; fixed pickup locations (e.g. by the Jungle drone guns, start of Antenna Cradle). Nearly absent on 00 Agent. |
@@ -223,10 +223,10 @@ scientist casualties.
 
 ## 7. Weapons — data table
 
-Clip / max-capacity / behaviour. (Balance and capacity numbers to cross-check
+Clip / max-capacity / behavior. (Balance and capacity numbers to cross-check
 against the decomp's weapon tables.)
 
-| Weapon | Type | Clip | Max | Behaviour notes |
+| Weapon | Type | Clip | Max | Behavior notes |
 |---|---|---|---|---|
 | PP7 | pistol | 7 | 800 | default sidearm |
 | PP7 (Silenced) | pistol | 7 | 800 | no alert on fire |
@@ -284,7 +284,7 @@ noted. **All Guns** cheat unlocks everything.
 | Object | Rule |
 |---|---|
 | Red alarm boxes | shoot to complete "neutralize all alarms"; a guard reaching one spawns reinforcements |
-| Security cameras | destroy (centre = one-shot); acquisition raises the black-clad alert |
+| Security cameras | destroy (center = one-shot); acquisition raises the black-clad alert |
 | Sentry guns | fixed turrets (Bunker 2 striped corridor, Depot); destroy to pass |
 | Drone guns | remote turrets (Jungle, Control Center, Water Caverns, Aztec); some pairs must be destroyed together |
 | Locks / grates | shootable (e.g. the 4-lock vent grate at the end of Surface) |
@@ -344,7 +344,7 @@ faithful; if you see one while testing, it is probably *not* a port bug.
   Ourumov has no objective use, but "firing" the key (action button) near the
   rocket opens the giant launch doors. Otherwise both items are inert.
 - **Cut content left in levels**: the Dam has the unused geometry of a
-  cancelled boat mission out on the water; the Train's rear region past
+  canceled boat mission out on the water; the Train's rear region past
   Alec/Trevelyan leads nowhere; the Facility's starting vent has a second path
   blocked purely cosmetically and shootable ceiling glass.
 

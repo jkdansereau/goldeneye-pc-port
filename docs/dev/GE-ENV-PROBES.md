@@ -1,7 +1,7 @@
 # GE_* environment probes — consolidated list
 
 Every `getenv("GE_…")` in the tree, from a grep of `src/` + `port/` on
-2026-08-31 (master `31d036da`). All are **env-gated**: unset = zero behaviour
+2026-08-31 (master `31d036da`). All are **env-gated**: unset = zero behavior
 change, so they are safe to leave in a release build (they only cost a
 `getenv` on the guarded path). "Dead" below means *the finding it was built
 for is closed* — the probe is strip-candidate scaffolding, not that it does
