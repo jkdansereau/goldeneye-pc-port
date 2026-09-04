@@ -11,8 +11,9 @@ the [GoldenEye 007 decompilation](https://github.com/n64decomp/007) — the
 original N64 game running from reconstructed source, not the Xbox 360 remaster.**
 The first alpha, **[v0.1.0](../../releases)**, is out for Windows and Linux: it
 boots, renders the full intro and front end, and runs all 21 solo missions — in
-a full-campaign playtest 19 of the 21 were completable start to finish (two
-levels still crash). **There is no audio yet** and rough edges remain; this is
+a full-campaign playtest 18 of the 21 were completable start to finish (two
+crash mid-level; the final level can't be finished yet). **There is no audio
+yet** and rough edges remain; this is
 Phase 2 of 4. See [Status](#status) and [Background](#background).
 
 It is also a **research project on AI-agent collaboration in a large,
@@ -132,7 +133,7 @@ asset converters — then both agents ran the debugging phase together:
 - **Day 8** — the whole intro renders
 - **Day 13** — all 21 solo missions run crash-free
 - **Day 14** — front end playable end to end
-- **Week 3** — v0.1.0 alpha; a full-campaign playtest completes 19 of 21 missions
+- **Week 3** — v0.1.0 alpha; a full-campaign playtest completes 18 of 21 missions
 
 Full write-up, timeline chart, and an honest "what worked / what didn't":
 [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md). The
@@ -154,7 +155,7 @@ remaster* — a different game, a different codebase, no shared code with this.
 | **How** | **Decompilation-based source port** — human-reconstructed C, compiled for the host; game logic runs as written | **Static binary recompilation** — the shipped machine code is auto-translated to C; no source-level understanding |
 | **Lineage** | [GoldenEye 007 decompilation](https://github.com/n64decomp/007) + [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) engine family | Xbox 360 "…Recompiled" static-recompilation family |
 | **Renderer** | Software RSP → OpenGL | Hardware (Vulkan) |
-| **Status** | WIP, Phase 2, alpha v0.1.0 — runs all 21 levels, 19/21 completable in a full playthrough; no audio; rough edges | Playable full game, higher frame rates, online multiplayer |
+| **Status** | WIP, Phase 2, alpha v0.1.0 — runs all 21 levels, 18/21 completable in a full playthrough; no audio; rough edges | Playable full game, higher frame rates, online multiplayer |
 | **Why it exists** | A [case study in AI-agent collaboration](#background) on a hard low-level codebase; the port is the target, not a product | A polished, playable PC release of the remaster |
 
 **If you just want to play GoldenEye on PC today, use one of the recompilation
@@ -181,8 +182,9 @@ finished and it is not fully stable.
 - Boot → Rare/Nintendo logos → gun-barrel → cast intro, fully rendered.
 - Front end: main menu → mission select → difficulty → briefing → mission start.
 - **All 21 solo missions load and render.** In a full-campaign playtest on the
-  packaged Windows build, **19 of 21 were completable start to finish**; Bunker
-  ii and Statue crash mid-level (one root cause, tracked as D191). See
+  packaged Windows build, **18 of 21 were completable start to finish**: Bunker
+  ii and Statue crash mid-level (one root cause, D191), and Cradle can't be
+  finished because the final-level scripted sequence breaks (D193). See
   [`docs/dev/LEVEL-STATUS.md`](docs/dev/LEVEL-STATUS.md).
 - Software RSP (fast3d): textured world geometry, skeletal characters, HUD,
   the GE-specific color-combiner / render modes and `G_TRI4`.

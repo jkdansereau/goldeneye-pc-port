@@ -286,11 +286,13 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           ASSETS=(dist/*.zip dist/*.zip.sha256 dist/*.tar.gz dist/*.tar.gz.sha256)
+          # substitute the <version> placeholders in the notes template
+          sed "s/<version>/${TAG#v}/g" .github/release-notes.md > "${RUNNER_TEMP}/release-notes.md"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
             gh release create "$TAG" "${ASSETS[@]}" \
               --draft --prerelease \
               --title "GoldenEye 007 PC Port $TAG" \
-              --notes-file .github/release-notes.md
+              --notes-file "${RUNNER_TEMP}/release-notes.md"
           fi

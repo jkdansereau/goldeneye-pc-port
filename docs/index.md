@@ -18,9 +18,9 @@ part-time through ~230 translation units of unmodified big-endian MIPS game
 code, handing work back and forth through shared written notes.
 
 **Status:** Phase 2 of 4 (rendering); first alpha **v0.1.0** released. Runs the
-full single-player campaign — 19 of 21 missions completable start to finish in
-a full-campaign playtest, two levels still crash mid-mission. No audio yet; AI pacing
-and cutscenes are rough.
+full single-player campaign — 18 of 21 missions completable start to finish in
+a full-campaign playtest (two levels crash, and the final level can't be
+finished). No audio yet; AI pacing and cutscenes are rough.
 
 - **[Project repository and README](https://github.com/jkdansereau/goldeneye-pc-port)** — build instructions, requirements, status, how it compares to the Xbox 360 recompilation projects.
 
