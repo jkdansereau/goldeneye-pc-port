@@ -7,6 +7,16 @@ auto-injected, D121), `GE_PCDUMP="80-260:40"`, ~24 s watchdog then
 0x140000000). "render %" = `tools_pc/pixcount.py` non-clear on the last
 captured frame. Binary at `f2beae4b` + this session's build.
 
+**M-49 (2026-09-04) — full-campaign playtest, v0.1.0 win64 bundle.**
+User played every solo mission on the packaged build (fresh save). **19 / 21
+completable start to finish.** Only two crashes in the whole game — **Bunker ii
+(`-level_27`) and Statue (`-level_22`)**, same fault PC `0x1400801b1`
+(`modelGetNodeRwData` node-tree walk), one root cause = **D191** (pointer-width
+/ byte-swap family, findings §F). This retires the old "expect crashes past the
+level intro" framing for 19/21 levels. Biggest non-crash complaint: **D193** —
+AI locomotion too slow, breaks Cradle's scripted progression. v0.1.0 tagged off
+this state.
+
 **M-30 re-sweep (2026-08-31, build after D157/D120/RC2): 21 / 21 PASS — no
 crash logs.** First all-green sweep incl. Cuba (54) — the D129 credits-path
 crash no longer reproduces on a bare `-level_54` boot (Cuba rendered 92.5%

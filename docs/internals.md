@@ -1,15 +1,16 @@
-# GoldenEye 007 — PC Port: architecture &amp; plan
+# GoldenEye 007 — PC Port: architecture & plan
 
 > This began as the pre-implementation research note and is kept as the
 > architecture reference. Sections 1–9 describe the design; section 10 lists
 > external references. The phased plan in section 8 is largely done through
-> Phase 2 — for current status see the [README](../README.md) and
+> Phase 2 — for current status see the
+> [README](https://github.com/jkdansereau/goldeneye-pc-port#status) and
 > [`dev/LEVEL-STATUS.md`](dev/LEVEL-STATUS.md); for the blow-by-blow finding
 > log see [`dev/findings.md`](dev/findings.md).
 
 This document captures the research done to plan a PC port of
 GoldenEye 007, based on the decompilation this repository is forked from
-([`n64decomp/007`](https://github.com/n64decomp/007)). It is modelled on the
+([`n64decomp/007`](https://github.com/n64decomp/007)). It is modeled on the
 approach used by the
 [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark),
 which ports the same Rare "Indy" engine (a later revision) to modern
