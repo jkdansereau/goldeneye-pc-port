@@ -54,6 +54,9 @@ A subagent brief is INVALID and must not be sent unless it contains all of:
   write-up of a half-solved bug is a deliverable, not a failure.
 - **KNOWN-GOOD / RULED OUT**, **CONSTRAINTS** (no game-logic changes;
   ABI/layout/format only; `#ifdef PORT`; documented in §F), **REPORT** shape.
+- **VERIFY** — the exact `tools_pc/verify.sh` / probe invocation that proves
+  the task done, or an explicit "runtime verification impossible here; a human
+  must run X".
 - Instruction to read `docs/porting-notes.md` first and append any
   generalisable quirk to it.
 

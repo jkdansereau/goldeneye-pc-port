@@ -1,7 +1,9 @@
 # GE_* environment probes — consolidated list
 
-Every `getenv("GE_…")` in the tree, from a grep of `src/` + `port/` on
-2026-08-31 (master `31d036da`). All are **env-gated**: unset = zero behavior
+Every `getenv("GE_…")` in the tree. The table prose is hand-curated;
+**`tools_pc/gen_env_probes.py`** re-greps the live sites and reports drift
+(NEW / GONE vars + a fresh file:line map) — run it before trusting the
+File:line cells. Last reconciled 2026-09-04 (M-51). All are **env-gated**: unset = zero behavior
 change, so they are safe to leave in a release build (they only cost a
 `getenv` on the guarded path). "Dead" below means *the finding it was built
 for is closed* — the probe is strip-candidate scaffolding, not that it does
@@ -22,6 +24,10 @@ Two classes:
 | `GE_INPUTLOG` | `port/src/input.c:329`, `port/src/config.c:53` (`configGetInputLog`) | Logs computed pad state (buttons + stick) each poll when non-zero. Also `[Debug] InputLog` ini. Also traces D165 `menuptr est/tgt/eff/stick`. | **live** |
 | `GE_STARTMENU` (+ `GE_STARTMENU_PAGE`, `GE_STARTMENU_DIFF`) | `src/game/lv.c:398-402` (`#ifdef PORT`) | Boot straight into a front-end menu id (13=MISSION_COMPLETE, 10=BRIEFING, 7=MISSION_SELECT, 12=MISSION_FAILED, 6=MODE_SELECT); `_PAGE`=folder row (def 1=Dam), `_DIFF`=0..3. Crash-test a screen fast. | **live** |
 | `GE_UNLOCK_ALL` | `src/game/debugmenu_handler.c:1098` (`get_debug_enable_all_levels_flag`, `#ifdef PORT`) | Mission-select shows every solo level (playtest jump-to-any-level aid). Cached in a `static int c`. | **live** |
+| `GE_OPTIONSOVERLAY` | `port/src/optionsoverlay.c:231` | Force-enable the F10 port-layer options overlay (D184 / PR #10) regardless of ini. `atoi != 0`. | **live** |
+| `GE_TEXPITCH` | `port/fast3d/gfx_pc.cpp:924` (`gfx_tex_pitch_fix`, cached) | `=0` disables the D183 defensive de-stride in `import_texture` (default on). RC2/RC3 texture-shear A/B knob. | **live** (RC3 not finished) |
+| `GE_TEXRAW` | `port/fast3d/gfx_pc.cpp:1079` | With `GE_TEXDUMP`, also dumps the raw pre-import source bytes (`texdump/rNNN_f…_s…_WxH.bin`) so a decode bug can be told from a source-data bug offline (D183). | **live** (RC3 not finished) |
+| `GE_WRAPFIX` | `port/fast3d/gfx_pc.cpp:3166` (`gfx_set_wrap_fix`) | RC3 test override for the `Video.WrapFix` D74/D167 wrap-block path (`atoi != 0` wins over the ini). | **live** (RC3 not finished) |
 | `GE_SAVELOG` | `src/game/file.c:46`, `src/game/file2.c:16` (`SAVELOG` macro), `src/boss.c:749`, `src/game/objective_status.c:297,343` | Traces the campaign save/unlock chain (objective completion → `end_of_mission_briefing` → `fileWriteSave` → EEPROM). Used to confirm D157. `g_savelogObjOnce` gates the per-criterion dump to the `bossReturnTitleStage` call. | **live** (strip once a few more level boundaries are playtested) |
 | `GE_D160` | `src/boss.c:744`, `src/game/bondview2.c:791`, `src/aicommands.def:10055,10181,10236,10242,10247` (all `#ifdef PORT`) | Dam exit-cutscene (D148/D160) diagnostic: trace points in `bossReturnTitleStage`, `bondviewSetCameraMode`, and AI cmds `EndLevel`/`exit_level`/`CameraLookAtBondFromPad`/`CameraSwitch`. **Investigation in progress** — user owes a `GE_D160=1` Dam run. | **live** |
 | `GE_DTEX` | `port/fast3d/gfx_pc.cpp:1001` | Per-`import_texture` param log (dims / line / size / lod / gen_mipmaps). Used to root-cause RC2 and D159. Kept as an inert diagnostic. | **live** (RC2/RC3 not finished) |
@@ -33,7 +39,10 @@ Two classes:
 | Env var | File:line | Finding / what it logged | Status |
 |---|---|---|---|
 | `GE_D51` | `port/src/libultra.c:496`, `src/game/model.c:125,244,544` | msgQ 32-slot overflow watch / ModelSlot layout | dead (D51 closed) |
-| `GE_D54` | — (all blocks stripped M-32, commit `49ce620a`) | music seq-table ABI / endianness (`ALMidiHdr`) | dead (D54 closed) — fully removed |
+| `GE_D54` | — (all blocks stripped M-32, commit `49ce620a`) | music seq-table ABI / endianness (`ALMidiHdr`) | dead (D54 closed) — fully removed (kept here as a tombstone; the generator flags it GONE) |
+| `GE_D154` | `src/game/bg.c:3418,3447,3632` (capped 64 calls) | bg room-GDL call trace (room / gdlidx / vtxoff / op / raw hdr words) | dead (D154 closed) |
+| `GE_D176` | `src/game/bgfog.c:459,471`, `src/game/sky.c:325,381` (all `#ifdef PORT`) | D176 sky/fog env-match + sky-vert trace (Path B, PR #18) | **live** (D176(a)/(b) OPEN) |
+| `GE_D178` | `src/game/front.c:6586,6594` (`#ifdef PORT`) | briefing-data u16 decode trace (blank-objectives, D143/D178) | dead (D178 closed) |
 | `GE_D56` | `src/game/model.c:227,830` | watch `Model` raw-offset reads | dead (D56 closed) |
 | `GE_D60` | `port/src/libultra.c:521,735` | gfx frame msgQ delivery trace | dead (D60 closed) |
 | `GE_D61` | `port/src/libultra.c:795` (`s_d61opened`) | opens a one-shot log file | dead (D61 closed) |

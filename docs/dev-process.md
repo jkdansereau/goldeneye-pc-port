@@ -101,6 +101,7 @@ KNOWN-GOOD / RULED OUT: <list — do not re-investigate>.
 PRE-FLIGHT ATTACHED: <probe output, baseline capture, PD-port pointer>.
 BUDGET: <N build->run cycles / ~M min>. On expiry: revert probes, write up with confidence.
 CONSTRAINTS: no game-logic changes; ABI/layout/format only; #ifdef PORT; documented in the finding log.
+VERIFY: <the exact tools_pc/verify.sh (or probe) invocation that proves this done — or, if runtime verification is impossible in this environment, say so and name what a human must run>.
 REPORT: (a) root cause + file:line evidence  (b) fix diff, or why not
         (c) probes left in tree  (d) confidence.
         Append any generalisable quirk to docs/porting-notes.md.

@@ -113,6 +113,12 @@ jobs:
       - name: Byte-compile Python tooling
         run: python3 -m compileall -q scripts tools_pc
 
+      # Generated dev-docs stay in sync with the tree (speed-ups plan Step 4).
+      - name: Check generated dev indexes are current
+        run: |
+          python3 tools_pc/gen_findings_index.py --check
+          python3 tools_pc/gen_env_probes.py --check
+
       # US only. gen_romassets.py resolves every symbol for the US region from
       # the committed CSVs with no ROM present; PAL/JP each need a handful of
       # region-specific prop/font offsets that only come from that region's ROM
