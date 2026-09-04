@@ -11,8 +11,9 @@ the [GoldenEye 007 decompilation](https://github.com/n64decomp/007) — the
 original N64 game running from reconstructed source, not the Xbox 360 remaster.**
 The first alpha, **[v0.1.0](../../releases)**, is out for Windows and Linux: it
 boots, renders the full intro and front end, and runs all 21 solo missions — in
-a full-campaign playtest 18 of the 21 were completable start to finish (three
-crash mid-level). **There is no audio yet** and rough edges remain; this is
+a full-campaign playtest 18 of the 21 were completable start to finish (two
+crash mid-level; the final level can't be finished yet). **There is no audio
+yet** and rough edges remain; this is
 Phase 2 of 4. See [Status](#status) and [Background](#background).
 
 It is also a **research project on AI-agent collaboration in a large,
@@ -181,9 +182,9 @@ finished and it is not fully stable.
 - Boot → Rare/Nintendo logos → gun-barrel → cast intro, fully rendered.
 - Front end: main menu → mission select → difficulty → briefing → mission start.
 - **All 21 solo missions load and render.** In a full-campaign playtest on the
-  packaged Windows build, **18 of 21 were completable start to finish**; Bunker
-  ii, Statue and Cradle crash mid-level (Bunker ii + Statue share a root cause,
-  tracked as D191). See
+  packaged Windows build, **18 of 21 were completable start to finish**: Bunker
+  ii and Statue crash mid-level (one root cause, D191), and Cradle can't be
+  finished because the final-level scripted sequence breaks (D193). See
   [`docs/dev/LEVEL-STATUS.md`](docs/dev/LEVEL-STATUS.md).
 - Software RSP (fast3d): textured world geometry, skeletal characters, HUD,
   the GE-specific color-combiner / render modes and `G_TRI4`.

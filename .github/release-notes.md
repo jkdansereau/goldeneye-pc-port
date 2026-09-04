@@ -4,13 +4,12 @@
 > The full single-player campaign runs. In a full-campaign playtest on this
 > build, **18 of 21 missions were completable start to finish**. Known issues:
 > - **no audio** (Phase 3, not started) — the game runs silent;
-> - **three levels crash mid-mission** — Bunker ii, Statue and Cradle
->   (Bunker ii + Statue share one root cause, D191);
-> - **AI characters move too slowly**, which also breaks Cradle (the final
->   level) via Trevelyan's scripted behavior (D193);
+> - **two levels crash mid-mission** — Bunker ii and Statue (one root cause, D191);
+> - **AI characters move too slowly** — guards and escorts lag well behind their
+>   N64 pace; this also makes the final level (Cradle) impossible to finish, as
+>   Trevelyan's scripted sequence never completes (D193);
 > - **cutscenes frequently glitch** — skipped, wrong camera, misplaced actors (D148/D160);
-> - some front-end 3D models are broken (the spinning Nintendo logo, the
->   MISSION COMPLETE / mode-select models);
+> - the spinning Nintendo logo on the intro renders wrong;
 > - outdoor levels render with a **black sky**;
 > - mouse aim and some textures/transparency have rough edges.
 >
