@@ -54,6 +54,14 @@ typedef enum ALSndpMsgType_e {
     AL_SNDP_UNUSED_15_EVT  = (1 << 15)  // defined here for 16 bit completion
 } ALSndpMsgType;
 
+#ifdef PORT
+/* D202/M-66 (PC port only): reuses a slot marked unused above. sndp posts one
+ * of these for ownerless infinite-loop SFX voices so they fade out after a
+ * bounded time instead of ringing until level exit (the faithful N64
+ * behavior). See docs/dev/findings.md D202, M-66. */
+#define AL_SNDP_PORT_EXPIRE_EVT AL_SNDP_UNUSED_13_EVT
+#endif
+
 // based on n64devkit\ultra\usr\src\pr\libsrc\libultra\audio\sndp.h
 struct ALSoundState_s;
 typedef struct ALSoundState_s {
