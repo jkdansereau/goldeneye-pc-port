@@ -424,7 +424,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D103–D107 | BUNKER1 viewport height, depth-buffer clear (`G_CLEAR_DEPTH_EXT`), portal near-plane, LOD mip tile | resolved |
 | D108–D112 | skeletal models: `d43_emit.py put_f32` byte-reversal bug | resolved |
 | D113–D116 | portal BFS ok · matrix chain ok · player raw-offset audit + `gunfire.c` THROW* · HUD text X-mirror | **D114/D116 CLOSED — NOT A BUG (M-33, see D168): the "X-mirror" was an upside-down `GE_PCDUMP` capture misread as mirrored. PPM writer fixed; the game renders correctly on hardware.** |
-| D117 | frame nondeterminism root-caused; `GE_DETERM` deferred; `framediff.py` structural | resolved (mode deferred) |
+| D117 | frame nondeterminism root-caused; `GE_DETERM` deferred; `framediff.py` structural. **M-52: `GE_DETERM=1` attempted — boot deadlock fixed, determinism NOT achieved (load-phase fallback still real-time-dependent). See addendum below.** | OPEN (mode attempted, not achieved) |
 | D118 | SDL input layer (`port/src/input.c`); M-24 mouse-look rework: mode-aware map (aim mode = analog stick, hipfire = digital C-pitch), `config.c` INI now real. D118b/c FIXED; D118a residual (hipfire pitch only) | resolved (D118a residual) |
 | D150 | watch OBJECTIVES / BRIEF page crash: `strcat(buf, langGet(id))` with `langGet` → NULL (unloaded bank) → NULL deref; `str.c` str* builtins elide a plain param NULL check, so guard via asm-laundered `GE_IS_NULL` | FIXED (`src/str.c` `#ifdef PORT`); interactive re-verify pending |
 | D137 | right-mouse (aim-sight) crash: `gunDrawSight` (`gunfire.c:6235`) `s32 sp54` holds a `Gfx*` the whole function (`sp54 = *gdl`; `texSelect(&sp54,…)`/`display_image_at_position(&sp54,…)` take `Gfx**`). As N64 `s32` it is 4 B, so `*(Gfx**)&sp54` reads 4 B of the adjacent stack float as the pointer high word → `_g = 0x03e4fca0_70081220` → wild DL write in `texSetRenderMode` (`othermodemicrocode.c:177`) the moment the crosshair raises. §A. | FIXED (`src/game/gunfire.c` `#ifdef PORT` — `sp54` is `Gfx *`) |
@@ -3674,6 +3674,195 @@ dmean 15, phash ≤ 23, non-clear Δ ≈ 0) while `--exact` correctly reports
 Golden set at `tools_pc/golden/frame_0002{00,320,440}.png` is the D115
 baseline — since it is a nondeterministic capture, only structural mode
 is meaningful against it today.
+
+**D117 — M-52 addendum: `GE_DETERM=1` implemented per the design above,
+tested live (Windows console). Boot deadlock FIXED as predicted; full
+determinism NOT achieved. Confidence: HIGH on both findings (live-tested,
+not argued).**
+
+Implemented exactly the 5-step design (`port/src/libultra.c`, env-gated,
+default off, zero change to the non-`GE_DETERM` path): `osGetCount()`
+returns a virtual `g_determTicks` seeded to the region quantum; a
+`g_determFrameReady` flag is set at the `osSpTaskStartGo` graphics-task call
+site (i.e. by the real "a frame was presented" event, not `videoEndFrame`
+directly — same effect, one call site, no `video.c` change needed);
+`portTickThread` gets a `GE_DETERM` branch that advances the clock + posts
+one retrace only when that flag is set, polling every 200 µs instead of
+pacing to the real 16.7/20 ms tick interval.
+
+*Step 1(b) risk, confirmed exactly as written.* Without a load-phase
+fallback, `-level_09 GE_DETERM=1` hangs before the first frame: symbolicated
+the live hang (not guessed) — `shedThread` blocked in `osRecvMesg`
+(`sched.c:256`, `__scMain`) and `mainThread` in `joyCheckStatusThreadSafe`
+(`joy.c:166`), both waiting on the scheduler's interruptQ (the same queue
+`portPostVIEvent` posts into, per the D134 comment), which never receives a
+retrace because no frame has rendered yet to set `g_determFrameReady` —
+exactly the chicken-and-egg the design called out ("boss.c:442 hangs the
+same way").
+
+*Fallback added, per the design's own suggestion — fixes the hang, breaks
+determinism.* Added: when `g_determFrameReady` is false AND
+`g_viRetraceMQ->validCount == 0` (nothing left to consume from a prior
+tick), advance the clock and post a retrace anyway, so a boot-time waiter
+isn't stuck forever. This **does** fix the hang — `-level_09 GE_DETERM=1`
+now boots and renders past frame 3000+ instead of hanging. It does **not**
+achieve determinism: two independent runs, same build, same command,
+`framediff.py --exact` at the golden frame numbers (200/320/440):
+
+```
+FAIL frame_000200: 276998/307200 px over tol (90.169%, maxchan=218)
+FAIL frame_000320: 85131/307200 px over tol (27.712%,  maxchan=102)
+FAIL frame_000440: 47936/307200 px over tol (15.604%,  maxchan=102)
+```
+
+That's *worse* at frame 200 than the port's existing wall-clock
+nondeterminism without any `GE_DETERM` mode at all (32–69 % per the
+original D117 measurement above) — the fallback didn't just fail to fix
+determinism, it introduced a new, bigger source of it. Root cause (analysis,
+not yet re-tested): the fallback fires whenever the 200 µs poll happens to
+observe an empty queue, which during the load phase depends on real
+OS-scheduling latency between the polling thread and whatever the load path
+is doing — so the *number* of extra ticks consumed before the first real
+frame renders varies run-to-run, exactly the same class of divergence D117
+already documents, just relocated from "wall-clock frame pacing" to
+"wall-clock load-phase tick count." User-observed side effect, consistent
+with this: with the fallback active the game visibly runs at a different
+apparent frame rate and sped up — because the tick loop is no longer paced
+to real 60/50 Hz at all once it starts free-running on empty-queue polls,
+it advances (and lets the sim advance) as fast as the poll thread schedules,
+not at any fixed rate.
+
+**D117 — M-52 2nd attempt (same session): moved generation from a polled
+fallback to a synchronous one. Root-caused precisely why that still isn't
+enough. Confidence: HIGH (live-tested, mechanism traced through sched.c).**
+
+Traced the actual consumer chain instead of guessing: `sched.c` `__scMain`
+is the **sole** consumer of `g_viRetraceMQ` (`sc->interruptQ`), and every
+retrace it processes drives task execution (`osSpTaskStartGo`), `joyPoll()`
+(which is what unblocks `joyCheckStatusThreadSafe` too — the other M-52
+1st-attempt hang site, for free), and the forward to `mainThread`, all
+**synchronously on that one thread** before it asks for the next message.
+So replaced the poll-driven tick-thread fallback with generation **inside
+`osRecvMesg()` itself**: when `GE_DETERM` is on and the sole consumer of
+`g_viRetraceMQ` finds it empty, synthesize the message inline (advance
+`g_determTicks`, enqueue) instead of blocking — driven by call sequencing,
+not by an independent thread's wall-clock poll.
+
+Result: still boots (no regression on the deadlock fix), and the divergence
+profile changed but did not go to ~0%: two runs, `framediff.py --exact`:
+
+```
+FAIL frame_000200: 101582/307200 px over tol (33.067%, maxchan=150)
+FAIL frame_000320: 116844/307200 px over tol (38.035%, maxchan=161)
+FAIL frame_000440: 43617/307200 px over tol (14.198%, maxchan=117)
+```
+
+Better than the 1st attempt's 90/28/16% at frame 200, but still nowhere
+near the ~0% acceptance target. **Root cause, found by diffing the two
+boot logs line-for-line** (not guessed): `boss.c`'s boot sequence has a
+genuine, bounded, wall-clock real-time wait —
+`for (i = 0; i != MAXCONTROLLERS; i++) { osSetTimer(100ms); osRecvMesg(BLOCK); }`
+(`src/boss.c:188-190`, controller detection) — untouched by `GE_DETERM` by
+design (`osGetTime()`/real timers are explicitly out of scope). During
+that ~400 ms real window, **nothing is yet consuming `__scMain`'s forwarded
+retraces** (`mainThread` hasn't reached its own retrace-consuming loop
+yet), so the new synchronous-generation code has nothing throttling it —
+`__scMain` free-spins through `osRecvMesg` as fast as the OS schedules that
+thread, and *how many* virtual ticks accumulate during that fixed 400 ms of
+real time depends on real thread-scheduling throughput. Same nondeterminism
+class as both prior attempts, relocated a third time: generation-on-ask is
+only deterministic when something else deterministically paces the asking,
+and right now nothing does during any window where a client isn't actively
+mid-frame.
+
+**Disposition:** kept in the tree, env-gated (`GE_DETERM` unset by default,
+zero behavior change confirmed via `verify.sh bunker1` before/after across
+both attempts — worst cell 12.1–12.5 throughout, within existing noise).
+The single-consumer synchronous-generation mechanism in `osRecvMesg()` is
+the right shape and should stay — it's strictly better than polling and
+fixed a real deadlock class cleanly. What's still missing: a genuine
+**rate limit** on `__scMain`'s synthetic-retrace generation, decoupled from
+real time — e.g. only synthesize the next one once the client has actually
+finished processing the previous forward (a real request/response coupling
+to `mainThread`'s progress, not just "the queue looked empty"), with a
+separate, explicitly-bounded allowance for pre-first-frame boot code that
+legitimately needs to service its own `osSetTimer` waits without the
+scheduler racing ahead. That is a genuine design task, not a quick
+follow-up — leaving D117 OPEN. `porting-notes.md` not updated (this
+addendum's lesson is already exactly what §D117 above says, restated at
+one more layer: any unthrottled or wall-clock-throttled generator racing
+against a genuinely real-time-bound consumer reintroduces the same
+divergence class, no matter how many layers deep you push it).
+
+**D117 — M-52 4th pass: instrumented tracing (`GE_DETERM_TRACE=1`) precisely
+localizes what's left — and it is NOT the virtual clock. Confidence: HIGH,
+directly measured, not inferred.**
+
+Rather than keep auditing code paths by inspection (two dispatches -- one to
+the local delegate, one done directly -- had just spent a round ruling out
+the level-load path and the audio-thread shared-globals angle with nothing
+to show for it), added a temporary trace: every `g_determTicks`
+advance/cap event and the `first_task_run` transition get a monotonic
+sequence number + timestamp-free log line (`port/src/libultra.c`, gated by
+`GE_DETERM_TRACE=1`, zero cost when unset). Ran `-level_09` twice, diffed
+the two trace logs directly instead of guessing.
+
+**Result: the tick mechanism is now proven fully deterministic.** Both runs
+are byte-identical (same `ticks=` value at every logged step) all the way
+through the `first_task_run` transition — the only difference is *which
+spin iteration* it happens on (run 1: spin 4020, run 2: spin 4086 — 66 more
+capped no-op spins in run 2, real-OS-scheduling-dependent as expected), but
+the **virtual clock value at that moment is identical in both** (1551750 =
+`2 × g_determQuantum`). Re-aligning the two logs by that spin-count offset
+shows the entire subsequent tick progression is byte-for-byte identical.
+The M-52 3rd-attempt fix (cap pre-task ticks to a fixed constant) works
+exactly as designed — this is not where the remaining divergence comes
+from.
+
+**The actual mechanism, found by reading `sched.c` with the trace numbers
+in hand:** every synthesized retrace — capped ones included — is a real
+`VIDEO_MSG` that `__scMain` processes via `__scHandleRetrace()`
+(`src/sched.c`), which unconditionally does `sc->frameCount++`
+(`sched.c:319`) and then, per registered client, gates forwarding on
+`(*((s32*)client + 2) == 0) || ((sc->frameCount & 1) == 0)`
+(`sched.c:334`) — i.e. some clients only receive every *other* frame's
+retrace by `frameCount` parity. The audio client is registered as exactly
+this kind of half-rate client: `osScAddClient(&os_scheduler,
+&g_AudioClient[0], &g_AudioManager.frameMessageQueue, 1)` (`src/audi.c:437`,
+the trailing `1` is the half-rate flag). Since `frameCount` increments on
+*every* capped spin — not gated by the virtual clock at all — and the total
+spin count before the first real task varies run-to-run by a genuinely
+real-time-scheduling-dependent amount, **`frameCount`'s parity at the
+moment real gameplay begins is not guaranteed to match between runs**, even
+though the clock value is now provably identical. This run pair happened to
+land on a same-parity gap (66, even) — a different pair easily could not.
+If it lands on opposite parities, the audio client's very first retrace
+forward shifts by one frame's phase between runs, and audio-task scheduling
+(which shares the same `osSpTaskStartGo`/tick-gating machinery) diverges
+from there.
+
+**Why no 5th live-coded attempt this session:** the natural next lever —
+don't call `__scHandleRetrace` (and thus don't increment `frameCount`) for
+a purely-capped "keep `__scMain`/`joyPoll` alive" spin — reopens the exact
+chicken-and-egg the 1st attempt hit: `joyCheckStatusThreadSafe`'s handshake
+and `__scMain`'s own unblocking need *something* processed during that
+window, and `sc->frameCount` is decomp-internal state with no port-visible
+accessor to correct after the fact. A real fix needs `frameCount`'s parity
+(or the half-rate audio client's phase) to be made deterministic
+independent of the real-time-dependent capped-spin count — a genuine
+4th-layer design task, not a variant of any of the first three attempts.
+Stopping here deliberately rather than rushing a live guess under momentum,
+per the same discipline the earlier attempts were written up under.
+
+**Disposition:** `GE_DETERM_TRACE` tracing kept in the tree alongside
+`GE_DETERM`, same env-gating, zero cost when unset — it's the tool that
+should be reused for the next attempt rather than re-instrumented from
+scratch. D117 stays OPEN. porting-notes.md not updated yet (the
+generalisable lesson here — "a per-frame parity/half-rate dispatch gate
+fed by an unconditionally-incrementing counter inherits whatever
+nondeterminism feeds that counter, even after the counter's *primary*
+consumer is made deterministic" — is specific enough to this scheduler
+that it's better captured here than genericized prematurely).
 
 **D118 (session M-9) — SDL input layer implemented (Phase 3).**
 `port/src/input.c` was an unimplemented stub; input only worked via

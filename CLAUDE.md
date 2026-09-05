@@ -54,6 +54,9 @@ A subagent brief is INVALID and must not be sent unless it contains all of:
   write-up of a half-solved bug is a deliverable, not a failure.
 - **KNOWN-GOOD / RULED OUT**, **CONSTRAINTS** (no game-logic changes;
   ABI/layout/format only; `#ifdef PORT`; documented in §F), **REPORT** shape.
+- **VERIFY** — the exact `tools_pc/verify.sh` / probe invocation that proves
+  the task done, or an explicit "runtime verification impossible here; a human
+  must run X".
 - Instruction to read `docs/porting-notes.md` first and append any
   generalisable quirk to it.
 
@@ -85,9 +88,16 @@ still owns judgment, planning, and the verification gate.
 - **Backend reality:** ~1 inference slot, slow per token — dispatch
   **sequentially**, `max_tokens` ~4–8K, treat as batch work. Needs the LiteLLM
   proxy (`litellm/run.ps1`) + Unsloth Studio both up.
-- **Windows quirk:** the worker's shell is `cmd.exe`, not bash — its agent
-  prompt tells it to use `read_file`/`findstr`, not `cat`/`grep`. Always
-  spot-check the returned artifact against the real files before integrating;
-  the 27B will confidently fabricate if a read fails.
+- **Corrected 2026-09-04:** the "worker's shell is `cmd.exe`, no grep/cat"
+  claim that used to live here was WRONG — verified directly against the
+  harness's own `_run_bash` (`C:\Users\james\tools\claude-code-delegate-local`):
+  `grep`, `sed`, `cat`, `ls`, `head`, pipes, and `grep -rn` all work fine
+  (Git-for-Windows/MSYS2 toolchain on PATH). The stale claim, baked into 4 of
+  5 local agent `.md` files, caused a real dispatch (a multi-file
+  cross-referencing investigation) to burn its whole turn budget
+  full-`read_file`-ing files instead of grepping them, hit the turn limit, and
+  returned nothing. Agent files fixed. Always still spot-check the returned
+  artifact against the real files before integrating — the 27B will
+  confidently fabricate if a read fails, independent of this.
 - Fits the **dispatch preflight** rules above (FILES / BUDGET / ON EXPIRY /
   CONSTRAINTS / REPORT) — write the `task` string to that shape.

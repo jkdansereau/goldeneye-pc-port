@@ -113,6 +113,12 @@ jobs:
       - name: Byte-compile Python tooling
         run: python3 -m compileall -q scripts tools_pc
 
+      # Generated dev-docs stay in sync with the tree (speed-ups plan Step 4).
+      - name: Check generated dev indexes are current
+        run: |
+          python3 tools_pc/gen_findings_index.py --check
+          python3 tools_pc/gen_env_probes.py --check
+
       # US only. gen_romassets.py resolves every symbol for the US region from
       # the committed CSVs with no ROM present; PAL/JP each need a handful of
       # region-specific prop/font offsets that only come from that region's ROM
@@ -141,6 +147,12 @@ jobs:
     env:
       CC: gcc-14
       CXX: g++-14
+      # CMakeLists.txt opt-in enables CMAKE_{C,CXX}_COMPILER_LAUNCHER=ccache
+      # when ccache is on PATH (b4de1c68, speed-ups plan Step 5). Game
+      # sources are frozen (1:1 with the decomp), so after the first run only
+      # touched port/ files miss cache -- near-total hit rate.
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
     steps:
       - uses: actions/checkout@v7
         with:
@@ -150,7 +162,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential gcc-14 g++-14 cmake python3 \
-            libsdl2-dev zlib1g-dev libgl1-mesa-dev
+            libsdl2-dev zlib1g-dev libgl1-mesa-dev ccache
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-linux-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-linux-${{ hashFiles('CMakeLists.txt') }}-
+            ccache-linux-
 
       - name: Regenerate ROM-asset symbol file (US)
         run: python3 scripts/gen_romassets.py u
@@ -161,6 +182,9 @@ jobs:
 
       - name: Build (ntsc-final)
         run: cmake --build build-linux -j"$(nproc)"
+
+      - name: ccache stats
+        run: ccache -s
 
       - name: Show binary
         run: |
@@ -204,6 +228,13 @@ jobs:
     defaults:
       run:
         shell: msys2 {0}
+    env:
+      # Same opt-in ccache CMakeLists.txt already wires up (Step 5). Note:
+      # this cache path is read/written by the JS actions/cache step outside
+      # the msys2 shell too, so it stays a plain workspace-relative path
+      # rather than an msys /c/... form.
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
     steps:
       - uses: actions/checkout@v7
         with:
@@ -219,14 +250,27 @@ jobs:
             mingw-w64-x86_64-SDL2
             mingw-w64-x86_64-zlib
             mingw-w64-x86_64-python
+            mingw-w64-x86_64-ccache
             zip
             unzip
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-windows-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-windows-${{ hashFiles('CMakeLists.txt') }}-
+            ccache-windows-
 
       - name: Regenerate ROM-asset symbol file (US)
         run: python scripts/gen_romassets.py u
 
       - name: Build (ntsc-final)
         run: ./build-pc.sh ntsc-final
+
+      - name: ccache stats
+        run: ccache -s
 
       # Package the distributable bundle on every run so the release path is
       # always exercised. On a tag build VERSION is the tag; otherwise it is a
