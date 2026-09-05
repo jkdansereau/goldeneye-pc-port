@@ -150,6 +150,12 @@ run_*.log
 d6*.log
 ge007.crash.log
 
+# agent scratch space + audio probe artifacts (regenerable dumps/traces)
+scratchpad/
+/audiodump.raw
+/audiotrace.log
+/mixertrace.log
+
 # Claude Code local state / agent worktrees
 .claude/
 

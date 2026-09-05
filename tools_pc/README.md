@@ -32,6 +32,7 @@ investigation artifacts.
 | `pixcount.py` | Count non-black pixels in a PPM dump — "did the scene render anything" as a number. |
 | `level_sweep.sh` | Bare `-level_XX` boot of all 21 solo levels → PASS / NO-FRAMES / CRASH. Predates `verify.sh sweep`; kept as the battle-tested full-21-level runner until `verify.sh sweep` has done an equivalent soak. |
 | `playtest.sh` | Launch a level for `docs/dev/LEVEL-PLAYTEST.md` human validation (WS6). |
+| `audiodebug.ps1` | Audio counterpart to `debug.ps1` (that one is for crashes; this one is for audio behaviour). Drives the `GE_D204` health monitor + `GE_AUDIOTRACE`/`GE_AUDIODUMP` and prints a pass/fail verdict: real-time ratio, queue starvation, dropped blocks, oversized blocks, plus a soundIndex histogram. `-AB` runs the same binary twice (with and without `GE_D204_OLD`) and prints a before/after table — how D204 was measured. `-Play` for an instrumented interactive playtest (the D202 workflow), `-Soak` for a 5-min stability run, `-SyncData` to mirror `./data` first. |
 | `debug.ps1` / `repro_gdb.sh` / `attach_animgen.sh` | Launch (or attach to) the game under gdb so a crash always leaves a backtrace. |
 | `bundle-win.sh` / `bundle-linux.sh` | Package a built tree as a distributable archive (exe + licenses + `prepare-assets/`). |
 | `romverify.c` | One-shot `.z64` integrity check against the repo's ground truths. |
