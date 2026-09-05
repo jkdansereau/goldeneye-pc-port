@@ -12,8 +12,9 @@ original N64 game running from reconstructed source, not the Xbox 360 remaster.*
 The first alpha, **[v0.1.0](../../releases)**, is out for Windows and Linux: it
 boots, renders the full intro and front end, and runs all 21 solo missions — in
 a full-campaign playtest 19 of the 21 were completable start to finish (two
-levels still crash). **There is no audio yet** and rough edges remain; this is
-Phase 2 of 4. See [Status](#status) and [Background](#background).
+levels still crash). **It shipped without audio** — a working software mixer
+landed in the tree afterwards (Phase 3, in progress) and will ship in the next
+release. Rough edges remain. See [Status](#status) and [Background](#background).
 
 It is also a **research project on AI-agent collaboration in a large,
 unfamiliar, low-level codebase** — how far two coding agents (a local
@@ -166,13 +167,14 @@ that work was driven by AI agents.
 
 > [!WARNING]
 > **Alpha — playable, not polished.** This is a work-in-progress research port.
-> It runs the full single-player campaign, but there is **no audio**, some
-> front-end 3D models and cutscenes are broken, AI characters move too slowly,
-> input has known rough edges, and two levels (Bunker ii, Statue) still crash.
-> Treat it as an early alpha of the porting work, not a finished way to play
-> GoldenEye.
+> It runs the full single-player campaign and has **working audio** (SFX +
+> music, Phase 3 in progress), but some front-end 3D models and cutscenes are
+> broken, AI characters move too slowly, input has known rough edges, and two
+> levels (Bunker ii, Statue) still crash. Treat it as an early alpha of the
+> porting work, not a finished way to play GoldenEye.
 
-**Phase 2 of 4 (rendering). First alpha: [v0.1.0](../../releases).** The port
+**Phase 3 of 4 (audio + input) in progress; Phase 2 (rendering) essentially
+done. First alpha: [v0.1.0](../../releases) (shipped before audio landed).** The port
 boots, renders, and plays through the front end and the campaign. It is not
 finished and it is not fully stable.
 
@@ -189,13 +191,18 @@ finished and it is not fully stable.
 - Input: keyboard + mouse (with mode-aware mouse-look) and SDL game
   controllers, mapped onto the N64 pad. Tunable via `ge007.ini`.
 - File-backed EEPROM saves.
+- **Audio** — software mixer (libultra audio layer → SDL, adapted from the PD
+  port): SFX and music play in-level. Recent fixes: a permanent ~2 % tempo
+  drift (D204) and a stuck infinite door loop (D202).
 - **Windows and Linux** (`x86_64`). Windows is the primary development and
   playtest path; the Linux build boots, renders, and passes the level sweep,
   with far less human playtime.
 
 **Not yet working**
 
-- **Audio** — not implemented (Phase 3). The game runs silent.
+- **Audio polish** — the mixer works, but Phase 3 is not done: by-ear
+  verification of the recent D202/D204 fixes is still owed, and reverb / mix
+  balance have not been playtest-tuned.
 - **AI pacing** — scripted and combat AI characters travel to their
   destinations noticeably slower than on N64. This breaks Cradle (the final
   level) via Trevelyan's scripted progression. Top post-alpha fix (D193).
@@ -209,8 +216,8 @@ finished and it is not fully stable.
   [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
 - No macOS or ARM support; no controller rebinding UI; no widescreen.
 
-Next up: audio (Phase 3), the AI-pacing fix, and the two remaining level
-crashes. Cosmetic defects are tracked in
+Next up: audio polish (Phase 3), the AI-pacing fix, and the two remaining
+level crashes. Cosmetic defects are tracked in
 [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
 
 ## Download
