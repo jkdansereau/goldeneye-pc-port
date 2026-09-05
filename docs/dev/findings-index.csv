@@ -48,7 +48,7 @@ D93-D102,RESOLVED,struct-pun / hardcoded-size pass:,resolved (D95 pool bump part
 D103-D107,RESOLVED,"BUNKER1 viewport height, depth-buffer clear (G_CLEAR_DEPTH_EXT), portal near-plane, LOD mip tile",resolved
 D108-D112,RESOLVED,skeletal models: d43_emit.py put_f32 byte-reversal bug,resolved
 D113-D116,FIXED,portal BFS ok · matrix chain ok · player raw-offset audit + gunfire.c THROW* · HUD text X-mirror,"D114/D116 CLOSED — NOT A BUG (M-33, see D168):"
-D117,RESOLVED,frame nondeterminism root-caused; GE_DETERM deferred; framediff.py structural,resolved (mode deferred)
+D117,OPEN,frame nondeterminism root-caused; GE_DETERM deferred; framediff.py structural.,"OPEN (mode attempted, not achieved)"
 D118,RESOLVED,SDL input layer (port/src/input.c); M-24 mouse-look rework:,resolved (D118a residual)
 D150,FIXED,watch OBJECTIVES / BRIEF page crash:,FIXED (src/str.c #ifdef PORT); interactive re-verify pending
 D137,FIXED,right-mouse (aim-sight) crash:,FIXED (src/game/gunfire.c #ifdef PORT —

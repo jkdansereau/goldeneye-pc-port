@@ -71,5 +71,9 @@ Two classes:
 - `[Debug]` ini keys (`Debug.FrameDump`, `Debug.InputLog`) mirror
   `GE_PCDUMP` / `GE_INPUTLOG` as a fallback (env var wins) — M-26,
   `port/src/config.c`.
-- Not GE_-prefixed but same category: `GE_DETERM` is **designed, not
-  implemented** (fixed-tick determinism mode, §F D117).
+- Not GE_-prefixed but same category: `GE_DETERM` is **implemented but
+  experimental — not yet achieving its determinism goal** (fixed-tick
+  mode, §F D117, M-52 four-pass writeup); `GE_DETERM_TRACE` (M-52 4th
+  pass) adds instrumented clock-event logging when used alongside it, for
+  diffing two runs to localize remaining divergence. Both env-gated,
+  default off, zero cost when unset.
