@@ -92,8 +92,11 @@ Acmd *alFxPull(void *filter, s16 *outp, s32 outCount, s32 sampleOffset,
 
     for (i = 0; i < r->section_count; i++) {
 	d  = &r->delay[i];  /* get the ALDelay structure */
-	in_ptr  = &r->input[-d->input];
-	out_ptr = &r->input[-d->output];
+	/* PC port (D200): d->input/d->output are u32, so -d->x is a u32 that
+	   zero-extends to a +4GB offset in 64-bit pointer arithmetic; negating
+	   in s32 restores the N64's s32-ptrdiff wrap (PD ground truth). */
+	in_ptr  = &r->input[(s32)-d->input];
+	out_ptr = &r->input[(s32)-d->output];
 	
 	if (in_ptr == prev_out_ptr) {
 	    SWAP(buff1, buff2);
@@ -265,8 +268,8 @@ Acmd *_loadOutputBuffer(ALFx *r, ALDelay *d, s32 buff, s32 incount, Acmd *p)
          * negative of that as an index into the delay buffer. loadBuffer that uses this
          * value then bumps it up if it is below the  delay buffer.
          */ 
-        out_ptr = &r->input[-(d->output - d->rsdelta)];
-        ramalign = ((s32)out_ptr & 0x7) >> 1; /* calculate the number of samples needed 
+        out_ptr = &r->input[(s32)-(d->output - d->rsdelta)];
+        ramalign = ((s64)out_ptr & 0x7) >> 1; /* calculate the number of samples needed 
                                                to align the buffer*/
 #ifdef _DEBUG
 #if 0
@@ -295,7 +298,7 @@ Acmd *_loadOutputBuffer(ALFx *r, ALDelay *d, s32 buff, s32 incount, Acmd *p)
         d->rs->first = 0; /* turn off first time flag */
         d->rsdelta += count - incount; /* add the number of samples to d->rsdelta */
     } else {
-        out_ptr = &r->input[-d->output];
+        out_ptr = &r->input[(s32)-d->output];
         ptr = _loadBuffer(r, out_ptr, buff, incount, ptr);
     }
 

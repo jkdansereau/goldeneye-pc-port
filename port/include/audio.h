@@ -26,9 +26,6 @@ s32  audioGetSamplesBuffered(void);
 /* Queue the next block of mixed samples (len is in bytes). */
 void audioSetNextBuffer(const s16 *buf, u32 len);
 
-/* Called at the end of each frame to flush the queued buffer to the device. */
-void audioEndFrame(void);
-
 #ifdef __cplusplus
 }
 #endif

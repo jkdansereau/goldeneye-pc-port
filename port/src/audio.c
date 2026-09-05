@@ -6,8 +6,6 @@
  * osAiGetLength (libultra.c) route through here.
  *
  * Modelled on the PD port's port/src/audio.c (~75 lines).
- *
- * STATUS: scaffolding stub — implement during Phase 3.
  */
 
 #include <SDL.h>
@@ -18,21 +16,29 @@
 #include "audio.h"
 
 static SDL_AudioDeviceID dev = 0;
-static const s16 *nextBuf = NULL;
-static u32 nextSize = 0;
 
 static int  bufferSize = 512;
 static int  queueLimit = 8192;
 
 int audioInit(void)
 {
-    /* TODO(Phase 3):
-     *  - SDL_InitSubSystem(AUDIO)
-     *  - open device: 22020 Hz (match GE's OUTPUT_RATE in src/audi.c),
-     *    AUDIO_S16SYS, 2 channels
-     *  - unpause
-     */
-    sysLogPrintf(LOG_INFO, "audioInit: TODO (Phase 3)");
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
+        sysLogPrintf(LOG_ERROR, "audioInit: SDL_InitSubSystem: %s", SDL_GetError());
+        return -1;
+    }
+    SDL_AudioSpec want = {0};
+    want.freq     = 22050; /* GE's OUTPUT_RATE (src/audi.c) */
+    want.format   = AUDIO_S16SYS;
+    want.channels = 2;
+    want.samples  = (u16)bufferSize;
+    SDL_AudioSpec have;
+    dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    if (!dev) {
+        sysLogPrintf(LOG_ERROR, "audioInit: SDL_OpenAudioDevice: %s", SDL_GetError());
+        return -1;
+    }
+    SDL_PauseAudioDevice(dev, 0);
+    sysLogPrintf(LOG_INFO, "audioInit: opened SDL audio device at %d Hz", have.freq);
     return 0;
 }
 
@@ -48,18 +54,8 @@ s32 audioGetSamplesBuffered(void)
 
 void audioSetNextBuffer(const s16 *buf, u32 len)
 {
-    nextBuf = buf;
-    nextSize = len;
-}
-
-void audioEndFrame(void)
-{
-    if (nextBuf && nextSize && dev) {
-        if (audioGetSamplesBuffered() < queueLimit) {
-            SDL_QueueAudio(dev, nextBuf, nextSize);
-        }
-        nextBuf = NULL;
-        nextSize = 0;
+    if (dev && buf && len && audioGetSamplesBuffered() < queueLimit) {
+        SDL_QueueAudio(dev, buf, len);
     }
 }
 

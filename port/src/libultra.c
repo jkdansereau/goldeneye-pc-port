@@ -851,14 +851,14 @@ s32 osAiSetFrequency(u32 hz)
 }
 s32 osAiSetNextBuffer(void *buf, u32 size)
 {
-    /* TODO(Phase 3): hand the mixed buffer to audioSetNextBuffer(). */
-    (void)buf; (void)size;
+    audioSetNextBuffer((const s16 *)buf, size);
     return 1;
 }
 u32 osAiGetLength(void)
 {
-    /* TODO(Phase 3): return audioGetSamplesBuffered() in the right units. */
-    return 0;
+    /* audioGetSamplesBuffered() returns stereo s16 frames (queued bytes / 4);
+     * callers shift right by 2 expecting a byte count (N64 AI_LEN_REG). */
+    return (u32)audioGetSamplesBuffered() * 4u;
 }
 void osAiSetConvert(u32 convert) { (void)convert; }
 
