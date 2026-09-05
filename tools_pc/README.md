@@ -26,9 +26,11 @@ investigation artifacts.
 
 | Script | Role |
 |---|---|
+| `verify.sh` | Speed-ups plan Step 2. One command → one verdict: build-if-stale, headless `GE_PCDUMP`/`GE_INPUTSCRIPT` capture, crash-detect + symbolication (via `crash_brief.py`), `pixcount`, `framediff` vs golden, `--json`. `verify.sh <level>`, `verify.sh sweep [subset]`, `verify.sh parity <level> --against <dir>`. |
+| `crash_brief.py` | Speed-ups plan Step 9 / R5. `ge007.crash.log` → symbolicated frames + a dev-process.md-shaped dispatch-ready brief: matches porting-notes.md sections / findings-index.csv entries by resolved function/file, flags known parked-crash signatures (Cuba credits, D188 va_list, D189 stack overrun) so agents stop re-investigating them. Called automatically by `verify.sh` on CRASH; also runnable standalone. |
 | `framediff.py` | Visual regression: candidate `GE_PCDUMP` frames vs `tools_pc/golden/`, per-region divergence. Structural/tolerant by default; `--exact` after `GE_DETERM`. |
 | `pixcount.py` | Count non-black pixels in a PPM dump — "did the scene render anything" as a number. |
-| `level_sweep.sh` | Bare `-level_XX` boot of all 21 solo levels → PASS / NO-FRAMES / CRASH. (Step 2 folds this into `verify.sh sweep`.) |
+| `level_sweep.sh` | Bare `-level_XX` boot of all 21 solo levels → PASS / NO-FRAMES / CRASH. Predates `verify.sh sweep`; kept as the battle-tested full-21-level runner until `verify.sh sweep` has done an equivalent soak. |
 | `playtest.sh` | Launch a level for `docs/dev/LEVEL-PLAYTEST.md` human validation (WS6). |
 | `debug.ps1` / `repro_gdb.sh` / `attach_animgen.sh` | Launch (or attach to) the game under gdb so a crash always leaves a backtrace. |
 | `bundle-win.sh` / `bundle-linux.sh` | Package a built tree as a distributable archive (exe + licenses + `prepare-assets/`). |
