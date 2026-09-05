@@ -86,8 +86,46 @@ OSTime osGetTime(void)
     return (OSTime)sysGetMicroseconds();
 }
 
+/* GE_DETERM=1 — fixed-tick deterministic mode (speed-ups plan Step 7 / R1,
+ * design in docs/dev/findings.md §D117). Test-only, default OFF: replaces
+ * the wall-clock osGetCount() below with a virtual clock advanced exactly
+ * once per virtual VI retrace (generated synchronously in osRecvMesg() —
+ * see the GE_DETERM block there — when __scMain, the sole consumer of
+ * g_viRetraceMQ, asks for the next message; NOT paced by an independent
+ * thread) instead of real elapsed time, so two runs of the same build take
+ * the same simulation path. Never the shipping timing model — the default
+ * (GE_DETERM unset) path below is byte-for-byte what it always was. */
+static int g_determEnabled = 0;
+static u32 g_determQuantum = 775875; /* NTSC; portKernelInit sets 931050 PAL */
+static u32 g_determTicks = 0;
+/* M-52 3rd attempt: __scMain is the sole consumer of g_viRetraceMQ, but
+ * before the first real gfx/audio task ever runs (src/boss.c's bounded
+ * osSetTimer(100ms)-based controller-detection loop -- genuinely real-time,
+ * out of scope by design), NOTHING is consuming its forwards, so unbounded
+ * per-ask generation free-spins for that whole real-time window and however
+ * many ticks accumulate is real-scheduling-dependent (confirmed: 2nd
+ * attempt's 33/38/14% divergence). waitForNextFrame() (frametiming.c) is a
+ * tight busy-spin on osGetCount(), not a queue wait -- so FREEZING the
+ * clock during that window (0 extra ticks) hangs it forever, and letting it
+ * free-run is exactly the bug. The fix: cap the clock to exactly ONE extra
+ * quantum beyond the seed before the first task runs -- fixed, identical
+ * every run, and >=1 quantum is already enough to clear
+ * waitForNextFrame()'s first-call threshold (see the arithmetic in
+ * frametiming.c), so it can't hang either. Set true by osSpTaskStartGo. */
+static int g_determTaskEverRun = 0;
+static int g_determPreTaskTicksGranted = 0;
+/* GE_DETERM_TRACE=1 (with GE_DETERM=1): log every virtual-clock advance with a
+ * monotonic sequence number, for diffing two runs' logs to find the exact
+ * first point they diverge -- see docs/dev/findings.md §D117 M-52. Test-only,
+ * both env-gated off by default; zero cost when unset. */
+static int g_determTraceEnabled = 0;
+static u32 g_determTraceSeq = 0;
+
 u32 osGetCount(void)
 {
+    if (g_determEnabled) {
+        return g_determTicks;
+    }
     /* The N64 RSP core counter advances at ~OS_CPU_COUNTER (~46.5 MHz), NOT
      * microseconds. GE's pacing assumes this rate: waitForNextFrame() in
      * frametiming.c waits for 775,875 - 387,937 ticks per NTSC frame (931,050
@@ -234,6 +272,25 @@ static void *portTickThread(void *arg)
 {
     (void)arg;
     for (;;) {
+        /* GE_DETERM (§D117, M-52 2nd attempt): retrace generation lives in
+         * osRecvMesg() now (see there) -- synchronous with the sole
+         * consumer asking for the next message, not paced by this thread.
+         * The M-52 FIRST attempt polled g_viRetraceMQ's empty/non-empty
+         * state from here on a real-time cadence; that poll's own
+         * OS-scheduling latency varied run-to-run and leaked directly into
+         * the tick count (measured: 90%/28%/16% frame divergence between
+         * two runs, worse than the port's baseline wall-clock
+         * nondeterminism this mode exists to remove). This thread still
+         * only does what osGetTime()-based real-time bookkeeping needs
+         * (timers, hang-heartbeat) -- deliberately NOT touching
+         * g_viRetraceMQ at all in this mode. */
+        if (g_determEnabled) {
+            portServiceTimers();
+            portHeartbeatCheck();
+            sysSleep(g_tickIntervalUs);
+            continue;
+        }
+
         uint64_t now = sysGetMicroseconds();
         if (!g_nextTickUs) g_nextTickUs = now + g_tickIntervalUs;
 
@@ -272,8 +329,25 @@ void portKernelInit(void)
 
     if (osTvType == OS_TV_MPAL || osTvType == OS_TV_PAL) {
         g_tickIntervalUs = 1000000 / 50; /* PAL: 50 frames/s -> 20ms */
+        g_determQuantum = 931050;
     } else {
         g_tickIntervalUs = 1000000 / 60; /* NTSC: 60 frames/s -> ~16.7ms */
+        g_determQuantum = 775875;
+    }
+
+    /* GE_DETERM=1: seed so the first waitForNextFrame() computes exactly
+     * (quantum + 387937) / quantum == 1 tick, per the §D117 design. */
+    g_determEnabled = getenv("GE_DETERM") != NULL;
+    if (g_determEnabled) {
+        g_determTicks = g_determQuantum;
+        g_determTraceEnabled = getenv("GE_DETERM_TRACE") != NULL;
+        sysLogPrintf(LOG_NOTE,
+            "GE_DETERM=1: fixed-tick deterministic mode (test-only, "
+            "quantum=%u) -- osGetCount() is now frame-locked, not wall-clock",
+            g_determQuantum);
+        if (g_determTraceEnabled) {
+            sysLogPrintf(LOG_NOTE, "DETERMTRACE seq=0 ticks=%u event=seed", g_determTicks);
+        }
     }
 
     pthread_t th;
@@ -576,6 +650,42 @@ s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
         if (flag != OS_MESG_BLOCK) {
             pthread_mutex_unlock(&pq->lock);
             return -1;
+        }
+        /* GE_DETERM (§D117, M-52 2nd attempt): __scMain (sched.c) is the
+         * SOLE consumer of g_viRetraceMQ, and everything the rest of the
+         * boot/frame chain waits on (task execution via osSpTaskStartGo,
+         * joyPoll() -- which is also what unblocks joyCheckStatusThreadSafe
+         * -- and the forward to mainThread's gfxFrameMsgQ) happens
+         * synchronously inside __scMain's handling of THAT message, on this
+         * same thread, before it comes back to ask for the next one. So
+         * "the consumer is asking and none exists" is itself the correct,
+         * purely call-sequenced trigger for the next virtual retrace --
+         * driven by program order, not by an independent thread polling on
+         * a wall-clock cadence (the M-52 first attempt's mistake: that
+         * poll's timing varied run-to-run and leaked into the tick count).
+         * Enqueue inline (not via osEnqueueMesg -- would re-lock pq->lock,
+         * which we already hold). */
+        if (g_determEnabled && mq == g_viRetraceMQ) {
+            /* Still synthesize the message every time (keeps __scMain/
+             * joyPoll unblocked -- no deadlock), but only advance the clock
+             * up to a fixed cap before the first real task runs. See the
+             * g_determTaskEverRun comment above. */
+            if (g_determTaskEverRun || g_determPreTaskTicksGranted < 1) {
+                g_determTicks += g_determQuantum;
+                if (!g_determTaskEverRun) ++g_determPreTaskTicksGranted;
+                if (g_determTraceEnabled) {
+                    sysLogPrintf(LOG_NOTE,
+                        "DETERMTRACE seq=%u ticks=%u event=advance taskEverRun=%d",
+                        ++g_determTraceSeq, g_determTicks, g_determTaskEverRun);
+                }
+            } else if (g_determTraceEnabled) {
+                sysLogPrintf(LOG_NOTE,
+                    "DETERMTRACE seq=%u ticks=%u event=capped taskEverRun=%d",
+                    ++g_determTraceSeq, g_determTicks, g_determTaskEverRun);
+            }
+            mq->msg[(mq->first + mq->validCount) % mq->msgCount] = g_viRetraceMsg;
+            ++mq->validCount;
+            break;
         }
         /* Log each queue's first blocking call site (the return address is
          * the caller); symbolicate with addr2line to find where in game code
@@ -1118,6 +1228,12 @@ void osSpTaskLoad(OSTask *t) { (void)t; /* nothing to load on the host */ }
 
 void osSpTaskStartGo(OSTask *t)
 {
+    if (g_determTraceEnabled && !g_determTaskEverRun) {
+        sysLogPrintf(LOG_NOTE,
+            "DETERMTRACE seq=%u ticks=%u event=first_task_run tasktype=%d",
+            ++g_determTraceSeq, g_determTicks, (int)t->t.type);
+    }
+    g_determTaskEverRun = 1;   /* GE_DETERM: §D117 M-52 3rd attempt */
     if (t->t.type == M_AUDTASK) {
         /* Phase 3: execute the audio ucode against t->t.data_ptr (an Acmd
          * list). For now the task simply completes; libaudio's amMain still
