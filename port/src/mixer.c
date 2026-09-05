@@ -23,10 +23,31 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <PR/abi.h>
 #include <PR/os.h>
+
+/* D202 diag (temporary): per-opcode DMEM address/context trace, gated by
+ * GE_MIXERTRACE=1, to test the M-56 "concurrent voices share/clobber DMEM
+ * context" hypothesis directly against a live repro. Remove once
+ * root-caused. */
+extern char *getenv(const char *);
+static FILE *sMixerTraceFile = NULL;
+static int   sMixerTraceChecked = 0;
+static int mixerTraceOn(void)
+{
+    if (!sMixerTraceChecked) {
+        sMixerTraceChecked = 1;
+        if (getenv("GE_MIXERTRACE")) {
+            sMixerTraceFile = fopen("mixertrace.log", "a");
+            if (sMixerTraceFile) setvbuf(sMixerTraceFile, NULL, _IONBF, 0);
+        }
+    }
+    return sMixerTraceFile != NULL;
+}
+#define MTRACE(...) do { if (mixerTraceOn()) fprintf(sMixerTraceFile, __VA_ARGS__); } while (0)
 
 #include "platform.h"
 #include "system.h"
@@ -92,22 +113,44 @@ void aSetBufferImpl(u32 flags, u16 i, u16 o, u16 c)
         sCtx.out = o;
         sCtx.count = c;
     }
+    MTRACE("[SETBUF] flags=%u i=%u o=%u c=%u\n", flags, i, o, c);
 }
 
 void aClearBufferImpl(u16 addr, u32 count)
 {
+    /* D202/M-65 diag (temporary): alMainBusPull's clear of AL_MAIN_L_OUT is
+     * the first opcode of every audio frame, so it is an exact frame
+     * boundary. GE_DMEMWIPE=1 zeroes the scratch region below AL_MAIN_L_OUT
+     * (AL_TEMP_0/1/2, AL_DECODER_IN, AL_RESAMPLER_OUT) there. Nothing on real
+     * hardware may read those without writing them first in the same command
+     * list, so this must be a no-op; if it silences the stuck drone, some
+     * opcode is reading scratch DMEM left over from the previous frame.
+     * Remove once root-caused. */
+    if (addr == 1088 /* AL_MAIN_L_OUT */ && getenv("GE_DMEMWIPE")) {
+        memset(sDmem, 0, sizeof(sDmem));
+    }
     memset(DMEM_U8(addr), 0, count);
 }
 
 
 void aLoadBufferImpl(u32 dramAddr)
 {
+    if (mixerTraceOn()) {
+        const u8 *src = (const u8 *)osPhysicalToVirtual(dramAddr);
+        u32 n = (sCtx.count > 72 ? 72 : sCtx.count);
+        u32 k;
+        fprintf(sMixerTraceFile, "[LOADBUF] dram=0x%08x -> in=%u count=%u bytes=", dramAddr, sCtx.in, sCtx.count);
+        for (k = 0; k < n; k++) fprintf(sMixerTraceFile, "%02x", src[k]);
+        fprintf(sMixerTraceFile, "\n");
+    }
     memcpy(DMEM_U8(sCtx.in), osPhysicalToVirtual(dramAddr), sCtx.count);
 }
 
 void aSaveBufferImpl(u32 dramAddr)
 {
     memcpy(osPhysicalToVirtual(dramAddr), DMEM_U8(sCtx.out), sCtx.count);
+
+    (void)0;
 }
 
 void aDMEMMoveImpl(u16 in, u16 out, u32 count)
@@ -138,6 +181,13 @@ void aLoadADPCMImpl(u32 count, u32 dramAddr)
     void *src = osPhysicalToVirtual(dramAddr);
     if (n > sizeof(sAdpcmTable)) n = sizeof(sAdpcmTable);
     memcpy(sAdpcmTable, src, n);
+    if (mixerTraceOn()) {
+        int p, q, r;
+        fprintf(sMixerTraceFile, "[LOADADPCM] count=%u dram=%p book=", count, src);
+        for (p = 0; p < 8; p++) for (q = 0; q < 2; q++) for (r = 0; r < 8; r++)
+            fprintf(sMixerTraceFile, "%d,", sAdpcmTable[p][q][r]);
+        fprintf(sMixerTraceFile, "\n");
+    }
 }
 
 void aSetLoopImpl(u32 stateAddr)
@@ -148,6 +198,8 @@ void aSetLoopImpl(u32 stateAddr)
 void aADPCMdecImpl(u32 flags, u32 stateAddr)
 {
     ADPCM_STATE *state = (ADPCM_STATE *)osPhysicalToVirtual(stateAddr);
+    MTRACE("[ADPCMDEC] flags=%u state=%p in=%u out=%u count=%u book0=%d\n",
+           flags, (void *)state, sCtx.in, sCtx.out, sCtx.count, sAdpcmTable[0][0][0]);
     u8 *in = DMEM_U8(sCtx.in);
     s16 *out = DMEM_S16(sCtx.out);
     s32 nbytes = (s32)((sCtx.count + 31) & ~31u); /* round up to 16-sample (32-byte) chunks */
@@ -189,6 +241,15 @@ void aADPCMdecImpl(u32 flags, u32 stateAddr)
     }
 
     memcpy(state, out - 16, 16 * sizeof(s16));
+
+    if (mixerTraceOn()) {
+        s16 *dumpOut = DMEM_S16(sCtx.out) + 16; /* skip the 16-sample history/init lead-in */
+        u32 n = (sCtx.count > 64 ? 64 : sCtx.count);
+        u32 k;
+        fprintf(sMixerTraceFile, "[PCMOUT] book0=%d first-decoded-frame[0..%u]=", sAdpcmTable[0][0][0], n / 2 - 1);
+        for (k = 0; k < n / 2; k++) fprintf(sMixerTraceFile, "%d,", dumpOut[k]);
+        fprintf(sMixerTraceFile, "\n");
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -234,6 +295,8 @@ void aResampleImpl(u32 flags, u16 pitch, u32 stateAddr)
 {
     RESAMPLE_STATE *stateBuf = (RESAMPLE_STATE *)osPhysicalToVirtual(stateAddr);
     s16 *state = (s16 *)stateBuf;
+    MTRACE("[RESAMPLE] flags=%u pitch=%u state=%p in=%u out=%u count=%u\n",
+           flags, pitch, (void *)stateBuf, sCtx.in, sCtx.out, sCtx.count);
     s16 tmp[16];
     s16 *inInitial = DMEM_S16(sCtx.in);
     s16 *in = inInitial;
@@ -324,6 +387,16 @@ void aSetVolumeImpl(u32 flags, u16 v, u16 t, u16 r)
     if (flags & A_AUX) {
         sVol.dryamt = (s16)v;
         sVol.wetamt = (s16)r;
+        /* D202/M-65 diag (temporary): GE_NOWET=1 stops any signal entering
+         * the reverb send. The reverb delay lines are the only audio state
+         * that survives across frames in DRAM, and aPoleFilterImpl -- the
+         * damping in that feedback path -- is an unimplemented no-op here
+         * (D199). If muting the send silences the stuck drone, the drone is
+         * an undamped reverb feedback loop, not a stuck voice.
+         * Remove once root-caused. */
+        if (getenv("GE_NOWET")) {
+            sVol.wetamt = 0;
+        }
     } else if (flags & A_VOL) {
         int ch = (flags & A_LEFT) ? 0 : 1;
         sVol.volCur[ch] = (s16)v;
@@ -344,6 +417,8 @@ void aEnvMixerImpl(u32 flags, u32 stateAddr)
         s16 volwet;
     } *saved = (void *)osPhysicalToVirtual(stateAddr);
 
+    MTRACE("[ENVMIX] flags=%u state=%p in=%u out=%u dryR=%u wetL=%u wetR=%u count=%u\n",
+           flags, (void *)saved, sCtx.in, sCtx.out, sCtx.dryR, sCtx.wetL, sCtx.wetR, sCtx.count);
     const s16 *in = DMEM_S16(sCtx.in);
     s16 *dry[2] = { DMEM_S16(sCtx.out), DMEM_S16(sCtx.dryR) };
     s16 *wet[2] = { DMEM_S16(sCtx.wetL), DMEM_S16(sCtx.wetR) };

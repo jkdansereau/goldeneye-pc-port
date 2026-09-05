@@ -8,6 +8,11 @@
 
 #include <ultra64.h>
 #include <math.h>
+#ifdef PORT
+#include <stdio.h>  /* D202/M-65 diag probe only (doorSndProbe); remove with it */
+#include <stdlib.h>
+#include <stddef.h>
+#endif
 #include <PR/libaudio.h>
 #include <assets/oddtextures.h>
 #include <bondgame.h>
@@ -12832,8 +12837,53 @@ void sub_GAME_7F053A3C(DoorRecord* arg0)
 }
 
 
+#ifdef PORT
+/* D202/M-65 diag (temporary): the two door slots are the ONLY handles on a
+ * door's looping SFX. doorPlayOpenSound0/1 adopt a slot only when it is
+ * NULL; if both are already occupied the loop starts with pendingState ==
+ * NULL, nothing holds its state, and nothing can ever sndDeactivate it --
+ * it retriggers until level exit. This probe prints the slot state at both
+ * ends of that contract (owner selection, and the stop path), so an
+ * orphaned loop is visible as an "ORPHAN" line with no later stop.
+ * Remove once root-caused. */
+void doorSndProbe(const char *where, DoorRecord *door, void *pendingState)
+{
+    static FILE *fd = NULL;
+    if (!getenv("GE_AUDIOTRACE"))
+        return;
+    if (!fd) {
+        fd = fopen("audiotrace.log", "a");
+        if (fd) {
+            setvbuf(fd, NULL, _IONBF, 0);
+            /* D202/M-65: doors are carved from setup data; if the 64-bit
+             * DoorRecord is larger than the per-object stride the allocator
+             * uses, door N's sound slots land inside door N+1 and every
+             * looping SFX loses its owner. Print the size once so it can be
+             * compared against the observed record spacing. */
+            fprintf(fd, "[DOORSND] sizeof(DoorRecord)=0x%X openSoundState@0x%X closeSoundState@0x%X\n",
+                    (unsigned)sizeof(DoorRecord),
+                    (unsigned)((char *)&door->openSoundState - (char *)door),
+                    (unsigned)((char *)&door->closeSoundState - (char *)door));
+        }
+    }
+    if (!fd)
+        return;
+    fprintf(fd, "[DOORSND] %-14s door=%p openSlot=%p(play=%d) closeSlot=%p(play=%d) sound=%d %s\n",
+            where, (void *)door,
+            (void *)door->openSoundState,
+            door->openSoundState ? (int)sndGetPlayingState(door->openSoundState) : -1,
+            (void *)door->closeSoundState,
+            door->closeSoundState ? (int)sndGetPlayingState(door->closeSoundState) : -1,
+            (int)door->doorOpenSound,
+            pendingState ? "owned" : "ORPHAN-both-slots-busy");
+}
+#endif
+
 void door7F053B10(DoorRecord *door) //#MATCH
 {
+#ifdef PORT
+    doorSndProbe("stop-sounds", door, (void *)1);
+#endif
     if (door->openSoundState && sndGetPlayingState(door->openSoundState))
     {
         sndDeactivate(door->openSoundState);
@@ -12862,6 +12912,10 @@ void doorPlayOpenSound0(DoorRecord *door) {
     {
         pendingState = &door->closeSoundState;
     }
+
+#ifdef PORT
+    doorSndProbe("open0", door, (void *)pendingState); /* D202/M-65 diag */
+#endif
 
     switch (door->doorOpenSound)
     {
@@ -12991,6 +13045,10 @@ void doorPlayOpenSound1(DoorRecord *door) {
     {
         pendingState = &door->closeSoundState;
     }
+
+#ifdef PORT
+    doorSndProbe("open1", door, (void *)pendingState); /* D202/M-65 diag */
+#endif
 
     switch (door->doorOpenSound)
     {

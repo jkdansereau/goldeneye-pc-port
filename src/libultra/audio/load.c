@@ -24,6 +24,8 @@
 #include <os.h>
 #include <R4300.h>
 #if defined(__x86_64__)
+#include <stdio.h>
+#include <stdlib.h>
 #endif
 
 #ifndef MIN
@@ -193,6 +195,28 @@ Acmd *alAdpcmPull(void *filter, s16 *outp, s32 outCount, s32 sampleOffset, Acmd 
         f->lastsam = 0;
         f->memin += ADPCMFBYTES*nframes;    
     }
+
+#if defined(__x86_64__)
+    /* D202/M-65 diag (temporary): a wave with no ALADPCMloop must run out and
+     * be zero-filled (nOver > 0) once memin passes base+len. If a voice keeps
+     * decoding past that point, an unstopped voice stays audible forever
+     * instead of going silent -- which is what "the door sound loops until
+     * you quit" would actually sound like. Assert it directly, rate-limited.
+     * Remove once root-caused. */
+    if (getenv("GE_PULLTRACE")) {
+        static FILE *pf = NULL;
+        static s32 reported = 0;
+        s32 totalSamples = (f->table->len / ADPCMFBYTES) * ADPCMFSIZE;
+        if (f->sample > totalSamples + ADPCMFSIZE && nOver == 0 && reported < 40) {
+            reported++;
+            if (!pf) { pf = fopen("audiotrace.log", "a"); if (pf) setvbuf(pf, NULL, _IONBF, 0); }
+            if (pf) fprintf(pf, "[PASTEND] filter=%p sample=%d totalSamples=%d memin=0x%08x base=0x%08x len=%d overFlow=%d nOver=%d\n",
+                    (void *)f, (int)f->sample, (int)totalSamples, (unsigned)f->memin,
+                    (unsigned)(s32)f->table->base, (int)f->table->len,
+                    (int)overFlow, (int)nOver);
+        }
+    }
+#endif
 
     /*
      * Put zeros in if necessary
@@ -367,6 +391,24 @@ alLoadParam(void *filter, s32 paramID, void *param)
     switch (paramID) {
         case (AL_FILTER_SET_WAVETABLE):
             a->table = (ALWaveTable *) param;
+#if defined(__x86_64__)
+            if (getenv("GE_AUDIOTRACE")) {
+                static FILE *tf = NULL;
+                if (!tf) { tf = fopen("audiotrace_wire.log", "a"); if (tf) setvbuf(tf, NULL, _IONBF, 0); }
+                if (tf) fprintf(tf, "[WIRE] filter=%p <- table=%p base=%p len=%d book=%p\n",
+                        (void *)a, (void *)a->table, (void *)a->table->base,
+                        a->table->len,
+                        (a->table->type == AL_ADPCM_WAVE) ? (void *)a->table->waveInfo.adpcmWave.book : NULL);
+            }
+            if (getenv("GE_MIXERTRACE")) {
+                static FILE *btf = NULL;
+                if (!btf) { btf = fopen("mixertrace.log", "a"); if (btf) setvbuf(btf, NULL, _IONBF, 0); }
+                if (btf) fprintf(btf, "[BINDTABLE] filter=%p <- table=%p base=%p len=%d book=%p\n",
+                        (void *)a, (void *)a->table, (void *)a->table->base,
+                        a->table->len,
+                        (a->table->type == AL_ADPCM_WAVE) ? (void *)a->table->waveInfo.adpcmWave.book : NULL);
+            }
+#endif
             a->memin = (s32) a->table->base;
             a->sample = 0;
             switch (a->table->type){
@@ -452,6 +494,14 @@ Acmd *_decodeChunk(Acmd *ptr, ALLoadFilter *f, s32 tsam, s32 nbytes, s16 outp, s
         dramLoc;
     
     if (nbytes > 0){
+#if defined(__x86_64__)
+        if (getenv("GE_MIXERTRACE")) {
+            static FILE *dtf = NULL;
+            if (!dtf) { dtf = fopen("mixertrace.log", "a"); if (dtf) setvbuf(dtf, NULL, _IONBF, 0); }
+            if (dtf) fprintf(dtf, "[DMAREQ] filter=%p memin=0x%08x nbytes=%d\n",
+                    (void *)f, (unsigned)f->memin, (int)nbytes);
+        }
+#endif
         dramLoc = (f->dma)(f->memin, nbytes, f->dmaState);
         /*
          * Make sure enough is loaded into DMEM to take care
