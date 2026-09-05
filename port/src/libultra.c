@@ -856,9 +856,12 @@ s32 osAiSetNextBuffer(void *buf, u32 size)
 }
 u32 osAiGetLength(void)
 {
-    /* audioGetSamplesBuffered() returns stereo s16 frames (queued bytes / 4);
-     * callers shift right by 2 expecting a byte count (N64 AI_LEN_REG). */
-    return (u32)audioGetSamplesBuffered() * 4u;
+    /* D204/F1: AI_LEN_REG is the bytes remaining in the buffer the DAC is
+     * CURRENTLY playing -- not the whole queue. Reporting the full SDL queue
+     * depth here pinned src/audi.c:531's frame-size regulator at its lower
+     * clamp and let its u32 subtraction wrap into a 74x heap overrun. See the
+     * long comment on audioGetAiLengthBytes() in port/src/audio.c. */
+    return audioGetAiLengthBytes();
 }
 void osAiSetConvert(u32 convert) { (void)convert; }
 

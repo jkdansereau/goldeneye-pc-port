@@ -23,6 +23,11 @@ void audioDestroy(void);
 /* Number of samples (stereo s16 frames) currently queued. */
 s32  audioGetSamplesBuffered(void);
 
+/* D204/F1: emulate the N64 AI_LEN_REG -- bytes remaining in the buffer the
+ * DAC is *currently* playing, NOT the whole queue depth. src/audi.c does
+ * arithmetic on this value that only holds inside the N64's range. */
+u32  audioGetAiLengthBytes(void);
+
 /* Queue the next block of mixed samples (len is in bytes). */
 void audioSetNextBuffer(const s16 *buf, u32 len);
 
