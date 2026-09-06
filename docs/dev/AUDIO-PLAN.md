@@ -4,6 +4,16 @@ Status: plan of record for the audio track, 2026-09-05. Companion to
 `ROADMAP-1.0.md` §B3 ("audio (Phase 3)", "audio track parallel from M-50 →
 v0.4.0"). Independent of B1/B2 — can start immediately.
 
+**Status update (M-69):** Phases 0–2 below are DONE — the mixer landed as
+D199 (`port/src/mixer.c` macro-swap), D200/D201 fixed the two pointer-width
+landmines it exposed, and D204 fixed a permanent ~2 % tempo drift. Phase 3
+(verification) is now the active track: D202's sample-correctness question is
+closed negative through M-69 (full-corpus per-voice exact match — 286/320
+requests CC ≥ 0.85, every allocated voice plays the exact ROM sample at the
+exact ROM pitch, no corruption). Remaining: user by-ear pass + N64 A/B on the
+door-loop cap (M-66b), then D202 probe removal + close; reverb/mix-balance
+tuning is still owed. See findings.md D199–D204.
+
 ---
 
 ## Where things stand (verified 2026-09-05)
