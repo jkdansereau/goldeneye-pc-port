@@ -394,8 +394,10 @@ alLoadParam(void *filter, s32 paramID, void *param)
 #if defined(__x86_64__)
             if (getenv("GE_AUDIOTRACE")) {
                 static FILE *tf = NULL;
+                extern uint64_t sysGetMicroseconds(void); /* port/src/system.c */
                 if (!tf) { tf = fopen("audiotrace_wire.log", "a"); if (tf) setvbuf(tf, NULL, _IONBF, 0); }
-                if (tf) fprintf(tf, "[WIRE] filter=%p <- table=%p base=%p len=%d book=%p\n",
+                if (tf) fprintf(tf, "[WIRE] t=%llu filter=%p <- table=%p base=%p len=%d book=%p\n",
+                        (unsigned long long)sysGetMicroseconds(),
                         (void *)a, (void *)a->table, (void *)a->table->base,
                         a->table->len,
                         (a->table->type == AL_ADPCM_WAVE) ? (void *)a->table->waveInfo.adpcmWave.book : NULL);

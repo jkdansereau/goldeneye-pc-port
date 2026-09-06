@@ -292,6 +292,19 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
 
         soundState = event->common.state;
         sound = soundState->sound;
+#ifdef PORT
+        /* D202/M-67 diag (temporary): log every event the player processes,
+         * so each VOICE- can be attributed to the exact killing event.
+         * Remove once root-caused. */
+        if (getenv("GE_AUDIOTRACE")) {
+            static FILE *fe = NULL;
+            extern uint64_t sysGetMicroseconds(void);
+            if (!fe) { fe = fopen("audiotrace.log", "a"); if (fe) setvbuf(fe, NULL, _IONBF, 0); }
+            if (fe) fprintf(fe, "[EVT] t=%llu type=%d state=%p\n",
+                    (unsigned long long)sysGetMicroseconds(),
+                    (int)event->common.type, (void *)soundState);
+        }
+#endif
 
         if (sound == NULL) {
             s16 numFree, numAlloc;
@@ -486,6 +499,18 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                         case SOUND_STATE_PLAYING:
                             sndRemoveEvents(&sndp->evtq, soundState, AL_SNDP_DECAY_EVT);
                             delta = sound->envelope->releaseTime / soundState->pitch_28 / soundState->pitch_2c;
+#ifdef PORT
+                            /* D202/M-67 diag (temporary): log the release ramp a
+                             * STOP/DEACTIVATE computes; delta==0 means the voice
+                             * is disposed immediately. Remove once root-caused. */
+                            if (getenv("GE_AUDIOTRACE")) {
+                                static FILE *fs = NULL;
+                                if (!fs) { fs = fopen("audiotrace.log", "a"); if (fs) setvbuf(fs, NULL, _IONBF, 0); }
+                                if (fs) fprintf(fs, "[STOP-EVT] type=%d state=%p playingState=%d deltaUs=%d\n",
+                                        (int)event->common.type, (void *)soundState,
+                                        (int)soundState->playingState, (int)delta);
+                            }
+#endif
                             alSynSetVol(sndp->drvr, &soundState->voice, 0, delta);
                             if (delta != 0) {
                                 spAC.common.type = AL_SNDP_END_EVT;
@@ -1059,16 +1084,22 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
                         (int)sound->envelope->releaseTime,
                         (unsigned)sound->envelope->attackVolume,
                         (unsigned)sound->envelope->decayVolume);
-            if (f2) fprintf(f2, "[AUDIOTRACE] sndPlaySfx: soundIndex=%d -> newState=%p flags=%d "
+            if (f2) {
+                extern uint64_t sysGetMicroseconds(void);
+                fprintf(f2, "[AUDIOTRACE] sndPlaySfx: t=%llu soundIndex=%d -> newState=%p wavetable=%p flags=%d "
                     "keyMap=%p velMin(next)=%d velMax(period)=%d keyMin=0x%02x keyMax=0x%02x "
                     "keyBase=%d detune=%d retrig=%d deltaLoopUs=%d\n",
-                    (int)soundIndex, (void *)newState, newState ? (int)newState->unk3e : -1,
+                    (unsigned long long)sysGetMicroseconds(),
+                    (int)soundIndex, (void *)newState,
+                    (void *)(sound ? sound->wavetable : NULL),
+                    newState ? (int)newState->unk3e : -1,
                     (void *)kmp,
                     kmp ? (int)kmp->velocityMin : -1, kmp ? (int)kmp->velocityMax : -1,
                     kmp ? (unsigned)kmp->keyMin : 0u, kmp ? (unsigned)kmp->keyMax : 0u,
                     kmp ? (int)kmp->keyBase : -1, kmp ? (int)kmp->detune : -1,
                     (newState && (newState->unk3e & 0x10)) ? 1 : 0,
                     kmp ? (int)(kmp->velocityMax * DELTA_33_MS) : -1);
+            }
             /* D202/M-65: only 8 voices exist (MUSIC_SFX_SEQ_MAYBE_MAX_SOUNDS).
              * A SOUND_FLAG_LOOPED voice never self-releases and is skipped by
              * the preemption scan, so each leaked one permanently costs a

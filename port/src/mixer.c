@@ -28,6 +28,7 @@
 
 #include <PR/abi.h>
 #include <PR/os.h>
+#include "system.h"
 
 /* D202 diag (temporary): per-opcode DMEM address/context trace, gated by
  * GE_MIXERTRACE=1, to test the M-56 "concurrent voices share/clobber DMEM
@@ -407,6 +408,16 @@ void aSetVolumeImpl(u32 flags, u16 v, u16 t, u16 r)
     }
 }
 
+/* D202/M-67 diag (temporary): GE_VOICEDUMP=1 writes each voice's resampled
+ * mono stream (the aEnvMixer input, i.e. post-resample/pre-envelope) to
+ * voicedump.raw as records of [u32 stateAddr][u32 nSamples][u64 us]
+ * [s16 x nSamples], where us is sysGetMicroseconds() at mix time so records
+ * can be correlated with the timestamped [WIRE] (load.c) and [AUDIOTRACE]
+ * (snd.c) lines. Offline, each record is matched against all 261 ROM SFX
+ * decodes (pitch-resampled per keymap) to prove exactly which sample data a
+ * voice played, with no music/reverb masking. Remove once D202 closes. */
+static FILE *s_voiceDumpFile = NULL;
+
 void aEnvMixerImpl(u32 flags, u32 stateAddr)
 {
     struct {
@@ -420,6 +431,19 @@ void aEnvMixerImpl(u32 flags, u32 stateAddr)
     MTRACE("[ENVMIX] flags=%u state=%p in=%u out=%u dryR=%u wetL=%u wetR=%u count=%u\n",
            flags, (void *)saved, sCtx.in, sCtx.out, sCtx.dryR, sCtx.wetL, sCtx.wetR, sCtx.count);
     const s16 *in = DMEM_S16(sCtx.in);
+
+    if (getenv("GE_VOICEDUMP")) {
+        if (!s_voiceDumpFile)
+            s_voiceDumpFile = fopen("voicedump.raw", "wb");
+        if (s_voiceDumpFile) {
+            u32 hdr[2] = { stateAddr, (u32)(sCtx.count >> 1) };
+            u64 us = sysGetMicroseconds();
+            fwrite(hdr, 4, 2, s_voiceDumpFile);
+            fwrite(&us, 8, 1, s_voiceDumpFile);
+            fwrite(in, sizeof(s16), sCtx.count >> 1, s_voiceDumpFile);
+        }
+    }
+
     s16 *dry[2] = { DMEM_S16(sCtx.out), DMEM_S16(sCtx.dryR) };
     s16 *wet[2] = { DMEM_S16(sCtx.wetL), DMEM_S16(sCtx.wetR) };
     u32 nsamples = sCtx.count >> 1;

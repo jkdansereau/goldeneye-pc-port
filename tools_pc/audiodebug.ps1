@@ -45,8 +45,9 @@ param(
     [int]$FireEvery   = 45,         # frames between pulses (45 = 0.75 s @60)
 
     # Probes
-    [switch]$Trace,                 # GE_AUDIOTRACE=1 -> audiotrace.log
+    [switch]$Trace,                 # GE_AUDIOTRACE=1 -> audiotrace.log (+ _wire.log)
     [switch]$Dump,                  # GE_AUDIODUMP=1  -> audiodump.raw
+    [switch]$VoiceDump,             # GE_VOICEDUMP=1  -> voicedump.raw (per-voice, D202/M-67)
     [switch]$MixerTrace,            # GE_MIXERTRACE=1 -- SLOW, see warning below
     [switch]$Old,                   # GE_D204_OLD=1: pre-D204 behaviour
     [switch]$AB,                    # run twice (old, then new) and compare
@@ -132,6 +133,7 @@ function Invoke-AudioRun {
     if ($OldMode)     { $env:GE_D204_OLD = "1" }   else { Remove-Item -EA SilentlyContinue Env:\GE_D204_OLD }
     if ($Trace)       { $env:GE_AUDIOTRACE = "1" } else { Remove-Item -EA SilentlyContinue Env:\GE_AUDIOTRACE }
     if ($Dump)        { $env:GE_AUDIODUMP = "1" }  else { Remove-Item -EA SilentlyContinue Env:\GE_AUDIODUMP }
+    if ($VoiceDump)   { $env:GE_VOICEDUMP = "1" }  else { Remove-Item -EA SilentlyContinue Env:\GE_VOICEDUMP }
     if ($MixerTrace)  { $env:GE_MIXERTRACE = "1" } else { Remove-Item -EA SilentlyContinue Env:\GE_MIXERTRACE }
     if ($inputScript) { $env:GE_INPUTSCRIPT = $inputScript } else { Remove-Item -EA SilentlyContinue Env:\GE_INPUTSCRIPT }
 
