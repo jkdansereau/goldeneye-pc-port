@@ -21,6 +21,9 @@
 #include <libaudio.h>
 #include <os.h>
 #include <ultraerror.h>
+#ifdef PORT
+#include "audiotrace.h"   /* D202/M-71: evtq drop probe */
+#endif
 
 
 void alEvtqNew(ALEventQueue *evtq, ALEventListItem *items, s32 itemCount)
@@ -83,6 +86,13 @@ void alEvtqPostEvent(ALEventQueue *evtq, ALEvent *evt, ALMicroTime delta)
 
     item = (ALEventListItem *)evtq->freeList.next;
     if (!item) {
+#ifdef PORT
+        /* D202/M-71 diag: silent drop is the prime suspect for missing
+         * [VOICE+]; log every exhausted-queue post. Remove with probe set. */
+        geTracePrintf("audiotrace.log", "[EVTQ-DROP] evtq=%p type=%d state=%p delta=%d\n",
+                (void *)evtq, (int)evt->type,
+                (void *)((u8 *)evt + 2), (int)delta);
+#endif
         osSetIntMask(mask);
 #ifdef _DEBUG
         __osError(ERR_ALEVENTNOFREE, 0);

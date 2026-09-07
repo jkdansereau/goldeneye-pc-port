@@ -1585,3 +1585,45 @@ void viInit(void)
 
 /* VI debug message queue (normally src/vi.c, EXCLUDED). fr.c references it. */
 OSMesgQueue vi_c_debug_MQ;
+
+/* ------------------------------------------------------------------------ */
+/* D202/M-70: serialized trace writer for the GE_AUDIOTRACE / WIRE probes.  */
+/* See port/include/audiotrace.h for why (cross-thread mid-line            */
+/* interleaving corrupted the M-69 corpus).                                */
+/* ------------------------------------------------------------------------ */
+#include <stdarg.h>
+#include <stdio.h>
+
+static volatile int geTraceLock = 0;
+
+struct geTraceFile { const char *path; FILE *f; };
+static struct geTraceFile geTraceFiles[4];
+
+void geTracePrintf(const char *path, const char *fmt, ...)
+{
+    struct geTraceFile *tf = NULL;
+    va_list ap;
+
+    while (__sync_lock_test_and_set(&geTraceLock, 1)) { /* spin */ }
+
+    for (int i = 0; i < (int)(sizeof(geTraceFiles) / sizeof(geTraceFiles[0])); i++) {
+        if (!geTraceFiles[i].path) {
+            if (!tf) tf = &geTraceFiles[i];
+            continue;
+        }
+        if (strcmp(geTraceFiles[i].path, path) == 0) { tf = &geTraceFiles[i]; break; }
+    }
+    if (tf && !tf->f) {
+        tf->path = path;
+        tf->f = fopen(path, "a");
+        if (tf->f) setvbuf(tf->f, NULL, _IONBF, 0);
+    }
+
+    if (tf && tf->f) {
+        va_start(ap, fmt);
+        vfprintf(tf->f, fmt, ap);
+        va_end(ap);
+    }
+
+    __sync_lock_release(&geTraceLock);
+}

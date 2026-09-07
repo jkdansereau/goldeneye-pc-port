@@ -144,6 +144,8 @@ ppm/
 screenshots/
 # local Mupen64 Plus checkout (N64 reference footage); binaries, do not commit
 tools_pc/mupen64/
+# local N64 emulator checkout (D205 A/B reference)
+mupen64/
 
 # PC port run/scratch logs
 run_*.log

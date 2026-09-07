@@ -11,6 +11,7 @@
 #ifdef PORT
 #include <stdio.h>  /* D202/M-65 diag probe only (doorSndProbe); remove with it */
 #include <stdlib.h>
+#include "audiotrace.h"  /* D202/M-71 diag probe only ([DISTVOL]); remove with it */
 #include <stddef.h>
 #endif
 #include <PR/libaudio.h>
@@ -12771,6 +12772,20 @@ s32 sub_GAME_7F053894(coord3d *pos, f32 low, f32 high)
             shortest_distance = distance;
         }
     }
+#ifdef PORT
+    /* D202/M-71 diag: every positional-SFX volume computation funnels here.
+     * Log the hit pos, nearest player pos, distance and resulting vol so a
+     * "loud impact that N64 plays silent" can be told apart as wrong-HIT vs
+     * wrong-DISTANCE. Remove with probe set. */
+    if (getenv("GE_AUDIOTRACE")) {
+        geTracePrintf("audiotrace.log",
+            "[DISTVOL] pos=(%.0f,%.0f,%.0f) player=(%.0f,%.0f,%.0f) dist=%.1f vol=%d\n",
+            (double)pos->x, (double)pos->y, (double)pos->z,
+            (double)prop->pos.x, (double)prop->pos.y, (double)prop->pos.z,
+            (double)shortest_distance,
+            (int)sub_GAME_7F0537B8(shortest_distance, low, high));
+    }
+#endif
     return sub_GAME_7F0537B8(shortest_distance, low, high);
 }
 

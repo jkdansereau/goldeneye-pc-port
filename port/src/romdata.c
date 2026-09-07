@@ -418,8 +418,11 @@ void romdataFixupMusicSeqTable(u8 *blob, u32 blobSize)
     u32 count = *(const u16 *)(blob + 0);
     u32 maxEntries = (blobSize - 4) / 8;
     if (count > maxEntries) {
-        sysLogPrintf(LOG_ERROR,
-                     "romdataFixupMusicSeqTable: seqCount %u exceeds blob capacity %u",
+        /* Expected, not an error: music.c first decodes a 0x10-byte header
+         * probe (capacity 1) before re-copying the full table and calling
+         * again. Log at NOTE so it isn't mistaken for broken music data. */
+        sysLogPrintf(LOG_NOTE,
+                     "romdataFixupMusicSeqTable: partial decode, seqCount %u > capacity %u (full table follows)",
                      count, maxEntries);
         count = maxEntries;
     }

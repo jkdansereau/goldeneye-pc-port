@@ -1,4 +1,8 @@
 #include <ultra64.h>
+#ifdef PORT
+#include <stdlib.h>
+#include "audiotrace.h"
+#endif
 #include <music.h>
 #include "music_0D2720.h"
 #include "options.h"
@@ -54,6 +58,11 @@ MISSION_STATE_ID get_mission_state(void)
 void set_missionstate(MISSION_STATE_ID arg0)
 {
     s32 old_mission_state = mission_state;
+
+#ifdef PORT
+    if (getenv("GE_AUDIOTRACE") && old_mission_state != (s32)arg0)
+        geTracePrintf("audiotrace.log", "[MISSIONSTATE] %d -> %d\n", (int)old_mission_state, (int)arg0);
+#endif
 
     mission_state = arg0;
 

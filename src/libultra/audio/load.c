@@ -26,6 +26,7 @@
 #if defined(__x86_64__)
 #include <stdio.h>
 #include <stdlib.h>
+#include "audiotrace.h"   /* D202/M-70: serialized trace writer */
 #endif
 
 #ifndef MIN
@@ -204,13 +205,11 @@ Acmd *alAdpcmPull(void *filter, s16 *outp, s32 outCount, s32 sampleOffset, Acmd 
      * you quit" would actually sound like. Assert it directly, rate-limited.
      * Remove once root-caused. */
     if (getenv("GE_PULLTRACE")) {
-        static FILE *pf = NULL;
         static s32 reported = 0;
         s32 totalSamples = (f->table->len / ADPCMFBYTES) * ADPCMFSIZE;
         if (f->sample > totalSamples + ADPCMFSIZE && nOver == 0 && reported < 40) {
             reported++;
-            if (!pf) { pf = fopen("audiotrace.log", "a"); if (pf) setvbuf(pf, NULL, _IONBF, 0); }
-            if (pf) fprintf(pf, "[PASTEND] filter=%p sample=%d totalSamples=%d memin=0x%08x base=0x%08x len=%d overFlow=%d nOver=%d\n",
+            geTracePrintf("audiotrace.log", "[PASTEND] filter=%p sample=%d totalSamples=%d memin=0x%08x base=0x%08x len=%d overFlow=%d nOver=%d\n",
                     (void *)f, (int)f->sample, (int)totalSamples, (unsigned)f->memin,
                     (unsigned)(s32)f->table->base, (int)f->table->len,
                     (int)overFlow, (int)nOver);
@@ -393,10 +392,8 @@ alLoadParam(void *filter, s32 paramID, void *param)
             a->table = (ALWaveTable *) param;
 #if defined(__x86_64__)
             if (getenv("GE_AUDIOTRACE")) {
-                static FILE *tf = NULL;
                 extern uint64_t sysGetMicroseconds(void); /* port/src/system.c */
-                if (!tf) { tf = fopen("audiotrace_wire.log", "a"); if (tf) setvbuf(tf, NULL, _IONBF, 0); }
-                if (tf) fprintf(tf, "[WIRE] t=%llu filter=%p <- table=%p base=%p len=%d book=%p\n",
+                geTracePrintf("audiotrace_wire.log", "[WIRE] t=%llu filter=%p <- table=%p base=%p len=%d book=%p\n",
                         (unsigned long long)sysGetMicroseconds(),
                         (void *)a, (void *)a->table, (void *)a->table->base,
                         a->table->len,
