@@ -34,6 +34,7 @@ D201,FIXED,"src/libultra/audio/bnkf.c bank/instrument/sound/wavetable relocation
 D202,RESOLVED,"Silenced PPK plays a ""slap"" instead of a gunshot, PLUS user reports broader real-time audio corruption (M-52 → M-59 → REOPENED M-60 → M-61/M-62 closed the data…",ROOT CAUSE ESTABLISHED (M-66); DISPOSITION C IMPLEMENTED + MEASURED (M-66b) —
 D206,FIXED,PC played every SFX one bank slot too high —,"FIXED (M-76, src/snd.c:1001, #ifdef PORT → soundArray[soundIndex - 1], N64 line verbatim under #else)."
 D207,PROPOSED,Alarm klaxon starves combat SFX and (per user) doesn't recover after it stops —,MONITORING (M-77c: user reports the alarm is acceptable in play after D206; no fix shipped) —
+D208,OPEN,Player weapon-fire sound goes permanently silent mid-firefight (all other SFX unaffected) —,"OPEN — root cause found (M-78c), fix not yet applied."
 D205,RESOLVED,PC plays wrong/extra SFX for gameplay events the user can A/B against N64:,CLOSED (M-78) — root cause was D206; all four symptoms resolved + user-confirmed by ear vs N64.
 D152+,FIXED,D152 addendum (M-31):,"FIXED (src/snd.c, port/src/libultra.c, #ifdef PORT) —"
 D168,FIXED,GE_PCDUMP / F12 PPM captures were vertically flipped —,FIXED (port/fast3d/gfx_opengl.cpp); D114 / D116 reclassified as capture-orientation artifacts (below).

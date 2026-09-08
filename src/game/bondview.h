@@ -197,7 +197,17 @@ struct hand
   f32 field_A3C;
   f32 field_A40;
   ALSoundState * audioHandle;
+#ifdef PORT
+  /* D208 (D3x ABI/layout): field_A48 is used as a second ALSoundState* sound-
+   * handle slot (gunfire.c:3186-3200 pass &field_A48 to sndPlaySfx, which
+   * stores an 8-byte pointer through it as pendingState->link.next). As s32
+   * that 8-byte write tears into field_A4C and the player fire sound goes
+   * permanently silent mid-firefight. hands[] is runtime-only (never ROM-
+   * serialized), so widening to pointer width is layout-safe. */
+  ALSoundState * field_A48;
+#else
   s32 field_A48;
+#endif
   s32 field_A4C;
   s32 field_A50;
   BeamRecord weapon_beam;
