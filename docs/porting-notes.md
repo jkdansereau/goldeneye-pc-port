@@ -190,6 +190,15 @@ expressed in N64 `Gfx`/`Vtx` units is **half-size** on PC.
   Fix: `Switches[18 + (j>>2)]` / `Switches[23 + (j>>2)]` under `#ifdef PORT`
   (`0x48/4=18`, `0x5c/4=23`). Grep every `(TYPE**)((u8*)arr + <const>)` and
   `arr[i << k]` where the array element is a pointer.
+  D191: `bondviewSelectCuff` (`bondview2.c`) — the **same** `Switches`
+  array, missed by D141. `offset = switchindex << 2` then
+  `base = (ModelNode**)((u8*)switches + offset)`, deref'd `base[0..5]`. On PC
+  the 8-byte slot stride makes `base[N]` a half-word-swapped pointer
+  (`0x70267a90` → `0x70267a9000000000`) → crash in `modelGetNodeRwData` when
+  the player fires with a fresh-save Bond model (Bunker ii first guard,
+  Statue post-cutscene). Fix: `offset = switchindex * sizeof(ModelNode *)`
+  under `#ifdef PORT`. When you fix one `arr[i<<2]` pointer-array site, grep
+  the whole file — these travel in packs.
 
 ## C. Big-endian rodata / ROM data read on little-endian PC
 

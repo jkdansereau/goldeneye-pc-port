@@ -18,7 +18,7 @@ D187,FIXED,"HUD ammo-type/weapon icon vanished at -O2 (M-46 root-cause, M-47 fix
 D188,FIXED,Linux -O2 boot crash:,"FIXED (src/libultrare/libc/xprintf.c, src/sprintf.c, #ifdef PORT); PR #22"
 D189,FIXED,Linux -fstack-protector aborts on the decomp's latent stack-buffer overruns (M-48) —,"FIXED (CMakeLists.txt, src/game/stan.c #ifdef PORT); PR #23"
 D190,OPEN,"Linux -level_45 SIGSEGV at load in add_ptr_to_objective (objective.c:64) (M-48, open).",OPEN — not investigated (M-48)
-D191,OPEN,Windows -O2 release-bundle crash:,OPEN — not investigated (M-49).
+D191,FIXED,Windows -O2 release-bundle crash:,FIXED + PLAYTEST-VERIFIED (M-79).
 D193,OPEN,NPC AI locomotion is too slow —,"OPEN — root-cause hypothesis (timing family), not investigated (M-49)."
 D194,OPEN,Mouse input needs another tuning pass —,"OPEN — root-caused, not fixed (M-49)"
 D195,OPEN,"Transparency / alpha surfaces broken on Control (M-49, user playtest) —","OPEN — not investigated (M-49), needs a capture"
