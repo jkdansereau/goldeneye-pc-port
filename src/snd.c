@@ -388,6 +388,12 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                                 alEvtqPostEvent(&sndp->evtq, (ALEvent *) event, DELTA_1_MS + 1);
                             } else {
                                 // No lower-priority sound to preempt, so stop the sound.
+                                if (getenv("GE_AUDIOTRACE")) { /* D207 diag: SFX actually dropped (pool full, nothing preemptable); remove with the D202 probe set */
+                                    geTracePrintf("audiotrace.log",
+                                        "[D207-DROP] site=preempt-scan state=%p prio=%d flags=%d count=%d/%d\n",
+                                        soundState, soundState->priority, soundState->unk3e,
+                                        g_sndAllocatedVoicesCount, sndp->maxSounds);
+                                }
                                 sndDisposeSound(soundState);
                             }
                         } else {
@@ -396,6 +402,12 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                             // Perhaps it would be better to look for a sound to preempt, just like when the limit is
                             // reached. It's strange that we only check for sounds to preempt when the limit is reached,
                             // but not when it hasn't been.
+                            if (getenv("GE_AUDIOTRACE")) { /* D207 diag: dropped on the "limit not reached" path; remove with the D202 probe set */
+                                geTracePrintf("audiotrace.log",
+                                    "[D207-DROP] site=no-limit state=%p prio=%d flags=%d count=%d/%d\n",
+                                    soundState, soundState->priority, soundState->unk3e,
+                                    g_sndAllocatedVoicesCount, sndp->maxSounds);
+                            }
                             sndDisposeSound(soundState);
                         }
                     }
