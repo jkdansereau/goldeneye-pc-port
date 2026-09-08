@@ -33,6 +33,64 @@
 #include "model.h"
 #include "tex.h"
 
+#ifdef PORT
+#include <stdio.h>
+#include <stdlib.h>
+/* GE_D193A=1 — per-second locomotion telemetry for one/all scripted chrs
+ * (D193: "AI travels slower than N64" — the frame clock was ruled out in
+ * M-80, so measure the anim-root-motion path directly). For each ticked
+ * chr, once per wall-second: chrnum, actiontype, distance travelled in
+ * world units over the last second (= travel speed), and the scalars that
+ * feed the root-motion extraction in modelSetAnimFrame2WithChrStuff
+ * (model.c:3060+): scale, anim_translation_scale, animrate, playspeed,
+ * speed, endframe, plus g_GlobalTimerDelta for reference. Optionally
+ * GE_D193A_CHR=<n> restricts output to that chrnum. Test-only, env-gated. */
+static int d193a_mode = -1;
+static int d193a_only = -1;
+struct D193aSlot { s16 chrnum; u8 used; f32 px, py, pz, accdist; OSTime t0; };
+static struct D193aSlot d193a_slots[48];
+static struct D193aSlot *d193aSlot(s16 n) {
+    int free = -1;
+    for (int i = 0; i < 48; i++) {
+        if (d193a_slots[i].used && d193a_slots[i].chrnum == n) return &d193a_slots[i];
+        if (free < 0 && !d193a_slots[i].used) free = i;
+    }
+    if (free < 0) return NULL;
+    d193a_slots[free].used = 1;
+    d193a_slots[free].chrnum = n;
+    d193a_slots[free].accdist = 0.0f;
+    d193a_slots[free].t0 = 0;
+    return &d193a_slots[free];
+}
+static void d193aSample(ChrRecord *chr, Model *model) {
+    if (d193a_mode < 0) {
+        d193a_mode = getenv("GE_D193A") != NULL;
+        const char *o = getenv("GE_D193A_CHR");
+        d193a_only = o ? atoi(o) : -1;
+    }
+    if (!d193a_mode || model == NULL || chr->prop == NULL) return;
+    if (d193a_only >= 0 && chr->chrnum != d193a_only) return;
+    struct D193aSlot *s = d193aSlot(chr->chrnum);
+    if (!s) return;
+    f32 x = chr->prop->pos.x, y = chr->prop->pos.y, z = chr->prop->pos.z;
+    OSTime now = osGetTime();
+    if (s->t0 == 0) { s->t0 = now; s->px = x; s->py = y; s->pz = z; s->accdist = 0.0f; return; }
+    f32 dx = x - s->px, dy = y - s->py, dz = z - s->pz;
+    s->accdist += sqrtf(dx*dx + dy*dy + dz*dz);
+    s->px = x; s->py = y; s->pz = z;
+    if (now - s->t0 >= 1000000) {
+        f32 secs = (f32)(now - s->t0) / 1e6f;
+        fprintf(stderr,
+            "[D193A] chr=%d act=%d speed=%.1fu/s gtd=%.2f | scale=%.4f xlscale=%.4f "
+            "animrate=%.4f playspeed=%.4f mspeed=%.4f endframe=%.1f anim=%p\n",
+            chr->chrnum, (int)chr->actiontype, s->accdist / secs, g_GlobalTimerDelta,
+            model->scale, model->anim_translation_scale, model->animrate,
+            model->playspeed, model->speed, model->endframe, (void *)model->anim);
+        s->t0 = now; s->accdist = 0.0f;
+    }
+}
+#endif
+
 #ifdef VERSION_EU
 #define GROUND_SMOOTH_FACTOR 0.118799984f /* 0x3DF34D68 (PAL-scaled 0.1) */
 #define FALLSPEED_DECAY      0.8812f      /* 0x3F619653 (PAL-scaled 0.9) */
@@ -2357,6 +2415,10 @@ s32 chrTick(PropRecord *prop)
     model = chr->model;
     headVisible = 1;
     tickamount = g_ClockTimer;
+
+#ifdef PORT
+    d193aSample(chr, model);
+#endif
 
     if ((!(chr->chrflags & CHRFLAG_HIDDEN)) || (chr->chrflags & CHRFLAG_00040000))
     {
