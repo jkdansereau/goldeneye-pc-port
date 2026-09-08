@@ -998,8 +998,26 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
     {
         ALKeyMap *keyMap;
 
+#ifndef PORT
         sound = (soundBank->instArray[0]->soundArray[soundIndex]);
-#ifdef PORT
+#else
+        /* D206 (ABI/layout, not game logic): on N64 `ALInstrumentAlt_s`
+         * (src/snd.h) places `soundArray` at struct offset 12 -- 3x s32,
+         * 4-byte pointers -- so it deliberately aliases the on-disk
+         * ALInstrument's `bendRange`/`soundCount` words, and `soundArray[N]`
+         * resolves to the on-disk sound table's entry [N-1]. GE's SFX IDs are
+         * therefore 1-based into that table (ID 0 = NOTHING_SFX, returned
+         * above and never dereferenced). On PC the 8-byte pointer plus 8-byte
+         * alignment pushes `soundArray` to offset 16, and the converted bank
+         * (port/src/romdata.c afFixupInst) is packed to match, so an
+         * uncompensated `soundArray[N]` would land on entry [N] -- every SFX
+         * one bank slot too high (D205 melee->Klobb, armour pickup; D202
+         * silenced-PPK "slap"). Subtract 1 to restore the N64 mapping. This
+         * expression also serves the retrigger chain (`soundIndex` recomputed
+         * at the bottom of this loop from `keyMap->velocityMin`), whose values
+         * live in the same 1-based space. See docs/dev/findings.md D206. */
+        sound = (soundBank->instArray[0]->soundArray[soundIndex - 1]);
+
         /* D202 diag probe (temporary): trace which soundIndex resolves to
          * which ALSound*, to root-cause the M-52 "wrong sample plays"
          * playtest report. Remove once root-caused. */
