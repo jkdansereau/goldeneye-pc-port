@@ -8381,7 +8381,18 @@ void bondviewSelectCuff(Model *model, ModelFileHeader *header, s32 switchindex)
 
     local = fileGetBondForCurrentFolder();
     switches = header->Switches;
+#ifdef PORT
+    /* D191: same bug class as D141 (gunfire.c). `header->Switches` is a
+     * ModelNode* array -- 8-byte stride on PC, not 4 -- but this code byte-
+     * indexes it as `switchindex * 4`, so every `base[N]` below reads a
+     * misaligned half-pointer (a bogus non-NULL ModelNode*) and
+     * modelGetNodeRwData faults. Seen killing the first Bunker ii guard and
+     * on Statue after the Trevelyan cutscene. Use the real pointer stride;
+     * the `base = (u8*)switches + offset` math downstream is unchanged. */
+    offset = switchindex * (s32) sizeof(ModelNode *);
+#else
     offset = switchindex << 2;
+#endif
 
     if (1);
 
