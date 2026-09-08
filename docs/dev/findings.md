@@ -8183,3 +8183,51 @@ listening pass on a real playthrough is still owed before calling it closed.
    `powershell -Command "& bash.exe script.sh"`. Every `GE_*` probe silently
    read as unset, which looks exactly like "the probe is broken". `cmd.exe`
    inherits normally, so `audiodebug.ps1` generates a `.bat` and runs that.
+
+### M-78b — user repro on Bunker: symptom is specific and permanent
+
+Natural Bunker alarm trigger (spawn, go forward into the room ahead, shoot
+one of the two guards → the other trips the alarm), then sustained firefight.
+User by-ear result:
+
+- Most SFX keep playing during the klaxon.
+- **Eventually the *player's* gunshots stop being emitted — and stay muted
+  even after the alarm ends.** Enemy gunfire and all other SFX continue fine
+  during and after.
+
+This is NOT generic pool starvation (that would drop random sounds
+transiently). It is specific to the player-weapon fire sound and it is
+*permanent* — a stuck-state bug, not a transient voice shortage.
+
+**Structural lead (static, unconfirmed — needs the capture).** The player
+fire sound is played through a **two-slot double buffer** in
+`bondfirefunc` / `gunfire.c:3178-3202`: `handptr->audioHandle` and
+`handptr->field_A48`. Each trigger interval: `sndDeactivate` whichever slot
+is currently *playing*, then `sndPlaySfx(..., &slot)` into whichever slot is
+*NULL* (`audioHandle` first, else `field_A48`). If **both** slots are ever
+left non-NULL-but-not-playing at once, the `else if (field_A48 == 0)` guard
+fails and **no further player gunshot can play, ever** — matches the symptom
+exactly.
+
+A slot is cleared only by `sndUnlinkClearSound` (via `sndDisposeSound`)
+following the state's back-link `state->state->link.next`. `sndDeactivate`
+is **asynchronous** — it posts `AL_SNDP_DEACTIVATE_EVT` to the 64-slot SFX
+event queue (`MUSIC_SFX_SEQ_CONFIG_MAX_EVENTS = 0x40`). If that queue is
+saturated (heavy firefight + the alarm's self-retrigger posts + every
+ricochet/impact/yelp posting PLAY/PLAY_EVT/STOP/DEACTIVATE), `alEvtqPostEvent`
+**drops the event silently** → the deactivate never runs → the state never
+disposes → the slot never clears. Once both slots are stuck, permanent mute.
+The `[VOICES] ... evtq=N/64` probe already in `snd.c` will show queue
+saturation; `[SLOTWRITE]` + `[VOICE+]/[VOICE-]` + `sndPlaySfx t=` trace the
+two player-gun slots. All three counts (8 voices / 64 states / 64 events) are
+byte-match stock GE — so if this is the mechanism it is a port *timing* bug
+(the SFX event queue drained too infrequently vs N64's RCP cadence, D204
+family), not a value to bump.
+
+**Next:** read the user's `build-pc/audiotrace.log` — confirm (1) `evtq`
+approaches 64, (2) a `[AUDIOTRACE] sndDeactivate: state=X` with no following
+`[VOICE-] state=X` / dispose, (3) two `[SLOTWRITE] slot=<audioHandle>` and
+`slot=<field_A48>` with no clear afterwards. Then the fix is port-side: drain
+the SFX event queue more often, or (cheaper, D202-family-consistent) a
+bounded self-heal in the double-buffer — if a slot has pointed at a
+non-playing state for > N ms, force-clear it.
