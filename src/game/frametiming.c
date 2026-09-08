@@ -2,10 +2,26 @@
 #include "frametiming.h"
 
 #ifdef PORT
+#include <stdlib.h>
+#include <stdio.h>
 /* Max frames of simulation catch-up per rendered frame (D155). 6 ~= 100 ms
  * at 60 Hz: covers a legitimately slow frame without letting a multi-second
  * stall spiral the anim/sim loops. */
 #define FRAMETIMING_PORT_MAX_CATCHUP 6
+
+/* GE_D193=1 — per-second telemetry of the wall-clock timing keystone.
+ * Prints: render frames this wall-second, sim ticks delivered (sum of the
+ * deltaFrames fed to updateFrameCounters == sum of g_ClockTimer), how many
+ * of those frames had their catch-up clamped, and the largest raw
+ * (pre-clamp) delta seen. A healthy second is ~60 render / ~60 sim / 0
+ * clamped. Sim << 60 (or many clamped) is the D193 AI-slowdown mechanism.
+ * Test-only, env-gated, zero cost unset. */
+static int  ft_d193 = -1;
+static u32  ft_d193_frames;
+static u32  ft_d193_simticks;
+static u32  ft_d193_clamped;
+static u32  ft_d193_maxraw;
+static OSTime ft_d193_wallstart;
 #endif
 
 // data
@@ -109,6 +125,26 @@ void waitForNextFrame(void) //maybe WaitForTick
    * small catch-up bound; after a hitch the sim just resumes at roughly
    * real-time pace, exactly as the console did when it dropped frames under
    * load. Timing-compensation class, cf. D117/D134. */
+  if (ft_d193 < 0) ft_d193 = getenv("GE_D193") != NULL;
+  if (ft_d193) {
+    u32 raw = nextFrameTime;
+    if (raw > FRAMETIMING_PORT_MAX_CATCHUP) ft_d193_clamped++;
+    if (raw > ft_d193_maxraw) ft_d193_maxraw = raw;
+    ft_d193_frames++;
+    ft_d193_simticks += (raw > FRAMETIMING_PORT_MAX_CATCHUP)
+                          ? FRAMETIMING_PORT_MAX_CATCHUP : raw;
+    if (ft_d193_wallstart == 0) ft_d193_wallstart = osGetTime();
+    OSTime nowus = osGetTime();
+    if (nowus - ft_d193_wallstart >= 1000000) {
+      fprintf(stderr,
+        "[D193] wall=%.3fs render=%u sim=%u clamped=%u maxraw=%u\n",
+        (double)(nowus - ft_d193_wallstart) / 1e6,
+        ft_d193_frames, ft_d193_simticks, ft_d193_clamped, ft_d193_maxraw);
+      ft_d193_frames = ft_d193_simticks = ft_d193_clamped = ft_d193_maxraw = 0;
+      ft_d193_wallstart = nowus;
+    }
+  }
+
   if (nextFrameTime > FRAMETIMING_PORT_MAX_CATCHUP) {
     nextFrameTime = FRAMETIMING_PORT_MAX_CATCHUP;
   }
