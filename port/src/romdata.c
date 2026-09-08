@@ -418,8 +418,11 @@ void romdataFixupMusicSeqTable(u8 *blob, u32 blobSize)
     u32 count = *(const u16 *)(blob + 0);
     u32 maxEntries = (blobSize - 4) / 8;
     if (count > maxEntries) {
-        sysLogPrintf(LOG_ERROR,
-                     "romdataFixupMusicSeqTable: seqCount %u exceeds blob capacity %u",
+        /* Expected, not an error: music.c first decodes a 0x10-byte header
+         * probe (capacity 1) before re-copying the full table and calling
+         * again. Log at NOTE so it isn't mistaken for broken music data. */
+        sysLogPrintf(LOG_NOTE,
+                     "romdataFixupMusicSeqTable: partial decode, seqCount %u > capacity %u (full table follows)",
                      count, maxEntries);
         count = maxEntries;
     }
@@ -781,6 +784,20 @@ static void afFixupEnvelope(struct afCtx *c, u32 o)
         afWr32(c, n + 4 * i, afRd32(c, o + 4 * i));
     c->dst[n + 12] = c->src[o + 12]; /* u8 volumes: identity */
     c->dst[n + 13] = c->src[o + 13];
+    /* D202/M-65 diag (temporary): decayTime == -1 is what sets
+     * SOUND_FLAG_LOOPED, and a looped sound never releases its voice on its
+     * own. Print the SOURCE ROM bytes so genuine data can be told from a
+     * conversion artifact. Remove once root-caused. */
+    if (getenv("GE_KEYMAPDUMP")) {
+        sysLogPrintf(LOG_NOTE,
+            "ENVSRC src@0x%06X -> img@0x%06X : raw=%02X%02X%02X%02X %02X%02X%02X%02X %02X%02X%02X%02X "
+            "attack=%d decay=%d release=%d",
+            o, n,
+            c->src[o], c->src[o+1], c->src[o+2], c->src[o+3],
+            c->src[o+4], c->src[o+5], c->src[o+6], c->src[o+7],
+            c->src[o+8], c->src[o+9], c->src[o+10], c->src[o+11],
+            (int)afRd32(c, o), (int)afRd32(c, o + 4), (int)afRd32(c, o + 8));
+    }
 }
 
 static void afFixupWaveTable(struct afCtx *c, u32 o)
@@ -848,6 +865,16 @@ static void afFixupSound(struct afCtx *c, u32 o)
             if (c->write) {
                 c->newOff[km] = kn;
                 memcpy(c->dst + kn, c->src + km, 6); /* ALKeyMap: all u8 */
+                /* D202/M-65 diag (temporary): print the SOURCE ROM bytes of
+                 * every ALKeyMap, so "the game sees zeros" can be separated
+                 * from "the ROM holds zeros". Remove once root-caused. */
+                if (getenv("GE_KEYMAPDUMP")) {
+                    sysLogPrintf(LOG_NOTE,
+                        "KEYMAP src@0x%06X -> img@0x%06X : velMin=%u velMax=%u "
+                        "keyMin=%u keyMax=0x%02X keyBase=%u detune=%d",
+                        km, kn, c->src[km], c->src[km + 1], c->src[km + 2],
+                        c->src[km + 3], c->src[km + 4], (int)(s8)c->src[km + 5]);
+                }
             }
         }
     }
@@ -883,6 +910,20 @@ static void afFixupInst(struct afCtx *c, u32 o)
 
     for (u32 i = 0; i < (u32)scount; i++) { /* children first */
         u32 soff = afRd32(c, o + 16 + 4 * i);
+        /* D202/M-65 diag (temporary): dump the SOURCE bank tree per
+         * soundIndex -- instArray[0]->soundArray[i] is exactly how snd.c
+         * resolves a soundIndex. decayTime == -1 is what makes a sound
+         * SOUND_FLAG_LOOPED (and therefore un-releasable without an owner),
+         * so this says whether that flag is genuine ROM data for a given
+         * index or a conversion artifact. Remove once root-caused. */
+        if (getenv("GE_BANKDUMP") && soff && soff + 12 <= c->srcSize) {
+            u32 env = afRd32(c, soff);
+            u32 km  = afRd32(c, soff + 4);
+            sysLogPrintf(LOG_NOTE,
+                "BANKSRC inst@0x%06X soundIndex=%u sound@0x%06X env@0x%06X km@0x%06X decay=%d",
+                o, i, soff, env, km,
+                (env && env + 8 <= c->srcSize) ? (int)afRd32(c, env + 4) : 0);
+        }
         if (soff)
             afFixupSound(c, soff);
     }

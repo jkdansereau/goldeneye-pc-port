@@ -3,6 +3,11 @@
 #include <os_extension.h>
 #include "music.h"
 #include "snd.h"
+#ifdef PORT
+#include <stdio.h>
+#include <stdlib.h>
+#include "audiotrace.h"   /* D202/M-70: serialized trace writer */
+#endif
 //likely named gslibaudio.c from xbla
 /**
  * EU .data, offset from start of data_seg : 0x3620
@@ -14,6 +19,19 @@
  */
 
 #define DEFAULT_SETUP_PITCH_SHIFT (-0x1770)
+
+#ifdef PORT
+/* D202/M-66 (PC port only): ownerless infinite-loop SFX voices (sound 203,
+ * METAL_SLIDE_CLOSE_SFX, is the one in the wild) can never be stopped by the
+ * game -- played fire-and-forget, looped voices skip the decay->stop chain,
+ * and stock preemption never touches flag-0x12 voices -- so on N64 they ring
+ * until level exit. On PC we let them play for D202_EXPIRE_DELAY_US, then fade
+ * over D202_EXPIRE_FADE_US (the stock STOP ramp uses the envelope releaseTime,
+ * a few ms here, which would hard-cut the loop). ALMicroTime = microseconds.
+ * See docs/dev/findings.md D202, M-66. */
+#define D202_EXPIRE_DELAY_US 2000000
+#define D202_EXPIRE_FADE_US  500000
+#endif
 
 /**
  * Based on \n64devkit\ultra\usr\src\pr\libsrc\libultra\audio\sndp.h
@@ -275,6 +293,17 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
 
         soundState = event->common.state;
         sound = soundState->sound;
+#ifdef PORT
+        /* D202/M-67 diag (temporary): log every event the player processes,
+         * so each VOICE- can be attributed to the exact killing event.
+         * Remove once root-caused. */
+        if (getenv("GE_AUDIOTRACE")) {
+            extern uint64_t sysGetMicroseconds(void);
+            geTracePrintf("audiotrace.log", "[EVT] t=%llu type=%d state=%p\n",
+                    (unsigned long long)sysGetMicroseconds(),
+                    (int)event->common.type, (void *)soundState);
+        }
+#endif
 
         if (sound == NULL) {
             s16 numFree, numAlloc;
@@ -318,7 +347,27 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                             ALSoundState *iterState = (ALSoundState *) D_800243E4.node.prev;
 
                             do {
-                                if (!(iterState->unk3e & 0x12) && (iterState->unk3e & 0x4) &&
+                                /* D202/M-65 (PORT, experimental): the stock scan refuses to
+                                 * preempt any looped or retriggering voice (0x12). That is
+                                 * right for a voice somebody still owns -- its owner will
+                                 * sndDeactivate it. But a SOUND_FLAG_LOOPED voice whose
+                                 * state->state is NULL was started with pendingState == NULL
+                                 * (doorPlayCloseSound0/1 do exactly this for
+                                 * METAL_SLIDE_CLOSE_SFX, whose envelope decayTime is -1), so
+                                 * no owner exists, no STOP_EVT is ever posted for it, and it
+                                 * holds one of the 8 voices until level exit. Measured: 7 of
+                                 * 8 voices held by that one sound after 115 s of Bunker
+                                 * attract. Allow reclaiming ONLY that provably-unstoppable
+                                 * case; owned loops are still protected exactly as before.
+                                 * Companion (M-66, option C): the AL_SNDP_PORT_EXPIRE_EVT
+                                 * post in PLAY_EVT fades such voices out after a bounded
+                                 * time; this guard only reclaims their SLOTS under pool
+                                 * pressure so new sounds can still start. */
+                                s32 ownerlessLoop = (iterState->unk3e & SOUND_FLAG_LOOPED) &&
+                                                    !(iterState->unk3e & SOUND_FLAG_RETRIGGER) &&
+                                                    iterState->state == NULL;
+                                if ((!(iterState->unk3e & 0x12) || ownerlessLoop) &&
+                                    (iterState->unk3e & 0x4) &&
                                     iterState->playingState != SOUND_STATE_PREEMPT) {
                                     // Found a lower-priority sound; it can be preempted
                                     ALSndpEvent interruptEvent;
@@ -358,6 +407,47 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                 alSynStartVoice(sndp->drvr, &soundState->voice, sound->wavetable);
                 soundState->playingState = SOUND_STATE_PLAYING;
                 g_sndAllocatedVoicesCount++;
+#ifdef PORT
+                /* D202/M-65 diag (temporary): pair every voice acquire with
+                 * its release to find which sounds hold the 8 voices for
+                 * good. Remove once root-caused. */
+                if (getenv("GE_AUDIOTRACE")) {
+                    geTracePrintf("audiotrace.log", "[VOICE+] sound=%p state=%p flags=%d count=%d\n",
+                            (void *)sound, (void *)soundState, (int)soundState->unk3e,
+                            (int)g_sndAllocatedVoicesCount);
+                }
+#endif
+#ifdef PORT
+                /* D202/M-66 (PORT deviation, option C): schedule the fade-out
+                 * for a provably ownerless infinite-loop voice. Predicate:
+                 * LOOPED (decayTime == -1) and FINAL_IN_SEQUENCE (single sound,
+                 * so the handler's sequence walk stops at this state), not
+                 * RETRIGGER (those are managed by PLAY_SFX/DEACTIVATE chains),
+                 * no owner (state->state == NULL: doorPlayCloseSound0/1 plays
+                 * with a NULL owner and nothing ever sndDeactivates it), and the
+                 * wave itself carries an ADPCM loop with count == -1 (finite
+                 * loops self-terminate in load.c and must not be cut short).
+                 * Stale-event safety: any dispose of this state (preemption,
+                 * natural end, deactivate) runs sndDisposeSound, which removes
+                 * ALL pending events for it (sndRemoveEvents ... 0xffff), and a
+                 * rebind always disposes first -- so this event can never fire
+                 * against a new binding. */
+                if ((soundState->unk3e & (SOUND_FLAG_LOOPED | SOUND_FLAG_RETRIGGER | SOUND_FLAG_FINAL_IN_SEQUENCE))
+                        == (SOUND_FLAG_LOOPED | SOUND_FLAG_FINAL_IN_SEQUENCE) &&
+                    soundState->state == NULL &&
+                    sound->wavetable != NULL && sound->wavetable->type == AL_ADPCM_WAVE &&
+                    sound->wavetable->waveInfo.adpcmWave.loop != NULL &&
+                    sound->wavetable->waveInfo.adpcmWave.loop->count == -1) {
+                    ALSndpEvent expireEvt;
+                    expireEvt.common.type = AL_SNDP_PORT_EXPIRE_EVT;
+                    expireEvt.common.state = soundState;
+                    alEvtqPostEvent(&sndp->evtq, (ALEvent *) &expireEvt, D202_EXPIRE_DELAY_US);
+                    if (getenv("GE_AUDIOTRACE")) {
+                        geTracePrintf("audiotrace.log", "[EXPIRE] sound=%p state=%p delay=%dus fade=%dus (ownerless infinite loop; D202/M-66)\n",
+                                (void *)sound, (void *)soundState, (int)D202_EXPIRE_DELAY_US, (int)D202_EXPIRE_FADE_US);
+                    }
+                }
+#endif
 
                 delta = sound->envelope->attackTime / soundState->pitch_2c / soundState->pitch_28;
                 volume =
@@ -404,6 +494,16 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                         case SOUND_STATE_PLAYING:
                             sndRemoveEvents(&sndp->evtq, soundState, AL_SNDP_DECAY_EVT);
                             delta = sound->envelope->releaseTime / soundState->pitch_28 / soundState->pitch_2c;
+#ifdef PORT
+                            /* D202/M-67 diag (temporary): log the release ramp a
+                             * STOP/DEACTIVATE computes; delta==0 means the voice
+                             * is disposed immediately. Remove once root-caused. */
+                            if (getenv("GE_AUDIOTRACE")) {
+                                geTracePrintf("audiotrace.log", "[STOP-EVT] type=%d state=%p playingState=%d deltaUs=%d\n",
+                                        (int)event->common.type, (void *)soundState,
+                                        (int)soundState->playingState, (int)delta);
+                            }
+#endif
                             alSynSetVol(sndp->drvr, &soundState->voice, 0, delta);
                             if (delta != 0) {
                                 spAC.common.type = AL_SNDP_END_EVT;
@@ -452,6 +552,14 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                 break;
             case AL_SNDP_VOL_EVT:
                 soundState->vol = event->vol.vol;
+#ifdef PORT
+                if (getenv("GE_AUDIOTRACE")) { /* D202 diag: distance-vol value per VOL event; remove with the other probes */
+                    extern uint64_t sysGetMicroseconds(void);
+                    geTracePrintf("audiotrace.log", "[VOL] t=%llu state=%p rawVol=%d playing=%d\n",
+                            (unsigned long long)sysGetMicroseconds(), (void *)soundState,
+                            (int)event->vol.vol, (int)soundState->playingState);
+                }
+#endif
                 if (soundState->playingState == SOUND_STATE_PLAYING) {
                     volume = MAX(
                         0, g_sndSfxSlotVolume[SOUND_PARAM_GROUP(keyMap)] *
@@ -504,13 +612,41 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                     sndPlaySfx(event->playSfx.soundBank, event->playSfx.soundIndex, soundState->state);
                 }
                 break;
+#ifdef PORT
+            case AL_SNDP_PORT_EXPIRE_EVT:
+                /* D202/M-66 (PORT deviation, option C): fade out an ownerless
+                 * infinite-loop SFX voice. Re-validate the full predicate at
+                 * fire time: if the state was disposed in the interim this
+                 * event was already removed (sndDisposeSound); if it was
+                 * rebound, the new binding fails the predicate and we no-op.
+                 * Mirrors the stock STOP_EVT ramp-to-zero + END_EVT pattern,
+                 * with a fixed fade length (see D202_EXPIRE_FADE_US). */
+                if (soundState->playingState == SOUND_STATE_PLAYING &&
+                    soundState->state == NULL &&
+                    (soundState->unk3e & (SOUND_FLAG_LOOPED | SOUND_FLAG_RETRIGGER | SOUND_FLAG_FINAL_IN_SEQUENCE))
+                        == (SOUND_FLAG_LOOPED | SOUND_FLAG_FINAL_IN_SEQUENCE) &&
+                    sound->wavetable != NULL && sound->wavetable->type == AL_ADPCM_WAVE &&
+                    sound->wavetable->waveInfo.adpcmWave.loop != NULL &&
+                    sound->wavetable->waveInfo.adpcmWave.loop->count == -1) {
+                    alSynSetVol(sndp->drvr, &soundState->voice, 0, D202_EXPIRE_FADE_US);
+                    spAC.common.type = AL_SNDP_END_EVT;
+                    spAC.common.state = soundState;
+                    alEvtqPostEvent(&sndp->evtq, (ALEvent *) &spAC, D202_EXPIRE_FADE_US);
+                    soundState->playingState = SOUND_STATE_STOPPING;
+                }
+                break;
+#endif
             default:
                 break;
         }
 
         soundState = nextState;
         isEventForSingleSound = event->common.type & (AL_SNDP_PLAY_EVT | AL_SNDP_PITCH_EVT | AL_SNDP_DECAY_EVT |
-                                                      AL_SNDP_END_EVT | AL_SNDP_PLAY_SFX_EVT);
+                                                      AL_SNDP_END_EVT | AL_SNDP_PLAY_SFX_EVT
+#ifdef PORT
+                                                      | AL_SNDP_PORT_EXPIRE_EVT /* D202/M-66: never sequence-walk */
+#endif
+                                                     );
 
         if (soundState != NULL && !isEventForSingleSound) {
             lastInSequence = soundState->unk3e & SOUND_FLAG_FINAL_IN_SEQUENCE;
@@ -746,6 +882,13 @@ void sndUnlinkClearSound(ALSoundState *state)
     if ((state->unk3e & 4) != 0)
     {
         g_sndAllocatedVoicesCount--;
+#ifdef PORT
+        if (getenv("GE_AUDIOTRACE")) { /* D202/M-65 diag; remove once root-caused */
+            geTracePrintf("audiotrace.log", "[VOICE-] sound=%p state=%p flags=%d count=%d\n",
+                    (void *)state->sound, (void *)state, (int)state->unk3e,
+                    (int)g_sndAllocatedVoicesCount);
+        }
+#endif
     }
 
     state->playingState = AL_STOPPED;
@@ -855,8 +998,43 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
     {
         ALKeyMap *keyMap;
 
+#ifndef PORT
         sound = (soundBank->instArray[0]->soundArray[soundIndex]);
-#ifdef PORT
+#else
+        /* D206 (ABI/layout, not game logic): on N64 `ALInstrumentAlt_s`
+         * (src/snd.h) places `soundArray` at struct offset 12 -- 3x s32,
+         * 4-byte pointers -- so it deliberately aliases the on-disk
+         * ALInstrument's `bendRange`/`soundCount` words, and `soundArray[N]`
+         * resolves to the on-disk sound table's entry [N-1]. GE's SFX IDs are
+         * therefore 1-based into that table (ID 0 = NOTHING_SFX, returned
+         * above and never dereferenced). On PC the 8-byte pointer plus 8-byte
+         * alignment pushes `soundArray` to offset 16, and the converted bank
+         * (port/src/romdata.c afFixupInst) is packed to match, so an
+         * uncompensated `soundArray[N]` would land on entry [N] -- every SFX
+         * one bank slot too high (D205 melee->Klobb, armour pickup; D202
+         * silenced-PPK "slap"). Subtract 1 to restore the N64 mapping. This
+         * expression also serves the retrigger chain (`soundIndex` recomputed
+         * at the bottom of this loop from `keyMap->velocityMin`), whose values
+         * live in the same 1-based space. See docs/dev/findings.md D206. */
+        sound = (soundBank->instArray[0]->soundArray[soundIndex - 1]);
+
+        /* D202 diag probe (temporary): trace which soundIndex resolves to
+         * which ALSound*, to root-cause the M-52 "wrong sample plays"
+         * playtest report. Remove once root-caused. */
+        if (getenv("GE_AUDIOTRACE")) {
+            extern unsigned long long audioDumpBytePos(void);
+            geTracePrintf("audiotrace.log", "[AUDIOTRACE] dumppos=%llu sndPlaySfx: bank=%p soundIndex=%d -> sound=%p keyMap=%p wavetable=%p base=%p len=%d type=%d flags=%d book=%p\n",
+                    (unsigned long long)audioDumpBytePos(),
+                    (void *)soundBank, (int)soundIndex, (void *)sound,
+                    sound ? (void *)sound->keyMap : NULL,
+                    (sound && sound->wavetable) ? (void *)sound->wavetable : NULL,
+                    (sound && sound->wavetable) ? (void *)sound->wavetable->base : NULL,
+                    (sound && sound->wavetable) ? sound->wavetable->len : -1,
+                    (sound && sound->wavetable) ? (int)sound->wavetable->type : -1,
+                    (sound && sound->wavetable) ? (int)sound->wavetable->flags : -1,
+                    (sound && sound->wavetable && sound->wavetable->type == AL_ADPCM_WAVE) ?
+                        (void *)sound->wavetable->waveInfo.adpcmWave.book : NULL);
+        }
         /* C7 / D127: the libaudio subsystem is Phase-3 parked (no real bank
          * playback yet).  On some levels (Surface1, -level_36) a requested
          * soundIndex resolves to a bogus ALSound* -- the converted bank tree
@@ -876,6 +1054,84 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
 #endif
 
         newState = sndSetupSound(soundBank, sound);
+
+#ifdef PORT
+        /* D202 diag probe (temporary): log the ALSoundState* handed back per
+         * soundIndex so a later sndDeactivate trace can be correlated back
+         * to "which chain link was this". Remove once root-caused. */
+        if (getenv("GE_AUDIOTRACE")) {
+            ALKeyMap *kmp = sound ? sound->keyMap : NULL;
+            /* D202/M-65: the retrigger machinery is what the user's three
+             * symptoms all route through, and none of it was traced before.
+             * Rare repurposed ALKeyMap: velocityMax is the retrigger PERIOD
+             * in 33ms ticks, velocityMin is the NEXT soundIndex in the chain
+             * this call is walking, and keyMax>>4 seeds unk3e (bit 0x10 =
+             * SOUND_FLAG_RETRIGGER = "replay me forever until deactivated").
+             * Bad values here produce, in order: wrong sound (bad chain
+             * link), several sounds at once (chain too long), and a sound
+             * that loops until level exit (period too short / flag stuck). */
+            /* D202/M-65: flags bit 1 (SOUND_FLAG_LOOPED) is derived purely
+             * from envelope->decayTime == -1, and a looped sound never posts
+             * AL_SNDP_STOP_EVT -- it holds its voice until something
+             * deactivates it. Print the envelope so a mis-assigned envelope
+             * pointer can be told from genuine ROM data. */
+            /* D202/M-65: an infinite ENVELOPE decay only stops the STOP_EVT
+             * from being posted -- it does not by itself make a sample
+             * repeat. If the WAVE also carries an ADPCM loop with count -1
+             * the sound is audibly endless; if it has no loop, the sample
+             * should run out and go silent, and anything still audible is a
+             * port-side mixer fault rather than a lifecycle one. */
+            if (sound && sound->wavetable && sound->wavetable->type == AL_ADPCM_WAVE) {
+                ALADPCMloop *lp = sound->wavetable->waveInfo.adpcmWave.loop;
+                geTracePrintf("audiotrace.log", "[WAVELOOP] soundIndex=%d wave=%p len=%d loop=%p start=%d end=%d count=%d\n",
+                        (int)soundIndex, (void *)sound->wavetable, (int)sound->wavetable->len,
+                        (void *)lp,
+                        lp ? (int)lp->start : -1, lp ? (int)lp->end : -1,
+                        lp ? (int)lp->count : -1);
+            }
+            if (sound && sound->envelope)
+                geTracePrintf("audiotrace.log", "[ENVELOPE] soundIndex=%d env=%p attack=%d decay=%d release=%d aVol=%u dVol=%u\n",
+                        (int)soundIndex, (void *)sound->envelope,
+                        (int)sound->envelope->attackTime,
+                        (int)sound->envelope->decayTime,
+                        (int)sound->envelope->releaseTime,
+                        (unsigned)sound->envelope->attackVolume,
+                        (unsigned)sound->envelope->decayVolume);
+            {
+                extern uint64_t sysGetMicroseconds(void);
+                geTracePrintf("audiotrace.log", "[AUDIOTRACE] sndPlaySfx: t=%llu soundIndex=%d -> newState=%p wavetable=%p flags=%d "
+                    "keyMap=%p velMin(next)=%d velMax(period)=%d keyMin=0x%02x keyMax=0x%02x "
+                    "keyBase=%d detune=%d retrig=%d deltaLoopUs=%d\n",
+                    (unsigned long long)sysGetMicroseconds(),
+                    (int)soundIndex, (void *)newState,
+                    (void *)(sound ? sound->wavetable : NULL),
+                    newState ? (int)newState->unk3e : -1,
+                    (void *)kmp,
+                    kmp ? (int)kmp->velocityMin : -1, kmp ? (int)kmp->velocityMax : -1,
+                    kmp ? (unsigned)kmp->keyMin : 0u, kmp ? (unsigned)kmp->keyMax : 0u,
+                    kmp ? (int)kmp->keyBase : -1, kmp ? (int)kmp->detune : -1,
+                    (newState && (newState->unk3e & 0x10)) ? 1 : 0,
+                    kmp ? (int)(kmp->velocityMax * DELTA_33_MS) : -1);
+            }
+            /* D202/M-65: only 8 voices exist (MUSIC_SFX_SEQ_MAYBE_MAX_SOUNDS).
+             * A SOUND_FLAG_LOOPED voice never self-releases and is skipped by
+             * the preemption scan, so each leaked one permanently costs a
+             * voice. Once this hits maxSounds nothing new can ever sound. */
+            {
+                /* D202/M-71: also log evtq occupancy (64 slots; a full
+                 * queue silently drops posts in alEvtqPostEvent). */
+                ALLink *evn;
+                s32 evAlloc = 0;
+                OSIntMask evm = osSetIntMask(OS_IM_NONE);
+                for (evn = g_sndPlayerPtr->evtq.allocList.next; evn; evn = evn->next)
+                    evAlloc++;
+                osSetIntMask(evm);
+                geTracePrintf("audiotrace.log", "[VOICES] allocated=%d / max=%d evtq=%d/64\n",
+                        (int)g_sndAllocatedVoicesCount,
+                        (int)g_sndPlayerPtr->maxSounds, (int)evAlloc);
+            }
+        }
+#endif
 
         if (newState != NULL)
         {
@@ -933,12 +1189,37 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
             playSfxEvent.playSfx.soundIndex = eventSoundIndex; // types dont match
             playSfxEvent.playSfx.soundBank = soundBank;
 
+#ifdef PORT
+            /* D202/M-65 diag (temporary): this is the self-retrigger post --
+             * the sound schedules itself to play again in playSfxDelta us,
+             * forever, until sndDeactivate clears bit 0x10. A stuck looping
+             * sound IS this event never stopping; a "piling up" mix is this
+             * period being far too short. Remove once root-caused. */
+            if (getenv("GE_AUDIOTRACE")) {
+                geTracePrintf("audiotrace.log", "[AUDIOTRACE] RETRIGGER-POST: state=%p soundIndex=%d delayUs=%d (%.1f ms)\n",
+                        (void *)nextState, (int)eventSoundIndex, (int)playSfxDelta,
+                        (double)playSfxDelta / 1000.0);
+            }
+#endif
             alEvtqPostEvent(&g_sndPlayerPtr->evtq, (ALEvent *)&playSfxEvent, playSfxDelta);
         }
     }
 
     if (pendingState != NULL)
     {
+#ifdef PORT
+        /* D202/M-65 diag (temporary): callers like doorPlayOpenSound0 pass
+         * &door->openSoundState here (an ALSoundState** punned as an
+         * ALSoundState*), relying on ALLink.next sitting at offset 0. This
+         * write IS how a looping SFX gets an owner that can later stop it.
+         * Log it so "slot never written" can be told apart from "slot
+         * written then cleared". Remove once root-caused. */
+        if (getenv("GE_AUDIOTRACE")) {
+            geTracePrintf("audiotrace.log", "[SLOTWRITE] slot=%p <- state=%p (was %p)\n",
+                    (void *)pendingState, (void *)nextState,
+                    (void *)pendingState->link.next);
+        }
+#endif
         pendingState->link.next = (void*)nextState;
     }
 
@@ -956,6 +1237,16 @@ void sndDeactivate(ALSoundState *state)
 
     evt.common.type = AL_SNDP_DEACTIVATE_EVT;
     evt.common.state = state;
+
+#ifdef PORT
+    /* D202 diag probe (temporary): does this ever fire for the stuck
+     * door-loop voice? Correlate against the sndPlaySfx newState= trace.
+     * Remove once root-caused. */
+    if (getenv("GE_AUDIOTRACE")) {
+        geTracePrintf("audiotrace.log", "[AUDIOTRACE] sndDeactivate: state=%p (%s)\n",
+                (void *)state, state ? "non-null" : "NULL-noop");
+    }
+#endif
 
     if (state != NULL)
     {
@@ -1037,18 +1328,18 @@ void sndCreatePostEvent(ALSoundState *state, s16 eventType, s32 arg2)
 {
     ALSndpEvent evt;
 
-#ifdef PORT
-    /* D138: libaudio is Phase-3 parked. The audio thread never drains
-     * g_sndPlayerPtr->evtq->allocList, so every positional-sound tick
-     * (chrobjSndCreatePostEvent, called per objTick for each ambient-sound
-     * object) appends an item and alEvtqPostEvent walks the whole list to
-     * insert it -> O(n^2). Facility has enough machinery ambience that after
-     * a few thousand frames one insert takes seconds and the kernel-heartbeat
-     * watchdog trips ("no frame rendered"). Skip event posting until audio
-     * lands (D77); no gameplay effect. */
-    (void) evt; (void) eventType; (void) arg2; (void) state;
-    return;
-#else
+    /* D202/M-65: this was stubbed out on PORT by D138, back when libaudio was
+     * Phase-3 parked and nothing drained g_sndPlayerPtr->evtq->allocList --
+     * every positional-sound tick appended an item that was never consumed,
+     * so alEvtqPostEvent's ordered insert walked an ever-growing list (O(n^2))
+     * until the kernel-heartbeat watchdog tripped on Facility's ambience.
+     * That premise expired when the Phase-3 audio thread landed (D198-D201):
+     * amMain now drains the queue every audio frame, so the list stays short.
+     *
+     * Leaving the stub in place is not neutral. Every caller posts type 8
+     * (AL_SNDP_VOL_EVT), so the stub silently removed ALL distance-based
+     * volume attenuation, and with it the only per-tick contact the engine
+     * has with a playing voice. See docs/dev/findings.md D202/M-65. */
     evt.common.type = eventType;
     evt.common.state = state;
     evt.unks32.val8 = arg2;
@@ -1057,7 +1348,6 @@ void sndCreatePostEvent(ALSoundState *state, s16 eventType, s32 arg2)
     {
         alEvtqPostEvent(&g_sndPlayerPtr->evtq, (ALEvent *)&evt, 0);
     }
-#endif
 }
 
 /**

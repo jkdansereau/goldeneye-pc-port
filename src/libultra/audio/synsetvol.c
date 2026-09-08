@@ -19,6 +19,8 @@
  *====================================================================*/
 
 #include "synthInternals.h"
+#if defined(__x86_64__)
+#endif
 #include <os_internal.h>
 #include <ultraerror.h>
 

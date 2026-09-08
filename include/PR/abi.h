@@ -269,6 +269,16 @@ typedef short ENVMIX_STATE[40];
  * Macros to assemble the audio command list
  */
 
+#ifdef PORT
+/* PC port (D199): the N64 RSP audio ucode that would execute this acmd list
+ * never runs on PC (port/src/ucode.c). Following the Perfect Dark PC port's
+ * macro-swap pattern (docs/dev/AUDIO-PLAN.md), each aXxx macro below is
+ * replaced with an immediate call into port/src/mixer.c's software
+ * implementation instead of packing RSP command words. The N64 branch below
+ * is untouched. */
+#include "mixer.h"
+#else /* !PORT */
+
 #define	aADPCMdec(pkt, f, s)						\
 {									\
 	Acmd *_a = (Acmd *)pkt;						\
@@ -401,6 +411,8 @@ typedef short ENVMIX_STATE[40];
 	_a->words.w0 = _SHIFTL(A_LOADADPCM, 24, 8) | _SHIFTL(c, 0, 24);	\
         _a->words.w1 = (unsigned int) d;                                \
 }
+
+#endif /* PORT */
 
 #endif /* _LANGUAGE_C */
 

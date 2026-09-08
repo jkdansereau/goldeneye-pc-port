@@ -21,8 +21,20 @@ D190,OPEN,"Linux -level_45 SIGSEGV at load in add_ptr_to_objective (objective.c:
 D191,OPEN,Windows -O2 release-bundle crash:,OPEN — not investigated (M-49).
 D193,OPEN,NPC AI locomotion is too slow —,"OPEN — root-cause hypothesis (timing family), not investigated (M-49)."
 D194,OPEN,Mouse input needs another tuning pass —,"OPEN — root-caused, not fixed (M-49)"
+D195,OPEN,"Transparency / alpha surfaces broken on Control (M-49, user playtest) —","OPEN — not investigated (M-49), needs a capture"
+D197,OPEN,"Character face/head textures wrap around the head, seen on Silo (M-49, user playtest).","OPEN — not investigated (M-49), needs a capture"
+D198,FIXED,alAdpcmPull/_decodeChunk used K0_TO_PHYS (an unconditional & 0x1FFFFFFF mask) on 64-bit heap pointers (src/libultra/audio/load.c).,FIXED (src/libultra/audio/load.c) —
+D199,PARTIAL,Phase-3 software audio mixer:,"LANDED (port/src/mixer.c, port/include/mixer.h, include/PR/abi.h) —"
+D200,FIXED,-level_09 segfault: reverb's ALDelay.input/output are u32 —,FIXED — 5-line cast in reverb.c (this session)
 D196,OPEN,"OS mouse cursor stays visible after closing the F10 options overlay in click-to-lock mode (M-49, user playtest).","OPEN — root-caused, 1-line fix identified, not applied (M-49)"
 D192,OPEN,Front-end mission/level-select grid pointer still can't reach the outer cells —,"OPEN — root-caused, not fixed (M-49)"
+D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
+D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
+D201,FIXED,"src/libultra/audio/bnkf.c bank/instrument/sound/wavetable relocation offsets were s32, truncating the real 64-bit base pointer.",FIXED (src/libultra/audio/bnkf.c) —
+D202,RESOLVED,"Silenced PPK plays a ""slap"" instead of a gunshot, PLUS user reports broader real-time audio corruption (M-52 → M-59 → REOPENED M-60 → M-61/M-62 closed the data…",ROOT CAUSE ESTABLISHED (M-66); DISPOSITION C IMPLEMENTED + MEASURED (M-66b) —
+D206,FIXED,PC played every SFX one bank slot too high —,"FIXED (M-76, src/snd.c:1001, #ifdef PORT → soundArray[soundIndex - 1], N64 line verbatim under #else)."
+D207,?,Alarm klaxon starves combat SFX and (per user) doesn't recover after it stops —,MONITORING (M-77c: user reports the alarm is acceptable in play after D206; no fix shipped) —
+D205,OPEN,PC plays wrong/extra SFX for gameplay events the user can A/B against N64:,OPEN — bank + playback + requested indices all exonerated; M-73 LOS/geometry root cause WITHDRAWN (M-74).
 D152+,FIXED,D152 addendum (M-31):,"FIXED (src/snd.c, port/src/libultra.c, #ifdef PORT) —"
 D168,FIXED,GE_PCDUMP / F12 PPM captures were vertically flipped —,FIXED (port/fast3d/gfx_opengl.cpp); D114 / D116 reclassified as capture-orientation artifacts (below).
 D169,FIXED,Front-end mouse pointer can't reach the outer cells of the mission/level-select grid —,"FIXED (M-33, port/src/input.c, port-only, no #ifdef PORT)."

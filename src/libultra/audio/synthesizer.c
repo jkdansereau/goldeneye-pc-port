@@ -20,6 +20,10 @@
 
 #include "synthInternals.h"
 #include "include/assert.h"
+#if defined(__x86_64__)
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 
 #ifdef AUD_PROFILE
 #include <os.h>
@@ -117,6 +121,24 @@ void alSynNew(ALSynth *drvr, ALSynConfig *c)
         alAuxBusParam(drvr->auxBus, AL_FILTER_ADD_SOURCE, &pv->envmixer);
         
         pv->channelKnob   = (ALFilter *)&pv->envmixer;
+
+#if defined(__x86_64__)
+        /* D202/M-69 diag (temporary): GE_AUDIOTRACE=1 logs the full
+         * PVoice -> decoder/resampler/env-state address map at synth init,
+         * so offline voicedump slot addresses can be tied to WIRE filter
+         * addresses (and hence to wave tables / sound indices). */
+        if (getenv("GE_AUDIOTRACE")) {
+            static FILE *mf = NULL;
+            if (!mf) { mf = fopen("audiotrace_wire.log", "a"); if (mf) setvbuf(mf, NULL, _IONBF, 0); }
+            if (i == 0)
+                fprintf(mf, "[VOICEMAP] sizes pv=%u dec=%u res=%u env=%u\n",
+                        (unsigned)sizeof(PVoice), (unsigned)sizeof(ALLoadFilter),
+                        (unsigned)sizeof(ALResampler), (unsigned)sizeof(ALEnvMixer));
+            if (mf) fprintf(mf, "[VOICEMAP] i=%d pv=%p dec=%p res=%p envstate=%p\n",
+                            i, (void *)pv, (void *)&pv->decoder,
+                            (void *)&pv->resampler, (void *)pv->envmixer.state);
+        }
+#endif
     }
     
     alSaveParam(save, AL_FILTER_SET_SOURCE, drvr->mainBus);

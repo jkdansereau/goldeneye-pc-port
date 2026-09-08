@@ -8,6 +8,12 @@
 
 #include <ultra64.h>
 #include <math.h>
+#ifdef PORT
+#include <stdio.h>  /* D202/M-65 diag probe only (doorSndProbe); remove with it */
+#include <stdlib.h>
+#include "audiotrace.h"  /* D202/M-71 diag probe only ([DISTVOL]); remove with it */
+#include <stddef.h>
+#endif
 #include <PR/libaudio.h>
 #include <assets/oddtextures.h>
 #include <bondgame.h>
@@ -12766,6 +12772,20 @@ s32 sub_GAME_7F053894(coord3d *pos, f32 low, f32 high)
             shortest_distance = distance;
         }
     }
+#ifdef PORT
+    /* D202/M-71 diag: every positional-SFX volume computation funnels here.
+     * Log the hit pos, nearest player pos, distance and resulting vol so a
+     * "loud impact that N64 plays silent" can be told apart as wrong-HIT vs
+     * wrong-DISTANCE. Remove with probe set. */
+    if (getenv("GE_AUDIOTRACE")) {
+        geTracePrintf("audiotrace.log",
+            "[DISTVOL] pos=(%.0f,%.0f,%.0f) player=(%.0f,%.0f,%.0f) dist=%.1f vol=%d\n",
+            (double)pos->x, (double)pos->y, (double)pos->z,
+            (double)prop->pos.x, (double)prop->pos.y, (double)prop->pos.z,
+            (double)shortest_distance,
+            (int)sub_GAME_7F0537B8(shortest_distance, low, high));
+    }
+#endif
     return sub_GAME_7F0537B8(shortest_distance, low, high);
 }
 
@@ -12832,8 +12852,53 @@ void sub_GAME_7F053A3C(DoorRecord* arg0)
 }
 
 
+#ifdef PORT
+/* D202/M-65 diag (temporary): the two door slots are the ONLY handles on a
+ * door's looping SFX. doorPlayOpenSound0/1 adopt a slot only when it is
+ * NULL; if both are already occupied the loop starts with pendingState ==
+ * NULL, nothing holds its state, and nothing can ever sndDeactivate it --
+ * it retriggers until level exit. This probe prints the slot state at both
+ * ends of that contract (owner selection, and the stop path), so an
+ * orphaned loop is visible as an "ORPHAN" line with no later stop.
+ * Remove once root-caused. */
+void doorSndProbe(const char *where, DoorRecord *door, void *pendingState)
+{
+    static FILE *fd = NULL;
+    if (!getenv("GE_AUDIOTRACE"))
+        return;
+    if (!fd) {
+        fd = fopen("audiotrace.log", "a");
+        if (fd) {
+            setvbuf(fd, NULL, _IONBF, 0);
+            /* D202/M-65: doors are carved from setup data; if the 64-bit
+             * DoorRecord is larger than the per-object stride the allocator
+             * uses, door N's sound slots land inside door N+1 and every
+             * looping SFX loses its owner. Print the size once so it can be
+             * compared against the observed record spacing. */
+            fprintf(fd, "[DOORSND] sizeof(DoorRecord)=0x%X openSoundState@0x%X closeSoundState@0x%X\n",
+                    (unsigned)sizeof(DoorRecord),
+                    (unsigned)((char *)&door->openSoundState - (char *)door),
+                    (unsigned)((char *)&door->closeSoundState - (char *)door));
+        }
+    }
+    if (!fd)
+        return;
+    fprintf(fd, "[DOORSND] %-14s door=%p openSlot=%p(play=%d) closeSlot=%p(play=%d) sound=%d %s\n",
+            where, (void *)door,
+            (void *)door->openSoundState,
+            door->openSoundState ? (int)sndGetPlayingState(door->openSoundState) : -1,
+            (void *)door->closeSoundState,
+            door->closeSoundState ? (int)sndGetPlayingState(door->closeSoundState) : -1,
+            (int)door->doorOpenSound,
+            pendingState ? "owned" : "ORPHAN-both-slots-busy");
+}
+#endif
+
 void door7F053B10(DoorRecord *door) //#MATCH
 {
+#ifdef PORT
+    doorSndProbe("stop-sounds", door, (void *)1);
+#endif
     if (door->openSoundState && sndGetPlayingState(door->openSoundState))
     {
         sndDeactivate(door->openSoundState);
@@ -12862,6 +12927,10 @@ void doorPlayOpenSound0(DoorRecord *door) {
     {
         pendingState = &door->closeSoundState;
     }
+
+#ifdef PORT
+    doorSndProbe("open0", door, (void *)pendingState); /* D202/M-65 diag */
+#endif
 
     switch (door->doorOpenSound)
     {
@@ -12991,6 +13060,10 @@ void doorPlayOpenSound1(DoorRecord *door) {
     {
         pendingState = &door->closeSoundState;
     }
+
+#ifdef PORT
+    doorSndProbe("open1", door, (void *)pendingState); /* D202/M-65 diag */
+#endif
 
     switch (door->doorOpenSound)
     {
@@ -14377,6 +14450,25 @@ Gfx *countdownTimerRender(Gfx *DL)
 
 void handle_alarm_gas_timer_calldamage(void)
 {
+#ifdef PORT
+    /* D207 diag probe (temporary): force + trace the alarm klaxon to
+     * root-cause "alarm SFX starves all other audio and never recovers".
+     * GE_FORCEALARM pins alarm_timer so alarmIsActive() stays true. Remove
+     * once root-caused. */
+    if (getenv("GE_FORCEALARM")) {
+        static int fa_frames;
+        ++fa_frames;
+        if (fa_frames == 120 || fa_frames == 900) alarmActivate();
+        if (fa_frames > 120 && fa_frames < 600) alarm_timer = 1;  /* sustain on ~2..10s */
+        if (fa_frames == 600) alarmDeactivate();                  /* explicit off at 10s */
+        if (fa_frames > 900) alarm_timer = 1;                     /* sustain on again */
+        geTracePrintf("audiotrace.log",
+            "[D207] f=%d active=%d ptr_alarm_sfx=%p playstate=%d locked=%d\n",
+            fa_frames, (int)alarmIsActive(), (void *)ptr_alarm_sfx,
+            ptr_alarm_sfx ? (int)sndGetPlayingState(ptr_alarm_sfx) : -1,
+            (int)lvlGetControlsLockedFlag());
+    }
+#endif
     if (alarmIsActive() != 0)
     {
         if ((ptr_alarm_sfx == 0) && (lvlGetControlsLockedFlag() == 0))

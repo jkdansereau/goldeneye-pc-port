@@ -21,19 +21,30 @@
 #include <libaudio.h>
 #include <os.h>
 #include <ultraerror.h>
+#include <stdint.h>
 
 /*
  * ### when the file format settles down a little, I'll remove these
  * ### for efficiency.
+ *
+ * PC port (D201): these relocation offsets were `s32`, truncating the real
+ * 64-bit base pointer. On N64 (32-bit pointers) that's a no-op; on PC it
+ * silently corrupted every bank/inst/sound/wavetable/book/loop pointer
+ * relocated below whenever the base allocation's low 32 bits had the top
+ * bit set (~50% of allocations, allocator-dependent) — sign-extension of
+ * the truncated s32 during pointer arithmetic reconstructs the wrong 64-bit
+ * address. `uintptr_t` is already this codebase's idiom for pointer-safe
+ * integers (src/game/*.c); widening these to it changes nothing on the
+ * 32-bit N64 build and fixes PC. See docs/dev/findings.md D201.
  */
-static  void _bnkfPatchBank(ALBank *bank, s32 offset, s32 table);
-static  void _bnkfPatchInst(ALInstrument *i, s32 offset, s32 table);
-static  void _bnkfPatchSound(ALSound *s, s32 offset, s32 table);
-static  void _bnkfPatchWaveTable(ALWaveTable *w, s32 offset, s32 table);
+static  void _bnkfPatchBank(ALBank *bank, uintptr_t offset, uintptr_t table);
+static  void _bnkfPatchInst(ALInstrument *i, uintptr_t offset, uintptr_t table);
+static  void _bnkfPatchSound(ALSound *s, uintptr_t offset, uintptr_t table);
+static  void _bnkfPatchWaveTable(ALWaveTable *w, uintptr_t offset, uintptr_t table);
 
 void alSeqFileNew(ALSeqFile *file, u8 *base)
 {
-    s32 offset = (s32) base;
+    uintptr_t offset = (uintptr_t) base;
     s32 i;
     
     /*
@@ -46,9 +57,9 @@ void alSeqFileNew(ALSeqFile *file, u8 *base)
 
 void alBnkfNew(ALBankFile *file, u8 *table)
 {
-    s32 offset = (s32) file;
-    s32 woffset = (s32) table;
-    
+    uintptr_t offset = (uintptr_t) file;
+    uintptr_t woffset = (uintptr_t) table;
+
     s32 i;
     
     /*
@@ -66,7 +77,7 @@ void alBnkfNew(ALBankFile *file, u8 *table)
     }
 }
 
-void _bnkfPatchBank(ALBank *bank, s32 offset, s32 table) 
+void _bnkfPatchBank(ALBank *bank, uintptr_t offset, uintptr_t table)
 {
     s32 i;
     
@@ -88,7 +99,7 @@ void _bnkfPatchBank(ALBank *bank, s32 offset, s32 table)
     }
 }
 
-void _bnkfPatchInst(ALInstrument *inst, s32 offset, s32 table)
+void _bnkfPatchInst(ALInstrument *inst, uintptr_t offset, uintptr_t table)
 {
     s32 i;
 
@@ -105,7 +116,7 @@ void _bnkfPatchInst(ALInstrument *inst, s32 offset, s32 table)
     }
 }
 
-void _bnkfPatchSound(ALSound *s, s32 offset, s32 table)
+void _bnkfPatchSound(ALSound *s, uintptr_t offset, uintptr_t table)
 {
     if (s->flags)
         return;
@@ -119,7 +130,7 @@ void _bnkfPatchSound(ALSound *s, s32 offset, s32 table)
     _bnkfPatchWaveTable(s->wavetable, offset, table);
 }
 
-void _bnkfPatchWaveTable(ALWaveTable *w, s32 offset, s32 table)
+void _bnkfPatchWaveTable(ALWaveTable *w, uintptr_t offset, uintptr_t table)
 {
     if (w->flags)
         return;

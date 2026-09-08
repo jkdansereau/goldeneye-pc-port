@@ -56,6 +56,8 @@ Run `/linkcheck` for this sweep. Record new findings in `docs/dev/findings.md` �
   parked in `docs/dev/GRAPHICS-BACKLOG.md`.
 - **Phase 3 (audio + input):** input layer done (`port/src/input.c`); polish
   bugs open (D118* mouse-look residuals; interactive feel-checks owed). Audio
-  not started — libaudio → SDL, copy-and-adapt from the PD port's `mixer.c`.
+  mixer done (libaudio → SDL software mixer, D198–D201); D204 tempo drift
+  fixed + measured; D202 stuck door loop root-caused with a port-side
+  expiration (M-66b) awaiting by-ear verification.
 - **Phase 4 (saves + polish):** file-backed EEPROM done; widescreen, config,
   rebinding UI outstanding.

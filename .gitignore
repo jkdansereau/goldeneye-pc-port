@@ -144,11 +144,19 @@ ppm/
 screenshots/
 # local Mupen64 Plus checkout (N64 reference footage); binaries, do not commit
 tools_pc/mupen64/
+# local N64 emulator checkout (D205 A/B reference)
+mupen64/
 
 # PC port run/scratch logs
 run_*.log
 d6*.log
 ge007.crash.log
+
+# agent scratch space + audio probe artifacts (regenerable dumps/traces)
+scratchpad/
+/audiodump.raw
+/audiotrace.log
+/mixertrace.log
 
 # Claude Code local state / agent worktrees
 .claude/

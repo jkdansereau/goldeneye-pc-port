@@ -23,6 +23,11 @@
 #include "synthInternals.h"
 #include <os.h>
 #include <R4300.h>
+#if defined(__x86_64__)
+#include <stdio.h>
+#include <stdlib.h>
+#include "audiotrace.h"   /* D202/M-70: serialized trace writer */
+#endif
 
 #ifndef MIN
 #   define MIN(a,b) (((a)<(b))?(a):(b))
@@ -37,6 +42,7 @@ extern u32 cnt_index, adpcm_num, adpcm_cnt, adpcm_max, adpcm_min, lastCnt[];
 
 static
 Acmd *_decodeChunk(Acmd *ptr, ALLoadFilter *f, s32 tsam, s32 nbytes, s16 outp, s16 inp, u32 flags);
+
 
 Acmd *alAdpcmPull(void *filter, s16 *outp, s32 outCount, s32 sampleOffset, Acmd *p) 
 {
@@ -65,8 +71,10 @@ Acmd *alAdpcmPull(void *filter, s16 *outp, s32 outCount, s32 sampleOffset, Acmd 
         return ptr;
 
     inp = AL_DECODER_IN;
+    /* PC port (D198): was K0_TO_PHYS — same corrupted-pointer bug as the
+     * f->state/f->lstate call sites below; see docs/dev/findings.md D198. */
     aLoadADPCM(ptr++, f->bookSize,
-               K0_TO_PHYS(f->table->waveInfo.adpcmWave.book->book));
+               osVirtualToPhysical(f->table->waveInfo.adpcmWave.book->book));
 
     looped = (outCount + f->sample > f->loop.end) && (f->loop.count != 0);
     if (looped)
@@ -189,6 +197,26 @@ Acmd *alAdpcmPull(void *filter, s16 *outp, s32 outCount, s32 sampleOffset, Acmd 
         f->memin += ADPCMFBYTES*nframes;    
     }
 
+#if defined(__x86_64__)
+    /* D202/M-65 diag (temporary): a wave with no ALADPCMloop must run out and
+     * be zero-filled (nOver > 0) once memin passes base+len. If a voice keeps
+     * decoding past that point, an unstopped voice stays audible forever
+     * instead of going silent -- which is what "the door sound loops until
+     * you quit" would actually sound like. Assert it directly, rate-limited.
+     * Remove once root-caused. */
+    if (getenv("GE_PULLTRACE")) {
+        static s32 reported = 0;
+        s32 totalSamples = (f->table->len / ADPCMFBYTES) * ADPCMFSIZE;
+        if (f->sample > totalSamples + ADPCMFSIZE && nOver == 0 && reported < 40) {
+            reported++;
+            geTracePrintf("audiotrace.log", "[PASTEND] filter=%p sample=%d totalSamples=%d memin=0x%08x base=0x%08x len=%d overFlow=%d nOver=%d\n",
+                    (void *)f, (int)f->sample, (int)totalSamples, (unsigned)f->memin,
+                    (unsigned)(s32)f->table->base, (int)f->table->len,
+                    (int)overFlow, (int)nOver);
+        }
+    }
+#endif
+
     /*
      * Put zeros in if necessary
      */
@@ -231,6 +259,7 @@ Acmd *alRaw16Pull(void *filter, s16 *outp, s32 outCount, s32 sampleOffset, Acmd 
         nbytes = nSam<<1;
         if (nSam > 0){
             dramLoc = (f->dma)(f->memin, nbytes, f->dmaState);
+
             
             /*
              * Make sure enough is loaded into DMEM to take care
@@ -319,6 +348,7 @@ Acmd *alRaw16Pull(void *filter, s16 *outp, s32 outCount, s32 sampleOffset, Acmd 
         if (outCount > 0){
             nbytes -= overFlow;
             dramLoc = (f->dma)(f->memin, nbytes, f->dmaState);
+
             
             /*
              * Make sure enough is loaded into DMEM to take care
@@ -360,6 +390,24 @@ alLoadParam(void *filter, s32 paramID, void *param)
     switch (paramID) {
         case (AL_FILTER_SET_WAVETABLE):
             a->table = (ALWaveTable *) param;
+#if defined(__x86_64__)
+            if (getenv("GE_AUDIOTRACE")) {
+                extern uint64_t sysGetMicroseconds(void); /* port/src/system.c */
+                geTracePrintf("audiotrace_wire.log", "[WIRE] t=%llu filter=%p <- table=%p base=%p len=%d book=%p\n",
+                        (unsigned long long)sysGetMicroseconds(),
+                        (void *)a, (void *)a->table, (void *)a->table->base,
+                        a->table->len,
+                        (a->table->type == AL_ADPCM_WAVE) ? (void *)a->table->waveInfo.adpcmWave.book : NULL);
+            }
+            if (getenv("GE_MIXERTRACE")) {
+                static FILE *btf = NULL;
+                if (!btf) { btf = fopen("mixertrace.log", "a"); if (btf) setvbuf(btf, NULL, _IONBF, 0); }
+                if (btf) fprintf(btf, "[BINDTABLE] filter=%p <- table=%p base=%p len=%d book=%p\n",
+                        (void *)a, (void *)a->table, (void *)a->table->base,
+                        a->table->len,
+                        (a->table->type == AL_ADPCM_WAVE) ? (void *)a->table->waveInfo.adpcmWave.book : NULL);
+            }
+#endif
             a->memin = (s32) a->table->base;
             a->sample = 0;
             switch (a->table->type){
@@ -445,6 +493,14 @@ Acmd *_decodeChunk(Acmd *ptr, ALLoadFilter *f, s32 tsam, s32 nbytes, s16 outp, s
         dramLoc;
     
     if (nbytes > 0){
+#if defined(__x86_64__)
+        if (getenv("GE_MIXERTRACE")) {
+            static FILE *dtf = NULL;
+            if (!dtf) { dtf = fopen("mixertrace.log", "a"); if (dtf) setvbuf(dtf, NULL, _IONBF, 0); }
+            if (dtf) fprintf(dtf, "[DMAREQ] filter=%p memin=0x%08x nbytes=%d\n",
+                    (void *)f, (unsigned)f->memin, (int)nbytes);
+        }
+#endif
         dramLoc = (f->dma)(f->memin, nbytes, f->dmaState);
         /*
          * Make sure enough is loaded into DMEM to take care
@@ -458,11 +514,18 @@ Acmd *_decodeChunk(Acmd *ptr, ALLoadFilter *f, s32 tsam, s32 nbytes, s16 outp, s
         dramAlign = 0;
 
     if (flags & A_LOOP){
-        aSetLoop(ptr++, K0_TO_PHYS(f->lstate));
+        /* PC port (D198): was K0_TO_PHYS(f->lstate), an unconditional
+         * `& 0x1FFFFFFF` mask that corrupts 64-bit heap pointers above
+         * 512MB. Every sibling call site (env.c, resample.c, reverb.c)
+         * already resolves state pointers via osVirtualToPhysical, which
+         * is bit-identical to K0_TO_PHYS for real N64 kseg0 addresses but
+         * PC-shimmed correctly (port/src/libultra.c). No behavior change
+         * on N64; see docs/dev/findings.md D198. */
+        aSetLoop(ptr++, osVirtualToPhysical(f->lstate));
     }
-    
+
     aSetBuffer(ptr++, 0, inp + dramAlign, outp, tsam<<1);
-    aADPCMdec(ptr++, flags, K0_TO_PHYS(f->state));
+    aADPCMdec(ptr++, flags, osVirtualToPhysical(f->state));
     f->first = 0;
 
     return ptr;

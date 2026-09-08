@@ -394,8 +394,20 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D191 | **Windows `-O2` release-bundle crash: SIGSEGV in `modelGetNodeRwData` (`src/game/model.c:478`) — the `root->Parent` node-tree walk (M-49, user playtests of the v0.1.0 win64 bundle).** **Two instances, identical fault PC `0x1400801b1`:** (1) fresh save, killed the first guard right after escaping the cell in Bunker ii; (2) Statue (`-level_49`?), right after the Trevelyan meeting cutscene. `ge007.crash.log` (auto-dump; symbols intact in the shipped exe, `addr2line` resolves): PC = `modelGetNodeRwData` at `model.c:478` — the `switch (root->Opcode & 0xff)`, i.e. `root` (a `ModelNode *`) is bad; `addr2line` puts it in the inlined self-recursion at `:532`, so the `while (root->Parent) { root = root->Parent; … }` walk (`model.c:527-540`) handed a garbage node into the recursive call. Instance 1: `Rdx = 0x70267bc000000000` — a `~0x70266xxx` heap address in the **high 32 bits, zero low half** = 32-bit pointer field read as 64-bit (or a byte-swapped `u32` pair). Instance 2: `Rdx = 0`, FAULT ADDR `0x0` — `root` (or `root->Parent`) resolved to NULL. Both: `Rcx=Rdi` = the `~0x7008xxxx`/`~0x7007xxxx` object ptr, `R8 = 0x1d` (29). So the `Parent` chain in some model contains a **truncated or NULL link** — pointer-width / byte-swap family (D3x, D119 `weapons_held[]->chr` type-pun, D122/D126/D132 propDef-stride). NOT weapon-fire-specific — common factor is `modelGetNodeRwData` running on a character/cutscene model whose node tree has a bad `Parent`. Crash logs saved: `scratchpad/crashlogs/`. **Repro aid:** shipped exe has full symbols; `debug-crash.ps1` in the bundle dir runs it under gdb, `GE_D51=1` → `d52rw.log` rwdata-pool trace. The crash.c EBP backtrace breaks immediately (`#01: 0x1d`) — need a real `bt` + `p *root` + `p *Objinst` at the fault. Not yet reproduced under a debugger; no fix. | OPEN — not investigated (M-49). 2 field instances (Bunker, Statue). Awaiting a gdb backtrace + `d52rw.log`. |
 | D193 | **NPC AI locomotion is too slow — characters don't move to their destinations at the original game's rate (M-49, user playtest; clarified after the FULL 21-level playthrough — "the biggest overall flaw").** Not (primarily) an animation-playback bug — the *travel speed* of scripted/AI movement is wrong: guards, named NPCs (Trevelyan, Ourumov) and friendlies (Natalya) all take noticeably longer to run/walk to their goal positions than on N64. General, not chr-specific. **Leading hypothesis — the D117/D134/D155/D156 wall-clock-timing family:** `chr.c` / `chrai.c` integrate movement as `pos += speed * g_GlobalTimerDelta` and step sim loops `while (i < g_ClockTimer)` / `-= g_ClockTimer` (`chr.c:1437,1446,1491-1502,1862,2359,2569`; `chrai.c:76`). On the port `osGetCount()` is free-running wall-clock (D117), `g_GlobalTimerDelta`/`g_ClockTimer` are derived from it, and D155's `FRAMETIMING_PORT_MAX_CATCHUP = 6` clamps `nextFrameTime`. If the effective per-second sum of `g_GlobalTimerDelta` (or the `g_ClockTimer` tick count) runs low — quantization, the catch-up clamp biting during normal play, or a units mismatch (`g_JP_GlobalTimerDelta` vs `g_GlobalTimerDelta`, `chr.c:1435/1437`) — every delta-scaled AI motion integrates slow while **player** movement (input-driven per frame) still feels right, which is exactly the reported split. Related: **D170** (Ourumov/Trevelyan "flee" looks wrong — flagged there as possibly the same locomotion-speed issue rather than an AI divergence). Also possible: `chrGoToBond/Chr(SPEED_RUN/WALK/SPRINT)` speed enum → path-follow step, or pathfinding advancing ≤1 waypoint per frame-quantized tick. **Instances seen (M-49 full playthrough):** (a) Facility — the post-scripted-scene beat with Ourumov + the soldier squad: the soldiers **walk in super slowly and take a long time to path into firing positions** before they start shooting (this is regular squad combat AI, not a named-NPC script — good evidence the slowdown is general delta-scaled `chr` locomotion / path-following, not one ailist); (b) the named-NPC flee behaviour on Silo (Ourumov) and Cradle (Trevelyan) — see D170; (c) **Natalya (the escort NPC) always walks really slow** — on every escort level (Bunker ii, Statue, Control, Archives) she trails far behind, forcing the player to wait. Escort follow-AI is the same `chrGoToChr`/path-follow path as (a). **WORST CASE — Cradle (`-level_51`) is "bugged out completely" due to Trevelyan's behaviour (M-49).** The final level is Trevelyan-fleeing-and-scripted end to end (he runs the antenna cradle, climbs, drops to the cradle floor, the helicopter beat); if his locomotion timing / path-following is off he never hits the trigger points and the level's scripted progression stalls or goes haywire. This makes D193 effectively a **can't-properly-finish-the-game** bug, not just cosmetic sluggishness. **Next:** log `g_GlobalTimerDelta` + `g_ClockTimer` per frame during normal play and check the 1-second sum vs the N64's ~60; time a guard's run across a known distance vs reference footage; then watch Trevelyan's chr state / current AI command on Cradle. | OPEN — root-cause hypothesis (timing family), not investigated (M-49). **Highest-impact playtest finding — breaks Cradle.** |
 | D194 | **Mouse input needs another tuning pass — RMB aim over-sensitive + sensitivity couples to frame/sim rate (M-49, user playtest).** Two parts. **(a) Aim mode (RMB) is near bang-bang, not proportional** (`port/src/input.c:697-707`): any per-poll delta past `AIM_MOVE_THRESH` emits stick `m = clamp(61 + |Δ|·(MouseAimSpeed/100)·AIM_GAIN, 61, 60+AimBand)` = `[61,80]` — with the M-29 defaults (`MouseAimSpeed=16`, `AIM_GAIN=4.0`, `AimBand=20`) `m` is already 61 (fast) at ~1.5 px/poll and saturates at 80 by ~30 px/poll, so the usable proportional band is tiny and sits near the top of GE's aim range → "way too sensitive," turn rate barely tracks how fast you actually move the mouse. Needs a real response curve (low floor, wider proportional band, maybe a gamma), not a threshold+clamp. **(b) Overall sensitivity correlates with movement/frame rate** (user's words: "correlated with movement speed, does not feel good"): `input.c` emits raw stick counts **per controller poll** with no `g_GlobalTimerDelta` / polls-per-frame normalization (hipfire yaw `sx += edx·(MouseTurnSpeed/100)·6.0` at `:709`; aim as above). GE integrates the stick scaled by its sim delta, and the port's poll cadence vs render/sim cadence drifts with scene load — so effective sensitivity shifts when the framerate does (which reads as "when I'm moving"). Fix direction: accumulate mouse delta and convert to stick using a fixed reference dt (or feed the game a dt-consistent value), so a given hand motion = a given view rotation regardless of fps. Lineage: D118a (hipfire pitch digital vs analog), D165 (menu pointer), D166 (hipfire pitch pulses), D180-B3 (`MouseAimSpeed` 25→16). Config knobs exist (`Input.MouseAimSpeed/AimBand/MouseTurnSpeed/HipfirePitchSpeed`) but the *shape* of the mapping is the problem. | OPEN — root-caused, not fixed (M-49) |
+| D195 | **Transparency / alpha surfaces broken on Control (M-49, user playtest)** — Natalya's console room, the glass partitions + translucent projected wall displays. Failure mode not yet specified by the reporter (no `GE_PCDUMP` capture taken). Likely a fast3d render-mode / alpha-blend path defect, not a decode one — neighbours D161 (CI8/LUT decode), D172, D176(b) (both blend-adjacent) but those are texture-format bugs, this reads as a blend-state one; check D128 portal adjacency in case the glass geometry is portal-culled wrong instead. Logged in `GRAPHICS-BACKLOG.md`. **Next:** `GE_PCDUMP` capture on Control near the console room, compare RDP render-mode words against N64 `gmain.s` for the glass/display materials. | OPEN — not investigated (M-49), needs a capture |
+| D197 | **Character face/head textures wrap around the head, seen on Silo (M-49, user playtest).** Reads as `G_TX_CLAMP` not honoured (or a non-power-of-two wrap period) on a head/face texture tile — the texture repeats around the mesh instead of clamping at the UV edge. Not yet isolated to a specific character or texture; no `GE_PCDUMP`/`GE_TEXDUMP` capture taken. Likely fast3d texture-tile setup (clamp/wrap mode bits from the tile descriptor not round-tripped) rather than a data bug, given it's cosmetic and geometry-independent. **Next:** `GE_TEXDUMP` the offending head texture's tile descriptor on Silo, diff clamp/mirror bits against `gmain.s`'s expectations for that material. | OPEN — not investigated (M-49), needs a capture |
+| D198 | **`alAdpcmPull`/`_decodeChunk` used `K0_TO_PHYS` (an unconditional `& 0x1FFFFFFF` mask) on 64-bit heap pointers (`src/libultra/audio/load.c`).** `K0_TO_PHYS` is the N64 kseg0→physical mask, valid only because N64 pointers fit in 32 bits; on PC's 64-bit heap it truncates any pointer whose value exceeds 512MB, corrupting the `aLoadADPCM`/`aSetLoop`/`aADPCMdec` DRAM addresses at 3 call sites (`load.c:71`, `:468`, `:474`). Every sibling call site in `env.c`/`resample.c`/`reverb.c` already resolves state pointers via `osVirtualToPhysical` (the port shim, `port/src/libultra.c`), which is bit-identical to `K0_TO_PHYS` for real N64 kseg0 addresses but correctly PC-shimmed. **Fix (ABI-layer, `#ifdef`-free — same call resolves correctly on both platforms):** replace the 3 `K0_TO_PHYS(...)` calls with `osVirtualToPhysical(...)`. No behavior change on N64 (identical result for kseg0 pointers); fixes PC. Surfaced while building the Phase-3 software mixer (D199) — the acmd list these opcodes feed now actually executes on PC instead of being ignored. | FIXED (`src/libultra/audio/load.c`) — part of the Phase-3 mixer landing, not yet build/runtime-verified in isolation |
+| D199 | **Phase-3 software audio mixer: macro-swap `aXxx` opcode execution + reverse-engineered `aSetBuffer` persistent-context semantics (`port/src/mixer.c`, `port/include/mixer.h`, `include/PR/abi.h`).** The RSP audio ucode (`aspMain`) that would normally execute GE's acmd list never runs on PC (`port/src/ucode.c`); adapting the Perfect Dark PC port's macro-swap trick (`docs/dev/AUDIO-PLAN.md`), `include/PR/abi.h` now `#include`s `port/include/mixer.h` under `#ifdef PORT`, which redefines every `aXxx` macro to call an `Impl` function in `mixer.c` immediately against a small software "DMEM" scratch buffer, instead of packing RSP command words for later execution. GE uses the classic IDO libaudio ABI (verified against every call site in `src/libultra/audio/*.c` + `src/libultrare/audio/{env,reverb}.c`), not PD's differently-shaped "naudio New" ABI — DSP math (ADPCM decode, linear resample, linear envelope mix) is the same Nintendo/SGI ucode PD's `mixer.c` already ported; only the ABI/addressing layer is GE-specific and new here. Several opcodes (`aADPCMdec`, `aResample`, `aEnvMixer`, `aLoadBuffer`, `aSaveBuffer`) take only a state/DRAM pointer — their DMEM source/dest addresses and byte counts come from the most recent `aSetBuffer` call(s), which there is no RSP disassembly to check against; the persistent-context shape (`sCtx.{in,out,count,dryR,wetL,wetR}`) was reconstructed purely from reading every `aSetBuffer`+opcode call-site pair across `resample.c`/`load.c`/`reverb.c`/`mainbus.c`/`save.c`/`env.c` (see the field comments on `sCtx` in `mixer.c:52-82`). `aSegmentImpl` is a no-op — GE's audio DRAM addresses are already resolved via `osVirtualToPhysical` before reaching the mixer (see D198), so segment/base never factor into DMEM addressing here. **Risk:** the `aSetBuffer` context reconstruction is an inference, not a verified spec — if a call site this session didn't audit sets the context differently, audio for that path will mix from the wrong DMEM offsets. **Verified:** `-level_09` now runs full music + SFX 120s+ crash-free (post-D200 fix); no cross-level or opcode-level audio-correctness verification done yet (no golden-audio comparison tooling exists). | LANDED (`port/src/mixer.c`, `port/include/mixer.h`, `include/PR/abi.h`) — functional on `-level_09`, context-inference risk noted, needs a wider level sweep |
+| D200 | **`-level_09` segfault: reverb's `ALDelay.input/output` are u32 — `-d->output` zero-extends to a +4GB pointer offset on 64-bit (D3x class, FIXED).** `src/libultrare/audio/reverb.c` back-references the delay ring as `&r->input[-d->output]`; on N64 (s32 `ptrdiff_t`) the u32 negation wraps to a small negative index, on PC x86-64 it zero-extends to +4294967136 samples → `_loadBuffer`/`_saveBuffer` write 13–52KB wild, trampling the delay array / `r->base` / adjacent heap in a self-propagating loop until unmapped memory. Fixed with `(s32)` negation casts at 5 sites (PD ground truth `n_reverb.c` does exactly this); ramalign line gets `(s64)`. Verified: `-level_09` runs 120 s+ crash-free, DRAM guard window over the FX region sees zero OOB writes. | FIXED — 5-line cast in reverb.c (this session) |
 | D196 | **OS mouse cursor stays visible after closing the F10 options overlay in click-to-lock mode (M-49, user playtest).** `Input.MouseCaptureMode=1`. Open F10 overlay → `optionsOverlayToggle()` (`optionsoverlay.c:391`) calls `inputSuspendForOverlay()` which forces `SDL_ShowCursor(SDL_ENABLE)` + drops the grab. While open, `inputComputePad(0)` early-returns at `input.c:512` (overlay owns controller 0) **before** `reconcileGrab()` / any cursor-visibility call. On close: the next poll runs `reconcileGrab(menuMode)` (`input.c:522`) which re-grabs + hides the cursor **only if `captureArmed && !menuMode`** — i.e. only if you had already clicked-to-lock in a stage before opening F10. If you opened the overlay from a menu, or in a stage you hadn't clicked-locked yet, `want` computes 0, `mouseGrabbed` stays 0, and **nothing calls `applyCursorVisibility()`** — so the cursor `inputSuspendForOverlay()` made visible never gets re-hidden (correct free-but-focused state per `applyCursorVisibility()` `input.c:842-846` is *hidden*). **Fix (port-only, ~1 line):** call `applyCursorVisibility()` right after the `reconcileGrab(menuMode)` at `input.c:522` (self-heals every poll once the overlay-open early-return stops firing), or add an `inputResumeFromOverlay()` that runs `reconcileGrab` + `applyCursorVisibility` and call it from `optionsOverlayToggle()` on close. D180/D184/D165 input lineage. Minor. | OPEN — root-caused, 1-line fix identified, not applied (M-49) |
 | D192 | **Front-end mission/level-select grid pointer still can't reach the outer cells — but only under `Input.MouseCaptureMode=0` (legacy always-grab) (M-49, user playtest).** D169 was marked FIXED (M-33) by replacing the hard-coded 320×240 pointer clamp with the live `getPlayer_c_screenwidth/height/left/top()` rect; the feel-check was flagged "owed" on both D169 and D180 and never done. It now reproduces: with `MouseCaptureMode=0` the menu pointer runs the relative-delta P-controller path (`port/src/input.c:659-690`), which clamps target+estimate to `getPlayer_c_screen*` — but that accessor returns `g_CurrentPlayer->c_screenwidth` (`src/game/bondview.c:882`), which in the front end is the ~320×240 stage viewport, **not** the front end's actual 440×330 (`front.c:8570` `viSetViewSize(440,330)`). So the effective clamp is still ~300/220 while the mission-select grid's outer split points sit at 317 / 235.5 (`front.c:516/519/3180/3194`) — outer columns + bottom row unreachable, P-controller winds up and never settles. `MouseCaptureMode=1` (the shipped default, click-to-lock) writes `cursor_h_pos`/`cursor_v_pos` directly from the absolute OS cursor (`input.c:629-657`) and *feels* fine, though it shares the bad `hiH` so the last few px at the right/bottom edge may still be short. **Not a v0.1.0 blocker** — default mode is acceptable, always-grab is opt-in via INI, front-end roughness is already in the release notes. **Fix (port-only, small):** in the `menuMode` branch, when `current_menu` is a front-end menu use the real front-end rect (hard-code `front.c`'s cursor clamp `[20,420]×[20,310]`, or read the front-end viewport global) instead of routing through `g_CurrentPlayer`. Confirm with one `GE_INPUTLOG=1` capture in mission-select — sweep the mouse to each corner, watch where `cursor=(x,y)` plateaus. D165 · D169 · D180 lineage. | OPEN — root-caused, not fixed (M-49) |
+| D204 | **PC audio ran ~2 % below real time permanently: GE's AI feedback loop (`src/audi.c:531`) has a ~3 ms setpoint that PC scheduling jitter clears, so the SDL queue starves and the device pads playback with silence (FIXED, measured).** `amMain` wakes at 30 Hz (`sched.c:334` forwards every 2nd retrace to the audio client) and asks for `g_MinFrameSize`=720 samples per block = 21600/s against a 22050 Hz device — structurally 2 % short, relying on 784-sample top-up blocks that `audi.c` only requests once the reported AI length falls under ~69 frames (3 ms). Fine on N64 (double-buffered AI, exact VI interrupt); on PC the queue empties before the loop reacts, and the padded silence is unrecoverable time. **Fix (F5, port-only):** `audioGetAiLengthBytes()` subtracts a 1024-frame (~46 ms) cushion before reporting, so the loop tops up while slack remains; `audi.c`'s control law untouched (rule #2 clean). Measured A/B in one binary via `GE_D204_OLD`: **rt 0.980 → 1.000, q min 0 → 368, drop 0.** Also: F1 correct AI_LEN_REG single-buffer semantics (robustness, measures as a no-op), F3 `Audio.QueueLimit` 8192→2880 + non-silent drops (NB: an existing `ge007.ini` pins it), F4 oversize invariant guard, and `GE_D204=1` cheap audio-health monitor (`rt`/`q`/`drop`/`max`, safe to leave on for a full playtest). **Falsified in-session, do not re-open:** the u32 wrap at `audi.c:531` is real (high-water 2064 frames > the 789 threshold) but harmless — `frameSamples` is `s16` (`audi.c:145`), so it lands negative and audi.c's own lower clamp catches it; max block stays 3136 B vs the 3156 B allocation, no heap overrun. **Corrects two M-63 claims:** `soundIndex=109` is guards' return fire (count was double-logged; the "32.6 ms cadence" is just the 2880-byte block quantum every `dumppos` is rounded to) — closed negative; and M-63's "13 % of real time" was `GE_MIXERTRACE`'s own 25 MB unbuffered log starving the audio thread (same repro without it: 58.0 s / 60 s). Does NOT explain D202. | FIXED (`port/src/audio.c`, `port/src/libultra.c`, `port/include/audio.h`) — measured; a by-ear pass on a real playthrough still owed |
+| D203 | **Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle: Facility (`-level_34`) crashes "after loading in as James Bond" (user bug report).** Idle repro attempts on WSL Ubuntu with the actual `dist/goldeneye-pc-port-0.1.0-linux-x86_64.tar.gz` are **negative**: 120 s idle → frame 3300+ clean exit (the intro auto-advances, so "sitting as Bond" is covered), and a ~4-min stick-forward-only run → frame 6900+ also survived. So the trigger needs real gameplay input (fire/action) or is Deck-environment-specific. **Leading suspect: the D191 family** — both known v0.1.0 field crashes are SIGSEGVs in `modelGetNodeRwData` (`model.c:478`) over a truncated/NULL `root->Parent` node link, and both were triggered by *gameplay state* (first guard kill on Bunker ii; post-cutscene on Statue), never by idling; Facility opens into the Ourumov + soldier-squad scripted beat (D193a instance), which fits the trigger profile. Alternatives: Deck GL driver path (RADV/zink vs llvmpipe) or 40/50/60 Hz timing (D193 family). **Next:** (1) WSL run under gdb with a walk+fire `GE_INPUTSCRIPT` — generate the script into a file first (earlier attempts were blocked by a `bash -lc` quoting quirk that emptied the loop var, so no fire buttons ever went out); on SIGSEGV compare the fault PC against `modelGetNodeRwData`; (2) if not reproducible on WSL, get `ge007.crash.log` from the Deck (the Linux build writes it — proven by a stale one in the smoke tree) + ask what Bond was doing at crash time; optionally a gdb run from the SteamOS terminal. | OPEN — negative idle repros only; not yet reproduced with input. |
+| D201 | **`src/libultra/audio/bnkf.c` bank/instrument/sound/wavetable relocation offsets were `s32`, truncating the real 64-bit base pointer.** `alSeqFileNew`/`alBnkfNew` compute `offset = (s32) base` from a heap pointer and thread it through `_bnkfPatchBank/Inst/Sound/WaveTable` as `s32 offset, table` parameters, used to rebase every embedded pointer field in a loaded bank/inst/sound/wavetable/book/loop record. On N64 (32-bit pointers) the truncation is a no-op; on PC, sign-extension of the truncated `s32` during the rebase arithmetic reconstructs the wrong 64-bit address whenever the base allocation's low 32 bits have the top bit set (~50% of allocations, allocator-dependent) — corrupting every relocated pointer in the bank file, a plausible contributor to bad model/audio pointers surfacing downstream (D191-family symptoms are a node-tree walk, not this, but the class is the same). **Fix (ABI-layer, no logic change):** widen `offset`/`table`/`woffset` and all four `_bnkfPatch*` parameters from `s32` to `uintptr_t` (`<stdint.h>`) — already this codebase's idiom for pointer-safe integers in `src/game/*.c`. No behavior change on the 32-bit N64 build. | FIXED (`src/libultra/audio/bnkf.c`) — part of the Phase-3 mixer landing, not yet build/runtime-verified in isolation |
+| D202 | **Silenced PPK plays a "slap" instead of a gunshot, PLUS user reports broader real-time audio corruption (M-52 → M-59 → REOPENED M-60 → M-61/M-62 closed the data chain, recommended close → REOPENED M-63 on a fuller symptom report).** M-56–M-62: exhaustively verified the index/bank/pointer/decode/ROM-offset/source-data chain — soundIndex 46 is correctly requested and the data is ground truth (byte-match checksum corroboration, M-62). **M-63: user's actual complaint is broader — wrong sound always plays, correct one SOMETIMES plays too (both heard together), and sounds "pile up and spirally glitch out" over a session until only a stuck looping sound (e.g. Bunker's door) remains.** Got a live build+run repro this session (`-level_09`, 60s, `GE_MIXERTRACE`+`GE_AUDIOTRACE`+`GE_AUDIODUMP`, 58 scripted PPK fires). **Ruled out voice-pool exhaustion/leak** — only 16 distinct voice slots used, properly recycled (`sndDeactivate` count tracks `sndPlaySfx` count 1:1). **Found an unexplained anomaly**: `soundIndex=109` (AK47 bolt-action SFX) fires 94 times in 60s despite no AK47 in the repro, some retriggering the same voice slot at a suspiciously uniform ~32.6ms cadence (4-in-a-row) — far faster than plausible weapon fire; looks like something re-issuing `sndPlaySfx` every audio tick instead of once per game event. Not yet confirmed as the cause of the user's symptom, but the top concrete lead. Traces preserved: `scratchpad/d202-m63/`. (Side note, not a real bug: chased a `load_bg_file` crash this session that turned out to be an incomplete test-data setup on the investigator's part — see M-63 write-up.) **M-65 PARTIALLY resolved:** the "eventual silence" cascade is root-caused and mitigated (ownerless `SOUND_FLAG_LOOPED` SFX — sound 203, `METAL_SLIDE_CLOSE_SFX`, `decayTime=-1`, played by `doorPlayCloseSound0/1` with `NULL` owner — leaks 7 of 8 voices; a 4-line guard in the preemption scan reclaims only provably-ownerless loops, measured 171→629 acquisitions), and a second independent cause is fixed (`sndCreatePostEvent` was stubbed out per D138, removing ALL distance attenuation). The audible stuck door loop is still not reproduced — every candidate mechanism ruled out by measurement (see M-65); needs a user capture at the failing door with `GE_AUDIOTRACE=1 GE_AUDIODUMP=1`. | ROOT CAUSE ESTABLISHED (M-66); DISPOSITION C IMPLEMENTED + MEASURED (M-66b) — the audible stuck loop is sound 203 (`METAL_SLIDE_CLOSE_SFX`): ROM infinite ADPCM loop (`count=-1`) + `decayTime=-1`, played fire-and-forget by `doorPlayCloseSound0/1` with NULL owner, never stored in any slot, exempt from preemption (flag 0x12) and from decay-stop scheduling, priority 0x41 makes it unstealable — **faithful N64 behaviour / original quirk, not a port bug**. 327 ms period = -550-cent pitch (keyBase 54 + detune 50 − shift 6000 → ratio 0.7278; 5248 samples @ 22050×0.7278 = 327.007 ms). M-65's guard fires only under pool pressure (twice in the user capture) and cannot silence the idle loop. **Disposition C implemented + measured (M-66b):** PC-only `AL_SNDP_PORT_EXPIRE_EVT` fades provably-ownerless infinite-loop SFX out ~2.5 s after start (2 s delay + 0.5 s fade); per-second spectral check: pre-fix drone flat at max t≈39→361 s, post-fix transient bursts with full silence between; run ends allocated=0/8. **M-67: static analysis exhausted — full-bank data scan clean (all 261), DSP audit complete vs PD, A_LOOP branch dead code in GE, reference clip B00I00S2D.wav REFUTED as an in-game capture (best waveform CC 0.19 ≈ noise; M-61's +0.999 was envelope-only correlation); new `GE_VOICEDUMP` per-voice probe + timestamped WIRE/AUDIOTRACE for the decisive runtime A/B; self-test found the offline resample direction had been inverted all along (y[k]=x[ratio·k]) and that GE "music" is an SFX-sequence system with its own ~8-sample set sharing the 8-voice pool; parked anomaly: sound 232 requested at level start produces no audible audio. **M-68 (user captures ×3): all three complaint classes verified per-voice at runtime — doors CC 0.91–0.99, PPK 46 CC 0.90–0.97, armor 81 full 833 ms vs ROM-predicted 837 ms @ ratio 0.5612; the earlier "instant death" metric was a line-count artifact (µs-timestamped `[EVT]` probe shows every STOP lands on schedule). No port bug: the heard "wrong" sounds are the original design (overlapping SFX, short decays, quick-stop truncation).** **M-69 (full-corpus exact match, 320 scripted-run requests): 286/320 CC ≥ 0.85 — every allocated voice plays the exact ROM sample at the exact ROM pitch; the initial 44 "BAD" were tooling artifacts (voicedump stamps are block-END times; coarse-slide missed sharp onsets; refs not clipped at voice death). Remaining failures = dropped allocations (no `[VOICE+]` — suspected 8-voice pool exhaustion, unverified) + shared-wavetable wire misattribution. No corruption.** **M-70 (decisive clean re-capture, 209 requests, matcher v3): every voiced request plays the exact ROM sample — 200/209 auto CC ≥ 0.85; the 4 MID are idx=109 verified at CC 0.946 by manual ratio sweep (residual = wall-clock-bursty dump stamps + short live windows); the 5 NO-WIRE are 1 matcher window artifact + 4 never-voiced requests, NOT pool exhaustion (alloc ≤ 5/8 at each drop). Zero wrong-sample playback — the D202 wrong-sample/mixer-corruption hypothesis is refuted.** **M-71: user by-ear pass on M-66b = PASS ("the metal door sound does not loop forever now") — Disposition C validated; D202 ready for probe removal + close. The user's remaining audio complaints (slap/glass over gunfire, explosion→scream, armor pickup wrong sample — N64 A/B confirms non-fidelity) are a DIFFERENT bug: PC requests different/extra sound indices than N64; bank converter + playback chain exonerated → split out to D205.** **M-76/M-77c: D202 CLOSED.** The silenced-PPK "slap" was D206 (bank index +1) — `ALInstrumentAlt_s.soundArray` sits at struct offset 12 on N64 but 16 on PC (pointer width), so `sndPlaySfx` resolved `GUN_SILPPK_A`=46 to on-disk slot 46 (`PUNCH1`, a slap) instead of slot 45; M-61's rejected "index 45, +0.999" was right. Fix `snd.c:1001` `#ifdef PORT` `-1`, committed `378386d1`; **user by-ear A/B vs N64 = PASS (M-77c)**. Mixer/pool/decode were correctly exonerated by M-56–M-70. The M-65/M-66b ownerless-infinite-loop mitigations stay (independent, validated M-71). |
+| D206 | **PC played every SFX one bank slot too high — a pointer-width layout shift in `struct ALInstrumentAlt_s`, not a game-logic bug (M-76 FIXED).** Root cause of D205 (3) armour + (4) melee→Klobb and of D202's silenced-PPK "slap". `sndPlaySfx` resolves a sound via `soundBank->instArray[0]->soundArray[soundIndex]` (`snd.c:1001`), casting the on-disk standard `ALInstrument` (12-byte u8 header, `s16 bendRange`@12, `s16 soundCount`@14, `ALSound* soundArray[]`@16) through GE's `struct ALInstrumentAlt_s { s32 unk0, unk4, unk8; ALSound *soundArray[1]; }` (`src/snd.h:165`). On N64 (4-byte pointers) that struct's `soundArray` sits at **offset 12** — it deliberately aliases the on-disk `bendRange`/`soundCount` words, so `soundArray[N]` == on-disk table entry **[N-1]**, i.e. GE's `SFX_ID` values are **1-based** into the sound table (`SFX_ID 0 = NOTHING_SFX`, short-circuited at `snd.c:992`, never dereferenced). On PC the 8-byte pointer + 8-byte alignment pushes `soundArray` to **offset 16**, and the converted bank (`port/src/romdata.c` `afFixupInst`, which faithfully reproduces the standard layout) is packed to match — so `soundArray[N]` landed on entry **[N]**, one slot high, on every SFX. Verified by static struct/converter arithmetic **and** at runtime: a BUNKER1 `GE_AUDIOTRACE` capture post-fix shows all ~90 distinct requested indices resolve to `rom_sfx_decode.py` slot **N-1** (0/90 at N). e.g. `ARMOUR_COLLECT_SFX`=81 → slot 80 (= rip `S50`, the user's "correct" armour); `skorpion_stats.Sound`=0x6A=106 → slot 105 (= rip `S69`, "the actual Klobb sound"); `wppksil_stats.Sound`=0x2E=46 → slot 45 (= rip `S2D`, M-61's rejected "+0.999" clip). The earlier "262 enum vs 261 bank ⇒ needs a -1" arithmetic was right about the *symptom*; the *mechanism* is the alias, and `BIG_CLANK_SFX`=261 → slot 260 is in-bounds (never an OOB). Upstream `n64decomp/007` `snd.c` byte-matches with no `-1` and no `NON_MATCHING` guard — correct, because the N64 struct offset supplies the -1. **NOT D205 (2)** explosion→scream (169-183 → slots 168-182, all still explosions) — stays with D205. | **FIXED (M-76, `src/snd.c:1001`, `#ifdef PORT` → `soundArray[soundIndex - 1]`, N64 line verbatim under `#else`).** ABI/layout-only, D3x class (pointer-width struct-layout reconciliation); no game-logic change. Build clean; BUNKER1 60s crash-free; `-level_09` golden framediff 3/3. **User by-ear A/B vs N64 = PASS (M-77c)** — armour / melee / silenced PP7 all correct now → D202 closed, D205 down to symptom (2). Committed `378386d1`. Scratchpad `rom_sfx_decode.py` / `exact_match.py` / `diff_bank.py` still walk slots 0-based — correct for "what is at bank slot i", but a check against a `SFX_ID` must compare to slot `id-1`. | 
+| D207 | **Alarm klaxon starves combat SFX and (per user) doesn't recover after it stops — surfaced by D206 (M-77, ROOT-CAUSED, fix designed not applied).** Before D206, `ALARM3_SFX` (id 163) resolved to the wrong bank slot 163 — a **one-shot** sample: played once, freed its voice. After D206 it correctly resolves to slot 162 = the **real infinite-loop klaxon** (`decayTime=-1` -> `SOUND_FLAG_LOOPED`; ADPCM `loop.count=-1`). Played by `handle_alarm_gas_timer_calldamage()` (`src/game/propobj.c:14457`) with owner `&ptr_alarm_sfx` while `alarmIsActive()`. It now **permanently holds 1 of only 8 SFX voices** (`MUSIC_SFX_SEQ_MAYBE_MAX_SOUNDS=8`, `src/music.c`), at priority `0x41` (looped sounds get `decayTimeFlag + 0x40`, `sndSetupSound` `snd.c:820`) — and is **exempt from the port's preemption scan** (`snd.c` ~369: `!(unk3e & 0x12)` refuses to steal any LOOPED/RETRIGGER voice; the M-65 carve-out only covers *ownerless* loops, and the alarm is owned). **M-77b:** the voice-starvation hypothesis did NOT hold up — a BUNKER1 `GE_FORCEALARM` + scripted-fire soak showed **0 true drops** (`sndDisposeSound` no-voice sites instrumented), the designed last-resort preemption pass **never fired**, and `g_sndAllocatedVoicesCount` recovered to 0 after every alarm-off (no leak). The earlier "~20% drop" was a log-latency artifact. The alarm klaxon (`ALARM3` slot 162) is a *continuous, gapless* infinite loop — a real GE alarm pulses — so the leading remaining explanation is **perceptual** (the drone masking gunfire, and/or slot-162 mixed too loud vs N64), or genuine 8/8 starvation only on a heavy level not yet tested. Needs a user repro. | MONITORING (M-77c: user reports the alarm is acceptable in play after D206; no fix shipped) — **the voice-starvation hypothesis did NOT hold up (M-77b).** The designed last-resort LOOPED-preemption pass was built, and instrumented drop counters (`[D207-DROP]` at both `sndDisposeSound` no-voice sites) + a `[D207-YIELD]` trace were added. Result on BUNKER1 (`GE_FORCEALARM` + scripted sustained fire, ~85 s): **zero true drops**, the last-resort pass **never fired** (pass-1 always found a non-looped victim), and `g_sndAllocatedVoicesCount` sat at 1 during quiet alarm and recovered to **0** after every alarm-off — no leak, no permanent starvation. The earlier "~20% dropped" figure was a measurement artifact (log-line latency, not real drops; every requested sound eventually got a voice via the `unk38` retries). So the fix was **reverted** (kept: nothing in `snd.c`; D206 `-1` only). BUNKER1 combat is too light to peg the 8-voice pool. **Next session needs a real repro from the user:** which level + weapon, and a `GE_AUDIOTRACE=1` capture at the failing alarm — is it (a) genuine 8/8 starvation on a heavy level (Facility/Silo/Statue firefight), (b) a leak that only triggers on a specific alarm-stop path, or (c) perceptual — the continuous klaxon drone masking gunfire / the alarm mixed too loud (check `ALARM3` slot 162 volume vs N64). Temp `GE_FORCEALARM` probe kept in `src/game/propobj.c` for that work. |
+| D205 | **PC plays wrong/extra SFX for gameplay events the user can A/B against N64: general gunfire has a slap/glass layer audible on PC but silent on N64; an explosion plays a soldier-scream sample; armor pickup plays a wrong sample; unarmed melee (slap) plays Klobb's shooting sound idx 106 instead of the slap effect (M-71/M-72, user by-ear + N64 A/B).** **M-74 WITHDRAWS M-73's root cause.** M-73 read the user's combat capture as guards stuck re-triggering fire sound idx 109 ("256x/29.7 s, no bullets") and pinned it on `stanTestLineUnobstructed` LOS over converted collision geometry. Re-counting the same file: idx 109 is requested **128x** not 256x (the double-log artifact D204 already corrected for M-63 on this very index), = 4.31/s across ~11 guards = ~0.4/s each, **~6x UNDER** the AK47's own `SoundTriggerRate` (`RATE_AK47`=4 ticks => 15/s ceiling) — so the `field_178` gate never binds; and impacts are plentiful in the same window (~30 ricochet/wall-hit 19-41, 69 x2 flesh, 12 body-falls 123-132, 14 yelps 134-147). The eye-catching monotone sweeps 134->147 / 123->132 are the ground-truth round-robin `male_guard_yelp_counter` (`chraction.c:2454-2470`), faithful, not a broken selector. **The 109 traffic is normal in-spec guard combat**; do NOT open the pccg-stan/LOS geometry investigation on this evidence. Everything upstream of presentation is proven: bank 261/261 identical (M-71), sample+pitch exact (M-68/M-70), and every index in the capture correct (182 explosion x1, 81 armor x1, 46/47/48/49/105). **Remaining untested layer = spatial presentation (per-voice volume, pan, concurrency)** — it explains all four complaints at once (a wrongly-placed sound is by ear a sound at your own position) and is the youngest code in the stack (`sndCreatePostEvent` was fully stubbed by D138 until M-65). | OPEN — bank + playback + requested indices all exonerated; M-73 LOS/geometry root cause WITHDRAWN (M-74). Next: static audit of the pan/volume path (`src/snd.c` :460/:527 -> `alSynSetPan` -> `port/src/mixer.c` ENVMIXER -> SDL stereo), then a `[DISTVOL]`+pan probe run; user N64 A/B + ROM 106-vs-109 WAVs held until that reports | 
 | D152+ | D152 addendum (M-31): static audit of every compiled-audio `osSetIntMask(OS_IM_NONE)` — **all balanced**, no unbalanced early-return. Real fixes: `sndSetSfxSlotVolume` now holds the mask across its list walk (matches its twin `sndDeactivateAllSfxByFlag`) + `sndApplyVolumeAllSfxSlot` batches the slot loop under one recursive hold (kills the fade-out lock-acquire storm); `portThreadWrapper` calls `imThreadExitRelease()` on thread exit (kills the "transient thread acquired `OS_IM_NONE` and died" leak + the pthread-id-reuse re-wedge). Steal-lock kept as backstop. | FIXED (`src/snd.c`, `port/src/libultra.c`, `#ifdef PORT`) — fade-out repro playtest-gated, not headless-verified |
 | RC3 · D167 | **Non-power-of-two texture wrap period (`docs/dev/TEXTURE-GLITCH-ANALYSIS.md` §6 RC3 — "textures repeat oddly", residual Depot-ceiling noise after D161).** The N64 RDP masks the texel coordinate of a wrapping render tile at `1<<mask`, and GE sets `mask = texDimensionToMask(dim) = ceil(log2(dim))` (`src/game/tex.c:361`), so a non-PoT tile (Depot's 65×65 / 96×48 / 56×56 room surfaces) repeats at the **next power of two**, not at its image size the way GL `GL_REPEAT` does → the pattern is squashed/stretched and the seam lands in the wrong place. fast3d never stored `masks`/`maskt` at all (`gfx_dp_set_tile` dropped them) and wrapped purely at the uploaded image dimension. **Fix (`port/fast3d/gfx_pc.cpp`, behind the existing `Video.WrapFix` knob, default OFF):** store `masks`/`maskt` on the tile; in the hoisted per-texunit pre-wrap block in `gfx_sp_tri1` (D74 block — already lifted out of the vertex loop, indexed by texunit `t` not vertex `i`), when the tile is WRAP (no CLAMP/MIRROR bit) and `1<<mask != tex_width`, fold the UV at the N64 period `1<<mask` and clamp the `[dim, 1<<mask)` overflow band (which is a TMEM smear on console, no real texels) to the last texel so it reads as an edge streak instead of a bogus early image restart. `GE_WRAPFIX=0/1` env override added (env wins over the ini, matching `Debug.FrameDump`). **Per-level captures (`-level_09`/`-30`/`-34`/`-20`, WrapFix OFF vs ON, `GE_PCDUMP` 6-frame windows):** no crashes, 6/6 frames each; on settled/comparable frames Silo is ~pixel-identical (phash 0–11), Facility 180–260 pixel-identical, Depot shows small localized texel changes on ceiling/wall cells (dmean 5–9, no structural break); the large per-run deltas are all the D117 intro-camera-pan nondeterminism, not the fix. Default kept **OFF** — no regression, but a headless structural diff can't confirm the Depot ceiling actually looks *better*; needs a human eyeball with `Video.WrapFix=1`. Default-off is byte-identical to golden (all new behaviour is inside `if (g_wrap_fix)`). D74's dead in-vertex-loop wrap block was already reworked/hoisted at M-30; this only adds the mask-period trigger. Confidence: **medium** (mechanism correct; overflow-band handling is an approximation, not exact TMEM-smear emulation; visual win unconfirmed). porting-notes.md §D. | KNOB ADDED, default OFF (`port/fast3d/gfx_pc.cpp`). Needs user visual check on Depot. |
 | D168 | **`GE_PCDUMP` / F12 PPM captures were vertically flipped — the entire source of the bogus D114/D116 "HUD/text X-mirror" (M-33, developer-confirmed).** `gfx_opengl_dump_bound_fbo` (`port/fast3d/gfx_opengl.cpp`) wrote `glReadPixels` output straight to a P6 PPM. GL framebuffer origin is bottom-left; PPM P6 is top-row-first — so every capture (and the `tools_pc/golden/` set, and every screenshot pasted into the finding log since M-6) was upside-down. On real hardware / an actual screen the game renders correctly (developer confirmed). The successive D114→D116 "shared fast3d mirror" investigations — each of which found *every probed stage clean yet the output "mirrored"* — were reading an inverted capture and pattern-matching upside-down asymmetric content (text, guards, the Nintendo logo) as "mirrored". Fix: emit PPM rows bottom-to-top. `tools_pc/golden/*.png` flipped in place to match (see `tools_pc/golden/README.md`); regenerate from a real run when convenient. **Not runtime-verified this session** (no ROM / toolchain in the migrated tree — see the migration note) — needs a fresh capture to confirm text reads normally. Confidence: **high** (mechanism is unambiguous; developer has hardware confirmation the screen is correct). porting-notes.md §D2. | FIXED (`port/fast3d/gfx_opengl.cpp`); D114 / D116 reclassified as capture-orientation artifacts (below). |
@@ -5451,3 +5463,2723 @@ byte-identical to the known-good `pccg.bin` (3604378 B) / `pcmodels.bin`;
 `-level_09` + `-level_20` boot crash-free. The CRLF→LF observation on
 `filelist.u.csv` / `file_resource_table.inc.c` is real but a red herring for
 this crash (d69 tolerates it; output unchanged).
+
+## D200 — `-level_09` segfault: u32 reverb delay indices negate into +4GB offsets on 64-bit (fixed)
+
+**Symptom.** `-level_09` reliably segfaulted within seconds of audio starting, in
+`_filterBuffer` (`src/libultrare/audio/reverb.c`) — `d->lp` (a pointer into the AFX
+delay array) resolved to garbage like `0x664d59be`.
+
+**Root cause.** `ALDelay.input` / `ALDelay.output` are `u32`, and reverb.c computes
+back-references into the delay ring as `&r->input[-d->output]` (and variants). On
+N64, `ptrdiff_t` is s32, so `-160` (the u32 constant `0xFFFFFF60`) wraps to −160 and
+the pointer arithmetic is correct. On PC x86-64, `ptrdiff_t` is s64: the u32 negation
+**zero-extends** to +4294967136 samples, so `out_ptr` flies forward ~8GB — verified
+exactly: `0x706d30a0 (r->input) + 0xFFFFFF60·2 = 0x2_706D2F60`, the observed wild
+address. The subsequent `aSaveBuffer`/`aLoadBuffer` then write 13–52KB of wild data,
+corrupting the delay array, `r->base`, and adjacent heap blocks — a self-propagating
+loop that grows each frame until it hits unmapped memory.
+
+**Fix (ABI/layout only, D3x class).** Five sites in `src/libultrare/audio/reverb.c`
+cast to `(s32)` before negation so the offset sign-extends: `alFxPull` (`in_ptr`,
+`out_ptr`), `_loadOutputBuffer` ×2 (`out_ptr`), plus the ramalign line, which uses
+`(s64)out_ptr & 0x7`. Perfect Dark ground truth (`src/lib/naudio/n_reverb.c`) does
+exactly this: `(s32)-d->input`, `(s32)-d->output`, `(s32)-(d->output - d->rsdelta)`,
+`(intptr_t)out_ptr & 0x7`. No game logic changed; behaviour on N64 is identical.
+
+**Verification.** `-level_09` now runs 120 s+ crash-free (previously segfaulted in
+seconds); the delay pointers advance correctly (`out_ptr = input − 320B`, +0x140/frame).
+A temporary DRAM guard window over the FX region, registered with the software mixer
+(`port/src/mixer.c`), confirmed zero out-of-bounds writes after the fix. All
+instrumentation removed; only the five casts remain in the diff.
+
+**Sibling-risk audit.** Grep of `src/libultra/audio/*.c` + `src/libultrare/audio/*.c`
+for negative pointer indexing: reverb.c is the only file with the pattern (its one
+positive index, `&r->input[d->output]`, is safe — positive u32 zero-extension is
+correct).
+
+**Lineage.** D3x pointer-width reconciliation; same family as D177 (widened-pointer
+high half) and D191 (32-bit field read as 64-bit).
+
+## D202 — Phase-3 audio: silenced PPK plays "slap" not gunshot, PLUS runtime mixer corruption (piling up / glitching / eventual silence) (M-52; reclassified M-59; REOPENED M-60 on reference clip; M-61/M-62 closed the data/index/decode chain and recommended close; M-63 REOPENED again; M-65 PARTIALLY resolved — voice-leak cascade root-caused + guarded, `sndCreatePostEvent` un-stubbed; **M-66 ROOT CAUSE ESTABLISHED for the audible stuck door loop — sound 203 behaving exactly as ROM + ground-truth code specify: faithful N64 behaviour / original quirk; M-66b DISPOSITION C IMPLEMENTED + MEASURED — port-side expiration fades ownerless infinite loops out ~2.5 s after start, awaiting user by-ear pass**)
+
+**Symptom (M-52 playtest, first listening pass on the Phase-3 software mixer,
+post-D200).** In-level (Bunker1, Dam — not menu/intro, which is music-only and
+correct): (a) weapon fire consistently plays the WRONG but always-the-same
+clip per weapon (e.g. Bond's silenced PPK plays what sounds like a melee/punch
+hit, every single shot — fully deterministic, not intermittent garble); (b)
+level music never plays — a looping SFX-like sound plays in its place from
+level start.
+
+**Ruled out, with hard evidence (do not re-investigate these):**
+- `soundIndex -> ALSound*` resolution (`snd.c sndPlaySfx`, `soundBank->instArray[0]->soundArray[soundIndex]`):
+  traced live with a `GE_AUDIOTRACE` probe against real gameplay (`-level_09`,
+  repeated PPK fire). `soundIndex=46` (confirmed via `bondconstants.h`'s SFX
+  name table = `46_GUN_SILPPK_A_SFX`) resolves to the same `ALSound*`/`ALWaveTable*`
+  every time; 13+ distinct indices captured across one session, all distinct,
+  all valid.
+- D37's bank re-layout (`port/src/romdata.c romdataFixupAudioBank`): preserves
+  `soundArray`/`instArray` order; not a re-ordering bug.
+- The `ALWaveTable.base`/`.book` pointer chain: traced all the way to
+  `alLoadParam(AL_FILTER_SET_WAVETABLE, ...)` (`src/libultra/audio/load.c`) —
+  the exact same `table`/`base`/`book` addresses `sndPlaySfx` resolved are the
+  ones wired into the physical decode filter. No swap between resolution and
+  voice setup.
+- `ALStartParamAlt` (40B on x86-64) vs the generic `ALParam` pool slot (32B):
+  already fixed pre-M-52 (D54, `synthesizer.c:127-140`, `#ifdef PORT` sizes
+  each slot for the largest variant). Re-confirmed still in place, not a
+  regression.
+- Per-voice synth processing (`synthesizer.c`'s client-list handler loop) is
+  strictly sequential — one client's full setup+decode completes before the
+  next starts. Ruled out global-mixer-scratch (`sCtx`/`sAdpcmTable`/`sVol` in
+  `port/src/mixer.c`) cross-talk between concurrently active voices.
+- `ALSndpEvent` (snd.c-local union, force-cast to `ALEvent*` through
+  `alEvtqPostEvent`/`alEvtqNextEvent`, which copy `sizeof(ALEvent)` bytes)
+  vs `ALEvent` (libaudio.h): measured directly with a throwaway compile —
+  both are exactly 32 bytes on x86-64. Not a truncating-copy bug.
+- `sndCountAllocList`'s `(ALEventQueue *)&D_800243E4` cast (a real, compiler-flagged
+  `-Warray-bounds` OOB read — `D_800243E4_s` is 24B, aliased as 40B `ALEventQueue`):
+  confirmed genuine but functionally inert — its output (`numFree`/`numAlloc`)
+  is computed and immediately discarded in `sndHandleEvent`, never used.
+
+**Not yet ruled out — pick up here:**
+1. **`aADPCMdecImpl`'s decode math** (`port/src/mixer.c`, this session's new
+   Phase-3 code, never verified against real N64 audio output). Structurally
+   matches the standard VADPCM order-2 predictor algorithm on inspection
+   (9 input bytes -> 16 output samples, intra-frame reverb-of-already-decoded-
+   samples loop) but no reference trace/audio diff exists yet.
+2. **The raw PCM bytes embedded in the exe at the resolved ROM offset being
+   wrong at the source** (asset-embedding/segment-placement issue, unrelated
+   to anything traced above) — would need a byte-level compare of the
+   PC-embedded `_sfxtblSegmentRomStart` segment against the source `.z64`.
+
+**Key diagnostic fact:** the wrong sample is 100% deterministic per weapon
+(same wrong clip every shot, confirmed by user) — this argues against a
+stateful/interleaving bug (already the least-likely explanation given the
+sequential-processing proof above) and toward either (1) or (2) above, both
+of which would consistently mis-decode/mis-fetch the same bytes every time
+for the same `ALWaveTable`.
+
+**Diagnostic tooling added this session (still in the tree, `#ifdef`/env-gated,
+harmless if left in, should be stripped once root-caused):**
+- `src/snd.c` `sndPlaySfx`: `GE_AUDIOTRACE=1` env var → appends resolved
+  `soundIndex`/`sound`/`wavetable`/`base`/`len`/`type`/`flags`/`book` to
+  `audiotrace.log` (cwd-relative, unbuffered).
+- `src/libultra/audio/load.c` `alLoadParam` `AL_FILTER_SET_WAVETABLE`:
+  same env var → appends the filter/table/base/len/book actually wired into
+  a voice to `audiotrace_wire.log`.
+
+**Also noticed, not yet a confirmed bug:** `alLoadParam`'s
+`a->memin = (s32) a->table->base;` (`load.c:382,438`) truncates a real 64-bit
+`u8 *` to `s32` — currently harmless only because the ROM is deliberately
+mapped at a low, sub-2GB virtual address (`0x10000000`, 12MB window per the
+boot log), so no real address in range overflows 32 bits. Fragile; worth a
+`(s64)`/`uintptr_t` widening pass regardless of whether it's D202's cause.
+
+**M-53 update — both of the two remaining suspects now independently checked,
+both look clean (static analysis only, no listening pass possible this
+session):**
+
+1. **`aADPCMdecImpl` decode math (`port/src/mixer.c:148-192`) — compared
+   line-by-line against the local Perfect Dark PC port's scalar reference
+   (`pd_port/port/src/mixer.c:333-352`, the `#else` non-SIMD path).**
+   Identical: same nibble unpack (`(((*in >> 4) << 28) >> 28) << shift` /
+   same for the low nibble), same `prev1`/`prev2` history read from `out[-1]`/
+   `out[-2]`, same accumulator (`tbl[0][j]*prev2 + tbl[1][j]*prev1 +
+   (ins[j]<<11)` plus the `k<j` intra-frame correction term), same `>>11`
+   scale-down + clamp, same 16-sample/32-byte state carry via
+   `memcpy(state, out-16, ...)`. No discrepancy found. This was PD's
+   ground-truth non-vectorized fallback, i.e. the reference the SIMD paths
+   are themselves checked against — a strong match.
+2. **`_sfxtblSegmentRomStart`'s ROM offset (`0x102F19A0`,
+   `port/src/romassets_u.s:2948`) — cross-validated three independent ways,
+   all agree:**
+   - `scripts/filelist.u.csv` row 28: `3086752,797360,assets/music/sfx.tbl` →
+     `0x10000000 + 3086752 = 0x102F19A0` exactly.
+   - Row 27 (`sfx.ctl`, `3063264,23488`) is contiguous with row 28:
+     `3063264 + 23488 = 3086752` — matches `music.c:686`'s assumption
+     (`size = &_sfxtblSegmentRomStart - &_sfxctlSegmentRomStart`, i.e. ctl
+     immediately precedes tbl in ROM with no gap).
+   - `ge007.ld:164-165` (N64 ground truth, untouched) places
+     `sfx.ctl.o (.data)` immediately followed by `sfx.tbl.o (.data)` in the
+     `musicfiles` segment — same adjacency, independently, from the linker
+     script rather than the CSV scanner.
+   - Read the real bytes from `data/ge007.ntsc-final.z64` at both offsets
+     (this session, ad hoc Python): `sfx.ctl` decodes as a plausible
+     `ALBankFile` (`bankCount=1`, one bank offset `0x5ba0` inside the 23488B
+     ctl blob); no structural red flag. Byte-level content correctness
+     beyond that needs a decode+listen pass, not available in this session.
+
+   Net: the segment-offset math is corroborated by 3 independent sources
+   (scanner CSV, N64 linker script, raw ROM read) and is very unlikely to be
+   a simple wrong-base bug. Downgrading this suspect's priority.
+
+**Also re-confirmed clean, not previously called out explicitly:** the ADPCM
+book coefficients (`ALADPCMBook`, referenced off `ALWaveTable.waveInfo.
+adpcmWave.book`) go through `afFixupBook()` (`port/src/romdata.c:704-735`),
+which correctly `afRd16`/`afWr16` byte-swaps every predictor coefficient
+during the D37 bank re-layout — not just the offset/pointer fields. And
+`_bnkfPatchWaveTable()`'s `w->base += table;` (`bnkf.c:140`) is `uintptr_t`
+end-to-end post-D201, so no truncation there either.
+
+**Net effect: the M-52 write-up's two recommended suspects are now the
+LEAST likely explanations, not the most likely.** The bug is probably
+further downstream, in a stage neither this nor the M-52 session traced:
+**the resample/pitch pipeline** (`aResampleImpl` / whatever computes a
+voice's playback rate from `ALKeyMap`/`unityPitch` — `synallocvoice.c`,
+`seqplayer.c`, `synport.c`/equivalent — not yet audited this session). A
+wrong pitch/rate calculation would (a) make a correctly-decoded SFX sample
+sound like a completely different sound if pitch-shifted far enough to be
+mistaken for one, matching "PPK sounds like a melee hit" better than a
+literal wrong-sample-content theory would, since sample *content* tracing
+(D202 original session) already came back clean; and (b) explain "music
+never plays, an SFX-like loop plays instead" if the same mis-pitched/
+mis-selected-voice bug applies to sequence-player note events too, not just
+raw `sndPlaySfx()` calls. **Recommended next step:** trace one PPK-fire note
+event's computed pitch/rate value (another `GE_AUDIOTRACE`-style probe, this
+time in the resample-rate / `ALKeyMap` lookup path) against what the N64
+build would compute for the same key/velocity, rather than re-auditing the
+decode or offset math further. Not yet attempted — no build/run done this
+session (static-analysis-only pass); still needs the real listening-pass
+sign-off per the standing M-52 note.
+
+**M-53 cont. (build+run, same session) — user rebuilt off the M-53 doc-only
+commit and confirmed no behavior change (expected — no code changed yet);
+then supplied two new concrete data points that reframe symptom (b) and
+partially (a):**
+
+1. **"the looping sound [that plays instead of music] is actually a door
+   sound in the attract screen getting looped and continuing to play."**
+   This is not a wrong-sample or wrong-pitch bug — it's confirmed to
+   literally be a real, correctly-identified SFX (a door slide-loop) that
+   fails to stop. Traced the mechanism live with `GE_AUDIOTRACE`
+   (`-level_09`, scripted door-interact input): a single player action
+   fires a **chained** `sndPlaySfx` sequence — soundIndex 202
+   (`METAL_SLIDE_OPEN_SFX`) → 204 (`METAL_SLIDE_LOOP_SFX`) → 203
+   (`METAL_SLIDE_CLOSE_SFX`) — via the `do…while` chain in `sndPlaySfx`
+   (`snd.c:927-928`, each `ALSound`'s `keyMap->velocityMin`/`keyMin` fields
+   double as a "next soundIndex" link; this chain mechanic is stock N64
+   design, not a port bug).
+   - The game-code side that's supposed to **stop** a stuck door loop —
+     `door7F053B10()` (`propobj.c:12835`, marked `//#MATCH`, i.e. decompiled
+     byte-exact to the N64 binary, so its logic is ground truth and NOT a
+     candidate for the bug itself) — calls `sndDeactivate(door->
+     openSoundState)` whenever the door's *open* or *close* sound is still
+     playing. `door->openSoundState` is already a real `ALSoundState *`
+     in `bondtypes.h:3042` (not a narrowed/truncated field — checked, this
+     is NOT another D3x pointer-width bug).
+   - So the bug is downstream of this game-logic call: either (a)
+     `sndDeactivate`'s posted `AL_SNDP_DEACTIVATE_EVT` (delta 0) isn't
+     being serviced/dequeued reliably by the PC event-queue/mixer tick, or
+     (b) (more likely given the user specifically saw this originate **in
+     the attract screen** and persist **past it, into gameplay**) whatever
+     N64 does to reset/clear all playing SFX at an attract-demo → real-game
+     mode transition isn't happening equivalently on PC, orphaning the
+     loop's voice with no `DoorRecord` left alive to ever call
+     `sndDeactivate` on it again. **Not yet located** — haven't found the
+     mode-transition audio-reset call (candidate: `sndDeactivateAllSfxByFlag`
+     family, `snd.c:996`, or an equivalent full-stop at level-load).
+2. **"ammo pick up is one of the knife sounds."** Checked against
+   `bondconstants.h`: `PICKUP_AMMO_SFX`=234, `PICKUP_KNIFE_SFX`=233 — adjacent
+   indices. Combined with the M-53 PPK report (`GUN_SILPPK_A_SFX`=46 sounding
+   like `PUNCH1_SFX`=47, also adjacent but in the OPPOSITE direction), this
+   does **not** fit a simple constant index-shift theory (would need to be
+   the same sign both times) — leaves either (a) two unrelated single-entry
+   bugs, or (b) the "wrong sound" being a badly-mispitched *correct* sample
+   that a listener reasonably mistakes for a neighboring, timbrally-similar
+   entry (a hard door clank at the wrong pitch could pass for a knife sound;
+   a gunshot pitched down for a punch). Not resolved this session — would
+   need an actual decoded-audio comparison (dump the decoded PCM for a
+   known-bad play and listen/compare band energy against the two
+   candidates), which the environment can produce (`GE_AUDIOTRACE` gives the
+   exact `base`/`len`/`book` addresses) but wasn't attempted here.
+
+**Still OPEN. Build/run environment confirmed available this session**
+(`./build-pc.sh ntsc-final` after `export PATH=/c/msys64/mingw64/bin:$PATH`,
+`GE_INPUTSCRIPT` with `"A"`=`GE_CONT_A`, `"Z"`=`GE_CONT_G` per
+`port/src/input.c:311` — note **"Z" triggers the door/action interact in
+this control scheme in `-level_09`, not weapon fire**; hadn't yet found the
+right button/level combo to headless-repro an actual gunshot before running
+out of session time). **Next step:** locate and instrument the attract→game
+(or menu→level) audio-reset call to confirm/deny the orphaned-voice theory
+for symptom (b); separately, dump+listen-compare decoded PCM for one
+mis-sounding SFX to settle symptom (a)/(2)'s index-vs-pitch question.
+
+**Follow-up (same session) — checked the level-transition "deactivate all"
+sweep, found it's flag-filtered, which narrows the orphaned-voice theory
+to a specific, already-catalogued bug family.** `lv.c:1443/1473` calls
+`sndDeactivateAllSfxByFlag_1()` at level transitions → `flag=1`
+(`SOUND_FLAG_FINAL_IN_SEQUENCE` only) → `sndDeactivateAllSfxByFlag`
+(`snd.c:996`) only touches sounds whose `unk3e` has **every** bit in `flag`
+set (`(item->unk3e & flag) == flag`). A door's loop-tail sound is very
+unlikely to carry `FINAL_IN_SEQUENCE` (it's a middle link in the
+open→loop→close chain, not the end), so this sweep would **not** catch an
+orphaned door loop even on real N64 — meaning N64 must instead rely on the
+attract-mode demo's scripted input naturally executing its "close door"
+press before the demo ends, letting `door7F053B10()` clean up the loop
+normally. **This reframes the theory:** if the attract-mode demo's
+canned input is driven by a fixed *frame count* but the PC build's
+sim-time-per-frame differs from N64's (the same `g_GlobalTimerDelta`/
+`g_ClockTimer` wall-clock-vs-sim-time family already root-cause-pending
+for **D193**, the AI-locomotion-too-slow bug), the demo could get cut off
+before its scripted door-close input fires on PC even though it always
+does on N64 — orphaning the loop's voice with no code path left to stop
+it. **If true, D202(b) (the stuck-loop symptom) may not be a distinct
+audio bug at all — it may be a second visible symptom of D193's root
+cause once that's found**, not something to fix in the audio code. Worth
+confirming/ruling out before spending more time in `snd.c`/`propobj.c`.
+
+**M-54 update — checked the D193-linkage theory's timing mechanics
+directly; it's weaker than M-53 framed it, and got two direct
+experimental data points instead.**
+
+1. Read `frametiming.c`/`libultra.c`'s timing chain end to end.
+   **The ramrom-demo path (`iterate_ramrom_entries_handle_camera_out`,
+   `ramromreplay.c:355`) does NOT go through `waitForNextFrame()`** — it
+   calls `updateFrameCounters(ramrom_blkbuf_2->speedframes)` directly
+   (`ramromreplay.c:400`), feeding the **recorded** N64 speedframes value,
+   not a value derived from PC wall-clock elapsed time. The D155
+   catch-up clamp (`FRAMETIMING_PORT_MAX_CATCHUP`) lives inside
+   `waitForNextFrame()` and is irrelevant here. The call site
+   (`boss.c:502-533`) gates *when* this fires on real elapsed ticks
+   (`mainTickElapsed >= MAIN_LOOP_TICK_INTERVAL`) but that gate
+   self-throttles correctly even if `gfxFrameMsgQ`'s retrace messages
+   back up during a stall (checked: `osCreateMesgQueue(&gfxFrameMsgQ,
+   ..., 32)`, `init.c:236` — 32-deep, so a stall *can* queue up dozens
+   of retrace messages) — the very first drained message after a stall
+   recomputes a big `mainTickElapsed` and fires exactly once, which
+   immediately refreshes `copy_of_osgetcount_value_1`, so every
+   subsequent backlogged message in the same burst sees a near-zero
+   elapsed and does nothing. **No runaway/duplicate advance mechanism
+   found.** This weakens (doesn't fully rule out) the D193-linkage
+   theory: the demo's sim-time progression looks insulated from PC
+   real-time hiccups by design, not just by luck. The D193 tie-in is
+   still plausible in principle (if the *count* of real retrace ticks
+   over the whole demo differs from N64's, e.g. via `osGetCount()`'s
+   scaling formula, D117/D134) but the specific "backlog causes runaway
+   catch-up" mechanism I'd hoped to point to isn't there. Downgrading
+   this from "leading theory" to "one of several still-open".
+2. Extended the existing `GE_AUDIOTRACE` probes: `sndPlaySfx` now also
+   logs the `newState` pointer per `soundIndex` link (not just the
+   `ALSound*`), and `sndDeactivate` now logs every call with its `state`
+   arg (`snd.c`, both `#ifdef PORT`/`getenv("GE_AUDIOTRACE")`-gated,
+   still uncommitted). Ran two headless captures
+   (`GE_AUDIOTRACE=1 GE_D87=1 ./build-pc/ge007.x86_64.exe`, no level arg,
+   no input, 100s then 240s, idling at the front end so the >=30s idle
+   timer — `front.c:2493`, `MENU_TIMER >= 1801` at NTSC 60fps — kicks
+   attract mode on). Findings:
+   - **`sndDeactivate` DOES fire and DOES work** when called: trace
+     shows `sndPlaySfx: soundIndex=260 -> newState=...706f4e18` followed
+     later by `sndDeactivate: state=...706f4e18 (non-null)`, and that
+     same `ALSoundState*` slot gets legitimately reused for a new
+     `soundIndex` right after. This rules out "the event-queue doesn't
+     service `AL_SNDP_DEACTIVATE_EVT` reliably" (branch (a) from the
+     M-53 writeup) as a *general* mechanism — deactivation is not
+     structurally broken.
+   - Both captures only ever logged front-end/menu-click `soundIndex`
+     values (258, 260, 111, 232, 109) — despite `GE_D87` confirming
+     `iterate_ramrom_entries_handle_camera_out`/`ramrom_replay_handler`
+     WERE firing repeatedly (159 D87 log lines in the 240s run, i.e. the
+     attract-mode camera flythrough demo was genuinely playing), **no
+     door-chain soundIndex (202/203/204) appeared in either capture.**
+     Root cause of the miss, found by reading `ramromreplay.c:631-634`:
+     which of the 14 `ramrom_table[]` demo files plays is
+     `randomGetNext() % i` — **randomly selected per attract cycle**, not
+     a fixed sequence. A short capture has no guarantee of landing on a
+     demo that triggers a door open/loop at all (most of the 14 clips
+     — Dam/Facility/Runway/Silo/Frigate/Train camera paths — may not
+     pass a metal sliding door in-frame). Neither capture is long enough
+     to be conclusive either way for symptom (b); this needs either (a)
+     a much longer unattended capture (several attract cycles, each
+     clip's `totaltime_ms` likely 30-90s, so plausibly 10+ min for good
+     odds of hitting a door-bearing clip), or (b) a temporary
+     `PORT`-gated env-var override pinning `ramrom_table` selection to a
+     specific known door-bearing index for fast, deterministic repro
+     (not yet added).
+   - Separately confirmed the `romdataFixupMusicSeqTable: seqCount 63
+     exceeds blob capacity 1` `[ERROR]` log line seen at boot is a
+     **known, benign, single-fire false alarm** — it's the deliberate
+     D35 header-only peek (`music.c:731-736`, buffer intentionally sized
+     16 bytes to decode just the `seqCount` field before the real,
+     correctly-sized allocation+decode at `music.c:738-742`) — confirmed
+     it fires exactly once per run and the real table load that follows
+     doesn't. Not a new lead; noting it here only so a future session
+     doesn't re-flag it as one.
+
+**M-54 cont. — got the live repro, and it's NOT a door.** Re-ran headless
+with a `GE_INPUTSCRIPT` pressing A every second for the first ~20s (to
+clear the Rare/Nintendo/legal/cast-intro screens fast) then idling, 280s
+total. Landed on the `ramrom_Train` attract demo (confirmed: `GE_D87`
+shows `iterate_ramrom_entries_handle_camera_out`/`ramrom_replay_handler`
+actively firing — real attract-mode canned-input playback, not the boot
+cinematic, which is a separate unrelated state machine in `front.c`).
+`audiotrace.log` (full, unedited):
+
+```
+soundIndex=64 -> newState=706f4db0 flags=2   (TRAIN_GO_SFX, first voice)
+soundIndex=64 -> newState=706f4f50 flags=2   (TRAIN_GO_SFX, second voice)
+...
+sndDeactivate: state=706f4e80 (non-null)
+sndDeactivate: state=706f4ee8 (non-null)
+```
+
+`soundIndex=64` = `TRAIN_GO_SFX` (`bondconstants.h`), `flags=2` =
+`SOUND_FLAG_LOOPED` — the **only** looped sound requested in the entire
+run. **Neither `706f4db0` nor `706f4f50` ever appears in a
+`sndDeactivate` line, anywhere in the log** — confirmed by grepping the
+full file for both pointers. Meanwhile two *other*, non-looped states
+(`706f4e80`, `706f4ee8`) DO get swept and deactivated, at exactly the
+point the demo cycle ends and the sequence rolls back to the boot logos
+(`RARELOGO_SFX`/`RARELOGO_FAINT_SFX`, indices 258/260, reappear
+immediately after). **This is a direct trace-level confirmation of the
+M-53 "Follow-up" theory**: whatever cleanup sweep runs at the
+demo-cycle/mode-transition boundary deactivates some voices but
+specifically skips the looped one(s) — consistent with
+`sndDeactivateAllSfxByFlag`'s `FINAL_IN_SEQUENCE`-only flag filter
+(`snd.c:996`, see M-53 above) never matching a genuinely-looped ambience
+voice. Reframes the bug from "door-specific" to **"any `SOUND_FLAG_
+LOOPED` voice started during a `ramrom` attract demo has no code path
+that ever stops it once the demo cycle moves on"** — the door report and
+this train report are the same bug, different SFX.
+
+**New candidate mechanism for why N64 doesn't audibly show this**:
+`src/libultra/audio/synallocvoice.c`'s `_allocatePVoice`/`alSynAllocVoice`
+implement real N64 hardware **voice-stealing** — a small fixed pool of
+physical `PVoice`s (`ALSynConfig.maxPVoices`, set from
+`MUSIC_SYN_CONFIG_MAX_P_VOICES` in `music.c:772`, unchanged decompiled
+value) where a new voice request silently steals and ramps out the
+lowest-priority already-playing physical voice once the pool is full
+(lines 100-131). On real hardware this would eventually silence an
+orphaned looped voice anyway, once enough *other* sounds compete for
+the same small voice pool — even though its `ALSoundState` bookkeeping
+never gets told to stop. **Not yet checked**: whether the PC port's
+mixer (`port/src/mixer.c`) and the synth's free/alloc/lame-list
+machinery actually enforce the same `maxPVoices` cap end-to-end, or
+whether something in the Phase-3 PC mixer path effectively gives every
+voice a free physical channel (never triggers stealing), which would
+make an orphaned loop audible forever on PC even in scenes where N64
+would eventually have silently stolen it away. This is the most
+promising next-step lead — cheaper to check (audit `mixer.c`'s voice
+dispatch / count) than adding more ramrom-timing probes.
+
+**Still OPEN.** Next session, in priority order: (1) audit whether
+`port/src/mixer.c` honors `maxPVoices`/voice-stealing identically to
+`synallocvoice.c`'s original algorithm — if it doesn't, that's the fix,
+and it would explain both the door and train loop reports without
+touching `snd.c`/`propobj.c`/`front.c` game logic at all; (2) if voice
+stealing checks out fine, look at whether N64 has some OTHER explicit
+stop call for these ambience loops that isn't in the `Dxx`-traced code
+paths yet (e.g. a `lvlManageMpGame`-adjacent full-audio-reset at
+attract-cycle boundaries not yet located). Symptom (a)/(2)
+(wrong-sample-per-weapon) still untouched — still needs the
+decoded-PCM listen-compare. The `GE_AUDIOTRACE` trace additions to
+`snd.c` (now covering `sndPlaySfx`'s `newState=`/`flags=` and every
+`sndDeactivate` call) are left in place, uncommitted, for reuse.
+
+**M-55 — priority-(1) voice-stealing audit done; result is negative, and
+narrows the bug further.** Static/read-only session (local Qwen `triage`
+dispatch for the grep/citation legwork, spot-checked line-for-line
+against the real files before trusting it).
+
+- **`port/src/mixer.c` doesn't need to honor `maxPVoices` — it never
+  participates in voice allocation at all.** Grepped it for
+  `maxPVoices`/`pAllocList`/`pFreeList`/`pLameList`/`numPVoices`: zero
+  hits. `mixer.c` (~436 lines) only implements the low-level `aXxx`
+  RSP-acmd DSP commands (envmixer/resample/etc `Impl` functions) that
+  `synallocvoice.c`'s already-allocated `PVoice`s get pointed at — the
+  lame-list/free-list/steal-lowest-priority bookkeeping (D202 M-54's
+  suspect) lives entirely in **unmodified ground-truth**
+  `src/libultra/audio/synallocvoice.c` (`alSynAllocVoice`/
+  `_allocatePVoice`, lines 27-131, byte-identical to decomp) plus
+  `src/libultra/audio/synthesizer.c`'s `alSynNew` (`numPVoices =
+  c->maxPVoices`, `music.c:772`'s `MUSIC_SYN_CONFIG_MAX_P_VOICES`,
+  unchanged). **The M-54 "maybe the PC mixer gives every voice a free
+  channel" theory is ruled out — there's no PC-specific voice-pool code
+  to have that bug in.** Since this pool logic is unmodified decomp
+  code, its steal behaviour on PC is provably identical to N64's.
+- **Priority (2) has an answer too, and it's negative in a useful way.**
+  Traced whether the `ALSynth` driver (or anything else audio-wide) gets
+  reset/reinitialized at the attract-demo → boot-logo transition:
+  `alInit` (`src/libultra/audio/sl.c:28-33`) is a **hard singleton**
+  (`if (!alGlobals) { alSynNew(...); }`) called exactly once, transitively
+  from `bossEntry()` → `musicSeqPlayerInit()` (`src/boss.c:312`,
+  `src/music.c:648`) → `amCreateAudioManager()` (`src/music.c:781`) →
+  `alInit()` (`src/audi.c:374`/`378`) → `alSynNew()`. The only teardown,
+  `alClose()` (`src/audi.c:481`), fires solely on audio-thread
+  `MAIN_QUIT_MESSAGE` (process exit), not at a demo boundary. The actual
+  attract-demo stop path, `stop_demo_playback()`
+  (`src/game/ramromreplay.c:604-616`), touches only joystick-playback
+  bookkeeping (`joySetPlaybackFunc`/`joySetContDataIndex`/
+  `ramrom_demo_related_3`/`is_ramrom_flag`) — **no audio call of any
+  kind.** All of `sl.c`, `audi.c`, `boss.c` here are unmodified
+  ground-truth, so **N64 has exactly the same absence of a
+  demo-boundary audio reset** — confirming there is no missing-on-PC
+  system-reset bug to find in this direction either.
+- **Net effect: both of M-54's priority leads are now closed, and
+  neither explains the bug.** This pushes the M-53 "Follow-up" theory
+  back to the front — a genuinely `SOUND_FLAG_LOOPED` voice has *no*
+  code path that stops it at a `ramrom` attract-cycle boundary on
+  **either** platform; whatever the real fix is, it is a **pre-existing
+  N64 behavior being newly exposed**, not a PC regression, and per rule
+  #2 (game logic is ground truth) is very unlikely to be something we
+  should "fix" by adding a stop call the original game never had. The
+  live-repro data (M-54 cont.) already showed this exact voice audibly
+  looping forever in the PC build; whether real N64 hardware's `PVoice`
+  stealing (now confirmed byte-identical logic) actually does silence it
+  in practice depends on whether some *other* sound eventually claims
+  that priority slot during/after the demo cycle — untested acoustically
+  either way.
+
+**Still OPEN. Next session:** stop auditing the voice-pool/reset code —
+both candidate mechanisms are now cross-validated clean/absent on both
+platforms. The two live options are (a) accept this as a real, harmless-
+on-N64-in-practice edge case (the orphaned voice gets stolen once enough
+other SFX compete for the small `PVoice` pool during normal gameplay,
+just not during an idle unattended attract-mode capture) and downgrade
+D202(b) priority accordingly, or (b) do the acoustic check directly —
+run a longer capture (10+ min, several attract cycles) or a temporary
+`PORT`-gated `ramrom_table` index override to force a door/train demo
+reliably, then listen past the demo boundary to hear whether the loop
+in fact does eventually cut out once other SFX start competing for
+voices (would confirm (a) and close D202(b) as WONTFIX/expected).
+Symptom (a)/(2) (wrong-sample-per-weapon, PPK→PUNCH1) is still fully
+untouched and is now the higher-value remaining D202 thread — needs the
+decoded-PCM listen-compare, not more voice-pool tracing.
+
+**M-56 — D202(a) got the decoded-PCM listen-compare, live user confirmation,
+and the index/pointer/ROM-data chain is now independently proven byte-exact
+against the real ROM (not just "ruled out" by code audit). Root cause is
+narrowed to the actual decode/mix runtime.**
+
+- Added a temporary `GE_AUDIODUMP=1` probe (`port/src/audio.c`,
+  `audioSetNextBuffer`) that raw-dumps every mixed s16 stereo buffer
+  reaching the SDL device to `audiodump.raw` — the true final output, same
+  path as what plays in-game. Ran a headless repro (`-level_33` Dam,
+  `GE_INPUTSCRIPT` holding aim+fire for 8 trigger-pulls starting ~10s in),
+  converted the dump to WAV, located the transients via a 50ms-window RMS
+  scan, and sent the clip to the user. **Exact repro command** (run from
+  repo root, `export PATH=/c/msys64/mingw64/bin:$PATH` first):
+  ```
+  rm -f audiotrace.log audiodump.raw
+  GE_AUDIODUMP=1 GE_AUDIOTRACE=1 GE_INPUTSCRIPT="600:R,Z;601:R,Z;650:R,Z;651:R,Z;700:R,Z;701:R,Z;750:R,Z;751:R,Z;800:R,Z;801:R,Z;850:R,Z;851:R,Z;900:R,Z;901:R,Z;950:R,Z;951:R,Z" \
+    timeout 30 ./build-pc/ge007.x86_64.exe -level_33
+  ```
+  `audiotrace.log` (per-call soundIndex/pointer trace) and `audiodump.raw`
+  (raw s16le stereo @ 22050Hz, no header — wrap with Python's `wave` module
+  or `ffmpeg -f s16le -ar 22050 -ac 2 -i audiodump.raw out.wav`) land in the
+  repo root. **User confirmation: "it's playing
+  the ricochet sound effect and the slapping melee attack sound effect on
+  each gunshot"** — i.e. two distinct wrong-but-real game sounds, not
+  silence/noise/a single mislabeled clip.
+- The `GE_AUDIOTRACE` probe (already in tree) on that same run showed the
+  fire event genuinely requests **soundIndex=46 (`GUN_SILPPK_A_SFX`)**
+  paired with **soundIndex=122 (`CART_SPENT_SFX`, the shell-casing sound —
+  `gunfire.c:5582`)** — both legitimate, correct call sites for this
+  weapon/action, resolving to non-null, structurally-valid
+  sound/keyMap/wavetable/book pointers. This is a **live, real-gameplay
+  confirmation** of what M-52 had only checked structurally.
+- **Independently re-parsed the raw ROM bytes from scratch in Python**
+  (no reuse of any project code — a from-first-principles walk of
+  `ALBankFile → ALBank → ALInstrument → ALSound → ALWaveTable` against
+  `data/ge007.ntsc-final.z64` at the `_sfxctlSegmentRomStart`/
+  `_sfxtblSegmentRomStart` addresses) to check the PC port's custom
+  `port/src/romdata.c` re-layout tool (`romdataAudioBankPcSize`/
+  `romdataFixupAudioBank`, the `afFixup*` family — hand-written PORT code,
+  not decomp, and the one part of this chain not previously scrutinized
+  this closely). **Result: exact match.** Index 46's wavetable resolves to
+  `base=0x103128A0 len=2242`, index 122's to `base=0x10351DF8 len=2196` —
+  **both bit-for-bit identical to the live runtime trace.** Also pulled
+  each sound's ADPCM book (order/npredictors/coefficients) and `ALKeyMap`
+  directly from ROM: indices 46/47/122 all have distinct, non-aliased book
+  coefficients (not a copy-paste/dedup collision), though 46 and 47
+  (`PUNCH1_SFX`) do share an identical `keyBase=54/detune=50` keymap —
+  coincidental (both are attack-transient sounds tuned the same), not by
+  itself an index confusion.
+- **This closes out the index/pointer/ROM-offset chain for good** — it is
+  now proven correct by independent reconstruction, not just "audited and
+  believed clean" (M-52's original phrasing). Since each sound's raw
+  ROM-embedded ADPCM data is objectively distinct (different books), the
+  wrong-sounding output can only be happening in the **decode or mixing
+  runtime itself** — i.e. the actually executed `port/src/mixer.c` path,
+  not the data feeding it.
+- **New leading suspect, not yet tested**: **D199's flagged risk** — the
+  Phase-3 mixer's `aSetBuffer` **persistent-DMEM-context inference**
+  (macro-swap `aXxx`→`aXxxImpl` execution with no RSP disassembly to
+  verify against, `findings.md` D199) — if two voices active in the same
+  audio frame (e.g. the continuous Dam wave-ambience loop already seen
+  looping throughout this capture, soundIndex 65/67, plus the fire SFX)
+  end up sharing/clobbering the same inferred DMEM decode-context instead
+  of each getting its own, one voice's ADPCM decoder state could bleed
+  into another's output — producing exactly this "correct data in, wrong
+  but real-sounding-like-something-else data out" symptom, deterministically
+  per concurrent-voice pairing. This is a hypothesis, not yet verified.
+
+**Still OPEN. Next session:** audit `port/src/mixer.c`'s `aSetBuffer`/DMEM
+context handling for whether concurrently-active voices (not just
+back-to-back `Impl` calls for the *same* voice) get isolated decode state —
+trace which physical DMEM buffer/context each of the fire SFX and the
+continuous ambience loop actually uses per frame during the same repro
+(`GE_AUDIODUMP`+`GE_AUDIOTRACE`, `-level_33`, aim+fire script above already
+gives a clean repro). Do NOT re-check the ROM offset/pointer/index chain
+again — independently re-derived byte-exact this session, closed for good.
+
+**M-57 — the M-56 concurrent-voice-DMEM hypothesis is FALSIFIED by a live
+opcode-level trace, not just re-audited. A new (currently dormant)
+pointer-truncation bug was found in the same family as D198/D201, and a
+full sibling audit was produced, but NEITHER explains D202 yet — still
+OPEN.** Interactive session, build+run environment confirmed working
+(`export PATH=/c/msys64/mingw64/bin:$PATH` from repo root).
+
+- Added a temporary `GE_MIXERTRACE=1` probe (`port/src/mixer.c`) that logs
+  every `aSetBuffer`/`aLoadADPCM`/`aADPCMdec`/`aResample`/`aEnvMixer` call
+  with its DMEM addresses and state pointer, in call order, to
+  `mixertrace.log`. Reran the exact M-56 repro
+  (`GE_AUDIODUMP=1 GE_AUDIOTRACE=1 GE_MIXERTRACE=1 GE_INPUTSCRIPT=... -level_33`)
+  and read the trace around the soundIndex 46/122 fire event (cross-referenced
+  via `audiotrace.log` and the `alLoadParam` wire probe's `audiotrace_wire.log`,
+  both already in tree from M-52/M-56).
+- **Result: every voice's full chain — `aLoadADPCM` → `aSetBuffer`(decode) →
+  `aADPCMdec` → `aSetBuffer`(resample) → `aResample` → `aSetBuffer`(main) →
+  `aSetBuffer`(aux) → `aEnvMixer` — runs to completion, strictly sequentially,
+  before the next voice's `aLoadADPCM` starts.** No interleaving between
+  voices was observed anywhere in ~62k logged opcodes spanning the fire
+  event. The single shared `sDmem`/`sAdpcmTable`/`sCtx` globals are safe
+  under this call pattern for exactly the same reason the real RSP's single
+  physical DMEM is safe: one voice's full pipeline finishes and its result is
+  accumulated into the persistent `AL_MAIN_L_OUT`/`AL_AUX_*` buffers before
+  the scratch region (`AL_DECODER_IN`=0) is reused by the next voice. **D199's
+  "concurrent-voice DMEM clobber" risk is closed, negative** — falsified by
+  direct trace, not just re-reasoned about.
+- Also noticed `a->table->len` visibly changes (2242 → 2241) between the
+  first and later `alLoadParam` wire-probe log lines for the *same* shared
+  `ALWaveTable`. Traced this to `load.c:396`
+  (`a->table->len = ADPCMFBYTES * ((s32)(a->table->len/ADPCMFBYTES));`) —
+  **unmodified N64 ground-truth code**, rounds the table length down to a
+  whole-ADPCM-frame multiple. It mutates the shared table in place but is
+  idempotent (rounds to the same value on every call after the first) and
+  behaves identically on N64. **Not a bug — ruled out.**
+- **New finding (not yet root-caused as D202's cause, likely a separate
+  latent issue): `src/libultra/audio/load.c` lines 111, 173, 259, 320, 382,
+  438 all do `f->memin = (s32) f->table->base + ...` / `a->memin = (s32)
+  a->table->base` — narrowing a real 64-bit `u8 *base` pointer
+  (`ALWaveTable.base`, `include/PR/libaudio.h:217`) into the `s32 memin`
+  field** (matches N64 ground truth's struct layout, `synthInternals.h`).
+  This is the same truncation class as the already-fixed D198
+  (`K0_TO_PHYS`) and D201 (`bnkf.c` relocation offsets), but **currently
+  dormant in this session's build**: the observed `ALWaveTable.base` values
+  (e.g. `0x103128a0`) sit comfortably under 4GB (this exe loads its ROM-data
+  blob at a low, non-ASLR'd address), so the `(s32)` truncation followed by
+  `osPhysicalToVirtual`'s `u32`→pointer zero-extension round-trips exactly —
+  no data corruption observed in this run. Flagging as a **hardening item**,
+  not a confirmed D202 cause; would need a build/environment where the
+  ROM-data blob's heap address exceeds 4GB to prove it live. Not fixed this
+  session (out of scope for this investigation; needs its own D-number if
+  picked up).
+- Delegated a read-only sibling-audit of this cast pattern across the whole
+  audio subsystem to the local Qwen `repo-mapper` agent (grep-only, no
+  edits, checked against real files). Full hit list, confirmed genuine
+  pointer-truncation sites beyond `load.c`:
+  - `src/music.c:879,1073,1266` — `(u8*)((t3 + (s32)thing.seqData) -
+    trackSizeBytes)` — same class, narrows a seq-data pointer before a ROM→RAM
+    copy. Worth checking next alongside `load.c`.
+  - `src/libultra/audio/heapinit.c:26` — narrows the audio heap `base`
+    pointer to `s32` but immediately masks with `& AL_CACHE_ALIGN` (only
+    alignment low-bits survive) — low risk in practice, still worth a
+    `uintptr_t` pass for hygiene.
+  - Every other `(s32)`/`(int)` cast in `src/libultra/audio/*.c` and
+    `src/libultrare/audio/*.c` (`resample.c`, `reverb.c`, `env.c`,
+    `seqplayer.c`, `csplayer.c`, `save.c`, `synthesizer.c`, `drvrNew.c`)
+    narrows a genuine small integer (byte/sample counts, pitch ratios,
+    indices) — not pointer truncation, nothing to fix.
+
+**M-58 — priority (1) from the M-57 write-up (decoded-PCM-per-voice-slot dump)
+executed. Result: address resolution AND the ADPCM decode math are BOTH
+independently verified bit-exact correct for a live fire-SFX occurrence.
+D202 is NOT in `aLoadBuffer`'s DMA/address plumbing and NOT in
+`aADPCMdecImpl`'s decode arithmetic. Still OPEN — the bug is downstream of
+decode or in voice/output routing.**
+
+- Extended the `GE_MIXERTRACE` probe (env-gated, zero cost when unset)
+  three ways: (a) `port/src/mixer.c` `aLoadBufferImpl`/`aLoadADPCMImpl`/
+  `aADPCMdecImpl` now log the actual DMEM source bytes, the loaded ADPCM
+  book coefficients, and the first decoded 16-sample frame (skipping the
+  16-sample history lead-in) into the *same* `mixertrace.log` as the M-57
+  opcode trace; (b) `src/libultra/audio/load.c` `_decodeChunk` logs
+  `[DMAREQ] filter=<ALLoadFilter*> memin=<addr>` right before calling
+  `f->dma(...)`, and `alLoadParam`'s existing `AL_FILTER_SET_WAVETABLE` case
+  now also emits a `[BINDTABLE] filter=<ptr> <- table=... base=...` line into
+  `mixertrace.log` (previously only in the separate `audiotrace_wire.log`)
+  so table-bind, DMA, and decode events for the same physical voice filter
+  interleave in one chronologically-ordered file instead of needing
+  cross-file correlation by line count (a real mistake made mid-session:
+  comparing `wavetable->base` from one run's `audiotrace.log` against
+  `aLoadBuffer` addresses from a *different* run's `mixertrace.log` produced
+  a spurious "addresses never match" false alarm — resolved by getting both
+  probes into one file in one run); (c) `src/audi.c` `amDmaCallback` now
+  logs `[DMAHIT]`/`[DMAMISS]` with the input ROM-side address, matched
+  buffer's `startAddr`, and the returned staging-buffer address.
+- Reran the exact M-56/M-57 repro
+  (`GE_AUDIODUMP=1 GE_AUDIOTRACE=1 GE_MIXERTRACE=1 GE_INPUTSCRIPT=... -level_33`,
+  see M-56 for the exact command). Picked one live fire event
+  (`soundIndex=46`, `wavetable->base=0x103128a0`) and followed its physical
+  voice filter (`ALLoadFilter*`) end to end in one linear read of
+  `mixertrace.log`:
+  - `[BINDTABLE] filter=...706d7230 <- table=...706c4cc8 base=0x103128a0`
+  - `[DMAREQ] filter=...706d7230 memin=0x103128a0` — **exactly matches** the
+    bound table's own base. No cross-voice/cross-heap address confusion.
+  - `[DMAMISS] addr=0x103128a0 ... ret=0x706dd490` — legitimate cold DMA
+    (N64-analogous ROM→staging-buffer copy via `port/src/libultra.c`'s
+    `piServiceDma`, which correctly `memcpy`s from the cart-mapped `.z64`
+    region at `srcPA=0x103128a0`, a real, valid cart address under
+    `romdata.c`'s mapping — not a stray heap pointer as first suspected
+    mid-session before the single-file trace fix above).
+  - `[LOADBUF] dram=0x706dd490 ... bytes=900de113224092ecde90f602424ae1bf` —
+    the exact ADPCM-encoded source bytes now loaded into DMEM.
+  - `[ADPCMDEC] ... book0=-881` and the dumped book coefficients match
+    `sndPlaySfx`'s own `book=00000000706c4ca0` trace for soundIndex 46
+    (`+8` byte print-pointer offset, same object) — the correct predictor
+    table for this sound, not a stale/aliased one.
+  - `[PCMOUT] book0=-881 first-decoded-frame[0..15]=0,-1536,-2475,-1165,...`
+- **Independently hand-decoded the same 9 input bytes against the same
+  dumped book coefficients using the textbook VADPCM algorithm** (order-2
+  predictor, `header byte -> shift+tableIndex`, nibble sign-extension,
+  cumulative predictor sum), entirely outside this codebase, no reuse of
+  `mixer.c`'s logic. First three samples worked by hand: `0`, `-1536`,
+  `-2475` — **bit-exact match** against the C implementation's dumped
+  output. This independently confirms `aADPCMdecImpl`'s math is a correct
+  VADPCM decoder, not just internally self-consistent.
+- Also noticed (not a bug, recorded for the record): `sAdpcmTable` is a
+  single static global reused across sound switches without zeroing unused
+  predictor slots, so predictor indices beyond a sound's own `npredictors`
+  hold stale coefficients from a previous sound's book load. Harmless in
+  practice — a sound's own ADPCM-encoded stream only ever emits
+  `tableIndex` values within its own encoded `npredictors` range (confirmed
+  here: soundIndex 46's book is `bookSize=32` bytes = 1 predictor via
+  `2*order*npredictors*ADPCMVSIZE`, and its stream's header nibble was `0`,
+  the only valid index) — but it is fragile precisely because it depends on
+  the encoder never emitting an out-of-range index; a future corrupted/
+  malformed bank could read garbage predictor coefficients silently. Not
+  pursued further this session (not shown to relate to D202).
+- **This closes out the entire `aSetBuffer`→`aLoadBuffer`→`aLoadADPCM`→
+  `aADPCMdec` chain for the cases actually traced.** Combined with M-56
+  (ROM data/index chain closed) and M-57 (DMEM concurrency closed), the
+  first three links of the pipeline — request routing, ROM data integrity,
+  and decode — are now all independently verified correct for at least one
+  live fire-SFX instance. The mid-session false alarm (see above) is a
+  useful lesson: **always put every new correlated probe into the same
+  linearly-ordered trace file**; cross-file correlation by line count
+  across separate runs is not valid even when the repro is "the same"
+  command, because per-run nondeterminism (already catalogued, D117) shifts
+  line counts and, this session, briefly looked exactly like a real bug.
+
+**Still OPEN. Next session, in priority order:** (1) the remaining untraced
+links are **resample → envmix → final-mix routing**, and **physical-voice
+(PVoice) allocation/identity** — whether the correctly-decoded PCM for one
+logical `ALSoundState` ends up accumulated into the *wrong* voice's/output's
+persistent envelope-mixer volume-ramp state (`sVol`/`saved->t[]` in
+`aEnvMixerImpl`) or gets attributed to the wrong output buffer, which would
+produce exactly "correct audio computed, wrong audio heard." Trace the same
+way as this session (one physical filter/voice followed end-to-end in one
+`mixertrace.log`, `[ENVMIX] state=...` pointer identity checked against which
+logical sound it's supposed to belong to) rather than assuming and re-deriving.
+(2) If that's clean too, suspect PVoice allocation/identity higher up (the
+synth's voice-slot assignment, independent of DMEM/decode). (3) Only after
+(1)/(2): consider fixing the `load.c`/`music.c` pointer-truncation family as
+a hardening pass (own D-number) — still not shown to cause D202. Do NOT
+re-check the ROM offset/index/pointer chain (M-56), DMEM/`aSetBuffer`
+concurrent-voice sharing (M-57), or the decode arithmetic/addressing
+(M-58, this session, verified bit-exact) — all closed.
+
+**M-59 — likely resolution: D202 is NOT a decode/mixer bug. The "ricochet +
+melee slap" audio the M-56 listening test heard is a SEPARATE, entirely
+legitimate SFX request made by unmodified ground-truth game logic on every
+shot in this specific repro, because the scripted aim direction hits a wall/
+prop, not open air. Recommend a follow-up open-air listening test before
+resuming the M-58 priority-1 envmix/PVoice trace.**
+
+- Two more concrete checks, continuing directly from M-58's decode-chain
+  verification (which stays valid and closed): (a) independently confirmed
+  the actual DMEM-loaded ADPCM byte string M-58 dumped for soundIndex 46
+  (`900de113224092ecde90f602424ae1bf...`) is byte-for-byte identical to the
+  **raw, untouched `data/ge007.ntsc-final.z64` file** at the corresponding
+  cart offset (`0x03128a0`, i.e. `base 0x103128a0` minus `CART_BASE
+  0x10000000`) — read directly with a throwaway Python script, no project
+  code reused. Traced why this address is meaningful at all:
+  `_sfxtblSegmentRomStart` (`port/src/romassets_u.s:2948`) is a linker
+  constant equal to the literal cart address `0x102F19A0`, used as-is by
+  `alBnkfNew`'s `table` argument (`src/music.c:703`) → `_bnkfPatchWaveTable`
+  (`src/libultra/audio/bnkf.c:140`, `w->base += table`) — i.e. GE's
+  wavetable sample data is **never relaid-out or copied by
+  `port/src/romdata.c`'s bank-structure fixup at all**; `base` ends up
+  pointing straight into the same live-mapped `.z64` image `port/src/audi.c`
+  reads cart data from generally (`docs/dev/findings.md` cart-mapping notes,
+  M-56). This closes the last theoretical gap in the M-56/M-58 chain: ROM
+  data integrity is now verified at the raw file-byte level, not just
+  structurally.
+  - With the entire request→ROM-offset→DMA→decode chain now proven correct
+    end to end, (b) re-examined the *complete* `audiotrace.log` from the
+    M-58 repro (`-level_33` Dam, aim+fire `GE_INPUTSCRIPT`) rather than
+    filtering to just soundIndex 46/122, and cross-referenced every other
+    soundIndex against `src/bondconstants.h`'s `"NN_NAME_SFX"` string table
+    (which encodes the index directly in the name — e.g. `"46_
+    GUN_SILPPK_A_SFX"`). **Every single `soundIndex=46` (fire) request in
+    the trace is immediately followed by a `soundIndex` from `{23, 24, 25,
+    37}`** — `"23_RICO_6_TAJ_A_SFX"`, `"24_RICO_6_TAJ_B_SFX"`,
+    `"25_RICO_6_TAJ_C_SFX"`, `"37_RICO_5_C_SFX"` — i.e. **ricochet/bullet-
+    impact sounds**, cycling per shot, plus the already-known `122` =
+    `"122_CART_SPENT_SFX"` (cartridge eject).
+  - Found the call site: `src/game/gunfire.c`
+    `recall_joy2_hits_edit_detail_edit_flag()` (line ~2270, unmodified
+    ground-truth decomp function, original obfuscated name) is the bullet
+    hit-detection handler. For a hitscan that strikes a non-character prop
+    (`prop->type != PROP_TYPE_CHR && != PROP_TYPE_VIEWER`, i.e. scenery/
+    wall, not an enemy), it unconditionally does:
+    `ricochet_sounds_small_copy = ricochet_sounds_small;
+    sndPlaySfx(g_musicSfxBufferPtr,
+    ricochet_sounds_small_copy.arr[randomGetNext() % 20], sound_state);`
+    — **every bullet that hits a wall/prop plays a randomly-chosen ricochet
+    SFX from a 20-entry table, by design, on real N64 too.** This is not a
+    port artifact; it is exactly what GoldenEye does when you shoot a wall.
+  - **Conclusion**: the M-52/M-56 repro's fixed aim direction
+    (`-level_33`, default spawn facing, held-down aim+fire) has the player
+    shooting directly into a nearby wall/prop the entire time, so *every*
+    trigger pull legitimately plays fire (46) + cartridge-eject (122) +
+    a random ricochet impact (23/24/25/37) simultaneously — three real,
+    correct SFX per shot, not one wrong one. The M-52 playtest's original
+    verbal description ("sounds like a melee/punch hit") and the M-56
+    listening test's ("ricochet sound effect and the slapping melee attack
+    sound effect") both match a ricochet impact's percussive/metallic
+    character far better than a coincidental decode bug that happens to
+    always produce two *other real, nameable* game sounds. No corrupted or
+    misattributed audio has been found anywhere in the chain despite three
+    full sessions (M-56/M-57/M-58) of independent, bit-exact and byte-exact
+    verification at every single link — address resolution, ROM data
+    integrity, book/coefficient selection, ADPCM decode arithmetic, and now
+    the request pattern itself.
+  - **This does not yet prove the gunfire (46) sound itself is
+    perceptually correct/prominent** — only that it is being computed
+    correctly and is not what's "wrong" in what the tester heard. It's
+    possible the fire SFX is simply quiet/subtle by design and gets
+    acoustically masked by the louder ricochet transient, which would be
+    expected N64 behavior too, or (lower probability, unverified) there is
+    a genuine separate volume/mix-balance issue between simultaneous
+    voices. Not fixed or further diagnosed this session — needs a
+    clean listening test to settle it (see below).
+
+**Recommended next session (before resuming the M-58 priority-1 envmix/
+PVoice trace, which may now be unnecessary): re-run the exact same
+`GE_AUDIODUMP` capture but with an `GE_INPUTSCRIPT` aim direction that
+points at open air / the sky instead of a wall (or simply hold fire without
+the aim-lock at a fixed wall-facing spawn), confirm via `audiotrace.log`
+that NO `ricochet_sounds_small`-family soundIndex fires, and have the user
+listen to that clip specifically. If the fire (46) + cartridge (122) sounds
+alone are now clearly audible, correct, and recognizable as gunfire, D202
+should be closed as a repro artifact (aim-at-wall), not a bug — with a note
+that the original M-52 playtest report may itself have simply been the
+player firing at nearby geometry during normal play, which is entirely
+expected. Only if the open-air clip STILL sounds wrong should the M-58
+priority-1 envmix/PVoice-identity trace be resumed.
+
+**Follow-up done same session (M-59 cont.):** turned the character with
+`GE_INPUTSCRIPT="1:SRIGHT;400:SNONE;600:R,Z;..."` (sustained analog-stick
+turn before the aim+fire sequence) and reran the `GE_AUDIOTRACE`+
+`GE_AUDIODUMP` capture on `-level_33`. Result: the *first* shot in this run
+requests **only** `soundIndex=46` (fire) + `122` (cartridge) — no
+`ricochet_sounds_small` index at all — confirming the turn moved the aim
+off whatever wall/prop the original fixed-facing repro was hitting. The
+*second* shot (moments later, once the turn brought the aim back toward
+nearby geometry) requests `46` + `122` + `23` (`RICO_6_TAJ_A_SFX`) again,
+giving a same-run A/B pair. Located both transients in `audiodump.raw` via
+a 50ms-window RMS scan (clean shot ≈ t=11.0–11.7s, ricochet shot ≈
+t=11.7–12.6s), exported both as WAV (`scratchpad/
+d202_clean_shot_no_ricochet.wav` / `scratchpad/d202_shot_with_ricochet.wav`,
+not committed — scratch), and sent both to the user for a direct listening
+comparison. **Awaiting user confirmation** on whether the ricochet-free
+clip sounds like correct, recognizable gunfire — that answer settles
+whether D202 closes outright as a repro artifact or the envmix/PVoice trace
+needs to resume.
+
+**M-59 result: user says BOTH clips are the ricochet/slap sound, just at
+different volumes — the "clean" clip is not clean.** This falsifies the
+"aim-at-wall repro artifact" theory as originally framed. Investigated
+further:
+
+- The two exported clips both came from `dumppos`-adjacent events with
+  soundIndex 46 and a ricochet index at the **same audio-frame position**
+  in this run's `audiotrace.log` (a new `dumppos=<byte offset into
+  audiodump.raw>` field was added to the existing `GE_AUDIOTRACE` probe —
+  `port/src/audio.c` now exposes `audioDumpBytePos()`, an exact running
+  byte counter, so future clip extraction can key off a logged sample
+  position instead of an RMS-scan guess). Confirmed the fire (46) and
+  ricochet requests land at the *same* `dumppos`, i.e. they are requested
+  in the same tick and their audio overlaps in time rather than being
+  sequential — so the RMS-peak-picking method used for the M-59 clips could
+  not actually isolate a ricochet-free window; both exported clips likely
+  had some ricochet content, just at different relative volume (distance-
+  dependent ricochet gain, or a different ricochet variant per shot).
+- To get a **guaranteed** ricochet-free sample, decoded `soundIndex 46`
+  **entirely offline**: read `data/ge007.ntsc-final.z64` directly at ROM
+  offset `0x03128a0`, len 2242, ran the same hand-verified VADPCM decode
+  used in M-58 (order-2, single predictor, coefficients from the M-58
+  trace dump) with no live game/mixer involved at all — zero possibility of
+  a simultaneous ricochet voice. Rendered to `scratchpad/
+  d202_soundindex46_isolated.wav`, sent to the user. **User confirmed: "yeah
+  that is the slap effect that in the original game plays when you do a
+  melee attack."** This is unambiguous — soundIndex 46's actual ROM sample
+  content genuinely is (or matches) the melee-slap SFX, independent of any
+  mixing/overlap question.
+- **Traced the request chain one level further up, past `sndPlaySfx`, to
+  find out why soundIndex 46 is requested for the silenced PPK's fire at
+  all.** `bondwalkItemGetSound(item)` (`src/game/gun.c:1345`) returns
+  `get_ptr_item_statistics(item)->Sound` — a `u16 Sound` field on the
+  per-weapon `WeaponStats` struct (`src/game/gun.h:87`, doc comment:
+  "Sound effect played when gun is shot. There are 261 sound effects, or
+  0 - 105h."). `get_ptr_item_statistics` (`gun.c:721`) returns
+  `gitem_structs[item].item_weapon_stats` — **not a runtime ROM-converted
+  pointer**; `gitem_structs[]` (`assets/obseg/gun/gunModelFileRecord.inc.c`)
+  is a **static, compiled C data table**, decompiled directly from the
+  ROM's `.data` segment (each `GUNFILERECORD(...)` entry pulling in a
+  `GUNSTATS(name)` initializer). The silenced PPK's is
+  `assets/obseg/gun/wppksil/gunWeaponStat.inc.c`
+  (`WeaponStats wppksil_stats = {1.0, 11.0, ..., 0x2E, ...}`, tagged with a
+  decompilation RAM-address comment `//D:800326C4`) — **`.Sound` is
+  positionally the 14th field, value `0x2E` = decimal **46**.** This is
+  unmodified, hand-decompiled ground truth, not a port-side conversion —
+  there is no PC-specific fixup in this chain at all (unlike the wavetable
+  data, this table is a plain compiled literal, identical on N64 and PC by
+  construction).
+- **Conclusion: on real N64 hardware, firing the silenced PPK requests
+  the exact same soundIndex 46 this port does.** Every link — decompiled
+  weapon-stat data, SFX-bank index resolution (M-56/M-59), ROM sample
+  bytes (M-58/M-59), and ADPCM decode (M-58) — is now independently
+  verified correct and, more importantly, **identical to what N64 hardware
+  would do with the same ROM**. If soundIndex 46 truly sounds like a melee
+  slap and not a silenced pistol, that is either (a) the original,
+  shipped game's actual designed audio (silenced firearms can have a soft,
+  percussive "thwack" character that isn't unreasonable to mistake for a
+  melee sound, and reusing one SFX asset across two unrelated actions to
+  save ROM space is a common technique of this era) — in which case there
+  is **no bug anywhere in this port to fix**, this is how GoldenEye 007
+  actually sounds; or (b) a very rare decompilation transcription error in
+  `wppksil_stats`'s `.Sound` field specifically — but this project's
+  entire premise is byte-verified matching against the real ROM's `.data`
+  segment (README/AGENTS.md), so an error surviving in a byte-matched
+  build would be surprising, though not provably impossible without
+  independently re-reading the literal ROM bytes at this struct's true RAM/
+  ROM address (not attempted this session — would need the N64 build's
+  linker map to translate the `//D:800326C4` RAM comment to a ROM file
+  offset).
+- **Not fixed, not committed — this is a research conclusion, not a code
+  change.** No `port/`, `src/`, or `assets/` change is warranted unless (b)
+  above is confirmed; per AGENTS.md, `assets/obseg/gun/wppksil/
+  gunWeaponStat.inc.c` is decompiled ROM data (ground truth) and must not
+  be "corrected" speculatively.
+
+**Recommended definitive tie-breaker (next session, if the user wants to
+keep pursuing this rather than close it):** run the **same ROM** in a
+known-good N64 emulator (or, if available, real hardware) and fire the
+silenced PPK. If it also sounds like the melee-slap effect there, D202 is
+closed for good as a genuine original-game characteristic (or a very
+deep, pre-existing GoldenEye quirk) — not a decompilation or port bug, and
+no further engineering time should go into it. If the emulator's silenced
+PPK sounds like a normal muted gunshot, the bug is almost certainly the
+rare decompilation transcription error in (b), and the fix would be a
+single-field data correction in `gunWeaponStat.inc.c` guarded by the
+project's existing byte-match verification (which would need to still
+pass — if it doesn't, this table is confirmed byte-correct after all and
+the "bug" is upstream of Bond's silenced-PPK path in some other way not
+yet identified).
+
+**M-60 — user explicitly rejects the "ground truth, not a bug" conclusion**
+("I know for a fact its the wrong sound playing in the PC port
+specifically") and supplies a real reference clip instead of an emulator
+A/B: `scratchpad/B00I00S2D.wav` (untracked/scratch), a genuine recording of
+the silenced PPK's real fire sound, dropped directly by the user (source
+not yet stated — presumably real hardware/video capture, not this repo).
+Measured: mono, 16-bit, 16 kHz, 3264 samples, 0.204 s. Its 10-bucket RMS
+envelope (`12645, 11548, 15152, 16172, 14006, 12766, 15106, 15669, 8280,
+6608, 8032, 9409, 9812, 8849, 7745, 6819, 4299, 1477, 496, 176` over 20
+buckets) is **sustained** — energy stays in the 6000-16000 range for
+roughly the first 80% of the clip's duration before decaying in the last
+~20% — structurally different from `d202_soundindex46_isolated.wav`'s
+envelope, which peaks early (`11209, 19213, 17387, 16284, 11296, 10047,
+6116, 3801, 2238, 1059` over 10 buckets) and decays smoothly and quickly
+from the first bucket onward. This is consistent with the user's "slap"
+identification (a single sharp decaying transient) vs. a real gunshot's
+more sustained buzz/reverb character, and is independent corroborating
+evidence — not proof by itself, since envelope shape alone doesn't rule out
+a resample/pitch difference distorting the comparison (see below).
+
+**Re-opened the investigation on the user's instruction; do not close D202
+as WONTFIX.** Two concrete threads were started this session, neither
+finished:
+
+1. **The debug-name label itself is suspicious independent of any
+   listening test.** `bondconstants.h`'s soundIndex 46 is *named*
+   `"46_GUN_SILPPK_A_SFX"` — a name that specifically claims to be the
+   silenced-PPK gunshot — yet its decoded ROM content is what the user
+   twice identified as the melee-slap effect (which has its own, different,
+   adjacent indices: `47_PUNCH1_SFX`/`48_PUNCH2_SFX`/`49_PUNCH3_SFX`). A
+   correctly-decoded sound whose content doesn't match its own debug label
+   points at a **sound-bank navigation/indexing bug** (wrong bank, wrong
+   instrument, or an off-by-one somewhere in the ALBank -> ALInstrument ->
+   ALSound walk) rather than at "GoldenEye's SFX design reuses one asset
+   for two things" (M-59's charitable reading (a)). `src/snd.c`'s
+   `sndPlaySfx` doc comment is explicit about the resolution path:
+   `soundBank->instArray[0]->soundArray[soundIndex]` — i.e. `soundIndex` is
+   an index into **instrument 0's** sound array, not a bank-global flat
+   index. Worth checking directly: does `romdata.c`'s bank re-layout
+   (`afCtx`/`_bnkfPatchWaveTable`, `port/src/romdata.c` ~L582-780) walk
+   instruments/sounds in the same order the ROM's `ALBankFile` stores them,
+   or could the PC conversion silently shift indices by one somewhere in
+   that re-layout pass? Not yet checked line-by-line against the ROM bytes
+   for THIS specific bank/instrument.
+2. **Started `scratchpad/rom_sfx_decode.py`** (untracked, WIP, not yet
+   working correctly) — a fresh, from-scratch offline ROM bank parser
+   (independent of the live game) intended to decode a whole *range* of
+   `soundIndex` values (44-50, 107, extensible) directly from
+   `_sfxctlSegmentRomStart`/`_sfxtblSegmentRomStart` and compare each one's
+   envelope/waveform against the new `B00I00S2D.wav` reference, to find
+   which soundIndex (if any) actually matches the real gunshot — which
+   would prove a specific off-by-N in the bank walk rather than relying on
+   ear-only comparisons. **This script's ADPCM predictor loop is currently
+   WRONG and must not be trusted as-is** — it stubs out the intra-subframe
+   accumulation term with a dead `if False` branch. Confirmed the *exact*
+   correct algorithm by re-reading `port/src/mixer.c`'s `aADPCMdecImpl`
+   (L185-239, ground truth, this is what the live port actually runs):
+   table shape `sAdpcmTable[predictor][2][8]`; per output sample `j` (0-7)
+   within a subframe, `acc = tbl[0][j]*prev2 + tbl[1][j]*prev1 +
+   (ins[j]<<11) + sum_{k=0}^{j-1} tbl[1][j-k-1]*ins[k]`, `ins[]` being the
+   8 sign-extended-then-shifted nibbles of that subframe, `prev1`/`prev2`
+   the last two output samples (carried from the previous subframe/frame).
+   **Next session: fix `rom_sfx_decode.py`'s decode loop to match this
+   exactly** (the M-58/M-59 "isolated decode" script that the user's slap
+   identification was based on was verified byte-exact against this same
+   algorithm in a prior session, so that specific result stands — only the
+   new range-scanning script is unverified), then run it across a wider
+   soundIndex range and diff each envelope against `B00I00S2D.wav`.
+3. **Also flagged, not yet resolved:** the M-59 "correctpitch" resample
+   experiment (`scratchpad/d202_soundindex46_correctpitch.wav`, pitch=23849
+   from the M-58 live trace) produced *fewer* output samples (1459) than
+   input (3984) at a pitch ratio ~0.364. If pitch < 1.0 means "advance less
+   than one input sample per output sample" (slow down / stretch), output
+   sample count should be `input / ratio` (more samples), not `input *
+   ratio` (fewer) — the direction looks inverted. This resample script's
+   formula needs re-deriving against `port/src/mixer.c`'s actual
+   `aResampleImpl`/`sResampleTable` before its output is trusted either
+   way; it has NOT been sent to the user and should not be used as evidence
+   yet.
+
+**Status at handoff: D202 is OPEN, user-confirmed-wrong-in-PC-port, actively
+being re-investigated.** Do not re-close as "ground truth, not a bug" —
+that conclusion was explicitly rejected by the user with a real reference
+recording now in hand (`scratchpad/B00I00S2D.wav`). No code changes made
+this session (diagnostic-only), nothing to revert.
+
+**M-61 — both M-60 threads resolved (one closed, one fixed+run); the
+decisive question is now "what byte is actually in the original ROM", and a
+new logical constraint makes that the keystone fact.** Diagnostic-only
+session again; no game/port code touched. Results:
+
+1. **Thread 1 (bank-navigation off-by-N) CLOSED — negative.** Line-by-line
+   review of `port/src/romdata.c`'s bank re-layout (`afCtx` /
+   `_bnkfPatchWaveTable`, ~L582-780) confirms the PC conversion walks
+   `ALBankFile -> ALInstrumentFile -> ALSoundFile` in exact ROM order with
+   no index shift; combined with M-56's byte-exact runtime trace, PC
+   soundIndex N resolves to the same ROM sample as N64 soundIndex N. The
+   "wrong bank / off-by-one in the walk" hypothesis is dead. Do not
+   re-litigate it.
+2. **Thread 2 (offline decoder) FIXED and VALIDATED.**
+   `scratchpad/rom_sfx_decode.py`'s `adpcm_decode()` was rewritten to match
+   `port/src/mixer.c`'s `aADPCMdecImpl` exactly. Three bugs fixed: (a)
+   tbl0/tbl1 indexing was swapped, (b) the intra-subframe accumulation term
+   `sum_{k<j} tbl[1][j-k-1]*ins[k]` was missing, (c) wrong `ncoef` count.
+   Validation: full-bank scan of all 261 sounds (gun.h L85: "There are 261
+   sound effects, or 0 - 105h") decoded cleanly; **index 45
+   (`45_DROP_GUN_SFX`) is the ONLY strong match for the user's reference
+   clip `B00I00S2D.wav` (envelope correlation +0.999)**; index 46
+   (`46_GUN_SILPPK_A_SFX`) decodes to the early-peak fast-decay "slap".
+   Candidates saved as `scratchpad/romsfx_44..60.wav`. The decoder is now
+   trustworthy for future soundIndex lookups.
+3. **Fire path traced end-to-end in game code — no runtime remapping of the
+   index exists.** `src/game/gunfire.c` L3196/L3200:
+   `sndPlaySfx(g_musicSfxBufferPtr, bondwalkItemGetSound(var_s1), ...)` →
+   `src/game/gun.c` L1343-1345: `bondwalkItemGetSound()` returns
+   `get_ptr_item_statistics(item)->Sound` — the raw u16
+   `WeaponStats.Sound` field (offset 38; layout confirmed from
+   `src/game/gun.h`: 7×f32, s32 AmmoType, s16 MagSize, u8 AutoFireRate,
+   s8 SingleFireRate, u8 ObjectsShootThrough, u8 SoundTriggerRate, u16
+   Sound, ptr cartridge, …). The silenced PPK's fire sound IS
+   `wppksil_stats.Sound`, used verbatim. (Unsilenced PPK uses 0x6B=107.)
+4. **Build wiring: both N64 and PC builds compile the same initializer from
+   source.** `src/game/gun.c:135` includes the aggregate
+   `assets/obseg/gun/gunWeaponStats.inc.c`, which defines `wppksil_stats`
+   inline at `//D:800326C4` with `.Sound = 0x2E` (it only #includes the
+   per-weapon files for fist/knife; everything else is inline). The
+   per-weapon file `assets/obseg/gun/wppksil/gunWeaponStat.inc.c` carries a
+   second, IDENTICAL copy (also `0x2E`, same `//D:800326C4`). The PC build
+   exclusion list covers only `assets/obseg/{bg,brief,setup,stan}`
+   (CMakeLists ~L473), so gun.c's compiled data is identical in both
+   builds. **The decompiled source is internally consistent: 0x2E in both
+   copies.**
+5. **KEY LOGICAL CONSTRAINT (new, this is the keystone):** the project's
+   premise is that the N64 build byte-matches the original ROM. Compiled
+   data cannot silently diverge — if `gunWeaponStat.inc.c`'s `.Sound`
+   were a transcription error, the built ROM would differ from the
+   original at exactly those 2 bytes and the match would fail. Therefore
+   **0x2E almost certainly IS in the original ROM**, i.e. real N64 hardware
+   also requests sound index 46 for the silenced PPK. That contradicts the
+   reference clip matching index 45 at +0.999. Exactly one of these must be
+   false:
+   (a) the byte-match verification does not actually cover this data
+       segment (check the verify tooling/output!);
+   (b) `B00I00S2D.wav` is not an in-game capture from real N64 hardware —
+       its filename looks like a media-library asset ID, provenance was
+       never stated; if it's e.g. film/marketing audio, the "N64 plays 45"
+       premise collapses and M-59's "faithful reproduction" conclusion
+       returns WITH evidence;
+   (c) N64 runtime resolution of index 46 differs from ROM-order index 46
+       (Thread 1 closed *ordering* in the PC re-layout, not real-hardware
+       ALBank content — lower priority given (a)/(b));
+   (d) the +0.999 envelope correlation with index 45 is misleading (room
+       reverb tail can inflate envelope matches).
+6. **Direct ROM-byte read of `wppksil_stats.Sound` FAILED — do NOT repeat
+   the same searches (they looped 40+ times this session, all 0 hits):**
+   - Any pattern containing a decompiled float literal is unreliable: the
+     literals are decimal approximations that don't round-trip to exact
+     IEEE-754 bits (e.g. `-20.799999` → `c1a66666`, zero occurrences in
+     ROM). Integer-only tail patterns (`AmmoType=1, MagSize=7, 0xFF, 0x10,
+     …`) also returned 0 hits — either the byte layout at that ROM location
+     differs from assumption or the data sits where the scan didn't look.
+   - The hand-computed RAM→ROM mapping produced ROM offset `0xC11934` >
+     file size `0xC00000` — WRONG. Note `ge007.ld` puts `.csegment` at ROM
+     `0xC00000` (= exactly EOF), so `wppksil_stats` (vaddr `0x800326C4`)
+     cannot live there; the correct vaddr→ROM mapping must come from the
+     N64 build's map file/symbol table, not arithmetic.
+   - No N64 `.map` found at maxdepth 3 (only the PC CMake tree
+     `build-linux/`). Search DEEPER: `assets/obseg/Makefile.*`, `ld/`,
+     `dist/`, or any N64 ELF in the repo; `nm`/`objdump` on it yields the
+     exact vaddr+section, and the ROM offset then follows from the linker
+     script.
+7. **Next session, in priority order:**
+   1. **Establish what byte the original ROM holds at
+      `wppksil_stats.Sound`** — find the N64 build map/ELF (search deeper
+      than maxdepth 3) and read the 2 bytes. This single fact splits the
+      tree: ROM=0x2D → transcription error (then audit why byte-match
+      verification missed it); ROM=0x2E → data is ground truth, and the
+      discrepancy lives in reference-clip provenance (b) or N64 runtime
+      resolution (c).
+   2. **Check the byte-match verification tooling** — does it compare data
+      segments or code only? Locate the last full-verify output.
+   3. **Ask the user for `B00I00S2D.wav`'s provenance** (one question; see
+      (b) above).
+   4. Cheap corroboration: live PC trace logging the soundIndex actually
+      passed to `sndPlaySfx` on PPK fire (expected 46) — confirms the PC
+      side behaves exactly per its data.
+
+**Status at handoff (M-61): D202 OPEN.** Threads 1+2 from M-60 are closed
+(negative / fixed). No code changes; only `scratchpad/rom_sfx_decode.py`
+modified (now correct + validated). Do not re-run the failed ROM byte-
+pattern searches — go for the N64 map file instead.
+
+### M-62 — item (2) resolved without a build: byte-match verification DOES cover this exact struct, and its checksum was captured after the source's last edit. `.Sound = 0x2E` is very likely ground truth. Pivoting to (b)/(d).
+
+Static/read-only session. Skipped the N64-map/ELF route (item 1) — no MIPS
+toolchain is installed in this environment (`mips-linux-gnu-*` absent,
+`docs/building.md` says extraction needs `binutils-mips-linux-gnu`; building
+the full N64 target to get a map file is a real toolchain-install task, not
+attempted this session) — and went straight for the cheaper item (2) instead.
+
+**Found: this repo's own CI (`.github/workflows/ci.yml`) never builds the
+N64 target at all.** `validate`/`linux-build`/`windows-build` are all PC-port
+jobs; there is no job invoking the N64 `Makefile` or
+`scripts/test_files.sh`. So "byte-matches US/EU/JP ROMs" (AGENTS.md's
+opening claim) is inherited from the upstream `n64decomp/007` project's own
+history, not continuously re-verified here — worth knowing, but a separate
+concern from D202.
+
+**The verification tooling itself does cover `.data`, and gun.o specifically:**
+`scripts/test_files_readme.md` — `test_files.sh` extracts `.text`/`.code`/
+`.bss`/`.data`/`.rodata` from every `.o` under `src/`, `src/game`, and the
+four asset dirs, and diffs each against a checked-in known-good md5
+(`scripts/ge007.u-test_basis.csv`). Confirmed by direct grep:
+`scripts/ge007.u-test_basis.csv:946`: `0289c36e967840bba7f6fbd026dda001,.data,build/u/src/game/gun.o`
+— `gun.o`'s `.data` section (which is where `wppksil_stats` lives, via
+`gun.c`'s `#include` of `gunWeaponStat.inc.c`) has a recorded checksum.
+This directly falsifies alternative (a) from M-61 — the verification does
+cover this exact data.
+
+**Timing check, so the checksum can't be stale relative to a since-edited
+source:** `git blame -L946,946 scripts/ge007.u-test_basis.csv` →
+`cc14d64e7 "for england james?"` (2026-08-16, upstream sync commit).
+`git log -- assets/obseg/gun/wppksil/gunWeaponStat.inc.c` → last touched
+`9fbe1fd5` ("sync. run make forceextractassets..."), which is an ancestor of
+`cc14d64e7` in this file's history. **So the checksum was captured AFTER
+the last edit to this exact source file** — it isn't testing stale content.
+Re-read the file directly: `.Sound` is still `0x2E` (14th positional field,
+`assets/obseg/gun/wppksil/gunWeaponStat.inc.c:3`), unchanged.
+
+**Conclusion (not a rebuild-confirmed pass, but strong circumstantial
+evidence):** the upstream decomp project's own generated fingerprint of a
+known-good `gun.o` build covers this exact struct, was captured against
+this exact (still-current) source content, and this repo's non-negotiable
+rule #2 (game logic/decomp source frozen, PC-port work never touches
+`src/game/gun.c` or `assets/obseg/gun/**`) means nothing has drifted since.
+**Actually running `test_files.sh` to get a live "pass" line still requires
+installing a MIPS toolchain and doing a real N64 build — not done this
+session; flagged as the one remaining way to make this airtight rather than
+strongly-inferred.** Barring that, alternative (a) is now the *least* likely
+of the four M-61 alternatives, not the most. Combined with M-61's already-
+closed alternative (c) (traced fire path, no runtime remapping), the two
+live leads are now **(b) reference-clip provenance** and **(d) envelope-
+match reliability** — both point away from a port bug and toward a
+misidentified reference clip.
+
+**Next session, in order:**
+1. **Ask the user the one open question: where did `scratchpad/
+   B00I00S2D.wav` come from?** (Real N64-hardware capture of this exact
+   weapon on this exact ROM region? An emulator? A sound-effects library
+   asset, given the filename reads like a media-asset ID, not a capture
+   log?) This is the cheapest possible next step and was never actually
+   asked — do it before any more code/data spelunking.
+2. If the user can't confirm hardware provenance: run the same ROM in a
+   known-good N64 emulator (the M-59 handoff's original recommended
+   tie-breaker, never done), fire the silenced PPK, listen directly —
+   settles (b)/(d) without needing the reference clip at all.
+3. Only if both of those come back still contradicting `.Sound = 0x2E`:
+   install a MIPS toolchain (`binutils-mips-linux-gnu` equivalent) and
+   actually run `scripts/test_files.sh` for real, to convert this
+   session's strong-inference close of alternative (a) into a hard pass/fail.
+4. Cheap corroboration, still not done: live PC trace of the soundIndex
+   passed to `sndPlaySfx` on PPK fire (expected 46) — confirms PC-side
+   behavior matches its own data, independent of what the data *should* be.
+
+**Status at handoff (M-62): D202 OPEN**, but the center of mass has shifted
+firmly away from "port bug in the data/decode chain" (four independent
+sessions, M-56 through M-62, now corroborate `.Sound = 0x2E` end to end)
+and toward "reference clip may not be what it was assumed to be." No code
+changes this session — read-only investigation, one `findings.md` write-up.
+
+**Same session, follow-up: asked the user directly where `B00I00S2D.wav`
+came from. Answer: "Not sure / found online"** — the user does not know its
+provenance and it was sourced from the internet, not recorded from real N64
+hardware or a verified emulator run against this ROM. This closes item (1)
+of the M-62 next-session list and directly confirms alternative **(b)**
+from M-61 (reference clip isn't a verified in-game N64 capture) as the true
+explanation — an unverified internet clip was compared against a
+byte-verified ROM data table and, unsurprisingly, didn't match.
+
+**Reassessment: five independent sessions (M-56 through M-62) have now
+verified every link in the actual chain** — soundIndex resolution, bank
+re-layout order, the ALWaveTable/ALSound pointer chain, the ADPCM decode
+math (hand-verified bit-exact against the C output), the ROM segment
+offset (verified 3 ways), and now the weapon-stats source data itself
+(byte-match checksum, captured post-edit) — **all say the silenced PPK
+correctly requests and plays soundIndex 46 exactly as real N64 hardware
+would.** The only unverified link left is the thing D202 was reopened over:
+an internet-sourced reference clip of unknown origin. That is no longer a
+credible basis to keep this open as a port bug.
+
+**Recommendation: close D202 as NOT-A-BUG** (same conclusion M-59 reached,
+now on much stronger evidence) **unless the user wants the belt-and-braces
+emulator A/B** (fire the silenced PPK on the actual ROM in a known-good N64
+emulator, listen directly) — cheap, and the only remaining way to fully
+rule out a genuine transcription error without installing a MIPS toolchain
+and running `scripts/test_files.sh` for a hard pass. Do not spend further
+session time on the data/decode/index chain — it is exhaustively verified.
+
+### M-63 — SUPERSEDES the M-62 "recommend close": user reports the bug is broader than a single wrong sample — real-time mixer/voice corruption, not a data-table issue. REOPENED for real, live repro attempted. Root cause NOT found; one concrete anomaly banked for next session.
+
+**User's report (verbatim symptom, not the M-60 reference-clip framing):** the
+wrong ("slap") sound always plays on the silenced PPK; the correct suppressed
+shot sometimes plays **too** (both heard together, not one-or-the-other);
+and over a play session sounds "pile up and spirally glitch out," eventually
+leaving **no audio except a looping sound (e.g. Bunker's door) stuck playing
+since level start.** This is categorically different from "wrong sample
+selected" — it describes runtime mixer/voice-lifecycle corruption. The M-56
+through M-62 chain (which verified the index/data/decode path bit-exact) does
+**not** cover this; it only proves soundIndex 46 is the *correctly requested*
+sound, not that the mixer plays it *cleanly* once requested. Reopening.
+
+**Build+run environment IS available this session** (`export
+PATH=/c/msys64/mingw64/bin:$PATH`; MSYS2 MINGW64 gcc/cmake/SDL2 all present).
+No MIPS toolchain (confirmed absent again, unrelated to this thread).
+
+**False-alarm detour (banked so it isn't repeated): a "crash in `load_bg_file`
+(`bg.c:865`) on every `-level_09` boot" is NOT a real bug** — it was this
+session's own test-setup gap. A throwaway `build-pc/data/` with only the
+`.z64` copied in (no `pccg-ntsc-final/`, `pcmodels-ntsc-final/`) leaves
+`file_resource_table` pointing at raw big-endian ROM instead of the converted
+PC sidecars (`obInit()`'s own comment describes exactly this failure mode);
+the two `[WARN]` lines ("pcmodels.bin not found", "pccg.bin not found —
+stage loads will fault") were sitting right in the log and should have been
+read before chasing a gdb backtrace. Copying the real `data/pccg-ntsc-final/`
++ `data/pcmodels-ntsc-final/` (+ the repo's real `ge007.eep`/`ge007.ini`)
+into `build-pc/data/` makes it load clean, 60s+, no crash, both with and
+without the uncommitted audio-diagnostic files. **Next session: always mirror
+the full `data/` dir into `build-pc/data/`, not just the ROM, before treating
+any level-load failure as real.**
+
+**Repro built:** `GE_MIXERTRACE=1 GE_AUDIOTRACE=1 GE_AUDIODUMP=1
+GE_INPUTSCRIPT="600:R,Z;601:R,Z;690:R,Z;691:R,Z;...;3210:R,Z;3211:R,Z"`
+(30 fire pulses at ~90-frame/~0.75s spacing) `timeout 60
+./ge007.x86_64.exe -level_09`, run against the real save
+(`data/ge007.eep`) copied into `build-pc/data/`. Ran clean 60s, no crash.
+Logs preserved: `scratchpad/d202-m63/{audiotrace.log,mixertrace.log,
+audiodump.raw}` (mixertrace.log is 25MB — grep it, don't read it whole).
+
+**Checked and RULED OUT this session, from the trace:**
+- **Voice-pool exhaustion / leak:** only **16 distinct `newState` voice-slot
+  pointers** were used across all 153 `sndPlaySfx` calls in the 60s window
+  (highest reuse count: 20), and `sndDeactivate` count (159) tracks
+  `sndPlaySfx` count (153) almost 1:1. The pool is being recycled
+  continuously, not growing unbounded — the "voices never freed" theory
+  (the D199/M-53–M-55 lineage) does **not** reproduce in this repro.
+- Firing the silenced PPK produced exactly the expected `soundIndex=46`
+  requests (58 of them, one burst per scripted trigger pull, occasionally
+  2 back-to-back — plausibly dual-wield, not investigated further) with no
+  other unexpected soundIndex interleaved in the same burst.
+
+**New anomaly found, not yet explained — the most concrete lead for next
+session:** `soundIndex=109` (`bondconstants.h:2546`,
+`"109_GUN_B4_BOLTACTION_SFX", //used for AK47`) fires **94 times in 60
+seconds** despite the player never touching an AK47 in this repro (silenced
+PPK only). A chunk of those requests hit the *same* voice slot
+(`newState=00000000706f4fb8`) at a suspiciously uniform **2880-byte spacing
+in the mixed output stream** — at 22050Hz stereo 16-bit that's exactly
+**720 samples / ~32.6ms between re-triggers**, four-in-a-row
+(`dumppos=688576,691456,694336,697216,700096`). ~30 rounds/sec is far
+faster than any plausible automatic-weapon cadence in this game (real
+full-auto weapons here fire far slower) — this reads like something is
+re-issuing `sndPlaySfx` for the same logical sound every audio tick/frame
+instead of once per actual game event, which would exactly explain "sounds
+piling up." **Not yet confirmed as related to the user's PPK-slap complaint
+specifically** (soundIndex 109 isn't the PPK's sound) — could be a
+*second*, independent SFX-retrigger bug that happens to share the same
+mixer, and its presence would still explain general "audio feels broken."
+
+**Not yet reproduced: the user's exact reported chain** (piling
+up → spiraling glitch → eventual total silence except one stuck loop). This
+60s/58-shot synthetic burst didn't collapse the mixer — either it needs a
+longer, more realistic session (real human play, many minutes, mixed
+NPC/player/ambient audio denser than this script), or the soundIndex=109
+retrigger-storm anomaly above is the seed that, given more real playtime,
+compounds into what the user described (worth designing a longer repro
+around forcing that specific retrigger condition first, cheaper than a raw
+extended random playtest).
+
+**Next session, in order:**
+1. Find what actually calls `sndPlaySfx(109, ...)` (search `src/game/*.c`
+   for callers keyed to soundIndex 109 / `GUN_B4_BOLTACTION_SFX`) and
+   determine whether the ~32.6ms retrigger cadence is a real per-shot
+   automatic-fire loop (legitimate, if unusually fast) or a bug re-firing
+   once per audio buffer/tick instead of once per game event. This is the
+   single most concrete, checkable lead from this session.
+2. If (1) doesn't explain it: build a much longer repro (5+ minutes,
+   `GE_INPUTSCRIPT` walking + intermittent firing near guards, or just ask
+   the user to reproduce with `GE_MIXERTRACE=1 GE_AUDIOTRACE=1
+   GE_AUDIODUMP=1` set and hand back the logs) aimed specifically at
+   reaching the "eventual total silence except one stuck loop" end state,
+   then diff voice-slot reuse counts/timing against this session's healthy
+   60s baseline to see where it diverges.
+3. Listen to `scratchpad/d202-m63/audiodump.raw` directly (raw s16 stereo
+   22050Hz PCM) for audible garbling/overlap around the soundIndex=109
+   retrigger-storm timestamps — not done this session (no audio playback
+   attempted, log-analysis only).
+4. Do NOT re-litigate the index/data/decode/ROM-offset chain (M-56–M-62,
+   exhaustively verified) — this session's finding is orthogonal to that
+   one; D202 is reopened on a *different* mechanism than the M-60 reference
+   clip.
+
+**Status at handoff (M-63): D202 REOPENED, root cause not found.** The
+M-62 "recommend close" no longer stands — the user's actual complaint is a
+runtime mixer/voice issue, not (only) a data-correctness question. One
+concrete, unexplained retrigger anomaly (soundIndex 109, ~32.6ms cadence)
+is banked as the top lead. No code changes this session — build+run+trace
+only; the pre-existing uncommitted diagnostic files (`port/src/audio.c`,
+`port/src/mixer.c`, `src/audi.c`, `src/libultra/audio/load.c`, `src/snd.c`)
+were exercised, not edited.
+
+### M-65 — Root-caused the "eventual silence" half: an ownerless `SOUND_FLAG_LOOPED` SFX permanently consumes one of only 8 voices. Guard measured. The "wrong/multiple sounds" half gains a second, independent cause (`sndCreatePostEvent` was stubbed out, killing ALL distance attenuation). The audible stuck loop is still NOT reproduced.
+
+**User's report this session:** "wrong sound playing or multiple sounds playing
+when there should be one", and "on bunker if the attract shows the door open,
+it plays a sound and the sound gets stuck looping forever until you close the
+game/level", later refined to "the double door sound by the computer room still
+infinitely loops after they begin playing" and "a good chance it just happens
+when the level starts if you get that attract intro with them opening".
+
+#### (1) CONFIRMED + MEASURED: the voice leak that produces "eventual silence"
+
+Chain, each link verified rather than argued:
+
+- `soundIndex=203` (`METAL_SLIDE_CLOSE_SFX`) has `envelope->decayTime == -1`.
+  Verified at the **source bank level**, not just at runtime, with a new
+  `GE_BANKDUMP` probe walking `instArray[0]->soundArray[i]` in the ROM-layout
+  blob: `BANKSRC inst@0x005778 soundIndex=203 sound@0x0046B8 env@0x000008
+  decay=-1`. `GE_KEYMAPDUMP` additionally dumps every source `ALEnvelope`
+  (`ENVSRC src@0x000008 raw=00000000 FFFFFFFF 000007D0`). **Genuine ROM data,
+  faithfully converted** — 19 of the SFX instrument's 261 sounds are
+  deliberately sustained this way.
+- `decayTime == -1` sets `SOUND_FLAG_LOOPED` (`sndSetupSound`, via
+  `decayTimeFlag`). A looped sound **never posts `AL_SNDP_STOP_EVT`**
+  (`snd.c` `AL_SNDP_DECAY_EVT` skips it), *and* the preemption scan
+  **explicitly refuses to steal looped voices** (`!(iterState->unk3e & 0x12)`).
+  So the only release is `sndDeactivate`, which needs an owner.
+- `doorPlayCloseSound0/1` play it as `sndPlaySfx(..., METAL_SLIDE_CLOSE_SFX,
+  NULL)` — **no `pendingState`**, so nothing stores the state and nothing can
+  ever deactivate it. (NB the decomp names mislead: `doorStartClose` calls
+  `doorPlayOpenSound1`; `doorFinishOpen`/`doorFinishClose` call
+  `doorPlayCloseSound0`/`1`. The *Open* pair own their slide loop via a slot;
+  the *Close* pair are unowned terminators.)
+- `maxSounds` is **8** (`MUSIC_SFX_SEQ_MAYBE_MAX_SOUNDS`, `music.c:76`).
+
+**Measured** (115 s headless `-level_09`, new `[VOICE+]`/`[VOICE-]` probes
+pairing every `g_sndAllocatedVoicesCount++` with its decrement):
+**7 of the 8 voices permanently held, every one of them `sound=706c8e48`
+(soundIndex 203) with `flags=7` (`LOOPED|PLAYING`)**, never released. The
+64-entry *state* pool stays healthy (18 slots recycling, never NULL) — which is
+why this is silence, not a crash: later `sndPlaySfx` calls get a state but no
+voice and are dropped via `sndDisposeSound`.
+
+**Guard (port-side deviation, `src/snd.c` preemption scan).** Allow reclaiming
+a voice only when it is `SOUND_FLAG_LOOPED`, not `SOUND_FLAG_RETRIGGER`, and
+`state->state == NULL` — i.e. provably ownerless, so nothing could ever have
+stopped it. Owned loops keep their existing protection exactly.
+
+| metric (115 s `-level_09`) | before | with guard |
+|---|---|---|
+| `g_sndAllocatedVoicesCount` | **pinned at 8** | oscillates 1–8 |
+| voices acquired over the run | 171 | **629** |
+| residual stuck 203 voices at exit | **7** | **1** |
+
+User confirmed the symptom improves ("still happens but less cascading
+perhaps"). **This is a game-logic change (AGENTS.md rule #2) justified by
+measurement, not by ground truth — it is NOT known why the N64 does not leak
+here.** Keep it flagged as a documented deviation, not a silent fix.
+
+#### (2) FIXED, independent: `sndCreatePostEvent` was stubbed out, removing all distance attenuation
+
+`sndCreatePostEvent` returned immediately under `#ifdef PORT` (D138), from when
+"libaudio is Phase-3 parked" and nothing drained
+`g_sndPlayerPtr->evtq->allocList`, so every positional tick appended an item
+that was never consumed and `alEvtqPostEvent`'s ordered insert went O(n^2)
+until the kernel-heartbeat watchdog tripped on Facility ambience.
+
+**That premise expired when the Phase-3 audio thread landed (D198-D201)** —
+`amMain` now drains the queue every audio frame. Every caller posts type 8 =
+`AL_SNDP_VOL_EVT` (`bondview2.c`, `chrai.c`, `gunfire.c`, `propobj.c`), so the
+stub had been silently removing **all distance-based volume**: every sound
+played at full volume regardless of range. That is very likely a large part of
+the "wrong sound / multiple sounds / too loud" impression, independent of (1).
+
+Stub removed. Re-measured: `rt=0.996`, `drop=0`, frame times 91-329 us, zero
+watchdog trips over 115 s — the O(n^2) regression does not return.
+
+#### (3) STILL OPEN: the audible endless door loop is NOT reproduced
+
+Not reproduced in any headless run. Everything that could make a sound audibly
+repeat was measured and excluded — see the ruled-out list below.
+
+#### RULED OUT this session (measured — do not re-walk)
+
+- **Wave-level looping.** New `[WAVELOOP]` probe: `loop == NULL` on **every**
+  sound in the SFX bank. No sample can repeat itself.
+- **Decoding past the end of a wave.** New `GE_PULLTRACE` `[PASTEND]` assertion
+  in `alAdpcmPull` (fires when `f->sample` exceeds the wave's total samples
+  while `nOver == 0`): **0 hits**. `aClearBuffer` zero-fill works; an exhausted
+  voice goes silent.
+- **Stale / accumulating software DMEM.** `GE_DMEMWIPE` zeroes all 4 KB of
+  `sDmem` at the exact frame boundary (`alMainBusPull`'s `AL_MAIN_L_OUT`
+  clear is the first opcode of every frame). Audio still 99 % non-silent and
+  unchanged — no audio state carries across frames in DMEM.
+- **Reverb feedback self-oscillating** (plausible because `aPoleFilterImpl`,
+  the damping in the feedback path, is an unimplemented no-op — D199).
+  `GE_NOWET` mutes the reverb send entirely: signal unchanged.
+- **The `AL_SNDP_PLAY_SFX_EVT` retrigger machinery.** 0 retrigger posts in the
+  user's trace. (Also independently confirms D204's closure of the M-63
+  `soundIndex=109` anomaly: measured here as 184 plays, **owned 184 / orphaned
+  0** — a properly-owned repeated sound, not a retrigger storm.)
+- **Doors oscillating.** ~4 open/close cycles per door per 110 s across 4 doors;
+  203 played ~once per door state change. Normal, not thrashing.
+- **Doors orphaning their loop because both slots are busy.** 0 occurrences
+  (`[DOORSND] ... ORPHAN-both-slots-busy` never fired). The orphan is real but
+  arises differently: the call site passes `NULL` by design.
+- **`ALKeyMap` conversion.** `GE_KEYMAPDUMP` dumps all 220 source keymaps from
+  the ROM-layout blob; runtime values match, including entries that are
+  legitimately all-zero in the fields Rare repurposed.
+- **`DoorRecord` 64-bit overlap.** `sizeof(DoorRecord)=0x128`, observed
+  allocation stride exactly `0x128`; `openSoundState@0x110`,
+  `closeSoundState@0x118`. No overlap.
+- **The `ALSoundState`-pointer-to-pointer pun** in `sndPlaySfx`
+  (`pendingState->link.next = nextState`, relied on by `doorPlayOpenSound0/1`
+  and `audioPlayFromProp`). Survives the 64-bit transition — `ALLink.next` is
+  at offset 0 and pointer-sized on both. New `[SLOTWRITE]` probe confirms the
+  slot receives the state.
+- **`ALWaveTable::len` drifting at runtime** (observed 6939 -> 6940 etc.).
+  Benign: `alLoadParam` rounds `len` down to a whole number of 9-byte ADPCM
+  frames on first bind, so the pre-round value is simply seen once.
+
+#### Corrections banked (mistakes made this session — do not repeat)
+
+- **`romdataFixupMusicSeqTable: seqCount 63 exceeds blob capacity 1` is
+  BENIGN**, not a music failure. The function is called twice and the first
+  call deliberately passes a 16-byte header slice (capacity `(16-4)/8 = 1`);
+  the full-size second call succeeds. Music loads and plays.
+- **A continuous ~1400 RMS "drone" in `GE_AUDIODUMP` captures is the
+  background music, not a stuck sound.** It was briefly mistaken for the bug
+  because only *SFX* events carry `dumppos` timestamps, so music looks like
+  sound with nothing playing it. Confirmed music by pointer range: the heavily
+  rebound wavetables (`706cbaf8`, `706ccfe8`) lie outside the SFX bank's
+  `706c3e70`-`706ca430` range and never appear in any `sndPlaySfx`; they are
+  driven by `csplayer.c:535` (`alSynStartVoiceParams`). The ~28 k
+  `AL_FILTER_SET_WAVETABLE` binds per 60 s are ordinary note-ons, and
+  `f->sample` resetting per note is correct.
+- **Multiple `audiotrace.log` files exist** (repo root vs `build-pc/`) and a
+  shell whose cwd shifts between commands will silently analyse the wrong one.
+  Always use an absolute path, and check `ls -la` timestamps before trusting a
+  log's provenance.
+
+#### Diagnostics added (all `#ifdef PORT` / env-gated; remove when D202 closes)
+
+| env var | file | what it prints |
+|---|---|---|
+| `GE_AUDIOTRACE` | `src/snd.c` | `[ENVELOPE]`, `[WAVELOOP]`, `[VOICES]`, `[VOICE+]`/`[VOICE-]`, `[SLOTWRITE]`, `[RETRIGGER-POST]`, keymap fields on every `sndPlaySfx` |
+| `GE_AUDIOTRACE` | `src/game/propobj.c` | `[DOORSND]` — every door sound state change, both slots, and an `ORPHAN-both-slots-busy` verdict |
+| `GE_KEYMAPDUMP` | `port/src/romdata.c` | `KEYMAP` + `ENVSRC` — source ROM bytes of every `ALKeyMap` / `ALEnvelope` |
+| `GE_BANKDUMP` | `port/src/romdata.c` | `BANKSRC` — the source bank tree per `soundIndex` |
+| `GE_PULLTRACE` | `src/libultra/audio/load.c` | `[PASTEND]` — asserts no voice decodes past its wave |
+| `GE_DMEMWIPE` | `port/src/mixer.c` | zeroes software DMEM at the frame boundary |
+| `GE_NOWET` | `port/src/mixer.c` | mutes the reverb send |
+
+**Caution:** the `[VOICE+]`/`[VOICE-]` probes are written from both the game
+thread and `amMain` to one unbuffered `FILE*`, so occasional lines are torn.
+Parse defensively (filter to well-formed hex) or add a lock before relying on
+exact counts.
+
+#### Next step
+
+Needs a user capture at the failing door (computer-room double doors, or a
+level start whose attract intro shows them opening) with **both**
+`GE_AUDIOTRACE=1` and `GE_AUDIODUMP=1`. The dump allows isolating the stuck
+sound numerically and separating it from music without listening, and
+`dumppos` pins it to the exact door event.
+
+**Status at handoff (M-65): D202 PARTIALLY resolved.** The "eventual silence"
+cascade is root-caused and mitigated (measured); the missing distance
+attenuation is fixed; the audible stuck loop is still not reproduced.
+
+### M-66 — the audible stuck door loop IS root-caused: it is faithful N64 behaviour (an original-game quirk), not a port bug
+
+The user capture M-65 asked for arrived (`build-pc/audiodump.raw`, 31,905,536 B
+= 361.7 s stereo s16 @22050; `build-pc/audiotrace.log`, same run, `-level_09`
+level start whose attract intro shows the computer-room double doors). The
+stuck loop is **sound 203 (`METAL_SLIDE_CLOSE_SFX`) doing exactly what the ROM
+tells it to do**, and every link of the chain is ground truth:
+
+1. **ROM data:** wavetable loop = `(start=2471, end=7719, count=-1)`;
+   `src/libultra/audio/load.c` implements `count` with the explicit comment
+   "-1 is loop forever" (decrements only when > 0). Envelope:
+   `attack=0 decay=-1 release=2000 aVol=127 dVol=127`.
+2. **Game code (byte-matched decompilation):** `doorPlayCloseSound0/1`
+   (`src/game/propobj.c`) plays 203 fire-and-forget with a `NULL` owner state.
+   The `[SLOTWRITE]` probe confirms the close-sound state is **never stored in
+   any door slot**, so the door's stop-sounds path can never reach it, and no
+   other code calls `sndDeactivate` on it. Nothing in the game will ever stop
+   it except level exit.
+3. **sndp (ground truth):** the preemption scan (`src/snd.c` ~line 321) skips
+   any voice with flag `0x12` (`SOUND_FLAG_LOOPED|SOUND_FLAG_RETRIGGER`).
+   `AL_SNDP_DECAY_EVT` schedules the release→stop envelope "except for a looped
+   sound" (`src/snd.c:509`) — a looped voice gets no stop event at all.
+   With `decayTime=-1`, `sndCreateSound` sets `state->priority = 0x41`
+   (vs `0x40` normal), and libultra's `_allocatePVoice`
+   (`src/libultra/audio/synallocvoice.c`) steals only voices with
+   `priority <= new voice priority` — so a 0x41 leaked loop is unstealable by
+   any ordinary 0x40 SFX or music note.
+4. **Pool geometry:** GE's soft limit is 8 (`maxSounds =
+   MUSIC_SFX_SEQ_MAYBE_MAX_SOUNDS`, `src/music.c:76`); the physical PVoice pool
+   is 24 (`MUSIC_SYN_CONFIG_MAX_P_VOICES = 0x18`, `src/music.c:67`). Leaked
+   loops therefore don't deadlock the synth, but they do eat GE's 8-slot soft
+   limit — which is where M-65's guard bites.
+
+**Consequence (identical on N64):** every metal-door close leaks one looping
+voice that persists until level exit. During attract idle no new sounds arrive,
+so nothing ever evicts them and they play forever — exactly the user's report:
+"the double door sound by the computer room still infinitely loops after they
+begin playing". Every code path in this chain is shared original source
+(`snd.c`, `propobj.c`, libultra audio); none of it is port-specific. **This is
+an original-game quirk, faithfully reproduced — rule #2 says leave it.**
+
+#### The capture, timeline (corrected)
+
+`dumppos` is the dump-file byte offset; time = `dumppos/88200` s.
+
+- t=0–21 s: level intro — heavy SFX, door cycles on five doors (…7d2c, …7c04,
+  …79b4, …7adc, …80a4). 203 plays at **1.3 / 3.3 / 11.3 / 17.2 / 21.0 s**.
+- t≈39.1 s: door …80a4 closes → 203 (state …5020). Then a long quiet stretch:
+  the same door's next close comes at **t≈360.7 s** (another 203, state
+  …4f50, still looping when the capture ends at 361.7 s). The attract demo
+  keeps running the whole time — it just gets sparse.
+- Leaked 203 voices alive by t≈40 s: four (states …4db0 from 1.3 s, …50f0 from
+  17.2 s, …4e80 from 21.0 s, …5020 from 39.1 s). Two earlier ones WERE
+  reclaimed — but only because M-65's guard fired under pool pressure:
+  `VOICE- snd8e48/st4e18` at t=14.8 s and `st4fb8` at t=16.4 s, each in the
+  same block as a new-sound play (the preemption path). Without the guard both
+  would persist and the 8-slot limit would fill by ~t=21 s.
+- Steady state from t≈39 s: RMS ≈1560, strong periodicity at **327.0±0.1 ms**.
+
+#### The 327 ms mystery (solved — it was the pitch)
+
+The loop segment is 5248 samples; at the bank rate (22050) that is 238 ms, not
+327. But the voice does **not** play at unity pitch: keymap `keyBase=54`,
+`detune=50`, and `DEFAULT_SETUP_PITCH_SHIFT = -0x1770 = -6000` (`src/snd.c:20`)
+give `alCents2Ratio(54*100 + 50 - 6000) = alCents2Ratio(-550)` = **0.72783**.
+Loop period at playback = 5248 / (22050 × 0.72783) = **327.007 ms** — matching
+the observed 327.0±0.1 ms exactly. The spectral fingerprint agrees: FFT peaks
+of the decoded loop segment at 355.3 / 371.4 / 694.4 / 710.6 Hz × 0.7278 →
+259 / 271 / 506 / 518 Hz vs observed steady-state lines 256.7 / 272 / 504.7 /
+513.8 Hz. Cross-correlating the **pitch-stretched** loop template against the
+t=100 s window gives r = 0.835 (the unpitched template gave ~0.10 — which is
+why every earlier template test "failed"; see corrections below).
+
+#### Corrections to M-65 (banked)
+
+- **M-65's correction "the continuous ~1400 RMS drone in captures is the
+  background music, not a stuck sound" is wrong (or at best incomplete).** The
+  steady-state signal's spectral lines and 327 ms period are the leaked 203
+  loop, pitch-shifted as above; r=0.835 template match. Music is present in the
+  mix too (M-65's pointer-range argument that *those particular* rebound
+  wavetables are music-driven still stands) — the steady state is a composite,
+  but the *stuck* component is 203, and it dominates the fingerprint.
+- **"The audible stuck loop is still not reproduced"** — it is now: user
+  capture + complete mechanism, every link grounded in ROM data / byte-matched
+  code / libultra source.
+- The earlier "full library correlation: best 0.28, sfx203 only 0.10" was an
+  artifact of correlating **unpitched** decodes against pitched playback. Do
+  not re-run template tests without applying `keyBase/detune/shift` → ratio.
+- M-65's guard comment "only 8 voices exist" is imprecise: there are 24
+  PVoice plus the 8-slot GE soft limit; the binding constraint for SFX is the
+  soft limit, and the guard operates on exactly that boundary.
+
+#### Guard status and decision pending (user)
+
+M-65's ownerless-loop preemption guard (`src/snd.c` ~line 325) fired twice in
+this capture and demonstrably prevents pool exhaustion — but it can only fire
+when a *new* sound arrives and the limit is hit. During attract idle nothing
+arrives, so the audible loop persists with or without the guard. Options:
+
+- **A) Pure fidelity:** remove the guard; document D202 as "faithful
+  reproduction of an original quirk". Consequence (also faithful): after 8
+  leaked loops in one level session, new SFX are silently dropped until level
+  exit — that is what N64 does.
+- **B) Keep the guard (status quo, recommended):** a small, precisely scoped,
+  documented port-side deviation. Prevents the SFX-deadlock; the idle loop
+  remains audible exactly as on N64.
+- **C) Extended deviation:** cap/expire ownerless loops in the port layer to
+  silence the idle loop. Fixes the user's complaint but is a larger departure
+  from ground truth than B.
+
+Diagnostics: with the root cause established, the M-65/M-66 probe set
+(`GE_AUDIOTRACE` lines, `[DOORSND]`, `[SLOTWRITE]`, `GE_PULLTRACE`,
+`GE_DMEMWIPE`, `GE_NOWET`, `GE_BANKDUMP`, `GE_KEYMAPDUMP`) may be removed once
+the A/B/C decision lands and D202 closes.
+
+**Status (M-66): D202 root cause ESTABLISHED — the audible stuck door loop is
+sound 203 behaving exactly as the ROM + ground-truth code specify; faithful
+N64 behaviour, original-game quirk. Disposition: user chose C (M-66b below).**
+
+### M-66b — disposition C implemented and measured: ownerless infinite-loop SFX now expire (fade out) on PC
+
+The user chose **C** (extended deviation) as part of the PC port's audio
+implementation. M-65's guard stays (slot reclamation under pool pressure);
+this adds the audibility fix.
+
+**Placement — why `src/snd.c` and not `port/src/mixer.c`.** The predicate that
+distinguishes a *leaked* loop from a legitimate one is **ownership**
+(`soundState->state == NULL`), which only sndp sees. The mixer iterates
+ALVoice/PVoices with no ownership field; scoping there would force either
+hardcoding region-fragile SFX-bank DRAM pointer ranges or capping *all*
+infinite-loop voices (music included). snd.c already carries the two documented
+D202 port-side deviations (M-65 guard, D138 un-stub), all `#ifdef PORT` — every
+D202 port-side change stays in one auditable place. N64 build: zero diff.
+
+**Mechanism.** New PC-only event `AL_SNDP_PORT_EXPIRE_EVT` (reuses the
+`AL_SNDP_UNUSED_13_EVT` = 1<<13 slot, defined under `#ifdef PORT` in
+`src/snd.h`; no shared-enum change). In PLAY_EVT, immediately after a voice
+starts, if the state is LOOPED + FINAL_IN_SEQUENCE + not RETRIGGER +
+`state->state == NULL` **and** the wave carries an ADPCM loop with `count == -1`
+(finite loops self-terminate in load.c and must not be cut short), post the
+expire event at `D202_EXPIRE_DELAY_US` (2 s). Handler: re-validate the full
+predicate at fire time, then ramp volume to 0 over `D202_EXPIRE_FADE_US`
+(500 ms) and post END_EVT — the stock fade/teardown path. Constants are in
+**ALMicroTime = microseconds** (the event queue is µs-driven: `DELTA_1_MS` is
+1000, `DELTA_33_MS` is 33333).
+
+- **Not a reused STOP_EVT:** the stock STOP ramp uses the envelope's
+  releaseTime — ~2.7 ms for sound 203 (release 2000 / pitch ratio 0.7278) —
+  which would hard-cut the loop (click). The dedicated event gives a clean
+  500 ms fade.
+- **Stale-event safety:** `sndDisposeSound` already removes *all* pending
+  events for a state (`sndRemoveEvents(..., 0xffff)`), and any rebind disposes
+  first — so an expire can never fire against a new binding. The fire-time
+  predicate re-check is belt-and-braces (also no-ops if the state was rebound
+  to the *same* sound).
+- **Sequence-walk safety:** the type is added to the `isEventForSingleSound`
+  mask under `#ifdef PORT`, and the post-site requires FINAL_IN_SEQUENCE, so
+  the handler's do-while can never walk into an unrelated alloc-list neighbor.
+- **Owned loops are untouched** (`state != NULL` fails the predicate) — they
+  behave exactly as on N64. Retrigger sounds (managed by PLAY_SFX/DEACTIVATE
+  chains) are excluded.
+
+**Files:** `src/snd.h` (PORT-only event define), `src/snd.c` (two constants,
+post-site in PLAY_EVT, handler case, mask token, guard-comment cross-ref).
+New `[EXPIRE]` line under `GE_AUDIOTRACE` (see GE-ENV-PROBES.md).
+
+**Measured.** 134 s headless `-level_09` run with `GE_AUDIOTRACE=1
+GE_AUDIODUMP=1`. Trace: every sound-203 play posts `[EXPIRE]`; each leaked
+voice gets its VOICE- ~2 s after its VOICE+; run ends at
+`[VOICES] allocated=0 / max=8` (no survivors). Spectral check (per-1-s
+Goertzel at 256.7 Hz, the strongest 203-loop line × 0.7278):
+
+| capture | 256.7 Hz line |
+|---|---|
+| user pre-fix (361 s) | **flat at max from t≈39 s to end** — the complaint, verbatim |
+| post-fix (134 s) | transient ~2–4 s bursts per door close, **full silence between** (gaps at t=60–62, 85–87, 94–98, 110–112, 128–131) |
+
+The stuck infinite loop is gone; each close now rings ~2 s + 0.5 s fade, as a
+door clunk naturally would. Scripts + archived user capture:
+`scratchpad/d202-m66/` (`check_dump.py`, `line_track.py`,
+`user-capture-audiodump.raw`, `user-capture-audiotrace.log`).
+
+**Remaining:** user by-ear pass on the new binary (window is open — probes are
+still in). On sign-off: remove the D202 probe set (`GE_AUDIOTRACE` additions,
+`[DOORSND]`, `[SLOTWRITE]`, `GE_PULLTRACE`, `GE_DMEMWIPE`, `GE_NOWET`,
+`GE_BANKDUMP`, `GE_KEYMAPDUMP`) and close D202.
+
+**Status (M-66b): disposition C IMPLEMENTED + measured — ownerless
+infinite-loop SFX fade out ~2.5 s after starting on PC; faithful N64 behaviour
+otherwise. Awaiting user by-ear verification, then probe removal + close.**
+
+---
+
+### M-67 — Static analysis exhausted: full-bank data scan clean, DSP audit complete, reference clip REFUTED as an in-game capture; new `GE_VOICEDUMP` per-voice probe added for the decisive runtime A/B (this session)
+
+**1. Full-bank SFX data scan — all 261 sounds clean.**
+`scratchpad/sfx_bank_scan.py` walks every sound's wavetable/book/data in the
+ROM: no out-of-range ADPCM table indices, all books valid (order=2, npred 1–4),
+all data within segment bounds, all type-0. The old decoder's silent clamp
+(`if tableIndex >= npred: tableIndex = 0`) had been masking this check — with
+it removed as a hard error, the whole bank passes. No stale/corrupt-table
+hypothesis is possible; the data side of "wrong sample" is closed.
+
+**2. DSP audit complete (vs PD ground truth).** ADPCM scalar decode
+(nibble→ins, predictor loop, clamp), the resample algorithm + 256-entry table,
+the envelope mixer, and the pitch path (`alCents2Ratio` pure/correct; keymap
+formula `keyBase*100 + detune - 6000`, snd.c:803/807) all match the PD port
+line-for-line. The `A_LOOP` (flags&2) branch in `aResampleImpl` is **dead code
+in GE**: the resampler filter's `first` is only ever 0 or 1 (load.c:461/530);
+A_LOOP(2) is never passed to aResample. Not a bug — closed.
+
+**3. The reference clip is refuted as an in-game capture.**
+`scratchpad/ref_match_all.py`: `B00I00S2D.wav` does NOT waveform-match any of
+the 261 SFX decodes (best single CC = 0.19 ≈ noise; index 45's waveform CC is
+0.048), and `ref_match_mix.py` shows no PPK mixture (46+122+ricochet) matches
+either (best 0.09). M-61's "+0.999 with index 45" was purely an
+**envelope-correlation artifact** (two percussive sounds with similar decay
+envelopes). The "N64 plays index 45 for the PPK" premise is dead; the clip's
+provenance is unknown and must be asked of the user.
+
+**4. M-63 final-mix cross-check was inconclusive, not exonerating.**
+`scratchpad/m63_crosscheck.py`: door events (dumppos 23296/54976, index 203)
+show CC≈0 vs offline decode, but those segments are dominated by music
+(broadband RMS 2000–8000, no SFX periodicity). CC≈0 in a music-masked final
+mix proves nothing about which sample the voice played. A per-voice dump (item
+5) or a music-off capture is required.
+
+**5. New probe: `GE_VOICEDUMP=1`** (`port/src/mixer.c`, temporary, D202 diag).
+Writes each voice's resampled mono stream — the `aEnvMixer` input, i.e.
+post-resample/pre-envelope, per-voice, no music/reverb masking — to
+`voicedump.raw` as records `[u32 stateAddr][u32 nSamples][u64 us][s16 × n]`.
+The `[WIRE]` lines (load.c `alLoadParam(SET_WAVETABLE)`) and the first
+`[AUDIOTRACE] sndPlaySfx` line now also carry `t=<µs>` (sysGetMicroseconds)
+so all three streams correlate in time. Offline matcher:
+`scratchpad/voicedump_match.py` (each record vs all 261 pitch-resampled
+decodes). Self-test: `scratchpad/d202-m67/` (25 s `-level_09`, 5.7 MB dump,
+clean parse, records match their sources once the item-6 direction fix is
+applied).
+
+**6. Two tooling bugs found in the self-test (my scripts, not the game):**
+
+- **Resample direction was inverted in every offline model so far.** The
+  hardware playhead advances `pitch/16384 = ratio` input samples per output
+  sample (`aResampleImpl`: `pitchAccumulator += pitch<<1; in += accum>>16`),
+  i.e. `y[k] = x[ratio·k]` — ratio < 1 plays SLOWER and lower. The correct
+  offline model is `resample_linear(native, RATE*ratio, RATE)`, not
+  `(native, RATE, RATE*ratio)` as used in M-63's cross-check and the first
+  matcher pass. **All prior CC results at pitch ≠ 1 are suspect** (the M-63
+  door check doubly so).
+- **WIRE bases are absolute; bank offsets are segment-relative.** The
+  in-memory wavetables hold `base = SFXTBL_START(0x102F19A0) + bank offset`;
+  matching WIRE entries against raw bank offsets finds nothing.
+
+**7. GE's "music" is an SFX-sequence system with its own sample set.**
+`sndNewPlayerInit(ALSeqpSfxConfig*)` (snd.c:168; config in src/music.c:823,
+`MUSIC_SFX_SEQ_MAYBE_MAX_SOUNDS = 8`): music notes are sequenced SFX played
+through the same 8-voice alSynth pool. The WIRE log shows ~8 music samples
+whose bases sit at ROM 0x103ed1e8–0x10407860 — 240–350 KB **past** the last
+SFX-bank sample — with wavetable structs allocated contiguously after the SFX
+bank's. Music notes do not pass through `sndPlaySfx`, so they are invisible to
+the `[AUDIOTRACE]` request probe: persistent voices in a voicedump are usually
+music, and their "best match" against the 261-SFX bank is coincidental
+(music samples reuse field recordings; free-ratio sweep found e.g. CC 0.92 vs
+index 122 at transposed pitch). Any per-voice analysis must subtract music
+first (or use the timestamped WIRE assignments to identify each voice's sample).
+
+**8. Open anomaly parked for the next session: sound 232 (PICKUP_GUN_SFX)
+requested at `-level_09` start produced no audible audio.**
+Self-test trace: `sndPlaySfx(232)` at dumppos=0 → VOICE+ (count 1/8) →
+VOICE- within ~1 frame; the WIRE-assigned filter was recycled to music
+immediately; no env state in the dump matches decode(232) (max CC 0.48 ≈
+noise, even with the corrected resample direction). Either the level script
+stops it instantly (faithful N64 behaviour — needs an N64 A/B to confirm)
+or something disposes it early on PC. Not chased this session.
+
+**Status (M-67): static analysis has hit diminishing returns — every pipeline
+stage (index resolution, bank data integrity, ADPCM, resample, envelope,
+pitch, loop mechanism) is verified against ROM + PD ground truth, and the
+reference clip is refuted. The remaining questions (PPK/door/armor "wrong
+sound" by ear) require a user runtime A/B capture with the new
+`GE_VOICEDUMP` probe: `GE_AUDIOTRACE=1 GE_AUDIODUMP=1 GE_VOICEDUMP=1`,
+reproduce each scenario, send `audiotrace.log` + `audiotrace_wire.log` +
+`voicedump.raw`. Also owed: provenance of `B00I00S2D.wav`, and the item-8
+sound-232 anomaly.**
+
+### M-68 — Decisive runtime A/B (user captures, 3× level_09): all three complaint classes play the exact ROM samples at the exact ROM pitches; no port bug found (this session)
+
+Three interactive user captures (`audiodebug.ps1 -Play -Trace -Dump
+-VoiceDump`), analysed with full-slide correlation of `voicedump.raw`
+per-voice records against `decode_sound(idx)` resampled at the keymap ratio
+(correct direction, M-67 item 7: `y[k] = x[ratio·k]`). A new `[EVT] t=µs
+type=N state=P` probe (PORT-gated, `sndHandleEvent` top) plus a
+`[STOP-EVT] … deltaUs=N` probe (release-ramp site) were added this session;
+event types decode per `src/snd.h`: 1=PLAY, 2=STOP, 8=VOL, 64=DECAY,
+128=END.
+
+**1. Doors — correct.** `METAL_SLIDE_OPEN` 202: CC **0.957** @ ratio 0.500;
+`METAL_SLIDE_CLOSE` 203: CC **0.906** @ 0.728; `METAL_SLIDE_LOOP` 204: CC
+**0.993** @ 0.728. Event flow is textbook: PLAY → DECAY (attack=0, fires
+immediately) → self-stop at the decay-scheduled STOP (204: +154 ms =
+112197 µs ÷ 0.7278; 202: ~450 ms) → release ramp (`[STOP-EVT] deltaUs` =
+releaseTime ÷ ratio, e.g. 1373/3999 µs) → END → dispose.
+
+**2. PPK shot — correct.** `GUN_SILPPK_A` 46: CC **0.90–0.97** @ ratio 0.728
+across four separate shots (full-slide, any offset). Combined with M-59
+(46 + 122 CART_SPENT + a ricochet is exactly what the ROM scripts for a PPK
+hit), the user's "gunshot plays broken glass/slap/ricochet" is the original
+design, reproduced faithfully.
+
+**3. Body armor pickup — correct, full length.** `ARMOUR_COLLECT` 81:
+voice lifetime measured **833 ms** from `[EVT]` timestamps (PLAY → decay-
+scheduled STOP), against ROM prediction 469649 µs ÷ 0.5612 = **837 ms**;
+release ramp 3563 µs; CC **0.828** vs decode(81) @ ratio (window contains
+other concurrent voices, hence <0.95).
+
+**The M-67-era "instant death" metric was a line-count artifact.** Log lines
+≠ time: a voice stopped by the door script's `stop-sounds`
+(`door7F053B10`, `src/game/propobj.c` — stock logic, identical on N64) when
+the player shuts a door quickly produces only a few log lines between birth
+and death even when it plays its full ~20 ms. With µs timestamps the STOPs
+land exactly at their scheduled times; no voice is disposed earlier than its
+decay/stop schedule in any of the three captures.
+
+**13 `[EXPIRE]` events in the final capture:** the M-66b guard expired 13
+ownerless `METAL_SLIDE_CLOSE_SFX` (203) loops, each at exactly 2.5 s (2 s
+delay + 0.5 s fade). This remains the single outstanding PORT deviation;
+whether the N64 lets that loop run until level exit is the open by-ear A/B
+(see M-66b).
+
+**Status (M-68): D202's "wrong sample" hypothesis is closed negative for all
+three user complaint classes — PC plays exactly what the ROM specifies,
+verified per-voice at runtime. Remaining: (a) N64 A/B on door-close-loop
+duration to confirm or retract the M-66b cap; (b) the parked sound-232
+anomaly (M-67 item 8); (c) once the user confirms by ear, remove the D202
+probe set (`GE_AUDIOTRACE`/`GE_AUDIODUMP`/`GE_VOICEDUMP` probes in
+`src/snd.c`, `src/libultra/audio/load.c`, `port/src/mixer.c`,
+`src/game/propobj.c`) and decide the M-66b guard's fate.**
+
+### M-69 — Full-corpus exact match (scripted `-level_09`, 320 SFX requests): 286/320 OK after tooling fixes; the remaining failures are *dropped allocations*, not corruption (this session)
+
+New offline tool `scratchpad/exact_match.py` (gitignored scratchpad; helpers
+`rom_sfx_decode.py`, `m63_crosscheck.py`) matches **every** `sndPlaySfx`
+request in a full trace to its voice and slides the ROM-decoded PCM
+(resampled at the keymap ratio, M-67 item 7 direction) against that voice's
+`GE_VOICEDUMP` stream. Corpus: `scratchpad/exact_run/` (scripted `-level_09`,
+61 input entries, `GE_AUDIOTRACE` + WIRE + `GE_VOICEDUMP`) — **320 requests**.
+Chain: request → its own `[EVT] type=1` PLAY (states are recycled across
+requests, so the wire window must anchor on *that* PLAY) → WIRE record with
+the same wavetable in [play−10 µs, play+50 ms] → decoder index → env-state
+slot address → voicedump records for that slot.
+
+**Result: 286/320 OK (CC ≥ 0.85).** The initial 241 OK / 35 MID / 44 BAD split
+was almost entirely tooling artifacts, not audio:
+
+1. **`GE_VOICEDUMP` records are rendered ahead — the µs stamp is the END of
+   the block.** Each record's n samples end at its stamp, spaced 1/22050 s.
+   Treating stamps as start offsets misplaces content by up to one block and
+   produced a phantom "stale content" in pv20's slot (sound 29 looked ~180 ms
+   early). With per-sample record times, sound 29's onset lands at **+263.8 ms
+   vs its WIRE timestamp +264 ms — exact**. Cross-slot correlation confirmed
+   the dump attribution was never wrong (max CC vs neighbouring slots ≤ 0.076;
+   slot content is unique per voice).
+2. **`slide()` needed step-1 refinement around the coarse best hit.** Coarse
+   stepping misses sharp onsets: sound 29 measured CC 0.590 at the coarse
+   argmax and **0.970 one sample later**. (Also fixed a bug: the best-offset
+   tracker was only updated in the last coarse loop, so refinement searched
+   around offset 0.)
+3. **Clip the reference at voice death.** Requests whose voice is cut by a
+   DEACTIVATE/STOP after PLAY (e.g. idx=109, killed at +131 ms) cannot match
+   the full ROM decode (CC 0.016); clipping the ref to the live window gives
+   CC **0.999** at offset +0 ms. The matcher now parses `[EVT]` per state and
+   clips accordingly.
+
+**The remaining ~34 failures are not corruption:**
+- **"NO WIRE AT PLAY" / DROPPED (no PLAY evt):** the request was processed but
+  `alSynAllocVoice` never gave it a voice (no `[VOICE+]`, no DECAY) — e.g.
+  t=567204976 idx=46. Leading suspect: the 8-voice pool is exhausted under
+  scripted rapid fire and low-priority sounds are dropped by design (`snd.c`
+  threads `state->priority` into `config.priority`; `alSynAllocVoice`'s steal
+  path has a ~512-sample delay). **Not yet verified — the next step.**
+- **pv10 mismatches:** consecutive requests share wavetables, so the wire
+  window can pick up the *next* request's wire and attribute the wrong slot.
+  Tighten: require the WIRE to fall between this PLAY and the next PLAY on the
+  same wavetable.
+- Log-interleaving gotcha: AUDIOTRACE lines from multiple file handles
+  interleave and corrupt some lines (a missing/corrupt PLAY line sends the
+  matcher to its wide-window fallback).
+
+**Status (M-69):** every request that *got* a voice plays the exact ROM sample
+at the exact ROM pitch — this extends M-68's per-class verification to the
+whole corpus. D202 remains "no port bug found"; open items are M-68's plus:
+(a) confirm the dropped requests are pool-exhaustion drops that N64 would drop
+identically (check `[VOICES] allocated=N / max=8` around each drop;
+`src/snd.c:916`, `alSynAllocVoice`); (b) fix the shared-wavetable wire
+attribution; then M-68's by-ear + N64 A/B, probe removal, close.
+
+### M-70 — Decisive full-corpus exact match on a clean re-capture (209 requests, scripted `-level_09`): every voiced request plays the exact ROM sample; D202's wrong-sample hypothesis is refuted (this session)
+
+The prior 316-request corpus was contaminated mid-capture (pause menu hit),
+so a fresh 75 s scripted capture was taken (`GE_AUDIOTRACE=1 GE_VOICEDUMP=1`,
+`-level_09`, `scratchpad/exact_run3_script.txt` fire burst) and the matcher
+(`scratchpad/exact_match.py`) was fixed in three places before the decisive run:
+
+1. **Death-clip both sides.** Clip *stream* as well as *ref* at the voice's
+downstream death event (STOP/END/DEACTIVATE). M-69 only clipped `ref`; when a
+slot is reused ~200–400 ms later, the unclipped 1.5 s stream window is mostly
+the *next* occupant's samples.
+2. **`slide()` sparse-tail bug (the big one).** The offset search was dense
+only up to 9000 samples (~408 ms) and used step = span/40 beyond that. Delayed
+voicing — `sndPlaySfx` queue wait, observed up to **+1.2 s** between request
+and PLAY — pushes the onset into the sparse zone, where the narrow CC peak
+falls between grid points: idx=134 (onset +532 ms) scored **CC 0.154** in the
+matcher but **0.973** under a full-range step-4 scan of the identical data.
+   Fixed: step-1 near the window start, step-4 across the *full* span, ±8
+   step-1 refine around the best hit. idx=136 went 0.285 → ≥0.85 the same way.
+3. **PLAY search window 600 ms → 2 s**, catching two idx=175 instances voiced
+   at +1196 ms (their WIREs land with the PLAY, so pairing is unambiguous).
+
+**Result — 209 requests:**
+
+| bucket | count | disposition |
+|---|---|---|
+| OK (CC ≥ 0.85) | **200** | exact sample at exact keymap pitch |
+| MID (0.6–0.85) | 4 | all idx=109, CC 0.744–0.811 — see below |
+| NO WIRE AT PLAY | 5 | 1 matcher artifact + 4 never voiced — see below |
+
+- **The 4 MID (idx=109):** manual verification on the tight `[play, death]`
+   window with a ratio sweep gives **CC 0.946 at the nominal keymap ratio**
+   (0.7236 = keyBase 54, detune +40, −6000 shift) — correct sample *and*
+   pitch. The residual is measurement, not audio: the voicedump records are
+   stamped with **wall-clock time at mix time**, and the scheduler's catch-up
+   delivers them in ~32 ms bursts of ≤160-sample records with clustered
+   stamps, so bisect windowing on those stamps is fuzzy by tens of ms — and
+   these voices die young (killed at +67…+131 ms), leaving little clean
+   signal to average over.
+- **NO WIRE ×5:** idx=109@610342131 was in fact voiced — its WIRE lands at
+   **+133 ms** after PLAY, outside the matcher's 50 ms wire window (all other
+   idx=109 instances match fine). The other four (idx 8/40/123/202) show no
+   voicing evidence anywhere: no `VOICE+` on their `newState` after t0, and no
+   WIRE for their wavetable within 2–3 s *in any state*. **Not pool
+   exhaustion** — `[VOICES] allocated` was 0–5/8 at each drop (run max 7/8).
+   Mechanism unverified; consistent with game-logic queue/priority timing in
+   code identical to the N64 build, and orthogonal to D202 (no samples were
+   played, so nothing could be wrong).
+
+**Verdict:** across 204 voiced requests spanning ~30 distinct sound indices,
+**zero** play a wrong sample. Combined with M-68 (per-class runtime A/B) and
+M-66 (stuck door loop = faithful N64 quirk), the D202 "wrong sample / mixer
+corruption" hypothesis is refuted: what the user heard is the original design
+(overlapping SFX, short decays, quick-stop truncation, the ownerless infinite
+door loop).
+
+**Status (M-70):** D202 data-closed. Remaining before final close + probe
+removal: user by-ear A/B on the M-66b expiration behaviour (does the stuck
+drone now fade out ~2.5 s after a door close, vs N64's forever-drone). Probes
+(`GE_AUDIOTRACE`, `GE_VOICEDUMP`, `[WIRE]`, `[EVT]`, `[VOICE±]`, `[SLOTWRITE]`,
+`[ENVELOPE]`, `[VOICES]`) stay in place until that pass is done; they are
+`#ifdef PORT`-gated and env-var-off by default.
+
+### M-71 — User by-ear pass on M-66b: PASS. D202 ready to close. New complaint class split out as D205 (this session)
+
+**By-ear verdict (user, PC vs N64 side-by-side):** "the metal door sound
+does not loop forever now" — the M-66b ownerless-infinite-loop expiration
+behaves as intended; Disposition C validated. That was the last gate on
+D202: probe removal + close is all that remains (see HANDOFF).
+
+**New user complaint class (NOT D202 — split out to D205).** With M-70's
+per-voice exact-match result standing (every voiced request plays the exact
+ROM sample), the user reports by ear, and confirms against an N64 A/B that
+the PC is *not* faithful: (1) general gunfire has a slap/glass-shatter
+layered over the correct gunshot — audible on PC, silent on N64 for the
+same shot; (2) an explosion plays a scream-like sample (the soldier-death
+voice); (3) armor pickup plays a wrong sample. This session exonerated the
+two remaining static suspects: the D37 bank converter offline (`scratchpad/
+banktest/`: real `romdataFixupAudioBank` harness + `diff_bank.py` → all 261
+entries map identically N64→PC, 0 mismatches) and the D154/D135 GBI raycast
+parsers + volume law (static re-audit, ABI-correct). The remaining
+explanation is that PC **requests different or extra sound indices** than
+N64 in the same scenario. See D205.
+
+### M-72 — Fourth symptom reported (unarmed melee → Klobb shot idx 106); controlled `GE_AUDIOTRACE` runs exonerate every request path; mechanism (b) now the leading suspect (this session)
+
+User added a fourth D205 symptom: Bond's unarmed slap attack plays
+Klobb's shooting sound (`GUN_B1_MGUN3_3_SFX`, idx 106) instead of the slap
+effect. Also fixed the test environment: the "flaky /GS crash" of earlier
+attempts was `SDL2.dll` missing from PATH (it lives in
+`C:\msys64\mingw64\bin`; the exe is `-mwindows`, so a failed DLL load just
+dies with 0xC0000105 and no console). Launchers now prepend it.
+
+Controlled traces (`build-pc/d205_*.ps1`, gitignored): PPK fire at
+`-level_09` requests exactly {46, one of the 20-entry ricochet table,
+122} per shot — no glass/slap layer; unarmed fire-presses at levels 01–08
+(all start unarmed) request only 105 PUNCHING_AIR. Static: punch hit =
+constant {47,48,49}, idx 106 is data-only (`skorpion_stats.Sound`), and the
+player fire-sound path cannot run for a fist — so Bond's own punch cannot
+request 106; an NPC guard firing its Skorpion can. No symptom reproduces in
+micro-scenarios → the layering must come from **extra events during real
+gameplay** (mechanism b). Next: user `GE_AUDIOTRACE=1` capture at the exact
+failing moment (splits per-symptom), then controlled explosion + armor.
+Full detail in D205.
+
+## D207 — **Alarm klaxon starves combat SFX (surfaced by D206)** (M-77, root-caused, fix designed & not applied)
+
+### How D206 caused it
+
+`ALARM3_SFX` (SFX_ID 163) is played by `handle_alarm_gas_timer_calldamage()`
+(`src/game/propobj.c:14457`) whenever `alarmIsActive()`, owner `&ptr_alarm_sfx`.
+
+- **Pre-D206:** resolved to on-disk bank slot **163** — a **one-shot** sample
+  (`decayTime` finite, no ADPCM loop). Played once, released its voice. The
+  alarm was audibly the *wrong* sound but cost the voice pool nothing.
+- **Post-D206:** correctly resolves to slot **162** — the real klaxon:
+  `envelope.decayTime == -1` (→ `SOUND_FLAG_LOOPED`, `sndSetupSound`
+  `snd.c:~836`), wavetable `adpcmWave.loop.count == -1` (infinite ADPCM loop).
+  It now holds a voice for the whole time the alarm is up.
+
+### Why it dominates
+
+The SFX player has **8 voices** (`MUSIC_SFX_SEQ_MAYBE_MAX_SOUNDS = 8`,
+`src/music.c:76`; the synth has 24 physical voices but the SFX soft cap is 8
+and is what `snd.c:328` gates on).
+
+`sndSetupSound` sets `state->priority = (decayTime == -1) + 0x40` → the alarm
+gets **0x41**, one-shots get **0x40**.
+
+When `g_sndAllocatedVoicesCount == 8`, `snd.c` PLAY_EVT does **not** call
+`alSynAllocVoice` (which *would* do libultra priority-stealing); it runs the
+manual preemption scan at `snd.c:~347-392`. That scan:
+- refuses to steal any `unk3e & 0x12` voice (LOOPED | RETRIGGER) — the M-65
+  carve-out only exempts *ownerless* loops (`state == NULL`), and the alarm
+  is **owned**;
+- ignores priority entirely — it steals the first non-looped PLAYING
+  non-PREEMPT voice it finds;
+- if it finds none → `sndDisposeSound(soundState)` → **the new SFX is
+  dropped** (`snd.c:391`).
+
+So an active alarm removes one of the 8 voices, and in a firefight (gunshots +
+ricochets + impacts + enemy fire + ambient door/machine loops) the remaining
+non-looped voices are all either already PREEMPT-marked from the same burst or
+themselves looped → gunshots drop.
+
+### Measured (BUNKER1, `-level_09`)
+
+Temporary probe `GE_FORCEALARM=1` (added to `handle_alarm_gas_timer_calldamage`,
+`#ifdef PORT` / `getenv`) pins `alarm_timer` so the klaxon stays up, plus a
+scripted `GE_INPUTSCRIPT` firing Z every 8 reads:
+
+| condition | SFX requests | dropped (no voice) |
+|---|---|---|
+| no alarm | 52 | 1 (~2%) |
+| alarm active | 137 | 28 (~20%) |
+
+Dropped indices were gunshot/impact/ricochet sounds (29, 30, 41, 90, 36, 109…).
+`ptr_alarm_sfx` stayed stable while active and was cleared on
+`alarmDeactivate()`; the alarm voice was freed and the pool recovered — the
+**"doesn't recover after the alarm stops" half of the user report was NOT
+reproduced** in any trace (light BUNKER1 combat; may need a heavier level, or
+it is perceptual).
+
+### The 8-cap and the scan are faithful decomp
+
+`MUSIC_SFX_SEQ_MAYBE_MAX_SOUNDS = 8` is unmodified game code; the manual
+preemption scan is stock `sndHandleEvent` (M-65 modified it in place). Upstream
+GE has the same. So this is not purely a port regression — it is partly the
+open **D202** voice-pool-margin problem (ambient infinite-loops holding voices
+longer than they should on the port) becoming audible because the alarm now
+legitimately consumes a slot.
+
+### Designed fix (PORT, not yet applied)
+
+In the `snd.c` preemption scan, add a **last-resort second pass**: after the
+normal pass (non-looped victims + the M-65 ownerless-loop carve-out) finds
+nothing and `limitReached` is still true, and **the incoming `soundState` is
+itself not LOOPED**, run one more pass that will preempt a stoppable LOOPED,
+non-RETRIGGER voice (the alarm klaxon; also the D202 door loop as a bonus).
+
+Self-healing: preempting the alarm posts `AL_SNDP_END_EVT` → `sndDisposeSound`
+→ `sndUnlinkClearSound` clears `state->state->link.next`, i.e. sets
+`ptr_alarm_sfx = 0`; the very next frame `handle_alarm_gas_timer_calldamage`
+sees `ptr_alarm_sfx == 0` and re-issues `sndPlaySfx(ALARM3_SFX, &ptr_alarm_sfx)`,
+which re-acquires a voice (or WAIT_VOICE-retries at 33 ms). Net effect: the
+klaxon briefly yields to a gunfire burst and comes right back — gameplay audio
+wins, which matches player expectation.
+
+Alternatives weighed and rejected for now: (a) raise `maxSounds` > 8 on the
+port — game-code change, rule #2 risk, changes mix loudness; (b) properly fix
+the D202 ambient-loop lifetimes — the correct fix but the hard open problem.
+
+### M-77b — designed fix tried, hypothesis not confirmed, reverted
+
+The last-resort LOOPED-preemption pass was implemented in the `snd.c` scan,
+plus `[D207-DROP]` counters at both no-voice `sndDisposeSound` sites and a
+`[D207-YIELD]` trace on the new pass. BUNKER1 test (`GE_FORCEALARM=1` +
+`GE_INPUTSCRIPT` firing every ~10 controller reads for ~85 s, alarm cycled
+on/off/on):
+
+- **`[D207-DROP]` = 0** — not a single SFX actually dropped.
+- **`[D207-YIELD]` = 0** — the new pass never even ran; pass 1 always found a
+  non-looped voice to preempt.
+- Per-frame voice count: **1** during quiet alarm, spikes to 3–5 under fire,
+  back to **0** after every alarm-off. No leak, no pegged pool.
+- The earlier "≈20 % dropped" number was bogus: it counted requests whose
+  `[VOICE+]` came more than 40 log-lines later. Cross-checking "states that
+  never got a voice at all" = **0 / 136**. Non-looped sounds get 2 `unk38`
+  retries then the scan, which nearly always places them a frame or two late —
+  audible as slightly loose timing, not silence.
+
+So on BUNKER1 the alarm does **not** starve the pool. The change was reverted
+(`snd.c` now carries only the D206 `-1`). Either BUNKER1 combat is too light to
+reach 8/8, or the user's symptom is a different mechanism.
+
+### Owed next session — needs a real repro from the user
+
+The BUNKER1 forced-alarm harness cannot reproduce this. Get from the user:
+**which level, which weapon/situation**, and a `GE_AUDIOTRACE=1` capture (or a
+short clip) of the failing alarm. Then decide between:
+
+1. **Genuine 8/8 starvation on a heavy level** — Facility / Silo / Statue
+   firefights have many more guards firing. Soak one with `GE_FORCEALARM` +
+   sustained scripted fire (or the user's own capture) and watch for
+   `[D207-DROP]` > 0 / `count=8` pinned. If real, the reverted last-resort
+   pass is the fix — re-apply it.
+2. **A leak on a specific alarm-stop path** — the `alarm_timer` auto-timeout
+   (`CHROBJ_GAS_TIMER`) vs `AI_AlarmOff` vs `deactivate_alarm_sound_effect`
+   from a cutscene. Trace `g_sndAllocatedVoicesCount` across each.
+3. **Perceptual** — the klaxon is a *continuous* infinite loop (`slot 162`,
+   no gaps). A real GE alarm pulses. Check: is `ALARM3` supposed to retrigger
+   (keyMap velMax=7 was noted but `SOUND_FLAG_RETRIGGER` needs `keyMax & 0xf0`,
+   and keyMax=4 → not set)? And compare slot-162 playback **volume** to N64 —
+   if the drone is just mixed loud it will mask everything without dropping a
+   single voice.
+
+**Temp probe kept:** `GE_FORCEALARM` in `handle_alarm_gas_timer_calldamage`
+(`src/game/propobj.c`, `#ifdef PORT` / `getenv`).
+
+
+## D206 — **PC played every SFX one bank slot too high: `ALInstrumentAlt_s.soundArray` shifts offset 12→16 at 64-bit** (M-74 found, M-76 FIXED)
+
+**This is the root cause of D205's melee→Klobb and armor-pickup symptoms, and
+of D202's original "silenced PPK plays a slap" report.** It was invisible for
+eight sessions because *the verification tooling shares the bug* — see
+"Why M-68/M-70 passed" below.
+
+### The evidence
+
+The user supplied an independently-produced, verified rip of GE's sound
+effects (`B00I00S<hex>.wav`, 186 files). Filenames are **hexadecimal** bank
+indices. Cross-checked by PCM frame count against `scratchpad/rom_sfx_decode.py`
+decoding the ROM's `sfxctl` bank:
+
+```
+offset -2:   0/184 matches
+offset -1:   0/185 matches
+offset  0: 186/186 matches   <-- rip index == bank index, exactly
+offset +1:  21/185 matches
+offset +2:  16/185 matches
+```
+
+So the rip is ground truth for *what sound lives at each bank index*, and our
+decoder's indexing agrees with it. The user then identified three by ear:
+
+| user's statement | rip file | = bank index | game requests (from `audiotrace.log`) |
+|---|---|---|---|
+| correct body-armour sound | `S50` | **80** | — |
+| what the PC port actually plays for armour | `S51` | **81** | **81** (`ARMOUR_COLLECT_SFX`) |
+| the actual Klobb sound | `S69` | **105** | **105** (`PUNCHING_AIR_SFX`, punch whiff) |
+
+Both are exactly `requested index → played bank[index]`, and in both cases the
+**correct** sound sits at `index - 1`.
+
+### The structural confirmation
+
+- ROM `sfxctl` bank: `bankCount=1`, `instCount=1`, **`soundCount=261`**,
+  `percussion=NULL` → valid `soundArray` indices are **0…260**.
+- `SFX_ID` (`src/bondconstants.h`) has **262** members, beginning
+  `NOTHING_SFX = 0`, which `snd.c:992` explicitly treats as "no sound"
+  (`if (soundIndex == 0) return NULL`).
+- **262 enum members − 1 sentinel = 261 real IDs (1…261), mapping exactly onto
+  bank slots 0…260.** The arithmetic only closes with a `-1`.
+- Corollary bug: the last ID, `BIG_CLANK_SFX` = 261, currently indexes
+  `soundArray[261]` — **one past the end of a 261-entry array.**
+
+`src/snd.c:1001` is unmodified decomp code:
+
+```c
+sound = (soundBank->instArray[0]->soundArray[soundIndex]);   /* needs - 1 */
+```
+
+### Independent confirmation from D202's own reference clip
+
+`scratchpad/B00I00S2D.wav` — the silenced-PPK reference clip that drove D202
+from M-60 to M-67, and whose provenance the user could only describe as "not
+sure / found online" — **is a file from this same rip**: `S2D` = **bank 45**
+(3264 frames, identical). And `wppksil_stats.Sound = 0x2E` = **46**.
+
+So the silenced PPK's ROM data value 46 must resolve to bank **45**, and the
+user's clip *is* bank 45. **M-61 found precisely this** ("index 45 is the only
+strong match for the user's reference clip, envcorr +0.999; index 46 is the
+'slap'") and it was argued away over four sessions — M-67 "refuted" the clip as
+a genuine capture on a waveform-correlation test. The +0.999 was right. The
+"slap" heard on every silenced PPK shot is `bank[46]`, which under the correct
+mapping is `PUNCH1_SFX` — **literally a slap.**
+
+### Why M-68/M-70's "exact match" passed anyway
+
+`scratchpad/exact_match.py` verifies a runtime voice against
+`rom_sfx_decode.py`'s decode of **the requested index**, and that decoder walks
+`soundArray[i]` with the same missing `-1`. `scratchpad/banktest/diff_bank.py`
+likewise compares an N64-layout walk to a PC-layout walk using the same
+indexing on both sides. **Every tool built to check the mapping reproduced the
+mapping.** M-68/M-70 proved the port plays *the sample it asked for, at the
+right pitch* — self-consistency — and never tested whether the index asked for
+was the right one. Method note added to `porting-notes.md` §E.
+
+### What it explains
+
+- **D202** — "silenced PPK plays a slap": requests 46, plays `bank[46]` =
+  `PUNCH1`; correct is `bank[45]`. ✔
+- **D205 (4)** — melee plays the Klobb gun: whiff requests 105, plays
+  `bank[105]` = **the Klobb sample**; correct is `bank[104]`. ✔ user-confirmed
+- **D205 (3)** — armour pickup wrong sample: requests 81, plays `bank[81]`;
+  correct is `bank[80]`. ✔ user-confirmed
+- **D205 (1)** — slap/glass layered over gunfire: consistent (a gunshot ID
+  landing on the adjacent impact/punch sample), not yet individually confirmed.
+- **D205 (2)** — explosion → scream: **NOT explained.** Explosion IDs 169–183
+  map to bank 168–182, all still explosions. Stays open; M-73's reading
+  (guards killed by the blast screaming, ±1 s) remains the likely answer.
+
+### RESOLVED (M-76) — pointer-width layout shift in `ALInstrumentAlt_s`
+
+The M-75 reframe below was on the right track (candidate B — a PC-side layout
+mismatch, not a code or data `-1`). The exact mechanism:
+
+`sndPlaySfx` (`snd.c:1001`) reads the on-disk sound bank — a **standard**
+`ALBankFile`/`ALInstrument` (verified: `rom_sfx_decode.py` finds `soundCount`
+= 261 at instrument offset 14, standard `ALSound*` table at offset 16) —
+through GE's cast alias:
+
+```c
+struct ALInstrumentAlt_s {      /* src/snd.h:165 */
+    s32 unk0;   /* off 0  */
+    s32 unk4;   /* off 4  */
+    s32 unk8;   /* off 8  */
+    ALSound *soundArray[1];     /* N64: off 12 (4-byte ptr) | PC: off 16 (8-byte ptr, 8-aligned) */
+};
+```
+
+- **N64:** `soundArray` at struct offset **12** — it overlaps the on-disk
+  instrument's `bendRange`(12) + `soundCount`(14) words. So `soundArray[0]`
+  is those two `s16`s (a bogus pointer, but `SFX_ID 0 = NOTHING_SFX` is
+  short-circuited at `snd.c:992` and never dereferenced), `soundArray[1]` is
+  on-disk table entry `[0]`, and in general **`soundArray[N]` == on-disk
+  entry `[N-1]`**. GE's `SFX_ID` enum and every `WeaponStats.Sound` byte are
+  therefore **1-based** into the sound table, by design.
+- **PC:** 8-byte pointers + 8-byte alignment insert 4 bytes of padding after
+  `unk8`, so `soundArray` sits at offset **16**. `port/src/romdata.c`
+  `afFixupInst` rebuilds the bank to exactly this layout (16-byte header,
+  `8*soundCount` bytes of 64-bit pointers from offset 16, entry `i` = on-disk
+  entry `i`). So PC `soundArray[N]` == on-disk entry `[N]` — **one slot
+  higher than N64** for every SFX.
+
+This is the D3x class (a ROM-serialized struct whose pointer-width field
+shifts the layout at 64-bit). **Fix:** `src/snd.c:1001`, `#ifdef PORT` branch
+→ `soundArray[soundIndex - 1]`, N64 line kept verbatim under `#else`. The one
+read site covers both the initial lookup and the retrigger chain (the loop
+recomputes `soundIndex` from `keyMap->velocityMin`, same 1-based space). No
+game-logic change; `romdata.c` untouched (its layout is internally correct —
+it just wasn't the layout the N64 struct alias assumes).
+
+### Open before fixing — where the fix belongs (M-75 reframe) — SUPERSEDED by M-76 above
+
+**M-75:** upstream `n64decomp/007` `src/snd.c` byte-matches the real ROM,
+carries no `NON_MATCHING`/`GLOBAL_ASM` guard on `sndPlaySfx`, and its index
+line is identical — `soundArray[soundIndex]`, **no `-1`**. Blame puts
+`snd.c:1001` in the 2022 upstream import, not this fork. So the earlier
+hypothesis "(i) real ROM does `soundArray[soundIndex-1]`, decomp dropped it"
+is almost certainly **dead**: a matching decomp would contain the `-1`. The
+N64 runs `soundArray[N]` for ID `N` and that game sounds correct.
+
+That forces a reconciliation. Candidates, cheapest test first — full decision
+gate and per-candidate byte-level experiments in
+`docs/dev/notes/D206-IMPL-BRIEF.md`:
+
+- **(A)** the rip `B00I00S<hex>` is keyed by `SFX_ID`, not by 0-based bank
+  slot → there is **no engine bug**, the PC audio path is faithful, and
+  D205 / D202's slap need another cause. Re-audit whether
+  `scratchpad/rom_sfx_decode.py`'s 0-based `sound_offsets` walk actually
+  models the runtime `soundArray` (leading NULL? offset-table vs `soundCount`
+  mismatch? sfxctl not a plain `ALBankFile`?). Cheapest — do first.
+- **(B)** PC-only off-by-one in the *converted* bank — `port/src/romdata.c`
+  `afFixupInst` drops/adds one `soundArray` entry vs the ROM. Test: dump PC
+  runtime `soundArray[81]` wavetable `base`/`len` (existing `GE_AUDIOTRACE`
+  probe at `snd.c:1002`) and byte-compare to `rom_sfx_decode.py` bank 80 vs
+  81. PC-side fix, rule-#2 clean.
+- **(C)** PC-only off-by-one in the `soundIndex` reaching `sndPlaySfx`
+  (request path / miscompiled or region-mismatched enum). Test: `GE_AUDIOTRACE`
+  already logs `soundIndex=` at the call — confirm armour logs `81`, not `82`.
+- **(D)** genuine data-side: ROM `SFX_ID` constants + `WeaponStats.Sound`
+  bytes are each +1 vs a 0-based bank. Only reachable if A/B/C all fail.
+  ~532 enum refs + debug-name table + weapon-stats asset bytes — **not** a
+  legal port edit under AGENTS.md rule #2; stop and escalate to the user
+  (possible "wontfix / faithful").
+
+M-62's caveat still applies: this repo never builds or byte-verifies the N64
+target, so "it byte-matches" cannot by itself settle (D).
+
+### Verification done (M-76)
+
+- Build clean (`build-pc.sh ntsc-final`).
+- BUNKER1 (`-level_09`) `GE_AUDIOTRACE=1`, 60 s: crash-free, 446 `sndPlaySfx`
+  calls. Every one of ~90 distinct requested `soundIndex` values resolves to a
+  wavetable whose `len` matches `rom_sfx_decode.py` slot **`soundIndex - 1`**
+  (0/90 match slot `soundIndex`). Includes `ARMOUR_COLLECT_SFX`=81 → slot 80,
+  `GUN_B4_BOLTACTION_SFX`(AK47)=109 → slot 108, `GUN_SILPPK_A`=46 → slot 45.
+- `-level_09` golden framediff (`200-440:120`): **3/3 within threshold** on two
+  consecutive runs (an audio-path change cannot affect rasterisation; ritual).
+
+### Still owed
+
+User by-ear A/B vs N64: armour pickup, unarmed melee whiff, silenced PP7 fire.
+If clean → **D202 closes outright**, D205 shrinks to symptom (2) (explosion→
+scream) alone. Then remove the temporary D202 `GE_AUDIOTRACE` / `[VOL]` /
+`[DISTVOL]` probe set (checklist in HANDOFF).
+
+## D205 — Wrong/extra SFX requested on PC vs N64: explosion→scream, armor pickup wrong sample, slap/glass layered over gunfire, melee→Klobb shot (M-71/M-72)
+
+**Symptoms (user by-ear; N64 A/B confirms non-fidelity):**
+1. General gunfire: a slap/glass-shatter plays *over* the correct gunshot on
+   PC; silent on N64 for the same shot.
+2. Explosion: plays a scream-like sample (the soldier-death voice) instead
+   of / over the explosion.
+3. Armor pickup: wrong sample.
+
+**Exonerated — do not re-investigate:**
+- Playback chain: M-68/M-70 exact match — every voiced request plays the
+  exact ROM sample at the exact ROM pitch (204/204 voiced, zero wrong-sample).
+- D37 bank converter: offline harness runs the real `romdataFixupAudioBank`
+  on the same ROM bytes and diffs N64 vs PC images entry-by-entry —
+  261/261 identical (base/len/type/keyMap/env), 0 mismatches
+  (`scratchpad/banktest/harness.c` + `diff_bank.py`; gitignored, local-only).
+- D154/D135 GBI raycast parsers ABI-correct; volume law
+  (`sub_GAME_7F0537B8`: d≤200→max, sqrt falloff to 5000, linear to 6000)
+  and suppression logic faithful (M-71 static audit).
+
+**Therefore: PC requests different or extra sound indices than N64 in the
+4. Unarmed melee: Bond's slap attack plays Klobb's shooting sound
+   (`GUN_B1_MGUN3_3_SFX`, idx 106) instead of the slap effect (M-72).
+
+**M-72 (controlled runtime traces, this session):** environment note first —
+the earlier "flaky /GS crash" was an investigator artifact: `SDL2.dll` lives
+in `C:\msys64\mingw64\bin`, which is NOT on the system PATH and not copied to
+`build-pc/`; launches without it die instantly (exit 0xC0000105), with or
+without any env vars. Prepending mingw64/bin to PATH in the launcher
+(`build-pc/d205_*.ps1`, gitignored) gives clean 40–60 s runs. Results under
+`GE_AUDIOTRACE=1`: (1) PPK fire at `-level_09` (unarmed start; first Z picks
+up the spawn PPK, idx 232): every shot requests exactly {46 GUN_SILPPK,
+one of 27/28/39/40 — all inside the 20-entry `ricochet_sounds_small` table,
+gun.c:415 — so `rnd1 % 20` is IN RANGE, not OOB, 122 CART_SPENT}. No glass
+(70), no slap (47–49) layering. (2) Unarmed melee at levels 01–08 (all start
+unarmed): fire-press requests ONLY 105 PUNCHING_AIR (whiff); punch-HIT path
+is the compiled constant `punch_sounds` = {47,48,49} (gunfire.c:2338), whiff
+= 105 (chrprop.c:1465). No 106 anywhere. (3) idx 106 is referenced by NO
+code constant — it enters only via `WeaponStats.Sound` (`skorpion_stats.
+Sound = 0x6A`) through `bondwalkItemGetSound`; the player fire-sound path
+(gunfire.c:3192–3200) runs only in `GUN_ANIM_STATE_FIRE` and a fist sets
+PUNCH state with `.Sound = 0`, so Bond's own punch cannot request 106 — an
+NPC guard firing its Skorpion (`chraction.c:5588`) can. **Conclusion:
+all four symptoms' request paths are faithful constants/tables, and none
+reproduces in controlled micro-scenarios; the leading suspect is now
+mechanism (b) — extra/different EVENTS during real gameplay (a guard firing
+as you punch → 106 layered on the slap; an NPC scream at the blast; a second
+surface hit adding glass/slap to a shot).**
+
+**M-73 (user combat capture) — ROOT CAUSE WITHDRAWN by M-74 below.** The
+session analysed the user's full-combat `GE_AUDIOTRACE=1` capture
+(`build-pc/audiotrace.log`) and concluded that guards were stuck
+re-triggering weapon fire sound idx 109 (`GUN_B4_BOLTACTION_SFX`,
+AK47/Spectre) "256x over 29.7 s with no corresponding bullets", pinning it on
+`stanTestLineUnobstructed` guard->Bond LOS returning clear on converted
+collision geometry. **M-74 re-counted the same file and every load-bearing
+number was wrong** — see below. The code walk M-73 produced is still accurate
+and worth keeping as reference: `chrlvFireWeaponRelated` (`chraction.c:6530`)
+passes `phi_a2 = sp27C || sp278` to `sub_GAME_7F02BFE4` (:6902), so a
+non-bullet auto tick still plays the weapon sound, gated by
+`SoundTriggerRate`/`field_178[hand]` (and by `CHRHIDDEN_FIRE_TRACER` 0x80,
+cleared once per `chrlvTriggerFireWeapon`); sustained attack needs
+`seen_bond_time >= g_GlobalTimer - CHRLV_SEEN_RECENT_CHECK` (:6593),
+refreshed by `setSeenBondTimeToNow` behind LOS queries (:3917/:3972,
+`chrCanSeeBond` :3945). That mechanism is real. What M-74 shows is that
+**nothing in the capture indicates it ever misfired.**
+
+**M-74 (re-count of the SAME capture — M-73's evidence does not hold, this
+session):** counting only the canonical one-per-call line
+(`sndPlaySfx: t=... soundIndex=...`) in `build-pc/audiotrace.log`:
+
+| M-73 claim | Actual |
+|---|---|
+| idx 109 requested **256x** | **128x** — the count was doubled |
+| "~11 guards each re-triggering" | 128 / 29.73 s = **4.31/s aggregate**, ~0.4/s per guard |
+| "sustained roar, gate blown open" | AK47 `SoundTriggerRate` = `RATE_AK47` = 4 `g_GlobalTimer` ticks (`assets/obseg/gun/gunWeaponStats.inc.c`) => design ceiling **15/s per guard**. Observed is **~6x UNDER** the weapon's own rate — `field_178` is not even the binding constraint |
+| "no corresponding bullets/impacts anywhere near that rate" | In the same 29.7 s window: **~30 ricochet / wall-hit requests** (idx 19, 20, 22-27, 29, 31-33, 35-37, 40, 41), **69 x2** (flesh hit), **123-132** (12 body-falls), **134-147** (14 guard yelps). Guards were firing *and* hitting |
+| "only ~32 non-109 requests in the window" | ~150 |
+
+Also corrected:
+
+- **The 128-vs-256 gap is the double-log artifact D204 already documented.**
+  D204 corrected M-63's "idx 109 fired 94 times in 60 s" with exactly this:
+  "the count is doubled by the probe (it logs two lines per call)". M-73
+  re-made the same mistake on the same sound index. Count `sndPlaySfx: t=`
+  lines, never bare `soundIndex=` matches.
+- **The monotone index runs are ground-truth round-robin, not a broken
+  selector.** The capture contains strictly increasing sweeps
+  `134,135,...,147` (GET_HIT_MALE) and `123,124,...,132` (BODY_FALL), one
+  request each, never repeating. This looks exactly like a `random() % n`
+  gone wrong and was checked specifically: `chraction.c:2454-2470` selects
+  `male_yelps[male_guard_yelp_counter]` and post-increments modulo 25 — a
+  deliberate cycling counter in byte-matched game code. Faithful. Do not
+  re-open.
+- The trace file spans 1321.85 s wall (288 requests); the actual firefight is
+  ~40 s of it (`t` in 715754-715800 s). M-73's "29.7 s" is the 109 span only.
+
+**Net: the 109 traffic in that capture is normal, in-spec guard combat.** The
+LOS / converted-geometry root cause is **withdrawn** — it was inferred from
+counts that do not survive re-derivation, and M-73's Next steps 1-3 (probe
+`setSeenBondTimeToNow`, decode pccg stan in Python, replay guard->Bond rays)
+would have been a full session spent on a phantom. The only genuinely open
+observation left from that capture is that the firefight lasted a long time,
+which is a gameplay-fidelity question for an N64 A/B, not evidence of an
+audio bug.
+
+**Where that leaves D205.** Every layer upstream of presentation is now
+proven correct: bank conversion (261/261 identical, M-71), requested indices
+(182 explosion x1, 81 armor x1, 46 PPK, 47/48/49 punch hits, 105 whiffs — all
+correct and in range, here and in M-72's controlled runs), and sample+pitch
+(M-68/M-70 exact match). That leaves exactly one untested layer between "the
+right sample" and "what the user hears": **spatial presentation — per-voice
+volume, pan and concurrency.** It fits all four complaints in one shape: if a
+sound's apparent *position* is wrong, a guard firing behind you is by ear
+indistinguishable from "a gun sound came out of my punch", a nearby guard's
+death scream reads as "the explosion screamed", and a ricochet reads as "a
+slap over my gunshot". The user's ear reports *what and where*; only *where*
+has never been verified. It is also the youngest code in the stack —
+`sndCreatePostEvent` was stubbed out entirely (D138) until M-65 un-stubbed
+it, so every distance/pan post-event has been live for only a few sessions
+and has never been A/B'd against N64.
+
+**Original M-71 framing (kept as background; DEMOTED by M-74 — every index
+observed in the user's capture was correct, so "PC requests a different
+index" is no longer the leading shape of the bug):** PC requests different or
+extra sound indices than N64 in the same scenario. Two mechanisms, ranked:
+(a) **Converted level/setup data** — sndID / explosion-type / item-sound
+    fields in the pccg sidecars differ from ROM. Explosions play
+    `sndPlaySfx(g_musicSfxBufferPtr, sp44->sndID, NULL)`
+    (`src/game/explosion.c:285`) with `sp44->sndID` =
+    `g_ExplosionTypes[type].sndid`; the *type* comes from level data.
+    Explosion SFX are idx 169–183 (EXPLOSION_2A_SFX=169 … EXPLOSION_9_SFX=
+    183, bondconstants.h). A scream is outside that range, so either the
+    type index is wrong (→ a non-explosion sndID) or a second event fires.
+    Armor: idx 81 verified exact in M-68 — a "wrong" armor sample means a
+    different index is requested in the user's scenario (or a layered
+    second sound).
+(b) **Extra hit events** — converted collision geometry makes bullet
+    raycasts or explosion proximity checks hit surfaces/NPCs the N64
+    misses. The slap+glass-over-gunshot signature is exactly the
+    non-penetrating-OBJ-hit path: `sub_GAME_7F064720`
+    (`src/game/gunfire.c`) plays `HIT_BULLET_GLASS_SFX` (idx 70) for every
+    non-penetrating hit; ricochet tables classify AFDM (27–30) = prop only,
+    GBU/TAJ/RICO_4 (19–26, 31–33) = wall only.
+
+**M-74 step 1 — static audit of the presentation layer: H-A FALSIFIED,
+H-B narrowed to "faithful but shallow". Done this session.**
+
+The pan machinery is complete and faithful end to end:
+`src/snd.c:461/530` computes `pan = clamp(soundState->pan + sound->samplePan -
+AL_PAN_CENTER)` → `alSynSetPan` (`synsetpan.c`, posts `AL_FILTER_SET_PAN`) →
+`src/libultrare/audio/env.c:400-402` turns pan into independent L/R targets via
+the `eqpower` table (`ltgt = volume*eqpower[pan]`, `rtgt =
+volume*eqpower[LEN-pan-1]`) and emits `aSetVolume(A_LEFT|A_RATE)` /
+`(A_RIGHT|A_RATE)` → `port/src/mixer.c` `aSetVolumeImpl` decodes A_LEFT
+(0x02) into `volCur/volTgt[0|1]` and `aEnvMixerImpl` applies `vol[0]`/`vol[1]`
+to `dry[0]`/`dry[1]` independently (:488-496). Nothing is dropped or collapsed
+to mono. **The port's stereo path is correct.**
+
+**But GE never uses it.** `AL_SNDP_PAN_EVT` (`snd.h:41`) is handled at
+`snd.c:527` and **posted by nothing anywhere in the tree** — grep returns the
+enum and the handler, no callers. So `soundState->pan` keeps the
+`AL_PAN_CENTER` set at `snd.c:842` for every SFX's entire life, and the only
+pan input is the static per-sound `samplePan` from the bank. Dumped from the
+converted bank image this session: **252 of 261 sounds have `samplePan == 64`
+(= `AL_PAN_CENTER`)**; the 9 exceptions are 4, 24, 44, 74, 84, 104, 123.
+Every sound in the user's capture is centred — 46, 47, 48, 49, 81, 105, 106,
+109, 182 all `samplePan = 64`.
+
+**⇒ GoldenEye does not spatially pan SFX at all, on N64 or PC.** There is no
+pan to get wrong. H-A is dead; do not re-open it, and do not write the
+"pan varies with bearing" probe (M-74 step 2 as originally drafted) — the
+answer is known and it is "never, by design".
+
+Field-coverage gap in M-71's bank exoneration closed at the same time: the
+converter writes `samplePan`/`sampleVolume`/`flags` at `+24/+25/+26`
+(`port/src/romdata.c:890`), correct for the PC layout (3 × 8-byte pointers
+before them), and `scratchpad/banktest/diff_bank.py` already diffs them as
+`panvol` — re-run this session, **261/261, 0 mismatches**. (M-71's prose
+listed only base/len/type/keyMap/env; its actual coverage was broader,
+including a 24-byte sample-data fingerprint.) The volume formula
+(`snd.c:453`, `:565`) also has no PC-side divergence: peak intermediate is
+127 × 32767 × 127 ≈ 5.3e8, inside s32 on both platforms, and `vol` is `s16`
+(`snd.h:90`) which holds the 32767 the `[VOL]` probe reports.
+
+**What this leaves.** GE's only spatial cue for an SFX is distance volume, and
+that law is shallow: the capture's `[DISTVOL]` lines show flat max out to
+~200 units, then 0.60 of max still at dist 1794. So a guard firing across the
+room plays **near-full volume, dead centre**, at a per-sample volume
+comparable to the player's own actions (idx 109 `sampleVolume` = 90; punch
+47/48 = 100, 49/105 = 110). **That is faithful, and it is also exactly the
+perceptual condition that generates all four of the user's reports** — with no
+spatial cue, a correct sample played at correct volume from across the room is
+by ear a sound at your own position. This reframes D205: the complaints are
+fully consistent with *correct* sounds overlapping, and the only remaining
+question is whether the PC generates **more** such overlaps than the N64
+(H-D). Nothing on the PC side can settle that; it needs the N64 A/B.
+
+**Next (cheapest first; re-ranked by M-74 — M-73's list is withdrawn):**
+0. ~~User capture~~ — DONE (M-73), but see M-74: it does NOT show a guard
+   re-trigger bug. 182 and 81 were both requested correctly and exactly once.
+1. ~~Static audit of the presentation layer~~ — **DONE (M-74 step 1 above).
+   H-A falsified: the port's stereo path is correct, but GE never pans SFX at
+   all (no `AL_SNDP_PAN_EVT` poster exists; 252/261 bank sounds are
+   `samplePan == 64`). Bank `panvol` re-diffed 261/261 clean. Do not re-open.**
+2. ~~Pan probe run~~ — **cancelled by step 1: pan cannot vary, by design.**
+3. ~~The PC side is now exhausted~~ — **SUPERSEDED by D206.** The premise
+   ("requested indices are correct") was wrong: the indices are correct as
+   *values* but are resolved one slot too high, which D206 root-causes. What
+   survives from this step: the pan audit (H-A dead) and the bank `panvol`
+   re-diff. Original text: bank, playback, requested indices,
+   sample+pitch, pan and per-sound volume are all verified faithful. The only
+   remaining hypothesis is **H-D** — that the PC generates *more* overlapping
+   combat events than the N64 — and nothing measurable on the PC alone can
+   settle it. **The N64 A/B is now the gating step, not an optional
+   corroboration.**
+4. **User-side, batched, held until 1-3 report:** (a) ROM samples 106
+   (Skorpion/"Klobb") vs 109 (AK47) as WAVs via `scratchpad/rom_sfx_decode.py`
+   for the user to settle the Klobb identification by ear — their by-ear
+   identification stands either way, this decides *which* sound, not whether
+   they heard it; (b) N64 A/B of one moment: punch a guard while others fire —
+   does the same combat sustain on N64?
+5. After root-cause + fix: user re-test of melee / explosion / armor pickup
+   vs N64.
+
+**Ranked hypotheses after M-74:**
+- **H-A (top) — pan/spatialisation wrong or absent in the mix.** Untested end
+  to end; youngest code in the stack (D138/M-65 lineage).
+- **H-B — distance law right, scale wrong.** The capture's `[DISTVOL]` lines
+  do follow the documented curve (flat max to ~200, falloff after) but only
+  reach 0.60 of max at dist 1794. Never compared to N64 loudness at the same
+  distance.
+- **H-C — voice-pool masking.** 8-voice soft limit vs 11 guards + music. Weak:
+  M-70 measured alloc <= 5/8.
+- **H-D — real content difference (PC guards engage where N64 guards don't).**
+  Possible, but after M-74 it has *no* supporting evidence. Gated behind the
+  N64 A/B.
+
+**Probes added this session (live under `GE_AUDIOTRACE`, catalogued in
+GE-ENV-PROBES.md):** `[VOL] t=… state=… rawVol=… playing=…` (`src/snd.c:
+556`, per-VOL-event value) and `[DISTVOL] pos=(…) player=(…) dist=… vol=…`
+(`src/game/propobj.c:12780`, the distance-attenuation funnel
+`sub_GAME_7F053894`).
+
+## D204 — Audio pipeline runs ~2 % below real time forever: GE's AI feedback loop has a 3 ms setpoint that OS jitter clears, so the DAC is padded with silence (M-64, FIXED + measured)
+
+**Found while reviewing the D202 audio state, not by chasing D202's stated
+symptom.** D202 itself is NOT resolved by this — see "What this does and does
+not explain" below.
+
+### The architecture (established, not assumed)
+
+GE's audio is a closed-loop, DAC-backpressure-driven producer:
+
+- `amMain` (`src/audi.c:433`) blocks on `OS_SC_RETRACE_MSG`. `__scMain`
+  (`src/sched.c:334`) forwards a retrace to a client either every frame or,
+  when the client registered with a non-zero flag, every *second* frame. The
+  audio client registers with `1` (`audi.c:441`), so it wakes at **30 Hz**.
+- Per wake, `amHandleFrameMessage` (`audi.c:531`) sizes the next block:
+  `frameSamples = (u16)((g_FrameSize - (osAiGetLength() >> 2) + 16 + 0x25) & ~0xf)`,
+  then clamps *below* at `g_MinFrameSize`.
+- NTSC constants: `outputRate=22050`, `FRAMES_PER_FIELD_AS_POW2=1`,
+  `MAYBE_FRAME_RATE=60` → `g_FrameSize=736`, `g_MinFrameSize=720`,
+  `g_MaxFrameSize=789`. `info->data` is allocated exactly `g_MaxFrameSize*4`
+  = 3156 bytes (`audi.c:388`).
+- So `osAiGetLength()` is a **±64-sample trim**, and the loop only asks for
+  more than 720 once the reported length falls under ~69 frames — **3 ms**.
+
+### The defect
+
+720 samples per 30 Hz block is **21600 samples/s against a 22050 Hz device**
+— the nominal rate is structurally 2 % short, and the design depends on those
+under-69-frames top-up blocks (784 samples) to make it back.
+
+On N64 a 3 ms setpoint is fine: AI is double-buffered and the VI interrupt is
+exact. On PC, `osAiGetLength()` maps onto the SDL queue, and ordinary OS
+scheduling jitter empties a 3 ms cushion before the loop reacts. The queue
+hits zero, SDL pads playback with silence, and **that lost time is
+unrecoverable** — a queue-*depth* reading can never tell the regulator it has
+already fallen behind. Measured, sustained, indefinitely:
+
+```
+GE_D204_OLD=1  rt=0.980  q=0..416   (q reaches 0 repeatedly)
+```
+
+`rt` = produced audio seconds / wall seconds. 0.980 is exactly 21600/22050.
+
+### The fix (F5, port-side only — `src/audi.c` untouched, rule #2 clean)
+
+`port/src/audio.c`'s `audioGetAiLengthBytes()` subtracts a target cushion
+(`AUDIO_TARGET_FRAMES` = 1024 frames ≈ 46 ms) before reporting, so "the queue
+holds the cushion" reads to the game as "the queue is empty". The loop then
+tops up while ~46 ms of slack remains and settles just above the cushion
+instead of oscillating into starvation. audi.c's own control law is unchanged.
+
+```
+after (same repro)   rt=1.000  q=368..672  drop=0   (q never reaches 0)
+```
+
+Also landed, all in `port/src/audio.c` / `port/src/libultra.c`:
+
+- **F1** — `osAiGetLength()` now reports the residue of a *single* buffer
+  (`min(queued, lastBufferBytes)`), matching AI_LEN_REG, instead of the whole
+  SDL queue depth. **Robustness only: measured A/B shows zero behavioural
+  change.** See the falsified hypothesis below.
+- **F3** — `Audio.QueueLimit` default 8192 → 2880 frames (372 ms → 130 ms
+  worst-case latency), and a full queue now logs a dropped block instead of
+  discarding it silently. **Caveat: an existing `data/ge007.ini` pins
+  `QueueLimit = 8192`, so this default only reaches fresh configs.**
+- **F4** — invariant guard refusing any block larger than `g_MaxFrameSize*4`.
+  Believed unreachable; costs one compare, versus a silent heap overrun.
+- **`GE_D204=1`** — audio-health monitor, one line per 5 s: `rt=` real-time
+  ratio, `q=` queue depth, `drop=`, `max=` largest block vs its allocation.
+  Deliberately cheap (~30 clock reads/s) so it can be left on for a whole
+  playtest. **`GE_D204_OLD=1`** restores pre-fix behaviour for in-binary A/B.
+
+### Hypothesis raised and FALSIFIED — do not re-open
+
+I predicted the u32 subtraction in `audi.c:531` wraps once the queue exceeds
+`g_FrameSize + 0x35` = 789 frames, truncates to u16 (e.g. 58128), and drives a
+74× heap overrun of the 3156-byte `info->data`. **The queue really does exceed
+789 routinely — measured high-water 2064 frames over 5 minutes — and the wrap
+really does happen, but it is harmless.** `frameSamples` is declared
+**`s16`** (`audi.c:145`), so the wrapped value lands negative and audi.c's own
+`(s32)frameSamples < (s32)(s16)g_MinFrameSize` clamp catches it, yielding a
+nominal 720-sample block. Max block observed is 3136 bytes against the
+3156-byte allocation, in both old and new modes, across every run. There is no
+overrun. This is why F1 measures as a no-op.
+
+### Two M-63 conclusions corrected
+
+1. **`soundIndex=109` firing "94 times in 60 s with no AK47 present" is a red
+   herring — closed, negative.** The count is doubled by the probe (it logs two
+   lines per call); 47 real calls. All of them fall in tight bursts *after*
+   t≈5.4 s, interleaved with ricochet indices 27/28/30/35/39/41 — **guards
+   returning fire**, correct behaviour once the player starts shooting in
+   Bunker. And the "suspiciously uniform ~32.6 ms cadence" is not a retrigger
+   artifact at all: 32.6 ms **is** the audio-block quantum (720 frames × 4
+   bytes = 2880 bytes), so *every* `dumppos` in the entire trace is quantised
+   to it. Several sounds landing in one block read as "4-in-a-row".
+2. **M-63's implied "audio produced at 13 % of real time" (708608 dump bytes
+   = 8.03 s over a 60 s run) was a measurement artifact of its own probe.**
+   That run had `GE_MIXERTRACE=1`, whose unbuffered per-opcode `fprintf`
+   produced a 25 MB log and slowed the process enough to starve the audio
+   thread. The identical repro without it produces 58.0 s of audio in 60 s.
+   **Lesson: `GE_MIXERTRACE` is not safe for any timing-sensitive measurement**
+   — that is exactly why `GE_D204` was written to be cheap. M-63's
+   recommendation to have the user replay with `GE_MIXERTRACE=1` set would
+   have induced the very starvation it was looking for.
+
+### What this does and does not explain
+
+**Does:** a permanent low-level stutter/gap artifact in all PC audio — ~2 % of
+playback was silence, in every level, for every user, from the first frame.
+
+**Does not:** D202's reported chain (wrong sound on the silenced PPK, correct
+sound sometimes heard simultaneously, sounds piling up and glitching over a
+session, eventual near-silence except one stuck loop). Nothing in this
+session's headless runs degraded: a 5-minute `-level_09` soak held `rt=1.000`,
+`drop=0`, no voice-pool growth. D202 stays OPEN. It needs a real playtest —
+now instrumentable with `GE_D204=1` (plus `GE_AUDIOTRACE=1`, and **not**
+`GE_MIXERTRACE`), where `rt` falling or `q` pinning at `queueLimit` with
+`drop=` climbing would localise it immediately.
+
+### Verification
+
+Reproduce with **`.	ools_pcudiodebug.ps1 -AB -Fire`** (added this session;
+`-Play -Trace` is the instrumented interactive run for D202). `-level_09`,
+scripted PPK fire, MSYS2 MINGW64 build, full `data/` mirror. In-binary A/B via
+`GE_D204_OLD` (same executable, no build-to-build variance):
+`rt` 0.980 → 1.000, `q` min 0 → 368, `drop` 0, `max` 3136/3156 unchanged.
+Not yet verified by ear — the artifact is a ~2 % silence rate, so a human
+listening pass on a real playthrough is still owed before calling it closed.
+
+### Harness gotchas found while building `audiodebug.ps1` (both cost a debug cycle)
+
+1. **`Start-Process -RedirectStandardOutput` does not capture this game's
+   stdout.** `CMakeLists.txt:577` sets `WIN32_EXECUTABLE TRUE` (`-mwindows`),
+   so `ge007.x86_64.exe` is a GUI-subsystem binary with no console of its own;
+   the redirect yields a 0-byte log while the output lands on the parent
+   console. A shell that opens the file itself before `CreateProcess` (cmd's
+   `>`, or a bash redirect) does work.
+2. **MSYS2 `bash.exe` launched from PowerShell arrives with a stripped
+   environment.** Neither variables inherited from PowerShell nor the script's
+   own `export` reach the child process — verified with a minimal
+   `export GE_PROBE=hello; env | grep GE_PROBE` probe, which prints under
+   `sh script.sh` from MSYS but nothing when the same script is run by
+   `powershell -Command "& bash.exe script.sh"`. Every `GE_*` probe silently
+   read as unset, which looks exactly like "the probe is broken". `cmd.exe`
+   inherits normally, so `audiodebug.ps1` generates a `.bat` and runs that.

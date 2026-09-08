@@ -37,6 +37,10 @@
  */
 
 #include <libaudio.h>
+#ifdef PORT
+#include <stdlib.h>
+#include "audiotrace.h"
+#endif
 #include <os.h>
 #include <ultraerror.h>
 #include <assert.h>
@@ -456,6 +460,11 @@ static void __CSPHandleMIDIMsg(ALCSPlayer *seqp, ALEvent *event)
                 voice = &vstate->voice;
                 
                 alSynAllocVoice(seqp->drvr, voice, &config);
+#ifdef PORT
+                if (getenv("GE_AUDIOTRACE"))
+                    geTracePrintf("audiotrace.log", "[MUSICNOTE] csp=%p key=%d vel=%d\n",
+                                  (void *)seqp, (int)key, (int)vel);
+#endif
                 
                 /*
                  * set up the voice state structure

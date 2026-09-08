@@ -851,14 +851,17 @@ s32 osAiSetFrequency(u32 hz)
 }
 s32 osAiSetNextBuffer(void *buf, u32 size)
 {
-    /* TODO(Phase 3): hand the mixed buffer to audioSetNextBuffer(). */
-    (void)buf; (void)size;
+    audioSetNextBuffer((const s16 *)buf, size);
     return 1;
 }
 u32 osAiGetLength(void)
 {
-    /* TODO(Phase 3): return audioGetSamplesBuffered() in the right units. */
-    return 0;
+    /* D204/F1: AI_LEN_REG is the bytes remaining in the buffer the DAC is
+     * CURRENTLY playing -- not the whole queue. Reporting the full SDL queue
+     * depth here pinned src/audi.c:531's frame-size regulator at its lower
+     * clamp and let its u32 subtraction wrap into a 74x heap overrun. See the
+     * long comment on audioGetAiLengthBytes() in port/src/audio.c. */
+    return audioGetAiLengthBytes();
 }
 void osAiSetConvert(u32 convert) { (void)convert; }
 
@@ -1582,3 +1585,45 @@ void viInit(void)
 
 /* VI debug message queue (normally src/vi.c, EXCLUDED). fr.c references it. */
 OSMesgQueue vi_c_debug_MQ;
+
+/* ------------------------------------------------------------------------ */
+/* D202/M-70: serialized trace writer for the GE_AUDIOTRACE / WIRE probes.  */
+/* See port/include/audiotrace.h for why (cross-thread mid-line            */
+/* interleaving corrupted the M-69 corpus).                                */
+/* ------------------------------------------------------------------------ */
+#include <stdarg.h>
+#include <stdio.h>
+
+static volatile int geTraceLock = 0;
+
+struct geTraceFile { const char *path; FILE *f; };
+static struct geTraceFile geTraceFiles[4];
+
+void geTracePrintf(const char *path, const char *fmt, ...)
+{
+    struct geTraceFile *tf = NULL;
+    va_list ap;
+
+    while (__sync_lock_test_and_set(&geTraceLock, 1)) { /* spin */ }
+
+    for (int i = 0; i < (int)(sizeof(geTraceFiles) / sizeof(geTraceFiles[0])); i++) {
+        if (!geTraceFiles[i].path) {
+            if (!tf) tf = &geTraceFiles[i];
+            continue;
+        }
+        if (strcmp(geTraceFiles[i].path, path) == 0) { tf = &geTraceFiles[i]; break; }
+    }
+    if (tf && !tf->f) {
+        tf->path = path;
+        tf->f = fopen(path, "a");
+        if (tf->f) setvbuf(tf->f, NULL, _IONBF, 0);
+    }
+
+    if (tf && tf->f) {
+        va_start(ap, fmt);
+        vfprintf(tf->f, fmt, ap);
+        va_end(ap);
+    }
+
+    __sync_lock_release(&geTraceLock);
+}

@@ -696,6 +696,45 @@ and turns every such overrun into a fatal `*** stack smashing detected ***`
   (especially Phase 3 audio underruns), reach first for host thread
   priorities (`SetThreadPriority`: scheduler thread time-critical, tick
   normal) and the deferred `GE_DETERM` mode (D117) — not for kernel changes.
+- **A verification tool that shares the code's indexing convention proves
+  self-consistency, not correctness** (D206 — cost eight sessions). The port
+  played every SFX one bank slot too high. Real cause: `struct
+  ALInstrumentAlt_s` (`src/snd.h`) is a cast alias over the on-disk
+  `ALInstrument`, and its `soundArray` member sits at struct offset **12** on
+  N64 (three 4-byte words) but **16** on PC (8-byte pointer + 8-byte
+  alignment). On N64 that offset-12 array deliberately aliases the on-disk
+  `bendRange`/`soundCount` words so `soundArray[N]` == on-disk entry `[N-1]`
+  (GE's `SFX_ID`s are 1-based by design); on PC the alias is broken and every
+  ID resolved one slot high. It survived M-68/M-70's "exact match" of 200+
+  requests because `exact_match.py` compared each runtime voice against a ROM
+  decode *of the requested index* with a decoder that walked the bank
+  0-based; `diff_bank.py` likewise walked N64 and PC layouts with identical
+  indexing. Both faithfully reproduced the bug and reported a pass. Two rules:
+  (1) when validating a **mapping** (index → asset, id → record, offset →
+  field), the reference must be produced **independently of the code's own
+  accessor** — an external rip, a published table, a hand-decoded sample — or
+  the test only confirms the code agrees with itself; (2) when a count and an
+  enum disagree by one (261 bank entries vs 262 `SFX_ID` members), suspect a
+  **pointer-width struct-layout shift** in a ROM-serialized struct (the D3x
+  class) before anything subtler — check every cast-alias struct's member
+  offsets at 32- vs 64-bit.
+- **Count a probe's events by its canonical one-per-call line, never by a bare
+  field match** (D204, then D205/M-73 which re-made the identical mistake on the
+  identical sound index). `GE_AUDIOTRACE` emits *two* lines per `sndPlaySfx`
+  (a `dumppos=... bank=...` line and a `sndPlaySfx: t=... soundIndex=...` line),
+  so `grep -c soundIndex=109` reports exactly double the truth. D204 already
+  corrected M-63's "idx 109 fired 94 times in 60 s" on these grounds; M-73 then
+  built a whole root cause ("guards stuck re-triggering, 256x/29.7 s") on the
+  doubled count and pinned it on converted collision geometry, which M-74
+  withdrew. Two general rules: (1) grep the timestamped call line
+  (`sndPlaySfx: t=`), not the field; (2) **before calling a rate anomalous,
+  compare it to the rate the data says is legal** — the "barrage" was ~6x
+  *under* the AK47's own `SoundTriggerRate` ceiling, which one lookup in
+  `assets/obseg/gun/gunWeaponStats.inc.c` would have shown. Corollary: a
+  perfectly monotone index sweep in a trace looks like a broken `random() % n`
+  but is often a deliberate round-robin counter in ground-truth code (e.g.
+  `male_guard_yelp_counter`, `chraction.c:2454`) — check the selector before
+  reporting it.
 - **"Regression vs. steady state" is decided by a build-and-compare, not by
   reading an old handoff line** (D133). Handoff prose like "the entire intro
   renders" is often aspirational — the author's intent, not a measured coverage
