@@ -48,6 +48,33 @@ state.
   D119 (`weapons_held[]->chr` punned as `ChrRecord*` to read
   `.act_*.attack_item` — aliased `WeaponObjRecord.weaponnum` at 0x80 on
   N64 via act-union@0x2C+84; act union moves to ~0x38 on PC).
+
+**A1. Raw-byte aliases into a union (`act_ubytes.padding[N]`) — the silent
+variant.** The nastiest members of this class do not crash: a literal byte
+index into a union that overlays pointer-bearing structs still *reads*, it
+just reads the wrong byte, so the game runs and merely behaves wrong. Grep
+for hardcoded indices into any `padding[]`/`u8[]` union arm.
+
+- **D209** (the D193 root cause, and the highest-impact instance found so
+  far): `self->act_ubytes.padding[45]` aliased `act_gopos.unk59`, the
+  SPEED tier. `act_gopos` = `{coord3d@0, StandTile *@12, waypoint *@16,
+  waypoint *[6]@20, u8 curindex@44, u8 unk59@45}` on N64; at 64-bit the
+  three pointer members widen and `unk59` moves 45 → 81, so the literal 45
+  lands on **byte 5 of `waypoints[1]`**. With a low-4GB arena
+  (`0x00000000_70xxxxxx`) that byte is **always 0x00** — a stable, plausible
+  value, not garbage. Effect: the locomotion-animation selector received
+  tier 0 forever and every AI character in the game was bound to a *walk*
+  animation; since GE travel is anim-root-motion driven, all AI moved at
+  walk pace on every level. No crash, no log, no NaN — it took a runtime
+  probe comparing the *commanded* tier (named field, correct) against the
+  *bound* animation (alias, wrong) to see it.
+
+**Lesson.** When a value reads as a clean constant (0, 1) rather than
+garbage, a pointer byte is a prime suspect — the high bytes of a low-4GB
+heap pointer are all zero, so a misaligned read looks like a legitimate
+"feature off" value. Prefer the named field under `#ifdef PORT`; the alias
+is only correct at 32-bit pointer width. Also: verify that every caller
+reaches the site with the union arm you are naming actually active.
 - **Open landmine:** raw hardcoded-offset accessors into `struct player`
   / `struct hand` — see `docs/dev/AUDIT-M6-player-offsets.md`.
 - **D126 corollary — a trailing runtime list pointer in a ROM-serialized

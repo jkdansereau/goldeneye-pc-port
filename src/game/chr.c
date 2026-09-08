@@ -47,7 +47,8 @@
  * GE_D193A_CHR=<n> restricts output to that chrnum. Test-only, env-gated. */
 static int d193a_mode = -1;
 static int d193a_only = -1;
-struct D193aSlot { s16 chrnum; u8 used; f32 px, py, pz, accdist; OSTime t0; };
+struct D193aSlot { s16 chrnum; u8 used; f32 px, py, pz, accdist; OSTime t0;
+                   u32 ticks, moved, frozen; };
 static struct D193aSlot d193a_slots[48];
 static struct D193aSlot *d193aSlot(s16 n) {
     int free = -1;
@@ -60,7 +61,17 @@ static struct D193aSlot *d193aSlot(s16 n) {
     d193a_slots[free].chrnum = n;
     d193a_slots[free].accdist = 0.0f;
     d193a_slots[free].t0 = 0;
+    d193a_slots[free].ticks = d193a_slots[free].moved = d193a_slots[free].frozen = 0;
     return &d193a_slots[free];
+}
+static s32 d193aAnimIndex(void *anim) {
+    extern s32 animation_table_ptrs1[];
+    s32 i;
+    if (anim == NULL) return -1;
+    for (i = 0; animation_table_ptrs1[i] != 0; i++) {
+        if ((void *)(uintptr_t)(u32)animation_table_ptrs1[i] == anim) return i;
+    }
+    return -1;
 }
 static void d193aSample(ChrRecord *chr, Model *model) {
     if (d193a_mode < 0) {
@@ -72,6 +83,7 @@ static void d193aSample(ChrRecord *chr, Model *model) {
     if (d193a_only >= 0 && chr->chrnum != d193a_only) return;
     struct D193aSlot *s = d193aSlot(chr->chrnum);
     if (!s) return;
+    s->ticks++;
     f32 x = chr->prop->pos.x, y = chr->prop->pos.y, z = chr->prop->pos.z;
     OSTime now = osGetTime();
     if (s->t0 == 0) { s->t0 = now; s->px = x; s->py = y; s->pz = z; s->accdist = 0.0f; return; }
@@ -81,13 +93,35 @@ static void d193aSample(ChrRecord *chr, Model *model) {
     if (now - s->t0 >= 1000000) {
         f32 secs = (f32)(now - s->t0) / 1e6f;
         fprintf(stderr,
-            "[D193A] chr=%d act=%d speed=%.1fu/s gtd=%.2f | scale=%.4f xlscale=%.4f "
-            "animrate=%.4f playspeed=%.4f mspeed=%.4f endframe=%.1f anim=%p\n",
+            "[D193A] chr=%d act=%d speed=%.1fu/s gtd=%.2f | tier=%d gspd=%.2f | typ=%d tick=%u move=%u frz=%u hid=%d | scale=%.4f xlscale=%.4f "
+            "animrate=%.4f playspeed=%.4f mspeed=%.4f endframe=%.1f anim=%p aidx=%d\n",
             chr->chrnum, (int)chr->actiontype, s->accdist / secs, g_GlobalTimerDelta,
+            (chr->actiontype == ACT_GOPOS) ? (int)chr->act_gopos.unk59 : -1,
+            (chr->actiontype == ACT_GOPOS) ? (double)chr->act_gopos.speed : -1.0,
+            (int)chr->prop->type, s->ticks, s->moved, s->frozen,
+            (int)((chr->chrflags & CHRFLAG_HIDDEN) != 0),
             model->scale, model->anim_translation_scale, model->animrate,
-            model->playspeed, model->speed, model->endframe, (void *)model->anim);
+            model->playspeed, model->speed, model->endframe, (void *)model->anim,
+            (int)d193aAnimIndex((void *)model->anim));
         s->t0 = now; s->accdist = 0.0f;
+        s->ticks = s->moved = s->frozen = 0;
     }
+}
+
+/* GE_D193A companion: called from chrUpdateAnim -- the ONLY path that
+ * advances prop->pos from anim root motion. chrTick gates it behind
+ * posIsOnScreen() for ACT_ANIM/ACT_STAND (chr.c:2540-2565): an off-screen
+ * chr gets modelTickAnim(model, ticks, 0) instead, which skips
+ * modelSetAnimFrame2WithChrStuff entirely and so does not move at all.
+ * move << tick in the per-second line = the chr is being visibility-culled
+ * out of its own locomotion; move == tick = the gate is clean and the
+ * slowdown is a rate/magnitude problem inside the root-motion decode. */
+static void d193aMoved(ChrRecord *chr, int frozen) {
+    if (d193a_mode <= 0 || chr->prop == NULL) return;
+    if (d193a_only >= 0 && chr->chrnum != d193a_only) return;
+    struct D193aSlot *s = d193aSlot(chr->chrnum);
+    if (!s) return;
+    if (frozen) s->frozen++; else s->moved++;
 }
 #endif
 
@@ -2368,6 +2402,10 @@ void chrUpdateAnim(ChrRecord *chr, s32 tickamount)
 
     model = chr->model;
     prop = chr->prop;
+
+#ifdef PORT
+    d193aMoved(chr, (chr->hidden & CHRHIDDEN_FREEZE) != 0);
+#endif
 
     if (!(chr->hidden & CHRHIDDEN_FREEZE))
     {
