@@ -1432,8 +1432,17 @@ static inline int gfx_lod_tile_offset(const int i) {
     // mip (tile 1), whose single-LOADBLOCK TMEM slot fast3d never registers
     // -> a magnified crop of the base image (the "blurry blob" ceilings /
     // wall panels in BUNKER1). GE loads the whole mip chain at TMEM 0, so
-    // the base render tile is the only correctly-loaded level: always use it.
-    return 0;
+    // for an LOD texture the base render tile is the only correctly-loaded
+    // level: use it.
+    //
+    // D172: but this must NOT collapse a genuine non-LOD two-texture combine.
+    // The explosion/blood/spark particle records (assets/oddtextures.c
+    // globalDL_0x078..) set G_TL_TILE (no LOD) + G_CC_INTERFERENCE
+    // (TEXEL0 * TEXEL1) and bind tile 0 = IA8 smoke @ TMEM 0, tile 1 = RGBA16
+    // fire @ TMEM 0x188. Returning 0 here fed TEXEL1 the smoke texture too
+    // (smoke * smoke) -> the magenta/cyan particle colour. Only fold to the
+    // base tile when LOD is actually active.
+    return rdp.tex_lod ? 0 : i;
 }
 
 static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bool is_rect) {
@@ -1690,6 +1699,40 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             }
         }
     }
+
+#ifdef PORT
+    /* D172 probe (env-gated, inert): the magenta/cyan blood/spark bug. The
+     * particle records (assets/oddtextures.c globalDL_0x078..) draw a 2-cycle
+     * G_CC_INTERFERENCE combine (TEXEL0*TEXEL1) binding two tiles of two
+     * formats - tile 0 IA8 smoke, tile 1 RGBA16 fire @ tmem 0x188. Dump both
+     * texunits' tile state whenever a 2-cycle tri actually consumes TEXEL1, so
+     * one Silo capture pins whether TEXEL1 resolves to the right tmem/format. */
+    if (getenv("GE_D172") && use_2cyc && comb->used_textures[1] && !rdp.tex_lod) {
+        const uint32_t fi = rdp.first_tile_index;
+        /* the tile fast3d will actually SAMPLE for each texunit */
+        const uint32_t s0 = fi + gfx_lod_tile_offset(0);
+        const uint32_t s1 = fi + gfx_lod_tile_offset(1);
+        /* the tile the DL actually CONFIGURED for texunit 1 */
+        const uint32_t c1 = fi + 1;
+        /* only interesting when the DL set up a genuinely distinct 2nd tile
+         * (different tmem) -- filters out mip/LOD-bilerp false positives */
+        if (rdp.texture_tile[c1].tmem != rdp.texture_tile[fi].tmem) {
+            static int d172x = 0;
+            if (d172x < 40) {
+                d172x++;
+                sysLogPrintf(LOG_NOTE,
+                    "D172: multitex tri combine=%llx tex_lod=%d first=%u | "
+                    "cfg1[tile=%u tmem=%u fmt=%u siz=%u] | "
+                    "SAMPLED0=tile%u(tmem=%u) SAMPLED1=tile%u(tmem=%u fmt=%u)%s",
+                    (unsigned long long)rdp.combine_mode, (int)rdp.tex_lod, fi,
+                    c1, rdp.texture_tile[c1].tmem, rdp.texture_tile[c1].fmt, rdp.texture_tile[c1].siz,
+                    s0, rdp.texture_tile[s0].tmem,
+                    s1, rdp.texture_tile[s1].tmem, rdp.texture_tile[s1].fmt,
+                    (s1 == s0) ? "  <-- TEXEL1 == TEXEL0 (BUG)" : "");
+            }
+        }
+    }
+#endif
 
     struct ShaderProgram* prg = comb->prg[tm];
     if (prg == NULL) {
@@ -2784,6 +2827,28 @@ static void gfx_run_dl(Gfx* cmd) {
                 gfx_dp_set_grayscale_color(C1(24, 8), C1(16, 8), C1(8, 8), C1(0, 8));
                 break;
             case G_SETCOMBINE:
+#ifdef PORT
+                /* D172 probe (env-gated, inert): log every SETCOMBINE with the
+                 * cycle-type active at that moment. Particle records
+                 * (explosion.c g_ExplosionDisplayLists[]) set a 2-cycle
+                 * combine but never set cycletype - this tells us what
+                 * cycletype fast3d has when they replay. */
+                if (getenv("GE_D172")) {
+                    static uint64_t d172seen[64];
+                    static int d172cnt = 0;
+                    uint64_t key = ((uint64_t)(uint32_t)cmd->words.w0 << 32) | (uint32_t)cmd->words.w1;
+                    bool dup = false;
+                    for (int k = 0; k < d172cnt; k++) if (d172seen[k] == key) { dup = true; break; }
+                    if (!dup && d172cnt < 64) {
+                        d172seen[d172cnt++] = key;
+                        uint32_t ct = (rdp.other_mode_h >> G_MDSFT_CYCLETYPE) & 3;
+                        sysLogPrintf(LOG_NOTE,
+                            "D172: SETCOMBINE w0=%08x w1=%08x  cycletype=%u (%s)",
+                            (uint32_t)cmd->words.w0, (uint32_t)cmd->words.w1,
+                            ct, ct == 0 ? "1CYC" : ct == 1 ? "2CYC" : ct == 2 ? "COPY" : "FILL");
+                    }
+                }
+#endif
                 gfx_dp_set_combine_mode(color_comb(C0(20, 4), C1(28, 4), C0(15, 5), C1(15, 3)),
                                         alpha_comb(C0(12, 3), C1(12, 3), C0(9, 3), C1(9, 3)),
                                         color_comb(C0(5, 4), C1(24, 4), C0(0, 5), C1(6, 3)),
