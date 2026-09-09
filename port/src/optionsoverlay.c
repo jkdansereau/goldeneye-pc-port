@@ -100,6 +100,8 @@ static struct Row rows[] = {
     { "Video.FpsCap",             "Frame cap",        ROW_SLIDER, 10,   NULL,       0, 0, 360, 0,0,0,0,0 },
     { "Video.MSAA",               "MSAA",             ROW_MSAA,   0,    NULL,       1, 0, 0,   0,0,0,0,0 },
     { "Video.TextureFilter",      "Texture filter",   ROW_ENUM,   1,    kTexFilter, 0, 0, 0,   0,0,0,0,0 },
+    { "Video.Anisotropy",         "Anisotropic",      ROW_SLIDER, 1,    NULL,       0, 0, 0,   0,0,0,0,0 },
+    { "Video.FovScale",           "FOV scale %",      ROW_SLIDER, 5,    NULL,       0, 0, 0,   0,0,0,0,0 },
     { "Input.MouseAimSpeed",      "Mouse aim speed",  ROW_SLIDER, 1,    NULL,       0, 0, 100, 0,0,0,0,0 },
     { "Input.MouseTurnSpeed",     "Mouse turn speed", ROW_SLIDER, 1,    NULL,       0, 0, 100, 0,0,0,0,0 },
     { "Input.MouseInvertY",       "Mouse invert Y",   ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
@@ -111,6 +113,40 @@ static struct Row rows[] = {
 static int  s_inited = 0;
 static volatile int s_open = 0;
 static int  s_sel = 0;
+
+/* D213: optional on-screen FPS readout (PD parity: Video.DisplayFPS). Drawn
+ * top-right whenever enabled, independent of the F10 panel. Config-only knob
+ * (kept off the 13-row panel, which is at its layout limit) -- matches PD,
+ * whose DisplayFPS is also file-only. Default 0 => emit path unchanged =>
+ * golden dumps byte-identical. */
+static int      s_showFps = 0;
+static char     s_fpsText[16] = "";
+
+PD_CONSTRUCTOR static void overlayConfigInit(void)
+{
+    configRegisterInt("Video.DisplayFPS", &s_showFps, 0, 1);
+}
+
+/* Sampled once per emitted frame; recomputes the string every ~0.5 s. */
+static void fpsTick(void)
+{
+    static uint64_t winStartUs = 0;
+    static int      frames = 0;
+
+    uint64_t nowUs = sysGetMicroseconds();
+    if (winStartUs == 0) {
+        winStartUs = nowUs;
+        return;
+    }
+    frames++;
+    uint64_t dtUs = nowUs - winStartUs;
+    if (dtUs >= 500000) {
+        int fps = (int)((double)frames * 1e6 / (double)dtUs + 0.5);
+        snprintf(s_fpsText, sizeof(s_fpsText), "%d FPS", fps);
+        winStartUs = nowUs;
+        frames = 0;
+    }
+}
 
 /* Layout (game 2D pixel space = viGetX() x viGetY(), ~320x240). Shared by the
  * emit path and the mouse hit-testing in optionsOverlayHandleInput().
@@ -543,8 +579,26 @@ Gfx *optionsOverlayEmit(void)
     if (!s_inited) {
         overlayInit();
     }
+
+    fpsTick();
+
     if (!s_open) {
-        return NULL;   /* nothing appended -> golden dumps byte-identical */
+        if (!s_showFps || !s_fpsText[0]) {
+            return NULL;   /* nothing appended -> golden dumps byte-identical */
+        }
+        /* D213: FPS-only mini DL (top-right), panel closed. */
+        const s32 fw = viGetX();
+        const s32 fh = viGetY();
+        Gfx *fgdl = s_buf;
+        gDPPipeSync(fgdl++);
+        gDPSetCycleType(fgdl++, G_CYC_1CYCLE);
+        gDPSetTexturePersp(fgdl++, G_TP_NONE);
+        gDPSetScissor(fgdl++, G_SC_NON_INTERLACE, 0, 0, fw, fh);
+        fgdl = microcode_constructor(fgdl);
+        fgdl = drawTextR(fgdl, fw - 6, 6, s_fpsText, 0x40ff60ff);
+        gDPPipeSync(fgdl++);
+        gSPEndDisplayList(fgdl++);
+        return s_buf;
     }
 
     const s32 W = viGetX();

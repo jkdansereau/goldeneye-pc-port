@@ -1,7 +1,10 @@
 # QoL Inventory — PD-vs-GE options diff
 
-Status: **read-only research, parked** (input to project Phase 4). No code
-changed. Companion to `WIDESCREEN-FOV-PLAN.md` and `UNLOCKED-FPS-PLAN.md`.
+Status: **partially implemented.** M-83 landed three port-only quick wins —
+DisplayFPS (D213), anisotropic filtering (D212), and the FOV slider (D211, via
+`WIDESCREEN-FOV-PLAN.md` Phase 4). Rebinding / SkipIntro / per-pad tuning /
+window HiDpi still open. Companion to `WIDESCREEN-FOV-PLAN.md` and
+`UNLOCKED-FPS-PLAN.md`.
 
 Method: diffed the config surface of both ports — every `configRegister*`
 key in `pd_port/port/src/*.c` vs `port/src/config.c` + the F10 overlay
@@ -27,8 +30,8 @@ ScreenShakeIntensity. Debug: FrameDump, InputLog.
 |---|---|---|---|---|
 | **Key rebinding** (config-string binds per controller/action) | `input.c:69,627-675,1548` (`bindStrs`, `inputParseBindString`) | P | M | **High.** Explicit Phase 4 debt ("rebinding UI" — note PD has *no* UI either; config-file driven). Port-only in `port/src/input.c`. |
 | **SkipIntro** | `main.c:139` (STAGE_TITLE → STAGE_CITRAINING) | P | S | **High.** GE analogue: stage-override path already exists (`boss.c:385-393`, `g_StageNum = LEVELID_TITLE` at :98); wire a flag + arg. 10-min check on what feeds `tokenFindLevel`. |
-| **DisplayFPS** (+ interval) | config `Video.DisplayFPS(Interval)` | P | S | Cheap; useful for FPS-plan verification too. |
-| **Anisotropic filtering** (≤16×), MipmapFilter, TextureFilter2D | `gfx_opengl` texparam path | P | S–M | **High at 4K.** GE's `gfx_opengl.cpp` has mipmap nY but no aniso (`GL_TEXTURE_MAX_ANISOTROPY_EXT`). Port-only. |
+| **DisplayFPS** _(DONE M-83, D213)_ | config `Video.DisplayFPS` | P | S | Top-right readout, config-only; ~0.5 s sample window. |
+| **Anisotropic filtering** _(DONE M-83, D212)_ | `Video.Anisotropy` (1–16, dflt 4) | P | S | fast3d already had the GL hook + a hardcoded 4×; M-83 exposed it as config. MipmapFilter / TextureFilter2D still not surfaced. |
 | Per-pad tuning: per-stick deadzones, stick scale, rumble scale, device index, swap sticks, C-button mapping | `input.c` padsCfg block | P | M | Medium. Matters for real-controller users; PD pattern is a config section per pad. |
 | FakeGamepads / FirstGamepadNum / UseHIDAPI | `input.c` | P | S–M | Niche (local MP on PC); defer until MP is actually played. |
 | Window polish: DefaultFullscreen/Maximize, CenterWindow, AllowHiDpi, ExclusiveFullscreen | `video.c` vid* block | P | S | HiDpi + center are the useful ones on modern Windows. |
