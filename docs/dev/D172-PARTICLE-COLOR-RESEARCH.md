@@ -104,10 +104,17 @@ render-iterate pass (headless can't see particle colour) — see §6.
 ### Probes shipped (M-82, `#ifdef PORT`, `GE_D172=1`, inert when unset)
 
 - `gfx_pc.cpp` G_SETCOMBINE case — logs each distinct combine + active
-  cycletype (dedup, 64 max).
-- `gfx_pc.cpp` `gfx_sp_tri1` — flags tris with a non-trivial cyc2 combine
-  drawn while cycletype != 2CYC (over-fires on trivial passthrough cyc2 —
-  read `combine_mode` values, don't trust the count).
+  cycletype (dedup, 64 max). Confirmed the particle combine `fc26a004` runs
+  at `cycletype=2CYC`.
+- `gfx_pc.cpp` `gfx_sp_tri1` (after the texunit loop) — whenever a **2-cycle
+  triangle actually consumes TEXEL1**, dumps `combine_mode` + both texunits'
+  `tile / tmem / fmt / siz`. This is the decisive probe: a Silo close-range
+  guard kill with `GE_D172=1` should log
+  `T0[... fmt=3(IA) siz=1(8b)]  T1[tmem=392 fmt=0(RGBA) siz=2(16b)]`.
+  If `T1.tmem != 392`, or `T1.fmt/siz` are wrong, the TEXEL1 bind is the bug.
+  If they're all correct, the fault is in `import_texture_rgba16` for the
+  second texunit or the `G_CC_INTERFERENCE` CC generation — pair with
+  `GE_DTEX=1` / `GE_TEXRAW=1` to dump the fire tile's bytes.
 
 ## 6. Fix path (next session — needs a display)
 

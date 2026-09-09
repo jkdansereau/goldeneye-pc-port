@@ -1529,25 +1529,6 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         use_alpha = true;
     }
 
-#ifdef PORT
-    /* D172 probe (env-gated, inert): flag triangles whose combine carries
-     * non-trivial cycle-2 terms while fast3d is NOT in 2-cycle mode - the
-     * suspected particle-colour bug (records set a 2-cyc combine but never
-     * set cycletype). rgb_cyc2 sits at bits 28..43 of combine_mode. */
-    if (getenv("GE_D172")) {
-        uint32_t rgb_cyc2 = (uint32_t)((rdp.combine_mode >> 28) & 0xffff);
-        if (!use_2cyc && rgb_cyc2 != 0) {
-            static int d172t = 0;
-            if (d172t < 12) {
-                d172t++;
-                sysLogPrintf(LOG_NOTE,
-                    "D172: tri with 2cyc combine but cycletype=1CYC  combine_mode=%llx",
-                    (unsigned long long)rdp.combine_mode);
-            }
-        }
-    }
-#endif
-
     if (use_alpha) {
         cc_options |= (uint64_t)SHADER_OPT_ALPHA;
     }
@@ -1709,6 +1690,29 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             }
         }
     }
+
+#ifdef PORT
+    /* D172 probe (env-gated, inert): the magenta/cyan blood/spark bug. The
+     * particle records (assets/oddtextures.c globalDL_0x078..) draw a 2-cycle
+     * G_CC_INTERFERENCE combine (TEXEL0*TEXEL1) binding two tiles of two
+     * formats - tile 0 IA8 smoke, tile 1 RGBA16 fire @ tmem 0x188. Dump both
+     * texunits' tile state whenever a 2-cycle tri actually consumes TEXEL1, so
+     * one Silo capture pins whether TEXEL1 resolves to the right tmem/format. */
+    if (getenv("GE_D172") && use_2cyc && comb->used_textures[1]) {
+        static int d172x = 0;
+        if (d172x < 16) {
+            d172x++;
+            const uint32_t t0 = rdp.first_tile_index + gfx_lod_tile_offset(0);
+            const uint32_t t1 = rdp.first_tile_index + gfx_lod_tile_offset(1);
+            sysLogPrintf(LOG_NOTE,
+                "D172: 2cyc+TEXEL1 tri  combine=%llx  "
+                "T0[tile=%u tmem=%u fmt=%u siz=%u]  T1[tile=%u tmem=%u fmt=%u siz=%u]",
+                (unsigned long long)rdp.combine_mode,
+                t0, rdp.texture_tile[t0].tmem, rdp.texture_tile[t0].fmt, rdp.texture_tile[t0].siz,
+                t1, rdp.texture_tile[t1].tmem, rdp.texture_tile[t1].fmt, rdp.texture_tile[t1].siz);
+        }
+    }
+#endif
 
     struct ShaderProgram* prg = comb->prg[tm];
     if (prg == NULL) {
