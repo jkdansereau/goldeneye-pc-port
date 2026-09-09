@@ -1432,8 +1432,17 @@ static inline int gfx_lod_tile_offset(const int i) {
     // mip (tile 1), whose single-LOADBLOCK TMEM slot fast3d never registers
     // -> a magnified crop of the base image (the "blurry blob" ceilings /
     // wall panels in BUNKER1). GE loads the whole mip chain at TMEM 0, so
-    // the base render tile is the only correctly-loaded level: always use it.
-    return 0;
+    // for an LOD texture the base render tile is the only correctly-loaded
+    // level: use it.
+    //
+    // D172: but this must NOT collapse a genuine non-LOD two-texture combine.
+    // The explosion/blood/spark particle records (assets/oddtextures.c
+    // globalDL_0x078..) set G_TL_TILE (no LOD) + G_CC_INTERFERENCE
+    // (TEXEL0 * TEXEL1) and bind tile 0 = IA8 smoke @ TMEM 0, tile 1 = RGBA16
+    // fire @ TMEM 0x188. Returning 0 here fed TEXEL1 the smoke texture too
+    // (smoke * smoke) -> the magenta/cyan particle colour. Only fold to the
+    // base tile when LOD is actually active.
+    return rdp.tex_lod ? 0 : i;
 }
 
 static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bool is_rect) {
