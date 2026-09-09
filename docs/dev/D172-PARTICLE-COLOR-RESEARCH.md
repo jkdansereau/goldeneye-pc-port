@@ -66,44 +66,64 @@ So the particle sub-DL runs to completion on PC: `E7` RDPPIPESYNC (handled),
 `B9` SetRenderMode (handled), `FC` SETCOMBINE (handled), `FD` SETTIMG (handled).
 **No D146 abort. No stale-state fallthrough.** The wrong-colour bug is elsewhere.
 
-## 5. Where the bug actually is — re-scoped (M-82)
+## 5. Cycle-type is ALSO ruled out — the real record, and where the bug is (M-82)
 
-The dominant combine (14/17 records, §2) is a **2-cycle** mode
-(`cycle 1 RGB: (COMBINED - 0)·SHADE + COMB_A`). But the records set render mode
-(`0xB9`) and **never set the cycle-type** field (`G_MDSFT_CYCLETYPE`, in
-`other_mode_h`). On N64 the ambient `other_mode_h` at particle-draw time is
-2-cycle (set by whatever DL ran before); fast3d's ambient `other_mode_h` at that
-point is very likely **1-cycle**, so `use_2cyc` (`gfx_pc.cpp:1521`) is false and
-fast3d renders only cycle-0 of the combine:
-`(TEXEL0 - 0)·TEXEL1 + COMBINED_A`. With no second tile loaded, **TEXEL1 is
-garbage** → arbitrary colour → the magenta/cyan symptom. This is the "secondary"
-note from the old §4, now promoted to the primary hypothesis.
+The actual particle records are in **`assets/oddtextures.c`**
+(`globalDL_0x078` … , 17 of them). One record verbatim:
 
-### Verification
+```c
+gsDPPipeSync(),
+gsDPSetCycleType(G_CYC_2CYCLE),            // <-- record DOES set 2-cycle
+gsDPSetRenderMode(G_RM_PASS, G_RM_ZB_CLD_SURF2),
+gsDPSetTextureLOD(G_TL_TILE),
+gsDPSetCombineMode(G_CC_INTERFERENCE, G_CC_MODULATEIA2),
+gsSPTexture(..., G_TX_RENDERTILE, G_ON),
+  // tile 0: IMAGE_SMOKE_0  IA16 image -> loaded/rendered as IA8, 56x56
+  // tile 1: IMAGE_FIRE_0   RGBA16, 16x14, loaded to tmem 0x188
+gsDPSetTextureLUT(G_TT_NONE),
+gsDPPipeSync(),
+gsSPEndDisplayList(),
+```
 
-1. **DONE (M-82).** `-level_09` (bunker1), `GE_INPUTSCRIPT` sustained-fire,
-   ~3600 frames, `d172_probe.log`: **zero `D146: unknown GBI opcode` lines,
-   zero ERROR/WARN of any kind.** The particle sub-DL does not abort on 0xB9.
-   §4 root cause is dead. (Headless, so this does not by itself confirm the
-   §5 2-cycle hypothesis — that still needs the probe below.)
-2. Add an env-gated probe at `gfx_sp_tri*` when `rdp.combine_mode` matches a
-   particle record's key: log `use_2cyc`, `other_mode_h & CYCLETYPE`, the CC
-   key. Expect `use_2cyc == 0`.
+So the record **explicitly sets `G_CYC_2CYCLE`** (opcode `0xBA` =
+`G_SETOTHERMODE_H` in this build), and fast3d handles `0xBA` correctly:
+`gfx_pc.cpp:2734` → `gfx_sp_set_other_mode(52, 2, w1<<32)` sets `other_mode_h`
+cycletype = 2CYC. **Confirmed by probe (M-82):** the `GE_D172=1` SETCOMBINE
+probe logged the particle combine `w0=fc26a004` (= `G_CC_INTERFERENCE`/
+`G_CC_MODULATEIA2`) with **`cycletype=1 (2CYC)`** every time. The cycle-type
+hypothesis is dead too.
 
-## 6. Fix path (next session)
+**The bug is the `G_CC_INTERFERENCE` two-tile combine / TEXEL1 path.**
+`G_CC_INTERFERENCE` cycle-0 = `TEXEL0 * TEXEL1`; the record binds **two
+different tiles of two different formats** (tile 0 IA8 smoke, tile 1 RGBA16
+fire at tmem 0x188). Magenta/cyan = a TEXEL1 sampling/decode fault: wrong tmem
+offset for tile 1, RGBA16 (5551) channel/endian misread, or fast3d treating
+tile 1 as an LOD mip of tile 0 under `G_TL_TILE`. This needs a visual
+render-iterate pass (headless can't see particle colour) — see §6.
 
-1. Run the §5 verification. If `use_2cyc == 0` on particle tris is confirmed:
-2. **Port-only fix, `src/game/explosion.c` under `#ifdef PORT`** (same
-   hardware-idiom exception class as the existing `G_TRI4` / dynamic-light
-   `#ifdef PORT`s): emit an explicit `gsDPSetCycleType(G_CYC_2CYCLE)` (or the
-   raw `G_SETOTHERMODE_H` immediate) into / ahead of the particle record replay
-   so PC does not depend on ambient cycle-type. `#else` = N64 stream verbatim.
-   Alternative (pure port): in `gfx_pc.cpp`, when a SETCOMBINE carries a
-   2-cycle-only combine (cycle-1 slots non-trivial) force `use_2cyc` — riskier,
-   broader blast radius.
-3. If colour still wrong after 2-cycle is forced: check `texSelect` actually
-   binds TEXEL1's tile for these records, and re-decode the combine (the §2
-   decode was not re-verified this pass).
+### Probes shipped (M-82, `#ifdef PORT`, `GE_D172=1`, inert when unset)
+
+- `gfx_pc.cpp` G_SETCOMBINE case — logs each distinct combine + active
+  cycletype (dedup, 64 max).
+- `gfx_pc.cpp` `gfx_sp_tri1` — flags tris with a non-trivial cyc2 combine
+  drawn while cycletype != 2CYC (over-fires on trivial passthrough cyc2 —
+  read `combine_mode` values, don't trust the count).
+
+## 6. Fix path (next session — needs a display)
+
+1. Get a `-level_XX` capture with visible particle spray (Silo guard kill at
+   close range per the original report, or any wall-impact spark). Note the
+   colour.
+2. Env-gated probe in `gfx_pc.cpp` `import_texture` / the TEXEL1 bind path:
+   for tile 1 when combine == the particle key, log format/size/tmem-addr/
+   line_size and the first few decoded texels. Compare against the RGBA16
+   `IMAGE_FIRE_0` bytes in the extracted asset.
+3. Likely fixes, in order of suspicion: (a) tile-1 tmem address 0x188 not
+   honoured → TEXEL1 reads tile-0 bytes; (b) RGBA16→RGBA32 decode for the
+   second texunit; (c) `G_TL_TILE` LOD path picking the wrong tile for TEXEL1.
+4. Re-decode `G_CC_INTERFERENCE` / `G_CC_MODULATEIA2` as fast3d generates them
+   (`gfx_cc.cpp`) and confirm the GLSL matches `TEXEL0*TEXEL1` then
+   `COMBINED*SHADE`.
 
 ## Files
 
