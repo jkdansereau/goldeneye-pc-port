@@ -1699,17 +1699,28 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
      * texunits' tile state whenever a 2-cycle tri actually consumes TEXEL1, so
      * one Silo capture pins whether TEXEL1 resolves to the right tmem/format. */
     if (getenv("GE_D172") && use_2cyc && comb->used_textures[1]) {
-        static int d172x = 0;
-        if (d172x < 16) {
-            d172x++;
-            const uint32_t t0 = rdp.first_tile_index + gfx_lod_tile_offset(0);
-            const uint32_t t1 = rdp.first_tile_index + gfx_lod_tile_offset(1);
-            sysLogPrintf(LOG_NOTE,
-                "D172: 2cyc+TEXEL1 tri  combine=%llx  "
-                "T0[tile=%u tmem=%u fmt=%u siz=%u]  T1[tile=%u tmem=%u fmt=%u siz=%u]",
-                (unsigned long long)rdp.combine_mode,
-                t0, rdp.texture_tile[t0].tmem, rdp.texture_tile[t0].fmt, rdp.texture_tile[t0].siz,
-                t1, rdp.texture_tile[t1].tmem, rdp.texture_tile[t1].fmt, rdp.texture_tile[t1].siz);
+        const uint32_t fi = rdp.first_tile_index;
+        /* the tile fast3d will actually SAMPLE for each texunit */
+        const uint32_t s0 = fi + gfx_lod_tile_offset(0);
+        const uint32_t s1 = fi + gfx_lod_tile_offset(1);
+        /* the tile the DL actually CONFIGURED for texunit 1 */
+        const uint32_t c1 = fi + 1;
+        /* only interesting when the DL set up a genuinely distinct 2nd tile
+         * (different tmem) -- filters out mip/LOD-bilerp false positives */
+        if (rdp.texture_tile[c1].tmem != rdp.texture_tile[fi].tmem) {
+            static int d172x = 0;
+            if (d172x < 40) {
+                d172x++;
+                sysLogPrintf(LOG_NOTE,
+                    "D172: multitex tri combine=%llx tex_lod=%d first=%u | "
+                    "cfg1[tile=%u tmem=%u fmt=%u siz=%u] | "
+                    "SAMPLED0=tile%u(tmem=%u) SAMPLED1=tile%u(tmem=%u fmt=%u)%s",
+                    (unsigned long long)rdp.combine_mode, (int)rdp.tex_lod, fi,
+                    c1, rdp.texture_tile[c1].tmem, rdp.texture_tile[c1].fmt, rdp.texture_tile[c1].siz,
+                    s0, rdp.texture_tile[s0].tmem,
+                    s1, rdp.texture_tile[s1].tmem, rdp.texture_tile[s1].fmt,
+                    (s1 == s0) ? "  <-- TEXEL1 == TEXEL0 (BUG)" : "");
+            }
         }
     }
 #endif
