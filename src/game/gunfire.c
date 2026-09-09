@@ -38,6 +38,8 @@
 #include "gbi_extension.h"
 
 #ifdef PORT
+#include <stdlib.h>
+#include <stdio.h>
 /* D102: the 1P weapon Model and its RW-data pool were punned onto
  * hand->field_B68 / hand->modeldatas; on x86-64 struct Model (0xE8) is too
  * big for that layout and modelInit() aliases objinst->datas onto the pool
@@ -606,6 +608,47 @@ void gunUpdateAndFire(GUNHAND handnum)
     {
         hand->field_87F = 0;
     }
+
+#ifdef PORT
+    /* GE_DVM=1 — triage the missing 1P weapon viewmodel (D115 item #5 /
+     * docs/dev/VIEWMODEL-RESEARCH.md). One BUNKER1 run with a pistol in hand
+     * dumps the field_87F show/hide gate terms + the model-setup pointers,
+     * rate-limited ~1/s per hand. Env-gated, zero behaviour change.
+     *   87F==0 with gunHwoi==0        -> suspect #1 (Gun_hand_without_item gate;
+     *                                    inv/hitem/f2A44 show which term diverged)
+     *   87F!=0 but numRec > 192       -> suspect #2 (RW pool overrun)
+     *   87F!=0 but RootNode NULL/wild -> suspect #3 (stale copy_of_body_obj_header)
+     *   87F!=0, RootNode sane         -> defect is downstream in subdraw/drawjointlist */
+    {
+        static int dvm = -1;
+        static u32 dvm_last[2] = {0, 0};
+        if (dvm < 0) dvm = getenv("GE_DVM") != NULL;
+        if (dvm && handnum < 2) {
+            u32 now = (u32)(osGetTime() / 1000000);
+            if (now != dvm_last[handnum]) {
+                struct player *pl = g_CurrentPlayer;
+                ModelFileHeader *dh = &pl->copy_of_body_obj_header[handnum];
+                dvm_last[handnum] = now;
+                fprintf(stderr,
+                    "[DVM] hand=%d item=%d 87F=%d | hdrLine=%d showFP=%d hideHand=%d "
+                    "actState=%d ittype=%d ammo=%d | gunHwoi=%d inv=%d hitem=%d f2A44=%d\n",
+                    handnum, item, (s32)hand->field_87F,
+                    get_ptr_weapon_model_header_line(item) != 0,
+                    bondwalkItemCheckBitflags(item, WEAPONSTATBITFLAG_SHOW_FIRST_PERSON),
+                    bondwalkItemCheckBitflags(item, WEAPONSTATBITFLAG_HIDE_FIRST_PERSON_HAND),
+                    (s32)hand->weapon_action_state, get_itemtype_in_hand(handnum),
+                    (s32)hand->weapon_ammo_in_magazine,
+                    Gun_hand_without_item(handnum),
+                    pl->hand_invisible[handnum], (s32)pl->hand_item[handnum],
+                    (s32)pl->field_2A44[handnum]);
+                fprintf(stderr,
+                    "[DVM]   hdr=%p RootNode=%p Skeleton=%p Switches=%p numMtx=%d numRec=%d (pool=192 words)\n",
+                    (void *)dh, (void *)dh->RootNode, (void *)dh->Skeleton,
+                    (void *)dh->Switches, (s32)dh->numMatrices, (s32)dh->numRecords);
+            }
+        }
+    }
+#endif
 
     if (hand->field_87F != 0)
     {
@@ -1528,7 +1571,26 @@ void gunRenderFirstPersonGunModels(Gfx **gdlptr)
     s32 handnum;
     Model *model;
  
+#ifdef PORT
+    /* D215: the N64 read `renderdata = *(ModelRenderData *)&D_80035CC0;` is a
+     * reinterpret across three separately-declared adjacent .data globals —
+     * `u32 D_80035CC0 = 0;` immediately followed by
+     * `u32 D_80035CC4[] = {1, 3, 0, 0, ...};` (see gun.c) — so on N64 it yields
+     * exactly { basemtx=0, zbufferenabled=1, flags=3, everything-else=0 }.
+     * On x86-64 it breaks twice over: `ModelRenderData`'s pointer members
+     * (`basemtx`, `gdl`, `mtxlist`) widen 4->8 B so `flags` is no longer at
+     * struct offset 8, and the C standard does not guarantee those two globals
+     * are laid out adjacently or in declaration order. Measured result:
+     * `renderdata.flags == 0`, which gates every 1P weapon-model DL node off in
+     * `modelRenderNodeGundl` (`flags & 1`) — the whole "no gun visible while
+     * playing" bug. Reproduce the N64 field values directly. ABI/layout only
+     * (D3x class), no logic change. */
+    renderdata = (ModelRenderData){0};
+    renderdata.zbufferenabled = TRUE;
+    renderdata.flags = 3;
+#else
     renderdata = *(ModelRenderData *)&D_80035CC0;
+#endif
  
     for (handnum = 0; handnum != 2; handnum++) 
     {
@@ -1612,9 +1674,31 @@ void gunRenderFirstPersonGunModels(Gfx **gdlptr)
             }
         }
  
+#ifdef PORT
+        /* GE_DVM=1: D215 verification probe — how many gfx commands the 1P
+         * weapon model's subdraw() actually emits. Pre-fix this was 1 (just the
+         * gSPSegment); a healthy weapon DL is ~150. Rate-limited ~1/s/hand. */
+        Gfx *dvm_before = renderdata.gdl;
+#endif
         subdraw(&renderdata, HAND_WEAPON_MODEL(handptr));
         gdl = renderdata.gdl;
- 
+#ifdef PORT
+        {
+            static int dvmr = -1;
+            static u32 dvmr_last[2] = {0, 0};
+            if (dvmr < 0) dvmr = getenv("GE_DVM") != NULL;
+            if (dvmr && handnum < 2) {
+                u32 now = (u32)(osGetTime() / 1000000);
+                if (now != dvmr_last[handnum]) {
+                    dvmr_last[handnum] = now;
+                    fprintf(stderr, "[DVMr] hand=%d item=%d 87F=%d cmds_emitted=%ld cull=%d\n",
+                            handnum, item, (s32)handptr->field_87F,
+                            (long)(renderdata.gdl - dvm_before), renderdata.cullmode);
+                }
+            }
+        }
+#endif
+
         if (bondwalkItemCheckBitflags(item, WEAPONSTATBITFLAG_MIRROR_DUAL) != 0) 
         {
             gSPClearGeometryMode(gdl++, G_CULL_BOTH);

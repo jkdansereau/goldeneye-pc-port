@@ -53,6 +53,7 @@ D179,FIXED,Packaged build crashes after the logos —,"Diagnosed, not fixed —"
 D180,PARTIAL,"Native-PC input pass (M-XX QoL run, qol/native-pc-input-menu, port-only).","LANDED, port-only, no #ifdef PORT."
 D181,PARTIAL,Game.ScreenShakeIntensity —,"LANDED behind config, default = original."
 D184,PARTIAL,F10 port-layer options overlay —,"LANDED, port-only, no #ifdef PORT in src/."
+D215,FIXED,1P weapon viewmodel never drew in-level —,"FIXED (src/game/gunfire.c, #ifdef PORT)."
 D85,OPEN,room primary/secondary DL → texLoadFromGdl garbage,"OPEN (safety-netted; widen/pool fixes landed, geometry now renders)"
 D86 · D87,RESOLVED,modelInitRwData truncated ptr · attract-demo BE ramromfilestructure,resolved
 D88.4,RESOLVED,propDefs polymorphic record stream not byteswapped → setupDoor crash,resolved (d88_propdefs.py); layout audit M-20 → D132
