@@ -5149,6 +5149,31 @@ established screen-space-overlay idiom; compile is clean. The two numeric
 unknowns (texture scale, and whether fast3d's viewport transform composes with
 this ortho exactly as the projection math intends) need one visual check.
 
+### D176(a) — M-82: PR #18 rebased; Defect 1 (texcoord) fixed by static analysis
+
+- **PR #18 rebased onto `main`** (was 5 days stale, `docs/porting-notes.md`
+  conflict resolved). Builds clean; `bunker1` verify PASS, `worst_cell`
+  unchanged (sky.c change is `#ifdef PORT` and only touches cloud-sky levels).
+- **Defect 1 root-caused, no visual iteration needed.** The M-46 "untested
+  risk — texture scale" is resolved:
+  - Cloud tile = `s_skywaterimages[0]` = `IMAGE_CLOUDS_GRAYSCALE`, **64×64
+    IA8, `G_TX_WRAP`** (`assets/oddtextures.c:646`). It *tiles* — S/T are not
+    [0,1) fractions.
+  - GE's own screen-space textured-quad idiom is `tc = width << 5`
+    (`src/game/glass2.c:678`), so the patch's `× 32.0f` **is the right scale**.
+  - `unk20`/`unk24` are texel coords reaching ±20 000 near the horizon (M-47),
+    so `(s16)(S × 32)` **overflows** → the streak.
+  - **Fix (committed):** per-primitive phase-fold — subtract the same
+    multiple of the 64-texel tile period from every vertex of one triangle
+    before scaling. Preserves inter-vertex deltas (hence the interpolated
+    texture); keeps `tc` in s16 range. Exact for any triangle whose S/T span
+    is < ~1000 texels — i.e. everything except triangles straddling the
+    horizon line, which remain Defect 2.
+- **Defect 2 (coverage / horizon-straddling tris) still open** → adaptive
+  tessellation, denser toward the horizon.
+- **Owed:** one `-level_22` visual check — see `docs/dev/D176a-SKY-NOTES.md`
+  "Verification ask".
+
 ---
 
 ## D177 — Ladders non-functional: `count`/`rooms` land in the high half of a widened pointer (M-36)

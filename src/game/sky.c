@@ -1513,6 +1513,23 @@ static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
     f32 b = t + getPlayer_c_screenheight();
     s32 i;
 
+    /* D176(a) Defect 1 (M-82): unk20/unk24 are S/T in *texel* units for the
+     * 64x64 cloud tile (s_skywaterimages[0]) and reach many thousands near
+     * the horizon -- (s16)(S * 32) overflows Vtx.tc and streaks the clouds.
+     * GL_REPEAT has period tex_width (64), so fold every vertex of this one
+     * primitive by the SAME multiple of 64: magnitudes drop into s16 range,
+     * inter-vertex deltas (hence the interpolated texture) are preserved
+     * exactly. Triangles whose S/T span exceeds ~1000 texels (only those
+     * straddling the horizon) still need Defect-2's finer tessellation. */
+    f32 foldS = v[0]->unk20, foldT = v[0]->unk24;
+    for (i = 1; i < nverts; i++)
+    {
+        if (v[i]->unk20 < foldS) foldS = v[i]->unk20;
+        if (v[i]->unk24 < foldT) foldT = v[i]->unk24;
+    }
+    foldS = (f32) ((s32) floorf(foldS / 64.0f) * 64);
+    foldT = (f32) ((s32) floorf(foldT / 64.0f) * 64);
+
     guOrtho(proj, l, r, b, t, -32768.0f, 32768.0f, 1.0f);
     guMtxIdent(mv);
 
@@ -1522,8 +1539,8 @@ static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
         vtx[i].v.ob[1] = (s16) (v[i]->unk2c * 0.25f);
         vtx[i].v.ob[2] = (s16) (v[i]->unk30 * 0.25f);
         vtx[i].v.flag  = 0;
-        vtx[i].v.tc[0] = (s16) (v[i]->unk20 * 32.0f);
-        vtx[i].v.tc[1] = (s16) (v[i]->unk24 * 32.0f);
+        vtx[i].v.tc[0] = (s16) ((v[i]->unk20 - foldS) * 32.0f);
+        vtx[i].v.tc[1] = (s16) ((v[i]->unk24 - foldT) * 32.0f);
         vtx[i].v.cn[0] = (u8) v[i]->r;
         vtx[i].v.cn[1] = (u8) v[i]->g;
         vtx[i].v.cn[2] = (u8) v[i]->b;
