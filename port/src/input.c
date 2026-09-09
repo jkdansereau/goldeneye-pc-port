@@ -520,6 +520,13 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                         current_menu != GE_MENU_INVALID);
 
         reconcileGrab(menuMode);
+        /* D196: the F10 options overlay forces the OS cursor visible via
+         * inputSuspendForOverlay() but nothing re-hides it on close unless
+         * reconcileGrab() happens to re-grab (only true if you had already
+         * clicked-to-lock in a stage). Re-assert the correct visibility
+         * every poll here -- this line is unreachable while the overlay is
+         * open (early return above), so it only fires once it has closed. */
+        applyCursorVisibility();
 
         /* Click-to-lock, in a stage, cursor free: the mouse buttons must not
          * reach the game (no phantom fire) -- the first click only re-locks
