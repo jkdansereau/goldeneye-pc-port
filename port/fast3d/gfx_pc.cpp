@@ -1698,7 +1698,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
      * formats - tile 0 IA8 smoke, tile 1 RGBA16 fire @ tmem 0x188. Dump both
      * texunits' tile state whenever a 2-cycle tri actually consumes TEXEL1, so
      * one Silo capture pins whether TEXEL1 resolves to the right tmem/format. */
-    if (getenv("GE_D172") && use_2cyc && comb->used_textures[1]) {
+    if (getenv("GE_D172") && use_2cyc && comb->used_textures[1] && !rdp.tex_lod) {
         const uint32_t fi = rdp.first_tile_index;
         /* the tile fast3d will actually SAMPLE for each texunit */
         const uint32_t s0 = fi + gfx_lod_tile_offset(0);
