@@ -1127,6 +1127,33 @@ f32 sub_GAME_7F06D3F4(s32 jointnum, s32 flip, ModelSkeleton *skeleton, ModelAnim
     pos->y = (f32)tmp[1];
     pos->z = (f32)tmp[2];
 
+#ifdef PORT
+    /* GE_D193B=1 (D193): raw root-motion decode trace. Rate-limited. Logs the
+     * joint index, the mtx base channel index, the decoded s16 translation
+     * triple straight out of the anim bitstream, and the derived angle. This
+     * is the value that scales every scripted/AI character's travel distance
+     * (model.c:3060+ multiplies it by model->scale*anim_translation_scale and
+     * accumulates it into the chr root position). Compare magnitudes against a
+     * clean N64 decomp build of the same anim/frame to catch a bitstream /
+     * ModelSkeleton.Joints-stride / descriptor decode divergence. */
+    {
+        static int d193b = -1;
+        static unsigned d193b_n = 0;
+        if (d193b < 0) d193b = getenv("GE_D193B") != NULL;
+        if (d193b && (d193b_n++ % 97) == 0) {
+            s32 base = flip ? skeleton->Joints[jointnum].mtxB
+                            : skeleton->Joints[jointnum].mtxA;
+            fprintf(stderr,
+                "[D193B] joint=%d flip=%d base=%d frame=%d tmp=(%d,%d,%d) "
+                "angle=%u anim=%p bd=%08x bs=%08x njoints=%d\n",
+                (int)jointnum, (int)flip, (int)base, (int)frame,
+                (int)tmp[0], (int)tmp[1], (int)tmp[2], (unsigned)angle,
+                (void *)anim, (unsigned)anim->bitDescriptors,
+                (unsigned)anim->bitStream, (int)skeleton->numjoints);
+        }
+    }
+#endif
+
     return ((f32)angle * M_TAU_F) / M_U16_MAX_VALUE_F;
 }
 

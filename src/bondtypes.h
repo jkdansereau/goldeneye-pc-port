@@ -2188,7 +2188,12 @@ typedef union
         // recalculated, the array replaced with a new one and index set to 0.
         /* player offset 0x58 */
         u8             curindex;
-        u8             unk59; // guess: room
+        // SPEED tier for this GOPOS: 0 = walk, 1 = run, 2 = sprint. Set from
+        // the SPEED enum in plot_course_for_actor(); read back by
+        // chrlvApplySpeed() and (via a raw-byte union alias on N64 -- see
+        // D209) by the locomotion-animation selector get_sound_at_range().
+        // NB: the old "guess: room" comment here was wrong.
+        u8             unk59;
 
         // g_ClockTimer related
         u16            unk5a;

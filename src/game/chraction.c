@@ -3662,7 +3662,28 @@ void get_sound_at_range(ChrRecord *self, s32 arg1, s32 arg2)
 */
 void play_hit_soundeffect_and_proper_volume( ChrRecord *self)
 {
+#ifdef PORT
+    /* D209: `act_ubytes.padding[45]` is a raw-byte alias into the action
+     * union for act_gopos.unk59 -- the SPEED tier (0 walk / 1 run / 2
+     * sprint) that get_sound_at_range() uses to pick the locomotion
+     * animation. On N64 the alias is exact: act_gopos is
+     * {coord3d targetpos@0, StandTile *target@12, waypoint *target_path@16,
+     * waypoint *waypoints[6]@20, u8 curindex@44, u8 unk59@45}. On x86-64 the
+     * three pointer members widen 4->8 B, so unk59 moves 45 -> 81 while the
+     * literal 45 now lands inside waypoints[1] (40..47) -- byte 5 of a heap
+     * pointer, which for the low-4GB arena (0x00000000_70xxxxxx) is always
+     * 0x00. arg1 therefore reads 0 forever and EVERY AI chr in the game is
+     * bound to ANIM_DATA_walking / ANIM_DATA_walking_unarmed no matter what
+     * speed the ailist commanded. Since chr travel is animation-root-motion
+     * driven, they all move at walk pace -- D193. Both callers of this
+     * function reach it with actiontype == ACT_GOPOS (chraction.c:3723 right
+     * after `actiontype = ACT_GOPOS; act_gopos.unk59 = speed;`, and :9087 in
+     * the explicit else of `actiontype == ACT_PATROL`), so the named field is
+     * exactly the byte N64 reads. ABI/layout only, no logic change (D3x). */
+    get_sound_at_range(self, self->act_gopos.unk59, c_item_entries[self->bodynum].isMale);
+#else
     get_sound_at_range(self, self->act_ubytes.padding[45], c_item_entries[self->bodynum].isMale);
+#endif
 }
 
 
