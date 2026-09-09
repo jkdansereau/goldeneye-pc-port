@@ -3869,7 +3869,18 @@ void set_actor_on_path(ChrRecord *self, struct patrol_path *path)
     self->act_patrol.forward = 1;
     self->act_patrol.waydata.age = randomGetNext() % 0x64U;
     self->act_patrol.waydata.unk03 = 0;
+    /* D210 (A1 raw-byte-alias class, sibling of D209): `act_init.padding[0x13]`
+     * (union-relative byte 0x4c) is `act_patrol.lastvisible60` on N64. On PC
+     * `act_patrol` widened by 4 (the `path` pointer), so byte 0x4c now lands
+     * in `waydata.segdisttotal` and `lastvisible60` (@0x50) is left
+     * uninitialised -> the "hasn't seen the player recently" patrol check at
+     * chraction.c:~9347 reads garbage on the first tick after entering PATROL.
+     * Write the named field. */
+#ifdef PORT
+    self->act_patrol.lastvisible60 = -1;
+#else
     self->act_init.padding[0x13] = -1;
+#endif
     self->act_patrol.speed = 0.0f;
 
     chrlvSetNextActPatrolStepPadPos(self);

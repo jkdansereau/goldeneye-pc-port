@@ -68,6 +68,18 @@ for hardcoded indices into any `padding[]`/`u8[]` union arm.
   walk pace on every level. No crash, no log, no NaN — it took a runtime
   probe comparing the *commanded* tier (named field, correct) against the
   *bound* animation (alias, wrong) to see it.
+- **D210** (sibling, found by the post-D209 sweep): `chrToPatrol` inits
+  `act_patrol.lastvisible60` via `act_init.padding[0x13]` (union byte `0x4c`).
+  `act_patrol` starts with a `patrol_path *path` — widens 4→8, so `padding[0x13]`
+  no longer hits `lastvisible60` (now `0x50`); it lands in `waydata` and
+  `lastvisible60` is left uninitialised → the patrol "haven't seen the player
+  recently" timer reads garbage for the first ticks. Fix: named field under
+  `#ifdef PORT`. **NB the alias need not land on a *pointer byte*** (as D209
+  did) — here it lands on a plain float that just isn't the field intended.
+  The tell is the same: a hardcoded index into `padding[]` right next to
+  named writes of the *same* arm. The rest of the `padding[N]` sweep
+  (`chrlvTickAnim`/`chrlvTickDead` → `act_anim`/`act_dead`, both pointer-free)
+  is layout-stable.
 
 **Lesson.** When a value reads as a clean constant (0, 1) rather than
 garbage, a pointer byte is a prime suspect — the high bytes of a low-4GB
