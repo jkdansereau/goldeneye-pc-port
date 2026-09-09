@@ -56,6 +56,7 @@ D184,PARTIAL,F10 port-layer options overlay —,"LANDED, port-only, no #ifdef PO
 D211,PARTIAL,"PC FOV slider — Video.FovScale (M-83 QoL wave, port-only, WIDESCREEN-FOV-PLAN.md Phase 4).","LANDED, port-only, no #ifdef PORT."
 D212,PARTIAL,Anisotropic-filtering config wiring —,"LANDED, port-only. Build clean."
 D213,PARTIAL,On-screen FPS readout —,"LANDED, port-only. Build clean; bunker1 no-op confirmed."
+D214,PARTIAL,"Keyboard rebinding — [Bind] config section (M-83, port-only, PD parity, Phase 4 debt).","LANDED, port-only, no #ifdef PORT."
 D85,OPEN,room primary/secondary DL → texLoadFromGdl garbage,"OPEN (safety-netted; widen/pool fixes landed, geometry now renders)"
 D86 · D87,RESOLVED,modelInitRwData truncated ptr · attract-demo BE ramromfilestructure,resolved
 D88.4,RESOLVED,propDefs polymorphic record stream not byteswapped → setupDoor crash,resolved (d88_propdefs.py); layout audit M-20 → D132
