@@ -45,50 +45,65 @@ bit layout:
 - The generated GLSL combiner implements the RDP formula with the usual special cases;
   `SHADER_COMBINED` correctly resolves to the previous cycle's running value.
 
-## 4. Root-cause candidate: the 0xB9 word aborts the sub-DL (D146 path)
+## 4. The 0xB9 root-cause candidate is WITHDRAWN (M-82, 2026-09-08)
 
-fast3d's SP walker has **no case for opcode 0xB9** (full case list audited: MTX/MOVEMEM/
-VTX/DL/COL/syncs/all DP immediates/EXT commands — nothing in the 0x80–0xBF group). Its
-`default:` (`gfx_pc.cpp:2920`, the D146 guard) **ends the whole (sub-)display list** on an
-unknown opcode.
+The earlier audit claimed fast3d has "no case for opcode 0xB9" and that the D146
+`default:` guard therefore aborts every particle sub-DL. **That is wrong.**
 
-Consequence for every particle record replay:
+This build does **not** define `F3DEX_GBI_2` (verified: no `-DF3DEX_GBI_2` in
+`CMakeLists.txt`, no `#define` in `include/PR/gbi.h` or anywhere in tree). In the
+non-F3DEX2 branch of `gbi.h`, `G_SETOTHERMODE_L = G_IMMFIRST-6 = -71`, and
+`(uint8_t)(-71) == 0xB9`. So `gfx_pc.cpp:2731` `case (uint8_t)G_SETOTHERMODE_L:`
+**is** `case 0xB9:`.
 
-```
-RDPPIPESYNC  -> ok (no-op)
-0xB9         -> D146 default -> RETURN (sub-DL dead)
-G_SETCOMBINE -> never applied
-G_SETTIMG    -> never applied
-<particles>  -> drawn with STALE combine mode + stale tile/timg state
-```
+Decode of the record word `w0 = 0xB900031D`, `w1 = <varies>`:
+`gfx_sp_set_other_mode(C0(8,8)=3, C0(0,8)=29, w1)` → sets `other_mode_l` bits
+3..31. `sft=3 == G_MDSFT_RENDERMODE`, `len=29` — this is exactly
+`gsDPSetRenderMode(w1)`. `w1` values (`0x0C184B50`, `0x00504B50`, …) are
+render-mode / blender words. fast3d applies it correctly.
 
-Stale CC/tile state = arbitrary colors = the magenta/cyan symptom. On N64, gmain.s
-obviously handles 0xB9 (the game works there), so this is a fast3d gap, not a ROM quirk.
+So the particle sub-DL runs to completion on PC: `E7` RDPPIPESYNC (handled),
+`B9` SetRenderMode (handled), `FC` SETCOMBINE (handled), `FD` SETTIMG (handled).
+**No D146 abort. No stale-state fallthrough.** The wrong-colour bug is elsewhere.
 
-Secondary (only matters if 0xB9 turns out to be a no-op): particle 2-cycle rendering
-requires `G_CYC_2CYCLE` in other_mode_h (`gfx_pc.cpp:1523`); the records never set
-other-modes, so particles inherit ambient state — same on N64, but worth confirming if
-the primary fix doesn't resolve it.
+## 5. Where the bug actually is — re-scoped (M-82)
 
-## 5. Verification (cheap, in-game)
+The dominant combine (14/17 records, §2) is a **2-cycle** mode
+(`cycle 1 RGB: (COMBINED - 0)·SHADE + COMB_A`). But the records set render mode
+(`0xB9`) and **never set the cycle-type** field (`G_MDSFT_CYCLETYPE`, in
+`other_mode_h`). On N64 the ambient `other_mode_h` at particle-draw time is
+2-cycle (set by whatever DL ran before); fast3d's ambient `other_mode_h` at that
+point is very likely **1-cycle**, so `use_2cyc` (`gfx_pc.cpp:1521`) is false and
+fast3d renders only cycle-0 of the combine:
+`(TEXEL0 - 0)·TEXEL1 + COMBINED_A`. With no second tile loaded, **TEXEL1 is
+garbage** → arbitrary colour → the magenta/cyan symptom. This is the "secondary"
+note from the old §4, now promoted to the primary hypothesis.
 
-The D146 guard logs `D146: unknown GBI opcode 0x%02x ...` rate-limited to **20** messages.
-Run any level, shoot things / trigger flares, watch console output at startup for
-`unknown GBI opcode 0xb9`. If present → root cause confirmed. (The budget fills in the
-first frame or two of particles, so check early output.)
+### Verification
+
+1. **DONE (M-82).** `-level_09` (bunker1), `GE_INPUTSCRIPT` sustained-fire,
+   ~3600 frames, `d172_probe.log`: **zero `D146: unknown GBI opcode` lines,
+   zero ERROR/WARN of any kind.** The particle sub-DL does not abort on 0xB9.
+   §4 root cause is dead. (Headless, so this does not by itself confirm the
+   §5 2-cycle hypothesis — that still needs the probe below.)
+2. Add an env-gated probe at `gfx_sp_tri*` when `rdp.combine_mode` matches a
+   particle record's key: log `use_2cyc`, `other_mode_h & CYCLETYPE`, the CC
+   key. Expect `use_2cyc == 0`.
 
 ## 6. Fix path (next session)
 
-1. **Decode 0xB9's semantics.** `ginit.s` (dispatch-table init) is *not in this repo*
-   (`gmain.s:10` includes it; file absent). Options: (a) locate ginit.s in the original
-   source / another checkout; (b) trace gmain.s's 0x80–0xBF group handler by hand;
-   (c) infer from data — w0 is constant `B900031D` across all records, w1 varies
-   (`0C184B50`, `00504B50`, …); if it's an other-modes/cycle-type setter, w1 bits should
-   match G_MDSFT_* fields.
-2. Implement the handler in fast3d (port-only). Re-run: blood/flares should go dark red;
-   D146 spam for 0xb9 stops.
-3. If colors still wrong after that: log `use_2cyc` + combine key on particle triangles
-   (env-gated) and check ambient G_CYC_2CYCLE (§4 secondary).
+1. Run the §5 verification. If `use_2cyc == 0` on particle tris is confirmed:
+2. **Port-only fix, `src/game/explosion.c` under `#ifdef PORT`** (same
+   hardware-idiom exception class as the existing `G_TRI4` / dynamic-light
+   `#ifdef PORT`s): emit an explicit `gsDPSetCycleType(G_CYC_2CYCLE)` (or the
+   raw `G_SETOTHERMODE_H` immediate) into / ahead of the particle record replay
+   so PC does not depend on ambient cycle-type. `#else` = N64 stream verbatim.
+   Alternative (pure port): in `gfx_pc.cpp`, when a SETCOMBINE carries a
+   2-cycle-only combine (cycle-1 slots non-trivial) force `use_2cyc` — riskier,
+   broader blast radius.
+3. If colour still wrong after 2-cycle is forced: check `texSelect` actually
+   binds TEXEL1's tile for these records, and re-decode the combine (the §2
+   decode was not re-verified this pass).
 
 ## Files
 
@@ -98,3 +113,6 @@ first frame or two of particles, so check early output.)
   SETCOMBINE decode (2786), combine store (2270), cc generation (312+), 2CYCLE flag (1523)
 - `rsp/graphics/gmain.s` — N64 ucode ground truth for 0xB9 (dispatch table at dmem 0xbc;
   ginit.s missing from repo)
+
+Note (M-82): 0xB9 is `G_SETOTHERMODE_L` in this non-F3DEX2 build and is already
+handled by fast3d — `gmain.s` / `ginit.s` are NOT needed to resolve D172.
