@@ -26,7 +26,7 @@ ScreenShakeIntensity. Debug: FrameDump, InputLog.
 | Feature | PD location | Class | Effort | Notes / priority |
 |---|---|---|---|---|
 | **Key rebinding** (config-string binds per controller/action) | `input.c:69,627-675,1548` (`bindStrs`, `inputParseBindString`) | P | M | **High.** Explicit Phase 4 debt ("rebinding UI" — note PD has *no* UI either; config-file driven). Port-only in `port/src/input.c`. |
-| **SkipIntro** | `main.c:139` (STAGE_TITLE → STAGE_CITRAINING) | P | S | **High.** GE analogue: stage-override path already exists (`boss.c:385-393`, `g_StageNum = LEVELID_TITLE` at :98); wire a flag + arg. 10-min check on what feeds `tokenFindLevel`. |
+| **SkipIntro** _(DONE M-83, D216)_ | `Game.SkipIntro` -> `src/game/lv.c` | P | S | Boots to the SELECT FILE menu, skipping the legal screen + Nintendo/Rare/GoldenEye logo attract loop. Reuses the game's own post-intro route (sets `is_first_time_on_main_menu=FALSE` + `menu_update=MENU_FILE_SELECT`); one `#ifdef PORT` line in the existing GE_STARTMENU block. Verified headless (screenshots). |
 | **DisplayFPS** (+ interval) | config `Video.DisplayFPS(Interval)` | P | S | Cheap; useful for FPS-plan verification too. |
 | **Anisotropic filtering** (≤16×), MipmapFilter, TextureFilter2D | `gfx_opengl` texparam path | P | S–M | **High at 4K.** GE's `gfx_opengl.cpp` has mipmap nY but no aniso (`GL_TEXTURE_MAX_ANISOTROPY_EXT`). Port-only. |
 | Per-pad tuning: per-stick deadzones, stick scale, rumble scale, device index, swap sticks, C-button mapping | `input.c` padsCfg block | P | M | Medium. Matters for real-controller users; PD pattern is a config section per pad. |

@@ -80,9 +80,14 @@ static int cfgWinMax = 0;
  */
 f32 portScreenShakeScale = 1.0f;
 
+/* D216: Game.SkipIntro — read once in src/game/lv.c at title-stage load.
+ * 0 (default) = the legal screen + logo attract sequence plays as normal. */
+s32 portSkipIntro = 0;
+
 PD_CONSTRUCTOR static void videoConfigInit(void)
 {
     configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
+    configRegisterInt("Game.SkipIntro", &portSkipIntro, 0, 1);
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 8);
