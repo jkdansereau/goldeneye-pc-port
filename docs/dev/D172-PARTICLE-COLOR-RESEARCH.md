@@ -1,7 +1,32 @@
-# D172 — particle/flares wrong color (magenta/cyan blood): static research + root-cause candidate
+# D172 — particle/flares wrong color (magenta/cyan blood): ROOT CAUSE FOUND + FIXED (M-82)
 
 Symptom (user-reported, GRAPHICS-BACKLOG line 31): bullet impacts / flares / blood spatter
-render magenta/cyan instead of dark red. Static audit done; one strong root-cause candidate
+render magenta/cyan instead of dark red.
+
+## TL;DR (M-82)
+
+**Root cause:** `gfx_lod_tile_offset()` (`gfx_pc.cpp`) returns `0` unconditionally on
+the `!gfx_detail_textures_enabled` path (a D107 blurry-ceiling fix — and
+`port/src/video.c:225` sets that flag `false` at startup). Particle draws use
+`G_CC_INTERFERENCE` (`TEXEL0 * TEXEL1`) with tile 0 = IA8 smoke @ TMEM 0 and
+tile 1 = RGBA16 fire @ TMEM 0x188 — but with the offset pinned to 0, **texunit 1
+samples the smoke texture too**. `smoke * smoke` through the rest of the combine
+= the magenta/cyan. Confirmed by the `GE_D172` probe on a user Silo firefight:
+40/40 particle tris logged `cfg1[tile=1 tmem=392 fmt=RGBA]` but
+`SAMPLED1=tile0(tmem=0 fmt=IA)`.
+
+**Fix (`gfx_pc.cpp` `gfx_lod_tile_offset`):** `return rdp.tex_lod ? 0 : i;` —
+fold to the base tile only when LOD is actually active (D107's mip case,
+`tex_lod=1`, unchanged); a genuine non-LOD 2-texture combine now gets tile `i`.
+`bunker1` verify PASS (the D107 repro level). Committed on PR #34. **Owed: an
+in-game eyeball that blood/sparks now read dark red.**
+
+The 0xB9 / cycle-type false trails and the probe design are kept below for the
+record.
+
+---
+
+Original note (superseded): Static audit done; one strong root-cause candidate
 with a cheap in-game verification. **No code changed.**
 
 ## 1. How particles get their color state (mechanism)
