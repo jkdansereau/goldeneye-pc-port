@@ -469,6 +469,23 @@ through a converter or a runtime bswap fixup reads scrambled.
   `import_texture()` dispatched purely on `tile.fmt` and did a palette lookup
   against a stale `rdp.palette` → garbage (D161, GE Depot ceiling = blue
   speckle). Fix: when `rdp.palette_fmt == G_TT_NONE`, route CI4/CI8 → I4/I8.
+- **CI texture cache must key on palette CONTENT, not just the TLUT source
+  address (D217).** GE assembles weapon/character model DLs in scratch arena
+  RAM and reissues `gDPLoadTLUT` from a *repeated* source address with different
+  palette content between materials and frames. fast3d keyed CI textures on
+  `{texel addr, palette_addrs[0/1], palette_index, size_bytes}` with no content
+  check → a later material takes a stale cache HIT and samples the GL texture
+  decoded for an earlier palette. Fix: FNV-1a the 512-byte `rdp.palette` in
+  `gfx_dp_load_tlut` (rare vs draws) and fold that hash into the CI cache key.
+- **GE model-DL TLUT payloads carry a 2-entry leading zero pad (D217, still
+  open).** Every larger weapon/chr model TLUT decodes with `entry[0]==entry[1]
+  ==0x0000` and real colour from index 2. `count=1` model TLUTs that feed
+  palette index 0 (solid-fill weapon parts — the PP7 grip) are the canary: if
+  the port's model-TLUT source pointer is even 4 bytes off, index 0 reads
+  adjacent texel/blob bytes and the part renders a wrong flat colour (green on
+  Facility/Depot, black-by-luck on Bunker1) while larger tiles look plausible
+  because they never index the low entries. Fix is upstream (segment resolution
+  or `tools_pc/d43_emit.py` blob placement), not in the fast3d decode.
 - **RC3 / D167 — GL `GL_REPEAT` wraps at the uploaded image size; the N64 RDP
   wraps a render tile at `1<<masks` (`= ceil(log2(dim))` for GE, `texDimensionToMask`).**
   Equal for power-of-two textures, so this is invisible almost everywhere — but a

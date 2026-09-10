@@ -59,7 +59,7 @@ D213,PARTIAL,On-screen FPS readout —,"LANDED, port-only. Build clean; bunker1 
 D214,PARTIAL,"Keyboard rebinding — [Input.Bind] config section (M-83, port-only, PD parity, Phase 4 debt).",PARTIAL — M-84: code PASS (alt/ctrl); one doc-only fix.
 D215,FIXED,1P weapon viewmodel never drew in-level —,"FIXED (src/game/gunfire.c, #ifdef PORT)."
 D216,PARTIAL,"Game.SkipIntro — boot straight to the file-select menu (M-83, port + one #ifdef PORT game-code line, PD parity, Phase 4 quick win).",LANDED + VERIFIED this session.
-D217,OPEN,1P weapon viewmodel + third-person Bond model textures render garbled —,OPEN — repro pinned to FACILITY (M-85).
+D217,OPEN,1P weapon viewmodel + third-person Bond model textures render garbled —,OPEN — root cause characterised (M-86); needs an upstream/asset-pipeline fix.
 D218,PROPOSED,Wide FOV exposes the per-level draw-distance / fog boundary —,"Logged (M-84), fix proposed + parked."
 D85,OPEN,room primary/secondary DL → texLoadFromGdl garbage,"OPEN (safety-netted; widen/pool fixes landed, geometry now renders)"
 D86 · D87,RESOLVED,modelInitRwData truncated ptr · attract-demo BE ramromfilestructure,resolved
