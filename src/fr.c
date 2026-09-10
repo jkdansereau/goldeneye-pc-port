@@ -715,7 +715,33 @@ Gfx *viSetupCurrentPlayerView(Gfx *gdl)
 
     // Create both a floating-point matrix for the CPU side and a fixed-point matrix for the RSP.
     g_viProjectionMatrix = dynAllocateMatrix();
+#ifdef PORT
+    /* D211: Video.FovScale — widen the render FOV here, at the one per-frame
+     * chokepoint that feeds both the world (via the CPU-combined proj x view
+     * matrix) and the sky/full-screen layer. fovy is in degrees, so an
+     * angle-proportional scale (portFovScale, default 1.0f) matches the
+     * documented 60deg->75deg at 1.25. Composes with the per-frame aim-zoom
+     * rewrites of fovy for free. NOTE: currentPlayerSetCameraScale() keeps
+     * the nominal FOV for frustum-cull / screen<->world math, so at large
+     * scales edge geometry can cull a hair early — acceptable for a cosmetic
+     * widen. Default 1.0f => identical matrix, bit for bit. */
+    {
+        extern f32 portFovScale;
+        extern s32 lvlGetCurrentStageToLoad(void);
+        f32 frFovY = g_ViBackData->fovy;
+        /* Gameplay only: the front end (main menu / file / mission select /
+         * briefing) also renders through this path with stage == LEVELID_TITLE
+         * (lv.c lvlRender), and the menu 3D is authored at a fixed FOV. */
+        if (portFovScale > 0.4f && portFovScale < 2.01f && portFovScale != 1.0f
+            && lvlGetCurrentStageToLoad() != LEVELID_TITLE) {
+            frFovY *= portFovScale;
+            if (frFovY > 160.0f) { frFovY = 160.0f; }
+        }
+        guPerspectiveF(g_viProjectionMatrixF, &g_viPerspNorm, frFovY, g_ViBackData->aspect, g_ViBackData->znear, g_ViBackData->zfar, 1.0f);
+    }
+#else
     guPerspectiveF(g_viProjectionMatrixF, &g_viPerspNorm, g_ViBackData->fovy, g_ViBackData->aspect, g_ViBackData->znear, g_ViBackData->zfar, 1.0f);
+#endif
     guMtxF2L(g_viProjectionMatrixF, g_viProjectionMatrix);
 
     /** 
