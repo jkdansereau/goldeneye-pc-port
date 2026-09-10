@@ -29,6 +29,15 @@ struct TextureCacheKey {
     // (gDPLoadBlock mip chains vs partial loads); include the size so a
     // truncated first import cannot poison later full imports.
     uint32_t size_bytes;
+    // D217: for CI (palettized) textures, a hash of the decoded rdp.palette
+    // content at import time. GE assembles weapon / character model DLs in
+    // scratch arena RAM and reissues gDPLoadTLUT with different palette
+    // *content* from a repeated source address, so
+    // {texture_addr, palette_addrs, palette_index, size_bytes} alone collides
+    // across materials/frames -> a CI tile takes a stale cache HIT decoded
+    // against a different palette. Recomputed only in gfx_dp_load_tlut(), so
+    // there is no per-texel or per-draw cost. Zero for non-CI textures.
+    uint32_t palette_hash;
 
     bool operator==(const TextureCacheKey&) const noexcept = default;
 
