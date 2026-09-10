@@ -29,7 +29,7 @@ ScreenShakeIntensity. Debug: FrameDump, InputLog.
 | Feature | PD location | Class | Effort | Notes / priority |
 |---|---|---|---|---|
 | **Key rebinding** _(DONE M-83, D214)_ | `port/src/input.c` `[Input.Bind]` section | P | M | Keyboard only, 12 actions, `Input.Bind.* = Key,Key` (SDL scancode names), file-driven like PD. Defaults = prior FPS layout (verified). Per-controller pad rebinding + a UI still open. |
-| **SkipIntro** | `main.c:139` (STAGE_TITLE → STAGE_CITRAINING) | P | S | **High.** GE analogue: stage-override path already exists (`boss.c:385-393`, `g_StageNum = LEVELID_TITLE` at :98); wire a flag + arg. 10-min check on what feeds `tokenFindLevel`. |
+| **SkipIntro** _(DONE M-83, D216)_ | `Game.SkipIntro` -> `src/game/lv.c` | P | S | Boots to the SELECT FILE menu, skipping the legal screen + Nintendo/Rare/GoldenEye logo attract loop. Reuses the game's own post-intro route (sets `is_first_time_on_main_menu=FALSE` + `menu_update=MENU_FILE_SELECT`); one `#ifdef PORT` line in the existing GE_STARTMENU block. Verified headless (screenshots). |
 | **DisplayFPS** _(DONE M-83, D213)_ | config `Video.DisplayFPS` | P | S | Top-right readout, config-only; ~0.5 s sample window. |
 | **Anisotropic filtering** _(DONE M-83, D212)_ | `Video.Anisotropy` (1–16, dflt 4) | P | S | fast3d already had the GL hook + a hardcoded 4×; M-83 exposed it as config. MipmapFilter / TextureFilter2D still not surfaced. |
 | Per-pad tuning: per-stick deadzones, stick scale, rumble scale, device index, swap sticks, C-button mapping | `input.c` padsCfg block | P | M | Medium. Matters for real-controller users; PD pattern is a config section per pad. |

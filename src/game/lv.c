@@ -413,6 +413,21 @@ void lvlStageLoad(s32 stage)
                 menu_update = (MENU)want;
                 osSyncPrintf("GE_STARTMENU: menu=0x%x page=%d stage=%d diff=%d\n",
                              want, page, selected_stage, diff);
+            } else {
+                /* D216: Game.SkipIntro — boot straight to the file-select
+                 * menu, skipping the legal screen + Nintendo/Rare/GoldenEye
+                 * logo attract loop. Reuses the game's own post-intro route:
+                 * every intro stage already jumps to MENU_FILE_SELECT once
+                 * is_first_time_on_main_menu is FALSE (front.c). Port config
+                 * only; default 0 = unchanged. */
+                extern s32 portSkipIntro;
+                if (portSkipIntro) {
+                    is_first_time_on_main_menu = FALSE;
+                    prev_keypresses = TRUE;
+                    maybe_is_in_menu = TRUE;
+                    menu_update = MENU_FILE_SELECT;
+                    osSyncPrintf("Game.SkipIntro: booting to file-select\n");
+                }
             }
         }
 #endif
