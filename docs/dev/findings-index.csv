@@ -53,13 +53,13 @@ D179,FIXED,Packaged build crashes after the logos —,"Diagnosed, not fixed —"
 D180,PARTIAL,"Native-PC input pass (M-XX QoL run, qol/native-pc-input-menu, port-only).","LANDED, port-only, no #ifdef PORT."
 D181,PARTIAL,Game.ScreenShakeIntensity —,"LANDED behind config, default = original."
 D184,PARTIAL,F10 port-layer options overlay —,"LANDED, port-only, no #ifdef PORT in src/."
-D211,MOSTLY-VERIFIED,"PC FOV slider — Video.FovScale (M-83; M-84 refix + front-end gate).","M-84: fast3d matrix hook only scaled pure-perspective loads (watch model/sky), missed the CPU-combined world matrix; moved to game-side fovy scale (fr.c, #ifdef PORT), gated to non-title stages. User-verified: menu unaffected + in-level view widens. Nits: HUD-static / aim-zoom eyeball at ~120. D218 (draw distance) split out + parked."
+D211,PARTIAL,"PC FOV slider — Video.FovScale (M-83 QoL wave, port-only, WIDESCREEN-FOV-PLAN.md Phase 4).",PARTIAL — M-84 refix:
 D212,PARTIAL,Anisotropic-filtering config wiring —,"LANDED, port-only. Build clean."
 D213,PARTIAL,On-screen FPS readout —,"LANDED, port-only. Build clean; bunker1 no-op confirmed."
-D214,PARTIAL,"Keyboard rebinding — [Input.Bind] config section (M-83; M-84 doc fix).","LANDED, port-only. M-84 user test: alt/ctrl PASS. Doc bug fixed (no code change): section is [Input.Bind] not [Bind] (config groups by last dot), or use a fully-qualified Input.Bind.Fire= line. Watch-menu Esc-to-back still unwired (pre-existing)."
+D214,PARTIAL,"Keyboard rebinding — [Input.Bind] config section (M-83, port-only, PD parity, Phase 4 debt).",PARTIAL — M-84: code PASS (alt/ctrl); one doc-only fix.
 D215,FIXED,1P weapon viewmodel never drew in-level —,"FIXED (src/game/gunfire.c, #ifdef PORT)."
-D217,OPEN,"1P viewmodel + 3rd-person Bond model textures render garbled (green/blue/yellow) — wrong/stale palette on model-DL CI textures (M-84, user QA; surfaced by D215). D161 family.","Observed, not investigated. Next: GE_TEXDUMP on a weapon texture; check gDPLoadTLUT reaches gfx_pc.cpp for model DLs."
-D218,LOGGED,"Wide FOV exposes the per-level FarFog draw-distance/fog boundary — blue artifacting down long sightlines (Dam tunnel) at high FovScale (M-84, user QA).","Fix proposed + parked: Video.DrawDistance multiplier on FarFog at bgfog.c:305 (#ifdef PORT) + Video.DrawDistanceAutoFov toggle (default couples draw distance to FovScale)."
+D217,OPEN,1P weapon viewmodel + third-person Bond model textures render garbled —,"OPEN — observed, not investigated (M-84)."
+D218,PROPOSED,Wide FOV exposes the per-level draw-distance / fog boundary —,"Logged (M-84), fix proposed + parked."
 D85,OPEN,room primary/secondary DL → texLoadFromGdl garbage,"OPEN (safety-netted; widen/pool fixes landed, geometry now renders)"
 D86 · D87,RESOLVED,modelInitRwData truncated ptr · attract-demo BE ramromfilestructure,resolved
 D88.4,RESOLVED,propDefs polymorphic record stream not byteswapped → setupDoor crash,resolved (d88_propdefs.py); layout audit M-20 → D132
