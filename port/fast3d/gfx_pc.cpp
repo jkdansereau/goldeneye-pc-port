@@ -916,50 +916,6 @@ bool g_fix_mip_textures = true;
  * off. Video.WrapFix = 1. */
 bool g_wrap_fix = false;
 
-/* D211 port-only FOV slider. Multiplies the half-angle of every *perspective*
- * projection matrix as it is loaded, so it composes with the game's per-frame
- * aim-zoom rewrites for free (see docs/dev/WIDESCREEN-FOV-PLAN.md "FOV
- * adjustment design"). 1.0 = byte-identical to the original (guarded skip);
- * Video.FovScale is a percent, 100 = 1.0. */
-static float g_fov_scale = 1.0f;
-
-extern "C" void gfx_set_fov_scale(float s) {
-    if (!(s > 0.4f) || !(s < 2.01f)) {
-        s = 1.0f;
-    }
-    g_fov_scale = s;
-}
-
-/* Widen/narrow a freshly-loaded projection matrix in place. No-op unless the
- * matrix is a perspective projection (row-vector guPerspective layout: only
- * P[2][3] == -1, P[3][3] == 0 — an ortho matrix has P[3][3] == 1 and is left
- * alone so HUD/menu 2D is untouched). Scaling columns 0 and 1 by the same
- * factor scales the effective cotangent, i.e. widens H and V FOV uniformly —
- * aspect ratio is preserved, no stretch. */
-static void gfx_apply_fov_scale(float m[4][4]) {
-    if (g_fov_scale == 1.0f) {
-        return;
-    }
-    if (!(fabsf(m[3][3]) < 0.01f) || !(fabsf(m[2][3] + 1.0f) < 0.05f)) {
-        return; /* not a perspective projection */
-    }
-    const float cot = m[1][1];
-    if (!(cot > 1e-4f)) {
-        return;
-    }
-    const float half = atanf(1.0f / cot);
-    float nhalf = half * g_fov_scale;
-    const float LIMIT = 1.48f; /* ~85 deg half-angle; keep cot well away from 0 */
-    if (nhalf > LIMIT) {
-        nhalf = LIMIT;
-    }
-    const float f = tanf(half) / tanf(nhalf);
-    for (int k = 0; k < 4; k++) {
-        m[k][0] *= f;
-        m[k][1] *= f;
-    }
-}
-
 /* D183 source-pitch de-stride (see import_texture). Default on;
  * GE_TEXPITCH=0 restores the old flat read for A/B. */
 static bool gfx_tex_pitch_fix(void) {
@@ -1256,11 +1212,6 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t* addr) {
     if (parameters & G_MTX_PROJECTION) {
         if (parameters & G_MTX_LOAD) {
             memcpy(rsp.P_matrix, matrix, sizeof(matrix));
-            /* D211: apply the FOV slider on the load path only. GE always
-             * (re)loads its view projection with G_MTX_LOAD (src/fr.c:725), so
-             * a relative G_MTX_MUL onto an already-scaled matrix never
-             * happens and cannot compound. */
-            gfx_apply_fov_scale(rsp.P_matrix);
         } else {
             gfx_matrix_mul(rsp.P_matrix, matrix, rsp.P_matrix);
         }

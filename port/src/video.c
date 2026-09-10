@@ -82,6 +82,13 @@ static int cfgWinMax = 0;
  */
 f32 portScreenShakeScale = 1.0f;
 
+/* D211: Video.FovScale as a multiplier on the render FOV. Applied game-side
+ * at the guPerspectiveF chokepoint (src/fr.c) so it lands BEFORE the CPU
+ * pre-multiplies projection x view into the combined world matrix — the
+ * fast3d-side matrix hack only caught the handful of pure-perspective loads
+ * (pause/watch model, sky) and left the world untouched. 1.0f = original. */
+f32 portFovScale = 1.0f;
+
 PD_CONSTRUCTOR static void videoConfigInit(void)
 {
     configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
@@ -105,11 +112,11 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
  * scheduler thread in videoStartFrame() where the GL context is bound. */
 static volatile int liveCfgDirty = 0;
 
-/* D211/D212: push the port-only image knobs into fast3d. Both are safe to
- * call every frame; gfx_set_fov_scale(1.0) is a guarded no-op. */
+/* D211/D212: push the port-only image knobs where they apply. FovScale is a
+ * plain float the game re-reads each frame; anisotropy goes to fast3d. */
 static void videoApplyImageOptions(void)
 {
-    gfx_set_fov_scale((float)cfgFovScale / 100.0f);
+    portFovScale = (f32)cfgFovScale / 100.0f;
     gfx_set_anisotropy_level(cfgAniso);
 }
 
