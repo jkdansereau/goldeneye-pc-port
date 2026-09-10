@@ -1,5 +1,13 @@
 # 1P weapon viewmodel — static research (read-only)
 
+> **RESOLVED 2026-09-09 (M-83, D215).** None of the three ranked suspects below
+> was the cause — all were ruled out by the `GE_DVM=1` probe (added this
+> session). The bug was `renderdata.flags == 0` in `gunRenderFirstPersonGunModels`:
+> the N64 `*(ModelRenderData*)&D_80035CC0` reinterpret-across-adjacent-globals
+> breaks under x86-64 pointer widening + no guaranteed global layout. Fixed
+> `#ifdef PORT` in `src/game/gunfire.c`. See findings.md D215. This doc is kept
+> for the ruled-out analysis only.
+
 Companion to `GRAPHICS-BACKLOG.md` ("1P weapon viewmodel") and findings D115
 item #5 / AUDIT-M6 #5. Goal: narrow the five audit suspects to a ranked,
 probe-ready list. No code changed by this doc.

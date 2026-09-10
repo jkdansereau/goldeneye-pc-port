@@ -1,7 +1,10 @@
 # QoL Inventory — PD-vs-GE options diff
 
-Status: **read-only research, parked** (input to project Phase 4). No code
-changed. Companion to `WIDESCREEN-FOV-PLAN.md` and `UNLOCKED-FPS-PLAN.md`.
+Status: **partially implemented.** M-83 landed three port-only quick wins —
+DisplayFPS (D213), anisotropic filtering (D212), and the FOV slider (D211, via
+`WIDESCREEN-FOV-PLAN.md` Phase 4). Rebinding / SkipIntro / per-pad tuning /
+window HiDpi still open. Companion to `WIDESCREEN-FOV-PLAN.md` and
+`UNLOCKED-FPS-PLAN.md`.
 
 Method: diffed the config surface of both ports — every `configRegister*`
 key in `pd_port/port/src/*.c` vs `port/src/config.c` + the F10 overlay
@@ -25,10 +28,10 @@ ScreenShakeIntensity. Debug: FrameDump, InputLog.
 
 | Feature | PD location | Class | Effort | Notes / priority |
 |---|---|---|---|---|
-| **Key rebinding** (config-string binds per controller/action) | `input.c:69,627-675,1548` (`bindStrs`, `inputParseBindString`) | P | M | **High.** Explicit Phase 4 debt ("rebinding UI" — note PD has *no* UI either; config-file driven). Port-only in `port/src/input.c`. |
+| **Key rebinding** _(DONE M-83, D214)_ | `port/src/input.c` `[Input.Bind]` section | P | M | Keyboard only, 12 actions, `Input.Bind.* = Key,Key` (SDL scancode names), file-driven like PD. Defaults = prior FPS layout (verified). Per-controller pad rebinding + a UI still open. |
 | **SkipIntro** _(DONE M-83, D216)_ | `Game.SkipIntro` -> `src/game/lv.c` | P | S | Boots to the SELECT FILE menu, skipping the legal screen + Nintendo/Rare/GoldenEye logo attract loop. Reuses the game's own post-intro route (sets `is_first_time_on_main_menu=FALSE` + `menu_update=MENU_FILE_SELECT`); one `#ifdef PORT` line in the existing GE_STARTMENU block. Verified headless (screenshots). |
-| **DisplayFPS** (+ interval) | config `Video.DisplayFPS(Interval)` | P | S | Cheap; useful for FPS-plan verification too. |
-| **Anisotropic filtering** (≤16×), MipmapFilter, TextureFilter2D | `gfx_opengl` texparam path | P | S–M | **High at 4K.** GE's `gfx_opengl.cpp` has mipmap nY but no aniso (`GL_TEXTURE_MAX_ANISOTROPY_EXT`). Port-only. |
+| **DisplayFPS** _(DONE M-83, D213)_ | config `Video.DisplayFPS` | P | S | Top-right readout, config-only; ~0.5 s sample window. |
+| **Anisotropic filtering** _(DONE M-83, D212)_ | `Video.Anisotropy` (1–16, dflt 4) | P | S | fast3d already had the GL hook + a hardcoded 4×; M-83 exposed it as config. MipmapFilter / TextureFilter2D still not surfaced. |
 | Per-pad tuning: per-stick deadzones, stick scale, rumble scale, device index, swap sticks, C-button mapping | `input.c` padsCfg block | P | M | Medium. Matters for real-controller users; PD pattern is a config section per pad. |
 | FakeGamepads / FirstGamepadNum / UseHIDAPI | `input.c` | P | S–M | Niche (local MP on PC); defer until MP is actually played. |
 | Window polish: DefaultFullscreen/Maximize, CenterWindow, AllowHiDpi, ExclusiveFullscreen | `video.c` vid* block | P | S | HiDpi + center are the useful ones on modern Windows. |

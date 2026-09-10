@@ -53,7 +53,14 @@ D179,FIXED,Packaged build crashes after the logos —,"Diagnosed, not fixed —"
 D180,PARTIAL,"Native-PC input pass (M-XX QoL run, qol/native-pc-input-menu, port-only).","LANDED, port-only, no #ifdef PORT."
 D181,PARTIAL,Game.ScreenShakeIntensity —,"LANDED behind config, default = original."
 D184,PARTIAL,F10 port-layer options overlay —,"LANDED, port-only, no #ifdef PORT in src/."
+D211,PARTIAL,"PC FOV slider — Video.FovScale (M-83 QoL wave, port-only, WIDESCREEN-FOV-PLAN.md Phase 4).",PARTIAL — M-84 refix:
+D212,PARTIAL,Anisotropic-filtering config wiring —,"LANDED, port-only. Build clean."
+D213,PARTIAL,On-screen FPS readout —,"LANDED, port-only. Build clean; bunker1 no-op confirmed."
+D214,PARTIAL,"Keyboard rebinding — [Input.Bind] config section (M-83, port-only, PD parity, Phase 4 debt).",PARTIAL — M-84: code PASS (alt/ctrl); one doc-only fix.
+D215,FIXED,1P weapon viewmodel never drew in-level —,"FIXED (src/game/gunfire.c, #ifdef PORT)."
 D216,PARTIAL,"Game.SkipIntro — boot straight to the file-select menu (M-83, port + one #ifdef PORT game-code line, PD parity, Phase 4 quick win).",LANDED + VERIFIED this session.
+D217,OPEN,1P weapon viewmodel + third-person Bond model textures render garbled —,"OPEN — observed, not investigated (M-84)."
+D218,PROPOSED,Wide FOV exposes the per-level draw-distance / fog boundary —,"Logged (M-84), fix proposed + parked."
 D85,OPEN,room primary/secondary DL → texLoadFromGdl garbage,"OPEN (safety-netted; widen/pool fixes landed, geometry now renders)"
 D86 · D87,RESOLVED,modelInitRwData truncated ptr · attract-demo BE ramromfilestructure,resolved
 D88.4,RESOLVED,propDefs polymorphic record stream not byteswapped → setupDoor crash,resolved (d88_propdefs.py); layout audit M-20 → D132

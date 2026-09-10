@@ -213,10 +213,17 @@ reason. Whole-feature fallback to A only if B fails verification overall.
       verification at 4:3 + 16:9, finding entry. Fallback-to-A decisions
       happen here, per surface, with documented reason.
 
-### Phase 4 — FOV slider (port-only)
+### Phase 4 — FOV slider (port-only) — **LANDED (M-83, D211)**
 
-- [ ] RSP projection post-scale; `Video.FovScale` config + F10 overlay;
-      verify composition with aim zoom at non-100 scale.
+- [x] RSP projection post-scale (`gfx_apply_fov_scale()` in
+      `port/fast3d/gfx_pc.cpp`, load-path only); `Video.FovScale` config
+      (percent of vertical FOV, 50–150, default 100 = byte-identical) + F10
+      overlay row. Perspective-only (ortho/HUD untouched); columns 0+1 scaled
+      together so aspect is preserved. Build clean, `bunker1` no-op confirmed.
+- [ ] Owed: interactive eyeball of composition with aim-zoom at scale ≠ 100.
+
+This phase does **not** depend on the Phase 2/3 game-code exception — it
+shipped standalone ahead of the rest of the plan.
 
 ### Phase 5 — Verification & sign-off
 
