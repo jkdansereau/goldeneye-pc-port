@@ -3227,6 +3227,20 @@ extern "C" void gfx_set_mipmap_filter(enum MipmapFilteringMode mode) {
 }
 
 extern "C" void gfx_set_fix_mip_textures(int on) { g_fix_mip_textures = !!on; }
+
+/* D212: expose the (already-implemented) rendering-API anisotropy hook to the
+ * port layer. Clamp to [1, GL max] so a stale ini value can't feed an invalid
+ * GL_TEXTURE_MAX_ANISOTROPY. 1 = isotropic (driver default). */
+extern "C" void gfx_set_anisotropy_level(int level) {
+    reset_texture_state();
+    int max = gfx_rapi->get_max_anisotropy_level ? gfx_rapi->get_max_anisotropy_level() : 1;
+    if (max < 1) max = 1;
+    if (level < 1) level = 1;
+    if (level > max) level = max;
+    if (gfx_rapi->set_anisotropy_level) {
+        gfx_rapi->set_anisotropy_level(level);
+    }
+}
 extern "C" void gfx_set_wrap_fix(int on) {
     const char* e = getenv("GE_WRAPFIX"); /* RC3 test override */
     g_wrap_fix = e ? (atoi(e) != 0) : !!on;

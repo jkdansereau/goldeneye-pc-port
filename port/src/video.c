@@ -58,6 +58,8 @@ static int cfgMSAA          = 1;   /* 1/2/4/8 samples; 1 = off                  
 static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N64 3-point + trilinear */
 static int cfgFixMipTex     = 1;   /* RC2: clip mip-contaminated texture uploads to base height */
 static int cfgWrapFix       = 0;   /* D74 sub-tile UV pre-wrap + RC3/D167 non-PoT mask-period wrap (opt-in; GE_WRAPFIX env overrides) */
+static int cfgFovScale      = 100; /* D211: percent of the original vertical FOV; 100 = unchanged (byte-identical) */
+static int cfgAniso         = 4;   /* D212: anisotropic filtering samples; 4 = the value fast3d already applied (no visual delta at default) */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
 
 /*
@@ -80,6 +82,13 @@ static int cfgWinMax = 0;
  */
 f32 portScreenShakeScale = 1.0f;
 
+/* D211: Video.FovScale as a multiplier on the render FOV. Applied game-side
+ * at the guPerspectiveF chokepoint (src/fr.c) so it lands BEFORE the CPU
+ * pre-multiplies projection x view into the combined world matrix — the
+ * fast3d-side matrix hack only caught the handful of pure-perspective loads
+ * (pause/watch model, sky) and left the world untouched. 1.0f = original. */
+f32 portFovScale = 1.0f;
+
 PD_CONSTRUCTOR static void videoConfigInit(void)
 {
     configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
@@ -89,6 +98,8 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.TextureFilter", &cfgTexFilter,  0, 2);
     configRegisterInt("Video.FixMipTextures", &cfgFixMipTex, 0, 1);
     configRegisterInt("Video.WrapFix", &cfgWrapFix, 0, 1);
+    configRegisterInt("Video.FovScale", &cfgFovScale, 50, 150);
+    configRegisterInt("Video.Anisotropy", &cfgAniso, 1, 16);
     configRegisterInt("Video.Fullscreen",    &cfgFullscreen, 0, 1);
     configRegisterInt("Window.Width",        &cfgWinW,       0, 16384);
     configRegisterInt("Window.Height",       &cfgWinH,       0, 16384);
@@ -100,6 +111,14 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
 /* Set by videoRequestLiveConfig() (F10 overlay, host thread); consumed on the
  * scheduler thread in videoStartFrame() where the GL context is bound. */
 static volatile int liveCfgDirty = 0;
+
+/* D211/D212: push the port-only image knobs where they apply. FovScale is a
+ * plain float the game re-reads each frame; anisotropy goes to fast3d. */
+static void videoApplyImageOptions(void)
+{
+    portFovScale = (f32)cfgFovScale / 100.0f;
+    gfx_set_anisotropy_level(cfgAniso);
+}
 
 static void videoApplyTexFilter(void)
 {
@@ -271,6 +290,7 @@ int videoInit(void)
     gfx_set_wrap_fix(cfgWrapFix);
 
     videoApplyTexFilter();
+    videoApplyImageOptions();
 
     /* The GL context is currently current on this (host main) thread, but all
      * rendering happens on the game's scheduler thread. WGL only allows a
@@ -311,9 +331,10 @@ void videoStartFrame(void)
         wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
         gfx_set_target_fps(cfgFpsCap);   /* 0 = uncapped */
         videoApplyTexFilter();
+        videoApplyImageOptions();
         sysLogPrintf(LOG_INFO, "video: live config applied "
-                     "(vsync=%d fpscap=%d texfilter=%d)",
-                     cfgVSync, cfgFpsCap, cfgTexFilter);
+                     "(vsync=%d fpscap=%d texfilter=%d fov=%d aniso=%d)",
+                     cfgVSync, cfgFpsCap, cfgTexFilter, cfgFovScale, cfgAniso);
     }
 
     gfx_start_frame();

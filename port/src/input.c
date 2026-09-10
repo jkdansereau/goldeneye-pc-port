@@ -399,6 +399,8 @@ static unsigned scriptApply(unsigned button)
     return m;
 }
 
+static void inputRebuildBinds(void);   /* D214; defined below with keyDown() */
+
 int inputInit(void)
 {
     if (!SDL_WasInit(SDL_INIT_GAMECONTROLLER)) {
@@ -412,6 +414,8 @@ int inputInit(void)
         pads[i] = NULL;
     }
     inputOpenPads();
+
+    inputRebuildBinds();   /* D214: parse [Bind] now that configLoad() has run */
 
     /* Relative mouse mode for mouse-look. In click-to-lock mode we start
      * released and wait for a click in the window (video.c -> inputNotifyClick). */
@@ -486,7 +490,79 @@ static int scaleAxis(int v)
 
 static int keyDown(const Uint8 *ks, SDL_Scancode sc)
 {
-    return ks && ks[sc];
+    return ks && sc != SDL_SCANCODE_UNKNOWN && ks[sc];
+}
+
+/* ------------------------------------------------------------------------
+ * D214 — keyboard rebinding (PD parity: config-string driven, no UI).
+ *
+ * Each gameplay action maps to a comma-separated list of SDL scancode names
+ * (as printed by SDL_GetScancodeName: "W", "Up", "Left Ctrl", "Space", ...).
+ * The defaults reproduce the previously-hardcoded FPS layout exactly, so a
+ * fresh or [Bind]-less ini changes nothing. Parsed once in inputInit(), after
+ * configLoad(). Mouse buttons (fire = LMB, aim = RMB) stay hardwired.
+ * ---------------------------------------------------------------------- */
+enum {
+    IA_FORWARD, IA_BACK, IA_STRAFE_L, IA_STRAFE_R, IA_TURN_L, IA_TURN_R,
+    IA_FIRE, IA_AIM, IA_ACTION, IA_CANCEL, IA_LEAN_L, IA_START, IA_COUNT
+};
+
+static const struct { const char *key; const char *def; } kBindDefs[IA_COUNT] = {
+    [IA_FORWARD]  = { "Input.Bind.Forward",     "W,Up"          },
+    [IA_BACK]     = { "Input.Bind.Back",        "S,Down"        },
+    [IA_STRAFE_L] = { "Input.Bind.StrafeLeft",  "A"             },
+    [IA_STRAFE_R] = { "Input.Bind.StrafeRight", "D"             },
+    [IA_TURN_L]   = { "Input.Bind.TurnLeft",    "Left"          },
+    [IA_TURN_R]   = { "Input.Bind.TurnRight",   "Right"         },
+    [IA_FIRE]     = { "Input.Bind.Fire",        "Left Ctrl"     },
+    [IA_AIM]      = { "Input.Bind.Aim",         "Left Shift"    },
+    [IA_ACTION]   = { "Input.Bind.Action",      "Space,Z,E"     },
+    [IA_CANCEL]   = { "Input.Bind.Cancel",      "X,R,F,Escape"  },
+    [IA_LEAN_L]   = { "Input.Bind.LeanLeft",    "Q"             },
+    [IA_START]    = { "Input.Bind.Start",       "Return,Tab"    },
+};
+
+#define BIND_MAX_KEYS 4
+static char         g_bindStr[IA_COUNT][64];
+static SDL_Scancode g_bind[IA_COUNT][BIND_MAX_KEYS];
+
+static void inputRebuildBinds(void)
+{
+    for (int a = 0; a < IA_COUNT; a++) {
+        for (int k = 0; k < BIND_MAX_KEYS; k++) {
+            g_bind[a][k] = SDL_SCANCODE_UNKNOWN;
+        }
+        char buf[64];
+        strncpy(buf, g_bindStr[a][0] ? g_bindStr[a] : kBindDefs[a].def, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = 0;
+
+        int n = 0;
+        for (char *tok = strtok(buf, ","); tok && n < BIND_MAX_KEYS; tok = strtok(NULL, ",")) {
+            while (*tok == ' ' || *tok == '\t') tok++;
+            char *end = tok + strlen(tok);
+            while (end > tok && (end[-1] == ' ' || end[-1] == '\t')) *--end = 0;
+            if (!*tok) continue;
+            SDL_Scancode sc = SDL_GetScancodeFromName(tok);
+            if (sc == SDL_SCANCODE_UNKNOWN) {
+                sysLogPrintf(LOG_WARNING, "input: %s: unknown key name '%s'",
+                             kBindDefs[a].key, tok);
+                continue;
+            }
+            g_bind[a][n++] = sc;
+        }
+        if (n == 0) {
+            sysLogPrintf(LOG_WARNING, "input: %s has no valid keys; action unbound",
+                         kBindDefs[a].key);
+        }
+    }
+}
+
+static int actHeld(const Uint8 *ks, int act)
+{
+    for (int k = 0; k < BIND_MAX_KEYS; k++) {
+        if (keyDown(ks, g_bind[act][k])) return 1;
+    }
+    return 0;
 }
 
 /* Fill button mask + stick for controller idx. Returns the 16-bit mask. */
@@ -538,32 +614,29 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         /* GE default control (1.1): stick Y = move fwd/back, stick X = turn,
          * C-left/right = sidestep, C-up/down = look. FPS layout: W/S move,
          * A/D strafe (C-buttons), mouse X turns (stick X), mouse Y looks. */
-        if (keyDown(ks, SDL_SCANCODE_W) || keyDown(ks, SDL_SCANCODE_UP))    sy =  STICK_MAX;
-        if (keyDown(ks, SDL_SCANCODE_S) || keyDown(ks, SDL_SCANCODE_DOWN))  sy = -STICK_MAX;
-        if (keyDown(ks, SDL_SCANCODE_A))  button |= GE_CONT_C;   /* strafe left  */
-        if (keyDown(ks, SDL_SCANCODE_D))  button |= GE_CONT_F;   /* strafe right */
-        if (keyDown(ks, SDL_SCANCODE_LEFT))  sx = -STICK_MAX;    /* keyboard turn */
-        if (keyDown(ks, SDL_SCANCODE_RIGHT)) sx =  STICK_MAX;
+        if (actHeld(ks, IA_FORWARD))  sy =  STICK_MAX;
+        if (actHeld(ks, IA_BACK))     sy = -STICK_MAX;
+        if (actHeld(ks, IA_STRAFE_L)) button |= GE_CONT_C;   /* strafe left  */
+        if (actHeld(ks, IA_STRAFE_R)) button |= GE_CONT_F;   /* strafe right */
+        if (actHeld(ks, IA_TURN_L))   sx = -STICK_MAX;       /* keyboard turn */
+        if (actHeld(ks, IA_TURN_R))   sx =  STICK_MAX;
 
-        if ((mb & SDL_BUTTON(SDL_BUTTON_LEFT)) || keyDown(ks, SDL_SCANCODE_LCTRL))
+        if ((mb & SDL_BUTTON(SDL_BUTTON_LEFT)) || actHeld(ks, IA_FIRE))
             button |= GE_CONT_G;
-        int aimHeld = (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) ||
-                      keyDown(ks, SDL_SCANCODE_LSHIFT);
+        int aimHeld = (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) || actHeld(ks, IA_AIM);
         if (aimHeld)
             button |= GE_CONT_R;
-        if (keyDown(ks, SDL_SCANCODE_SPACE) || keyDown(ks, SDL_SCANCODE_Z) ||
-            keyDown(ks, SDL_SCANCODE_E))
+        if (actHeld(ks, IA_ACTION))
             button |= GE_CONT_A;
         if (wheelPulse > 0) {           /* mouse-wheel weapon cycle -> A pulse */
             button |= GE_CONT_A;
             wheelPulse--;
         }
-        if (keyDown(ks, SDL_SCANCODE_X) || keyDown(ks, SDL_SCANCODE_R) ||
-            keyDown(ks, SDL_SCANCODE_F) || keyDown(ks, SDL_SCANCODE_ESCAPE)) /* D145: ESC = B (back/cancel) */
+        if (actHeld(ks, IA_CANCEL))     /* D145: Escape is in the default Cancel bind */
             button |= GE_CONT_B;
-        if (keyDown(ks, SDL_SCANCODE_Q))
+        if (actHeld(ks, IA_LEAN_L))
             button |= GE_CONT_L;
-        if (keyDown(ks, SDL_SCANCODE_RETURN) || keyDown(ks, SDL_SCANCODE_TAB))
+        if (actHeld(ks, IA_START))
             button |= GE_CONT_START;
 
         /* Mouse-look. Mode-dependent (see the tuning-constants comment):
@@ -952,4 +1025,12 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.PadDeadzone", &padDeadzone, 0, 30000);
     configRegisterInt("Input.PadTriggerPct", &padTriggerPct, 1, 99);
     configRegisterInt("Input.PadLookInvertY", &padLookInvertY, 0, 1);
+
+    /* D214: keyboard rebinding. Seed each buffer with its default so the knob
+     * is visible/editable in a fresh ge007.ini; configLoad() overwrites any the
+     * user set, then inputInit() calls inputRebuildBinds(). */
+    for (int a = 0; a < IA_COUNT; a++) {
+        strncpy(g_bindStr[a], kBindDefs[a].def, sizeof(g_bindStr[a]) - 1);
+        configRegisterString(kBindDefs[a].key, g_bindStr[a], sizeof(g_bindStr[a]));
+    }
 }
