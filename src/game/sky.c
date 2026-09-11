@@ -20,6 +20,14 @@
 
 #define SKYABS(val) (val >= 0.0f ? (val) : -(val))
 
+#ifdef PORT
+/* D227 (M-95): forward decls -- the two fan-drawing blocks that call these
+ * (further down this file) come before the static definitions themselves.
+ * See the comment above skyPortBeginFan()'s definition. */
+static void skyPortBeginFan(SkyRelated38 *v, s32 n);
+static void skyPortEndFan(void);
+#endif
+
 // bss
 s32 g_SkyStageNum;
 
@@ -895,6 +903,11 @@ Gfx *skyRender(Gfx *gdl)
             gdl = sub_GAME_7F09343C(gdl, 0); // ???
             gDPSetRenderMode(gdl++, G_RM_OPA_SURF, G_RM_OPA_SURF2);
 
+#ifdef PORT
+            /* D227 (M-95): one shared wScale for every triangle drawn from
+             * this sp274[] fan -- see skyPortBeginFan() above. */
+            skyPortBeginFan(sp274, s1);
+#endif
             if (s1 == 4)
             {
                 gdl = skyRenderTri(gdl, &sp274[0], &sp274[1], &sp274[3], 130.0f, TRUE);
@@ -919,6 +932,9 @@ Gfx *skyRender(Gfx *gdl)
             {
                 gdl = skyRenderTri(gdl, &sp274[0], &sp274[1], &sp274[2], 130.0f, TRUE);
             }
+#ifdef PORT
+            skyPortEndFan();
+#endif
         }
     }
 
@@ -1338,6 +1354,12 @@ Gfx *skyRender(Gfx *gdl)
             sp94[i].unk2c = skyClamp(sp94[i].unk2c, getPlayer_c_screentop() * 4.0f, (getPlayer_c_screentop() + getPlayer_c_screenheight()) * 4.0f - 1.0f);
         }
 
+#ifdef PORT
+        /* D227 (M-95): one shared wScale for every triangle drawn from this
+         * sp94[] fan -- see skyPortBeginFan() above. Computed from unk0c,
+         * which none of the position overrides below touch. */
+        skyPortBeginFan(sp94, s1);
+#endif
         if (s1 == 4)
         {
             if (((sp538 << 3) | (sp534 << 2) | (sp530 << 1) | sp52c) == 12)
@@ -1392,6 +1414,9 @@ Gfx *skyRender(Gfx *gdl)
         {
             gdl = skyRenderTri(gdl, &sp94[0], &sp94[1], &sp94[2], 130.0f, TRUE);
         }
+#ifdef PORT
+        skyPortEndFan();
+#endif
     }
 
     return gdl;
@@ -1478,6 +1503,45 @@ bool skyVerticesAreTheSame(SkyRelated38 *arg0, SkyRelated38 *arg1)
 }
 
 #ifdef PORT
+/* D227 (M-95): the two fan-drawing blocks below (the sp274[]/sp94[] arrays
+ * further down this file) each populate up to 5 SkyRelated38 verts once,
+ * then issue 1-3 separate skyRenderTri/skyRenderFull calls that each draw a
+ * different triangle from that SAME shared vertex pool. skyPortRenderPoly
+ * used to compute its wScale locally from only the 2-4 verts of whichever
+ * call it's currently servicing -- so two triangles sharing an edge/vertex
+ * could each independently pick a different wScale for that shared vertex,
+ * and since Vtx.ob[] is s16, quantize it to two slightly different values.
+ * That crack at a shared triangle edge is the "two-halves seam" defect
+ * (findings.md D227) -- confirmed by a headless capture showing a static-
+ * frame crease, screenshot docs/img/bugs/d227-sky-seam-statue.png.
+ *
+ * Fix: the two call sites compute one shared wScale across the WHOLE fan
+ * (every vertex about to be drawn this frame, not just one call's 2-4) via
+ * skyPortBeginFan() right after populating their vertex array, before the
+ * first skyRenderTri/skyRenderFull call; skyPortRenderPoly uses that shared
+ * value instead of recomputing locally. skyPortEndFan() clears it so a
+ * hypothetical future caller that forgets to call skyPortBeginFan() falls
+ * back to the old per-call-local computation instead of reusing a stale
+ * value. */
+static f32 s_skyFanWScale = 0.0f; /* 0 = not set; per-call fallback */
+
+static void skyPortBeginFan(SkyRelated38 *v, s32 n)
+{
+    f32 maxAbsW = 0.0f;
+    s32 i;
+    for (i = 0; i < n; i++)
+    {
+        f32 aw = SKYABS(v[i].unk0c);
+        if (aw > maxAbsW) maxAbsW = aw;
+    }
+    s_skyFanWScale = (maxAbsW > 30000.0f) ? (maxAbsW / 30000.0f) : 1.0f;
+}
+
+static void skyPortEndFan(void)
+{
+    s_skyFanWScale = 0.0f;
+}
+
 /*
  * D176(a) Path B (M-46) -- black-sky fix. Full rationale in
  * docs/dev/findings.md section F, "D176(a)".
@@ -1562,13 +1626,24 @@ static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
      * comment below. Z is unused for the sky (draws first, into a cleared
      * buffer -- M-46) so clip.z is left 0.
      */
-    maxAbsW = 0.0f;
-    for (i = 0; i < nverts; i++)
+    /* D227 (M-95): prefer the whole-fan wScale set by skyPortBeginFan() so
+     * every triangle in a multi-call fan quantizes its shared vertices
+     * against the same scale (see the comment above skyPortBeginFan()).
+     * Falls back to the old per-call-local computation if unset. */
+    if (s_skyFanWScale > 0.0f)
     {
-        f32 aw = SKYABS(v[i]->unk0c);
-        if (aw > maxAbsW) maxAbsW = aw;
+        wScale = s_skyFanWScale;
     }
-    wScale = (maxAbsW > 30000.0f) ? (maxAbsW / 30000.0f) : 1.0f;
+    else
+    {
+        maxAbsW = 0.0f;
+        for (i = 0; i < nverts; i++)
+        {
+            f32 aw = SKYABS(v[i]->unk0c);
+            if (aw > maxAbsW) maxAbsW = aw;
+        }
+        wScale = (maxAbsW > 30000.0f) ? (maxAbsW / 30000.0f) : 1.0f;
+    }
 
     guMtxIdentF(projf.m);
     /* row = input axis (matches this codebase's row-vector * M convention,

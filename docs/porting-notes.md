@@ -479,7 +479,23 @@ through a converter or a runtime bswap fixup reads scrambled.
   screen-space `x,y` (`clip.xy = ndc.xy·w`, `clip.w = w` — the GPU's normal
   divide recovers the intended `ndc.xy` regardless of `w`, only the
   interpolation changes); `Vtx.ob[]` is `s16` so pre-scale by a per-primitive
-  `wScale` and have the matrix multiply it back in.
+  `wScale` and have the matrix multiply it back in. **Follow-on caveat
+  (D227, M-95): compute that `wScale` once per shared-vertex group, not
+  once per triangle.** If a decompiled routine fans one shared vertex pool
+  out across several separate calls to a per-primitive perspective-
+  correction helper (one call per triangle instead of one call for the
+  whole fan) and each call derives its own scale factor, two triangles
+  sharing an edge/vertex can each independently pick a different scale —
+  and because the scale feeds into a low-precision (`s16`) vertex field,
+  the same logical vertex quantizes to two slightly different values
+  depending on which call computed it. The position math stays exact for
+  any scale (it's just a rescale that cancels out algebraically), so this
+  isn't a logic bug and won't show up as wrong geometry — it shows up as a
+  visible crack/seam at the shared edge, easy to misread as "two separate
+  things happening" rather than one quantization mismatch. Fix: hoist the
+  scale computation to scan every vertex in the whole shared group once,
+  before the per-triangle calls, and thread that one value through instead
+  of letting each call recompute its own.
 - Z buffer cleared by pointing the color image at it + fill-rect → does
   nothing in fast3d; must emit `G_CLEAR_DEPTH_EXT` (D105).
 - LOD / detail mip tiles: fast3d fabricates a crop when detail textures
