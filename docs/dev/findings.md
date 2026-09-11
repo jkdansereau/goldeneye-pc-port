@@ -8915,6 +8915,25 @@ the constraint). Options:
   runtime; touches the RSP emulation, which is port-layer and therefore
   permitted, but is a wider blast radius.
 - **C. Hybrid** — a modest fast3d widening plus modest tessellation.
+- **D. RDP tile shift (found last, and it dominates A/B/C — recommended).**
+  The RDP already has a native mechanism for trading texcoord precision
+  against range: the tile descriptor's `shifts`/`shiftt`. **`port/fast3d/`
+  implements it fully, including the left-shift case** (`gfx_pc.cpp` ~1783:
+  `shifts <= 10` divides, `shifts >= 11` multiplies by `1 << (16 - shifts)`).
+  So emit tc at `32 / 2^k` units instead of 32 and set `shifts = 16 - k` to
+  multiply it back — **2^k more range, no tessellation, no fast3d change, no
+  vertex-budget cost, and an authentic RDP idiom rather than a port-only
+  hack.** At `k = 5` tc is 1 texel per unit with a range of ±32,767 texels,
+  which covers the measured 29,830-texel span outright — that is exactly the
+  M-100 diagnostic build that already demonstrably removes the artifact, with
+  the scale corrected by the tile shift instead of left wrong. Precision cost
+  is a ≤0.5-texel rounding *at the vertices only* (≤0.8% of the 64-texel
+  tile); interpolation between them is float in the GPU. Implementation care
+  needed in two places: emitting the shift on the sky's tile without
+  disturbing other draws (an extra `gDPSetTile` after the existing
+  `texSelect`), and choosing `k` per draw from the measured span (`k = 0`
+  when the span is already small). A light 2x2 subdivision can still be added
+  on top for spans beyond ±32,767 texels if any camera produces them.
 
 
 **Human playtest (same session, after M-98's fold-sharing fix was pushed):**
