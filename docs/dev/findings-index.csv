@@ -28,7 +28,7 @@ D199,PARTIAL,Phase-3 software audio mixer:,"LANDED (port/src/mixer.c, port/inclu
 D200,FIXED,-level_09 segfault: reverb's ALDelay.input/output are u32 —,FIXED — 5-line cast in reverb.c (this session)
 D196,OPEN,"OS mouse cursor stays visible after closing the F10 options overlay in click-to-lock mode (M-49, user playtest).","OPEN — root-caused, 1-line fix identified, not applied (M-49)"
 D192,OPEN,Front-end mission/level-select grid pointer still can't reach the outer cells —,"OPEN — root-caused, not fixed (M-49)"
-D221,OPEN,SELECT FILE screen: the mouse hit-box for a file slot is vertically offset from its visible box —,"OPEN — observed, not investigated."
+D221,FIXED,SELECT FILE screen: the mouse hit-box for a file slot is vertically offset from its visible box —,FIXED (M-91) — root cause was NOT a coordinate/origin mismatch:
 D222,OPEN,High Video.FovScale breaks culling —,"OPEN — root cause known, not fixed."
 D223,OPEN,QoL ask: mouse-wheel weapon cycling should be directional like a normal PC shooter —,"OPEN — root cause + fix mechanism known, not implemented."
 D224,FIXED,"QoL gap (M-87, from a PD-PC-port survey):","DEPRIORITIZED (M-87, user call)."
@@ -68,7 +68,7 @@ D216,PARTIAL,"Game.SkipIntro — boot straight to the file-select menu (M-83, po
 D217,OPEN,1P weapon viewmodel + third-person Bond model textures render garbled —,OPEN — root cause characterised (M-86); needs an upstream/asset-pipeline fix.
 D218,PROPOSED,Wide FOV exposes the per-level draw-distance / fog boundary —,"Logged (M-84), fix proposed + parked."
 D219,OPEN,"PPK explosions render purple on Dam (M-87, user QA, ""not 3D but noting"").","OPEN — observed, not investigated."
-D220,OPEN,"1P muzzle flash position shifts upward at higher Video.FovScale (M-87, user QA, Jungle/M16).","OPEN — observed, not investigated."
+D220,?,"1P muzzle flash position shifts upward at higher Video.FovScale (M-87, user QA, Jungle/M16).","ANALYZED (M-91) — the suspected unscaled-viewmodel root does NOT hold; this is correct perspective behavior, likely cosmetic/QoL."
 D85,OPEN,room primary/secondary DL → texLoadFromGdl garbage,"OPEN (safety-netted; widen/pool fixes landed, geometry now renders)"
 D86 · D87,RESOLVED,modelInitRwData truncated ptr · attract-demo BE ramromfilestructure,resolved
 D88.4,RESOLVED,propDefs polymorphic record stream not byteswapped → setupDoor crash,resolved (d88_propdefs.py); layout audit M-20 → D132
