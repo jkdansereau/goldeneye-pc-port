@@ -1,12 +1,10 @@
 # Agentic development: two AI coding agents porting GoldenEye 007
 
-*A case study in AI-agent collaboration on a large, low-level codebase. A
-GoldenEye 007 Nintendo 64 → desktop port, taken from "builds a ROM" to
-"playable front end" in about two weeks — driven mostly by two coding agents (a
-local open-weight model, Qwen 3.8, on a single RTX 5090, and a hosted frontier
-model, Claude / Claude Code), handing work back and forth through shared
-written notes under one person's part-time direction. This is the goal, the
-method, the timeline, and an honest read on what did and didn't work.*
+*How this port was actually built: a local open-weight model (Qwen 3.8 on a
+single RTX 5090) and a hosted frontier model (Claude / Claude Code) handing
+work back and forth through shared written notes, under one person's
+part-time direction. The goal, the setup, the timeline, and an honest read on
+what did and didn't work.*
 
 ## Contents
 
@@ -104,14 +102,14 @@ issues still outstanding.
 
 | | |
 |---|---|
-| Calendar time | 16 days (16 Aug – 1 Sep 2026), one person part-time |
-| Commits on the port | ~223 |
-| Root-caused bugs logged | 162 (`D1`–`D169` in [`findings.md`](findings.md); some later merged or withdrawn) |
-| Handoff sessions | ~33 (`M-2` … `M-33`) |
-| Game-source files given `#ifdef PORT` ABI edits | 63 files, 241 blocks |
-| New port-layer / tooling files | 128 |
-| Port layer | ~17,000 lines C/C++ (`port/`) |
-| PC asset-conversion tooling | ~6,300 lines Python (`tools_pc/`) |
+| Calendar time | 26 days (17 Aug – 11 Sep 2026), one person part-time |
+| Commits on the port | ~430 |
+| Root-caused bugs logged | `D1`–`D226` in [`findings.md`](findings.md), 116 still-listed entries (some labels later merged or withdrawn) |
+| Handoff sessions | 89+ (`M-2` … `M-89`, and counting) |
+| Game-source files given `#ifdef PORT` ABI edits | 67 files, ~305 blocks |
+| New port-layer / tooling files | ~114 |
+| Port layer | ~21,900 lines C/C++ (`port/`) |
+| PC asset-conversion tooling | ~7,050 lines Python (`tools_pc/`) |
 | Outcome | intro + all 21 solo missions render, front end playable; audio not yet done |
 
 ### Commit velocity
