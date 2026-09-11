@@ -7,6 +7,18 @@ auto-injected, D121), `GE_PCDUMP="80-260:40"`, ~24 s watchdog then
 0x140000000). "render %" = `tools_pc/pixcount.py` non-clear on the last
 captured frame. Binary at `f2beae4b` + this session's build.
 
+**M-79/M-81 catch-up note (added M-91, since these fixes were never given a
+LEVEL-STATUS entry of their own).** Both crashers below (D191) and the
+AI-pacing bug (D193) that blocked Cradle were subsequently root-caused,
+fixed, and playtest-verified: D191 in M-79 (user replayed both trigger
+scenes — Bunker ii first-guard kill, Statue post-Trevelyan cutscene — neither
+crashes; **21/21 solo levels crash-free**), D193 in M-81 (user-verified on
+Cradle itself — Trevelyan and the guards run at correct pace; root cause was
+D209). **No known crashing levels as of M-91.** What's still open is a full
+21-mission end-to-end re-playthrough confirming completability on the
+current build (the "v0.2.0 gate" in `docs/HANDOFF.md`) — the M-49 playtest
+below predates both fixes and should not be read as current.
+
 **M-49 (2026-09-04) — full-campaign playtest, v0.1.0 win64 bundle.**
 User played every solo mission on the packaged build (fresh save). **19 / 21
 completable start to finish.** Only two crashes in the whole game — **Bunker ii
