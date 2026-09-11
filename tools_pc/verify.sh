@@ -161,12 +161,43 @@ run_one() {
   R_STATUS=""; R_FRAMES=0; R_SYM=""; R_BRIEF=""
 
   rm -f "$ROOT/ge007.crash.log"
-  KILL; sleep 1
+  KILL; sleep 0.3
+
+  # Speed-up: a level only needs to render its intro pan + spawn-in once --
+  # everything after the last requested GE_PCDUMP frame is wasted wall-clock
+  # (the process used to always idle out the full watchdog, ~30s/level of
+  # nothing on top of the ~15s that actually matters -- 21 levels x that
+  # waste is most of a sweep's runtime). Poll for the last frame's PPM (or a
+  # crash) and kill the instant it lands; `watchdog` remains the safety net
+  # for a level that never gets there (hang / load-sensitivity flake).
+  local lo hi step lastframe target=""
+  IFS='-:' read -r lo hi step <<< "$dump"
+  if [[ "$lo" =~ ^-?[0-9]+$ && "$hi" =~ ^-?[0-9]+$ ]]; then
+    [[ "$step" =~ ^[0-9]+$ && "$step" -gt 0 ]] || step=1
+    lastframe=$(( lo + step * ( (hi - lo) / step ) ))
+    target=$(printf "%s/ppm/frame_%06d.ppm" "$ROOT" "$lastframe")
+  fi
 
   ( cd "$ROOT" && export GE_PCDUMP="$dump"
     [ -n "$SCRIPT" ] && export GE_INPUTSCRIPT="$SCRIPT"
-    timeout "$watchdog" "$EXE" "-level_$num" ) \
-      >"$capdir/run.log" 2>&1
+    if [ -n "$target" ]; then "$EXE" "-level_$num"; else timeout "$watchdog" "$EXE" "-level_$num"; fi ) \
+      >"$capdir/run.log" 2>&1 &
+  local gamepid=$!
+
+  if [ -n "$target" ]; then
+    local ticks=0 max_ticks=$(( watchdog * 5 ))   # 0.2s ticks
+    while [ "$ticks" -lt "$max_ticks" ]; do
+      if [ -f "$target" ] || [ -f "$ROOT/ge007.crash.log" ]; then
+        sleep 0.2   # let the just-written frame's fclose() settle
+        break
+      fi
+      kill -0 "$gamepid" 2>/dev/null || break   # exited/crashed on its own
+      sleep 0.2
+      ticks=$((ticks + 1))
+    done
+    KILL
+  fi
+  wait "$gamepid" 2>/dev/null
   mv "$ROOT"/ppm "$capdir/ppm" 2>/dev/null || mkdir -p "$capdir/ppm"
 
   R_FRAMES=$(ls "$capdir/ppm"/*.ppm 2>/dev/null | wc -l)
