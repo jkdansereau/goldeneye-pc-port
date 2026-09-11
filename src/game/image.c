@@ -2322,10 +2322,26 @@ void texBlur(u8 *pixels, s32 width, s32 height, s32 method, s32 chansize)
 
 void texInitPool(struct texpool *arg0, u8 *arg1, s32 arg2)
 {
+    u8 *endbuf = arg1 + arg2;
+#ifdef PORT
+    /* D217 (M-90): the whole texture-layout scheme assumes the arena base is
+     * 8-byte aligned. texAlignIndices pads each index row to an ABSOLUTE
+     * 8-byte boundary, and the model-DL TLUT loads address the palette at
+     * tex->data + len (texGetDepthAndSize), where len is a formula that only
+     * matches the real layout when rows start 8-aligned -- i.e. when leftpos
+     * stays 8-aligned for life (header += 8, every inflate size is 8-multiple).
+     * On N64 the memp bump allocations feeding these pools happened to be
+     * 8-multiples so bases were aligned; PC pointer bloat broke that (e.g.
+     * weapon buffers land %8==4), shifting the palette inside the allocation
+     * while LoadTLUT still reads the N64 offset -- solid wrong-colour tiles
+     * (the D217 green grip). Round the base up to 8; a no-op on N64. The end
+     * stays at the original buffer limit (the pool loses <= 7 bytes). */
+    arg1 = (u8 *)(((uintptr_t)arg1 + 7) & ~(uintptr_t)7);
+#endif
     arg0->start = arg1;
-	arg0->end = (struct tex *)(arg1 + arg2);
+	arg0->end = (struct tex *)endbuf;
     arg0->leftpos = arg1;
-    arg0->rightpos = (struct tex *)(arg1 + arg2);
+    arg0->rightpos = (struct tex *)endbuf;
 }
 
 

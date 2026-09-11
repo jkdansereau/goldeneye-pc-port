@@ -4,7 +4,8 @@ A field guide to the bug classes that keep recurring when running big-endian
 32-bit N64 game code, unmodified, on a little-endian 64-bit host. Terse by
 design — each entry compresses a full investigation to a symptom, a fix, and a
 grep heuristic for finding siblings. Each entry cites a `Dxx` label; the full
-evidence and fix for that instance live in [`dev/findings.md`](dev/findings.md)
+evidence and fix for that instance live in
+[`dev/findings.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/findings.md)
 under the same label. Skim the section headers; read the classes relevant to
 the task at hand.
 
