@@ -33,6 +33,7 @@ D222,OPEN,High Video.FovScale breaks culling —,"OPEN — root cause known, not
 D223,OPEN,QoL ask: mouse-wheel weapon cycling should be directional like a normal PC shooter —,"OPEN — root cause + fix mechanism known, not implemented."
 D224,OPEN,"QoL gap (M-87, from a PD-PC-port survey):","OPEN — not implemented, straightforward."
 D225,OPEN,"Dev-tooling QoL (M-87, user ask):","OPEN — root-caused, not implemented."
+D226,OPEN,"QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.","OPEN — root cause / call sites identified, not designed or implemented."
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
 D201,FIXED,"src/libultra/audio/bnkf.c bank/instrument/sound/wavetable relocation offsets were s32, truncating the real 64-bit base pointer.",FIXED (src/libultra/audio/bnkf.c) —
