@@ -423,7 +423,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D169 | **Front-end mouse pointer can't reach the outer cells of the mission/level-select grid — only an inner ~3×3 selectable (M-33, developer bug report).** The D165 pointer P-controller in `port/src/input.c` is hard-coded to a **320×240** virtual field (`MENU_CURSOR_HI_H`/`_HI_V` = 300/220, `MENU_CURSOR_MID_H`/`_MID_V` = 160/120, `input.c:145-149`), but GE's front end runs at **440×330** (`front.c:8570` `viSetViewSize(440,330)`; default cursor home 220/165 `front.c:285`). `frontUpdateControlStickPosition` clamps the real cursor to `[20,420]×[20,310]` (`front.c:1195-1217`); the mission-select hit-test grid spans x 73…352 / y 62…270 with outer split points 317 / 235.5 (`front.c:516,519,3180,3194`). The port clamps its pointer *target* and *estimate* to 300/220 (`input.c:553-564`) → the stick zeroes out once both saturate → the game's `cursor_h_pos`/`cursor_v_pos` park at ≈300/220, short of the two outer columns and the bottom row. File-select / mode-select / main-menu are unaffected because their hit targets (centred folder boxes, the `x=126` mode list, the `x=106` difficulty list) all sit inside the 320×240 sub-box. Not the D118d `joyGetStickY`-threshold class — this is a virtual-resolution constant mismatch, closer to D164 (a front-end layout constant wrong on the PC path). Also note: the "re-syncs whenever the target is held at a screen edge" comment at `input.c:141-143` describes behaviour the code doesn't implement — the only estimator reset is the activation re-home (`input.c:545-549`), so once pinned at the clamp the estimate never recovers. Confidence: **medium-high** (constants + clamp math unambiguous in source; static-only, no build/run this session; exact reachable block "~4×3" vs the reported "3×3" within tolerance). | **FIXED (M-33, `port/src/input.c`, port-only, no `#ifdef PORT`).** The `menuMode` pointer branch now derives its clamp bounds from the live virtual screen — `[screenleft+20, screenleft+screenwidth-20] × [screentop+20, screentop+screenheight-20]` via `getPlayer_c_screenwidth/height/left/top()` (`src/game/bondview.c:880-895`) — falling back to the old 320×240 constants when the front-end screen isn't set (`sw` outside 200…2000). The estimator seed on activation is now the real `cursor_h_pos`/`cursor_v_pos` (`front.c:285`, externed in `front.h`) instead of the 160/120 centre guess. `MENU_CURSOR_HI_H/_V` / `MID_H/_V` kept only as the fallback. **Verified:** builds + links clean (`getPlayer_c_screen*` and `cursor_[hv]_pos` all resolve — non-static engine symbols, as expected); `GE_STARTMENU=7` mission-select boots crash-free 600+ frames; `-level_09` unregressed (framediff 3/3 within threshold, 91.6% nonclear). The in-level path is untouched (menu-only branch). **Interactive feel-check still owed** — headless input can't drive the mouse pointer, so "every grid tile is now reachable" is inferred from the corrected clamp math, not observed. `Input.MenuPointerMode=0` (legacy velocity) and the constant fallback remain as escape hatches. |
 | D178 | **Pre-mission briefing screen: objectives blank / missing, briefing pages blank (also the D143 "briefing text blank" side effect) — FIXED (M-36).** Root cause: the briefing segment (`Ubrief*Z`, source `assets/obseg/brief/*.c`) is a raw ROM image of `struct BriefStruct` = `{ u16 brief[4]; struct { u16 textid; u16 enabled_difficulty; } objective[10]; }` (48 bytes), loaded by `front.c load_briefing_text_for_stage()` via `_fileNameLoadToAddr()` — **no converter and no BE→LE fixup anywhere in the chain**. On the LE host all 24 `u16` read byte-swapped. Measured on Dam (`GE_D178=1`): raw `brief=002c,012c,022c,032c obj0=042c/0100 obj3=072c/0000` vs correct `2c00,2c01,2c02,2c03 / 2c04/0001 / 2c07/0000`. Two independent symptoms follow: (a) `textid` `0x2C04` (= `getStringID(LDAM,4)`, bank 11 slot 4) reads as `0x042C` → bank 1 slot 44, never loaded → `langGet()` NULL → **blank text** (this is exactly the D143 residual, `front.c:6732` and `brief[0..3]` at `front.c:6855-6867`); (b) `enabled_difficulty` `0x0001` (Secret Agent) reads as `0x0100 = 256`, so `selected_difficulty >= enabled_difficulty` (`front.c:6729`) is false for every difficulty-gated objective — on Agent only the one `DIFFICULTY_AGENT`(0) objective survived the filter, which is why a single bare "a." bullet printed. **Fix:** `romdataFixupBriefing()` in `port/src/romdata.c` (+ `port/include/romdata.h`), called from a `#ifdef PORT` block in `load_briefing_text_for_stage()` right after the load — the same shape as `langFixupLoadedBank()` in `language.c` (BE-serialized-struct reconciliation, semantics-preserving, no game logic touched). `GE_D178=1` prints the raw and fixed words. **Verified:** Dam briefing on Agent now shows "a. Bungee jump from platform"; on `GE_STARTMENU_DIFF=3` (00 Agent) all four (Neutralize all alarms / Install covert modem / Intercept data backup / Bungee jump from platform), correct difficulty gating. `-level_09` framediff 3/3; `GE_STARTMENU=7`/`=13` crash-free. | **FIXED (M-36)** — high confidence |
 | D175 | **In-game stutter / brief hang during normal play** (user QA report): opening a door on Runway (`-level_35`, mission 3) and also observed on Surface. Self-recovered; no backtrace captured. Likely one of the known transient-hang classes (D155 catch-up spiral / D156 anim NaN loop / D134 task-done event / D147-D152 audio-lock steal) or a benign new-room texture-import frame spike on door open. See `GRAPHICS-BACKLOG.md` D175 for the gdb pattern-match sheet. | Observed, not investigated |
-| D176 | **Surface exterior renders wrong (`-level_36`), two independent defects.** **(a)** sky solid black — env data is correct (`Clouds=1`, warm `CloudRGB`), the cloud-sky path runs, but `skyRenderTri`/`skyRenderFull` emit only `G_RDPHALF_*` immediates which `gfx_pc.cpp:2901` deliberately no-ops → **root-caused M-37** (see "D176(a) — M-37 UPDATE"); fix = decode the RDPHALF sky-tri stream in fast3d. **(b)** cliff/rock walls = grey diagonal static — NOT a texture decode bug (D183 disproved the shear hypothesis, 0/166 loads strided); re-scope from ROM ground truth of the wall texnum (M-37: inconclusive, leaning tiling-density). See `GRAPHICS-BACKLOG.md` D176. | (a) root-caused, fix owed / (b) open. **M-87 user playtest: still current** — skybox is "still glitchy" broadly (not just Surface), and some levels (**Cradle** named) still show solid black where sky/backdrop should be — consistent with (a) never having landed a verified fix (Path B draft PR #18 was left "unverified visually"). **Follow-up, same session:** the sky is **partially working**, not just black — where it does render, it **scrolls too fast and repeats too visibly** (tiling period reads as too short / speed too high for the cloud texture, likely the M-82 horizon-band phase-fold's 64-texel wrap period, `sky.c` `skyPortRenderPoly`). Separately, **Cradle (and other levels) still show black sky specifically at higher FovScale** — reads as a *third* instance of the "wide FOV exposes an edge nothing was built past" family alongside D218 (fog/draw-distance) and D222 (culling): the sky's rendered coverage/tessellation likely only spans the nominal ~60° frustum (ties to D176(a)'s already-logged "Defect 2 — horizon-band coverage / straddling tris — adaptive tessellation" need), so widening the FOV reveals black past its edge. |
+| D176 | **Surface exterior renders wrong (`-level_36`), two independent defects.** **(a)** sky solid black — env data is correct (`Clouds=1`, warm `CloudRGB`), the cloud-sky path runs, but `skyRenderTri`/`skyRenderFull` emit only `G_RDPHALF_*` immediates which `gfx_pc.cpp:2901` deliberately no-ops → **root-caused M-37** (see "D176(a) — M-37 UPDATE"); fix = decode the RDPHALF sky-tri stream in fast3d. **(b)** cliff/rock walls = grey diagonal static — NOT a texture decode bug (D183 disproved the shear hypothesis, 0/166 loads strided); re-scope from ROM ground truth of the wall texnum (M-37: inconclusive, leaning tiling-density). See `GRAPHICS-BACKLOG.md` D176. | (a) **"scrolls too fast/tiles too visibly" ROOT-CAUSED + FIXED** (see "D176(a) — fidelity pass" below): `skyPortRenderPoly` interpolated tc *linearly* under a `w=1` ortho projection when the source S/T data assumes RDP-style perspective-correct interpolation (per-vertex camera-space `w` differed up to 38x within one primitive); fixed by giving each vertex its real `w` via a custom projection matrix, `#ifdef PORT` in `src/game/sky.c` only. Verified: `bunker1` regression-clean, `-level_22`/`-level_41` (Cradle) before/after captures show the expected uniform-aliasing → perspective-converging-fan change; Cradle sky at default FOV is no longer black. Confidence HIGH on root cause/fix direction, MODERATE on full N64 parity (no N64 reference capture available to diff against). (b) open. Defect 2 (horizon-band coverage/adaptive tessellation) and the separate FOV-coupled black-sky-past-frustum-edge symptom (D218/D222-adjacent) are **unchanged, still open** — not attempted this pass. |
 | D177 | **Ladders non-functional — progression blocker (user QA report) — FIXED (M-36).** Not the input path and not the ladder state machine: `MoveBond` gates the ladder-collision path on `stanGetLocusCount(&curLocus)`, which was pinned at 0 on PC. `stanCheckLinkedSpecialTile` writes the LADDER signal via raw `outFlags[1] = 1` into a `struct StandTileLocusCallbackRecord` whose first member `s32 *rooms` is pointer-widened on PC → `[1]` is the high half of `rooms`, and `count` (moved +4→+8) is never written. Compounded by `curLocus` being declared as the 8-byte placeholder `move_bond_temp_struct` (too small for the widened record) and a `(s32)coords` pointer-truncation AV waiting in `stanGetMoveBondCollisionTiles`. **Fix:** `#ifdef PORT` — write record fields by name, declare `curLocus` as the real struct, `PORT_PTRADD` for the truncating cast (`src/game/stan.c`, `src/game/bondview2.c`; no game logic). Full detail: §F "D177". | **FIXED (M-36)** — high confidence; interactive climb test owed |
 | D172 | **Bullet-impact / blood / spark particles render magenta or cyan instead of dark red (M-82, ROOT CAUSE FOUND + FIXED).** Particle billboards (`explosion.c` `explosionRenderPart`, `gSPVertex`+`gSP2Triangles`) take their CC/tile state from ROM state records replayed just before them (`g_ExplosionDisplayLists[]` = `assets/oddtextures.c` `globalDL_0x078..`). The dominant record sets `gsDPSetCycleType(G_CYC_2CYCLE)` + `gsDPSetTextureLOD(G_TL_TILE)` + `gsDPSetCombineMode(G_CC_INTERFERENCE, G_CC_MODULATEIA2)` and binds **two** tiles: tile 0 = IA8 "smoke" @ TMEM 0, tile 1 = RGBA16 "fire" @ TMEM 0x188. `G_CC_INTERFERENCE` cycle-0 = `TEXEL0 * TEXEL1`. **fast3d's `gfx_lod_tile_offset()` returns `0` unconditionally** on the `!gfx_detail_textures_enabled` branch — a D107 fix for GE's mip textures (whole chain loaded in one LOADBLOCK at TMEM 0; `port/src/video.c:225` sets the flag `false`). So texunit 1's sampled tile = `first_tile_index + 0` = tile 0 → **TEXEL1 samples the smoke texture, not fire** → `smoke * smoke` → wrong colour. Two earlier M-82 candidates were false trails: (1) "0xB9 unhandled → D146 abort" — 0xB9 is `G_SETOTHERMODE_L` in this non-F3DEX2 build, handled; zero D146 aborts in a sustained-fire run. (2) "records never set 2-cycle" — they do (`0xBA`), and fast3d applies it (probe-confirmed `cycletype=2CYC`). **Probe evidence (`GE_D172=1`, user Silo firefight, `d172_silo.log`):** 40/40 particle tris → `cfg1[tile=1 tmem=392 fmt=RGBA siz=16b]` but `SAMPLED1 = tile0 (tmem=0 fmt=IA)`, `tex_lod=0`. | **FIXED (`port/fast3d/gfx_pc.cpp` `gfx_lod_tile_offset`): `return rdp.tex_lod ? 0 : i;`** — fold to the base tile only when LOD is actually active. D107's mip case (`tex_lod=1`, blurry ceilings) unchanged; a genuine non-LOD 2-texture combine now samples tile `i`. `bunker1` verify PASS (the D107 repro level), no framediff regression. PR #34. **Owed: in-game eyeball — blood/sparks should read dark red.** Env-gated `GE_D172` probes left in tree (`#ifdef PORT`, inert). |
 | D174 | **"No blood effect" (user QA report).** Likely the unverified D120 decal fix: `d43_emit.py` now emits the opcode-0x18 `PointUsage[]` chain, but it was never interactively verified and requires a full sidecar regen to take effect (`debug.ps1` does not regen). Spray path is D172 (draws, wrong colour) — total absence would be new. See `GRAPHICS-BACKLOG.md` D174. | Observed; first step = BUNKER1 firefight with regenerated sidecars |
@@ -5261,6 +5261,106 @@ this ortho exactly as the projection math intends) need one visual check.
   tessellation, denser toward the horizon.
 - **Owed:** one `-level_22` visual check — see `docs/dev/D176a-SKY-NOTES.md`
   "Verification ask".
+
+### D176(a) — fidelity pass: "scrolls too fast / tiles too visibly" ROOT-CAUSED + FIXED (linear vs. perspective-correct tc interpolation)
+
+M-84/M-87 playtest found Path B partially working: where the sky renders it
+"scrolls too fast and repeats too visibly" (tiling period reads too short).
+Root-caused with a `GE_D176SCROLL` probe (temporarily added to
+`skyPortRenderPoly`, removed after use — same throwaway-probe pattern as
+`GE_D176`):
+
+- **`skyPortRenderPoly` placed every sky vertex under a plain pixel-space
+  `guOrtho` projection**, i.e. every vertex got clip `w = 1`. fast3d's normal
+  GPU pipeline then interpolates `tc` (and every other varying) *linearly in
+  screen space* across the primitive — correct only when every vertex shares
+  the same `w`.
+- **They don't.** `unk20`/`unk24` (S/T, texel units) are computed upstream
+  (`sub_GAME_7F097388`, `sky.c:1401`) from the *world-space* cloud-plane
+  intersection, with **no perspective divide applied** — exactly like the
+  real RDP's `G_TRI_SHADE_TXTR` coefficient block, which carries `S·w′`/`T·w′`/`w′`
+  triples (`docs/dev/D176a-SKY-NOTES.md` wire-format section) and relies on
+  the RDP's own perspective-correct texture unit to divide back out per
+  pixel. `SkyRelated38.unk0c` (a field Path B wasn't reading before this fix)
+  already carries that raw camera-space `w` (`sky.c:1450`,
+  `arg5->unk0c = sp68[3]` — the same `w` sub_GAME_7F097388 itself divides by
+  to get screen X/Y, so it's directly reusable).
+- **Measured on `-level_22` (Statue), frame ~330:** one sky quad's four
+  corners had camera-space `w` = 5469/5469 (top edge, near) vs.
+  207300/207257 (bottom edge, at the horizon) — a **38x ratio** — over an S
+  span of ~30000 texels. Linear interpolation smears that whole 30000-texel
+  delta evenly across every screen pixel of the quad; perspective-correct
+  interpolation concentrates it almost entirely into the last few pixels
+  next to the horizon-grazing vertices (hand-computed check: naive linear
+  interpolation at the screen-space midpoint gives S≈-9090, true
+  perspective-correct gives S≈-884 — an order of magnitude apart). The
+  linear version reads exactly as reported: a uniformly dense, aliased
+  "hatching" over the *entire* visible sky instead of a gentle gradient that
+  only gets busy right at the horizon.
+- **Fix (`src/game/sky.c`, `skyPortRenderPoly`, `#ifdef PORT`):** replaced
+  the `guOrtho` load with a hand-built projection matrix that gives each
+  vertex its *real* camera-space `w` (from `unk0c`) instead of `w=1`, while
+  keeping every vertex's screen-space `x,y` position bit-identical (the
+  matrix is constructed so `clip.xy = ndc.xy * w` and `clip.w = w`, so the
+  GPU's perspective divide recovers the same `ndc.xy` regardless of `w` —
+  only the *interpolation* across the primitive changes). `Vtx.ob[]` is
+  `s16` and can't hold raw `w` (up to ~2×10^5 near the horizon), so each
+  vertex pre-divides by a per-primitive `wScale` (`max|w| / 30000` when that
+  exceeds 30000, else 1) and the projection matrix multiplies back by
+  `wScale` for `clip.x/y/w`; `ob[2]` (unused for depth — the sky draws first
+  into a cleared buffer, M-46) carries `w/wScale` through to the matrix's
+  w-column. This rides the exact same fast3d vertex/triangle/GLSL pipeline
+  every other textured draw in the game already depends on for correct
+  perspective (`gl_Position = aVtxPos;`, `port/fast3d/gfx_opengl.cpp:320` —
+  default GLSL `varying` interpolation is perspective-correct whenever
+  `w != 1`); no `port/fast3d` changes.
+- **Verified:**
+  - `tools_pc/verify.sh bunker1` — PASS, `frames=3`, no crash (non-sky level,
+    confirms no regression).
+  - `-level_22` (Statue) and `-level_41` (Cradle) headless `GE_PCDUMP`
+    captures, before/after, eyeballed. The intro camera pan isn't frame-exact
+    between runs (small wall-clock-driven timing drift in the pre-gameplay
+    camera — a separate, out-of-scope-for-this-task timing question, not the
+    D193/D209 gameplay-tick class which is already fixed), so an exact
+    per-pixel diff isn't reliable, but the *qualitative* pattern change is
+    unambiguous and reproduces every run: before, uniform parallel aliased
+    streaks over the whole sky; after, a proper perspective-converging fan —
+    coarse near the top (near vertices), converging to fine detail only near
+    the horizon edge (far vertices) — the textbook look of a textured plane
+    correctly extending to a horizon. Cradle (`-level_41`) sky at default FOV
+    renders a normal blue sky with cloud streaks, not black.
+  - Not verified: an actual side-by-side against real N64 footage (none
+    available in this environment), and whether the residual "busy" look at
+    the very top of Cradle's sky (still fairly dense) is acceptable or needs
+    Defect 2's tessellation on top — see below.
+- **Interaction with Defect 2 (coverage / horizon-straddling tris, still
+  open):** this fix corrects the interpolation *mode* (linear → perspective)
+  but does not add tessellation. A primitive whose w-ratio between vertices
+  is this extreme will still show real (now correctly-shaped, but still
+  dense) detail concentrated at its horizon edge — finer subdivision near
+  the horizon (Defect 2) is what would spread that out further and is still
+  the right follow-up for full visual quality. Defect 2 itself (vertical
+  coverage / horizon-straddling triangles needing adaptive tessellation,
+  and the separate FOV-coupled black-sky-past-frustum-edge symptom on Cradle
+  at high FovScale, D218/D222-adjacent) is **unchanged/still open** — not
+  attempted this pass.
+- **Confidence:** HIGH on root cause (confirmed numerically: measured 38x
+  `w` ratio + hand-computed order-of-magnitude interpolation error) and on
+  the fix being a real, correct improvement (reproducible qualitative
+  before/after pattern change, matches the mathematically expected
+  perspective-converging shape). MODERATE on "fully resolves the reported
+  symptom to N64 parity" — no N64 reference capture to diff against in this
+  environment; a human should eyeball `-level_22` and `-level_41` and say
+  whether the remaining density right at the horizon reads as acceptable or
+  still warrants Defect 2's tessellation work.
+- **Porting-notes quirk added:** `docs/porting-notes.md` §D — screen-space
+  "already-projected" GBI overlays (HUD/front-end idiom) are only safe to
+  place under an identity/orthographic (`w=1`) transform when every vertex
+  in the primitive really does share one depth/scale; a primitive whose
+  per-vertex data was computed via a *world-space* perspective projection
+  upstream (sky, and potentially other N64 RDP-immediate idioms) needs its
+  real `w` preserved through to the GPU, or every non-positional varying
+  (texture coords, vertex colour) interpolates wrong across the primitive.
 
 ---
 

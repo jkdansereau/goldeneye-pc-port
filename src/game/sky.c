@@ -1505,12 +1505,14 @@ bool skyVerticesAreTheSame(SkyRelated38 *arg0, SkyRelated38 *arg1)
 static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
 {
     Vtx *vtx = dynAllocateVertices(nverts < 3 ? 3 : nverts);
+    Mtxf projf;
     Mtx *proj = dynAllocateMatrix();
     Mtx *mv = dynAllocateMatrix();
     f32 l = getPlayer_c_screenleft();
     f32 t = getPlayer_c_screentop();
     f32 r = l + getPlayer_c_screenwidth();
     f32 b = t + getPlayer_c_screenheight();
+    f32 maxAbsW, wScale;
     s32 i;
 
     /* D176(a) Defect 1 (M-82): unk20/unk24 are S/T in *texel* units for the
@@ -1530,14 +1532,73 @@ static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
     foldS = (f32) ((s32) floorf(foldS / 64.0f) * 64);
     foldT = (f32) ((s32) floorf(foldT / 64.0f) * 64);
 
-    guOrtho(proj, l, r, b, t, -32768.0f, 32768.0f, 1.0f);
+    /* D176(a) "M-90" fix: skyPortRenderPoly used to place these verts under a
+     * plain pixel-space ORTHO projection, i.e. every vertex got w=1 and the
+     * GPU/software rasteriser interpolated tc *linearly in screen space*
+     * across the primitive. But unk20/unk24 (S/T) are texel coords on the
+     * world-space cloud plane, computed upstream (sub_GAME_7F097388) WITHOUT
+     * a perspective divide -- exactly like the RDP's own G_TRI_SHADE_TXTR
+     * coefficient block, which carries S*w'/T*w'/w' triples (see
+     * docs/dev/D176a-SKY-NOTES.md) and relies on the RDP's normal
+     * perspective-correct texture unit to divide back out per pixel. Linear
+     * interpolation instead of perspective-correct interpolation is only
+     * exact when every vertex shares the same w -- here the near (top of
+     * screen) and horizon-grazing (bottom) verts of one quad can differ by
+     * >20x in camera-space w (unk0c), so the S/T delta was smeared evenly
+     * across every screen pixel instead of being weighted toward the near
+     * vertices, producing a uniformly dense, aliased "hatching" over the
+     * whole sky and reading as "scrolls too fast / tiles too visibly" --
+     * the true per-pixel gradient should stay small until right at the
+     * horizon edge. Fix: build a real perspective (w != 1) transform so the
+     * existing fast3d vertex/triangle pipeline (same one every other
+     * textured draw in the game already relies on) does the perspective
+     * divide for us, exactly like the RDP would.
+     *
+     * ob[] is s16 so we can't store camera-space w (unk0c, up to ~2e5 near
+     * the horizon) directly; instead each vertex's NDC xy is pre-multiplied
+     * by its own w/wScale (wScale keeps the product in s16 range) and a
+     * custom projection matrix multiplies that by wScale again for clip.x/y
+     * and routes ob[2] (=w/wScale) through to clip.w -- see the matrix
+     * comment below. Z is unused for the sky (draws first, into a cleared
+     * buffer -- M-46) so clip.z is left 0.
+     */
+    maxAbsW = 0.0f;
+    for (i = 0; i < nverts; i++)
+    {
+        f32 aw = SKYABS(v[i]->unk0c);
+        if (aw > maxAbsW) maxAbsW = aw;
+    }
+    wScale = (maxAbsW > 30000.0f) ? (maxAbsW / 30000.0f) : 1.0f;
+
+    guMtxIdentF(projf.m);
+    /* row = input axis (matches this codebase's row-vector * M convention,
+     * e.g. sub_GAME_7F097388 / gfx_pc.cpp's own MP_matrix use):
+     *   clip.x = ob[0]*wScale                = (ndcX*w/wScale)*wScale = ndcX*w
+     *   clip.y = ob[1]*wScale                = ndcY*w
+     *   clip.z = 0
+     *   clip.w = ob[2]*wScale                = (w/wScale)*wScale     = w
+     * so the GPU's normal perspective divide recovers ndcX/ndcY at each
+     * vertex exactly (screen position unchanged) while interpolating
+     * everything else -- tc included -- with real 1/w weighting. */
+    projf.m[0][0] = wScale;
+    projf.m[1][1] = wScale;
+    projf.m[2][2] = 0.0f;
+    projf.m[2][3] = wScale;
+    projf.m[3][3] = 0.0f;
+    guMtxF2L(projf.m, proj);
     guMtxIdent(mv);
 
     for (i = 0; i < nverts; i++)
     {
-        vtx[i].v.ob[0] = (s16) (v[i]->unk28 * 0.25f);
-        vtx[i].v.ob[1] = (s16) (v[i]->unk2c * 0.25f);
-        vtx[i].v.ob[2] = (s16) (v[i]->unk30 * 0.25f);
+        f32 screenX = v[i]->unk28 * 0.25f;
+        f32 screenY = v[i]->unk2c * 0.25f;
+        f32 ndcX = 2.0f * ((screenX - l) / (r - l)) - 1.0f;
+        f32 ndcY = 1.0f - 2.0f * ((screenY - t) / (b - t));
+        f32 wv = v[i]->unk0c / wScale;
+
+        vtx[i].v.ob[0] = (s16) (ndcX * wv);
+        vtx[i].v.ob[1] = (s16) (ndcY * wv);
+        vtx[i].v.ob[2] = (s16) wv;
         vtx[i].v.flag  = 0;
         vtx[i].v.tc[0] = (s16) ((v[i]->unk20 - foldS) * 32.0f);
         vtx[i].v.tc[1] = (s16) ((v[i]->unk24 - foldT) * 32.0f);
