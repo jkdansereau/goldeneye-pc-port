@@ -92,6 +92,44 @@ Then hand the agent the *findings*, not just the problem.
   inverted here — the hard part is identifying the implicit hardware/ABI
   contract the already-readable C depends on.
 
+## 6. Keep PR/git-history noise low
+
+A session produces a lot of small, independently-verifiable units of work —
+one Dxx row, one docs pass, one mechanical fix. Left unmanaged that turns
+into a pile of small open PRs that's harder to review than the work
+justifies. Rules:
+
+- **Squash-merge single-purpose and docs-only PRs.** The repo has squash
+  merge enabled; use it (`gh pr merge --squash --delete-branch`) for anything
+  whose in-branch commit history (iteration, probe-add, probe-strip) isn't
+  itself useful to keep — which is most PRs. Reserve a plain merge commit for
+  a PR whose individual commits are each a distinct, reviewable unit someone
+  might want to `git revert` independently (e.g. this session's PR #50: a
+  fix commit + a separate analysis-only commit).
+- **Batch same-session, same-flavor docs updates into one PR/branch**
+  instead of opening a new PR per finding row. A runtime re-check that
+  updates one `findings.md` row (like #48) doesn't need its own PR if
+  another docs-only branch is already open in the same session — fold it in.
+  Only split into separate PRs when the pieces have genuinely different
+  review/merge timing (e.g. one needs a human playtest, the other doesn't).
+- **A branch takes only the change it's named for.** Don't let unrelated
+  housekeeping (a stray gitignore fix, a config tweak) ride along on an
+  active feature/fix branch just because it's the one checked out — cut a
+  separate branch, even for a one-line change.
+- **Stacked PRs declare the dependency in the title/body** ("step 2 of N,
+  step 1 is #N") and get rebased/merged in order promptly — don't let a
+  later step sit open so long the earlier step's content drifts under it.
+- **Triage the open-PR list at least once a session**, ordered by
+  time-to-close (docs-only and non-draft first, human-playtest-gated last).
+  A PR idle long enough that `main` has moved past the finding rows it
+  touches is **stale, not just old** — check for real textual conflict
+  (`git merge-tree`), not just calendar age. If `main` already has more
+  current information than the PR (a bug the PR still lists `OPEN` that's
+  since been fixed and verified), **close it rather than force a merge or
+  spend a cycle rebasing it** — re-derive only whatever part of its content
+  is still true as a fresh, small PR against current `main`. Merging stale
+  content back over newer information is a regression, not a save.
+
 ## Investigation-brief template
 
 ```
