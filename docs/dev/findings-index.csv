@@ -31,6 +31,7 @@ D192,OPEN,Front-end mission/level-select grid pointer still can't reach the oute
 D221,OPEN,SELECT FILE screen: the mouse hit-box for a file slot is vertically offset from its visible box —,"OPEN — observed, not investigated."
 D222,OPEN,High Video.FovScale breaks culling —,"OPEN — root cause known, not fixed."
 D223,OPEN,QoL ask: mouse-wheel weapon cycling should be directional like a normal PC shooter —,"OPEN — root cause + fix mechanism known, not implemented."
+D224,OPEN,"QoL gap (M-87, from a PD-PC-port survey):","OPEN — not implemented, straightforward."
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
 D201,FIXED,"src/libultra/audio/bnkf.c bank/instrument/sound/wavetable relocation offsets were s32, truncating the real 64-bit base pointer.",FIXED (src/libultra/audio/bnkf.c) —
