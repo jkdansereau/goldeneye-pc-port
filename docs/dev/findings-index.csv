@@ -49,7 +49,7 @@ D168,FIXED,GE_PCDUMP / F12 PPM captures were vertically flipped —,FIXED (port/
 D169,FIXED,Front-end mouse pointer can't reach the outer cells of the mission/level-select grid —,"FIXED (M-33, port/src/input.c, port-only, no #ifdef PORT)."
 D178,FIXED,Pre-mission briefing screen:,FIXED (M-36) — high confidence
 D175,?,In-game stutter / brief hang during normal play (user QA report):,"Observed, not investigated"
-D176,PARTIAL,"Surface exterior renders wrong (-level_36), two independent defects.","(a) root-caused, fix owed / (b) open."
+D176,FIXED,"Surface exterior renders wrong (-level_36), two independent defects.","(a) ""scrolls too fast/tiles too visibly"" ROOT-CAUSED + FIXED (see ""D176(a) —"
 D177,FIXED,Ladders non-functional —,FIXED (M-36) — high confidence; interactive climb test owed
 D172,FIXED,"Bullet-impact / blood / spark particles render magenta or cyan instead of dark red (M-82, ROOT CAUSE FOUND + FIXED).",FIXED (port/fast3d/gfx_pc.cpp gfx_lod_tile_offset):
 D174,?,"""No blood effect"" (user QA report).",Observed; first step = BUNKER1 firefight with regenerated sidecars
