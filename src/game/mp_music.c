@@ -37,9 +37,23 @@ s32 mission_state = MISSION_STATE_0;
 
 
 
+/**
+ * D6-class bug (docs/porting-notes.md): missing "return" on a non-void
+ * function whose body is a single tail call. The N64/IDO build happened to
+ * leave get_mTrack2Vol()'s result in $v0, so the ASM ground truth "works" by
+ * accident; GCC at -O2 (the PC release build) does not guarantee that, and
+ * every caller of this function (set_missionstate()'s MISSION_STATE_1/4
+ * transitions -- i.e. every in-level music-track-start trigger) fed
+ * musicTrack1ApplySeqpVol()/musicTrack3ApplySeqpVol() a garbage/zero volume,
+ * silencing level music while leaving note-on processing intact (D77).
+ */
 u16 sub_GAME_7F0C0BF0(void)
 {
+#ifdef AVOID_UB
+    return get_mTrack2Vol();
+#else
     get_mTrack2Vol();
+#endif
 }
 
 u16 sub_GAME_7F0C0C10(void)

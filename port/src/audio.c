@@ -16,6 +16,7 @@
 #include "system.h"
 #include "config.h"
 #include "audio.h"
+#include "audiotrace.h"
 
 static SDL_AudioDeviceID dev = 0;
 
@@ -249,6 +250,35 @@ void audioSetNextBuffer(const s16 *buf, u32 len)
     if (s_audioDumpFile && buf && len) {
         fwrite(buf, 1, len, s_audioDumpFile);
         s_audioDumpBytesWritten += len;
+    }
+
+    /* D77 diag (temporary): GE_AUDIOTRACE=1 already logs csplayer.c
+     * [MUSICNOTE] note-on events into audiotrace.log. That proves the
+     * level-music trigger fires and posts notes to the synth, but says
+     * nothing about whether those notes actually reach the final mixed
+     * buffer handed to the SDL device below. Interleave a cheap (~1/s)
+     * peak/RMS reading of *this* buffer into the SAME file/lock
+     * (geTracePrintf) so the two can be correlated by line order without
+     * per-line timestamps. Remove once D77 closes. */
+    if (buf && len && getenv("GE_AUDIOTRACE")) {
+        static u64 lastReportUs = 0;
+        u64 now = sysGetMicroseconds();
+        if (now - lastReportUs >= 1000000ull) {
+            const s16 *s = buf;
+            u32 n = len / 2u;
+            s32 peak = 0;
+            s64 sumsq = 0;
+            for (u32 i = 0; i < n; i++) {
+                s32 v = s[i];
+                if (v < 0) v = -v;
+                if (v > peak) peak = v;
+                sumsq += (s64)s[i] * (s64)s[i];
+            }
+            double rms = n ? __builtin_sqrt((double)sumsq / (double)n) : 0.0;
+            geTracePrintf("audiotrace.log", "[AUDIOLVL] peak=%d rms=%.1f n=%u\n",
+                          (int)peak, rms, (unsigned)n);
+            lastReportUs = now;
+        }
     }
     if (dev && buf && len) {
         if (audioGetSamplesBuffered() < queueLimit) {

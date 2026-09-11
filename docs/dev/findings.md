@@ -380,7 +380,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D59–D68 | intro render: blood-RLE clobber, DMA validate, OSMesgQueue, HEADS/BODIES sentinels, romCopy width, image_entry, Globalimagetable BE→LE | resolved |
 | D69 · D78–D84 | stage load (`load_bg_file`): bg/stan offline sidecar (`d69_emit.py`) + StandTile/bg_room_data ABI | resolved |
 | D70–D74 | intro-logo pixels: C-array bswap, UV path, sinf/cosf `DVAL()`, texture-import truncation | resolved |
-| D75 · D77 | front-end 3D model transforms · audio | OPEN (parked). **M-32 triage (see §F "D75 ADDENDUM"): (a) D73-scope-gap RULED OUT (gu tree fully endian-clean). Splits in two: Bug 1 = logo/photo transform = the parked D114/D116 fast3d viewport mirror (not game code). Bug 2 = absent animated models = category (b). M-32b runtime probe (`GE_D75=1`): `render_pos`/`dynAllocate`-arena hypothesis RULED OUT (render_pos valid + fresh each frame), model instances valid (nMtx 21/1), zero fast3d DL warnings — failure is downstream in `drawjointlist`/`dotube` vtx/node-DL resolution or an off-screen `basemtx`. Needs a drawjointlist-level probe. M-33 (upright captures, D168 fixed): "Bug 1 = D114/D116 mirror" retracted; **gun-barrel Bond RENDERS fine** (walk + fire, upright) — the "absent" reports were the flipped capture; **Nintendo logo genuinely broken** (renders as 2 white blobs, shifted left — a real `logoinst` transform/geometry bug, not a flip); cast roll not re-captured. See §F "D75 Bug 2 — M-33 UPDATE".** |
+| D75 | front-end 3D model transforms (D77 audio split out below — resolved, unrelated cause) | OPEN (parked). **M-32 triage (see §F "D75 ADDENDUM"): (a) D73-scope-gap RULED OUT (gu tree fully endian-clean). Splits in two: Bug 1 = logo/photo transform = the parked D114/D116 fast3d viewport mirror (not game code). Bug 2 = absent animated models = category (b). M-32b runtime probe (`GE_D75=1`): `render_pos`/`dynAllocate`-arena hypothesis RULED OUT (render_pos valid + fresh each frame), model instances valid (nMtx 21/1), zero fast3d DL warnings — failure is downstream in `drawjointlist`/`dotube` vtx/node-DL resolution or an off-screen `basemtx`. Needs a drawjointlist-level probe. M-33 (upright captures, D168 fixed): "Bug 1 = D114/D116 mirror" retracted; **gun-barrel Bond RENDERS fine** (walk + fire, upright) — the "absent" reports were the flipped capture; **Nintendo logo genuinely broken** (renders as 2 white blobs, shifted left — a real `logoinst` transform/geometry bug, not a flip); cast roll not re-captured. See §F "D75 Bug 2 — M-33 UPDATE".** |
 | D76 · D164 | disclaimer/legal screen only draws line 1 — **root-caused (M-31)**: `constructor_menu00_legalscreen` text loop bounds `legal_text_end` on `&legalscreen_MRD`, a linker-adjacency assumption that mingw breaks (`legalscreen_MRD` links 0x60 *before* `legalpage_text_array`) → `do{}while(ptr<end)` runs once. NOT an image-table bug (screen references zero `sImageTableEntry`). | fix proposed (not applied — `front.c` owned by another agent) |
 | D159 | front-end wallet-Bond photo "interlaced"/combed (RC1 / D149) — `texSwapAltRowBytes` odd-row 8-byte pre-swap (N64 RDP odd-line TMEM XOR compensation) not reversed by fast3d | FIXED (`#ifdef PORT` no-op the swap in `image.c`) |
 | D161 | Depot (`-level_30`) ceiling = bright-blue speckle + radial rays (B2). A CI8 tile drawn with `gsDPSetTextureLUT(G_TT_NONE)` was decoded against the stale `rdp.palette` → garbage. Fix: `#ifdef`-free narrow route CI→I when `palette_fmt == G_TT_NONE` in `gfx_pc.cpp import_texture()`. | FIXED (`port/fast3d/gfx_pc.cpp`) |
@@ -2365,16 +2365,87 @@ The image-table/D68 hypothesis is **wrong**: the legal screen (`constructor_menu
 D75 family, parked). The "only 2 lines render" is a **linker-adjacency bug** in the text loop — see
 **D164**.
 
-**D77 (OPEN: audio — music runs in code but no audible output on PC).**
-Intro music is processed without fault, but **nothing reaches the PC speakers.** This is
-distinct from the earlier audio work: D54/D54b only stopped the audio-thread SIGSEGVs
-(`__getTrackByte`, `alLoadParam`); they do not imply the mixed output is routed to a device.
-Per §6 Audio the intended path is libaudio (CPU synth) → PD's `audio.c` (SDL device) +
-`mixer.c`; the likely gap is that the SDL audio device / mixer queue is never opened or fed —
-synthesis runs but the AI-DMA→device handoff never happens. Files to check: `port/src/audio.c`,
-`port/src/mixer.c`, `src/audi.c` (`OUTPUT_RATE`), and the AI shim in `port/src/libultra.c`.
-Verify: confirm an SDL audio device is opened and the mix buffer is written/pushed; check
-`OUTPUT_RATE` match (PD = 22020 Hz stereo s16) and that the AI-DMA shim feeds it.
+**D77 (RESOLVED — in-level background music was silent; the general audio
+pipeline was never at fault).** Original framing ("nothing reaches the PC
+speakers") is **stale/wrong** — superseded by the M-78 audio work
+(D198–D208): the SDL device opens, the software mixer runs, and menu/intro
+music is audibly correct. The actual, narrower symptom (still present until
+this fix): **in-level** background music never plays, while the SAME
+`musicTrack1Play()` API called directly from the front end (menu/intro)
+worked fine.
+
+**Root cause: D6-class missing-`return` bug (see `docs/porting-notes.md`
+§D6), NOT a mixer/trigger-plumbing gap.** `sub_GAME_7F0C0BF0()`
+(`src/game/mp_music.c`) is a one-line wrapper `{ get_mTrack2Vol(); }` with no
+`return` — on N64/IDO the value happened to already sit in `$v0`; at the PC
+release build's `-O2` the return register is genuinely undefined. Every
+in-level music trigger goes through `set_missionstate()`'s
+MISSION_STATE_1/4 cases (the ONLY call path that starts a level's
+background track — `lvlStageLoad()` → `sub_GAME_7F0C11FC()` →
+`set_missionstate()`), which calls
+`musicTrack1ApplySeqpVol(sub_GAME_7F0C0BF0())` /
+`musicTrack3ApplySeqpVol(sub_GAME_7F0C0C10())` immediately before
+`musicTrack1Play()`/`musicTrack3Play()`. The front-end/menu music
+(`front.c`'s several direct `musicTrack1Play(M_INTRO/M_FOLDERS/...)` calls)
+never goes through `set_missionstate()` at all, which is exactly why it
+worked while level music didn't — different call path, not a different
+pipeline. With the garbage/zero volume applied, `musicTrack1Play()`'s own
+tail call `musicTrack1ApplySeqpVol(musicTrack1GetVolume())` re-applies the
+same zeroed value, so the whole track plays at (effectively) zero gain for
+its entire duration.
+
+**Why this was hard to see from a note-level trace alone:** the compact-seq
+player keeps working correctly downstream of the bug — `csplayer.c`'s
+existing `GE_AUDIOTRACE` `[MUSICNOTE]` probe showed ~170-250 real-looking
+note-on events (sane key/velocity) firing continuously through a whole
+BUNKER1 capture. The bug is a *track/channel-level gain* fed once per
+mission-state transition, not a per-note field, so a per-note trace looks
+perfectly healthy; only a trace of the actual mixed output distinguishes
+"notes are being processed" from "notes are audible".
+
+**Verification (this session, `chore/golden-bunker1-rebaseline-d215`
+worktree, `-level_09`/BUNKER1):**
+- Added a temporary, cheap (~1/s, gated on `GE_AUDIOTRACE`) `[AUDIOLVL]`
+  peak/RMS probe of the exact buffer `audioSetNextBuffer()` hands to SDL
+  (`port/src/audio.c`), writing into the SAME `audiotrace.log` (same
+  `geTracePrintf` lock) as the existing `[MUSICNOTE]` line so the two
+  interleave in true call order without needing per-line timestamps.
+- **Before the fix:** 173 `[MUSICNOTE]` events over a 28 s capture; **every
+  single `[AUDIOLVL]` reading (29 samples spanning the full run) read
+  `peak=0 rms=0.0`** — literally zero output reaches the mixed buffer for
+  the entire run despite continuous note-on activity.
+- **After the fix** (`return` added under `#ifdef AVOID_UB`, `#else` keeps
+  the N64 body verbatim): same 28 s BUNKER1 capture, 173 `[MUSICNOTE]`
+  events, and **every `[AUDIOLVL]` reading from the first note onward is
+  strongly non-zero and sustained** (`peak` ~2700–10300, `rms` ~800–2900,
+  continuously, not brief bursts) — a categorical before/after difference,
+  not a marginal one.
+- `tools_pc/verify.sh bunker1`: **PASS**, `frames=3 worst_cell=0` — no
+  visual regression (this is a one-line audio-only fix; nothing touches
+  rendering).
+- Runtime audible confirmation (human ears on real hardware) is still owed
+  — the capture above proves samples reach the SDL queue with real
+  amplitude, which is the strongest evidence obtainable headless, but a
+  human should do a by-ear BUNKER1 pass to close this out completely.
+
+**Fix:** `src/game/mp_music.c`, `sub_GAME_7F0C0BF0()` — `return
+get_mTrack2Vol();` under `#ifdef AVOID_UB` (`#else` keeps the N64 body
+verbatim, matching the D187/D6 precedent). One line. No game-logic change
+(same value the N64 build always effectively returned); ABI/UB-class fix,
+not the D3x pointer-width family (no pointer/struct-layout involved here).
+
+**Probe left in the tree:** `port/src/audio.c`, the `[AUDIOLVL]` block,
+gated on `getenv("GE_AUDIOTRACE")` (same env var as the pre-existing
+`[MUSICNOTE]` probe in `csplayer.c`, not touched this session). Cheap
+(~1 peak/RMS scan per second of audio, only when the env var is set) — safe
+to leave for future audio work reusing the same trace file. Remove whenever
+`GE_AUDIOTRACE`'s other temporary probes are cleaned up.
+
+**Confidence: HIGH.** Root cause matches an already-catalogued bug class
+(D6/D187) exactly; the fix is a single `return`; and the before/after
+`[AUDIOLVL]` measurement is a direct, categorical (zero → sustained
+non-zero) reading of the exact buffer handed to the audio device, not an
+inference from upstream state.
 
 **Cross-cutting (Q1 — shared blocker?):** before ordering D75 vs D77, spend one check on whether
 any single root cause touches both audio and rendering. Current evidence says **independent**

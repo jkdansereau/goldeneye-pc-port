@@ -702,10 +702,28 @@ silently disappears.
   Invisible under `-Og`; vanished the day release switched to `-O2`
   (`34885535`). Fix: `return` the tail call under `#ifdef AVOID_UB`
   (`#else` keeps the N64 body verbatim).
-- The one currently flagged in-source is `grep -rn "missing a \"return\"" src/`
-  (just `gunfire.c` today). Others may exist without the banner — suspect this
-  class whenever an `-O2` build drops a small on-screen element that an `-Og`
-  build shows. One-line `#ifdef AVOID_UB` fix each.
+- Instance: **D77** — `sub_GAME_7F0C0BF0()` (`src/game/mp_music.c`), a
+  one-line wrapper around `get_mTrack2Vol()` with no `return`. Every
+  in-level music trigger (`set_missionstate()`'s MISSION_STATE_1/4 cases —
+  i.e. the only path that starts a level's background track; the front-end
+  menu/intro music bypasses this and calls `musicTrack1Play()` directly,
+  which is why menu music worked while level music didn't) feeds this
+  garbage/zero return straight into `musicTrack1ApplySeqpVol()` /
+  `musicTrack3ApplySeqpVol()`. The result isn't a missing on-screen
+  primitive but a **silent audio channel that still runs**: the compact-seq
+  player keeps processing note-on events (visible in a `GE_AUDIOTRACE`
+  `[MUSICNOTE]` capture with normal-looking key/velocity data) but every
+  note's synthesized volume is scaled by the zeroed track volume, so nothing
+  reaches the mixed output. A per-note trace alone looks completely healthy
+  — the tell is a *track/channel-level* gain feed with a missing `return`
+  upstream. This class isn't limited to display-list cursors; audit any
+  `-O2`-only "quietly broken but not crashing" symptom for the same shape.
+  Fix: `return` under `#ifdef AVOID_UB` (`#else` keeps the N64 body).
+- The one flagged in-source with an explicit comment is
+  `grep -rn "missing a \"return\"" src/` (`gunfire.c`). Others (like D77's)
+  exist without the banner — suspect this class whenever an `-O2` build
+  silently drops or mutes a small on-screen/audio element that an `-Og`
+  build shows/plays correctly. One-line `#ifdef AVOID_UB` fix each.
 - Not caught headless by a symbol/link check or a default-config framediff
   (the missing primitive is often small). Needs an `-O2` build + an eyeball
   or a targeted crop diff.
