@@ -8775,3 +8775,22 @@ static-camera test needed to confirm before spending a build cycle on it.
 **Housekeeping:** capture files (`ppm/`, a `ppm2/` scratch dir, and the run
 logs) were cleaned up after pulling the one evidence screenshot; nothing
 else from this session's captures is left in the tree.
+
+**M-94 addendum — static-camera confirmation, same session.** `-level_22`'s
+fixed level-title cutscene ("Statue Park, St. Petersburg") holds a genuinely
+static camera (verified: the foreground statue/pedestal region differs by
+only mean ~3.0/255 between frames 30 and 90 — lighting/AA noise, no
+detectable pan/zoom) while the sky region above it differs by mean ~15.9/255
+over the same two frames. **This confirms the sky animates over time,
+independent of camera motion** — it is not merely a static geometric crease
+that only *looks* like motion under a moving camera. That said, the diff
+magnitude was non-monotonic across the sampled frames (30→45 measured larger
+than 30→90), which doesn't cleanly fit a simple constant-rate linear scroll
+either — worth another look with a denser, longer static-camera sample
+before concluding *how* it's animating. Does not distinguish between "one
+sky animating uniformly past a static quantization seam" (this session's
+leading hypothesis) and "two separately-animating regions" (the user's
+original read) — either is still consistent with a real per-frame diff in
+the sky region. Capture files cleaned up after taking these measurements;
+nothing added to `docs/img/bugs/` beyond the one screenshot already
+committed.
