@@ -156,6 +156,7 @@ static struct RDP {
     uint16_t palette[256];
     const uint8_t* palette_addrs[2];
     uint32_t palette_fmt;
+    uint32_t palette_hash; /* D217: FNV-1a of palette[], refreshed in gfx_dp_load_tlut */
     struct {
         const uint8_t* addr;
         uint8_t siz;
@@ -988,9 +989,9 @@ static void import_texture(int i, int tile, bool importReplacement) {
     TextureCacheKey key;
     if (fmt == G_IM_FMT_CI) {
         key = { orig_addr, { rdp.palette_addrs[0], rdp.palette_addrs[1] }, fmt, siz, palette_index,
-                loaded_texture.size_bytes };
+                loaded_texture.size_bytes, rdp.palette_hash }; // D217: key on palette content
     } else {
-        key = { orig_addr, {}, fmt, siz, palette_index, loaded_texture.size_bytes };
+        key = { orig_addr, {}, fmt, siz, palette_index, loaded_texture.size_bytes, 0u };
     }
 
     if (gfx_texture_cache_lookup(i, key)) {
@@ -2231,6 +2232,23 @@ static void gfx_dp_load_tlut(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     uint16_t *dst = rdp.palette + palofs;
     for (uint32_t i = 0; i < count; ++i) {
         *dst++ = PD_BE16(*src++);
+    }
+
+    /* D217: refresh the palette-content hash that keys the CI texture cache.
+     * GE reissues gDPLoadTLUT from a repeated scratch source address with
+     * different content between weapon / character model materials; the CI
+     * TextureCacheKey keys on the source *address*, so without a content hash a
+     * later material can take a stale cache HIT decoded against an earlier
+     * palette. gDPLoadTLUT is rare relative to draws, so hashing the whole
+     * 512-byte table here keeps the per-texel path untouched. */
+    {
+        uint32_t h = 2166136261u;
+        const uint8_t *pb = (const uint8_t *)rdp.palette;
+        for (uint32_t k = 0; k < sizeof(rdp.palette); ++k) {
+            h ^= pb[k];
+            h *= 16777619u;
+        }
+        rdp.palette_hash = h;
     }
 
     rdp.textures_changed[0] = rdp.textures_changed[1] = true;
