@@ -7,7 +7,7 @@ D43-D50,RESOLVED,"model-file loading → offline sidecar ""Plan B"" (d43_emit.py
 D51-D58,RESOLVED,"font pixeldata, osGetCount tick rate, model RW pools, cseq BE header, synth slots, RLE menu bg, watch raw offsets, gun-barrel DL",resolved
 D59-D68,RESOLVED,"intro render: blood-RLE clobber, DMA validate, OSMesgQueue, HEADS/BODIES sentinels, romCopy width, image_entry, Globalimagetable BE→LE",resolved
 D70-D74,RESOLVED,"intro-logo pixels: C-array bswap, UV path, sinf/cosf DVAL(), texture-import truncation",resolved
-D75 · D77,OPEN,front-end 3D model transforms · audio,"OPEN (parked). M-32 triage (see §F ""D75 ADDENDUM""):"
+D75,OPEN,front-end 3D model transforms (D77 audio split out below —,"OPEN (parked). M-32 triage (see §F ""D75 ADDENDUM""):"
 D76 · D164,PROPOSED,disclaimer/legal screen only draws line 1 —,fix proposed (not applied —
 D159,FIXED,"front-end wallet-Bond photo ""interlaced""/combed (RC1 / D149) —",FIXED (#ifdef PORT no-op the swap in image.c)
 D161,FIXED,Depot (-level_30) ceiling = bright-blue speckle + radial rays (B2).,FIXED (port/fast3d/gfx_pc.cpp)
