@@ -1726,6 +1726,20 @@ static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
         vtx[i].v.cn[1] = (u8) v[i]->g;
         vtx[i].v.cn[2] = (u8) v[i]->b;
         vtx[i].v.cn[3] = (u8) v[i]->a;
+
+        /* D227 (M-100) probe: dumps the per-vertex S/T/w actually handed to
+         * the rasteriser. This is what proved the seam is s16 tc overflow --
+         * one sky quad spans ~30,000 texels in S and T, but tc is S10.5, so
+         * (S - foldS) * 32 only holds +/-1024 texels. Same env-gate style as
+         * the GE_D176 probes above. */
+        if (getenv("GE_D227V")) {
+            static int n = 0;
+            if (n++ < 200)
+                fprintf(stderr, "D227V poly nv=%d i=%d w=%.1f 1/w=%.6g sx=%.1f sy=%.1f S=%.1f T=%.1f\n",
+                        nverts, i, (double) v[i]->unk0c, (double) v[i]->unk34,
+                        (double) screenX, (double) screenY,
+                        (double) v[i]->unk20, (double) v[i]->unk24);
+        }
     }
 
     gSPMatrix(gdl++, osVirtualToPhysical(proj), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
