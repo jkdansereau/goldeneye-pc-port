@@ -439,7 +439,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D214 | **Keyboard rebinding — `[Input.Bind]` config section (M-83, port-only, PD parity, Phase 4 debt).** `port/src/input.c` gains 12 gameplay actions (Forward/Back/StrafeLeft/StrafeRight/TurnLeft/TurnRight/Fire/Aim/Action/Cancel/LeanLeft/Start), each a comma-separated list of up to 4 SDL scancode names (`Input.Bind.Forward = W,Up` …). `inputRebuildBinds()` (called from `inputInit()`, after `configLoad()`) parses them via `SDL_GetScancodeFromName`; unknown names log a warning and are skipped. The old hardcoded `keyDown(ks, SDL_SCANCODE_*)` block in `inputComputePad` is replaced by `actHeld(ks, IA_*)`. Mouse buttons (fire = LMB, aim = RMB) stay hardwired; the mouse-wheel weapon-cycle A-pulse is untouched. **Defaults reproduce the previous FPS layout exactly — verified: all 20 default key names round-trip to the identical `SDL_Scancode` the old code used (`SDL_GetScancodeFromName` test, 0 mismatches).** Config-file only (no in-overlay text entry — matches PD, whose rebinding is also file-driven); a fresh `ge007.ini` gets the full `[Input.Bind]` block with the defaults visible. | **PARTIAL — M-84: code PASS (alt/ctrl); one doc-only fix.** LANDED, port-only, no `#ifdef PORT`; build clean. One doc bug fixed (no code change): `config.c` groups keys by the substring *before the last `.`*, so the section header is **`[Input.Bind]`**, not `[Bind]` — earlier finding/commit/QOL text was wrong. Working syntax: put `Fire = Left Alt` under `[Input.Bind]`, or write a fully-qualified `Input.Bind.Fire = Left Alt` line anywhere (`config.c:307`). Separately: the pause→**watch menu** does not wire Esc→back (still Enter to open/close/back) — pre-existing, `options.c`, minor. |
 | D215 | **1P weapon viewmodel never drew in-level — `gunRenderFirstPersonGunModels` builds its `ModelRenderData` from a reinterpret across separately-declared adjacent globals that only works on N64 (M-83, D3x/ABI class; retires VIEWMODEL-RESEARCH.md).** The N64 line `renderdata = *(ModelRenderData *)&D_80035CC0;` (`gunfire.c`) casts the lone `u32 D_80035CC0 = 0;` to a whole `ModelRenderData` and reads on into the next declared global, `u32 D_80035CC4[] = {1, 3, 0, 0, …}` (`gun.c`) — yielding `{ basemtx=0, zbufferenabled=1, flags=3, rest=0 }` **only because the N64 linker lays the two globals out contiguously in declaration order and pointers are 4 B**. On x86-64 it breaks twice: `ModelRenderData`'s three pointer members (`basemtx`/`gdl`/`mtxlist`) widen 4→8 B so `flags` is no longer at struct offset 8, and C guarantees nothing about the two globals' relative placement. Measured (`GE_DVM=1`, BUNKER1): `renderdata.flags == 0`, so **every** weapon-model DL node was gated off at `modelRenderNodeGundl` (`(renderdata->flags & 1)`), and `subdraw()` for the weapon emitted just its `gSPSegment` — 1 gfx command instead of ~150. All three VIEWMODEL-RESEARCH.md ranked suspects were ruled out by the same probe first: `field_87F==1` (gate open), `RootNode` valid, `numRecords 22 < 192` (pool fine), node walk visits 24+ valid `DL`/`SWITCH`/`BSP` nodes. **Fix:** `#ifdef PORT` → set the three fields explicitly (`zbufferenabled=TRUE; flags=3;`), N64 line verbatim under `#else`. ABI/layout only, no logic change. | **FIXED (`src/game/gunfire.c`, `#ifdef PORT`).** Build clean. `GE_DVM=1` post-fix: `flags=0x3`, weapon `subdraw()` now emits **153** gfx commands (was 1). Regression sweep crash-free. `GE_DVM` gate+render probes left in, env-gated (cf. `GE_D193*`). **Owed:** one BUNKER1 eyeball that the gun model is actually visible + correctly posed (headless can't see pixels; the DL is now provably generated). The committed `bunker1` golden will need re-baselining — the gun now renders in-frame. |
 | D216 | **`Game.SkipIntro` — boot straight to the file-select menu (M-83, port + one `#ifdef PORT` game-code line, PD parity, Phase 4 quick win).** New `s32 portSkipIntro` (`port/src/video.c`, `configRegisterInt("Game.SkipIntro", 0, 1)`), read once in `src/game/lv.c` at `LEVELID_TITLE` stage load — in the `else` of the existing `GE_STARTMENU` `#ifdef PORT` block. When set it does what every intro stage's own `!is_first_time_on_main_menu` branch does (`front.c`): `is_first_time_on_main_menu = FALSE; prev_keypresses = TRUE; maybe_is_in_menu = TRUE; menu_update = MENU_FILE_SELECT;` — i.e. it reuses the game's own post-intro route rather than inventing one, so the legal screen + Nintendo/Rare/GoldenEye logo attract loop is skipped. `GE_STARTMENU` still wins when both are set. Default 0 ⇒ untouched. | **LANDED + VERIFIED this session.** Build clean. Headless: default boot frame 90 = the TWYCROSS classification screen (10% non-black), `SkipIntro=1` frame 90 = the **SELECT FILE menu** (folders/photos/cursor all render, 89% non-black), no crash across repeated boots. Screenshots captured + eyeballed. **Owed:** nothing critical — a human boot to confirm the menu is fully interactive (cursor moves, a save slot opens). |
-| D217 | **1P weapon viewmodel + third-person Bond model textures render garbled — wrong/stale palette on model-DL CI textures (M-84, user QA; surfaced by D215 now that the viewmodel draws).** BUNKER1/Facility: the PP7 viewmodel has yellow+blue scrambled texels and a solid **green** patch by the hammer; Bond's in-game **watch face** shows the same green mismatch; user reports the **third-person Bond world model** does this "sometimes" too. Signature matches the **D161 family** — a CI-format tile drawn without the expected TLUT state, so fast3d's `import_texture` indexes a **stale `rdp.palette`**. D161 fixed the explicit `G_TT_NONE` case; this looks like model DLs not emitting `gDPLoadTLUT` through the port path, or the palette segment not resolving for weapon/character geometry. **Not a D215 regression** — D215 only un-gated the DL. | **OPEN — root cause characterised (M-86); needs an upstream/asset-pipeline fix.** Headless repro: `-level_34` FACILITY ~frame 300–400, PP7 **grip = flat green block** + green ring at the barrel joint + green-cast hand; barrel/slide upper correct black. Also green on `-level_30` DEPOT. **Clean on `-level_09` BUNKER1** (A/B control — same PP7, identical DL). **Two separate defects found:** ① **Wrong palette bound (the visible green — upstream of fast3d).** The grip is a CI4 solid-fill of palette index 0. Green `(24,65,0)` == RGBA5551 `0x1A00` == `rdp.palette[0]` at grip-import time. The grip's `count=1` model `G_LOADTLUT` is fed **different source bytes per level** for the same tile: BUNKER `00 01`→`PD_BE16`→`0x0001` (black ✓), FACILITY `1a 00`→`0x1A00` (green ✗). fast3d byteswaps + stores faithfully (proven correct by BUNKER) — the wrong bytes *arrive* from the model-DL / segment-address path. Strong tell: every *larger* model TLUT has `raw[0]==raw[1]==0x0000` with real colour from index 2 ⇒ GE's model-TLUT payload likely carries a **4-byte (2-entry) leading zero pad**, OR the port's model-TLUT source pointer is **4 bytes / 2 entries too low** (then the `count=1` grip load reads the tail of the preceding CI blob — BUNKER lucky, FACILITY not; fits "widespread across levels + weapons"). Ruled out this session: not tail-overflow (index 0 is in-range; matches M-85 `GE_D217Z`), not the fast3d byteswap. **Next:** dump the grip TLUT `G_SETTIMG` target vs the ROM/`pcmodels` sidecar PP7-grip material bytes; confirm the 4-byte offset vs N64; fix in model-DL segment resolution or `tools_pc/d43_emit.py` blob placement (sidecar regen). ② **CI texture-cache collision (proven, real, separate; fix landed).** `gfx_texture_cache_lookup` (`gfx_pc.cpp:522`) keyed CI textures on `{addr, palette_addrs[0/1], palidx, size_bytes}` with **no palette-content check**; GE reissues `gDPLoadTLUT` from repeated scratch-arena addresses with different content, so a later material could take a stale HIT and sample another material's decoded palette. **Fix on branch `fix/d217-model-texture-palette` (commit `f6fc0399`):** FNV-1a hash of the 512-byte `rdp.palette` computed only in `gfx_dp_load_tlut()`, added to the CI cache key (`port/fast3d/gfx_pc.{cpp,h}`, fast3d-internal, no `#ifdef`). Cheap, cannot worsen a decode; **owes a full 21-level `verify.sh sweep`** before merge (touches every palettized world texture's import path — cache-churn risk only). Does **not** fix defect ①. Screenshots: session scratchpad `d217/`, `fac_gun_crop.png`. Cross-ref `docs/dev/GRAPHICS-BACKLOG.md`. **User playtest matrix (M-87, raw notes — not yet triaged):** DAM/PPK: watch still green; AK47 viewmodel has white (missing-texture) patches on the magazine + barrel. FACILITY: PPK garbled **green AND blue**; 3rd-person Bond world model shows greenness on level load-in; AK47 has "weird blue / glitched" textures. JUNGLE: M16 viewmodel is orange in spots. Confirms multi-weapon (PP7/AK47/M16), multi-color (green/blue/white/orange) — consistent with the upstream model-TLUT-source theory (different trailing garbage per weapon/material) rather than one single fixed offset. **Scope clarified (M-87):** not just Bond's 1P viewmodel / 3P world model — **NPC-held weapon models (other characters' guns in third person) show the same glitched-color/white-missing texture symptom.** So the defect is in the shared weapon-model-DL/TLUT path used by *any* character holding that weapon, not something specific to Bond's model or the 1P viewmodel rig — widens the likely fix surface (weapon model loading in general) beyond "Bond's gun." **M-87 clarification:** not uniform across levels — severity and glitch *type* both vary per level (some levels show it lightly, some not at all in a given session, and the specific wrong-color/missing pattern differs), consistent with the per-material trailing-garbage theory rather than one fixed global offset. |
+| D217 | **1P weapon viewmodel + third-person Bond model textures render garbled — wrong/stale palette on model-DL CI textures (M-84, user QA; surfaced by D215 now that the viewmodel draws).** BUNKER1/Facility: the PP7 viewmodel has yellow+blue scrambled texels and a solid **green** patch by the hammer; Bond's in-game **watch face** shows the same green mismatch; user reports the **third-person Bond world model** does this "sometimes" too. Signature matches the **D161 family** — a CI-format tile drawn without the expected TLUT state, so fast3d's `import_texture` indexes a **stale `rdp.palette`**. D161 fixed the explicit `G_TT_NONE` case; this looks like model DLs not emitting `gDPLoadTLUT` through the port path, or the palette segment not resolving for weapon/character geometry. **Not a D215 regression** — D215 only un-gated the DL. | **OPEN — root cause characterised (M-86); needs an upstream/asset-pipeline fix.** Headless repro: `-level_34` FACILITY ~frame 300–400, PP7 **grip = flat green block** + green ring at the barrel joint + green-cast hand; barrel/slide upper correct black. Also green on `-level_30` DEPOT. **Clean on `-level_09` BUNKER1** (A/B control — same PP7, identical DL). **Two separate defects found:** ① **Wrong palette bound (the visible green — upstream of fast3d).** The grip is a CI4 solid-fill of palette index 0. Green `(24,65,0)` == RGBA5551 `0x1A00` == `rdp.palette[0]` at grip-import time. The grip's `count=1` model `G_LOADTLUT` is fed **different source bytes per level** for the same tile: BUNKER `00 01`→`PD_BE16`→`0x0001` (black ✓), FACILITY `1a 00`→`0x1A00` (green ✗). fast3d byteswaps + stores faithfully (proven correct by BUNKER) — the wrong bytes *arrive* from the model-DL / segment-address path. Strong tell: every *larger* model TLUT has `raw[0]==raw[1]==0x0000` with real colour from index 2 ⇒ GE's model-TLUT payload likely carries a **4-byte (2-entry) leading zero pad**, OR the port's model-TLUT source pointer is **4 bytes / 2 entries too low** (then the `count=1` grip load reads the tail of the preceding CI blob — BUNKER lucky, FACILITY not; fits "widespread across levels + weapons"). Ruled out this session: not tail-overflow (index 0 is in-range; matches M-85 `GE_D217Z`), not the fast3d byteswap. **Next:** dump the grip TLUT `G_SETTIMG` target vs the ROM/`pcmodels` sidecar PP7-grip material bytes; confirm the 4-byte offset vs N64; fix in model-DL segment resolution or `tools_pc/d43_emit.py` blob placement (sidecar regen). ② **CI texture-cache collision (proven, real, separate; fix landed).** `gfx_texture_cache_lookup` (`gfx_pc.cpp:522`) keyed CI textures on `{addr, palette_addrs[0/1], palidx, size_bytes}` with **no palette-content check**; GE reissues `gDPLoadTLUT` from repeated scratch-arena addresses with different content, so a later material could take a stale HIT and sample another material's decoded palette. **Fix on branch `fix/d217-model-texture-palette` (commit `f6fc0399`):** FNV-1a hash of the 512-byte `rdp.palette` computed only in `gfx_dp_load_tlut()`, added to the CI cache key (`port/fast3d/gfx_pc.{cpp,h}`, fast3d-internal, no `#ifdef`). Cheap, cannot worsen a decode; **owes a full 21-level `verify.sh sweep`** before merge (touches every palettized world texture's import path — cache-churn risk only). Does **not** fix defect ①. Screenshots: session scratchpad `d217/`, `fac_gun_crop.png`. Cross-ref `docs/dev/GRAPHICS-BACKLOG.md`. **User playtest matrix (M-87, raw notes — not yet triaged):** DAM/PPK: watch still green; AK47 viewmodel has white (missing-texture) patches on the magazine + barrel. FACILITY: PPK garbled **green AND blue**; 3rd-person Bond world model shows greenness on level load-in; AK47 has "weird blue / glitched" textures. JUNGLE: M16 viewmodel is orange in spots. Confirms multi-weapon (PP7/AK47/M16), multi-color (green/blue/white/orange) — consistent with the upstream model-TLUT-source theory (different trailing garbage per weapon/material) rather than one single fixed offset. **Scope clarified (M-87):** not just Bond's 1P viewmodel / 3P world model — **NPC-held weapon models (other characters' guns in third person) show the same glitched-color/white-missing texture symptom.** So the defect is in the shared weapon-model-DL/TLUT path used by *any* character holding that weapon, not something specific to Bond's model or the 1P viewmodel rig — widens the likely fix surface (weapon model loading in general) beyond "Bond's gun." **M-87 clarification:** not uniform across levels — severity and glitch *type* both vary per level (some levels show it lightly, some not at all in a given session, and the specific wrong-color/missing pattern differs), consistent with the per-material trailing-garbage theory rather than one fixed global offset. **M-88 update: defect ① is NOT a `tools_pc/d43_*.py` sidecar bug — the theory in this row is refuted; the model converter never touches texture/palette bytes at all.** Root cause narrowed to the runtime `texWriteLoadToTmemAddr`/`gfx_dp_load_tlut` TLUT-address path (`src/game/tex.c` + `port/fast3d/gfx_pc.cpp`, both out of this session's file scope). See full write-up: §H "D217 — M-88 defect ① root-cause narrowing". |
 | D218 | **Wide FOV exposes the per-level draw-distance / fog boundary — "blue artifacting" down long peripheral sightlines (M-84, user QA on the D211 FOV slider).** BUNKER→**Dam main tunnel** at `FovScale` ~150: geometry / backdrop past the level's fog-end distance shows at the widened frustum edges (blue = Dam's fog tint). Not a render bug — `fogLoadCurrentEnvironment` (`bgfog.c:305`) does `viSetZRange(Visibility.BlendMultiplier, Visibility.FarFog)`, so **`Visibility.FarFog` is both the far clip plane and the fog-saturation distance**; levels tune it for the stock ~60° FOV. | **Logged (M-84), fix proposed + parked.** Plan: `Video.DrawDistance` (percent, 100–400, default 100 ⇒ no-op) `#ifdef PORT` multiplier on `FarFog` at `bgfog.c:305` (+ the direct `arg0->Visibility.FarFog` reads just below, so fog stays consistent) plus `Video.DrawDistanceAutoFov` (0/1, default 1 — couples draw distance to `FovScale` unless `DrawDistance` is set explicitly). Clamp effective multiplier ≲2.5× (small znear ⇒ far-field z-fighting risk). **M-87: user confirms still occurring** at high FOV, and — reversing the earlier "not implemented by user request" — **now wants `Video.DrawDistance` implemented as a real QoL feature**, plus scope it to cover **LOD/detail-distance in general**, not just the fog/far-clip boundary this row root-caused. Open question for that broader ask: does GE have a *separate* geometry/object LOD-swap or draw-culling distance mechanism (distinct from `Visibility.FarFog`) worth exposing too, or is fog-distance the only meaningful "how far can you see" knob in this engine? Check for a per-object visibility-radius / simple-model-swap system before assuming `FarFog` is the whole story. |
 | D219 | **PPK explosions render purple on Dam (M-87, user QA, "not 3D but noting").** Effect-color defect, not a texture-decode one — likely the D172 particle-color family (`gfx_lod_tile_offset` / `G_CC_INTERFERENCE` channel-order class) recurring on a different particle type/weapon than the D172 fix covered, or a fresh instance of the same class. | **OPEN — observed, not investigated.** Next: `GE_PCDUMP`/`GE_TEXDUMP` a Dam PPK explosion; check whether it's the same `gfx_lod_tile_offset` tile-sampling defect D172 fixed for blood, on an explosion DL D172's fix didn't touch. |
 | D220 | **1P muzzle flash position shifts upward at higher `Video.FovScale` (M-87, user QA, Jungle/M16).** Likely shares D211's noted residual: the viewmodel draws through `c_perspfovy`/unscaled fovy while the world view is FovScale-scaled (`fr.c:737`), so a flash sprite anchored to viewmodel-space vs. screen-space math can drift as the two diverge more at higher scale. | **OPEN — observed, not investigated.** Next: find the muzzle-flash placement code (gun DL attach point vs. screen-space billboard), check what FOV/projection it uses vs. `frFovY`/`portFovScale`, reproduce headless with `FovScale` 100 vs 150 on Jungle M16. |
@@ -8335,3 +8335,163 @@ approaches 64, (2) a `[AUDIOTRACE] sndDeactivate: state=X` with no following
 the SFX event queue more often, or (cheaper, D202-family-consistent) a
 bounded self-heal in the double-buffer — if a slot has pointed at a
 non-playing state for > N ms, force-clear it.
+
+## D217 — M-88 defect ① root-cause narrowing: NOT the model sidecar; the runtime TLUT-address path (session dispatched to investigate a `tools_pc/d43_*.py` fix; investigation concludes the fix does not belong there)
+
+**Dispatch brief for this session** asked for a root-cause + fix of D217
+defect ① (wrong palette bytes arrive for model-DL CI textures) confined to
+`tools_pc/d43_*.py`, working theory: the model-DL/sidecar's embedded
+palette-source pointer is a fixed 4 bytes / 2 entries too low. **That theory
+is refuted** and the fix does not belong in the converter at all — see
+below. Per the brief's own instruction ("if your investigation concludes
+otherwise, stop and write up why instead of editing game code"), no code
+was changed; this is a write-up only.
+
+### Why `tools_pc/d43_emit.py` cannot be the site of this bug
+
+Traced the full model-texture reference chain from the ROM to the draw call:
+
+- A model's texture table (`ModelFileTextures[]`, the "texconfig" block
+  `d43_emit.py` emits at `8*NS .. 8*NS+12*NT`) stores each texture as a
+  **numeric `TextureID`** (`src/bondtypes.h:836-847`), not an embedded
+  pixel/palette blob. `d43_emit.py:508-516` passes this `u32` straight
+  through byte-order-swapped (BE→LE) — **the numeric value is never
+  remapped or altered**. Verified by reading the emit loop directly; there
+  is no code path in `d43_emit.py` that touches texture *content*.
+- `texLoadFromModelFileHeader` (`src/game/image.c:2522-2536`, decomp ground
+  truth) resolves each `TextureID < MAX_TEXTURES` via `texLoad()` against
+  the **global, per-game (not per-model, not per-level) image table**
+  (`Globalimagetable`). That table's BE→LE fixup lives in
+  `port/src/gimgfixup.c` (D68) — a `port/src/` runtime file, not a
+  `tools_pc/` offline converter. `tools_pc/d43_lutscan.py` (read-only
+  analysis script, confirmed by re-reading it end to end) independently
+  shows every model texture reference resolves through this same global
+  `imagelist.u.csv`-indexed table — there is no per-model or per-level
+  texture/palette blob for `G*`/`P*`/`C*` model files to have a "sidecar
+  offset" bug in.
+- Actual pixel+palette bytes are decoded **at runtime, once per level load**
+  by `texInflateZlib`/`texInflateNonZlib` (`src/game/image.c`). For the
+  zlib/CI-native path (`texInflateZlib:169-331`), the palette is decoded
+  from the bitstream (`texReadBits`, endian- and pointer-width-agnostic)
+  and **appended after the pixel data in the same `tex->data` allocation**
+  (lines 320-326), with `tex->unk0a = numcolours - 1` (`image.c:238`)
+  recording the palette's position. None of this is touched by any
+  `tools_pc/d43_*.py` script — it is pure runtime C, identical instructions
+  on both platforms.
+- The actual `G_LOADTLUT`-equivalent commands are **synthesized at runtime**
+  by `texWriteLoadToTmemAddr` (`src/game/tex.c:494-554`), which computes a
+  hardware-accurate (S,T)-style byte-offset split (`uls`/`ult`) into
+  `tex->data` using `tex->unk0a`, and issues them via the *same*
+  `gDPSetTextureImage(gdl++, tex->gbiformat, depth, 1, tex->data)` call used
+  for the pixel LOADBLOCK moments earlier (`tex.c:503` and `tex.c:519`) —
+  there is no separate "model-DL TLUT source pointer" for a converter to
+  get wrong; the address is a live pool pointer computed fresh every level
+  load, in game code, not ROM-serialized data.
+
+Conclusion: **the "4-byte / 2-entry leading pad" theory in the original
+D217 row does not have a mechanism** — nothing in the offline pipeline ever
+places a palette 4 bytes off from where the runtime decoder expects it,
+because the offline pipeline never places a palette at all for these
+textures.
+
+### What the runtime probe actually shows (empirical, this session)
+
+Built successfully in this worktree (`./build-pc.sh ntsc-final`, clean
+build, `data/` symlinked from the main checkout — see VERIFY below) and
+reproduced the exact byte values quoted in the original D217 row using the
+**existing, unmodified** `GE_TEXDUMP=1` env probe already in
+`port/fast3d/gfx_pc.cpp:1066-1075` (no code changes, read-only env-gated
+diagnostic that ships in the tree):
+
+```
+BUNKER1  (-level_09,  GE_PCDUMP=200-440:120):
+  GE_TEXI[125] fmt=2 siz=0 palfmt=32768 size=8 tile=1x1 pal[0..3]=0001 18c7 18c9 2107
+  GE_TEXI[185] fmt=2 siz=0 palfmt=32768 size=8 tile=1x1 pal[0..3]=0001 0800 0840 0842
+
+FACILITY (-level_34,  GE_PCDUMP=300-400:20):
+  GE_TEXI[157] fmt=2 siz=0 palfmt=32768 size=8 tile=1x1 pal[0..3]=1a00 0000 0001 0843
+```
+
+`fmt=2 siz=0` = CI4, `tile=1x1` = a flat single-texel fill (matches "grip =
+solid colour block"), `pal[0]=0001` on BUNKER1 (black, matches the row's
+claim exactly) vs `pal[0]=1a00` on FACILITY (matches the row's claimed
+green `0x1A00` exactly, byte-for-byte). This independently confirms the
+symptom is real and reproducible with zero code changes — good news for
+whoever picks up the actual fix.
+
+**Where the bug most likely actually lives (not verified further — out of
+this session's scope to touch):** `port/fast3d/gfx_pc.cpp:2202-2237`
+(`gfx_dp_load_tlut`) computes the palette source address as
+`rdp.texture_to_load.addr + pitch*ult + uls` where
+`pitch = rdp.texture_to_load.width + 1`, and `rdp.texture_to_load.width`
+comes from the immediately preceding `gDPSetTextureImage` call. GE's
+`texWriteLoadToTmemAddr` (`src/game/tex.c:503,519`) always issues that
+`SetTextureImage` with a **literal width argument of `1`** regardless of
+the texture's real dimensions — real N64 hardware LOADTLUT addressing uses
+this "width" field as a DRAM line-stride for the S,T→byte-offset
+computation, so fast3d's software model of that computation is only as
+good as its handling of the `width=1` special case for a texture whose
+real pixel-data length (`len`, hence the palette's real starting byte) can
+be much larger than what a `pitch=2` u16-stride implies. This is consistent
+with the finding row's "different bytes per level for the same tile" —
+if this pitch/offset math is wrong, the byte read for a `count=1` TLUT load
+would land in whatever the shared texpool arena happens to hold near
+(but not at) the intended 2-byte palette tail, which is exactly the
+level-dependent "reads adjacent garbage" signature already logged. This is
+a **hypothesis with strong circumstantial support, not a confirmed
+mechanism** — I did not instrument `gfx_dp_load_tlut` further because doing
+so would require editing `port/fast3d/gfx_pc.cpp`, explicitly off-limits
+for this dispatch.
+
+### Confidence
+
+- **High confidence** the bug is NOT in `tools_pc/d43_*.py` (structural
+  proof: the converter never sees texture/palette bytes for model-DL CI
+  textures; traced the complete reference chain from ROM to draw call).
+- **Medium confidence** the mechanism is the `gfx_dp_load_tlut` /
+  `texWriteLoadToTmemAddr` width=1/pitch interaction described above — this
+  is the most concrete remaining hypothesis but was not instrumented or
+  bisected this session (would require touching the off-limits file).
+- Re-affirms the M-86 finding that ② (the CI cache-key content-hash fix,
+  `fix/d217-model-texture-palette` / `f6fc0399`) is real, separate, and
+  unaffected by any of the above.
+
+### For whoever picks this up next
+
+A follow-up dispatch with `port/fast3d/gfx_pc.cpp` (specifically
+`gfx_dp_load_tlut`) and/or `src/game/tex.c` in scope (the latter under the
+narrow ABI-only exception if a genuine platform difference is found, or
+`#ifdef PORT` in `port/` if the fix is a fast3d-side hardware-model
+correction) is the natural next step. Suggested probe: temporarily log
+`rdp.texture_to_load.width`, `pitch`, `uls`, `ult`, and the resulting `base`
+pointer's offset from `tex->data` inside `gfx_dp_load_tlut` for the
+`tile=1x1`/`count=1` case on both BUNKER1 and FACILITY, and compare against
+what `texWriteLoadToTmemAddr`'s `len`/`tex->unk0a` actually were for that
+texture (a second probe point in `tex.c`, already has a `GE_D85TEX`
+env-gate precedent to extend). If `base` does not land exactly 2 bytes past
+the real end of the decoded pixel data, that confirms the pitch/width=1
+special case as the mechanism.
+
+### VERIFY — what was and wasn't completed this session
+
+- **Build:** clean (`./build-pc.sh ntsc-final` from MSYS2 MINGW64, this
+  worktree, `data/` symlinked read-only from the main checkout since this
+  worktree had none — no writes to the main checkout's `data/`).
+- **BUNKER1:** ran `tools_pc/verify.sh bunker1` — PASS, frames=3, no crash.
+  (Note: the golden-frame-stem comparison itself reports a pre-existing,
+  unrelated harness mismatch — "golden frame stems don't match --dump
+  window" — even though the requested and golden windows are numerically
+  identical (200-440:120); this looks like a `verify.sh`/`framediff.py`
+  stem-formatting bug, not a regression from this session's zero code
+  changes. Not investigated further — out of scope, no code was touched
+  either way, and `worst_cell=0` with no crash is the relevant signal here.)
+- **FACILITY:** ran the game directly (`GE_PCDUMP=300-400:20`,
+  `GE_TEXDUMP=1`) rather than through `verify.sh` (to keep the temp capture
+  dir instead of having it auto-deleted) — captured frames 300-400 cleanly,
+  no crash, and confirmed the green `pal[0]=1a00` grip palette entry is
+  still present (expected — no fix was applied). Did not do a pixel-eyeball
+  of the PPM captures beyond confirming they exist; the log-level TLUT
+  value match (`1a00` = the documented green) is the decisive signal.
+- No `tools_pc/d43_*.py` file was modified; `git status` in this worktree
+  shows only the two docs edits (this section + the D217 table-row pointer)
+  plus a local `data` symlink (not tracked/committed) used for the build.
