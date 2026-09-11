@@ -104,13 +104,13 @@ issues still outstanding.
 |---|---|
 | Calendar time | 26 days (17 Aug – 11 Sep 2026), one person part-time |
 | Commits on the port | ~430 |
-| Root-caused bugs logged | `D1`–`D226` in [`findings.md`](findings.md), 116 still-listed entries (some labels later merged or withdrawn) |
+| Root-caused bugs logged | `D1`–`D226` in [`findings.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/findings.md), 116 still-listed entries (some labels later merged or withdrawn) |
 | Handoff sessions | 89+ (`M-2` … `M-89`, and counting) |
 | Game-source files given `#ifdef PORT` ABI edits | 67 files, ~305 blocks |
 | New port-layer / tooling files | ~114 |
 | Port layer | ~21,900 lines C/C++ (`port/`) |
 | PC asset-conversion tooling | ~7,050 lines Python (`tools_pc/`) |
-| Outcome | intro + all 21 solo missions render, front end playable; audio not yet done |
+| Outcome | intro + all 21 solo missions render and are crash-free, front end playable, in-level SFX + menu/intro music play; in-level music and full-campaign completion re-confirmation still owed |
 
 ### Commit velocity
 
@@ -259,4 +259,5 @@ Honest notes, for anyone weighing whether this transfers.
 
 **Still outstanding** (parked below crash/level work): audio is not
 implemented; several front-end 3D transforms and some text rendering are
-wrong. See [`GRAPHICS-BACKLOG.md`](GRAPHICS-BACKLOG.md).
+wrong. See
+[`GRAPHICS-BACKLOG.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/GRAPHICS-BACKLOG.md).

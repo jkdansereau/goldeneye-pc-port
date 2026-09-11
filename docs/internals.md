@@ -5,8 +5,9 @@
 > external references. The phased plan in section 8 is largely done through
 > Phase 2 — for current status see the
 > [README](https://github.com/jkdansereau/goldeneye-pc-port#status) and
-> [`dev/LEVEL-STATUS.md`](dev/LEVEL-STATUS.md); for the blow-by-blow finding
-> log see [`dev/findings.md`](dev/findings.md).
+> [`dev/LEVEL-STATUS.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/LEVEL-STATUS.md);
+> for the blow-by-blow finding log see
+> [`dev/findings.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/findings.md).
 
 This document captures the research done to plan a PC port of
 GoldenEye 007, based on the decompilation this repository is forked from

@@ -112,11 +112,12 @@ getting the *original* game running from source.
 
 ## Status
 
-**Alpha — playable, not polished.** It runs the full single-player campaign,
-but some front-end 3D models and cutscenes are broken, AI characters move too
-slowly, in-level music doesn't play yet, input has known rough edges, and two
-levels (Bunker ii, Statue) still crash. Treat it as an early alpha of the
-porting work, not a finished way to play GoldenEye.
+**Alpha — playable, not polished.** It runs the full single-player campaign
+with no known crashes, but some front-end 3D models and cutscenes are broken,
+in-level music doesn't play yet, and input has known rough edges. A full
+end-to-end re-confirmation that all 21 missions are completable start to
+finish is still owed (see below). Treat it as an early alpha of the porting
+work, not a finished way to play GoldenEye.
 
 Phase 3 of 4 (audio + input) is in progress; Phase 2 (rendering) is
 essentially done. First alpha: [v0.1.0](../../releases). The port boots,
@@ -127,9 +128,12 @@ finished or fully stable.
 
 - Boot → Rare/Nintendo logos → gun-barrel → cast intro, fully rendered.
 - Front end: main menu → mission select → difficulty → briefing → mission start.
-- All 21 solo missions load and render. In a full-campaign playtest on the
-  packaged Windows build, 19 of 21 were completable start to finish; Bunker ii
-  and Statue crash mid-level (one root cause, tracked as D191). See
+- All 21 solo missions load, render, and are crash-free. A v0.1.0-era
+  full-campaign playtest found two crashing levels (Bunker ii, Statue, one
+  root cause) and an AI-pacing bug that blocked the final level (Cradle) from
+  finishing; both were subsequently root-caused, fixed, and playtest-verified
+  (D191, D193) — a full re-playthrough confirming all 21 missions completable
+  start to finish on the current build is still owed. See
   [`docs/dev/LEVEL-STATUS.md`](docs/dev/LEVEL-STATUS.md).
 - Software RSP (fast3d): textured world geometry, skeletal characters, HUD,
   the GE-specific color-combiner / render modes and `G_TRI4`.
@@ -147,9 +151,6 @@ finished or fully stable.
 **Not yet working**
 
 - **In-level music** — silent; see above (D77).
-- **AI pacing** — scripted and combat AI characters travel to their
-  destinations noticeably slower than on N64. This breaks Cradle (the final
-  level) via Trevelyan's scripted progression. Top post-alpha fix (D193).
 - **Cutscenes** — frequently glitch: skipped, wrong camera, misplaced or
   hovering actors, wrong timing (D148/D160).
 - Some front-end 3D models — the spinning Nintendo logo, and the MISSION

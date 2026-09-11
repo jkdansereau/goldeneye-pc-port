@@ -30,5 +30,4 @@ and cutscenes are rough.
 - **[Development process](dev-process.md)** — how work was scoped, partitioned, and budgeted across agents; the finding-log discipline.
 - **[Internals](internals.md)** — architecture, the software RSP-emulation approach, GoldenEye-vs-Perfect-Dark engine differences, the phased plan.
 - **[Porting notes](porting-notes.md)** — the recurring Nintendo 64 → PC bug classes hit during the port, with fixes.
-- **[Game-behavior reference](dev/game-behavior-reference.md)** — how the retail N64 game is meant to behave: combat/AI model, difficulty scaling, per-level objectives, timers, weapon data, and the original game's known quirks.
 - **[Building](building.md)** — full build and asset-extraction guide.
