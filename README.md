@@ -4,18 +4,18 @@
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 A native PC port of _GoldenEye 007_ (Rare, 1997, Nintendo 64), compiled from
-the [GoldenEye 007 decompilation](https://github.com/n64decomp/007) — the
+the [GoldenEye 007 decompilation](https://github.com/n64decomp/007): the
 original N64 game running from reconstructed source, not the Xbox 360
 remaster. The first alpha, [v0.1.0](../../releases), is out for Windows and
-Linux and runs the full campaign with rough edges; see [Status](#status).
+Linux and runs the full campaign with rough edges (see [Status](#status)).
 
-It also doubles as a **research project on AI-agent collaboration** in a
-large, low-level codebase — two coding agents, driven by one person
-part-time, porting ~230 translation units of unmodified big-endian MIPS game
-code to a 64-bit desktop. See [Background](#background).
+It's also a case study in AI-agent collaboration on a large, low-level
+codebase: two coding agents, driven by one person part-time, porting ~230
+translation units of unmodified big-endian MIPS game code to a 64-bit
+desktop. See [Background](#background).
 
 Technically, it follows the architecture of the
-[Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) — the same
+[Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark), the same
 Rare "Indy" engine family, one hardware generation apart. The unmodified game
 C sources are compiled for the host; the N64's Reality Signal Processor (RSP)
 is emulated in software; every other hardware surface (video, audio, input,
@@ -81,8 +81,8 @@ notes (a running handoff doc), directed by one person part-time:
   finding catalog, the SDL input layer, and the front-end flow.
 
 In short: ~3.5 weeks, one person part-time, two agents, ~430 commits, 200+
-root-caused bugs logged. The full write-up — timeline, the handoff mechanism,
-commit/effort breakdown, and an honest "what worked / what didn't" — is
+root-caused bugs logged. The full write-up (timeline, the handoff mechanism,
+commit/effort breakdown, and an honest "what worked / what didn't") lives in
 [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md). The
 workflow itself: [`docs/dev-process.md`](docs/dev-process.md). To cite this
 project or its findings, use [`CITATION.cff`](CITATION.cff) (GitHub's "Cite
@@ -91,11 +91,11 @@ this repository" menu).
 ## How this differs from the other GoldenEye PC projects
 
 This is a native port of the original 1997 Nintendo 64 game, built from its
-actual reconstructed source code — the same lineage as the Perfect Dark PC
+actual reconstructed source code, the same lineage as the Perfect Dark PC
 port. The other well-known "GoldenEye on PC" projects are something
 different: they machine-translate the shipped binary of the *unreleased Xbox
-360 XBLA remaster* — a different game, a different codebase, no shared code
-with this.
+360 XBLA remaster*, a different game on a different codebase with no shared
+code with this one.
 
 | | This project | [GoldenEye-Recomp](https://github.com/SunJaycy/GoldenEye-Recomp) / [Steam Deck build](https://github.com/couchk1ng/GoldenEye-Recomp-SteamDeck) |
 |---|---|---|
@@ -107,18 +107,16 @@ with this.
 | **Why it exists** | A [case study in AI-agent collaboration](#background) on a hard low-level codebase | A polished, playable PC release of the remaster |
 
 If you just want to play GoldenEye on PC today, use one of the recompilation
-projects — they are finished and this is not. What's here is the other half:
+projects: they are finished and this is not. What's here is the other half,
 getting the *original* game running from source.
 
 ## Status
 
-> [!WARNING]
-> **Alpha — playable, not polished.** This is a work-in-progress research
-> port. It runs the full single-player campaign, but some front-end 3D models
-> and cutscenes are broken, AI characters move too slowly, in-level music
-> doesn't play yet, input has known rough edges, and two levels (Bunker ii,
-> Statue) still crash. Treat it as an early alpha of the porting work, not a
-> finished way to play GoldenEye.
+**Alpha — playable, not polished.** It runs the full single-player campaign,
+but some front-end 3D models and cutscenes are broken, AI characters move too
+slowly, in-level music doesn't play yet, input has known rough edges, and two
+levels (Bunker ii, Statue) still crash. Treat it as an early alpha of the
+porting work, not a finished way to play GoldenEye.
 
 Phase 3 of 4 (audio + input) is in progress; Phase 2 (rendering) is
 essentially done. First alpha: [v0.1.0](../../releases). The port boots,
@@ -139,7 +137,7 @@ finished or fully stable.
   controllers, mapped onto the N64 pad. Tunable via `ge007.ini`.
 - File-backed EEPROM saves.
 - Audio — software mixer (libultra audio layer → SDL, adapted from the PD
-  port). **In-level sound effects play; in-level music does not play yet**
+  port). In-level sound effects play; in-level music does not play yet
   (tracked as D77). Front-end/menu audio is unaffected.
 - Windows and Linux (`x86_64`). Windows is the primary development and
   playtest path. The Linux build was built and smoke-tested (boots, renders,
@@ -165,8 +163,8 @@ finished or fully stable.
 
 ## Download
 
-Pre-built **Windows** and **Linux** `x86_64` bundles are published under
-[Releases](../../releases), starting with **v0.1.0**. Each contains the engine
+Pre-built Windows and Linux `x86_64` bundles are published under
+[Releases](../../releases), starting with v0.1.0. Each contains the engine
 executable, its runtime libraries, and the one-time `prepare-assets` tool —
 no ROM and no game assets. See [Quick start](#quick-start) for the four
 steps to get it running, [Requirements](#requirements) for accepted ROMs, and
@@ -176,7 +174,7 @@ You can also build it yourself; see [Building](#building).
 
 ## Requirements
 
-You need a **GoldenEye 007 (Nintendo 64) ROM** that you legally own, in
+You need a GoldenEye 007 (Nintendo 64) ROM that you legally own, in
 big-endian (`.z64`) format, matching one of:
 
 | Region | ROMID | ROM filename (in `data/`) | SHA-1 |
@@ -235,7 +233,7 @@ The executable is written to `build-pc/ge007.x86_64` (on Windows,
 1. Create a `data/` directory in the repo root.
 2. Put your ROM in it, named as in the table above
    (e.g. `data/ge007.ntsc-final.z64`).
-3. Run the executable **from the repo root**:
+3. Run the executable from the repo root:
    `./build-pc/ge007.x86_64`.
 
 Configuration is written to `ge007.ini` on first run.
@@ -258,7 +256,7 @@ Mouse sensitivity, Y-inversion and the aim/turn split are tunable in the
 
 ## How it works
 
-The R4300 game code in `src/` is compiled completely unmodified — the
+The R4300 game code in `src/` is compiled completely unmodified; the
 decompilation's control flow is treated as ground truth. Everything that
 would touch N64 hardware is redirected into `port/`:
 
@@ -300,7 +298,7 @@ docs/               see below
 ## Documentation
 
 Key docs are also published as a site:
-**<https://jkdansereau.github.io/goldeneye-pc-port/>**.
+<https://jkdansereau.github.io/goldeneye-pc-port/>.
 
 | Doc | What's in it |
 |---|---|
@@ -373,11 +371,11 @@ GitHub. It follows the same conventions they do:
 - No official logos, box art, or marketing assets are used. "GoldenEye 007",
   "007", "James Bond" and related marks belong to their respective owners
   (Nintendo, Microsoft/Rare, MGM, Danjaq, EON Productions).
-- **Pre-built binaries** published under [Releases](../../releases) contain
-  only the engine — the `port/` layer plus the compiled decompilation, with no
-  game data of any kind — bundled with permissively-licensed runtime libraries
+- Pre-built binaries published under [Releases](../../releases) contain
+  only the engine (the `port/` layer plus the compiled decompilation, with no
+  game data of any kind), bundled with permissively-licensed runtime libraries
   (SDL2, zlib, the MinGW runtime; their licenses travel in the download). Any
-  build — yours or ours — is useless without a ROM you supply.
+  build, yours or ours, is useless without a ROM you supply.
 
 This project is **not affiliated with, endorsed by, or sponsored by** Nintendo,
 Rare, Microsoft, MGM, Danjaq, EON Productions, or any rights holder in
@@ -386,7 +384,7 @@ issue and it will be addressed.
 
 ## License
 
-The original work in this repository — the port layer (`port/`), the PC build
-system, `tools_pc/`, and the documentation — is released under the MIT License,
+The original work in this repository, the port layer (`port/`), the PC build
+system, `tools_pc/`, and the documentation, is released under the MIT License;
 see [`LICENSE`](LICENSE). Everything inherited from the upstream decompilation
 is covered by [`NOTICE`](NOTICE), not by that license.
