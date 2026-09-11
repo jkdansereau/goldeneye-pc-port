@@ -486,6 +486,37 @@ through a converter or a runtime bswap fixup reads scrambled.
   Facility/Depot, black-by-luck on Bunker1) while larger tiles look plausible
   because they never index the low entries. Fix is upstream (segment resolution
   or `tools_pc/d43_emit.py` blob placement), not in the fast3d decode.
+  **M-88 correction: the "segment resolution / `d43_emit.py` blob placement"
+  theory above is refuted.** Traced the full reference chain: model files
+  store textures as a numeric `TextureID` (`ModelFileTextures`,
+  `src/bondtypes.h`) into the **global** `Globalimagetable` (fixed once at
+  runtime by `port/src/gimgfixup.c`, D68 — not per-model, not per-level, and
+  not touched by any `tools_pc/d43_*.py` script); pixel+palette bytes are
+  decoded fresh each level load by `texInflateZlib`/`NonZlib`
+  (`src/game/image.c`) into a runtime pool, with the palette appended after
+  the pixel data (`tex->unk0a` records the boundary) — there is no
+  ROM-serialized or offline-converted "model-TLUT source pointer" to be off
+  by 4 bytes. **General rule this adds to the catalogue: a "same asset,
+  different bytes on different levels" symptom for a texture/model resource
+  does NOT imply an offline-converter/sidecar bug** — GE's model and image
+  pipelines resolve almost everything through small numeric IDs into
+  shared, runtime-decoded pools; the offline `tools_pc/d43_*.py` scripts
+  only ever touch model *geometry* (nodes/GDL structure/vertex data), never
+  texture or palette content. Before chasing a converter offset for a
+  texture-content bug, first prove the content is even sidecar-owned (grep
+  the relevant `d43_*.py`/`d88_*.py`/`d69_*.py` for the field name — if it
+  isn't there, the bug is runtime: `src/game/image.c`/`tex.c` (decode) or
+  `port/fast3d/gfx_pc.cpp` (RDP emulation)). Current leading hypothesis for
+  the real mechanism (unconfirmed, needs a fast3d-side probe out of this
+  session's scope): `gfx_dp_load_tlut`'s palette-source addressing
+  (`port/fast3d/gfx_pc.cpp:2202`) uses `pitch = rdp.texture_to_load.width +
+  1` from the preceding `gDPSetTextureImage`, which `texWriteLoadToTmemAddr`
+  (`src/game/tex.c:503,519`) always calls with a literal `width=1` — a
+  software-RDP approximation that may not correctly reproduce hardware
+  LOADTLUT byte-addressing for this width=1 special case. See
+  `docs/dev/findings.md` §D217 "M-88" for the full trace + empirical
+  `GE_TEXDUMP` repro (BUNKER1 `pal[0]=0001` vs FACILITY `pal[0]=1a00`,
+  exact match to the originally reported bytes).
 - **RC3 / D167 — GL `GL_REPEAT` wraps at the uploaded image size; the N64 RDP
   wraps a render tile at `1<<masks` (`= ceil(log2(dim))` for GE, `texDimensionToMask`).**
   Equal for power-of-two textures, so this is invisible almost everywhere — but a
