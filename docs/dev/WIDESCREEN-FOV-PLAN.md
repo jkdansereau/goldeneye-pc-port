@@ -99,6 +99,24 @@ From the `pd_port` checkout (N64 PD had no widescreen; the port added it):
 4. User-facing: vsync/framerate options + HUD-centering option
    (`g_HudCenter` → `g_HudAlignModeL/R`, `port/src/main.c:77-83`).
 
+**M-87 PD-legacy-survey notes (`docs/dev/notes/PD-LEGACY-SURVEY.md`):**
+- **Overscan/safe-frame (candidate 2, deliberate divergence, recorded here):**
+  PD hardcodes its native viewport to 320×220 (`port/src/video.c:77-79`) — the
+  N64-on-a-TV visible area after ~20 lines top/bottom of overscan. **GE's port
+  renders the full 640×480/640×400 frame, no overscan crop** (`port/src/video.c:38-47`)
+  — a deliberate PC-default choice (nothing hidden, no HUD-clipping risk from a
+  TV-only limitation), not an oversight, and not something to "fix" toward PD's
+  behavior. Net effect: GE shows ~9% more vertical content than PD at the
+  equivalent native resolution. Revisit only if a `Video.SafeAreaOverlay` debug
+  knob is ever wanted to visualize the original TV-safe region.
+- **"Ratio" 4:3/16:9 option (candidate 3):** PD deleted its N64-era per-player
+  Ratio dropdown on PC (`options.c` forces `SCREENRATIO_NORMAL` outside
+  `PLATFORM_N64`). **GE deliberately keeps the opposite call** — the shipped
+  `SCREEN_RATIO_16_9` path (`get/set_screen_ratio`, `options.c:553-558`,
+  persisted per-save, consumed by the camera) is exactly what Option B above is
+  planned to build on. Not a gap to close toward PD; a future reviewer should
+  not "fix" this toward PD's behavior either.
+
 ## Option B — the standard (native 16:9, PD-parity)
 
 ### Architecture
