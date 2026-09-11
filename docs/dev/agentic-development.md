@@ -106,7 +106,7 @@ issues still outstanding.
 |---|---|
 | Calendar time | 16 days (16 Aug – 1 Sep 2026), one person part-time |
 | Commits on the port | ~223 |
-| Root-caused bugs logged | 162 (`D1`–`D169` in [`findings.md`](findings.md); some later merged or withdrawn) |
+| Root-caused bugs logged | 162 (`D1`–`D169` in [`findings.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/findings.md); some later merged or withdrawn) |
 | Handoff sessions | ~33 (`M-2` … `M-33`) |
 | Game-source files given `#ifdef PORT` ABI edits | 63 files, 241 blocks |
 | New port-layer / tooling files | 128 |
@@ -261,4 +261,5 @@ Honest notes, for anyone weighing whether this transfers.
 
 **Still outstanding** (parked below crash/level work): audio is not
 implemented; several front-end 3D transforms and some text rendering are
-wrong. See [`GRAPHICS-BACKLOG.md`](GRAPHICS-BACKLOG.md).
+wrong. See
+[`GRAPHICS-BACKLOG.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/GRAPHICS-BACKLOG.md).
