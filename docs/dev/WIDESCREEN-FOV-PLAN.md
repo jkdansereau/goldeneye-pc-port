@@ -109,13 +109,21 @@ From the `pd_port` checkout (N64 PD had no widescreen; the port added it):
   behavior. Net effect: GE shows ~9% more vertical content than PD at the
   equivalent native resolution. Revisit only if a `Video.SafeAreaOverlay` debug
   knob is ever wanted to visualize the original TV-safe region.
-- **"Ratio" 4:3/16:9 option (candidate 3):** PD deleted its N64-era per-player
-  Ratio dropdown on PC (`options.c` forces `SCREENRATIO_NORMAL` outside
-  `PLATFORM_N64`). **GE deliberately keeps the opposite call** — the shipped
-  `SCREEN_RATIO_16_9` path (`get/set_screen_ratio`, `options.c:553-558`,
-  persisted per-save, consumed by the camera) is exactly what Option B above is
-  planned to build on. Not a gap to close toward PD; a future reviewer should
-  not "fix" this toward PD's behavior either.
+- **"Ratio" 4:3/16:9 option (candidate 3) — correction, M-87 review:** PD
+  deleted its N64-era per-player Ratio dropdown on PC (`options.c` forces
+  `SCREENRATIO_NORMAL` outside `PLATFORM_N64`). GE's equivalent (`SCREEN_RATIO_16_9`,
+  `get/set_screen_ratio`, `options.c:553-558`, persisted per-save, consumed by
+  the camera) is a live, functioning code path — but it's an old **anamorphic
+  stretch toggle**, not true wider-FOV rendering, and this doc's own **Open
+  Questions** (below) already flag the tension and lean the *other* way: leave
+  this legacy flag **dormant** and have a **separate, new, port-owned
+  `Video.Aspect` config** be Option B's actual trigger — the same
+  separation-of-concerns choice PD itself made (PD didn't repurpose its legacy
+  flag either). Repurposing the shipped save-flag to drive a brand-new render
+  path risks desync (existing saves silently gaining/missing the modern
+  feature, or the flag and `Video.Aspect` disagreeing). **Not yet decided**
+  ("Decide Phase 1" below) — correcting an earlier note here that overstated
+  this as settled.
 
 ## Option B — the standard (native 16:9, PD-parity)
 
