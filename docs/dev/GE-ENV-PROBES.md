@@ -70,6 +70,7 @@ Two classes:
 | `GE_D69STAN` | `src/game/stan.c:266,276` | D69 stan-tile trace | dead |
 | `GE_D85DUMP` | `src/game/bg.c:2510` | D85 `bgWidenRoomGdl` 8→16B dump | dead (D85 closed) |
 | `GE_D85TEX` | `src/game/image.c:2479`, `src/game/tex.c:859,1050` | D85 texpool-full events (Depot analysis) | dead (D85 closed) — was useful for §3 |
+| `GE_D217TEX` | `src/game/image.c:234` (`texInflateZlib`) | D217: logs `texnum`/`format`/`numcolours`/`palette[0..1]` straight off the decode bitstream (before any arena/pointer math) — the decode-correctness check that proved the affected texture (grip, `texnum=1608`) decodes byte-identically across levels, ruling out a decode/ROM-data bug. | **live** (D217 open — investigation instrument) |
 | `GE_D86` | `src/game/model.c:6295`, `src/game/objecthandler_2.c:143` | D86 model rwdata trace | dead (D86 closed) |
 | `GE_D87` | `src/game/ramromreplay.c:296,363,381` | D87 `ramromfilestructure` endianness | dead (D87 closed) |
 | `GE_D88` | `src/game/prop.c:1367`, `src/game/stan.c:3090` | D88 `Usetup*Z` propDef stream | dead (D88 family closed; D88.4 resolved) |
