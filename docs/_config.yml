@@ -3,8 +3,8 @@
 title: GoldenEye 007 PC Port
 description: >-
   A native PC port of the original Nintendo 64 GoldenEye 007, built from its
-  decompiled source, and a case study in AI-agent collaboration on a large
-  low-level codebase.
+  decompiled source with a software RSP — plus the engineering record:
+  internals, porting notes, and the two-agent development workflow.
 theme: jekyll-theme-cayman
 show_downloads: false
 
@@ -26,26 +26,46 @@ plugins:
   - jekyll-sitemap
 
 # jekyll-relative-links (on by default for Pages) rewrites the .md links in
-# these docs to .html so cross-links work on the published site.
+# these docs to .html so cross-links work on the published site. Links that
+# must reach docs kept out of the site build point at the GitHub blob URL
+# instead, so they resolve from the published pages too.
 
-# Rolling local working files - not useful as published pages.
+# ---------------------------------------------------------------------------
+# The site publishes a small curated set (see docs/dev/notes/DE-SLOP-DOCS-PLAN.md):
+#   index.md, building.md, internals.md, porting-notes.md, dev-process.md,
+#   dev/agentic-development.md
+# Everything else under docs/ is working material - the finding log, level
+# status, backlogs, plans, inherited decomp guides. It stays in the repo (and
+# on GitHub) but is excluded from the site build so it never shows up as a
+# published page or in sitemap.xml.
 exclude:
+  - BACKLOG.md
   - HANDOFF.md
-
-# Keep the raw engineering record (finding log, per-level status, triage
-# notes, backlogs) out of sitemap.xml so search engines aren't steered at it.
-# The pages still build and stay reachable from cross-links; the two dev/
-# docs that are linked from the site index are kept in.
-defaults:
-  - scope:
-      path: "dev"
-    values:
-      sitemap: false
-  - scope:
-      path: "dev/agentic-development.md"
-    values:
-      sitemap: true
-  - scope:
-      path: "dev/game-behavior-reference.md"
-    values:
-      sitemap: true
+  - SetupGuide.md
+  - StructureGuide.md
+  - StyleGuide.md
+  - dev/AUDIO-PLAN.md
+  - dev/AUDIT-M6-player-offsets.md
+  - dev/D172-PARTICLE-COLOR-RESEARCH.md
+  - dev/D176a-SKY-NOTES.md
+  - dev/GE-ENV-PROBES.md
+  - dev/GRAPHICS-BACKLOG.md
+  - dev/HANDOFF-ARCHIVE.md
+  - dev/LEVEL-OBJECTIVES.md
+  - dev/LEVEL-PLAYTEST.md
+  - dev/LEVEL-STATUS.md
+  - dev/LINUX-PORT.md
+  - dev/M-35-PLAYTEST-CHECKLIST.md
+  - dev/M-35-QOL-REVIEW.md
+  - dev/M-36-TRIAGE.md
+  - dev/MODERN-PORT-FEATURES-BACKLOG.md
+  - dev/OPTIONS-MENU-PLAN.md
+  - dev/QOL-INVENTORY.md
+  - dev/TEXTURE-GLITCH-ANALYSIS.md
+  - dev/UNLOCKED-FPS-PLAN.md
+  - dev/VIEWMODEL-RESEARCH.md
+  - dev/WIDESCREEN-FOV-PLAN.md
+  - dev/findings-index.csv
+  - dev/findings.md
+  - dev/game-behavior-reference.md
+  - dev/release-dropin-rom-plan.md
