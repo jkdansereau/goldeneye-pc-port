@@ -20,7 +20,7 @@ D189,FIXED,Linux -fstack-protector aborts on the decomp's latent stack-buffer ov
 D190,OPEN,"Linux -level_45 SIGSEGV at load in add_ptr_to_objective (objective.c:64) (M-48, open).",OPEN — not investigated (M-48)
 D191,FIXED,Windows -O2 release-bundle crash:,FIXED + PLAYTEST-VERIFIED (M-79).
 D193,FIXED,NPC AI locomotion is too slow —,FIXED + user-playtest-verified (M-81) —
-D194,OPEN,Mouse input needs another tuning pass —,"OPEN — root-caused, not fixed (M-49)"
+D194,?,Mouse input needs another tuning pass —,
 D195,OPEN,"Transparency / alpha surfaces broken on Control (M-49, user playtest) —","OPEN — not investigated (M-49), needs a capture"
 D197,OPEN,"Character face/head textures wrap around the head, seen on Silo (M-49, user playtest).","OPEN — not investigated (M-49), needs a capture"
 D198,FIXED,alAdpcmPull/_decodeChunk used K0_TO_PHYS (an unconditional & 0x1FFFFFFF mask) on 64-bit heap pointers (src/libultra/audio/load.c).,FIXED (src/libultra/audio/load.c) —
@@ -28,6 +28,12 @@ D199,PARTIAL,Phase-3 software audio mixer:,"LANDED (port/src/mixer.c, port/inclu
 D200,FIXED,-level_09 segfault: reverb's ALDelay.input/output are u32 —,FIXED — 5-line cast in reverb.c (this session)
 D196,OPEN,"OS mouse cursor stays visible after closing the F10 options overlay in click-to-lock mode (M-49, user playtest).","OPEN — root-caused, 1-line fix identified, not applied (M-49)"
 D192,OPEN,Front-end mission/level-select grid pointer still can't reach the outer cells —,"OPEN — root-caused, not fixed (M-49)"
+D221,OPEN,SELECT FILE screen: the mouse hit-box for a file slot is vertically offset from its visible box —,"OPEN — observed, not investigated."
+D222,OPEN,High Video.FovScale breaks culling —,"OPEN — root cause known, not fixed."
+D223,OPEN,QoL ask: mouse-wheel weapon cycling should be directional like a normal PC shooter —,"OPEN — root cause + fix mechanism known, not implemented."
+D224,FIXED,"QoL gap (M-87, from a PD-PC-port survey):","DEPRIORITIZED (M-87, user call)."
+D225,OPEN,"Dev-tooling QoL (M-87, user ask):","OPEN — root-caused, not implemented."
+D226,OPEN,"QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.","OPEN — root cause / call sites identified, not designed or implemented."
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
 D201,FIXED,"src/libultra/audio/bnkf.c bank/instrument/sound/wavetable relocation offsets were s32, truncating the real 64-bit base pointer.",FIXED (src/libultra/audio/bnkf.c) —
@@ -43,12 +49,12 @@ D168,FIXED,GE_PCDUMP / F12 PPM captures were vertically flipped —,FIXED (port/
 D169,FIXED,Front-end mouse pointer can't reach the outer cells of the mission/level-select grid —,"FIXED (M-33, port/src/input.c, port-only, no #ifdef PORT)."
 D178,FIXED,Pre-mission briefing screen:,FIXED (M-36) — high confidence
 D175,?,In-game stutter / brief hang during normal play (user QA report):,"Observed, not investigated"
-D176,OPEN,"Surface exterior renders wrong (-level_36), two independent defects.","(a) root-caused, fix owed / (b) open"
+D176,PARTIAL,"Surface exterior renders wrong (-level_36), two independent defects.","(a) root-caused, fix owed / (b) open."
 D177,FIXED,Ladders non-functional —,FIXED (M-36) — high confidence; interactive climb test owed
 D172,FIXED,"Bullet-impact / blood / spark particles render magenta or cyan instead of dark red (M-82, ROOT CAUSE FOUND + FIXED).",FIXED (port/fast3d/gfx_pc.cpp gfx_lod_tile_offset):
 D174,?,"""No blood effect"" (user QA report).",Observed; first step = BUNKER1 firefight with regenerated sidecars
 D183,OPEN,"M-36 Family A (""texture line/pitch shear"") is DISPROVEN for the Surface repro (-level_36).",Hypothesis DISPROVEN + diagnostics shipped; D176(b)/D182(2) still OPEN
-D173,?,Third-person Bond model spawns too high (user QA report):,"Observed, not investigated"
+D173,?,Third-person Bond model spawns too high (user QA report):,"Observed, not investigated."
 D179,FIXED,Packaged build crashes after the logos —,"Diagnosed, not fixed —"
 D180,PARTIAL,"Native-PC input pass (M-XX QoL run, qol/native-pc-input-menu, port-only).","LANDED, port-only, no #ifdef PORT."
 D181,PARTIAL,Game.ScreenShakeIntensity —,"LANDED behind config, default = original."
@@ -59,8 +65,10 @@ D213,PARTIAL,On-screen FPS readout —,"LANDED, port-only. Build clean; bunker1 
 D214,PARTIAL,"Keyboard rebinding — [Input.Bind] config section (M-83, port-only, PD parity, Phase 4 debt).",PARTIAL — M-84: code PASS (alt/ctrl); one doc-only fix.
 D215,FIXED,1P weapon viewmodel never drew in-level —,"FIXED (src/game/gunfire.c, #ifdef PORT)."
 D216,PARTIAL,"Game.SkipIntro — boot straight to the file-select menu (M-83, port + one #ifdef PORT game-code line, PD parity, Phase 4 quick win).",LANDED + VERIFIED this session.
-D217,OPEN,1P weapon viewmodel + third-person Bond model textures render garbled —,"OPEN — observed, not investigated (M-84)."
+D217,OPEN,1P weapon viewmodel + third-person Bond model textures render garbled —,OPEN — root cause characterised (M-86); needs an upstream/asset-pipeline fix.
 D218,PROPOSED,Wide FOV exposes the per-level draw-distance / fog boundary —,"Logged (M-84), fix proposed + parked."
+D219,OPEN,"PPK explosions render purple on Dam (M-87, user QA, ""not 3D but noting"").","OPEN — observed, not investigated."
+D220,OPEN,"1P muzzle flash position shifts upward at higher Video.FovScale (M-87, user QA, Jungle/M16).","OPEN — observed, not investigated."
 D85,OPEN,room primary/secondary DL → texLoadFromGdl garbage,"OPEN (safety-netted; widen/pool fixes landed, geometry now renders)"
 D86 · D87,RESOLVED,modelInitRwData truncated ptr · attract-demo BE ramromfilestructure,resolved
 D88.4,RESOLVED,propDefs polymorphic record stream not byteswapped → setupDoor crash,resolved (d88_propdefs.py); layout audit M-20 → D132

@@ -99,6 +99,32 @@ From the `pd_port` checkout (N64 PD had no widescreen; the port added it):
 4. User-facing: vsync/framerate options + HUD-centering option
    (`g_HudCenter` → `g_HudAlignModeL/R`, `port/src/main.c:77-83`).
 
+**M-87 PD-legacy-survey notes (`docs/dev/notes/PD-LEGACY-SURVEY.md`):**
+- **Overscan/safe-frame (candidate 2, deliberate divergence, recorded here):**
+  PD hardcodes its native viewport to 320×220 (`port/src/video.c:77-79`) — the
+  N64-on-a-TV visible area after ~20 lines top/bottom of overscan. **GE's port
+  renders the full 640×480/640×400 frame, no overscan crop** (`port/src/video.c:38-47`)
+  — a deliberate PC-default choice (nothing hidden, no HUD-clipping risk from a
+  TV-only limitation), not an oversight, and not something to "fix" toward PD's
+  behavior. Net effect: GE shows ~9% more vertical content than PD at the
+  equivalent native resolution. Revisit only if a `Video.SafeAreaOverlay` debug
+  knob is ever wanted to visualize the original TV-safe region.
+- **"Ratio" 4:3/16:9 option (candidate 3) — correction, M-87 review:** PD
+  deleted its N64-era per-player Ratio dropdown on PC (`options.c` forces
+  `SCREENRATIO_NORMAL` outside `PLATFORM_N64`). GE's equivalent (`SCREEN_RATIO_16_9`,
+  `get/set_screen_ratio`, `options.c:553-558`, persisted per-save, consumed by
+  the camera) is a live, functioning code path — but it's an old **anamorphic
+  stretch toggle**, not true wider-FOV rendering, and this doc's own **Open
+  Questions** (below) already flag the tension and lean the *other* way: leave
+  this legacy flag **dormant** and have a **separate, new, port-owned
+  `Video.Aspect` config** be Option B's actual trigger — the same
+  separation-of-concerns choice PD itself made (PD didn't repurpose its legacy
+  flag either). Repurposing the shipped save-flag to drive a brand-new render
+  path risks desync (existing saves silently gaining/missing the modern
+  feature, or the flag and `Video.Aspect` disagreeing). **Not yet decided**
+  ("Decide Phase 1" below) — correcting an earlier note here that overstated
+  this as settled.
+
 ## Option B — the standard (native 16:9, PD-parity)
 
 ### Architecture
@@ -246,3 +272,16 @@ shipped standalone ahead of the rest of the plan.
   Decide order when audio lands.
 - PAL: `GE_NATIVE` 640×400 bookkeeping — confirm aspect math per region.
 - Split-screen viewports under 16:9 — likely out of scope for PC; note and close.
+- **M-87 QoL ask (user, not critical, backlogged):** expose `Video.FovScale` as
+  a real horizontal-or-vertical **degree** value instead of the current
+  percent-of-original-vertical-FOV scale (D211) — the "50–150%" knob doesn't
+  tell the user what degree FOV they're actually getting. Needs: pick a
+  convention (report vertical, since that's what `frFovY` actually is post-D211
+  refix — `fr.c:737`) and either (a) relabel the F10 row + INI value as degrees
+  directly (`frFovY = clamp(requestedDeg, ~24°, 160°)`, drop the percent
+  multiply), or (b) keep percent internally but show the *computed* degree
+  value live in the F10 overlay/INI comment for transparency. (a) is cleaner
+  and removes a level of indirection; check whether anything else reads
+  `Video.FovScale` as a percent before renaming the key (search besides
+  `fr.c`/`video.c`). Cosmetic/UX only, no render-path change beyond the
+  input unit.

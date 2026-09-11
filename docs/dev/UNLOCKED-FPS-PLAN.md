@@ -174,3 +174,10 @@ runs faster by showing each rendered frame more than once.
   option set. Confirm no PAL-specific pacing assumptions in Phase 1 math.
 - Naming/caps for "unlocked": adopt PD's safety-cap value (200/240) or expose
   the cap as a slider?
+
+**M-87 PD-legacy-survey note (candidate 8):** if this plan stalls and GE stays
+fixed-tick, PD's `Game.TickRateDivisor` (0–10, slow-motion/perf lever) +
+`Game.ExtraSleep` (`port/src/main.c:39,167-168`, applied `src/game/timing.c:49`)
+is a cheap borrowable fallback lever — not otherwise relevant since this plan's
+whole direction is decoupling sim from frame rate, the opposite of PD's
+fixed-tick-with-a-divisor approach.
