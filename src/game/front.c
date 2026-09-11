@@ -2391,6 +2391,18 @@ s32 interface_menu05_fileselect(void)
             f32 xmin;
             f32 ymax;
             f32 ymin;
+#ifdef PORT
+            /* D221: projectRectCornersTo2D takes {min,max} coord2d pairs and
+             * the original N64 binary received them with the max adjacent to
+             * the min in memory. The decompilation flattened that into four
+             * separate f32s, so on PC (declaration-order locals) arg1->f[1]/
+             * arg2->f[1] read ymax/garbage instead of xmax/ymax -- the file-
+             * select hit band collapsed to a thin strip at the bottom edge of
+             * each wallet (sometimes NaN). Pass explicit pairs: identical
+             * values to what the N64 binary used, layout-independent. */
+            struct coord2d xminmax;
+            struct coord2d yminmax;
+#endif
 
             struct rectbbox folderbbox;
 
@@ -2398,7 +2410,15 @@ s32 interface_menu05_fileselect(void)
             DIFFICULTY highestdifficulty;
 
             modelGetXYExtents(walletinst[foldernum], &xmax, &xmin, &ymax, &ymin);
+#ifdef PORT
+            xminmax.f[0] = xmin;
+            xminmax.f[1] = xmax;
+            yminmax.f[0] = ymin;
+            yminmax.f[1] = ymax;
+            projectRectCornersTo2D(&folderpositions_camspace[foldernum], &xminmax, &yminmax, &folderbbox.right, &folderbbox.left);
+#else
             projectRectCornersTo2D(&folderpositions_camspace[foldernum], &xmin, &ymin, &folderbbox.right, &folderbbox.left);
+#endif
 
             if ((folderbbox.right <= cursor_h_pos)
                 && (cursor_h_pos <= folderbbox.left)

@@ -224,6 +224,19 @@ s32 texInflateZlib(u8 *src, u8 *dst, s32 arg2, s32 forcenumimages, struct texpoo
         palette[i] = texReadBits(16);
     }
 
+#ifdef PORT
+    /* TEMP D217 (M-89 lead a): log the palette bytes as decoded straight off
+     * the bitstream, keyed by texture number, so a run on BUNKER1 and a run
+     * on FACILITY can be diffed to see whether the SAME texnum yields the
+     * SAME palette[0] -- if not, the divergence is upstream of texInflateZlib
+     * (ROM offset table / bitstream source), not the runtime TLUT-address
+     * math (already ruled out, see findings.md D217 M-89). */
+    if (getenv("GE_D217TEX"))
+        osSyncPrintf("D217TEX texnum=%d format=%d numcolours=%d pal0=%04x pal1=%04x\n",
+                     (int)arg4->rightpos->texturenum, (int)format, (int)numcolours,
+                     (unsigned)palette[0], (unsigned)(numcolours > 1 ? palette[1] : 0));
+#endif
+
     foundthething = FALSE;
 
     for (j = 0; j < numimages; j++)
