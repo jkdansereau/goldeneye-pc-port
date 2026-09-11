@@ -246,3 +246,16 @@ shipped standalone ahead of the rest of the plan.
   Decide order when audio lands.
 - PAL: `GE_NATIVE` 640×400 bookkeeping — confirm aspect math per region.
 - Split-screen viewports under 16:9 — likely out of scope for PC; note and close.
+- **M-87 QoL ask (user, not critical, backlogged):** expose `Video.FovScale` as
+  a real horizontal-or-vertical **degree** value instead of the current
+  percent-of-original-vertical-FOV scale (D211) — the "50–150%" knob doesn't
+  tell the user what degree FOV they're actually getting. Needs: pick a
+  convention (report vertical, since that's what `frFovY` actually is post-D211
+  refix — `fr.c:737`) and either (a) relabel the F10 row + INI value as degrees
+  directly (`frFovY = clamp(requestedDeg, ~24°, 160°)`, drop the percent
+  multiply), or (b) keep percent internally but show the *computed* degree
+  value live in the F10 overlay/INI comment for transparency. (a) is cleaner
+  and removes a level of indirection; check whether anything else reads
+  `Video.FovScale` as a percent before renaming the key (search besides
+  `fr.c`/`video.c`). Cosmetic/UX only, no render-path change beyond the
+  input unit.
