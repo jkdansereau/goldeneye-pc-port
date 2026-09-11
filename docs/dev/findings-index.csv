@@ -28,6 +28,7 @@ D199,PARTIAL,Phase-3 software audio mixer:,"LANDED (port/src/mixer.c, port/inclu
 D200,FIXED,-level_09 segfault: reverb's ALDelay.input/output are u32 —,FIXED — 5-line cast in reverb.c (this session)
 D196,OPEN,"OS mouse cursor stays visible after closing the F10 options overlay in click-to-lock mode (M-49, user playtest).","OPEN — root-caused, 1-line fix identified, not applied (M-49)"
 D192,OPEN,Front-end mission/level-select grid pointer still can't reach the outer cells —,"OPEN — root-caused, not fixed (M-49)"
+D221,OPEN,SELECT FILE screen: the mouse hit-box for a file slot is vertically offset from its visible box —,"OPEN — observed, not investigated."
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
 D201,FIXED,"src/libultra/audio/bnkf.c bank/instrument/sound/wavetable relocation offsets were s32, truncating the real 64-bit base pointer.",FIXED (src/libultra/audio/bnkf.c) —
