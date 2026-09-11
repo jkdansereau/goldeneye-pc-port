@@ -1522,12 +1522,31 @@ bool skyVerticesAreTheSame(SkyRelated38 *arg0, SkyRelated38 *arg1)
  * value instead of recomputing locally. skyPortEndFan() clears it so a
  * hypothetical future caller that forgets to call skyPortBeginFan() falls
  * back to the old per-call-local computation instead of reusing a stale
- * value. */
+ * value.
+ *
+ * D227 (M-98): the same per-call-local mistake was still present one field
+ * over -- skyPortRenderPoly's S/T fold (foldS/foldT, below) was computed
+ * from only the current call's own 2-4 verts, same as wScale used to be.
+ * M-95 only shared wScale; it never touched the fold, so the seam it was
+ * meant to close persisted (confirmed by human playtest, M-96). Two
+ * triangles in one fan sharing an edge vertex can each independently floor
+ * that vertex's S/T to a different multiple of 64 texels; the *visual*
+ * result is supposed to be identical (GL_REPEAT has period 64), but each
+ * triangle bakes its own copy of the shared vertex into its own Vtx buffer
+ * at `(S - fold) * 32`, and two folds differing by 64 texels produce tc
+ * values differing by exactly 2048 (64*32) -- an s16-precision difference
+ * big enough to read as a crack at the shared edge, not just any leftover
+ * discontinuity. Fixed the same way as wScale: fold once across the whole
+ * fan in skyPortBeginFan(), thread it through instead of recomputing. */
 static f32 s_skyFanWScale = 0.0f; /* 0 = not set; per-call fallback */
+static f32 s_skyFanFoldS = 0.0f;
+static f32 s_skyFanFoldT = 0.0f;
+static bool s_skyFanFoldSet = FALSE;
 
 static void skyPortBeginFan(SkyRelated38 *v, s32 n)
 {
     f32 maxAbsW = 0.0f;
+    f32 minS, minT;
     s32 i;
     for (i = 0; i < n; i++)
     {
@@ -1535,11 +1554,23 @@ static void skyPortBeginFan(SkyRelated38 *v, s32 n)
         if (aw > maxAbsW) maxAbsW = aw;
     }
     s_skyFanWScale = (maxAbsW > 30000.0f) ? (maxAbsW / 30000.0f) : 1.0f;
+
+    minS = v[0].unk20;
+    minT = v[0].unk24;
+    for (i = 1; i < n; i++)
+    {
+        if (v[i].unk20 < minS) minS = v[i].unk20;
+        if (v[i].unk24 < minT) minT = v[i].unk24;
+    }
+    s_skyFanFoldS = (f32) ((s32) floorf(minS / 64.0f) * 64);
+    s_skyFanFoldT = (f32) ((s32) floorf(minT / 64.0f) * 64);
+    s_skyFanFoldSet = TRUE;
 }
 
 static void skyPortEndFan(void)
 {
     s_skyFanWScale = 0.0f;
+    s_skyFanFoldSet = FALSE;
 }
 
 /*
@@ -1587,14 +1618,28 @@ static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
      * inter-vertex deltas (hence the interpolated texture) are preserved
      * exactly. Triangles whose S/T span exceeds ~1000 texels (only those
      * straddling the horizon) still need Defect-2's finer tessellation. */
-    f32 foldS = v[0]->unk20, foldT = v[0]->unk24;
-    for (i = 1; i < nverts; i++)
+    f32 foldS, foldT;
+    /* D227 (M-98): prefer the whole-fan fold set by skyPortBeginFan() so
+     * every triangle in a multi-call fan bakes its shared vertices against
+     * the same S/T origin (see the comment above skyPortBeginFan()). Falls
+     * back to the old per-call-local computation if unset. */
+    if (s_skyFanFoldSet)
     {
-        if (v[i]->unk20 < foldS) foldS = v[i]->unk20;
-        if (v[i]->unk24 < foldT) foldT = v[i]->unk24;
+        foldS = s_skyFanFoldS;
+        foldT = s_skyFanFoldT;
     }
-    foldS = (f32) ((s32) floorf(foldS / 64.0f) * 64);
-    foldT = (f32) ((s32) floorf(foldT / 64.0f) * 64);
+    else
+    {
+        foldS = v[0]->unk20;
+        foldT = v[0]->unk24;
+        for (i = 1; i < nverts; i++)
+        {
+            if (v[i]->unk20 < foldS) foldS = v[i]->unk20;
+            if (v[i]->unk24 < foldT) foldT = v[i]->unk24;
+        }
+        foldS = (f32) ((s32) floorf(foldS / 64.0f) * 64);
+        foldT = (f32) ((s32) floorf(foldT / 64.0f) * 64);
+    }
 
     /* D176(a) "M-90" fix: skyPortRenderPoly used to place these verts under a
      * plain pixel-space ORTHO projection, i.e. every vertex got w=1 and the

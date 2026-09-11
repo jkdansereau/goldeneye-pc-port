@@ -496,7 +496,21 @@ through a converter or a runtime bswap fixup reads scrambled.
   things happening" rather than one quantization mismatch. Fix: hoist the
   scale computation to scan every vertex in the whole shared group once,
   before the per-triangle calls, and thread that one value through instead
-  of letting each call recompute its own.
+  of letting each call recompute its own. **Follow-on caveat #2 (D227,
+  M-98): fixing ONE per-primitive-derived quantity this way doesn't fix
+  every one.** The same routine can derive more than one such "shared state
+  from the whole vertex group" value — GE's sky code also floors S/T into a
+  per-primitive range fold to keep it in `s16` (`floorf(minS/64)*64`,
+  `sky.c`'s `skyPortRenderPoly`). Sharing `wScale` across the fan and
+  leaving the fold per-call left the exact same seam-shaped bug alive one
+  field over: nominally-identical shared vertices still bake different
+  absolute values (here, off by an exact multiple of the fold period) into
+  each triangle's own vertex buffer. When you find one "derive this from
+  only my local call's inputs, should derive from the whole shared group"
+  bug in a routine, grep the same function for every other value computed
+  the same way (any per-call min/max/floor/round over a subset of a larger
+  shared vertex/primitive pool) — don't assume fixing the first one you
+  found closes the whole defect class.
 - Z buffer cleared by pointing the color image at it + fill-rect → does
   nothing in fast3d; must emit `G_CLEAR_DEPTH_EXT` (D105).
 - LOD / detail mip tiles: fast3d fabricates a crop when detail textures
