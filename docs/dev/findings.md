@@ -8649,3 +8649,82 @@ applying it — do not repeat this fix:**
   that is the one load-bearing assumption ("same weapon, same ROM bytes")
   this whole investigation has taken for granted but never directly
   checked with a probe.
+
+## D217 — M-89 cont.: decisive probe — decode is proven correct+identical across levels; the parked defect ② fix does NOT fix the visible symptom; new leading theory is a stale/dangling `tex->data` arena pointer, not a decode or cache-key bug
+
+Ran the actual empirical test the M-89 section above called for, rather than
+delegating it further. **Result answers the open question decisively and
+rules out both of this row's previous leads.**
+
+**Probe added** (`src/game/image.c`, `texInflateZlib`, `#ifdef PORT` +
+`getenv("GE_D217TEX")`, follows the `GE_TEXDUMP`/`GE_D85TEX` pattern):
+logs `texnum`/`format`/`numcolours`/`palette[0]`/`palette[1]` **straight off
+the decode bitstream**, before any arena/pointer math — the most direct
+possible check of "does this texture number decode to the same bytes on
+both levels."
+
+**Result:** ran BUNKER1 (`-level_09`) and FACILITY (`-level_34`) headless
+with `GE_D217TEX=1`. `texnum=1608` is the only `numcolours=1` texture common
+to both logs, and its `pal0` value (`0001`, black) matches the previously
+documented BUNKER1-correct value exactly — confirming this is the PP7 grip.
+**`texnum=1608` decodes to `pal0=0001` on BOTH levels, identically, every
+time it's called.** This directly disproves the M-89 "different ROM bytes
+per level" open question (lead a is dead — the decode is correct and
+level-invariant) and also rules out any remaining decode-math theory: the
+bug is not in `texInflateZlib`, `texGetDepthAndSize`, or `gfx_dp_load_tlut`
+(already shown correct M-89) — it is **strictly downstream of a provably
+correct decode**.
+
+**Then tested the parked defect ② fix (`fix/d217-model-texture-palette`,
+`f6fc0399` — the CI-texture-cache-key content-hash) directly against this
+exact FACILITY repro**, since "correct decode, wrong render" is precisely
+the signature that fix targets (a stale cache `HIT` serving a different
+material's already-decoded palette). **Built it, ran `-level_34`, captured
+frame 380: the grip is still solid green.** The already-written, previously
+untested-against-this-repro defect ② fix does **not** fix the visible
+symptom. This means defect ① and defect ② are **not the same underlying
+bug** — they were right to be tracked separately, and defect ②'s fix should
+still land (real, separate, still needs its 21-level sweep) but will not
+close this row on its own.
+
+**New leading theory (untested, most concrete lead yet):** since a fresh
+decode is proven correct, and the fast3d-side cache-key fix doesn't help,
+the render-time GBI command for this material must be reading a `tex->data`
+pointer whose *arena contents have changed* between when it was decoded and
+when the DL that references it is actually drawn — i.e. a **stale/dangling
+pointer into the `texpool` arena**, not a decode or cache-lookup bug. GE's
+`texpool` (`image.c` `texLoad`/`texInitPool`, two-ended `leftpos`/`rightpos`
+allocator) is reused across many textures per level; if it resets or the
+model-node/GDL that references texture 1608 caches a raw pointer/segment
+address resolved once (e.g. at weapon-pickup or level-load time) rather
+than re-resolving through `texFindInPool` every time it draws, then any
+*later* texture decode that reuses that same arena address (plausible on a
+texture-heavy level like FACILITY, less likely on the lighter BUNKER1) would
+silently overwrite the grip's palette bytes with whatever the next tenant's
+content is — explaining both "same weapon, different wrong color per level"
+(depends on what else that level's arena happened to decode nearby/after)
+and "clean on the lighter level" (less arena churn/reuse pressure).
+
+**Confidence:** HIGH the decode itself and the fast3d/cache-key layer are
+now both cleared (empirically, not just by inspection). MEDIUM-LOW on the
+stale-arena-pointer mechanism — plausible and consistent with all evidence
+so far, but not yet probed directly.
+
+**For whoever picks this up next:** probe whichever code path holds the
+`Gfx*`/model-node reference to this material's `SetTextureImage` address at
+*draw* time (`texWriteLoadToTmemAddr`'s caller chain from the weapon
+model-DL walk, not `texLoad` itself) and log the `tex->data` pointer value
++ a fresh read of the two bytes at the computed palette offset **at draw
+time**, alongside a second log of what `texInflateZlib` most recently wrote
+to that same address (extend the `GE_D217TEX` probe with an address field
+to correlate). If the drawn address's live content no longer matches what
+was last decoded there, that confirms the stale-arena-pointer theory
+directly and narrows the fix to wherever the model DL caches that pointer
+instead of re-resolving it. Probe left in tree (`GE_D217TEX`, env-gated,
+inert by default).
+
+**VERIFY performed this session:** `tools_pc/verify.sh bunker1` — PASS,
+no regression from the (inert-by-default) probe. `-level_09`/`-level_34`
+`GE_D217TEX=1` headless captures — decisive result above. Built and ran
+the parked defect ② fix directly against `-level_34` frame 380 — still
+green, screenshot evidence in this session's scratchpad.
