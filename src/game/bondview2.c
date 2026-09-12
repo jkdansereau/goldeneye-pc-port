@@ -4241,18 +4241,21 @@ void currentPlayerSetFadeColour(s32 r, s32 g, s32 b, f32 frac) {
      * envelope in bondviewPlayerTickDamageAndHealth above — white 0xFF
      * with an alpha envelope scaled by remaining health — and the red
      * 150,0,0 overlay once the death blood finishes) — every other caller
-     * passes (0,0,0). Zeroing the RGB here therefore kills exactly the hit
-     * flash / damage indicator and leaves all blackouts, the colour screen
-     * and the death fade untouched. Default 0 = original behaviour. */
+     * passes (0,0,0). User playtest (M-105 cont.) caught that zeroing just
+     * the RGB isn't enough: `frac` is the overlay's alpha/opacity, so a
+     * zeroed-RGB-but-nonzero-frac call still draws a fully opaque BLACK
+     * flash at the same envelope as the original white one -- same visual
+     * intrusion, different colour. Zero frac too so the overlay doesn't
+     * draw at all. Leaves all blackouts, the colour screen and the death
+     * fade's *own* frac-driven timing untouched (their frac is unaffected
+     * since they only ever pass (0,0,0) here). Default 0 = original
+     * behaviour. */
     extern s32 portNoHitFlash;
-    if (getenv("GE_NOHITFLASH_TRACE") && (r != 0 || g != 0 || b != 0)) {
-        osSyncPrintf("D232: currentPlayerSetFadeColour(r=%d g=%d b=%d frac=%f) gate=%d caller=%p\n",
-                     (int)r, (int)g, (int)b, frac, (int)portNoHitFlash, __builtin_return_address(0));
-    }
     if (portNoHitFlash && (r != 0 || g != 0 || b != 0)) {
         r = 0;
         g = 0;
         b = 0;
+        frac = 0.0f;
     }
 #endif
     g_CurrentPlayer->colourscreenred = r;
