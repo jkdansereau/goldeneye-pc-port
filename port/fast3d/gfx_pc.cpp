@@ -1743,12 +1743,23 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
                 sysLogPrintf(LOG_NOTE,
                     "D172: multitex tri combine=%llx tex_lod=%d first=%u | "
                     "cfg1[tile=%u tmem=%u fmt=%u siz=%u] | "
-                    "SAMPLED0=tile%u(tmem=%u) SAMPLED1=tile%u(tmem=%u fmt=%u)%s",
+                    "SAMPLED0=tile%u(tmem=%u) SAMPLED1=tile%u(tmem=%u fmt=%u)%s | "
+                    /* D219 (docs/dev/findings.md): explosion.c never clears
+                     * G_LIGHTING before drawing these particle billboards -
+                     * it relies on whatever last set it. If lighting is ON
+                     * here, cn[]'s authored RGBA tint is misread as a normal
+                     * vector (gfx_pc.cpp:1301-1346) and SHADE becomes a
+                     * scene-light color instead of red/orange, which would
+                     * explain a state-dependent purple/blue that a synthetic
+                     * scripted repro (M-90) might not reproduce. */
+                    "geometry_mode=%08x LIGHTING=%s",
                     (unsigned long long)rdp.combine_mode, (int)rdp.tex_lod, fi,
                     c1, rdp.texture_tile[c1].tmem, rdp.texture_tile[c1].fmt, rdp.texture_tile[c1].siz,
                     s0, rdp.texture_tile[s0].tmem,
                     s1, rdp.texture_tile[s1].tmem, rdp.texture_tile[s1].fmt,
-                    (s1 == s0) ? "  <-- TEXEL1 == TEXEL0 (BUG)" : "");
+                    (s1 == s0) ? "  <-- TEXEL1 == TEXEL0 (BUG)" : "",
+                    rsp.geometry_mode,
+                    (rsp.geometry_mode & G_LIGHTING) ? "ON <-- D219 SUSPECT" : "off");
             }
         }
     }
