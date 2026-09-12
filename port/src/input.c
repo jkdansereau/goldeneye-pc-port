@@ -209,12 +209,22 @@ static double mouseSmDX = 0.0, mouseSmDY = 0.0;
 static double mouseDX = 0.0;
 static double mouseDY = 0.0;
 
-/* Mouse-wheel -> weapon cycle: a wheel notch queues a short A-button press
- * (GE's default scheme cycles the weapon forward on a fresh A edge, invButtons
- * = A_BUTTON, bondview2.c:5162/5326). Held for a couple of polls so the game
- * sees a clean press+release edge. */
-#define WHEEL_PULSE_POLLS 2
-static int wheelPulse = 0;
+/* Mouse-wheel -> weapon cycle (D223): directional, like a normal PC shooter.
+ * The port forces CONTROLLER_CONFIG_HONEY (bondview.c:1484), so GE's default
+ * scheme applies (bondview2.c:5177-5179): invButtons = A_BUTTON,
+ * shootButtons = Z_TRIG, and the cycle signals are (bondview2.c:5337-5346):
+ *   forward  = fresh A edge while Z is NOT held
+ *   backward = Z fresh edge while A IS held (the N64 "hold A, tap Z" trick)
+ * moveData.triggerOn (bondview2.c:5419) requires A to be released, so the
+ * synthesized Z edge in the backward sequence can never fire a shot.
+ *
+ * wheelFwd:  remaining polls of the A pulse (clean press+release edge).
+ * wheelBack: 2 = present A-only next poll; 1 = present A+Z next poll (the
+ *            fresh-Z-edge-while-A-held poll). A must already read "held"
+ *            oldbuttons-wise before Z's edge, hence the two-poll sequence. */
+#define WHEEL_FWD_POLLS 2
+static int wheelFwd  = 0;
+static int wheelBack = 0;
 
 /* Item 1 (D165) — front-end pointer P-controller state. */
 static int    menuPointerMode  = 1;    /* 0 = legacy velocity, 1 = 1:1 pointer */
@@ -628,9 +638,14 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
             button |= GE_CONT_R;
         if (actHeld(ks, IA_ACTION))
             button |= GE_CONT_A;
-        if (wheelPulse > 0) {           /* mouse-wheel weapon cycle -> A pulse */
+        if (wheelFwd > 0) {             /* wheel up: fresh A edge = cycle forward */
             button |= GE_CONT_A;
-            wheelPulse--;
+            wheelFwd--;
+        } else if (wheelBack > 0) {     /* wheel down: hold A, tap Z = cycle backward */
+            button |= GE_CONT_A;
+            if (wheelBack == 1)
+                button |= GE_CONT_G;   /* fresh Z edge while A is held */
+            wheelBack--;
         }
         if (actHeld(ks, IA_CANCEL))     /* D145: Escape is in the default Cancel bind */
             button |= GE_CONT_B;
@@ -976,8 +991,11 @@ void inputSuspendForOverlay(void)
 
 void inputPostWheel(int notches)
 {
-    if (notches < 0) notches = -notches;   /* both directions cycle forward */
-    if (notches > 0) wheelPulse = WHEEL_PULSE_POLLS;
+    /* D223: keep the direction -- up cycles to the next weapon, down to the
+     * previous one. A burst of same-direction notches just re-arms the same
+     * pulse; a direction change mid-sequence restarts it (last wins). */
+    if (notches > 0)      { wheelFwd = WHEEL_FWD_POLLS; wheelBack = 0; }
+    else if (notches < 0) { wheelBack = 2;              wheelFwd = 0; }
 }
 
 /* Called from the host event pump on SDL_CONTROLLERDEVICEADDED/REMOVED.
