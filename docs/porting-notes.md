@@ -716,6 +716,11 @@ through a converter or a runtime bswap fixup reads scrambled.
   exposed. Offline ROM census (M-115): 94 such images — the 16-bit family
   is exactly `IMAGE_FIRE_0..14` + texnum 1198–1201/2430/2510–2523, and
   every ammo/flare/crosshair/muzzle-flash wide-pixel image is RGBA32.
+  **Only the fire frames were eyeball-verified (M-115); texnum
+  1198–1201/2430/2510–2523 were corrected by the importer contract, not
+  seen on screen.** If a sprite in any level ever renders with wrong or
+  inverted colors, check first whether its texnum is in that list (and
+  decode it with `GE_D219RAW=1` against `scratch/d219_census.txt`).
   General rule for this bug class: before "fixing" a shared decoder's
   byte order, enumerate **every consumer** of the buffer and check which
   endianness each one assumes — the fix belongs at the store site, keyed
