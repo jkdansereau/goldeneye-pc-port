@@ -224,7 +224,10 @@ jobs:
   windows-build:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: windows-latest
+    # Self-hosted for push/workflow_dispatch (fast, local ccache); fork PRs
+    # always stay on windows-latest — untrusted PR code must never reach a
+    # box that will later hold a ROM (docs/dev/notes/SELFHOSTED-RUNNER-PLAN.md §G2).
+    runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || fromJSON('["self-hosted", "windows"]') }}
     defaults:
       run:
         shell: msys2 {0}
