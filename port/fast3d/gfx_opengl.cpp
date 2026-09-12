@@ -699,9 +699,19 @@ static void gfx_opengl_upload_texture(const uint8_t* rgba32_buf, uint32_t width,
     /* GE_TEXDUMP: PPM-dump every uploaded texture (first N) for B2/D161 triage. */
     if (getenv("GE_TEXDUMP")) {
         static int td = 0;
-        if (td < 400 && width && height && width < 4096 && height < 4096) {
+        static int td_fire = 0;
+        /* D219: the 400-cap fills up during ordinary level load, long before
+         * a player-triggered explosion. Never suppress the 16x14 RGBA fire
+         * particle images (assets/oddtextures.c IMAGE_FIRE_N via
+         * globalDL_0x078..0x9a8) -- that's the one shape we actually need. */
+        const bool is_fire_shape = (width == 16 && height == 14);
+        if ((is_fire_shape || td < 400) && width && height && width < 4096 && height < 4096) {
             char nm[128];
-            snprintf(nm, sizeof nm, "texdump/t%03d_%ux%u_mip%d.ppm", td++, width, height, (int)gen_mipmaps);
+            if (is_fire_shape) {
+                snprintf(nm, sizeof nm, "texdump/fire%03d_%ux%u_mip%d.ppm", td_fire++, width, height, (int)gen_mipmaps);
+            } else {
+                snprintf(nm, sizeof nm, "texdump/t%03d_%ux%u_mip%d.ppm", td++, width, height, (int)gen_mipmaps);
+            }
             FILE* f = fopen(nm, "wb");
             if (f) {
                 fprintf(f, "P6\n%u %u\n255\n", width, height);
