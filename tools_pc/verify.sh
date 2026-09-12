@@ -297,6 +297,10 @@ except Exception:
   fi
 
   local brief="$R_BRIEF"
+  if [ "$status" = NO-FRAMES ] && [ -f "$CAPDIR/run.log" ]; then
+    echo "  -- $name run.log tail (NO-FRAMES, no crash -- likely startup/init failure) --"
+    tail -n 30 "$CAPDIR/run.log" | sed 's/^/  | /'
+  fi
   rm -rf "$CAPDIR"
   emit_verdict "$name" "$status" "$frames" "$worst" "$sym" "$note"
   if [ "$status" = CRASH ] && [ -n "$brief" ]; then
