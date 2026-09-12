@@ -230,12 +230,20 @@ jobs:
     runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || fromJSON('["self-hosted", "windows"]') }}
     defaults:
       run:
-        shell: msys2 {0}
+        # windows-latest (PR): the `msys2 {0}` alias registered by the
+        # setup-msys2 step below. Self-hosted (push/dispatch): MSYS2 is
+        # hand-maintained on the box (never installed per run), so this
+        # invokes its bash directly instead — same command setup-msys2's
+        # wrapper uses, just without needing that action to have run.
+        shell: >-
+          ${{ github.event_name == 'pull_request' && 'msys2 {0}'
+              || 'C:\msys64\usr\bin\bash.exe -leo pipefail "{0}"' }}
     env:
       # Same opt-in ccache CMakeLists.txt already wires up (Step 5). Note:
       # this cache path is read/written by the JS actions/cache step outside
       # the msys2 shell too, so it stays a plain workspace-relative path
       # rather than an msys /c/... form.
+      MSYSTEM: MINGW64
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 500M
     steps:
@@ -243,7 +251,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: msys2/setup-msys2@v2
+      # windows-latest is ephemeral — every PR run needs a full MSYS2 install.
+      # Self-hosted never runs this (see the dependency check below instead).
+      - name: Install MSYS2 (windows-latest / PR only)
+        if: github.event_name == 'pull_request'
+        uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
@@ -256,6 +268,14 @@ jobs:
             mingw-w64-x86_64-ccache
             zip
             unzip
+
+      # Self-hosted only: fails fast with exact install instructions if the
+      # box's hand-maintained MSYS2 is missing a required package, instead of
+      # a confusing failure deeper in the build. windows-latest just installed
+      # everything above, so this would be redundant there.
+      - name: Check self-hosted dependencies
+        if: github.event_name != 'pull_request'
+        run: tools_pc/check-selfhosted-deps.sh
 
       - name: Restore ccache
         uses: actions/cache@v4
