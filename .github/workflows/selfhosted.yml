@@ -45,11 +45,14 @@ permissions:
   contents: read
 
 # One ROM job at a time per ref; never cancel an in-flight sweep out from
-# under itself (the sweep is serialized by its own lockdir + watchdog).
+# under itself (the sweep is serialized by its own lockdir + watchdog). Group
+# + cancel-in-progress:false is what actually serializes runs — GitHub
+# Actions' workflow-level `concurrency` has no `max-parallel` key (that only
+# exists under a job's `strategy:` for matrix jobs); a stray one here is a
+# hard parse error that blocks every dispatch.
 concurrency:
   group: selfhosted-${{ github.ref }}
   cancel-in-progress: false
-  max-parallel: 1
 
 env:
   ROM_CACHE_KEY: ge-rom-data-ntsc-v1
