@@ -20,7 +20,7 @@ D189,FIXED,Linux -fstack-protector aborts on the decomp's latent stack-buffer ov
 D190,?,"Linux -level_45 SIGSEGV at load in add_ptr_to_objective (objective.c:64) (M-48, open).","CLOSED — not a port bug; level 45 is MP-only and has no solo setup file in the ROM (root-caused M-105, reproduced on Windows)."
 D191,FIXED,Windows -O2 release-bundle crash:,FIXED + PLAYTEST-VERIFIED (M-79).
 D193,FIXED,NPC AI locomotion is too slow —,FIXED + user-playtest-verified (M-81) —
-D194,OPEN,Mouse input needs another tuning pass —,"OPEN — root cause and fix direction known, not implemented."
+D194,PARTIAL,Mouse input needs another tuning pass —,"PARTIAL — part (b) landed this session (M-107), parts (a) and the SOLITAIRE controldef switch still open."
 D195,OPEN,"Transparency / alpha surfaces broken on Control (M-49, user playtest) —","OPEN — not investigated (M-49), needs a capture"
 D197,OPEN,"Character face/head textures wrap around the head, seen on Silo (M-49, user playtest).","OPEN — not investigated (M-49), needs a capture"
 D198,FIXED,alAdpcmPull/_decodeChunk used K0_TO_PHYS (an unconditional & 0x1FFFFFFF mask) on 64-bit heap pointers (src/libultra/audio/load.c).,FIXED (src/libultra/audio/load.c) —
