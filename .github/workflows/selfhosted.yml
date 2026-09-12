@@ -130,8 +130,10 @@ jobs:
             exit 2
           }
           mkdir -p data
-          cp "$seed/ge007.ntsc-final.z64" "$seed/pcmodels-ntsc-final" \
-             "$seed/pccg-ntsc-final" data/
+          # -r: pcmodels-*/pccg-* are directories, not single files (found by
+          # testing — a plain cp failed with "omitting directory").
+          cp -r "$seed/ge007.ntsc-final.z64" "$seed/pcmodels-ntsc-final" \
+                "$seed/pccg-ntsc-final" data/
           echo "seeded ROM store from $seed"
 
       # Explicit save (restore alone never saves): persist the seeded store
