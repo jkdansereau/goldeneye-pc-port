@@ -74,7 +74,7 @@ D215,FIXED,1P weapon viewmodel never drew in-level —,"FIXED (src/game/gunfire.
 D216,PARTIAL,"Game.SkipIntro — boot straight to the file-select menu (M-83, port + one #ifdef PORT game-code line, PD parity, Phase 4 quick win).",LANDED + VERIFIED this session.
 D217,FIXED,1P weapon viewmodel + third-person Bond model textures render garbled —,FIXED (M-90/M-92/M-97; PR #47 texpool alignment + PR #49 CI-cache palette key) —
 D218,PROPOSED,Wide FOV exposes the per-level draw-distance / fog boundary —,"Logged (M-84), fix proposed + parked."
-D219,OPEN,"Explosions render purple/blue (M-87 Dam PPK report; user-confirmed 2026-09-12 NOT Dam-exclusive, game-wide).","OPEN, PRIORITY — M-89/M-90 static+scripted passes exhausted, need a live GE_PCDUMP capture during a real explosion to actually fix."
+D219,OPEN,"Explosions render purple/blue (M-87 Dam PPK report; user-confirmed 2026-09-12 NOT Dam-exclusive, game-wide).","OPEN, PRIORITY — M-110 new lead: explosion.c never clears G_LIGHTING before particle draws; a GE_D172=1 probe is now instrumented (port/fast3d/gfx_pc.cpp) to catch it live, sanity-checked against the known-clean M-90 repro. Needs one live GE_PCDUMP/GE_D172=1 capture during a real explosion to confirm or rule out."
 D220,PARTIAL,"1P muzzle flash position shifts upward at higher Video.FovScale (M-87, user QA, Jungle/M16).","ANALYZED (M-91) — the suspected unscaled-viewmodel root does NOT hold; this is correct perspective behavior, likely cosmetic/QoL."
 D85,OPEN,room primary/secondary DL → texLoadFromGdl garbage,"OPEN (safety-netted; widen/pool fixes landed, geometry now renders)"
 D86 · D87,RESOLVED,modelInitRwData truncated ptr · attract-demo BE ramromfilestructure,resolved
