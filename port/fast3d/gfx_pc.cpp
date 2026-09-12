@@ -1453,7 +1453,26 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
     struct LoadedVertex* v_arr[3] = { v1, v2, v3 };
 
     if ((rsp.extra_geometry_mode & G_NO_CLIPPING_EXT) == 0) {
-        if (v1->clip_rej & v2->clip_rej & v3->clip_rej) {
+        /* D233: the outcode bits set in gfx_sp_vertex (x<-w / x>w / y<-w /
+         * y>w / z>w) are only valid half-space tests when w>0. A vertex
+         * that has crossed behind the camera plane (w<0) flips the sense of
+         * those comparisons, so its clip_rej bits can come out wrong. If
+         * that spurious bit happens to match the other two (genuinely
+         * correct) vertices' bits, the AND-reduction below fires and drops
+         * the whole triangle before it ever reaches the GPU -- even though
+         * OpenGL's own homogeneous clipper (which handles w<0 correctly)
+         * would have rendered the visible portion of it. This hits large
+         * polygons near the camera (room walls/ceilings near a doorway,
+         * where the camera is close enough for a vertex to sit behind it)
+         * far more than small prop models, matching D233's "room geometry
+         * intermittently vanishes near doors, furniture/terminals still
+         * draw" report. Fix: never trust the trivial-reject AND test when
+         * any vertex has a negative w -- defer to GL's clipper instead,
+         * same as the backface-cull code just below already does for the
+         * same w-sign hazard. Worst case for the (rare) mixed-sign case is
+         * a few extra triangles reaching the GPU; never fewer. */
+        bool any_behind_camera = (v1->w < 0) || (v2->w < 0) || (v3->w < 0);
+        if (!any_behind_camera && (v1->clip_rej & v2->clip_rej & v3->clip_rej)) {
             // The whole triangle lies outside the visible area
             return;
         }

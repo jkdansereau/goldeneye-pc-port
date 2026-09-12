@@ -612,6 +612,24 @@ through a converter or a runtime bswap fixup reads scrambled.
 - Portal near-plane: z==0 clip points project to ±1e20; x86-64 float
   garbage can come back `min>max` / non-finite and slip past a
   degenerate-box check that clamps to full-screen on N64 (D106).
+- fast3d CPU-side "trivial reject" (`v1->clip_rej & v2->clip_rej &
+  v3->clip_rej` in `gfx_sp_tri1`) trusts per-vertex outcodes (`x<-w`,
+  `x>w`, etc.) that are only valid half-space tests when `w>0`. A vertex
+  behind the camera (`w<0`) flips the comparison sense, so its outcode can
+  be wrong; if that spurious bit happens to match the other two (correct)
+  vertices', the AND-reduction drops a triangle GL's own clipper would
+  have rendered correctly. Bites large near-camera polygons (room
+  walls/ceilings close to a doorway) far more than small prop models —
+  reads as "background geometry flickers away, props keep drawing" (D233).
+  The backface-cull code right below already special-cases this same
+  w-sign hazard for its cross-product sign; the trivial-reject block
+  didn't. Fix pattern: skip the AND-test (don't trivially reject) whenever
+  any vertex has `w<0` — safe, since it only ever adds triangles, never
+  drops more. General lesson: any CPU-side "skip this triangle" heuristic
+  in fast3d needs the same w<0-behind-camera exemption the existing
+  backface culling already has, or it'll silently eat near-camera geometry
+  exactly where a port is most likely to get scrutinized (doorways,
+  tight corridors).
 - **D74 wrap-block is DEAD CODE** (`gfx_pc.cpp:1546/1551`): guard is
   `cms & G_TX_WRAP` but `G_TX_WRAP == 0`, so always false (line 1887 does
   it right with `cms == G_TX_WRAP`). And if it did run it indexes
