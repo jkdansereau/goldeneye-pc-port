@@ -17,7 +17,7 @@ D186,PARTIAL,"Video.FpsCap throttles the sim, not just presentation (M-39 diag, 
 D187,FIXED,"HUD ammo-type/weapon icon vanished at -O2 (M-46 root-cause, M-47 fix + verify).","FIXED (src/game/gunfire.c, #ifdef AVOID_UB); PR #19"
 D188,FIXED,Linux -O2 boot crash:,"FIXED (src/libultrare/libc/xprintf.c, src/sprintf.c, #ifdef PORT); PR #22"
 D189,FIXED,Linux -fstack-protector aborts on the decomp's latent stack-buffer overruns (M-48) —,"FIXED (CMakeLists.txt, src/game/stan.c #ifdef PORT); PR #23"
-D190,OPEN,"Linux -level_45 SIGSEGV at load in add_ptr_to_objective (objective.c:64) (M-48, open).",OPEN — not investigated (M-48)
+D190,?,"Linux -level_45 SIGSEGV at load in add_ptr_to_objective (objective.c:64) (M-48, open).","CLOSED — not a port bug; level 45 is MP-only and has no solo setup file in the ROM (root-caused M-105, reproduced on Windows)."
 D191,FIXED,Windows -O2 release-bundle crash:,FIXED + PLAYTEST-VERIFIED (M-79).
 D193,FIXED,NPC AI locomotion is too slow —,FIXED + user-playtest-verified (M-81) —
 D194,?,Mouse input needs another tuning pass —,
