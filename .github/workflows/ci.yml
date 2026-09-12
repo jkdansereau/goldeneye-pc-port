@@ -66,11 +66,30 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      # Windows builds default to the self-hosted box (fast, local ccache;
+      # docs/dev/notes/SELFHOSTED-RUNNER-PLAN.md §G2) for everything EXCEPT:
+      # (a) a release build (tag push) -- keep that on a clean, reproducible
+      #     GitHub-hosted runner for the artifact that actually ships, and
+      # (b) a fork PR -- untrusted PR code must never reach a box that will
+      #     later hold a ROM. Same-repo (non-fork) PRs now also get routed to
+      #     self-hosted per the 2026-09-12 standing preference.
+      windows_selfhosted: ${{ steps.runner.outputs.selfhosted }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 0
+
+      - id: runner
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "selfhosted=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request" ] && \
+               [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "selfhosted=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "selfhosted=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - id: filter
         run: |
@@ -224,10 +243,10 @@ jobs:
   windows-build:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    # Self-hosted for push/workflow_dispatch (fast, local ccache); fork PRs
-    # always stay on windows-latest — untrusted PR code must never reach a
-    # box that will later hold a ROM (docs/dev/notes/SELFHOSTED-RUNNER-PLAN.md §G2).
-    runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || fromJSON('["self-hosted", "windows"]') }}
+    # Self-hosted by default (fast, local ccache); windows-latest only for a
+    # release (tag) build or a fork PR — see the `changes` job's `runner`
+    # step for the exact rule (docs/dev/notes/SELFHOSTED-RUNNER-PLAN.md §G2).
+    runs-on: ${{ needs.changes.outputs.windows_selfhosted == 'true' && fromJSON('["self-hosted", "windows"]') || 'windows-latest' }}
     defaults:
       run:
         shell: msys2 {0}
@@ -243,26 +262,27 @@ jobs:
         with:
           persist-credentials: false
 
-      # windows-latest (PR) is ephemeral: full install + update every run.
-      # Self-hosted (push/dispatch): `release: false` reuses the box's own
-      # C:\msys64 as-is and, with update/install both empty here, does no
-      # pacman -Syu / pacman -S at all (verified against the action's source)
-      # — it only registers the `msys2 {0}` shell wrapper every job needs.
-      # Packages themselves are hand-maintained on the box; the dependency
-      # check below (not this step) is what verifies they're present.
+      # windows-latest (release tag / fork PR) is ephemeral: full install +
+      # update every run. Self-hosted (everything else): `release: false`
+      # reuses the box's own C:\msys64 as-is and, with update/install both
+      # empty here, does no pacman -Syu / pacman -S at all (verified against
+      # the action's source) — it only registers the `msys2 {0}` shell
+      # wrapper every job needs. Packages themselves are hand-maintained on
+      # the box; the dependency check below (not this step) verifies they're
+      # present.
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          release: ${{ github.event_name == 'pull_request' }}
-          update: ${{ github.event_name == 'pull_request' }}
-          install: ${{ github.event_name == 'pull_request' && 'mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-SDL2 mingw-w64-x86_64-zlib mingw-w64-x86_64-python mingw-w64-x86_64-ccache zip unzip' || '' }}
+          release: ${{ needs.changes.outputs.windows_selfhosted != 'true' }}
+          update: ${{ needs.changes.outputs.windows_selfhosted != 'true' }}
+          install: ${{ needs.changes.outputs.windows_selfhosted != 'true' && 'mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-SDL2 mingw-w64-x86_64-zlib mingw-w64-x86_64-python mingw-w64-x86_64-ccache zip unzip' || '' }}
 
       # Self-hosted only: fails fast with exact install instructions if the
       # box's hand-maintained MSYS2 is missing a required package, instead of
       # a confusing failure deeper in the build. windows-latest just installed
       # everything above, so this would be redundant there.
       - name: Check self-hosted dependencies
-        if: github.event_name != 'pull_request'
+        if: needs.changes.outputs.windows_selfhosted == 'true'
         run: tools_pc/check-selfhosted-deps.sh
 
       - name: Restore ccache
