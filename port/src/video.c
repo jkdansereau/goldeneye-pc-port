@@ -86,6 +86,11 @@ f32 portScreenShakeScale = 1.0f;
  * 0 (default) = the legal screen + logo attract sequence plays as normal. */
 s32 portSkipIntro = 0;
 
+/* D232: Game.NoHitFlash — the community "no damage flash" toggle (route-(b)
+ * hook in src/game/bondview2.c currentPlayerSetFadeColour). 0 (default) =
+ * original damage flash. */
+s32 portNoHitFlash = 0;
+
 /* D211: Video.FovScale as a multiplier on the render FOV. Applied game-side
  * at the guPerspectiveF chokepoint (src/fr.c) so it lands BEFORE the CPU
  * pre-multiplies projection x view into the combined world matrix — the
@@ -97,6 +102,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
 {
     configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
     configRegisterInt("Game.SkipIntro", &portSkipIntro, 0, 1);
+    configRegisterInt("Game.NoHitFlash", &portNoHitFlash, 0, 1);
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 8);
