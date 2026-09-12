@@ -1,3 +1,8 @@
+---
+title: Building
+description: Full build and asset-extraction guide for the GoldenEye 007 PC port, covering Windows (MSYS2) and Linux.
+---
+
 # Building the PC port
 
 Stages:

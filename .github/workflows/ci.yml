@@ -333,8 +333,10 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
+            NOTES="$(mktemp)"
+            sed "s/<version>/${TAG}/g" .github/release-notes.md > "$NOTES"
             gh release create "$TAG" "${ASSETS[@]}" \
               --draft --prerelease \
               --title "GoldenEye 007 PC Port $TAG" \
-              --notes-file .github/release-notes.md
+              --notes-file "$NOTES"
           fi

@@ -1,5 +1,10 @@
 # Setup Guide
 
+> Inherited from the decompilation this repo forks. It covers building the
+> **N64 ROM** with the IDO toolchain — needed only for the one-time
+> asset-extraction step referenced from [`building.md`](building.md), not for
+> building or running the PC port itself.
+
 <!-- TOC -->
 * [Setup Guide](#setup-guide)
   * [Prerequisites](#prerequisites)

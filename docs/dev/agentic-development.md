@@ -1,3 +1,8 @@
+---
+title: Agentic Development
+description: A case study in two AI coding agents porting a Nintendo 64 game to PC — the setup, timeline, handoff workflow, and an honest assessment of what worked.
+---
+
 # Agentic development: two AI coding agents porting GoldenEye 007
 
 *How this port was actually built: a local open-weight model (Qwen 3.8 on a
