@@ -16,11 +16,15 @@
 #                restore-only. Integrity is re-verified every run against the
 #                committed ge007.u.sha1 (repo-tracked US ROM hash).
 #   - MSYS2   -> machine-level install at C:\msys64 (verify.sh hardcodes the
-#                prefix), installed and maintained BY HAND on the box — this
-#                workflow never runs msys2/setup-msys2 or pacman -S. It only
-#                runs tools_pc/check-selfhosted-deps.sh, which verifies the
-#                required package set is present and fails fast with exact
-#                install instructions if not (no silent auto-install).
+#                prefix), installed and its packages maintained BY HAND on
+#                the box. msys2/setup-msys2 still runs every job (it's what
+#                registers the `msys2 {0}` shell wrapper), but with
+#                `release: false` and update/install both omitted — verified
+#                against the action's source to do no pacman -Syu / pacman -S
+#                / network round-trip, just a fast reuse of the existing
+#                C:\msys64. Package presence is checked (not installed) by
+#                tools_pc/check-selfhosted-deps.sh, which fails fast with
+#                exact install instructions if something's missing.
 #
 # Trigger gating (non-negotiable):
 #   - workflow_dispatch ONLY for now. Flip on `push: branches: [main]` once
@@ -66,16 +70,8 @@ jobs:
     runs-on: [ self-hosted, windows ]
     defaults:
       run:
-        # Invokes MSYS2 bash directly (same invocation msys2/setup-msys2's
-        # generated wrapper uses under the hood) instead of the `msys2 {0}`
-        # shell alias — that alias only exists after running the setup-msys2
-        # action, which this workflow deliberately never does (no per-run
-        # install; MSYS2 is hand-maintained on the box, see §Persistence
-        # model above). MSYSTEM below makes this a MINGW64 login shell so
-        # /etc/profile puts mingw64/bin on PATH, same as the action would.
-        shell: 'C:\msys64\usr\bin\bash.exe -leo pipefail "{0}"'
+        shell: msys2 {0}
     env:
-      MSYSTEM: MINGW64
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 500M
     steps:
@@ -83,8 +79,21 @@ jobs:
         with:
           persist-credentials: false
 
-      # Fails fast with exact install instructions if the box's hand-
-      # maintained MSYS2 is missing a required package — no auto-install.
+      # `release: false` reuses the box's own C:\msys64 as-is instead of
+      # downloading/installing MSYS2 fresh (verified against the action's
+      # source: with this set, and update/install both omitted, it does
+      # exactly one `uname -a` + a pacman.conf sed tweak — no pacman -Syu,
+      # no pacman -S, no network round-trip). This step still has to run
+      # every time — it's what registers the `msys2 {0}` shell wrapper
+      # above — but does no install/update work.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          release: false
+
+      # Packages themselves are hand-maintained on the box (never installed
+      # by this workflow) — fails fast with exact install instructions if
+      # one's missing, instead of a confusing failure deeper in the build.
       - name: Check self-hosted dependencies
         run: tools_pc/check-selfhosted-deps.sh
 
