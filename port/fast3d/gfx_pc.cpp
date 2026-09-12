@@ -1077,11 +1077,24 @@ static void import_texture(int i, int tile, bool importReplacement) {
         /* GE_TEXRAW=1 additionally writes the raw source bytes handed to the
          * importer (texdump/rNNN_f<fmt>_s<siz>_<w>x<h>.bin) -- lets a decode
          * bug be told apart from a source-data bug offline (D183). */
-        if (tdc <= 400 && getenv("GE_TEXRAW")) {
+        const int tw = (int)(((rdp.texture_tile[tile].lrs - rdp.texture_tile[tile].uls) >> 2) + 1);
+        const int th = (int)(((rdp.texture_tile[tile].lrt - rdp.texture_tile[tile].ult) >> 2) + 1);
+        /* D219: same cap-exhausted-before-the-explosion problem as the
+         * D172/GE_TEXDUMP probes -- never suppress the fire particle image
+         * dump. NOTE: `tw`/`th` above come from gsDPSetTileSize (the DL sets
+         * the fire tile's logical wrap size to 56x56, unrelated to its real
+         * 16x14 pixel content), so they do NOT identify this texture -- a
+         * first attempt at this exemption keyed on tw/th==16/14 and silently
+         * never matched, burning a whole live-playtest cycle for nothing.
+         * The real, always-correct signature is the load's byte count: 16 *
+         * 14 * 2 bytes/texel (RGBA16) = 448, matching CALC_LRS(16,14,...) in
+         * every one of assets/oddtextures.c's 15 fire DLs and confirmed
+         * against the TEXEL1_bytes=448 field already proven out via the
+         * gfx_sp_tri1 D172/D219 probe. */
+        const bool is_fire_bytes = (loaded_texture.size_bytes == 448);
+        if ((is_fire_bytes || tdc <= 400) && getenv("GE_TEXRAW")) {
             char nm[160];
-            snprintf(nm, sizeof nm, "texdump/r%03d_f%u_s%u_%ux%u.bin", tdc - 1, fmt, siz,
-                     ((rdp.texture_tile[tile].lrs - rdp.texture_tile[tile].uls) >> 2) + 1,
-                     ((rdp.texture_tile[tile].lrt - rdp.texture_tile[tile].ult) >> 2) + 1);
+            snprintf(nm, sizeof nm, "texdump/r%03d_f%u_s%u_%ux%u.bin", tdc - 1, fmt, siz, tw, th);
             FILE* bf = fopen(nm, "wb");
             if (bf) { fwrite(loaded_texture.addr, 1, loaded_texture.size_bytes, bf); fclose(bf); }
         }
@@ -1738,7 +1751,22 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
          * (different tmem) -- filters out mip/LOD-bilerp false positives */
         if (rdp.texture_tile[c1].tmem != rdp.texture_tile[fi].tmem) {
             static int d172x = 0;
-            if (d172x < 40) {
+            static int d172_total = 0;
+            /* D219: the original 40-hit cap (sized for M-90's short scripted
+             * repro) silently went dark for the rest of a real play session
+             * after ~40 ordinary bullet-impact particles, well before any
+             * actual explosion -- and the silence itself was indistinguishable
+             * from "no more particle draws happened at all". Never suppress
+             * the interesting (lit) case, and keep an always-on counter with
+             * periodic summaries so a long session still proves whether this
+             * code path is being hit throughout, not just early on. */
+            const bool lit = (rsp.geometry_mode & G_LIGHTING) != 0;
+            d172_total++;
+            if (!lit && d172x >= 40) {
+                if (d172_total % 200 == 0) {
+                    sysLogPrintf(LOG_NOTE, "D172: (summary) %d multitex tris seen so far, still LIGHTING=off", d172_total);
+                }
+            } else {
                 d172x++;
                 sysLogPrintf(LOG_NOTE,
                     "D172: multitex tri combine=%llx tex_lod=%d first=%u | "
@@ -1752,14 +1780,29 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
                      * scene-light color instead of red/orange, which would
                      * explain a state-dependent purple/blue that a synthetic
                      * scripted repro (M-90) might not reproduce. */
-                    "geometry_mode=%08x LIGHTING=%s",
+                    "geometry_mode=%08x LIGHTING=%s | "
+                    /* D219 round 2: G_LIGHTING is ruled out (5000/5000
+                     * samples off, live-confirmed still purple/blue). Next
+                     * suspect: a D217-style texture-cache collision -- the
+                     * cache key is {texture_addr, fmt, siz, size_bytes,
+                     * palette_hash} (gfx_pc.h) with no content hash for
+                     * non-CI textures, so if two of the 15 FIRE_N images
+                     * ever resolve to the same address (Globalimagetable
+                     * fixup aliasing) or the cache evicts/reuses a texture_id
+                     * without a real re-upload, this tile's GL texture could
+                     * be serving stale/wrong-image content while every
+                     * bookkeeping field above still looks correct. */
+                    "TEXEL1_addr=%p TEXEL1_texid=%u TEXEL1_bytes=%u",
                     (unsigned long long)rdp.combine_mode, (int)rdp.tex_lod, fi,
                     c1, rdp.texture_tile[c1].tmem, rdp.texture_tile[c1].fmt, rdp.texture_tile[c1].siz,
                     s0, rdp.texture_tile[s0].tmem,
                     s1, rdp.texture_tile[s1].tmem, rdp.texture_tile[s1].fmt,
                     (s1 == s0) ? "  <-- TEXEL1 == TEXEL0 (BUG)" : "",
                     rsp.geometry_mode,
-                    (rsp.geometry_mode & G_LIGHTING) ? "ON <-- D219 SUSPECT" : "off");
+                    (rsp.geometry_mode & G_LIGHTING) ? "ON <-- D219 SUSPECT" : "off",
+                    rendering_state.textures[1] ? (const void*)rendering_state.textures[1]->first.texture_addr : nullptr,
+                    rendering_state.textures[1] ? rendering_state.textures[1]->second.texture_id : 0u,
+                    rendering_state.textures[1] ? rendering_state.textures[1]->first.size_bytes : 0u);
             }
         }
     }
