@@ -1,0 +1,234 @@
+# Self-hosted runtime (ROM-gated)
+#
+# Runs the build + the 21-level headless sweep (tools_pc/verify.sh) on the
+# self-hosted runner "corpyvt6agent01", the one machine that has a legal ROM.
+# This is the job class ci.yml explicitly does NOT do: CI is build-only, no
+# ROM, so runtime checks live here. Setup + rollout plan (gitignored, local):
+#   docs/dev/notes/SELFHOSTED-RUNNER-PLAN.md
+#
+# Persistence model — everything lives under the runner's own paths, managed
+# by the pipeline; no hand-maintained directories:
+#   - ccache  -> actions/cache (stored by the runner under _work/_temp)
+#   - ROM     -> actions/cache, key ge-rom-data-ntsc-v1. Bootstrap: copy the
+#                three files into {runner_home}/_rom-seed/ on the box; a run
+#                with an empty cache copies them in and attempts to save the
+#                cache entry. The seed dir is kept (NOT deleted) rather than
+#                treated as one-time -- actions/cache/save has been silently
+#                failing to persist on this box (warning, not a hard step
+#                failure; root cause open, see SELFHOSTED-RUNNER-PLAN.md), so
+#                the seed is the durable fallback every run re-copies from
+#                until that's fixed. Integrity is re-verified every run
+#                against the committed ge007.u.sha1 (repo-tracked US ROM hash).
+#   - MSYS2   -> machine-level install at C:\msys64 (verify.sh hardcodes the
+#                prefix), installed and its packages maintained BY HAND on
+#                the box. msys2/setup-msys2 still runs every job (it's what
+#                registers the `msys2 {0}` shell wrapper), but with
+#                `release: false` and update/install both omitted — verified
+#                against the action's source to do no pacman -Syu / pacman -S
+#                / network round-trip, just a fast reuse of the existing
+#                C:\msys64. Package presence is checked (not installed) by
+#                tools_pc/check-selfhosted-deps.sh, which fails fast with
+#                exact install instructions if something's missing.
+#
+# Trigger gating (non-negotiable):
+#   - workflow_dispatch ONLY for now. Flip on `push: branches: [main]` once
+#     the first manual runs are reliably green.
+#   - NEVER add `pull_request`: unreviewed fork code must not be routable to
+#     a runner that can see the ROM.
+#
+# Leak rules (docs/dev/notes/AGENT-VM-FORGEJO-PLAN.md checklist):
+#   - The ROM + sidecars live in the runner-managed cache only; nothing in
+#     this workflow uploads from data/.
+#   - Artifacts here are console logs + a JSON verdict only. Rendered frames
+#     (ppm/) are ROM-derived content and are NOT uploaded.
+
+name: Self-hosted runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      levels:
+        description: "Sweep subset, SWEEP_LEVELS format (blank = all 21)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+# One ROM job at a time per ref; never cancel an in-flight sweep out from
+# under itself (the sweep is serialized by its own lockdir + watchdog). Group
+# + cancel-in-progress:false is what actually serializes runs — GitHub
+# Actions' workflow-level `concurrency` has no `max-parallel` key (that only
+# exists under a job's `strategy:` for matrix jobs); a stray one here is a
+# hard parse error that blocks every dispatch.
+concurrency:
+  group: selfhosted-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ROM_CACHE_KEY: ge-rom-data-ntsc-v1
+
+jobs:
+  build-and-sweep:
+    runs-on: [ self-hosted, windows ]
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # `release: false` reuses the box's own C:\msys64 as-is instead of
+      # downloading/installing MSYS2 fresh (verified against the action's
+      # source: with this set, and update/install both omitted, it does
+      # exactly one `uname -a` + a pacman.conf sed tweak — no pacman -Syu,
+      # no pacman -S, no network round-trip). This step still has to run
+      # every time — it's what registers the `msys2 {0}` shell wrapper
+      # above — but does no install/update work.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          release: false
+
+      # Packages themselves are hand-maintained on the box (never installed
+      # by this workflow) — fails fast with exact install instructions if
+      # one's missing, instead of a confusing failure deeper in the build.
+      - name: Check self-hosted dependencies
+        run: tools_pc/check-selfhosted-deps.sh
+
+      # --- ROM + sidecars: runner-managed cache, one-time seed --------------
+      - name: Restore ROM + sidecars (runner cache)
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            data/ge007.ntsc-final.z64
+            data/pcmodels-ntsc-final
+            data/pccg-ntsc-final
+          key: ${{ env.ROM_CACHE_KEY }}
+
+      - name: Check ROM store presence
+        id: romcheck
+        run: |
+          present=true
+          for f in ge007.ntsc-final.z64 pcmodels-ntsc-final pccg-ntsc-final; do
+            if [ ! -f "data/$f" ]; then echo "missing from cache: $f"; present=false; fi
+          done
+          echo "present=$present" >> "$GITHUB_OUTPUT"
+
+      # {runner_home} = two levels up from RUNNER_WORKSPACE ({home}/_work/{repo}).
+      # NOT deleted after the cache save below (see that step's comment) --
+      # kept as a durable fallback source until the cache save is proven to
+      # actually round-trip on this box.
+      - name: Seed ROM cache (from durable seed dir)
+        if: steps.romcheck.outputs.present == 'false'
+        run: |
+          seed="$(dirname "$(dirname "$RUNNER_WORKSPACE")")/_rom-seed"
+          [ -d "$seed" ] || {
+            echo "ROM cache is empty and no seed found at $seed." >&2
+            echo "One-time bootstrap: copy ge007.ntsc-final.z64, pcmodels-ntsc-final," >&2
+            echo "and pccg-ntsc-final into that directory on the runner, then re-run." >&2
+            exit 2
+          }
+          mkdir -p data
+          # -r: pcmodels-*/pccg-* are directories, not single files (found by
+          # testing — a plain cp failed with "omitting directory").
+          cp -r "$seed/ge007.ntsc-final.z64" "$seed/pcmodels-ntsc-final" \
+                "$seed/pccg-ntsc-final" data/
+          echo "seeded ROM store from $seed"
+
+      # Explicit save (restore alone never saves): persist the seeded store
+      # immediately, before the build/sweep can fail out from under it.
+      # KNOWN ISSUE (2026-09-12): this reliably logs a WARNING annotation
+      # ("Failed to save: ... tar.exe failed with exit code 2") on this box
+      # and never actually persists anything to the cache -- but
+      # actions/cache/save treats a save failure as non-fatal by design, so
+      # the step still reports success and the job carries on. Root cause not
+      # yet found (see docs/dev/notes/SELFHOSTED-RUNNER-PLAN.md). Consequence:
+      # do NOT delete the seed dir after this step (previously done, and it
+      # meant a *silent* cache-save failure combined with the delete wiped
+      # the only copy of the ROM every run -- exactly what broke rollout
+      # step 5's repeated dispatches). The seed dir now stays in place
+      # indefinitely as a durable fallback; "Check ROM store presence" /
+      # "Seed ROM cache" above already re-copy from it whenever the cache
+      # comes back empty, so this is safe to leave as a no-op once the cache
+      # save is fixed for real.
+      - name: Save ROM cache
+        if: steps.romcheck.outputs.present == 'false'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            data/ge007.ntsc-final.z64
+            data/pcmodels-ntsc-final
+            data/pccg-ntsc-final
+          key: ${{ env.ROM_CACHE_KEY }}
+
+      - name: Verify ROM integrity (committed US sha1)
+        run: |
+          cd data
+          want="$(cut -d' ' -f1 ../ge007.u.sha1)"
+          got="$(sha1sum ge007.ntsc-final.z64 | cut -d' ' -f1)"
+          [ "$want" = "$got" ] || { echo "ROM hash mismatch: want $want got $got" >&2; exit 2; }
+          echo "ROM sha1 ok: $got"
+
+      # --- build -------------------------------------------------------------
+      # Same opt-in ccache CMakeLists.txt wires up (speed-ups plan Step 5);
+      # persisted via actions/cache like ci.yml's windows-build.
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-selfhosted-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-selfhosted-${{ hashFiles('CMakeLists.txt') }}-
+            ccache-selfhosted-
+
+      - name: Regenerate ROM-asset symbol file (US)
+        run: python scripts/gen_romassets.py u
+
+      - name: Build (ntsc-final)
+        run: ./build-pc.sh ntsc-final
+
+      # verify.sh: build-if-stale -> headless GE_PCDUMP per level -> crash
+      # symbolication -> pixcount -> framediff vs tools_pc/golden/. Serialized
+      # + watchdog + one retry by design (D117: not frame-deterministic).
+      - name: Level sweep (all 21, or dispatch subset)
+        run: |
+          [ -n "${{ inputs.levels }}" ] && export SWEEP_LEVELS='${{ inputs.levels }}'
+          tools_pc/verify.sh sweep --json > sweep.log 2>&1
+          rc=$?
+          cat sweep.log
+          exit $rc
+
+      # Pull the JSON verdict array out of the mixed stdout for easy review.
+      - name: Extract JSON verdict
+        if: always()
+        run: |
+          python -c "
+          import json, sys
+          s = open('sweep.log', encoding='utf-8', errors='replace').read()
+          i = s.rfind('[{')
+          out = '[]'
+          if i >= 0:
+              d, _ = json.JSONDecoder().raw_decode(s[i:])
+              out = json.dumps(d, indent=1)
+          open('sweep-verdict.json', 'w').write(out + '\n')
+          print(out)
+          "
+
+      # Console logs + verdict only — no frames, no ROM bytes (leak rules).
+      - name: Upload sweep report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: selfhosted-sweep-${{ github.run_number }}
+          path: |
+            sweep.log
+            sweep-verdict.json
+            ge007.crash.log
+          if-no-files-found: ignore
+          retention-days: 14
