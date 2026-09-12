@@ -26,11 +26,11 @@ D197,OPEN,"Character face/head textures wrap around the head, seen on Silo (M-49
 D198,FIXED,alAdpcmPull/_decodeChunk used K0_TO_PHYS (an unconditional & 0x1FFFFFFF mask) on 64-bit heap pointers (src/libultra/audio/load.c).,FIXED (src/libultra/audio/load.c) —
 D199,PARTIAL,Phase-3 software audio mixer:,"LANDED (port/src/mixer.c, port/include/mixer.h, include/PR/abi.h) —"
 D200,FIXED,-level_09 segfault: reverb's ALDelay.input/output are u32 —,FIXED — 5-line cast in reverb.c (this session)
-D196,OPEN,"OS mouse cursor stays visible after closing the F10 options overlay in click-to-lock mode (M-49, user playtest).","OPEN — root-caused, 1-line fix identified, not applied (M-49)"
+D196,FIXED,"OS mouse cursor stays visible after closing the F10 options overlay in click-to-lock mode (M-49, user playtest).","FIXED (6e758f1d, merged to main) —"
 D192,OPEN,Front-end mission/level-select grid pointer still can't reach the outer cells —,"OPEN — root-caused, not fixed (M-49)"
 D221,FIXED,SELECT FILE screen: the mouse hit-box for a file slot is vertically offset from its visible box —,FIXED (M-91) — root cause was NOT a coordinate/origin mismatch:
 D222,OPEN,High Video.FovScale breaks culling —,"OPEN — root cause known, not fixed."
-D223,OPEN,QoL ask: mouse-wheel weapon cycling should be directional like a normal PC shooter —,"OPEN — root cause + fix mechanism known, not implemented."
+D223,FIXED,QoL ask: mouse-wheel weapon cycling should be directional like a normal PC shooter —,"FIXED (M-105, port/src/input.c) —"
 D224,FIXED,"QoL gap (M-87, from a PD-PC-port survey):","DEPRIORITIZED (M-87, user call)."
 D225,OPEN,"Dev-tooling QoL (M-87, user ask):","OPEN — root-caused, not implemented."
 D226,OPEN,"QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.","OPEN — root cause / call sites identified, not designed or implemented."
