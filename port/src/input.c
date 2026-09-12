@@ -641,10 +641,24 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         if (wheelFwd > 0) {             /* wheel up: fresh A edge = cycle forward */
             button |= GE_CONT_A;
             wheelFwd--;
-        } else if (wheelBack > 0) {     /* wheel down: hold A, tap Z = cycle backward */
-            button |= GE_CONT_A;
-            if (wheelBack == 1)
-                button |= GE_CONT_G;   /* fresh Z edge while A is held */
+        } else if (wheelBack > 0) {     /* wheel down: A+Z together, not staggered.
+             * D223 follow-up: staggering (A alone for a poll, THEN adding Z) races
+             * the real game-tick rate -- if the two states land in separate ticks,
+             * the "A alone" tick is itself a fresh A edge with no Z held, which
+             * the game's own weaponForwardOffset formula reads as a genuine
+             * cycle-FORWARD request (bondview2.c weaponForwardOffset/
+             * weaponBackOffset, both control-scheme sites) *before* the
+             * correcting backward tick runs -- so depending on real-time
+             * poll/tick alignment (D117-class nondeterminism) a single wheel-down
+             * notch could silently do a stray forward step, or forward-then-back
+             * (net a skipped slot on wrap). Presenting A and Z together from the
+             * very first poll means whichever single tick samples the 0->(A|Z)
+             * transition sees them rising simultaneously; weaponForwardOffset
+             * requires Z NOT held, so it's unambiguous -- only backward fires,
+             * every time, regardless of tick timing. moveData.triggerOn (actual
+             * fire) is separately gated off while A/invButtons is held, so this
+             * doesn't risk an accidental shot either. */
+            button |= GE_CONT_A | GE_CONT_G;
             wheelBack--;
         }
         if (actHeld(ks, IA_CANCEL))     /* D145: Escape is in the default Cancel bind */
