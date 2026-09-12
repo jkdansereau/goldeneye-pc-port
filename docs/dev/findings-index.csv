@@ -116,7 +116,7 @@ D165,FIXED,"Front-end menu cursor doesn't feel like a mouse pointer (M-31, user 
 D166,FIXED,Hipfire mouse pitch is digital while yaw is analog —,FIXED (port/src/input.c).
 D233,OPEN,All levels (intermittent):,OPEN — not investigated; needs a GE_PCDUMP capture at a failing doorway
 D234,OPEN,"Dam: guard towers along the dam structure invisible except the first one (M-106, user QA report).",OPEN — not investigated
-D235,OPEN,"Facility: wrong textures ""now"" —",OPEN — needs which-surfaces + screenshot vs older build
+D235,OPEN,Wrong textures load after dying/restarting a level —,OPEN — needs: does it repro on a *fresh* level boot (rules out reload-state) vs only after death/restart (confirms it); which surfaces; a screenshot.
 D236,OPEN,"Surface 1: 2D billboard trees render as a wall/sheet of tree texture instead of discrete camera-facing tree sprites (M-106, user QA report).",OPEN — not investigated
 D237,OPEN,"QoL ask (M-106, user QA):",OPEN — not designed; port-only
 D238,OPEN,"QoL ask (M-106, user QA):",OPEN — not designed; port-only (port/src/input.c + config.c)
