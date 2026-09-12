@@ -20,6 +20,11 @@ extern "C" {
 int  audioInit(void);
 void audioDestroy(void);
 
+/* Mute-on-focus-loss (Audio.MuteOnFocusLoss, default on). Called from the
+ * host event pump on SDL window focus events; while muted, mixed blocks are
+ * dropped instead of queued. No-op when the toggle is off. */
+void audioHandleFocus(int gained);
+
 /* Number of samples (stereo s16 frames) currently queued. */
 s32  audioGetSamplesBuffered(void);
 
