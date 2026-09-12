@@ -38,7 +38,7 @@ D227,FIXED,Sky renders as two independently-moving halves —,"FIXED (M-100b, PR
 D229,OPEN,"Water on IsWater levels renders green and pulses blue<->green on an interval (M-101, user playtest, Frigate -level_26; Surface 2 also an IsWater level).","OPEN — pre-existing (A/B proven), mechanism partly identified, not root-caused."
 D230,OPEN,In-level music quality:,OPEN — not investigated.
 D233,FIXED,All levels (intermittent):,"FIXED (port/fast3d/gfx_pc.cpp, gfx_sp_tri1) —"
-D234,OPEN,"Dam: guard towers along the dam structure invisible except the first one (M-106, user QA report).",OPEN — not root-caused.
+D234,FIXED,"Dam: guard towers along the dam structure invisible except the first one (M-106, user QA report).",VISUALLY VERIFIED FIXED (M-108) —
 D228,OPEN,AK47 (and other) weapon models still show WHITE missing-texture patches after D217's texpool-alignment fix —,"OPEN — newly split out, not investigated."
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
@@ -121,3 +121,7 @@ D236,OPEN,"Surface 1: 2D billboard trees render as a wall/sheet of tree texture 
 D237,OPEN,"QoL ask (M-106, user QA):",OPEN — not designed; port-only
 D238,OPEN,"QoL ask (M-106, user QA):",OPEN — not designed; port-only (port/src/input.c + config.c)
 D239,OPEN,"QoL ask (M-106, user QA):",OPEN — supersedes/re-confirms the M-82 always-grab removal item; port-only
+D240,OPEN,"Player gunshot SFX timing/cadence reportedly does not match the N64 original's rate (M-106, user QA report).","OPEN — not root-caused; static call-site tracing only, no runtime verification possible in this environment."
+D241,OPEN,Player gunshot SFX goes silent under some conditions —,"OPEN — not newly root-caused; high confidence this is D207 reproduced, not an independent bug."
+D242,?,Player-death sequence UX regression vs N64 original:,NOT A PORT-LOGIC BUG as far as static analysis can tell.
+D243,OPEN,"Dam end-of-level cutscene (the abseil/bungee sequence, D148/D160's subject):","OPEN — root cause hypothesis (freed/stale display-list memory read during a cutscene camera-cut race) supported by direct trace evidence, not yet pinned to a specific allocation/free call site."
