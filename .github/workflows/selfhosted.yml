@@ -71,6 +71,26 @@ jobs:
         with:
           persist-credentials: false
 
+      # Registers the `msys2 {0}` shell wrapper used by every step below
+      # (found missing by testing: without this, GitHub Actions has no idea
+      # what "msys2" means and every step fails with `msys2: command not
+      # found`). MSYS2 itself is expected pre-installed at C:\msys64 per the
+      # rollout plan, so `install:` here is a fast no-op (pacman confirms
+      # everything already present) — mirrors ci.yml's windows-build step.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-SDL2
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-ccache
+            zip
+            unzip
+
       # --- ROM + sidecars: runner-managed cache, one-time seed --------------
       - name: Restore ROM + sidecars (runner cache)
         uses: actions/cache/restore@v4
