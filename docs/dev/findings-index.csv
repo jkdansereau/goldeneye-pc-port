@@ -36,7 +36,9 @@ D225,OPEN,"Dev-tooling QoL (M-87, user ask):","OPEN — root-caused, not impleme
 D226,OPEN,"QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.","OPEN — root cause / call sites identified, not designed or implemented."
 D227,FIXED,Sky renders as two independently-moving halves —,"FIXED (M-100b, PR #43) —"
 D229,OPEN,"Water on IsWater levels renders green and pulses blue<->green on an interval (M-101, user playtest, Frigate -level_26; Surface 2 also an IsWater level).","OPEN — pre-existing (A/B proven), mechanism partly identified, not root-caused."
-D230,OPEN,In-level music quality:,"OPEN — filed M-105, not yet investigated."
+D230,OPEN,In-level music quality:,OPEN — not investigated.
+D233,FIXED,All levels (intermittent):,"FIXED (port/fast3d/gfx_pc.cpp, gfx_sp_tri1) —"
+D234,OPEN,"Dam: guard towers along the dam structure invisible except the first one (M-106, user QA report).",OPEN — not root-caused.
 D228,OPEN,AK47 (and other) weapon models still show WHITE missing-texture patches after D217's texpool-alignment fix —,"OPEN — newly split out, not investigated."
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
@@ -114,3 +116,8 @@ D130,RESOLVED,"crash class C2 (Facility -level_34, Runway -level_35):",resolved 
 D164,PROPOSED,"Disclaimer / legal screen only draws the first line (D76 root cause, M-31).","FIX PROPOSED, NOT APPLIED (front.c is owned by another agent this session)."
 D165,FIXED,"Front-end menu cursor doesn't feel like a mouse pointer (M-31, user bug B5 follow-up).","FIXED (port/src/input.c; Input.MenuPointerMode, Input.HipfirePitchSpeed added)."
 D166,FIXED,Hipfire mouse pitch is digital while yaw is analog —,FIXED (port/src/input.c).
+D235,OPEN,Wrong textures load after dying/restarting a level —,OPEN — needs: does it repro on a *fresh* level boot (rules out reload-state) vs only after death/restart (confirms it); which surfaces; a screenshot.
+D236,OPEN,"Surface 1: 2D billboard trees render as a wall/sheet of tree texture instead of discrete camera-facing tree sprites (M-106, user QA report).",OPEN — not investigated
+D237,OPEN,"QoL ask (M-106, user QA):",OPEN — not designed; port-only
+D238,OPEN,"QoL ask (M-106, user QA):",OPEN — not designed; port-only (port/src/input.c + config.c)
+D239,OPEN,"QoL ask (M-106, user QA):",OPEN — supersedes/re-confirms the M-82 always-grab removal item; port-only

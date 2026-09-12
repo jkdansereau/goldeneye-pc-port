@@ -340,6 +340,26 @@ through a converter or a runtime bswap fixup reads scrambled.
   elsewhere. The Dam rappel cutscene (D148) reached this wall: data path proven intact;
   residual cause is runtime AI-script control-flow / `CAMERAMODE_POSEND` cinematic
   render (D75 family). `GE_D160=1` diagnostic ships; needs a live Dam-to-exit playthrough.
+  **M-106 addendum:** independently re-derived (not just re-cited) — `CutsceneRecord`
+  (propDef type 46) has zero pointer/union fields, so it cannot exhibit this class at
+  all; confirms the M-31 stride audit rather than superseding it. D148/D160's residual
+  cause is still unlocated (needs the live trace); see D173 for a related negative
+  result on the puppet-position side.
+- **D132/D126 corollary — a zeroed ROM-serialized pointer-width tail slot is not
+  automatically a converter bug; check the N64 source literal first (M-106).**
+  Before assuming an offline converter wrongly zeroed a widened pointer field
+  (the D122/D126/D132 "dead-on-load" pattern), grep the asset `.c` source tables
+  (`assets/obseg/**/*.c`) for that field's literal initialiser. `PadRecord.stan`
+  (`src/bondtypes.h:1744-1751`) looked exactly like a D126/D132 miss — a ROM-
+  serialized tail pointer, zeroed by `tools_pc/d88_emit.py`'s `emit_pad()` — but
+  every `PadRecord` in every checked setup table (`UsetupdamZ.c` etc.) initialises
+  `stan` to literal `0`; N64 never carried a live pointer there either, so the PC
+  zeroing is byte-identical to ground truth, not a regression. The tell that saves
+  the trip: if the *source*, not just the ROM binary, always writes `0`/`NULL` for
+  a field, it was never "dead-on-load" in the D123-corollary sense (a field that
+  reads a real small int/id before being overwritten) — it's simply always
+  runtime-computed, on both platforms, and a NULL seed into whatever consumes it
+  is the original game's normal case, not a port defect.
 - **D151 — a ROM-serialized `s32` slot decoded by the struct as `[u16 hi][u16 lo]`
   reads zero on LE.** N64 code frequently splits a 32-bit setup-stream word into
   `u16 reserved; u16 realvalue;` where the useful value is always small and lands
@@ -592,6 +612,24 @@ through a converter or a runtime bswap fixup reads scrambled.
 - Portal near-plane: z==0 clip points project to ±1e20; x86-64 float
   garbage can come back `min>max` / non-finite and slip past a
   degenerate-box check that clamps to full-screen on N64 (D106).
+- fast3d CPU-side "trivial reject" (`v1->clip_rej & v2->clip_rej &
+  v3->clip_rej` in `gfx_sp_tri1`) trusts per-vertex outcodes (`x<-w`,
+  `x>w`, etc.) that are only valid half-space tests when `w>0`. A vertex
+  behind the camera (`w<0`) flips the comparison sense, so its outcode can
+  be wrong; if that spurious bit happens to match the other two (correct)
+  vertices', the AND-reduction drops a triangle GL's own clipper would
+  have rendered correctly. Bites large near-camera polygons (room
+  walls/ceilings close to a doorway) far more than small prop models —
+  reads as "background geometry flickers away, props keep drawing" (D233).
+  The backface-cull code right below already special-cases this same
+  w-sign hazard for its cross-product sign; the trivial-reject block
+  didn't. Fix pattern: skip the AND-test (don't trivially reject) whenever
+  any vertex has `w<0` — safe, since it only ever adds triangles, never
+  drops more. General lesson: any CPU-side "skip this triangle" heuristic
+  in fast3d needs the same w<0-behind-camera exemption the existing
+  backface culling already has, or it'll silently eat near-camera geometry
+  exactly where a port is most likely to get scrutinized (doorways,
+  tight corridors).
 - **D74 wrap-block is DEAD CODE** (`gfx_pc.cpp:1546/1551`): guard is
   `cms & G_TX_WRAP` but `G_TX_WRAP == 0`, so always false (line 1887 does
   it right with `cms == G_TX_WRAP`). And if it did run it indexes
