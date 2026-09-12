@@ -40,6 +40,31 @@ u64 audioDumpBytePos(void)
     return s_audioDumpBytesWritten;
 }
 
+/* Mute-on-focus-loss (Audio.MuteOnFocusLoss, default on): the host event
+ * pump calls audioHandleFocus() on SDL window focus events. While muted,
+ * mixed blocks are dropped instead of queued; the game's AI regulator
+ * (src/audi.c) keeps producing and the queue is empty by the time focus
+ * returns, so audio resumes with fresh samples rather than a burst of stale
+ * ones. (Pause-on-focus-loss was considered and deferred: pausing the sim
+ * from the port layer interacts with the AI feedback loop + scheduler and
+ * needs its own design; mute alone kills the "blaring audio on alt-tab" half
+ * of the complaint. See docs/dev/findings.md D231.) */
+static int  cfgMuteOnFocusLoss = 1;
+static volatile int s_focusMuted = 0;
+
+void audioHandleFocus(int gained)
+{
+    if (!cfgMuteOnFocusLoss) {
+        return;
+    }
+    int m = gained ? 0 : 1;
+    if (m != s_focusMuted) {
+        s_focusMuted = m;
+        sysLogPrintf(LOG_INFO, "audio: %s (window focus %s)",
+                     m ? "muted" : "unmuted", gained ? "gained" : "lost");
+    }
+}
+
 static int  bufferSize = 512;
 
 /* D204/F3: was 8192 frames (372 ms). GE's AI feedback loop (src/audi.c:531)
@@ -280,7 +305,7 @@ void audioSetNextBuffer(const s16 *buf, u32 len)
             lastReportUs = now;
         }
     }
-    if (dev && buf && len) {
+    if (dev && buf && len && !s_focusMuted) {
         if (audioGetSamplesBuffered() < queueLimit) {
             SDL_QueueAudio(dev, buf, len);
             lastBufferBytes = len;
@@ -298,4 +323,5 @@ PD_CONSTRUCTOR static void audioConfigInit(void)
 {
     configRegisterInt("Audio.BufferSize", &bufferSize, 0, 1 * 1024 * 1024);
     configRegisterInt("Audio.QueueLimit", &queueLimit, 0, 1 * 1024 * 1024);
+    configRegisterInt("Audio.MuteOnFocusLoss", &cfgMuteOnFocusLoss, 0, 1);
 }

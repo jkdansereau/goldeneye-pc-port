@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #if defined(_WIN32)
 #include <direct.h>
@@ -27,6 +28,7 @@
 #include "system.h"
 #include "config.h"
 #include "video.h"
+#include "audio.h"
 #include "input.h"
 #include "optionsoverlay.h"
 
@@ -61,6 +63,15 @@ static int cfgWrapFix       = 0;   /* D74 sub-tile UV pre-wrap + RC3/D167 non-Po
 static int cfgFovScale      = 100; /* D211: percent of the original vertical FOV; 100 = unchanged (byte-identical) */
 static int cfgAniso         = 4;   /* D212: anisotropic filtering samples; 4 = the value fast3d already applied (no visual delta at default) */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
+
+/*
+ * Screenshot hotkey + output dir (D231). The key is a single SDL scancode
+ * name in the D214 style ("F12", "Print", "F8", ...); the dir defaults to
+ * ./screenshots. Both are read lazily/where used, so an ini edit takes
+ * effect on the next run like every other option.
+ */
+static char cfgShotKey[32]  = "F12";
+static char cfgShotDir[128] = "screenshots";
 
 /*
  * [Window] persistence. W/H = 0 -> auto (gfx_sdl2 fits a 4:3 window into ~85%
@@ -106,6 +117,8 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.FovScale", &cfgFovScale, 50, 150);
     configRegisterInt("Video.Anisotropy", &cfgAniso, 1, 16);
     configRegisterInt("Video.Fullscreen",    &cfgFullscreen, 0, 1);
+    configRegisterString("Video.ScreenshotKey", cfgShotKey, sizeof(cfgShotKey));
+    configRegisterString("Video.ScreenshotDir", cfgShotDir, sizeof(cfgShotDir));
     configRegisterInt("Window.Width",        &cfgWinW,       0, 16384);
     configRegisterInt("Window.Height",       &cfgWinH,       0, 16384);
     configRegisterInt("Window.X",            &cfgWinX,      -1, 16384);
@@ -225,10 +238,37 @@ static void videoDrainWindowRequests(void)
     }
 }
 
+static int videoFileExists(const char *p)
+{
+    FILE *f = fopen(p, "rb");
+    if (f) fclose(f);
+    return f != NULL;
+}
+
 static u32 frames = 0;
-/* Set by the host event pump (F12), consumed on the render thread in
- * videoEndFrame where a GL context is current. */
+/* Set by the host event pump (screenshot key, default F12), consumed on the
+ * render thread in videoPreSwapCapture where a GL context is current. */
 static volatile int screenshotReq = 0;
+
+/* Video.ScreenshotKey -> SDL_Scancode, parsed once on first use. Runs on the
+ * host thread (SDL available; configLoad() has long since run). Falls back to
+ * F12 with a warning if the configured name is unknown. */
+static int        shotKeyParsed = 0;
+static SDL_Scancode shotKeySc   = SDL_SCANCODE_F12;
+
+static SDL_Scancode videoScreenshotScancode(void)
+{
+    if (!shotKeyParsed) {
+        shotKeyParsed = 1;
+        SDL_Scancode sc = cfgShotKey[0] ? SDL_GetScancodeFromName(cfgShotKey) : SDL_SCANCODE_UNKNOWN;
+        if (sc == SDL_SCANCODE_UNKNOWN) {
+            sysLogPrintf(LOG_WARNING, "video: Video.ScreenshotKey '%s' unknown; using F12", cfgShotKey);
+            sc = SDL_SCANCODE_F12;
+        }
+        shotKeySc = sc;
+    }
+    return shotKeySc;
+}
 
 /* Pre-swap capture hook (defined below, registered in videoInit). */
 static void videoPreSwapCapture(void);
@@ -382,7 +422,8 @@ void videoPumpEvents(void)
             if ((ev.key.keysym.sym == SDLK_F4) && (ev.key.keysym.mod & KMOD_ALT)) {
                 sysLogPrintf(LOG_INFO, "video: Alt+F4 -> quit");
                 exit(0);
-            } else if (ev.key.keysym.sym == SDLK_F12 && !ev.key.repeat) {
+            } else if (ev.key.keysym.scancode == videoScreenshotScancode() && !ev.key.repeat) {
+                /* D231: configurable screenshot hotkey (default F12). */
                 screenshotReq = 1;
             } else if (ev.key.keysym.sym == SDLK_F10 && !ev.key.repeat) {
                 optionsOverlayToggle();   /* F10: port-layer options overlay */
@@ -424,8 +465,10 @@ void videoPumpEvents(void)
                 gfx_sdl_update_cached_size();
             } else if (ev.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
                 inputSetMouseGrab(0);   /* free the cursor when alt-tabbed away */
+                audioHandleFocus(0);    /* D231: mute while unfocused */
             } else if (ev.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) {
                 inputSetMouseGrab(1);
+                audioHandleFocus(1);
             }
             break;
         default:
@@ -483,10 +526,30 @@ static void videoPreSwapCapture(void)
 
     if (screenshotReq) {
         screenshotReq = 0;
-        static int shotNum = 0;
-        char path[128];
-        GE_MKDIR("ppm");
-        snprintf(path, sizeof(path), "ppm/shot_%03d.ppm", shotNum++);
+        /* D231: timestamped names in a configurable dir. Same-second
+         * collisions get a _N suffix. localtime() is not thread-safe but this
+         * runs once per hotkey press on the render thread -- fine. */
+        const char *dir = cfgShotDir[0] ? cfgShotDir : "screenshots";
+        GE_MKDIR(dir);
+        time_t t = time(NULL);
+        struct tm lt;
+#ifdef _WIN32
+        if (localtime_s(&lt, &t) != 0) {
+#else
+        if (!localtime_r(&t, &lt)) {
+#endif
+            sysLogPrintf(LOG_WARNING, "video: screenshot failed (no local time)");
+            return;
+        }
+        char base[192];
+        snprintf(base, sizeof(base), "%s/screenshot_%04d%02d%02d_%02d%02d%02d",
+                 dir, lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday,
+                 lt.tm_hour, lt.tm_min, lt.tm_sec);
+        char path[240];
+        int n = 0;
+        do {
+            snprintf(path, sizeof(path), "%s%s.ppm", base, n ? "_" : "");
+        } while (n++ < 99 && videoFileExists(path));
         if (gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_dimensions.width,
                                       (uint32_t)gfx_current_dimensions.height, path)) {
             sysLogPrintf(LOG_INFO, "video: screenshot -> %s "
