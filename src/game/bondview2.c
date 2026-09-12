@@ -4234,6 +4234,23 @@ Gfx *currentPlayerDrawFade(Gfx *gdl)
 }
 
 void currentPlayerSetFadeColour(s32 r, s32 g, s32 b, f32 frac) {
+#if defined(PORT)
+    /* D232: Game.NoHitFlash — the community "no damage flash" toggle.
+     * Every fade in the game routes through this function, and the ONLY
+     * non-black ones are the two damage paths (the per-frame g_DamageTypes
+     * envelope in bondviewPlayerTickDamageAndHealth above — white 0xFF
+     * with an alpha envelope scaled by remaining health — and the red
+     * 150,0,0 overlay once the death blood finishes) — every other caller
+     * passes (0,0,0). Zeroing the RGB here therefore kills exactly the hit
+     * flash / damage indicator and leaves all blackouts, the colour screen
+     * and the death fade untouched. Default 0 = original behaviour. */
+    extern s32 portNoHitFlash;
+    if (portNoHitFlash && (r != 0 || g != 0 || b != 0)) {
+        r = 0;
+        g = 0;
+        b = 0;
+    }
+#endif
     g_CurrentPlayer->colourscreenred = r;
     g_CurrentPlayer->colourscreengreen = g;
     g_CurrentPlayer->colourscreenblue = b;
