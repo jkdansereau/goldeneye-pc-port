@@ -1,3 +1,8 @@
+---
+title: Internals
+description: Architecture behind the PC port — the software RSP-emulation approach, GoldenEye-vs-Perfect-Dark engine differences, and the phased development plan.
+---
+
 # GoldenEye 007 — PC Port: architecture & plan
 
 > This began as the pre-implementation research note and is kept as the

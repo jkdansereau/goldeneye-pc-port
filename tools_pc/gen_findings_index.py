@@ -52,7 +52,11 @@ def one_liner(cell: str, limit: int = 160) -> str:
     return txt
 
 
-LEAD_RE = re.compile(r"^\**\s*(OPEN|RESOLVED|FIXED|PROPOSED|PARTIAL|LANDED|CLAMP|DISPROVEN)", re.I)
+LEAD_RE = re.compile(
+    r"^\**\s*(OPEN|RESOLVED|FIXED|PROPOSED|PARTIAL|LANDED|CLAMP|DISPROVEN"
+    r"|ROOT-CAUSED|GUARDED|ANALYZED|DIAGNOSTIC SHIPPED|NOT A BUG)",
+    re.I,
+)
 
 
 def bucket(status_cell: str) -> str:
@@ -61,7 +65,16 @@ def bucket(status_cell: str) -> str:
     lead = LEAD_RE.match(status_cell.strip())
     if lead:
         tok = lead.group(1).upper()
-        return {"LANDED": "PARTIAL", "CLAMP": "PARTIAL", "DISPROVEN": "RESOLVED"}.get(tok, tok)
+        return {
+            "LANDED": "PARTIAL",
+            "CLAMP": "PARTIAL",
+            "DISPROVEN": "RESOLVED",
+            "ROOT-CAUSED": "RESOLVED",
+            "GUARDED": "PARTIAL",
+            "ANALYZED": "PARTIAL",
+            "DIAGNOSTIC SHIPPED": "PARTIAL",
+            "NOT A BUG": "RESOLVED",
+        }.get(tok, tok)
     for name, rx in STATUS_BUCKETS:
         if rx.search(status_cell):
             return name

@@ -1,3 +1,8 @@
+---
+title: Porting Notes
+description: A field guide to the recurring N64-to-PC bug classes hit while running unmodified big-endian game code on a 64-bit host, each with its symptom and fix.
+---
+
 # Porting notes — recurring N64→PC bug classes
 
 A field guide to the bug classes that keep recurring when running big-endian
