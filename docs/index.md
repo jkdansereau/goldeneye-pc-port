@@ -20,8 +20,9 @@ back and forth through shared written notes.
 **Status:** alpha, [v0.1.0](https://github.com/jkdansereau/goldeneye-pc-port/releases)
 released. Runs the full single-player campaign — all 21 missions load, render,
 and are crash-free; a full re-playthrough confirming all 21 completable start
-to finish is still owed. In-level sound effects play; in-level music doesn't
-yet. AI pacing and cutscenes are rough.
+to finish is still owed. In-level sound effects and in-level music both play;
+a handful of tracks have wrong-sounding instruments or occasional garbling.
+AI pacing and cutscenes are rough.
 
 - [Project repository and README](https://github.com/jkdansereau/goldeneye-pc-port) — build instructions, requirements, status, how it compares to the Xbox 360 recompilation projects.
 
