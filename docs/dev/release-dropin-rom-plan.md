@@ -220,21 +220,82 @@ offer to create it).
    `docs/building.md` says it needs region-specific offsets; the code says
    otherwise. Generate `e` and `j` in CI and diff against a
    locally-ROM-generated copy to confirm before committing them.
+
 2. **Does `d43_emit.py` really use `scripts/filelist.u.csv` for all three
-   regions?** It hard-codes `FILELIST = "scripts/filelist.u.csv"` even when
-   `REGION` is `pal-final`/`jpn-final`. Either model file offsets are
-   US-identical across regions (plausible — models live in obseg which may not
-   shift) or PAL/JP model conversion is currently untested. Confirm before
-   promising PAL/JP support in the release.
-3. **Launcher vs self-re-exec vs three shortcuts** — pick one UX.
-4. **Splash UI for the first-run convert** — reuse the SDL window / a simple
+   regions?** — *Resolved: yes, and that is a real bug.* Both emitters
+   hard-code the NTSC filelist regardless of `REGION`: `FILELIST =
+   "scripts/filelist.u.csv"` at `tools_pc/d43_emit.py:47` and
+   `tools_pc/d69_emit.py:56`, so `pal-final`/`jpn-final` runs read NTSC byte
+   offsets out of the wrong ROM — decompression garbage or `find_row()`
+   misses. The per-region CSVs already exist in the repo with the identical
+   shape (`rom_offset,size,asset_path,flag,flag`): `scripts/filelist.e.csv`
+   (32,843 bytes) and `scripts/filelist.j.csv` (37,947 bytes), just with bare
+   names instead of NTSC's `.bin`-suffixed ones — and `find_row()`
+   (`d43_emit.py:89-93`) already tries multiple name variants, so it would
+   work against any of the three CSVs if pointed at the right one. The fix is
+   small: pick `scripts/filelist.{u,e,j}.csv` from `REGION` instead of
+   hard-coding `.u`. **Remaining real unknown:** `d43_emit.py` also reads
+   every `assets/**/modelFileHeader.inc.c` (512 files, e.g.
+   `assets/obseg/chr/armourguard/modelFileHeader.inc.c:2`) to get NS/NT — arg
+   4 and arg 8 of the `MODELFILEHEADER(...)` macro — which it uses in
+   `build_nodes()` (`d43_emit.py`, ~lines 125-157) to compute the model root
+   offset `R0 = 4*NS + 12*NT`. Those headers are committed decomp data, one
+   file per model dir, with no region-suffixed variants; whether NS/NT
+   actually differ between NTSC/PAL/JP ROMs for the same model cannot be
+   verified from files in this repo alone (it would need an actual PAL or JP
+   ROM to check). If they don't differ, the CSV fix above makes `d43`/`d69`
+   region-correct on its own; if they do, that is a second, currently
+   invisible bug.
+
+3. **Where does Part B's converter write, so `pcmodels.c` / `pccg.c` find it?**
+   — *Resolved.* Both loaders resolve the region from the ROM country byte at
+   offset `0x3E` via the same `Country→region` map (`'E'`→`"ntsc-final"`,
+   `'P'`→`"pal-final"`, `'J'`→`"jpn-final"`;
+   `pcmodelsRegionForCountry()` at `port/src/pcmodels.c:66-74`, same pattern
+   in `port/src/pccg.c:59-67`), then search the prefixes `$S/`, `$E/`, `./`
+   in order (`pcmodels.c:79`; `pccg.c` similar) through `sysResolvePath()`
+   (`port/src/system.c:207-259`: on Windows `$S/` → `./data` if it exists,
+   else `<exedir>/data`; `$E/` → `<exedir>/`). So a native first-run
+   converter in `port/src/pcconvert/` must write exactly, for region `R`:
+   `data/pcmodels-R/pcmodels.bin` + `data/pcmodels-R/manifest.csv`
+   (`pcmodels.c:100,109`) and `data/pccg-R/pccg.bin` +
+   `data/pccg-R/manifest.csv` (`pccg.c:92,101`). The manifest is a CSV with
+   header `name,offset,size`, decimal-parsed via `strtol`
+   (`pcmodels.c:185-186`, `pccg.c:176-177`), row cap 1024 for pcmodels / 256
+   for pccg.
+
+4. **Launcher vs self-re-exec vs three shortcuts** — pick one UX.
+
+5. **Splash UI for the first-run convert** — reuse the SDL window / a simple
    progress line, or a pre-SDL Win32 dialog? ~5 s is short enough that a log
    line + busy cursor may suffice.
-5. **Non-Windows.** Part B's C converter is portable; the launcher and
+
+6. **Non-Windows.** Part B's C converter is portable; the launcher and
    bundling are Windows-only today. Out of scope but the C port keeps the
    door open.
-6. **Signing.** Unsigned exes + a "reads your ROM" first-run step will trip
+
+7. **Signing.** Unsigned exes + a "reads your ROM" first-run step will trip
    SmartScreen. Not blocking, but worth a release-notes note.
+
+8. **How much metadata does Part B's CMake codegen actually have to
+   generate?** — *Resolved: far less than the original plan assumed.* The
+   emitters read three kinds of committed metadata:
+   (a) `scripts/filelist.u.csv` (and now `.e`/`.j` per question 2) — plain CSV,
+   ~33-41 KB each; readable from disk at runtime, no embedding needed.
+   (b) `assets/obseg/file_resource_table.inc.c` (38,056 bytes, 884 lines) —
+   used only to extract an ordered filename list via regex; a C port can read
+   the already-compiled `file_resource_table[]` symbol directly at link time
+   instead of parsing or embedding it.
+   (c) `assets/**/modelFileHeader.inc.c`, 512 files — **this is the one real
+   codegen artifact**: the C port needs a build-time-generated table of 512
+   entries mapping model symbol → (NS, NT), the two args of the
+   `MODELFILEHEADER(...)` macro that `d43_emit.py` actually uses. Everything
+   else the scripts use — the N64_REC/PC_REC record-size tables, ADDR_OPS
+   marker bytes, `d69_emit.py`'s `TILESIZES[11]` array — are small fixed
+   constants that can just be hand-transcribed into the C port, not
+   codegen'd. Bottom line: the CMake codegen step Part B calls for is
+   narrowly the 512-entry nsnt table, not a general metadata-embedding
+   system.
 
 ## Suggested milestone ordering
 

@@ -113,8 +113,9 @@ getting the *original* game running from source.
 ## Status
 
 **Alpha — playable, not polished.** It runs the full single-player campaign
-with no known crashes, but some front-end 3D models and cutscenes are broken,
-in-level music doesn't play yet, and input has known rough edges. A full
+with no known crashes, but some front-end 3D models and cutscenes are
+broken, a few in-level music tracks sound wrong, and input has known rough
+edges. A full
 end-to-end re-confirmation that all 21 missions are completable start to
 finish is still owed (see below). Treat it as an early alpha of the porting
 work, not a finished way to play GoldenEye.
@@ -141,8 +142,9 @@ finished or fully stable.
   controllers, mapped onto the N64 pad. Tunable via `ge007.ini`.
 - File-backed EEPROM saves.
 - Audio — software mixer (libultra audio layer → SDL, adapted from the PD
-  port). In-level sound effects play; in-level music does not play yet
-  (tracked as D77). Front-end/menu audio is unaffected.
+  port). In-level sound effects and in-level music both play (the D77
+  silence is fixed); a handful of tracks have wrong-sounding instruments or
+  occasional garbling (D230).
 - Windows and Linux (`x86_64`). Windows is the primary development and
   playtest path. The Linux build was built and smoke-tested (boots, renders,
   passes the level sweep) at v0.1.0; it has not been actively maintained or
@@ -150,15 +152,17 @@ finished or fully stable.
 
 **Not yet working**
 
-- **In-level music** — silent; see above (D77).
+- **Audio quality on some in-level tracks** — wrong-sounding instruments
+  (the elevator track named specifically) and occasional garbling (D230);
+  the D77 silence itself is fixed.
 - **Cutscenes** — frequently glitch: skipped, wrong camera, misplaced or
   hovering actors, wrong timing (D148/D160).
 - Some front-end 3D models — the spinning Nintendo logo, and the MISSION
   COMPLETE / mode-select models — are mispositioned or absent. (The
   gun-barrel Bond intro renders correctly.)
-- Outdoor levels' sky rendering is still being fixed (was solid black; now
-  partially fixed with residual defects); assorted other cosmetic defects are
-  tracked in
+- Outdoor levels' sky rendering is fixed (was solid black/glitchy — D227,
+  merged); water on `IsWater` levels still renders green and pulses
+  (D229). Assorted other cosmetic defects are tracked in
   [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
 - No macOS or ARM support; no controller rebinding UI; no widescreen.
 

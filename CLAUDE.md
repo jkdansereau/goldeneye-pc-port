@@ -99,5 +99,16 @@ still owns judgment, planning, and the verification gate.
   returned nothing. Agent files fixed. Always still spot-check the returned
   artifact against the real files before integrating — the 27B will
   confidently fabricate if a read fails, independent of this.
+- **Landing delegate output on its own branch: branch off `main` explicitly,
+  never off whatever's currently checked out.** (2026-09-12: a delegate's
+  docs-only writeup got `git branch <name> <sha>` where `<sha>` happened to
+  sit on top of an unrelated in-flight feature branch — the resulting PR
+  silently carried that branch's whole history, including code that had
+  since been reverted, and it only surfaced as a CI failure (a stale
+  env-probe-index check), not from inspecting the diff.) Before creating the
+  branch, confirm you're branching from `main`/`origin/main` HEAD, not from
+  `HEAD` of the session's current checkout; after pushing, sanity-check with
+  `git log --oneline main..<branch>` that it contains only the commit(s) the
+  delegate's task actually produced.
 - Fits the **dispatch preflight** rules above (FILES / BUDGET / ON EXPIRY /
   CONSTRAINTS / REPORT) — write the `task` string to that shape.
