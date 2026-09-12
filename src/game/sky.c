@@ -24,7 +24,7 @@
 /* D227 (M-95): forward decls -- the two fan-drawing blocks that call these
  * (further down this file) come before the static definitions themselves.
  * See the comment above skyPortBeginFan()'s definition. */
-static void skyPortBeginFan(SkyRelated38 *v, s32 n);
+static void skyPortBeginFan(SkyRelated38 *v, s32 n, bool allowShift);
 static void skyPortEndFan(void);
 /* D227 (M-100): same reason -- the texSelect call sites precede the definition. */
 static void skyPortCaptureTile(Gfx *start, Gfx *end);
@@ -339,10 +339,15 @@ Gfx *skyRender(Gfx *gdl)
         static int n = 0;
         if (n++ < 4)
             fprintf(stderr, "D176 sky: Clouds=%d RGB=%d,%d,%d SkyImageId=%d CloudRGB=%.1f,%.1f,%.1f "
-                    "CloudRepeat=%.2f players=%d IsWater=%d\n",
+                    "CloudRepeat=%.2f players=%d IsWater=%d "
+                    /* D229: the water quad's shade comes from these. */
+                    "WaterRGB=%.1f,%.1f,%.1f WaterImageId=%d WaterRepeat=%.2f WaterConcavity=%.1f\n",
                     env->Clouds, env->Red, env->Green, env->Blue, env->SkyImageId,
                     (double)env->CloudRed, (double)env->CloudGreen, (double)env->CloudBlue,
-                    (double)env->CloudRepeat, getPlayerCount(), env->IsWater);
+                    (double)env->CloudRepeat, getPlayerCount(), env->IsWater,
+                    (double)env->WaterRed, (double)env->WaterGreen, (double)env->WaterBlue,
+                    env->WaterImageId, (double)env->WaterRepeat,
+                    (double)env->WaterConcavity);
     }
 #endif
 
@@ -902,23 +907,26 @@ Gfx *skyRender(Gfx *gdl)
             gDPPipeSync(gdl++);
 
 #ifdef PORT
-            /* D227 (M-100): remember the tile texSelect sets up so
-             * skyPortEmitTileShift() can replay it with a shift. */
+            /* D227 (M-100): remember the tiles this draw sets up so
+             * skyPortEmitTileShift() can replay them with a shift. Captured
+             * AFTER sub_GAME_7F09343C, which re-declares both tiles -- see the
+             * comment above skyPortCaptureTile(). */
             {
                 Gfx *skyTileFrom = gdl;
                 texSelect(&gdl, &skywaterimages[fogGetCurrentEnvironmentp()->WaterImageId], 1, 0, 2);
+                gdl = sub_GAME_7F09343C(gdl, 0); // ???
                 skyPortCaptureTile(skyTileFrom, gdl);
             }
 #else
             texSelect(&gdl, &skywaterimages[fogGetCurrentEnvironmentp()->WaterImageId], 1, 0, 2);
-#endif
             gdl = sub_GAME_7F09343C(gdl, 0); // ???
+#endif
             gDPSetRenderMode(gdl++, G_RM_OPA_SURF, G_RM_OPA_SURF2);
 
 #ifdef PORT
             /* D227 (M-95): one shared wScale for every triangle drawn from
              * this sp274[] fan -- see skyPortBeginFan() above. */
-            skyPortBeginFan(sp274, s1);
+            skyPortBeginFan(sp274, s1, FALSE); /* water: see skyPortBeginFan */
 #endif
             if (s1 == 4)
             {
@@ -1379,7 +1387,7 @@ Gfx *skyRender(Gfx *gdl)
         /* D227 (M-95): one shared wScale for every triangle drawn from this
          * sp94[] fan -- see skyPortBeginFan() above. Computed from unk0c,
          * which none of the position overrides below touch. */
-        skyPortBeginFan(sp94, s1);
+        skyPortBeginFan(sp94, s1, TRUE);
 #endif
         if (s1 == 4)
         {
@@ -1639,46 +1647,70 @@ static s32 s_skyFanShiftT = 0;
 #define SKY_SETTILE_SHIFTT_SHIFT 10
 #define SKY_SETTILE_FIELD_MASK   0xF
 
-static Gfx s_skyTileCmd;
-static bool s_skyTileCmdOk = FALSE;
+/* Tiles 0 and 1 are both captured. The IsWater path is a two-texunit draw
+ * (sub_GAME_7F09343C binds tile 0 and tile 1 to the same TMEM and cross-fades
+ * TEXEL0/TEXEL1 by an animated PRIM_LOD_FRAC), and both texunits read the same
+ * vertex tc, so a shift applied to only one of them would desynchronise the
+ * two layers. Capture must also run AFTER every tile-setup call for the draw,
+ * not just after texSelect -- sub_GAME_7F09343C re-declares both tiles, so
+ * capturing earlier would replay a stale declaration and clobber it. */
+#define SKY_NUM_CAPTURED_TILES 2
 
-/* Scan the display list texSelect() just wrote for the render tile's G_SETTILE.
- * Takes the last match: the mipmapped path emits one per level. */
+static Gfx s_skyTileCmd[SKY_NUM_CAPTURED_TILES];
+static bool s_skyTileCmdOk[SKY_NUM_CAPTURED_TILES];
+
+/* Scan the display list just written for each tile's G_SETTILE. Takes the last
+ * match per tile: the mipmapped path emits one per level, and a later setup
+ * call may re-declare a tile the earlier one already set. */
 static void skyPortCaptureTile(Gfx *start, Gfx *end)
 {
     Gfx *p;
+    s32 i;
 
-    s_skyTileCmdOk = FALSE;
+    for (i = 0; i < SKY_NUM_CAPTURED_TILES; i++)
+        s_skyTileCmdOk[i] = FALSE;
+
     for (p = start; p < end; p++)
     {
+        u32 tile;
+
         if ((u32) (p->words.w0 >> 24) != (u32) (u8) G_SETTILE)
             continue;
-        if (((p->words.w1 >> 24) & 7) != G_TX_RENDERTILE)
+
+        tile = (p->words.w1 >> 24) & 7;
+        if (tile >= (u32) SKY_NUM_CAPTURED_TILES)
             continue;
-        s_skyTileCmd = *p;
-        s_skyTileCmdOk = TRUE;
+
+        s_skyTileCmd[tile] = *p;
+        s_skyTileCmdOk[tile] = TRUE;
     }
 }
 
-/* Emit the captured tile with shifts/shiftt replaced. k == 0 on both axes
- * restores the original command, which is how the sky hands the tile back
+/* Re-emit every captured tile with shifts/shiftt replaced. k == 0 on both axes
+ * restores the original commands, which is how the sky hands the tiles back
  * unshifted for whatever draws next. */
 static Gfx *skyPortEmitTileShift(Gfx *gdl, s32 kS, s32 kT)
 {
-    Gfx cmd;
+    s32 i;
 
-    if (!s_skyTileCmdOk)
-        return gdl;
+    for (i = 0; i < SKY_NUM_CAPTURED_TILES; i++)
+    {
+        Gfx cmd;
 
-    cmd = s_skyTileCmd;
-    cmd.words.w1 &= ~((u32) SKY_SETTILE_FIELD_MASK << SKY_SETTILE_SHIFTT_SHIFT);
-    cmd.words.w1 &= ~((u32) SKY_SETTILE_FIELD_MASK);
-    if (kT > 0)
-        cmd.words.w1 |= (u32) (16 - kT) << SKY_SETTILE_SHIFTT_SHIFT;
-    if (kS > 0)
-        cmd.words.w1 |= (u32) (16 - kS);
+        if (!s_skyTileCmdOk[i])
+            continue;
 
-    *gdl++ = cmd;
+        cmd = s_skyTileCmd[i];
+        cmd.words.w1 &= ~((u32) SKY_SETTILE_FIELD_MASK << SKY_SETTILE_SHIFTT_SHIFT);
+        cmd.words.w1 &= ~((u32) SKY_SETTILE_FIELD_MASK);
+        if (kT > 0)
+            cmd.words.w1 |= (u32) (16 - kT) << SKY_SETTILE_SHIFTT_SHIFT;
+        if (kS > 0)
+            cmd.words.w1 |= (u32) (16 - kS);
+
+        *gdl++ = cmd;
+    }
+
     return gdl;
 }
 
@@ -1697,7 +1729,25 @@ static s32 skyPortPickShift(f32 span)
     return k;
 }
 
-static void skyPortBeginFan(SkyRelated38 *v, s32 n)
+/*
+ * `allowShift` gates the safety valve, and the IsWater quad passes FALSE.
+ *
+ * That quad is a two-texunit draw: sub_GAME_7F09343C binds tile 0 and tile 1
+ * to the same TMEM and cross-fades TEXEL0/TEXEL1 with an animated
+ * PRIM_LOD_FRAC (the water shimmer). Both texunits read the same vertex tc, so
+ * a tc rescale has to be matched by a shift on BOTH tiles or the two layers
+ * desynchronise -- and shifting both makes them sample identically, which
+ * flattens the cross-fade the effect is built on. Either way the shift is
+ * wrong for this draw, so the water quad keeps the plain 1:1 tc and simply
+ * tolerates the overflow on its horizon vertex, exactly as it did before D227.
+ *
+ * The water on IsWater levels is separately and visibly broken (D229, green /
+ * pulsating) and that is NOT caused by any of this -- it reproduces
+ * identically on main with none of the D227 work present. Keeping this path
+ * byte-identical to its old behaviour is deliberate: it stops D227 from
+ * entangling with a defect it did not cause and cannot fix.
+ */
+static void skyPortBeginFan(SkyRelated38 *v, s32 n, bool allowShift)
 {
     f32 maxAbsW = 0.0f;
     f32 minS, minT, maxS, maxT;
@@ -1722,8 +1772,8 @@ static void skyPortBeginFan(SkyRelated38 *v, s32 n)
     s_skyFanFoldT = (f32) ((s32) floorf(minT / (f32) SKY_TC_WRAP) * SKY_TC_WRAP);
     s_skyFanFoldSet = TRUE;
 
-    s_skyFanShiftS = skyPortPickShift(maxS - minS);
-    s_skyFanShiftT = skyPortPickShift(maxT - minT);
+    s_skyFanShiftS = allowShift ? skyPortPickShift(maxS - minS) : 0;
+    s_skyFanShiftT = allowShift ? skyPortPickShift(maxT - minT) : 0;
 }
 
 static void skyPortEndFan(void)
