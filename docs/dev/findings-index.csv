@@ -36,8 +36,7 @@ D225,OPEN,"Dev-tooling QoL (M-87, user ask):","OPEN — root-caused, not impleme
 D226,OPEN,"QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.","OPEN — root cause / call sites identified, not designed or implemented."
 D227,FIXED,Sky renders as two independently-moving halves —,"FIXED (M-100b, PR #43) —"
 D229,OPEN,"Water on IsWater levels renders green and pulses blue<->green on an interval (M-101, user playtest, Frigate -level_26; Surface 2 also an IsWater level).","OPEN — pre-existing (A/B proven), mechanism partly identified, not root-caused."
-D230,OPEN,"In-level music quality: a bass instrument sounds corrupted on PC, correct on N64 reference (M-106, user QA report).","OPEN — not investigated. Deterministic repro: Control (elevator+regular track), Cavern (elevator), Runway (~5-7s in)."
-D230,OPEN,In-level music quality:,"OPEN — filed M-105, not yet investigated."
+D230,OPEN,In-level music quality:,OPEN — not investigated.
 D228,OPEN,AK47 (and other) weapon models still show WHITE missing-texture patches after D217's texpool-alignment fix —,"OPEN — newly split out, not investigated."
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
