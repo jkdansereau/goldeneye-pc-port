@@ -144,6 +144,32 @@ extern float cursor_h_pos, cursor_v_pos;
 #define AIM_MOVE_THRESH     0.5   /* aim mode: px/poll before the stick moves   */
 #define HIP_PITCH_FULL      6.0   /* hipfire pitch: |px/poll| for a solid C hold (D166) */
 
+/* D194(b) -- mouse sensitivity coupled to frame/poll rate.
+ *
+ * MOUSE_TURN_GAIN/AIM_GAIN above treat "px accumulated since the last
+ * inputComputePad(0) drain" as a fixed per-poll unit, but the real interval
+ * between drains drifts with render/scene load (D193 measured a rock-steady
+ * 60 sim ticks/s in the idle case, but the drain itself piggybacks on
+ * whatever cadence calls contSnapshotFromKeyboard() -- 1-2x per rendered
+ * frame per D165's comment -- so a hitch or a variable-length frame changes
+ * how much real time one "poll" of accumulated px represents). Net effect:
+ * the same physical hand motion emits a different turn rate depending on
+ * how ragged the poll cadence is, which reads as "sensitivity changes with
+ * movement/frame rate" (the user's own words).
+ *
+ * Fix: measure real elapsed time since the last drain with a monotonic
+ * clock and rescale the accumulated px by (dtRef / dtActual) before it
+ * hits MOUSE_TURN_GAIN/AIM_GAIN, where dtRef is the nominal 1/60s tick
+ * (matches D193's measured steady-state sim rate) -- so "px this poll"
+ * always means "px for a nominal 1/60s tick" regardless of how long that
+ * tick actually took in real time. Clamped both directions so one big
+ * stall (level load, GC pause) can't fling the view. Menu-cursor paths
+ * (D165/D169's P-controller, which has its own poll-count-based settling
+ * design) are deliberately NOT touched by this -- gameplay look only. */
+#define MOUSE_DT_REF        (1.0 / 60.0)
+#define MOUSE_DT_SCALE_MIN  0.25   /* cap correction for an abnormally long poll gap */
+#define MOUSE_DT_SCALE_MAX  4.0    /* cap correction for an abnormally short poll gap */
+
 /* Item 1 (D165) — front-end 1:1 pointer. front.c frontUpdateControlStickPosition
  * INTEGRATES the stick as a velocity into a screen-pixel cursor position
  * (cursor_h_pos += (stickx*0.075 +/- 0.5) * delta, deadzone +/-5, clamp +/-70,
@@ -193,6 +219,10 @@ static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
 static int mouseYScale    = 100;    /* extra vertical (pitch) sensitivity, % */
 static int mouseSmoothing = 0;      /* 0 = raw; 1..90 = low-pass strength (%) */
 static int mouseRawInput  = 0;      /* 1 = bypass OS pointer accel for aim    */
+static int mouseDtDecouple = 1;     /* D194(b): normalize look sensitivity by real
+                                      * elapsed poll time instead of raw px/poll.
+                                      * Escape hatch: 0 = prior (coupled) behaviour. */
+static Uint64 s_lastLookPollCounter = 0;  /* D194(b): monotonic clock, gameplay-look drain only */
 
 /* Gamepad tuning -- defaults reproduce the old hardcoded constants exactly. */
 static int padDeadzone    = STICK_DEADZONE;   /* left-stick deadzone, raw 0..32767 */
@@ -693,6 +723,31 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
 
             double dyLook = edy * invert;   /* >0 => look down */
 
+            /* D194(b): gameplay-look-only dt normalization -- see the
+             * MOUSE_DT_REF comment above. Computed unconditionally (so the
+             * clock stays warm across mode switches) but only ever applied
+             * below, inside the aimHeld/hipfire branches. */
+            double lookDtScale = 1.0;
+            {
+                Uint64 now = SDL_GetPerformanceCounter();
+                if (s_lastLookPollCounter != 0) {
+                    double freq = (double)SDL_GetPerformanceFrequency();
+                    double dtActual = (double)(now - s_lastLookPollCounter) / freq;
+                    if (dtActual > 0.0005) {   /* ignore sub-ms jitter / double polls */
+                        lookDtScale = MOUSE_DT_REF / dtActual;
+                        if (lookDtScale < MOUSE_DT_SCALE_MIN) lookDtScale = MOUSE_DT_SCALE_MIN;
+                        if (lookDtScale > MOUSE_DT_SCALE_MAX) lookDtScale = MOUSE_DT_SCALE_MAX;
+                    }
+                }
+                s_lastLookPollCounter = now;
+            }
+            if (!mouseDtDecouple) lookDtScale = 1.0;
+
+            if (configGetInputLog() && !menuMode && (aimHeld || fabs(edx) > 0.01 || fabs(dyLook) > 0.01)) {
+                sysLogPrintf(LOG_NOTE, "GE_INPUTLOG lookdt scale=%.3f raw=(%.2f,%.2f)",
+                             lookDtScale, edx, dyLook);
+            }
+
             if (menuMode && !menuPointerMode) {
                 /* Legacy velocity mode (Input.MenuPointerMode = 0): mouse
                  * velocity -> stick. Kept as a fallback; integrates as
@@ -804,30 +859,32 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                         haveAbs, (double)cursor_h_pos, (double)cursor_v_pos, sx, sy);
                 }
             } else if (aimHeld) {
-                double gx = fabs(edx)    * (mouseAimSpeed / 100.0) * AIM_GAIN;
-                double gy = fabs(dyLook) * (mouseAimSpeed / 100.0) * AIM_GAIN;
-                if (fabs(edx) >= AIM_MOVE_THRESH) {
+                double aimEdx = edx * lookDtScale, aimDyLook = dyLook * lookDtScale;
+                double gx = fabs(aimEdx)    * (mouseAimSpeed / 100.0) * AIM_GAIN;
+                double gy = fabs(aimDyLook) * (mouseAimSpeed / 100.0) * AIM_GAIN;
+                if (fabs(aimEdx) >= AIM_MOVE_THRESH) {
                     int m = 61 + (int)gx; if (m > 60 + aimBand) m = 60 + aimBand;
-                    sx += (edx > 0) ? m : -m;
+                    sx += (aimEdx > 0) ? m : -m;
                 }
-                if (fabs(dyLook) >= AIM_MOVE_THRESH) {
+                if (fabs(aimDyLook) >= AIM_MOVE_THRESH) {
                     int m = 61 + (int)gy; if (m > 60 + aimBand) m = 60 + aimBand;
-                    sy += (dyLook > 0) ? m : -m;   /* +stick_y = look down */
+                    sy += (aimDyLook > 0) ? m : -m;   /* +stick_y = look down */
                 }
             } else {
-                sx += (int)(edx * (mouseTurnSpeed / 100.0) * MOUSE_TURN_GAIN);
+                double hipEdx = edx * lookDtScale, hipDyLook = dyLook * lookDtScale;
+                sx += (int)(hipEdx * (mouseTurnSpeed / 100.0) * MOUSE_TURN_GAIN);
                 /* D166: hipfire pitch as C-button pulses whose frequency scales
                  * with mouse-Y speed -- fast mouse = solid hold, slow = sparse
                  * taps -- so it feels closer to the analog yaw. Aim mode (above)
                  * is untouched. */
-                double sp = fabs(dyLook);
+                double sp = fabs(hipDyLook);
                 if (sp >= MOUSE_PITCH_THRESH) {
                     double duty = sp * (hipfirePitchSpeed / 100.0) / HIP_PITCH_FULL;
                     if (duty > 1.0) duty = 1.0;
                     hipPitchPhase += duty;
                     if (hipPitchPhase >= 1.0) {
                         hipPitchPhase -= 1.0;
-                        button |= (dyLook > 0) ? GE_CONT_E : GE_CONT_D; /* E=C-up=look down */
+                        button |= (hipDyLook > 0) ? GE_CONT_E : GE_CONT_D; /* E=C-up=look down */
                     }
                 } else {
                     hipPitchPhase = 0.0;
@@ -1054,6 +1111,7 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.MouseYScale", &mouseYScale, 1, 500);
     configRegisterInt("Input.MouseSmoothing", &mouseSmoothing, 0, 90);
     configRegisterInt("Input.MouseRawInput", &mouseRawInput, 0, 1);
+    configRegisterInt("Input.MouseDtDecouple", &mouseDtDecouple, 0, 1);  /* D194(b) */
     configRegisterInt("Input.PadDeadzone", &padDeadzone, 0, 30000);
     configRegisterInt("Input.PadTriggerPct", &padTriggerPct, 1, 99);
     configRegisterInt("Input.PadLookInvertY", &padLookInvertY, 0, 1);
