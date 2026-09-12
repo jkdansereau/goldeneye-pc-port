@@ -4245,6 +4245,10 @@ void currentPlayerSetFadeColour(s32 r, s32 g, s32 b, f32 frac) {
      * flash / damage indicator and leaves all blackouts, the colour screen
      * and the death fade untouched. Default 0 = original behaviour. */
     extern s32 portNoHitFlash;
+    if (getenv("GE_NOHITFLASH_TRACE") && (r != 0 || g != 0 || b != 0)) {
+        osSyncPrintf("D232: currentPlayerSetFadeColour(r=%d g=%d b=%d frac=%f) gate=%d caller=%p\n",
+                     (int)r, (int)g, (int)b, frac, (int)portNoHitFlash, __builtin_return_address(0));
+    }
     if (portNoHitFlash && (r != 0 || g != 0 || b != 0)) {
         r = 0;
         g = 0;
