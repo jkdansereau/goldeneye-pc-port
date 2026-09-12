@@ -9,12 +9,16 @@
 # Persistence model — everything lives under the runner's own paths, managed
 # by the pipeline; no hand-maintained directories:
 #   - ccache  -> actions/cache (stored by the runner under _work/_temp)
-#   - ROM     -> actions/cache, key ge-rom-data-ntsc-v1. ONE-TIME bootstrap:
-#                copy the three files into {runner_home}/_rom-seed/ on the box;
-#                the next run detects the empty cache, copies them in, saves
-#                the cache entry, and DELETES the seed dir. Steady state is
-#                restore-only. Integrity is re-verified every run against the
-#                committed ge007.u.sha1 (repo-tracked US ROM hash).
+#   - ROM     -> actions/cache, key ge-rom-data-ntsc-v1. Bootstrap: copy the
+#                three files into {runner_home}/_rom-seed/ on the box; a run
+#                with an empty cache copies them in and attempts to save the
+#                cache entry. The seed dir is kept (NOT deleted) rather than
+#                treated as one-time -- actions/cache/save has been silently
+#                failing to persist on this box (warning, not a hard step
+#                failure; root cause open, see SELFHOSTED-RUNNER-PLAN.md), so
+#                the seed is the durable fallback every run re-copies from
+#                until that's fixed. Integrity is re-verified every run
+#                against the committed ge007.u.sha1 (repo-tracked US ROM hash).
 #   - MSYS2   -> machine-level install at C:\msys64 (verify.sh hardcodes the
 #                prefix), installed and its packages maintained BY HAND on
 #                the box. msys2/setup-msys2 still runs every job (it's what
@@ -116,10 +120,11 @@ jobs:
           done
           echo "present=$present" >> "$GITHUB_OUTPUT"
 
-      # One-time bootstrap only. {runner_home} = two levels up from
-      # RUNNER_WORKSPACE ({home}/_work/{repo}). The seed dir is deleted after
-      # the cache save below, so steady state has no hand-maintained dirs.
-      - name: Seed ROM cache (one-time bootstrap)
+      # {runner_home} = two levels up from RUNNER_WORKSPACE ({home}/_work/{repo}).
+      # NOT deleted after the cache save below (see that step's comment) --
+      # kept as a durable fallback source until the cache save is proven to
+      # actually round-trip on this box.
+      - name: Seed ROM cache (from durable seed dir)
         if: steps.romcheck.outputs.present == 'false'
         run: |
           seed="$(dirname "$(dirname "$RUNNER_WORKSPACE")")/_rom-seed"
@@ -138,6 +143,20 @@ jobs:
 
       # Explicit save (restore alone never saves): persist the seeded store
       # immediately, before the build/sweep can fail out from under it.
+      # KNOWN ISSUE (2026-09-12): this reliably logs a WARNING annotation
+      # ("Failed to save: ... tar.exe failed with exit code 2") on this box
+      # and never actually persists anything to the cache -- but
+      # actions/cache/save treats a save failure as non-fatal by design, so
+      # the step still reports success and the job carries on. Root cause not
+      # yet found (see docs/dev/notes/SELFHOSTED-RUNNER-PLAN.md). Consequence:
+      # do NOT delete the seed dir after this step (previously done, and it
+      # meant a *silent* cache-save failure combined with the delete wiped
+      # the only copy of the ROM every run -- exactly what broke rollout
+      # step 5's repeated dispatches). The seed dir now stays in place
+      # indefinitely as a durable fallback; "Check ROM store presence" /
+      # "Seed ROM cache" above already re-copy from it whenever the cache
+      # comes back empty, so this is safe to leave as a no-op once the cache
+      # save is fixed for real.
       - name: Save ROM cache
         if: steps.romcheck.outputs.present == 'false'
         uses: actions/cache/save@v4
@@ -147,12 +166,6 @@ jobs:
             data/pcmodels-ntsc-final
             data/pccg-ntsc-final
           key: ${{ env.ROM_CACHE_KEY }}
-
-      - name: Delete one-time seed dir
-        if: steps.romcheck.outputs.present == 'false'
-        run: |
-          seed="$(dirname "$(dirname "$RUNNER_WORKSPACE")")/_rom-seed"
-          [ -d "$seed" ] && rm -rf "$seed" && echo "removed one-time seed dir"
 
       - name: Verify ROM integrity (committed US sha1)
         run: |
