@@ -17,7 +17,7 @@ D186,PARTIAL,"Video.FpsCap throttles the sim, not just presentation (M-39 diag, 
 D187,FIXED,"HUD ammo-type/weapon icon vanished at -O2 (M-46 root-cause, M-47 fix + verify).","FIXED (src/game/gunfire.c, #ifdef AVOID_UB); PR #19"
 D188,FIXED,Linux -O2 boot crash:,"FIXED (src/libultrare/libc/xprintf.c, src/sprintf.c, #ifdef PORT); PR #22"
 D189,FIXED,Linux -fstack-protector aborts on the decomp's latent stack-buffer overruns (M-48) —,"FIXED (CMakeLists.txt, src/game/stan.c #ifdef PORT); PR #23"
-D190,OPEN,"Linux -level_45 SIGSEGV at load in add_ptr_to_objective (objective.c:64) (M-48, open).",OPEN — not investigated (M-48)
+D190,?,"Linux -level_45 SIGSEGV at load in add_ptr_to_objective (objective.c:64) (M-48, open).","CLOSED — not a port bug; level 45 is MP-only and has no solo setup file in the ROM (root-caused M-105, reproduced on Windows)."
 D191,FIXED,Windows -O2 release-bundle crash:,FIXED + PLAYTEST-VERIFIED (M-79).
 D193,FIXED,NPC AI locomotion is too slow —,FIXED + user-playtest-verified (M-81) —
 D194,?,Mouse input needs another tuning pass —,
@@ -36,6 +36,7 @@ D225,OPEN,"Dev-tooling QoL (M-87, user ask):","OPEN — root-caused, not impleme
 D226,OPEN,"QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.","OPEN — root cause / call sites identified, not designed or implemented."
 D227,FIXED,Sky renders as two independently-moving halves —,"FIXED (M-100b, PR #43) —"
 D229,OPEN,"Water on IsWater levels renders green and pulses blue<->green on an interval (M-101, user playtest, Frigate -level_26; Surface 2 also an IsWater level).","OPEN — pre-existing (A/B proven), mechanism partly identified, not root-caused."
+D230,OPEN,In-level music quality:,"OPEN — filed M-105, not yet investigated."
 D228,OPEN,AK47 (and other) weapon models still show WHITE missing-texture patches after D217's texpool-alignment fix —,"OPEN — newly split out, not investigated."
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
@@ -68,7 +69,7 @@ D213,PARTIAL,On-screen FPS readout —,"LANDED, port-only. Build clean; bunker1 
 D214,PARTIAL,"Keyboard rebinding — [Input.Bind] config section (M-83, port-only, PD parity, Phase 4 debt).",PARTIAL — M-84: code PASS (alt/ctrl); one doc-only fix.
 D215,FIXED,1P weapon viewmodel never drew in-level —,"FIXED (src/game/gunfire.c, #ifdef PORT)."
 D216,PARTIAL,"Game.SkipIntro — boot straight to the file-select menu (M-83, port + one #ifdef PORT game-code line, PD parity, Phase 4 quick win).",LANDED + VERIFIED this session.
-D217,OPEN,1P weapon viewmodel + third-person Bond model textures render garbled —,OPEN — root cause characterised (M-86); needs an upstream/asset-pipeline fix.
+D217,FIXED,1P weapon viewmodel + third-person Bond model textures render garbled —,FIXED (M-90/M-92/M-97; PR #47 texpool alignment + PR #49 CI-cache palette key) —
 D218,PROPOSED,Wide FOV exposes the per-level draw-distance / fog boundary —,"Logged (M-84), fix proposed + parked."
 D219,OPEN,"PPK explosions render purple on Dam (M-87, user QA, ""not 3D but noting"").","OPEN — observed, not investigated."
 D220,?,"1P muzzle flash position shifts upward at higher Video.FovScale (M-87, user QA, Jungle/M16).","ANALYZED (M-91) — the suspected unscaled-viewmodel root does NOT hold; this is correct perspective behavior, likely cosmetic/QoL."
