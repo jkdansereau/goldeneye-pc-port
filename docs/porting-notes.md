@@ -459,7 +459,58 @@ through a converter or a runtime bswap fixup reads scrambled.
   normal `gSPVertex` + `gSP*Triangle` batch behind `#ifdef PORT`: if the game
   code already screen-space-projected the verts, re-emit them under a
   `guOrtho(l,r,b,t,…)` + identity modelview matching the projection's pixel
-  extents, `#else` keeps the stream verbatim (D176(a), M-46).
+  extents, `#else` keeps the stream verbatim (D176(a), M-46). **Caveat
+  (D176(a), fidelity pass):** a plain `w=1` ortho is only correct when every
+  vertex in the primitive really does share one depth/scale. The RDP's own
+  coefficient block for this idiom carries `S·w′/T·w′/w′` per vertex (a real
+  perspective-correct texture unit divides it back out per pixel) whenever
+  the upstream game math computed S/T from a *world-space* projection without
+  dividing by `w` itself (GE's sky does — `unk20/24` are texel coords on the
+  world cloud-plane intersection, not pre-divided). Re-emitting those under
+  `w=1` makes fast3d's GPU pipeline interpolate texture coords *linearly in
+  screen space* instead of perspective-correctly — invisible when the
+  primitive's per-vertex `w` barely varies, but a primitive spanning
+  near-camera to horizon-grazing geometry can have >30x `w` spread between
+  its own vertices, and linear interpolation then smears the entire S/T
+  delta evenly across every pixel instead of concentrating it near the
+  far/horizon vertices — reads as "tiles too densely / scrolls too fast"
+  everywhere instead of a gentle gradient. Fix: build a small custom
+  projection matrix that gives each vertex its real `w` (any per-vertex
+  camera-space `w` the game math already computed) while keeping the same
+  screen-space `x,y` (`clip.xy = ndc.xy·w`, `clip.w = w` — the GPU's normal
+  divide recovers the intended `ndc.xy` regardless of `w`, only the
+  interpolation changes); `Vtx.ob[]` is `s16` so pre-scale by a per-primitive
+  `wScale` and have the matrix multiply it back in. **Follow-on caveat
+  (D227, M-95): compute that `wScale` once per shared-vertex group, not
+  once per triangle.** If a decompiled routine fans one shared vertex pool
+  out across several separate calls to a per-primitive perspective-
+  correction helper (one call per triangle instead of one call for the
+  whole fan) and each call derives its own scale factor, two triangles
+  sharing an edge/vertex can each independently pick a different scale —
+  and because the scale feeds into a low-precision (`s16`) vertex field,
+  the same logical vertex quantizes to two slightly different values
+  depending on which call computed it. The position math stays exact for
+  any scale (it's just a rescale that cancels out algebraically), so this
+  isn't a logic bug and won't show up as wrong geometry — it shows up as a
+  visible crack/seam at the shared edge, easy to misread as "two separate
+  things happening" rather than one quantization mismatch. Fix: hoist the
+  scale computation to scan every vertex in the whole shared group once,
+  before the per-triangle calls, and thread that one value through instead
+  of letting each call recompute its own. **Follow-on caveat #2 (D227,
+  M-98): fixing ONE per-primitive-derived quantity this way doesn't fix
+  every one.** The same routine can derive more than one such "shared state
+  from the whole vertex group" value — GE's sky code also floors S/T into a
+  per-primitive range fold to keep it in `s16` (`floorf(minS/64)*64`,
+  `sky.c`'s `skyPortRenderPoly`). Sharing `wScale` across the fan and
+  leaving the fold per-call left the exact same seam-shaped bug alive one
+  field over: nominally-identical shared vertices still bake different
+  absolute values (here, off by an exact multiple of the fold period) into
+  each triangle's own vertex buffer. When you find one "derive this from
+  only my local call's inputs, should derive from the whole shared group"
+  bug in a routine, grep the same function for every other value computed
+  the same way (any per-call min/max/floor/round over a subset of a larger
+  shared vertex/primitive pool) — don't assume fixing the first one you
+  found closes the whole defect class.
 - Z buffer cleared by pointing the color image at it + fill-rect → does
   nothing in fast3d; must emit `G_CLEAR_DEPTH_EXT` (D105).
 - LOD / detail mip tiles: fast3d fabricates a crop when detail textures

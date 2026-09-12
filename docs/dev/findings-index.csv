@@ -34,6 +34,8 @@ D223,OPEN,QoL ask: mouse-wheel weapon cycling should be directional like a norma
 D224,FIXED,"QoL gap (M-87, from a PD-PC-port survey):","DEPRIORITIZED (M-87, user call)."
 D225,OPEN,"Dev-tooling QoL (M-87, user ask):","OPEN — root-caused, not implemented."
 D226,OPEN,"QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.","OPEN — root cause / call sites identified, not designed or implemented."
+D227,FIXED,Sky renders as two independently-moving halves —,"FIXED (M-100b, PR #43) —"
+D229,OPEN,"Water on IsWater levels renders green and pulses blue<->green on an interval (M-101, user playtest, Frigate -level_26; Surface 2 also an IsWater level).","OPEN — pre-existing (A/B proven), mechanism partly identified, not root-caused."
 D228,OPEN,AK47 (and other) weapon models still show WHITE missing-texture patches after D217's texpool-alignment fix —,"OPEN — newly split out, not investigated."
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
@@ -50,7 +52,7 @@ D168,FIXED,GE_PCDUMP / F12 PPM captures were vertically flipped —,FIXED (port/
 D169,FIXED,Front-end mouse pointer can't reach the outer cells of the mission/level-select grid —,"FIXED (M-33, port/src/input.c, port-only, no #ifdef PORT)."
 D178,FIXED,Pre-mission briefing screen:,FIXED (M-36) — high confidence
 D175,?,In-game stutter / brief hang during normal play (user QA report):,"Observed, not investigated"
-D176,PARTIAL,"Surface exterior renders wrong (-level_36), two independent defects.","(a) root-caused, fix owed / (b) open."
+D176,FIXED,"Surface exterior renders wrong (-level_36), two independent defects.","(a) ""scrolls too fast/tiles too visibly"" ROOT-CAUSED + FIXED (see ""D176(a) —"
 D177,FIXED,Ladders non-functional —,FIXED (M-36) — high confidence; interactive climb test owed
 D172,FIXED,"Bullet-impact / blood / spark particles render magenta or cyan instead of dark red (M-82, ROOT CAUSE FOUND + FIXED).",FIXED (port/fast3d/gfx_pc.cpp gfx_lod_tile_offset):
 D174,?,"""No blood effect"" (user QA report).",Observed; first step = BUNKER1 firefight with regenerated sidecars

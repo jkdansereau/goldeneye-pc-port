@@ -20,6 +20,16 @@
 
 #define SKYABS(val) (val >= 0.0f ? (val) : -(val))
 
+#ifdef PORT
+/* D227 (M-95): forward decls -- the two fan-drawing blocks that call these
+ * (further down this file) come before the static definitions themselves.
+ * See the comment above skyPortBeginFan()'s definition. */
+static void skyPortBeginFan(SkyRelated38 *v, s32 n, bool allowShift);
+static void skyPortEndFan(void);
+/* D227 (M-100): same reason -- the texSelect call sites precede the definition. */
+static void skyPortCaptureTile(Gfx *start, Gfx *end);
+#endif
+
 // bss
 s32 g_SkyStageNum;
 
@@ -329,10 +339,15 @@ Gfx *skyRender(Gfx *gdl)
         static int n = 0;
         if (n++ < 4)
             fprintf(stderr, "D176 sky: Clouds=%d RGB=%d,%d,%d SkyImageId=%d CloudRGB=%.1f,%.1f,%.1f "
-                    "CloudRepeat=%.2f players=%d IsWater=%d\n",
+                    "CloudRepeat=%.2f players=%d IsWater=%d "
+                    /* D229: the water quad's shade comes from these. */
+                    "WaterRGB=%.1f,%.1f,%.1f WaterImageId=%d WaterRepeat=%.2f WaterConcavity=%.1f\n",
                     env->Clouds, env->Red, env->Green, env->Blue, env->SkyImageId,
                     (double)env->CloudRed, (double)env->CloudGreen, (double)env->CloudBlue,
-                    (double)env->CloudRepeat, getPlayerCount(), env->IsWater);
+                    (double)env->CloudRepeat, getPlayerCount(), env->IsWater,
+                    (double)env->WaterRed, (double)env->WaterGreen, (double)env->WaterBlue,
+                    env->WaterImageId, (double)env->WaterRepeat,
+                    (double)env->WaterConcavity);
     }
 #endif
 
@@ -891,10 +906,28 @@ Gfx *skyRender(Gfx *gdl)
         {
             gDPPipeSync(gdl++);
 
+#ifdef PORT
+            /* D227 (M-100): remember the tiles this draw sets up so
+             * skyPortEmitTileShift() can replay them with a shift. Captured
+             * AFTER sub_GAME_7F09343C, which re-declares both tiles -- see the
+             * comment above skyPortCaptureTile(). */
+            {
+                Gfx *skyTileFrom = gdl;
+                texSelect(&gdl, &skywaterimages[fogGetCurrentEnvironmentp()->WaterImageId], 1, 0, 2);
+                gdl = sub_GAME_7F09343C(gdl, 0); // ???
+                skyPortCaptureTile(skyTileFrom, gdl);
+            }
+#else
             texSelect(&gdl, &skywaterimages[fogGetCurrentEnvironmentp()->WaterImageId], 1, 0, 2);
             gdl = sub_GAME_7F09343C(gdl, 0); // ???
+#endif
             gDPSetRenderMode(gdl++, G_RM_OPA_SURF, G_RM_OPA_SURF2);
 
+#ifdef PORT
+            /* D227 (M-95): one shared wScale for every triangle drawn from
+             * this sp274[] fan -- see skyPortBeginFan() above. */
+            skyPortBeginFan(sp274, s1, FALSE); /* water: see skyPortBeginFan */
+#endif
             if (s1 == 4)
             {
                 gdl = skyRenderTri(gdl, &sp274[0], &sp274[1], &sp274[3], 130.0f, TRUE);
@@ -919,6 +952,9 @@ Gfx *skyRender(Gfx *gdl)
             {
                 gdl = skyRenderTri(gdl, &sp274[0], &sp274[1], &sp274[2], 130.0f, TRUE);
             }
+#ifdef PORT
+            skyPortEndFan();
+#endif
         }
     }
 
@@ -1310,7 +1346,16 @@ Gfx *skyRender(Gfx *gdl)
 
     gDPPipeSync(gdl++);
 
+#ifdef PORT
+    /* D227 (M-100): see the matching capture in the IsWater block above. */
+    {
+        Gfx *skyTileFrom = gdl;
+        texSelect(&gdl, &skywaterimages[fogGetCurrentEnvironmentp()->SkyImageId], 1, 0, 2);
+        skyPortCaptureTile(skyTileFrom, gdl);
+    }
+#else
     texSelect(&gdl, &skywaterimages[fogGetCurrentEnvironmentp()->SkyImageId], 1, 0, 2);
+#endif
 
     if (1);
 
@@ -1338,6 +1383,12 @@ Gfx *skyRender(Gfx *gdl)
             sp94[i].unk2c = skyClamp(sp94[i].unk2c, getPlayer_c_screentop() * 4.0f, (getPlayer_c_screentop() + getPlayer_c_screenheight()) * 4.0f - 1.0f);
         }
 
+#ifdef PORT
+        /* D227 (M-95): one shared wScale for every triangle drawn from this
+         * sp94[] fan -- see skyPortBeginFan() above. Computed from unk0c,
+         * which none of the position overrides below touch. */
+        skyPortBeginFan(sp94, s1, TRUE);
+#endif
         if (s1 == 4)
         {
             if (((sp538 << 3) | (sp534 << 2) | (sp530 << 1) | sp52c) == 12)
@@ -1392,6 +1443,9 @@ Gfx *skyRender(Gfx *gdl)
         {
             gdl = skyRenderTri(gdl, &sp94[0], &sp94[1], &sp94[2], 130.0f, TRUE);
         }
+#ifdef PORT
+        skyPortEndFan();
+#endif
     }
 
     return gdl;
@@ -1478,6 +1532,258 @@ bool skyVerticesAreTheSame(SkyRelated38 *arg0, SkyRelated38 *arg1)
 }
 
 #ifdef PORT
+/* D227 (M-95): the two fan-drawing blocks below (the sp274[]/sp94[] arrays
+ * further down this file) each populate up to 5 SkyRelated38 verts once,
+ * then issue 1-3 separate skyRenderTri/skyRenderFull calls that each draw a
+ * different triangle from that SAME shared vertex pool. skyPortRenderPoly
+ * used to compute its wScale locally from only the 2-4 verts of whichever
+ * call it's currently servicing -- so two triangles sharing an edge/vertex
+ * could each independently pick a different wScale for that shared vertex,
+ * and since Vtx.ob[] is s16, quantize it to two slightly different values.
+ * That crack at a shared triangle edge is the "two-halves seam" defect
+ * (findings.md D227) -- confirmed by a headless capture showing a static-
+ * frame crease, screenshot docs/img/bugs/d227-sky-seam-statue.png.
+ *
+ * Fix: the two call sites compute one shared wScale across the WHOLE fan
+ * (every vertex about to be drawn this frame, not just one call's 2-4) via
+ * skyPortBeginFan() right after populating their vertex array, before the
+ * first skyRenderTri/skyRenderFull call; skyPortRenderPoly uses that shared
+ * value instead of recomputing locally. skyPortEndFan() clears it so a
+ * hypothetical future caller that forgets to call skyPortBeginFan() falls
+ * back to the old per-call-local computation instead of reusing a stale
+ * value.
+ *
+ * D227 (M-98): the same per-call-local mistake was still present one field
+ * over -- skyPortRenderPoly's S/T fold (foldS/foldT, below) was computed
+ * from only the current call's own 2-4 verts, same as wScale used to be.
+ * M-95 only shared wScale; it never touched the fold, so the seam it was
+ * meant to close persisted (confirmed by human playtest, M-96). Two
+ * triangles in one fan sharing an edge vertex can each independently floor
+ * that vertex's S/T to a different multiple of 64 texels; the *visual*
+ * result is supposed to be identical (GL_REPEAT has period 64), but each
+ * triangle bakes its own copy of the shared vertex into its own Vtx buffer
+ * at `(S - fold) * 32`, and two folds differing by 64 texels produce tc
+ * values differing by exactly 2048 (64*32) -- an s16-precision difference
+ * big enough to read as a crack at the shared edge, not just any leftover
+ * discontinuity. Fixed the same way as wScale: fold once across the whole
+ * fan in skyPortBeginFan(), thread it through instead of recomputing. */
+static f32 s_skyFanWScale = 0.0f; /* 0 = not set; per-call fallback */
+static f32 s_skyFanFoldS = 0.0f;
+static f32 s_skyFanFoldT = 0.0f;
+static bool s_skyFanFoldSet = FALSE;
+
+/*
+ * D227 (M-100): the fix for the real defect, on top of the two above.
+ *
+ * THE UNIT BUG. M-82 ("D176(a) Defect 1") read unk20/unk24 as texel counts and
+ * so baked tc as (S - fold) * 32, converting texels to tc's S10.5 units. They
+ * are not texel counts. They are set in skyRender as worldpos * 0.1f (see the
+ * sp4b4[].unk0c/unk10 assignments) and handed to the RDP's coefficient block
+ * unscaled (skyRenderTri: S * unk34 * sp368), so they are already in the RDP's
+ * native S10.5 1/32-texel units. The extra *32 made every sky texture
+ * coordinate 32x too large, which caused three symptoms at once:
+ *
+ *   1. D227 itself. One quad's S/T then spanned ~30,000 *texels* where an s16
+ *      tc holds +/-1024, so 7 of a quad's 8 coordinates overflowed and wrapped
+ *      to arbitrary values (measured, GE_D227V probe, -level_41 frame 350).
+ *      The rasteriser interpolated between garbage: that is what the "two sky
+ *      processes" / starburst was. The quad splits on the 0-3 diagonal
+ *      (gSP2Triangles below) and verts 0 and 3 are exactly the two that keep
+ *      one coordinate in range, hence two differently-wrong screen halves.
+ *   2. The sky tiling ~32x too finely (466 repeats of the 64-texel cloud
+ *      across one quad instead of ~15).
+ *   3. The sky scrolling ~32x too fast -- the long-standing "N64 sky is nearly
+ *      static, ours races" complaint (M-96), measured at ~7 px/tick in M-98.
+ *      g_SkyCloudOffset advances 1 unit/tick, which is 1/32 texel, not 1.
+ *
+ * Reading the units correctly fixes all three: tc = (S - fold), 1:1, and the
+ * ~30,000-unit span fits an s16 unaided. That is also why the original N64 code
+ * needs no tessellation here -- it never had a range problem to solve.
+ *
+ * M-95's shared wScale and M-98's shared fold stay: they were real bugs, and
+ * per-fan consistency is still what keeps shared vertices bit-identical
+ * between the fan's primitives.
+ *
+ * THE SAFETY VALVE (normally inactive, k == 0). A span can in principle still
+ * exceed s16. The RDP's own answer to that is the tile descriptor's shift
+ * field: coordinates shift right by `shift` for shift <= 10 and LEFT by
+ * (16 - shift) for shift >= 11. So divide tc by 2^k and set the tile shift to
+ * (16 - k) -- decoded coordinate unchanged, s16 reaches 2^k further.
+ * port/fast3d implements this exactly (gfx_pc.cpp, gfx_dp_set_tile plus the
+ * u/v shift block), so it is a native GBI mechanism, not a port-side hack: no
+ * fast3d change, no tessellation, no extra vertices.
+ *
+ * k is chosen per FAN, not per primitive, for the same reason wScale and the
+ * fold are: the decoded coordinate is identical for any k, but the granularity
+ * is 2^k units, so two primitives sharing an edge under different k could round
+ * a shared vertex apart.
+ *
+ * k = 5 is the cap, because shift (16 - 5) == 11 is the smallest value fast3d
+ * still treats as a left shift. Beyond that a span would genuinely need
+ * Defect-2 tessellation; skyPortPickShift clamps rather than overflowing, so
+ * the failure mode stays graceful.
+ */
+#define SKY_TC_MAX_SHIFT 5
+
+/* One tile period expressed in unk20/unk24's units: 64 texels * 32 = 2048.
+ * The fold must be a whole number of these or the rebase shifts the texture. */
+#define SKY_TC_WRAP 2048
+
+static s32 s_skyFanShiftS = 0;
+static s32 s_skyFanShiftT = 0;
+
+/*
+ * Applying the shift means re-emitting the render tile's G_SETTILE with only
+ * its two shift fields changed. Rather than rebuild that command -- its format,
+ * depth, line and mask fields are derived inside texSelect() from the texture
+ * pool, and duplicating that derivation here would rot the moment a sky image
+ * had a different format -- capture the exact command texSelect() just emitted
+ * and replay a patched copy. Exact by construction, and it stays correct if
+ * texSelect's derivation ever changes.
+ *
+ * G_SETTILE word 1 layout (see port/fast3d/gfx_pc.cpp's G_SETTILE dispatch):
+ *   tile = bits 24..26, shiftt = bits 10..13, shifts = bits 0..3.
+ */
+#define SKY_SETTILE_SHIFTT_SHIFT 10
+#define SKY_SETTILE_FIELD_MASK   0xF
+
+/* Tiles 0 and 1 are both captured. The IsWater path is a two-texunit draw
+ * (sub_GAME_7F09343C binds tile 0 and tile 1 to the same TMEM and cross-fades
+ * TEXEL0/TEXEL1 by an animated PRIM_LOD_FRAC), and both texunits read the same
+ * vertex tc, so a shift applied to only one of them would desynchronise the
+ * two layers. Capture must also run AFTER every tile-setup call for the draw,
+ * not just after texSelect -- sub_GAME_7F09343C re-declares both tiles, so
+ * capturing earlier would replay a stale declaration and clobber it. */
+#define SKY_NUM_CAPTURED_TILES 2
+
+static Gfx s_skyTileCmd[SKY_NUM_CAPTURED_TILES];
+static bool s_skyTileCmdOk[SKY_NUM_CAPTURED_TILES];
+
+/* Scan the display list just written for each tile's G_SETTILE. Takes the last
+ * match per tile: the mipmapped path emits one per level, and a later setup
+ * call may re-declare a tile the earlier one already set. */
+static void skyPortCaptureTile(Gfx *start, Gfx *end)
+{
+    Gfx *p;
+    s32 i;
+
+    for (i = 0; i < SKY_NUM_CAPTURED_TILES; i++)
+        s_skyTileCmdOk[i] = FALSE;
+
+    for (p = start; p < end; p++)
+    {
+        u32 tile;
+
+        if ((u32) (p->words.w0 >> 24) != (u32) (u8) G_SETTILE)
+            continue;
+
+        tile = (p->words.w1 >> 24) & 7;
+        if (tile >= (u32) SKY_NUM_CAPTURED_TILES)
+            continue;
+
+        s_skyTileCmd[tile] = *p;
+        s_skyTileCmdOk[tile] = TRUE;
+    }
+}
+
+/* Re-emit every captured tile with shifts/shiftt replaced. k == 0 on both axes
+ * restores the original commands, which is how the sky hands the tiles back
+ * unshifted for whatever draws next. */
+static Gfx *skyPortEmitTileShift(Gfx *gdl, s32 kS, s32 kT)
+{
+    s32 i;
+
+    for (i = 0; i < SKY_NUM_CAPTURED_TILES; i++)
+    {
+        Gfx cmd;
+
+        if (!s_skyTileCmdOk[i])
+            continue;
+
+        cmd = s_skyTileCmd[i];
+        cmd.words.w1 &= ~((u32) SKY_SETTILE_FIELD_MASK << SKY_SETTILE_SHIFTT_SHIFT);
+        cmd.words.w1 &= ~((u32) SKY_SETTILE_FIELD_MASK);
+        if (kT > 0)
+            cmd.words.w1 |= (u32) (16 - kT) << SKY_SETTILE_SHIFTT_SHIFT;
+        if (kS > 0)
+            cmd.words.w1 |= (u32) (16 - kS);
+
+        *gdl++ = cmd;
+    }
+
+    return gdl;
+}
+
+/* Smallest k in [0, SKY_TC_MAX_SHIFT] for which the whole span still fits an
+ * s16 once divided by 2^k. `span` is the fan's S or T extent in S10.5 units;
+ * the +SKY_TC_WRAP covers the fold's rebase to a tile boundary. Normally
+ * returns 0 -- see the unit note above, the coordinates fit unaided. */
+static s32 skyPortPickShift(f32 span)
+{
+    s32 k;
+    for (k = 0; k < SKY_TC_MAX_SHIFT; k++)
+    {
+        if ((span + (f32) SKY_TC_WRAP) / (f32) (1 << k) <= 32767.0f)
+            break;
+    }
+    return k;
+}
+
+/*
+ * `allowShift` gates the safety valve, and the IsWater quad passes FALSE.
+ *
+ * That quad is a two-texunit draw: sub_GAME_7F09343C binds tile 0 and tile 1
+ * to the same TMEM and cross-fades TEXEL0/TEXEL1 with an animated
+ * PRIM_LOD_FRAC (the water shimmer). Both texunits read the same vertex tc, so
+ * a tc rescale has to be matched by a shift on BOTH tiles or the two layers
+ * desynchronise -- and shifting both makes them sample identically, which
+ * flattens the cross-fade the effect is built on. Either way the shift is
+ * wrong for this draw, so the water quad keeps the plain 1:1 tc and simply
+ * tolerates the overflow on its horizon vertex, exactly as it did before D227.
+ *
+ * The water on IsWater levels is separately and visibly broken (D229, green /
+ * pulsating) and that is NOT caused by any of this -- it reproduces
+ * identically on main with none of the D227 work present. Keeping this path
+ * byte-identical to its old behaviour is deliberate: it stops D227 from
+ * entangling with a defect it did not cause and cannot fix.
+ */
+static void skyPortBeginFan(SkyRelated38 *v, s32 n, bool allowShift)
+{
+    f32 maxAbsW = 0.0f;
+    f32 minS, minT, maxS, maxT;
+    s32 i;
+    for (i = 0; i < n; i++)
+    {
+        f32 aw = SKYABS(v[i].unk0c);
+        if (aw > maxAbsW) maxAbsW = aw;
+    }
+    s_skyFanWScale = (maxAbsW > 30000.0f) ? (maxAbsW / 30000.0f) : 1.0f;
+
+    minS = maxS = v[0].unk20;
+    minT = maxT = v[0].unk24;
+    for (i = 1; i < n; i++)
+    {
+        if (v[i].unk20 < minS) minS = v[i].unk20;
+        if (v[i].unk24 < minT) minT = v[i].unk24;
+        if (v[i].unk20 > maxS) maxS = v[i].unk20;
+        if (v[i].unk24 > maxT) maxT = v[i].unk24;
+    }
+    s_skyFanFoldS = (f32) ((s32) floorf(minS / (f32) SKY_TC_WRAP) * SKY_TC_WRAP);
+    s_skyFanFoldT = (f32) ((s32) floorf(minT / (f32) SKY_TC_WRAP) * SKY_TC_WRAP);
+    s_skyFanFoldSet = TRUE;
+
+    s_skyFanShiftS = allowShift ? skyPortPickShift(maxS - minS) : 0;
+    s_skyFanShiftT = allowShift ? skyPortPickShift(maxT - minT) : 0;
+}
+
+static void skyPortEndFan(void)
+{
+    s_skyFanWScale = 0.0f;
+    s_skyFanFoldSet = FALSE;
+    s_skyFanShiftS = 0;
+    s_skyFanShiftT = 0;
+}
+
 /*
  * D176(a) Path B (M-46) -- black-sky fix. Full rationale in
  * docs/dev/findings.md section F, "D176(a)".
@@ -1505,52 +1811,174 @@ bool skyVerticesAreTheSame(SkyRelated38 *arg0, SkyRelated38 *arg1)
 static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
 {
     Vtx *vtx = dynAllocateVertices(nverts < 3 ? 3 : nverts);
+    Mtxf projf;
     Mtx *proj = dynAllocateMatrix();
     Mtx *mv = dynAllocateMatrix();
     f32 l = getPlayer_c_screenleft();
     f32 t = getPlayer_c_screentop();
     f32 r = l + getPlayer_c_screenwidth();
     f32 b = t + getPlayer_c_screenheight();
+    f32 maxAbsW, wScale;
     s32 i;
+    /* D227 (M-100). Fan-wide when skyPortBeginFan() ran (the only callers
+     * today); a lone primitive falls back to sizing the shift off its own
+     * span, which is self-consistent because k never changes the decoded
+     * coordinate -- only its granularity. */
+    s32 tcShiftS = s_skyFanShiftS;
+    s32 tcShiftT = s_skyFanShiftT;
 
-    /* D176(a) Defect 1 (M-82): unk20/unk24 are S/T in *texel* units for the
-     * 64x64 cloud tile (s_skywaterimages[0]) and reach many thousands near
-     * the horizon -- (s16)(S * 32) overflows Vtx.tc and streaks the clouds.
-     * GL_REPEAT has period tex_width (64), so fold every vertex of this one
-     * primitive by the SAME multiple of 64: magnitudes drop into s16 range,
-     * inter-vertex deltas (hence the interpolated texture) are preserved
-     * exactly. Triangles whose S/T span exceeds ~1000 texels (only those
-     * straddling the horizon) still need Defect-2's finer tessellation. */
-    f32 foldS = v[0]->unk20, foldT = v[0]->unk24;
-    for (i = 1; i < nverts; i++)
+    /* D176(a) Defect 1 (M-82), as corrected by D227 (M-100): unk20/unk24 are
+     * S/T for the 64x64 cloud tile (s_skywaterimages[0]) in Vtx.tc's own S10.5
+     * 1/32-texel units -- NOT texels, which is what M-82 assumed when it baked
+     * tc as S * 32. They still reach tens of thousands near the horizon, so the
+     * fold is still needed: GL_REPEAT has period tex_width (64 texels =
+     * SKY_TC_WRAP units), so folding every vertex of the fan by the SAME
+     * multiple of that drops magnitudes into s16 range while preserving
+     * inter-vertex deltas (hence the interpolated texture) exactly. With the
+     * units read correctly the spans fit unaided and no Defect-2 tessellation
+     * is required; skyPortPickShift is the safety valve if one ever doesn't. */
+    f32 foldS, foldT;
+    /* D227 (M-98): prefer the whole-fan fold set by skyPortBeginFan() so
+     * every triangle in a multi-call fan bakes its shared vertices against
+     * the same S/T origin (see the comment above skyPortBeginFan()). Falls
+     * back to the old per-call-local computation if unset. */
+    if (s_skyFanFoldSet)
     {
-        if (v[i]->unk20 < foldS) foldS = v[i]->unk20;
-        if (v[i]->unk24 < foldT) foldT = v[i]->unk24;
+        foldS = s_skyFanFoldS;
+        foldT = s_skyFanFoldT;
     }
-    foldS = (f32) ((s32) floorf(foldS / 64.0f) * 64);
-    foldT = (f32) ((s32) floorf(foldT / 64.0f) * 64);
+    else
+    {
+        f32 maxS, maxT;
 
-    guOrtho(proj, l, r, b, t, -32768.0f, 32768.0f, 1.0f);
+        foldS = maxS = v[0]->unk20;
+        foldT = maxT = v[0]->unk24;
+        for (i = 1; i < nverts; i++)
+        {
+            if (v[i]->unk20 < foldS) foldS = v[i]->unk20;
+            if (v[i]->unk24 < foldT) foldT = v[i]->unk24;
+            if (v[i]->unk20 > maxS) maxS = v[i]->unk20;
+            if (v[i]->unk24 > maxT) maxT = v[i]->unk24;
+        }
+        tcShiftS = skyPortPickShift(maxS - foldS);
+        tcShiftT = skyPortPickShift(maxT - foldT);
+        foldS = (f32) ((s32) floorf(foldS / (f32) SKY_TC_WRAP) * SKY_TC_WRAP);
+        foldT = (f32) ((s32) floorf(foldT / (f32) SKY_TC_WRAP) * SKY_TC_WRAP);
+    }
+
+    /* D176(a) "M-90" fix: skyPortRenderPoly used to place these verts under a
+     * plain pixel-space ORTHO projection, i.e. every vertex got w=1 and the
+     * GPU/software rasteriser interpolated tc *linearly in screen space*
+     * across the primitive. But unk20/unk24 (S/T) are texel coords on the
+     * world-space cloud plane, computed upstream (sub_GAME_7F097388) WITHOUT
+     * a perspective divide -- exactly like the RDP's own G_TRI_SHADE_TXTR
+     * coefficient block, which carries S*w'/T*w'/w' triples (see
+     * docs/dev/D176a-SKY-NOTES.md) and relies on the RDP's normal
+     * perspective-correct texture unit to divide back out per pixel. Linear
+     * interpolation instead of perspective-correct interpolation is only
+     * exact when every vertex shares the same w -- here the near (top of
+     * screen) and horizon-grazing (bottom) verts of one quad can differ by
+     * >20x in camera-space w (unk0c), so the S/T delta was smeared evenly
+     * across every screen pixel instead of being weighted toward the near
+     * vertices, producing a uniformly dense, aliased "hatching" over the
+     * whole sky and reading as "scrolls too fast / tiles too visibly" --
+     * the true per-pixel gradient should stay small until right at the
+     * horizon edge. Fix: build a real perspective (w != 1) transform so the
+     * existing fast3d vertex/triangle pipeline (same one every other
+     * textured draw in the game already relies on) does the perspective
+     * divide for us, exactly like the RDP would.
+     *
+     * ob[] is s16 so we can't store camera-space w (unk0c, up to ~2e5 near
+     * the horizon) directly; instead each vertex's NDC xy is pre-multiplied
+     * by its own w/wScale (wScale keeps the product in s16 range) and a
+     * custom projection matrix multiplies that by wScale again for clip.x/y
+     * and routes ob[2] (=w/wScale) through to clip.w -- see the matrix
+     * comment below. Z is unused for the sky (draws first, into a cleared
+     * buffer -- M-46) so clip.z is left 0.
+     */
+    /* D227 (M-95): prefer the whole-fan wScale set by skyPortBeginFan() so
+     * every triangle in a multi-call fan quantizes its shared vertices
+     * against the same scale (see the comment above skyPortBeginFan()).
+     * Falls back to the old per-call-local computation if unset. */
+    if (s_skyFanWScale > 0.0f)
+    {
+        wScale = s_skyFanWScale;
+    }
+    else
+    {
+        maxAbsW = 0.0f;
+        for (i = 0; i < nverts; i++)
+        {
+            f32 aw = SKYABS(v[i]->unk0c);
+            if (aw > maxAbsW) maxAbsW = aw;
+        }
+        wScale = (maxAbsW > 30000.0f) ? (maxAbsW / 30000.0f) : 1.0f;
+    }
+
+    guMtxIdentF(projf.m);
+    /* row = input axis (matches this codebase's row-vector * M convention,
+     * e.g. sub_GAME_7F097388 / gfx_pc.cpp's own MP_matrix use):
+     *   clip.x = ob[0]*wScale                = (ndcX*w/wScale)*wScale = ndcX*w
+     *   clip.y = ob[1]*wScale                = ndcY*w
+     *   clip.z = 0
+     *   clip.w = ob[2]*wScale                = (w/wScale)*wScale     = w
+     * so the GPU's normal perspective divide recovers ndcX/ndcY at each
+     * vertex exactly (screen position unchanged) while interpolating
+     * everything else -- tc included -- with real 1/w weighting. */
+    projf.m[0][0] = wScale;
+    projf.m[1][1] = wScale;
+    projf.m[2][2] = 0.0f;
+    projf.m[2][3] = wScale;
+    projf.m[3][3] = 0.0f;
+    guMtxF2L(projf.m, proj);
     guMtxIdent(mv);
 
     for (i = 0; i < nverts; i++)
     {
-        vtx[i].v.ob[0] = (s16) (v[i]->unk28 * 0.25f);
-        vtx[i].v.ob[1] = (s16) (v[i]->unk2c * 0.25f);
-        vtx[i].v.ob[2] = (s16) (v[i]->unk30 * 0.25f);
+        f32 screenX = v[i]->unk28 * 0.25f;
+        f32 screenY = v[i]->unk2c * 0.25f;
+        f32 ndcX = 2.0f * ((screenX - l) / (r - l)) - 1.0f;
+        f32 ndcY = 1.0f - 2.0f * ((screenY - t) / (b - t));
+        f32 wv = v[i]->unk0c / wScale;
+
+        vtx[i].v.ob[0] = (s16) (ndcX * wv);
+        vtx[i].v.ob[1] = (s16) (ndcY * wv);
+        vtx[i].v.ob[2] = (s16) wv;
         vtx[i].v.flag  = 0;
-        vtx[i].v.tc[0] = (s16) ((v[i]->unk20 - foldS) * 32.0f);
-        vtx[i].v.tc[1] = (s16) ((v[i]->unk24 - foldT) * 32.0f);
+        /* D227 (M-100): unk20/unk24 are ALREADY in tc's own S10.5 units, so
+         * they go through 1:1 -- see the unit note above skyPortBeginFan().
+         * The 2^k divide is the overflow safety valve, normally k == 0; the
+         * tile shift emitted below multiplies it back out. */
+        vtx[i].v.tc[0] = (s16) ((v[i]->unk20 - foldS) / (f32) (1 << tcShiftS));
+        vtx[i].v.tc[1] = (s16) ((v[i]->unk24 - foldT) / (f32) (1 << tcShiftT));
         vtx[i].v.cn[0] = (u8) v[i]->r;
         vtx[i].v.cn[1] = (u8) v[i]->g;
         vtx[i].v.cn[2] = (u8) v[i]->b;
         vtx[i].v.cn[3] = (u8) v[i]->a;
+
+        /* D227 (M-100) probe: dumps the per-vertex S/T/w actually handed to
+         * the rasteriser. This is what proved the seam is s16 tc overflow --
+         * one sky quad spans ~30,000 texels in S and T, but tc is S10.5, so
+         * (S - foldS) * 32 only holds +/-1024 texels. Same env-gate style as
+         * the GE_D176 probes above. */
+        if (getenv("GE_D227V")) {
+            static int n = 0;
+            if (n++ < 200)
+                fprintf(stderr, "D227V poly nv=%d i=%d w=%.1f 1/w=%.6g sx=%.1f sy=%.1f S=%.1f T=%.1f "
+                        "kS=%d kT=%d tc=%d,%d tileOk=%d\n",
+                        nverts, i, (double) v[i]->unk0c, (double) v[i]->unk34,
+                        (double) screenX, (double) screenY,
+                        (double) v[i]->unk20, (double) v[i]->unk24,
+                        tcShiftS, tcShiftT, vtx[i].v.tc[0], vtx[i].v.tc[1],
+                        (s32) s_skyTileCmdOk);
+        }
     }
 
     gSPMatrix(gdl++, osVirtualToPhysical(proj), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
     gSPMatrix(gdl++, osVirtualToPhysical(mv), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPClearGeometryMode(gdl++, G_LIGHTING | G_CULL_BOTH | G_FOG);
     gSPSetGeometryMode(gdl++, G_SHADE | G_SHADING_SMOOTH);
+    gdl = skyPortEmitTileShift(gdl, tcShiftS, tcShiftT);
     gSPVertex(gdl++, osVirtualToPhysical(vtx), nverts, 0);
 
     if (nverts >= 4)
@@ -1561,6 +1989,10 @@ static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
     {
         gSP1Triangle(gdl++, 0, 1, 2, 0);
     }
+
+    /* Hand the tile back unshifted so nothing downstream inherits it. */
+    if (tcShiftS > 0 || tcShiftT > 0)
+        gdl = skyPortEmitTileShift(gdl, 0, 0);
 
     return gdl;
 }

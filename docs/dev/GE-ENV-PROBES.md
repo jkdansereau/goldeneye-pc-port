@@ -58,6 +58,7 @@ Two classes:
 | `GE_D51` | `port/src/libultra.c:496`, `src/game/model.c:125,244,544` | msgQ 32-slot overflow watch / ModelSlot layout | dead (D51 closed) |
 | `GE_D54` | — (all blocks stripped M-32, commit `49ce620a`) | music seq-table ABI / endianness (`ALMidiHdr`) | dead (D54 closed) — fully removed (kept here as a tombstone; the generator flags it GONE) |
 | `GE_D154` | `src/game/bg.c:3418,3447,3632` (capped 64 calls) | bg room-GDL call trace (room / gdlidx / vtxoff / op / raw hdr words) | dead (D154 closed) |
+| `GE_D227V` | `src/game/sky.c` (`skyPortRenderPoly`, `#ifdef PORT`) | Sky/water per-vertex dump: `S`/`T`/`w`/`1/w`, screen xy, the chosen tc shift `k`, the baked `tc`, and whether the tile capture succeeded. **Found D227**: one sky quad spans ~30,000 texels in S and T but `Vtx.tc` is S10.5 in an `s16` (+/-1024 texels), so 7 of its 8 texture coordinates overflowed and wrapped -- the starburst/"two sky processes" seam. Root cause was a unit error (`unk20`/`unk24` are already S10.5, not texels; M-82's `*32` was spurious). FIXED M-100b. Probe kept inert. | **live** (D227 FIXED, probe kept; useful for D229 water) |
 | `GE_D176` | `src/game/bgfog.c:459,471`, `src/game/sky.c:325,381` (all `#ifdef PORT`) | D176 sky/fog env-match + sky-vert trace (Path B, PR #18) | **live** (D176(a)/(b) OPEN) |
 | `GE_D178` | `src/game/front.c:6586,6594` (`#ifdef PORT`) | briefing-data u16 decode trace (blank-objectives, D143/D178) | dead (D178 closed) |
 | `GE_D56` | `src/game/model.c:227,830` | watch `Model` raw-offset reads | dead (D56 closed) |

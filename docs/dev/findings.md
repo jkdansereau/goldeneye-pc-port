@@ -407,6 +407,8 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D224 | **QoL gap (M-87, from a PD-PC-port survey): the N64 Rumble Pak is fully dropped instead of modernized.** GE genuinely has a rumble subsystem (`src/motor.c`, `src/joy.c`) but the port's `osMotorInit/Start/Stop` (`port/src/libultra.c:1220-1223`) are all hard stubs — "no accessories on the PC," `osMotorStart`/`osMotorStop` return `-1` unconditionally, `osPfsFindFile`-family returns `PFS_ERR_NOPACK`. So every in-game rumble event (weapon recoil, explosions, etc.) computes and calls into a dead path. **PD's PC port wires the equivalent straight through to real gamepad rumble:** `inputRumbleSupported(idx)` checks `SDL_GameControllerHasRumble`/`SDL_JoystickIsHaptic` (with a Windows fallback: some pads report no haptics but rumble anyway), `inputRumble(idx, strength, time)` calls `SDL_GameControllerRumble()` scaled by a per-pad `RumbleScale` config value (options-menu slider, `Input.PadN.RumbleScale`), and `osPfsFindFile` reports a "Rumble Pak" present exactly when a real pad supports rumble (`libultra.c` — same "pretend the N64 accessory is there" pattern GE's port already uses for `osMemSize`/Expansion Pak, just applied to a real capability instead of faked). Cross-ref `QOL-INVENTORY.md` (folded into the existing "per-pad tuning" row). | **DEPRIORITIZED (M-87, user call).** Gamepad-only — irrelevant to mouse/keyboard, which is the primary target for this next release; no keyboard/mouse play is affected by NOT doing this. Root cause + fix still valid whenever gamepad support becomes a priority (no `src/` game-logic touch: GE's `motor.c`/`joy.c` call sites already exist and already call the `osMotor*` shims; the fix is entirely in `port/src/libultra.c` + `input.c` — add `inputRumbleSupported`/`inputRumble` per the PD shape, wire `osMotorStart`/`osMotorStop` to them, add `Input.PadN.RumbleScale` config). **M-87 PD-legacy-survey addendum (`docs/dev/notes/PD-LEGACY-SURVEY.md` candidate 1, high confidence) — the D224 fix as originally stated is NOT sufficient by itself.** Two more upstream blockers sit before the stubbed `osMotorInit/Start/Stop` ever gets reached: (1) `port/src/libultra.c:1096-1098` sets `g_contStatus[i].status = 0` for every pad — `CONT_CARD_ON` is never set, and `src/joy.c:184` gates the *entire* rumble-pak init path on that bit, so `joyRumblePakInit()` never even calls `osPfsInit`. (2) `src/joy.c:186-190` only attempts `osMotorInit` if `osPfsInit`'s return is `PFS_ERR_ID_FATAL` or `PFS_ERR_DEVICE` — but the port's stub (`libultra.c:1214`) returns `PFS_ERR_NOPACK`, so motor init is never attempted even once (1) is fixed. PD's exact trick (`libultra.c:213-227,349-351`): set `CONT_CARD_ON` for connected pads, and make `osPfsInitPak()` return `PFS_ERR_DEVICE` specifically when the pad supports rumble. **Whenever D224 gets implemented, both of these must land alongside the `SDL_GameControllerRumble` wiring** or the game's state machine parks at `RUMBLEPAKINITSTATE_NOT_READY` forever and nothing audibly changes despite looking wired up correctly. |
 | D225 | **Dev-tooling QoL (M-87, user ask): a debug-build/env toggle that unlocks all missions + all cheats, for testing.** Root-caused a clean single choke point — **both** gates route through the same function: `bool fileGetIsCheatUnlocked(save_data *save, s32 cheat)` (`src/game/file2.c:391`) reads the save's `unlocked_cheats_1/2/3` bitfields and returns whether bit `cheat` is set. Mission-select lock (`src/game/file.c:59`, gates whether a briefing page's mission is selectable) and the cheat-menu availability check (`frontCheckIfCheatIsUnlocked`, `front.c:1009`, itself calling `fileGetIsCheatUnlocked` for the per-level `SP_LEVEL_*` cheat IDs) **both** call it — it's a pure, side-effect-free bitfield read (no save-data mutation), so short-circuiting it to always-true under a debug env var unlocks mission-select *and* the cheat menu in one change, matching exactly what was asked ("those two go a long way"). **Bonus, free once cheats unlock:** the ROM already contains real Rare-era developer cheats that are otherwise unreachable in normal play — `CHEAT_LINEMODE` (wireframe render — would make D222-style culling bugs trivial to see), `CHEAT_BONDPHASE`, `CHEAT_DEBUG_POS`, `CHEAT_DEBUG_UNK5` (`cheat.c` ~L687-707, `CHEAT_MASK_GLOBAL`) — worth trying once this lands, may be useful dev tools in their own right. | **OPEN — root-caused, not implemented.** Plan: `#ifdef PORT`, env-gated (e.g. `GE_DEBUG_UNLOCKALL=1`, catalogue in `GE-ENV-PROBES.md` once added) short-circuit at the top of `fileGetIsCheatUnlocked` — `if (getenv-cached-flag) return TRUE;` before the bitfield read. Default off ⇒ zero behavior change for normal play; when set, purely a query-time override (save file itself is never touched, so it can't corrupt a save or leak into the shipped default). No `src/` logic change beyond the guarded early-return (same class of edit as other `#ifdef PORT` dev-convenience hooks, e.g. `GE_STARTMENU`). |
 | D226 | **QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.** All three route through the same primitive, `textRenderOutlined()` (`src/game/textrelated.c:688`, doc comment: *"Used for ammo counter, bottom left HUD messages, countdown timers"*), called from two specific in-game (not menu) sites in `bondview2.c`: **ammo + bottom-left pickup/status** at `bondview2.c:10005` (`stringbuffer_lowerleft[...]`, anchored at `view_left`/`view_vert`), and **top-of-screen dialogue** at `bondview2.c:10163`/`10165` (`stringbuffer_top[...]`, anchored at `msg.x`/`msg.y`). `textRenderOutlined` → `textDrawGlyphQuad` (`textrelated.c:615`) emits each glyph as a plain RDP `gSPTextureRectangle` at the glyph's native font-metric pixel size, `dsdx`/`dsdy` = `0x400` (1:1 texel:pixel, no scale factor anywhere in the call chain). Same function is also used by menus/options/multiplayer UI (`front.c`, `options.c`, `mpmenu.c`) — **do not scale generically**, those have their own layout at fixed screen fractions and D211 already established HUD anchors must stay put; scale only the 3 in-game HUD call sites named above, about their existing anchor (so bottom-left stays bottom-left, top stays top — same anchor-preserving principle as D211's HUD-static check). | **OPEN — root cause / call sites identified, not designed or implemented.** Two viable directions: (a) a `#ifdef PORT` wrapper at just these 2-3 `bondview2.c` call sites that scales the emitted `gSPTextureRectangle` geometry (`xl/yl/xh/yh`) by a new `f32 portHudScale` (default 1.0 ⇒ byte-identical) while inversely scaling `dsdx/dsdy` to keep the same source glyph texels mapped onto the larger/smaller rect, re-anchored so the opposite edge (bottom for the lower-left block, top for dialogue) doesn't move; or (b) thread a scale parameter into `textRenderOutlined`/`textDrawGlyphQuad` itself, defaulted to 1.0 at every other call site. (a) is more surgical (matches the "don't touch shared menu text" constraint) but duplicates a little geometry math; (b) is more central but touches a much more widely shared function. No PD precedent found (PD's port has no equivalent HUD-scale option). F10 overlay slider candidate once implemented, alongside `Video.FovScale`. |
+| D227 | **Sky renders as two independently-moving halves — reads as "two sky processes" (M-93, user QA on PR #43's debug build, `-level_22` Statue and Cradle).** Each half of the screen shows a different sky pattern, and the two halves scroll/move at different rates relative to each other. Surfaced *while* verifying D176(a)'s perspective-correct-interpolation fix — D176(a)'s fix measurably improved the scroll-speed symptom on the visible pattern but did not touch this; this is a distinct defect, not a regression from that PR (unclear yet whether it pre-dates PR #43 or was merely easier to notice once the scroll speed calmed down enough to see the seam). User flagged one confound worth ruling out first: might be a widescreen/aspect-ratio artifact of rendering at modern resolutions rather than a logic bug — original N64 output is 4:3/{something narrower}, and the sky-quad tiling math (`skyPortRenderPoly`, `sub_GAME_7F097388` upstream) may assume the original screen split. | **FIXED (M-100b, PR #43) — root cause was a unit error, and it also fixed the "sky scrolls too fast" complaint (M-96) and the over-tiling.** `unk20`/`unk24` are already in the RDP's native S10.5 1/32-texel units; M-82 read them as texel counts and baked `tc = (S - fold) * 32`, making every sky texcoord 32x too large and overflowing the `s16` `tc`. Human play-test confirmed by the user on the previously-failing levels. Full write-up: §H "D227 — M-100b". Historical investigation trail below. **OPEN — visual evidence captured + a concrete mechanistic hypothesis found (M-94), not yet fixed.** Headless `-level_22` capture confirms a real, visible crease/discontinuity in the cloud texture — not a rendering artifact of viewing it live, and present in a single static frame (rules out the "just camera pan" explanation for at least this instance). Screenshot: `docs/img/bugs/d227-sky-seam-statue.png`. **Leading hypothesis:** `skyPortRenderPoly` (D176(a)'s fix) computes `wScale` per call — i.e. per individual triangle in the sky fan (`skyRenderTri`/`skyRenderFull` issue up to 5 separate `skyPortRenderPoly` calls per frame from a 5-vertex fan, `sky.c:900-920`/`1372-1393`) — from that triangle's own 3 vertices' `unk0c`. The position math is exact for any `wScale` (verified algebraically: `clip.x = (ndcX·w/wScale)·wScale = ndcX·w` regardless of `wScale`), so this is not a logic bug in the fix itself, but the `s16`-quantized `ob[]` storage means each triangle's shared-edge vertices get **independently re-quantized at a different granularity** depending on that triangle's own `wScale` — a vertex sitting on the seam between two triangles can round to a measurably different `ob[]` value in each triangle's independent call, producing a small position/continuity crack exactly at triangle boundaries. This would read as "two adjacent regions with different patterns" without requiring two draw calls or two cloud layers — one `skyPortRenderPoly` call producing a slightly different quantization per neighboring primitive is sufficient. **Not yet confirmed** — did not isolate camera motion from sky-scroll motion cleanly enough to independently verify the "each half moves at a different rate" part of the user's report, only the static crease. **M-95: FIXED (the static-crease part) + headless-verified.** Implemented the fix direction above: `skyPortBeginFan()`/`skyPortEndFan()` (new, `#ifdef PORT`, `src/game/sky.c`) compute one shared `wScale` across every vertex in the whole fan (`sp274[]`/`sp94[]`, up to 5 verts), called once right after each fan's vertex array is populated and before its 1-3 `skyRenderTri`/`skyRenderFull` calls; `skyPortRenderPoly` now uses that shared value when set, falling back to its old per-call-local computation otherwise (defensive — no other caller exists today, checked: `grep` finds `skyRenderTri`/`skyRenderFull` used nowhere outside this file). **Verified:** same-frame before/after screenshots at `-level_22` frame 345 — `docs/img/bugs/d227-sky-seam-statue.png` (before, visible kink ~x=1000/1280) vs `docs/img/bugs/d227-sky-seam-statue-fixed.png` (after, same frame, continuous streaks, kink gone). Full 21-level `verify.sh sweep`: 21/21 PASS both before and after this change (no regressions). `bunker1`'s `worst_cell` framediff number is unaffected by this change — reproduced identically on the pre-fix build, it's the already-known stale-golden-baseline issue (see M-84/M-83 notes; owed a re-baseline, unrelated to sky.c). **Cradle checked too:** the "black rectangle" artifact visible there is confirmed pre-existing (identical on a pre-fix build capture) — that's the separate, already-documented FOV-coupled black-sky-past-frustum-edge symptom (D218/D222 family), not this defect; didn't chase it here. **Not fully closed:** did not re-verify the "moves at a different rate" half of the original report post-fix (the M-94 addendum's static-camera diff measurement wasn't repeated on the fix); the aspect-ratio-artifact alternate theory was never separately confirmed or ruled out, though the fix visibly closing the crease at a fixed resolution is itself decent evidence the crease specifically was a code-side seam, not a display-scaling artifact. Human eyeball still owed before merge, same as every other rendering fix landed without display access this session. **M-96: human eyeball done — seam/crack STILL PRESENT on Statue with the M-95 fix in.** The static-crease theory (verified by the frame-345 screenshot diff) is therefore not the whole story, or not the dominant contributor to what's actually visible in live play; the never-repeated "moves at a different rate" temporal theory from the original report is the next thing to check — a single-frame diff can't see it. **D227 NOT resolved; PR #43 stays in draft.** **Also M-96: user reports the N64 sky should be *almost static* and this build's scroll is *extremely fast* — stronger than M-93's "still reads too fast," bears on D176(a)'s fix magnitude itself, not just this seam; possibly the same wrong-magnitude tc-delta drives both symptoms, not yet investigated.** Full write-up: §H "D227 — M-96". **M-98: seam residual FIXED (same bug class as M-95, one field over) + scroll-rate quantitatively measured.** Re-derivation confirmed the tick-rate side is clean: `skyTick()` (unmodified N64 logic) adds `g_ClockTimer` (verified via `frametiming.c` to run ~1/tick under normal load, D193/D204's territory) to `g_SkyCloudOffset` once per logic tick — not a per-render-frame or double-counted path, ruling out a global-timing explanation for "extremely fast" (that would show up as everything sped up, not just the sky). The seam, though: M-95 shared `wScale` across a whole sky fan but **left `skyPortRenderPoly`'s S/T fold (`foldS`/`foldT`) computed per-call, from only that triangle's own 2-4 verts** — the exact same class of bug M-95 fixed for position, just one field over, and never touched. Two triangles in one fan can independently floor a shared vertex's S/T to a different multiple of 64 texels; nominally invisible (GL_REPEAT period 64) but each triangle bakes `(S - fold) * 32` into its own `s16` Vtx buffer, and two folds 64 texels apart produce tc values 2048 apart — large enough to crack at the shared edge. Fix: extended `skyPortBeginFan()`/`skyPortEndFan()` to also compute one shared fold across the whole fan (`s_skyFanFoldS/T`), threaded into `skyPortRenderPoly` the same way as `wScale`. Verified: `-level_22` frame 345 (same frame M-95's before/after used) now shows continuous streaks with no visible crease at the ~x=1000/1280 location, vs. the still-visible crease in `docs/img/bugs/d227-sky-seam-statue.png`; `verify.sh bunker1` PASS (worst_cell unchanged, the known stale-golden-baseline number, not a regression). **Scroll-rate data point (the M-96/M-97-requested measurement):** cross-correlating consecutive-frame captures (`GE_PCDUMP=345-355:1`) at a static camera gives a consistent **~7 px/tick horizontal shift at 640px capture width** — a full 640px screen-width sweep roughly every 90 ticks (~1.5s at 60Hz), which is hard quantitative confirmation of "extremely fast," not just a subjective read. **Root cause of that magnitude is NOT yet found** — `g_SkyCloudOffset`'s accumulation (1 texel/tick) and the vertex S/T geometry it feeds (`sub_GAME_7F097388`) are unmodified N64 logic, so if the rate is genuinely wrong relative to N64, the bug must be in how many on-screen pixels one texel-tick maps to (camera-to-sky-plane geometry, FOV, or a scale baked into the D176(a) Path B substitution) rather than in the accumulator itself — not investigated this pass. Human eyeball still owed on both the seam-close and the (unfixed) scroll-speed complaint. **M-99: human playtest — seam STILL PRESENT after M-98, AND confirmed view-angle-dependent (moves as the mouse/view moves); also reported still bad on Cradle and present on Surface.** Ruled out the cross-quad water/cloud scale-mismatch theory on the two `IsWater==0` levels tested (Statue, Cradle) — untested on any `IsWater==1` level. Headless camera-pan repro via `GE_INPUTSCRIPT` confirmed NOT to work (doesn't reach real mouselook) — this needs either a human playtest or a new debug hook to chase further. Full write-up + ranked candidate list for next session: §H "D227 — M-99". **M-100: ROOT CAUSE FOUND AND PROVEN — `s16` texture-coordinate overflow.** A user-supplied emulator-vs-ours screenshot pair on Surface (same framing) showed the real symptom is a *radial starburst*, not a crack — which redirected the investigation off the quantization-mismatch track M-94→M-98 had been on. New `GE_D227V` per-vertex probe on the Cradle frame-350 camera: the sky is one quad spanning **29,830 texels in S and 29,929 in T**, but `Vtx.tc` is S10.5 in an `s16` = **±1024 texels**, so **7 of its 8 texture coordinates overflow and wrap to arbitrary values**; the fold cannot help against a span 29x the representable range. The quad is split `gSP2Triangles(0,1,3, 0,3,2)` on the 0–3 diagonal and vertices 0 and 3 are exactly the two that keep one coordinate in range — hence "two halves with different patterns, split by a line", the original D227 report verbatim. All four w positive, so no projective pole. Apparent view-dependence needs no view-dependent mechanism: S/T depend on view, so the wrap point moves. **Confirmed by diagnostic build:** baking tc at 1-texel instead of 1/32-texel granularity (32x range, deliberately wrong scale) makes the starburst and the split *completely disappear* (`docs/img/bugs/d227-cradle-tcscale-diagnostic.png`) — no second defect hiding behind it. **D227 == D176(a) "Defect 2" == M-98's "Cradle tower starburst"; M-98 misfiled that capture as unrelated, which is what made D227 look headlessly-unreproducible — it reproduces statically.** M-95/M-98 stay (per-fan consistency is what makes subdivision seamless). **Fix not implemented:** subdivide until span < ~960 texels/primitive; subdivision math and cut placement are worked out (S is linear in w, so cut uniformly in w — uniform-in-screen is badly wrong), but the vertex budget is an open decision (unchecked 50 KB/frame pool; pure tessellation wants ~40% of it). See §H "D227 — M-100". **M-100b: FIXED — and the real cause is one step further back: a UNIT ERROR.** M-82 ("Defect 1") read `unk20`/`unk24` as texel counts and baked `tc` as `(S - fold) * 32` to convert to S10.5. They are not texels: `skyRender` sets them as `worldpos * 0.1f` and the N64 path hands them to the RDP coefficient block unscaled (`skyRenderTri`: `S * unk34 * sp368`), so they are **already in the RDP's native S10.5 1/32-texel units**. That stray `* 32` made every sky texcoord 32x too large and caused **three symptoms tracked as separate bugs**: (1) D227 (spans of ~30,000 *texels* vs an `s16` holding ±1024 → overflow → starburst); (2) over-tiling (~466 repeats of the 64-texel cloud per quad instead of ~15); and (3) **M-96's "the N64 sky is nearly static, ours races"**, measured at ~7 px/tick in M-98 — `g_SkyCloudOffset` advances 1 unit/tick, which is 1/32 texel, not 1. **The scroll complaint and D227 were the same bug**, which is why M-98's tick-path re-derivation kept coming back clean: the accumulator was never wrong, its unit was. **Fix:** `tc = (S - fold)` 1:1, fold rebased to a whole tile period (2048 units); the span then fits an `s16` unaided — no tessellation, no tile shift, which is also why the original N64 code never needed either. **Verified:** Cradle frame 350 (`docs/img/bugs/d227-cradle-fixed-m100.png`) soft cloud bands at correct scale, no starburst/split/moiré; `GE_D227V` reports `kS=kT=0` and max tc 31,513 of 32,767; Statue frame 345 clean; `verify.sh bunker1` PASS. M-95/M-98 kept (per-fan consistency); the tile-shift machinery kept as a graceful-degradation safety valve (only ~4% headroom left on the observed span). **Human play-test still owed** — both prior "fixes" passed static checks and failed live. See §H "D227 — M-100b". |
+| D229 | **Water on `IsWater` levels renders green and pulses blue<->green on an interval (M-101, user playtest, Frigate `-level_26`; Surface 2 also an IsWater level).** Reported alongside green weapon textures on Frigate/Surface 2 — **that half was NOT a bug**: the branch under test was 2 commits behind main and those 2 commits were exactly the D217 fixes (#47 texpool alignment, #49 CI cache palette-content key); after merging main the user confirms the gun is good. | **OPEN — pre-existing (A/B proven), mechanism partly identified, not root-caused.** Built plain `main` with none of the D227 work: `-level_26` frame 340 shows the **same green** (only the tiling density differs), so D229 is independent of D227. The quad is `sky.c`'s `IsWater` block1 (Frigate confirmed `IsWater=1` via `GE_D176` — which also settles M-99's ranked item 1: that path is textured and does go through `skyPortRenderPoly`). Draw state from `sub_GAME_7F09343C` (`unk_092E50.c:278`): tile 0 and tile 1 both RGBA/16b at **the same TMEM 0**, `masks=maskt=5`, tile 1 offset by `gDPSetTileSize(1, uls=90, ult=150, lrs=0, lrt=0)`, 2-cycle `LERP(TEXEL1, TEXEL0, PRIM_LOD_FRAC)` with cycle 2 `= COMBINED * SHADE` and the LOD fraction driven by **`sinf()`** — that sine IS the reported pulsing, so **one texunit resolves blue and the other green** and the sine fades between them. **Ruled out: the shade path** — `skyChooseWaterVtxColour` with measured `env RGB=16,48,96` / `WaterRGB=255,255,150` spans dark blue to pale yellow and can never be green; measured pixels ~`(5,70..175,20..37)` (R and B crushed) put the green on the texel side. **Not established:** why one texunit decodes green when both tiles share TMEM and format. One unproven oddity: `uls/lrs` are `uint16_t` and `width = ((lrs-uls)>>2)+1` gives tile 1 `-22` -> **65514**, though the matching negative `tex_width2` makes the sub-tile-window branch skip and fall through to the correct mask-based 32-texel wrap, so it may be harmless. **Next:** widen the `GE_D172` multitex probe (it filters on `tile1.tmem != tile0.tmem`, equal here, so it never fires) to dump both texunits' decoded state; capture a *sequence* across the sine period, since a single frame is useless (frame 340 reads green on all builds); and check `skywaterimages[2]`'s real format vs the RGBA/16b `sub_GAME_7F09343C` re-declares. **D227 is deliberately decoupled:** M-100b's safety valve takes `allowShift` and the water quad passes FALSE, leaving that path byte-identical to pre-D227 — shifting both tiles was observed live to flatten the cross-fade into constant green. Full write-up: §H "D229 — M-101". |
 | D228 | **AK47 (and other) weapon models still show WHITE missing-texture patches after D217's texpool-alignment fix — a separate failure mode from the green wrong-palette defect (M-97, user playtest of PR #47, `-level_34` FACILITY).** Split out of D217 defect ①, exactly as the M-90 write-up anticipated ("do not close D217 defect ① on this merge — reopen/retitle as the AK47 + NPC-world-model white-texture residual"). **Playtest result that motivates the split:** with PR #47's `texInitPool` 8-byte arena alignment in, the *green* symptom is GONE — PP7/PPK grip and hammer render correct, Bond's watch face correct, no green cast on hands or the 3rd-person world model. But **NPC-held AK47s still render with white patches**, i.e. tiles sampling a missing/undecoded texture rather than a wrong-but-present palette. White ≠ wrong colour: a wrong palette binds a real TLUT with wrong contents (D217's mechanism, now fixed), whereas white is the signature of a texture that never got decoded/uploaded at all, or a tile descriptor pointing at an empty/cleared texpool slot. The M-87 matrix described these as distinct from the start ("AK47 viewmodel has white (missing-texture) patches on the magazine + barrel" vs. the green/blue colour corruption) — this playtest confirms they have distinct root causes, since fixing one left the other untouched. | **OPEN — newly split out, not investigated.** Next: `-level_34` with `GE_D217TEX=1`/`GE_TEXDUMP` while an AK47-carrying guard is on screen; check whether the AK47's affected tiles ever reach `import_texture` at all (a decode that never ran → white) versus reaching it with empty/zeroed source bytes (a decode that ran on a cleared arena slot). The texpool two-ended allocator (`image.c` `texLoad`, `leftpos`/`rightpos`) and the per-level weapon-model texture load path are the obvious suspects — an AK47 is not a level-start weapon on Facility, so its textures load later than the PP7's and may be hitting an exhausted or differently-based pool. Compare against a level where the AK47 IS a starting/early weapon. D217 · D161 lineage. |
 | D204 | **PC audio ran ~2 % below real time permanently: GE's AI feedback loop (`src/audi.c:531`) has a ~3 ms setpoint that PC scheduling jitter clears, so the SDL queue starves and the device pads playback with silence (FIXED, measured).** `amMain` wakes at 30 Hz (`sched.c:334` forwards every 2nd retrace to the audio client) and asks for `g_MinFrameSize`=720 samples per block = 21600/s against a 22050 Hz device — structurally 2 % short, relying on 784-sample top-up blocks that `audi.c` only requests once the reported AI length falls under ~69 frames (3 ms). Fine on N64 (double-buffered AI, exact VI interrupt); on PC the queue empties before the loop reacts, and the padded silence is unrecoverable time. **Fix (F5, port-only):** `audioGetAiLengthBytes()` subtracts a 1024-frame (~46 ms) cushion before reporting, so the loop tops up while slack remains; `audi.c`'s control law untouched (rule #2 clean). Measured A/B in one binary via `GE_D204_OLD`: **rt 0.980 → 1.000, q min 0 → 368, drop 0.** Also: F1 correct AI_LEN_REG single-buffer semantics (robustness, measures as a no-op), F3 `Audio.QueueLimit` 8192→2880 + non-silent drops (NB: an existing `ge007.ini` pins it), F4 oversize invariant guard, and `GE_D204=1` cheap audio-health monitor (`rt`/`q`/`drop`/`max`, safe to leave on for a full playtest). **Falsified in-session, do not re-open:** the u32 wrap at `audi.c:531` is real (high-water 2064 frames > the 789 threshold) but harmless — `frameSamples` is `s16` (`audi.c:145`), so it lands negative and audi.c's own lower clamp catches it; max block stays 3136 B vs the 3156 B allocation, no heap overrun. **Corrects two M-63 claims:** `soundIndex=109` is guards' return fire (count was double-logged; the "32.6 ms cadence" is just the 2880-byte block quantum every `dumppos` is rounded to) — closed negative; and M-63's "13 % of real time" was `GE_MIXERTRACE`'s own 25 MB unbuffered log starving the audio thread (same repro without it: 58.0 s / 60 s). Does NOT explain D202. | FIXED (`port/src/audio.c`, `port/src/libultra.c`, `port/include/audio.h`) — measured; a by-ear pass on a real playthrough still owed |
 | D203 | **Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle: Facility (`-level_34`) crashes "after loading in as James Bond" (user bug report).** Idle repro attempts on WSL Ubuntu with the actual `dist/goldeneye-pc-port-0.1.0-linux-x86_64.tar.gz` are **negative**: 120 s idle → frame 3300+ clean exit (the intro auto-advances, so "sitting as Bond" is covered), and a ~4-min stick-forward-only run → frame 6900+ also survived. So the trigger needs real gameplay input (fire/action) or is Deck-environment-specific. **Leading suspect: the D191 family** — both known v0.1.0 field crashes are SIGSEGVs in `modelGetNodeRwData` (`model.c:478`) over a truncated/NULL `root->Parent` node link, and both were triggered by *gameplay state* (first guard kill on Bunker ii; post-cutscene on Statue), never by idling; Facility opens into the Ourumov + soldier-squad scripted beat (D193a instance), which fits the trigger profile. Alternatives: Deck GL driver path (RADV/zink vs llvmpipe) or 40/50/60 Hz timing (D193 family). **Next:** (1) WSL run under gdb with a walk+fire `GE_INPUTSCRIPT` — generate the script into a file first (earlier attempts were blocked by a `bash -lc` quoting quirk that emptied the loop var, so no fire buttons ever went out); on SIGSEGV compare the fault PC against `modelGetNodeRwData`; (2) if not reproducible on WSL, get `ge007.crash.log` from the Deck (the Linux build writes it — proven by a stale one in the smoke tree) + ask what Bond was doing at crash time; optionally a gdb run from the SteamOS terminal. | OPEN — negative idle repros only; not yet reproduced with input. |
@@ -424,7 +426,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D169 | **Front-end mouse pointer can't reach the outer cells of the mission/level-select grid — only an inner ~3×3 selectable (M-33, developer bug report).** The D165 pointer P-controller in `port/src/input.c` is hard-coded to a **320×240** virtual field (`MENU_CURSOR_HI_H`/`_HI_V` = 300/220, `MENU_CURSOR_MID_H`/`_MID_V` = 160/120, `input.c:145-149`), but GE's front end runs at **440×330** (`front.c:8570` `viSetViewSize(440,330)`; default cursor home 220/165 `front.c:285`). `frontUpdateControlStickPosition` clamps the real cursor to `[20,420]×[20,310]` (`front.c:1195-1217`); the mission-select hit-test grid spans x 73…352 / y 62…270 with outer split points 317 / 235.5 (`front.c:516,519,3180,3194`). The port clamps its pointer *target* and *estimate* to 300/220 (`input.c:553-564`) → the stick zeroes out once both saturate → the game's `cursor_h_pos`/`cursor_v_pos` park at ≈300/220, short of the two outer columns and the bottom row. File-select / mode-select / main-menu are unaffected because their hit targets (centred folder boxes, the `x=126` mode list, the `x=106` difficulty list) all sit inside the 320×240 sub-box. Not the D118d `joyGetStickY`-threshold class — this is a virtual-resolution constant mismatch, closer to D164 (a front-end layout constant wrong on the PC path). Also note: the "re-syncs whenever the target is held at a screen edge" comment at `input.c:141-143` describes behaviour the code doesn't implement — the only estimator reset is the activation re-home (`input.c:545-549`), so once pinned at the clamp the estimate never recovers. Confidence: **medium-high** (constants + clamp math unambiguous in source; static-only, no build/run this session; exact reachable block "~4×3" vs the reported "3×3" within tolerance). | **FIXED (M-33, `port/src/input.c`, port-only, no `#ifdef PORT`).** The `menuMode` pointer branch now derives its clamp bounds from the live virtual screen — `[screenleft+20, screenleft+screenwidth-20] × [screentop+20, screentop+screenheight-20]` via `getPlayer_c_screenwidth/height/left/top()` (`src/game/bondview.c:880-895`) — falling back to the old 320×240 constants when the front-end screen isn't set (`sw` outside 200…2000). The estimator seed on activation is now the real `cursor_h_pos`/`cursor_v_pos` (`front.c:285`, externed in `front.h`) instead of the 160/120 centre guess. `MENU_CURSOR_HI_H/_V` / `MID_H/_V` kept only as the fallback. **Verified:** builds + links clean (`getPlayer_c_screen*` and `cursor_[hv]_pos` all resolve — non-static engine symbols, as expected); `GE_STARTMENU=7` mission-select boots crash-free 600+ frames; `-level_09` unregressed (framediff 3/3 within threshold, 91.6% nonclear). The in-level path is untouched (menu-only branch). **Interactive feel-check still owed** — headless input can't drive the mouse pointer, so "every grid tile is now reachable" is inferred from the corrected clamp math, not observed. `Input.MenuPointerMode=0` (legacy velocity) and the constant fallback remain as escape hatches. |
 | D178 | **Pre-mission briefing screen: objectives blank / missing, briefing pages blank (also the D143 "briefing text blank" side effect) — FIXED (M-36).** Root cause: the briefing segment (`Ubrief*Z`, source `assets/obseg/brief/*.c`) is a raw ROM image of `struct BriefStruct` = `{ u16 brief[4]; struct { u16 textid; u16 enabled_difficulty; } objective[10]; }` (48 bytes), loaded by `front.c load_briefing_text_for_stage()` via `_fileNameLoadToAddr()` — **no converter and no BE→LE fixup anywhere in the chain**. On the LE host all 24 `u16` read byte-swapped. Measured on Dam (`GE_D178=1`): raw `brief=002c,012c,022c,032c obj0=042c/0100 obj3=072c/0000` vs correct `2c00,2c01,2c02,2c03 / 2c04/0001 / 2c07/0000`. Two independent symptoms follow: (a) `textid` `0x2C04` (= `getStringID(LDAM,4)`, bank 11 slot 4) reads as `0x042C` → bank 1 slot 44, never loaded → `langGet()` NULL → **blank text** (this is exactly the D143 residual, `front.c:6732` and `brief[0..3]` at `front.c:6855-6867`); (b) `enabled_difficulty` `0x0001` (Secret Agent) reads as `0x0100 = 256`, so `selected_difficulty >= enabled_difficulty` (`front.c:6729`) is false for every difficulty-gated objective — on Agent only the one `DIFFICULTY_AGENT`(0) objective survived the filter, which is why a single bare "a." bullet printed. **Fix:** `romdataFixupBriefing()` in `port/src/romdata.c` (+ `port/include/romdata.h`), called from a `#ifdef PORT` block in `load_briefing_text_for_stage()` right after the load — the same shape as `langFixupLoadedBank()` in `language.c` (BE-serialized-struct reconciliation, semantics-preserving, no game logic touched). `GE_D178=1` prints the raw and fixed words. **Verified:** Dam briefing on Agent now shows "a. Bungee jump from platform"; on `GE_STARTMENU_DIFF=3` (00 Agent) all four (Neutralize all alarms / Install covert modem / Intercept data backup / Bungee jump from platform), correct difficulty gating. `-level_09` framediff 3/3; `GE_STARTMENU=7`/`=13` crash-free. | **FIXED (M-36)** — high confidence |
 | D175 | **In-game stutter / brief hang during normal play** (user QA report): opening a door on Runway (`-level_35`, mission 3) and also observed on Surface. Self-recovered; no backtrace captured. Likely one of the known transient-hang classes (D155 catch-up spiral / D156 anim NaN loop / D134 task-done event / D147-D152 audio-lock steal) or a benign new-room texture-import frame spike on door open. See `GRAPHICS-BACKLOG.md` D175 for the gdb pattern-match sheet. | Observed, not investigated |
-| D176 | **Surface exterior renders wrong (`-level_36`), two independent defects.** **(a)** sky solid black — env data is correct (`Clouds=1`, warm `CloudRGB`), the cloud-sky path runs, but `skyRenderTri`/`skyRenderFull` emit only `G_RDPHALF_*` immediates which `gfx_pc.cpp:2901` deliberately no-ops → **root-caused M-37** (see "D176(a) — M-37 UPDATE"); fix = decode the RDPHALF sky-tri stream in fast3d. **(b)** cliff/rock walls = grey diagonal static — NOT a texture decode bug (D183 disproved the shear hypothesis, 0/166 loads strided); re-scope from ROM ground truth of the wall texnum (M-37: inconclusive, leaning tiling-density). See `GRAPHICS-BACKLOG.md` D176. | (a) root-caused, fix owed / (b) open. **M-87 user playtest: still current** — skybox is "still glitchy" broadly (not just Surface), and some levels (**Cradle** named) still show solid black where sky/backdrop should be — consistent with (a) never having landed a verified fix (Path B draft PR #18 was left "unverified visually"). **Follow-up, same session:** the sky is **partially working**, not just black — where it does render, it **scrolls too fast and repeats too visibly** (tiling period reads as too short / speed too high for the cloud texture, likely the M-82 horizon-band phase-fold's 64-texel wrap period, `sky.c` `skyPortRenderPoly`). Separately, **Cradle (and other levels) still show black sky specifically at higher FovScale** — reads as a *third* instance of the "wide FOV exposes an edge nothing was built past" family alongside D218 (fog/draw-distance) and D222 (culling): the sky's rendered coverage/tessellation likely only spans the nominal ~60° frustum (ties to D176(a)'s already-logged "Defect 2 — horizon-band coverage / straddling tris — adaptive tessellation" need), so widening the FOV reveals black past its edge. |
+| D176 | **Surface exterior renders wrong (`-level_36`), two independent defects.** **(a)** sky solid black — env data is correct (`Clouds=1`, warm `CloudRGB`), the cloud-sky path runs, but `skyRenderTri`/`skyRenderFull` emit only `G_RDPHALF_*` immediates which `gfx_pc.cpp:2901` deliberately no-ops → **root-caused M-37** (see "D176(a) — M-37 UPDATE"); fix = decode the RDPHALF sky-tri stream in fast3d. **(b)** cliff/rock walls = grey diagonal static — NOT a texture decode bug (D183 disproved the shear hypothesis, 0/166 loads strided); re-scope from ROM ground truth of the wall texnum (M-37: inconclusive, leaning tiling-density). See `GRAPHICS-BACKLOG.md` D176. | (a) **"scrolls too fast/tiles too visibly" ROOT-CAUSED + FIXED** (see "D176(a) — fidelity pass" below): `skyPortRenderPoly` interpolated tc *linearly* under a `w=1` ortho projection when the source S/T data assumes RDP-style perspective-correct interpolation (per-vertex camera-space `w` differed up to 38x within one primitive); fixed by giving each vertex its real `w` via a custom projection matrix, `#ifdef PORT` in `src/game/sky.c` only. Verified: `bunker1` regression-clean, `-level_22`/`-level_41` (Cradle) before/after captures show the expected uniform-aliasing → perspective-converging-fan change; Cradle sky at default FOV is no longer black. Confidence HIGH on root cause/fix direction, MODERATE on full N64 parity (no N64 reference capture available to diff against). (b) open. Defect 2 (horizon-band coverage/adaptive tessellation) and the separate FOV-coupled black-sky-past-frustum-edge symptom (D218/D222-adjacent) are **unchanged, still open** — not attempted this pass. **M-93 human playtest of PR #43 (debug build):** confirms Cradle default-FOV black sky is FIXED, and Statue's scaling is measurably better but still reads too fast. Confirms the already-flagged FOV-coupled black-sky symptom too — Cradle's black skybox reappears at max FOV (D218/D222 family, unchanged). **New, previously undocumented residual found this pass, split out as D227:** the sky visibly renders as two independently-moving halves ("two sky processes") on both Statue and Cradle — see D227. **M-98: Defect 2 (horizon-band tessellation) visually confirmed on Cradle with a concrete screenshot** — checking Cradle for D227 regressions (it wasn't) turned up a much more visible, distinct artifact: looking up the suspension-tower catwalk near the level's start, roughly the left half of the sky renders as a sharp "starburst" of radiating light-ray-like streaks converging toward a point near the top of the screen, stitched right up against normal-looking horizontal cloud streaks on the right half — `docs/img/bugs/d176a-cradle-tower-starburst.png` (`-level_41` frame 350). **Confirmed pre-existing, not a regression from M-98's fold fix or M-95's wScale fix** — identical pixel-for-pixel with `src/game/sky.c` reverted to its pre-M-98 state, same camera/frame. **Confirmed static, not the D227 "moves at a different rate" symptom** — pixel-identical across frames 350 and 380 (30 ticks apart) at this static camera. This matches the already-known, already-open Defect 2 exactly: the code comment at `skyPortRenderPoly`'s fold logic already predicts it — "Triangles whose S/T span exceeds ~1000 texels (only those straddling the horizon) still need Defect-2's finer tessellation." Looking nearly straight up the tower is exactly the camera angle that produces one sky triangle spanning from near-camera to horizon-grazing texel coordinates, i.e. the >1000-texel-span case the fold logic already flags as unhandled. Not fixed this pass (tessellation work, separate from the D227 fold/wScale-sharing fix) — logged here so whoever picks up Defect 2 has a concrete repro + screenshot instead of the prior "inconclusive, leaning tiling-density" note. |
 | D177 | **Ladders non-functional — progression blocker (user QA report) — FIXED (M-36).** Not the input path and not the ladder state machine: `MoveBond` gates the ladder-collision path on `stanGetLocusCount(&curLocus)`, which was pinned at 0 on PC. `stanCheckLinkedSpecialTile` writes the LADDER signal via raw `outFlags[1] = 1` into a `struct StandTileLocusCallbackRecord` whose first member `s32 *rooms` is pointer-widened on PC → `[1]` is the high half of `rooms`, and `count` (moved +4→+8) is never written. Compounded by `curLocus` being declared as the 8-byte placeholder `move_bond_temp_struct` (too small for the widened record) and a `(s32)coords` pointer-truncation AV waiting in `stanGetMoveBondCollisionTiles`. **Fix:** `#ifdef PORT` — write record fields by name, declare `curLocus` as the real struct, `PORT_PTRADD` for the truncating cast (`src/game/stan.c`, `src/game/bondview2.c`; no game logic). Full detail: §F "D177". | **FIXED (M-36)** — high confidence; interactive climb test owed |
 | D172 | **Bullet-impact / blood / spark particles render magenta or cyan instead of dark red (M-82, ROOT CAUSE FOUND + FIXED).** Particle billboards (`explosion.c` `explosionRenderPart`, `gSPVertex`+`gSP2Triangles`) take their CC/tile state from ROM state records replayed just before them (`g_ExplosionDisplayLists[]` = `assets/oddtextures.c` `globalDL_0x078..`). The dominant record sets `gsDPSetCycleType(G_CYC_2CYCLE)` + `gsDPSetTextureLOD(G_TL_TILE)` + `gsDPSetCombineMode(G_CC_INTERFERENCE, G_CC_MODULATEIA2)` and binds **two** tiles: tile 0 = IA8 "smoke" @ TMEM 0, tile 1 = RGBA16 "fire" @ TMEM 0x188. `G_CC_INTERFERENCE` cycle-0 = `TEXEL0 * TEXEL1`. **fast3d's `gfx_lod_tile_offset()` returns `0` unconditionally** on the `!gfx_detail_textures_enabled` branch — a D107 fix for GE's mip textures (whole chain loaded in one LOADBLOCK at TMEM 0; `port/src/video.c:225` sets the flag `false`). So texunit 1's sampled tile = `first_tile_index + 0` = tile 0 → **TEXEL1 samples the smoke texture, not fire** → `smoke * smoke` → wrong colour. Two earlier M-82 candidates were false trails: (1) "0xB9 unhandled → D146 abort" — 0xB9 is `G_SETOTHERMODE_L` in this non-F3DEX2 build, handled; zero D146 aborts in a sustained-fire run. (2) "records never set 2-cycle" — they do (`0xBA`), and fast3d applies it (probe-confirmed `cycletype=2CYC`). **Probe evidence (`GE_D172=1`, user Silo firefight, `d172_silo.log`):** 40/40 particle tris → `cfg1[tile=1 tmem=392 fmt=RGBA siz=16b]` but `SAMPLED1 = tile0 (tmem=0 fmt=IA)`, `tex_lod=0`. | **FIXED (`port/fast3d/gfx_pc.cpp` `gfx_lod_tile_offset`): `return rdp.tex_lod ? 0 : i;`** — fold to the base tile only when LOD is actually active. D107's mip case (`tex_lod=1`, blurry ceilings) unchanged; a genuine non-LOD 2-texture combine now samples tile `i`. `bunker1` verify PASS (the D107 repro level), no framediff regression. PR #34. **Owed: in-game eyeball — blood/sparks should read dark red.** Env-gated `GE_D172` probes left in tree (`#ifdef PORT`, inert). |
 | D174 | **"No blood effect" (user QA report).** Likely the unverified D120 decal fix: `d43_emit.py` now emits the opcode-0x18 `PointUsage[]` chain, but it was never interactively verified and requires a full sidecar regen to take effect (`debug.ps1` does not regen). Spray path is D172 (draws, wrong colour) — total absence would be new. See `GRAPHICS-BACKLOG.md` D174. | Observed; first step = BUNKER1 firefight with regenerated sidecars |
@@ -5263,6 +5265,106 @@ this ortho exactly as the projection math intends) need one visual check.
 - **Owed:** one `-level_22` visual check — see `docs/dev/D176a-SKY-NOTES.md`
   "Verification ask".
 
+### D176(a) — fidelity pass: "scrolls too fast / tiles too visibly" ROOT-CAUSED + FIXED (linear vs. perspective-correct tc interpolation)
+
+M-84/M-87 playtest found Path B partially working: where the sky renders it
+"scrolls too fast and repeats too visibly" (tiling period reads too short).
+Root-caused with a `GE_D176SCROLL` probe (temporarily added to
+`skyPortRenderPoly`, removed after use — same throwaway-probe pattern as
+`GE_D176`):
+
+- **`skyPortRenderPoly` placed every sky vertex under a plain pixel-space
+  `guOrtho` projection**, i.e. every vertex got clip `w = 1`. fast3d's normal
+  GPU pipeline then interpolates `tc` (and every other varying) *linearly in
+  screen space* across the primitive — correct only when every vertex shares
+  the same `w`.
+- **They don't.** `unk20`/`unk24` (S/T, texel units) are computed upstream
+  (`sub_GAME_7F097388`, `sky.c:1401`) from the *world-space* cloud-plane
+  intersection, with **no perspective divide applied** — exactly like the
+  real RDP's `G_TRI_SHADE_TXTR` coefficient block, which carries `S·w′`/`T·w′`/`w′`
+  triples (`docs/dev/D176a-SKY-NOTES.md` wire-format section) and relies on
+  the RDP's own perspective-correct texture unit to divide back out per
+  pixel. `SkyRelated38.unk0c` (a field Path B wasn't reading before this fix)
+  already carries that raw camera-space `w` (`sky.c:1450`,
+  `arg5->unk0c = sp68[3]` — the same `w` sub_GAME_7F097388 itself divides by
+  to get screen X/Y, so it's directly reusable).
+- **Measured on `-level_22` (Statue), frame ~330:** one sky quad's four
+  corners had camera-space `w` = 5469/5469 (top edge, near) vs.
+  207300/207257 (bottom edge, at the horizon) — a **38x ratio** — over an S
+  span of ~30000 texels. Linear interpolation smears that whole 30000-texel
+  delta evenly across every screen pixel of the quad; perspective-correct
+  interpolation concentrates it almost entirely into the last few pixels
+  next to the horizon-grazing vertices (hand-computed check: naive linear
+  interpolation at the screen-space midpoint gives S≈-9090, true
+  perspective-correct gives S≈-884 — an order of magnitude apart). The
+  linear version reads exactly as reported: a uniformly dense, aliased
+  "hatching" over the *entire* visible sky instead of a gentle gradient that
+  only gets busy right at the horizon.
+- **Fix (`src/game/sky.c`, `skyPortRenderPoly`, `#ifdef PORT`):** replaced
+  the `guOrtho` load with a hand-built projection matrix that gives each
+  vertex its *real* camera-space `w` (from `unk0c`) instead of `w=1`, while
+  keeping every vertex's screen-space `x,y` position bit-identical (the
+  matrix is constructed so `clip.xy = ndc.xy * w` and `clip.w = w`, so the
+  GPU's perspective divide recovers the same `ndc.xy` regardless of `w` —
+  only the *interpolation* across the primitive changes). `Vtx.ob[]` is
+  `s16` and can't hold raw `w` (up to ~2×10^5 near the horizon), so each
+  vertex pre-divides by a per-primitive `wScale` (`max|w| / 30000` when that
+  exceeds 30000, else 1) and the projection matrix multiplies back by
+  `wScale` for `clip.x/y/w`; `ob[2]` (unused for depth — the sky draws first
+  into a cleared buffer, M-46) carries `w/wScale` through to the matrix's
+  w-column. This rides the exact same fast3d vertex/triangle/GLSL pipeline
+  every other textured draw in the game already depends on for correct
+  perspective (`gl_Position = aVtxPos;`, `port/fast3d/gfx_opengl.cpp:320` —
+  default GLSL `varying` interpolation is perspective-correct whenever
+  `w != 1`); no `port/fast3d` changes.
+- **Verified:**
+  - `tools_pc/verify.sh bunker1` — PASS, `frames=3`, no crash (non-sky level,
+    confirms no regression).
+  - `-level_22` (Statue) and `-level_41` (Cradle) headless `GE_PCDUMP`
+    captures, before/after, eyeballed. The intro camera pan isn't frame-exact
+    between runs (small wall-clock-driven timing drift in the pre-gameplay
+    camera — a separate, out-of-scope-for-this-task timing question, not the
+    D193/D209 gameplay-tick class which is already fixed), so an exact
+    per-pixel diff isn't reliable, but the *qualitative* pattern change is
+    unambiguous and reproduces every run: before, uniform parallel aliased
+    streaks over the whole sky; after, a proper perspective-converging fan —
+    coarse near the top (near vertices), converging to fine detail only near
+    the horizon edge (far vertices) — the textbook look of a textured plane
+    correctly extending to a horizon. Cradle (`-level_41`) sky at default FOV
+    renders a normal blue sky with cloud streaks, not black.
+  - Not verified: an actual side-by-side against real N64 footage (none
+    available in this environment), and whether the residual "busy" look at
+    the very top of Cradle's sky (still fairly dense) is acceptable or needs
+    Defect 2's tessellation on top — see below.
+- **Interaction with Defect 2 (coverage / horizon-straddling tris, still
+  open):** this fix corrects the interpolation *mode* (linear → perspective)
+  but does not add tessellation. A primitive whose w-ratio between vertices
+  is this extreme will still show real (now correctly-shaped, but still
+  dense) detail concentrated at its horizon edge — finer subdivision near
+  the horizon (Defect 2) is what would spread that out further and is still
+  the right follow-up for full visual quality. Defect 2 itself (vertical
+  coverage / horizon-straddling triangles needing adaptive tessellation,
+  and the separate FOV-coupled black-sky-past-frustum-edge symptom on Cradle
+  at high FovScale, D218/D222-adjacent) is **unchanged/still open** — not
+  attempted this pass.
+- **Confidence:** HIGH on root cause (confirmed numerically: measured 38x
+  `w` ratio + hand-computed order-of-magnitude interpolation error) and on
+  the fix being a real, correct improvement (reproducible qualitative
+  before/after pattern change, matches the mathematically expected
+  perspective-converging shape). MODERATE on "fully resolves the reported
+  symptom to N64 parity" — no N64 reference capture to diff against in this
+  environment; a human should eyeball `-level_22` and `-level_41` and say
+  whether the remaining density right at the horizon reads as acceptable or
+  still warrants Defect 2's tessellation work.
+- **Porting-notes quirk added:** `docs/porting-notes.md` §D — screen-space
+  "already-projected" GBI overlays (HUD/front-end idiom) are only safe to
+  place under an identity/orthographic (`w=1`) transform when every vertex
+  in the primitive really does share one depth/scale; a primitive whose
+  per-vertex data was computed via a *world-space* perspective projection
+  upstream (sky, and potentially other N64 RDP-immediate idioms) needs its
+  real `w` preserved through to the GPU, or every non-positional varying
+  (texture coords, vertex colour) interpolates wrong across the primitive.
+
 ---
 
 ## D177 — Ladders non-functional: `count`/`rooms` land in the high half of a widened pointer (M-36)
@@ -8567,6 +8669,760 @@ special case as the mechanism.
 - No `tools_pc/d43_*.py` file was modified; `git status` in this worktree
   shows only the two docs edits (this section + the D217 table-row pointer)
   plus a local `data` symlink (not tracked/committed) used for the build.
+## D176(a) — M-93: human playtest of PR #43 (debug build) — Cradle default-FOV black sky CONFIRMED FIXED; Statue scroll speed improved but still off; NEW residual split out as D227 (sky renders as two independently-moving halves)
+
+**Method:** user's own debug build (`build-linux-dbg`), branch
+`land/d176a-sky-perspective-scroll` checked out. Sampled Statue
+(`-level_22`) and Cradle (`-level_41`), plus a Bunker1 sanity pass.
+
+**Confirmed fixed:** Cradle's sky at default FOV is no longer black — matches
+the PR's claim exactly.
+
+**Confirmed improved, not fully fixed:** Statue's cloud scaling reads
+noticeably better than before (the PR's perspective-correct-`tc`
+interpolation fix is doing real work), but the user's read is it's **still
+too fast**. Not yet re-measured numerically post-verdict; could be residual
+under-correction in the fix itself, or could be downstream of the D227
+split-sky issue below making the whole thing harder to judge cleanly.
+
+**Confirmed still-open, as expected:** at **max FOV**, Cradle's black-skybox
+artifact reappears. This matches the PR body's own disclaimer verbatim
+("the separate FOV-coupled black-sky-past-frustum-edge symptom (D218/D222
+-family) ... unchanged/still open — not attempted here") — not a surprise,
+not a regression, just confirmation the known gap is real and reproducible.
+
+**New, not previously documented:** the sky visibly renders as **two
+independently-moving halves** on both Statue and Cradle — user's words,
+"like there's two different sky processes running at once roughly taking
+half the sky each," each half scrolling differently. Split out as its own
+row, **D227**, rather than folded into D176(a), since it's a distinct visual
+signature (a seam + differential motion between two regions) rather than a
+scroll-rate or color/black issue. Not established whether this pre-dates
+PR #43 (the fix could have just made it easier to notice once the gross
+scroll-speed error calmed down) or whether it's a widescreen/aspect-ratio
+rendering artifact rather than a logic bug — user explicitly flagged the
+latter as plausible and unconfirmed pending a side-by-side against real
+N64 output at the same camera angle.
+
+**Sanity pass:** Bunker1 (non-sky level) — clean, no regression, matches
+the PR's own headless `verify.sh bunker1` PASS claim.
+
+**Disposition:** PR #43's fix is real and should still merge — it closes
+the confirmed black-sky sub-symptom on Cradle and measurably improves (if
+not fully fixes) the Statue scroll-rate symptom, with no regression
+elsewhere. D176(a) stays open for the residual scroll-speed-still-too-fast
+report and defect 2 (horizon-band tessellation, pre-existing, unchanged).
+D227 is a new, separate open item pending investigation.
+
+## D227 — M-94: visual confirmation + a concrete mechanistic hypothesis for the "two sky processes" seam — per-primitive `wScale` quantization in D176(a)'s fix, not yet confirmed or fixed
+
+**Method.** Headless capture, `-level_22` (Statue), `GE_PCDUMP` at frames
+300/330/345/350/355/360, `land/d176a-sky-perspective-scroll` built and run
+directly (not through `verify.sh`, to keep the PPM frames instead of having
+them auto-deleted). Converted to PNG and cropped to the sky band with PIL for
+close inspection.
+
+**What the capture shows.** Frame 345's sky band has a clearly visible
+crease: the cloud streak pattern on the right portion of the frame breaks
+continuity from the pattern on the left, with a faint diagonal artifact line
+right at the boundary — this is a single static frame, so it rules out "just
+normal camera pan across a busy texture" as the explanation for at least this
+instance. Screenshot: `docs/img/bugs/d227-sky-seam-statue.png`.
+
+**Hypothesis.** D176(a)'s fix (`skyPortRenderPoly`, `src/game/sky.c`)
+computes a per-call `wScale = maxAbsW / 30000` from the vertices passed to
+*that one call*. But `skyRenderTri`/`skyRenderFull` issue **up to 5 separate
+`skyPortRenderPoly` calls per frame**, one per triangle in a 5-vertex sky fan
+(`sky.c:900-920` and `:1372-1393`) — so each triangle in the fan can pick a
+different `wScale` depending on its own 3 vertices' camera-space `w`
+(`unk0c`).
+
+The position math itself is exact for any `wScale > 0` (re-derived
+algebraically: `clip.x = ob[0]·wScale = (ndcX·w/wScale)·wScale = ndcX·w`,
+independent of `wScale` — this was already verified when the D176a fix was
+first reviewed this session). So this is not a bug in the fix's core
+logic. The likely mechanism is **quantization**: `Vtx.ob[]` is `s16`, so
+`ndcX·wv` (where `wv = w/wScale`) rounds to a 16-bit integer *at a
+granularity that depends on `wScale`*. Two triangles sharing an edge each
+call `skyPortRenderPoly` independently, each picking its own `wScale` from
+its own 3 vertices — so a vertex that is logically shared between two
+triangles can round to two slightly different quantized `ob[]` values
+depending on which triangle's call computed it, cracking the shared edge by
+a small but visible amount. That reads exactly like "two regions, different
+pattern" without requiring two draw calls, two cloud layers, or any
+screen-half-specific logic — a single quantization granularity mismatch
+between neighboring primitives is sufficient.
+
+**Not yet confirmed.** This explains the static crease. It does **not** yet
+confirm the user's "each half moves at a different rate" observation — that
+would require isolating camera motion from sky-texture scroll (a
+static-camera, sim-time-only comparison), which this session's captures
+didn't attempt. The user's original alternate theory (a widescreen/aspect-
+ratio rendering artifact, unrelated to game logic) is also not ruled out —
+it could coexist with or be independent of the quantization crease.
+
+**Fix direction, if this hypothesis holds:** compute one `wScale` shared
+across the *entire* sky fan for the frame (max `unk0c` over every vertex in
+every poly about to be drawn, not just the 3 vertices of one
+`skyPortRenderPoly` call), then pass it into each call instead of
+recomputing locally. Every triangle's vertices would then quantize against
+the same scale, and shared edges should match exactly. Not attempted this
+session — flagging the direction for whoever picks this up, along with the
+static-camera test needed to confirm before spending a build cycle on it.
+
+**Housekeeping:** capture files (`ppm/`, a `ppm2/` scratch dir, and the run
+logs) were cleaned up after pulling the one evidence screenshot; nothing
+else from this session's captures is left in the tree.
+
+**M-94 addendum — static-camera confirmation, same session.** `-level_22`'s
+fixed level-title cutscene ("Statue Park, St. Petersburg") holds a genuinely
+static camera (verified: the foreground statue/pedestal region differs by
+only mean ~3.0/255 between frames 30 and 90 — lighting/AA noise, no
+detectable pan/zoom) while the sky region above it differs by mean ~15.9/255
+over the same two frames. **This confirms the sky animates over time,
+independent of camera motion** — it is not merely a static geometric crease
+that only *looks* like motion under a moving camera. That said, the diff
+magnitude was non-monotonic across the sampled frames (30→45 measured larger
+than 30→90), which doesn't cleanly fit a simple constant-rate linear scroll
+either — worth another look with a denser, longer static-camera sample
+before concluding *how* it's animating. Does not distinguish between "one
+sky animating uniformly past a static quantization seam" (this session's
+leading hypothesis) and "two separately-animating regions" (the user's
+original read) — either is still consistent with a real per-frame diff in
+the sky region. Capture files cleaned up after taking these measurements;
+nothing added to `docs/img/bugs/` beyond the one screenshot already
+committed.
+
+## D229 — M-101: Frigate/IsWater-level water renders green and pulses blue<->green. Pre-existing (reproduces on main), mechanism partly identified, NOT root-caused
+
+**Reported (user playtest, M-101):** on Frigate the water "turns green
+randomly and goes between looking right and glitching green", later refined to
+**"it changes from blue to green on an interval like pulsating"** and, at one
+point under a bad intermediate build, "only green". Also reported in the same
+message: green weapon textures on Frigate and Surface 2 — **that half was a
+stale-branch artifact, not a bug** (see below).
+
+**The gun half: not a bug.** `land/d176a-sky-perspective-scroll` was 2 commits
+behind `main`, and those 2 commits were exactly the D217 green-texture fixes
+(`7278baad` = #47 texpool 8-byte alignment, `f15a12b9` = #49 CI texture cache
+keyed on palette content). The user was play-testing a branch build that
+predated both. Merged main in (`f8822805`); user confirms **"gun is good on
+frigate"**. No new defect. Worth remembering as a process point: a D217-family
+symptom report against a feature branch should check branch-vs-main first.
+
+**Pre-existing, and not caused by the D227 work — proven by A/B.** Built plain
+`main` (none of the D227 changes) and captured `-level_26` frame 340: the
+water is the **same green**. The only difference is tiling density — main
+shows it 32x over-tiled (the D227/M-100b unit bug), the branch shows it
+smooth. Green in both. So D229 is independent of D227.
+
+**Mechanism, as far as it is established.** The water quad is `sky.c`'s
+`IsWater` block (`skyRender` block1; Frigate confirmed `IsWater=1` via
+`GE_D176`, which also answers M-99's ranked item 1 — that path IS textured and
+does go through `skyPortRenderPoly`). Its draw state comes from
+`sub_GAME_7F09343C` (`src/game/unk_092E50.c:278`):
+
+- tile 0 and tile 1 are both `G_IM_FMT_RGBA`/`G_IM_SIZ_16b`, `line=4`,
+  **both at TMEM 0** — i.e. the same texture — with `masks = maskt = 5`
+  (32-texel wrap).
+- tile 1 is offset: `gDPSetTileSize(1, uls=90, ult=150, lrs=0, lrt=0)`, so it
+  samples the same image shifted by 22.5 / 37.5 texels.
+- 2-cycle combine `gDPSetCombineLERP(TEXEL1, TEXEL0, PRIM_LOD_FRAC, TEXEL0,
+  ...)` with cycle 2 `= COMBINED * SHADE`, and the LOD fraction is
+  **`gDPSetPrimColor(..., sinf(flt_CODE_bss_80079E88) * 127.0f + 128.0f, ...)`
+  — an animated sine.**
+
+**That sine is the "pulsating".** The effect cross-fades TEXEL0 and TEXEL1 over
+time; the user seeing blue<->green on an interval means **one texunit resolves
+correct (blue) and the other resolves green**, with the sine fading between
+them. This is the single most useful clue in the report and it came from the
+user, not from a capture — a static frame cannot see it (frame 340 samples
+green on *all three* builds tested, because the sine phase happens to land
+there, which is why single-frame diffs were useless here).
+
+**Ruled out:** the shade path. Water vertex colour is
+`skyChooseWaterVtxColour` = `env->RGB + env->WaterRGB * (1 - c/255) * (1 - a)`;
+measured on Frigate `env RGB = 16,48,96` and `WaterRGB = 255,255,150`, so the
+shade ranges from dark blue to pale yellow and **can never be green**. Measured
+water pixels are ~`(5, 70..175, 20..37)` — R and B crushed, so the green comes
+from the texel side, not the shade.
+
+**Not yet established:** why one texunit decodes green. Both tiles point at the
+same TMEM with the same format, so a plain "wrong texture" explanation does not
+fit; the difference between them is only the uls/ult offset and whatever
+fast3d does with tile 1's inverted window. One concrete oddity found and *not*
+yet shown to matter: `uls/ult/lrs/lrt` are `uint16_t` and
+`gfx_dp_set_tile_size` computes `width = ((lrs - uls) >> 2) + 1`, so tile 1
+gets `((0 - 90) >> 2) + 1 = -22` stored into a `uint16_t` = **65514** (height
+likewise 65500). `tex_width2` goes negative by the same arithmetic, which as it
+happens makes the `g_wrap_fix` sub-tile-window branch skip (`tex_width2 > 0`
+fails) and fall through to the mask-based 32-texel wrap — which is the correct
+period — so this may be harmless. It has not been proven either way.
+
+**FOV context (M-101):** the user's playtest ran with **FOV turned up**
+(`Video.FovScale`, PR #36's slider, range 50-150). Every headless capture in
+this entry ran at the ini's `FovScale = 100`, i.e. **default**, and still
+reproduces the green — so raised FOV is *not required* to trigger D229. Whether
+it worsens it is untested (deliberately: the config file was open in the user's
+editor and not worth racing). Worth checking when this is picked up, because
+FOV-coupled sky/frustum coverage is a known separate symptom family
+(D218/D222), and the black bands visible at the edges of the Frigate captures
+are likely that rather than D229.
+
+**Next steps:** dump what fast3d actually decodes for each texunit on this draw
+(the existing `GE_D172` multitex probe does not fire here — it filters on
+`tile1.tmem != tile0.tmem`, and these are equal, so it needs widening);
+capture a *sequence* across the sine period rather than one frame, since the
+defect is temporal; and check `skywaterimages[WaterImageId=2]`'s real format
+against the `RGBA/16b` that `sub_GAME_7F09343C` re-declares.
+
+**D227 deliberately decoupled from this.** The M-100b safety valve now takes an
+`allowShift` argument and the IsWater quad passes `FALSE`, leaving that path
+byte-identical to its pre-D227 behaviour. Reason: the water quad is a
+two-texunit draw sharing one set of vertex tc, so a tc rescale must be matched
+by a tile shift on *both* tiles — and shifting both makes them sample
+identically, which flattens the very cross-fade the effect is built on. That
+was observed live: an intermediate build that shifted both tiles turned the
+water from pulsating into **constantly green**. Neither variant is right, so
+the water quad keeps plain 1:1 tc and tolerates the overflow on its horizon
+vertex exactly as before. D227's fix stands on its own for the non-water
+levels; D229 is a separate defect needing its own fix.
+
+## D227 — M-100b: FIXED. The real cause is a unit error (`unk20`/`unk24` are S10.5, not texels); the s16 overflow was its symptom, and so are the over-tiling and the "scrolls too fast" complaint
+
+**This supersedes the fix design in M-100 below.** M-100's measurement and its
+overflow diagnosis were right; its *explanation* of why the numbers were so
+large was not. Neither tessellation nor the tile shift turned out to be needed.
+
+**The unit bug.** M-82 ("D176(a) Defect 1") read `unk20`/`unk24` as texel
+counts and therefore baked `tc` as `(S - fold) * 32` to convert texels into
+`tc`'s S10.5 units. They are not texel counts. `skyRender` sets them as
+`worldpos * 0.1f` (the `sp4b4[].unk0c`/`unk10` assignments) and the N64 path
+hands them to the RDP's coefficient block unscaled (`skyRenderTri`:
+`S * unk34 * sp368`), so they are **already in the RDP's native S10.5
+1/32-texel units**. The stray `* 32` made every sky texture coordinate 32x too
+large, which produced three symptoms tracked until now as separate bugs:
+
+1. **D227 itself.** Spans of ~30,000 *texels* against an `s16` `tc` holding
+   +/-1024 -> 7 of 8 coordinates overflowed and wrapped -> starburst / "two
+   sky processes".
+2. **Over-tiling** — ~466 repeats of the 64-texel cloud across one quad
+   instead of ~15.
+3. **"The N64 sky is nearly static, ours races"** (M-96), measured at
+   ~7 px/tick in M-98. `g_SkyCloudOffset` advances 1 unit/tick, which is
+   1/32 texel — not 1 texel. **The M-96 scroll complaint and D227 are the same
+   bug**, which is why M-98's re-derivation of the tick path kept coming back
+   clean: the accumulator was never wrong, its unit was.
+
+**The fix:** `tc = (S - fold)`, 1:1, with the fold rebasing to a whole tile
+period (`SKY_TC_WRAP` = 64 texels x 32 = 2048 units). The ~30,000-unit span
+then fits an `s16` unaided — which is also why the original N64 code needs no
+tessellation here: it never had a range problem to solve.
+
+**How the intermediate wrong turn read on screen, for the record.** Building
+the tile-shift version first (correct overflow handling, still-wrong units)
+removed the starburst and the diagonal split completely but left the sky a
+dense fine moire — the *intended* mapping at 32x the intended scale. That is
+what identified the unit error; the user independently flagged the same thing
+on sight ("background looks like it tiles too small... sky i mean").
+
+**Verified** (`-level_41` Cradle frame 350, the M-98 starburst repro):
+`docs/img/bugs/d227-cradle-fixed-m100.png` — soft cloud bands, correct scale,
+correct perspective compression toward the horizon, no starburst, no diagonal
+split, no moire; matches the character of the emulator reference. `GE_D227V`
+confirms `kS = kT = 0` (no shift needed) and every `tc` in range, max 31,513
+of 32,767. `-level_22` Statue frame 345: clean horizon cloud band, no seam.
+`tools_pc/verify.sh bunker1`: **PASS**, `worst_cell = 10.32` (the known
+stale-golden-baseline number, unaffected by sky work). Surface1 frame 345 has
+almost no sky in frame at that camera, so it is not evidence either way — the
+user's own play-test screenshot remains the Surface evidence.
+
+**What was kept, and why.** M-95's shared `wScale` and M-98's shared fold both
+stay — they were real bugs, and per-fan consistency is still what keeps a
+fan's shared vertices bit-identical between its primitives. The tile-shift
+machinery (`skyPortPickShift` / `skyPortCaptureTile` / `skyPortEmitTileShift`)
+also stays as a **safety valve**: the observed span is 31,513 against a 32,767
+limit, only ~4% of headroom, so a camera that exceeds it is not far-fetched,
+and the mechanism degrades gracefully instead of overflowing. It is not
+untested code — the intermediate build above ran it at `k = 5` and it worked
+correctly (coherent mapping; the wrong scale there was the unrelated unit
+bug). It uses the RDP's own tile `shifts`/`shiftt`, which `port/fast3d`
+already implements (`gfx_pc.cpp` ~1783), so it needs no fast3d change.
+`skyPortCaptureTile` replays the exact `G_SETTILE` that `texSelect` emitted
+with only the shift fields patched, rather than rebuilding it, so it cannot
+drift from `texSelect`'s format/line/mask derivation.
+
+**Still owed:** a human play-test. Every previous D227 "fix" (M-95, M-98)
+passed a static headless check and then failed live, so this does not count as
+closed until it is played — though unlike those two, this one has a mechanism
+that explains every reported symptom, and the user has eyeballed the fixed
+frame. Also worth re-measuring the scroll rate against M-98's ~7 px/tick
+baseline: it should now be ~0.2 px/tick.
+
+## D227 — M-100: ROOT CAUSE FOUND AND PROVEN — `s16` texture-coordinate overflow. Not a crack, not view-dependence, not a quantization mismatch. Fix not yet implemented (design decision open).
+
+**Status: root cause proven by direct measurement + a confirming diagnostic
+build. D227, D176(a) "Defect 2", and the M-98 "Cradle tower starburst" are
+all the same defect.** M-95 (shared `wScale`) and M-98 (shared S/T fold) each
+fixed a real but *second-order* bug; neither could have fixed this one.
+
+**The unblocking evidence was a human screenshot pair** (user supplied, same
+level / weapon / ammo count / near-identical framing, Surface):
+`docs/img/bugs/d227-surface-emulator-ref.png` (1964 emulator — soft, blobby,
+near-isotropic clouds) vs `docs/img/bugs/d227-surface-starburst-ours.png`
+(our build — clouds smeared into long streaks radiating from a point, with
+sharp *radial* boundaries). A radial starburst is not a crack between two
+mis-quantized vertices, which is what M-94→M-98 had been chasing.
+
+**M-99's "blocked, needs a human co-session" conclusion was wrong, and cost a
+session.** The defect reproduces headlessly and *statically* — M-98 had
+already captured it at Cradle frame 350
+(`docs/img/bugs/d176a-cradle-tower-starburst.png`) and even confirmed frames
+350/380 pixel-identical, but filed it as "pre-existing Defect 2, not D227."
+That misclassification is what made D227 look view-dependent-and-unreachable.
+Note the Cradle capture matches the *original* D227 report almost word for
+word: left half starburst, right half normal horizontal streaks, hard
+boundary between them — "each half of the screen shows a different sky
+pattern."
+
+**Measurement (new `GE_D227V` probe, `skyPortRenderPoly`, env-gated in the
+same style as `GE_D176`).** `-level_41`, the frame-350 camera. The sky is one
+`nverts=4` quad, corners TL/TR/BL/BR:
+
+| i | screen x,y | w (`unk0c`) | S (`unk20`) | T (`unk24`) |
+|---|---|---|---|---|
+| 0 | 0.0, 10.0 | 6457.0 | 236.7 | 489.3 |
+| 1 | 319.8, 10.0 | 6457.0 | -658.1 | -122.8 |
+| 2 | 0.0, 212.9 | 215228.8 | 1422.2 | 29806.0 |
+| 3 | 319.8, 212.9 | 215277.7 | -28408.5 | 9406.1 |
+
+All four w are **positive** — no vertex behind the camera, no sign change, so
+no projective pole (a hypothesis worth ruling out; it is ruled out).
+
+The span across this single primitive is **29,830 texels in S and 29,929 in
+T**. `Vtx.tc` is S10.5 (1/32-texel units) in an `s16`, so one primitive can
+represent at most **±1024 texels**. The fold (`floor(min/64)*64`) rebases the
+minimum vertex but cannot compress a span 29x larger than the entire
+representable range. Computing `(S - foldS) * 32` for these four vertices
+(`foldS = -28416`, `foldT = -128`):
+
+| i | tc S exact | → `s16` | tc T exact | → `s16` |
+|---|---|---|---|---|
+| 0 | 916,886 | **-618** | 19,754 | 19,753 ok |
+| 1 | 888,253 | **-29,252** | 166 | 166 ok |
+| 2 | 954,822 | **-28,218** | 957,888 | **-25,152** |
+| 3 | 240 ok | 240 | 305,091 | **-22,589** |
+
+**Seven of the eight texture coordinates overflow and wrap to essentially
+arbitrary values.** The rasteriser then interpolates between wrapped
+garbage — which is exactly a starburst.
+
+**Why it reads as "two halves that differ, split by a line."** The quad is
+emitted as `gSP2Triangles(0, 1, 3, 0, 3, 2)` — split on the **0-3 diagonal**.
+Vertices 0 and 3 are precisely the two that each keep *one* coordinate in
+range, so the two triangles rasterise different mixes of wrapped values,
+divided by that diagonal. This also explains the reported view-dependence
+without any view-dependent mechanism: S/T are functions of view, so the
+wrap point moves as you look around, and the garbage pattern changes with it.
+
+**Confirming diagnostic (decisive).** Rebuilt with `tc` baked at 1-texel
+instead of 1/32-texel granularity (32x the range, deliberately *wrong*
+texture scale, nothing else changed), same `-level_41` frame 350:
+`docs/img/bugs/d227-cradle-tcscale-diagnostic.png`. The starburst and the
+two-halves split are **completely gone**; the sky is smooth and coherent and
+structurally matches the emulator reference. The texture is over-zoomed, as
+expected for a deliberately wrong scale. **s16 tc overflow is the whole
+mechanism** — there is no residual second defect hiding behind it.
+
+**Consequences for the existing record:**
+- D176(a) "Defect 2" (adaptive tessellation of wide-span sky triangles) is
+  not a separate cosmetic nicety — it *is* D227, and it is the dominant sky
+  defect on every affected level.
+- The `skyPortRenderPoly` code comment predicted this exactly ("Triangles
+  whose S/T span exceeds ~1000 texels ... still need Defect-2's finer
+  tessellation") but the severity was underestimated: it is not a
+  horizon-only artifact, it corrupts the entire sky quad.
+- M-95's and M-98's shared-`wScale`/shared-fold fixes remain correct and
+  should stay: once spans are small enough for tc to be in range, per-fan
+  consistency is exactly what keeps sub-primitive boundaries seamless.
+- The M-96 "sky scrolls extremely fast" complaint and M-98's measured
+  ~7 px/tick are plausibly the *same* bug (wrapped tc makes the apparent
+  pattern move at a rate unrelated to the true 1 texel/tick scroll), but
+  that is not yet confirmed — recheck after the fix.
+
+**Fix not implemented — one design decision is genuinely open.** The fix is
+to subdivide until each sub-primitive's S/T span is under ~960 texels, with
+per-sub-primitive folds (folds differing by multiples of 64 texels are
+seamless under `GL_REPEAT` at tile width 64, which is what makes subdivision
+safe). Two things are already worked out:
+
+- **Exact subdivision math.** Interpolate `(1/w, S/w, T/w, colour/w)`
+  bilinearly in the quad's `(u,v)` and divide through — exact for any quad,
+  because affine-in-screen functions commute with affine combinations whose
+  weights sum to 1 (true of bilinear weights). A triangle is handled as a
+  degenerate quad with the `v=1` edge collapsed, also exact.
+- **Where to place the cuts.** Along an edge, `1/w` is affine in screen, so
+  `S = (a + b·(1/w))/(1/w) = b + a·w` — **S is linear in w**. Subdividing
+  *uniformly in w* therefore gives uniform S/T steps, and the cut count is
+  just `ceil(span / threshold)`. Uniform-in-*screen* subdivision is badly
+  wrong here: on this quad's right edge, half the screen distance carries
+  807 texels and the other half carries 26,943.
+
+**The open decision is the vertex budget.** `dynAllocateVertices` is an
+unchecked bump allocator over a per-frame pool of `-mvtx50` = 50 KB (3,200
+`Vtx`), shared with the whole scene; overrunning it corrupts memory silently.
+A pure-tessellation fix needs ~32 divisions per axis at this camera, i.e.
+~1,200-1,300 verts (~20 KB, ~40% of the pool) even with vertex sharing and
+2-row `gSPVertex` batches (fast3d's `MAX_VERTICES` is 128, so batching is not
+the constraint). Options:
+- **A. Pure tessellation.** No port/fast3d change; costs ~40% of the frame's
+  vertex pool on sky alone. Self-limiting via `dynGetFreeVtx()` with
+  graceful degradation (slightly-over-threshold cells in extreme views).
+- **B. Widen the texcoord transport in `port/fast3d/`** so tc carries more
+  range, then only ~4x4 subdivision is needed (~100 verts). Cheap at
+  runtime; touches the RSP emulation, which is port-layer and therefore
+  permitted, but is a wider blast radius.
+- **C. Hybrid** — a modest fast3d widening plus modest tessellation.
+- **D. RDP tile shift (found last, and it dominates A/B/C — recommended).**
+  The RDP already has a native mechanism for trading texcoord precision
+  against range: the tile descriptor's `shifts`/`shiftt`. **`port/fast3d/`
+  implements it fully, including the left-shift case** (`gfx_pc.cpp` ~1783:
+  `shifts <= 10` divides, `shifts >= 11` multiplies by `1 << (16 - shifts)`).
+  So emit tc at `32 / 2^k` units instead of 32 and set `shifts = 16 - k` to
+  multiply it back — **2^k more range, no tessellation, no fast3d change, no
+  vertex-budget cost, and an authentic RDP idiom rather than a port-only
+  hack.** At `k = 5` tc is 1 texel per unit with a range of ±32,767 texels,
+  which covers the measured 29,830-texel span outright — that is exactly the
+  M-100 diagnostic build that already demonstrably removes the artifact, with
+  the scale corrected by the tile shift instead of left wrong. Precision cost
+  is a ≤0.5-texel rounding *at the vertices only* (≤0.8% of the 64-texel
+  tile); interpolation between them is float in the GPU. Implementation care
+  needed in two places: emitting the shift on the sky's tile without
+  disturbing other draws (an extra `gDPSetTile` after the existing
+  `texSelect`), and choosing `k` per draw from the measured span (`k = 0`
+  when the span is already small). A light 2x2 subdivision can still be added
+  on top for spans beyond ±32,767 texels if any camera produces them.
+
+
+**Human playtest (same session, after M-98's fold-sharing fix was pushed):**
+the seam is still visible on Statue, and — new data point, sharper than
+anything in M-93/M-96 — **it visibly changes as the mouse/player view
+moves.** Also reported: "still pretty bad" on Cradle, and Surface has the
+same issue. M-98's fix was real (verified via a same-frame diff) but is
+evidently not the dominant mechanism live play is hitting — the same
+pattern as M-95's wScale fix before it.
+
+**Ruled out this pass:** the cross-quad water/cloud texture-scale mismatch
+theory (block1's below-horizon quad uses raw `unk0c`, block2's cloud quad
+uses `unk0c*0.1f`, and each computes its own independent `wScale`/fold via
+separate `skyPortBeginFan` calls — a plausible source of a horizon-tracking
+seam). Checked via the existing `GE_D176` env probe: **both Statue and
+Cradle report `IsWater=0`.** For `IsWater==0`, block1 is a flat
+`gDPFillRectangle` (`sky.c` ~874-897) — no texture, no scroll, can't be the
+source of a texture-pattern seam. This theory is **not ruled out in
+general** — only on the two `IsWater==0` levels actually tested. It's
+untested on any `IsWater==1` level (Frigate/Runway/Depot/Surface1/2 are
+candidates — check `GE_D176=1` first, cheap).
+
+**Blocked on: headless camera-pan repro doesn't work.** Tried reproducing
+"changes with view" via `GE_INPUTSCRIPT` — both sustained analog-stick
+(`SRIGHT`, held 90 ticks) and repeated C-button pulses (`CRIGHT`/`CUP`)
+produced **zero visible camera rotation** across captured frames (identical
+look direction/HUD framing throughout). The real in-game mouselook almost
+certainly injects yaw/pitch through a path `GE_INPUTSCRIPT` doesn't reach —
+it only emulates the N64 controller (buttons + one fake stick), and
+turning during solo FPS play is evidently driven by something else
+entirely (real SDL mouse deltas, likely, given D194's mouselook work).
+**Any view-angle-dependent visual bug needs a human playtest to chase until
+this gets a debug hook** (e.g. an env-gated `GE_FORCEVIEW=yaw,pitch` set
+once per frame, or finding the actual mouse-delta injection point in
+`port/src/input.c` and driving it directly instead of going through the
+N64-controller emulation layer). Don't re-attempt `GE_INPUTSCRIPT`
+stick/button tokens for camera turn next time — confirmed dead end.
+
+**Ranked candidates for next session, in order of promise:**
+1. Cross-block independent-fan state on an `IsWater==1` level (see above,
+   not yet ruled out) — cheapest to check, `GE_D176=1` first.
+2. Frame-to-frame popping at the S/T fold boundary (not a same-frame
+   spatial crack) — `skyPortRenderPoly`'s fold recomputes every frame from
+   the scrolling min-S, jumping by 64 texels whenever it crosses that
+   boundary; never independently verified that fast3d's real texture wrap
+   makes that jump invisible for this combiner. **Doesn't need view
+   rotation to test** — a static-camera `step:1` capture bracketing a
+   known fold-crossing tick (from M-98's ~7px/tick rate) would show it
+   directly. Best headlessly-testable option if no human is available.
+3. The clip-shape switch (`skyRender`'s 16-case corner-mask switch) handing
+   block2 a differently-*shaped* fan frame to frame as screen corners
+   cross the horizon, not just moved vertices — could read as "the pattern
+   changes as you look around" without a same-frame crack. Not
+   investigated.
+
+**Concretely blocked on:** a screenshot or precise repro detail (level,
+look angle/pitch, screen location) from a human. Full narrative + the
+environment gotchas hit this pass: HANDOFF.md "M-99" (local, this
+session — condense into this row if HANDOFF gets rotated before someone
+picks this up).
+
+## D176(a) — M-98: Cradle "tower starburst" — concrete screenshot of the already-known, still-open Defect 2 (horizon-band tessellation)
+
+**Context:** checking the Cradle side of PR #43 (never done in M-97, per its
+own "not done this session" note) for D227 regressions from the fold-sharing
+fix below. It wasn't regressed, but turned up a much more visually dramatic
+pre-existing artifact than anything previously screenshotted for this level.
+
+**What it looks like:** near Cradle's spawn, looking up the suspension
+tower/catwalk, roughly the left half of the sky renders as a sharp
+"starburst" of radiating streaks converging toward a point near the top of
+frame, directly adjacent to normal horizontal cloud streaks on the right
+half. Screenshot: `docs/img/bugs/d176a-cradle-tower-starburst.png`
+(`-level_41` frame 350).
+
+**Confirmed pre-existing, not caused by this session's work:** rebuilt with
+`src/game/sky.c` reverted to its pre-M-98 (and pre-M-95, since the revert
+target predates both) state, same camera/frame — pixel-identical to the
+post-fix capture. Also confirmed **static**, not the D227 "two halves move
+at different rates" symptom: frame 350 and frame 380 (30 ticks apart, same
+static camera) are pixel-identical.
+
+**This is Defect 2, not a new bug.** The D176(a) finding row has carried
+"Defect 2 (horizon-band coverage/adaptive tessellation) ... unchanged, still
+open" since M-90, and `skyPortRenderPoly`'s own code comment already
+predicts exactly this shape of failure: "Triangles whose S/T span exceeds
+~1000 texels (only those straddling the horizon) still need Defect-2's
+finer tessellation." Looking almost straight up the tower is precisely the
+camera angle that produces one sky fan triangle spanning from near-camera
+to horizon-grazing texel coordinates — the >1000-texel-span case the fold
+logic already flags as unhandled. The perspective-correct interpolation
+(M-90) gets the *shape* of the gradient right end-to-end, but with only 1-3
+triangles per fan and no subdivision, a single triangle covering that much
+of the texture's S/T range still shows visible linear-interpolation
+artifacts across itself — reading as this radiating streak pattern rather
+than smooth cloud, because the fold-and-interpolate math treats the whole
+huge span as one linear ramp.
+
+**Not fixed this pass** — tessellation (subdividing wide-span sky triangles
+before the fold/perspective step) is a materially bigger change than the
+fold-sharing fix below, and out of scope for "did Cradle regress." Logged
+here with a concrete repro + screenshot so Defect 2 has hard evidence
+instead of the prior "M-37: inconclusive, leaning tiling-density" note.
+
+## D227 — M-98: seam residual FIXED (fold-sharing, same class as M-95's wScale-sharing) + scroll-rate quantitatively measured
+
+**Picking up exactly where M-96/M-97 left off:** re-derive the intended N64
+sky scroll rate and check the port's actual per-frame tc delta, rather than
+re-attempting the seam in isolation.
+
+**Ruled out first: the tick rate.** `skyTick()` (`src/game/sky.c`, verbatim
+N64 logic, no `#ifdef PORT`) does `g_SkyCloudOffset += g_ClockTimer` once per
+logic tick, wrapping at 4096. `g_ClockTimer` is set from `speedgraphframes`
+(`frametiming.c`'s `updateFrameCounters`), which D193/D204 already
+established runs at ~1/tick under normal load with a 6-tick catch-up clamp.
+If the global tick rate were wrong, movement/AI/animation would all be sped
+up too, not just the sky — that's not the report. Also checked
+`sub_GAME_7F097388`'s call sites (`sky.c:862,1351`) for a second,
+compounding time-based scale — both pass constant `65535.0f` args, not
+anything frame-dependent. So the accumulator side is clean; per AGENTS.md
+rule 2 (game logic is ground truth), any real bug has to be in the
+`#ifdef PORT` D176(a) Path B substitution, not the decompiled game code.
+
+**Found: M-95 only shared half of what needed sharing.** `skyPortBeginFan()`
+(added by M-95) computes one `wScale` across the whole fan so shared-edge
+vertices quantize their *position* consistently. But `skyPortRenderPoly`'s
+S/T fold (`foldS`/`foldT`) — the `floorf(minS/64)*64` that keeps texel
+coordinates in `s16` range — was still being computed **per call**, from
+only that triangle's own 2-4 vertices, exactly the bug class M-95 fixed one
+field over and never touched here. Two triangles in one fan can each
+independently floor a shared vertex's S/T to a different multiple of 64
+texels; the *visual* result is supposed to be identical (`GL_REPEAT` has
+period 64), but each triangle bakes `(S - fold) * 32` into its own `s16`
+`Vtx` buffer, and two folds 64 texels apart produce tc values exactly 2048
+apart (`64 * 32`) — an s16-precision jump easily large enough to crack at
+the shared edge. This is why M-96's human playtest still saw the seam after
+M-95: M-95's fix was real (closed *a* crease, per its frame-345 diff) but
+not the dominant one live play was hitting.
+
+**Fix:** extended `skyPortBeginFan()`/`skyPortEndFan()` to also compute one
+shared fold across the whole fan (`s_skyFanFoldS`/`s_skyFanFoldT`,
+`s_skyFanFoldSet`), threaded into `skyPortRenderPoly` the same way as
+`wScale` (falls back to the old per-call computation if unset — same
+defensive shape as the wScale fallback). `src/game/sky.c`, `#ifdef PORT`
+only, no game-logic touch.
+
+**Verified:**
+- Build clean (`./build-pc.sh ntsc-final`), no new/duplicate symbols.
+- `-level_22` frame 345 (same frame M-95's before/after screenshots used) —
+  fresh capture shows continuous diagonal cloud streaks with no visible
+  crease at the ~x=1000/1280 location that's clearly cracked in the
+  pre-M-95 reference screenshot (`docs/img/bugs/d227-sky-seam-statue.png`).
+  No new screenshot committed this pass (didn't diff against an M-96-era
+  "still broken" capture, since none was saved) — human eyeball still owed
+  per the usual rule for visual fixes landed without display access.
+- `verify.sh bunker1`: PASS, `worst_cell=10.3` — unchanged from before this
+  fix, matching M-95's note that this number is the already-known stale
+  golden-baseline issue (owed a re-baseline, unrelated to sky.c), not a
+  regression.
+
+**Scroll-rate measurement (the actual M-96/M-97 ask):** captured 11
+consecutive frames (`GE_PCDUMP=345-355:1`, static camera, Statue spawn) and
+cross-correlated a sky-band row (y=60) frame-to-frame. Result: a highly
+consistent **~7 px/tick horizontal shift at 640px capture width** (346→347
+through 354→355 all landed at 6-7px, one outlier at the 345→346 transition
+likely a cutscene/fade boundary). At 60 ticks/sec that's a full 640px
+screen-width sweep roughly every 90 ticks (~1.5s) — hard quantitative
+confirmation of "extremely fast," not just a subjective read, and a
+concrete number for whoever chases the magnitude next.
+
+**Not resolved this pass: *why* that magnitude is what it is.** Since the
+accumulator (1 texel/tick) and the vertex geometry that turns a texel delta
+into screen pixels (`sub_GAME_7F097388`) are both unmodified N64 logic, a
+genuine wrong-magnitude bug (if the rate really is wrong relative to N64,
+which still isn't confirmed absent a hardware/emulator reference) would
+have to live in how the D176(a) Path B substitution maps a given per-vertex
+S/T value to on-screen texels — e.g. camera-to-cloud-plane distance, FOV,
+or a scale factor implicit in the `skyPortRenderPoly` perspective matrix —
+not in the scroll-rate accumulator itself. Didn't chase this further this
+pass; next session should compare the recovered per-pixel S gradient
+(`tc[0]` delta between adjacent screen columns within one frame, not
+frame-to-frame) against what the `130.0f`/`arg4`-driven N64 edge-setup math
+in the `#else` branch of `skyRenderTri` computes for the same triangle, to
+find whether the *shape* of the perspective correction (M-90) also carries
+the right *magnitude*, independent of the wrap-rate question addressed here.
+
+**Still open / human-gated:** the seam-close and the scroll-speed data
+point both need a live eyeball before this can come off draft — same as
+every other rendering fix landed without display access this session.
+Cradle side of PR #43 still never checked (Statue only, again, this pass).
+
+## D227 — M-96: human playtest — seam/crack STILL PRESENT after the M-95 fix; the "static-crease" theory alone does not explain the reported symptom
+
+**Method:** user's own build, this branch (`land/d176a-sky-perspective-scroll`
+at `b1733eda`, which includes the M-95 `wScale`-sharing fix). Launched
+directly into Statue (`-level_22`), looked at the sky.
+
+**Result: sky renders (the original D176a black-sky bug is fixed — sky is
+visibly present, not black), but the seam/crack is still there.** This
+directly contradicts the M-95 commit's "closes the visible seam" claim.
+
+**New scroll-speed data point (user, same session): the sky should be
+*almost static* on the original N64 game, and on this build it currently
+scrolls *extremely fast* — a stronger complaint than M-93's "measurably
+better but still reads too fast."** This bears directly on D176(a) itself
+(the perspective-correct tc-interpolation fix this whole PR is about), not
+just the D227 seam residual. Two live symptoms reported together on the
+same Statue session: (a) scroll rate way too fast, (b) the seam. Worth
+treating as possibly related — if the effective per-frame tc delta is
+wrong by a large factor, that same wrong-magnitude value could plausibly
+also drive the per-vertex/per-primitive divergence read as a "seam" (the
+D227 M-94 hypothesis assumed *quantization* was the cause of the seam, but
+never ruled out a *scroll-rate* mismatch between primitives as an
+alternative explanation for "two things moving at different rates"). **Not
+yet investigated — next session should re-derive the intended N64 scroll
+rate from `sky.c`/the ROM env data and check what the port's actual
+per-frame tc delta computes to, rather than assuming D176(a)'s fix already
+has the right magnitude just because it's no longer solid black.**
+
+**What this means for the M-94/M-95 diagnosis.** M-95's write-up was explicit
+that it verified only the *static per-primitive `wScale` quantization* half
+of M-94's hypothesis (via a same-frame before/after screenshot diff), and
+flagged the *"each half moves at a different rate"* half of the original
+user report as **not re-verified** — that measurement (M-94's static-camera
+diff) was never repeated against the M-95 build. This playtest is that
+missing verification, and it says the crease is still visible in live play.
+Two non-exclusive readings:
+
+1. The screenshot-diff comparison (single static frame) wasn't sensitive to
+   whatever actually causes the live-play seam — i.e. the M-95 fix may have
+   closed *a* crease (real, per the frame 345 before/after) without being
+   *the* crease the user is seeing, or without being the dominant one.
+2. There is a second, independent seam-causing mechanism — most likely the
+   still-unconfirmed "two halves animate at different rates over time" theory
+   from the original M-93/M-94 report, which is a *temporal* divergence
+   (rates, not one-frame geometry) that a single-frame diff cannot detect at
+   all.
+
+**Status: D227 NOT resolved. PR #43 stays in draft — do not merge on the
+strength of the M-95 fix alone.** Next investigation should target the
+temporal/rate theory specifically: capture the same fixed camera position
+across a range of frames (not just one) on both sky "halves" and measure
+whether their texture-coordinate scroll rate actually diverges over time,
+per M-94's original (but never re-run post-M-95) methodology.
+
+## D227 — M-95: FIXED (the static-crease part) — one shared `wScale` across the whole sky fan instead of one per triangle
+
+**The fix.** `src/game/sky.c`, `#ifdef PORT` throughout, three additions:
+
+- `skyPortBeginFan(SkyRelated38 *v, s32 n)` — scans `n` verts' `unk0c` for the
+  max absolute camera-space `w` and stores `wScale` in a new file-static
+  `s_skyFanWScale`. Forward-declared near the top of the file (its first use
+  is ~600 lines before its definition).
+- `skyPortEndFan(void)` — resets `s_skyFanWScale` to `0.0f` (the "unset"
+  sentinel).
+- `skyPortRenderPoly` now checks `s_skyFanWScale > 0.0f` first; if set, uses
+  it directly instead of recomputing `maxAbsW`/`wScale` from just its own
+  2-4 verts. Falls back to the original per-call computation if unset —
+  `skyRenderTri`/`skyRenderFull` have no callers outside this file (checked
+  by grep), but this keeps a safe default instead of silently reusing a
+  stale value if that ever changes.
+- Both fan-drawing blocks (the `sp274[5]`/`sp94[5]` local arrays,
+  `src/game/sky.c`) call `skyPortBeginFan(array, s1)` once right after
+  populating the array — before dispatching to their 1-3
+  `skyRenderTri`/`skyRenderFull` calls — and `skyPortEndFan()` once after
+  the last one. For the `sp94[]` block specifically: computed from `unk0c`,
+  which the position-override code for the full-quad special case (`s1==4`,
+  the `sp94[0].unk28 = ...` assignments) does not touch, so the order is
+  safe regardless of whether that override path runs.
+
+**Why this was the right diagnosis.** `skyRenderTri`/`skyRenderFull` draw up
+to 5 triangles per frame from a *shared* pool of up to 5 vertices (built
+once, then fan-triangulated across 1-3 calls). Each call used to compute its
+own `wScale` from only its own 2-4 verts. The position math is exact for any
+`wScale > 0` (re-derived algebraically in M-94), so this was never a logic
+bug — but `Vtx.ob[]` is `s16`, and two triangles sharing a vertex could each
+independently pick a different `wScale`, quantizing that logically-identical
+shared vertex to two different 16-bit values depending on which triangle's
+call computed it. That's a crack at the shared edge — exactly the visible
+"seam" from M-94's screenshot.
+
+**Verification.**
+- `./build-pc.sh ntsc-final`: clean build, no new/duplicate symbols.
+- Full `verify.sh sweep`: **21/21 PASS**, no crash/regression, both with and
+  without this change (isolated by `git stash`/`stash pop` and re-running).
+- `bunker1`'s non-zero `worst_cell` framediff is unaffected by this change —
+  reproduced identically (~64) on a pre-fix build. Confirmed pre-existing:
+  the stale golden-baseline issue already noted in the M-83/M-84 memory
+  (owed a re-baseline), unrelated to `sky.c`.
+- **Direct same-frame before/after comparison, `-level_22` frame 345:**
+  `docs/img/bugs/d227-sky-seam-statue.png` (pre-fix — visible kink in the
+  cloud streaks around x=1000/1280 in the cropped+2x-upscaled screenshot)
+  vs. `docs/img/bugs/d227-sky-seam-statue-fixed.png` (post-fix, same exact
+  frame — streaks flow continuously through that region, kink gone).
+- **Cradle checked too** (`-level_41`, the other level named in the M-93
+  report): the large black rectangular gap visible there is confirmed
+  **pre-existing and unrelated** — reproduced identically on a pre-fix
+  build capture at the same frame. That's the already-documented
+  FOV-coupled black-sky-past-frustum-edge symptom (D218/D222 family, "not
+  attempted" per the D176(a) PR body) — a different defect, not touched by
+  this fix, not chased further here.
+
+**Not re-verified post-fix:** the "each half moves at a different rate"
+half of the original user report (M-94's static-camera diff measurement
+was not repeated against this build) and the aspect-ratio-artifact
+alternate theory (never independently confirmed or ruled out either way).
+The crease visibly closing at a fixed resolution/aspect is reasonable
+evidence the crease itself was code-side, not a display-scaling artifact,
+but this is not a substitute for a human eyeball pass — owed before merge,
+consistent with every other rendering fix landed this session without
+interactive display access.
+
+**Generalizable quirk for `porting-notes.md`:** when a decompiled routine
+fans a single shared vertex set out across multiple separate perspective-
+correction / projection-matrix-building calls (one call per triangle
+instead of one call for the whole primitive group), and the fix stores a
+derived per-call scale factor into a low-precision (`s16`) vertex field,
+each call's independently-chosen scale can quantize a *logically shared*
+vertex differently — producing a visible crack at the shared edge even
+though the underlying position math is exact for any scale value. Fix:
+compute the scale once for the whole shared-vertex group, not per call.
 
 ## D217 — M-89: the `gfx_dp_load_tlut` width=1/pitch hypothesis is REFUTED (it computes correctly by design); new lead pointed at the runtime texpool arena + image-table conversion, not the model sidecar
 
