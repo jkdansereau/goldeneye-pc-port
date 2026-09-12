@@ -230,7 +230,13 @@ jobs:
     runs-on: ${{ github.event_name == 'pull_request' && 'windows-latest' || fromJSON('["self-hosted", "windows"]') }}
     defaults:
       run:
-        shell: msys2 {0}
+        # Custom shell = MSYS2 MINGW64 launched headlessly by C:\msys64\ci-shell.cmd
+        # (source: tools_pc/ci-shell.cmd, refreshed into C:\msys64 by the bootstrap
+        # step below). Works on BOTH runners because both have MSYS2 at C:\msys64:
+        # windows-latest gets it from setup-msys2 (its default install dir),
+        # self-hosted has it hand-maintained. Non-login bash keeps the workspace
+        # cwd + -e -o pipefail; not the msys2/setup-msys2 `msys2 {0}` shim.
+        shell: C:\msys64\ci-shell.cmd {0}
     env:
       # Same opt-in ccache CMakeLists.txt already wires up (Step 5). Note:
       # this cache path is read/written by the JS actions/cache step outside
@@ -243,13 +249,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # windows-latest (PR) is ephemeral: full install + update every run.
-      # Self-hosted (push/dispatch): `release: false` reuses the box's own
-      # C:\msys64 as-is and, with update/install both empty here, does no
-      # pacman -Syu / pacman -S at all (verified against the action's source)
-      # — it only registers the `msys2 {0}` shell wrapper every job needs.
-      # Packages themselves are hand-maintained on the box; the dependency
-      # check below (not this step) is what verifies they're present.
+      # windows-latest (PR) is ephemeral: full install + update every run —
+      # this is what puts MSYS2 at C:\msys64 (the action's default dir) with
+      # the mingw-w64-x86_64 packages. Self-hosted (push/dispatch):
+      # `release: false` reuses the box's hand-maintained C:\msys64 as-is and,
+      # with update/install both empty, does no pacman -Syu / pacman -S at all.
+      # NOTE: we no longer rely on this action's `msys2 {0}` shell shim — the
+      # shell comes from C:\msys64\ci-shell.cmd (bootstrap step below) — so on
+      # self-hosted this step is effectively a no-op kept only for clarity.
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -264,6 +271,17 @@ jobs:
       - name: Check self-hosted dependencies
         if: github.event_name != 'pull_request'
         run: tools_pc/check-selfhosted-deps.sh
+
+      # Refresh the CI shell launcher from the repo into C:\msys64 (a fixed
+      # absolute path, identical on every box / ephemeral runner). Runs under
+      # plain Windows cmd — NOT the msys2 default above — because it must run
+      # before that launcher is guaranteed current. Placed after setup-msys2 so
+      # C:\msys64 exists on windows-latest; on self-hosted it already does.
+      - name: Install CI shell launcher into C:\msys64
+        shell: cmd
+        run: |
+          if not exist "C:\msys64\mingw64\bin" (echo "C:\msys64 MINGW64 toolchain missing" & exit 2)
+          copy /Y "tools_pc\ci-shell.cmd" "C:\msys64\ci-shell.cmd"
 
       - name: Restore ccache
         uses: actions/cache@v4

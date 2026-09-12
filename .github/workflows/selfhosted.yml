@@ -17,12 +17,15 @@
 #                committed ge007.u.sha1 (repo-tracked US ROM hash).
 #   - MSYS2   -> machine-level install at C:\msys64 (verify.sh hardcodes the
 #                prefix), installed and its packages maintained BY HAND on
-#                the box. msys2/setup-msys2 still runs every job (it's what
-#                registers the `msys2 {0}` shell wrapper), but with
-#                `release: false` and update/install both omitted — verified
-#                against the action's source to do no pacman -Syu / pacman -S
-#                / network round-trip, just a fast reuse of the existing
-#                C:\msys64. Package presence is checked (not installed) by
+#                the box. Every `run` step executes under a custom shell,
+#                C:\msys64\ci-shell.cmd (source: tools_pc/ci-shell.cmd, copied
+#                in by a bootstrap step), which launches the box's MINGW64
+#                bash headlessly — MSYSTEM=MINGW64 + /mingw64/bin on PATH,
+#                non-login so it keeps the workspace cwd (a login shell cd's
+#                to $HOME and would break every relative path). No
+#                msys2/setup-msys2 action: its `msys2 {0}` shell shim is what
+#                was failing with "msys2: command not found". Package presence
+#                is checked (not installed) by
 #                tools_pc/check-selfhosted-deps.sh, which fails fast with
 #                exact install instructions if something's missing.
 #
@@ -70,7 +73,14 @@ jobs:
     runs-on: [ self-hosted, windows ]
     defaults:
       run:
-        shell: msys2 {0}
+        # Custom shell = the box's own MSYS2 MINGW64, launched headlessly by
+        # C:\msys64\ci-shell.cmd (source: tools_pc/ci-shell.cmd, refreshed into
+        # C:\msys64 by the bootstrap step below). Reproduces the local "MSYS2
+        # MINGW64" terminal: MSYSTEM=MINGW64 + /mingw64/bin on PATH, but as a
+        # NON-login bash so it keeps the workspace cwd and with -e -o pipefail
+        # for GitHub-style error propagation. Deliberately NOT the
+        # msys2/setup-msys2 `msys2 {0}` shim (that was "command not found").
+        shell: C:\msys64\ci-shell.cmd {0}
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 500M
@@ -79,17 +89,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # `release: false` reuses the box's own C:\msys64 as-is instead of
-      # downloading/installing MSYS2 fresh (verified against the action's
-      # source: with this set, and update/install both omitted, it does
-      # exactly one `uname -a` + a pacman.conf sed tweak — no pacman -Syu,
-      # no pacman -S, no network round-trip). This step still has to run
-      # every time — it's what registers the `msys2 {0}` shell wrapper
-      # above — but does no install/update work.
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          release: false
+      # Refresh the CI shell launcher from the repo into C:\msys64 (a fixed
+      # absolute path, identical on every box). Runs under plain Windows cmd —
+      # NOT the msys2 default above — because it must execute before that
+      # launcher is guaranteed current. One file copy, no per-run install.
+      - name: Install CI shell launcher into C:\msys64
+        shell: cmd
+        run: |
+          if not exist "C:\msys64\mingw64\bin" (echo "C:\msys64 MINGW64 toolchain missing — install MSYS2 + the mingw-w64-x86_64 packages on this box first" & exit 2)
+          copy /Y "tools_pc\ci-shell.cmd" "C:\msys64\ci-shell.cmd"
 
       # Packages themselves are hand-maintained on the box (never installed
       # by this workflow) — fails fast with exact install instructions if
