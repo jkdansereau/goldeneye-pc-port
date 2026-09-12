@@ -1,6 +1,4 @@
 * text=auto eol=lf
-# Windows batch launchers must keep CRLF or cmd.exe can misparse them.
-*.cmd text eol=crlf
 *.png binary
 *.jpg binary
 *.gif binary
