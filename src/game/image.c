@@ -10,6 +10,40 @@
 
 #define TEX_ALPHA_WEIGHT 961
 
+/* D219 (M-115, see docs/dev/findings.md): the two fast3d importer families
+ * disagree about the byte order of the texpool buffer, and the split is keyed
+ * on the GBI texture SIZE -- which corresponds 1:1 to the pixel format
+ * decoded at each call site below:
+ *
+ *   G_IM_SIZ_16b (RGBA16, RGB15-via-RGBA, IA16): import_texture_rgba16 /
+ *   import_texture_ia16 read the pool as manually big-endian bytes
+ *   ((addr[0]<<8)|addr[1]; intensity=addr[0], alpha=addr[1]). A native u16
+ *   store on this little-endian host is therefore read back byte-swapped,
+ *   so the decoder must store bswap16(value). This is what IMAGE_FIRE_0..14
+ *   (RGBA16) needed: without it, fire particles render blue/purple (M-87/
+ *   M-108); with it, GE_TEXDUMP PPM captures went from B-dominant to
+ *   R-dominant with a clean fire animation (M-113).
+ *
+ *   G_IM_SIZ_32b (RGBA32, RGB24): import_texture_rgba32 does PD_BE32() on a
+ *   NATIVE u32 load -- it expects the pool to hold native-order words. A
+ *   store-time swap inverts those colors instead (M-114 regression: muzzle
+ *   flash blue, ammo HUD pink).
+ *
+ * compmethod is NOT a distinguisher (the fire frames span LOOKUP/RLE/
+ * HUFFMANBLUR/RLELOOKUP); format is, and every call site already routes by
+ * TEXFORMAT_*, so the scoping lives here. Offline ROM census
+ * (scratch/d219_census.txt) confirms the non-zlib 16-bit wide-pixel images
+ * are exactly IMAGE_FIRE_0..14 + texnum 1198-1201 (RGBA16), 2430 (IA16),
+ * 2510-2523 (RGB15); every ammo/flare/crosshair/muzzle-flash wide-pixel
+ * image is RGBA32. The blanket M-113 swap hit both families and caused
+ * M-114; this format-scoped version fixes the 16-bit family only. */
+#ifdef PORT
+#define PORT_PIXEL16(x) __builtin_bswap16((unsigned short)(x))
+#else
+#define PORT_PIXEL16(x) (x)
+#endif
+#define PORT_PIXEL32(x) (x) /* 32b importer expects native words -- see above */
+
 // bss
 //8008C720
 #ifdef PORT
@@ -924,6 +958,20 @@ s32 texInflateNonZlib(u8 *src, u8 *dst, s32 arg2, s32 forcenumimages, struct tex
             return 0;
         }
 
+#ifdef PORT
+        /* D219 (docs/dev/findings.md): diagnostic-only, inert unless
+         * GE_D219RAW is set. Log the bitstream header for every non-zlib
+         * wide-pixel image (RGBA32/RGBA16/RGB24/RGB15/IA16) so a session can
+         * cross-reference any suspect texture's format/compmethod against the
+         * offline ROM census (scratch/d219_census.txt) without a texnum-range
+         * filter. No behavior change -- print only. */
+        if (getenv("GE_D219RAW") && format <= TEXFORMAT_IA16)
+        {
+            osSyncPrintf("D219RAW texnum=%d format=%d width=%d height=%d compmethod=%d i=%d\n",
+                         (int)g_TexNumToLoad, (int)format, (int)width, (int)height, (int)compmethod, (int)i);
+        }
+#endif
+
         switch (compmethod)
         {
             case TEXCOMPMETHOD_UNCOMPRESSED0:
@@ -1017,6 +1065,24 @@ s32 texInflateNonZlib(u8 *src, u8 *dst, s32 arg2, s32 forcenumimages, struct tex
                     // Hang forever!
                 };
         }
+
+#ifdef PORT
+        /* D219: dump the first row of decoded texels exactly as stored in the
+         * pool (post-PORT_PIXEL16, i.e. byte-swapped on PORT for the 16-bit
+         * family -- the bytes import_texture_rgba16/ia16 read back). Covers
+         * every 16-bit wide-pixel format, no texnum filter. Diagnostic-only. */
+        if (getenv("GE_D219RAW") &&
+            (format == TEXFORMAT_RGBA16 || format == TEXFORMAT_RGB15 || format == TEXFORMAT_IA16))
+        {
+            u16 *p16 = (u16 *)&dst[totalbytesout];
+            s32 dbgk;
+            osSyncPrintf("D219RAW decoded texnum=%d format=%d compmethod=%d width=%d height=%d pixels:",
+                         (int)g_TexNumToLoad, (int)format, (int)compmethod, (int)width, (int)height);
+            for (dbgk = 0; dbgk < 12 && dbgk < width * height; dbgk++)
+                osSyncPrintf(" %04x", (unsigned)p16[dbgk]);
+            osSyncPrintf("\n");
+        }
+#endif
 
         if (arg2 == 1 && forcenumimages > 0)
         {
@@ -1683,8 +1749,9 @@ s32 texReadUncompressed(u8 *dst, s32 width, s32 height, s32 format)
 	case TEXFORMAT_RGBA32:
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++) {
-				dst32[x] = texReadBits(16) << 16;
-				dst32[x] |= texReadBits(16);
+				u32 px = texReadBits(16) << 16;
+				px |= texReadBits(16);
+				dst32[x] = PORT_PIXEL32(px);
 			}
 
 			dst32 += (width + 3) & 0xffc;
@@ -1694,7 +1761,7 @@ s32 texReadUncompressed(u8 *dst, s32 width, s32 height, s32 format)
 	case TEXFORMAT_RGB24:
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++) {
-				dst32[x] = texReadBits(24) << 8 | 0xff;
+				dst32[x] = PORT_PIXEL32(texReadBits(24) << 8 | 0xff);
 			}
 
 			dst32 += (width + 3) & 0xffc;
@@ -1705,7 +1772,7 @@ s32 texReadUncompressed(u8 *dst, s32 width, s32 height, s32 format)
 	case TEXFORMAT_IA16:
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++) {
-				dst16[x] = texReadBits(16);
+				dst16[x] = PORT_PIXEL16(texReadBits(16));
 			}
 
 			dst16 += (width + 3) & 0xffc;
@@ -1715,7 +1782,7 @@ s32 texReadUncompressed(u8 *dst, s32 width, s32 height, s32 format)
 	case TEXFORMAT_RGB15:
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++) {
-				dst16[x] = texReadBits(15) << 1 | 1;
+				dst16[x] = PORT_PIXEL16(texReadBits(15) << 1 | 1);
 			}
 
 			dst16 += (width + 3) & 0xffc;
@@ -1776,7 +1843,7 @@ s32 texChannelsToPixels(u8 *src, s32 width, s32 height, u8 *dst, s32 format)
             {
                 for (x = 0; x < width; x++)
                 {
-                    dst32[x] = src[pos] << 24 | src[pos + mult] << 16 | src[pos + mult * 2] << 8 | src[pos + mult * 3];
+                    dst32[x] = PORT_PIXEL32(src[pos] << 24 | src[pos + mult] << 16 | src[pos + mult * 2] << 8 | src[pos + mult * 3]);
                     pos++;
                 }
 
@@ -1790,7 +1857,7 @@ s32 texChannelsToPixels(u8 *src, s32 width, s32 height, u8 *dst, s32 format)
             {
                 for (x = 0; x < width; x++)
                 {
-                    dst32[x] = src[pos] << 24 | src[pos + mult] << 16 | src[pos + mult * 2] << 8 | 0xff;
+                    dst32[x] = PORT_PIXEL32(src[pos] << 24 | src[pos + mult] << 16 | src[pos + mult * 2] << 8 | 0xff);
                     pos++;
                 }
 
@@ -1804,7 +1871,7 @@ s32 texChannelsToPixels(u8 *src, s32 width, s32 height, u8 *dst, s32 format)
             {
                 for (x = 0; x < width; x++)
                 {
-                    dst16[x] = src[pos] << 11 | src[pos + mult] << 6 | src[pos + mult * 2] << 1 | src[pos + mult * 3];
+                    dst16[x] = PORT_PIXEL16(src[pos] << 11 | src[pos + mult] << 6 | src[pos + mult * 2] << 1 | src[pos + mult * 3]);
                     pos++;
                 }
 
@@ -1818,7 +1885,7 @@ s32 texChannelsToPixels(u8 *src, s32 width, s32 height, u8 *dst, s32 format)
             {
                 for (x = 0; x < width; x++)
                 {
-                    dst16[x] = src[pos] << 8 | src[pos + mult];
+                    dst16[x] = PORT_PIXEL16(src[pos] << 8 | src[pos + mult]);
                     pos++;
                 }
 
@@ -1832,7 +1899,7 @@ s32 texChannelsToPixels(u8 *src, s32 width, s32 height, u8 *dst, s32 format)
             {
                 for (x = 0; x < width; x++)
                 {
-                    dst16[x] = src[pos] << 11 | src[pos + mult] << 6 | src[pos + mult * 2] << 1 | 1;
+                    dst16[x] = PORT_PIXEL16(src[pos] << 11 | src[pos + mult] << 6 | src[pos + mult * 2] << 1 | 1);
                     pos++;
                 }
 
@@ -1940,7 +2007,7 @@ s32 texInflateLookup(s32 width, s32 height, u8 *dst, u8 *lookup, s32 numcolours,
 	case TEXFORMAT_RGBA32:
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++) {
-				dst32[x] = lookup32[texReadBits(bitspercolour)];
+				dst32[x] = PORT_PIXEL32(lookup32[texReadBits(bitspercolour)]);
 			}
 
 			dst32 += (width + 3) & 0xffc;
@@ -1950,7 +2017,7 @@ s32 texInflateLookup(s32 width, s32 height, u8 *dst, u8 *lookup, s32 numcolours,
 	case TEXFORMAT_RGB24:
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++) {
-				dst32[x] = lookup32[texReadBits(bitspercolour)] << 8;
+				dst32[x] = PORT_PIXEL32(lookup32[texReadBits(bitspercolour)] << 8);
 			}
 
 			dst32 += (width + 3) & 0xffc;
@@ -1961,7 +2028,7 @@ s32 texInflateLookup(s32 width, s32 height, u8 *dst, u8 *lookup, s32 numcolours,
 	case TEXFORMAT_IA16:
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++) {
-				dst16[x] = lookup16[texReadBits(bitspercolour)];
+				dst16[x] = PORT_PIXEL16(lookup16[texReadBits(bitspercolour)]);
 			}
 
 			dst16 += (width + 3) & 0xffc;
@@ -1971,7 +2038,7 @@ s32 texInflateLookup(s32 width, s32 height, u8 *dst, u8 *lookup, s32 numcolours,
 	case TEXFORMAT_RGB15:
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++) {
-				dst16[x] = lookup16[texReadBits(bitspercolour)] << 1 | 1;
+				dst16[x] = PORT_PIXEL16(lookup16[texReadBits(bitspercolour)] << 1 | 1);
 			}
 
 			dst16 += (width + 3) & 0xffc;
@@ -2060,11 +2127,11 @@ s32 texInflateLookupFromBuffer(u8 *src, s32 width, s32 height, u8 *dst, u8 *look
                 {
                     if (numcolours <= 256)
                     {
-                        dst32[x] = lookup32[src8[x]];
+                        dst32[x] = PORT_PIXEL32(lookup32[src8[x]]);
                     }
                     else
                     {
-                        dst32[x] = lookup32[src16[x]];
+                        dst32[x] = PORT_PIXEL32(lookup32[src16[x]]);
                     }
                 }
 
@@ -2082,11 +2149,11 @@ s32 texInflateLookupFromBuffer(u8 *src, s32 width, s32 height, u8 *dst, u8 *look
                 {
                     if (numcolours <= 256)
                     {
-                        dst32[x] = lookup32[src8[x]] << 8 | 0xff;
+                        dst32[x] = PORT_PIXEL32(lookup32[src8[x]] << 8 | 0xff);
                     }
                     else
                     {
-                        dst32[x] = lookup32[src16[x]] << 8 | 0xff;
+                        dst32[x] = PORT_PIXEL32(lookup32[src16[x]] << 8 | 0xff);
                     }
                 }
 
@@ -2105,11 +2172,11 @@ s32 texInflateLookupFromBuffer(u8 *src, s32 width, s32 height, u8 *dst, u8 *look
                 {
                     if (numcolours <= 256)
                     {
-                        dst16[x] = lookup16[src8[x]];
+                        dst16[x] = PORT_PIXEL16(lookup16[src8[x]]);
                     }
                     else
                     {
-                        dst16[x] = lookup16[src16[x]];
+                        dst16[x] = PORT_PIXEL16(lookup16[src16[x]]);
                     }
                 }
 
@@ -2127,11 +2194,11 @@ s32 texInflateLookupFromBuffer(u8 *src, s32 width, s32 height, u8 *dst, u8 *look
                 {
                     if (numcolours <= 256)
                     {
-                        dst16[x] = lookup16[src8[x]] << 1 | 1;
+                        dst16[x] = PORT_PIXEL16(lookup16[src8[x]] << 1 | 1);
                     }
                     else
                     {
-                        dst16[x] = lookup16[src16[x]] << 1 | 1;
+                        dst16[x] = PORT_PIXEL16(lookup16[src16[x]] << 1 | 1);
                     }
                 }
 

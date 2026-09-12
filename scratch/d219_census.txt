@@ -1,0 +1,109 @@
+== census (kind, format) -> count ==
+  ('NONZLIB', 'I4'): 363
+  ('NONZLIB', 'I8'): 231
+  ('NONZLIB', 'IA16'): 1
+  ('NONZLIB', 'IA4'): 74
+  ('NONZLIB', 'IA8'): 192
+  ('NONZLIB', 'RGB15'): 14
+  ('NONZLIB', 'RGBA16'): 19
+  ('NONZLIB', 'RGBA32'): 60
+  ('ZLIB', 'IA16_CI4'): 15
+  ('ZLIB', 'IA16_CI8'): 91
+  ('ZLIB', 'RGBA16_CI4'): 83
+  ('ZLIB', 'RGBA16_CI8'): 1555
+
+== non-zlib WIDE-pixel images: 94 ==
+  texnum=   0 IMAGE_COPYICON               RGBA32  comp=7 32x28 lod=0
+  texnum=   2 IMAGE_DELICON                RGBA32  comp=8 32x28 lod=0
+  texnum= 437 _image437_ID                 RGBA32  comp=8 32x16 lod=6
+  texnum= 439 _image439_ID                 RGBA32  comp=8 32x16 lod=6
+  texnum= 884 _image884_ID                 RGBA32  comp=4 32x32 lod=0
+  texnum=1198 _image1198_ID                RGBA16  comp=6 64x17 lod=6
+  texnum=1199 _image1199_ID                RGBA16  comp=6 64x17 lod=6
+  texnum=1200 _image1200_ID                RGBA16  comp=6 64x17 lod=6
+  texnum=1201 _image1201_ID                RGBA16  comp=6 64x17 lod=6
+  texnum=2085 IMAGE_FIRE_0                 RGBA16  comp=5 14x14 lod=0
+  texnum=2087 IMAGE_FIRE_1                 RGBA16  comp=8 14x14 lod=0
+  texnum=2089 IMAGE_FIRE_2                 RGBA16  comp=4 14x14 lod=0
+  texnum=2091 IMAGE_FIRE_3                 RGBA16  comp=8 14x14 lod=0
+  texnum=2093 IMAGE_FIRE_4                 RGBA16  comp=8 14x14 lod=0
+  texnum=2095 IMAGE_FIRE_5                 RGBA16  comp=7 14x14 lod=0
+  texnum=2097 IMAGE_FIRE_6                 RGBA16  comp=7 14x14 lod=0
+  texnum=2099 IMAGE_FIRE_7                 RGBA16  comp=4 14x14 lod=0
+  texnum=2101 IMAGE_FIRE_8                 RGBA16  comp=4 14x14 lod=0
+  texnum=2103 IMAGE_FIRE_9                 RGBA16  comp=8 14x14 lod=0
+  texnum=2105 IMAGE_FIRE_10                RGBA16  comp=8 14x14 lod=0
+  texnum=2107 IMAGE_FIRE_11                RGBA16  comp=4 14x14 lod=0
+  texnum=2109 IMAGE_FIRE_12                RGBA16  comp=8 14x14 lod=0
+  texnum=2111 IMAGE_FIRE_13                RGBA16  comp=8 14x14 lod=0
+  texnum=2113 IMAGE_FIRE_14                RGBA16  comp=8 14x14 lod=0
+  texnum=2114 _image2114_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2115 _image2115_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2116 _image2116_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2117 _image2117_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2119 _image2119_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2120 _image2120_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2121 _image2121_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2122 _image2122_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2123 _image2123_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2124 _image2124_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2125 _image2125_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2126 _image2126_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2127 _image2127_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2128 IMAGE_FLAREORANGELINE        RGBA32  comp=4 16x32 lod=6
+  texnum=2134 IMAGE_FLAREBLUEROUND         RGBA32  comp=8 32x32 lod=0
+  texnum=2135 IMAGE_FLAREBLUELINE          RGBA32  comp=8 16x32 lod=6
+  texnum=2137 _image2137_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2138 _image2138_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2139 _image2139_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2140 _image2140_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2141 _image2141_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2142 _image2142_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2143 _image2143_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2144 _image2144_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2145 _image2145_ID                RGBA32  comp=8 32x32 lod=0
+  texnum=2146 _image2146_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2147 _image2147_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2148 _image2148_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2149 _image2149_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2150 _image2150_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2151 _image2151_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2152 _image2152_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2153 _image2153_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2154 _image2154_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2155 _image2155_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2156 _image2156_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2157 _image2157_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2158 _image2158_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2159 _image2159_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2160 _image2160_ID                RGBA32  comp=4 32x32 lod=0
+  texnum=2161 IMAGE_ROCKETAMMO             RGBA32  comp=4 7x22 lod=0
+  texnum=2162 IMAGE_PLAINMINEAMMO          RGBA32  comp=4 14x14 lod=0
+  texnum=2163 IMAGE_GRENADEAMMO            RGBA32  comp=4 14x18 lod=0
+  texnum=2164 IMAGE_MAGAMMO                RGBA32  comp=7 5x15 lod=0
+  texnum=2165 IMAGE_GLAMMO                 RGBA32  comp=4 8x21 lod=0
+  texnum=2166 IMAGE_KNIFEAMMO              RGBA32  comp=4 6x24 lod=0
+  texnum=2167 IMAGE_SHOTAMMO               RGBA32  comp=4 6x20 lod=0
+  texnum=2231 IMAGE_9MMAMMO                RGBA32  comp=4 5x12 lod=0
+  texnum=2232 IMAGE_RIFLEAMMO              RGBA32  comp=4 5x28 lod=0
+  texnum=2233 IMAGE_GGAMMO                 RGBA32  comp=4 5x12 lod=0
+  texnum=2234 IMAGE_MINEAMMO               RGBA32  comp=4 14x14 lod=0
+  texnum=2235 IMAGE_PROXAMMO               RGBA32  comp=4 14x14 lod=0
+  texnum=2236 IMAGE_CROSSHAIR1             RGBA32  comp=4 32x32 lod=0
+  texnum=2237 IMAGE_CROSSHAIR2             RGBA32  comp=7 32x32 lod=0
+  texnum=2238 IMAGE_TIMEAMMO               RGBA32  comp=4 14x14 lod=0
+  texnum=2430 _image2430_ID                IA16    comp=4 64x32 lod=1
+  texnum=2510 _image2510_ID                RGB15   comp=7 128x12 lod=2
+  texnum=2511 _image2511_ID                RGB15   comp=8 128x12 lod=2
+  texnum=2512 _image2512_ID                RGB15   comp=8 128x12 lod=2
+  texnum=2513 _image2513_ID                RGB15   comp=6 128x12 lod=2
+  texnum=2514 _image2514_ID                RGB15   comp=6 128x12 lod=2
+  texnum=2515 _image2515_ID                RGB15   comp=6 128x12 lod=2
+  texnum=2516 _image2516_ID                RGB15   comp=8 128x12 lod=2
+  texnum=2517 _image2517_ID                RGB15   comp=8 128x12 lod=2
+  texnum=2518 _image2518_ID                RGB15   comp=8 128x12 lod=2
+  texnum=2519 _image2519_ID                RGB15   comp=8 128x12 lod=2
+  texnum=2520 _image2520_ID                RGB15   comp=8 128x12 lod=2
+  texnum=2521 _image2521_ID                RGB15   comp=8 128x12 lod=3
+  texnum=2522 _image2522_ID                RGB15   comp=8 128x12 lod=3
+  texnum=2523 _image2523_ID                RGB15   comp=8 128x12 lod=3

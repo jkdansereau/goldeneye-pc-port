@@ -298,6 +298,33 @@ through a converter or a runtime bswap fixup reads scrambled.
   (`GE_IS_NULL()`) so the guard survives. Same class as the D143 textRender
   NULL guards. Audit any hand-rolled libc primitive in `src/` that a port
   NULL can reach.
+- **D219 (M-112; the finding itself resolved in M-115 — kept as a triage lesson) — "the shared texture decoder is proven correct" is
+  a claim about *pixel format*, not *compression method*, and the two are
+  independent knobs on the same runtime `texLoad`.** `src/game/image.c`'s
+  non-zlib texture decompressor reads a per-image 4-bit `TEXCOMPMETHOD_*`
+  from the bitstream (uncompressed / huffman / huffman-per-channel / RLE /
+  lookup / huffman-lookup / RLE-lookup / huffman-blur / RLE-blur) independent
+  of the 4-bit pixel-`format` (RGBA32/16, IA16, I8/4, CI8/4 …). Two textures
+  sharing a pixel format can still take completely different code paths:
+  `_HUFFMAN`/`_HUFFMANPERHCHANNEL`/`_RLE` go through `texChannelsToPixels`
+  (per-channel planes in R,G,B,A order), while `_LOOKUP`/`_HUFFMANLOOKUP`/
+  `_RLELOOKUP` go through `texBuildLookup`+`texInflateLookup*` (a packed
+  color table, bits read directly in final pixel layout). "Every other
+  RGBA16 texture in the game renders correctly, so the decoder can't be the
+  bug" is **not** a valid inference unless you've confirmed the *comparison*
+  texture used the *same* `TEXCOMPMETHOD_*` as the suspect one — they can
+  silently diverge into different functions despite an identical
+  `G_IM_FMT_RGBA,G_IM_SIZ_16b` DL declaration. Also: whether a texture's
+  `G_SETTIMG` marker is baked directly into a compiled display list
+  (`gsDPSetTextureImage(...IMAGESEG(id))` in `assets/*.c`, fixed up by
+  `gimgFixupGlobalimagetable`'s DL-bswap pass) vs. synthesized at runtime
+  from an `sImageTableEntry`'s `index` field (`texSelect`,
+  `src/game/othermodemicrocode.c`) is a real, checkable difference in
+  *resolution* path worth ruling in/out early — but both funnel into the
+  same `texLoadFromDisplayList`→`texLoad` call, so it is a weaker lead than
+  the compression-method one. See `docs/dev/findings.md` D219 for the full
+  writeup and an env-gated (`GE_D219RAW`) diagnostic left in the tree to
+  check this on the next session that can capture runtime output.
 - **D157 — a small value in the LOW BYTE of a BE `s32` word, read as `s8` at
   the word's last offset, reads 0 on LE after the converter byte-swaps it.**
   Same family as D151/D139. `struct objective_entry.difficulty` is `s8` at
@@ -659,6 +686,46 @@ through a converter or a runtime bswap fixup reads scrambled.
   scale), a pitch/shear bug has the minimum at a *different* pitch, and genuine
   noise data is flat (~3.7) at every pitch. That three-way split settles
   decode-vs-pitch-vs-source-data in one pass with no rebuild.
+
+- **D219 — a runtime bitstream decoder that stores a "wide" (>1 byte/pixel)
+  reconstructed value via a native machine write needs an explicit
+  byte-order fixup on PC; a compile-time C-array asset does not. And the
+  fixup is per *importer family*, not per texture: scope it by pixel
+  format, never by texnum range or compmethod (M-113/M-114/M-115).**
+  `src/game/image.c`'s texture decompressor (`texReadUncompressed`,
+  `texChannelsToPixels`, `texBuildLookup`, `texInflateLookup`,
+  `texInflateLookupFromBuffer`) builds each wide pixel as a shifted-OR
+  integer and does a native store — correct on N64 (native == big-endian),
+  byte-reversed on x86-64. This is the **opposite** of the usual "BE ROM
+  data read as LE" direction in this section: here the PORT *host* writes
+  native-endian and a downstream *shared, otherwise-correct* consumer has
+  opinions about byte order. The trap M-113→M-114 hit: the fast3d importer
+  family is NOT uniform. `import_texture_rgba16`/`_ia16` (G_IM_SIZ_16b:
+  RGBA16, RGB15, IA16) read the pool as **manually big-endian bytes**
+  (`(addr[0]<<8)|addr[1]`) → the decoder must store `bswap16(value)`;
+  `import_texture_rgba32` (G_IM_SIZ_32b: RGBA32, RGB24) does `PD_BE32()`
+  on a **native** u32 load → it wants host-order words and a store-time
+  swap *inverts* them (that was the muzzle-flash-blue/ammo-pink
+  regression). So the correct scope is the decoded `TEXFORMAT_*` — which
+  every call site already switches on — not compmethod (the fire frames
+  span LOOKUP/RLE/HUFFMANBLUR/RLELOOKUP) and not a hardcoded texnum range.
+  Static `assets/*.c` C-array textures don't hit this because
+  `gfx_tex_normalize_source` (D71) already normalizes them upstream of
+  `import_texture_*`; only assets that are BOTH genuinely multi-byte-per-
+  pixel AND decompressed at runtime through `texLoad`'s bitstream path are
+  exposed. Offline ROM census (M-115): 94 such images — the 16-bit family
+  is exactly `IMAGE_FIRE_0..14` + texnum 1198–1201/2430/2510–2523, and
+  every ammo/flare/crosshair/muzzle-flash wide-pixel image is RGBA32.
+  General rule for this bug class: before "fixing" a shared decoder's
+  byte order, enumerate **every consumer** of the buffer and check which
+  endianness each one assumes — the fix belongs at the store site, keyed
+  on the format each consumer family expects.
+  Final state (M-115, resolved): `PORT_PIXEL16` = bswap16 under `#ifdef PORT`
+  (16-bit family only), `PORT_PIXEL32` = identity, wrapped around every
+  wide-pixel store in the five functions above; CI/I4/I8/IA4/IA8 (single
+  byte, no byte order) untouched. The intermediate history — M-113's blanket
+  swap regressing muzzle flash/ammo HUD (M-114), reverted to identity, then
+  M-115's format-scoped re-application — is in `docs/dev/findings.md` D219.
 
 ## D2. The HUD/model "X-mirror" (D114/D116) — RESOLVED: it was an upside-down capture
 
