@@ -340,6 +340,26 @@ through a converter or a runtime bswap fixup reads scrambled.
   elsewhere. The Dam rappel cutscene (D148) reached this wall: data path proven intact;
   residual cause is runtime AI-script control-flow / `CAMERAMODE_POSEND` cinematic
   render (D75 family). `GE_D160=1` diagnostic ships; needs a live Dam-to-exit playthrough.
+  **M-106 addendum:** independently re-derived (not just re-cited) — `CutsceneRecord`
+  (propDef type 46) has zero pointer/union fields, so it cannot exhibit this class at
+  all; confirms the M-31 stride audit rather than superseding it. D148/D160's residual
+  cause is still unlocated (needs the live trace); see D173 for a related negative
+  result on the puppet-position side.
+- **D132/D126 corollary — a zeroed ROM-serialized pointer-width tail slot is not
+  automatically a converter bug; check the N64 source literal first (M-106).**
+  Before assuming an offline converter wrongly zeroed a widened pointer field
+  (the D122/D126/D132 "dead-on-load" pattern), grep the asset `.c` source tables
+  (`assets/obseg/**/*.c`) for that field's literal initialiser. `PadRecord.stan`
+  (`src/bondtypes.h:1744-1751`) looked exactly like a D126/D132 miss — a ROM-
+  serialized tail pointer, zeroed by `tools_pc/d88_emit.py`'s `emit_pad()` — but
+  every `PadRecord` in every checked setup table (`UsetupdamZ.c` etc.) initialises
+  `stan` to literal `0`; N64 never carried a live pointer there either, so the PC
+  zeroing is byte-identical to ground truth, not a regression. The tell that saves
+  the trip: if the *source*, not just the ROM binary, always writes `0`/`NULL` for
+  a field, it was never "dead-on-load" in the D123-corollary sense (a field that
+  reads a real small int/id before being overwritten) — it's simply always
+  runtime-computed, on both platforms, and a NULL seed into whatever consumes it
+  is the original game's normal case, not a port defect.
 - **D151 — a ROM-serialized `s32` slot decoded by the struct as `[u16 hi][u16 lo]`
   reads zero on LE.** N64 code frequently splits a 32-bit setup-stream word into
   `u16 reserved; u16 realvalue;` where the useful value is always small and lands
