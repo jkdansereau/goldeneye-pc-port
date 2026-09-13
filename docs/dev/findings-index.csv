@@ -42,7 +42,7 @@ D234,FIXED,"Dam: guard towers along the dam structure invisible except the first
 D244,OPEN,Self-hosted CI runner (corpyvt6agent01) link failure:,"OPEN, not yet fixed. Next:"
 D228,FIXED,AK47 (and other) weapon models still show WHITE missing-texture patches after D217's texpool-alignment fix —,"FIXED (port/fast3d/gfx_pc.cpp, palette_to_rgba32) —"
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
-D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
+D203,?,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",CLOSED — root cause + fix in D253.
 D201,FIXED,"src/libultra/audio/bnkf.c bank/instrument/sound/wavetable relocation offsets were s32, truncating the real 64-bit base pointer.",FIXED (src/libultra/audio/bnkf.c) —
 D202,RESOLVED,"Silenced PPK plays a ""slap"" instead of a gunshot, PLUS user reports broader real-time audio corruption (M-52 → M-59 → REOPENED M-60 → M-61/M-62 closed the data…",ROOT CAUSE ESTABLISHED (M-66); DISPOSITION C IMPLEMENTED + MEASURED (M-66b) —
 D206,FIXED,PC played every SFX one bank slot too high —,"FIXED (M-76, src/snd.c:1001, #ifdef PORT → soundArray[soundIndex - 1], N64 line verbatim under #else)."
@@ -134,3 +134,4 @@ D249,OPEN,"LOD/culling breaks down on large open levels (Streets, Egyptian named
 D250,?,FPS is inconsistent/low on many levels since the port started actually running at 60fps —,
 D251,FIXED,F10 options overlay QoL pass:,"FIXED (port-only, port/src/optionsoverlay.c)."
 D252,?,"Particle effects cycle through a rainbow palette (M-124, user playtest of the v0.2.0-pre candidate).",
+D253,FIXED,Facility (and any level with a FORCECROUCH/LADDER linked special tile) SIGSEGV on Linux/Steam Deck —,FIXED — pending Deck re-verification with the re-cut bundle.
