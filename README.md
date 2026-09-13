@@ -87,14 +87,15 @@ dual-stick controller layout; file-backed saves; F10 in-game options overlay
   (spinning Nintendo logo, MISSION COMPLETE / mode-select) mispositioned or
   absent. Assorted further cosmetic defects are tracked in
   [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
-- No macOS or ARM support; no widescreen; no controller rebinding UI.
+- No macOS or ARM support; no controller rebinding UI.
 
 Root causes and fix status for every item: the [release notes](../../releases)
 and the finding log in [`docs/dev/findings.md`](docs/dev/findings.md).
 
 ### Steam Deck
 
-The Linux bundle is the Deck build. Sideload it (USB or a file manager):
+The Linux bundle is the Deck build. SFTP it over from your PC, or download
+it straight from the [releases page](../../releases) on the Deck itself:
 unzip, drop your ROM in `data/`, run `prepare-assets` once, and add the
 executable as a non-Steam game. SDL2 is bundled, so no dependencies need
 installing. The renderer is CPU-bound (software RSP); expect original N64-era

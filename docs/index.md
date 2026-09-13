@@ -177,7 +177,7 @@ catalogue: [Porting notes](porting-notes.md).
 - Particle colours drift through a rainbow palette instead of holding grey/orange.
 - Water levels show a moving seam; pixel strips at screen edges at non-integer
   scales; some front-end 3D models mispositioned or absent.
-- No macOS/ARM, no widescreen, no controller rebinding UI yet.
+- No macOS/ARM support; no controller rebinding UI yet.
 
 The full list, with root causes and fix status: the
 [README's Status section](https://github.com/jkdansereau/goldeneye-pc-port#status)
