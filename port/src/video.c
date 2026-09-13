@@ -126,25 +126,41 @@ f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
 /* D218: Video.DrawDistance -- multiplier applied to a level's authored
  * Visibility.FarFog (src/game/bgfog.c fogLoadCurrentEnvironment), which is
  * both the far clip plane and the fog-saturation distance (levels are tuned
- * for the stock ~60deg FOV). Video.DrawDistanceAutoFov (default on) couples
- * the multiplier to Video.FovScale so a wider FOV doesn't clip its own newly
- * visible far geometry against fog tuned for the narrower original view
- * (D218's "blue artifacting" down long sightlines); an explicit
- * Video.DrawDistance != 100 overrides that coupling. Clamped to <=2.5x --
- * pushing the far plane much further out risks far-field z-fighting against
- * the level's original near-plane precision. Identity (1.0f) at both
- * defaults, bit-for-bit no-op. */
+ * for the stock ~60deg FOV), plus the character/prop fog-visibility-fade
+ * cutoff (src/game/propobj.c chrobjFogVisRangeRelated/sub_GAME_7F054C58).
+ * Video.DrawDistanceAutoFov (default on) couples the multiplier to
+ * Video.FovScale so a wider FOV doesn't clip its own newly visible far
+ * geometry -- or fade NPCs out early -- against distances tuned for the
+ * narrower original view (D218's "blue artifacting"; the M-121 live
+ * playtest found a straight 1:1 FovScale coupling still faded guards in
+ * noticeably close on Dam, so the auto coupling is 2x FovScale, not 1x).
+ * An explicit Video.DrawDistance != 100 overrides that coupling outright.
+ * Clamped to <=4.0x -- pushing the far plane much further out risks
+ * far-field z-fighting against the level's original near-plane precision;
+ * raised again (M-121 live playtest: 2x FovScale still showed a "blue
+ * glow" on far Dam tunnel geometry, so auto coupling is now 4x FovScale)
+ * to give headroom (max portFovScale is 1.5 at Video.FovScale's registered
+ * ceiling of 150, so 4x tops out at 6.0x -- ceiling raised to match).
+ * Identity (1.0f) at both defaults, bit-for-bit no-op. NOTE: end-to-end
+ * re-check of fogLoadCurrentEnvironment (bgfog.c) found the fog RAMP
+ * itself (not just the far-clip cutoff) already scales correctly with
+ * this multiplier -- g_ScaledFarFogIntensity/scaled_far_fog_dist both
+ * derive from the same scaled far value. If a visible blue tint at range
+ * persists even at a large multiplier, it may be Dam's tunnel sightline
+ * simply exceeding whatever distance was tried, or a separate visual
+ * element (skybox/backdrop) not gated by Visibility.FarFog at all --
+ * worth a fresh screenshot-driven look before assuming another bug here. */
 f32 portDrawDistanceMultiplier(void)
 {
     f32 mult;
     if (cfgDrawDistance != 100) {
         mult = (f32)cfgDrawDistance / 100.0f;
     } else if (cfgDrawDistanceAutoFov && portFovScale != 1.0f) {
-        mult = portFovScale;
+        mult = portFovScale * 4.0f;
     } else {
         return 1.0f;
     }
-    if (mult > 2.5f) { mult = 2.5f; }
+    if (mult > 6.0f) { mult = 6.0f; }
     if (mult < 1.0f) { mult = 1.0f; }
     return mult;
 }
