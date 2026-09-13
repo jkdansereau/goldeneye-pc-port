@@ -64,6 +64,9 @@ static void portPrintHelp(const char *argv0)
     printf("\nusage: %s [options] [-level_XX]\n\n"
            "  --help            this message\n"
            "  --version         build id only\n"
+           "  -fresh            wipe playtest data + config before starting\n"
+           "                    (removes ge007.eep save and ge007.ini; the\n"
+           "                    ini is re-written with defaults on exit)\n"
            "  -level_XX         boot straight into a solo level (per-level\n"
            "                    memory pools are auto-injected)\n\n"
            "config: ge007.ini in the data dir (written on first run).\n\n"
@@ -96,6 +99,21 @@ int main(int argc, char **argv)
 
     /* Crash handler first, so any failure below is debuggable. */
     crashInit();
+
+    /* -fresh: clean-slate run -- drop the file-backed EEPROM save and the
+     * ini before anything reads them (configLoad below, eeprom's lazy load).
+     * sysResolvePath returns one static buffer, so copy each path out. */
+    if (sysArgCheck("-fresh") || sysArgCheck("--fresh")) {
+        char ini[1024], eep[1024];
+        strncpy(ini, sysResolvePath("$S/ge007.ini"), sizeof(ini) - 1);
+        ini[sizeof(ini) - 1] = 0;
+        strncpy(eep, sysResolvePath("$S/ge007.eep"), sizeof(eep) - 1);
+        eep[sizeof(eep) - 1] = 0;
+        if (remove(ini) == 0) sysLogPrintf(LOG_INFO, "fresh: removed %s", ini);
+        else                  sysLogPrintf(LOG_NOTE, "fresh: no %s to remove", ini);
+        if (remove(eep) == 0) sysLogPrintf(LOG_INFO, "fresh: removed %s", eep);
+        else                  sysLogPrintf(LOG_NOTE, "fresh: no %s to remove", eep);
+    }
 
     /* 1. Platform + config + filesystem. */
     configLoad();
