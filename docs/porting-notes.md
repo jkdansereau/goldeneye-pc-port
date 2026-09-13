@@ -1125,4 +1125,23 @@ and turns every such overrun into a fatal `*** stack smashing detected ***`
   geometry (viewport height/width, screen offset, etc.) back to its decomp
   origin — a visually surprising but *exactly reproduced* N64 quirk isn't a
   port defect, and the fix is to close the finding, not to write code.
+- **D195 — a targeted decomp-side fix (D72) blanket-disabled a whole PC-side
+  feature instead of gating it on the GBI bit that actually distinguishes the
+  broken case from the working one.** `gfx_sp_vertex()`'s PD-inherited
+  envmap (`G_TEXTURE_GEN`) UV-generation block was removed wholesale to fix
+  the Rareware logo (D72.1), on the reasoning "GE never generates texture
+  coordinates from vertex normals." That's true for the logo specifically
+  (lit, but doesn't set `G_TEXTURE_GEN`) but false for the engine in
+  general: GE uses real RSP envmap generation for every shiny/reflective
+  material (gold/silver weapon skins, chrome trim, reflective glass), all of
+  which DO set the bit. Deleting the feature instead of gating it on
+  `rsp.geometry_mode & G_TEXTURE_GEN` (which the reference PD port already
+  does correctly) silently broke every one of those materials game-wide —
+  they'd sample a fixed, usually-dark corner texel forever, reading as solid
+  black. **Lesson:** when a PD-inherited block causes a wrong result for one
+  specific draw, check what GBI bit *that draw* fails to gate on before
+  assuming the whole mechanism doesn't apply to GE — a feature real N64
+  hardware supports and GE's own assets exercise is not "PD-only" just
+  because the first investigation happened to hit it on a draw that
+  shouldn't have taken that path. §F **D195**.
   §F **D247**.

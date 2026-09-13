@@ -21,7 +21,7 @@ D190,?,"Linux -level_45 SIGSEGV at load in add_ptr_to_objective (objective.c:64)
 D191,FIXED,Windows -O2 release-bundle crash:,FIXED + PLAYTEST-VERIFIED (M-79).
 D193,FIXED,NPC AI locomotion is too slow —,FIXED + user-playtest-verified (M-81) —
 D194,OPEN,Mouse input needs another tuning pass —,"OPEN — root cause and fix direction known, not implemented."
-D195,OPEN,"Transparency / alpha surfaces broken on Control (M-49, user playtest) —","OPEN — not investigated (M-49), needs a capture"
+D195,FIXED,"Transparency / alpha surfaces broken on Control (M-49, user playtest) —","FIXED (port/fast3d/gfx_pc.cpp, gfx_sp_vertex) —"
 D197,OPEN,"Character face/head textures wrap around the head, seen on Silo (M-49, user playtest).","OPEN — not investigated (M-49), needs a capture"
 D198,FIXED,alAdpcmPull/_decodeChunk used K0_TO_PHYS (an unconditional & 0x1FFFFFFF mask) on 64-bit heap pointers (src/libultra/audio/load.c).,FIXED (src/libultra/audio/load.c) —
 D199,PARTIAL,Phase-3 software audio mixer:,"LANDED (port/src/mixer.c, port/include/mixer.h, include/PR/abi.h) —"

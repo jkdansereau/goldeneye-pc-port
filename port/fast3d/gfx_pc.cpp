@@ -1390,19 +1390,55 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
             d->color.g = g > 255 ? 255 : g;
             d->color.b = b > 255 ? 255 : b;
 
-            /* D72 (docs/internals.md): unlike the PD port, GE never
-             * generates texture coordinates from vertex normals. This PD-
-             * inherited block overwrote the authored tc[] UVs on every
-             * lit+textured surface (lookat_enabled defaults to true here),
-             * which smeared the Rareware-logo quads into a diagonal gold
-             * wedge: their corner UVs (0x0010..0x03F0 = full 32x32 coverage)
-             * were replaced by normal-derived values. GE's ground truth:
-             * every DL that could env-map sets gsDPSetTextureLUT(G_TT_NONE),
-             * stage rendering always has a camera lookat yet stage textures
-             * are surface-fixed on hardware, and the logo vertex batches
-             * carry authored atlas-slice UVs. So U/V stay as computed from
-             * tc[] above. (gSPLookAt state is still tracked — it may matter
-             * for lighting fidelity later.) */
+            /* D195/D72 correction: GE DOES use RSP-generated (environment-
+             * mapped) texture coordinates -- shiny gold/silver weapon skins
+             * and Control's reflective console glass all set G_TEXTURE_GEN,
+             * the real GBI bit that gates this on real hardware. D72.1
+             * originally removed this whole PD-inherited block to fix the
+             * Rareware logo (a lit surface that does NOT set G_TEXTURE_GEN,
+             * so it was never supposed to hit this path in the first place)
+             * but over-corrected: it deleted the feature instead of gating
+             * it on the bit that actually distinguishes the two cases. With
+             * no envmap UV generation, every G_TEXTURE_GEN draw sampled its
+             * texture at whatever raw tc[] happened to be authored (usually
+             * ~0), landing on the same corner texel every frame regardless
+             * of view angle -- for a typical dark-edged reflection map, a
+             * solid near-black surface instead of a shiny/reflective one.
+             * Gating on G_TEXTURE_GEN preserves D72.1's actual fix (the logo
+             * never sets this bit, so it's unaffected) while restoring the
+             * envmap effect for the draws that do. */
+            if (rsp.geometry_mode & G_TEXTURE_GEN) {
+                float dotx = 0, doty = 0;
+                if (rsp.lookat_enabled) {
+                    dotx += vcn->x * rsp.current_lookat_coeffs[0][0];
+                    dotx += vcn->y * rsp.current_lookat_coeffs[0][1];
+                    dotx += vcn->z * rsp.current_lookat_coeffs[0][2];
+                    doty += vcn->x * rsp.current_lookat_coeffs[1][0];
+                    doty += vcn->y * rsp.current_lookat_coeffs[1][1];
+                    doty += vcn->z * rsp.current_lookat_coeffs[1][2];
+                    dotx /= 127.0f;
+                    doty /= 127.0f;
+                } else {
+                    float tvcn[3];
+                    calculate_normal_dir(vcn, tvcn);
+                    dotx = tvcn[0];
+                    doty = tvcn[1];
+                }
+
+                dotx = clampf(dotx, -1.0f, 1.0f);
+                doty = clampf(doty, -1.0f, 1.0f);
+
+                if (rsp.geometry_mode & G_TEXTURE_GEN_LINEAR) {
+                    dotx = acosf(-dotx) / 4.0f;
+                    doty = acosf(-doty) / 4.0f;
+                } else {
+                    dotx = (dotx + 1.0f) / 4.0f;
+                    doty = (doty + 1.0f) / 4.0f;
+                }
+
+                U = (int32_t)(dotx * rsp.texture_scaling_factor.s);
+                V = (int32_t)(doty * rsp.texture_scaling_factor.t);
+            }
         } else {
             d->color.r = vcn->r;
             d->color.g = vcn->g;
