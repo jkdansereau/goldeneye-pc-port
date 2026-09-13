@@ -131,4 +131,4 @@ D246,OPEN,"Tiny pixel strips at the left and right edges of the screen, ""like o
 D247,RESOLVED,Black bars top and bottom of screen —,"NOT A BUG — confirmed faithful, unmodified N64 decomp behaviour, no code change made."
 D248,FIXED,"Port runs a stable 30 FPS instead of 60 FPS game-wide (M-117, user asked to verify FPS after the D209 timing-keystone fixes).","FIXED, root-caused to a genuine pointer-width ABI bug in src/sched.c (compiled for the PC build, not excluded)."
 D249,OPEN,"LOD/culling breaks down on large open levels (Streets, Egyptian named specifically) at *default* FOV —",OPEN — not investigated.
-D250,OPEN,FPS is inconsistent/low on many levels since the port started actually running at 60fps —,OPEN — not investigated.
+D250,?,FPS is inconsistent/low on many levels since the port started actually running at 60fps —,
