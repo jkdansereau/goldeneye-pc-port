@@ -149,7 +149,14 @@ const char aStanlinelog[] = "-stanlinelog";
 // forward declarations
 
 s32 stanIsSpecialBit1Set(StandTile *arg0, struct StandTileLocusCallbackRecord* arg1);
-s32 stanCheckLinkedSpecialTile(StandTile *tile, s32 pointIdx, s32 arg2, s32 arg3, s32 arg4, s32 *outFlags);
+// D253: the three middle params are f32 on the N64 (o32 ABI passes them in
+// GPRs either way, and the body never uses them), but on x86-64 SysV the
+// float/int class split puts the 6th arg (outFlags) in a different register
+// depending on their declared type. The caller passes through the
+// standTileLocusCallback_B_t typedef (f32 f32 f32), so this definition must
+// match it or outFlags lands in the wrong register (stale %r9 -> SEGV on the
+// FORCECROUCH/LADDER store).
+s32 stanCheckLinkedSpecialTile(StandTile *tile, s32 pointIdx, f32 arg2, f32 arg3, f32 arg4, s32 *outFlags);
 s32 sub_GAME_7F0B21B0(StandTile **tileStack, f32 target_x, f32 target_z, f32 radius, s32 *rooms, s32 *count_rtn, s32 bufMax);
 f32 getShortest2dDispToInfTripleEdge(StandTile *tile, s32 start3index, f32 p_x, f32 p_z);
 StanCollisionResult sub_GAME_7F0B1DDC(struct StandTile**, f32, f32, f32, standTileLocusCallback_A_t, standTileLocusCallback_B_t, standTileLocusCallback_C_t, struct StandTileLocusCallbackRecord*);
@@ -2404,7 +2411,7 @@ s32 stanIsSpecialBit1Set(StandTile *arg0, struct StandTileLocusCallbackRecord *a
 /**
  * Address: 7F0B2274
  */
-s32 stanCheckLinkedSpecialTile(StandTile *tile, s32 pointIdx, s32 arg2, s32 arg3, s32 arg4, s32 *outFlags)
+s32 stanCheckLinkedSpecialTile(StandTile *tile, s32 pointIdx, f32 arg2, f32 arg3, f32 arg4, s32 *outFlags) // D253
 {
     u16 link;
     StandTile *target;

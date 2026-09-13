@@ -19,7 +19,10 @@
   green/pulsing; reflective surfaces (glass, chrome weapon skins) work.
 - **Crash fixes**: the two v0.1.0-era crashing levels (Bunker ii, Statue) and
   the AI-pacing bug that broke Cradle are fixed and playtest-verified — all 21
-  solo missions load and run crash-free.
+  solo missions load and run crash-free. Also fixed: the Steam Deck / Linux
+  Facility crash triggered by walking into the crouch-forcing spot at the
+  level's opening (D253) — this also revives the auto-crouch and ladder
+  signals, which were dead on PC before.
 - **QoL**: F10 in-game options overlay (fullscreen, resolution, frame cap,
   MSAA, texture filtering, FOV/draw distance, sensitivity), mute-on-focus-loss,
   F12 screenshot.
