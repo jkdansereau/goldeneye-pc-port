@@ -39,8 +39,9 @@ timers, save storage) is shimmed in a dedicated `port/` layer.
 
 ## Quick start
 
-You supply your own **NTSC-U GoldenEye 007 N64 ROM** (`.z64`, big-endian) — no
-ROM or game asset is included or distributed. Then:
+You supply your own **GoldenEye 007 N64 ROM** (`.z64`, big-endian; NTSC-U
+recommended — all three regions are supported, see [Requirements](#requirements)).
+No ROM or game asset is included or distributed. Then:
 
 1. Download the Windows or Linux bundle from [Releases](../../releases) and unpack it. The Linux bundle ships its own SDL2, so it runs on any distro — and on a Steam Deck — with nothing installed.
 2. Make a `data/` folder next to the executable and drop the ROM in as `ge007.ntsc-final.z64`.
@@ -50,9 +51,25 @@ ROM or game asset is included or distributed. Then:
 Building from source instead: see [Building](#building). Read the
 [Status](#status) caveats first — this is a pre-release.
 
+## Beyond playing
+
+- **Tweak it** — `ge007.ini` and the F10 in-game overlay expose resolution,
+  frame cap, MSAA, texture filtering, FOV/draw distance and mouse feel;
+  launch with `-fresh` for a clean-slate run.
+- **Read it** — [`docs/internals.md`](docs/internals.md) maps the
+  architecture and the software RSP; [`docs/porting-notes.md`](docs/porting-notes.md)
+  is the catalogue of N64→PC bug classes hit along the way. Game logic in
+  `src/` is unmodified decompilation; every hardware surface lives in the
+  MIT-licensed `port/` layer.
+- **Mod it** — the port layer, build system and `tools_pc/` are yours to
+  extend (see [License](#license)); [`CONTRIBUTING.md`](CONTRIBUTING.md) has
+  the ground rules for getting changes in, and [`docs/dev/`](docs/dev/) is
+  the raw engineering record behind every fix.
+
 ## Contents
 
 - [Quick start](#quick-start)
+- [Beyond playing](#beyond-playing)
 - [Background](#background)
 - [How this differs from the other GoldenEye PC projects](#how-this-differs-from-the-other-goldeneye-pc-projects)
 - [Status](#status)
@@ -69,26 +86,20 @@ Building from source instead: see [Building](#building). Read the
 
 ## Background
 
-The port used two agents handing work back and forth through shared written
-notes (a running handoff doc), directed by one person part-time:
+The port was built by two coding agents — a local open-weight model
+(`unsloth/Qwen3.8-27B-GGUF` on one RTX 5090, via the [pi](https://pi.dev/)
+agent) doing the groundwork (build, boot chain, software-RSP integration,
+asset pipeline, first frames), and **Claude Code** (Sonnet 5, Opus 5 for the
+hardest bugs) joining for the collaborative phase (the 21-level sweep, the
+ABI finding catalog, SDL input, front end) — handing work back and forth
+through shared written notes, directed by one person part-time. In short:
+~3.5 weeks, ~430 commits, 200+ root-caused bugs logged.
 
-- a **local open-weight model** —
-  `unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL` on a single **RTX 5090**, driven mainly
-  through the **[pi](https://pi.dev/)** coding agent — which did the
-  groundwork: the CMake build, the boot chain, the software-RSP integration,
-  the offline asset-conversion pipeline, and the first rendered frames;
-- **Claude** (via **Claude Code** — mostly **Sonnet 5**, with **Opus 5** as an
-  escalation tier for the hardest bugs), which joined for a collaborative
-  phase covering the 21-level load/render/no-crash sweep, the ABI/layout
-  finding catalog, the SDL input layer, and the front-end flow.
-
-In short: ~3.5 weeks, one person part-time, two agents, ~430 commits, 200+
-root-caused bugs logged. The full write-up (timeline, the handoff mechanism,
-commit/effort breakdown, and an honest "what worked / what didn't") lives in
-[`docs/dev/agentic-development.md`](docs/dev/agentic-development.md). The
-workflow itself: [`docs/dev-process.md`](docs/dev-process.md). To cite this
-project or its findings, use [`CITATION.cff`](CITATION.cff) (GitHub's "Cite
-this repository" menu).
+The full write-up (timeline, handoff mechanism, effort breakdown, an honest
+"what worked / what didn't"): [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md).
+The workflow itself: [`docs/dev-process.md`](docs/dev-process.md). To cite the
+project or its findings: [`CITATION.cff`](CITATION.cff) (GitHub's "Cite this
+repository" menu).
 
 ## How this differs from the other GoldenEye PC projects
 
