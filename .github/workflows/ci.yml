@@ -365,7 +365,12 @@ jobs:
             gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
             NOTES="$(mktemp)"
-            sed "s/<version>/${TAG}/g" .github/release-notes.md > "$NOTES"
+            # Asset names are built from the tag with the leading v stripped
+            # (bundle-{linux,win}.sh), so substitute the same form -- a raw
+            # TAG would make the notes reference goldeneye-pc-port-v*.* assets
+            # that don't exist.
+            NOTES_VERSION="${TAG#v}"
+            sed "s/<version>/${NOTES_VERSION}/g" .github/release-notes.md > "$NOTES"
             gh release create "$TAG" "${ASSETS[@]}" \
               --draft --prerelease \
               --title "GoldenEye 007 PC Port $TAG" \

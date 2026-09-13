@@ -1136,12 +1136,16 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
             button |= GE_CONT_B;
         int padMenuMode = (current_menu != GE_MENU_RUN_STAGE &&
                            current_menu != GE_MENU_INVALID);
-        if (!padMenuMode) {
+        {
             int lbNow = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
             int rbNow = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
             int *prev = &padShoulderPrev[idx];
-            if (rbNow && !(*prev & 1)) button |= GE_CONT_A;            /* next weapon */
-            if (lbNow && !(*prev & 2)) button |= GE_CONT_A | GE_CONT_G; /* prev weapon */
+            /* Track edge state in menus too: a shoulder held across the
+             * menu->game transition must not fire a cycle on entry. */
+            if (!padMenuMode) {
+                if (rbNow && !(*prev & 1)) button |= GE_CONT_A;            /* next weapon */
+                if (lbNow && !(*prev & 2)) button |= GE_CONT_A | GE_CONT_G; /* prev weapon */
+            }
             *prev = (rbNow ? 1 : 0) | (lbNow ? 2 : 0);
         }
         if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_START))
