@@ -77,7 +77,40 @@ without a ROM you already own.
   <br><em>~15 s of the port running: mission dossier &rarr; Facility &rarr; Silo &rarr; Jungle &rarr; Archives (the clip has no audio track).</em>
 </p>
 
-More in-engine captures land here as playtesting continues.
+<details>
+<summary><strong>Full playtest gallery</strong> — 26 in-engine captures from the v0.2.0-pre Windows playtest, across the campaign</summary>
+
+<p align="center">
+  <img src="img/shots/shot-01.jpg" width="32%" alt="In-engine playtest capture 1 (v0.2.0-pre)">
+  <img src="img/shots/shot-02.jpg" width="32%" alt="In-engine playtest capture 2 (v0.2.0-pre)">
+  <img src="img/shots/shot-03.jpg" width="32%" alt="In-engine playtest capture 3 (v0.2.0-pre)">
+  <img src="img/shots/shot-04.jpg" width="32%" alt="In-engine playtest capture 4 (v0.2.0-pre)">
+  <img src="img/shots/shot-05.jpg" width="32%" alt="In-engine playtest capture 5 (v0.2.0-pre)">
+  <img src="img/shots/shot-06.jpg" width="32%" alt="In-engine playtest capture 6 (v0.2.0-pre)">
+  <img src="img/shots/shot-07.jpg" width="32%" alt="In-engine playtest capture 7 (v0.2.0-pre)">
+  <img src="img/shots/shot-08.jpg" width="32%" alt="In-engine playtest capture 8 (v0.2.0-pre)">
+  <img src="img/shots/shot-09.jpg" width="32%" alt="In-engine playtest capture 9 (v0.2.0-pre)">
+  <img src="img/shots/shot-10.jpg" width="32%" alt="In-engine playtest capture 10 (v0.2.0-pre)">
+  <img src="img/shots/shot-11.jpg" width="32%" alt="In-engine playtest capture 11 (v0.2.0-pre)">
+  <img src="img/shots/shot-12.jpg" width="32%" alt="In-engine playtest capture 12 (v0.2.0-pre)">
+  <img src="img/shots/shot-13.jpg" width="32%" alt="In-engine playtest capture 13 (v0.2.0-pre)">
+  <img src="img/shots/shot-14.jpg" width="32%" alt="In-engine playtest capture 14 (v0.2.0-pre)">
+  <img src="img/shots/shot-15.jpg" width="32%" alt="In-engine playtest capture 15 (v0.2.0-pre)">
+  <img src="img/shots/shot-16.jpg" width="32%" alt="In-engine playtest capture 16 (v0.2.0-pre)">
+  <img src="img/shots/shot-17.jpg" width="32%" alt="In-engine playtest capture 17 (v0.2.0-pre)">
+  <img src="img/shots/shot-18.jpg" width="32%" alt="In-engine playtest capture 18 (v0.2.0-pre)">
+  <img src="img/shots/shot-19.jpg" width="32%" alt="In-engine playtest capture 19 (v0.2.0-pre)">
+  <img src="img/shots/shot-20.jpg" width="32%" alt="In-engine playtest capture 20 (v0.2.0-pre)">
+  <img src="img/shots/shot-21.jpg" width="32%" alt="In-engine playtest capture 21 (v0.2.0-pre)">
+  <img src="img/shots/shot-22.jpg" width="32%" alt="In-engine playtest capture 22 (v0.2.0-pre)">
+  <img src="img/shots/shot-23.jpg" width="32%" alt="In-engine playtest capture 23 (v0.2.0-pre)">
+  <img src="img/shots/shot-24.jpg" width="32%" alt="In-engine playtest capture 24 (v0.2.0-pre)">
+  <img src="img/shots/shot-25.jpg" width="32%" alt="In-engine playtest capture 25 (v0.2.0-pre)">
+  <img src="img/shots/shot-26.jpg" width="32%" alt="In-engine playtest capture 26 (v0.2.0-pre)">
+</p>
+</details>
+
+More captures land here as playtesting continues (Steam Deck session next).
 
 ## Documentation
 
