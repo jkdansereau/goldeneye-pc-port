@@ -275,6 +275,7 @@ static int connectedMask   = 0x1;   /* controller 0 always present */
 
 static SDL_GameController *pads[MAX_PADS];
 static int padShoulderPrev[MAX_PADS];   /* LB/RB edge state for weapon cycling */
+static int padSelectPrev = 0;           /* Select (BACK) edge: overlay toggle */
 
 static int mouseEnabled   = 1;
 static int mouseGrabbed    = 1;     /* released while the window is unfocused */
@@ -748,10 +749,17 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
     }
 
     /* F10 options overlay: while it is open, controller 0 is fully swallowed
-     * (neutral pad, no stick) and the nav keys / wheel drive the overlay
-     * instead. Mirrors the WI-1 "cursor free in a stage -> withhold input"
-     * pattern. Controllers 1-3 are untouched. */
+     * (neutral pad, no stick) and the nav keys / wheel / gamepad drive the
+     * overlay instead. Mirrors the WI-1 "cursor free in a stage -> withhold
+     * input" pattern. Controllers 1-3 are untouched. */
     if (idx == 0 && optionsOverlayIsOpen()) {
+        /* Select closes the overlay. padSelectPrev is tracked on this path
+         * and the open path below alike, so a button held across the
+         * transition cannot immediately re-toggle it. */
+        int selNow = pads[0] ? SDL_GameControllerGetButton(pads[0],
+                                                           SDL_CONTROLLER_BUTTON_BACK) : 0;
+        if (selNow && !padSelectPrev) optionsOverlayToggle();
+        padSelectPrev = selNow;
         optionsOverlayHandleInput();
         if (stick_x) *stick_x = 0;
         if (stick_y) *stick_y = 0;
@@ -1158,6 +1166,15 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
             button |= GE_CONT_LEFT;
         if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT))
             button |= GE_CONT_RIGHT;
+
+        /* Select (BACK) opens the F10 options overlay -- the gamepad
+         * equivalent of the F10 key for controller-only machines (Steam
+         * Deck). The game never reads BACK, so nothing is withheld. */
+        {
+            int selNow = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_BACK);
+            if (selNow && !padSelectPrev) optionsOverlayToggle();
+            padSelectPrev = selNow;
+        }
     }
 
     if (sx > STICK_MAX)  sx = STICK_MAX;
@@ -1256,6 +1273,18 @@ int inputReleaseCapture(void)
  * stage) would persist and the mouse UI would be unusable. Force the cursor
  * free + visible every poll; the normal reconcile resumes once the overlay
  * closes and the early-return no longer fires. */
+int inputPadButton(int idx, SDL_GameControllerButton b)
+{
+    if (idx < 0 || idx >= MAX_PADS || !pads[idx]) return 0;
+    return SDL_GameControllerGetButton(pads[idx], b);
+}
+
+short inputPadAxis(int idx, SDL_GameControllerAxis a)
+{
+    if (idx < 0 || idx >= MAX_PADS || !pads[idx]) return 0;
+    return SDL_GameControllerGetAxis(pads[idx], a);
+}
+
 void inputSuspendForOverlay(void)
 {
     if (mouseGrabbed) {

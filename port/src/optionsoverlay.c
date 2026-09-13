@@ -565,11 +565,32 @@ void optionsOverlayHandleInput(void)
     int lmb = (mb & SDL_BUTTON(SDL_BUTTON_LEFT))  ? 1 : 0;
     int rmb = (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) ? 1 : 0;
 
-    int up = ks[SDL_SCANCODE_UP]    || ks[SDL_SCANCODE_KP_8];
-    int dn = ks[SDL_SCANCODE_DOWN]  || ks[SDL_SCANCODE_KP_2];
-    int lf = ks[SDL_SCANCODE_LEFT]  || ks[SDL_SCANCODE_KP_4];
+    /* Gamepad navigation (controller-only machines, e.g. Steam Deck): the
+     * D-pad or left stick moves the selection; A/X step forward (the Enter
+     * equivalent), B/Y step back; Start closes. OR-ed into the same edge
+     * logic as the keyboard, so repeat/clamp/scroll behaviour is identical.
+     * input.c swallows the pad while we are open, so none of this reaches
+     * the game. (Select also closes -- handled in input.c's toggle, which
+     * runs before this one.) */
+    int gUp = inputPadButton(0, SDL_CONTROLLER_BUTTON_DPAD_UP)
+           || inputPadAxis(0, SDL_CONTROLLER_AXIS_LEFTY) < -12000;
+    int gDn = inputPadButton(0, SDL_CONTROLLER_BUTTON_DPAD_DOWN)
+           || inputPadAxis(0, SDL_CONTROLLER_AXIS_LEFTY) > 12000;
+    int up = ks[SDL_SCANCODE_UP]    || ks[SDL_SCANCODE_KP_8] || gUp;
+    int dn = ks[SDL_SCANCODE_DOWN]  || ks[SDL_SCANCODE_KP_2] || gDn;
+    int lf = ks[SDL_SCANCODE_LEFT]  || ks[SDL_SCANCODE_KP_4]
+          || inputPadButton(0, SDL_CONTROLLER_BUTTON_B)
+          || inputPadButton(0, SDL_CONTROLLER_BUTTON_Y);
     int rt = ks[SDL_SCANCODE_RIGHT] || ks[SDL_SCANCODE_KP_6]
-          || ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_KP_ENTER];
+          || ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_KP_ENTER]
+          || inputPadButton(0, SDL_CONTROLLER_BUTTON_A)
+          || inputPadButton(0, SDL_CONTROLLER_BUTTON_X);
+
+    static int prevStart = 0;   /* not reset while closed: a Start held across
+                                  close must not re-close on the next open */
+    int startNow = inputPadButton(0, SDL_CONTROLLER_BUTTON_START);
+    if (startNow && !prevStart) optionsOverlayToggle();   /* Start closes */
+    prevStart = startNow;
 
     /* ---- keyboard / D-pad nav (clamped at the ends; scroll follows) ---- */
     if (up && !prevUp && s_sel > 0) s_sel--;

@@ -55,6 +55,12 @@ int  inputReleaseCapture(void);
  * owns the mouse. Safe to call every poll. */
 void inputSuspendForOverlay(void);
 
+/* Raw gamepad state for controller idx (the F10 options overlay's gamepad
+ * navigation). Unaffected by the overlay's pad-swallow, which happens at our
+ * logic layer, not SDL's. No pad open -> 0. */
+int   inputPadButton(int idx, SDL_GameControllerButton b);
+short inputPadAxis(int idx, SDL_GameControllerAxis a);
+
 /* Queue a mouse-wheel weapon-cycle input (one short A-button press). Sign is
  * ignored -- GE only cycles forward on a bare A edge. */
 void inputPostWheel(int notches);
