@@ -81,25 +81,80 @@ without a ROM you already own.
 <summary><strong>Full playtest gallery</strong> — 19 in-engine captures from the v0.2.0-pre Windows playtest, across the campaign</summary>
 
 <p align="center">
-  <img src="img/shots/shot-01.jpg" width="32%" alt="In-engine playtest capture 1 (v0.2.0-pre)">
-  <img src="img/shots/shot-02.jpg" width="32%" alt="In-engine playtest capture 2 (v0.2.0-pre)">
-  <img src="img/shots/shot-03.jpg" width="32%" alt="In-engine playtest capture 3 (v0.2.0-pre)">
-  <img src="img/shots/shot-04.jpg" width="32%" alt="In-engine playtest capture 4 (v0.2.0-pre)">
-  <img src="img/shots/shot-05.jpg" width="32%" alt="In-engine playtest capture 5 (v0.2.0-pre)">
-  <img src="img/shots/shot-06.jpg" width="32%" alt="In-engine playtest capture 6 (v0.2.0-pre)">
-  <img src="img/shots/shot-07.jpg" width="32%" alt="In-engine playtest capture 7 (v0.2.0-pre)">
-  <img src="img/shots/shot-09.jpg" width="32%" alt="In-engine playtest capture 9 (v0.2.0-pre)">
-  <img src="img/shots/shot-10.jpg" width="32%" alt="In-engine playtest capture 10 (v0.2.0-pre)">
-  <img src="img/shots/shot-11.jpg" width="32%" alt="In-engine playtest capture 11 (v0.2.0-pre)">
-  <img src="img/shots/shot-13.jpg" width="32%" alt="In-engine playtest capture 13 (v0.2.0-pre)">
-  <img src="img/shots/shot-16.jpg" width="32%" alt="In-engine playtest capture 16 (v0.2.0-pre)">
-  <img src="img/shots/shot-19.jpg" width="32%" alt="In-engine playtest capture 19 (v0.2.0-pre)">
-  <img src="img/shots/shot-20.jpg" width="32%" alt="In-engine playtest capture 20 (v0.2.0-pre)">
-  <img src="img/shots/shot-21.jpg" width="32%" alt="In-engine playtest capture 21 (v0.2.0-pre)">
-  <img src="img/shots/shot-23.jpg" width="32%" alt="In-engine playtest capture 23 (v0.2.0-pre)">
-  <img src="img/shots/shot-24.jpg" width="32%" alt="In-engine playtest capture 24 (v0.2.0-pre)">
-  <img src="img/shots/shot-25.jpg" width="32%" alt="In-engine playtest capture 25 (v0.2.0-pre)">
-  <img src="img/shots/shot-26.jpg" width="32%" alt="In-engine playtest capture 26 (v0.2.0-pre)">
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-01.jpg" width="100%" alt="In-engine — Dam (v0.2.0-pre)">
+    <div><small>Dam</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-02.jpg" width="100%" alt="In-engine — Facility (v0.2.0-pre)">
+    <div><small>Facility</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-03.jpg" width="100%" alt="In-engine — Runway (v0.2.0-pre)">
+    <div><small>Runway</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-04.jpg" width="100%" alt="In-engine — Surface (v0.2.0-pre)">
+    <div><small>Surface</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-05.jpg" width="100%" alt="In-engine — Surface (v0.2.0-pre)">
+    <div><small>Surface</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-06.jpg" width="100%" alt="In-engine — Bunker 1 (v0.2.0-pre)">
+    <div><small>Bunker 1</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-07.jpg" width="100%" alt="In-engine capture (v0.2.0-pre)">
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-09.jpg" width="100%" alt="In-engine capture (v0.2.0-pre)">
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-10.jpg" width="100%" alt="In-engine — Frigate (v0.2.0-pre)">
+    <div><small>Frigate</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-11.jpg" width="100%" alt="In-engine — Surface 2 (v0.2.0-pre)">
+    <div><small>Surface 2</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-13.jpg" width="100%" alt="In-engine — Bunker 2 (v0.2.0-pre)">
+    <div><small>Bunker 2</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-16.jpg" width="100%" alt="In-engine — Statue (v0.2.0-pre)">
+    <div><small>Statue</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-19.jpg" width="100%" alt="In-engine — Statue (v0.2.0-pre)">
+    <div><small>Statue</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-20.jpg" width="100%" alt="In-engine — Archives (v0.2.0-pre)">
+    <div><small>Archives</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-21.jpg" width="100%" alt="In-engine — Cradle (v0.2.0-pre)">
+    <div><small>Cradle</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-23.jpg" width="100%" alt="In-engine — Cradle (v0.2.0-pre)">
+    <div><small>Cradle</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-24.jpg" width="100%" alt="In-engine — Aztec (v0.2.0-pre)">
+    <div><small>Aztec</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-25.jpg" width="100%" alt="In-engine — Aztec (v0.2.0-pre)">
+    <div><small>Aztec</small></div>
+  </div>
+  <div style="width:32%;text-align:center;margin:4px">
+    <img src="img/shots/shot-26.jpg" width="100%" alt="In-engine — Frigate (v0.2.0-pre)">
+    <div><small>Frigate</small></div>
+  </div>
 </p>
 </details>
 
