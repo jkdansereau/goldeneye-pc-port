@@ -1,16 +1,16 @@
-# GoldenEye 007 PC Port — @VERSION@ (alpha)
+# GoldenEye 007 PC Port — @VERSION@ (pre-release)
 
 A native PC port of the original Nintendo 64 *GoldenEye 007*, compiled from the
 [GoldenEye 007 decompilation](https://github.com/n64decomp/007).
 
-> **Very early research alpha — not a playable game.**
-> The intro and menus render and all 21 solo missions load, but there is
-> **no audio**, some front-end 3D models are broken, outdoor levels render with
-> a black sky, and you should expect crashes and glitches past the level intro.
-> This is a technical demo of the porting work.
->
-> If you just want to *play* GoldenEye on PC, use one of the Xbox 360
-> recompilation projects instead — see the project page.
+> **Pre-release — playable, with known rough edges.**
+> The full single-player campaign runs at a steady 60 fps with no known
+> crashes, and in-level music + sound effects play throughout. Known issues:
+> cutscenes glitch frequently (the Dam level-end in particular), a few music
+> tracks have wrong-sounding instruments, some front-end 3D models are broken
+> (the spinning Nintendo logo, the MISSION COMPLETE / mode-select models), and
+> assorted cosmetic rendering defects remain. This cut is for playtesting —
+> report what you find.
 
 Project & source: <https://github.com/jkdansereau/goldeneye-pc-port>
 
@@ -24,11 +24,14 @@ This package contains **no Nintendo code and no game data**. You need a
 *GoldenEye 007* Nintendo 64 ROM that **you legally own**, big-endian `.z64`,
 NTSC-U (US):
 
-| ROM filename | SHA-1 |
-|---|---|
-| `ge007.ntsc-final.z64` | `abe01e4aeb033b6c0836819f549c791b26cfde83` |
+| Region | ROM filename | SHA-1 |
+|---|---|---|
+| NTSC-U (US) | `ge007.ntsc-final.z64` | `abe01e4aeb033b6c0836819f549c791b26cfde83` |
+| PAL (EU) | `ge007.pal-final.z64` | `167c3c433dec1f1eb921736f7d53fac8cb45ee31` |
+| NTSC-J (JP) | `ge007.jpn-final.z64` | `2a5dade32f7fad6c73c659d2026994632c1b3174` |
 
-Only the US ROM is supported in this alpha.
+US is the best-tested. The asset step below detects the region from the ROM's
+SHA-1, so any of the three works as-is.
 
 @DEPS@
 ## 2. Set up (one time)

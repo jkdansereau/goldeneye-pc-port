@@ -10,11 +10,14 @@
 #     goldeneye-pc-port-<VERSION>-linux-x86_64/        the unpacked bundle
 #     goldeneye-pc-port-<VERSION>-linux-x86_64.tar.gz  + .tar.gz.sha256
 #
-# The bundle contains ONLY: the engine executable, a README, license texts, and
-# the prepare-assets/ tool. It contains NO ROM and NO game assets, and — unlike
-# the Windows bundle — NO bundled shared libraries: the user installs SDL2 / zlib
-# / libGL from their distro (see the README this generates). The script hard-
-# fails if a ROM image or an oversized blob ends up inside the bundle.
+# The bundle contains ONLY: the engine executable, its SDL2 library, a README,
+# license texts, and the prepare-assets/ tool. It contains NO ROM and NO game
+# assets. SDL2 is bundled (copied next to the exe, whose rpath is set to
+# $ORIGIN) so the tarball runs as-is on any distro — including a sideloaded
+# Steam Deck — with nothing installed; zlib and libGL are expected from the
+# system (preinstalled everywhere that matters, incl. SteamOS). The script
+# hard-fails if patchelf is missing or if a ROM image / oversized blob ends up
+# inside the bundle.
 #
 set -euo pipefail
 
@@ -38,16 +41,34 @@ rm -rf "$OUT"
 mkdir -p "$OUT/licenses"
 cp "$EXE" "$OUT/"
 chmod +x "$OUT/$(basename "$EXE")"
+EXE_NAME="$(basename "$EXE")"
 
-# --- report the dynamic-library needs (informational; not bundled) -----
+# --- bundle SDL2 (turnkey on any distro / Steam Deck) ------------------
+# SDL2 is the engine's only non-universal runtime dep. Copy the exact file
+# this exe was linked against next to it and point the rpath at $ORIGIN so
+# the bundled copy wins over whatever the target system has.
+command -v patchelf >/dev/null 2>&1 || {
+  echo "error: patchelf is required to bundle SDL2 (apt install patchelf / pacman -S patchelf)" >&2; exit 1; }
+SDL2_LIB="$(ldd "$EXE" | awk '/libSDL2/ {print $3; exit}')"
+[ -n "$SDL2_LIB" ] && [ -f "$SDL2_LIB" ] || {
+  echo "error: cannot locate libSDL2 for $EXE (unexpected ldd output)" >&2; exit 1; }
+cp -L "$SDL2_LIB" "$OUT/"
+chmod 644 "$OUT/$(basename "$SDL2_LIB")"
+patchelf --set-rpath '$ORIGIN' "$OUT/$EXE_NAME"
+RESOLVED="$(ldd "$OUT/$EXE_NAME" | awk '/libSDL2/ {print $3; exit}')"
+case "$RESOLVED" in
+  "$OUT"/*) echo "    + $(basename "$SDL2_LIB") (bundled; rpath \$ORIGIN)" ;;
+  *) echo "error: bundled libSDL2 is not picked up via \$ORIGIN (ldd -> ${RESOLVED:-nothing})" >&2; exit 1 ;;
+esac
+
+# --- report the remaining dynamic-library needs (system-provided) ------
 if command -v ldd >/dev/null 2>&1; then
-  echo "    dynamic dependencies (must be present on the target system):"
-  ldd "$EXE" | sed 's/^/      /' || true
+  echo "    remaining system dependencies (zlib / libGL / libc — preinstalled on desktop distros and SteamOS):"
+  ldd "$OUT/$EXE_NAME" | grep -v "\$OUT/" | sed 's/^/      /' || true
 fi
 
 # --- docs + licenses --------------------------------------------------
-EXE_NAME="$(basename "$EXE")"
-DEPS_BLOCK=$'## 1a. Install the runtime libraries\n\nThis Linux build links against your distro\'s SDL2, zlib and OpenGL. Install\nthem first:\n\n```\n# Debian / Ubuntu\nsudo apt install libsdl2-2.0-0 zlib1g libgl1\n\n# Fedora\nsudo dnf install SDL2 zlib libglvnd-glx\n\n# Arch\nsudo pacman -S sdl2 zlib libglvnd\n```\n'
+DEPS_BLOCK=$'## 1a. Runtime libraries\n\nSDL2 is bundled in this folder and found automatically (the executable\npoints at its own directory first). zlib and OpenGL come from your system —\npreinstalled on every desktop distro and on SteamOS / Steam Deck.\n\n**Steam Deck:** sideload this folder (USB or a file manager), do steps 2–4\nbelow, then add `@EXE@` to Games → *Add Game* as a non-Steam game.\n'
 sed -e "s|@VERSION@|${VERSION}|g" \
     -e "s|@PLATFORM@|Linux x86-64|g" \
     -e "s|@EXE@|${EXE_NAME}|g" \
@@ -61,6 +82,10 @@ rm -f "$OUT/README.md.tmp"
 cp NOTICE  "$OUT/licenses/NOTICE"
 cp LICENSE "$OUT/licenses/LICENSE-port-MIT.txt"
 [ -f port/fast3d/LICENSE.txt ] && cp port/fast3d/LICENSE.txt "$OUT/licenses/LICENSE-fast3d.txt"
+# SDL2 ships under the zlib license; carry the distro's copyright file when
+# it exists (Debian/Ubuntu), skip silently elsewhere.
+SDL2_LIC="$(dpkg -L libsdl2-2.0-0 2>/dev/null | grep -m1 '/copyright$' || true)"
+[ -n "$SDL2_LIC" ] && [ -f "$SDL2_LIC" ] && cp "$SDL2_LIC" "$OUT/licenses/SDL2.txt"
 
 # --- asset-prep tool (identical assembly to bundle-win.sh) -----------
 PREP="$OUT/prepare-assets"

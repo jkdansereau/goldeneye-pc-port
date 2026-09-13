@@ -1,51 +1,80 @@
-## GoldenEye 007 PC Port — v0.1.0 alpha
+## GoldenEye 007 PC Port — <version> (pre-release)
 
-> ⚠️ **Research alpha. Playable, not polished.**
-> The full single-player campaign runs. In a full-campaign playtest on this
-> build, **19 of 21 missions were completable start to finish**. Known issues:
-> - **no audio** (Phase 3, not started) — the game runs silent;
-> - **two levels crash mid-mission** — Bunker ii and Statue (one root cause, D191);
-> - **AI characters move too slowly**, which breaks Cradle (the final level)
->   via Trevelyan's scripted behavior (D193);
-> - **cutscenes frequently glitch** — skipped, wrong camera, misplaced actors (D148/D160);
-> - some front-end 3D models are broken (the spinning Nintendo logo, the
->   MISSION COMPLETE / mode-select models);
-> - outdoor levels render with a **black sky**;
-> - mouse aim and some textures/transparency have rough edges.
->
-> If you just want to *play* GoldenEye on PC today, use one of the Xbox 360
-> recompilation projects instead — see the
-> [project README](https://github.com/jkdansereau/goldeneye-pc-port#how-this-differs-from-the-other-goldeneye-pc-projects).
+> **Pre-release.** The full single-player campaign runs at a steady 60 fps
+> with no known crashes, audio (music + SFX) playing throughout. This cut is
+> for playtesting: a full end-to-end confirmation that all 21 missions are
+> completable on this build is still owed, and the known issues below are real.
+
+### What's new since v0.1.0
+
+- **Steady 60 fps** in normal play (the software RSP runs off the presentation
+  critical path); `Video.DisplayFPS` in the F10 overlay shows it.
+- **Audio**: in-level music and sound effects throughout (the alpha was
+  silent). A handful of tracks have wrong-sounding instruments (below).
+- **Mouse**: click-to-lock capture (click to grab, ESC to release) with a
+  proportional GEPD-style aim mode; sensitivity / Y-inversion / aim-turn split
+  tunable in `ge007.ini` or the F10 overlay. The legacy always-grab mode is
+  gone.
+- **Rendering**: outdoor skies render correctly; water no longer renders
+  green/pulsing; reflective surfaces (glass, chrome weapon skins) work.
+- **Crash fixes**: the two v0.1.0-era crashing levels (Bunker ii, Statue) and
+  the AI-pacing bug that broke Cradle are fixed and playtest-verified — all 21
+  solo missions load and run crash-free.
+- **QoL**: F10 in-game options overlay (fullscreen, resolution, frame cap,
+  MSAA, texture filtering, FOV/draw distance, sensitivity), mute-on-focus-loss,
+  F12 screenshot.
+- **Linux / Steam Deck**: the Linux bundle now ships its own SDL2 — it runs
+  as-is on any distro, and sideloads onto a Steam Deck with nothing installed.
+
+### Known issues
+
+- **Cutscenes frequently glitch** — skipped beats, wrong camera, misplaced or
+  hovering actors, wrong timing; the Dam level-end cutscene is racy (D243).
+  The most visible gap in this release.
+- **Music quality on some tracks** — a wrong-sounding bass instrument on a few
+  elevator/level tracks (D230).
+- Water on `IsWater` levels shows a moving seam between two patterns (D245);
+  thin pixel strips at the left/right screen edges at non-integer window
+  scales (D246); character face textures can wrap on Silo (D197).
+- Some front-end 3D models are mispositioned or absent — the spinning
+  Nintendo logo and the MISSION COMPLETE / mode-select models (D75).
+- The F10 overlay occasionally shows a ghost repeat of the top row at the
+  panel bottom in true 4K fullscreen with MSAA on (intermittent, display-
+  specific; windowed is unaffected).
+- **Not yet verified on real Steam Deck hardware** — the bundle is built for
+  it and its prime crash suspect from v0.1.0 was fixed, but please report any
+  Deck-specific faults (a `ge007.crash.log` next to the exe helps).
 
 ### Downloads
 
 | File | Platform |
 |---|---|
 | `goldeneye-pc-port-<version>-win64.zip` | Windows x86-64 |
-| `goldeneye-pc-port-<version>-linux-x86_64.tar.gz` | Linux x86-64 |
+| `goldeneye-pc-port-<version>-linux-x86_64.tar.gz` | Linux x86-64 (incl. Steam Deck) |
 
 Each contains the engine executable, a README, license texts, and the
-`prepare-assets` tool. **No ROM, no game assets.** The Windows bundle also
-carries its runtime DLLs; the Linux bundle links against your distro's SDL2 /
-zlib / libGL (`sudo apt install libsdl2-2.0-0 zlib1g libgl1`, or the equivalent).
-
-Windows development and playtesting is the primary path; the Linux build boots
-and renders (tested on WSLg) but has had far less exercise.
+`prepare-assets` tool. **No ROM, no game assets.** The Windows bundle carries
+its runtime DLLs; the Linux bundle carries SDL2 — on both platforms nothing
+needs to be installed first.
 
 ### Running it
 
-You supply your own **NTSC-U GoldenEye 007 N64 ROM** (`.z64`, big-endian,
-`SHA-1 abe01e4aeb033b6c0836819f549c791b26cfde83`). Only the US ROM is supported
-in this alpha.
+You supply your own **GoldenEye 007 N64 ROM** (`.z64`, big-endian) that you
+legally own — NTSC-U (US), PAL (EU) or NTSC-J (JP); the asset step detects the
+region from the SHA-1. US is the best-tested.
 
 1. Unpack the archive.
-2. Make a `data/` folder next to the executable and put the ROM in it as
-   `ge007.ntsc-final.z64`.
+2. Make a `data/` folder next to the executable and put the ROM in it, named
+   per region (`ge007.ntsc-final.z64` / `ge007.pal-final.z64` /
+   `ge007.jpn-final.z64`).
 3. Run the one-time asset step (needs Python 3.8+):
-   `python3 prepare-assets/prepare-assets.py`
-   — it reads your ROM and writes the two `data/pc*-ntsc-final/` folders the
-   engine needs. Standard library only; a few seconds.
+   `python3 prepare-assets/prepare-assets.py` — it reads your ROM and writes
+   the two `data/pc*-<region>/` folders the engine needs. Standard library
+   only; a few seconds.
 4. Run the executable **from that folder**.
+
+**Steam Deck:** sideload the unpacked folder (USB or a file manager), do steps
+2–4, then add the executable to Games → *Add Game* as a non-Steam game.
 
 Full steps are in the bundled `README.md`.
 
