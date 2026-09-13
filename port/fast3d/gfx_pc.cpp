@@ -842,8 +842,16 @@ static void import_texture_i8(int tile, const LoadedTexture& loaded_texture, boo
 
 static inline void palette_to_rgba32(const uint16_t palentry, uint8_t *rgba32_buf) {
     if (rdp.palette_fmt == G_TT_IA16) {
-        const uint8_t intensity = (palentry & 0xff);
-        const uint8_t alpha = palentry >> 8;
+        /* D228: intensity/alpha were swapped here relative to the (correct)
+         * direct IA16 decode in import_texture_ia16() a few lines above --
+         * that one reads addr[2*i]=intensity, addr[2*i+1]=alpha, i.e.
+         * intensity is the first (high, after gfx_dp_load_tlut's PD_BE16
+         * swap) byte. This path had them backwards: a dim, fully-opaque
+         * palette entry (e.g. intensity=0x58, alpha=0xff) decoded as a
+         * bright, mostly-transparent one (intensity=0xff, alpha=0x58) --
+         * the "white missing-texture patches" on AK47/NPC weapon models. */
+        const uint8_t intensity = palentry >> 8;
+        const uint8_t alpha = palentry & 0xff;
         rgba32_buf[0] = intensity;
         rgba32_buf[1] = intensity;
         rgba32_buf[2] = intensity;

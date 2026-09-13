@@ -40,7 +40,7 @@ D230,OPEN,In-level music quality:,"OPEN — static-analysis pass done (M-108), n
 D233,FIXED,All levels (intermittent):,"FIXED (port/fast3d/gfx_pc.cpp, gfx_sp_tri1) —"
 D234,FIXED,"Dam: guard towers along the dam structure invisible except the first one (M-106, user QA report).",VISUALLY VERIFIED FIXED (M-108) —
 D244,OPEN,Self-hosted CI runner (corpyvt6agent01) link failure:,"OPEN, not yet fixed. Next:"
-D228,OPEN,AK47 (and other) weapon models still show WHITE missing-texture patches after D217's texpool-alignment fix —,"OPEN — newly split out, not investigated."
+D228,FIXED,AK47 (and other) weapon models still show WHITE missing-texture patches after D217's texpool-alignment fix —,"FIXED (port/fast3d/gfx_pc.cpp, palette_to_rgba32) —"
 D204,FIXED,PC audio ran ~2 % below real time permanently:,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,OPEN,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",OPEN — negative idle repros only; not yet reproduced with input.
 D201,FIXED,"src/libultra/audio/bnkf.c bank/instrument/sound/wavetable relocation offsets were s32, truncating the real 64-bit base pointer.",FIXED (src/libultra/audio/bnkf.c) —

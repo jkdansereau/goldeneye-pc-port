@@ -1144,4 +1144,20 @@ and turns every such overrun into a fatal `*** stack smashing detected ***`
   hardware supports and GE's own assets exercise is not "PD-only" just
   because the first investigation happened to hit it on a draw that
   shouldn't have taken that path. §F **D195**.
-  §F **D247**.
+- **D228 — when two decode paths exist for the same underlying format,
+  check them against each other for a swapped byte order, not just against
+  the spec.** `palette_to_rgba32`'s `G_TT_IA16` branch (CI texture whose
+  palette is intensity-alpha, not RGBA16) read `intensity = palentry & 0xff`,
+  `alpha = palentry >> 8` — exactly backwards relative to the *already
+  correct* direct-IA16 decode (`import_texture_ia16`) a few lines above it
+  in the same file, which reads `intensity = addr[2*i]` (first/high byte),
+  `alpha = addr[2*i+1]` (second/low byte), matching what `gfx_dp_load_tlut`'s
+  `PD_BE16` byte-swap actually produces. A dim, fully-opaque texel (e.g.
+  intensity=0x58, alpha=0xff) decoded backwards as bright and
+  mostly-transparent — read as "white missing-texture patches" (AK47 and
+  other metallic weapon materials, whose grayscale-metal-plus-opacity look
+  is a natural fit for IA16 palettes). Two importers for the same source
+  format existing side by side in one file is exactly the situation where
+  one silently drifts from the other; when investigating a decode bug, diff
+  the suspect path against its sibling path for the same format before
+  re-deriving the bit layout from scratch. §F **D228**.
