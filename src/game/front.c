@@ -8578,9 +8578,73 @@ MENU get_currentmenu(void)
 }
 
 
+#ifdef PORT
+/* D243: fast3d's D146 catch-all ("unknown GBI opcode ... ending DL") fires a
+ * freed/uninitialized-memory-pattern read burst ~1600-3900 frames *after*
+ * bossReturnTitleStage()/the Dam abseil cutscene's camera_switch calls, not
+ * during them (M-109 re-analysis) -- i.e. tens of seconds into whatever
+ * front-end screen(s) the mission-complete -> briefing/file-select chain
+ * passes through. This probe does not hook bossReturnTitleStage() directly
+ * (out of this investigation's file scope, boss.c) -- instead it logs every
+ * MENU_* state transition this state machine (menu_init(), called once per
+ * front-end tick from lv.c) makes, tagged with a local frame counter, so a
+ * GE_D146 burst's frame number can be cross-referenced against whichever
+ * MENU_* was active at that point. NOTE: this counter is local to front.c's
+ * per-tick calls (menu_init() runs once per LEVELID_TITLE tick) -- it is not
+ * necessarily numerically identical to port/src/libultra.c's internal
+ * g_framesRendered (that counter is `static`, no accessor exists, and it is
+ * out of this investigation's file scope to add one) -- cross-reference by
+ * elapsed count/offset from bossReturnTitleStage's own GE_D160 trace line,
+ * not by assuming exact frame-number equality between the two logs. */
+static int g_d243FrameCounter = 0;
+
+static const char *d243MenuName(MENU m)
+{
+    switch (m) {
+        case MENU_INVALID:             return "MENU_INVALID";
+        case MENU_LEGAL_SCREEN:        return "MENU_LEGAL_SCREEN";
+        case MENU_SWITCH_SCREENS:      return "MENU_SWITCH_SCREENS";
+        case MENU_NINTENDO_LOGO:       return "MENU_NINTENDO_LOGO";
+        case MENU_RAREWARE_LOGO:       return "MENU_RAREWARE_LOGO";
+        case MENU_EYE_INTRO:           return "MENU_EYE_INTRO";
+        case MENU_GOLDENEYE_LOGO:      return "MENU_GOLDENEYE_LOGO";
+        case MENU_FILE_SELECT:         return "MENU_FILE_SELECT";
+        case MENU_MODE_SELECT:         return "MENU_MODE_SELECT";
+        case MENU_MISSION_SELECT:      return "MENU_MISSION_SELECT";
+        case MENU_DIFFICULTY:          return "MENU_DIFFICULTY";
+        case MENU_007_OPTIONS:         return "MENU_007_OPTIONS";
+        case MENU_BRIEFING:            return "MENU_BRIEFING";
+        case MENU_RUN_STAGE:           return "MENU_RUN_STAGE";
+        case MENU_MISSION_FAILED:      return "MENU_MISSION_FAILED";
+        case MENU_MISSION_COMPLETE:    return "MENU_MISSION_COMPLETE";
+        case MENU_MP_OPTIONS:          return "MENU_MP_OPTIONS";
+        case MENU_MP_SCENARIO_SELECT:  return "MENU_MP_SCENARIO_SELECT";
+        case MENU_MP_CHAR_SELECT:      return "MENU_MP_CHAR_SELECT";
+        case MENU_MP_TEAMS:            return "MENU_MP_TEAMS";
+        case MENU_MP_HANDICAP:         return "MENU_MP_HANDICAP";
+        case MENU_MP_CONTROL_STYLE:    return "MENU_MP_CONTROL_STYLE";
+        case MENU_MP_STAGE_SELECT:     return "MENU_MP_STAGE_SELECT";
+        case MENU_CHEAT:               return "MENU_CHEAT";
+        case MENU_NO_CONTROLLERS:      return "MENU_NO_CONTROLLERS";
+        case MENU_DISPLAY_CAST:        return "MENU_DISPLAY_CAST";
+        case MENU_SPECTRUM_EMU:        return "MENU_SPECTRUM_EMU";
+        default:                       return "MENU_<unknown>";
+    }
+}
+#endif
+
+
 void menu_init(void)
 {
     s32 var_v0;
+
+#ifdef PORT
+    /* D243: one call per front-end tick (see g_d243FrameCounter comment
+     * above for how this correlates against the D146/GE_D160 logs). */
+    if (getenv("GE_D243")) {
+        g_d243FrameCounter++;
+    }
+#endif
 
     if (current_menu == MENU_SWITCH_SCREENS)
     {
@@ -8671,6 +8735,12 @@ void menu_init(void)
         {
             current_menu = MENU_SWITCH_SCREENS;
             reset_menutimer();
+#ifdef PORT
+            if (getenv("GE_D243")) {
+                fprintf(stderr, "D243: frame=%d -> MENU_SWITCH_SCREENS (pending=%s)\n",
+                        g_d243FrameCounter, d243MenuName(menu_update));
+            }
+#endif
         }
     }
 
@@ -8678,6 +8748,13 @@ void menu_init(void)
     {
         current_menu = maybe_prev_menu;
         maybe_prev_menu = MENU_INVALID;
+
+#ifdef PORT
+        if (getenv("GE_D243")) {
+            fprintf(stderr, "D243: frame=%d -> %s\n",
+                    g_d243FrameCounter, d243MenuName(current_menu));
+        }
+#endif
 
         switch(current_menu) {
             case MENU_LEGAL_SCREEN:           init_menu00_legalscreen();            break;
