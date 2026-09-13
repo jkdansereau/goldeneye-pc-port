@@ -85,6 +85,10 @@
  * file uses; we only READ vv_theta/vv_verta/speedtheta/speedverta/aspect. */
 #include "player.h"
 
+/* D194 spazz diagnosis: game ticks batched into the current poll (lv.h).
+ * Read-only; declared locally to avoid pulling lv.h's wider dependency set. */
+extern s32 g_ClockTimer;
+
 /* N64 button bits (from PR/os.h -- duplicated here to avoid pulling os.h,
  * whose `u8 errno;` field collides with <errno.h>'s macro). */
 #define GE_CONT_A      0x8000
@@ -289,7 +293,8 @@ static int mouseCaptureMode = 1;   /* WI-1 default: Quake-style click-to-lock + 
 static int captureArmed     = 0;   /* user has clicked to lock (capture mode) */
 static int windowFocused    = 1;
 static int mouseAimSpeed  = 16;     /* aim-mode sensitivity, percent (B3: 50 -> 25 M-29 -> 16; still overshot at 25) */
-static int gepdSens       = 20;     /* D194 Input.GepdSens: GEPD SENSITIVITY setting, range 1..80 */
+static int gepdSens       = 25;     /* D194 Input.GepdSens: GEPD SENSITIVITY setting, range 1..80
+                                        (20 -> 25 after M-123 user playtest: "a bit slow/unsensitive") */
 static int aimBand        = 20;     /* aim mode: usable stick range above the 60 gate */
 static int mouseTurnSpeed = 100;    /* hipfire yaw sensitivity, percent */
 static int menuPointerSpeed = 100;  /* front-end cursor speed, percent */
@@ -1445,12 +1450,16 @@ static int aimGepdCompute(double dxPx, double dyLook)
     }
 
     if (configGetInputLog()) {
+        /* ct = g_ClockTimer: game ticks batched into this poll. If the
+         * displayed crosshair shrinks by damp^ct with ct varying tick to
+         * tick (frame-pacing catch-up), game= will show fluctuating shrink
+         * at d=(0,0) -- the multi-tick spazz hypothesis. */
         sysLogPrintf(LOG_NOTE,
-            "GE_INPUTLOG gepdaim d=(%.1f,%.1f) cross=(%.2f,%.2f) game=(%.2f,%.2f) aa=(%.2f,%.2f) st=%.3f sv=%.3f cam=(%.1f,%.1f)",
+            "GE_INPUTLOG gepdaim d=(%.1f,%.1f) cross=(%.2f,%.2f) game=(%.2f,%.2f) aa=(%.2f,%.2f) st=%.3f sv=%.3f ct=%d cam=(%.1f,%.1f)",
             dxPx, dyLook, s_gepdCrossX, s_gepdCrossY, resX, resY,
             (double)p->autoaimx, (double)p->autoaimy,
             (double)p->speedtheta, (double)p->speedverta,
-            (double)p->vv_theta, (double)p->vv_verta);
+            g_ClockTimer, (double)p->vv_theta, (double)p->vv_verta);
     }
     return 1;
 }
@@ -1461,7 +1470,7 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.MouseCaptureMode", &mouseCaptureMode, 0, 1);
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
     configRegisterInt("Input.AimAbsolute", &aimAbsolute, 0, 1);  /* D194 */
-    configRegisterInt("Input.GepdSens", &gepdSens, 1, 80);       /* D194 */
+    configRegisterInt("Input.GepdSens", &gepdSens, 1, 80);       /* D194 (default 25 per M-123) */
     configRegisterInt("Input.AimBand", &aimBand, 5, 40);
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
     configRegisterInt("Input.MenuPointerSpeed", &menuPointerSpeed, 10, 500);
