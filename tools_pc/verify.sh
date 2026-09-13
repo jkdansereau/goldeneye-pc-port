@@ -297,6 +297,16 @@ except Exception:
   fi
 
   local brief="$R_BRIEF"
+  if [ "$status" = NO-FRAMES ] && [ -f "$CAPDIR/run.log" ]; then
+    # stderr, not stdout: sweep mode captures verify_level's stdout via
+    # `out=$(...)` and only keeps its first line (`head -1`) as the verdict
+    # summary -- anything printed here on stdout would become that first
+    # line and clip the real verdict (and, worse, the --json line further
+    # down). stderr bypasses the capture and reaches the terminal/log file
+    # directly.
+    echo "  -- $name run.log tail (NO-FRAMES, no crash -- likely startup/init failure) --" >&2
+    tail -n 30 "$CAPDIR/run.log" | sed 's/^/  | /' >&2
+  fi
   rm -rf "$CAPDIR"
   emit_verdict "$name" "$status" "$frames" "$worst" "$sym" "$note"
   if [ "$status" = CRASH ] && [ -n "$brief" ]; then
@@ -330,9 +340,29 @@ case "$MODE" in
       out=$(verify_level "$n" "$num" "${DUMP:-80-400:40}" 45)
       rc=$?
       [ "$rc" -ne 0 ] && RC=1
+      # Pre-existing bug (found alongside D244's diagnostics): `head -1` here
+      # silently discarded emit_verdict's --json line (its 2nd line of
+      # output, starting with `{`) on every sweep run -- RESULTS_JSON above
+      # was declared for exactly this and never actually populated, so
+      # `--json` sweeps have never produced a usable verdict array; the
+      # workflow's "Extract JSON verdict" step (scans for the last `[{` in
+      # sweep.log) always got an empty `[]`.
       echo "$out" | head -1
+      if [ "$JSON" = 1 ]; then
+        j=$(echo "$out" | grep -m1 '^{')
+        [ -n "$j" ] && RESULTS_JSON+=("$j")
+      fi
     done
     echo "SWEEP DONE"
+    if [ "$JSON" = 1 ] && [ "${#RESULTS_JSON[@]}" -gt 0 ]; then
+      { printf '['
+        for i in "${!RESULTS_JSON[@]}"; do
+          [ "$i" -gt 0 ] && printf ','
+          printf '%s' "${RESULTS_JSON[$i]}"
+        done
+        printf ']\n'
+      }
+    fi
     exit $RC
     ;;
 

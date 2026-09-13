@@ -150,6 +150,11 @@ struct LoadedTexture {
     uint32_t line_size_bytes;
     uint32_t tex_flags;
     struct RawTexMetadata raw_tex_metadata;
+    /* D229: G_IM_FMT_* of the gDPSetTextureImage active when this slot was
+     * last written by a load command (0xFF = never / unknown). Used to tell
+     * a CI8 index stream apart from real RGBA16 pixels when a later tile
+     * re-declares the same TMEM in another format -- see import_texture. */
+    uint8_t src_fmt = 0xFF;
 };
 
 static struct RDP {
@@ -159,6 +164,7 @@ static struct RDP {
     uint32_t palette_hash; /* D217: FNV-1a of palette[], refreshed in gfx_dp_load_tlut */
     struct {
         const uint8_t* addr;
+        uint8_t fmt; /* D229: was dropped before; needed to track CI sources */
         uint8_t siz;
         uint32_t width;
         uint32_t tex_flags;
@@ -836,8 +842,16 @@ static void import_texture_i8(int tile, const LoadedTexture& loaded_texture, boo
 
 static inline void palette_to_rgba32(const uint16_t palentry, uint8_t *rgba32_buf) {
     if (rdp.palette_fmt == G_TT_IA16) {
-        const uint8_t intensity = (palentry & 0xff);
-        const uint8_t alpha = palentry >> 8;
+        /* D228: intensity/alpha were swapped here relative to the (correct)
+         * direct IA16 decode in import_texture_ia16() a few lines above --
+         * that one reads addr[2*i]=intensity, addr[2*i+1]=alpha, i.e.
+         * intensity is the first (high, after gfx_dp_load_tlut's PD_BE16
+         * swap) byte. This path had them backwards: a dim, fully-opaque
+         * palette entry (e.g. intensity=0x58, alpha=0xff) decoded as a
+         * bright, mostly-transparent one (intensity=0xff, alpha=0x58) --
+         * the "white missing-texture patches" on AK47/NPC weapon models. */
+        const uint8_t intensity = palentry >> 8;
+        const uint8_t alpha = palentry & 0xff;
         rgba32_buf[0] = intensity;
         rgba32_buf[1] = intensity;
         rgba32_buf[2] = intensity;
@@ -1077,11 +1091,24 @@ static void import_texture(int i, int tile, bool importReplacement) {
         /* GE_TEXRAW=1 additionally writes the raw source bytes handed to the
          * importer (texdump/rNNN_f<fmt>_s<siz>_<w>x<h>.bin) -- lets a decode
          * bug be told apart from a source-data bug offline (D183). */
-        if (tdc <= 400 && getenv("GE_TEXRAW")) {
+        const int tw = (int)(((rdp.texture_tile[tile].lrs - rdp.texture_tile[tile].uls) >> 2) + 1);
+        const int th = (int)(((rdp.texture_tile[tile].lrt - rdp.texture_tile[tile].ult) >> 2) + 1);
+        /* D219: same cap-exhausted-before-the-explosion problem as the
+         * D172/GE_TEXDUMP probes -- never suppress the fire particle image
+         * dump. NOTE: `tw`/`th` above come from gsDPSetTileSize (the DL sets
+         * the fire tile's logical wrap size to 56x56, unrelated to its real
+         * 16x14 pixel content), so they do NOT identify this texture -- a
+         * first attempt at this exemption keyed on tw/th==16/14 and silently
+         * never matched, burning a whole live-playtest cycle for nothing.
+         * The real, always-correct signature is the load's byte count: 16 *
+         * 14 * 2 bytes/texel (RGBA16) = 448, matching CALC_LRS(16,14,...) in
+         * every one of assets/oddtextures.c's 15 fire DLs and confirmed
+         * against the TEXEL1_bytes=448 field already proven out via the
+         * gfx_sp_tri1 D172/D219 probe. */
+        const bool is_fire_bytes = (loaded_texture.size_bytes == 448);
+        if ((is_fire_bytes || tdc <= 400) && getenv("GE_TEXRAW")) {
             char nm[160];
-            snprintf(nm, sizeof nm, "texdump/r%03d_f%u_s%u_%ux%u.bin", tdc - 1, fmt, siz,
-                     ((rdp.texture_tile[tile].lrs - rdp.texture_tile[tile].uls) >> 2) + 1,
-                     ((rdp.texture_tile[tile].lrt - rdp.texture_tile[tile].ult) >> 2) + 1);
+            snprintf(nm, sizeof nm, "texdump/r%03d_f%u_s%u_%ux%u.bin", tdc - 1, fmt, siz, tw, th);
             FILE* bf = fopen(nm, "wb");
             if (bf) { fwrite(loaded_texture.addr, 1, loaded_texture.size_bytes, bf); fclose(bf); }
         }
@@ -1094,40 +1121,66 @@ static void import_texture(int i, int tile, bool importReplacement) {
      * decoding it against the stale rdp.palette produced the blue-speckle roof
      * (docs/dev/TEXTURE-GLITCH-ANALYSIS.md, B2). Route CI4/CI8 -> I4/I8 here. */
     uint8_t fmt_eff = fmt;
+    uint8_t siz_eff = siz;
     if (fmt == G_IM_FMT_CI && rdp.palette_fmt == G_TT_NONE) {
         fmt_eff = G_IM_FMT_I;
     }
 
+    /* D229: green/pulsating sky water. GE's texSelect loads CI8 mipmap chains
+     * with gDPLoadBlock (SetTexImage format = CI; the 16b "size" is only the
+     * fast3d 4KB-per-block convention), then the sky-water draw re-declares
+     * the same TMEM slot as RGBA/16b (sub_GAME_7F09343C). On N64 GE's custom
+     * RSP ucode expands the indices through the TLUT into real 16-bit pixels
+     * in TMEM, so the RGBA16 tile samples blue water. fast3d has no such
+     * expansion: it uploads the raw index bytes as 16-bit texels (g = 2*idx
+     * mod 32 dominates) -> green mottle. Route the import through the CI8
+     * palette path instead -- the port-layer equivalent of the ucode's
+     * expand-at-load. Only fires when the tile format genuinely disagrees
+     * with the loaded source, so real RGBA16 textures are untouched. */
+    if (fmt_eff == G_IM_FMT_RGBA && siz == G_IM_SIZ_16b &&
+        loaded_texture.src_fmt == G_IM_FMT_CI) {
+#ifdef PORT
+        if (getenv("GE_D229")) {
+            static int n_ci8r = 0;
+            if (n_ci8r++ < 8)
+                sysLogPrintf(LOG_NOTE, "D229: RGBA16 tile over CI8 source -> ci8 import (addr=%p size=%u palidx=%u)",
+                             (const void *)orig_addr, loaded_texture.size_bytes, palette_index);
+        }
+#endif
+        fmt_eff = G_IM_FMT_CI;
+        siz_eff = G_IM_SIZ_8b;
+    }
+
     if (fmt_eff == G_IM_FMT_RGBA) {
-        if (siz == G_IM_SIZ_16b) {
+        if (siz_eff == G_IM_SIZ_16b) {
             import_texture_rgba16(tile, loaded_texture, rdp.tex_lod);
-        } else if (siz == G_IM_SIZ_32b) {
+        } else if (siz_eff == G_IM_SIZ_32b) {
             import_texture_rgba32(tile, loaded_texture, rdp.tex_lod);
         } else {
             sysFatalError("Bad size for RGBA texture in tile %d: %02x", tile, siz);
         }
     } else if (fmt_eff == G_IM_FMT_IA) {
-        if (siz == G_IM_SIZ_4b) {
+        if (siz_eff == G_IM_SIZ_4b) {
             import_texture_ia4(tile, loaded_texture, rdp.tex_lod);
-        } else if (siz == G_IM_SIZ_8b) {
+        } else if (siz_eff == G_IM_SIZ_8b) {
             import_texture_ia8(tile, loaded_texture, rdp.tex_lod);
-        } else if (siz == G_IM_SIZ_16b) {
+        } else if (siz_eff == G_IM_SIZ_16b) {
             import_texture_ia16(tile, loaded_texture, rdp.tex_lod);
         } else {
             sysFatalError("Bad size for IA texture in tile %d: %02x", tile, siz);
         }
     } else if (fmt_eff == G_IM_FMT_CI) {
-        if (siz == G_IM_SIZ_4b) {
+        if (siz_eff == G_IM_SIZ_4b) {
             import_texture_ci4(tile, loaded_texture, rdp.tex_lod);
-        } else if (siz == G_IM_SIZ_8b) {
+        } else if (siz_eff == G_IM_SIZ_8b) {
             import_texture_ci8(tile, loaded_texture, rdp.tex_lod);
         } else {
             sysFatalError("Bad size for CI texture in tile %d: %02x", tile, siz);
         }
     } else if (fmt_eff == G_IM_FMT_I) {
-        if (siz == G_IM_SIZ_4b) {
+        if (siz_eff == G_IM_SIZ_4b) {
             import_texture_i4(tile, loaded_texture, rdp.tex_lod);
-        } else if (siz == G_IM_SIZ_8b) {
+        } else if (siz_eff == G_IM_SIZ_8b) {
             import_texture_i8(tile, loaded_texture, rdp.tex_lod);
         } else {
             sysFatalError("Bad size for I texture in tile %d: %02x", tile, siz);
@@ -1345,19 +1398,55 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
             d->color.g = g > 255 ? 255 : g;
             d->color.b = b > 255 ? 255 : b;
 
-            /* D72 (docs/internals.md): unlike the PD port, GE never
-             * generates texture coordinates from vertex normals. This PD-
-             * inherited block overwrote the authored tc[] UVs on every
-             * lit+textured surface (lookat_enabled defaults to true here),
-             * which smeared the Rareware-logo quads into a diagonal gold
-             * wedge: their corner UVs (0x0010..0x03F0 = full 32x32 coverage)
-             * were replaced by normal-derived values. GE's ground truth:
-             * every DL that could env-map sets gsDPSetTextureLUT(G_TT_NONE),
-             * stage rendering always has a camera lookat yet stage textures
-             * are surface-fixed on hardware, and the logo vertex batches
-             * carry authored atlas-slice UVs. So U/V stay as computed from
-             * tc[] above. (gSPLookAt state is still tracked — it may matter
-             * for lighting fidelity later.) */
+            /* D195/D72 correction: GE DOES use RSP-generated (environment-
+             * mapped) texture coordinates -- shiny gold/silver weapon skins
+             * and Control's reflective console glass all set G_TEXTURE_GEN,
+             * the real GBI bit that gates this on real hardware. D72.1
+             * originally removed this whole PD-inherited block to fix the
+             * Rareware logo (a lit surface that does NOT set G_TEXTURE_GEN,
+             * so it was never supposed to hit this path in the first place)
+             * but over-corrected: it deleted the feature instead of gating
+             * it on the bit that actually distinguishes the two cases. With
+             * no envmap UV generation, every G_TEXTURE_GEN draw sampled its
+             * texture at whatever raw tc[] happened to be authored (usually
+             * ~0), landing on the same corner texel every frame regardless
+             * of view angle -- for a typical dark-edged reflection map, a
+             * solid near-black surface instead of a shiny/reflective one.
+             * Gating on G_TEXTURE_GEN preserves D72.1's actual fix (the logo
+             * never sets this bit, so it's unaffected) while restoring the
+             * envmap effect for the draws that do. */
+            if (rsp.geometry_mode & G_TEXTURE_GEN) {
+                float dotx = 0, doty = 0;
+                if (rsp.lookat_enabled) {
+                    dotx += vcn->x * rsp.current_lookat_coeffs[0][0];
+                    dotx += vcn->y * rsp.current_lookat_coeffs[0][1];
+                    dotx += vcn->z * rsp.current_lookat_coeffs[0][2];
+                    doty += vcn->x * rsp.current_lookat_coeffs[1][0];
+                    doty += vcn->y * rsp.current_lookat_coeffs[1][1];
+                    doty += vcn->z * rsp.current_lookat_coeffs[1][2];
+                    dotx /= 127.0f;
+                    doty /= 127.0f;
+                } else {
+                    float tvcn[3];
+                    calculate_normal_dir(vcn, tvcn);
+                    dotx = tvcn[0];
+                    doty = tvcn[1];
+                }
+
+                dotx = clampf(dotx, -1.0f, 1.0f);
+                doty = clampf(doty, -1.0f, 1.0f);
+
+                if (rsp.geometry_mode & G_TEXTURE_GEN_LINEAR) {
+                    dotx = acosf(-dotx) / 4.0f;
+                    doty = acosf(-doty) / 4.0f;
+                } else {
+                    dotx = (dotx + 1.0f) / 4.0f;
+                    doty = (doty + 1.0f) / 4.0f;
+                }
+
+                U = (int32_t)(dotx * rsp.texture_scaling_factor.s);
+                V = (int32_t)(doty * rsp.texture_scaling_factor.t);
+            }
         } else {
             d->color.r = vcn->r;
             d->color.g = vcn->g;
@@ -1717,6 +1806,49 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
                     rendering_state.textures[i]->second.cmt = cmt;
                 }
             }
+
+#ifdef PORT
+            /* D229 probe (env-gated, inert): green/pulsating IsWater water.
+             * The water quad is a 2-cycle LERP(TEXEL1, TEXEL0) draw binding
+             * BOTH tiles to the same TMEM with tile 1 offset by uls/ult --
+             * the D172 probe's `tmem differs` filter never fires for it. Dump
+             * each texunit's full decoded tile state + wrap decision + GL
+             * texture identity so one Frigate capture pins whether TEXEL1
+             * resolves to the same image/region as TEXEL0 or drifts into
+             * other TMEM content (the green). */
+            if (getenv("GE_D229") && use_2cyc && comb->used_textures[0] && comb->used_textures[1]) {
+                static int d229x = 0;
+                static int d229_total = 0;
+                d229_total++;
+                if (d229x < 12) {
+                    d229x++;
+                    const uint32_t tmem = rdp.texture_tile[tile].tmem;
+                    sysLogPrintf(LOG_NOTE,
+                        "D229: texunit%d first=%u lodoff=%u tile=%u tmem=%u fmt=%u siz=%u | "
+                        "uls=%u ult=%u lrs=%u lrt=%u masks=%u maskt=%u shifts=%d shiftt=%d cms=%u cmt=%u | "
+                        "texw=%u texh=%u texw2=%u texh2=%u | "
+                        "wrapS=%d(tw=%.1f,uls=%.1f) wrapT=%d(th=%.1f,ult=%.1f) | "
+                        "tmembytes=%u GLaddr=%p texid=%u glbytes=%u same_tmem_as_other=%d",
+                        i, rdp.first_tile_index, gfx_lod_tile_offset(i), tile, tmem,
+                        rdp.texture_tile[tile].fmt, rdp.texture_tile[tile].siz,
+                        rdp.texture_tile[tile].uls, rdp.texture_tile[tile].ult,
+                        rdp.texture_tile[tile].lrs, rdp.texture_tile[tile].lrt,
+                        rdp.texture_tile[tile].masks, rdp.texture_tile[tile].maskt,
+                        (int)rdp.texture_tile[tile].shifts, (int)rdp.texture_tile[tile].shiftt,
+                        (unsigned)cms, (unsigned)cmt,
+                        tex_width[i], tex_height[i], tex_width2[i], tex_height2[i],
+                        (int)wrap_s[i], wrap_tw[i], wrap_uls[i],
+                        (int)wrap_t[i], wrap_th[i], wrap_ult[i],
+                        rdp.loaded_texture[tmem].orig_size_bytes,
+                        rendering_state.textures[i] ? (const void*)rendering_state.textures[i]->first.texture_addr : nullptr,
+                        rendering_state.textures[i] ? rendering_state.textures[i]->second.texture_id : 0u,
+                        rendering_state.textures[i] ? rendering_state.textures[i]->first.size_bytes : 0u,
+                        (int)(rdp.texture_tile[rdp.first_tile_index + gfx_lod_tile_offset(1 - i)].tmem == tmem));
+                } else if (d229_total % 400 == 0) {
+                    sysLogPrintf(LOG_NOTE, "D229: (summary) %d dual-texunit 2-cycle tris so far", d229_total);
+                }
+            }
+#endif
         }
     }
 
@@ -1738,17 +1870,58 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
          * (different tmem) -- filters out mip/LOD-bilerp false positives */
         if (rdp.texture_tile[c1].tmem != rdp.texture_tile[fi].tmem) {
             static int d172x = 0;
-            if (d172x < 40) {
+            static int d172_total = 0;
+            /* D219: the original 40-hit cap (sized for M-90's short scripted
+             * repro) silently went dark for the rest of a real play session
+             * after ~40 ordinary bullet-impact particles, well before any
+             * actual explosion -- and the silence itself was indistinguishable
+             * from "no more particle draws happened at all". Never suppress
+             * the interesting (lit) case, and keep an always-on counter with
+             * periodic summaries so a long session still proves whether this
+             * code path is being hit throughout, not just early on. */
+            const bool lit = (rsp.geometry_mode & G_LIGHTING) != 0;
+            d172_total++;
+            if (!lit && d172x >= 40) {
+                if (d172_total % 200 == 0) {
+                    sysLogPrintf(LOG_NOTE, "D172: (summary) %d multitex tris seen so far, still LIGHTING=off", d172_total);
+                }
+            } else {
                 d172x++;
                 sysLogPrintf(LOG_NOTE,
                     "D172: multitex tri combine=%llx tex_lod=%d first=%u | "
                     "cfg1[tile=%u tmem=%u fmt=%u siz=%u] | "
-                    "SAMPLED0=tile%u(tmem=%u) SAMPLED1=tile%u(tmem=%u fmt=%u)%s",
+                    "SAMPLED0=tile%u(tmem=%u) SAMPLED1=tile%u(tmem=%u fmt=%u)%s | "
+                    /* D219 (docs/dev/findings.md): explosion.c never clears
+                     * G_LIGHTING before drawing these particle billboards -
+                     * it relies on whatever last set it. If lighting is ON
+                     * here, cn[]'s authored RGBA tint is misread as a normal
+                     * vector (gfx_pc.cpp:1301-1346) and SHADE becomes a
+                     * scene-light color instead of red/orange, which would
+                     * explain a state-dependent purple/blue that a synthetic
+                     * scripted repro (M-90) might not reproduce. */
+                    "geometry_mode=%08x LIGHTING=%s | "
+                    /* D219 round 2: G_LIGHTING is ruled out (5000/5000
+                     * samples off, live-confirmed still purple/blue). Next
+                     * suspect: a D217-style texture-cache collision -- the
+                     * cache key is {texture_addr, fmt, siz, size_bytes,
+                     * palette_hash} (gfx_pc.h) with no content hash for
+                     * non-CI textures, so if two of the 15 FIRE_N images
+                     * ever resolve to the same address (Globalimagetable
+                     * fixup aliasing) or the cache evicts/reuses a texture_id
+                     * without a real re-upload, this tile's GL texture could
+                     * be serving stale/wrong-image content while every
+                     * bookkeeping field above still looks correct. */
+                    "TEXEL1_addr=%p TEXEL1_texid=%u TEXEL1_bytes=%u",
                     (unsigned long long)rdp.combine_mode, (int)rdp.tex_lod, fi,
                     c1, rdp.texture_tile[c1].tmem, rdp.texture_tile[c1].fmt, rdp.texture_tile[c1].siz,
                     s0, rdp.texture_tile[s0].tmem,
                     s1, rdp.texture_tile[s1].tmem, rdp.texture_tile[s1].fmt,
-                    (s1 == s0) ? "  <-- TEXEL1 == TEXEL0 (BUG)" : "");
+                    (s1 == s0) ? "  <-- TEXEL1 == TEXEL0 (BUG)" : "",
+                    rsp.geometry_mode,
+                    (rsp.geometry_mode & G_LIGHTING) ? "ON <-- D219 SUSPECT" : "off",
+                    rendering_state.textures[1] ? (const void*)rendering_state.textures[1]->first.texture_addr : nullptr,
+                    rendering_state.textures[1] ? rendering_state.textures[1]->second.texture_id : 0u,
+                    rendering_state.textures[1] ? rendering_state.textures[1]->first.size_bytes : 0u);
             }
         }
     }
@@ -2165,6 +2338,7 @@ static void gfx_dp_set_scissor(uint32_t mode, uint32_t ulx, uint32_t uly, uint32
 
 static void gfx_dp_set_texture_image(uint32_t format, uint32_t size, uint32_t width, uint32_t tex_flags, const void* addr) {
     rdp.texture_to_load.addr = (const uint8_t*)addr;
+    rdp.texture_to_load.fmt = (uint8_t)format; /* D229 */
     rdp.texture_to_load.siz = size;
     rdp.texture_to_load.width = width;
     rdp.texture_to_load.tex_flags = tex_flags;
@@ -2296,6 +2470,7 @@ static void gfx_dp_load_block(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t
     loaded_texture.tex_flags = rdp.texture_to_load.tex_flags;
     loaded_texture.raw_tex_metadata = rdp.texture_to_load.raw_tex_metadata;
     loaded_texture.addr = rdp.texture_to_load.addr;
+    loaded_texture.src_fmt = rdp.texture_to_load.fmt; /* D229 */
 
     rdp.textures_changed[0] = rdp.textures_changed[1] = true;
 }
@@ -2336,6 +2511,7 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     loaded_texture.tex_flags = rdp.texture_to_load.tex_flags;
     loaded_texture.raw_tex_metadata = rdp.texture_to_load.raw_tex_metadata;
     loaded_texture.addr = rdp.texture_to_load.addr + start_offset_bytes;
+    loaded_texture.src_fmt = rdp.texture_to_load.fmt; /* D229 */
 
     rdp.texture_tile[tile].uls = uls;
     rdp.texture_tile[tile].ult = ult;
