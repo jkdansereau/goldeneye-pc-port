@@ -3,6 +3,15 @@
 Status: **proposal, parked** — documented while audio work (project Phase 3) is
 active. Do not start Phase 0 until audio is done; first action when resumed is
 the Phase 0 measurement pass.
+
+**M-119 note:** this plan's premise below ("default preset = ~30fps") is now
+stale — **D248** (M-118) found and fixed a real port bug (a pointer-width
+scheduler ABI bug) that had been silently halving the game to 30fps since the
+port's inception; the corrected default is a genuine 60fps. Re-measure Phase 0
+against the corrected baseline before resuming this plan. Also see **D250**
+(M-119, open): the exposed real 60fps cost now drops to 20-40fps intermittently
+on some levels — a performance pass may be a prerequisite for this plan, not
+just a baseline re-measurement.
 Related: `docs/dev/findings.md` §D117 (GE_DETERM), §D155 (catch-up clamp),
 `port/src/libultra.c` (pacemaker), `src/game/frametiming.c`, `src/sched.c`.
 
