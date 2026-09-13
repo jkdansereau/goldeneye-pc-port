@@ -125,6 +125,32 @@ extern float getPlayer_c_screenheight(void);
 extern float getPlayer_c_screenleft(void);
 extern float getPlayer_c_screentop(void);
 extern float cursor_h_pos, cursor_v_pos;
+
+/* D194/D238 -- natural-pitch control scheme.
+ *
+ * GE's hipfire pitch is structurally digital: bondviewProcessInput's default
+ * (1.1/HONEY) scheme reads pitch only from C-up/C-down (see D166), so the
+ * port emulates continuous pitch by duty-cycling that button -- an
+ * approximation that can never fully match yaw's genuinely continuous,
+ * unbounded analog mapping, which is the root of the "vertical feels slower"
+ * complaint. GE's own 1.2/SOLITARE scheme (cur_player_get/set_control_type,
+ * src/game/options.c; dispatch in bondviewProcessInput, bondview2.c ~5192-
+ * 5450) gives BOTH pitch and yaw continuous analog stick control in hipfire
+ * (canNaturalTurn/canNaturalPitch) -- at the cost of moving movement
+ * (forward/back/strafe) from the analog stick onto digital step buttons
+ * (digitalStepForward/Back/Left/Right, fed from C-buttons/D-pad). This is an
+ * ORIGINAL, player-selectable GE control style (not new game logic) -- we
+ * select it from the port the same way the options menu would
+ * (cur_player_set_control_type), and remap WASD/gamepad accordingly so
+ * movement keeps working under it. No src/ edits; no behavior invented that
+ * GE didn't already support. Escape hatch: Input.NaturalPitch=0 reverts to
+ * the 1.1/HONEY default with the D166 digital-pitch-pulse hack. */
+extern int cur_player_get_control_type(void);
+extern void cur_player_set_control_type(int type);
+struct player;
+extern struct player *g_CurrentPlayer;   /* NULL-checked only, never dereferenced here */
+#define CONTROLLER_CONFIG_HONEY_    0
+#define CONTROLLER_CONFIG_SOLITARE_ 1
 #define MENU_POINTER_GAIN  1.5
 #define TRIG_THRESHOLD     (30 * 256)
 #define RSTICK_THRESHOLD   0x4000
@@ -140,9 +166,27 @@ extern float cursor_h_pos, cursor_v_pos;
  * hide that so mouse-down looks down by default; MouseInvertY flips it. */
 #define MOUSE_TURN_GAIN     6.0   /* hipfire: raw px this poll -> stick-X counts */
 #define MOUSE_PITCH_THRESH  1.5   /* hipfire: px/poll before a C-button fires  */
-#define AIM_GAIN            4.0   /* aim mode: px/poll -> counts into the band  */
-#define AIM_MOVE_THRESH     0.5   /* aim mode: px/poll before the stick moves   */
+#define AIM_MOVE_THRESH     0.3   /* aim mode: px/poll before the stick moves   */
 #define HIP_PITCH_FULL      6.0   /* hipfire pitch: |px/poll| for a solid C hold (D166) */
+
+/* D194(a) -- aim-mode response curve.
+ *
+ * bondviewPlayerControlStuff (bondview2.c) turns an aim-mode stick value
+ * into turn speed as `(stick_x - 60) / 10.0`, clamped to 1.0 -- i.e. the
+ * game's own proportional band is stick in [61,70]; anything from 71 up to
+ * whatever AimBand allows (60+AimBand, up to 100) clamps to the exact same
+ * max speed as 70. The old code aimed for the port's [61, 60+AimBand] range
+ * (up to [61,80]) as if it were all proportional, so a config'd AimBand>10
+ * bought nothing, and AIM_GAIN=4.0 reached the (effectively already-maxed)
+ * top of that range by ~5 px/poll -- "near bang-bang", matching the D194(a)
+ * complaint. Fix: curve-map px/poll onto the game's REAL proportional range
+ * [61,70] (independent of AimBand, which still acts as an extra ceiling for
+ * anyone who wants to cap below the game's own max), with a configurable
+ * gamma so slow motions land near the low end instead of jumping to nearly
+ * full speed immediately. */
+#define AIM_STICK_MIN        61
+#define AIM_STICK_GAME_MAX   70    /* bondview2.c: (stick-60)/10 saturates at stick=70 */
+#define AIM_FULL_SPEED_PX    20.0  /* px/poll (at MouseAimSpeed=100) that reaches AIM_STICK_GAME_MAX */
 
 /* D194(b) -- mouse sensitivity coupled to frame/poll rate.
  *
@@ -222,6 +266,18 @@ static int mouseRawInput  = 0;      /* 1 = bypass OS pointer accel for aim    */
 static int mouseDtDecouple = 1;     /* D194(b): normalize look sensitivity by real
                                       * elapsed poll time instead of raw px/poll.
                                       * Escape hatch: 0 = prior (coupled) behaviour. */
+static int mouseSensitivity = 100;  /* D238: single master sensitivity, percent --
+                                      * multiplies BOTH MouseAimSpeed and MouseTurnSpeed
+                                      * so one number tunes overall feel; the two legacy
+                                      * knobs stay as an independent per-mode trim on
+                                      * top of it (both default 100/16 => unchanged
+                                      * unless the user also touches those). */
+static int aimCurveGamma  = 160;    /* D194(a): aim-mode response curve exponent x100
+                                      * (100 = linear, >100 = more low-speed control /
+                                      * less bang-bang, <100 = more twitchy). */
+static int naturalPitchMode = 1;    /* D194/D238: 1 = force GE's own 1.2/SOLITARE
+                                      * control style for continuous analog pitch;
+                                      * 0 = legacy 1.1/HONEY + D166 digital pulse. */
 static Uint64 s_lastLookPollCounter = 0;  /* D194(b): monotonic clock, gameplay-look drain only */
 
 /* Gamepad tuning -- defaults reproduce the old hardcoded constants exactly. */
@@ -611,6 +667,16 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
     unsigned button = 0;
     int sx = 0, sy = 0;
 
+    /* D194/D238: self-correcting every poll -- cheap (plain field writes,
+     * see options.c cur_player_set_control_type), and re-asserts itself if
+     * anything else ever calls the setter (menu, save load) in between. */
+    if (idx == 0 && g_CurrentPlayer != NULL) {
+        int wantSolitare = naturalPitchMode ? CONTROLLER_CONFIG_SOLITARE_ : CONTROLLER_CONFIG_HONEY_;
+        if (cur_player_get_control_type() != wantSolitare) {
+            cur_player_set_control_type(wantSolitare);
+        }
+    }
+
     if (idx < 0 || idx >= MAX_PADS) {
         if (stick_x) *stick_x = 0;
         if (stick_y) *stick_y = 0;
@@ -654,8 +720,19 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         /* GE default control (1.1): stick Y = move fwd/back, stick X = turn,
          * C-left/right = sidestep, C-up/down = look. FPS layout: W/S move,
          * A/D strafe (C-buttons), mouse X turns (stick X), mouse Y looks. */
-        if (actHeld(ks, IA_FORWARD))  sy =  STICK_MAX;
-        if (actHeld(ks, IA_BACK))     sy = -STICK_MAX;
+        /* D194/D238 natural-pitch mode (GE's own 1.2/SOLITARE style) reads
+         * forward/back from digital C-up/C-down instead of the analog stick
+         * (bondview2.c: digitalStepForward/Back <- U/D_JPAD|U/D_CBUTTONS),
+         * because the stick's Y axis is what carries continuous analog
+         * pitch there instead. Strafe and turn are unchanged -- both
+         * schemes read them the same way. */
+        if (naturalPitchMode) {
+            if (actHeld(ks, IA_FORWARD)) button |= GE_CONT_E;   /* C-up = forward   */
+            if (actHeld(ks, IA_BACK))    button |= GE_CONT_D;   /* C-down = back    */
+        } else {
+            if (actHeld(ks, IA_FORWARD))  sy =  STICK_MAX;
+            if (actHeld(ks, IA_BACK))     sy = -STICK_MAX;
+        }
         if (actHeld(ks, IA_STRAFE_L)) button |= GE_CONT_C;   /* strafe left  */
         if (actHeld(ks, IA_STRAFE_R)) button |= GE_CONT_F;   /* strafe right */
         if (actHeld(ks, IA_TURN_L))   sx = -STICK_MAX;       /* keyboard turn */
@@ -860,34 +937,53 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                 }
             } else if (aimHeld) {
                 double aimEdx = edx * lookDtScale, aimDyLook = dyLook * lookDtScale;
-                double gx = fabs(aimEdx)    * (mouseAimSpeed / 100.0) * AIM_GAIN;
-                double gy = fabs(aimDyLook) * (mouseAimSpeed / 100.0) * AIM_GAIN;
+                double aimSens = (mouseAimSpeed / 100.0) * (mouseSensitivity / 100.0);
+                double gamma = aimCurveGamma / 100.0;
+                double normX = fabs(aimEdx) * aimSens / AIM_FULL_SPEED_PX;
+                double normY = fabs(aimDyLook) * aimSens / AIM_FULL_SPEED_PX;
+                if (normX > 1.0) normX = 1.0;
+                if (normY > 1.0) normY = 1.0;
+                int ceilStick = 60 + aimBand;
+                if (ceilStick > AIM_STICK_GAME_MAX) ceilStick = AIM_STICK_GAME_MAX;
                 if (fabs(aimEdx) >= AIM_MOVE_THRESH) {
-                    int m = 61 + (int)gx; if (m > 60 + aimBand) m = 60 + aimBand;
+                    int m = AIM_STICK_MIN + (int)(pow(normX, gamma) * (AIM_STICK_GAME_MAX - AIM_STICK_MIN));
+                    if (m > ceilStick) m = ceilStick;
                     sx += (aimEdx > 0) ? m : -m;
                 }
                 if (fabs(aimDyLook) >= AIM_MOVE_THRESH) {
-                    int m = 61 + (int)gy; if (m > 60 + aimBand) m = 60 + aimBand;
+                    int m = AIM_STICK_MIN + (int)(pow(normY, gamma) * (AIM_STICK_GAME_MAX - AIM_STICK_MIN));
+                    if (m > ceilStick) m = ceilStick;
                     sy += (aimDyLook > 0) ? m : -m;   /* +stick_y = look down */
                 }
             } else {
                 double hipEdx = edx * lookDtScale, hipDyLook = dyLook * lookDtScale;
-                sx += (int)(hipEdx * (mouseTurnSpeed / 100.0) * MOUSE_TURN_GAIN);
-                /* D166: hipfire pitch as C-button pulses whose frequency scales
-                 * with mouse-Y speed -- fast mouse = solid hold, slow = sparse
-                 * taps -- so it feels closer to the analog yaw. Aim mode (above)
-                 * is untouched. */
-                double sp = fabs(hipDyLook);
-                if (sp >= MOUSE_PITCH_THRESH) {
-                    double duty = sp * (hipfirePitchSpeed / 100.0) / HIP_PITCH_FULL;
-                    if (duty > 1.0) duty = 1.0;
-                    hipPitchPhase += duty;
-                    if (hipPitchPhase >= 1.0) {
-                        hipPitchPhase -= 1.0;
-                        button |= (hipDyLook > 0) ? GE_CONT_E : GE_CONT_D; /* E=C-up=look down */
-                    }
+                double hipSens = (mouseTurnSpeed / 100.0) * (mouseSensitivity / 100.0);
+                sx += (int)(hipEdx * hipSens * MOUSE_TURN_GAIN);
+                if (naturalPitchMode) {
+                    /* D194/D238: SOLITARE gives hipfire pitch the same
+                     * continuous analog stick treatment as yaw -- same
+                     * formula as the sx line above, so X and Y are, by
+                     * construction, symmetric. Forward/back moved to
+                     * digital C-up/C-down above, freeing the stick's Y axis
+                     * for this. */
+                    sy += (int)(hipDyLook * hipSens * MOUSE_TURN_GAIN);
                 } else {
-                    hipPitchPhase = 0.0;
+                    /* D166 (legacy): hipfire pitch as C-button pulses whose
+                     * frequency scales with mouse-Y speed -- fast mouse =
+                     * solid hold, slow = sparse taps. Kept as the
+                     * Input.NaturalPitch=0 escape hatch. */
+                    double sp = fabs(hipDyLook);
+                    if (sp >= MOUSE_PITCH_THRESH) {
+                        double duty = sp * (hipfirePitchSpeed / 100.0) * (mouseSensitivity / 100.0) / HIP_PITCH_FULL;
+                        if (duty > 1.0) duty = 1.0;
+                        hipPitchPhase += duty;
+                        if (hipPitchPhase >= 1.0) {
+                            hipPitchPhase -= 1.0;
+                            button |= (hipDyLook > 0) ? GE_CONT_E : GE_CONT_D; /* E=C-up=look down */
+                        }
+                    } else {
+                        hipPitchPhase = 0.0;
+                    }
                 }
             }
         }
@@ -912,16 +1008,34 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         int rx = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_RIGHTX);
         int ry = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_RIGHTY);
 
-        int px = scaleAxis(lx);
-        int py = -scaleAxis(ly);       /* SDL up = negative -> N64 up = positive */
-        if (px) sx = px;
-        if (py) sy = py;
+        if (naturalPitchMode) {
+            /* D194/D238: SOLITARE swaps stick roles -- left stick becomes
+             * digital-step movement (same analog-for-movement tradeoff as
+             * the keyboard remap above), right stick becomes continuous
+             * natural look (replacing its old digital-C-button emulation),
+             * matching how the mouse now drives look continuously too. */
+            if (ly < -RSTICK_THRESHOLD) button |= GE_CONT_E;   /* stick up = forward */
+            if (ly >  RSTICK_THRESHOLD) button |= GE_CONT_D;   /* stick down = back  */
+            if (lx < -RSTICK_THRESHOLD) button |= GE_CONT_C;   /* strafe left        */
+            if (lx >  RSTICK_THRESHOLD) button |= GE_CONT_F;   /* strafe right       */
 
-        if (padLookInvertY) ry = -ry;
-        if (rx >  RSTICK_THRESHOLD) button |= GE_CONT_F;
-        if (rx < -RSTICK_THRESHOLD) button |= GE_CONT_C;
-        if (ry >  RSTICK_THRESHOLD) button |= GE_CONT_D;
-        if (ry < -RSTICK_THRESHOLD) button |= GE_CONT_E;
+            int rxs = scaleAxis(rx);
+            int rys = -scaleAxis(ry);   /* SDL up = negative -> N64 up = positive */
+            if (padLookInvertY) rys = -rys;
+            if (rxs) sx = rxs;
+            if (rys) sy = rys;
+        } else {
+            int px = scaleAxis(lx);
+            int py = -scaleAxis(ly);       /* SDL up = negative -> N64 up = positive */
+            if (px) sx = px;
+            if (py) sy = py;
+
+            if (padLookInvertY) ry = -ry;
+            if (rx >  RSTICK_THRESHOLD) button |= GE_CONT_F;
+            if (rx < -RSTICK_THRESHOLD) button |= GE_CONT_C;
+            if (ry >  RSTICK_THRESHOLD) button |= GE_CONT_D;
+            if (ry < -RSTICK_THRESHOLD) button |= GE_CONT_E;
+        }
 
         int trigPt = padTriggerPct * 327;   /* % of the 0..32767 trigger travel */
         if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > trigPt)
@@ -1112,6 +1226,9 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.MouseSmoothing", &mouseSmoothing, 0, 90);
     configRegisterInt("Input.MouseRawInput", &mouseRawInput, 0, 1);
     configRegisterInt("Input.MouseDtDecouple", &mouseDtDecouple, 0, 1);  /* D194(b) */
+    configRegisterInt("Input.MouseSensitivity", &mouseSensitivity, 1, 500);  /* D238 */
+    configRegisterInt("Input.MouseAimCurve", &aimCurveGamma, 50, 400);  /* D194(a), x100 */
+    configRegisterInt("Input.NaturalPitch", &naturalPitchMode, 0, 1);  /* D194/D238 */
     configRegisterInt("Input.PadDeadzone", &padDeadzone, 0, 30000);
     configRegisterInt("Input.PadTriggerPct", &padTriggerPct, 1, 99);
     configRegisterInt("Input.PadLookInvertY", &padLookInvertY, 0, 1);
