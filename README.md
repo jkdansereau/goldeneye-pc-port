@@ -261,7 +261,9 @@ The executable is written to `build-pc/ge007.x86_64` (on Windows,
 3. Run the executable from the repo root:
    `./build-pc/ge007.x86_64`.
 
-Configuration is written to `ge007.ini` on first run.
+Configuration is written to `ge007.ini` on first run; game progress
+lives in `ge007.eep`. Launch with `-fresh` to wipe both before starting
+(a clean-slate run for playtesting).
 
 ### Default controls
 
