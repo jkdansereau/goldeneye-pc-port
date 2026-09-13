@@ -178,6 +178,29 @@ reaches the site with the union arm you are naming actually active.
   real struct, under `#ifdef PORT`. (`[0]`/`rooms` often still works by luck
   on LE — low half at +0 — which masks the bug for one of the two fields.)
 
+- **D248 — a hardcoded byte offset used to index "one struct past the end of
+  the array" desyncs from a real field write once the struct grows.**
+  `OSScClient` (`src/sched.h`) is `{next; msgQ;}`, 8B on N64 / 16B on PC.
+  `osScAddClient()` deliberately writes a per-client flag into the *next
+  array element's* first field (`c[1].next = next`) instead of adding a
+  real member — cheap on N64 since the caller over-allocates the array by
+  one slot. The reader, `__scHandleRetrace`, doesn't index the struct back;
+  it recomputes the same address by hand as `*((s32*)client + 2)` (a
+  hardcoded 8-byte offset). That offset only equals `sizeof(OSScClient)`
+  (and thus `&client[1]`) when pointers are 32-bit. On PC it lands 8 bytes
+  into `client[0]` itself — inside `msgQ`, a real non-NULL pointer — so the
+  flag reads as permanently "set" for every client, silently collapsing a
+  60Hz/30Hz per-client split onto whichever branch a nonzero flag takes.
+  **General tell:** any place a struct is deliberately under-declared and a
+  sibling array slot is used as ad-hoc extra storage (`c[1].field`,
+  `arr[i+1].x`) is fine as a *write* (indexing scales with the real
+  `sizeof`), but a matching *read* done via a raw `(T*)p + N`/byte-offset
+  cast instead of `p[1].field` will silently desync once the struct's size
+  changes across the port. Fix: always index the struct on both ends
+  (`client[1].next`), never hand-roll the byte math — it's the direct
+  decompilation of what the write side already does, `#ifdef PORT` with the
+  N64 hand-rolled offset kept verbatim under `#else`. §F **D248**.
+
 ## B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64
 
 Any buffer reservation, `memcpy` size, slot stride, or pool budget

@@ -129,3 +129,4 @@ D243,OPEN,"Dam end-of-level cutscene (the abseil/bungee sequence, D148/D160's su
 D245,OPEN,IsWater water: two competing patterns with a visible seam that moves as the player looks around (mouse/aim) —,"OPEN — REOPENED (M-116 live playtest, same session):"
 D246,OPEN,"Tiny pixel strips at the left and right edges of the screen, ""like overscan"" —","OPEN — one candidate ruled out (M-116 follow-up), root cause not found."
 D247,RESOLVED,Black bars top and bottom of screen —,"NOT A BUG — confirmed faithful, unmodified N64 decomp behaviour, no code change made."
+D248,FIXED,"Port runs a stable 30 FPS instead of 60 FPS game-wide (M-117, user asked to verify FPS after the D209 timing-keystone fixes).","FIXED, root-caused to a genuine pointer-width ABI bug in src/sched.c (compiled for the PC build, not excluded)."

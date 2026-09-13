@@ -331,7 +331,24 @@ void __scHandleRetrace(OSSched *sc) {
             __scExec(sc, sp, dp);
     }
     for (client = sc->clientList; client != 0; client = client->next) {
+        /* D2xx (PC-port pointer-width fix): osScAddClient() stashes a
+         * per-client "every-other-frame" flag in the *next* array slot
+         * (`c[1].next = next`, see osScAddClient above) -- gfxClient gets
+         * NULL (send every retrace, 60Hz) and g_AudioClient gets a nonzero
+         * sentinel (send every other retrace, 30Hz). This read has to land
+         * on that same slot. The N64 line below finds it via a hardcoded
+         * 2*sizeof(s32)=8-byte offset, which only equals sizeof(OSScClient)
+         * (and thus &client[1]) when pointers are 32-bit; on this 64-bit
+         * port sizeof(OSScClient)==16, so the hardcoded offset instead reads
+         * the low 32 bits of client->msgQ itself (always non-NULL) and the
+         * gfx client silently loses its 60Hz path, halving to 30fps. Fix:
+         * index the real field instead of hardcoding the byte offset -- it
+         * naturally scales with the pointer width on either platform. */
+#ifdef PORT
+        if ((client[1].next == 0) || ((sc->frameCount & 1) == 0)) {
+#else
         if ((*((s32*)client + 2) == 0) || ((sc->frameCount & 1) == 0)) {
+#endif
             osSendMesg(client->msgQ, (OSMesg) &sc->retraceMsg, OS_MESG_NOBLOCK);
         }
     }
