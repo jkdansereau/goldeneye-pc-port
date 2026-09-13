@@ -205,20 +205,15 @@ extern s32 lvlGetCurrentStageToLoad(void);
 #define AIM_STICK_GAME_MAX   70    /* bondview2.c: (stick-60)/10 saturates at stick=70 */
 #define AIM_FULL_SPEED_PX    20.0  /* px/poll (at MouseAimSpeed=100) that reaches AIM_STICK_GAME_MAX */
 
-/* D194 absolute (cursor-anchored) aim tuning. FULLERR_DEG = residual angular
- * error that demands full stick: at that size the cursor is a full-screen turn
- * away, so full speed there is exactly "slew as fast as possible"; nearer the
- * target the demand falls off linearly -- the P-controller that makes the
- * crosshair settle on the cursor instead of coasting past it. DEADBAND_DEG is
- * the hold zone (~0.75 deg is sub-pixel at normal scope zoom). COAST_K predicts
- * how far the view keeps moving if we cut the stick now (the game eases
- * speedtheta/speedverta to zero at 0.05*mult/tick and integrates them at 3.5x,
- * bondview2.c UpdateSpeedTheta/Verta -- coast = 3.5*s^2/(2*0.05*mult) =
- * 35*s^2/mult degrees), so the demand is against where we'll BE, not where we
- * ARE. All three are cheap to retune; they change no game logic. */
-#define AIM_ABS_FULLERR_DEG   15.0
-#define AIM_ABS_DEADBAND_DEG  0.75
-#define AIM_ABS_COAST_K       35.0f
+/* D194 GEPD-style aim mapping. While RMB is held (cursor free), mouse
+ * MOVEMENT rotates the view by the same screen angle the cursor swept: a
+ * sweep across the rendered viewport width sweeps the full horizontal FOV,
+ * height <-> fovy. The crosshair stays locked at screen centre and stop
+ * moving holds the view where it is (the game's own speed decay coasts it to
+ * rest). Because the scale is angle-per-pixel of the CURRENT fovy, scope
+ * zooms automatically become finer control. No target, no chase, no
+ * snap-back: placement is cumulative and path-dependent, exactly like GEPD.
+ */
 #define AIM_ABS_DEG2RAD       0.0174532925
 
 /* D194(b) -- mouse sensitivity coupled to frame/poll rate.
@@ -308,23 +303,20 @@ static int mouseSensitivity = 100;  /* D238: single master sensitivity, percent 
 static int aimCurveGamma  = 160;    /* D194(a): aim-mode response curve exponent x100
                                       * (100 = linear, >100 = more low-speed control /
                                       * less bang-bang, <100 = more twitchy). */
-static int aimAbsolute      = 1;    /* D194: 1 = cursor-anchored (GEPD-style) aim while
-                                      * RMB is held -- the crosshair chases and HOLDS
-                                      * the point under the free cursor; 0 = legacy
-                                      * velocity stick synthesized from mouse delta. */
+static int aimAbsolute      = 1;    /* D194: 1 = GEPD-style aim while RMB is held --
+                                      * crosshair locked at centre, mouse MOVEMENT
+                                      * rotates the view 1:1 in screen angle; 0 =
+                                      * legacy velocity stick from mouse delta. */
 
-/* D194 absolute aim state. Touched ONLY in inputComputePad (game thread), the
- * same confinement as every other static here. The target pair is re-derived
- * from live camera values on press and on every mouse move, so there is no
- * free-running per-poll accumulator for multi-tick catch-up (D193) to
- * double-consume; the frac carry only dithers this poll's stick quantization. */
+/* D194 GEPD-aim state. Touched ONLY in inputComputePad (game thread), the
+ * same confinement as every other static here. The per-poll cursor delta
+ * drives the view, so there is no free-running angle accumulator for
+ * multi-tick catch-up (D193) to double-consume; the frac carry only dithers
+ * this poll's stick quantization. (inputUpdate() does not accumulate
+ * mouseDX/DY while the cursor is free, so the position must be tracked here.) */
 static int    s_absAimActive = 0;
-static float  s_absTgtTheta = 0.0f, s_absTgtVerta = 0.0f;
 static double s_absFracX = 0.0, s_absFracY = 0.0;
-/* Last cursor position / quantized FOV seen while anchoring: the target is
- * re-derived when either changes. (inputUpdate() does not accumulate
- * mouseDX/DY while the cursor is free, so position must be tracked here.) */
-static int    s_absLastMx = 0, s_absLastMy = 0, s_absLastFovQ = 0;
+static int    s_absLastMx = 0, s_absLastMy = 0;   /* last free-cursor position read */
 /* Previous poll's suspend state: the rising edge is when the cursor pops out
  * of relative mode, and SDL reappears it at its stale (clipped/desktop)
  * position -- we must warp it to centre before the first anchor reads it. */
@@ -1341,14 +1333,6 @@ int inputGetNumControllers(void)
  * fall back to the legacy velocity stick (grabbed mouse, menus, gamepad,
  * degenerate geometry).
  */
-static float aimAbsAngDiff(float a, float b)
-{
-    float d = a - b;
-    while (d > 180.0f)  d -= 360.0f;
-    while (d < -180.0f) d += 360.0f;
-    return d;
-}
-
 /* Quantize [0,10] stick-units to an int with first-order dithering so the
  * game's ten discrete aim speeds time-average into a finer low-speed range
  * (precision work: shoot-the-lock / laser-cut tasks). */
@@ -1386,17 +1370,6 @@ static int aimAbsCompute(int *outSx, int *outSy)
     if (vw <= 1 || vh <= 1 || bufW <= 1 || bufH <= 1)
         return 0;
 
-    /* Cursor in the game's CFB space (320x240 NTSC), then NDC against the live
-     * render viewport rect. The TV-safe-area letterbox is part of the image,
-     * so centering on the viewport -- not the window -- is exact. */
-    double cxv = (double)mx / (double)ww * (double)bufW;
-    double cyv = (double)my / (double)wh * (double)bufH;
-    double ndcX = 2.0 * (cxv - ((double)viGetViewLeft() + (double)vw * 0.5)) / (double)vw;
-    double ndcY = 2.0 * (cyv - ((double)viGetViewTop()  + (double)vh * 0.5)) / (double)vh;
-    if (mouseInvertY) ndcY = -ndcY;
-    if (ndcX > 1.0) ndcX = 1.0; else if (ndcX < -1.0) ndcX = -1.0;
-    if (ndcY > 1.0) ndcY = 1.0; else if (ndcY < -1.0) ndcY = -1.0;
-
     /* The effective FOV the render actually uses (fr.c viSetupCurrentPlayerView),
      * so scope zooms and Video.FovScale compose for free. */
     f32 fovy = portScaleFovY(viGetFovY(), lvlGetCurrentStageToLoad() == LEVELID_TITLE);
@@ -1404,69 +1377,72 @@ static int aimAbsCompute(int *outSx, int *outSy)
     if (fovy < 5.0f || fovy > 170.0f || aspect < 0.1f)
         return 0;
 
-    double tanV = tan(fovy * 0.5 * AIM_ABS_DEG2RAD);
-    double offYawR   = atan(ndcX * tanV * (double)aspect) / AIM_ABS_DEG2RAD; /* deg, right + */
-    double offPitchD = atan(ndcY * tanV) / AIM_ABS_DEG2RAD;                  /* deg, down  + */
+    /* Rendered viewport in window pixels (the letterbox bars are not part of
+     * the image): px swept across it <-> full screen angle. */
+    double vwpx = (double)vw / (double)bufW * (double)ww;
+    double vhpx = (double)vh / (double)bufH * (double)wh;
+    if (vwpx <= 1.0 || vhpx <= 1.0)
+        return 0;
 
-    /* Angle conventions (verified against bondview2.c natural-turn + aim paths):
-     *   vv_theta:  a RIGHT turn INCREASES it (stick_x>60 -> UpdateSpeedTheta(-x)
-     *              -> positive speedtheta).
-     *   vv_verta:  looking DOWN DECREASES it (stick_y>60 -> UpdateSpeedVerta(+x)
-     *              -> negative speedverta). */
-    float curT = g_CurrentPlayer->vv_theta;   /* yaw, deg; right + */
-    float curV = g_CurrentPlayer->vv_verta;   /* pitch, deg; up + */
-
-    /* Re-anchor whenever the cursor moves or the effective FOV changes
-     * (scope zoom in/out). While held still, the target stays put and the
-     * crosshair converges on it and HOLDS. */
-    int fovQ = (int)(fovy * 4.0f);   /* quarter-degree steps */
-    if (!s_absAimActive || mx != s_absLastMx || my != s_absLastMy || fovQ != s_absLastFovQ) {
-        int freshAnchor = !s_absAimActive;
+    /* GEPD model: crosshair locked at centre; mouse MOVEMENT rotates the view
+     * by the screen angle the cursor swept. Angle conventions (verified
+     * against bondview2.c natural-turn + aim paths): a RIGHT turn INCREASES
+     * vv_theta (stick_x>60 -> UpdateSpeedTheta(-x) -> positive speedtheta);
+     * looking DOWN DECREASES vv_verta (stick_y>60 -> negative speedverta). */
+    if (!s_absAimActive) {
+        /* Fresh hold: baseline at the (just-warped-to-centre) cursor so the
+         * warp itself emits no rotation. */
         s_absAimActive = 1;
-        s_absLastMx = mx;  s_absLastMy = my;  s_absLastFovQ = fovQ;
-        s_absTgtTheta = (float)(curT + offYawR);   /* right of centre -> larger theta */
-        s_absTgtVerta = (float)(curV - offPitchD); /* below centre  -> smaller verta */
-        if (freshAnchor && configGetInputLog()) {
+        s_absLastMx = mx;
+        s_absLastMy = my;
+        if (configGetInputLog()) {
             sysLogPrintf(LOG_NOTE,
-                "GE_INPUTLOG absaim ANCHOR win=(%d,%d) cursor=(%d,%d) cfb=(%.1f,%.1f) "
-                "view=(%d,%d %dx%d) ndc=(%.3f,%.3f) fov=%.2f aspect=%.3f cur=(%.2f,%.2f)",
-                ww, wh, mx, my, cxv, cyv,
-                (int)viGetViewLeft(), (int)viGetViewTop(), (int)vw, (int)vh,
-                ndcX, ndcY, (double)fovy, (double)aspect, (double)curT, (double)curV);
+                "GE_INPUTLOG absaim SESSION win=(%d,%d) cursor=(%d,%d) viewport=(%.0fx%.0fpx) "
+                "fov=%.2f aspect=%.3f cur=(%.2f,%.2f)",
+                ww, wh, mx, my, vwpx, vhpx,
+                (double)fovy, (double)aspect,
+                (double)g_CurrentPlayer->vv_theta, (double)g_CurrentPlayer->vv_verta);
         }
+        return 1;
     }
 
-    float errT = aimAbsAngDiff(s_absTgtTheta, curT);  /* +: target right of view -> turn RIGHT */
-    float errV = s_absTgtVerta - curV;                /* -: target below view   -> look DOWN   */
+    int dx = mx - s_absLastMx;
+    int dy = my - s_absLastMy;
+    s_absLastMx = mx;
+    s_absLastMy = my;
+    if (mouseInvertY) dy = -dy;
 
-    /* Demand against the RESIDUAL error after predicted coast (see COAST_K). */
-    f32 mult = viGetFovY() / 60.0f;
-    if (mult < 0.01f) mult = 0.01f;
-    float sT = g_CurrentPlayer->speedtheta;
-    float sV = g_CurrentPlayer->speedverta;
-    double eX = (double)errT - AIM_ABS_COAST_K * (double)sT * fabs((double)sT) / mult;
-    double eY = (double)errV - AIM_ABS_COAST_K * (double)sV * fabs((double)sV) / mult;
+    /* Screen angle swept this poll (deg). */
+    double tanV = tan(fovy * 0.5 * AIM_ABS_DEG2RAD);
+    double hfovDeg = 2.0 * atan((double)aspect * tanV) / AIM_ABS_DEG2RAD;
+    double dTheta = (double)dx * hfovDeg / vwpx;   /* +: cursor right -> turn RIGHT */
+    double dVerta = (double)dy * (double)fovy / vhpx;  /* +: cursor down  -> look DOWN  */
 
-    double uX = fabs(eX) / AIM_ABS_FULLERR_DEG;  if (uX > 1.0) uX = 1.0;
-    double uY = fabs(eY) / AIM_ABS_FULLERR_DEG;  if (uY > 1.0) uY = 1.0;
-    if (fabs(errT) < AIM_ABS_DEADBAND_DEG && fabs(eX) < AIM_ABS_DEADBAND_DEG) uX = 0.0;
-    if (fabs(errV) < AIM_ABS_DEADBAND_DEG && fabs(eY) < AIM_ABS_DEADBAND_DEG) uY = 0.0;
+    /* Stick level that makes the plant cover that angle this tick
+     * (bondview2.c: vv_theta += speedtheta*td*3.5 with td~1; the full-stick
+     * aim speed limit is 0.7*fovY/60 from sub_GAME_7F080228). Dithered
+     * quantization keeps sub-level (fine) movements smooth. */
+    f32 sMax = viGetFovY() / 60.0f * 0.7f;
+    if (sMax < 0.01f) sMax = 0.01f;
+    double uX = ((dTheta / 3.5) / (double)sMax) * 10.0;
+    double uY = ((dVerta / 3.5) / (double)sMax) * 10.0;
+    if (uX > 10.0) uX = 10.0; else if (uX < -10.0) uX = -10.0;
+    if (uY > 10.0) uY = 10.0; else if (uY < -10.0) uY = -10.0;
 
-    int magX = aimAbsQuantize(&s_absFracX, uX * 10.0);
-    int magY = aimAbsQuantize(&s_absFracY, uY * 10.0);
+    int magX = aimAbsQuantize(&s_absFracX, fabs(uX));
+    int magY = aimAbsQuantize(&s_absFracY, fabs(uY));
 
-    if (magX > 0) *outSx = (errT > 0.0f) ? 60 + magX : -(60 + magX);
-    if (magY > 0) *outSy = (errV < 0.0f) ? 60 + magY : -(60 + magY);
+    if (magX > 0) *outSx = (uX > 0.0) ? 60 + magX : -(60 + magX);
+    if (magY > 0) *outSy = (uY > 0.0) ? 60 + magY : -(60 + magY);
 
     if (configGetInputLog()) {
         sysLogPrintf(LOG_NOTE,
-            "GE_INPUTLOG absaim tgt=(%.2f,%.2f) cur=(%.2f,%.2f) err=(%.2f,%.2f) "
-            "spd=(%.3f,%.3f) stick=(%d,%d) m=(%d,%d) ndc=(%.2f,%.2f) fov=%.1f act=%d",
-            (double)s_absTgtTheta, (double)s_absTgtVerta,
-            (double)curT, (double)curV,
-            (double)errT, (double)errV,
-            (double)sT, (double)sV, *outSx, *outSy,
-            mx, my, ndcX, ndcY, (double)fovy, s_absAimActive);
+            "GE_INPUTLOG absaim d=(%d,%d) dAng=(%.2f,%.2f) cur=(%.2f,%.2f) "
+            "spd=(%.3f,%.3f) stick=(%d,%d) fov=%.1f",
+            dx, dy, dTheta, dVerta,
+            (double)g_CurrentPlayer->vv_theta, (double)g_CurrentPlayer->vv_verta,
+            (double)g_CurrentPlayer->speedtheta, (double)g_CurrentPlayer->speedverta,
+            *outSx, *outSy, (double)fovy);
     }
     return 1;
 }
