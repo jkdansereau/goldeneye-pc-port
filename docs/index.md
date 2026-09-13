@@ -106,10 +106,12 @@ without a ROM you already own.
     <div><small>Bunker 1</small></div>
   </div>
   <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-07.jpg" width="100%" alt="In-engine capture (v0.2.0-pre)">
+    <img src="img/shots/shot-07.jpg" width="100%" alt="In-engine — Silo (v0.2.0-pre)">
+    <div><small>Silo</small></div>
   </div>
   <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-09.jpg" width="100%" alt="In-engine capture (v0.2.0-pre)">
+    <img src="img/shots/shot-09.jpg" width="100%" alt="In-engine — Frigate (v0.2.0-pre)">
+    <div><small>Frigate</small></div>
   </div>
   <div style="width:32%;text-align:center;margin:4px">
     <img src="img/shots/shot-10.jpg" width="100%" alt="In-engine — Frigate (v0.2.0-pre)">
