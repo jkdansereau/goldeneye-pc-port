@@ -696,8 +696,13 @@ static void gfx_opengl_select_texture(int tile, GLuint texture_id, bool linear_f
 
 static void gfx_opengl_upload_texture(const uint8_t* rgba32_buf, uint32_t width, uint32_t height, bool gen_mipmaps) {
 #ifdef PORT
-    /* GE_TEXDUMP: PPM-dump every uploaded texture (first N) for B2/D161 triage. */
-    if (getenv("GE_TEXDUMP")) {
+    /* GE_TEXDUMP: PPM-dump every uploaded texture (first N) for B2/D161 triage.
+     * D250: this runs on every texture upload -- cache the getenv() like the
+     * gfx_pc.cpp import_texture() sites (uncached getenv() measured at ~50%
+     * of the hot render thread's CPU time via a live profile). */
+    static int ge_texdump_gl = -1;
+    if (ge_texdump_gl < 0) ge_texdump_gl = getenv("GE_TEXDUMP") != NULL;
+    if (ge_texdump_gl) {
         static int td = 0;
         static int td_fire = 0;
         /* D219: the 400-cap fills up during ordinary level load, long before
@@ -1086,7 +1091,9 @@ static void gfx_opengl_end_frame(void) {
  * the default framebuffer (the window back buffer; the scene renders there
  * directly at 1:1 window size) and write a P6 PPM. */
 extern "C" bool gfx_opengl_pcdump_enabled(void) {
-    return getenv("GE_PCDUMP") != NULL;
+    static int cached = -1;
+    if (cached < 0) cached = getenv("GE_PCDUMP") != NULL;
+    return cached != 0;
 }
 
 extern "C" bool gfx_opengl_dump_bound_fbo(uint32_t width, uint32_t height, const char* path) {

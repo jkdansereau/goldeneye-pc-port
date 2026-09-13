@@ -650,9 +650,13 @@ static const uint8_t* gfx_tex_normalize_source(const uint8_t* addr, uint32_t ext
     uint32_t* dst = (uint32_t*)buf.data();
     for (uint32_t i = 0; i < n / 4; i++)
         dst[i] = PD_BE32(src[i]);
-    if (getenv("GE_D71LOG"))
-        fprintf(stderr, "[D71] normalized C-array texture source %p (%u bytes)\n",
-                (const void*)addr, extent);
+    {
+        static int ge_d71log = -1;
+        if (ge_d71log < 0) ge_d71log = getenv("GE_D71LOG") != NULL;
+        if (ge_d71log)
+            fprintf(stderr, "[D71] normalized C-array texture source %p (%u bytes)\n",
+                    (const void*)addr, extent);
+    }
     return s_c_array_tex_norms.emplace(addr, std::move(buf)).first->second.data();
 }
 
@@ -1054,8 +1058,14 @@ static void import_texture(int i, int tile, bool importReplacement) {
      * RC2 (mip-chain contamination -> over-tall upload) can be told apart from a
      * decode/row-swap bug. tile_h = base-tile height from SETTILESIZE; if the
      * computed upload height is much larger, the excess rows are LOD mip data.
-     * docs/dev/TEXTURE-GLITCH-ANALYSIS.md sec 6b. */
-    if (getenv("GE_DTEX")) {
+     * docs/dev/TEXTURE-GLITCH-ANALYSIS.md sec 6b.
+     * D250: import_texture() runs on every texture bind -- an uncached
+     * getenv() here measured at ~50% of the hot render thread's total CPU
+     * time on a texture-heavy level (Dam), via a live WPR/xperf profile.
+     * Cache like every other env-gated probe in this codebase. */
+    static int ge_dtex = -1;
+    if (ge_dtex < 0) ge_dtex = getenv("GE_DTEX") != NULL;
+    if (ge_dtex) {
         static int dtexCount = 0;
         if (dtexCount < 64) {
             const uint32_t row = rdp.texture_tile[tile].line_size_bytes;
@@ -1078,7 +1088,9 @@ static void import_texture(int i, int tile, bool importReplacement) {
         }
     }
 
-    if (getenv("GE_TEXDUMP")) {
+    static int ge_texdump = -1;
+    if (ge_texdump < 0) ge_texdump = getenv("GE_TEXDUMP") != NULL;
+    if (ge_texdump) {
         static int tdc = 0;
         const uint16_t* pal = (const uint16_t*)rdp.palette;
         sysLogPrintf(LOG_NOTE,
@@ -1106,7 +1118,9 @@ static void import_texture(int i, int tile, bool importReplacement) {
          * against the TEXEL1_bytes=448 field already proven out via the
          * gfx_sp_tri1 D172/D219 probe. */
         const bool is_fire_bytes = (loaded_texture.size_bytes == 448);
-        if ((is_fire_bytes || tdc <= 400) && getenv("GE_TEXRAW")) {
+        static int ge_texraw = -1;
+        if (ge_texraw < 0) ge_texraw = getenv("GE_TEXRAW") != NULL;
+        if ((is_fire_bytes || tdc <= 400) && ge_texraw) {
             char nm[160];
             snprintf(nm, sizeof nm, "texdump/r%03d_f%u_s%u_%ux%u.bin", tdc - 1, fmt, siz, tw, th);
             FILE* bf = fopen(nm, "wb");
@@ -1140,7 +1154,9 @@ static void import_texture(int i, int tile, bool importReplacement) {
     if (fmt_eff == G_IM_FMT_RGBA && siz == G_IM_SIZ_16b &&
         loaded_texture.src_fmt == G_IM_FMT_CI) {
 #ifdef PORT
-        if (getenv("GE_D229")) {
+        static int ge_d229_a = -1;
+        if (ge_d229_a < 0) ge_d229_a = getenv("GE_D229") != NULL;
+        if (ge_d229_a) {
             static int n_ci8r = 0;
             if (n_ci8r++ < 8)
                 sysLogPrintf(LOG_NOTE, "D229: RGBA16 tile over CI8 source -> ci8 import (addr=%p size=%u palidx=%u)",
@@ -1816,7 +1832,9 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
              * texture identity so one Frigate capture pins whether TEXEL1
              * resolves to the same image/region as TEXEL0 or drifts into
              * other TMEM content (the green). */
-            if (getenv("GE_D229") && use_2cyc && comb->used_textures[0] && comb->used_textures[1]) {
+            static int ge_d229_b = -1;
+            if (ge_d229_b < 0) ge_d229_b = getenv("GE_D229") != NULL;
+            if (ge_d229_b && use_2cyc && comb->used_textures[0] && comb->used_textures[1]) {
                 static int d229x = 0;
                 static int d229_total = 0;
                 d229_total++;
@@ -1859,7 +1877,9 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
      * formats - tile 0 IA8 smoke, tile 1 RGBA16 fire @ tmem 0x188. Dump both
      * texunits' tile state whenever a 2-cycle tri actually consumes TEXEL1, so
      * one Silo capture pins whether TEXEL1 resolves to the right tmem/format. */
-    if (getenv("GE_D172") && use_2cyc && comb->used_textures[1] && !rdp.tex_lod) {
+    static int ge_d172_a = -1;
+    if (ge_d172_a < 0) ge_d172_a = getenv("GE_D172") != NULL;
+    if (ge_d172_a && use_2cyc && comb->used_textures[1] && !rdp.tex_lod) {
         const uint32_t fi = rdp.first_tile_index;
         /* the tile fast3d will actually SAMPLE for each texunit */
         const uint32_t s0 = fi + gfx_lod_tile_offset(0);
@@ -3046,7 +3066,9 @@ static void gfx_run_dl(Gfx* cmd) {
                  * (explosion.c g_ExplosionDisplayLists[]) set a 2-cycle
                  * combine but never set cycletype - this tells us what
                  * cycletype fast3d has when they replay. */
-                if (getenv("GE_D172")) {
+                static int ge_d172_b = -1;
+                if (ge_d172_b < 0) ge_d172_b = getenv("GE_D172") != NULL;
+                if (ge_d172_b) {
                     static uint64_t d172seen[64];
                     static int d172cnt = 0;
                     uint64_t key = ((uint64_t)(uint32_t)cmd->words.w0 << 32) | (uint32_t)cmd->words.w1;
