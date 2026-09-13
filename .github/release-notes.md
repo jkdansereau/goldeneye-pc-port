@@ -23,6 +23,9 @@
 - **QoL**: F10 in-game options overlay (fullscreen, resolution, frame cap,
   MSAA, texture filtering, FOV/draw distance, sensitivity), mute-on-focus-loss,
   F12 screenshot.
+- **Modern dual-stick controller layout** (the scheme used by the console
+  re-releases): left stick move/strafe, right stick look, right trigger fire,
+  left trigger aim, A/X use, B/Y crouch/cancel, **RB/LB cycle weapons**.
 - **Linux / Steam Deck**: the Linux bundle now ships its own SDL2 — it runs
   as-is on any distro, and sideloads onto a Steam Deck with nothing installed.
 

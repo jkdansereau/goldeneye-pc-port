@@ -274,6 +274,7 @@ static int numControllers = 1;
 static int connectedMask   = 0x1;   /* controller 0 always present */
 
 static SDL_GameController *pads[MAX_PADS];
+static int padShoulderPrev[MAX_PADS];   /* LB/RB edge state for weapon cycling */
 
 static int mouseEnabled   = 1;
 static int mouseGrabbed    = 1;     /* released while the window is unfocused */
@@ -1120,15 +1121,29 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > trigPt)
             button |= GE_CONT_R;
 
+        /* Modern dual-stick layout (Xbox re-release style; the Steam Deck
+         * target). A/X = action/use/reload (the game's context-sensitive A
+         * line), B/Y = crouch, and LB/RB rising edges cycle weapons.
+         * In-game cycling is an A edge (forward) or A+Z held on the same tick
+         * (backward -- bondview2.c weaponForwardOffset/weaponBackOffset, the
+         * same trick the mouse wheel uses above); emit for exactly one poll
+         * so holding RB cannot latch invButtons and block firing. */
         if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A) ||
             SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X))
             button |= GE_CONT_A;
         if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B) ||
-            SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y) ||
-            SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER))
+            SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y))
             button |= GE_CONT_B;
-        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER))
-            button |= GE_CONT_L;
+        int padMenuMode = (current_menu != GE_MENU_RUN_STAGE &&
+                           current_menu != GE_MENU_INVALID);
+        if (!padMenuMode) {
+            int lbNow = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+            int rbNow = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+            int *prev = &padShoulderPrev[idx];
+            if (rbNow && !(*prev & 1)) button |= GE_CONT_A;            /* next weapon */
+            if (lbNow && !(*prev & 2)) button |= GE_CONT_A | GE_CONT_G; /* prev weapon */
+            *prev = (rbNow ? 1 : 0) | (lbNow ? 2 : 0);
+        }
         if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_START))
             button |= GE_CONT_START;
         if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_UP))

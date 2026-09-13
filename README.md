@@ -267,14 +267,19 @@ Configuration is written to `ge007.ini` on first run.
 
 | Action              | Keyboard / mouse         | Controller    |
 |---------------------|--------------------------|---------------|
-| Move / strafe       | `W` `A` `S` `D` / arrows  | Left stick    |
+| Move / strafe       | `W` `A` `S` `D` / arrows  | Left stick (or D-pad) |
 | Aim / look          | Mouse                    | Right stick   |
 | Fire (Z)            | Left mouse / `LCtrl`     | Right trigger |
 | Aim mode (R)        | Right mouse / `LShift`   | Left trigger  |
-| Use / accept (A)    | `Space` / `E` / `X`            | A / X         |
-| Reload / cancel (B) | `R` / `F`                | B / Y / RB    |
-| L trigger           | `Q`                      | LB            |
+| Use / accept (A)    | `Space` / `E` / `X`      | A / X         |
+| Reload / cancel (B) | `R` / `F`                | B / Y         |
+| Next weapon         | Mouse wheel up           | RB            |
+| Previous weapon     | Mouse wheel down         | LB            |
 | Start               | `Enter` / `Tab`          | Start         |
+
+The controller layout follows the modern dual-stick scheme used by the
+console re-releases (left stick move, right stick look, triggers fire/aim,
+shoulders cycle weapons).
 
 Mouse sensitivity, Y-inversion and the aim/turn split are tunable in the
 `[Input]` section of `ge007.ini`.
