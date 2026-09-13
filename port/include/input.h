@@ -44,15 +44,12 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y);
  * disabled in config. */
 void inputSetMouseGrab(int on);
 
-/* WI-1 click-to-lock cursor capture (Input.MouseCaptureMode = 1). The host
- * event pump calls inputNotifyClick() when a mouse button goes down inside the
- * game window (arms + locks the cursor), and inputReleaseCapture() when ESC is
- * pressed (frees it; returns 1 if it consumed the key). inputMouseCaptureActive()
- * is true when capture mode is on and the cursor is currently free -- the pump
- * uses it to decide whether a click should be swallowed rather than passed on. */
+/* WI-1 click-to-lock cursor capture. The host event pump calls
+ * inputNotifyClick() when a mouse button goes down inside the game window
+ * (arms + locks the cursor), and inputReleaseCapture() when ESC is pressed
+ * (frees it; returns 1 if it consumed the key). */
 void inputNotifyClick(void);
 int  inputReleaseCapture(void);
-int  inputMouseCaptureActive(void);
 
 /* F10 options overlay: force the OS cursor free + visible while the overlay
  * owns the mouse. Safe to call every poll. */
