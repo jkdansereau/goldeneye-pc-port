@@ -33,6 +33,9 @@
   The most visible gap in this release.
 - **Music quality on some tracks** — a wrong-sounding bass instrument on a few
   elevator/level tracks (D230).
+- **Particle colours cycle through a rainbow palette** — bullet-impact sparks
+  and lingering smoke/explosion residue drift through the hues over time
+  instead of holding their intended grey/orange palette (D252).
 - Water on `IsWater` levels shows a moving seam between two patterns (D245);
   thin pixel strips at the left/right screen edges at non-integer window
   scales (D246); character face textures can wrap on Silo (D197).
