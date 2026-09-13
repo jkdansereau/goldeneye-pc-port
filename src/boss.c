@@ -2,6 +2,7 @@
 #include <PR/os.h>
 #ifdef PORT
 #include <stdlib.h>
+#include <stdio.h>
 #endif
 #include "bondview.h"
 #include <bondconstants.h>
@@ -581,7 +582,41 @@ void bossMainloop(void)
                                 }
                             }
 
+#ifdef PORT
+                            /* D250: isolate DL-building cost (culling,
+                             * animation, scene traversal) from gfx_run's
+                             * software-RSP interpretation cost, measured
+                             * separately by libultra.c's "frame rendered in
+                             * us" (D193 already showed that one stays well
+                             * under budget while real fps still sags -- this
+                             * finds out whether lvlRender is where the rest
+                             * of the missing time goes). Env-gated, no-op
+                             * unless GE_D250 is set. */
+                            {
+                                static int gd250 = -1;
+                                static OSTime d250Sum = 0, d250WallStart = 0;
+                                static int d250N = 0;
+                                OSTime d250T0 = 0;
+                                if (gd250 < 0) gd250 = getenv("GE_D250") != NULL;
+                                if (gd250) d250T0 = osGetTime();
+#endif
                             gdl = lvlRender(gdl);
+#ifdef PORT
+                                if (gd250) {
+                                    OSTime now = osGetTime();
+                                    d250Sum += now - d250T0;
+                                    d250N++;
+                                    if (!d250WallStart) d250WallStart = now;
+                                    if (now - d250WallStart >= 1000000) {
+                                        fprintf(stderr,
+                                            "[D250] lvlRender avg=%lluus n=%d\n",
+                                            (unsigned long long)(d250Sum / (d250N ? d250N : 1)),
+                                            d250N);
+                                        d250Sum = 0; d250N = 0; d250WallStart = now;
+                                    }
+                                }
+                            }
+#endif
 
                             // Lets Visualise the Coverage Value used for Scilohete Anti-Ailising (edges)
                             // (done on the VI), also produces a cool looking linemode - providing AA is working.

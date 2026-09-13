@@ -1051,6 +1051,25 @@ and turns every such overrun into a fatal `*** stack smashing detected ***`
   **pointer-width struct-layout shift** in a ROM-serialized struct (the D3x
   class) before anything subtler — check every cast-alias struct's member
   offsets at 32- vs 64-bit.
+- **`getenv()` is expensive on Windows (a locked, locale-aware linear scan
+  via msvcrt.dll) — never call it uncached inside a per-frame, per-draw-call,
+  or per-item hot path** (D250, M-120). Dozens of `GE_*` debug-probe checks
+  across the codebase already follow the safe pattern
+  (`static int x = -1; if (x < 0) x = getenv("GE_X") != NULL;`), but a
+  handful in `port/fast3d/gfx_pc.cpp`'s `import_texture()` (runs on every
+  texture bind) and per-triangle/per-`G_SETCOMBINE` combine-mode checks
+  didn't. A live WPR/xperf CPU trace (Microsoft public symbols resolved via
+  `-symbols`) on a texture-heavy level found `msvcrt.dll!getenv` alone
+  eating **50% of the hot render thread's total CPU time** — the game's own
+  code was only 5%. Fixing the caching took the same scene from a hard
+  ~45-50fps ceiling to a rock-solid 60fps, at every resolution tested, with
+  zero other changes. The lesson generalizes: **any new `GE_*` env-gated
+  probe added to a function that runs more than roughly once per frame must
+  cache its `getenv()` at that call site**, following the existing pattern —
+  don't assume "it's just a debug check" makes it free. `tools_pc/perf.ps1`
+  (sister script to `debug.ps1`) automates this exact trace-and-analyze
+  workflow for the next time a "runs slow but sim/GL-visible-cost checks out
+  fine" report shows up.
 - **Count a probe's events by its canonical one-per-call line, never by a bare
   field match** (D204, then D205/M-73 which re-made the identical mistake on the
   identical sound index). `GE_AUDIOTRACE` emits *two* lines per `sndPlaySfx`

@@ -721,22 +721,18 @@ Gfx *viSetupCurrentPlayerView(Gfx *gdl)
      * matrix) and the sky/full-screen layer. fovy is in degrees, so an
      * angle-proportional scale (portFovScale, default 1.0f) matches the
      * documented 60deg->75deg at 1.25. Composes with the per-frame aim-zoom
-     * rewrites of fovy for free. NOTE: currentPlayerSetCameraScale() keeps
-     * the nominal FOV for frustum-cull / screen<->world math, so at large
-     * scales edge geometry can cull a hair early — acceptable for a cosmetic
-     * widen. Default 1.0f => identical matrix, bit for bit. */
+     * rewrites of fovy for free. Default 1.0f => identical matrix, bit for
+     * bit. D222: the same widen (portScaleFovY, port/src/video.c) now also
+     * feeds currentPlayerSetPerspective at the viSet* call sites below, so
+     * frustum-cull planes and the fog/LOD distance scale stay calibrated to
+     * what's actually rendered instead of the narrower nominal FOV. */
     {
-        extern f32 portFovScale;
+        extern f32 portScaleFovY(f32 fovy, s32 isTitleScreen);
         extern s32 lvlGetCurrentStageToLoad(void);
-        f32 frFovY = g_ViBackData->fovy;
         /* Gameplay only: the front end (main menu / file / mission select /
          * briefing) also renders through this path with stage == LEVELID_TITLE
          * (lv.c lvlRender), and the menu 3D is authored at a fixed FOV. */
-        if (portFovScale > 0.4f && portFovScale < 2.01f && portFovScale != 1.0f
-            && lvlGetCurrentStageToLoad() != LEVELID_TITLE) {
-            frFovY *= portFovScale;
-            if (frFovY > 160.0f) { frFovY = 160.0f; }
-        }
+        f32 frFovY = portScaleFovY(g_ViBackData->fovy, lvlGetCurrentStageToLoad() == LEVELID_TITLE);
         guPerspectiveF(g_viProjectionMatrixF, &g_viPerspNorm, frFovY, g_ViBackData->aspect, g_ViBackData->znear, g_ViBackData->zfar, 1.0f);
     }
 #else
@@ -934,17 +930,44 @@ void viSetUseZBuf(s32 usezbuf)
   g_ViBackData->usezbuf = usezbuf;
 }
 
+#ifdef PORT
+/* D222: currentPlayerSetPerspective feeds c_perspfovy, which
+ * currentPlayerSetCameraScale() (game/bondview.c) uses to derive the
+ * frustum-cull plane normals (c_cameratopnorm/c_cameraleftnorm) and the
+ * fog/LOD distance scale (c_scalelod/c_lodscalez, consumed by
+ * chrobjFogVisRangeRelated() et al. in game/propobj.c). Every viSet* below
+ * was calling it with the nominal g_ViBackData->fovy even though the actual
+ * render projection (this file, viSetupCurrentPlayerView) had already been
+ * widened by Video.FovScale — so at high FovScale, on-screen geometry near
+ * the edges (and the fog-based distance-visibility fade) got culled/faded
+ * as if the view were still narrow. Identity at FovScale=100. */
+static f32 frCullFovY(void)
+{
+    extern f32 portScaleFovY(f32 fovy, s32 isTitleScreen);
+    extern s32 lvlGetCurrentStageToLoad(void);
+    return portScaleFovY(g_ViBackData->fovy, lvlGetCurrentStageToLoad() == LEVELID_TITLE);
+}
+#endif
+
 void viSetFovY(f32 fovy)
 {
     g_ViBackData->fovy = fovy;
+#ifdef PORT
+    currentPlayerSetPerspective(g_ViBackData->znear, frCullFovY(), g_ViBackData->aspect);
+#else
     currentPlayerSetPerspective(g_ViBackData->znear, g_ViBackData->fovy, g_ViBackData->aspect);
+#endif
     currentPlayerSetCameraScale();
 }
 
 void viSetAspect(f32 aspect)
 {
     g_ViBackData->aspect = aspect;
+#ifdef PORT
+    currentPlayerSetPerspective(g_ViBackData->znear, frCullFovY(), g_ViBackData->aspect);
+#else
     currentPlayerSetPerspective(g_ViBackData->znear, g_ViBackData->fovy, g_ViBackData->aspect);
+#endif
     currentPlayerSetCameraScale();
 }
 
@@ -957,7 +980,11 @@ void viSetFov(f32 fovx, f32 fovy)
 {
     g_ViBackData->fovy = fovy;
     g_ViBackData->aspect = (f32) (fovx / fovy);
+#ifdef PORT
+    currentPlayerSetPerspective(g_ViBackData->znear, frCullFovY(), g_ViBackData->aspect);
+#else
     currentPlayerSetPerspective(g_ViBackData->znear, g_ViBackData->fovy, g_ViBackData->aspect);
+#endif
     currentPlayerSetCameraScale();
 }
 
@@ -965,7 +992,11 @@ void viSetZRange(f32 near, f32 far)
 {
     g_ViBackData->znear = near;
     g_ViBackData->zfar = far;
+#ifdef PORT
+    currentPlayerSetPerspective(g_ViBackData->znear, frCullFovY(), g_ViBackData->aspect);
+#else
     currentPlayerSetPerspective(g_ViBackData->znear, g_ViBackData->fovy, g_ViBackData->aspect);
+#endif
     currentPlayerSetCameraScale();
 }
 

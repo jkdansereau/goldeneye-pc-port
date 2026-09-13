@@ -13500,6 +13500,23 @@ f32 chrobjFogVisRangeRelated(PropRecord *prop, f32 size)
     if ((nfd != NULL) && (nfd->MaxObfuscationRange < prop->zDepth))
     {
         temp_f12 = getPlayer_c_lodscalez();
+#ifdef PORT
+        /* D222/D218 follow-up: c_lodscalez now correctly grows with
+         * Video.FovScale (D222, so the screen-edge frustum-cull planes that
+         * share it stay consistent with what's actually rendered) -- but
+         * this fog-visibility-fade cutoff was an unintended second consumer
+         * of that same value, so guards/props started fading/disappearing
+         * SOONER at wide FOV than before D222, not farther. Counteract with
+         * the same portDrawDistanceMultiplier() this "how far can you see"
+         * question is already opted into via Video.DrawDistanceAutoFov
+         * (default on) -- divides back out D222's FOV-driven growth and, at
+         * an explicit Video.DrawDistance, extends visibility further still.
+         * Identity whenever the multiplier is 1.0 (both defaults). */
+        {
+            extern f32 portDrawDistanceMultiplier(void);
+            temp_f12 /= portDrawDistanceMultiplier();
+        }
+#endif
         temp_f12 = ((((prop->zDepth - nfd->MaxObfuscationRange) * 100.0f) / size) + nfd->MaxObfuscationRange) * temp_f12;
 
         if (nfd->MaxVisRange <= temp_f12)
@@ -13540,6 +13557,14 @@ bool sub_GAME_7F054C58(coord3d *coord, f32 arg1)
         if (sp20 > ptr->z)
         {
             f32 scalez = getPlayer_c_lodscalez();
+#ifdef PORT
+            /* D222/D218 follow-up -- see chrobjFogVisRangeRelated above,
+             * same fix for this sibling visibility test. */
+            {
+                extern f32 portDrawDistanceMultiplier(void);
+                scalez /= portDrawDistanceMultiplier();
+            }
+#endif
             sp20 = ((sp20 - ptr->z) * 100 / arg1 + ptr->z) * scalez;
 
             if (sp20 >= ptr->y)

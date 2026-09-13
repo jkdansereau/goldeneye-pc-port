@@ -142,6 +142,8 @@ ge007.crash.log
 run_out.log
 ppm/
 screenshots/
+# tools_pc/perf.ps1 output (raw ETW traces + CSV analysis, regenerable)
+perf_captures/
 # local Mupen64 Plus checkout (N64 reference footage); binaries, do not commit
 tools_pc/mupen64/
 # local N64 emulator checkout (D205 A/B reference)
