@@ -205,8 +205,8 @@ extern s32 lvlGetCurrentStageToLoad(void);
 #define AIM_STICK_GAME_MAX   70    /* bondview2.c: (stick-60)/10 saturates at stick=70 */
 #define AIM_FULL_SPEED_PX    20.0  /* px/poll (at MouseAimSpeed=100) that reaches AIM_STICK_GAME_MAX */
 
-/* D194 GEPD-style aim mapping. While RMB is held (cursor free), mouse
- * MOVEMENT rotates the view by the same screen angle the cursor swept: a
+/* D194 GEPD-style aim mapping. While RMB is held (cursor grabbed/hidden),
+ * mouse MOVEMENT rotates the view by the same screen angle swept: a
  * sweep across the rendered viewport width sweeps the full horizontal FOV,
  * height <-> fovy. The crosshair stays locked at screen centre and stop
  * moving holds the view where it is (the game's own speed decay coasts it to
@@ -214,7 +214,12 @@ extern s32 lvlGetCurrentStageToLoad(void);
  * zooms automatically become finer control. No target, no chase, no
  * snap-back: placement is cumulative and path-dependent, exactly like GEPD.
  */
-#define AIM_ABS_DEG2RAD       0.0174532925
+/* D194 GEPD-mirror aim constants (MouseInjectorPlugin/games/goldeneye.c): */
+#define AIM_ABS_DEAD_PX       2.0    /* per-poll px below this is jitter, not aim */
+#define GEPD_CROSSHAIR_LIMIT  5.159373283  /* crosshair pos units at the screen edge (GEPD 0x40A51996) */
+#define GEPD_EDGE_THRESHOLD   0.72f        /* |pos|/limit beyond which the view scrolls */
+#define GEPD_SCROLL_SPEED     475.0        /* GEPD: (ratio-threshold)*475*timestep per tick */
+#define GEPD_BASE_FOV         90.0f        /* unzoomed FOV (our native); GEPD uses its 60 override */
 
 /* D194(b) -- mouse sensitivity coupled to frame/poll rate.
  *
@@ -284,6 +289,7 @@ static int mouseCaptureMode = 1;   /* WI-1 default: Quake-style click-to-lock + 
 static int captureArmed     = 0;   /* user has clicked to lock (capture mode) */
 static int windowFocused    = 1;
 static int mouseAimSpeed  = 16;     /* aim-mode sensitivity, percent (B3: 50 -> 25 M-29 -> 16; still overshot at 25) */
+static int gepdSens       = 20;     /* D194 Input.GepdSens: GEPD SENSITIVITY setting, range 1..80 */
 static int aimBand        = 20;     /* aim mode: usable stick range above the 60 gate */
 static int mouseTurnSpeed = 100;    /* hipfire yaw sensitivity, percent */
 static int menuPointerSpeed = 100;  /* front-end cursor speed, percent */
@@ -309,25 +315,37 @@ static int aimAbsolute      = 1;    /* D194: 1 = GEPD-style aim while RMB is hel
                                       * legacy velocity stick from mouse delta. */
 
 /* D194 GEPD-aim state. Touched ONLY in inputComputePad (game thread), the
- * same confinement as every other static here. The per-poll cursor delta
+ * same confinement as every other static here. The per-poll grabbed delta
  * drives the view, so there is no free-running angle accumulator for
  * multi-tick catch-up (D193) to double-consume; the frac carry only dithers
- * this poll's stick quantization. (inputUpdate() does not accumulate
- * mouseDX/DY while the cursor is free, so the position must be tracked here.) */
-static int    s_absAimActive = 0;
-static double s_absFracX = 0.0, s_absFracY = 0.0;
-static int    s_absLastMx = 0, s_absLastMy = 0;   /* last free-cursor position read */
-/* Previous poll's suspend state: the rising edge is when the cursor pops out
- * of relative mode, and SDL reappears it at its stale (clipped/desktop)
- * position -- we must warp it to centre before the first anchor reads it. */
-static int    s_absSuspendPrev = 0;
-/* D194: nonzero while an aim hold has temporarily released the grab so the
- * free cursor can be read as an absolute position (set in the idx==0 block of
- * inputComputePad); reconcileGrab(), applyCursorVisibility() and the mouse-
- * button mask honour it. */
+ * this poll's stick quantization. */
+/* D194 GEPD-mirror aim state: the crosshair position accumulator in game
+ * units (±GEPD_CROSSHAIR_LIMIT at the screen edge). Written straight into
+ * g_CurrentPlayer->crosshair_x/y_pos + gun_azimuth_angle/turning each tick;
+ * bondview2's damped crosshair update keeps running and is simply
+ * overwritten each tick (GEPD model, D194). */
+static double s_gepdCrossX = 0.0, s_gepdCrossY = 0.0;
+static int    s_gepdHeldPrev = 0;   /* aim held last tick -> adopt on entry */
+static int aimGepdCompute(double dxPx, double dyLook);
+/* D194: bondview2's "look-ahead" pitch centreing (docentreupdown) arms during
+ * hip-fire walking whenever the pitch strays from the horizon target, and --
+ * once armed -- keeps pulling vv_verta back to it even in aim mode, EXCEPT
+ * while a manual pitch stick (|stick_y|>60) is present. That reads as "the
+ * gun always tries to return to centre" the moment the mouse stops. Port-
+ * side fix: on entering aim with the spring armed, emit a minimal 2-tick
+ * pitch nudge in the direction of current motion so the game's own rule
+ * (manual input clears docentreupdown) disarms it; aiming is then free and
+ * holds when the mouse stops. No game logic touched -- this is just what
+ * stick we choose to present. */
+static int s_aimHeldPrev = 0;
+static int s_centreClearTicks = 0;
+/* D194: always 0 since the free-cursor experiment was reverted (aim uses
+ * grabbed relative deltas). Kept because reconcileGrab(),
+ * applyCursorVisibility() and the mouse-button mask still branch on it --
+ * with it pinned to 0 they take exactly the pre-D194 paths. */
 static int    s_absAimSuspend = 0;
 
-static int aimAbsCompute(int *outSx, int *outSy);   /* D194, defined below */
+static int aimAbsCompute(double dxPx, double dyPx, int *outSx, int *outSy);  /* D194 */
 static int naturalPitchMode = 1;    /* D194/D238: 1 = force GE's own 1.2/SOLITARE
                                       * control style for continuous analog pitch;
                                       * 0 = legacy 1.1/HONEY + D166 digital pulse. */
@@ -754,34 +772,16 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         int menuMode = (current_menu != GE_MENU_RUN_STAGE &&
                         current_menu != GE_MENU_INVALID);
 
-        /* D194 absolute aim (GEPD-style): while an aim button is physically
-         * held, temporarily release the grab so the free OS cursor can be read
-         * as an absolute position; reconcileGrab() honours s_absAimSuspend and
-         * restores the grab when the button comes up. rmbRaw is pre-mask: once
-         * the grab releases, the button mask below zeroes mb, but the physical
-         * state must keep the hold (and the game's aim mode) alive. */
-        int rmbRaw = (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
-        /* Capture mode only: legacy (MouseCaptureMode=0) keeps its exact
-         * focus-grabbed relative behaviour. */
-        s_absAimSuspend = mouseEnabled && mouseCaptureMode && !menuMode && windowFocused &&
-                          (rmbRaw || actHeld(ks, IA_AIM));
-        int absRisingEdge = s_absAimSuspend && !s_absSuspendPrev;
-        s_absSuspendPrev = s_absAimSuspend;
+        /* D194: aim mode drives the view from GRABBED relative deltas (see
+         * aimAbsCompute) -- the cursor stays hidden and clipped to the window
+         * for the whole hold. The earlier free-cursor experiment (suspend the
+         * grab, read absolute position) is reverted: the visible cursor could
+         * leave the window and OS micro-jitter read as view jitter.
+         * s_absAimSuspend therefore stays 0; the readers that honour it
+         * (reconcileGrab/applyCursorVisibility/button mask) behave exactly as
+         * pre-D194. */
+        s_absAimSuspend = 0;
         reconcileGrab(menuMode);
-        if (absRisingEdge) {
-            /* Rising edge, AFTER the grab has actually released: while
-             * relative mode is on the cursor is clipped/hidden at a stale
-             * position and warping it there is a no-op. Now that it is free,
-             * centre it -- otherwise the first anchor reads the stale corner
-             * position and hard-pulls the view to the screen edge. */
-            SDL_Window *w = SDL_GetMouseFocus();
-            if (w) {
-                int ww = 0, wh = 0;
-                SDL_GetWindowSize(w, &ww, &wh);
-                if (ww > 1 && wh > 1)
-                    SDL_WarpMouseInWindow(w, ww / 2, wh / 2);
-            }
-        }
         /* D196: the F10 options overlay forces the OS cursor visible via
          * inputSuspendForOverlay() but nothing re-hides it on close unless
          * reconcileGrab() happens to re-grab (only true if you had already
@@ -822,13 +822,27 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
 
         if ((mb & SDL_BUTTON(SDL_BUTTON_LEFT)) || actHeld(ks, IA_FIRE))
             button |= GE_CONT_G;
-        /* While s_absAimSuspend has the cursor out (capture mode), mb is
-         * masked above, so fall back to the physical rmbRaw to keep the hold,
-         * and with it the game's aim mode, alive for the whole press. */
-        int aimHeld = (s_absAimSuspend ? rmbRaw
-                                       : (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0) ||
+        int aimHeld = (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0 ||
                       actHeld(ks, IA_AIM);
-        if (!aimHeld) s_absAimActive = 0;   /* D194: absolute target dies with the hold */
+        int aimRisingEdgeAim = aimHeld && !s_aimHeldPrev;
+        if (aimRisingEdgeAim && g_CurrentPlayer && g_CurrentPlayer->docentreupdown)
+            s_centreClearTicks = 2;   /* see D194 centre-spring note above */
+        if (!aimHeld) {
+            s_centreClearTicks = 0;
+            /* GEPD adopts the game's current crosshair pos every non-aim
+             * frame so re-entry starts where the game left it. */
+            s_gepdHeldPrev = 0;
+            if (g_CurrentPlayer) {
+                s_gepdCrossX = (double) g_CurrentPlayer->crosshair_x_pos;
+                s_gepdCrossY = (double) g_CurrentPlayer->crosshair_y_pos;
+            }
+        }
+        s_aimHeldPrev = aimHeld;
+        if (aimRisingEdgeAim && g_CurrentPlayer && g_CurrentPlayer->docentreupdown
+            && configGetInputLog()) {
+            sysLogPrintf(LOG_NOTE,
+                "GE_INPUTLOG absaim centre-spring armed at aim entry; nudging to clear");
+        }
         if (aimHeld)
             button |= GE_CONT_R;
         if (actHeld(ks, IA_ACTION))
@@ -1024,18 +1038,11 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                         haveAbs, (double)cursor_h_pos, (double)cursor_v_pos, sx, sy);
                 }
             } else if (aimHeld) {
-                /* D194 absolute aim: when a free cursor is available the stick
-                 * is driven by a closed position loop on the live camera (see
-                 * aimAbsCompute) instead of this poll's mouse velocity -- the
-                 * crosshair chases the point under the cursor and HOLDS it.
-                 * Otherwise fall through to the legacy velocity stick below. */
-                int absSx = 0, absSy = 0;
-                if (aimAbsCompute(&absSx, &absSy)) {
-                    /* Absolute aim owns the look axes this poll; keyboard turn
-                     * (sx set above) is overridden only when we demand motion. */
-                    if (absSx != 0) sx = absSx;
-                    if (absSy != 0) sy = absSy;
-                } else {
+                /* D194 GEPD-mirror aim: direct crosshair/camera writes, no
+                 * look stick (see aimGepdCompute). Keyboard turn (sx/sy set
+                 * above) still works. Otherwise fall through to the legacy
+                 * velocity stick below. */
+                if (!aimGepdCompute(edx * lookDtScale, dyLook * lookDtScale)) {
                 double aimEdx = edx * lookDtScale, aimDyLook = dyLook * lookDtScale;
                 double aimSens = (mouseAimSpeed / 100.0) * (mouseSensitivity / 100.0);
                 double gamma = aimCurveGamma / 100.0;
@@ -1056,6 +1063,16 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                     sy += (aimDyLook > 0) ? m : -m;   /* +stick_y = look down */
                 }
                 } /* D194: end legacy velocity-aim fallback */
+
+                /* D194 centre-spring clear: a minimal pitch stick for a couple
+                 * of ticks -- enough for bondview2's manual-input rule to clear
+                 * docentreupdown, small enough (~0.1-0.3 deg) not to read as a
+                 * jerk. Only when we are not already pitching this poll. */
+                if (s_centreClearTicks > 0 && g_CurrentPlayer &&
+                    sy >= -60 && sy <= 60) {
+                    sy = (g_CurrentPlayer->speedverta >= 0.0f) ? -61 : 61;
+                    s_centreClearTicks--;
+                }
             } else {
                 double hipEdx = edx * lookDtScale, hipDyLook = dyLook * lookDtScale;
                 double hipSens = (mouseTurnSpeed / 100.0) * (mouseSensitivity / 100.0);
@@ -1333,116 +1350,93 @@ int inputGetNumControllers(void)
  * fall back to the legacy velocity stick (grabbed mouse, menus, gamepad,
  * degenerate geometry).
  */
-/* Quantize [0,10] stick-units to an int with first-order dithering so the
- * game's ten discrete aim speeds time-average into a finer low-speed range
- * (precision work: shoot-the-lock / laser-cut tasks). */
-static int aimAbsQuantize(double *frac, double units)
+/* D194 GEPD-mirror aim -- direct crosshair/camera writes.
+ *
+ * Mirrors MouseInjectorPlugin (games/goldeneye.c) in model:
+ *   - mouse motion moves a crosshair POSITION accumulator (not the view),
+ *     clamped to ±GEPD_CROSSHAIR_LIMIT (the screen edge);
+ *   - the accumulator is written straight into crosshair_x/y_pos and the
+ *     gun/arm pose (gun_azimuth_angle/turning) via GEPD's formulas;
+ *   - the view only scrolls when the crosshair passes 72% toward the edge:
+ *     cam += (ratio-0.72)*475*timestep*(fov/basefov);
+ *   - no look stick is emitted while active. bondview2's damped crosshair
+ *     auto-centre (caclulate_gun_crosshair_position_rotation) keeps RUNNING
+ *     -- exactly like GEPD, which patches nothing there: the per-frame
+ *     overwrite simply wins over the damping, and the game derives
+ *     crosshair_angle (HUD crosshair + aim ray) and field_FFC (arm/gun
+ *     screen offset in gunUpdateAndFire) from our written values. On aim
+ *     release we stop writing and the game's damping eases everything back
+ *     to centre itself.
+ *
+ * Sensitivity: Input.GepdSens (GEPD SENSITIVITY setting; default 20 ~= 1:1
+ * window-px per crosshair-screen-px at full zoom).
+ *
+ * Returns 1 if it handled this poll (callers must NOT emit a look stick);
+ * 0 means fall back to the legacy velocity stick.
+ */
+static int aimGepdCompute(double dxPx, double dyLook)
 {
-    int m = (int)units;              /* floor for units >= 0 */
-    *frac += units - (double)m;
-    if (*frac >= 1.0) { m++; *frac -= 1.0; }
-    if (m > 10) m = 10;
-    return m;
-}
+    struct player *p = g_CurrentPlayer;
 
-static int aimAbsCompute(int *outSx, int *outSy)
-{
-    *outSx = 0;
-    *outSy = 0;
-
-    /* Absolute aim needs a free OS cursor to read an absolute position from. */
-    if (!aimAbsolute || !mouseCaptureMode || mouseGrabbed || g_CurrentPlayer == NULL) {
-        s_absAimActive = 0;
+    /* Needs the grabbed-cursor relative deltas (capture mode, locked in a
+     * stage) and a live player. dxPx/dyLook are this poll's dt-scaled px. */
+    if (!aimAbsolute || !mouseCaptureMode || !mouseGrabbed || p == NULL)
         return 0;
+
+    /* On entry adopt the game's current position (GEPD adopts every
+     * non-aim frame; input.c does that in the !aimHeld branch). */
+    if (!s_gepdHeldPrev) {
+        s_gepdCrossX = (double) p->crosshair_x_pos;
+        s_gepdCrossY = (double) p->crosshair_y_pos;
     }
+    s_gepdHeldPrev = 1;
 
-    SDL_Window *w = SDL_GetMouseFocus();
-    int mx = 0, my = 0, ww = 0, wh = 0;
-    if (!w)
-        return 0;
-    SDL_GetWindowSize(w, &ww, &wh);   /* void in SDL2; sanity-check the values */
-    if (ww <= 1 || wh <= 1)
-        return 0;
-    SDL_GetMouseState(&mx, &my);
+    /* Crosshair position: GEPD crosshairpos += delta/10 * (SENS/292). */
+    double sens = (double) gepdSens / 2920.0;
+    s_gepdCrossX += dxPx * sens;
+    s_gepdCrossY += dyLook * sens;      /* +dyLook = look down = crosshair down */
+    if (s_gepdCrossX >  GEPD_CROSSHAIR_LIMIT) s_gepdCrossX =  GEPD_CROSSHAIR_LIMIT;
+    if (s_gepdCrossX < -GEPD_CROSSHAIR_LIMIT) s_gepdCrossX = -GEPD_CROSSHAIR_LIMIT;
+    if (s_gepdCrossY >  GEPD_CROSSHAIR_LIMIT) s_gepdCrossY =  GEPD_CROSSHAIR_LIMIT;
+    if (s_gepdCrossY < -GEPD_CROSSHAIR_LIMIT) s_gepdCrossY = -GEPD_CROSSHAIR_LIMIT;
 
-    s16 vw = viGetViewWidth(), vh = viGetViewHeight();
-    s16 bufW = getWidth320or440(), bufH = getHeight330or240();
-    if (vw <= 1 || vh <= 1 || bufW <= 1 || bufH <= 1)
-        return 0;
+    f32 fov = viGetFovY();
+    f32 fovratio = (fov > 0.0f) ? fov / GEPD_BASE_FOV : 1.0f;
 
-    /* The effective FOV the render actually uses (fr.c viSetupCurrentPlayerView),
-     * so scope zooms and Video.FovScale compose for free. */
-    f32 fovy = portScaleFovY(viGetFovY(), lvlGetCurrentStageToLoad() == LEVELID_TITLE);
-    f32 aspect = g_CurrentPlayer->aspect;
-    if (fovy < 5.0f || fovy > 170.0f || aspect < 0.1f)
-        return 0;
+    /* Crosshair + gun/arm pose (GEPD formulas, RATIOFACTOR=1 for our 4:3
+     * viewport; failsafe weapon offsets 0.15/0 as in goldeneye.c). */
+    p->crosshair_x_pos = (f32) s_gepdCrossX;
+    p->crosshair_y_pos = (f32) s_gepdCrossY;
+    p->gun_azimuth_angle   = (f32) (s_gepdCrossX * (1.11f + 0.15f * 1.5f) + fovratio - 1.0f);
+    p->gun_azimuth_turning = (f32) (s_gepdCrossY * 1.11f + fovratio - 1.0f);
 
-    /* Rendered viewport in window pixels (the letterbox bars are not part of
-     * the image): px swept across it <-> full screen angle. */
-    double vwpx = (double)vw / (double)bufW * (double)ww;
-    double vhpx = (double)vh / (double)bufH * (double)wh;
-    if (vwpx <= 1.0 || vhpx <= 1.0)
-        return 0;
+    /* Edge scroll: only past 72% of the way to the edge, proportional to
+     * overshoot; scaled by zoom like GEPD's (fov/basefov). */
+    double rX = s_gepdCrossX / GEPD_CROSSHAIR_LIMIT;
+    double rY = s_gepdCrossY / GEPD_CROSSHAIR_LIMIT;
+    double aimx = 0.0, aimy = 0.0;
+    if (rX >  GEPD_EDGE_THRESHOLD) aimx = (rX - GEPD_EDGE_THRESHOLD) * GEPD_SCROLL_SPEED / 60.0;
+    else if (rX < -GEPD_EDGE_THRESHOLD) aimx = (rX + GEPD_EDGE_THRESHOLD) * GEPD_SCROLL_SPEED / 60.0;
+    if (rY >  GEPD_EDGE_THRESHOLD) aimy = (rY - GEPD_EDGE_THRESHOLD) * GEPD_SCROLL_SPEED / 60.0;
+    else if (rY < -GEPD_EDGE_THRESHOLD) aimy = (rY + GEPD_EDGE_THRESHOLD) * GEPD_SCROLL_SPEED / 60.0;
 
-    /* GEPD model: crosshair locked at centre; mouse MOVEMENT rotates the view
-     * by the screen angle the cursor swept. Angle conventions (verified
-     * against bondview2.c natural-turn + aim paths): a RIGHT turn INCREASES
-     * vv_theta (stick_x>60 -> UpdateSpeedTheta(-x) -> positive speedtheta);
-     * looking DOWN DECREASES vv_verta (stick_y>60 -> negative speedverta). */
-    if (!s_absAimActive) {
-        /* Fresh hold: baseline at the (just-warped-to-centre) cursor so the
-         * warp itself emits no rotation. */
-        s_absAimActive = 1;
-        s_absLastMx = mx;
-        s_absLastMy = my;
-        if (configGetInputLog()) {
-            sysLogPrintf(LOG_NOTE,
-                "GE_INPUTLOG absaim SESSION win=(%d,%d) cursor=(%d,%d) viewport=(%.0fx%.0fpx) "
-                "fov=%.2f aspect=%.3f cur=(%.2f,%.2f)",
-                ww, wh, mx, my, vwpx, vhpx,
-                (double)fovy, (double)aspect,
-                (double)g_CurrentPlayer->vv_theta, (double)g_CurrentPlayer->vv_verta);
-        }
-        return 1;
+    f32 scale = (fov > 0.0f) ? fov / GEPD_BASE_FOV : 1.0f;
+    if (aimx != 0.0) {
+        p->vv_theta += (f32) aimx * scale;
+        if (p->vv_theta < 0.0f)      p->vv_theta += 360.0f;
+        if (p->vv_theta >= 360.0f)   p->vv_theta -= 360.0f;
     }
-
-    int dx = mx - s_absLastMx;
-    int dy = my - s_absLastMy;
-    s_absLastMx = mx;
-    s_absLastMy = my;
-    if (mouseInvertY) dy = -dy;
-
-    /* Screen angle swept this poll (deg). */
-    double tanV = tan(fovy * 0.5 * AIM_ABS_DEG2RAD);
-    double hfovDeg = 2.0 * atan((double)aspect * tanV) / AIM_ABS_DEG2RAD;
-    double dTheta = (double)dx * hfovDeg / vwpx;   /* +: cursor right -> turn RIGHT */
-    double dVerta = (double)dy * (double)fovy / vhpx;  /* +: cursor down  -> look DOWN  */
-
-    /* Stick level that makes the plant cover that angle this tick
-     * (bondview2.c: vv_theta += speedtheta*td*3.5 with td~1; the full-stick
-     * aim speed limit is 0.7*fovY/60 from sub_GAME_7F080228). Dithered
-     * quantization keeps sub-level (fine) movements smooth. */
-    f32 sMax = viGetFovY() / 60.0f * 0.7f;
-    if (sMax < 0.01f) sMax = 0.01f;
-    double uX = ((dTheta / 3.5) / (double)sMax) * 10.0;
-    double uY = ((dVerta / 3.5) / (double)sMax) * 10.0;
-    if (uX > 10.0) uX = 10.0; else if (uX < -10.0) uX = -10.0;
-    if (uY > 10.0) uY = 10.0; else if (uY < -10.0) uY = -10.0;
-
-    int magX = aimAbsQuantize(&s_absFracX, fabs(uX));
-    int magY = aimAbsQuantize(&s_absFracY, fabs(uY));
-
-    if (magX > 0) *outSx = (uX > 0.0) ? 60 + magX : -(60 + magX);
-    if (magY > 0) *outSy = (uY > 0.0) ? 60 + magY : -(60 + magY);
+    if (aimy != 0.0) {
+        p->vv_verta -= (f32) aimy * scale;   /* crosshair low -> look down */
+        if (p->vv_verta >  90.0f) p->vv_verta =  90.0f;
+        if (p->vv_verta < -90.0f) p->vv_verta = -90.0f;
+    }
 
     if (configGetInputLog()) {
         sysLogPrintf(LOG_NOTE,
-            "GE_INPUTLOG absaim d=(%d,%d) dAng=(%.2f,%.2f) cur=(%.2f,%.2f) "
-            "spd=(%.3f,%.3f) stick=(%d,%d) fov=%.1f",
-            dx, dy, dTheta, dVerta,
-            (double)g_CurrentPlayer->vv_theta, (double)g_CurrentPlayer->vv_verta,
-            (double)g_CurrentPlayer->speedtheta, (double)g_CurrentPlayer->speedverta,
-            *outSx, *outSy, (double)fovy);
+            "GE_INPUTLOG gepdaim d=(%.1f,%.1f) cross=(%.2f,%.2f) cam=(%.1f,%.1f)",
+            dxPx, dyLook, s_gepdCrossX, s_gepdCrossY,
+            (double)p->vv_theta, (double)p->vv_verta);
     }
     return 1;
 }
@@ -1453,6 +1447,7 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.MouseCaptureMode", &mouseCaptureMode, 0, 1);
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
     configRegisterInt("Input.AimAbsolute", &aimAbsolute, 0, 1);  /* D194 */
+    configRegisterInt("Input.GepdSens", &gepdSens, 1, 80);       /* D194 */
     configRegisterInt("Input.AimBand", &aimBand, 5, 40);
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
     configRegisterInt("Input.MenuPointerSpeed", &menuPointerSpeed, 10, 500);

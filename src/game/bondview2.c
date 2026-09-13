@@ -6136,6 +6136,10 @@ void bondviewProcessInput(s8 stick_x, s8 stick_y, u16 buttons, u16 oldbuttons)
         g_CurrentPlayer->controldef = CONTROLLER_CONFIG_KISSY;
     }
 
+    /* D194 GEPD-mirror aim: the port overwrites crosshair/gun/camera state
+     * every tick while aiming (port/src/input.c), which nullifies the damped
+     * auto-centre below -- exactly how GEPD's plugin coexists with this code
+     * (it patches nothing here; its per-frame writes simply win). */
     if (g_CurrentPlayer->controldef == CONTROLLER_CONFIG_HONEY)
     {
         gunSetAimType(0);
