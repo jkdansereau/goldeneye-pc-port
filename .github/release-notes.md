@@ -44,12 +44,13 @@
   instead of holding their intended grey/orange palette (D252).
 - Water on `IsWater` levels shows a moving seam between two patterns (D245);
   thin pixel strips at the left/right screen edges at non-integer window
-  scales (D246); character face textures can wrap on Silo (D197).
-- Some front-end 3D models are mispositioned or absent — the spinning
-  Nintendo logo and the MISSION COMPLETE / mode-select models (D75).
-- The F10 overlay occasionally shows a ghost repeat of the top row at the
-  panel bottom in true 4K fullscreen with MSAA on (intermittent, display-
-  specific; windowed is unaffected).
+  scales (D246).
+- The front-end **Nintendo logo renders as two white blobs**, and the
+  Rareware logo is close but its texture filtering looks off (D75).
+- The F10 overlay's **bottom row duplicates whatever item is currently
+  selected** (e.g. the MSAA value appears both on its own row and again at
+  the panel bottom); earlier builds showed it as an intermittent 4K-
+  fullscreen ghost of the top row.
 - **Not yet verified on real Steam Deck hardware** — the bundle is built for
   it and its prime crash suspect from v0.1.0 was fixed, but please report any
   Deck-specific faults (a `ge007.crash.log` next to the exe helps).
