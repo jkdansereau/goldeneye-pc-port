@@ -925,8 +925,11 @@ Gfx *skyRender(Gfx *gdl)
 
 #ifdef PORT
             /* D227 (M-95): one shared wScale for every triangle drawn from
-             * this sp274[] fan -- see skyPortBeginFan() above. */
-            skyPortBeginFan(sp274, s1, FALSE); /* water: see skyPortBeginFan */
+             * this sp274[] fan -- see skyPortBeginFan() above. D245: allow
+             * the tc-shift safety valve on the water quad too -- see the
+             * comment above skyPortBeginFan() for why this doesn't flatten
+             * the cross-fade. */
+            skyPortBeginFan(sp274, s1, TRUE); /* water: see skyPortBeginFan */
 #endif
             if (s1 == 4)
             {
@@ -1730,22 +1733,30 @@ static s32 skyPortPickShift(f32 span)
 }
 
 /*
- * `allowShift` gates the safety valve, and the IsWater quad passes FALSE.
+ * `allowShift` gates the safety valve. The IsWater quad used to pass FALSE
+ * (see D245) on the theory that a matched shift on both texunits would
+ * flatten the cross-fade; that theory was wrong and D245 corrects it here.
  *
  * That quad is a two-texunit draw: sub_GAME_7F09343C binds tile 0 and tile 1
  * to the same TMEM and cross-fades TEXEL0/TEXEL1 with an animated
- * PRIM_LOD_FRAC (the water shimmer). Both texunits read the same vertex tc, so
- * a tc rescale has to be matched by a shift on BOTH tiles or the two layers
- * desynchronise -- and shifting both makes them sample identically, which
- * flattens the cross-fade the effect is built on. Either way the shift is
- * wrong for this draw, so the water quad keeps the plain 1:1 tc and simply
- * tolerates the overflow on its horizon vertex, exactly as it did before D227.
+ * PRIM_LOD_FRAC (the water shimmer). Both texunits read the SAME vertex tc;
+ * what makes tile 1 sample a different part of the texture is its own
+ * SetTileSize uls/ult offset (90,150 in 1/4-texel units -- see
+ * sub_GAME_7F09343C), applied by the RDP AFTER the tile's shift field
+ * multiplies the (possibly pre-divided) coordinate back up. skyPortEmitTileShift
+ * replays BOTH tiles' captured SETTILE commands with the identical k, so both
+ * texunits' decoded S/T are rescaled by the same 2^k before their own
+ * (unshifted, tile-native) uls/ult offset is applied -- the offset between
+ * tile 0 and tile 1's sample points is preserved, not flattened. Confirmed by
+ * a diagnostic build with allowShift forced TRUE on the water path: the
+ * cross-fade shimmer still animates, no flattening. D245 (view-tracking
+ * seam) was this quad's horizon vertex genuinely overflowing an s16 tc with
+ * no shift applied -- same class of bug as D227 before M-100b's fix, just
+ * never given the safety valve.
  *
- * The water on IsWater levels is separately and visibly broken (D229, green /
- * pulsating) and that is NOT caused by any of this -- it reproduces
- * identically on main with none of the D227 work present. Keeping this path
- * byte-identical to its old behaviour is deliberate: it stops D227 from
- * entangling with a defect it did not cause and cannot fix.
+ * The water on IsWater levels was separately and visibly broken (D229, green
+ * / pulsating, now FIXED) and that was NOT caused by any of this -- it
+ * reproduced identically on main with none of the D227 work present.
  */
 static void skyPortBeginFan(SkyRelated38 *v, s32 n, bool allowShift)
 {
