@@ -20,7 +20,7 @@ D189,FIXED,Linux -fstack-protector aborts on the decomp's latent stack-buffer ov
 D190,?,"Linux -level_45 SIGSEGV at load in add_ptr_to_objective (objective.c:64) (M-48, open).","CLOSED — not a port bug; level 45 is MP-only and has no solo setup file in the ROM (root-caused M-105, reproduced on Windows)."
 D191,FIXED,Windows -O2 release-bundle crash:,FIXED + PLAYTEST-VERIFIED (M-79).
 D193,FIXED,NPC AI locomotion is too slow —,FIXED + user-playtest-verified (M-81) —
-D194,OPEN,Mouse input needs another tuning pass —,"OPEN — root cause and fix direction known, not implemented."
+D194,PARTIAL,Mouse input needs another tuning pass —,"PARTIAL, rest implemented pending playtest."
 D195,FIXED,"Transparency / alpha surfaces broken on Control (M-49, user playtest) —","FIXED (port/fast3d/gfx_pc.cpp, gfx_sp_vertex) —"
 D197,OPEN,"Character face/head textures wrap around the head, seen on Silo (M-49, user playtest).","OPEN — not investigated (M-49), needs a capture"
 D198,FIXED,alAdpcmPull/_decodeChunk used K0_TO_PHYS (an unconditional & 0x1FFFFFFF mask) on 64-bit heap pointers (src/libultra/audio/load.c).,FIXED (src/libultra/audio/load.c) —
@@ -130,3 +130,5 @@ D245,OPEN,IsWater water: two competing patterns with a visible seam that moves a
 D246,OPEN,"Tiny pixel strips at the left and right edges of the screen, ""like overscan"" —","OPEN — one candidate ruled out (M-116 follow-up), root cause not found."
 D247,RESOLVED,Black bars top and bottom of screen —,"NOT A BUG — confirmed faithful, unmodified N64 decomp behaviour, no code change made."
 D248,FIXED,"Port runs a stable 30 FPS instead of 60 FPS game-wide (M-117, user asked to verify FPS after the D209 timing-keystone fixes).","FIXED, root-caused to a genuine pointer-width ABI bug in src/sched.c (compiled for the PC build, not excluded)."
+D249,OPEN,"LOD/culling breaks down on large open levels (Streets, Egyptian named specifically) at *default* FOV —",OPEN — not investigated.
+D250,OPEN,FPS is inconsistent/low on many levels since the port started actually running at 60fps —,OPEN — not investigated.
