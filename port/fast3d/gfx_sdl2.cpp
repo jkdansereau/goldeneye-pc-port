@@ -409,7 +409,13 @@ static inline void sync_framerate_with_timer(void) {
     // We want to exit a bit early, so we can busy-wait the rest to never miss the deadline
     left -= 15000UL;
     if (left > 0) {
-        sysSleep(left);
+        /* D250: `left` is in 100ns units (qpc_to_100ns); sysSleep() takes
+         * microseconds. Passing it unconverted slept ~10x too long every
+         * time this branch fired (e.g. an intended 2ms sleep became a real
+         * ~20ms one), silently eating the rest of the frame budget whenever
+         * per-frame work left little slack -- a resolution/GPU-independent
+         * frame-pacing bug, not a real render cost. */
+        sysSleep((uint32_t)(left / 10));
     }
 
     do {
