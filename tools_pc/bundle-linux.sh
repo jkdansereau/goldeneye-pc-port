@@ -55,16 +55,18 @@ SDL2_LIB="$(ldd "$EXE" | awk '/libSDL2/ {print $3; exit}')"
 cp -L "$SDL2_LIB" "$OUT/"
 chmod 644 "$OUT/$(basename "$SDL2_LIB")"
 patchelf --set-rpath '$ORIGIN' "$OUT/$EXE_NAME"
+# ldd reports absolute paths, so match both the relative $OUT and its
+# absolute form ($(pwd) == $REPO_ROOT after the cd above).
 RESOLVED="$(ldd "$OUT/$EXE_NAME" | awk '/libSDL2/ {print $3; exit}')"
 case "$RESOLVED" in
-  "$OUT"/*) echo "    + $(basename "$SDL2_LIB") (bundled; rpath \$ORIGIN)" ;;
+  "$OUT"/*|"$REPO_ROOT/$OUT"/*) echo "    + $(basename "$SDL2_LIB") (bundled; rpath \$ORIGIN)" ;;
   *) echo "error: bundled libSDL2 is not picked up via \$ORIGIN (ldd -> ${RESOLVED:-nothing})" >&2; exit 1 ;;
 esac
 
 # --- report the remaining dynamic-library needs (system-provided) ------
 if command -v ldd >/dev/null 2>&1; then
   echo "    remaining system dependencies (zlib / libGL / libc — preinstalled on desktop distros and SteamOS):"
-  ldd "$OUT/$EXE_NAME" | grep -v "\$OUT/" | sed 's/^/      /' || true
+  ldd "$OUT/$EXE_NAME" | grep -v "/${NAME}/" | sed 's/^/      /' || true
 fi
 
 # --- docs + licenses --------------------------------------------------
