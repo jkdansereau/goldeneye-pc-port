@@ -61,6 +61,8 @@ static int cfgWrapFix       = 0;   /* D74 sub-tile UV pre-wrap + RC3/D167 non-Po
 static int cfgFovScale      = 100; /* D211: percent of the original vertical FOV; 100 = unchanged (byte-identical) */
 static int cfgDrawDistance      = 100; /* D218: percent of the level's authored far-clip/fog distance; 100 = unchanged */
 static int cfgDrawDistanceAutoFov = 1;   /* D218: couple draw distance to Video.FovScale unless DrawDistance is set explicitly */
+static int cfgLodDistance         = 100; /* D249: percent scale on the geometry/model LOD-swap distance; 100 = unchanged */
+static int cfgLodDistanceAutoFov  = 0;   /* off by default -- unlike DrawDistance, this is meant as a standalone perf lever, not something that should silently get more expensive as FovScale widens */
 static int cfgAniso         = 4;   /* D212: anisotropic filtering samples; 4 = the value fast3d already applied (no visual delta at default) */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
 
@@ -147,6 +149,36 @@ f32 portDrawDistanceMultiplier(void)
     return mult;
 }
 
+/* D249: Video.LodDistance -- multiplier on the *distance* term
+ * modelUpdateDistanceRelations() (src/game/model.c) tests against each LOD
+ * node's MinDistance/MaxDistance, composed on top of the game's own
+ * g_ModelDistanceScale rather than replacing it. Smaller distance reads as
+ * "closer", so this function returns the INVERSE of the requested percent:
+ * Video.LodDistance=200 (keep full detail twice as far, more cost) ->
+ * 0.5x on the distance term; =50 (drop to lower detail twice as soon, less
+ * cost -- the perf lever) -> 2.0x. Video.LodDistanceAutoFov (default OFF,
+ * unlike DrawDistanceAutoFov) can couple it to Video.FovScale the same
+ * direction as draw distance if ever wanted; off by default so this stays a
+ * standalone dial and doesn't quietly add cost as FovScale widens. Clamped
+ * to a [0.25, 4.0] distance multiplier (== effective LodDistance 25-400%) --
+ * far outside that band either does nothing visible (LOD never triggers) or
+ * thrashes every frame. Identity (1.0f) at the Video.LodDistance=100
+ * default, bit-for-bit no-op. */
+f32 portLodDistanceMultiplier(void)
+{
+    f32 pct;
+    if (cfgLodDistance != 100) {
+        pct = (f32)cfgLodDistance;
+    } else if (cfgLodDistanceAutoFov && portFovScale != 1.0f) {
+        pct = portFovScale * 100.0f;
+    } else {
+        return 1.0f;
+    }
+    if (pct < 25.0f)  { pct = 25.0f; }
+    if (pct > 400.0f) { pct = 400.0f; }
+    return 100.0f / pct;
+}
+
 PD_CONSTRUCTOR static void videoConfigInit(void)
 {
     configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
@@ -161,6 +193,8 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.FovScale", &cfgFovScale, 50, 150);
     configRegisterInt("Video.DrawDistance", &cfgDrawDistance, 100, 400);
     configRegisterInt("Video.DrawDistanceAutoFov", &cfgDrawDistanceAutoFov, 0, 1);
+    configRegisterInt("Video.LodDistance", &cfgLodDistance, 25, 400);
+    configRegisterInt("Video.LodDistanceAutoFov", &cfgLodDistanceAutoFov, 0, 1);
     configRegisterInt("Video.Anisotropy", &cfgAniso, 1, 16);
     configRegisterInt("Video.Fullscreen",    &cfgFullscreen, 0, 1);
     configRegisterInt("Window.Width",        &cfgWinW,       0, 16384);

@@ -104,6 +104,8 @@ static struct Row rows[] = {
     { "Video.FovScale",           "FOV scale %",      ROW_SLIDER, 5,    NULL,       0, 0, 0,   0,0,0,0,0 },
     { "Video.DrawDistance",       "Draw distance %",  ROW_SLIDER, 25,   NULL,       0, 0, 0,   0,0,0,0,0 },
     { "Video.DrawDistanceAutoFov","Draw dist. auto",  ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
+    { "Video.LodDistance",        "LOD distance %",   ROW_SLIDER, 25,   NULL,       0, 0, 0,   0,0,0,0,0 },
+    { "Video.LodDistanceAutoFov", "LOD dist. auto",   ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
     { "Input.MouseAimSpeed",      "Mouse aim speed",  ROW_SLIDER, 1,    NULL,       0, 0, 100, 0,0,0,0,0 },
     { "Input.MouseTurnSpeed",     "Mouse turn speed", ROW_SLIDER, 1,    NULL,       0, 0, 100, 0,0,0,0,0 },
     { "Input.MouseInvertY",       "Mouse invert Y",   ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },

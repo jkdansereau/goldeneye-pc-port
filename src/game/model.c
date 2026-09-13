@@ -1978,6 +1978,23 @@ void modelUpdateDistanceRelations(Model* model, ModelNode* node)
         {
             distance *= g_ModelDistanceScale;
         }
+
+#ifdef PORT
+        /* D249/D218 follow-up: Video.LodDistance. Composed on top of (not
+         * replacing) g_ModelDistanceScale so it doesn't fight the game's own
+         * transient overrides (chr.c's 0.3125f close-up scale, the
+         * modelSetDistanceDisabled front-end/menu paths above). A smaller
+         * distance here reads as "closer" to the MinDistance/MaxDistance
+         * test below, so a multiplier < 1.0 keeps full-detail LOD children
+         * visible farther out (more detail, more cost); > 1.0 drops to the
+         * lower LOD sooner (less detail, cheaper) -- a real performance
+         * lever, independent of Video.DrawDistance's fog/far-clip distance.
+         * Identity at the Video.LodDistance=100 default. */
+        {
+            extern f32 portLodDistanceMultiplier(void);
+            distance *= portLodDistanceMultiplier();
+        }
+#endif
     }
 
     if (distance > rodata->LOD.MinDistance * model->scale || rodata->LOD.MinDistance == 0)
