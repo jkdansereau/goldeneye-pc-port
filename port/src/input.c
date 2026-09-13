@@ -304,6 +304,8 @@ static int aimBand        = 20;     /* aim mode: usable stick range above the 60
  * leave that mode". At 40% (2.4 stick/px) the mid-speed view rate matches
  * the GEPD reticle's angular pace at GepdSens=30; flicks still reach full
  * turn speed, only later. */
+static int sensLink       = 1;     /* F10 overlay: keep aim/turn sens at the
+                                      stock 38:50 ratio (default on) */
 static int mouseTurnSpeed = 50;     /* hipfire yaw sensitivity, percent
                                         (40 = M-123 match point at GepdSens=30; 50 = the user's
                                         "~20-35% faster" default request, same +25% as gepdSens) */
@@ -1492,6 +1494,7 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.GepdSens",    &gepdSens, 1, 80);   /* deprecated alias */
     configRegisterInt("Input.AimBand", &aimBand, 5, 40);
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
+    configRegisterInt("Input.SensLink", &sensLink, 0, 1);
     configRegisterInt("Input.MenuPointerSpeed", &menuPointerSpeed, 10, 500);
     configRegisterInt("Input.MenuPointerMode", &menuPointerMode, 0, 1);
     configRegisterInt("Input.HipfirePitchSpeed", &hipfirePitchSpeed, 10, 500);

@@ -6,6 +6,12 @@
  * port-owned config.c variables directly. Live knobs apply immediately; the
  * two that need an FBO/window rebuild (MSAA, Fullscreen) are tagged "(restart)".
  *
+ * The panel adapts to whatever 2D space it is drawn in (320x240 in-game vs
+ * 440x330 on front-end screens -- viSetXY differs) and scrolls when the row
+ * list outgrows the viewport (wheel / arrows at the edges). Cyclic rows
+ * (MSAA, texture filter, resolution, toggles) wrap in both directions; the
+ * manual % rows (draw/LOD distance) are hidden while their "auto" toggle is on.
+ *
  * Text + fill helpers are the game's own (textRender / microcode_constructor /
  * gDPFillRectangle) reached by extern -- same pattern input.c uses to read
  * current_menu / cursor_h_pos. This is a rendering/UI view, not a logic change.
@@ -91,6 +97,11 @@ struct Row {
     int                type;     /* CONFIG_OPT_*    */
     void              *ptr;
     double             cfgMin, cfgMax;
+
+    /* Hidden while the option named here is nonzero (a manual % row
+     * disappears while its "auto" toggle is on). Resolved to hidePtr at init. */
+    const char        *hiddenIfOn;
+    int               *hidePtr;
 };
 
 static struct Row rows[] = {
@@ -102,12 +113,16 @@ static struct Row rows[] = {
     { "Video.TextureFilter",      "Texture filter",   ROW_ENUM,   1,    kTexFilter, 0, 0, 0,   0,0,0,0,0 },
     { "Video.Anisotropy",         "Anisotropic",      ROW_SLIDER, 1,    NULL,       0, 0, 0,   0,0,0,0,0 },
     { "Video.FovScale",           "FOV scale %",      ROW_SLIDER, 5,    NULL,       0, 0, 0,   0,0,0,0,0 },
-    { "Video.DrawDistance",       "Draw distance %",  ROW_SLIDER, 25,   NULL,       0, 0, 0,   0,0,0,0,0 },
+    { "Video.DrawDistance",       "Draw distance %",  ROW_SLIDER, 25,   NULL,       0, 0, 0,   0,0,0,0,0, "Video.DrawDistanceAutoFov" },
     { "Video.DrawDistanceAutoFov","Draw dist. auto",  ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
-    { "Video.LodDistance",        "LOD distance %",   ROW_SLIDER, 25,   NULL,       0, 0, 0,   0,0,0,0,0 },
+    { "Video.LodDistance",        "LOD distance %",   ROW_SLIDER, 25,   NULL,       0, 0, 0,   0,0,0,0,0, "Video.LodDistanceAutoFov" },
     { "Video.LodDistanceAutoFov", "LOD dist. auto",   ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
-    { "Input.MouseAimSpeed",      "Mouse aim speed",  ROW_SLIDER, 1,    NULL,       0, 0, 100, 0,0,0,0,0 },
+    /* Aim row edits Input.AimModeSens -- the knob the default GEPD aim path
+     * actually uses (Input.MouseAimSpeed only feeds the legacy velocity-stick
+     * fallback, so it was inert here). */
+    { "Input.AimModeSens",        "Mouse aim speed",  ROW_SLIDER, 1,    NULL,       0, 1, 80,  0,0,0,0,0 },
     { "Input.MouseTurnSpeed",     "Mouse turn speed", ROW_SLIDER, 1,    NULL,       0, 0, 100, 0,0,0,0,0 },
+    { "Input.SensLink",           "Link aim/turn sens",ROW_TOGGLE, 1,   kOnOff,     0, 0, 0,   0,0,0,0,0 },
     { "Input.MouseInvertY",       "Mouse invert Y",   ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
     { "Input.MouseCaptureMode",   "Mouse capture",    ROW_TOGGLE, 1,    kCapture,   0, 0, 0,   0,0,0,0,0 },
     { "Game.ScreenShakeIntensity","Screen shake",     ROW_SLIDER, 0.25, NULL,       0, 0, 3,   0,0,0,0,0 },
@@ -116,7 +131,14 @@ static struct Row rows[] = {
 
 static int  s_inited = 0;
 static volatile int s_open = 0;
-static int  s_sel = 0;
+static int  s_sel = 0;        /* selection, index into s_visIdx (visible list) */
+
+/* Visible-row list: rows whose hiddenIfOn option is nonzero are omitted
+ * (manual % rows hide while their auto toggle is on). Rebuilt every frame in
+ * overlayUpdateVisible(); s_scroll is the first visible-list entry drawn. */
+static int  s_visIdx[NUM_ROWS];
+static int  s_visN = 0;
+static int  s_scroll = 0;
 
 /* D213: optional on-screen FPS readout (PD parity: Video.DisplayFPS). Drawn
  * top-right whenever enabled, independent of the F10 panel. Config-only knob
@@ -161,7 +183,20 @@ static void fpsTick(void)
 #define OV_TOP       12
 #define OV_LINE      15                       /* row pitch (13 rows must fit ~240) */
 #define OV_HDR       2                        /* header rows above row 0 (title+hint) */
+/* i is a VISIBLE-POSITION (already scroll-adjusted by the caller). */
 #define OV_ROW_Y(i)  (OV_TOP + ((i) + OV_HDR) * OV_LINE)
+
+/* How many rows fit between the header and the bottom edge of whatever 2D
+ * space we are in right now (320x240 in-game, 440x330 on front-end screens --
+ * viSetXY differs, see src/game/front.c). More rows than this => scroll. */
+static int maxVisibleRows(void)
+{
+    int n = (viGetY() - 6 - OV_TOP - OV_HDR * OV_LINE) / OV_LINE;
+    if (n < 4) {
+        n = 4;
+    }
+    return n;
+}
 #define OV_RIGHT     (viGetX() - OV_X0)       /* right edge for right-aligned text */
 #define OV_NUM_W     36                       /* reserved width for a slider's number */
 #define OV_BAR_X     150
@@ -176,16 +211,53 @@ static void sliderBarSpan(s32 *x0, s32 *x1)
     }
 }
 
-/* Row index the given overlay-space y falls in, or -1. */
+/* Visible position (0..s_visN-1) the given overlay-space y falls in, or -1. */
 static int overlayRowAtY(double oy)
 {
-    for (int i = 0; i < NUM_ROWS; i++) {
-        double top = OV_ROW_Y(i) - 3;
+    for (int p = 0; p < s_visN; p++) {
+        double top = OV_ROW_Y(p - s_scroll) - 3;
         if (oy >= top && oy < top + OV_LINE) {
-            return i;
+            return p;
         }
     }
     return -1;
+}
+
+/* Rebuild the visible-row list and keep the selection in range. */
+static void overlayUpdateVisible(void)
+{
+    s_visN = 0;
+    for (int i = 0; i < NUM_ROWS; i++) {
+        if (!(rows[i].hidePtr && *rows[i].hidePtr != 0)) {
+            s_visIdx[s_visN++] = i;
+        }
+    }
+    if (s_visN == 0) {   /* cannot happen (toggles have no hide source) */
+        s_visIdx[s_visN++] = 0;
+    }
+    if (s_sel < 0) {
+        s_sel = 0;
+    }
+    if (s_sel >= s_visN) {
+        s_sel = s_visN - 1;
+    }
+}
+
+/* Keep the selected row on screen: shift the window when it nears an edge. */
+static void overlayUpdateScroll(void)
+{
+    int maxV = maxVisibleRows();
+    if (s_visN <= maxV) {
+        s_scroll = 0;
+        return;
+    }
+    s_scroll = s_sel - (maxV - 1);
+    if (s_scroll < 0) {
+        s_scroll = 0;
+    }
+    if (s_scroll > s_visN - maxV) {
+        s_scroll = s_visN - maxV;
+    }
 }
 
 /* The close box brackets the title row at the panel's right edge. */
@@ -243,6 +315,21 @@ static void overlayInit(void)
         }
     }
 
+    /* Resolve the hidden-while-on sources (manual % rows vs their auto
+     * toggles), then build the initial visible list. */
+    for (int i = 0; i < NUM_ROWS; i++) {
+        if (!rows[i].hiddenIfOn) {
+            continue;
+        }
+        for (int j = 0; j < NUM_ROWS; j++) {
+            if (strcmp(rows[j].key, rows[i].hiddenIfOn) == 0 && rows[j].found) {
+                rows[i].hidePtr = rows[j].ptr;
+                break;
+            }
+        }
+    }
+    overlayUpdateVisible();
+
     /* Build the windowed-resolution preset list: presets that fit the desktop,
      * plus the current window size snapped to the nearest surviving entry. */
     {
@@ -297,6 +384,18 @@ static double rowHi(const struct Row *r)
     return (r->uiMin != r->uiMax) ? r->uiMax : r->cfgMax;
 }
 
+static struct Row *rowByKey(const char *key)
+{
+    for (int i = 0; i < NUM_ROWS; i++) {
+        if (strcmp(rows[i].key, key) == 0) {
+            return &rows[i];
+        }
+    }
+    return NULL;
+}
+
+static int s_linkDepth = 0;   /* re-entrancy guard for the sens link below */
+
 static void rowSet(struct Row *r, double v)
 {
     double lo = rowLo(r), hi = rowHi(r);
@@ -318,6 +417,29 @@ static void rowSet(struct Row *r, double v)
     } else if (strncmp(r->key, "Video.", 6) == 0 && !r->restart) {
         videoRequestLiveConfig();
     }
+
+    /* Linked aim/turn sensitivity (Input.SensLink, default on): moving either
+     * knob scales the other to hold the stock default ratio -- AimModeSens 38
+     * : MouseTurnSpeed 50 (the D194/D238 calibrated defaults). */
+    if (!s_linkDepth && strcmp(r->key, "Input.SensLink") != 0) {
+        struct Row *lk = rowByKey("Input.SensLink");
+        if (lk && lk->found && *(int *)lk->ptr != 0) {
+            struct Row *o = NULL;
+            double nv = 0.0;
+            if (strcmp(r->key, "Input.MouseTurnSpeed") == 0) {
+                o = rowByKey("Input.AimModeSens");
+                nv = v * 38.0 / 50.0;
+            } else if (strcmp(r->key, "Input.AimModeSens") == 0) {
+                o = rowByKey("Input.MouseTurnSpeed");
+                nv = v * 50.0 / 38.0;
+            }
+            if (o && o->found) {
+                s_linkDepth = 1;
+                rowSet(o, nv);
+                s_linkDepth = 0;
+            }
+        }
+    }
 }
 
 static void rowAdjust(struct Row *r, int dir)
@@ -335,9 +457,9 @@ static void rowAdjust(struct Row *r, int dir)
         for (int i = 0; i < 4; i++) {
             if (kMsaaSeq[i] == (int)lround(v)) idx = i;
         }
-        idx += dir;
-        if (idx < 0) idx = 0;
-        if (idx > 3) idx = 3;
+        /* Wrap like a normal settings-menu cycle: OFF->2x->4x->8x->OFF, in
+         * both directions (left/right click and arrows all roll). */
+        idx = (idx + dir + 4) % 4;
         rowSet(r, (double)kMsaaSeq[idx]);
         break;
     }
@@ -388,12 +510,18 @@ int optionsOverlayIsOpen(void)
 
 void optionsOverlayScroll(int dir)
 {
+    if (!s_inited) {
+        overlayInit();
+    }
     if (!s_open || dir == 0) {
         return;
     }
+    overlayUpdateVisible();
     s_sel += (dir > 0) ? -1 : 1;   /* wheel-up -> move up the list */
-    if (s_sel < 0) s_sel = NUM_ROWS - 1;
-    if (s_sel >= NUM_ROWS) s_sel = 0;
+    /* Clamp at both ends like a normal PC settings list -- wrapping made the
+     * selection "repeat" from the far edge, which read as a duplicate. */
+    if (s_sel < 0) s_sel = 0;
+    if (s_sel >= s_visN) s_sel = s_visN - 1;
 }
 
 /* Set a slider row from an overlay-space x inside its value bar, snapped to
@@ -430,6 +558,9 @@ void optionsOverlayHandleInput(void)
      * visible (a stage poll would otherwise leave it locked/hidden). */
     inputSuspendForOverlay();
 
+    overlayUpdateVisible();   /* % rows may have appeared/vanished (auto toggles) */
+    overlayUpdateScroll();
+
     const Uint8 *ks = SDL_GetKeyboardState(NULL);
     int mx = 0, my = 0;
     Uint32 mb = SDL_GetMouseState(&mx, &my);
@@ -442,11 +573,12 @@ void optionsOverlayHandleInput(void)
     int rt = ks[SDL_SCANCODE_RIGHT] || ks[SDL_SCANCODE_KP_6]
           || ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_KP_ENTER];
 
-    /* ---- keyboard / D-pad nav ---- */
-    if (up && !prevUp) s_sel = (s_sel + NUM_ROWS - 1) % NUM_ROWS;
-    if (dn && !prevDn) s_sel = (s_sel + 1) % NUM_ROWS;
-    if (lf && !prevLf) rowAdjust(&rows[s_sel], -1);
-    if (rt && !prevRt) rowAdjust(&rows[s_sel], +1);
+    /* ---- keyboard / D-pad nav (clamped at the ends; scroll follows) ---- */
+    if (up && !prevUp && s_sel > 0) s_sel--;
+    if (dn && !prevDn && s_sel < s_visN - 1) s_sel++;
+    overlayUpdateScroll();
+    if (lf && !prevLf) rowAdjust(&rows[s_visIdx[s_sel]], -1);
+    if (rt && !prevRt) rowAdjust(&rows[s_visIdx[s_sel]], +1);
 
     /* ---- mouse ---- */
     int ww = 0, wh = 0;
@@ -454,12 +586,13 @@ void optionsOverlayHandleInput(void)
     if (ww > 0 && wh > 0) {
         double ox = (double)mx * (double)viGetX() / ww;
         double oy = (double)my * (double)viGetY() / wh;
-        int hoverRow = overlayRowAtY(oy);
+        int hoverVis = overlayRowAtY(oy);
         int onClose  = overlayInCloseBox(ox, oy);
 
-        if (hoverRow >= 0 && !onClose) {
-            s_sel = hoverRow;   /* hover-to-highlight */
-        }
+        /* No hover-to-highlight: merely moving the mouse must not move the
+         * selection or scroll the window (hovering near a list edge fed the
+         * new row back into the cursor and made the bottom twitch/echo).
+         * Selection moves only by click, wheel, or arrows. */
 
         /* left press. A click in the label column only focuses the row; a
          * click in the value/control column (>= the bar-span start) changes
@@ -471,13 +604,17 @@ void optionsOverlayHandleInput(void)
                 optionsOverlayToggle();   /* close + configSave */
                 return;
             }
-            if (hoverRow >= 0 && ox >= bx0) {
-                struct Row *r = &rows[hoverRow];
-                if (r->kind == ROW_SLIDER && r->found) {
-                    sliderSetFromX(r, ox);
-                    dragRow = hoverRow;
-                } else {
-                    rowAdjust(r, +1);   /* toggle / cycle forward */
+            if (hoverVis >= 0) {
+                s_sel = hoverVis;         /* explicit click -> select */
+                overlayUpdateScroll();
+                if (ox >= bx0) {
+                    struct Row *r = &rows[s_visIdx[hoverVis]];
+                    if (r->kind == ROW_SLIDER && r->found) {
+                        sliderSetFromX(r, ox);
+                        dragRow = s_visIdx[hoverVis];
+                    } else {
+                        rowAdjust(r, +1);   /* toggle / cycle forward (wraps) */
+                    }
                 }
             }
         }
@@ -489,8 +626,10 @@ void optionsOverlayHandleInput(void)
             dragRow = -1;
         }
         /* right press in the value column: cycle back / decrement */
-        if (rmb && !prevRmb && hoverRow >= 0 && !onClose && ox >= bx0) {
-            rowAdjust(&rows[hoverRow], -1);
+        if (rmb && !prevRmb && hoverVis >= 0 && !onClose && ox >= bx0) {
+            s_sel = hoverVis;
+            overlayUpdateScroll();
+            rowAdjust(&rows[s_visIdx[hoverVis]], -1);
         }
     }
 
@@ -605,11 +744,19 @@ Gfx *optionsOverlayEmit(void)
         return s_buf;
     }
 
+    overlayUpdateVisible();
+    overlayUpdateScroll();
+
     const s32 W = viGetX();
     const s32 H = viGetY();
     const s32 right = OV_RIGHT;
     const s32 panelTop = OV_TOP - 9;
-    const s32 panelBottom = OV_ROW_Y(NUM_ROWS - 1) + OV_LINE / 2 + 3;
+    /* Last visible position actually drawn (window may be shorter than the
+     * list at small 2D viewports -- the rest is reached by scrolling). */
+    const int maxV  = maxVisibleRows();
+    const int pLast = (s_visN - s_scroll < maxV) ? s_visN - s_scroll
+                                                 : s_scroll + maxV - 1;
+    const s32 panelBottom = OV_ROW_Y(pLast) + OV_LINE / 2 + 3;
     s32 bx0, bx1;
     sliderBarSpan(&bx0, &bx1);
     Gfx *gdl = s_buf;
@@ -626,15 +773,16 @@ Gfx *optionsOverlayEmit(void)
     gdl = fillRect(gdl, OV_CB_X0, OV_CB_Y0, OV_CB_X1, OV_CB_Y1,
                    150, 40, 40, 235);                                   /* close */
 
-    for (int i = 0; i < NUM_ROWS; i++) {
-        s32 rowY = OV_ROW_Y(i);
-        if (i == s_sel) {
+    for (int p = s_scroll; p <= pLast; p++) {
+        const struct Row *r = &rows[s_visIdx[p]];
+        s32 rowY = OV_ROW_Y(p - s_scroll);
+        if (p == s_sel) {
             gdl = fillRect(gdl, OV_X0 - 4, rowY - 3, W - (OV_X0 - 4),
                            rowY + OV_LINE - 4, 40, 46, 96, 220);
         }
-        if (rows[i].kind == ROW_SLIDER && rows[i].found) {
-            double lo = rowLo(&rows[i]), hi = rowHi(&rows[i]);
-            double f = (hi > lo) ? (rowGet(&rows[i]) - lo) / (hi - lo) : 0.0;
+        if (r->kind == ROW_SLIDER && r->found) {
+            double lo = rowLo(r), hi = rowHi(r);
+            double f = (hi > lo) ? (rowGet(r) - lo) / (hi - lo) : 0.0;
             if (f < 0) f = 0; if (f > 1) f = 1;
             s32 by = rowY + 3;
             gdl = fillRect(gdl, bx0, by, bx1, by + 5, 60, 60, 70, 220);
@@ -647,25 +795,27 @@ Gfx *optionsOverlayEmit(void)
     gdl = microcode_constructor(gdl);
 
     gdl = drawText(gdl, OV_X0, OV_TOP, "PC OPTIONS", 0xffe040ff);
-    gdl = drawText(gdl, OV_X0, OV_TOP + OV_LINE, "click value / drag / arrows",
+    gdl = drawText(gdl, OV_X0, OV_TOP + OV_LINE,
+                   "select: scroll/click, change: mouse/arrows",
                    0x8890a0ff);                                        /* hint line */
     gdl = drawText(gdl, (OV_CB_X0 + OV_CB_X1) / 2 - measureText("X") / 2,
                    OV_TOP, "X", 0xffffffff);                            /* close glyph */
 
-    for (int i = 0; i < NUM_ROWS; i++) {
-        s32 rowY = OV_ROW_Y(i);
-        u32 col = (i == s_sel) ? 0xffffffff : 0xc0c0c8ff;
+    for (int p = s_scroll; p <= pLast; p++) {
+        const struct Row *r = &rows[s_visIdx[p]];
+        s32 rowY = OV_ROW_Y(p - s_scroll);
+        u32 col = (p == s_sel) ? 0xffffffff : 0xc0c0c8ff;
         char val[48];
 
-        gdl = drawText(gdl, OV_LABEL_X, rowY, (char *)rows[i].label,
-                       rows[i].found ? col : 0x808080ff);
-        if (!rows[i].found) {
+        gdl = drawText(gdl, OV_LABEL_X, rowY, (char *)r->label,
+                       r->found ? col : 0x808080ff);
+        if (!r->found) {
             gdl = drawTextR(gdl, right, rowY, "(n/a)", 0x808080ff);
             continue;
         }
 
-        valueText(&rows[i], val, sizeof(val));
-        if (rows[i].restart) {
+        valueText(r, val, sizeof(val));
+        if (r->restart) {
             /* value left of the bar span, "(restart)" pinned to the edge */
             gdl = drawText(gdl, bx0, rowY, val, col);
             gdl = drawTextR(gdl, right, rowY, "(restart)", 0x909090ff);
