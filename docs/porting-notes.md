@@ -1106,3 +1106,23 @@ and turns every such overrun into a fatal `*** stack smashing detected ***`
   anim/physics data never produced the degenerate value, so the decomp never
   checks. Suspect a misaligned `Model`/struct field (D100/D140 pun family) as
   the NaN source before blaming the data. §F **D156**.
+- **D247 — a visual "defect" report can be faithful, unmodified N64 behaviour;
+  check the decomp's own constants before assuming a port bug.** User reported
+  black bars top/bottom of the screen. The obvious port-side suspects (a
+  present/letterbox path, a framebuffer-vs-window size mismatch) were all
+  clean — no code anywhere sets `G_ASPECT_MODE_EXT` for GE, so fast3d never
+  letterboxes. The real cause: `bondviewGetCurrentPlayerViewportHeight()`
+  (`bondview2.c:7858`) returns `VIEWPORT_HEIGHT_DEFAULT` = 220 of 240 NTSC
+  scanlines (`fr.h:34`, ~92% fill) whenever `PLAYER_OPTION_SCREEN` is
+  `SCREEN_SIZE_FULLSCREEN` — the decomp's own default value — unmodified,
+  no `#ifdef PORT` in sight. `VIEWPORT_HEIGHT_FULLSCREEN` (304, no inset) is
+  a trap name: it's only reachable via the unrelated `cameraBufferToggle`
+  branch, not normal solo play. This is GoldenEye's real TV-safe-area
+  letterboxing, present on original hardware. Ruled out a stale EEPROM
+  `Screen=Wide/Cinema` setting from earlier sessions as an alternative
+  explanation by reproducing identically on a fresh EEPROM. **Lesson:**
+  before chasing a `port/` fix for a rendering "bug," grep the reported
+  geometry (viewport height/width, screen offset, etc.) back to its decomp
+  origin — a visually surprising but *exactly reproduced* N64 quirk isn't a
+  port defect, and the fix is to close the finding, not to write code.
+  §F **D247**.

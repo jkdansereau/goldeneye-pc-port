@@ -127,5 +127,5 @@ D241,OPEN,Player gunshot SFX goes silent under some conditions —,"OPEN — not
 D242,?,Player-death sequence UX regression vs N64 original:,NOT A PORT-LOGIC BUG as far as static analysis can tell.
 D243,OPEN,"Dam end-of-level cutscene (the abseil/bungee sequence, D148/D160's subject):",OPEN — M-109 re-analysis of the same session's raw logs corrects the timing/pattern claims above; the D134/pendingGfx race hypothesis is likely wrong.
 D245,FIXED,IsWater water: two competing patterns with a visible seam that moves as the player looks around (mouse/aim) —,"FIXED (port-layer, src/game/sky.c, #ifdef PORT) —"
-D246,OPEN,"Tiny pixel strips at the left and right edges of the screen, ""like overscan"" —","OPEN — observed, not investigated."
-D247,OPEN,Black bars top and bottom of screen —,OPEN — possibly intended pending the widescreen decision; needs one data point.
+D246,OPEN,"Tiny pixel strips at the left and right edges of the screen, ""like overscan"" —","OPEN — one candidate ruled out (M-116 follow-up), root cause not found."
+D247,RESOLVED,Black bars top and bottom of screen —,"NOT A BUG — confirmed faithful, unmodified N64 decomp behaviour, no code change made."
