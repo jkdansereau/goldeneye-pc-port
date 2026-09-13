@@ -732,6 +732,27 @@ through a converter or a runtime bswap fixup reads scrambled.
   swap regressing muzzle flash/ammo HUD (M-114), reverted to identity, then
   M-115's format-scoped re-application — is in `docs/dev/findings.md` D219.
 
+- **The tile's declared format is not the source data's format when GE's
+  custom ucode transforms TMEM at load time (D229).** `texSelect`
+  (`src/game/othermodemicrocode.c`) loads CI8 water images with
+  `gDPSetTextureImage(CI,16b)` + `gDPLoadBlock` (the 16b is only the
+  4KB-per-block load convention: lrs counts 16-bit units, so 700 × 2 = 1400
+  bytes of raw 8-bit indices), and GE's RSP ucode expands indices→RGBA16 in
+  TMEM at load — after which `sub_GAME_7F09343C` (`src/game/unk_092E50.c`)
+  re-declares the slot as RGBA/16b and samples blue. fast3d has no such
+  transform: it trusted the tile declaration, read index byte-pairs as
+  16-bit texels (g = 2·idx mod 32 dominates → green mottle), and the water's
+  pre-existing `sinf()` PRIM_LOD_FRAC cross-fade read as "pulsating". Fix
+  (`port/fast3d/gfx_pc.cpp`, M-116): record the `G_IM_FMT` of each
+  SetTexImage into `LoadedTexture.src_fmt` at load time; in `import_texture`,
+  an RGBA/16b tile whose slot's last load came from a CI source routes
+  through the CI8 palette import — the port equivalent of expand-at-load.
+  Fires only on a genuine format disagreement, so real RGBA16 textures are
+  untouched. **General rule:** when a GE draw declares a tile format that
+  looks wrong for the data it loaded, suspect the ucode's load-time transform
+  (ginit.s is missing from this repo — the expansion lives there), not UV,
+  shade, or the combiner.
+
 ## D2. The HUD/model "X-mirror" (D114/D116) — RESOLVED: it was an upside-down capture
 
 **M-33 (finding D168).** There was no mirror. `gfx_opengl_dump_bound_fbo`

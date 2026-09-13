@@ -150,6 +150,11 @@ struct LoadedTexture {
     uint32_t line_size_bytes;
     uint32_t tex_flags;
     struct RawTexMetadata raw_tex_metadata;
+    /* D229: G_IM_FMT_* of the gDPSetTextureImage active when this slot was
+     * last written by a load command (0xFF = never / unknown). Used to tell
+     * a CI8 index stream apart from real RGBA16 pixels when a later tile
+     * re-declares the same TMEM in another format -- see import_texture. */
+    uint8_t src_fmt = 0xFF;
 };
 
 static struct RDP {
@@ -159,6 +164,7 @@ static struct RDP {
     uint32_t palette_hash; /* D217: FNV-1a of palette[], refreshed in gfx_dp_load_tlut */
     struct {
         const uint8_t* addr;
+        uint8_t fmt; /* D229: was dropped before; needed to track CI sources */
         uint8_t siz;
         uint32_t width;
         uint32_t tex_flags;
@@ -1107,40 +1113,66 @@ static void import_texture(int i, int tile, bool importReplacement) {
      * decoding it against the stale rdp.palette produced the blue-speckle roof
      * (docs/dev/TEXTURE-GLITCH-ANALYSIS.md, B2). Route CI4/CI8 -> I4/I8 here. */
     uint8_t fmt_eff = fmt;
+    uint8_t siz_eff = siz;
     if (fmt == G_IM_FMT_CI && rdp.palette_fmt == G_TT_NONE) {
         fmt_eff = G_IM_FMT_I;
     }
 
+    /* D229: green/pulsating sky water. GE's texSelect loads CI8 mipmap chains
+     * with gDPLoadBlock (SetTexImage format = CI; the 16b "size" is only the
+     * fast3d 4KB-per-block convention), then the sky-water draw re-declares
+     * the same TMEM slot as RGBA/16b (sub_GAME_7F09343C). On N64 GE's custom
+     * RSP ucode expands the indices through the TLUT into real 16-bit pixels
+     * in TMEM, so the RGBA16 tile samples blue water. fast3d has no such
+     * expansion: it uploads the raw index bytes as 16-bit texels (g = 2*idx
+     * mod 32 dominates) -> green mottle. Route the import through the CI8
+     * palette path instead -- the port-layer equivalent of the ucode's
+     * expand-at-load. Only fires when the tile format genuinely disagrees
+     * with the loaded source, so real RGBA16 textures are untouched. */
+    if (fmt_eff == G_IM_FMT_RGBA && siz == G_IM_SIZ_16b &&
+        loaded_texture.src_fmt == G_IM_FMT_CI) {
+#ifdef PORT
+        if (getenv("GE_D229")) {
+            static int n_ci8r = 0;
+            if (n_ci8r++ < 8)
+                sysLogPrintf(LOG_NOTE, "D229: RGBA16 tile over CI8 source -> ci8 import (addr=%p size=%u palidx=%u)",
+                             (const void *)orig_addr, loaded_texture.size_bytes, palette_index);
+        }
+#endif
+        fmt_eff = G_IM_FMT_CI;
+        siz_eff = G_IM_SIZ_8b;
+    }
+
     if (fmt_eff == G_IM_FMT_RGBA) {
-        if (siz == G_IM_SIZ_16b) {
+        if (siz_eff == G_IM_SIZ_16b) {
             import_texture_rgba16(tile, loaded_texture, rdp.tex_lod);
-        } else if (siz == G_IM_SIZ_32b) {
+        } else if (siz_eff == G_IM_SIZ_32b) {
             import_texture_rgba32(tile, loaded_texture, rdp.tex_lod);
         } else {
             sysFatalError("Bad size for RGBA texture in tile %d: %02x", tile, siz);
         }
     } else if (fmt_eff == G_IM_FMT_IA) {
-        if (siz == G_IM_SIZ_4b) {
+        if (siz_eff == G_IM_SIZ_4b) {
             import_texture_ia4(tile, loaded_texture, rdp.tex_lod);
-        } else if (siz == G_IM_SIZ_8b) {
+        } else if (siz_eff == G_IM_SIZ_8b) {
             import_texture_ia8(tile, loaded_texture, rdp.tex_lod);
-        } else if (siz == G_IM_SIZ_16b) {
+        } else if (siz_eff == G_IM_SIZ_16b) {
             import_texture_ia16(tile, loaded_texture, rdp.tex_lod);
         } else {
             sysFatalError("Bad size for IA texture in tile %d: %02x", tile, siz);
         }
     } else if (fmt_eff == G_IM_FMT_CI) {
-        if (siz == G_IM_SIZ_4b) {
+        if (siz_eff == G_IM_SIZ_4b) {
             import_texture_ci4(tile, loaded_texture, rdp.tex_lod);
-        } else if (siz == G_IM_SIZ_8b) {
+        } else if (siz_eff == G_IM_SIZ_8b) {
             import_texture_ci8(tile, loaded_texture, rdp.tex_lod);
         } else {
             sysFatalError("Bad size for CI texture in tile %d: %02x", tile, siz);
         }
     } else if (fmt_eff == G_IM_FMT_I) {
-        if (siz == G_IM_SIZ_4b) {
+        if (siz_eff == G_IM_SIZ_4b) {
             import_texture_i4(tile, loaded_texture, rdp.tex_lod);
-        } else if (siz == G_IM_SIZ_8b) {
+        } else if (siz_eff == G_IM_SIZ_8b) {
             import_texture_i8(tile, loaded_texture, rdp.tex_lod);
         } else {
             sysFatalError("Bad size for I texture in tile %d: %02x", tile, siz);
@@ -1730,6 +1762,49 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
                     rendering_state.textures[i]->second.cmt = cmt;
                 }
             }
+
+#ifdef PORT
+            /* D229 probe (env-gated, inert): green/pulsating IsWater water.
+             * The water quad is a 2-cycle LERP(TEXEL1, TEXEL0) draw binding
+             * BOTH tiles to the same TMEM with tile 1 offset by uls/ult --
+             * the D172 probe's `tmem differs` filter never fires for it. Dump
+             * each texunit's full decoded tile state + wrap decision + GL
+             * texture identity so one Frigate capture pins whether TEXEL1
+             * resolves to the same image/region as TEXEL0 or drifts into
+             * other TMEM content (the green). */
+            if (getenv("GE_D229") && use_2cyc && comb->used_textures[0] && comb->used_textures[1]) {
+                static int d229x = 0;
+                static int d229_total = 0;
+                d229_total++;
+                if (d229x < 12) {
+                    d229x++;
+                    const uint32_t tmem = rdp.texture_tile[tile].tmem;
+                    sysLogPrintf(LOG_NOTE,
+                        "D229: texunit%d first=%u lodoff=%u tile=%u tmem=%u fmt=%u siz=%u | "
+                        "uls=%u ult=%u lrs=%u lrt=%u masks=%u maskt=%u shifts=%d shiftt=%d cms=%u cmt=%u | "
+                        "texw=%u texh=%u texw2=%u texh2=%u | "
+                        "wrapS=%d(tw=%.1f,uls=%.1f) wrapT=%d(th=%.1f,ult=%.1f) | "
+                        "tmembytes=%u GLaddr=%p texid=%u glbytes=%u same_tmem_as_other=%d",
+                        i, rdp.first_tile_index, gfx_lod_tile_offset(i), tile, tmem,
+                        rdp.texture_tile[tile].fmt, rdp.texture_tile[tile].siz,
+                        rdp.texture_tile[tile].uls, rdp.texture_tile[tile].ult,
+                        rdp.texture_tile[tile].lrs, rdp.texture_tile[tile].lrt,
+                        rdp.texture_tile[tile].masks, rdp.texture_tile[tile].maskt,
+                        (int)rdp.texture_tile[tile].shifts, (int)rdp.texture_tile[tile].shiftt,
+                        (unsigned)cms, (unsigned)cmt,
+                        tex_width[i], tex_height[i], tex_width2[i], tex_height2[i],
+                        (int)wrap_s[i], wrap_tw[i], wrap_uls[i],
+                        (int)wrap_t[i], wrap_th[i], wrap_ult[i],
+                        rdp.loaded_texture[tmem].orig_size_bytes,
+                        rendering_state.textures[i] ? (const void*)rendering_state.textures[i]->first.texture_addr : nullptr,
+                        rendering_state.textures[i] ? rendering_state.textures[i]->second.texture_id : 0u,
+                        rendering_state.textures[i] ? rendering_state.textures[i]->first.size_bytes : 0u,
+                        (int)(rdp.texture_tile[rdp.first_tile_index + gfx_lod_tile_offset(1 - i)].tmem == tmem));
+                } else if (d229_total % 400 == 0) {
+                    sysLogPrintf(LOG_NOTE, "D229: (summary) %d dual-texunit 2-cycle tris so far", d229_total);
+                }
+            }
+#endif
         }
     }
 
@@ -2219,6 +2294,7 @@ static void gfx_dp_set_scissor(uint32_t mode, uint32_t ulx, uint32_t uly, uint32
 
 static void gfx_dp_set_texture_image(uint32_t format, uint32_t size, uint32_t width, uint32_t tex_flags, const void* addr) {
     rdp.texture_to_load.addr = (const uint8_t*)addr;
+    rdp.texture_to_load.fmt = (uint8_t)format; /* D229 */
     rdp.texture_to_load.siz = size;
     rdp.texture_to_load.width = width;
     rdp.texture_to_load.tex_flags = tex_flags;
@@ -2350,6 +2426,7 @@ static void gfx_dp_load_block(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t
     loaded_texture.tex_flags = rdp.texture_to_load.tex_flags;
     loaded_texture.raw_tex_metadata = rdp.texture_to_load.raw_tex_metadata;
     loaded_texture.addr = rdp.texture_to_load.addr;
+    loaded_texture.src_fmt = rdp.texture_to_load.fmt; /* D229 */
 
     rdp.textures_changed[0] = rdp.textures_changed[1] = true;
 }
@@ -2390,6 +2467,7 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     loaded_texture.tex_flags = rdp.texture_to_load.tex_flags;
     loaded_texture.raw_tex_metadata = rdp.texture_to_load.raw_tex_metadata;
     loaded_texture.addr = rdp.texture_to_load.addr + start_offset_bytes;
+    loaded_texture.src_fmt = rdp.texture_to_load.fmt; /* D229 */
 
     rdp.texture_tile[tile].uls = uls;
     rdp.texture_tile[tile].ult = ult;

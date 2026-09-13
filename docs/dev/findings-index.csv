@@ -35,7 +35,7 @@ D224,FIXED,"QoL gap (M-87, from a PD-PC-port survey):","DEPRIORITIZED (M-87, use
 D225,OPEN,"Dev-tooling QoL (M-87, user ask):","OPEN — root-caused, not implemented."
 D226,OPEN,"QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.","OPEN — root cause / call sites identified, not designed or implemented."
 D227,FIXED,Sky renders as two independently-moving halves —,"FIXED (M-100b, PR #43) —"
-D229,OPEN,"Water on IsWater levels renders green and pulses blue<->green on an interval (M-101, user playtest, Frigate -level_26; Surface 2 also an IsWater level).","OPEN — pre-existing (A/B proven), mechanism partly identified, not root-caused."
+D229,FIXED,"Water on IsWater levels renders green and pulses blue<->green on an interval (M-101, user playtest, Frigate -level_26; Surface 2 also an IsWater level).",FIXED (port-layer) — root cause:
 D230,OPEN,In-level music quality:,"OPEN — static-analysis pass done (M-108), not runtime-confirmed."
 D233,FIXED,All levels (intermittent):,"FIXED (port/fast3d/gfx_pc.cpp, gfx_sp_tri1) —"
 D234,FIXED,"Dam: guard towers along the dam structure invisible except the first one (M-106, user QA report).",VISUALLY VERIFIED FIXED (M-108) —
@@ -126,3 +126,6 @@ D240,OPEN,"Player gunshot SFX timing/cadence reportedly does not match the N64 o
 D241,OPEN,Player gunshot SFX goes silent under some conditions —,"OPEN — not newly root-caused; high confidence this is D207 reproduced, not an independent bug."
 D242,?,Player-death sequence UX regression vs N64 original:,NOT A PORT-LOGIC BUG as far as static analysis can tell.
 D243,OPEN,"Dam end-of-level cutscene (the abseil/bungee sequence, D148/D160's subject):",OPEN — M-109 re-analysis of the same session's raw logs corrects the timing/pattern claims above; the D134/pendingGfx race hypothesis is likely wrong.
+D245,OPEN,IsWater water: two competing patterns with a visible seam that moves as the player looks around (mouse/aim) —,"OPEN — observed, not investigated."
+D246,OPEN,"Tiny pixel strips at the left and right edges of the screen, ""like overscan"" —","OPEN — observed, not investigated."
+D247,OPEN,Black bars top and bottom of screen —,OPEN — possibly intended pending the widescreen decision; needs one data point.
