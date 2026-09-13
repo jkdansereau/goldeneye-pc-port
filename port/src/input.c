@@ -296,7 +296,14 @@ static int mouseAimSpeed  = 16;     /* aim-mode sensitivity, percent (B3: 50 -> 
 static int gepdSens       = 25;     /* D194 Input.GepdSens: GEPD SENSITIVITY setting, range 1..80
                                         (20 -> 25 after M-123 user playtest: "a bit slow/unsensitive") */
 static int aimBand        = 20;     /* aim mode: usable stick range above the 60 gate */
-static int mouseTurnSpeed = 100;    /* hipfire yaw sensitivity, percent */
+/* D194/D238: default 100 -> 40 (M-123 user calibration). The old gain
+ * (MOUSE_TURN_GAIN=6 stick/px) saturated the game's quadratic natural-turn
+ * curve at ~13 px/poll, i.e. hipfire ran at full 315 deg/s for any normal
+ * movement while GEPD aim mode moves proportionally -- "too fast when I
+ * leave that mode". At 40% (2.4 stick/px) the mid-speed view rate matches
+ * the GEPD reticle's angular pace at GepdSens=30; flicks still reach full
+ * turn speed, only later. */
+static int mouseTurnSpeed = 40;     /* hipfire yaw sensitivity, percent */
 static int menuPointerSpeed = 100;  /* front-end cursor speed, percent */
 static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
 static int mouseYScale    = 100;    /* extra vertical (pitch) sensitivity, % */
@@ -1397,7 +1404,11 @@ static int aimGepdCompute(double dxPx, double dyLook)
     s_gepdHeldPrev = 1;
 
     /* Crosshair position: GEPD crosshairpos += delta/10 * (SENS/292). */
-    double sens = (double) gepdSens / 2920.0;
+    /* D194/D238: master sensitivity scales aim mode too, so MouseSensitivity
+     * moves BOTH hipfire and aim together ("in line"); GepdSens sets the
+     * aim-mode offset from that shared baseline. At master=100 this is
+     * exactly the M-123-calibrated feel. */
+    double sens = (double) gepdSens / 2920.0 * (mouseSensitivity / 100.0);
     s_gepdCrossX += dxPx * sens;
     s_gepdCrossY += dyLook * sens;      /* +dyLook = look down = crosshair down */
     if (s_gepdCrossX >  GEPD_CROSSHAIR_LIMIT) s_gepdCrossX =  GEPD_CROSSHAIR_LIMIT;
