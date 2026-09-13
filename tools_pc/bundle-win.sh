@@ -75,6 +75,7 @@ sed -e "s|@VERSION@|${VERSION}|g" \
     -e "s|@PLATFORM@|Windows x86-64|g" \
     -e "s|@EXE@|${EXE_NAME}|g" \
     -e "s|@DEPS@||g" \
+    -e "s|@DECK@||g" \
     -e "s|@LICENSE_EXTRA@|, the MinGW runtime|g" \
     tools_pc/dist/README.md.in > "$OUT/README.md"
 cp NOTICE  "$OUT/licenses/NOTICE"

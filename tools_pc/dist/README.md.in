@@ -62,18 +62,21 @@ first run.
 
 ## 4. Controls (defaults)
 
-| Action | Keyboard / mouse |
-|---|---|
-| Move / strafe | `W` `A` `S` `D` / arrows |
-| Aim / look | mouse |
-| Fire | left mouse / `LCtrl` |
-| Aim mode | right mouse / `LShift` |
-| Use / accept | `Space` / `E` |
-| Reload / cancel | `R` / `F` |
-| Start | `Enter` / `Tab` |
+| Action | Keyboard / mouse | Controller |
+|---|---|---|
+| Move / strafe | `W` `A` `S` `D` / arrows | Left stick (or D-pad) |
+| Aim / look | mouse | Right stick |
+| Fire | left mouse / `LCtrl` | Right trigger |
+| Aim mode | right mouse / `LShift` | Left trigger |
+| Use / accept | `Space` / `E` / `X` | A / X |
+| Reload / cancel | `R` / `F` | B / Y |
+| Next / previous weapon | Mouse wheel up / down | RB / LB |
+| Start | `Enter` / `Tab` | Start |
+| Options overlay | `F10` | Select (D-pad/stick + A/B navigate, Start closes) |
 
 Mouse sensitivity and Y-inversion are in the `[Input]` section of `ge007.ini`.
 
+@DECK@
 ## 5. Legal
 
 Non-commercial fan preservation / research project. **Not** affiliated with,

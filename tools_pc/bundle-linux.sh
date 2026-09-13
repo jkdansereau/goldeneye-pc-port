@@ -71,13 +71,18 @@ fi
 
 # --- docs + licenses --------------------------------------------------
 DEPS_BLOCK=$'## 1a. Runtime libraries\n\nSDL2 is bundled in this folder and found automatically (the executable\npoints at its own directory first). zlib and OpenGL come from your system —\npreinstalled on every desktop distro and on SteamOS / Steam Deck.\n\n**Steam Deck:** sideload this folder (USB or a file manager), do steps 2–4\nbelow, then add `@EXE@` to Games → *Add Game* as a non-Steam game.\n'
+# @DECK@: the in-game settings (F10 overlay) controller-mapping guide — only
+# meaningful where Steam input mapping exists (Deck / Linux); Windows bundles
+# substitute it with nothing.
+DECK_BLOCK=$'## 4a. Steam Deck — in-game settings (options overlay)\n\nThe options overlay is fully gamepad-driven: it opens with **Select**, the\nD-pad or left stick (up/down) moves between options, **A** steps the selected\noption forward, **B** steps it back, and **Start** (or Select again) closes.\nToggles flip, resolution / MSAA / filtering cycle, sliders step in\nincrements. With a keyboard attached the same overlay is `F10` + arrows/Enter.\n\n'
 sed -e "s|@VERSION@|${VERSION}|g" \
     -e "s|@PLATFORM@|Linux x86-64|g" \
     -e "s|@EXE@|${EXE_NAME}|g" \
     -e "s|@LICENSE_EXTRA@||g" \
     tools_pc/dist/README.md.in > "$OUT/README.md.tmp"
-# @DEPS@ is a multi-line block — substitute it via awk, not sed.
-awk -v repl="$DEPS_BLOCK" '{ if ($0 == "@DEPS@") print repl; else print }' \
+# @DEPS@ / @DECK@ are multi-line blocks — substitute them via awk, not sed.
+awk -v deps="$DEPS_BLOCK" -v deck="$DECK_BLOCK" \
+     '{ if ($0 == "@DEPS@") print deps; else if ($0 == "@DECK@") print deck; else print }' \
     "$OUT/README.md.tmp" > "$OUT/README.md"
 rm -f "$OUT/README.md.tmp"
 

@@ -6,22 +6,20 @@
 A native PC port of _GoldenEye 007_ (Rare, 1997, Nintendo 64), compiled from
 the [GoldenEye 007 decompilation](https://github.com/n64decomp/007): the
 original N64 game running from reconstructed source, not the Xbox 360
-remaster. **v0.2.0 (pre-release)** is out for Windows and Linux — including
-Steam Deck, where the Linux bundle sideloads as-is — and runs the full
-campaign at a steady 60 fps with known rough edges (see
-[Status](#status) and [Download](#download)).
+remaster. The N64's graphics coprocessor (RSP) is emulated in software; every
+other hardware surface (video, audio, input, timers, save storage) is shimmed
+in a dedicated `port/` layer, following the architecture of the
+[Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark), the same
+Rare "Indy" engine family, one hardware generation apart.
+
+**v0.2.0 (pre-release)** is out for Windows and Linux — including Steam Deck,
+where the Linux bundle sideloads as-is — and runs the full campaign at a steady
+60 fps with known rough edges ([Status](#status)).
 
 It's also a case study in AI-agent collaboration on a large, low-level
 codebase: two coding agents, driven by one person part-time, porting ~230
-translation units of unmodified big-endian MIPS game code to a 64-bit
-desktop. See [Background](#background).
-
-Technically, it follows the architecture of the
-[Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark), the same
-Rare "Indy" engine family, one hardware generation apart. The unmodified game
-C sources are compiled for the host; the N64's Reality Signal Processor (RSP)
-is emulated in software; every other hardware surface (video, audio, input,
-timers, save storage) is shimmed in a dedicated `port/` layer.
+translation units of unmodified big-endian MIPS game code to a 64-bit desktop.
+See [Background](#background).
 
 > [!IMPORTANT]
 > **You must supply your own GoldenEye 007 ROM.** This repository contains no
@@ -37,19 +35,79 @@ timers, save storage) is shimmed in a dedicated `port/` layer.
   Facility &rarr; Silo &rarr; Jungle &rarr; Archives.</em>
 </p>
 
-## Quick start
+## Download
 
-You supply your own **GoldenEye 007 N64 ROM** (`.z64`, big-endian; NTSC-U
-recommended — all three regions are supported, see [Requirements](#requirements)).
-No ROM or game asset is included or distributed. Then:
+| Platform | Bundle | Notes |
+|---|---|---|
+| **Windows** (x86_64) | [win64.zip](../../releases) | Engine + runtime DLLs + the one-time asset tool. |
+| **Linux** (x86_64) / **Steam Deck** | [linux tarball](../../releases) | SDL2 is bundled — runs as-is on any distro, and sideloads onto a Deck with nothing installed. |
 
-1. Download the Windows or Linux bundle from [Releases](../../releases) and unpack it. The Linux bundle ships its own SDL2, so it runs on any distro — and on a Steam Deck — with nothing installed.
+Both bundles contain **no ROM and no game assets** — you supply your own
+(see [Requirements](#requirements)), which keeps the release legal to
+distribute. Earlier builds: v0.1.0 alpha, same page. You can also build it
+yourself; see [Building](#building).
+
+### Quick start
+
+You need a GoldenEye 007 N64 ROM (`.z64`, big-endian; NTSC-U recommended — all
+three regions are supported). No ROM or game asset is included or distributed.
+Then:
+
+1. Download the Windows or Linux bundle from [Releases](../../releases) and unpack it.
 2. Make a `data/` folder next to the executable and drop the ROM in as `ge007.ntsc-final.z64`.
 3. Run the one-time asset step: `python3 prepare-assets/prepare-assets.py` (Python 3.8+, stdlib only).
 4. Launch the executable from that folder.
 
-Building from source instead: see [Building](#building). Read the
-[Status](#status) caveats first — this is a pre-release.
+Read the [Status](#status) caveats first — this is a pre-release.
+
+## Status
+
+**v0.2.0 (pre-release) — playable, with known rough edges.** It runs the full
+single-player campaign at a steady 60 fps with no known crashes; the point of
+the pre-release is an end-to-end playtest that all 21 missions are completable
+start to finish on this build — feedback is welcome.
+
+**Working:** boot sequence and front end (menu → mission select → briefing →
+start); all 21 solo missions load, render and are crash-free; steady 60 fps
+(software RSP off the presentation critical path); full audio — in-level music
+and SFX; keyboard + mouse (click-to-lock, proportional aim mode) and a modern
+dual-stick controller layout; file-backed saves; F10 in-game options overlay
+(resolution, frame cap, MSAA, filtering, FOV, sensitivity); Windows and Linux.
+
+**Known issues:**
+
+- **Cutscenes glitch frequently** — skipped beats, wrong camera, misplaced or
+  hovering actors, wrong timing. The most visible gap in this release.
+- A few in-level music tracks sound wrong (wrong instruments, occasional
+  garbling).
+- Particle colours drift through a rainbow palette instead of holding their
+  grey/orange intent (bullet sparks, lingering smoke/explosion residue).
+- Water levels show a moving seam between two water patterns; pixel strips at
+  the left/right screen edges at non-integer scales; some front-end 3D models
+  (spinning Nintendo logo, MISSION COMPLETE / mode-select) mispositioned or
+  absent. Assorted further cosmetic defects are tracked in
+  [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
+- No macOS or ARM support; no widescreen; no controller rebinding UI.
+
+Root causes and fix status for every item: the [release notes](../../releases)
+and the finding log in [`docs/dev/findings.md`](docs/dev/findings.md).
+
+### Steam Deck
+
+The Linux bundle is the Deck build. Sideload it (USB or a file manager):
+unzip, drop your ROM in `data/`, run `prepare-assets` once, and add the
+executable as a non-Steam game. SDL2 is bundled, so no dependencies need
+installing. The renderer is CPU-bound (software RSP); expect original N64-era
+performance at 60 fps rather than more. A v0.1.0-era crash on the Deck in
+Facility was never reproduced and its prime suspect has since been fixed, but
+this release has not yet been verified on real Deck hardware.
+
+**In-game settings on the Deck.** The options overlay is fully gamepad-driven:
+it opens with **Select**, the D-pad or left stick (up/down) moves between
+options, **A** steps the selected option forward, **B** steps it back, and
+**Start** (or Select again) closes. Toggles flip, resolution / MSAA /
+filtering cycle, sliders step in increments. With a keyboard attached the same
+overlay is `F10` + arrows/Enter.
 
 ## Beyond playing
 
@@ -65,24 +123,6 @@ Building from source instead: see [Building](#building). Read the
   extend (see [License](#license)); [`CONTRIBUTING.md`](CONTRIBUTING.md) has
   the ground rules for getting changes in, and [`docs/dev/`](docs/dev/) is
   the raw engineering record behind every fix.
-
-## Contents
-
-- [Quick start](#quick-start)
-- [Beyond playing](#beyond-playing)
-- [Background](#background)
-- [How this differs from the other GoldenEye PC projects](#how-this-differs-from-the-other-goldeneye-pc-projects)
-- [Status](#status)
-- [Download](#download)
-- [Requirements](#requirements)
-- [Building](#building) · [Windows (MSYS2)](#windows-msys2) · [Linux](#linux)
-- [Running](#running) · [Default controls](#default-controls)
-- [How it works](#how-it-works)
-- [Project layout](#project-layout)
-- [Documentation](#documentation)
-- [Credits](#credits)
-- [Legal](#legal)
-- [License](#license)
 
 ## Background
 
@@ -122,91 +162,6 @@ code with this one.
 If you just want to play GoldenEye on PC today, use one of the recompilation
 projects: they are finished and this is not. What's here is the other half,
 getting the *original* game running from source.
-
-## Status
-
-**v0.2.0 (pre-release) — playable, with known rough edges.** It runs the full
-single-player campaign at a steady 60 fps with no known crashes, but
-cutscenes still glitch frequently, a few in-level music tracks sound wrong,
-and a handful of cosmetic rendering defects remain. A full end-to-end
-re-confirmation that all 21 missions are completable start to finish on this
-build is the point of the pre-release — playtest feedback is welcome.
-
-**Working**
-
-- Boot → Rare/Nintendo logos → gun-barrel → cast intro, fully rendered.
-- Front end: main menu → mission select → difficulty → briefing → mission start.
-- All 21 solo missions load, render, and are crash-free. The v0.1.0-era
-  crashing levels (Bunker ii, Statue) and the AI-pacing bug that blocked the
-  final level (Cradle) were root-caused, fixed, and playtest-verified (D191,
-  D193). See [`docs/dev/LEVEL-STATUS.md`](docs/dev/LEVEL-STATUS.md).
-- **Steady 60 fps** in normal play — the software RSP runs off the
-  presentation critical path (D248); `Video.DisplayFPS` (F10) shows it.
-- Software RSP (fast3d): textured world geometry, skeletal characters, HUD,
-  the GE-specific color-combiner / render modes and `G_TRI4`; outdoor skies
-  render correctly (D227); water no longer renders green/pulsing (D229).
-- Input: keyboard + mouse and SDL game controllers mapped onto the N64 pad.
-  Mouse is click-to-lock (click to grab, ESC to release) with a GEPD-style
-  proportional aim mode (D194 closed); sensitivity, Y-inversion and the
-  aim/turn split are tunable in `ge007.ini` or the F10 options overlay.
-- File-backed EEPROM saves.
-- Audio — software mixer (libultra audio layer → SDL, adapted from the PD
-  port). In-level sound effects and in-level music both play (the D77
-  silence is fixed).
-- QoL: F10 in-game options overlay (fullscreen, resolution, frame cap, MSAA,
-  texture filtering, FOV/draw distance, sensitivity), mute-on-focus-loss, F12
-  screenshot.
-- Windows and Linux (`x86_64`). The Linux build is compiled on every push by
-  CI and ships with SDL2 bundled, so it runs without installing anything —
-  including on a Steam Deck (see below).
-
-**Not yet working / known issues**
-
-- **Cutscenes** — frequently glitch: skipped beats, wrong camera, misplaced or
-  hovering actors, wrong timing (D148/D160/D173; the Dam level-end race is
-  D243). The most visible gap in this release.
-- **Audio quality on some in-level tracks** — wrong-sounding instruments and
-  occasional garbling (D230); silence itself is fixed.
-- Some front-end 3D models — the spinning Nintendo logo, and the MISSION
-  COMPLETE / mode-select models — are mispositioned or absent (D75). The
-  gun-barrel Bond intro renders correctly.
-- **Particle colours cycle through a rainbow palette** — bullet-impact sparks
-  and lingering smoke/explosion residue drift through the hues over time
-  instead of holding their intended grey/orange palette (D252; suspect is the
-  RGBA16 fire-tile width/height in the texture importer).
-- Water on `IsWater` levels shows a moving seam between two patterns (D245);
-  pixel strips at the left/right screen edges at non-integer scales (D246).
-  Assorted other cosmetic defects are tracked in
-  [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
-- No macOS or ARM support; no controller rebinding UI; no widescreen.
-
-### Steam Deck
-
-The Linux bundle is the Deck build. Sideload it (USB or a file manager):
-unzip, drop your ROM in `data/`, run `prepare-assets` once, and add the
-executable as a non-Steam game. SDL2 is bundled, so no dependencies need
-installing. The renderer is CPU-bound (software RSP); expect original N64-era
-performance at 60 fps rather than more. A v0.1.0-era crash on the Deck in
-Facility (D203) was never reproduced and its prime suspect has since been
-fixed, but this release has not yet been verified on real Deck hardware.
-
-## Download
-
-**Get v0.2.0 (pre-release):**
-
-- **Windows:** [`goldeneye-pc-port-0.2.0-pre-win64.zip`](../../releases) —
-  the engine, its runtime DLLs, and the one-time `prepare-assets` tool.
-- **Linux / Steam Deck:** [`goldeneye-pc-port-0.2.0-pre-linux-x86_64.tar.gz`](../../releases)
-  — same contents; SDL2 is bundled so it runs as-is on any distro or a
-  sideloaded Deck.
-
-Both bundles contain **no ROM and no game assets** — you supply your own
-(see [Requirements](#requirements)), which keeps the release legal to
-distribute. The four steps from download to playing are in
-[Quick start](#quick-start); known issues are listed under
-[Status](#status). Earlier builds: v0.1.0 alpha, same page.
-
-You can also build it yourself; see [Building](#building).
 
 ## Requirements
 
@@ -289,6 +244,7 @@ lives in `ge007.eep`. Launch with `-fresh` to wipe both before starting
 | Next weapon         | Mouse wheel up           | RB            |
 | Previous weapon     | Mouse wheel down         | LB            |
 | Start               | `Enter` / `Tab`          | Start         |
+| Options overlay     | `F10`                    | Select (D-pad/stick + A/B navigate, Start closes) |
 
 The controller layout follows the modern dual-stick scheme used by the
 console re-releases (left stick move, right stick look, triggers fire/aim,
@@ -300,30 +256,20 @@ Mouse sensitivity, Y-inversion and the aim/turn split are tunable in the
 ## How it works
 
 The R4300 game code in `src/` is compiled completely unmodified; the
-decompilation's control flow is treated as ground truth. Everything that
-would touch N64 hardware is redirected into `port/`:
-
-- **`port/fast3d/`** — a software RSP. It interprets the GBI display list the
-  game builds each frame and emits OpenGL, bypassing the RDP. Adapted from the
-  Perfect Dark port and extended for GoldenEye's custom GBI.
-- **`port/src/gesched.c`** — replaces the RCP scheduler; instead of poking RSP
-  registers it drives the software RSP directly.
-- **`port/src/libultra.c`** — single-threaded shims for the libultra OS API
-  (threads, messages, timers, PI/SI/AI/VI) over the host.
-- **`port/src/{video,audio,input,fs,romdata,config}.c`** — the SDL2 / OpenGL /
-  filesystem backends.
-
-The 32→64-bit transition forces a small, cataloged class of mechanical
-ABI-only edits to ROM-serialized structs (pointer-width reconciliation); these
-change no behavior and are documented individually.
-
-Where it diverges from the Perfect Dark port: GoldenEye's N64 serialized asset
-formats (level setup, models, backgrounds) are converted offline by a set
-of Python "sidecar" converters in `tools_pc/`, rather than fixed up at load
-time. See [`docs/internals.md`](docs/internals.md) and
+decompilation's control flow is ground truth. Everything that would touch N64
+hardware is redirected into `port/`: a **software RSP** (`port/fast3d/`,
+adapted from the Perfect Dark port) that interprets the GBI display list the
+game builds each frame and emits OpenGL, bypassing the RDP; a scheduler
+replacement (`port/src/gesched.c`) that drives it directly; single-threaded
+libultra OS shims (`port/src/libultra.c`); and SDL2/OpenGL/filesystem backends
+for video, audio, input and storage. The 32→64-bit transition forces a small,
+cataloged class of mechanical ABI-only edits to ROM-serialized structs
+(pointer-width reconciliation); these change no behavior and are documented
+individually. Where it diverges from the Perfect Dark port: GoldenEye's N64
+serialized asset formats are converted offline by Python "sidecar" converters
+in `tools_pc/` rather than fixed up at load time. Full detail:
+[`docs/internals.md`](docs/internals.md) and
 [`docs/porting-notes.md`](docs/porting-notes.md).
-
-## Project layout
 
 ```
 CMakeLists.txt      PC build (parallel to the decomp's Makefile, which is untouched)

@@ -82,6 +82,11 @@ region from the SHA-1. US is the best-tested.
 **Steam Deck:** sideload the unpacked folder (USB or a file manager), do steps
 2–4, then add the executable to Games → *Add Game* as a non-Steam game.
 
+**In-game settings on the Deck:** the options overlay is fully gamepad-driven
+— it opens with **Select**, the D-pad or left stick (up/down) moves between
+options, **A** steps the selected option forward, **B** steps it back, and
+**Start** (or Select again) closes. No keyboard needed.
+
 Full steps are in the bundled `README.md`.
 
 ### Verify the download
