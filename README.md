@@ -6,8 +6,10 @@
 A native PC port of _GoldenEye 007_ (Rare, 1997, Nintendo 64), compiled from
 the [GoldenEye 007 decompilation](https://github.com/n64decomp/007): the
 original N64 game running from reconstructed source, not the Xbox 360
-remaster. The first alpha, [v0.1.0](../../releases), is out for Windows and
-Linux and runs the full campaign with rough edges (see [Status](#status)).
+remaster. **v0.2.0 (pre-release)** is out for Windows and Linux — including
+Steam Deck, where the Linux bundle sideloads as-is — and runs the full
+campaign at a steady 60 fps with known rough edges (see
+[Status](#status) and [Download](#download)).
 
 It's also a case study in AI-agent collaboration on a large, low-level
 codebase: two coding agents, driven by one person part-time, porting ~230
@@ -40,13 +42,13 @@ timers, save storage) is shimmed in a dedicated `port/` layer.
 You supply your own **NTSC-U GoldenEye 007 N64 ROM** (`.z64`, big-endian) — no
 ROM or game asset is included or distributed. Then:
 
-1. Download the Windows or Linux bundle from [Releases](../../releases) and unpack it.
+1. Download the Windows or Linux bundle from [Releases](../../releases) and unpack it. The Linux bundle ships its own SDL2, so it runs on any distro — and on a Steam Deck — with nothing installed.
 2. Make a `data/` folder next to the executable and drop the ROM in as `ge007.ntsc-final.z64`.
 3. Run the one-time asset step: `python3 prepare-assets/prepare-assets.py` (Python 3.8+, stdlib only).
 4. Launch the executable from that folder.
 
 Building from source instead: see [Building](#building). Read the
-[Status](#status) caveats first — this is an early alpha.
+[Status](#status) caveats first — this is a pre-release.
 
 ## Contents
 
@@ -103,7 +105,7 @@ code with this one.
 | **How** | Decompilation-based source port — human-reconstructed C, compiled for the host; game logic runs as written | Static binary recompilation — the shipped machine code is auto-translated to C; no source-level understanding |
 | **Lineage** | [GoldenEye 007 decompilation](https://github.com/n64decomp/007) + [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) engine family | Xbox 360 "…Recompiled" static-recompilation family |
 | **Renderer** | Software RSP → OpenGL | Hardware (Vulkan) |
-| **Status** | WIP alpha; see [Status](#status) | Playable full game, higher frame rates, online multiplayer |
+| **Status** | v0.2.0 pre-release; see [Status](#status) | Playable full game, higher frame rates, online multiplayer |
 | **Why it exists** | A [case study in AI-agent collaboration](#background) on a hard low-level codebase | A polished, playable PC release of the remaster |
 
 If you just want to play GoldenEye on PC today, use one of the recompilation
@@ -112,68 +114,82 @@ getting the *original* game running from source.
 
 ## Status
 
-**Alpha — playable, not polished.** It runs the full single-player campaign
-with no known crashes, but some front-end 3D models and cutscenes are
-broken, a few in-level music tracks sound wrong, and input has known rough
-edges. A full
-end-to-end re-confirmation that all 21 missions are completable start to
-finish is still owed (see below). Treat it as an early alpha of the porting
-work, not a finished way to play GoldenEye.
-
-Phase 3 of 4 (audio + input) is in progress; Phase 2 (rendering) is
-essentially done. First alpha: [v0.1.0](../../releases). The port boots,
-renders, and plays through the front end and the campaign, but is not
-finished or fully stable.
+**v0.2.0 (pre-release) — playable, with known rough edges.** It runs the full
+single-player campaign at a steady 60 fps with no known crashes, but
+cutscenes still glitch frequently, a few in-level music tracks sound wrong,
+and a handful of cosmetic rendering defects remain. A full end-to-end
+re-confirmation that all 21 missions are completable start to finish on this
+build is the point of the pre-release — playtest feedback is welcome.
 
 **Working**
 
 - Boot → Rare/Nintendo logos → gun-barrel → cast intro, fully rendered.
 - Front end: main menu → mission select → difficulty → briefing → mission start.
-- All 21 solo missions load, render, and are crash-free. A v0.1.0-era
-  full-campaign playtest found two crashing levels (Bunker ii, Statue, one
-  root cause) and an AI-pacing bug that blocked the final level (Cradle) from
-  finishing; both were subsequently root-caused, fixed, and playtest-verified
-  (D191, D193) — a full re-playthrough confirming all 21 missions completable
-  start to finish on the current build is still owed. See
-  [`docs/dev/LEVEL-STATUS.md`](docs/dev/LEVEL-STATUS.md).
+- All 21 solo missions load, render, and are crash-free. The v0.1.0-era
+  crashing levels (Bunker ii, Statue) and the AI-pacing bug that blocked the
+  final level (Cradle) were root-caused, fixed, and playtest-verified (D191,
+  D193). See [`docs/dev/LEVEL-STATUS.md`](docs/dev/LEVEL-STATUS.md).
+- **Steady 60 fps** in normal play — the software RSP runs off the
+  presentation critical path (D248); `Video.DisplayFPS` (F10) shows it.
 - Software RSP (fast3d): textured world geometry, skeletal characters, HUD,
-  the GE-specific color-combiner / render modes and `G_TRI4`.
-- Input: keyboard + mouse (with mode-aware mouse-look) and SDL game
-  controllers, mapped onto the N64 pad. Tunable via `ge007.ini`.
+  the GE-specific color-combiner / render modes and `G_TRI4`; outdoor skies
+  render correctly (D227); water no longer renders green/pulsing (D229).
+- Input: keyboard + mouse and SDL game controllers mapped onto the N64 pad.
+  Mouse is click-to-lock (click to grab, ESC to release) with a GEPD-style
+  proportional aim mode (D194 closed); sensitivity, Y-inversion and the
+  aim/turn split are tunable in `ge007.ini` or the F10 options overlay.
 - File-backed EEPROM saves.
 - Audio — software mixer (libultra audio layer → SDL, adapted from the PD
   port). In-level sound effects and in-level music both play (the D77
-  silence is fixed); a handful of tracks have wrong-sounding instruments or
-  occasional garbling (D230).
-- Windows and Linux (`x86_64`). Windows is the primary development and
-  playtest path. The Linux build was built and smoke-tested (boots, renders,
-  passes the level sweep) at v0.1.0; it has not been actively maintained or
-  retested since.
+  silence is fixed).
+- QoL: F10 in-game options overlay (fullscreen, resolution, frame cap, MSAA,
+  texture filtering, FOV/draw distance, sensitivity), mute-on-focus-loss, F12
+  screenshot.
+- Windows and Linux (`x86_64`). The Linux build is compiled on every push by
+  CI and ships with SDL2 bundled, so it runs without installing anything —
+  including on a Steam Deck (see below).
 
-**Not yet working**
+**Not yet working / known issues**
 
-- **Audio quality on some in-level tracks** — wrong-sounding instruments
-  (the elevator track named specifically) and occasional garbling (D230);
-  the D77 silence itself is fixed.
-- **Cutscenes** — frequently glitch: skipped, wrong camera, misplaced or
-  hovering actors, wrong timing (D148/D160).
+- **Cutscenes** — frequently glitch: skipped beats, wrong camera, misplaced or
+  hovering actors, wrong timing (D148/D160/D173; the Dam level-end race is
+  D243). The most visible gap in this release.
+- **Audio quality on some in-level tracks** — wrong-sounding instruments and
+  occasional garbling (D230); silence itself is fixed.
 - Some front-end 3D models — the spinning Nintendo logo, and the MISSION
-  COMPLETE / mode-select models — are mispositioned or absent. (The
-  gun-barrel Bond intro renders correctly.)
-- Outdoor levels' sky rendering is fixed (was solid black/glitchy — D227,
-  merged); water on `IsWater` levels still renders green and pulses
-  (D229). Assorted other cosmetic defects are tracked in
+  COMPLETE / mode-select models — are mispositioned or absent (D75). The
+  gun-barrel Bond intro renders correctly.
+- Water on `IsWater` levels shows a moving seam between two patterns (D245);
+  pixel strips at the left/right screen edges at non-integer scales (D246).
+  Assorted other cosmetic defects are tracked in
   [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
 - No macOS or ARM support; no controller rebinding UI; no widescreen.
 
+### Steam Deck
+
+The Linux bundle is the Deck build. Sideload it (USB or a file manager):
+unzip, drop your ROM in `data/`, run `prepare-assets` once, and add the
+executable as a non-Steam game. SDL2 is bundled, so no dependencies need
+installing. The renderer is CPU-bound (software RSP); expect original N64-era
+performance at 60 fps rather than more. A v0.1.0-era crash on the Deck in
+Facility (D203) was never reproduced and its prime suspect has since been
+fixed, but this release has not yet been verified on real Deck hardware.
+
 ## Download
 
-Pre-built Windows and Linux `x86_64` bundles are published under
-[Releases](../../releases), starting with v0.1.0. Each contains the engine
-executable, its runtime libraries, and the one-time `prepare-assets` tool —
-no ROM and no game assets. See [Quick start](#quick-start) for the four
-steps to get it running, [Requirements](#requirements) for accepted ROMs, and
-[Status](#status) for the alpha caveats.
+**Get v0.2.0 (pre-release):**
+
+- **Windows:** [`goldeneye-pc-port-0.2.0-pre-win64.zip`](../../releases) —
+  the engine, its runtime DLLs, and the one-time `prepare-assets` tool.
+- **Linux / Steam Deck:** [`goldeneye-pc-port-0.2.0-pre-linux-x86_64.tar.gz`](../../releases)
+  — same contents; SDL2 is bundled so it runs as-is on any distro or a
+  sideloaded Deck.
+
+Both bundles contain **no ROM and no game assets** — you supply your own
+(see [Requirements](#requirements)), which keeps the release legal to
+distribute. The four steps from download to playing are in
+[Quick start](#quick-start); known issues are listed under
+[Status](#status). Earlier builds: v0.1.0 alpha, same page.
 
 You can also build it yourself; see [Building](#building).
 
@@ -219,8 +235,8 @@ cd goldeneye-pc-port
 
 ### Linux
 
-Built and smoke-tested at v0.1.0; not actively maintained or retested since —
-the steps below are the intended path, not a continuously verified one.
+The Linux build is compiled on every push by CI (ubuntu-24.04); the release
+bundle additionally bundles SDL2 so no system packages are needed at runtime.
 
 ```sh
 sudo apt install build-essential cmake python3 libsdl2-dev zlib1g-dev libgl1-mesa-dev
