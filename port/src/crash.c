@@ -324,7 +324,7 @@ static void *crashGetModuleBase(const void *addr)
     return NULL;
 }
 
-static void crashStackTrace(char *msg, int sig, void *pc)
+static void crashStackTrace(char *msg, int sig, void *pc, ucontext_t *ucontext, siginfo_t *siginfo)
 {
     unsigned msglen = 0;
     void *frames[CRASH_MAX_FRAMES] = { NULL };
@@ -338,6 +338,26 @@ static void crashStackTrace(char *msg, int sig, void *pc)
     char **strings = backtrace_symbols(frames, nframes);
 
     CRASH_MSG("SIGNAL: %d\n", sig);
+    if (siginfo && (sig == SIGSEGV || sig == SIGBUS)) {
+        CRASH_MSG("FAULT ADDR: %p\n", (void *)siginfo->si_addr);
+    }
+#if defined(PLATFORM_X86_64)
+    if (ucontext) {
+        CRASH_MSG("REGS: Rax=%p Rcx=%p Rdx=%p Rsi=%p Rdi=%p R8=%p R9=%p R10=%p R11=%p\n",
+                  (void *)ucontext->uc_mcontext.gregs[REG_RAX],
+                  (void *)ucontext->uc_mcontext.gregs[REG_RCX],
+                  (void *)ucontext->uc_mcontext.gregs[REG_RDX],
+                  (void *)ucontext->uc_mcontext.gregs[REG_RSI],
+                  (void *)ucontext->uc_mcontext.gregs[REG_RDI],
+                  (void *)ucontext->uc_mcontext.gregs[REG_R8],
+                  (void *)ucontext->uc_mcontext.gregs[REG_R9],
+                  (void *)ucontext->uc_mcontext.gregs[REG_R10],
+                  (void *)ucontext->uc_mcontext.gregs[REG_R11]);
+        CRASH_MSG("Rsp=%p Rbp=%p\n",
+                  (void *)ucontext->uc_mcontext.gregs[REG_RSP],
+                  (void *)ucontext->uc_mcontext.gregs[REG_RBP]);
+    }
+#endif
     CRASH_MSG("PC: ");
     if (pc) {
         CRASH_MSG("%p\n", pc);
@@ -370,13 +390,26 @@ static void crashStackTrace(char *msg, int sig, void *pc)
     free(strings);
 }
 
+/* D254: re-entrancy guard. The handler used to call sysFatalError() ->
+ * abort() -> SIGABRT, which re-entered this handler and TRUNCATED the log
+ * ("wb"), destroying the original SEGV block — the one with the faulting
+ * PC/registers. Field crash logs then only showed the abort. Guard against
+ * re-entry and terminate directly instead (the Windows path already did).
+ */
+static sig_atomic_t inCrashHandler = 0;
+
 static void crashHandler(int sig, siginfo_t *siginfo, void *ctx)
 {
+    if (inCrashHandler) {
+        _exit(128 + sig);
+    }
+    inCrashHandler = 1;
+
     char msg[CRASH_MAX_MSG + 1] = { 0 };
 
+    ucontext_t *ucontext = ctx ? (ucontext_t *)ctx : NULL;
     void *pc = NULL;
-    if (ctx) {
-        ucontext_t *ucontext = (ucontext_t *)ctx;
+    if (ucontext) {
 #ifdef PLATFORM_X86
         pc = (void *)ucontext->uc_mcontext.gregs[REG_EIP];
 #elif defined(PLATFORM_X86_64)
@@ -389,7 +422,7 @@ static void crashHandler(int sig, siginfo_t *siginfo, void *ctx)
     fflush(stderr);
     fflush(stdout);
 
-    crashStackTrace(msg, sig, pc);
+    crashStackTrace(msg, sig, pc, ucontext, siginfo);
 
     {
         FILE *f = fopen(CRASH_LOG_FNAME, "wb");
@@ -399,7 +432,9 @@ static void crashHandler(int sig, siginfo_t *siginfo, void *ctx)
         }
     }
 
-    sysFatalError("Crash!\n\n%s", msg);
+    /* D254: terminate directly — sysFatalError() raises SIGABRT which used
+     * to re-enter this handler and truncate the log we just wrote. */
+    _exit(128 + sig);
 }
 
 /* D38: called by the kernel heartbeat watchdog (port/src/libultra.c) when a

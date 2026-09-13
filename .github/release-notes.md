@@ -51,9 +51,12 @@
   selected** (e.g. the MSAA value appears both on its own row and again at
   the panel bottom); earlier builds showed it as an intermittent 4K-
   fullscreen ghost of the top row.
-- **Not yet verified on real Steam Deck hardware** — the bundle is built for
-  it and its prime crash suspect from v0.1.0 was fixed, but please report any
-  Deck-specific faults (a `ge007.crash.log` next to the exe helps).
+- **Steam Deck: one open crash remains** — the v0.1.0-era Facility crash is
+  confirmed fixed on Deck hardware, but a *new* SIGSEGV can occur during a
+  firefight in Facility (D255); diagnosis is in progress. Other levels are
+  untested there so far — please report any Deck-specific faults (a
+  `ge007.crash.log` next to the exe helps; recent builds now capture full
+  faulting registers in it).
 
 ### Downloads
 

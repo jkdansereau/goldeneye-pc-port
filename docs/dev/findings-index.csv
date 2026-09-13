@@ -134,4 +134,6 @@ D249,OPEN,"LOD/culling breaks down on large open levels (Streets, Egyptian named
 D250,?,FPS is inconsistent/low on many levels since the port started actually running at 60fps —,
 D251,FIXED,F10 options overlay QoL pass:,"FIXED (port-only, port/src/optionsoverlay.c)."
 D252,?,"Particle effects cycle through a rainbow palette (M-124, user playtest of the v0.2.0-pre candidate).",
-D253,FIXED,Facility (and any level with a FORCECROUCH/LADDER linked special tile) SIGSEGV on Linux/Steam Deck —,FIXED — pending Deck re-verification with the re-cut bundle.
+D253,FIXED,Facility (and any level with a FORCECROUCH/LADDER linked special tile) SIGSEGV on Linux/Steam Deck —,FIXED — Deck-verified:
+D254,FIXED,Linux crash handler destroyed its own logs:,FIXED — needs one Deck crash to prove the new format in the field.
+D255,OPEN,"Facility firefight SIGSEGV on Steam Deck (v0.2.0-pre CI bundle, D253 fix confirmed working —",OPEN — awaiting register capture from the Deck.
