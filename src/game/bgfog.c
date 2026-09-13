@@ -291,6 +291,9 @@ void fogLoadCurrentEnvironment(EnvironmentRecord *arg0)
     f32 temp_f0;
     f32 sp20; // 32
     f32 sp1C; // 28
+#ifdef PORT
+    f32 scaledFarFog; // D218: Video.DrawDistance -- see fogLoadCurrentEnvironment body
+#endif
 #ifdef DEBUG
     f32 fmin; // hoisted to global
     f32 fmax; // hoisted to global
@@ -302,7 +305,23 @@ void fogLoadCurrentEnvironment(EnvironmentRecord *arg0)
     assert(fmax <= 1.0F);
 #endif
 
+#ifdef PORT
+    /* D218: Video.DrawDistance -- fogLoadCurrentEnvironment is the single
+     * point where a level's authored Visibility.FarFog becomes the actual
+     * runtime far-clip/fog distance (both viSetZRange's far plane and the
+     * fog-blend math just below use it), so scaling it here keeps the two
+     * consistent. Read arg0->Visibility.FarFog into a local instead of
+     * mutating the record -- EnvironmentRecord data is shared/reloaded, not
+     * a per-frame copy. Identity at DrawDistance=100/DrawDistanceAutoFov's
+     * FovScale=100 default. */
+    {
+        extern f32 portDrawDistanceMultiplier(void);
+        scaledFarFog = arg0->Visibility.FarFog * portDrawDistanceMultiplier();
+    }
+    viSetZRange(arg0->Visibility.BlendMultiplier, scaledFarFog);
+#else
     viSetZRange(arg0->Visibility.BlendMultiplier, arg0->Visibility.FarFog);
+#endif
     viGetZRange(&zrange);
 
     temp_f0 = bgGetLevelVisibilityScale();
@@ -317,7 +336,13 @@ void fogLoadCurrentEnvironment(EnvironmentRecord *arg0)
 
     g_CurFogDetails.g_CurFogDetails = (arg0->Visibility.BlendMultiplier / temp_f0);
     pk0 = g_CurFogDetails.g_CurFogDetails;
+#ifdef PORT
+    /* D218: keep the fog-blend distance consistent with the scaled far
+     * clip plane set above, instead of the level's raw authored FarFog. */
+    g_CurFogDetails.scaled_far_fog_dist = (scaledFarFog / temp_f0);
+#else
     g_CurFogDetails.scaled_far_fog_dist = (arg0->Visibility.FarFog / temp_f0);
+#endif
     pk4 = g_CurFogDetails.scaled_far_fog_dist;
 
     // numerator is constant 128.0f

@@ -59,6 +59,10 @@ static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N
 static int cfgFixMipTex     = 1;   /* RC2: clip mip-contaminated texture uploads to base height */
 static int cfgWrapFix       = 0;   /* D74 sub-tile UV pre-wrap + RC3/D167 non-PoT mask-period wrap (opt-in; GE_WRAPFIX env overrides) */
 static int cfgFovScale      = 100; /* D211: percent of the original vertical FOV; 100 = unchanged (byte-identical) */
+static int cfgDrawDistance      = 100; /* D218: percent of the level's authored far-clip/fog distance; 100 = unchanged */
+static int cfgDrawDistanceAutoFov = 1;   /* D218: couple draw distance to Video.FovScale unless DrawDistance is set explicitly */
+static int cfgLodDistance         = 100; /* D249: percent scale on the geometry/model LOD-swap distance; 100 = unchanged */
+static int cfgLodDistanceAutoFov  = 0;   /* off by default -- unlike DrawDistance, this is meant as a standalone perf lever, not something that should silently get more expensive as FovScale widens */
 static int cfgAniso         = 4;   /* D212: anisotropic filtering samples; 4 = the value fast3d already applied (no visual delta at default) */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
 
@@ -98,6 +102,99 @@ s32 portNoHitFlash = 0;
  * (pause/watch model, sky) and left the world untouched. 1.0f = original. */
 f32 portFovScale = 1.0f;
 
+/* D222: the same widen-FOV math as the fr.c guPerspectiveF chokepoint,
+ * factored out so cull-plane / LOD-scale call sites (currentPlayerSetCameraScale,
+ * via currentPlayerSetPerspective) can feed the SAME effective FOV that is
+ * actually rendered, instead of leaving them on the nominal value. Before this,
+ * high FovScale widened what was drawn but left frustum-cull planes and the
+ * fog/LOD distance scale (c_scalelod/c_lodscalez) calibrated for the narrower
+ * nominal FOV, so on-screen geometry near the edges (and, via c_lodscalez,
+ * the fog-based distance-visibility fade) got culled/faded as if the view
+ * were still narrow. `isTitleScreen` mirrors fr.c's own
+ * `lvlGetCurrentStageToLoad() != LEVELID_TITLE` guard -- the front end's
+ * fixed-FOV 3D must not be touched. 1.0f/identity at FovScale=100 (default),
+ * bit-for-bit no-op. */
+f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
+{
+    if (!isTitleScreen && portFovScale > 0.4f && portFovScale < 2.01f && portFovScale != 1.0f) {
+        fovy *= portFovScale;
+        if (fovy > 160.0f) { fovy = 160.0f; }
+    }
+    return fovy;
+}
+
+/* D218: Video.DrawDistance -- multiplier applied to a level's authored
+ * Visibility.FarFog (src/game/bgfog.c fogLoadCurrentEnvironment), which is
+ * both the far clip plane and the fog-saturation distance (levels are tuned
+ * for the stock ~60deg FOV), plus the character/prop fog-visibility-fade
+ * cutoff (src/game/propobj.c chrobjFogVisRangeRelated/sub_GAME_7F054C58).
+ * Video.DrawDistanceAutoFov (default on) couples the multiplier to
+ * Video.FovScale so a wider FOV doesn't clip its own newly visible far
+ * geometry -- or fade NPCs out early -- against distances tuned for the
+ * narrower original view (D218's "blue artifacting"; the M-121 live
+ * playtest found a straight 1:1 FovScale coupling still faded guards in
+ * noticeably close on Dam, so the auto coupling is 2x FovScale, not 1x).
+ * An explicit Video.DrawDistance != 100 overrides that coupling outright.
+ * Clamped to <=4.0x -- pushing the far plane much further out risks
+ * far-field z-fighting against the level's original near-plane precision;
+ * raised again (M-121 live playtest: 2x FovScale still showed a "blue
+ * glow" on far Dam tunnel geometry, so auto coupling is now 4x FovScale)
+ * to give headroom (max portFovScale is 1.5 at Video.FovScale's registered
+ * ceiling of 150, so 4x tops out at 6.0x -- ceiling raised to match).
+ * Identity (1.0f) at both defaults, bit-for-bit no-op. NOTE: end-to-end
+ * re-check of fogLoadCurrentEnvironment (bgfog.c) found the fog RAMP
+ * itself (not just the far-clip cutoff) already scales correctly with
+ * this multiplier -- g_ScaledFarFogIntensity/scaled_far_fog_dist both
+ * derive from the same scaled far value. If a visible blue tint at range
+ * persists even at a large multiplier, it may be Dam's tunnel sightline
+ * simply exceeding whatever distance was tried, or a separate visual
+ * element (skybox/backdrop) not gated by Visibility.FarFog at all --
+ * worth a fresh screenshot-driven look before assuming another bug here. */
+f32 portDrawDistanceMultiplier(void)
+{
+    f32 mult;
+    if (cfgDrawDistance != 100) {
+        mult = (f32)cfgDrawDistance / 100.0f;
+    } else if (cfgDrawDistanceAutoFov && portFovScale != 1.0f) {
+        mult = portFovScale * 4.0f;
+    } else {
+        return 1.0f;
+    }
+    if (mult > 6.0f) { mult = 6.0f; }
+    if (mult < 1.0f) { mult = 1.0f; }
+    return mult;
+}
+
+/* D249: Video.LodDistance -- multiplier on the *distance* term
+ * modelUpdateDistanceRelations() (src/game/model.c) tests against each LOD
+ * node's MinDistance/MaxDistance, composed on top of the game's own
+ * g_ModelDistanceScale rather than replacing it. Smaller distance reads as
+ * "closer", so this function returns the INVERSE of the requested percent:
+ * Video.LodDistance=200 (keep full detail twice as far, more cost) ->
+ * 0.5x on the distance term; =50 (drop to lower detail twice as soon, less
+ * cost -- the perf lever) -> 2.0x. Video.LodDistanceAutoFov (default OFF,
+ * unlike DrawDistanceAutoFov) can couple it to Video.FovScale the same
+ * direction as draw distance if ever wanted; off by default so this stays a
+ * standalone dial and doesn't quietly add cost as FovScale widens. Clamped
+ * to a [0.25, 4.0] distance multiplier (== effective LodDistance 25-400%) --
+ * far outside that band either does nothing visible (LOD never triggers) or
+ * thrashes every frame. Identity (1.0f) at the Video.LodDistance=100
+ * default, bit-for-bit no-op. */
+f32 portLodDistanceMultiplier(void)
+{
+    f32 pct;
+    if (cfgLodDistance != 100) {
+        pct = (f32)cfgLodDistance;
+    } else if (cfgLodDistanceAutoFov && portFovScale != 1.0f) {
+        pct = portFovScale * 100.0f;
+    } else {
+        return 1.0f;
+    }
+    if (pct < 25.0f)  { pct = 25.0f; }
+    if (pct > 400.0f) { pct = 400.0f; }
+    return 100.0f / pct;
+}
+
 PD_CONSTRUCTOR static void videoConfigInit(void)
 {
     configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
@@ -110,6 +207,10 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.FixMipTextures", &cfgFixMipTex, 0, 1);
     configRegisterInt("Video.WrapFix", &cfgWrapFix, 0, 1);
     configRegisterInt("Video.FovScale", &cfgFovScale, 50, 150);
+    configRegisterInt("Video.DrawDistance", &cfgDrawDistance, 100, 400);
+    configRegisterInt("Video.DrawDistanceAutoFov", &cfgDrawDistanceAutoFov, 0, 1);
+    configRegisterInt("Video.LodDistance", &cfgLodDistance, 25, 400);
+    configRegisterInt("Video.LodDistanceAutoFov", &cfgLodDistanceAutoFov, 0, 1);
     configRegisterInt("Video.Anisotropy", &cfgAniso, 1, 16);
     configRegisterInt("Video.Fullscreen",    &cfgFullscreen, 0, 1);
     configRegisterInt("Window.Width",        &cfgWinW,       0, 16384);
