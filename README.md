@@ -159,6 +159,10 @@ build is the point of the pre-release — playtest feedback is welcome.
 - Some front-end 3D models — the spinning Nintendo logo, and the MISSION
   COMPLETE / mode-select models — are mispositioned or absent (D75). The
   gun-barrel Bond intro renders correctly.
+- **Particle colours cycle through a rainbow palette** — bullet-impact sparks
+  and lingering smoke/explosion residue drift through the hues over time
+  instead of holding their intended grey/orange palette (D252; suspect is the
+  RGBA16 fire-tile width/height in the texture importer).
 - Water on `IsWater` levels shows a moving seam between two patterns (D245);
   pixel strips at the left/right screen edges at non-integer scales (D246).
   Assorted other cosmetic defects are tracked in
@@ -346,6 +350,12 @@ This port is a thin layer on a large amount of other people's work.
   the source of the `fast3d` software RSP.
 - The [Perfect Dark decompilation](https://github.com/n64decomp/perfect_dark) —
   the sibling decomp the PD port is built on.
+- **Carnivorous** — author of the *Mouse Injector* input plugin for 1964 (the
+  "GEPD Edition" bundle). Its mouse-aim behaviour for GoldenEye/Perfect Dark is
+  what our in-game GEPD-style aim mode is modelled on; the implementation here
+  is an independent reimplementation of that behaviour, not derived code.
+  Thanks also to **Rice** and **schibo** of the 1964 team for the emulator it
+  shipped with.
 
 **Vendored / adapted code**
 
