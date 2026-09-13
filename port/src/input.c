@@ -293,8 +293,9 @@ static int mouseCaptureMode = 1;   /* WI-1 default: Quake-style click-to-lock + 
 static int captureArmed     = 0;   /* user has clicked to lock (capture mode) */
 static int windowFocused    = 1;
 static int mouseAimSpeed  = 16;     /* aim-mode sensitivity, percent (B3: 50 -> 25 M-29 -> 16; still overshot at 25) */
-static int gepdSens       = 25;     /* D194 Input.GepdSens: GEPD SENSITIVITY setting, range 1..80
-                                        (20 -> 25 after M-123 user playtest: "a bit slow/unsensitive") */
+static int gepdSens       = 38;     /* D194 Input.GepdSens: GEPD SENSITIVITY setting, range 1..80
+                                        (20 -> 25 "a bit slow" -> 30 user-calibrated match point
+                                        -> 38: user asked defaults ~20-35% faster than that) */
 static int aimBand        = 20;     /* aim mode: usable stick range above the 60 gate */
 /* D194/D238: default 100 -> 40 (M-123 user calibration). The old gain
  * (MOUSE_TURN_GAIN=6 stick/px) saturated the game's quadratic natural-turn
@@ -303,7 +304,9 @@ static int aimBand        = 20;     /* aim mode: usable stick range above the 60
  * leave that mode". At 40% (2.4 stick/px) the mid-speed view rate matches
  * the GEPD reticle's angular pace at GepdSens=30; flicks still reach full
  * turn speed, only later. */
-static int mouseTurnSpeed = 40;     /* hipfire yaw sensitivity, percent */
+static int mouseTurnSpeed = 50;     /* hipfire yaw sensitivity, percent
+                                        (40 = M-123 match point at GepdSens=30; 50 = the user's
+                                        "~20-35% faster" default request, same +25% as gepdSens) */
 static int menuPointerSpeed = 100;  /* front-end cursor speed, percent */
 static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
 static int mouseYScale    = 100;    /* extra vertical (pitch) sensitivity, % */
