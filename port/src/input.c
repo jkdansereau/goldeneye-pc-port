@@ -325,6 +325,10 @@ static double s_absFracX = 0.0, s_absFracY = 0.0;
  * re-derived when either changes. (inputUpdate() does not accumulate
  * mouseDX/DY while the cursor is free, so position must be tracked here.) */
 static int    s_absLastMx = 0, s_absLastMy = 0, s_absLastFovQ = 0;
+/* Previous poll's suspend state: the rising edge is when the cursor pops out
+ * of relative mode, and SDL reappears it at its stale (clipped/desktop)
+ * position -- we must warp it to centre before the first anchor reads it. */
+static int    s_absSuspendPrev = 0;
 /* D194: nonzero while an aim hold has temporarily released the grab so the
  * free cursor can be read as an absolute position (set in the idx==0 block of
  * inputComputePad); reconcileGrab(), applyCursorVisibility() and the mouse-
@@ -769,7 +773,23 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
          * focus-grabbed relative behaviour. */
         s_absAimSuspend = mouseEnabled && mouseCaptureMode && !menuMode && windowFocused &&
                           (rmbRaw || actHeld(ks, IA_AIM));
+        int absRisingEdge = s_absAimSuspend && !s_absSuspendPrev;
+        s_absSuspendPrev = s_absAimSuspend;
         reconcileGrab(menuMode);
+        if (absRisingEdge) {
+            /* Rising edge, AFTER the grab has actually released: while
+             * relative mode is on the cursor is clipped/hidden at a stale
+             * position and warping it there is a no-op. Now that it is free,
+             * centre it -- otherwise the first anchor reads the stale corner
+             * position and hard-pulls the view to the screen edge. */
+            SDL_Window *w = SDL_GetMouseFocus();
+            if (w) {
+                int ww = 0, wh = 0;
+                SDL_GetWindowSize(w, &ww, &wh);
+                if (ww > 1 && wh > 1)
+                    SDL_WarpMouseInWindow(w, ww / 2, wh / 2);
+            }
+        }
         /* D196: the F10 options overlay forces the OS cursor visible via
          * inputSuspendForOverlay() but nothing re-hides it on close unless
          * reconcileGrab() happens to re-grab (only true if you had already
@@ -1388,22 +1408,36 @@ static int aimAbsCompute(int *outSx, int *outSy)
     double offYawR   = atan(ndcX * tanV * (double)aspect) / AIM_ABS_DEG2RAD; /* deg, right + */
     double offPitchD = atan(ndcY * tanV) / AIM_ABS_DEG2RAD;                  /* deg, down  + */
 
-    float curT = g_CurrentPlayer->vv_theta;   /* yaw, deg; a RIGHT turn DECREASES it */
-    float curV = g_CurrentPlayer->vv_verta;   /* pitch, deg; looking DOWN increases it */
+    /* Angle conventions (verified against bondview2.c natural-turn + aim paths):
+     *   vv_theta:  a RIGHT turn INCREASES it (stick_x>60 -> UpdateSpeedTheta(-x)
+     *              -> positive speedtheta).
+     *   vv_verta:  looking DOWN DECREASES it (stick_y>60 -> UpdateSpeedVerta(+x)
+     *              -> negative speedverta). */
+    float curT = g_CurrentPlayer->vv_theta;   /* yaw, deg; right + */
+    float curV = g_CurrentPlayer->vv_verta;   /* pitch, deg; up + */
 
     /* Re-anchor whenever the cursor moves or the effective FOV changes
      * (scope zoom in/out). While held still, the target stays put and the
      * crosshair converges on it and HOLDS. */
     int fovQ = (int)(fovy * 4.0f);   /* quarter-degree steps */
     if (!s_absAimActive || mx != s_absLastMx || my != s_absLastMy || fovQ != s_absLastFovQ) {
+        int freshAnchor = !s_absAimActive;
         s_absAimActive = 1;
         s_absLastMx = mx;  s_absLastMy = my;  s_absLastFovQ = fovQ;
-        s_absTgtTheta = (float)(curT - offYawR);
-        s_absTgtVerta = (float)(curV + offPitchD);
+        s_absTgtTheta = (float)(curT + offYawR);   /* right of centre -> larger theta */
+        s_absTgtVerta = (float)(curV - offPitchD); /* below centre  -> smaller verta */
+        if (freshAnchor && configGetInputLog()) {
+            sysLogPrintf(LOG_NOTE,
+                "GE_INPUTLOG absaim ANCHOR win=(%d,%d) cursor=(%d,%d) cfb=(%.1f,%.1f) "
+                "view=(%d,%d %dx%d) ndc=(%.3f,%.3f) fov=%.2f aspect=%.3f cur=(%.2f,%.2f)",
+                ww, wh, mx, my, cxv, cyv,
+                (int)viGetViewLeft(), (int)viGetViewTop(), (int)vw, (int)vh,
+                ndcX, ndcY, (double)fovy, (double)aspect, (double)curT, (double)curV);
+        }
     }
 
-    float errT = aimAbsAngDiff(s_absTgtTheta, curT);  /* +: theta must rise -> turn LEFT */
-    float errV = s_absTgtVerta - curV;                /* +: look DOWN                  */
+    float errT = aimAbsAngDiff(s_absTgtTheta, curT);  /* +: target right of view -> turn RIGHT */
+    float errV = s_absTgtVerta - curV;                /* -: target below view   -> look DOWN   */
 
     /* Demand against the RESIDUAL error after predicted coast (see COAST_K). */
     f32 mult = viGetFovY() / 60.0f;
@@ -1421,17 +1455,18 @@ static int aimAbsCompute(int *outSx, int *outSy)
     int magX = aimAbsQuantize(&s_absFracX, uX * 10.0);
     int magY = aimAbsQuantize(&s_absFracY, uY * 10.0);
 
-    if (magX > 0) *outSx = (errT < 0.0f) ? 60 + magX : -(60 + magX);
-    if (magY > 0) *outSy = (errV > 0.0f) ? 60 + magY : -(60 + magY);
+    if (magX > 0) *outSx = (errT > 0.0f) ? 60 + magX : -(60 + magX);
+    if (magY > 0) *outSy = (errV < 0.0f) ? 60 + magY : -(60 + magY);
 
     if (configGetInputLog()) {
         sysLogPrintf(LOG_NOTE,
             "GE_INPUTLOG absaim tgt=(%.2f,%.2f) cur=(%.2f,%.2f) err=(%.2f,%.2f) "
-            "spd=(%.3f,%.3f) stick=(%d,%d)",
+            "spd=(%.3f,%.3f) stick=(%d,%d) m=(%d,%d) ndc=(%.2f,%.2f) fov=%.1f act=%d",
             (double)s_absTgtTheta, (double)s_absTgtVerta,
             (double)curT, (double)curV,
             (double)errT, (double)errV,
-            (double)sT, (double)sV, *outSx, *outSy);
+            (double)sT, (double)sV, *outSx, *outSy,
+            mx, my, ndcX, ndcY, (double)fovy, s_absAimActive);
     }
     return 1;
 }
