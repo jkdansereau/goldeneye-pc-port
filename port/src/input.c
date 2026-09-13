@@ -1484,7 +1484,12 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.MouseCaptureMode", &mouseCaptureMode, 0, 1);
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
     configRegisterInt("Input.AimAbsolute", &aimAbsolute, 0, 1);  /* D194 */
-    configRegisterInt("Input.GepdSens", &gepdSens, 1, 80);       /* D194 (default 25 per M-123) */
+    /* D194: renamed Input.GepdSens -> Input.AimModeSens (community name for
+     * the RMB aim mode; "GEPD" is internal provenance jargon). The old key
+     * stays registered against the same variable as a deprecated alias --
+     * if both appear in an ini, the later line wins. */
+    configRegisterInt("Input.AimModeSens", &gepdSens, 1, 80);
+    configRegisterInt("Input.GepdSens",    &gepdSens, 1, 80);   /* deprecated alias */
     configRegisterInt("Input.AimBand", &aimBand, 5, 40);
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
     configRegisterInt("Input.MenuPointerSpeed", &menuPointerSpeed, 10, 500);
