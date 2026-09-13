@@ -69,7 +69,7 @@
  * ------------------------------------------------------------------------
  */
 
-#include <math.h>
+#include "port_math.h"   /* real system math decls; see header for why */
 #include <stdlib.h>
 #include <string.h>
 
@@ -80,6 +80,10 @@
 #include "config.h"
 #include "input.h"
 #include "optionsoverlay.h"
+/* D194 absolute aim: read-only access to the live camera (struct player).
+ * Game header pulled in through the same shim path every other compiled game
+ * file uses; we only READ vv_theta/vv_verta/speedtheta/speedverta/aspect. */
+#include "player.h"
 
 /* N64 button bits (from PR/os.h -- duplicated here to avoid pulling os.h,
  * whose `u8 errno;` field collides with <errno.h>'s macro). */
@@ -147,8 +151,21 @@ extern float cursor_h_pos, cursor_v_pos;
  * the 1.1/HONEY default with the D166 digital-pitch-pulse hack. */
 extern int cur_player_get_control_type(void);
 extern void cur_player_set_control_type(int type);
-struct player;
-extern struct player *g_CurrentPlayer;   /* NULL-checked only, never dereferenced here */
+
+/* D194 absolute aim: live camera/projection accessors (src/fr.c, src/game/,
+ * port/src/video.c). All are plain reads of state owned by the game thread,
+ * sampled from inputComputePad which already runs in that same context
+ * (contSnapshotFromKeyboard <- osContStartReadData <- joy.c) -- no new
+ * cross-thread access, and nothing here writes. */
+extern f32 viGetFovY(void);
+extern s16 viGetViewWidth(void);
+extern s16 viGetViewHeight(void);
+extern s16 viGetViewLeft(void);
+extern s16 viGetViewTop(void);
+extern s16 getWidth320or440(void);   /* CFB width the viewport rect lives in (320 NTSC) */
+extern s16 getHeight330or240(void);  /* CFB height (240 NTSC) */
+extern f32 portScaleFovY(f32 fovy, s32 isTitleScreen);
+extern s32 lvlGetCurrentStageToLoad(void);
 #define CONTROLLER_CONFIG_HONEY_    0
 #define CONTROLLER_CONFIG_SOLITARE_ 1
 #define MENU_POINTER_GAIN  1.5
@@ -187,6 +204,22 @@ extern struct player *g_CurrentPlayer;   /* NULL-checked only, never dereference
 #define AIM_STICK_MIN        61
 #define AIM_STICK_GAME_MAX   70    /* bondview2.c: (stick-60)/10 saturates at stick=70 */
 #define AIM_FULL_SPEED_PX    20.0  /* px/poll (at MouseAimSpeed=100) that reaches AIM_STICK_GAME_MAX */
+
+/* D194 absolute (cursor-anchored) aim tuning. FULLERR_DEG = residual angular
+ * error that demands full stick: at that size the cursor is a full-screen turn
+ * away, so full speed there is exactly "slew as fast as possible"; nearer the
+ * target the demand falls off linearly -- the P-controller that makes the
+ * crosshair settle on the cursor instead of coasting past it. DEADBAND_DEG is
+ * the hold zone (~0.75 deg is sub-pixel at normal scope zoom). COAST_K predicts
+ * how far the view keeps moving if we cut the stick now (the game eases
+ * speedtheta/speedverta to zero at 0.05*mult/tick and integrates them at 3.5x,
+ * bondview2.c UpdateSpeedTheta/Verta -- coast = 3.5*s^2/(2*0.05*mult) =
+ * 35*s^2/mult degrees), so the demand is against where we'll BE, not where we
+ * ARE. All three are cheap to retune; they change no game logic. */
+#define AIM_ABS_FULLERR_DEG   15.0
+#define AIM_ABS_DEADBAND_DEG  0.75
+#define AIM_ABS_COAST_K       35.0f
+#define AIM_ABS_DEG2RAD       0.0174532925
 
 /* D194(b) -- mouse sensitivity coupled to frame/poll rate.
  *
@@ -275,6 +308,30 @@ static int mouseSensitivity = 100;  /* D238: single master sensitivity, percent 
 static int aimCurveGamma  = 160;    /* D194(a): aim-mode response curve exponent x100
                                       * (100 = linear, >100 = more low-speed control /
                                       * less bang-bang, <100 = more twitchy). */
+static int aimAbsolute      = 1;    /* D194: 1 = cursor-anchored (GEPD-style) aim while
+                                      * RMB is held -- the crosshair chases and HOLDS
+                                      * the point under the free cursor; 0 = legacy
+                                      * velocity stick synthesized from mouse delta. */
+
+/* D194 absolute aim state. Touched ONLY in inputComputePad (game thread), the
+ * same confinement as every other static here. The target pair is re-derived
+ * from live camera values on press and on every mouse move, so there is no
+ * free-running per-poll accumulator for multi-tick catch-up (D193) to
+ * double-consume; the frac carry only dithers this poll's stick quantization. */
+static int    s_absAimActive = 0;
+static float  s_absTgtTheta = 0.0f, s_absTgtVerta = 0.0f;
+static double s_absFracX = 0.0, s_absFracY = 0.0;
+/* Last cursor position / quantized FOV seen while anchoring: the target is
+ * re-derived when either changes. (inputUpdate() does not accumulate
+ * mouseDX/DY while the cursor is free, so position must be tracked here.) */
+static int    s_absLastMx = 0, s_absLastMy = 0, s_absLastFovQ = 0;
+/* D194: nonzero while an aim hold has temporarily released the grab so the
+ * free cursor can be read as an absolute position (set in the idx==0 block of
+ * inputComputePad); reconcileGrab(), applyCursorVisibility() and the mouse-
+ * button mask honour it. */
+static int    s_absAimSuspend = 0;
+
+static int aimAbsCompute(int *outSx, int *outSy);   /* D194, defined below */
 static int naturalPitchMode = 1;    /* D194/D238: 1 = force GE's own 1.2/SOLITARE
                                       * control style for continuous analog pitch;
                                       * 0 = legacy 1.1/HONEY + D166 digital pulse. */
@@ -701,6 +758,17 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         int menuMode = (current_menu != GE_MENU_RUN_STAGE &&
                         current_menu != GE_MENU_INVALID);
 
+        /* D194 absolute aim (GEPD-style): while an aim button is physically
+         * held, temporarily release the grab so the free OS cursor can be read
+         * as an absolute position; reconcileGrab() honours s_absAimSuspend and
+         * restores the grab when the button comes up. rmbRaw is pre-mask: once
+         * the grab releases, the button mask below zeroes mb, but the physical
+         * state must keep the hold (and the game's aim mode) alive. */
+        int rmbRaw = (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
+        /* Capture mode only: legacy (MouseCaptureMode=0) keeps its exact
+         * focus-grabbed relative behaviour. */
+        s_absAimSuspend = mouseEnabled && mouseCaptureMode && !menuMode && windowFocused &&
+                          (rmbRaw || actHeld(ks, IA_AIM));
         reconcileGrab(menuMode);
         /* D196: the F10 options overlay forces the OS cursor visible via
          * inputSuspendForOverlay() but nothing re-hides it on close unless
@@ -713,7 +781,9 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         /* Click-to-lock, in a stage, cursor free: the mouse buttons must not
          * reach the game (no phantom fire) -- the first click only re-locks
          * (handled in video.c -> inputNotifyClick). Menus keep their buttons. */
-        if (mouseCaptureMode && !mouseGrabbed && !menuMode) {
+        /* ...but not while an aim hold has the cursor out for absolute aim:
+         * then the buttons are intentional (RMB is the hold itself, LMB fires). */
+        if (mouseCaptureMode && !mouseGrabbed && !menuMode && !s_absAimSuspend) {
             mb = 0;
         }
 
@@ -740,7 +810,13 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
 
         if ((mb & SDL_BUTTON(SDL_BUTTON_LEFT)) || actHeld(ks, IA_FIRE))
             button |= GE_CONT_G;
-        int aimHeld = (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) || actHeld(ks, IA_AIM);
+        /* While s_absAimSuspend has the cursor out (capture mode), mb is
+         * masked above, so fall back to the physical rmbRaw to keep the hold,
+         * and with it the game's aim mode, alive for the whole press. */
+        int aimHeld = (s_absAimSuspend ? rmbRaw
+                                       : (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0) ||
+                      actHeld(ks, IA_AIM);
+        if (!aimHeld) s_absAimActive = 0;   /* D194: absolute target dies with the hold */
         if (aimHeld)
             button |= GE_CONT_R;
         if (actHeld(ks, IA_ACTION))
@@ -936,6 +1012,18 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                         haveAbs, (double)cursor_h_pos, (double)cursor_v_pos, sx, sy);
                 }
             } else if (aimHeld) {
+                /* D194 absolute aim: when a free cursor is available the stick
+                 * is driven by a closed position loop on the live camera (see
+                 * aimAbsCompute) instead of this poll's mouse velocity -- the
+                 * crosshair chases the point under the cursor and HOLDS it.
+                 * Otherwise fall through to the legacy velocity stick below. */
+                int absSx = 0, absSy = 0;
+                if (aimAbsCompute(&absSx, &absSy)) {
+                    /* Absolute aim owns the look axes this poll; keyboard turn
+                     * (sx set above) is overridden only when we demand motion. */
+                    if (absSx != 0) sx = absSx;
+                    if (absSy != 0) sy = absSy;
+                } else {
                 double aimEdx = edx * lookDtScale, aimDyLook = dyLook * lookDtScale;
                 double aimSens = (mouseAimSpeed / 100.0) * (mouseSensitivity / 100.0);
                 double gamma = aimCurveGamma / 100.0;
@@ -955,6 +1043,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                     if (m > ceilStick) m = ceilStick;
                     sy += (aimDyLook > 0) ? m : -m;   /* +stick_y = look down */
                 }
+                } /* D194: end legacy velocity-aim fallback */
             } else {
                 double hipEdx = edx * lookDtScale, hipDyLook = dyLook * lookDtScale;
                 double hipSens = (mouseTurnSpeed / 100.0) * (mouseSensitivity / 100.0);
@@ -1110,6 +1199,9 @@ static void reconcileGrab(int menuMode)
     } else {
         want = captureArmed && windowFocused && !menuMode; /* click-to-lock */
     }
+    if (s_absAimSuspend) {
+        want = 0;   /* D194: an aim hold wants the free cursor for absolute aim */
+    }
     applyGrab(want);
 }
 
@@ -1121,7 +1213,9 @@ static void reconcileGrab(int menuMode)
  * this covers the free-but-focused states (menus, pre-click stage). */
 static void applyCursorVisibility(void)
 {
-    int hide = windowFocused && mouseEnabled;
+    /* D194: while an aim hold has the cursor out for absolute aim, show it --
+     * the user is pointing with it and needs to see where. */
+    int hide = windowFocused && mouseEnabled && !s_absAimSuspend;
     SDL_ShowCursor(hide ? SDL_DISABLE : SDL_ENABLE);
 }
 
@@ -1211,11 +1305,143 @@ int inputGetNumControllers(void)
     return numControllers;
 }
 
+/* D194 absolute (cursor-anchored) aim mode -- GEPD "mouse injector" style.
+ *
+ * Instead of synthesizing a velocity stick from this poll's mouse delta
+ * (which can only ever be one of ten discrete (stick-60)/10 speeds, with a
+ * hard 10%-speed floor on the smallest nonzero nudge), drive the game's own
+ * aim-speed plant as a closed position loop: the cursor's screen position IS
+ * the desired aim direction. On RMB press / every mouse move we record the
+ * view angles that would put the point under the cursor at screen center;
+ * each poll we emit a stick proportional to the remaining angular error, so
+ * the crosshair slews to the cursor and HOLDS there -- stationary cursor =
+ * stationary aim (even while walking), no floor jump, no release snap.
+ *
+ * Returns 1 if it handled this poll (callers must use outSx/outSy); 0 means
+ * fall back to the legacy velocity stick (grabbed mouse, menus, gamepad,
+ * degenerate geometry).
+ */
+static float aimAbsAngDiff(float a, float b)
+{
+    float d = a - b;
+    while (d > 180.0f)  d -= 360.0f;
+    while (d < -180.0f) d += 360.0f;
+    return d;
+}
+
+/* Quantize [0,10] stick-units to an int with first-order dithering so the
+ * game's ten discrete aim speeds time-average into a finer low-speed range
+ * (precision work: shoot-the-lock / laser-cut tasks). */
+static int aimAbsQuantize(double *frac, double units)
+{
+    int m = (int)units;              /* floor for units >= 0 */
+    *frac += units - (double)m;
+    if (*frac >= 1.0) { m++; *frac -= 1.0; }
+    if (m > 10) m = 10;
+    return m;
+}
+
+static int aimAbsCompute(int *outSx, int *outSy)
+{
+    *outSx = 0;
+    *outSy = 0;
+
+    /* Absolute aim needs a free OS cursor to read an absolute position from. */
+    if (!aimAbsolute || !mouseCaptureMode || mouseGrabbed || g_CurrentPlayer == NULL) {
+        s_absAimActive = 0;
+        return 0;
+    }
+
+    SDL_Window *w = SDL_GetMouseFocus();
+    int mx = 0, my = 0, ww = 0, wh = 0;
+    if (!w)
+        return 0;
+    SDL_GetWindowSize(w, &ww, &wh);   /* void in SDL2; sanity-check the values */
+    if (ww <= 1 || wh <= 1)
+        return 0;
+    SDL_GetMouseState(&mx, &my);
+
+    s16 vw = viGetViewWidth(), vh = viGetViewHeight();
+    s16 bufW = getWidth320or440(), bufH = getHeight330or240();
+    if (vw <= 1 || vh <= 1 || bufW <= 1 || bufH <= 1)
+        return 0;
+
+    /* Cursor in the game's CFB space (320x240 NTSC), then NDC against the live
+     * render viewport rect. The TV-safe-area letterbox is part of the image,
+     * so centering on the viewport -- not the window -- is exact. */
+    double cxv = (double)mx / (double)ww * (double)bufW;
+    double cyv = (double)my / (double)wh * (double)bufH;
+    double ndcX = 2.0 * (cxv - ((double)viGetViewLeft() + (double)vw * 0.5)) / (double)vw;
+    double ndcY = 2.0 * (cyv - ((double)viGetViewTop()  + (double)vh * 0.5)) / (double)vh;
+    if (mouseInvertY) ndcY = -ndcY;
+    if (ndcX > 1.0) ndcX = 1.0; else if (ndcX < -1.0) ndcX = -1.0;
+    if (ndcY > 1.0) ndcY = 1.0; else if (ndcY < -1.0) ndcY = -1.0;
+
+    /* The effective FOV the render actually uses (fr.c viSetupCurrentPlayerView),
+     * so scope zooms and Video.FovScale compose for free. */
+    f32 fovy = portScaleFovY(viGetFovY(), lvlGetCurrentStageToLoad() == LEVELID_TITLE);
+    f32 aspect = g_CurrentPlayer->aspect;
+    if (fovy < 5.0f || fovy > 170.0f || aspect < 0.1f)
+        return 0;
+
+    double tanV = tan(fovy * 0.5 * AIM_ABS_DEG2RAD);
+    double offYawR   = atan(ndcX * tanV * (double)aspect) / AIM_ABS_DEG2RAD; /* deg, right + */
+    double offPitchD = atan(ndcY * tanV) / AIM_ABS_DEG2RAD;                  /* deg, down  + */
+
+    float curT = g_CurrentPlayer->vv_theta;   /* yaw, deg; a RIGHT turn DECREASES it */
+    float curV = g_CurrentPlayer->vv_verta;   /* pitch, deg; looking DOWN increases it */
+
+    /* Re-anchor whenever the cursor moves or the effective FOV changes
+     * (scope zoom in/out). While held still, the target stays put and the
+     * crosshair converges on it and HOLDS. */
+    int fovQ = (int)(fovy * 4.0f);   /* quarter-degree steps */
+    if (!s_absAimActive || mx != s_absLastMx || my != s_absLastMy || fovQ != s_absLastFovQ) {
+        s_absAimActive = 1;
+        s_absLastMx = mx;  s_absLastMy = my;  s_absLastFovQ = fovQ;
+        s_absTgtTheta = (float)(curT - offYawR);
+        s_absTgtVerta = (float)(curV + offPitchD);
+    }
+
+    float errT = aimAbsAngDiff(s_absTgtTheta, curT);  /* +: theta must rise -> turn LEFT */
+    float errV = s_absTgtVerta - curV;                /* +: look DOWN                  */
+
+    /* Demand against the RESIDUAL error after predicted coast (see COAST_K). */
+    f32 mult = viGetFovY() / 60.0f;
+    if (mult < 0.01f) mult = 0.01f;
+    float sT = g_CurrentPlayer->speedtheta;
+    float sV = g_CurrentPlayer->speedverta;
+    double eX = (double)errT - AIM_ABS_COAST_K * (double)sT * fabs((double)sT) / mult;
+    double eY = (double)errV - AIM_ABS_COAST_K * (double)sV * fabs((double)sV) / mult;
+
+    double uX = fabs(eX) / AIM_ABS_FULLERR_DEG;  if (uX > 1.0) uX = 1.0;
+    double uY = fabs(eY) / AIM_ABS_FULLERR_DEG;  if (uY > 1.0) uY = 1.0;
+    if (fabs(errT) < AIM_ABS_DEADBAND_DEG && fabs(eX) < AIM_ABS_DEADBAND_DEG) uX = 0.0;
+    if (fabs(errV) < AIM_ABS_DEADBAND_DEG && fabs(eY) < AIM_ABS_DEADBAND_DEG) uY = 0.0;
+
+    int magX = aimAbsQuantize(&s_absFracX, uX * 10.0);
+    int magY = aimAbsQuantize(&s_absFracY, uY * 10.0);
+
+    if (magX > 0) *outSx = (errT < 0.0f) ? 60 + magX : -(60 + magX);
+    if (magY > 0) *outSy = (errV > 0.0f) ? 60 + magY : -(60 + magY);
+
+    if (configGetInputLog()) {
+        sysLogPrintf(LOG_NOTE,
+            "GE_INPUTLOG absaim tgt=(%.2f,%.2f) cur=(%.2f,%.2f) err=(%.2f,%.2f) "
+            "spd=(%.3f,%.3f) stick=(%d,%d)",
+            (double)s_absTgtTheta, (double)s_absTgtVerta,
+            (double)curT, (double)curV,
+            (double)errT, (double)errV,
+            (double)sT, (double)sV, *outSx, *outSy);
+    }
+    return 1;
+}
+
 PD_CONSTRUCTOR static void inputConfigInit(void)
 {
     configRegisterInt("Input.MouseEnabled", &mouseEnabled, 0, 1);
     configRegisterInt("Input.MouseCaptureMode", &mouseCaptureMode, 0, 1);
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
+    configRegisterInt("Input.AimAbsolute", &aimAbsolute, 0, 1);  /* D194 */
     configRegisterInt("Input.AimBand", &aimBand, 5, 40);
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
     configRegisterInt("Input.MenuPointerSpeed", &menuPointerSpeed, 10, 500);
