@@ -1403,6 +1403,14 @@ static int aimGepdCompute(double dxPx, double dyLook)
     f32 fov = viGetFovY();
     f32 fovratio = (fov > 0.0f) ? fov / GEPD_BASE_FOV : 1.0f;
 
+    /* Pre-overwrite residue: what last tick's damped update left behind
+     * (crosshair_pos = pos*damp + turn, gunfire.c caclulate_gun_crosshair_...
+     * runs AFTER our write each tick). The gap between this and our write
+     * below is the game-side turn term (autoaimx/y or speedtheta*0.3) --
+     * logged for the D194 spazz diagnosis. */
+    double resX = (double) p->crosshair_x_pos;
+    double resY = (double) p->crosshair_y_pos;
+
     /* Crosshair + gun/arm pose (GEPD formulas, RATIOFACTOR=1 for our 4:3
      * viewport; failsafe weapon offsets 0.15/0 as in goldeneye.c). */
     p->crosshair_x_pos = (f32) s_gepdCrossX;
@@ -1422,9 +1430,13 @@ static int aimGepdCompute(double dxPx, double dyLook)
 
     f32 scale = (fov > 0.0f) ? fov / GEPD_BASE_FOV : 1.0f;
     if (aimx != 0.0) {
+        /* GEPD does a bare `camx += ...` -- no [0,360) wrap. The game never
+         * wraps vv_theta in on-foot play either (bondviewApplyVertaTheta only
+         * sin/cos's it; the tank code is the sole wraper), so keep the
+         * accumulator unbounded. Wrapping turned a small negative edge-scroll
+         * step into a one-tick +360 spike in the raw value (D194 playtest log,
+         * line 534: cam 0.5 -> 359.7). */
         p->vv_theta += (f32) aimx * scale;
-        if (p->vv_theta < 0.0f)      p->vv_theta += 360.0f;
-        if (p->vv_theta >= 360.0f)   p->vv_theta -= 360.0f;
     }
     if (aimy != 0.0) {
         p->vv_verta -= (f32) aimy * scale;   /* crosshair low -> look down */
@@ -1434,8 +1446,10 @@ static int aimGepdCompute(double dxPx, double dyLook)
 
     if (configGetInputLog()) {
         sysLogPrintf(LOG_NOTE,
-            "GE_INPUTLOG gepdaim d=(%.1f,%.1f) cross=(%.2f,%.2f) cam=(%.1f,%.1f)",
-            dxPx, dyLook, s_gepdCrossX, s_gepdCrossY,
+            "GE_INPUTLOG gepdaim d=(%.1f,%.1f) cross=(%.2f,%.2f) game=(%.2f,%.2f) aa=(%.2f,%.2f) st=%.3f sv=%.3f cam=(%.1f,%.1f)",
+            dxPx, dyLook, s_gepdCrossX, s_gepdCrossY, resX, resY,
+            (double)p->autoaimx, (double)p->autoaimy,
+            (double)p->speedtheta, (double)p->speedverta,
             (double)p->vv_theta, (double)p->vv_verta);
     }
     return 1;
