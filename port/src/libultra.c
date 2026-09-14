@@ -1188,6 +1188,126 @@ static void geEepromStore(void)
     }
 }
 
+/* D257: Game.AllUnlocked -- mirror of src/game/file.h save_data (96 bytes;
+ * keep in sync). Two things are patched in at read time:
+ *  - the progression-gated cheat-unlock bits (front.c
+ *    frontCheckIfCheatIsUnlocked) test per-LEVEL bits in
+ *    unlocked_cheats_1/2/3 that normal play sets when each level is
+ *    completed, so a fresh save has an empty cheat menu;
+ *  - every stage/difficulty completion time. When ANY single-player cheat
+ *    is active, g_AppendCheatSinglePlayer makes the mission-select screen
+ *    (front.c get_highest_unlocked_difficulty_for_level) only accept levels
+ *    whose status is STAGESTATUS_COMPLETED (3), not merely UNLOCKED (1) --
+ *    so AllUnlocked must read as a fully-completed campaign or enabling a
+ *    cheat locks every level. Existing (nonzero) player times are kept;
+ *    only empty slots get the max time (0x3FF). */
+typedef struct ge_save_slot {
+    s32 chksum1;
+    s32 chksum2;
+    u8  completion_bitflags;
+    u8  flag_007;
+    u8  music_vol;
+    u8  sfx_vol;
+    u16 options;
+    u8  unlocked_cheats_1;
+    u8  unlocked_cheats_2;
+    u8  unlocked_cheats_3;
+    u8  padding;
+    u8  times[76];   /* (SP_LEVEL_MAX-1)*4: 19 levels x 4 difficulties */
+} ge_save_slot;   /* sizeof == 96 == save_data (file.h) -- enforced below */
+
+/* If this ever fires, the mirror drifted from save_data and the AllUnlocked
+ * cheat patch silently no-ops (the block-read size check stops matching). */
+typedef char ge_save_slot_size_check[(sizeof(ge_save_slot) == 96) ? 1 : -1];
+
+/* Game-side CRC (src/game/crc.c) over [completion_bitflags, next slot),
+ * stored in the slot's own chksum1/2 -- exactly what fileValidateSaves
+ * re-checks after the block read. */
+extern void fileGenerateCRC(u8 *addressA, u8 *addressB, void *retval);
+
+extern s32 portAllUnlocked;   /* port/src/video.c */
+
+/* Bit math mirrors fileGetSaveStageDifficultyTime / fileSetDifficultyStageTime
+ * (src/game/file2.c): 10-bit time fields, offset = (difficulty*20+level)*10,
+ * difficulties 0..2 (agent/secret/00) only -- 007 times are virtual. */
+static u32 geSaveGetTime(const u8 *t, s32 difficulty, s32 level)
+{
+    s32 offset = (difficulty * 20 + level) * 10;
+    s32 index  = offset >> 3;
+    switch (7 - (offset & 7)) {
+    case 7: return ((u32)(t[index] & 0xFF) << 2) | ((u32)(t[index + 1] & 0xc0) >> 6);
+    case 5: return ((u32)(t[index] & 0x3f) << 4) | ((u32)(t[index + 1] & 0xf0) >> 4);
+    case 3: return ((u32)(t[index] & 0x0f) << 6) | ((u32)(t[index + 1] & 0xfc) >> 2);
+    case 1: return ((u32)(t[index] & 0x03) << 8) | (u32)(t[index + 1] & 0xFF);
+    default: return 0;
+    }
+}
+
+static void geSaveSetTime(u8 *t, s32 difficulty, s32 level, u32 newtime)
+{
+    s32 offset = (difficulty * 20 + level) * 10;
+    s32 index  = offset >> 3;
+    switch (7 - (offset & 7)) {
+    case 7:
+        t[index]     = (u8)((t[index] & 0x00) | ((newtime >> 2) & 0xFF));
+        t[index + 1] = (u8)((t[index + 1] & 0x3F) | ((newtime << 6) & 0xC0));
+        break;
+    case 5:
+        t[index]     = (u8)((t[index] & 0xC0) | ((newtime >> 4) & 0x3F));
+        t[index + 1] = (u8)((t[index + 1] & 0x0F) | ((newtime << 4) & 0xF0));
+        break;
+    case 3:
+        t[index]     = (u8)((t[index] & 0xF0) | ((newtime >> 6) & 0x0F));
+        t[index + 1] = (u8)((t[index + 1] & 0x03) | ((newtime << 2) & 0xFC));
+        break;
+    case 1:
+        t[index]     = (u8)((t[index] & 0xFC) | ((newtime >> 8) & 0x03));
+        t[index + 1] = (u8)(newtime & 0xFF);
+        break;
+    }
+}
+
+static void geEepromPatchAllCheats(u8 *buf)
+{
+    /* buf holds the five save slots read from block 4. The sixth local slot
+     * is only a CRC end-boundary for the last one (fileGenerateCRC reads
+     * [A, B), so its contents are irrelevant). */
+    static ge_save_slot slots[6];
+    memcpy(slots, buf, sizeof(ge_save_slot) * 5);
+    memset(&slots[5], 0, sizeof(ge_save_slot));
+
+    int changed = 0;
+    for (int i = 0; i < 5; i++) {
+        /* Cheat ids are level ids 0..19 (CHEAT_INPUT_BUFFER_SIZE == 20):
+         * bits 0-7 in _1, 8-15 in _2, 16-19 in the low nibble of _3. */
+        if (slots[i].unlocked_cheats_1 != 0xFF ||
+            slots[i].unlocked_cheats_2 != 0xFF ||
+            (slots[i].unlocked_cheats_3 & 0x0F) != 0x0F) {
+            slots[i].unlocked_cheats_1 = 0xFF;
+            slots[i].unlocked_cheats_2 = 0xFF;
+            slots[i].unlocked_cheats_3 |= 0x0F;
+            changed = 1;
+        }
+        /* Fully-completed campaign: fill empty completion times with the
+         * max (0x3FF). Needed so mission select still works while any cheat
+         * is active (see header comment); player records are preserved. */
+        for (s32 diff = 0; diff < 3; diff++) {
+            for (s32 lvl = 0; lvl < 20; lvl++) {
+                if (geSaveGetTime(slots[i].times, diff, lvl) == 0) {
+                    geSaveSetTime(slots[i].times, diff, lvl, 0x3FF);
+                    changed = 1;
+                }
+            }
+        }
+    }
+    if (!changed) return;
+
+    for (int i = 0; i < 5; i++)
+        fileGenerateCRC(&slots[i].completion_bitflags, (u8 *)&slots[i + 1],
+                        &slots[i]);
+    memcpy(buf, slots, sizeof(ge_save_slot) * 5);
+}
+
 static s32 geEepromRW(u8 block, u8 *buf, int nbytes, int write)
 {
     u32 off = (u32)block * 8;
@@ -1198,6 +1318,11 @@ static s32 geEepromRW(u8 block, u8 *buf, int nbytes, int write)
         geEepromStore();
     } else {
         memcpy(buf, s_eeprom + off, nbytes);
+        /* fileValidateSaves' block read: five save slots from block 4. */
+        if (portAllUnlocked && block == 4 &&
+            nbytes == (int)(sizeof(ge_save_slot) * 5)) {
+            geEepromPatchAllCheats(buf);
+        }
     }
     return 0;
 }

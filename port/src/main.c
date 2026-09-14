@@ -126,6 +126,33 @@ int main(int argc, char **argv)
     configLoad();
     atexit(portAtExit);   /* persist config + window geometry on clean exit */
 
+    /* 1a. D257: Game.AllUnlocked (default ON) -- seed the game's own RAM
+     *     unlock flags so mission select offers every solo level at every
+     *     difficulty plus 007 mode, with no save data required. Both are
+     *     plain s32 globals in src/game/debugmenu_handler.c (compiled because
+     *     the PC build defines LEFTOVERDEBUG); file2.c's
+     *     fileIsStageUnlockedAtDifficulty() and front.c's 007-mode gate OR
+     *     them in ahead of the EEPROM completion bits. Port-layer memory
+     *     writes only -- no game-logic edits (AGENTS rule 2), same class as
+     *     the existing GE_UNLOCK_ALL getenv hook in the getter. No active
+     *     cheats (invincibility / all guns) are enabled; weapons remain
+     *     per-mission pickups as on the N64. Separately, the eep shim
+     *     (libultra.c geEepromPatchAllCheats) sets every progression-gated
+     *     cheat-unlock bit in the save block at read time (per-slot CRC
+     *     recomputed via the game's own fileGenerateCRC), so the cheat
+     *     menu is fully populated without completed levels. */
+    {
+        extern s32 portAllUnlocked;            /* port/src/video.c */
+        extern s32 debug_enable_all_levels_flag;  /* src/game/debugmenu_handler.c */
+        extern s32 debug_007_unlock_flag;         /* ditto */
+        if (portAllUnlocked) {
+            debug_enable_all_levels_flag = 1;
+            debug_007_unlock_flag = 1;
+            sysLogPrintf(LOG_INFO, "all-unlocked: RAM unlock flags seeded "
+                        "(Game.AllUnlocked=1)");
+        }
+    }
+
     /* 2. Load the ROM and map segments. */
     if (romdataInit() != 0) {
         sysLogPrintf(LOG_ERROR, "Failed to load ROM (expected a .z64 in the "

@@ -95,6 +95,15 @@ s32 portSkipIntro = 0;
  * original damage flash. */
 s32 portNoHitFlash = 0;
 
+/* D257: Game.AllUnlocked — ship-with-everything-unlocked goodie, ON by
+ * default for this cut. Consumed once at startup by main.c, which sets the
+ * game's own RAM unlock flags (debug_enable_all_levels_flag /
+ * debug_007_unlock_flag in src/game/debugmenu_handler.c, live because the PC
+ * build defines LEFTOVERDEBUG) — port-layer memory writes only, no game-code
+ * edits. Takes effect at launch; toggling it mid-session applies next run.
+ * 0 = faithful N64 progression (levels unlock as you complete them). */
+s32 portAllUnlocked = 1;
+
 /* D211: Video.FovScale as a multiplier on the render FOV. Applied game-side
  * at the guPerspectiveF chokepoint (src/fr.c) so it lands BEFORE the CPU
  * pre-multiplies projection x view into the combined world matrix — the
@@ -200,6 +209,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
     configRegisterInt("Game.SkipIntro", &portSkipIntro, 0, 1);
     configRegisterInt("Game.NoHitFlash", &portNoHitFlash, 0, 1);
+    configRegisterInt("Game.AllUnlocked", &portAllUnlocked, 0, 1);
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 8);

@@ -130,6 +130,9 @@ static struct Row rows[] = {
     /* D216: read once at title-stage load (lv.c) -- toggling it takes effect
      * the next time the title screen is reached. */
     { "Game.SkipIntro",           "Skip intro",       ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
+    /* D257: everything-unlocked goodie (default ON). Consumed at startup by
+     * main.c -- applies from the next launch. */
+    { "Game.AllUnlocked",         "All unlocked",     ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
 };
 #define NUM_ROWS ((int)(sizeof(rows) / sizeof(rows[0])))
 
