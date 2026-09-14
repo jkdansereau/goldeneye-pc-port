@@ -57,8 +57,6 @@
 - **Cutscenes frequently glitch** — skipped beats, wrong camera, misplaced or
   hovering actors, wrong timing; the Dam level-end cutscene is racy (D243).
   The most visible gap in this release.
-- **Music quality on some tracks** — a wrong-sounding bass instrument on a few
-  elevator/level tracks (D230).
 - **Particle colours cycle through a rainbow palette** — bullet-impact sparks
   and lingering smoke/explosion residue drift through the hues over time
   instead of holding their intended grey/orange palette (D252).

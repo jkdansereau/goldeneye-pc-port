@@ -113,6 +113,116 @@ static int romHeaderValid(const u8 *h, char *err, size_t errsz)
 
 static u32 romdataBswap32(u32 v); /* defined below; used by the D55 fixup */
 
+/* D230: RAW16 wavetable samples are stored big-endian s16 in the ROM (the
+ * N64 CPU reads them that way), but the PC mixer's resampler consumes
+ * host-native (little-endian) s16 — so every RAW16 instrument plays as a
+ * byte-swapped buzz. ADPCM nibble data is byte-order agnostic, which is why
+ * only RAW16 ranges are affected. The wavetable sample segments stay in the
+ * cart map (alBnkfNew() points straight at them; only the bank structs are
+ * re-laid out, D37), so bswap16 those ranges in place once the map is live.
+ * The walk mirrors the ALBankFile layout romdataFixupAudioBank() uses. */
+
+#define RAW16_MAX_RANGES 32
+
+struct raw16Range { u32 start, end; };
+
+static void romdataRaw16Swap(u8 *tbl, u32 tblSize, u32 base, s32 len,
+                             struct raw16Range *done, int *ndone)
+{
+    int i;
+    if (len <= 0 || base >= tblSize || (u32)len > tblSize - base) {
+        sysLogPrintf(LOG_ERROR, "romdataInit: D230 RAW16 wavetable out of "
+                 "range (base 0x%X len %d, segment 0x%X bytes)",
+                 base, len, tblSize);
+        return;
+    }
+    for (i = 0; i < *ndone; i++) {
+        /* Shared sample data (two instruments can point at the same range):
+         * swapping twice would undo the first swap. */
+        if (base >= done[i].start && base + (u32)len <= done[i].end)
+            return;
+    }
+    for (i = 0; i + 1 < len; i += 2) {
+        u8 t = tbl[base + i];
+        tbl[base + i] = tbl[base + i + 1];
+        tbl[base + i + 1] = t;
+    }
+    if (*ndone < RAW16_MAX_RANGES) {
+        done[*ndone].start = base;
+        done[*ndone].end = base + (u32)len;
+        (*ndone)++;
+    }
+}
+
+static void romdataRaw16Inst(const u8 *ctl, u32 ctlSize, u8 *tbl, u32 tblSize,
+                             struct raw16Range *done, int *ndone, u32 ioff)
+{
+    s16 scount;
+    u32 k;
+    if (!ioff || ioff + 16 > ctlSize)
+        return;
+    scount = (s16)((ctl[ioff + 14] << 8) | ctl[ioff + 15]); /* soundCount */
+    if (scount < 0)
+        return;
+    for (k = 0; k < (u32)scount; k++) {
+        u32 soff, wt;
+        if (ioff + 16 + 4 * k + 4 > ctlSize)
+            break;
+        soff = ((u32)ctl[ioff + 16 + 4 * k] << 24) |
+               ((u32)ctl[ioff + 17 + 4 * k] << 16) |
+               ((u32)ctl[ioff + 18 + 4 * k] << 8) |
+               (u32)ctl[ioff + 19 + 4 * k];
+        if (!soff || soff + 15 > ctlSize)
+            continue;
+        wt = ((u32)ctl[soff + 8] << 24) | ((u32)ctl[soff + 9] << 16) |
+             ((u32)ctl[soff + 10] << 8) | (u32)ctl[soff + 11];
+        if (!wt || wt + 20 > ctlSize)
+            continue;
+        if (ctl[wt + 8] == 1 /* AL_RAW16_WAVE */) {
+            u32 base = ((u32)ctl[wt] << 24) | ((u32)ctl[wt + 1] << 16) |
+                       ((u32)ctl[wt + 2] << 8) | (u32)ctl[wt + 3];
+            s32 len = (s32)(((u32)ctl[wt + 4] << 24) |
+                            ((u32)ctl[wt + 5] << 16) |
+                            ((u32)ctl[wt + 6] << 8) | (u32)ctl[wt + 7]);
+            romdataRaw16Swap(tbl, tblSize, base, len, done, ndone);
+        }
+    }
+}
+
+static void romdataRaw16Walk(const u8 *ctl, u32 ctlSize, u8 *tbl, u32 tblSize,
+                             struct raw16Range *done, int *ndone)
+{
+    s16 i;
+    if (ctlSize < 4 || ((ctl[0] << 8) | ctl[1]) != 0x4231 /* 'B1' */)
+        return;
+    for (i = 0; i < (s16)((ctl[2] << 8) | ctl[3]); i++) {
+        u32 boff, j;
+        s16 icount;
+        if (4 + 4 * (u32)i + 4 > ctlSize)
+            break;
+        boff = ((u32)ctl[4 + 4 * i] << 24) | ((u32)ctl[5 + 4 * i] << 16) |
+               ((u32)ctl[6 + 4 * i] << 8) | (u32)ctl[7 + 4 * i];
+        if (!boff || boff + 12 > ctlSize)
+            continue;
+        icount = (s16)((ctl[boff] << 8) | ctl[boff + 1]); /* instCount */
+        if (icount < 0)
+            continue;
+        romdataRaw16Inst(ctl, ctlSize, tbl, tblSize, done, ndone,
+                         ((u32)ctl[boff + 8] << 24) |
+                         ((u32)ctl[boff + 9] << 16) |
+                         ((u32)ctl[boff + 10] << 8) | (u32)ctl[boff + 11]);
+        for (j = 0; j < icount; j++) {
+            if (boff + 12 + 4 * (u32)j + 4 > ctlSize)
+                break;
+            romdataRaw16Inst(ctl, ctlSize, tbl, tblSize, done, ndone,
+                             ((u32)ctl[boff + 12 + 4 * j] << 24) |
+                             ((u32)ctl[boff + 13 + 4 * j] << 16) |
+                             ((u32)ctl[boff + 14 + 4 * j] << 8) |
+                             (u32)ctl[boff + 15 + 4 * j]);
+        }
+    }
+}
+
 /* The caller has placed a writable region of (romSize + sidecars) bytes at
  * CART_BASE. Populate it, load the sidecars, apply the D55 RLE-header fixup,
  * and mark the ROM live. Shared by the Windows (VirtualAlloc) and POSIX (mmap)
@@ -138,6 +248,38 @@ static int romdataFinishCartMap(const char *tok, u8 *img,
         u32 *hdr = (u32 *)&unknown2;
         if ((u16)*hdr > 512 || (u16)(*hdr >> 16) > 512)
             *hdr = romdataBswap32(*hdr);
+    }
+
+    /* D230: byte-swap the RAW16 wavetable sample ranges in both bank trees
+     * (BE s16 in the ROM -> host LE for the mixer's resampler). */
+    {
+        extern u32 _sfxctlSegmentRomStart;
+        extern u32 _sfxtblSegmentRomStart;
+        extern u32 _instrumentsctlSegmentRomStart;
+        extern u32 _instrumentstblSegmentRomStart;
+        struct raw16Range done[RAW16_MAX_RANGES];
+        int ndone = 0;
+
+        /* Each tbl segment runs to the end of the ROM; bound the swap range
+         * by that (the real segment is smaller, but base/len are validated
+         * against this anyway). */
+        romdataRaw16Walk((const u8 *)&_sfxctlSegmentRomStart,
+                         (u32)&_sfxtblSegmentRomStart -
+                             (u32)&_sfxctlSegmentRomStart,
+                         (u8 *)&_sfxtblSegmentRomStart,
+                         CART_BASE + romSize -
+                             (u32)&_sfxtblSegmentRomStart,
+                         done, &ndone);
+        romdataRaw16Walk((const u8 *)&_instrumentsctlSegmentRomStart,
+                         (u32)&_instrumentstblSegmentRomStart -
+                             (u32)&_instrumentsctlSegmentRomStart,
+                         (u8 *)&_instrumentstblSegmentRomStart,
+                         CART_BASE + romSize -
+                             (u32)&_instrumentstblSegmentRomStart,
+                         done, &ndone);
+        if (ndone)
+            sysLogPrintf(LOG_INFO, "romdataInit: D230 byte-swapped %d RAW16 "
+                     "wavetable range(s) in place", ndone);
     }
     return 0;
 }
