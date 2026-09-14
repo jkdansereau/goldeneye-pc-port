@@ -32,6 +32,24 @@ keep the port faithful to the original game.
 - Port-layer code is plain C11 / C++17, SDL2 + OpenGL, no extra dependencies.
 - Keep commits focused and describe *why*, not just *what*.
 
+## Forks and derivative works
+
+Fork away — the code is MIT and the `port/` layer exists to be extended.
+Rebranding, localizing and extending are all welcome, and none of them need
+permission. If you carry the work forward under your own name, please keep
+two things:
+
+- **Attribution.** A clear statement, in your README and about page, that the
+  project derives from this one — with a link. The engine prints its origin at
+  startup and in its `--version` output; keeping that intact is part of the
+  ask.
+- **The record.** `docs/dev/` (the finding log, porting notes, per-level
+  status) is the engineering record behind every fix. Derivative projects are
+  asked to preserve or link to it rather than fork-and-forget.
+
+Stripping the attribution is the one thing that turns a fork into something
+we no longer recognize as a descendant of this project.
+
 ## Where to look
 
 - `docs/internals.md` — how the port is structured.

@@ -145,6 +145,12 @@ execute_process(COMMAND git rev-parse --short HEAD
 if(NOT VERSION_HASH)
   set(VERSION_HASH "unknown")
 endif()
+
+# Provenance, printed by --version and at startup (port/src/main.c): a build
+# keeps pointing at this repository no matter who compiles or renames it.
+set(VERSION_CODENAME "larkspur")
+set(ORIGIN_URL "https://github.com/jkdansereau/goldeneye-pc-port")
+
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/versioninfo.h.in"
   "${CMAKE_BINARY_DIR}/port/include/versioninfo.h" @ONLY)

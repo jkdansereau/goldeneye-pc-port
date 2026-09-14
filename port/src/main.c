@@ -54,8 +54,10 @@ static void portPrintVersion(void)
     printf("GoldenEye 007 PC port\n"
            "  rom      : %s\n"
            "  platform : %s\n"
-           "  build    : %s\n",
-           GE007_ROMID, GE007_TARGET_PLATFORM, GE007_VERSION_HASH);
+           "  build    : %s (%s)\n"
+           "  origin   : %s\n",
+           GE007_ROMID, GE007_TARGET_PLATFORM, GE007_VERSION_HASH,
+           GE007_VERSION_CODENAME, GE007_ORIGIN_URL);
 }
 
 static void portPrintHelp(const char *argv0)
@@ -95,7 +97,9 @@ int main(int argc, char **argv)
     }
 
     sysLogPrintf(LOG_INFO, "GoldenEye 007 PC port starting "
-                "(%s, %s)", GE007_ROMID, GE007_VERSION_HASH);
+                "(%s, %s %s) -- %s",
+                GE007_ROMID, GE007_VERSION_HASH, GE007_VERSION_CODENAME,
+                GE007_ORIGIN_URL);
 
     /* Crash handler first, so any failure below is debuggable. */
     crashInit();
