@@ -181,7 +181,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential gcc-14 g++-14 cmake python3 \
-            libsdl2-dev zlib1g-dev libgl1-mesa-dev ccache patchelf
+            python3-pip libsdl2-dev zlib1g-dev libgl1-mesa-dev ccache patchelf
 
       - name: Restore ccache
         uses: actions/cache@v4
@@ -194,6 +194,22 @@ jobs:
 
       - name: Regenerate ROM-asset symbol file (US)
         run: python3 scripts/gen_romassets.py u
+
+      # Drop-in ROM support: freeze the asset-prep tool into a single
+      # ge007-convert binary the engine spawns on first run when the
+      # pcmodels/pccg sidecars are missing (port/src/romconvert.c). Pure-
+      # stdlib scripts, so PyInstaller --onefile is clean; lands in
+      # tools_pc/dist/prepare-assets/ where bundle-linux.sh picks it up.
+      - name: Freeze asset converter (PyInstaller)
+        run: |
+          python3 -c "import PyInstaller" 2>/dev/null \
+            || python3 -m pip install --quiet --break-system-packages pyinstaller
+          python3 -m PyInstaller --onefile --noconfirm --clean \
+            --name ge007-convert \
+            --distpath tools_pc/dist/prepare-assets \
+            --workpath build-pyinst --specpath build-pyinst \
+            tools_pc/dist/prepare-assets/prepare-assets.py
+          ls -la tools_pc/dist/prepare-assets/ge007-convert
 
       - name: Configure (ntsc-final)
         run: cmake -S . -B build-linux -DROMID=ntsc-final
@@ -296,6 +312,23 @@ jobs:
 
       - name: Regenerate ROM-asset symbol file (US)
         run: python scripts/gen_romassets.py u
+
+      # Drop-in ROM support: freeze the asset-prep tool into a single
+      # ge007-convert.exe the engine spawns on first run when the pcmodels/
+      # pccg sidecars are missing (port/src/romconvert.c). Lands in
+      # tools_pc/dist/prepare-assets/ where bundle-win.sh picks it up.
+      - name: Freeze asset converter (PyInstaller)
+        run: |
+          # MSYS2's mingw python ships without pip — bootstrap it if needed.
+          python -m pip --version >/dev/null 2>&1 || python -m ensurepip --upgrade
+          python -c "import PyInstaller" 2>/dev/null \
+            || python -m pip install --quiet --break-system-packages pyinstaller
+          python -m PyInstaller --onefile --noconfirm --clean \
+            --name ge007-convert \
+            --distpath tools_pc/dist/prepare-assets \
+            --workpath build-pyinst --specpath build-pyinst \
+            tools_pc/dist/prepare-assets/prepare-assets.py
+          ls -la tools_pc/dist/prepare-assets/ge007-convert.exe
 
       - name: Build (ntsc-final)
         run: ./build-pc.sh ntsc-final

@@ -95,21 +95,20 @@ needs to be installed first.
 ### Running it
 
 You supply your own **GoldenEye 007 N64 ROM** (`.z64`, big-endian) that you
-legally own — NTSC-U (US), PAL (EU) or NTSC-J (JP); the asset step detects the
-region from the SHA-1. US is the best-tested.
+legally own — the **NTSC-U (US)** release is what this build supports (PAL / JP
+are on the roadmap). No Python, no toolchain, nothing to install.
 
 1. Unpack the archive.
 2. Make a `data/` folder next to the executable and put the ROM in it, named
-   per region (`ge007.ntsc-final.z64` / `ge007.pal-final.z64` /
-   `ge007.jpn-final.z64`).
-3. Run the one-time asset step (needs Python 3.8+):
-   `python3 prepare-assets/prepare-assets.py` — it reads your ROM and writes
-   the two `data/pc*-<region>/` folders the engine needs. Standard library
-   only; a few seconds.
-4. Run the executable **from that folder**.
+   `ge007.ntsc-final.z64`.
+3. Run the executable **from that folder**. The first run takes a few extra
+   seconds: it detects your ROM, generates the two derived asset folders
+   (`data/pcmodels-ntsc-final/`, `data/pccg-ntsc-final/`) once, and saves them
+   for every future run. (The generator is `prepare-assets/ge007-convert`
+   inside the bundle; you can also run it manually — it prints what it's doing.)
 
 **Steam Deck:** sideload the unpacked folder (USB or a file manager), do steps
-2–4, then add the executable to Games → *Add Game* as a non-Steam game.
+2–3, then add the executable to Games → *Add Game* as a non-Steam game.
 
 **In-game settings on the Deck:** the options overlay is fully gamepad-driven
 — it opens with **Select**, the D-pad or left stick (up/down) moves between

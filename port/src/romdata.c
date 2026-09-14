@@ -44,6 +44,7 @@ extern int snprintf(char *str, size_t maxsize, const char *format, ...);
 #include "romdata.h"
 #include "pcmodels.h"
 #include "pccg.h"
+#include "romconvert.h"
 
 /* D50: struct font/fontchar layouts for the font-segment re-layout. Order
  * matters (see pcmodels.c): ultra64.h must finish before bondtypes.h. */
@@ -173,11 +174,11 @@ int romdataInit(void)
         static const char *locs[3] = { "$S/", "$E/", "./" };
         int li;
         FSFile *f = NULL;
+        char romRelPath[1024] = "";   /* locs[li] + tok of the ROM we opened */
 
         for (li = 0; li < 3 && !f; li++) {
-            char pathbuf[1024];
-            snprintf(pathbuf, sizeof(pathbuf), "%s%s", locs[li], tok);
-            f = fsOpen(sysResolvePath(pathbuf), "rb");
+            snprintf(romRelPath, sizeof(romRelPath), "%s%s", locs[li], tok);
+            f = fsOpen(sysResolvePath(romRelPath), "rb");
         }
         if (!f)
             continue;
@@ -196,6 +197,15 @@ int romdataInit(void)
                          tok, err);
             free(img);
             continue;
+        }
+
+        /* Drop-in ROM support: if the ROM-derived sidecars are missing, run
+         * the bundled frozen converter (ge007-convert) once to generate them.
+         * Without them the game crashes later in
+         * modelPromoteNodeOffsetsToPointers (D179), so abort boot cleanly. */
+        if (!romConvertEnsureSidecars(img, romRelPath)) {
+            free(img);
+            return -1;
         }
 
         /* D50: reserve room for the PC model sidecar image right after the

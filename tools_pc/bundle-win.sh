@@ -106,15 +106,28 @@ nmh="$(find "$PREP/vendor/assets" -iname 'modelfileheader.inc.c' | wc -l)"
 echo "    + prepare-assets/ (emit scripts + $nmh model headers)"
 [ "$nmh" -gt 400 ] || { echo "error: prepare-assets vendored only $nmh model headers — expected ~512" >&2; exit 1; }
 
+# Frozen first-run converter (drop-in ROM support): the engine spawns this
+# when data/pcmodels-* / data/pccg-* are missing (port/src/romconvert.c).
+# CI builds it with PyInstaller before bundling; a local bundle needs the
+# same step:  python -m PyInstaller --onefile --name ge007-convert \
+#                --distpath tools_pc/dist/prepare-assets \
+#                tools_pc/dist/prepare-assets/prepare-assets.py
+CV="$REPO_ROOT/tools_pc/dist/prepare-assets/ge007-convert.exe"
+[ -f "$CV" ] || { echo "error: $CV not found — freeze it with PyInstaller first (see above)" >&2; exit 1; }
+cp "$CV" "$PREP/"
+echo "    + prepare-assets/ge007-convert.exe ($(du -h "$CV" | cut -f1))"
+
 # --- guard: no ROM / game data snuck in --------------------------------
 if find "$OUT" -type f \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' \) | grep -q .; then
   echo "error: bundle contains a ROM image — aborting" >&2
   exit 1
 fi
+# 120 MB: engine + DLLs are a few MB; the frozen ge007-convert (PyInstaller
+# --onefile CPython) adds ~15 MB. Anything far beyond that is game data.
 BYTES="$(du -sb "$OUT" | cut -f1)"
-LIMIT=$((60 * 1024 * 1024))
+LIMIT=$((120 * 1024 * 1024))
 if [ "$BYTES" -gt "$LIMIT" ]; then
-  echo "error: bundle is $BYTES bytes (> 60 MB) — likely contains game data, aborting" >&2
+  echo "error: bundle is $BYTES bytes (> 120 MB) — likely contains game data, aborting" >&2
   exit 1
 fi
 

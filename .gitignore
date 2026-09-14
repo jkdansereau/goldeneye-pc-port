@@ -172,3 +172,7 @@ nohup.out
 
 gdb.txt
 gdb-hang.txt
+
+# frozen asset converter (built by CI via PyInstaller; local freezes land here)
+tools_pc/dist/prepare-assets/ge007-convert*
+build-pyinst/

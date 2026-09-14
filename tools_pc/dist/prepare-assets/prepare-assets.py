@@ -25,12 +25,21 @@ contains this "prepare-assets" folder (i.e. next to ge007.x86_64.exe).
 
 import argparse
 import hashlib
+import os
+import runpy
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
+# When frozen (PyInstaller --onefile, shipped as ge007-convert in the release
+# bundle) __file__ is not the install location — the exe lives inside the
+# prepare-assets/ folder next to vendor/, so use the executable's directory.
+FROZEN = getattr(sys, "frozen", False)
+if FROZEN:
+    HERE = Path(sys.executable).resolve().parent
+else:
+    HERE = Path(__file__).resolve().parent
 VENDOR = HERE / "vendor"
 
 # SHA-1 of each supported retail ROM (big-endian .z64) -> region id the
@@ -91,6 +100,34 @@ def find_rom(explicit, bundle_root):
     return cand[0]
 
 
+def run_emit(script, argv_tail, cwd):
+    """Run one emit script with CWD=cwd. Unfrozen: a subprocess (as before).
+    Frozen: in-process via runpy — there is no user Python to exec. The
+    scripts are pure-stdlib; d88 also imports its sibling d88_propdefs, so
+    this directory must be on sys.path for the duration (run_path does NOT
+    do that — only a real `python script.py` launch does)."""
+    if not FROZEN:
+        r = subprocess.run([sys.executable, str(HERE / script), *argv_tail], cwd=cwd)
+        return r.returncode
+    # Frozen sys.executable carries Windows backslashes on MSYS2; the
+    # import machinery wants a plain directory string.
+    here = str(HERE).replace("\\", "/")
+    old_argv, old_cwd = sys.argv, os.getcwd()
+    sys.argv = [here + "/" + script, *argv_tail]
+    sys.path.insert(0, here)
+    os.chdir(cwd)
+    rc = 0
+    try:
+        runpy.run_path(here + "/" + script, run_name="__main__")
+    except SystemExit as e:
+        rc = e.code if isinstance(e.code, int) else (1 if e.code else 0)
+    finally:
+        sys.argv = old_argv
+        sys.path.pop(0)
+        os.chdir(old_cwd)
+    return rc
+
+
 def main():
     ap = argparse.ArgumentParser(description="Generate the GoldenEye PC port's ROM-derived asset dirs.")
     ap.add_argument("--rom", help="path to your .z64 ROM (default: auto-detect near the bundle)")
@@ -114,8 +151,12 @@ def main():
     region = ROM_SHA1.get(digest)
     if region is None:
         die(f"ROM SHA-1 {digest} is not a recognised retail GoldenEye 007 image.\n"
-            "         Supported: NTSC-U / PAL / NTSC-J, big-endian .z64.\n"
+            "         Supported: NTSC-U (US), big-endian .z64.\n"
             "         A byte-swapped (.n64/.v64) or overdumped ROM will not work -- convert to .z64 first.")
+    if region != "ntsc-final":
+        die(f"this release only supports the NTSC-U (US) ROM; your ROM is the "
+            f"{region} version.\n"
+            "         PAL / JP support is on the roadmap but not in this build.")
     print(f"prepare-assets: SHA-1    {digest}  ->  region '{region}'")
 
     # The emit scripts assume CWD is a tree with scripts/ assets/ data/ .
@@ -133,11 +174,10 @@ def main():
             shutil.rmtree(p)
 
     for script, extra, produces in EMIT_STEPS:
-        argv = [sys.executable, str(HERE / script), region, *extra]
-        print(f"prepare-assets: running  {' '.join(argv[1:])} ...")
-        r = subprocess.run(argv, cwd=work)
-        if r.returncode != 0:
-            die(f"{script} exited {r.returncode}")
+        print(f"prepare-assets: running  {script} {region} {' '.join(extra)} ...")
+        rc = run_emit(script, (region, *extra), work)
+        if rc != 0:
+            die(f"{script} exited {rc}")
         want = work / "data" / produces.format(region=region)
         if not want.is_file():
             die(f"{script} did not produce {want}")
@@ -158,11 +198,8 @@ def main():
     if not args.keep_temp and staged_rom.exists() and staged_rom.resolve() != rom.resolve():
         staged_rom.unlink()
 
-    print("\nprepare-assets: done. You can now run ge007.x86_64.exe from the bundle folder.")
+    print("\nprepare-assets: done. You can now run the game from the bundle folder.")
     print(f"                (Your ROM must also be at {dest_data / f'ge007.{region}.z64'} for the game itself.)")
-    if region != "ntsc-final":
-        print("                NOTE: only the NTSC-U ROM is validated in this alpha; "
-              f"'{region}' is experimental.")
 
 
 if __name__ == "__main__":
