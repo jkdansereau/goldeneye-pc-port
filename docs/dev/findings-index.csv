@@ -139,3 +139,4 @@ D254,FIXED,Linux crash handler destroyed its own logs:,FIXED — field-verified.
 D255,OPEN,"Facility firefight SIGSEGV on Steam Deck (v0.2.0-pre CI bundle, D253 fix confirmed working —","OPEN — case identified (NULL model on an active OBJ record; destroy-path ordering), reproducible on Deck in combat (Bunker + Frigate); fix pending rule-#2 sign-off."
 D256,FIXED,Saves (and config) silently failed to persist on Linux whenever the game was not launched from the directory containing data/ —,FIXED (path half) — save-flow detail still owed from the user.
 D257,FIXED,"New Game.AllUnlocked option (F10, default ON for this cut):",FIXED — verified by user playtest; PR open.
+D258,OPEN,PAL/JP asset conversion is broken at the source-data level —,"OPEN — repair path verified, not applied (out of v0.2.0 scope)."

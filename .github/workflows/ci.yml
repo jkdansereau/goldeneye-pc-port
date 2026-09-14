@@ -319,10 +319,12 @@ jobs:
       # tools_pc/dist/prepare-assets/ where bundle-win.sh picks it up.
       - name: Freeze asset converter (PyInstaller)
         run: |
-          # MSYS2's mingw python ships without pip — bootstrap it if needed.
-          python -m pip --version >/dev/null 2>&1 || python -m ensurepip --upgrade
-          python -c "import PyInstaller" 2>/dev/null \
-            || python -m pip install --quiet --break-system-packages pyinstaller
+          # MSYS2's mingw python ships without pip and has ensurepip
+          # disabled — install pip from pacman, then PyInstaller.
+          python -c "import PyInstaller" 2>/dev/null || {
+            pacman -S --noconfirm mingw-w64-x86_64-python-pip
+            python -m pip install --quiet --break-system-packages pyinstaller
+          }
           python -m PyInstaller --onefile --noconfirm --clean \
             --name ge007-convert \
             --distpath tools_pc/dist/prepare-assets \
