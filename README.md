@@ -98,7 +98,10 @@ The Linux bundle is the Deck build. SFTP it over from your PC, or download
 it straight from the [releases page](../../releases) on the Deck itself:
 unzip, drop your ROM in `data/`, run `prepare-assets` once, and add the
 executable as a non-Steam game. SDL2 is bundled, so no dependencies need
-installing. The renderer is CPU-bound (software RSP); expect original N64-era
+installing. On SteamOS the first launch seeds `ge007.ini` with Deck-friendly
+defaults — native 1280×800 fullscreen, VSync, MSAA 4, and 150% draw/LOD
+distance (the authored N64 fade distances read short on the close-up panel);
+everything is changeable in the options overlay and persists afterwards. The renderer is CPU-bound (software RSP); expect original N64-era
 performance at 60 fps rather than more. A v0.1.0-era crash on the Deck in
 Facility was never reproduced and its prime suspect has since been fixed, but
 this release has not yet been verified on real Deck hardware.
