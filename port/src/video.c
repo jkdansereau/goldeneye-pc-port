@@ -230,6 +230,29 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Window.Maximized",    &cfgWinMax,     0, 1);
 }
 
+/* Steam Deck / SteamOS first-run preset. Called from main() when STEAMOS is
+ * set, BEFORE configLoad(): if no ge007.ini exists yet, configLoad's
+ * first-run path saves these values to disk and every later launch reads the
+ * file (user changes via F10 win outright); if an ini already exists its
+ * values overwrite everything here. So this is a first-launch preset only.
+ * 1280x800 is the Deck's native panel resolution; MSAA 4 + VSync is
+ * comfortable headroom for the A11 GPU; DrawDistance/LodDistance at 150%
+ * because the authored N64 fade distances read "things pop in just before
+ * you can see them" on a sharp 7" close-up panel (e.g. the Dam lock).
+ * Note: the panel is 16:10 and the game renders 4:3, so this stretches
+ * uniformly like any non-4:3 window today (letterboxing is the parked
+ * WIDESCREEN-FOV-PLAN). */
+void videoApplySteamOSDefaults(void)
+{
+    cfgFullscreen   = 1;
+    cfgWinW         = 1280;
+    cfgWinH         = 800;
+    cfgVSync        = 1;
+    cfgMSAA         = 4;
+    cfgDrawDistance = 150;
+    cfgLodDistance  = 150;
+}
+
 /* Set by videoRequestLiveConfig() (F10 overlay, host thread); consumed on the
  * scheduler thread in videoStartFrame() where the GL context is bound. */
 static volatile int liveCfgDirty = 0;

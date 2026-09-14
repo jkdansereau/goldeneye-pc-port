@@ -124,6 +124,12 @@ static struct Row rows[] = {
     { "Input.SensLink",           "Link aim/turn sens",ROW_TOGGLE, 1,   kOnOff,     0, 0, 0,   0,0,0,0,0 },
     { "Input.MouseInvertY",       "Mouse invert Y",   ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
     { "Game.ScreenShakeIntensity","Screen shake",     ROW_SLIDER, 0.25, NULL,       0, 0, 3,   0,0,0,0,0 },
+    /* D232: the community "no damage flash" toggle (suppresses the red/green
+     * hit-flash overlay in bondview2). */
+    { "Game.NoHitFlash",          "No hit flash",     ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
+    /* D216: read once at title-stage load (lv.c) -- toggling it takes effect
+     * the next time the title screen is reached. */
+    { "Game.SkipIntro",           "Skip intro",       ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
     /* D257: everything-unlocked goodie (default ON). Consumed at startup by
      * main.c -- applies from the next launch. */
     { "Game.AllUnlocked",         "All unlocked",     ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
