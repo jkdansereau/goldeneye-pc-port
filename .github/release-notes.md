@@ -6,11 +6,12 @@
 </p>
 
 > The full single-player campaign runs at a steady 60 fps with audio (music +
-> SFX) playing throughout, on Windows and Linux including Steam Deck. To our
-> knowledge this is also the first open-source port of the original N64 game
-> to ship as a public release. It's an early public cut: all 21 solo missions
-> load and run crash-free, but the known issues below are real — feedback is
-> very welcome.
+> SFX) playing throughout, on Windows and Linux including Steam Deck — and it
+> is completable end to end: the whole campaign has been playtested through
+> all 21 missions (Agent difficulty). To our knowledge this is also the first
+> open-source port of the original N64 game to ship as a public release. It's
+> an early public cut: all 21 solo missions load and run crash-free, but the
+> known issues below are real — feedback is very welcome.
 
 ### What's new since v0.1.0
 
@@ -73,11 +74,12 @@
   fullscreen ghost of the top row.
 - **Steam Deck: one intermittent crash remains** — the v0.1.0-era Facility
   crash is confirmed fixed on Deck hardware, but a SIGSEGV can occasionally
-  occur during heavy firefights (D255); diagnosis has narrowed it to a stale
-  model reference hit while vertex batches merge mid-destruction, and current
-  builds capture full faulting registers in `ge007.crash.log` for a
-  definitive pin. More Deck playtime across levels is welcome — please report
-  any Deck-specific faults.
+  occur during heavy firefights (D255; seen on Bunker and Frigate). The
+  faulting-register capture in `ge007.crash.log` has pinned it: an object
+  record whose model reference is NULL while the record is still active —
+  i.e. something in a mid-firefight destruction leaves the record live one
+  tick too long. We're tracking down the exact destruction path; more Deck
+  playtime across levels is welcome — please report any Deck-specific faults.
 
 ### Downloads
 
