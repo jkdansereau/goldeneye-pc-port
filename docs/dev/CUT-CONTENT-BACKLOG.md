@@ -16,6 +16,48 @@ export at `scratchpad/backlog-scrape/restore-cut-content-mod/` (gitignored).
 > table as pickup+prop pairs except heroine; (4) TCRF's 11 unused cheats, music
 > track index, MP character table and build dates all verify 1:1 against
 > `bondconstants.h`/`cheat.c`/`front.c`/`compiletime.c`.
+>
+> **Round 2 (decomp-only discoveries — not in TCRF's documentation):**
+>
+> 1. **The shipped game still calls the M16 an "AR33"** — pickup text
+>    `"an AR33 assault rifle."` (`LpropobjE.c` PROPOBJ_STR_2A, used at
+>    `propobj.c:10471`), plus unused strings `"US AR33 Assault Rifle"`/
+>    `"US AR33"` (`LgunE.c` GUN_STR_74/75) and `PROP_CHRM16 /* AR33 Assault
+>    Rifle */` comments. TCRF's prerelease page mentions the AR33 name in early
+>    footage but not that it survived into retail text.
+> 2. **Klobb rename trace verified**: weapon-name strings in `LgunE.c` are
+>    alphabetical except GUN_STR_6B `"Klobb"` (between "Spy File" and "Staff
+>    List") — exactly the last-minute Skorpion→Klobb scar TCRF describes.
+> 3. **Two cut weapons TCRF's unused-items page doesn't list**: `cartrifle` and
+>    `wristdart` — full pickup+prop resources (`GcartrifleZ`, `GwristdartZ`,
+>    `PchrwristdartZ /* (BETA) */`) but no `ITEM_*` entry and no WeaponStats,
+>    i.e. unusable as weapons. The wrist dart is the hardware behind TCRF's
+>    `AMMO_DARTS` ($0E).
+> 4. **All four Bonds, fully mapped**: `CUFF_CONNERY/DALTON/MOORE` +
+>    `BOND_BROSNAN/CONNERY/DALTON/MOORE` enums; the actor-switch code
+>    (`bondview2.c:391-460`) survives with every branch flattened to Brosnan;
+>    the save struct keeps the per-dossier actor field. **No Connery/Moore/
+>    Dalton models exist in the retail ROM** (80 `C*Z` chr models enumerated —
+>    none for the former actors); only enum slots + the `SW_CONNERY`/`SW_DINNER`
+>    switches on the watch-arm model remain. TCRF's "four dossiers, four
+>    actors" was pre-release state.
+> 5. **Cuba is the one orphan level with recoverable content**: `LlenE.c` holds a
+>    cut Natalya dialogue exchange, the "C U B A N J U N G L E" title card, and a
+>    full alternate credits cast. The other 12 unused level text files are empty
+>    stubs.
+> 6. **Orphan-level geometry IS in the ROM**: `assets/obseg/obseg.h` declares all
+>    nine text-only orphans' bg segments (`bg_sho_all_p_seg[]` …) — a
+>    byte-matching decomp can't fabricate them. What's missing is mission setup
+>    (briefings exist only for the 21 solo levels), not geometry.
+> 7. **Moneypenny's two risqué Frigate-briefing lines are gone from the ROM**
+>    (final `LdestE.c` keeps only the toned-down "thighs of steel" paragraph);
+>    recoverable only from TCRF's transcription. "Destroyer"→"Frigate" rename is
+>    complete; the Manticore yacht mission has zero ROM trace.
+> 8. **Music enum ↔ Notes-page GS index fully aligned**: indices 0–48 match
+>    slot-for-slot; four local mismatches past 0x2C (49 `M_CUBA` vs "Ending
+>    theme", 52 `M_MPTHEME3` vs "Surface 2 X", 54 `M_GUITARGLISS` vs "MP Death
+>    (Alt)", 59 `M_SURFACE2X` vs "Surface 1 X") — in-game `DEB_MUSIC` audition
+>    needed to resolve.
 
 ## 1. Findings
 
@@ -250,8 +292,9 @@ Cross-reference:
 - Head model dirs exist under `assets/obseg/chr/`: `headken` (the Ken face),
   `headbrosnan*` (4 costume variants), `moonfemale`, plus ~30 named heads.
   The actor-named suits (Connery/Dalton/Moore) do **not** appear as chr dirs —
-  likely cut before model export, or embedded in a shared body file.
-  **Unverified** which exact models the TCRF face shots show.
+  **resolved in round 2**: the ROM holds exactly 80 `C*Z` character models and
+  none is a former-Bond actor; only the enum slots + the flattened actor-switch
+  code (`bondview2.c:391-460`) survive (see banner, item 4).
 
 **Status: Tier 2/3.** Cosmetic mod (extra MP faces) = asset-level work if the
 models are in the ROM; verify by dumping `assets/obseg/chr/*/Model.c` headers.
