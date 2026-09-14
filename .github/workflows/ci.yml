@@ -361,16 +361,19 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           ASSETS=(dist/*.zip dist/*.zip.sha256 dist/*.tar.gz dist/*.tar.gz.sha256)
+          NOTES="$(mktemp)"
+          # Asset names are built from the tag with the leading v stripped
+          # (bundle-{linux,win}.sh), so substitute the same form -- a raw
+          # TAG would make the notes reference goldeneye-pc-port-v*.* assets
+          # that don't exist.
+          NOTES_VERSION="${TAG#v}"
+          sed "s/<version>/${NOTES_VERSION}/g" .github/release-notes.md > "$NOTES"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${ASSETS[@]}" --clobber
+            # Re-stamp the notes body too: it is only set at creation, and
+            # release-notes.md may have moved since the draft was first cut.
+            gh release edit "$TAG" --notes-file "$NOTES"
           else
-            NOTES="$(mktemp)"
-            # Asset names are built from the tag with the leading v stripped
-            # (bundle-{linux,win}.sh), so substitute the same form -- a raw
-            # TAG would make the notes reference goldeneye-pc-port-v*.* assets
-            # that don't exist.
-            NOTES_VERSION="${TAG#v}"
-            sed "s/<version>/${NOTES_VERSION}/g" .github/release-notes.md > "$NOTES"
             gh release create "$TAG" "${ASSETS[@]}" \
               --draft --prerelease \
               --title "GoldenEye 007 PC Port $TAG" \
