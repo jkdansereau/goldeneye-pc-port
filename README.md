@@ -28,11 +28,10 @@ See [Background](#background).
 
 <p align="center">
   <img src="docs/img/attract-bunker1.png" width="32%" alt="Bunker 1 intro camera">
-  <img src="docs/media/goldeneye-demo.gif" width="32%" alt="~15 s of the port running: mission dossier, Facility, Silo, Jungle, Archives">
+  <video src="docs/media/goldeneye-gh-preview.mp4" width="32%" controls muted loop></video>
   <img src="docs/img/attract-dam.png" width="32%" alt="Dam intro camera">
   <br><em>In-engine, running in the port — Bunker&nbsp;1 and Dam attract views, and a
-  ~15&nbsp;s clip (the clip itself has no audio track): mission dossier &rarr;
-  Facility &rarr; Silo &rarr; Jungle &rarr; Archives.</em>
+  ~32&nbsp;s gameplay montage from live play sessions (the clip has no audio track).</em>
 </p>
 
 ## Download

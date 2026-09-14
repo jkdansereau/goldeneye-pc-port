@@ -22,8 +22,8 @@ handful of cosmetic rendering defects remain — are listed plainly under
 [Honest status](#honest-status).
 
 <p align="center">
-  <img src="media/goldeneye-demo.gif" width="70%" alt="~15 s of the port running: mission dossier, Facility, Silo, Jungle, Archives">
-  <br><em>~15 s of the port running: mission dossier &rarr; Facility &rarr; Silo &rarr; Jungle &rarr; Archives (the clip has no audio track).</em>
+  <video src="media/goldeneye-gh-preview.mp4" width="70%" controls muted loop></video>
+  <br><em>~32 s gameplay montage from live play sessions, running in the port (the clip has no audio track).</em>
 </p>
 
 ## Download
