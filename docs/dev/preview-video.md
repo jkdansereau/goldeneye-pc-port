@@ -63,8 +63,7 @@ add a new session there (tag, filename suffix, duration) to use it.
 
 ## Optional: motion data to find "cool" moments
 
-`scratchpad/analyze-sessions.py` / the old `best-of*.py` scripts dump
-per-keyframe YAVG diffs (`k<N>.txt` in `.preview-work/`) for exactly these
+`scratchpad/analyze-sessions.py` dumps per-keyframe YAVG stats for the
 session files; the diff between consecutive keyframes is a decent proxy for
 "something is happening". If you need to find the coolest moment in a time
 window, maximize it — but note plain random picks with spacing constraints
