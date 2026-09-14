@@ -26,6 +26,7 @@
   #define _POSIX_C_SOURCE 199309L
   #include <unistd.h>
   #include <time.h>
+  #include <sys/stat.h>
 #endif
 
 #include "system.h"
@@ -245,10 +246,42 @@ const char *sysResolvePath(const char *path)
         else
             snprintf(out, sizeof(out), "%s\\data\\%s", exedir, path + 3);
 #else
+        /* D256: mirror the Windows branch. The ROM itself is found via
+         * $S/ OR $E/ (exe dir) by romdataInit, so a launch from any CWD
+         * (Steam shortcut, terminal in ~) runs fine while saves/config —
+         * which only knew the CWD-relative path — silently failed to write.
+         * Prefer CWD data/ (dev/repo workflow), else exe-dir data/, and
+         * create the directory best-effort so first-run writes don't fail. */
         if (access("data", F_OK) == 0)
             snprintf(out, sizeof(out), "data/%s", path + 3);
-        else
-            snprintf(out, sizeof(out), "./data/%s", path + 3);
+        else {
+            static char sexedir[1024] = "";
+            if (!sexedir[0]) {
+                ssize_t n = readlink("/proc/self/exe", sexedir, sizeof(sexedir) - 1);
+                if (n > 0) {
+                    char *slash;
+                    sexedir[n] = 0;
+                    slash = strrchr(sexedir, '/');
+                    if (slash)
+                        *slash = 0;
+                    else
+                        sexedir[0] = 0;
+                }
+            }
+            if (sexedir[0])
+                snprintf(out, sizeof(out), "%s/data/%s", sexedir, path + 3);
+            else
+                snprintf(out, sizeof(out), "data/%s", path + 3);
+        }
+        {
+            char dirbuf[1024];
+            char *slash;
+            strncpy(dirbuf, out, sizeof(dirbuf) - 1);
+            dirbuf[sizeof(dirbuf) - 1] = 0;
+            slash = strrchr(dirbuf, '/');
+            if (slash && slash != dirbuf)
+                *slash = 0, mkdir(dirbuf, 0755); /* best effort; EEXIST is fine */
+        }
 #endif
         return out;
     }

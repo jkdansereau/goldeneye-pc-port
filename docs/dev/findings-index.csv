@@ -137,3 +137,4 @@ D252,?,"Particle effects cycle through a rainbow palette (M-124, user playtest o
 D253,FIXED,Facility (and any level with a FORCECROUCH/LADDER linked special tile) SIGSEGV on Linux/Steam Deck —,FIXED — Deck-verified:
 D254,FIXED,Linux crash handler destroyed its own logs:,FIXED — needs one Deck crash to prove the new format in the field.
 D255,OPEN,"Facility firefight SIGSEGV on Steam Deck (v0.2.0-pre CI bundle, D253 fix confirmed working —",OPEN — awaiting register capture from the Deck.
+D256,FIXED,Saves (and config) silently failed to persist on Linux whenever the game was not launched from the directory containing data/ —,FIXED (path half) — save-flow detail still owed from the user.
