@@ -156,6 +156,9 @@ ge007.crash.log
 
 # agent scratch space + audio probe artifacts (regenerable dumps/traces)
 scratchpad/
+# montage work artifact: the tiled contact sheet behind docs/img/shots/ and
+# the preview video (regenerable from the same session recordings)
+docs/img/shots/CONTACT-SHEET.jpg
 /audiodump.raw
 /audiotrace.log
 /mixertrace.log

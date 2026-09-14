@@ -2,7 +2,7 @@
 title: GoldenEye 007 PC Port
 description: >-
   A native PC port of the original Nintendo 64 GoldenEye 007, built from its
-  decompiled source with a software RSP. v0.2.0 pre-release is out for Windows
+  decompiled source with a software RSP. v0.2.0 is out for Windows
   and Linux (including Steam Deck) — download it, drop in your own ROM, and
   play; or dig into the code and the engineering record behind it.
 ---
@@ -15,15 +15,17 @@ N64's graphics coprocessor (RSP) running in software — the same architecture
 as the [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark), the
 same Rare "Indy" engine family, one hardware generation apart.
 
-**Status: v0.2.0 pre-release.** The full single-player campaign runs at a
-steady 60 fps with no known crashes, and audio (music + SFX) plays throughout.
+**Status: v0.2.0** — to our knowledge, the first open-source port of the
+original N64 game to ship as a public release. The full single-player
+campaign runs at a steady 60 fps with no known crashes, and audio (music +
+SFX) plays throughout.
 Known rough edges — cutscenes still glitch, a few music tracks sound wrong, a
 handful of cosmetic rendering defects remain — are listed plainly under
 [Honest status](#honest-status).
 
 <p align="center">
-  <img src="media/goldeneye-demo.gif" width="70%" alt="~15 s of the port running: mission dossier, Facility, Silo, Jungle, Archives">
-  <br><em>~15 s of the port running: mission dossier &rarr; Facility &rarr; Silo &rarr; Jungle &rarr; Archives (the clip has no audio track).</em>
+  <video src="media/goldeneye-gh-preview.mp4" width="70%" controls muted loop></video>
+  <br><em>~32 s gameplay montage from live play sessions, running in the port (the clip has no audio track).</em>
 </p>
 
 ## Download
@@ -132,12 +134,12 @@ without a ROM you already own.
 </p>
 </details>
 
-More captures land here as playtesting continues (Steam Deck session next).
+More captures may land here as playtesting continues.
 
 ## Play it — or take it apart
 
 - **Try it yourself** — grab a bundle above, bring your own ROM, and play the
-  campaign. It's a pre-release cut for exactly this: if something breaks, an
+  campaign. It's an early cut for exactly this: if something breaks, an
   [issue](https://github.com/jkdansereau/goldeneye-pc-port/issues) with what
   you were doing is genuinely useful.
 - **Read the code** — the game logic in `src/` is unmodified decompilation;
@@ -177,6 +179,8 @@ catalogue: [Porting notes](porting-notes.md).
 - Particle colours drift through a rainbow palette instead of holding grey/orange.
 - Water levels show a moving seam; pixel strips at screen edges at non-integer
   scales; some front-end 3D models mispositioned or absent.
+- The F10 overlay's bottom row duplicates the selected item; one intermittent
+  Steam Deck SIGSEGV in heavy firefights remains open (D255).
 - No macOS/ARM support; no controller rebinding UI yet.
 
 The full list, with root causes and fix status: the

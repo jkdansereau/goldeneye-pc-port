@@ -12,9 +12,11 @@ in a dedicated `port/` layer, following the architecture of the
 [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark), the same
 Rare "Indy" engine family, one hardware generation apart.
 
-**v0.2.0 (pre-release)** is out for Windows and Linux — including Steam Deck,
-where the Linux bundle sideloads as-is — and runs the full campaign at a steady
-60 fps with known rough edges ([Status](#status)).
+**v0.2.0** is out for Windows and Linux — including Steam Deck, where the
+Linux bundle sideloads as-is — and runs the full campaign at a steady 60 fps
+with known rough edges ([Status](#status)). To our knowledge it's also the
+first open-source port of the original N64 game to ship as a public release:
+free to download, build on and modify (you bring the ROM).
 
 It's also a case study in AI-agent collaboration on a large, low-level
 codebase: two coding agents, driven by one person part-time, porting ~230
@@ -28,11 +30,10 @@ See [Background](#background).
 
 <p align="center">
   <img src="docs/img/attract-bunker1.png" width="32%" alt="Bunker 1 intro camera">
-  <img src="docs/media/goldeneye-demo.gif" width="32%" alt="~15 s of the port running: mission dossier, Facility, Silo, Jungle, Archives">
+  <video src="docs/media/goldeneye-gh-preview.mp4" width="32%" controls muted loop></video>
   <img src="docs/img/attract-dam.png" width="32%" alt="Dam intro camera">
   <br><em>In-engine, running in the port — Bunker&nbsp;1 and Dam attract views, and a
-  ~15&nbsp;s clip (the clip itself has no audio track): mission dossier &rarr;
-  Facility &rarr; Silo &rarr; Jungle &rarr; Archives.</em>
+  ~32&nbsp;s gameplay montage from live play sessions (the clip has no audio track).</em>
 </p>
 
 ## Download
@@ -58,34 +59,46 @@ Then:
 3. Run the one-time asset step: `python3 prepare-assets/prepare-assets.py` (Python 3.8+, stdlib only).
 4. Launch the executable from that folder.
 
-Read the [Status](#status) caveats first — this is a pre-release.
+Read the [Status](#status) caveats first — v0.2.0 has known rough edges,
+listed plainly there.
 
 ## Status
 
-**v0.2.0 (pre-release) — playable, with known rough edges.** It runs the full
-single-player campaign at a steady 60 fps with no known crashes; the point of
-the pre-release is an end-to-end playtest that all 21 missions are completable
-start to finish on this build — feedback is welcome.
+**v0.2.0 — playable, with known rough edges.** The full single-player
+campaign is completable end to end (all 21 missions, Agent difficulty —
+playtested), at a steady 60 fps; all 21 solo missions load, render and run
+crash-free, verified on Windows, Linux and real Steam Deck hardware. Feedback
+is very welcome.
 
 **Working:** boot sequence and front end (menu → mission select → briefing →
-start); all 21 solo missions load, render and are crash-free; steady 60 fps
+start); all 21 solo missions load, render and are crash-free (full campaign
+playtested end to end at Agent difficulty); steady 60 fps
 (software RSP off the presentation critical path); full audio — in-level music
 and SFX; keyboard + mouse (click-to-lock, proportional aim mode) and a modern
-dual-stick controller layout; file-backed saves; F10 in-game options overlay
-(resolution, frame cap, MSAA, filtering, FOV, sensitivity); Windows and Linux.
+dual-stick controller layout; file-backed saves; all levels, 007 mode and the full cheat menu unlocked by
+default (F10 → *All unlocked* restores faithful N64 progression); F10 in-game
+options overlay (resolution, frame cap, MSAA, filtering, FOV, sensitivity);
+Windows and Linux.
 
 **Known issues:**
 
 - **Cutscenes glitch frequently** — skipped beats, wrong camera, misplaced or
-  hovering actors, wrong timing. The most visible gap in this release.
-- A few in-level music tracks sound wrong (wrong instruments, occasional
-  garbling).
+  hovering actors, wrong timing; the Dam level-end cutscene is racy (D243).
+  The most visible gap in this release.
+- A few in-level music tracks sound wrong — a wrong-sounding bass instrument
+  on some elevator/level tracks (D230).
 - Particle colours drift through a rainbow palette instead of holding their
-  grey/orange intent (bullet sparks, lingering smoke/explosion residue).
-- Water levels show a moving seam between two water patterns; pixel strips at
-  the left/right screen edges at non-integer scales; some front-end 3D models
-  (spinning Nintendo logo, MISSION COMPLETE / mode-select) mispositioned or
-  absent. Assorted further cosmetic defects are tracked in
+  grey/orange intent (bullet sparks, lingering smoke/explosion residue) (D252).
+- Water levels show a moving seam between two water patterns (D245); thin
+  pixel strips at the left/right screen edges at non-integer window scales
+  (D246).
+- Some front-end 3D models are off — the spinning Nintendo logo renders as two
+  white blobs and the Rareware logo's texture filtering looks wrong (D75).
+- The F10 overlay's bottom row duplicates whatever item is currently selected
+  (D251).
+- **Steam Deck:** one intermittent SIGSEGV remains in heavy firefights (D255);
+  current builds capture full faulting registers in `ge007.crash.log`.
+- Assorted further cosmetic defects are tracked in
   [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
 - No macOS or ARM support; no controller rebinding UI.
 
@@ -102,9 +115,10 @@ installing. On SteamOS the first launch seeds `ge007.ini` with Deck-friendly
 defaults — native 1280×800 fullscreen, VSync, MSAA 4, and 150% draw/LOD
 distance (the authored N64 fade distances read short on the close-up panel);
 everything is changeable in the options overlay and persists afterwards. The renderer is CPU-bound (software RSP); expect original N64-era
-performance at 60 fps rather than more. A v0.1.0-era crash on the Deck in
-Facility was never reproduced and its prime suspect has since been fixed, but
-this release has not yet been verified on real Deck hardware.
+performance at 60 fps rather than more. This release was playtested on real
+Deck hardware — the v0.1.0-era Facility crash was never reproduced there, and
+its prime suspect (D253) is fixed; one intermittent SIGSEGV in heavy
+firefights remains open (D255).
 
 **In-game settings on the Deck.** The options overlay is fully gamepad-driven:
 it opens with **Select**, the D-pad or left stick (up/down) moves between
@@ -160,7 +174,7 @@ code with this one.
 | **How** | Decompilation-based source port — human-reconstructed C, compiled for the host; game logic runs as written | Static binary recompilation — the shipped machine code is auto-translated to C; no source-level understanding |
 | **Lineage** | [GoldenEye 007 decompilation](https://github.com/n64decomp/007) + [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) engine family | Xbox 360 "…Recompiled" static-recompilation family |
 | **Renderer** | Software RSP → OpenGL | Hardware (Vulkan) |
-| **Status** | v0.2.0 pre-release; see [Status](#status) | Playable full game, higher frame rates, online multiplayer |
+| **Status** | v0.2.0; see [Status](#status) | Playable full game, higher frame rates, online multiplayer |
 | **Why it exists** | A [case study in AI-agent collaboration](#background) on a hard low-level codebase | A polished, playable PC release of the remaster |
 
 If you just want to play GoldenEye on PC today, use one of the recompilation
