@@ -115,7 +115,14 @@ int main(int argc, char **argv)
         else                  sysLogPrintf(LOG_NOTE, "fresh: no %s to remove", eep);
     }
 
-    /* 1. Platform + config + filesystem. */
+    /* 1. Platform + config + filesystem. Steam Deck / SteamOS: seed the
+     * first-run preset (native 1280x800 fullscreen, MSAA 4, longer draw/LOD
+     * distances) before the load so a missing ini saves these values; an
+     * existing ini always wins. */
+    if (getenv("STEAMOS")) {
+        sysLogPrintf(LOG_INFO, "video: SteamOS detected; applying Steam Deck first-run defaults");
+        videoApplySteamOSDefaults();
+    }
     configLoad();
     atexit(portAtExit);   /* persist config + window geometry on clean exit */
 

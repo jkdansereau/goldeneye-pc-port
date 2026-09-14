@@ -20,6 +20,9 @@ extern "C" {
 #endif
 
 /* Initialize the window + GL context. Returns 0 on success. */
+/* Steam Deck first-run preset; must run after the config constructor and
+ * before configLoad() (see video.c). No-op effect once an ini exists. */
+void videoApplySteamOSDefaults(void);
 int  videoInit(void);
 void videoDestroy(void);
 
