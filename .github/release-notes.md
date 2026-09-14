@@ -1,9 +1,16 @@
-## GoldenEye 007 PC Port — <version> (pre-release)
+## GoldenEye 007 PC Port — <version>
 
-> **Pre-release.** The full single-player campaign runs at a steady 60 fps,
-> audio (music + SFX) playing throughout. This cut is for playtesting: a full
-> end-to-end confirmation that all 21 missions are completable on this build
-> is still owed, and the known issues below are real.
+<p align="center">
+  <img src="https://github.com/jkdansereau/goldeneye-pc-port/raw/v0.2.0/docs/media/goldeneye-gh-preview.gif" width="480"
+       alt="~32 s gameplay montage from live play sessions (no audio track)">
+</p>
+
+> The full single-player campaign runs at a steady 60 fps with audio (music +
+> SFX) playing throughout, on Windows and Linux including Steam Deck. To our
+> knowledge this is also the first open-source port of the original N64 game
+> to ship as a public release. It's an early public cut: all 21 solo missions
+> load and run crash-free, but the known issues below are real — feedback is
+> very welcome.
 
 ### What's new since v0.1.0
 
@@ -26,6 +33,15 @@
 - **QoL**: F10 in-game options overlay (fullscreen, resolution, frame cap,
   MSAA, texture filtering, FOV/draw distance, sensitivity), mute-on-focus-loss,
   F12 screenshot.
+- **Everything unlocked by default** — all 21 solo levels are selectable at
+  every difficulty from the first launch, 007 mode is available, and the cheat
+  menu is fully populated. No *active* cheats are enabled (weapons remain
+  per-mission pickups, as on N64); F10 → *All unlocked* switches back to
+  faithful N64 progression.
+- **Steam Deck first-run preset** — on SteamOS the first launch seeds
+  Deck-friendly defaults (native 1280×800 fullscreen, VSync, MSAA 4, 150%
+  draw/LOD distance); an existing `ge007.ini` always wins. Two more F10 rows:
+  *No hit flash* (suppresses the damage-flash overlay) and *Skip intro*.
 - **Modern dual-stick controller layout** (the scheme used by the console
   re-releases): left stick move/strafe, right stick look, right trigger fire,
   left trigger aim, A/X use, B/Y crouch/cancel, **RB/LB cycle weapons**.
