@@ -1,9 +1,9 @@
 ## GoldenEye 007 PC Port — <version> (pre-release)
 
-> **Pre-release.** The full single-player campaign runs at a steady 60 fps
-> with no known crashes, audio (music + SFX) playing throughout. This cut is
-> for playtesting: a full end-to-end confirmation that all 21 missions are
-> completable on this build is still owed, and the known issues below are real.
+> **Pre-release.** The full single-player campaign runs at a steady 60 fps,
+> audio (music + SFX) playing throughout. This cut is for playtesting: a full
+> end-to-end confirmation that all 21 missions are completable on this build
+> is still owed, and the known issues below are real.
 
 ### What's new since v0.1.0
 
@@ -30,7 +30,11 @@
   re-releases): left stick move/strafe, right stick look, right trigger fire,
   left trigger aim, A/X use, B/Y crouch/cancel, **RB/LB cycle weapons**.
 - **Linux / Steam Deck**: the Linux bundle now ships its own SDL2 — it runs
-  as-is on any distro, and sideloads onto a Steam Deck with nothing installed.
+  as-is on any distro, and sideloads onto a Steam Deck with nothing
+  installed. Saves and F10 settings now persist no matter which directory you
+  launch from (previously Linux wrote them relative to the launch directory
+  only, so they silently failed elsewhere — D256); the options overlay is
+  fully gamepad-driven on the Deck.
 
 ### Known issues
 
@@ -51,12 +55,13 @@
   selected** (e.g. the MSAA value appears both on its own row and again at
   the panel bottom); earlier builds showed it as an intermittent 4K-
   fullscreen ghost of the top row.
-- **Steam Deck: one open crash remains** — the v0.1.0-era Facility crash is
-  confirmed fixed on Deck hardware, but a *new* SIGSEGV can occur during a
-  firefight in Facility (D255); diagnosis is in progress. Other levels are
-  untested there so far — please report any Deck-specific faults (a
-  `ge007.crash.log` next to the exe helps; recent builds now capture full
-  faulting registers in it).
+- **Steam Deck: one intermittent crash remains** — the v0.1.0-era Facility
+  crash is confirmed fixed on Deck hardware, but a SIGSEGV can occasionally
+  occur during heavy firefights (D255); diagnosis has narrowed it to a stale
+  model reference hit while vertex batches merge mid-destruction, and current
+  builds capture full faulting registers in `ge007.crash.log` for a
+  definitive pin. More Deck playtime across levels is welcome — please report
+  any Deck-specific faults.
 
 ### Downloads
 
