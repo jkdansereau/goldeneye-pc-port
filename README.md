@@ -64,13 +64,15 @@ listed plainly there.
 
 ## Status
 
-**v0.2.0 — playable, with known rough edges.** It runs the full single-player
-campaign at a steady 60 fps; all 21 solo missions load, render and run
+**v0.2.0 — playable, with known rough edges.** The full single-player
+campaign is completable end to end (all 21 missions, Agent difficulty —
+playtested), at a steady 60 fps; all 21 solo missions load, render and run
 crash-free, verified on Windows, Linux and real Steam Deck hardware. Feedback
 is very welcome.
 
 **Working:** boot sequence and front end (menu → mission select → briefing →
-start); all 21 solo missions load, render and are crash-free; steady 60 fps
+start); all 21 solo missions load, render and are crash-free (full campaign
+playtested end to end at Agent difficulty); steady 60 fps
 (software RSP off the presentation critical path); full audio — in-level music
 and SFX; keyboard + mouse (click-to-lock, proportional aim mode) and a modern
 dual-stick controller layout; file-backed saves; all levels, 007 mode and the full cheat menu unlocked by
