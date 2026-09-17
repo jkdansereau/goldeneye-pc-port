@@ -75,8 +75,8 @@ listed plainly there.
 **v0.2.2 - playable, with known rough edges.** The full single-player
 campaign is completable end to end (all 21 missions, Agent difficulty,
 playtested), at a steady 60 fps; all 21 solo missions load, render and run
-crash-free, verified on Windows, Linux and real Steam Deck hardware. Feedback
-is very welcome.
+crash-free, verified on Windows, Linux and real Steam Deck hardware. Native
+Intel macOS builds are supported. Feedback is very welcome.
 
 **Working:** boot sequence and front end (menu → mission select → briefing →
 start), front-end menu navigation on the left stick to match the F10 overlay
@@ -87,7 +87,7 @@ dual-stick controller layout; file-backed saves; faithful N64 progression by def
 (F10 → *All unlocked* opens every level, 007 mode and the full cheat menu); F10 in-game
 options overlay (resolution, frame cap, MSAA, filtering, FOV, sensitivity,
 quit to desktop);
-Windows and Linux.
+Windows, Linux, and Intel macOS.
 
 **Known issues:**
 
@@ -130,7 +130,7 @@ Windows and Linux.
   capture full faulting registers in `ge007.crash.log`.
 - Assorted further cosmetic defects are tracked in
   [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
-- No macOS or ARM support; no controller rebinding UI.
+- No ARM support; no controller rebinding UI.
 
 Root causes and fix status for every item: the [release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases)
 and the finding log in [`docs/dev/findings.md`](docs/dev/findings.md).
@@ -173,7 +173,7 @@ directionally, on the way to v1.0:
 - **PAL and JP ROM support** ([issue #85](https://github.com/jkdansereau/goldeneye-pc-port/issues/85)); NTSC-U is the only supported region today.
 - **Real widescreen** (properly expanding the field of view at 16:9, rather
   than today's 4:3-stretch).
-- **Controller rebinding UI**, and macOS/ARM builds.
+- **Controller rebinding UI**, and ARM builds.
 - **LAN multiplayer**: reviving GoldenEye's original split-screen/deathmatch
   netplay across multiple PCs on a local network. Genuinely under
   consideration, but early and not started; no ETA.

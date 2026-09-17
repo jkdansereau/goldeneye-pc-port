@@ -36,6 +36,7 @@ extern int snprintf(char *str, size_t maxsize, const char *format, ...);
   /* POSIX: mmap the ROM at the fixed cart address (mirrors the VirtualAlloc
    * path). <sys/mman.h> is a host header the decomp include path does not
    * shadow. */
+  #include <errno.h>
   #include <sys/mman.h>
 #endif
 
@@ -382,9 +383,15 @@ int romdataInit(void)
             int flags = MAP_PRIVATE | MAP_ANONYMOUS;
 #ifdef MAP_FIXED_NOREPLACE
             flags |= MAP_FIXED_NOREPLACE;
+#elif defined(PLATFORM_MACOS)
+            /* __PAGEZERO ends at CART_BASE in the macOS build, so this range
+             * is deliberately vacant. Darwin has no MAP_FIXED_NOREPLACE and
+             * otherwise treats CART_BASE only as a hint, relocating it. */
+            flags |= MAP_FIXED;
 #endif
             void *at = mmap((void *)(uintptr_t)CART_BASE, maplen,
                             PROT_READ | PROT_WRITE, flags, -1, 0);
+            int mapErrno = errno;
             if (at != MAP_FAILED && at == (void *)(uintptr_t)CART_BASE) {
                 mappedLen = maplen;
                 return romdataFinishCartMap(tok, img, sideTotal, cgTotal);
@@ -392,8 +399,8 @@ int romdataInit(void)
             if (at != MAP_FAILED)
                 munmap(at, maplen);
             sysLogPrintf(LOG_WARNING, "romdataInit: could not map 0x%08X "
-                         "(ASLR/kernel refused the fixed address); using heap "
-                         "copy — direct ROM reads will fail", CART_BASE);
+                         "(mmap result=%p errno=%d); using heap copy — direct "
+                         "ROM reads will fail", CART_BASE, at, mapErrno);
 #endif
         }
 

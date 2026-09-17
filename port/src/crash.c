@@ -11,6 +11,12 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE 1
 #endif
+#if defined(__APPLE__) && !defined(_XOPEN_SOURCE)
+#define _XOPEN_SOURCE 700
+#endif
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE 1
+#endif
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -303,7 +309,7 @@ static LONG __stdcall crashHandler(PEXCEPTION_POINTERS exinfo)
     return EXCEPTION_CONTINUE_EXECUTION;
 }
 
-#elif defined(PLATFORM_LINUX)
+#elif defined(PLATFORM_LINUX) || defined(PLATFORM_MACOS)
 
 #include <ucontext.h>
 #include <signal.h>
@@ -341,7 +347,7 @@ static void crashStackTrace(char *msg, int sig, void *pc, ucontext_t *ucontext, 
     if (siginfo && (sig == SIGSEGV || sig == SIGBUS)) {
         CRASH_MSG("FAULT ADDR: %p\n", (void *)siginfo->si_addr);
     }
-#if defined(PLATFORM_X86_64)
+#if defined(PLATFORM_LINUX) && defined(PLATFORM_X86_64)
     if (ucontext) {
         CRASH_MSG("REGS: Rax=%p Rcx=%p Rdx=%p Rsi=%p Rdi=%p R8=%p R9=%p R10=%p R11=%p\n",
                   (void *)ucontext->uc_mcontext.gregs[REG_RAX],
@@ -410,10 +416,12 @@ static void crashHandler(int sig, siginfo_t *siginfo, void *ctx)
     ucontext_t *ucontext = ctx ? (ucontext_t *)ctx : NULL;
     void *pc = NULL;
     if (ucontext) {
-#ifdef PLATFORM_X86
+#if defined(PLATFORM_LINUX) && defined(PLATFORM_X86)
         pc = (void *)ucontext->uc_mcontext.gregs[REG_EIP];
-#elif defined(PLATFORM_X86_64)
+#elif defined(PLATFORM_LINUX) && defined(PLATFORM_X86_64)
         pc = (void *)ucontext->uc_mcontext.gregs[REG_RIP];
+#elif defined(PLATFORM_MACOS) && defined(PLATFORM_X86_64)
+        pc = (void *)ucontext->uc_mcontext->__ss.__rip;
 #endif
     }
 
@@ -470,7 +478,7 @@ void crashDumpThreads(const unsigned long *tids, const char **names, int count)
     }
 }
 
-#endif /* PLATFORM_WINDOWS / PLATFORM_LINUX */
+#endif /* PLATFORM_WINDOWS / POSIX */
 
 int g_CrashEnabled = 0;
 
@@ -480,7 +488,7 @@ void crashInit(void)
     SetErrorMode(SEM_FAILCRITICALERRORS);
     prevExFilter = SetUnhandledExceptionFilter(crashHandler);
     g_CrashEnabled = 1;
-#elif defined(PLATFORM_LINUX)
+#elif defined(PLATFORM_LINUX) || defined(PLATFORM_MACOS)
     struct sigaction sigact = { 0 };
     sigact.sa_flags = SA_SIGINFO | SA_ONSTACK;
     sigact.sa_sigaction = crashHandler;
@@ -501,7 +509,7 @@ void crashShutdown(void)
     if (prevExFilter) {
         SetUnhandledExceptionFilter(prevExFilter);
     }
-#elif defined(PLATFORM_LINUX)
+#elif defined(PLATFORM_LINUX) || defined(PLATFORM_MACOS)
     sigaction(SIGSEGV, &prevSigAction, NULL);
     sigaction(SIGABRT, &prevSigAction, NULL);
     sigaction(SIGBUS,  &prevSigAction, NULL);

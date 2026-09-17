@@ -485,6 +485,30 @@ through a converter or a runtime bswap fixup reads scrambled.
 
 ## C2. Port-layer / SDL shims
 
+- **Darwin assembly uses Mach-O symbol spelling.** GAS absolute symbols that
+  are `.global foo` / `.set foo, address` on ELF/PE must become `.globl _foo`
+  / `.set _foo, address`; Darwin also rejects the ELF `.section .data`
+  spelling used by these symbol-only files. Generate transformed build-tree
+  copies rather than changing the cross-platform source files (D294).
+- **Darwin GCC cannot lower ELF-style `#pragma weak alias = target`.** It can
+  ICE in `assemble_alias`; compile generated copies with those pragmas removed
+  and provide Mach-O indirect symbols (`.set _alias, _target`) separately
+  (D294).
+- **Mach-O's default `__PAGEZERO` reserves the entire low 4 GiB.** A build
+  can compile and link successfully yet fail every fixed N64 mapping at
+  runtime (`0x10000000`, `0x70000000`, `0x80000000`). Link with
+  `-Wl,-pagezero_size,0x10000` so null-page pointers remain protected while
+  the cartridge and DRAM ranges are available (D294).
+- **Darwin has no `MAP_FIXED_NOREPLACE`; a fixed-address hint can relocate.**
+  Once `__PAGEZERO` is deliberately bounded below the cart range, use
+  `MAP_FIXED` for the `0x10000000` cartridge mapping. Retaining the advisory
+  hint silently falls back to a heap ROM and later crashes on direct absolute
+  ROM-symbol reads (D294).
+- **AppKit event polling is main-thread-only.** This port has both a host-main
+  `videoPumpEvents()` loop and fast3d's render-thread event pump. The latter
+  must be disabled on macOS or `SDL_PollEvent` raises
+  `NSInternalInconsistencyException`; the main-thread loop already handles
+  the complete event set (D294).
 - `#include <PR/os.h>` in a port `.c`/`.h` that also sees `<errno.h>`
   breaks: `OSContStatus`/`OSContPad` have a `u8 errno;` field vs errno.h's
   macro. libultra.c wraps the include in `#pragma push_macro("errno")` /

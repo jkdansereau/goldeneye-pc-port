@@ -972,7 +972,7 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
             char win[1200] = "";
             char *wp = win;
             for (int i = 0; i < 32; i++) {
-                wp += snprintf(wp, win + sizeof(win) - (wp - win),
+                wp += snprintf(wp, sizeof(win) - (size_t)(wp - win),
                                " %p", (void *)sp[i]);
             }
 #if defined(PLATFORM_WINDOWS)

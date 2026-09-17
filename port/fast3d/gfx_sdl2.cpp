@@ -309,6 +309,12 @@ static void gfx_sdl_get_dimensions(uint32_t* width, uint32_t* height, int32_t* p
 }
 
 static void gfx_sdl_handle_events(void) {
+#if defined(__APPLE__)
+    /* AppKit requires event polling on the process main thread. The host
+     * loop in videoPumpEvents owns the complete SDL queue, so the scheduler
+     * render thread must not call SDL_PollEvent on macOS. */
+    return;
+#else
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
@@ -357,6 +363,7 @@ static void gfx_sdl_handle_events(void) {
                 break;
         }
     }
+#endif
 }
 
 /* The window/context are created on the host main thread, but the game's

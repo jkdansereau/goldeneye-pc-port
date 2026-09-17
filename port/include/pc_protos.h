@@ -28,8 +28,19 @@
  * "using typedef-name after 'struct'"), and no C++ TU has an implicit
  * declaration needing a fix here. C++ TUs keep their pre-D38 header exposure.
  */
+
 #ifndef _PC_PROTOS_H_
 #define _PC_PROTOS_H_
+
+#if defined(__APPLE__)
+/* Darwin SDK headers expose these libc calls as fortify function-like
+ * macros. This legacy declaration list needs their actual symbol names. */
+#undef memcpy
+#undef snprintf
+#undef strcat
+#undef strcpy
+#undef strncpy
+#endif
 
 #if defined(PORT) && defined(__x86_64__) && !defined(__cplusplus)
 

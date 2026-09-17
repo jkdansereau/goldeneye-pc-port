@@ -28,7 +28,19 @@
 #define _PORT_SHIM_OS_H_
 
 #if defined(PORT)
+#    if defined(__APPLE__)
+/* Darwin exposes errno and sprintf as function-like macros. Suppress them
+ * while parsing the N64 API's errno fields and sprintf declaration. */
+#        pragma push_macro("errno")
+#        pragma push_macro("sprintf")
+#        undef errno
+#        undef sprintf
+#    endif
 #    include "include/PR/os.h"
+#    if defined(__APPLE__)
+#        pragma pop_macro("sprintf")
+#        pragma pop_macro("errno")
+#    endif
 
 #    undef OS_K0_TO_PHYSICAL
 #    define OS_K0_TO_PHYSICAL(x) ((u32)((char *)(x) - 0x70000000))

@@ -561,6 +561,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D258 | **PAL/JP asset conversion is broken at the source-data level — `scripts/filelist.e.csv` and `filelist.j.csv` carry naming defects, so `gen_romassets.py e/j` (and…** — full `## D258` entry at file tail | OPEN — repair path verified, not applied (out of v0.2.0 scope). |
 | D285 | **Steam Deck SIGSEGV during D255 live-testing = SEPARATE bug: the `sndHandleEvent` preempt-scan walks the active-sound list unlocked (M-140; fixed M-141).** — full `## D285` entry at file tail | **FIXED (M-141, `src/snd.c`)** — `osSetIntMask` lock added around the preempt-scan, matching `sndSetupSound`'s existing unconditional (no `#ifdef PORT`) pattern in the same file; build green, `-level_09`/`-level_20` unregressed (1400+ frames, no crash, no D152 lock-stuck warnings). Not yet gdb/live-confirmed against a real reproduced crash — see M-141 body. Do not conflate with D255 — different thread, different subsystem. |
 | D293 | **QoL ask: no discoverable way to quit the game from the UI (M-141, Steam Deck user playtest — "couldn't see a way to exit the game. Maybe build this into the…** — full `## D293` entry at file tail | FIXED (M-141) — "Quit to desktop" row added to the F10 overlay; build-verified Win+Linux, not yet live-confirmed.… |
+| D294 | **Native Intel macOS build support.** Apple Clang lacks the required Plan 9 struct extensions; Darwin also needs SDK header discovery, Mach-O absolute/weak-alias symbol spelling, POSIX shared-memory backing instead of Linux `memfd_create`, and Darwin signal-context handling. | **FIXED** — CMake selects versioned Homebrew GNU GCC, generates Mach-O assembly/source adapters in the build tree, and the port layer now handles Darwin libc macros, shared memory, and crash diagnostics. Fresh `build-pc.sh ntsc-final` build and `--version` smoke test pass on x86_64 macOS 26.6.2. |
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
 threads, compiled GE's real `src/sched.c`, and brought in PD's fast3d software
@@ -10149,3 +10150,50 @@ do {
 ## D293 — QoL ask (M-141, Steam Deck user playtest): no discoverable way to quit the game from the UI on a controller-only setup
 **Context.** Deck/controller-only setups had only window-close/Alt+F4 to quit; no in-UI affordance.
 **FIXED.** Added a `ROW_ACTION` row kind (not config-backed, same pattern as the existing `__Resolution` row) to the F10 options overlay ("Quit to desktop") that triggers the identical `configSave()`+`exit(0)` path `SDL_QUIT` already uses. Build-verified on Windows and Linux; `verify.sh dam` PASS, no regression.
+
+## D294 — Native Intel macOS build support
+**Context.** The CMake file contained nominal Apple branches, but had never
+completed a Darwin build. `/usr/bin/gcc` is Apple Clang and rejects the
+decomp's required `-fplan9-extensions`; host-header paths assumed MinGW/Linux;
+ELF-style absolute symbols and weak aliases are invalid in Mach-O; the DRAM
+mirror used Linux-only `memfd_create`; and crash diagnostics only implemented
+Windows/Linux.
+
+**FIXED.** CMake now selects Homebrew's versioned GNU `gcc-N`/`g++-N`, locates
+libc headers through the macOS SDK, omits Linux-only `-ldl`, and generates
+Mach-O-spelled copies of the ROM/DRAM absolute symbols. Five sources containing
+ELF weak-alias pragmas are copied into the build tree with only those pragmas
+removed; a Mach-O assembly file supplies equivalent indirect symbols. Darwin
+fortify/`errno` macros are suppressed while legacy declarations parse.
+`dramReserve` uses an immediately-unlinked POSIX shared-memory object, and the
+POSIX crash handler supports Darwin's x86-64 signal context.
+
+**Verified.** On x86_64 macOS 26.6.2 with Homebrew GCC 16.2.0, both an
+incremental native build and a fresh build through `build-pc.sh` completed at
+100%. `file` identifies the output as a Mach-O 64-bit x86_64 executable,
+`otool -L` resolves SDL2, zlib, libstdc++, Cocoa, and OpenGL, and
+`ge007.x86_64 --version` reports `x86_64-osx`. Runtime gameplay was not
+exercised because ROM-derived user data is not part of build verification.
+Apple Silicon remains unsupported/untested.
+
+**Runtime follow-up.** The first real launch exposed a link-time/runtime gap:
+Darwin's default Mach-O `__PAGEZERO` segment reserved `[0, 0x100000000)`.
+Consequently both the cartridge mapping at `0x10000000` and the mirrored DRAM
+mapping at `0x70000000`/`0x80000000` failed despite a successful build.
+The Apple link now sets `-pagezero_size 0x10000`, preserving null-page
+protection while leaving all three N64 address windows available. Darwin also
+lacks Linux's `MAP_FIXED_NOREPLACE`; the ROM mapping
+therefore uses `MAP_FIXED` after the linker has guaranteed the cartridge range
+is vacant. Without it, `mmap` relocated the cartridge despite the now-free
+range, boot fell back to a heap copy, and direct absolute ROM-symbol reads
+crashed during level initialization. With fixed ROM mapping working, the next
+launch reached rendering and exposed AppKit's main-thread-only event rule:
+fast3d polled SDL from the scheduler/render thread even though the port's host
+main loop already owns a complete event pump. The fast3d pump is now disabled
+only on macOS; `videoPumpEvents()` continues to process input/window events.
+After generating all three required sidecar sets from the user's NTSC ROM,
+`-level_09` ran for more than 1,500 rendered frames with the ROM fixed at
+`0x10000000`, both DRAM views active, all 512 model and 73 stage sidecars
+patched, and no crash. The missing packed-vertex OpenGL entry-point messages
+are non-fatal capability noise from the GL loader; rendering proceeds on the
+created macOS OpenGL 4.1 core context.

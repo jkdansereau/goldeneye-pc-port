@@ -12,6 +12,9 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Prevent GCC's implicit declaration warning */
+extern void exit(int status);
+
 #if defined(_WIN32)
 #include <direct.h>
 #define GE_MKDIR(p) _mkdir(p)
@@ -496,8 +499,9 @@ void videoStartFrame(void)
  * CREATED the window pumps them — and every game thread can be blocked on a
  * message queue at any time. So the host main thread (which created the
  * window in videoInit) must keep pumping; otherwise the window goes
- * "Not Responding" and ESC/close never arrive. fast3d's own handle_events
- * (which runs during rendering) remains as a backstop.
+ * "Not Responding" and ESC/close never arrive. On macOS AppKit strictly
+ * requires this main-thread pump, so fast3d's render-thread event handler is
+ * disabled there; on other platforms it remains as a backstop.
  */
 void videoPumpEvents(void)
 {

@@ -25,11 +25,26 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 # name as an inherited one — CCTVRecord's `pad` — see docs/internals.md.)
 # An explicit -DCMAKE_C_COMPILER=... always wins.
 if(NOT DEFINED CMAKE_C_COMPILER)
-  find_program(_GE007_GCC NAMES gcc)
+  if(CMAKE_HOST_APPLE)
+    # Homebrew installs real GNU GCC with a version suffix; /usr/bin/gcc is
+    # Apple Clang and does not support the Plan 9 struct extensions required
+    # by the decomp's `inherits` pattern.
+    find_program(_GE007_GCC
+      NAMES gcc-16 gcc-15 gcc-14 gcc-13 gcc-12 gcc-11 gcc)
+  else()
+    find_program(_GE007_GCC NAMES gcc)
+  endif()
   if(_GE007_GCC)
     set(CMAKE_C_COMPILER "${_GE007_GCC}" CACHE FILEPATH "C compiler" FORCE)
     get_filename_component(_GE007_GCC_DIR "${_GE007_GCC}" DIRECTORY)
-    find_program(_GE007_GXX NAMES g++ PATHS "${_GE007_GCC_DIR}" NO_DEFAULT_PATH)
+    if(CMAKE_HOST_APPLE)
+      find_program(_GE007_GXX
+        NAMES g++-16 g++-15 g++-14 g++-13 g++-12 g++-11 g++
+        PATHS "${_GE007_GCC_DIR}" NO_DEFAULT_PATH)
+    else()
+      find_program(_GE007_GXX NAMES g++
+        PATHS "${_GE007_GCC_DIR}" NO_DEFAULT_PATH)
+    endif()
     if(_GE007_GXX)
       set(CMAKE_CXX_COMPILER "${_GE007_GXX}" CACHE FILEPATH "CXX compiler" FORCE)
     endif()
@@ -163,7 +178,18 @@ configure_file(
 # the toolchain include dir from the compiler location (MinGW/MSYS2 layout:
 # bin/../include) and generate an absolute-path include.
 get_filename_component(_PORT_GCC_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
-get_filename_component(PORT_HOST_STRING_H "${_PORT_GCC_DIR}/../include/string.h" ABSOLUTE)
+if(APPLE)
+  execute_process(
+    COMMAND xcrun --show-sdk-path
+    OUTPUT_VARIABLE _PORT_MACOS_SDK OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+  if(NOT _PORT_MACOS_SDK)
+    message(FATAL_ERROR "Cannot locate the macOS SDK; install the Xcode Command Line Tools")
+  endif()
+  set(PORT_HOST_STRING_H "${_PORT_MACOS_SDK}/usr/include/string.h")
+else()
+  get_filename_component(PORT_HOST_STRING_H "${_PORT_GCC_DIR}/../include/string.h" ABSOLUTE)
+endif()
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststring.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hoststring.h" @ONLY)
@@ -172,7 +198,11 @@ configure_file(
 # the include path and shadows the system header; libstdc++'s <thread>/gthr
 # headers in the fast3d C++ TUs need the real <sched.h> (cpu_set_t,
 # sched_yield). Both MinGW and Linux keep <sched.h> at bin/../include.
-get_filename_component(PORT_HOST_SCHED_H "${_PORT_GCC_DIR}/../include/sched.h" ABSOLUTE)
+if(APPLE)
+  set(PORT_HOST_SCHED_H "${_PORT_MACOS_SDK}/usr/include/sched.h")
+else()
+  get_filename_component(PORT_HOST_SCHED_H "${_PORT_GCC_DIR}/../include/sched.h" ABSOLUTE)
+endif()
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hostsched.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hostsched.h" @ONLY)
@@ -182,7 +212,11 @@ configure_file(
 # one C++ TU (fast3d): MinGW's own sec_api/stdlib_s.h does `#include
 # <stdlib.h>`, which resolves to the N64 header via -I. The shim routes C++
 # TUs to the host header by absolute path (same trick as hoststring.h).
-get_filename_component(PORT_HOST_STDLIB_H "${_PORT_GCC_DIR}/../include/stdlib.h" ABSOLUTE)
+if(APPLE)
+  set(PORT_HOST_STDLIB_H "${_PORT_MACOS_SDK}/usr/include/stdlib.h")
+else()
+  get_filename_component(PORT_HOST_STDLIB_H "${_PORT_GCC_DIR}/../include/stdlib.h" ABSOLUTE)
+endif()
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststdlib.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hoststdlib.h" @ONLY)
@@ -328,6 +362,13 @@ elseif(UNIX AND NOT APPLE)
   # relocations are fine (unlike a 0x140000000 base, which needs mcmodel=large).
   # This is the ELF analogue of the Windows build's fixed 0x140000000 base.
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Ttext-segment=0x20000000")
+elseif(APPLE)
+  # Mach-O executables normally reserve [0, 4 GiB) as __PAGEZERO. The port
+  # needs fixed mappings at 0x10000000 (ROM), 0x70000000 (s32-safe DRAM), and
+  # 0x80000000 (KSEG0 mirror), so retain null/low-pointer protection only up
+  # while leaving ample space before the first required mapping.
+  set(CMAKE_EXE_LINKER_FLAGS
+    "${CMAKE_EXE_LINKER_FLAGS} -Wl,-pagezero_size,0x10000")
 endif()
 
 # port/shim first: PC-only shadow headers (bondtypes.h, bondconstants.h,
@@ -342,6 +383,7 @@ include_directories(
   "${CMAKE_SOURCE_DIR}/src/game"
   "${CMAKE_SOURCE_DIR}/src/libultra"
   "${CMAKE_SOURCE_DIR}/src/libultra/audio"
+  "${CMAKE_SOURCE_DIR}/src/libultra/gu"
   "${CMAKE_SOURCE_DIR}/port/include"
   "${CMAKE_BINARY_DIR}/port/include"
 )
@@ -395,6 +437,8 @@ if(NOT EXTRA_LIBRARIES)
     set(EXTRA_LIBRARIES dbghelp -static-libstdc++ pthread)
   elseif(WIN32)
     set(EXTRA_LIBRARIES dbghelp -static-libstdc++)
+  elseif(APPLE)
+    set(EXTRA_LIBRARIES stdc++ m pthread)
   else()
     set(EXTRA_LIBRARIES stdc++ m dl pthread)
   endif()
@@ -414,14 +458,41 @@ file(GLOB_RECURSE SRC_FAST3D    "${CMAKE_SOURCE_DIR}/port/fast3d/*.cpp"
 # scripts/gen_romassets.py). Defines every obseg/ramrom/music label and the
 # ge007.ld segment markers as 0x10000000 + rom_offset, so `&symbol` / romCopy()
 # work once romdata.c maps the .z64 at 0x10000000.
-set(SRC_ROMASSETS "${CMAKE_SOURCE_DIR}/port/src/romassets_${ASSET_REGION}.s")
-if(NOT EXISTS ${SRC_ROMASSETS})
-  message(FATAL_ERROR "Missing ${SRC_ROMASSETS} — run: python3 scripts/gen_romassets.py ${ASSET_REGION}")
+set(SRC_ROMASSETS_INPUT "${CMAKE_SOURCE_DIR}/port/src/romassets_${ASSET_REGION}.s")
+if(NOT EXISTS ${SRC_ROMASSETS_INPUT})
+  message(FATAL_ERROR "Missing ${SRC_ROMASSETS_INPUT} — run: python3 scripts/gen_romassets.py ${ASSET_REGION}")
 endif()
 
 # Absolute symbols inside the reserved N64-DRAM region (port/src/dram.c):
 # cfb_16 (replaces src/cfb.c) and _bssSegmentEnd (mempool start marker).
-set(SRC_DRAM_SYMS "${CMAKE_SOURCE_DIR}/port/src/dram_syms.s")
+set(SRC_DRAM_SYMS_INPUT "${CMAKE_SOURCE_DIR}/port/src/dram_syms.s")
+
+if(APPLE)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  set(SRC_ROMASSETS "${CMAKE_BINARY_DIR}/port/src/romassets_${ASSET_REGION}_macho.s")
+  set(SRC_DRAM_SYMS "${CMAKE_BINARY_DIR}/port/src/dram_syms_macho.s")
+  add_custom_command(
+    OUTPUT "${SRC_ROMASSETS}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
+            "${SRC_ROMASSETS_INPUT}" "${SRC_ROMASSETS}"
+    DEPENDS "${SRC_ROMASSETS_INPUT}"
+            "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
+    VERBATIM)
+  add_custom_command(
+    OUTPUT "${SRC_DRAM_SYMS}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
+            "${SRC_DRAM_SYMS_INPUT}" "${SRC_DRAM_SYMS}"
+    DEPENDS "${SRC_DRAM_SYMS_INPUT}"
+            "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
+    VERBATIM)
+  set_source_files_properties(${SRC_ROMASSETS} ${SRC_DRAM_SYMS}
+    PROPERTIES GENERATED TRUE)
+else()
+  set(SRC_ROMASSETS "${SRC_ROMASSETS_INPUT}")
+  set(SRC_DRAM_SYMS "${SRC_DRAM_SYMS_INPUT}")
+endif()
 
 # Game code — compiled unmodified.
 file(GLOB_RECURSE SRC_GAME "${CMAKE_SOURCE_DIR}/src/game/*.c")
@@ -451,6 +522,39 @@ file(GLOB SRC_LIBAUDIO "${CMAKE_SOURCE_DIR}/src/libultra/audio/*.c")
 file(GLOB SRC_LIBULTRARE_AUDIO "${CMAKE_SOURCE_DIR}/src/libultrare/audio/*.c")
 # gu matrix helpers.
 file(GLOB SRC_GU "${CMAKE_SOURCE_DIR}/src/libultra/gu/*.c")
+
+# GCC for Darwin crashes while lowering the decomp's ELF-style
+# `#pragma weak alias = target` directives. Compile generated copies with
+# those directives removed, then provide their aliases in Mach-O assembly.
+set(SRC_MACHO_ALIASES "")
+if(APPLE)
+  set(_MACHO_GENERATED_SOURCES "")
+  set(_MACHO_WEAK_INPUTS
+    "${CMAKE_SOURCE_DIR}/src/game/lv.c"
+    "${CMAKE_SOURCE_DIR}/src/game/objective_status.c"
+    "${CMAKE_SOURCE_DIR}/src/game/spectrum.c"
+    "${CMAKE_SOURCE_DIR}/src/libultra/gu/sinf.c"
+    "${CMAKE_SOURCE_DIR}/src/libultra/gu/cosf.c")
+  foreach(_INPUT IN LISTS _MACHO_WEAK_INPUTS)
+    get_filename_component(_NAME "${_INPUT}" NAME)
+    set(_OUTPUT "${CMAKE_BINARY_DIR}/port/src/macho_${_NAME}")
+    add_custom_command(
+      OUTPUT "${_OUTPUT}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_SOURCE_DIR}/scripts/strip_weak_pragmas.py"
+              "${_INPUT}" "${_OUTPUT}"
+      DEPENDS "${_INPUT}" "${CMAKE_SOURCE_DIR}/scripts/strip_weak_pragmas.py"
+      VERBATIM)
+    list(APPEND SRC_MACHO_ALIASES "${_OUTPUT}")
+    list(APPEND _MACHO_GENERATED_SOURCES "${_OUTPUT}")
+    list(REMOVE_ITEM SRC_GAME "${_INPUT}")
+    list(REMOVE_ITEM SRC_GU "${_INPUT}")
+  endforeach()
+  list(APPEND SRC_MACHO_ALIASES
+    "${CMAKE_SOURCE_DIR}/port/src/macho_weak_aliases.s")
+  set_source_files_properties(${_MACHO_GENERATED_SOURCES}
+    PROPERTIES GENERATED TRUE)
+endif()
 
 # VI mode table (DATA, not a driver): fr.c references osViModeTable ~15x.
 # This is the only libultra/io file we compile — the rest are hardware
@@ -569,6 +673,7 @@ set(SRC
   ${SRC_LIBULTRARE_LIBC}
   ${SRC_ASSETS}
   ${SRC_GU}
+  ${SRC_MACHO_ALIASES}
   ${SRC_ENGINE}
 )
 

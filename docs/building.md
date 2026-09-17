@@ -1,6 +1,6 @@
 ---
 title: Building
-description: Full build and asset-extraction guide for the GoldenEye 007 PC port, covering Windows (MSYS2) and Linux.
+description: Full build and asset-extraction guide for the GoldenEye 007 PC port on Windows, Linux, and macOS.
 ---
 
 ## Building the PC port
@@ -27,20 +27,28 @@ for accepted versions and hashes.
 
 ### Port build
 
-> **The Windows (MSYS2 MINGW64) path is the primary one.** The Linux build is
-> compiled by CI on every push and ships in the release bundle (also
-> playtested on Steam Deck hardware); the macOS column is best-effort
-> guidance and has never been built or run there. Expect to fix build breaks
-> yourself on untested platforms.
+> **The Windows (MSYS2 MINGW64) path is the primary one.** Linux is compiled
+> by CI and ships in the release bundle. Native Intel macOS builds are also
+> supported; Apple Silicon remains untested.
 
 | Need | Windows (MSYS2 MINGW64) | Debian/Ubuntu | macOS (Homebrew) |
 |------|------------------------|---------------|------------------|
-| toolchain | `mingw-w64-x86_64-toolchain` | `build-essential` | Xcode CLT / `gcc` |
+| toolchain | `mingw-w64-x86_64-toolchain` | `build-essential` | Xcode CLT + Homebrew `gcc` |
 | CMake | `mingw-w64-x86_64-cmake` | `cmake` | `cmake` |
 | SDL2 | `mingw-w64-x86_64-SDL2` | `libsdl2-dev` | `sdl2` |
 | zlib | `mingw-w64-x86_64-zlib` | `zlib1g-dev` | `zlib` |
 | OpenGL | (in the toolchain) | `libgl1-mesa-dev` | (system) |
 | Python 3 | `mingw-w64-x86_64-python` | `python3` | `python3` |
+
+On macOS, install the build dependencies with:
+
+```sh
+brew install cmake gcc sdl2 zlib python3
+```
+
+The project requires real GNU GCC for the decomp's Plan 9 struct extensions.
+Apple's `/usr/bin/gcc` is Clang and is not compatible. CMake automatically
+selects Homebrew's versioned `gcc-N`/`g++-N` executables.
 
 ### Asset extraction (decompilation toolchain)
 
