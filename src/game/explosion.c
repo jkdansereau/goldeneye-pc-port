@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "port_addr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include <PR/os.h>
 #include <PR/gbi.h>
 #include <gbi_extension.h>
@@ -1723,7 +1728,7 @@ Gfx *explosionRenderFlyingParticles(Gfx *gdl)
     for (i = 0; i < max_particles; i++)
     {
         // HACK: regalloc has instructions backwards.
-        particles = (struct FlyingParticles *)(u32)g_FlyingParticlesBuffer + i;
+        particles = (struct FlyingParticles *)PORT_N64PTR(void, g_FlyingParticlesBuffer) + i;
 
         if (particles->unk00 > 0)
         {

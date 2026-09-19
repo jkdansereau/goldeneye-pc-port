@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "port_addr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include "include/limits.h"
 #include <bondconstants.h>
 #include <bondtypes.h>
@@ -2091,7 +2096,15 @@ Gfx* watchRenderController(Gfx* gdl, Mtxf* basemtx, s32 envcolour, bool animateb
 
     for (i = 0; i < objheader->numMatrices; i++)
     {
+        #ifdef PORT
+        /* D308: (u32)render_pos truncates the host pointer (D300 class) and the
+         * sum is passed as a Mtxf* -> unbased 0x700d_xxxx, SIGSEGV in
+         * matrix_4x4_copy. &render_pos[i] is the same address at full width --
+         * the next line already uses it. Crashed the watch's Control page. */
+        matrix_4x4_copy(&modelstack.render_pos[i], &sp41c);
+        #else
         matrix_4x4_copy((u32)modelstack.render_pos + i * sizeof(Mtxf), &sp41c);
+        #endif
         matrix_4x4_f32_to_s32(&sp41c, &modelstack.render_pos[i]);
     }
 
@@ -2326,7 +2339,15 @@ Gfx* watchRenderController(Gfx* gdl, Mtxf* basemtx, s32 envcolour, bool animateb
 
         for (i = 0; i < objheader->numMatrices; i++)
         {
+            #ifdef PORT
+            /* D308: (u32)render_pos truncates the host pointer (D300 class) and the
+             * sum is passed as a Mtxf* -> unbased 0x700d_xxxx, SIGSEGV in
+             * matrix_4x4_copy. &render_pos[i] is the same address at full width --
+             * the next line already uses it. Crashed the watch's Control page. */
+            matrix_4x4_copy(&modelstack.render_pos[i], &sp41c);
+            #else
             matrix_4x4_copy((u32)modelstack.render_pos + i * sizeof(Mtxf), &sp41c);
+            #endif
             matrix_4x4_f32_to_s32(&sp41c, &modelstack.render_pos[i]);
         }
 
@@ -4828,6 +4849,12 @@ void gunSetTracerTarget(coord3d* pos)
 
 void caclulate_gun_crosshair_position_rotation(f32 turn_x, f32 turn_y, f32 guncrossdamp, f32 gunaimdamp)
 {
+#ifdef PORT
+    /* D307 diagnostic: count damps so a capture can report the damp:write
+     * ratio per frame (aimGepdCompute writes once per poll; this runs once per
+     * sim tick). Remove with the rest of the D307 probes. */
+    { extern int g_d307_damps; g_d307_damps++; }
+#endif
     s32 i;
     f32 screen_width;
     f32 screen_height;
@@ -6156,14 +6183,14 @@ Gfx *generate_ammo_total_microcode(Gfx *gdl)
                     if (imageoffset_r != 0)
                     {
                         imageoffset_r += globalbank_rdram_offset;
-                        gdl = set_rgba_redirect_generate_microcode(gdl, (u8 *)imageoffset_r, (getPlayer_c_screenleft() + getPlayer_c_screenwidth()) - (f32)rightx, -1.0f,
+                        gdl = set_rgba_redirect_generate_microcode(gdl, PORT_N64PTR(u8, imageoffset_r), (getPlayer_c_screenleft() + getPlayer_c_screenwidth()) - (f32)rightx, -1.0f,
 #if defined(VERSION_EU)
                             (viGetViewTop() + viGetViewHeight()) - 30, 0,
 #else
                             (viGetViewTop() + viGetViewHeight()) - 20, 0,
 #endif
                             ammo_related[ammotype].IconYOffset, 1);
-                        textwidth_r = ((u8 *)imageoffset_r)[4];
+                        textwidth_r = (PORT_N64PTR(u8, imageoffset_r))[4];
                     }
 
                     gdl = microcode_constructor(gdl);
@@ -6222,14 +6249,14 @@ Gfx *generate_ammo_total_microcode(Gfx *gdl)
                     if (imageoffset_l != 0)
                     {
                         imageoffset_l += globalbank_rdram_offset;
-                        gdl = set_rgba_redirect_generate_microcode(gdl, (u8 *)imageoffset_l, getPlayer_c_screenleft() + (f32)leftx, -1.0f,
+                        gdl = set_rgba_redirect_generate_microcode(gdl, PORT_N64PTR(u8, imageoffset_l), getPlayer_c_screenleft() + (f32)leftx, -1.0f,
 #if defined(VERSION_EU)
                             (viGetViewTop() + viGetViewHeight()) - 30, 1,
 #else
                             (viGetViewTop() + viGetViewHeight()) - 20, 1,
 #endif
                             ammo_related[ammotype].IconYOffset, 1);
-                        textwidth_l = ((u8 *)imageoffset_l)[4];
+                        textwidth_l = (PORT_N64PTR(u8, imageoffset_l))[4];
                     }
 
                     gdl = microcode_constructor(gdl);
@@ -6316,12 +6343,12 @@ Gfx *gunDrawWatchAmmoDisplay(Gfx *gdl)
 
                 // Draw the ammo icon
 #if defined(VERSION_EU)
-                gdl = set_rgba_redirect_generate_microcode(gdl, (u8 *)imageoffset, 200.0f, 208.0f, (viGetViewTop() + viGetViewHeight()) - 30, 0, ammo_related[ammotype].IconYOffset, 1);
+                gdl = set_rgba_redirect_generate_microcode(gdl, PORT_N64PTR(u8, imageoffset), 200.0f, 208.0f, (viGetViewTop() + viGetViewHeight()) - 30, 0, ammo_related[ammotype].IconYOffset, 1);
 #else
-                gdl = set_rgba_redirect_generate_microcode(gdl, (u8 *)imageoffset, 200.0f, 180.0f, (viGetViewTop() + viGetViewHeight()) - 20, 0, ammo_related[ammotype].IconYOffset, 1);
+                gdl = set_rgba_redirect_generate_microcode(gdl, PORT_N64PTR(u8, imageoffset), 200.0f, 180.0f, (viGetViewTop() + viGetViewHeight()) - 20, 0, ammo_related[ammotype].IconYOffset, 1);
 #endif
 
-                textwidth = ((u8 *)imageoffset)[4];
+                textwidth = (PORT_N64PTR(u8, imageoffset))[4];
             }
 
             gdl = microcode_constructor(gdl);

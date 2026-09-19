@@ -197,7 +197,7 @@
 // These are compile time extern constants (so not "really" const), but used the same
 // as the defines above, which is to index into ptr_animation_table.
 
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
 /* D34 (docs/dev/findings.md): on N64 this segment links at VMA 0
  * (ge007.ld), so &ANIM_DATA_x is the record's offset within the
  * animation_data segment and game code re-bases it with
@@ -572,7 +572,7 @@ extern s32 ANIM_DATA_credits_natalya_kissing;
 extern s32 ANIM_DATA_helicopter_cradle;
 extern s32 ANIM_DATA_plane_runway;
 extern s32 ANIM_DATA_helicopter_takeoff;
-#endif /* __x86_64__ (D34) */
+#endif /* PLATFORM_64BIT (D34) */
 
 
 

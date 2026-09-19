@@ -1277,19 +1277,19 @@ void proplvreset2(enum LEVELID stageId)
          * The setup file stores every internal reference as a byte offset from the start of the file,
          * so rebase them all onto the RAM copy at local_stage.
          */
-        g_CurrentSetup.pathwaypoints = (void *) (((u32) local_stage) + ((u32) local_stage->pathwaypoints));
-        g_CurrentSetup.waypointgroups = (void *) (((u32) local_stage) + ((u32) local_stage->waypointgroups));
-        g_CurrentSetup.intro = (void *) (((u32) local_stage) + ((u32) local_stage->intro));
-        g_CurrentSetup.propDefs = (void *) (((u32) local_stage) + ((u32) local_stage->propDefs));
-        g_CurrentSetup.patrolpaths = (void *) (((u32) local_stage) + ((u32) local_stage->patrolpaths));
-        g_CurrentSetup.ailists = (void *) (((u32) local_stage) + ((u32) local_stage->ailists));
-        g_CurrentSetup.pads = (void *) (((u32) local_stage) + ((u32) local_stage->pads));
-        g_CurrentSetup.boundpads = (void *) (((u32) local_stage) + ((u32) local_stage->boundpads));
+        g_CurrentSetup.pathwaypoints = (void *) (((uintptr_t) local_stage) + ((u32) local_stage->pathwaypoints));
+        g_CurrentSetup.waypointgroups = (void *) (((uintptr_t) local_stage) + ((u32) local_stage->waypointgroups));
+        g_CurrentSetup.intro = (void *) (((uintptr_t) local_stage) + ((u32) local_stage->intro));
+        g_CurrentSetup.propDefs = (void *) (((uintptr_t) local_stage) + ((u32) local_stage->propDefs));
+        g_CurrentSetup.patrolpaths = (void *) (((uintptr_t) local_stage) + ((u32) local_stage->patrolpaths));
+        g_CurrentSetup.ailists = (void *) (((uintptr_t) local_stage) + ((u32) local_stage->ailists));
+        g_CurrentSetup.pads = (void *) (((uintptr_t) local_stage) + ((u32) local_stage->pads));
+        g_CurrentSetup.boundpads = (void *) (((uintptr_t) local_stage) + ((u32) local_stage->boundpads));
 
         // Pad names and bound names are optional. An offset of 0 means absent.
         if (local_stage->padnames != 0)
         {
-            g_CurrentSetup.padnames = (void *) (((u32) local_stage) + ((u32) local_stage->padnames));
+            g_CurrentSetup.padnames = (void *) (((uintptr_t) local_stage) + ((u32) local_stage->padnames));
         }
         else
         {
@@ -1298,7 +1298,7 @@ void proplvreset2(enum LEVELID stageId)
 
         if (local_stage->boundpadnames != 0)
         {
-            g_CurrentSetup.boundpadnames = (void *) (((u32) local_stage) + ((u32) local_stage->boundpadnames));
+            g_CurrentSetup.boundpadnames = (void *) (((uintptr_t) local_stage) + ((u32) local_stage->boundpadnames));
         }
         else
         {
@@ -1309,7 +1309,7 @@ void proplvreset2(enum LEVELID stageId)
         {
             for (i1 = 0; g_CurrentSetup.pathwaypoints[i1].padID >= 0; i1++)
             {
-                g_CurrentSetup.pathwaypoints[i1].neighbours = (void *) (((u32) g_CurrentSetup.pathwaypoints[i1].neighbours) + ((u32) local_stage));
+                g_CurrentSetup.pathwaypoints[i1].neighbours = (void *) (((u32) g_CurrentSetup.pathwaypoints[i1].neighbours) + ((uintptr_t) local_stage));
             }
         }
 
@@ -1317,8 +1317,8 @@ void proplvreset2(enum LEVELID stageId)
         {
             for (i2 = 0; g_CurrentSetup.waypointgroups[i2].neighbours; i2++)
             {
-                g_CurrentSetup.waypointgroups[i2].neighbours = (void *) (((u32) g_CurrentSetup.waypointgroups[i2].neighbours) + ((u32) local_stage));
-                g_CurrentSetup.waypointgroups[i2].waypoints = (void *) (((u32) g_CurrentSetup.waypointgroups[i2].waypoints) + ((u32) local_stage));
+                g_CurrentSetup.waypointgroups[i2].neighbours = (void *) (((u32) g_CurrentSetup.waypointgroups[i2].neighbours) + ((uintptr_t) local_stage));
+                g_CurrentSetup.waypointgroups[i2].waypoints = (void *) (((u32) g_CurrentSetup.waypointgroups[i2].waypoints) + ((uintptr_t) local_stage));
             }
         }
 
@@ -1329,7 +1329,7 @@ void proplvreset2(enum LEVELID stageId)
             {
                 for (i3 = 0; g_CurrentSetup.ailists[i3].ailist != 0; i3++)
                 {
-                    g_CurrentSetup.ailists[i3].ailist = (void *) (((u32) g_CurrentSetup.ailists[i3].ailist) + ((u32) local_stage));
+                    g_CurrentSetup.ailists[i3].ailist = (void *) (((u32) g_CurrentSetup.ailists[i3].ailist) + ((uintptr_t) local_stage));
                 }
             }
         }
@@ -1338,7 +1338,7 @@ void proplvreset2(enum LEVELID stageId)
         {
             for (i3 = 0; g_CurrentSetup.patrolpaths[i3].waypoints != NULL; i3++)
             {
-                g_CurrentSetup.patrolpaths[i3].waypoints = (void *) (((u32) g_CurrentSetup.patrolpaths[i3].waypoints) + ((u32) local_stage));
+                g_CurrentSetup.patrolpaths[i3].waypoints = (void *) (((u32) g_CurrentSetup.patrolpaths[i3].waypoints) + ((uintptr_t) local_stage));
 
                 for (i5 = 0; g_CurrentSetup.patrolpaths[i3].waypoints[i5] >= 0; i5++)
                 {
@@ -1358,7 +1358,7 @@ void proplvreset2(enum LEVELID stageId)
 
             for (; pad->plink != NULL; pad++)
             {
-                pad->plink = (void *) (((u32) local_stage) + ((u32) pad->plink));
+                pad->plink = (void *) (((uintptr_t) local_stage) + ((u32) pad->plink));
                 pad->pos.f[0] *= roompos_1;
                 pad->pos.f[1] *= roompos_1;
                 pad->pos.f[2] *= roompos_1;
@@ -1413,9 +1413,9 @@ void proplvreset2(enum LEVELID stageId)
                 /** Ugly matching hack. 
                 *   TODO: investigate if there's a way to get rid of this.
                 */
-                if ((((u32) local_stage) ^ 0) + ((u32)vol->plink));
+                if ((((uintptr_t) local_stage) ^ 0) + ((u32)vol->plink));
 
-                vol->plink = (void *) (((u32) local_stage) + ((u32)vol->plink));
+                vol->plink = (void *) (((uintptr_t) local_stage) + ((u32)vol->plink));
                 vol->pos.f[0] *= roompos_2;
                 vol->pos.f[1] *= roompos_2;
                 vol->pos.f[2] *= roompos_2;
@@ -1450,7 +1450,7 @@ void proplvreset2(enum LEVELID stageId)
         {
             for (i1 = 0; g_CurrentSetup.padnames[i1].p; i1++)
             {
-                g_CurrentSetup.padnames[i1].p = (void *) (((u32) g_CurrentSetup.padnames[i1].p) + ((u32) local_stage));
+                g_CurrentSetup.padnames[i1].p = (void *) (((u32) g_CurrentSetup.padnames[i1].p) + ((uintptr_t) local_stage));
             }
         }
 
@@ -1461,7 +1461,7 @@ void proplvreset2(enum LEVELID stageId)
 
             for (i1 = 0; g_CurrentSetup.boundpadnames[i1].p; i1++)
             {
-                g_CurrentSetup.boundpadnames[i1].p = (void *) (((u32) g_CurrentSetup.boundpadnames[i1].p) + ((u32) local_stage));
+                g_CurrentSetup.boundpadnames[i1].p = (void *) (((u32) g_CurrentSetup.boundpadnames[i1].p) + ((uintptr_t) local_stage));
             }
         }
 

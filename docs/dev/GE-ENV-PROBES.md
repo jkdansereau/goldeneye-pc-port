@@ -82,6 +82,7 @@ Two classes:
 | `GE_D96` | `src/game/chrprop.c:436,507` (cached `probe`) | D96 chrprop trace | dead (D96 closed) |
 | `GE_D104` | `src/game/bg.c:654` (rate-limited, `d104c`) | D104 depth-clear trace | dead (D104 closed) |
 | `GE_D71LOG` | `port/fast3d/gfx_pc.cpp:645` | D71 fast3d trace | dead (D71 closed) |
+| `GE_ADDRSTRICT_SELFTEST` | `port/src/port_addr.c` (`portAddrStrictSelfTest`) | **Negative self-test for `PORT_ADDR_STRICT` (D305).** Feeds `portN64ToHost()` a deliberately-unmapped address (`0x30000000`) at boot so a run can prove the validator is live rather than merely silent. Requires a build configured with `-DPORT_ADDR_STRICT=ON`; a no-op otherwise. | **live** (D305) |
 | `GE_D75` | `src/game/title.c` `sub_GAME_7F007F30` (capped 8) | D75 Bug 2 gun-barrel model probe: logs `chrModelInstance`/`gunModelInstance` ptr+obj+numMatrices, `render_pos`, `renderData.mtxlist`, `g_GfxMemPos`, `osVirtualToPhysical(render_pos)` | **LIVE** (D75 Bug 2 OPEN — see §F "D75 Bug 2 — RUNTIME PROBE") |
 
 ## Notes

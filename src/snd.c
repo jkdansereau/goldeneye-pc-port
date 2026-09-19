@@ -2,6 +2,9 @@
 #include <PR/libaudio.h>
 #include <os_extension.h>
 #include "music.h"
+#ifdef PORT
+#include "port_addr.h"
+#endif
 #include "snd.h"
 #ifdef PORT
 #include <stdio.h>
@@ -1072,8 +1075,16 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
          * (0x1_4000_0000..); anything else (e.g. 0x0000_5622_0001_0001) is a
          * byte-scrambled / OOB read. */
         {
-            uintptr_t sp = (uintptr_t)sound;
-            if (sp < 0x10000 || sp >= 0x400000000ULL) {
+            /* D299 (macOS arm64): this guard predates the shifted-window
+             * address model (port/include/port_addr.h). With PORT_ADDR_BASE
+             * != 0 a valid ALSound* is ~0x1000_707b_5740 -- far ABOVE the old
+             * 16 GiB (0x400000000) ceiling -- so the hardcoded bound rejected
+             * every real sound and SFX were silent. (Music is a separate
+             * player, so only SFX were affected; on x86_64 the window starts
+             * at 0 and DRAM at 0x7000_0000, below the ceiling, which is why
+             * this never showed there.) Test the pointer against the actual
+             * window instead. */
+            if (!portAddrIsInWindow(sound)) {
                 return NULL;
             }
         }

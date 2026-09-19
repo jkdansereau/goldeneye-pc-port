@@ -23,7 +23,7 @@
 #include "synthInternals.h"
 #include <os.h>
 #include <R4300.h>
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
 #include <stdio.h>
 #include <stdlib.h>
 #include "audiotrace.h"   /* D202/M-70: serialized trace writer */
@@ -197,7 +197,7 @@ Acmd *alAdpcmPull(void *filter, s16 *outp, s32 outCount, s32 sampleOffset, Acmd 
         f->memin += ADPCMFBYTES*nframes;    
     }
 
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
     /* D202/M-65 diag (temporary): a wave with no ALADPCMloop must run out and
      * be zero-filled (nOver > 0) once memin passes base+len. If a voice keeps
      * decoding past that point, an unstopped voice stays audible forever
@@ -390,7 +390,7 @@ alLoadParam(void *filter, s32 paramID, void *param)
     switch (paramID) {
         case (AL_FILTER_SET_WAVETABLE):
             a->table = (ALWaveTable *) param;
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
             if (getenv("GE_AUDIOTRACE")) {
                 extern uint64_t sysGetMicroseconds(void); /* port/src/system.c */
                 geTracePrintf("audiotrace_wire.log", "[WIRE] t=%llu filter=%p <- table=%p base=%p len=%d book=%p\n",
@@ -493,7 +493,7 @@ Acmd *_decodeChunk(Acmd *ptr, ALLoadFilter *f, s32 tsam, s32 nbytes, s16 outp, s
         dramLoc;
     
     if (nbytes > 0){
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
         if (getenv("GE_MIXERTRACE")) {
             static FILE *dtf = NULL;
             if (!dtf) { dtf = fopen("mixertrace.log", "a"); if (dtf) setvbuf(dtf, NULL, _IONBF, 0); }

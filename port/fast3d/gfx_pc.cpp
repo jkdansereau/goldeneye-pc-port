@@ -25,6 +25,7 @@
 #include "gbiex.h" /* GE's G_TRI4 + PD extension opcodes (see header) */
 
 #include "platform.h"
+#include "port_addr.h"
 
 #include "gfx_pc.h"
 #include "gfx_cc.h"
@@ -628,7 +629,9 @@ void gfx_texture_cache_delete_range(const uint8_t* start, const uint8_t* end) {
 // texels (0xED0F...) decode from the swapped pairs (0x4FCC/0xCC4F) as bright
 // green/pink — the garbled Rareware-logo pixels.
 static bool gfx_tex_source_is_c_array(const uint8_t* addr) {
-    const uintptr_t a = (uintptr_t)addr;
+    // Ranges are N64-space, so strip the window base first (identity at
+    // PORT_ADDR_BASE==0, where the ranges are the raw addresses).
+    const uintptr_t a = (uintptr_t)addr - (uintptr_t)PORT_ADDR_BASE;
     if (a >= 0x10000000u && a < 0x20000000u) return false; // cart map + sidecar
     if (a >= 0x70000000u && a < 0x90000000u) return false; // V1 dram + KSEG0 mirror
     return true; // exe image: C-compiled array
@@ -2321,11 +2324,20 @@ static void gfx_sp_moveword(uint8_t index, uint16_t offset, uintptr_t data) {
             rsp.fog_mul = (int16_t)(data >> 16);
             rsp.fog_offset = (int16_t)data;
             break;
-        case G_MW_SEGMENT:
+        case G_MW_SEGMENT: {
             // GE registers segment bases as OS_K0_TO_PHYSICAL(ptr); store the
             // live host pointer so seg_addr() resolves seg+offset correctly.
-            segmentPointers[(offset >> 2) & 0xff] = (data < 0x800000) ? (data + 0x80000000) : data;
+            // Values that fit in 32 bits are N64-space (a small physical
+            // offset, or a V1 address); full 64-bit values are already host
+            // pointers. Identity at PORT_ADDR_BASE==0.
+            uintptr_t v = (uintptr_t)data;
+            if (v < 0x100000000ULL) {
+                if (v < 0x800000) v += 0x80000000u;
+                v = (uintptr_t)portN64ToHost((u32)v);
+            }
+            segmentPointers[(offset >> 2) & 0xff] = v;
             break;
+        }
     }
 }
 
@@ -2879,6 +2891,12 @@ static void gfx_dp_set_other_mode(uint32_t h, uint32_t l) {
 }
 
 static inline void *seg_addr(uintptr_t w1) {
+    // A full 64-bit host pointer (the gSP* macros pack full pointers into w1;
+    // the window base makes every real host pointer >= 4 GiB) passes through
+    // untouched. Only values that fit in 32 bits are N64-space addresses.
+    if (w1 >= 0x100000000ULL) {
+        return (void *)w1;
+    }
     // GE model files reference GDLs (gSPDisplayList) and vertex arrays by raw
     // VMA 0x05xxxxxx WITHOUT the LSB set; segment 5 is set per-render to the
     // live host file base by the game's gSPSegment. Resolve it explicitly
@@ -2908,30 +2926,20 @@ static inline void *seg_addr(uintptr_t w1) {
             return (void *)(segmentPointers[seg] + (w1 & 0x00FFFFFF));
         }
     }
-    // GE passes OS_K0_TO_PHYSICAL(ptr) == ptr - 0x80000000 for RAM that lives
-    // in the reserved N64-DRAM region (port/src/dram.c); map it back. The
-    // region is 8 MB, so any offset below 0x800000 came from there.
+    // GE passes OS_K0_TO_PHYSICAL(ptr) == ptr - V1 base for RAM that lives in
+    // the reserved N64-DRAM region (port/src/dram.c); map it back into the V2
+    // view. The region is 8 MB, so any offset below 0x800000 came from there.
     if (w1 < 0x800000) {
-        return (void *)(w1 + 0x80000000);
+        return portN64ToHost((u32)(w1 + 0x80000000));
     }
-    // D131: a GBI DL built by game code can reference a COMPILED symbol via
-    // osVirtualToPhysical() (a u32-returning shim), which truncates the
-    // module's 0x1_00000000 high word. Seen in explosionRenderPropSmoke:
-    // gSPMatrix(gdl++, osVirtualToPhysical((void*)&dword_CODE_bss_8007A100),
-    // ..MODELVIEW) -> w1 == 0x40xxxxxx -> wild deref in gfx_sp_matrix. The
-    // module is based at 0x140000000 (fixed, no ASLR), and nothing legit
-    // reaches this fallthrough with a value in [0x40000000, DRAM_V1): DRAM
-    // (>=0x70000000), KSEG0 (>=0x80000000), segmented addrs and sub-0x800000
-    // physical offsets are all handled above. Restore the high word from
-    // this TU's own load address.
-    {
-        static const uintptr_t mod_hi =
-            ((uintptr_t)(void *)&segmentPointers[0]) & 0xffffffff00000000ULL;
-        if (mod_hi && w1 >= 0x40000000 && w1 < 0x70000000) {
-            return (void *)(mod_hi | w1);
-        }
-    }
-    return (void *)w1;
+    // Everything else is a 32-bit N64-space address: DRAM V1 (0x70xxxxxx),
+    // KSEG0 (0x80xxxxxx), cart (0x10xxxxxx), or the image-relative encoding
+    // 0x40000000 + (ptr - image base) produced by osVirtualToPhysical() on a
+    // pointer into the executable (D131). portN64ToHost applies the window
+    // base and, for the image-relative range, the image base. On Windows the
+    // image base is 0x140000000, so this reproduces the old mod_hi|w1 exactly;
+    // at PORT_ADDR_BASE==0 the whole thing is the identity it was before.
+    return portN64ToHost((u32)w1);
 }
 
 uintptr_t clearMtx;

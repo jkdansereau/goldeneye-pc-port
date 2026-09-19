@@ -4,6 +4,10 @@
 #include "image_bank.h"
 #ifdef PORT
 #include <gimgfixup.h>
+#include "port_addr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
 #endif
 
 // bss
@@ -16,7 +20,11 @@ s32 img_bitcount;
 //8008D0AC
 s32 dword_CODE_bss_8008D0AC;
 //8008D0B0;
+#if defined(PORT)
+uintptr_t globalbank_rdram_offset; /* D298/M2: host-based, see image_bank.h */
+#else
 s32 globalbank_rdram_offset;
+#endif
 //8008D0B4;
 s32 *pGlobalimagetable;
 //8008D0B8;
@@ -89,7 +97,14 @@ extern u8* _GlobalimagetableSegmentRomStart;
 
 
 void texSetBitstring(s32 pos) {
+#if defined(PORT)
+    /* D298/M2: callers pass a host pointer through this s32 parameter, which
+     * truncates it. Because PORT_ADDR_BASE is 4 GiB-aligned the low 32 bits
+     * are the N64/window offset, so re-base them. Identity at base 0. */
+    img_curpos = (u8 *)portN64ToHost((u32)pos);
+#else
     img_curpos = pos;
+#endif
     img_curdatatable = 0;
     img_bitcount = 0;
 }
@@ -167,7 +182,7 @@ extern Gfx* globalDL_0x900;
 extern Gfx* globalDL_0x9a8;
 extern Gfx* globalDL_0xa50;
 
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
 /* D39 (docs/dev/findings.md): on N64 all 49 symbols above link inside the
  * Globalimagetable segment at physical 0x02xxxxxx (ge007.ld), so
  * `globalbank_rdram_offset + (u32)&sym` rebases each onto pGlobalimagetable.
@@ -244,16 +259,24 @@ void texReset(void)
     pGlobalimagetable = mempAllocBytesInBank(size + 0x1000, MEMPOOL_STAGE);
     pGlobalimagetable = ((u32)pGlobalimagetable + 0xFFFU) & 0xFFFFF000;
 
-    romCopy(pGlobalimagetable, &_GlobalimagetableSegmentRomStart, size);
+    romCopy(PORT_N64PTR(void, pGlobalimagetable), &_GlobalimagetableSegmentRomStart, size);
 
 #ifdef PORT
     /* D68 (docs/dev/findings.md): the ROM copy is N64 big-endian; convert
      * the CPU-interpreted u32 fields (IMAGESEG Gfx w1 words and
      * sImageTableEntry.index) to host order before any code reads them. */
-    gimgFixupGlobalimagetable((u8 *)pGlobalimagetable);
+    gimgFixupGlobalimagetable((u8 *)PORT_N64PTR(void, pGlobalimagetable));
 #endif
 
+#if defined(PORT)
+    /* D298/M2: store a HOST-based offset. GIMG_OFF(sym) adds 0x02000000, so
+     * `globalbank_rdram_offset + GIMG_OFF(sym)` is then a live host pointer.
+     * `- 0x02000000` is the 64-bit equivalent of the original 32-bit
+     * `+ 0xFE000000` wraparound (which relied on mod-2^32 cancellation). */
+    globalbank_rdram_offset = (uintptr_t)portN64ToHost((u32)pGlobalimagetable) - 0x02000000UL;
+#else
     globalbank_rdram_offset = (u32)pGlobalimagetable + 0xFE000000;
+#endif
     genericimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_genericimage));
     impactimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_impactimages));
     explosion_smokeimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_explosion_smokeimages));
@@ -321,6 +344,6 @@ void texReset(void)
     /* D68: explosion.c executes the compiled globalDL_0xNNN shadows via
      * g_ExplosionDisplayLists[]; copy the IMAGESEG words that texLoad()
      * patched in the ROM copy over into those arrays. */
-    gimgSyncCompiledGlobalDLs((u8 *)pGlobalimagetable);
+    gimgSyncCompiledGlobalDLs((u8 *)PORT_N64PTR(void, pGlobalimagetable));
 #endif
 }

@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "port_addr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include <R4300.h>
 #include "tex.h"
 #include "image.h"
@@ -364,7 +369,7 @@ void texSelect(Gfx **gdlptr, struct sImageTableEntry *tconfig, u32 arg2, s32 arg
             texLoad((s32 *)tconfig, NULL);
         }
 
-        aa = PHYS_TO_K0(tconfig->index);
+        aa = PORT_N64PTR(u16, tconfig->index); /* D298/M2: index holds the pool address */
         tex = texFindInPool((aa)[-4], NULL);
 
         if (tconfig->level == 0)

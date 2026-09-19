@@ -6,6 +6,16 @@
 #include "math.h"
 #include "math_floor.h"
 
+/* D298/M2: these tables store animation addresses as N64 values (s32/union
+ * offset) that are then cast to pointers. Re-base when the pointer is formed;
+ * identity at PORT_ADDR_BASE == 0. */
+#if defined(PORT)
+#include "port_addr.h"
+#define ANI_ADDR(x) ((void *)portN64ToHost((u32)(x)))
+#else
+#define ANI_ADDR(x) ((void *)(x))
+#endif
+
 
 /**
  * Gets the number of currently allocated heads and bodies
@@ -108,7 +118,7 @@ s32 initResolveAnimGroupTable(struct weapon_firing_animation_table *animconfig)
 
         do
         {
-            config->anim.anim = (struct ModelAnimation *)(((0, animoffset)) + ((s32)ptr_animation_table));
+            config->anim.anim = (struct ModelAnimation *)ANI_ADDR(((0, animoffset)) + ((s32)ptr_animation_table));
             endframe = floorFloatToInt(config->unk04);
             angle16 = sub_GAME_7F0001F0(config->anim.anim, 0, endframe) & 0xffff;
             duration = config->unk04;
@@ -186,7 +196,7 @@ s32 initResolveAnimTable(struct StruckAnim *entries)
             count++;
             entry++;
             ptr_animation_table_addr = (struct StruckAnim *)(&ptr_animation_table);
-            entry[-1].struck_anim = (ModelAnimation *)((*((s32 *)entries)) + (0, address));
+            entry[-1].struck_anim = (ModelAnimation *)ANI_ADDR((*((s32 *)entries)) + (0, address));
         }
         while (entry->struck_anim != 0);
     }
@@ -196,7 +206,7 @@ s32 initResolveAnimTable(struct StruckAnim *entries)
 
 
 #define ANIM_PTR(anim) \
-    ((ModelAnimation *)((s32)&anim + ((s32)ptr_animation_table)))
+    ((ModelAnimation *)ANI_ADDR((s32)&anim + ((s32)ptr_animation_table)))
 
 #define ANIM_FRAC(anim) \
     ((((f32)sub_GAME_7F000290(ANIM_PTR(anim), 0, ANIM_PTR(anim)->unk04 - 1)) * 0.10000001f) / \

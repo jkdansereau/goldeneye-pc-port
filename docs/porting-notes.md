@@ -29,6 +29,7 @@ good that you are looking at one of these.
 - [D4. N64 "interrupts off" must be a real lock on PC](#d4-n64-interrupts-off-is-not-free-on-pc--it-must-be-a-real-lock)
 - [D5. Loop bounds that assume linker adjacency of two globals](#d5-loop-bounds-that-assume-linker-adjacency-of-two-file-scope-globals)
 - [E. Process / method notes](#e-process--method-notes)
+- [F. The N64 address space on a host that cannot map it low (macOS/arm64)](#f-the-n64-address-space-on-a-host-that-cannot-map-it-low-macosarm64)
 
 ## A. Pointer-width struct growth (32→64): the dominant class
 
@@ -485,6 +486,30 @@ through a converter or a runtime bswap fixup reads scrambled.
 
 ## C2. Port-layer / SDL shims
 
+- **Darwin assembly uses Mach-O symbol spelling.** GAS absolute symbols that
+  are `.global foo` / `.set foo, address` on ELF/PE must become `.globl _foo`
+  / `.set _foo, address`; Darwin also rejects the ELF `.section .data`
+  spelling used by these symbol-only files. Generate transformed build-tree
+  copies rather than changing the cross-platform source files (D294).
+- **Darwin GCC cannot lower ELF-style `#pragma weak alias = target`.** It can
+  ICE in `assemble_alias`; compile generated copies with those pragmas removed
+  and provide Mach-O indirect symbols (`.set _alias, _target`) separately
+  (D294).
+- **Mach-O's default `__PAGEZERO` reserves the entire low 4 GiB.** A build
+  can compile and link successfully yet fail every fixed N64 mapping at
+  runtime (`0x10000000`, `0x70000000`, `0x80000000`). Link with
+  `-Wl,-pagezero_size,0x10000` so null-page pointers remain protected while
+  the cartridge and DRAM ranges are available (D294).
+- **Darwin has no `MAP_FIXED_NOREPLACE`; a fixed-address hint can relocate.**
+  Once `__PAGEZERO` is deliberately bounded below the cart range, use
+  `MAP_FIXED` for the `0x10000000` cartridge mapping. Retaining the advisory
+  hint silently falls back to a heap ROM and later crashes on direct absolute
+  ROM-symbol reads (D294).
+- **AppKit event polling is main-thread-only.** This port has both a host-main
+  `videoPumpEvents()` loop and fast3d's render-thread event pump. The latter
+  must be disabled on macOS or `SDL_PollEvent` raises
+  `NSInternalInconsistencyException`; the main-thread loop already handles
+  the complete event set (D294).
 - `#include <PR/os.h>` in a port `.c`/`.h` that also sees `<errno.h>`
   breaks: `OSContStatus`/`OSContPad` have a `u8 errno;` field vs errno.h's
   macro. libultra.c wraps the include in `#pragma push_macro("errno")` /
@@ -991,6 +1016,117 @@ and turns every such overrun into a fatal `*** stack smashing detected ***`
   other byte-matched function, during stage load or the first few frames.
 - Distinct from D7 (`va_list` UB) and D6 (missing `return`) but the same
   "works on N64 + MinGW, fatal on hardened Linux" shape.
+
+## F. The N64 address space on a host that cannot map it low (macOS/arm64)
+
+Windows and Linux realise the N64's 32-bit address space **directly**: DRAM at
+`0x70000000` with the KSEG0 mirror at `0x80000000`, the cart at `0x10000000`,
+and ~1700 linker-absolute symbols carrying those values. A 32-bit address field
+and a host pointer are then the same number, so `(u32)ptr` and `(T*)u32`
+round-trip for free — which is why classes A–E could treat address fields as
+pointers.
+
+**Native arm64 macOS cannot map below 4 GiB** (`__PAGEZERO`; a shrunken
+pagezero is SIGKILLed at exec; PIE is mandatory; `MAP_32BIT` fails). So the
+whole space lives at `PORT_ADDR_BASE = 0x1000_0000_0000` (16 TiB) instead:
+`port/include/port_addr.h`, `port/src/port_addr.c` (D298). Because the base is
+4 GiB-aligned, the **pointer→u32 direction is still free** (`(u32)host_ptr` is
+the N64 address), so only *reconstruction* sites — a 32-bit value becoming a
+pointer — need work.
+
+- Symptom: a fault at a *plausible N64 address* used as a host pointer, e.g.
+  `FAULT ADDR: 0x706ff8e0` (DRAM), `0x10xxxxxx` (cart) or `0x40xxxxxx`
+  (image-relative). On Windows/Linux the same value is a valid pointer; the
+  value looking "reasonable" is the tell.
+- Fix: route the conversion through `portN64ToHost` / `PORT_N64PTR` (identity
+  at `PORT_ADDR_BASE == 0`, so Windows/Linux are unchanged). For containers
+  whose fields are already pointers but are fed N64 addresses, convert **once
+  at the boundary** — the mempool (`mempCheckMemflagTokens` /
+  `mempSetBankStarts`, `MemoryPool` fields are `u8*`) is the main one.
+  Keep the `s32` the game passes around: `mempCheckMemflagTokens(s32, s32)`
+  needs a value that fits `s32` (V1 must stay positive), so N64 addresses stay
+  N64 addresses in the game's fields and only the pointer-typed sinks re-base.
+- **One canonical macro.** `port/include/port_addr.h` defines
+  `PORT_N64PTR(T, expr)`. Ported game code uses that, not a file-local alias —
+  an earlier pass grew seven names (`BG_PTR`, `OPT_N64PTR`, `CHR_N64PTR`,
+  `FRONT_N64PTR`, `TITLE_N64PTR`, `STAN_N64PTR`, `MODEL_N64PTR`, …) which is
+  exactly the drift this file exists to prevent. A game file defines the N64
+  fallback once:
+
+  ```c
+  #if defined(PORT)
+  #include "port_addr.h"
+  #else
+  #define PORT_N64PTR(T, x) ((T *)(x))
+  #endif
+  ```
+- **Prefer boundary fixes over consumer fixes.** Where a subsystem's fields are
+  already pointers but are fed N64 addresses, convert once at the hand-out
+  (`mempCheckMemflagTokens`/`mempSetBankStarts`, `memaAlloc`,
+  `globalbank_rdram_offset`, `texSetBitstring`) instead of at every use — the
+  single `globalbank_rdram_offset` change cleared ~43 sites.
+- **Do not blind-pattern-match the cast.** `(s32)someFloatField` (e.g.
+  `(s32)foo[room].pos.x`) is a float→int conversion, not an address; a regex
+  over the `(s32)` pattern rewrites those and breaks the build. Type the
+  operand first. Also left alone by design: `(s32)` stack-pointer truncations
+  used as matching hacks (e.g. `options.c` watch-table locals) — a different,
+  pre-existing bug class.
+- Image pointers (exe globals) have their own encoding:
+  `0x40000000 + (ptr - image_base)`. `portHostToN64` produces it and
+  `portN64ToHost` decodes it; `osVirtualToPhysical` returns it, fast3d's
+  `seg_addr` decodes it. On Windows the image base is `0x140000000`, so this
+  equals the raw `(u32)&sym` truncation the D131 fix relied on.
+- Instances: D294 (`#pragma weak` has no Mach-O equivalent — use a global
+  symbol equate), D295 (the decomp's `include/` stubs shadow libc++'s wrapper
+  headers), D296 (`__x86_64__` used as the "64-bit PC" gate → `PLATFORM_64BIT`),
+  D297 (macOS platform branches: `shm_open`, Darwin `ucontext`, `_NSGetExecutablePath`),
+  D298 (the window + chokepoints + mappings), D299, D300.
+- **Never bound an N64 address with an absolute number.** A guard like
+  `if (p < 0x10000 || p >= 0x400000000ULL) return NULL;` is written against the
+  *unshifted* layout: it is correct on Windows/Linux (DRAM at `0x7000_0000`,
+  below 16 GiB) and silently rejects **every** real pointer on arm64 (DRAM at
+  `~0x1000_707b_5740`). D299 was exactly this in `sndPlaySfx()` — all in-level
+  SFX were silent, while music (a separate player) still worked. Use
+  `portAddrIsInWindow()` (`port_addr.h`) instead.
+- **`(u32)ptr` assigned back to a pointer is a truncation, not a no-op.**
+  `u32 *obj = (u32)g_CurrentSetup.propDefs;` (D300) round-trips on N64 but
+  leaves an unbased N64 address on the 64-bit port, faulting on first deref.
+  The port-correct form is a pointer-to-pointer cast (`(u32 *)…`), keeping the
+  pointer's own arithmetic. Grep for `ptr_var = (u32)expr`; D300 was the only
+  instance.
+- **Sweep by function PAIR, not by grep hit.** Four of the six bugs in the D302
+  census pass were cases where one member of a near-duplicate function pair had
+  been converted and its twin had not (`model.c` `sub_GAME_7F06DEC0` vs
+  `sub_GAME_7F06E540`; `bondview_r.c`'s solo spawn vs `bondview2.c`'s MP
+  respawn, on two separate counts; `bg.c:3399` vs `bg.c:5213` *in the same
+  file*). GE's decomp is full of solo/MP and primary/secondary twins that were
+  decompiled independently and differ only in whitespace. **After landing any
+  fix in this family, grep the repo for the distinctive fragment of the line you
+  just changed and confirm every other occurrence is already fixed.** Cheap, and
+  it would have found all four for free.
+- **A warning census finds the PRODUCER side, not the CONSUMER side.** Building
+  with `-Wint-to-pointer-cast -Wpointer-to-int-cast -Wint-conversion` flags
+  pointers implicitly truncated *into* int parameters/locals — and in `front.c`
+  + `options.c` all 206 such warnings were already-correct round trips. It does
+  **not** flag the dangerous direction when the cast is explicit: `(T *)(uintptr_t)x`
+  (how D301 was written) is silent, and D299 (a numeric bound on an address) has
+  no cast at all. Use the census to audit the invariant "every value reaching a
+  `PORT_N64PTR` is either from `portHostToN64()` or provably in-window", but do
+  not mistake a clean census for a clean codebase — the consumer side needs a
+  type-driven audit, or `PORT_ADDR_STRICT` (D305) at runtime.
+- **A stage-unload bug needs input to surface.** Both sweeps that missed D300
+  ran with no controller input, so the level never ended and
+  `lvlUnloadStageTextData()` never ran. Drive `GE_INPUTSCRIPT` (START/A ends a
+  level) when the affected path is teardown rather than steady-state.
+- Grep heuristic: build with clang and collect
+  `-Wint-to-pointer-cast` / `-Wint-to-void-pointer-cast` / `-Wint-conversion`
+  (u32→pointer: actionable) and `-Wpointer-to-int-cast` (only *image* pointers
+  are actionable — in-window truncation is correct). The M2 census and its
+  counts live in `docs/dev/MACOS-ARM64-PLAN.md`.
+- Also macOS-specific and worth knowing: the game's fixed-address maps
+  (`dram.c`, `romdata.c`, `libultra.c` stacks) all move into the window, and
+  the window is reserved `PROT_NONE` up front (`portAddrInit`) so those carves
+  cannot collide with libmalloc/the dyld cache.
 
 ## E. Process / method notes
 

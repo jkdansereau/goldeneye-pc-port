@@ -745,11 +745,17 @@ typedef union
             /* PC port (D43/D45): stored as a raw vma (0x05xxxxxx) instead of a real
              * pointer so sizeof(Vertex) stays 16 bytes — the gSPVertex stride is
              * hardcoded to 16B and propobj.c copies vertices with sizeof(Vertex).
-             * modelPromoteNodeOffsetsToPointers rebases it via PROMOTE32; chr.c casts
-             * back to ModelNode* at the use site. N64 layout unchanged (4B either way). */
+             * modelPromoteNodeOffsetsToPointers rebases it via PROMOTE32, which is
+             * `var = (u32)((u32)var + diff)` — note that unlike PROMOTE it keeps the
+             * field a 32-bit N64 ADDRESS, it does NOT produce a host pointer.
+             * D301: consumers must therefore re-base it (PORT_N64PTR), never cast it
+             * straight to a pointer — a bare cast leaves 0x7070_xxxx and faults on
+             * arm64, where the window is based at PORT_ADDR_BASE.
+             * N64 layout unchanged (4B either way). */
             u32 LinkedTo;
 
-            /* Collision vertices only: points to related model node (raw vma). */
+            /* Collision vertices only: related model node, as a raw vma — same union
+             * storage as LinkedTo above, so the same PORT_N64PTR rule applies. */
             u32 CollisionRelatedNode; /* 0x8 */
 #else
             struct Vertex *LinkedTo;

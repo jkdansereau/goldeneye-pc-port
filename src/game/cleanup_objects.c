@@ -23,7 +23,19 @@
 
 void cleanupObjects(s32 stage)
 {
+#ifdef PORT
+    /* D300: the decomp's `(u32)g_CurrentSetup.propDefs` converts the pointer
+     * to a 32-bit integer and back into a `u32 *` -- a no-op where pointers
+     * are 32-bit (N64), but on the 64-bit port it TRUNCATES the host pointer
+     * to its low 32 bits, leaving an unbased N64 address (0x7017_c70f on
+     * Cuba) that faults on the first CLEANUP_PDTYPE deref. propDefs is a real
+     * host pointer (prop.c:1283 stores `local_stage + propDefs`), so cast
+     * pointer-to-pointer and keep `u32 *` for sizepropdef()'s 4-byte-unit
+     * increment. Same class as D3x; semantics unchanged. */
+    u32 *obj = (u32 *)g_CurrentSetup.propDefs;
+#else
     u32 *obj = (u32)g_CurrentSetup.propDefs;
+#endif
 
     if (obj)
     {

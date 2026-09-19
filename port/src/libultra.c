@@ -44,6 +44,7 @@
 
 #include "platform.h"
 #include "system.h"
+#include "port_addr.h"
 #include "crash.h"   /* D38: crashDumpThreads() */
 #include "video.h"
 #include "audio.h"
@@ -417,13 +418,40 @@ void osCreateThread(OSThread *t, OSId id, void (*entry)(void *), void *arg,
 #if !defined(_WIN32)
 #include <sys/mman.h>
 /* The decomp aligns/compares stack-buffer pointers by truncating to u32
- * (e.g. `(u32)compbuffer` in image.c texLoad) — an N64 assumption. glibc
- * puts pthread stacks above 4 GiB, so those truncations corrupt. Force each
- * game-thread stack into the low 2 GiB with MAP_32BIT so every such idiom
- * works exactly as on the console. Windows pthread stacks are already low. */
+ * (e.g. `(u32)compbuffer` in image.c texLoad) — an N64 assumption. Windows
+ * pthread stacks are already low, so every such idiom works there.
+ *
+ * On macOS the whole N64 window is reserved PROT_NONE by portAddrInit, so each
+ * game-thread stack is carved from the window's stack region
+ * [PORT_ADDR_BASE + 0xA0000000, + 0xC0000000), leaving a PROT_NONE guard page
+ * below it; the stack's host address then truncates to its N64 address exactly
+ * as on Windows.
+ *
+ * On Linux (PORT_ADDR_BASE == 0) the window is not reserved, so keep the
+ * original MAP_32BIT allocation: addresses below 2 GiB truncate identically. */
+#define PORT_STACK_REGION_OFF  0xA0000000ULL
+#define PORT_STACK_REGION_SIZE (512ULL << 20)
+#define PORT_STACK_GUARD       0x4000ULL
+
+static uintptr_t s_stackNext = 0;
+
 static void *portAllocLowStack(size_t sz)
 {
-#if defined(MAP_32BIT)
+#if PORT_ADDR_BASE != 0
+    const uintptr_t region = (uintptr_t)PORT_ADDR_BASE + PORT_STACK_REGION_OFF;
+    if (s_stackNext == 0)
+        s_stackNext = region;
+    const uintptr_t base = s_stackNext + PORT_STACK_GUARD;
+    const uintptr_t end = base + sz;
+    if (end > region + PORT_STACK_REGION_SIZE)
+        return NULL;
+    void *p = mmap((void *)base, sz, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    if (p != (void *)base)
+        return NULL;
+    s_stackNext = end;
+    return p;
+#elif defined(MAP_32BIT)
     void *p = mmap(NULL, sz, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT
 #if defined(MAP_STACK)
@@ -432,8 +460,11 @@ static void *portAllocLowStack(size_t sz)
                    , -1, 0);
     if (p != MAP_FAILED)
         return p;
-#endif
     return NULL;
+#else
+    (void)sz;
+    return NULL;
+#endif
 }
 #endif
 
@@ -906,7 +937,10 @@ static int s_d61opened = 0;
 
 static int dramHostAddrValid(uintptr_t addr, u32 size)
 {
-    static const uintptr_t bases[2] = { 0x70000000UL, 0x80000000UL };
+    static const uintptr_t bases[2] = {
+        (uintptr_t)PORT_ADDR_BASE + 0x70000000UL,
+        (uintptr_t)PORT_ADDR_BASE + 0x80000000UL,
+    };
     for (int i = 0; i < 2; i++) {
         if (addr >= bases[i] && addr + size <= bases[i] + 0x00800000UL)
             return 1;
@@ -972,7 +1006,7 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
             char win[1200] = "";
             char *wp = win;
             for (int i = 0; i < 32; i++) {
-                wp += snprintf(wp, win + sizeof(win) - (wp - win),
+                wp += snprintf(wp, sizeof(win) - (size_t)(wp - win),
                                " %p", (void *)sp[i]);
             }
 #if defined(PLATFORM_WINDOWS)
@@ -998,7 +1032,7 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
             sysFatalError("D60: ROM-read target %p + 0x%X not host-mapped "
                           "(src=0x%08X)", dstVA, size, srcPA);
         }
-        memcpy(dstVA, (const void *)(uintptr_t)srcPA, size);
+        memcpy(dstVA, portN64ToHost(srcPA), size);
     } else {
         /* OS_WRITE: the game never writes the cart (saves go to EEPROM via
          * osEeprom*, shimmed separately). Log and drop. */
@@ -1439,8 +1473,8 @@ void osWritebackDCache(void *addr, int size)      { (void)addr; (void)size; }
 void osWritebackDCacheAll(void)                    { }
 void osInvalICache(void *addr, int size)           { (void)addr; (void)size; }
 void osInvalDCache(void *addr, int size)           { (void)addr; (void)size; }
-u32   osVirtualToPhysical(void *va)                { return (u32)(uintptr_t)va; }
-void *osPhysicalToVirtual(u32 pa)                  { return (void *)(uintptr_t)pa; }
+u32   osVirtualToPhysical(void *va)                { return portHostToN64(va); }
+void *osPhysicalToVirtual(u32 pa)                  { return portN64ToHost(pa); }
 
 /* ------------------------------------------------------------------------ */
 /* Misc                                                                      */

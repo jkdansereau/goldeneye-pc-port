@@ -23,6 +23,7 @@
 
 #include "platform.h"
 #include "system.h"
+#include "port_addr.h"
 #include "config.h"
 #include "fs.h"
 #include "romdata.h"
@@ -100,6 +101,12 @@ int main(int argc, char **argv)
                 "(%s, %s %s) -- %s",
                 GE007_ROMID, GE007_VERSION_HASH, GE007_VERSION_CODENAME,
                 GE007_ORIGIN_URL);
+
+    /* Reserve the N64 address-space window before anything else maps or
+     * allocates (macOS: 4 GiB PROT_NONE; elsewhere a no-op). Must precede
+     * crashInit so the reservation is in place for every later stage, and any
+     * failure here is reported before SDL/GL are involved. */
+    portAddrInit();
 
     /* Crash handler first, so any failure below is debuggable. */
     crashInit();

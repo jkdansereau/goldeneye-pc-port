@@ -38,7 +38,7 @@ void initModelHitEntryFreeList(void)
         entries[i].prev = &entries[i - 1];
     }
 
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
     // D40: N64 g_ModelHitEntriesPenultimate labels entry 598 of the pool; on PC the
     // placeholder symbol is not emitted, so take the address directly.
     ((ModelHitEntry *)g_ModelHitEntries)[MODELHITENTRIES_LEN - 1].prev = &entries[MODELHITENTRIES_LEN - 2];

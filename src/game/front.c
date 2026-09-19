@@ -49,6 +49,12 @@
 #include "ob.h"
 #include "gbi_extension.h"
 #include "model.h"
+#if defined(PORT)
+#include "port_addr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 
 
 /**
@@ -977,8 +983,8 @@ Gfx *frontPrintText(Gfx *gdl, s32 *x, s32 *y, s8 *text, s32 second_font_table, s
             x,
             y,
             text,
-            second_font_table,
-            first_font_table,
+            PORT_N64PTR(struct fontchar, second_font_table),
+            PORT_N64PTR(struct font, first_font_table),
             arg6,
             (textglowR.r << 0x18) | (textglowG.r << 0x10) | (textglowB.r << 8) | textglowA.r,
             view_x,
@@ -993,8 +999,8 @@ Gfx *frontPrintText(Gfx *gdl, s32 *x, s32 *y, s8 *text, s32 second_font_table, s
             x,
             y,
             text,
-            second_font_table,
-            first_font_table,
+            PORT_N64PTR(struct fontchar, second_font_table),
+            PORT_N64PTR(struct font, first_font_table),
             arg6,
             view_x,
             view_y,
@@ -1520,7 +1526,7 @@ Gfx *display_aligned_white_text_to_screen(Gfx *dl, s32 arg1, s32 arg2, s32 halig
     x = arg1 - ((s32) (halign * sp48) / 2);
     y = arg2 - ((s32) (valign * sp4C) / 2);
 
-    return textRender(dl, &x, &y, text, arg6, arg7, -1, viGetX(), viGetY(), 0, 0);
+    return textRender(dl, &x, &y, text, PORT_N64PTR(struct fontchar, arg6), PORT_N64PTR(struct font, arg7), -1, viGetX(), viGetY(), 0, 0);
 }
 
 
@@ -2173,7 +2179,7 @@ void load_walletbond(void)
             b = (struct ModelNode *)mnode;
             srecord = b->Data;
 
-            arg0 = (s32)srecord->BaseAddr + ((s32)srecord->Primary & 0xffffff);
+            arg0 = PORT_N64PTR(Gfx, (s32)srecord->BaseAddr + ((s32)srecord->Primary & 0xffffff));
             bgApplyDynamicCCRMLUT(arg0, NULL, CCRMLUT_WALLETBOND);
         }
     }
@@ -2203,7 +2209,7 @@ void frontCleanUpWalletBond(void)
 void init_menu05_fileselect(void)
 {
     s32 size = 0x6e000;
-    Gfx* DL = (s32)(ptr_logo_and_walletbond_DL) + (s32)(4096*10);
+    Gfx* DL = PORT_N64PTR(Gfx, (s32)(ptr_logo_and_walletbond_DL) + (s32)(4096*10));
     int i;
 
     prev_keypresses = FALSE;
@@ -6590,7 +6596,7 @@ void load_briefing_text_for_stage(void)
     s32 argg;
 
     // what is this
-    temp_s0 = (s32)(ptr_logo_and_walletbond_DL) + (s32)(4096*10);
+    temp_s0 = PORT_N64PTR(Gfx, (s32)(ptr_logo_and_walletbond_DL) + (s32)(4096*10));
 
     // alright
     argg = 0x200;
@@ -7413,7 +7419,7 @@ Gfx *constructor_menu0D_missioncomplete(Gfx *DL)
     x = 0x37;
     y = 0xDC;
     DL = frontPrintText(DL, &x, &y, text, ptrFontZurichBoldChars, ptrFontZurichBold, 0xFF, viGetX(), viGetY(), 0, 0);
-    strcpy(stagename, frontGetPlayersFavoriteWeaponInHand(0, 0));
+    strcpy(stagename, PORT_N64PTR(char, frontGetPlayersFavoriteWeaponInHand(0, 0)));
     if ((array_favweapon[0][0] > 0) && (array_favweapon[0][1] == array_favweapon[0][0]))
     {
         temp = strlen(stagename)-1;
@@ -7767,16 +7773,16 @@ Gfx *constructor_menu16_nocontrollers(Gfx *DL)
     if ((numContCon == 0) || (numContCon == 1) || (numContCon == 2) || (numContCon == 3)) {
         text = langGet(getStringID(LTITLE, TITLE_STR_118_NOCONT)); //NO CONTROLLER IN CONTROLLER SOCKET 1
     }
-    textMeasure(&y2, &x2, text, ptrFontZurichBoldChars, ptrFontZurichBold, 0);
+    textMeasure(&y2, &x2, PORT_N64PTR(char, text), ptrFontZurichBoldChars, ptrFontZurichBold, 0);
     x = 0xDC - (x2 >> 1);
     y = 0x99 - (y2 >> 1);
 #ifdef BUGFIX_R1
     if (j_text_trigger) {
-        DL = textRenderOutlined(DL, &x, &y, text, ptrFontZurichBoldChars, ptrFontZurichBold, -1, 0x8000FF, viGetX(), viGetY(), 0, 0);
+        DL = textRenderOutlined(DL, &x, &y, PORT_N64PTR(char, text), ptrFontZurichBoldChars, ptrFontZurichBold, -1, 0x8000FF, viGetX(), viGetY(), 0, 0);
     }
     else {
 #endif
-        DL = textRender(DL, &x, &y, text, ptrFontZurichBoldChars, ptrFontZurichBold, -1, viGetX(), viGetY(), 0, 0);
+        DL = textRender(DL, &x, &y, PORT_N64PTR(char, text), ptrFontZurichBoldChars, ptrFontZurichBold, -1, viGetX(), viGetY(), 0, 0);
 #ifdef BUGFIX_R1
     }
 #endif
@@ -7785,16 +7791,16 @@ Gfx *constructor_menu16_nocontrollers(Gfx *DL)
     if ((numContCon == 0) || (numContCon == 1) || (numContCon == 2) || (numContCon == 3)) {
         text = langGet(getStringID(LTITLE, TITLE_STR_119_ATTACHCONT)); //PLEASE POWER OFF AND ATTACH A CONTROLLER
     }
-    textMeasure(&y2, &x2, text, ptrFontZurichBoldChars, ptrFontZurichBold, 0);
+    textMeasure(&y2, &x2, PORT_N64PTR(char, text), ptrFontZurichBoldChars, ptrFontZurichBold, 0);
     x = 0xDC - (x2 >> 1);
     y = 0xB1 - (y2 >> 1);
 #ifdef BUGFIX_R1
     if (j_text_trigger) {
-        DL = textRenderOutlined(DL, &x, &y, text, ptrFontZurichBoldChars, ptrFontZurichBold, -1, 0x8000FF, viGetX(), viGetY(), 0, 0);
+        DL = textRenderOutlined(DL, &x, &y, PORT_N64PTR(char, text), ptrFontZurichBoldChars, ptrFontZurichBold, -1, 0x8000FF, viGetX(), viGetY(), 0, 0);
     }
     else {
 #endif
-        DL = textRender(DL, &x, &y, text, ptrFontZurichBoldChars, ptrFontZurichBold, -1, viGetX(), viGetY(), 0, 0);
+        DL = textRender(DL, &x, &y, PORT_N64PTR(char, text), ptrFontZurichBoldChars, ptrFontZurichBold, -1, viGetX(), viGetY(), 0, 0);
 #ifdef BUGFIX_R1
     }
 #endif
@@ -8019,7 +8025,7 @@ void init_menu18_displaycast(void)
 #else
     modelSetAnimPlaySpeed(cast_model, 0.5f, 0);
 #endif
-    modelSetAnimation(cast_model, animation_table_ptrs1[intro_animation_table[randomly_selected_intro_animation].animID], flip, intro_animation_table[randomly_selected_intro_animation].startframeoffset, intro_animation_table[randomly_selected_intro_animation].playback_speed, 0.0f);
+    modelSetAnimation(cast_model, PORT_N64PTR(ModelAnimation, animation_table_ptrs1[intro_animation_table[randomly_selected_intro_animation].animID]), flip, intro_animation_table[randomly_selected_intro_animation].startframeoffset, intro_animation_table[randomly_selected_intro_animation].playback_speed, 0.0f);
 
     g_MenuTimer = 0;
     cast_camera_dist_start = ((((f32) ((u32) randomGetNext())) * (1.0f / U32_MAX)) * 80.0f) + 70.0f;
@@ -8611,7 +8617,7 @@ void menu_init(void)
     {
         if (viGetFrameBuf2() == (cfb_16[1]))
         {
-            viSetFrameBuf2(ptr_menu_videobuffer);
+            viSetFrameBuf2(PORT_N64PTR(u8, ptr_menu_videobuffer));
         }
 
         viSetAspect(MENU_INIT_ASPECT_440);

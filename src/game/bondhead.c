@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "port_addr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include <limits.h>
 #include <assets/animationtable_data.h>
 #include <random.h>
@@ -419,7 +424,7 @@ void bheadAdjustAnimation(f32 speed)
                 modelSetAnimation(
                     &g_CurrentPlayer->model,
                     // match hack: addu address backwards
-                    (struct ModelAnimation *) ((s32)g_BondMoveAnimationSetup[i].anim_id + (s32)&ptr_animation_table->data),
+                    PORT_N64PTR(struct ModelAnimation, (s32)g_BondMoveAnimationSetup[i].anim_id + (s32)&ptr_animation_table->data),
                     (s32) g_CurrentPlayer->animFlipFlag,
                     startframe,
                     0.5f,
