@@ -17,6 +17,12 @@
 #include "glass.h"
 #include "frametiming.h"
 #include "assets/obseg/text/LoptionE.h"
+#if defined(PORT)
+#include "port_addr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 
 #define WATCH_BACKGROUND_VERTEX_COUNT 30
 
@@ -1937,30 +1943,30 @@ Gfx *draw_abort_cancel_confirm(Gfx *gdl)
 
     if (watch_item_is_actively_selected != 0)
     {
-        textMeasure(&sp60, &sp64, sp54, pFontChars, pFontFile, 0);
+        textMeasure(&sp60, &sp64, PORT_N64PTR(char, sp54), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
 
-        gdl = textRender(gdl, &sp7C, &sp70, sp54, pFontChars, pFontFile, 0xA0FFA0F0, sp64, sp60, 0, 0);
+        gdl = textRender(gdl, &sp7C, &sp70, PORT_N64PTR(char, sp54), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0xA0FFA0F0, sp64, sp60, 0, 0);
 
         if (D_800409A4 != 0)
         {
-            gdl = textRenderOutlined(gdl, &sp78, &sp6C, sp50, pFontChars, pFontFile, -1, 0x7000A0, viGetX(), viGetY(), 0, 0);
-            gdl = textRender(gdl, &sp74, &sp68, sp4C, pFontChars, pFontFile, 0xFF00B0, viGetX(), viGetY(), 0, 0);
+            gdl = textRenderOutlined(gdl, &sp78, &sp6C, PORT_N64PTR(char, sp50), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), -1, 0x7000A0, viGetX(), viGetY(), 0, 0);
+            gdl = textRender(gdl, &sp74, &sp68, PORT_N64PTR(char, sp4C), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0xFF00B0, viGetX(), viGetY(), 0, 0);
         }
         else
         {
             if (D_800409A4 == 0)
             {
-                gdl = textRender(gdl, &sp78, &sp6C, sp50, pFontChars, pFontFile, 0xFF00B0, viGetX(), viGetY(), 0, 0);
-                gdl = textRenderOutlined(gdl, &sp74, &sp68, sp4C, pFontChars, pFontFile, -1, 0x7000A0, viGetX(), viGetY(), 0, 0);
+                gdl = textRender(gdl, &sp78, &sp6C, PORT_N64PTR(char, sp50), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0xFF00B0, viGetX(), viGetY(), 0, 0);
+                gdl = textRenderOutlined(gdl, &sp74, &sp68, PORT_N64PTR(char, sp4C), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), -1, 0x7000A0, viGetX(), viGetY(), 0, 0);
             }
         }
     }
     else
     {
-        textMeasure(&sp60, &sp64, sp54, pFontChars, pFontFile, 0);
-        gdl = textRender(gdl, &sp7C, &sp70, sp54, pFontChars, pFontFile, 0x800080, sp64, sp60, 0, 0);
-        gdl = textRender(gdl, &sp78, &sp6C, sp50, pFontChars, pFontFile, 0x800080, viGetX(), viGetY(), 0, 0);
-        gdl = textRender(gdl, &sp74, &sp68, sp4C, pFontChars, pFontFile, 0x800080, viGetX(), viGetY(), 0, 0);
+        textMeasure(&sp60, &sp64, PORT_N64PTR(char, sp54), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
+        gdl = textRender(gdl, &sp7C, &sp70, PORT_N64PTR(char, sp54), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0x800080, sp64, sp60, 0, 0);
+        gdl = textRender(gdl, &sp78, &sp6C, PORT_N64PTR(char, sp50), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0x800080, viGetX(), viGetY(), 0, 0);
+        gdl = textRender(gdl, &sp74, &sp68, PORT_N64PTR(char, sp4C), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0x800080, viGetX(), viGetY(), 0, 0);
     }
 
     return gdl;
@@ -1996,10 +2002,10 @@ Gfx *draw_text_mission_status(Gfx *gdl)
     }
 
     gdl = microcode_constructor(gdl);
-    textMeasure(&sp5C, &sp58, txtptr_1, pFontChars, pFontFile, 0);
+    textMeasure(&sp5C, &sp58, PORT_N64PTR(char, txtptr_1), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
     sp64 = 0x51;
     sp60 = YOFFSET_MISSIONSTATUS;
-    gdl = textRender(gdl, &sp64, &sp60, txtptr_1, pFontChars, pFontFile, 0xFF00B0, sp58, sp5C, 0, 0);
+    gdl = textRender(gdl, &sp64, &sp60, PORT_N64PTR(char, txtptr_1), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0xFF00B0, sp58, sp5C, 0, 0);
 
     if (j_text_trigger)
     {
@@ -2012,8 +2018,8 @@ Gfx *draw_text_mission_status(Gfx *gdl)
 
     sp64 = sp64 + sp58 + joffset + 4;
     sp60 = sp60 - sp5C;
-    textMeasure(&sp5C, &sp58, txtptr_2, pFontChars, pFontFile, 0);
-    gdl = textRender(gdl, &sp64, &sp60, txtptr_2, pFontChars, pFontFile, sp4C, sp58, sp5C, 0, 0);
+    textMeasure(&sp5C, &sp58, PORT_N64PTR(char, txtptr_2), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
+    gdl = textRender(gdl, &sp64, &sp60, PORT_N64PTR(char, txtptr_2), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), sp4C, sp58, sp5C, 0, 0);
     gdl = draw_abort_cancel_confirm(gdl);
 
     return gdl;
@@ -2053,8 +2059,8 @@ Gfx *draw_text_q_watch_v201_beta(Gfx *gdl)
     pFontFile = ptrFontBankGothic;
     pFontChars = ptrFontBankGothicChars;
     gdl = microcode_constructor(gdl);
-    textMeasure(&sp48, &sp44, txtptr, pFontChars, pFontFile, 0);
-    gdl = textRender(gdl, &sp50, &sp4C, txtptr, pFontChars, pFontFile, 0xFF00B0, sp44, sp48, 0, 0);
+    textMeasure(&sp48, &sp44, PORT_N64PTR(char, txtptr), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
+    gdl = textRender(gdl, &sp50, &sp4C, PORT_N64PTR(char, txtptr), PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0xFF00B0, sp44, sp48, 0, 0);
     return gdl;
 }
 
@@ -2189,16 +2195,16 @@ Gfx* draw_current_hand_item_and_ammo(Gfx* gdl) {
 #else
     sp88 = 0xBC;
 #endif
-    textMeasure(&sp84, &sp80, text, sp78, sp7C, 0);
-    gdl = textRender(gdl, &sp8C, &sp88, text, sp78, sp7C, 0xFF00B0, sp80, sp84, 0, 0);
+    textMeasure(&sp84, &sp80, text, PORT_N64PTR(struct fontchar, sp78), PORT_N64PTR(struct font, sp7C), 0);
+    gdl = textRender(gdl, &sp8C, &sp88, text, PORT_N64PTR(struct fontchar, sp78), PORT_N64PTR(struct font, sp7C), 0xFF00B0, sp80, sp84, 0, 0);
 
 #if defined(LEFTOVERDEBUG)
     sp88 = 0xAA;
 #else
     sp88 = 0xC6;
 #endif
-    textMeasure(&sp84, &sp80, text2, sp78, sp7C, 0);
-    gdl = textRender(gdl, &sp8C, &sp88, text2, sp78, sp7C, 0xFF00B0, sp80, sp84, 0, 0);
+    textMeasure(&sp84, &sp80, text2, PORT_N64PTR(struct fontchar, sp78), PORT_N64PTR(struct font, sp7C), 0);
+    gdl = textRender(gdl, &sp8C, &sp88, text2, PORT_N64PTR(struct fontchar, sp78), PORT_N64PTR(struct font, sp7C), 0xFF00B0, sp80, sp84, 0, 0);
 
     return gdl;
 }
@@ -2428,11 +2434,11 @@ Gfx *draw_watch_inventory_page(Gfx *gdl, Mtx *param_2)
 
             gdl = microcode_constructor(gdl);
 
-            textMeasure(&textheight, &textwidth, string_builder_allocation, pFontChars2, pFontFile2, LINEHEIGHT());
+            textMeasure(&textheight, &textwidth, string_builder_allocation, PORT_N64PTR(struct fontchar, pFontChars2), PORT_N64PTR(struct font, pFontFile2), LINEHEIGHT());
 
             gdl = microcode_constructor_related_to_menus(gdl, 0x4E, WATCH_INV_BASE_Y(), textwidth + 0x4E, (LINEHEIGHT() * 5) + WATCH_INV_BASE_Y(), 0);
 
-            gdl = textRender(gdl, &x1, &y1, string_builder_allocation, pFontChars2, pFontFile2, 0xAA00B0, textwidth + 1, LINEHEIGHT() * 5, watch_inventory_text_y, LINEHEIGHT());
+            gdl = textRender(gdl, &x1, &y1, string_builder_allocation, PORT_N64PTR(struct fontchar, pFontChars2), PORT_N64PTR(struct font, pFontFile2), 0xAA00B0, textwidth + 1, LINEHEIGHT() * 5, watch_inventory_text_y, LINEHEIGHT());
 
             gdl = microcode_constructor_related_to_menus(gdl, 0x4B, temp_s0_3, textwidth + 0x52, (LINEHEIGHT() + temp_s0_3) - 2, 0x800050);
 
@@ -2454,22 +2460,22 @@ Gfx *draw_watch_inventory_page(Gfx *gdl, Mtx *param_2)
 
                 gdl = microcode_constructor(gdl);
 
-                textMeasure(&y2, &x2, formattedString, pFontChars, pFontFile, 0);
+                textMeasure(&y2, &x2, formattedString, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
 
                 if (watch_inventory_text_is_settled != 0)
                 {
-                    textMeasure(&y2, &x2, invItemName, pFontChars, pFontFile, LINEHEIGHT());
+                    textMeasure(&y2, &x2, invItemName, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), LINEHEIGHT());
 
                     x1 = 0x4E;
                     y1 = (LINEHEIGHT() * 2) + WATCH_INV_BASE_Y();
 
                     if (D_800409C4 == 0)
                     {
-                        gdl = textRender(gdl, &x1, &y1, invItemName, pFontChars, pFontFile, 0xA0FFA0F0, x2, 0x64, 0, LINEHEIGHT());
+                        gdl = textRender(gdl, &x1, &y1, invItemName, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0xA0FFA0F0, x2, 0x64, 0, LINEHEIGHT());
                     }
                     else
                     {
-                        gdl = textRenderOutlined(gdl, &x1, &y1, invItemName, pFontChars, pFontFile, -1, 0x7000A0, x2 + 1, 0x64, 0, LINEHEIGHT());
+                        gdl = textRenderOutlined(gdl, &x1, &y1, invItemName, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), -1, 0x7000A0, x2 + 1, 0x64, 0, LINEHEIGHT());
                     }
 
                     sub_GAME_7F0A8378();
@@ -2521,7 +2527,7 @@ Gfx *unused_draw_watch_inventory_page(Gfx *gdl, Mtx *param_2) {
         game_options_inventory_navigation();
         gdl = microcode_constructor(gdl);
 
-        textMeasure(&sp58, &sp54, long_name, pFontChars, pFontFile, 0);
+        textMeasure(&sp58, &sp54, long_name, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
 
         sp70 = ((s32) (0xAA - sp54) / 2) + 0x4B;
         temp_2 = sp70;
@@ -2534,16 +2540,16 @@ Gfx *unused_draw_watch_inventory_page(Gfx *gdl, Mtx *param_2) {
             sub_GAME_7F0A8378();
             if (D_800409C4 == 0)
             {
-                gdl = textRender(gdl, &sp70, &sp6C, long_name, pFontChars, pFontFile, 0xA0FFA0F0, sp54, 0x64, 0, 0);
+                gdl = textRender(gdl, &sp70, &sp6C, long_name, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0xA0FFA0F0, sp54, 0x64, 0, 0);
             }
             else
             {
-                gdl = textRenderOutlined(gdl, &sp70, &sp6C, long_name, pFontChars, pFontFile, -1, 0x7000A0, sp54 + 1, 0x64, 0, 0);
+                gdl = textRenderOutlined(gdl, &sp70, &sp6C, long_name, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), -1, 0x7000A0, sp54 + 1, 0x64, 0, 0);
             }
         }
         else
         {
-            gdl = textRender(gdl, &sp70, &sp6C, long_name, pFontChars, pFontFile, 0xAA00B0, sp54, 0x64, 0, 0);
+            gdl = textRender(gdl, &sp70, &sp6C, long_name, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0xAA00B0, sp54, 0x64, 0, 0);
         }
 
     }
@@ -3260,11 +3266,11 @@ Gfx *display_text_buttons_dual_control(Gfx *gdl)
 
     if (joyGetButtons(PLAYER_1, Z_TRIG))
     {
-        gdl = draw_options_labels(gdl, 0x5A, YOFFSET_5, textptr_aux, -1, 1, 0x7000A0, 0, 0, 0x3000B0, 0);
+        gdl = draw_options_labels(gdl, 0x5A, YOFFSET_5, PORT_N64PTR(char, textptr_aux), -1, 1, 0x7000A0, 0, 0, 0x3000B0, 0);
     }
     else
     {
-        gdl = draw_options_labels(gdl, 0x5A, YOFFSET_5, textptr_aux, 0xAA00B0, 0, -1, 0, 0, 0x3000B0, 0);
+        gdl = draw_options_labels(gdl, 0x5A, YOFFSET_5, PORT_N64PTR(char, textptr_aux), 0xAA00B0, 0, -1, 0, 0, 0x3000B0, 0);
     }
 
     if ((g_CurrentPlayer->cur_player_control_type_0 == CONTROLLER_CONFIG_PLENTY) || (g_CurrentPlayer->cur_player_control_type_0 == CONTROLLER_CONFIG_DOMINO))
@@ -3276,7 +3282,7 @@ Gfx *display_text_buttons_dual_control(Gfx *gdl)
         textptr_aux = langGet(getStringID(LOPTIONS, OPTION_STR_06_LOOK_LF)); //look
     }
 
-    gdl = draw_options_labels(gdl, 0x5A, YOFFSET_4, textptr_aux, 0xAA00B0, 0, -1, 0, 0, 0x3000B0, 0);
+    gdl = draw_options_labels(gdl, 0x5A, YOFFSET_4, PORT_N64PTR(char, textptr_aux), 0xAA00B0, 0, -1, 0, 0, 0x3000B0, 0);
 
     if (joyGetButtons(1, A_BUTTON))
     {
@@ -3307,11 +3313,11 @@ Gfx *display_text_buttons_dual_control(Gfx *gdl)
 
     if (joyGetButtons(1, Z_TRIG))
     {
-        gdl = draw_options_labels(gdl, 0xE6, YOFFSET_5, textptr_aux, -1, 1, 0x7000A0, 0, 0, 0x3000B0, 1);
+        gdl = draw_options_labels(gdl, 0xE6, YOFFSET_5, PORT_N64PTR(char, textptr_aux), -1, 1, 0x7000A0, 0, 0, 0x3000B0, 1);
     }
     else
     {
-        gdl = draw_options_labels(gdl, 0xE6, YOFFSET_5, textptr_aux, 0xAA00B0, 0, -1, 0, 0, 0x3000B0, 1);
+        gdl = draw_options_labels(gdl, 0xE6, YOFFSET_5, PORT_N64PTR(char, textptr_aux), 0xAA00B0, 0, -1, 0, 0, 0x3000B0, 1);
     }
 
     if ((g_CurrentPlayer->cur_player_control_type_0 == CONTROLLER_CONFIG_PLENTY) || (g_CurrentPlayer->cur_player_control_type_0 == CONTROLLER_CONFIG_DOMINO))
@@ -3323,7 +3329,7 @@ Gfx *display_text_buttons_dual_control(Gfx *gdl)
         textptr_aux = langGet(getStringID(LOPTIONS, OPTION_STR_05_MOVE_LF)); //move
     }
 
-    gdl = draw_options_labels(gdl, 0xE6, YOFFSET_4, textptr_aux, 0xAA00B0, 0, -1, 0, 0, 0x3000B0, 1);
+    gdl = draw_options_labels(gdl, 0xE6, YOFFSET_4, PORT_N64PTR(char, textptr_aux), 0xAA00B0, 0, -1, 0, 0, 0x3000B0, 1);
     return gdl;
 }
 
@@ -3420,7 +3426,7 @@ Gfx *draw_watch_controller(Gfx *gdl)
     }
     else
     {
-        gdl = watchRenderControllerOpaque(gdl, &finalmtx, 1, (s32) watchTable, &contpadnum0);
+        gdl = watchRenderControllerOpaque(gdl, &finalmtx, 1, (WatchContButtonPositions *) watchTable, &contpadnum0);
     }
 
     if (controllerCheckDualControllerTypesAllowed())
@@ -3471,7 +3477,7 @@ Gfx *draw_watch_controller(Gfx *gdl)
         }
         else
         {
-            gdl = watchRenderControllerOpaque(gdl, &finalmtx, 1, (s32) (&table2), &contpadnum1);
+            gdl = watchRenderControllerOpaque(gdl, &finalmtx, 1, (WatchContButtonPositions *) (&table2), &contpadnum1);
         }
     }
 
@@ -3541,14 +3547,14 @@ Gfx *draw_watch_control_options_page(Gfx *gdl, Mtx *param_2) {
             }
         }
 
-        textMeasure(&sp50, &sp54, textptr, pFontChars, pFontFile, 0);
+        textMeasure(&sp50, &sp54, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
 
         if ((watch_item_is_actively_selected != 0) && (controller_options_index == CONTROLLER_OPTIONS_INDEX_STYLE))
         {
-            gdl = textRenderOutlined(gdl, &sp5C, &sp58, textptr, pFontChars, pFontFile, phi_s1, 0x7000A0, sp54 + 1, sp50, 0, 0);
+            gdl = textRenderOutlined(gdl, &sp5C, &sp58, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), phi_s1, 0x7000A0, sp54 + 1, sp50, 0, 0);
         } else
         {
-            gdl = textRender(gdl, &sp5C, &sp58, textptr, pFontChars, pFontFile, phi_s1, sp54, sp50, 0, 0);
+            gdl = textRender(gdl, &sp5C, &sp58, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), phi_s1, sp54, sp50, 0, 0);
         }
 
         gdl = draw_controller_style_text(gdl);
@@ -3572,14 +3578,14 @@ Gfx *draw_watch_control_options_page(Gfx *gdl, Mtx *param_2) {
             }
         }
 
-        textMeasure(&sp50, &sp54, textptr, pFontChars, pFontFile, 0);
+        textMeasure(&sp50, &sp54, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
 
         if ((watch_item_is_actively_selected != 0) && (controller_options_index == CONTROLLER_OPTIONS_INDEX_INPUTS))
         {
-            gdl = textRenderOutlined(gdl, &sp5C, &sp58, textptr, pFontChars, pFontFile, phi_s1, 0x7000A0, sp54 + 1, sp50, 0, 0);
+            gdl = textRenderOutlined(gdl, &sp5C, &sp58, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), phi_s1, 0x7000A0, sp54 + 1, sp50, 0, 0);
         } else
         {
-            gdl = textRender(gdl, &sp5C, &sp58, textptr, pFontChars, pFontFile, phi_s1, sp54, sp50, 0, 0);
+            gdl = textRender(gdl, &sp5C, &sp58, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), phi_s1, sp54, sp50, 0, 0);
         }
 
     }
@@ -3846,15 +3852,15 @@ Gfx *draw_watch_game_options_page(Gfx *gdl, Mtx *param_2) {
             }
         }
 
-        textMeasure(&sp48, &sp4C, textptr, pFontChars, pFontFile, 0);
+        textMeasure(&sp48, &sp4C, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
 
         if ((watch_item_is_actively_selected != 0) && (game_options_index == 0))
         {
-            gdl = textRenderOutlined(gdl, &sp54, &sp50, textptr, pFontChars, pFontFile, sp5C, 0x7000A0, sp4C + 1, sp48, 0, 0);
+            gdl = textRenderOutlined(gdl, &sp54, &sp50, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), sp5C, 0x7000A0, sp4C + 1, sp48, 0, 0);
         }
         else
         {
-            gdl = textRender(gdl, &sp54, &sp50, textptr, pFontChars, pFontFile, sp5C, sp4C, sp48, 0, 0);
+            gdl = textRender(gdl, &sp54, &sp50, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), sp5C, sp4C, sp48, 0, 0);
         }
 
         sp5C = 0xFF00B0;
@@ -3873,15 +3879,15 @@ Gfx *draw_watch_game_options_page(Gfx *gdl, Mtx *param_2) {
             }
         }
 
-        textMeasure(&sp48, &sp4C, textptr, pFontChars, pFontFile, 0);
+        textMeasure(&sp48, &sp4C, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), 0);
 
         if ((watch_item_is_actively_selected != 0) && (game_options_index == 1))
         {
-            gdl = textRenderOutlined(gdl, &sp54, &sp50, textptr, pFontChars, pFontFile, sp5C, 0x7000A0, sp4C + 1, sp48, 0, 0);
+            gdl = textRenderOutlined(gdl, &sp54, &sp50, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), sp5C, 0x7000A0, sp4C + 1, sp48, 0, 0);
         }
         else
         {
-            gdl = textRender(gdl, &sp54, &sp50, textptr, pFontChars, pFontFile, sp5C, sp4C, sp48, 0, 0);
+            gdl = textRender(gdl, &sp54, &sp50, textptr, PORT_N64PTR(struct fontchar, pFontChars), PORT_N64PTR(struct font, pFontFile), sp5C, sp4C, sp48, 0, 0);
         }
 
         gdl = draw_toggle_options(gdl);

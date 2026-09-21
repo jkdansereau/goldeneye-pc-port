@@ -28,10 +28,21 @@
  * "using typedef-name after 'struct'"), and no C++ TU has an implicit
  * declaration needing a fix here. C++ TUs keep their pre-D38 header exposure.
  */
+
 #ifndef _PC_PROTOS_H_
 #define _PC_PROTOS_H_
 
-#if defined(PORT) && defined(__x86_64__) && !defined(__cplusplus)
+#if defined(__APPLE__)
+/* Darwin SDK headers expose these libc calls as fortify function-like
+ * macros. This legacy declaration list needs their actual symbol names. */
+#undef memcpy
+#undef snprintf
+#undef strcat
+#undef strcpy
+#undef strncpy
+#endif
+
+#if defined(PORT) && defined(PLATFORM_64BIT) && !defined(__cplusplus)
 
 #include <PR/ultratypes.h> /* u8..s32, f32, size_t (host on PC) */
 #include <PR/gbi.h>        /* Gfx, Mtx, Vtx, Light (shimmed on PC) */
@@ -477,5 +488,5 @@ Gfx * watchRenderControllerOpaque();
 u32 weaponLoadProjectileModels();
 void zbufSetBuffer();
 
-#endif /* PORT && __x86_64__ && !__cplusplus */
+#endif /* PORT && PLATFORM_64BIT && !__cplusplus */
 #endif /* _PC_PROTOS_H_ */

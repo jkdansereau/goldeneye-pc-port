@@ -94,7 +94,8 @@ floating or spin-glitching) and his third-person model positioning generally
 is right the large majority of the time now, at most a small drift when off; file-backed saves; faithful N64 progression
 by default (F10 → *All unlocked* opens every level, 007 mode and the full
 cheat menu); F10 in-game options overlay (resolution, frame cap, MSAA,
-filtering, FOV, sensitivity); Windows and Linux, including Steam Deck.
+filtering, FOV, sensitivity); Windows, Linux and macOS (Intel and Apple
+Silicon), including Steam Deck.
 
 **Known issues:**
 
@@ -142,7 +143,7 @@ filtering, FOV, sensitivity); Windows and Linux, including Steam Deck.
   cause silent audio and odd right-mouse-aim behavior (D257/D259/D281).
 - Assorted further cosmetic defects are tracked in
   [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
-- No macOS or ARM support; no controller rebinding UI.
+- No controller rebinding UI; no Windows-on-ARM support.
 
 Root causes and fix status for every item: the [release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases)
 and the finding log in [`docs/dev/findings.md`](docs/dev/findings.md).
@@ -187,7 +188,7 @@ directionally, on the way to v1.0:
 - **Native widescreen** — a distortion-free render at your display's aspect
   (correct-aspect projection and a wide-frame HUD), replacing today's
   stretched 4:3 frame + FOV compensation.
-- **Controller rebinding UI**, and macOS/ARM builds.
+- **Controller rebinding UI**.
 - **LAN multiplayer**: reviving GoldenEye's original split-screen/deathmatch
   netplay across multiple PCs on a local network. Genuinely under
   consideration, but early and not started; no ETA.

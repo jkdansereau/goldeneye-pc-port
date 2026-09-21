@@ -7,6 +7,12 @@
 #include <fr.h>
 #include <memp.h>
 #include "bg.h"
+#if defined(PORT)
+#include "port_addr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include "bondview.h"
 #include "chr.h"
 #include "debug_camera.h"
@@ -855,22 +861,22 @@ void load_bg_file(LEVEL_INDEX levelid)
     lightFixtureInitTables();
  
     ptr_bg_data = (s32)header;
-    obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, (u8 *) ptr_bg_data, 0, 0x40);
+    obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, (u8 *)PORT_N64PTR(void, ptr_bg_data), 0, 0x40);
 
     if (((levelid && ptr_bg_data) && levelentry_index));
 
     ptr_bgdata_offsets = ptr_bg_data;
-    ptr_bgdata_room_fileposition_list = (bg_room_data *) BG_SEG_TO_PTR(ptr_bg_data, ((s32 *)ptr_bg_data)[1]);
+    ptr_bgdata_room_fileposition_list = (bg_room_data *) BG_SEG_TO_PTR(ptr_bg_data, ((s32 *)PORT_N64PTR(void, ptr_bg_data))[1]);
  
     size = (((((u32) ptr_bgdata_room_fileposition_list[1].pPointTableBin) & 0x00ffffff) - 1) | 0xf) + 1;
  
     ptr_bg_data = (s32) mempAllocBytesInBank(size, 4);
-    obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, (u8 *) ptr_bg_data, 0, size);
+    obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, (u8 *)PORT_N64PTR(void, ptr_bg_data), 0, size);
  
     gptr_stan = (s32) _fileNameLoadToBank(levelinfotable[levelentry_index].bg_stan_filename, 2, 0, 4);
  
-    stanDetermineEOF((struct StanPrefixRecord *) gptr_stan, 0, (u8 *) gptr_stan);
-    stanLoadFile((struct StanPrefixRecord *) gptr_stan);
+    stanDetermineEOF((struct StanPrefixRecord *)PORT_N64PTR(void, gptr_stan), 0, (u8 *)PORT_N64PTR(void, gptr_stan));
+    stanLoadFile((struct StanPrefixRecord *)PORT_N64PTR(void, gptr_stan));
  
     sub_GAME_7F0B4810(levelinfotable[levelentry_index].levelscale);
     setLevelScale(levelinfotable[levelentry_index].levelscale);
@@ -882,7 +888,7 @@ void load_bg_file(LEVEL_INDEX levelid)
     sub_GAME_7F08976C(mCurrentLevelVisibilityScale);
     matrix_4x4_7F058C4C(mCurrentLevelVisibilityScale);
  
-    data = (s32 *)ptr_bg_data;
+    data = (s32 *)PORT_N64PTR(void, ptr_bg_data);
     dword_CODE_bss_8007BF98 = *data;
     dword_CODE_bss_8007FF88 = 1;
  
@@ -890,7 +896,7 @@ void load_bg_file(LEVEL_INDEX levelid)
     {
         dword_CODE_bss_8007FF88 = 2;
         ptr_bgdata_offsets = (s32)data;
-        ptr_bgdata_room_fileposition_list = (bg_room_data *) BG_SEG_TO_PTR(data, ((s32 *)ptr_bgdata_offsets)[1]);
+        ptr_bgdata_room_fileposition_list = (bg_room_data *) BG_SEG_TO_PTR(data, ((s32 *)PORT_N64PTR(void, ptr_bgdata_offsets))[1]);
         
         // Keep this fake goto for matching.
         goto dummy_label_543534; dummy_label_543534: ;
@@ -902,25 +908,25 @@ void load_bg_file(LEVEL_INDEX levelid)
             g_MaxNumRooms++;  
         }
  
-        g_BgPortals = (bg_portal_data_entry *) BG_SEG_TO_PTR(data, ((s32 *)ptr_bgdata_offsets)[2]);
+        g_BgPortals = (bg_portal_data_entry *) BG_SEG_TO_PTR(data, ((s32 *)PORT_N64PTR(void, ptr_bgdata_offsets))[2]);
 
         if (1);
 
-        if (((s32 *)ptr_bgdata_offsets)[3] == 0)
+        if (((s32 *)PORT_N64PTR(void, ptr_bgdata_offsets))[3] == 0)
         {
             dword_CODE_bss_8007FF90 = 0;
         }
         else
         {
-            dword_CODE_bss_8007FF90 = (s32 *) BG_SEG_TO_PTR(data, ((s32 *)ptr_bgdata_offsets)[3]);
+            dword_CODE_bss_8007FF90 = (s32 *) BG_SEG_TO_PTR(data, ((s32 *)PORT_N64PTR(void, ptr_bgdata_offsets))[3]);
  
-            if (((s32 *)ptr_bgdata_offsets)[4] == 0)
+            if (((s32 *)PORT_N64PTR(void, ptr_bgdata_offsets))[4] == 0)
             {
                 dword_CODE_bss_8007FF94 = NULL;
             }
             else
             {
-                dword_CODE_bss_8007FF94 = (f32 *) BG_SEG_TO_PTR(data, ((s32 *)ptr_bgdata_offsets)[4]);
+                dword_CODE_bss_8007FF94 = (f32 *) BG_SEG_TO_PTR(data, ((s32 *)PORT_N64PTR(void, ptr_bgdata_offsets))[4]);
             }
         }
  
@@ -3138,7 +3144,7 @@ void bgBuildRoomVtxBounds(s32 roomID)
             numvertices = ((gdl[cmdindex].dma.par >> 4) & 0xf) + 1;
 #endif
 
-            vtx = (Vtx *)(SEGMENT_OFFSET(gdl[cmdindex].dma.addr) + (u32)vertices);
+            vtx = (Vtx *)PORT_N64PTR(void, SEGMENT_OFFSET(gdl[cmdindex].dma.addr) + (u32)vertices);
 
 #if defined(PORT)
             /* TEMP D69 safety net: the room primary/secondary DL binaries
@@ -3560,7 +3566,7 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
 
                 if (bgTestRayIntersectsBbox(from, dir, (s32 *) (&bboxMin), (s32 *) (&bboxMax)))
                 {
-                    if (intersectRayTriangle((Vertex *)((s32)vtxbase - (0 - (idx[0] << 4))), (Vertex *)((s32)vtxbase - (0 - (idx[1] << 4))), (Vertex *)((s32)vtxbase - (0 - (idx[2] << 4))), (coord3d *) (((roomnum * 24) + ((s32) ptr_bgdata_room_fileposition_list)) + 12), from, to, dir, &hitbuf))
+                    if (intersectRayTriangle((Vertex *)((uintptr_t)vtxbase - (0 - (idx[0] << 4))), (Vertex *)((uintptr_t)vtxbase - (0 - (idx[1] << 4))), (Vertex *)((uintptr_t)vtxbase - (0 - (idx[2] << 4))), (coord3d *) (((roomnum * 24) + ((uintptr_t) ptr_bgdata_room_fileposition_list)) + 12), from, to, dir, &hitbuf))
                     {
                         tcmd = gdl;
                         dx = ((s32) hitbuf.hitpos.x) - ((s32) from->x);
@@ -3743,7 +3749,7 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
 
                         if (bgTestRayIntersectsBbox(from, dir, (s32 *) (&bboxMin2), (s32 *) (&bboxMax2)))
                         {
-                            if (intersectRayTriangle((Vertex *)((s32)vtxbase - (0 - (idx2[0] << 4))), (Vertex *)((s32)vtxbase - (0 - (idx2[1] << 4))), (Vertex *)((s32)vtxbase - (0 - (idx2[2] << 4))), (coord3d *) (((roomnum * 24) + ((s32) ptr_bgdata_room_fileposition_list)) + 12), from, to, dir, &hitbuf))
+                            if (intersectRayTriangle((Vertex *)((uintptr_t)vtxbase - (0 - (idx2[0] << 4))), (Vertex *)((uintptr_t)vtxbase - (0 - (idx2[1] << 4))), (Vertex *)((uintptr_t)vtxbase - (0 - (idx2[2] << 4))), (coord3d *) (((roomnum * 24) + ((uintptr_t) ptr_bgdata_room_fileposition_list)) + 12), from, to, dir, &hitbuf))
                             {
                                 tcmd = gdl;
                                 dx = ((s32) hitbuf.hitpos.x) - ((s32) from->x);
@@ -5226,7 +5232,7 @@ void bgRoomCalcBB(s32 room) // canonical name
     StanRoomBounds limits;
     u8 wasloaded;
 
-    roomdata = (bg_room_data *) ((s32) ptr_bgdata_room_fileposition_list + room * 24);
+    roomdata = (bg_room_data *) ((uintptr_t) ptr_bgdata_room_fileposition_list + room * 24);
 
     if (roomdata->pPointTableBin == NULL)
     {
@@ -5259,7 +5265,7 @@ void bgRoomCalcBB(s32 room) // canonical name
     }
 
     vertices = g_BgRoomInfo[room].vertices;
-    roomdata = (bg_room_data *) ((s32) ptr_bgdata_room_fileposition_list + room * 24);
+    roomdata = (bg_room_data *) ((uintptr_t) ptr_bgdata_room_fileposition_list + room * 24);
 
     limits.minX = 0x7fff;
     limits.minY = 0x7fff;
@@ -5268,7 +5274,20 @@ void bgRoomCalcBB(s32 room) // canonical name
     limits.maxY = -0x7fff;
     limits.maxZ = -0x7fff;
 
+#ifdef PORT
+    /* D331: the induction variable is a full host pointer, so truncating the
+     * bound to (s32) makes the comparison false on the very first iteration
+     * once the window is based at PORT_ADDR_BASE -- the loop body never runs,
+     * `limits` keeps its sentinel init, and every room ends up with an
+     * INVERTED bounding box (min = pos + 0x7fff, max = pos - 0x7fff) below.
+     * Silent: no crash, just wrong culling/visibility for every room of every
+     * level. Byte arithmetic must be preserved (usize_point_index_binary is a
+     * byte count), so widen the cast rather than doing pointer arithmetic.
+     * Mirrors the same fix already applied at bg.c:3399. */
+    for (; vertices < (Vtx *) ((uintptr_t) g_BgRoomInfo[room].vertices + g_BgRoomInfo[room].usize_point_index_binary); vertices++)
+#else
     for (; vertices < (Vtx *) ((s32) g_BgRoomInfo[room].vertices + g_BgRoomInfo[room].usize_point_index_binary); vertices++)
+#endif
     {
         for (j = 0; j < 3; j++)
         {

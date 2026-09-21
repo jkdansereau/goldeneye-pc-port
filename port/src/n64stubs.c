@@ -23,6 +23,7 @@
 #include <PR/ultratypes.h>
 #include <PR/os.h>
 #include <tlb_manage.h>
+#include "port_addr.h"
 
 /* --- Segment start/end getters (normally linker-script symbols) --------- */
 /* On the PC the ROM is loaded by romdata.c; these are unused. Return 0.   */
@@ -102,8 +103,14 @@ u8 (*tlbmanageGetTlbAllocatedBlock(void))[TLB_BLOCK_SIZE]
      * lives up there, at 0x707FFD30). Reclaim ~4 MB of it for the mempool
      * area; the extra goes to MEMPOOL_STAGE (boss.c:218 gives STAGE
      * everything that isn't the fixed PERMANENT bank). Stays well clear of
-     * animations_frame_buffer. */
-    return (u8 (*)[TLB_BLOCK_SIZE])0x70700000;
+     * animations_frame_buffer.
+     *
+     * D327 (macOS/arm64): the same reclaim is not quite enough there — the
+     * first level load exhausts STAGE by ~0x30 bytes at a model rwdata alloc
+     * (mempAllocBytesInBank spins). Push the ceiling to the last 0x10000
+     * before animations_frame_buffer, adding ~960 KiB to STAGE. Same
+     * reasoning as above; no game-logic change. */
+    return (u8 (*)[TLB_BLOCK_SIZE])portN64ToHost(0x707F0000);
 }
 
 /* --- K&R libc helpers (IDO provided these; MinGW's libc does not) -------- */

@@ -188,3 +188,10 @@ build-pyinst/
 # Local working junk (frame captures, timerun state, PPM dumps) - moved here
 # from repo root / scratch on 2026-09-18; never commit.
 /local/
+
+# Debug traces and capture artifacts written by the engine at runtime
+# (GE_AUDIOTRACE, GE_MIXERTRACE, GE_AUDIODUMP, GE_PCDUMP, crash handler).
+# These are run output, never source -- see dev-process.md "keep PR noise low".
+*.log
+audiodump.raw
+.DS_Store

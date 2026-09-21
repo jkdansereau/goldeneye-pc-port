@@ -48,17 +48,21 @@
 
 #include "platform.h"
 #include "system.h"
+#include "port_addr.h"
 
 #if defined(PLATFORM_WINDOWS)
 #include <windows.h>
 #else
 #define _GNU_SOURCE /* memfd_create — must precede all system headers */
+#include <fcntl.h>
+#include <stdio.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
-#define DRAM_V1_BASE   0x70000000UL /* s32-safe "virtual" view */
-#define DRAM_K0_BASE   0x80000000UL /* KSEG0 mirror view */
+#define DRAM_V1_BASE   (PORT_ADDR_BASE + 0x70000000ULL) /* s32-safe "virtual" view */
+#define DRAM_K0_BASE   (PORT_ADDR_BASE + 0x80000000ULL) /* KSEG0 mirror view */
 #define DRAM_SIZE      0x00800000UL /* 8 MB */
 
 void *dramReserve(void)
@@ -101,10 +105,20 @@ void *dramReserve(void)
     CloseHandle(hSec);
     return v1;
 #else
-    /* memfd + two MAP_SHARED mmaps = one backing store, two views. */
+    /* One shared file descriptor + two MAP_SHARED mmaps = one backing store,
+     * two views. Linux can keep it fully anonymous with memfd; Darwin uses a
+     * POSIX shared-memory object and unlinks its name immediately. */
+#if defined(PLATFORM_MACOS)
+    char shmName[64];
+    snprintf(shmName, sizeof(shmName), "/ge007_dram_%ld", (long)getpid());
+    int fd = shm_open(shmName, O_RDWR | O_CREAT, 0600);
+    if (fd >= 0)
+        shm_unlink(shmName);
+#else
     int fd = memfd_create("ge007_dram", 0);
+#endif
     if (fd < 0) {
-        sysFatalError("dram: memfd_create failed");
+        sysFatalError("dram: could not create shared backing store");
     }
     if (ftruncate(fd, DRAM_SIZE) != 0) {
         sysFatalError("dram: ftruncate failed");

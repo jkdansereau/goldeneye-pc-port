@@ -27,6 +27,9 @@
   #include <unistd.h>
   #include <time.h>
   #include <sys/stat.h>
+  #if defined(PLATFORM_MACOS)
+    #include <mach-o/dyld.h> /* _dyld_get_image_header, _NSGetExecutablePath */
+  #endif
 #endif
 
 #include "system.h"
@@ -59,9 +62,43 @@ uintptr_t sysImageBase(void)
 {
 #if defined(PLATFORM_WINDOWS)
     return (uintptr_t)GetModuleHandleW(NULL);
+#elif defined(PLATFORM_MACOS)
+    /* The mach_header of the main image == its load address. Unlike Windows
+     * there is no fixed base: arm64 is PIE-only (and `-image_base` is ignored),
+     * so this is 0x1_0000_0000 + a per-run ASLR slide. M1's image-relative
+     * address rule uses this; get the slide from _dyld_get_image_vmaddr_slide. */
+    return (uintptr_t)_dyld_get_image_header(0);
 #else
     /* TODO: parse /proc/self/maps for the first executable mapping. */
     return 0;
+#endif
+}
+
+/* Fill `buf` with the directory containing the executable, or "" on failure.
+ * Linux reads /proc/self/exe; macOS uses _NSGetExecutablePath (no /proc, and
+ * _POSIX_C_SOURCE=199309L above hides readlink on Darwin). */
+static void getExeDir(char *buf, size_t buflen)
+{
+    buf[0] = 0;
+#if defined(PLATFORM_MACOS)
+    uint32_t n = (uint32_t)buflen;
+    if (_NSGetExecutablePath(buf, &n) == 0) {
+        char *slash = strrchr(buf, '/');
+        if (slash) *slash = 0; else buf[0] = 0;
+    } else {
+        buf[0] = 0;
+    }
+#elif defined(PLATFORM_LINUX)
+    ssize_t n = readlink("/proc/self/exe", buf, buflen - 1);
+    if (n > 0) {
+        buf[n] = 0;
+        char *slash = strrchr(buf, '/');
+        if (slash) *slash = 0; else buf[0] = 0;
+    } else {
+        buf[0] = 0;
+    }
+#else
+    (void)buf; (void)buflen;
 #endif
 }
 
@@ -201,6 +238,13 @@ const char *sysGetExeDir(void)
                 *slash = 0;
         }
     }
+#else
+    if (exeDir[0] == '.' && exeDir[1] == 0) {
+        char d[512];
+        getExeDir(d, sizeof(d));
+        if (d[0])
+            snprintf(exeDir, sizeof(exeDir), "%s", d);
+    }
 #endif
     return exeDir;
 }
@@ -257,16 +301,7 @@ const char *sysResolvePath(const char *path)
         else {
             static char sexedir[1024] = "";
             if (!sexedir[0]) {
-                ssize_t n = readlink("/proc/self/exe", sexedir, sizeof(sexedir) - 1);
-                if (n > 0) {
-                    char *slash;
-                    sexedir[n] = 0;
-                    slash = strrchr(sexedir, '/');
-                    if (slash)
-                        *slash = 0;
-                    else
-                        sexedir[0] = 0;
-                }
+                getExeDir(sexedir, sizeof(sexedir));
             }
             if (sexedir[0])
                 snprintf(out, sizeof(out), "%s/data/%s", sexedir, path + 3);

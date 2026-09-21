@@ -19,7 +19,7 @@
  *====================================================================*/
 
 #include "synthInternals.h"
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
 #endif
 #include <os_internal.h>
 #include <ultraerror.h>

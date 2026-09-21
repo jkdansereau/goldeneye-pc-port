@@ -1,6 +1,6 @@
 ---
 title: Building
-description: Full build and asset-extraction guide for the GoldenEye 007 PC port, covering Windows (MSYS2) and Linux.
+description: Full build and asset-extraction guide for the GoldenEye 007 PC port on Windows, Linux, and macOS.
 ---
 
 ## Building the PC port
@@ -27,20 +27,43 @@ for accepted versions and hashes.
 
 ### Port build
 
-> **The Windows (MSYS2 MINGW64) path is the primary one.** The Linux build is
-> compiled by CI on every push and ships in the release bundle (also
-> playtested on Steam Deck hardware); the macOS column is best-effort
-> guidance and has never been built or run there. Expect to fix build breaks
-> yourself on untested platforms.
+> **The Windows (MSYS2 MINGW64) path is the primary one.** Linux is compiled
+> by CI and ships in the release bundle. macOS is supported natively on both
+> Intel and Apple Silicon (arm64); see the note below the table for the
+> arm64-specific points.
 
 | Need | Windows (MSYS2 MINGW64) | Debian/Ubuntu | macOS (Homebrew) |
 |------|------------------------|---------------|------------------|
-| toolchain | `mingw-w64-x86_64-toolchain` | `build-essential` | Xcode CLT / `gcc` |
+| toolchain | `mingw-w64-x86_64-toolchain` | `build-essential` | Xcode CLT + Homebrew `gcc` |
 | CMake | `mingw-w64-x86_64-cmake` | `cmake` | `cmake` |
 | SDL2 | `mingw-w64-x86_64-SDL2` | `libsdl2-dev` | `sdl2` |
 | zlib | `mingw-w64-x86_64-zlib` | `zlib1g-dev` | `zlib` |
 | OpenGL | (in the toolchain) | `libgl1-mesa-dev` | (system) |
 | Python 3 | `mingw-w64-x86_64-python` | `python3` | `python3` |
+
+On macOS, install the build dependencies with:
+
+```sh
+brew install cmake gcc sdl2 zlib python3
+```
+
+The project requires real GNU GCC for the decomp's Plan 9 struct extensions.
+Apple's `/usr/bin/gcc` is Clang and is not compatible. CMake automatically
+selects Homebrew's versioned `gcc-N`/`g++-N` executables.
+
+**Apple Silicon (arm64).** Everything above applies as-is; `./build-pc.sh`
+detects the architecture and produces `build-pc/ge007.aarch64`. Two arm64
+specifics are handled automatically:
+
+- Native arm64 cannot map the low 4 GiB (mandatory `__PAGEZERO`), so the N64
+  address-space window is placed at a 16 TiB host base (`PORT_ADDR_BASE`,
+  `port/include/port_addr.h`). It is a CMake cache var
+  (`-DPORT_ADDR_BASE=...`) for tooling that needs it elsewhere; every
+  game-visible 32-bit value is identical to the other platforms.
+- GCC's `libstdc++`/`libgcc_s` and SDL2 come from Homebrew and are **not**
+  system libraries, so a redistributable build must bundle them — use
+  `tools_pc/bundle-mac.sh` (below), which produces a signed, double-clickable
+  `GoldenEye.app`.
 
 ### Asset extraction (decompilation toolchain)
 
@@ -160,6 +183,54 @@ deterministic function of the ROM. Re-run after any change to `d43_emit.py` /
 
 The ROM in `data/` (from step 4) and the sidecars are both required at
 runtime. `ge007.ini` is written under `data/` on first launch.
+
+On macOS the binary is `./build-pc/ge007.aarch64` (Apple Silicon) or
+`./build-pc/ge007.x86_64` (Intel).
+
+### Debugging address bugs (`PORT_ADDR_STRICT`)
+
+The port realises the N64 address space at a host base (`PORT_ADDR_BASE`,
+non-zero only on arm64 macOS). The recurring failure mode is a 32-bit value
+that is *not* a valid N64 address reaching `portN64ToHost()` — a truncated host
+pointer, or one that was never re-based. The resulting fault usually happens
+far from the cause, and sometimes there is no fault at all, just silent
+corruption.
+
+```sh
+cmake -S . -B build-strict -DROMID=ntsc-final -DPORT_ADDR_STRICT=ON
+cmake --build build-strict -j
+```
+
+Every conversion is then validated against the mapped regions and offenders are
+reported at the conversion site with a backtrace naming the caller. It is
+**off by default and compiled out entirely**, so normal builds pay nothing.
+
+To prove the detector is live rather than merely silent:
+
+```sh
+GE_ADDRSTRICT_SELFTEST=1 ./build-strict/ge007.aarch64 -level_09
+```
+
+See findings D328–D334 for the bug family this exists to catch.
+
+### Packaging a macOS app
+
+```sh
+tools_pc/bundle-mac.sh           # -> dist/GoldenEye.app + a .zip + sha256
+```
+
+Builds a double-clickable, ad-hoc-signed `GoldenEye.app` (the engine plus
+bundled SDL2 / SDL3 / `libstdc++` / `libgcc_s`, README, licenses, and the
+`prepare-assets` tool). Note that Homebrew's `sdl2` is **sdl2-compat**, a
+shim over SDL3 that locates its backend through a *relative* rpath
+(`@loader_path/../../../../opt/sdl3/lib`): copy it without SDL3 and
+repointing that rpath, and it shows a modal error dialog from its
+initializer and the app hangs before `main()`. The script does both. It contains **no ROM and no game data**: the player
+drops their own ROM at
+`GoldenEye.app/Contents/MacOS/data/ge007.ntsc-final.z64` and the app finds it
+next to the executable. Because the app is ad-hoc signed rather than
+notarised, first launch needs right-click → *Open* (or
+`xattr -dr com.apple.quarantine GoldenEye.app`).
 
 ### Useful flags / env
 

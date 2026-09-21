@@ -20,7 +20,15 @@ struct levelentry
 // cannonical name
 #define PORTMAX 200
 
+/* D327/M2: the sum is an N64/window offset, so re-base it into the DRAM
+ * window before it becomes a pointer. Identity at PORT_ADDR_BASE == 0. */
+#if defined(PORT)
+#include "port_addr.h"
+#define BG_SEG_TO_PTR(base, off) \
+    ((void *) portN64ToHost((u32)(((u32)(base)) + (((u32)(off)) + 0xF1000000))))
+#else
 #define BG_SEG_TO_PTR(base, off) ((void *) (((u32) (base)) + (((u32) (off)) + 0xF1000000)))
+#endif
 
 typedef struct RoomVtxBatchBounds {
     s16 gdlindex;    // 0x00

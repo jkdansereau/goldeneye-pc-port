@@ -1180,11 +1180,44 @@ static int gfx_opengl_create_framebuffer() {
     return i;
 }
 
+/* video.c documents MSAA as "snaps down to the highest supported level", but
+ * nothing ever queried the limit: gfx_msaa_level went to
+ * glRenderbufferStorageMultisample() verbatim, and a request above
+ * GL_MAX_SAMPLES leaves the renderbuffer unallocated -> incomplete FBO ->
+ * a completely BLACK screen (MSAA=8 on Apple Silicon, where GL_MAX_SAMPLES
+ * is 4). Clamp here, where the GL limit actually matters. */
+static uint32_t gfx_opengl_clamp_msaa(uint32_t level)
+{
+    static GLint max_samples = 0;
+    static uint32_t warned_level = 0;
+
+    if (level <= 1) {
+        return 1;
+    }
+    if (max_samples == 0) {
+        glGetIntegerv(GL_MAX_SAMPLES, &max_samples);
+        if (max_samples < 1) {
+            max_samples = 1;
+        }
+    }
+    if ((GLint)level > max_samples) {
+        if (warned_level != level) {
+            sysLogPrintf(LOG_WARNING,
+                         "MSAA: %u samples requested but GL_MAX_SAMPLES is %d; using %d",
+                         level, (int)max_samples, (int)max_samples);
+            warned_level = level;
+        }
+        return (uint32_t)max_samples;
+    }
+    return level;
+}
+
 static void gfx_opengl_update_framebuffer_parameters(int fb_id, uint32_t width, uint32_t height, uint32_t msaa_level,
                                                      bool opengl_invert_y, bool render_target, bool has_depth_buffer,
                                                      bool can_extract_depth) {
     Framebuffer& fb = framebuffers[fb_id];
 
+    msaa_level = gfx_opengl_clamp_msaa(msaa_level);
     width = max(width, 1U);
     height = max(height, 1U);
 
@@ -1284,7 +1317,13 @@ void gfx_opengl_resolve_msaa_color_buffer(int fb_id_target, int fb_id_source) {
     glBindFramebuffer(GL_READ_FRAMEBUFFER, fb_src.fbo);
     glBlitFramebuffer(0, 0, fb_src.width, fb_src.height, 0, 0, fb_dst.width, fb_dst.height, GL_COLOR_BUFFER_BIT,
                       GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, current_framebuffer);
+    /* Restore whatever was bound before the resolve. `current_framebuffer` is
+     * an INDEX into framebuffers[], NOT a GL framebuffer name -- binding it
+     * directly named an unrelated GL object (or nothing) and left the wrong
+     * target bound for the rest of the frame. With MSAA on that produced a
+     * completely black screen. Use the same fb_id==0 -> GL name 0 rule as
+     * gfx_opengl_bind_framebuffer above. */
+    glBindFramebuffer(GL_FRAMEBUFFER, current_framebuffer == 0 ? 0 : framebuffers[current_framebuffer].fbo);
     glEnable(GL_SCISSOR_TEST);
 }
 
@@ -1348,7 +1387,11 @@ void gfx_opengl_copy_framebuffer(int fb_dst, int fb_src, int left, int top, bool
 
     glBlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffers[current_framebuffer].fbo);
+    /* Same index-vs-name bug as the MSAA resolve above: for current_framebuffer
+     * == 0 this bound framebuffers[0].fbo, which is a generated but
+     * attachment-less FBO (incomplete on a strict GL implementation) -- the
+     * window's default framebuffer is GL name 0. */
+    glBindFramebuffer(GL_FRAMEBUFFER, current_framebuffer == 0 ? 0 : framebuffers[current_framebuffer].fbo);
 
     glReadBuffer(GL_BACK);
 

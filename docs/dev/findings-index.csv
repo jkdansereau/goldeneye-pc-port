@@ -200,3 +200,17 @@ D319,FIXED,"Frame cap slider was mostly a dead zone; replaced with a plain 30/60
 D320,OPEN,"D318-class sweep: aim-hold → _update AI lists in 8 levels carry the same as-authored softlock race (static analysis, 2026-09-20).","OPEN — static sweep complete (Facility ai_19, Control ai_9, Depot ai_12 flagged high/med-high; Bond-combat loops likely safe); no live confirmation beyond D318 itself; probe-verify path + generalized…"
 D321,CLOSED,D318 trigger chain fully mapped:,CLOSED — trigger chain mapped and faithful; D318 watchdog validated in live play.
 D322,OPEN,Long-session audio degradation:,"OPEN — static triage done (teardown audit, mixer statelessness, D202-coverage check); ranked hypotheses:"
+D323,FIXED,macOS/arm64 (M0.4): #pragma weak X = Y has no Mach-O equivalent —,"FIXED (macOS port, lv.c/spectrum.c/objective_status.c) —"
+D324,FIXED,macOS/arm64 (M0.6): the decomp's include/ stubs shadow libc++'s wrapper headers —,"FIXED (macOS port) — new port/shim/math.h + generated hostmath.h; the existing host{string,stdlib,stddef}.h.in now also pull libc++'s c++/v1/<name>.h wrapper, guarded && defined(__cplusplus)."
+D325,FIXED,"macOS/arm64 (M0.2): __x86_64__ was used as the ""64-bit PC"" gate —","FIXED — 22 sites in 14 src/+assets/ files and port/include/pc_protos.h now use PLATFORM_64BIT (defined by CMake on every 64-bit PC target, undefined on N64, so the N64 branch is unchanged)."
+D326,FIXED,macOS/arm64 (M0.7/M0.8):,"FIXED — shm_open double-map (dram.c); Darwin ucontext registers + _XOPEN_SOURCE (crash.c, incl."
+D327,FIXED,"macOS/arm64 (M1): the port realises the N64 32-bit address space as host addresses; native arm64 cannot map the low 4 GiB, so the space is shifted up by PORT_A…","FIXED (port layer) — port/include/port_addr.h + port/src/port_addr.c (portAddrInit, portN64ToHost/portHostToN64, PORT_N64PTR); all chokepoints routed through them; DRAM/cart/stacks mapped at B+…; seg…"
+D328,FIXED,macOS/arm64: in-level SFX completely silent —,"FIXED — new portAddrIsInWindow() in port_addr.h, guard tests the real window."
+D329,FIXED,macOS/arm64: crash at stage unload —,"FIXED (cleanup_objects.c, D3x ABI/layout class) —"
+D330,FIXED,macOS/arm64: crash on guard gunfire —,FIXED (port_addr.h + chr.c) —
+D331,FIXED,"macOS/arm64: six more pointer truncations, found by a static -Wint-conversion census rather than by crashing.","FIXED (model.c x4, bondview2.c x11, bg.c) —"
+D332,FIXED,"macOS/arm64: texReadUncompressed() aligned its destination through u32 ((u32 *)(((u32)dst + 0xf) & ~0xf) x3), truncating a host pointer and then writing throug…","FIXED defensively (image.c), latent not live."
+D333,OPEN,"Intermittent renderer crash, level-agnostic, observed once on Dam:","OPEN — observed once, not investigated."
+D334,FIXED,PORT_ADDR_STRICT: a debug gate that catches the whole D328-D333 family at the conversion rather than at the fault.,FIXED (new CMake option + port_addr.h/port_addr.c).
+D335,FIXED,MSAA=8 produced a completely BLACK screen —,FIXED (port/fast3d/gfx_opengl.cpp) —
+D336,OPEN,Reticule jitter in aim mode (RMB) —,REVERTED (1d587c64). OPEN.
