@@ -200,3 +200,4 @@ D319,FIXED,"Frame cap slider was mostly a dead zone; replaced with a plain 30/60
 D320,OPEN,"D318-class sweep: aim-hold → _update AI lists in 8 levels carry the same as-authored softlock race (static analysis, 2026-09-20).","OPEN — static sweep complete (Facility ai_19, Control ai_9, Depot ai_12 flagged high/med-high; Bond-combat loops likely safe); no live confirmation beyond D318 itself; probe-verify path + generalized…"
 D321,CLOSED,D318 trigger chain fully mapped:,CLOSED — trigger chain mapped and faithful; D318 watchdog validated in live play.
 D322,OPEN,Long-session audio degradation:,"OPEN — static triage done (teardown audit, mixer statelessness, D202-coverage check); ranked hypotheses:"
+D337,FIXED,Reticule jitter in aim mode (RMB) —,FIXED (fix/mouse-pd-model) —

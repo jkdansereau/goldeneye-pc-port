@@ -4935,6 +4935,32 @@ void sub_GAME_7F067FBC(f32 turn_x, f32 turn_y)
     gunaimdamp = item_stats->AimLockSpeed;
 #endif
 
+#ifdef PORT
+    /* Defined in port/src/input.c. Declared here rather than including
+     * port/include/input.h, which pulls in SDL types game code cannot see --
+     * the same pattern other game files use for port functions. */
+    extern int portMouseAimPdGetTurn(f32 *tx, f32 *ty);
+
+    /* Input.PdMouseAim (findings D337): PD's mouse-aim model.
+     *
+     * PD chooses its crosshair damp PER INPUT DEVICE -- its mouse path calls
+     * bgunSwivelWithDamp(x, y, 0.01f) while its stick path uses ~0.945. GE has
+     * one damp for both, and the weapon's CrosshairSpeed (~0.8) is a stick
+     * value: the integrator is what smooths a stick. With a mouse that slow
+     * integrator is what makes the drawn crosshair step, because the port
+     * writes once per input poll while the game damps once per sim tick -- the
+     * displayed value is write*damp^k with k varying (D337). At 0.01 the input
+     * dominates and k stops mattering.
+     *
+     * The port supplies the turn; PD does the same from its own game files
+     * (bondmove.c/bondgun.c, behind #ifndef PLATFORM_N64) calling port
+     * functions. Identity when Input.PdMouseAim is off, and the N64 build
+     * never sees any of it. */
+    if (portMouseAimPdGetTurn(&turn_x, &turn_y)) {
+        guncrossdamp = 0.01f;
+    }
+#endif
+
     caclulate_gun_crosshair_position_rotation(turn_x, turn_y, guncrossdamp, gunaimdamp);
 }
 

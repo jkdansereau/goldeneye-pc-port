@@ -163,6 +163,13 @@ static struct Row rows[] = {
     /* { "Input.SensLink",           "Link aim/turn sens",ROW_TOGGLE,1, kOnOff, 0, 0, 0, 0,0,0,0,0 }, */
     { "Input.MouseSensitivity",   "Mouse sensitivity",ROW_SLIDER, 5,    NULL,       0, 0, 0,   0,0,0,0,0 },
     { "Input.MouseInvertY",       "Mouse invert Y",   ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
+    /* Input.PdMouseAim (findings D337): the Perfect Dark port's mouse-aim
+     * model. The port only accumulates the mouse; the game's own crosshair
+     * integrator is driven by the port-supplied turn with PD's near-zero damp
+     * (0.01), instead of GEPD's overwrite with the weapon's ~0.8 -- which is
+     * what made the reticule step. Changes aim feel, so opt-in. Also settable
+     * live via GE_PDMOUSEAIM for A/B without a restart. */
+    { "Input.PdMouseAim",         "PD mouse aim",     ROW_TOGGLE, 1,    kOnOff,     0, 0, 0,   0,0,0,0,0 },
     /* D181/Game.ScreenShakeIntensity: user testing (v0.2.1) found the slider
      * "basically useless" -- viShake() is only called from explosion.c, so it
      * scales explosion shake alone; it never touches the always-on walking
