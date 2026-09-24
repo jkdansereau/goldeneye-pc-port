@@ -5268,7 +5268,15 @@ void bgRoomCalcBB(s32 room) // canonical name
     limits.maxY = -0x7fff;
     limits.maxZ = -0x7fff;
 
+#ifdef PORT
+    /* The induction variable is a full host pointer; truncating the bound to
+     * (s32) makes the comparison false on the first iteration when host
+     * pointers do not fit in 32 bits, the loop body never runs, and every
+     * room keeps an inverted bounding box. Byte arithmetic is preserved. */
+    for (; vertices < (Vtx *) ((uintptr_t) g_BgRoomInfo[room].vertices + g_BgRoomInfo[room].usize_point_index_binary); vertices++)
+#else
     for (; vertices < (Vtx *) ((s32) g_BgRoomInfo[room].vertices + g_BgRoomInfo[room].usize_point_index_binary); vertices++)
+#endif
     {
         for (j = 0; j < 3; j++)
         {

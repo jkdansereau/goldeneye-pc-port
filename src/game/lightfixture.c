@@ -186,7 +186,12 @@ Vtx *lightFindVertexBaseForTri(Gfx *gfx, s32 room_index)
 
     if (((s32) ret & 0xFF000000) == 0x0E000000) 
     {
+#ifdef PORT
+        /* keep the full-width vertex base (see bgRoomCalcBB) */
+        ret = (Vtx *)((uintptr_t)g_BgRoomInfo[room_index].vertices + ((uintptr_t) ret & 0xFFFFFF));
+#else
         ret = (s32)g_BgRoomInfo[room_index].vertices + ((s32) ret & 0xFFFFFF);
+#endif
     }
 
     return ret;
