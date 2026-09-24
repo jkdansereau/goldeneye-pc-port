@@ -1101,11 +1101,11 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
          * sound->keyMap.  Until audio lands, skip a sound whose pointer is
          * plainly not a mapped address rather than crash the level.
          * ALSound lives in game DRAM (~0x7000_0000..) or the cart image
-         * (0x1_4000_0000..); anything else (e.g. 0x0000_5622_0001_0001) is a
+         * (0x1_4000_0000.. on Windows/Linux, 0x1000_.... on macOS); anything else (e.g. 0x0000_5622_0001_0001) is a
          * byte-scrambled / OOB read. */
         {
             uintptr_t sp = (uintptr_t)sound;
-            if (sp < 0x10000 || sp >= 0x400000000ULL) {
+            if (sp < 0x10000 || sp >= 0x0000800000000000ULL) {  /* macOS: DRAM arena lives at 0x1000_7000_0000, above the old 0x4_0000_0000 bound */
                 return NULL;
             }
         }
