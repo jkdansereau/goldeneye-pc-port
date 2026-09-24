@@ -608,6 +608,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D320 | **D318-class sweep: aim-hold → `_update` AI lists in 8 levels carry the same as-authored softlock race (static analysis, 2026-09-20).** — full `## D320` entry at file tail | OPEN — static sweep complete (Facility ai_19, Control ai_9, Depot ai_12 flagged high/med-high; Bond-combat loops likely safe); no live confirmation beyond D318 itself; probe-verify path + generalized-watchdog recommendation documented. |
 | D321 | **D318 trigger chain fully mapped: tanks → combat bit is an authored ~3.5 s gas-cascade delay (chr 254 script); derail lands same-tick; PC behavior confirmed faithful to N64 (probe captures, 2026-09-20).** — full `## D321` entry at file tail | CLOSED — trigger chain mapped and faithful; D318 watchdog validated in live play. Optional deferred tuning: `D318_DEADLOCK_TICKS` 600→300 (user's call). |
 | D322 | **Long-session audio degradation: full campaign on v0.3.0 — audio progressively worsens from Silo, by Caverns/Cradle the OST is inaudible and SFX "come and go"; restarting the game restores it (issue #87, user report, 2026-09-21).** — full `## D322` entry at file tail | OPEN — static triage done (teardown audit, mixer statelessness, D202-coverage check); ranked hypotheses: voice-pool exhaustion/counter drift > queue starvation > evtq saturation. `GE_D322` pool-telemetry probe shipped; needs a campaign capture with `GE_D322=1 GE_D204=1`. |
+| D324 | **`bgRoomCalcBB()` / `lightFindVertexBaseForTri()` truncate a pointer to 32 bits: inverted room bounding boxes, rooms culled.** — full `## D324` entry at file tail | FIXED (`src/game/bg.c`, `src/game/lightfixture.c`, `#ifdef PORT`; AGENTS.md rule-2 ABI exception). |
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
 threads, compiled GE's real `src/sched.c`, and brought in PD's fast3d software
@@ -12239,3 +12240,12 @@ Full campaign (or at minimum Silo → Caverns/Cradle) with **`GE_D322=1 GE_D204=
 - All pools healthy while audio is bad → back to the mixer/reverb state classes (re-open M-65's ruled-out list with a long-session `GE_AUDIODUMP`).
 
 **Status:** OPEN — static triage complete, probe shipped, awaiting campaign capture. Cross-ref: D202/M-65+M-66b (ownerless-loop leak class + expiration), D207 (8-cap starvation design notes), D305 (pool/list desync observation), D204 (pipeline pacing + `GE_D204` monitor), D248/D250 (frame pacing, fixed), issue #87.
+
+## D324 — Truncated pointer in room bounding-box code
+
+`bgRoomCalcBB()` compared a pointer loop variable against an `(s32)`-truncated
+bound. Whenever host pointers do not fit in 32 bits the body never ran, `limits`
+kept its sentinel, and every room got `min = pos + 0x7fff`, `max = pos - 0x7fff`
+(silent; rooms were culled and scenery went missing). `lightFindVertexBaseForTri()`
+had the same truncation on the vertex base. Both now use `(uintptr_t)` under
+`#ifdef PORT`; the N64 lines are kept under `#else`.
