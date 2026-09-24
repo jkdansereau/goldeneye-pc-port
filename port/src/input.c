@@ -274,6 +274,7 @@ static int numControllers = 1;
 static int connectedMask   = 0x1;   /* controller 0 always present */
 
 static SDL_GameController *pads[MAX_PADS];
+static void padRebuildBinds(void);
 static int padShoulderPrev[MAX_PADS];   /* LB/RB edge state for weapon cycling */
 static int padSelectPrev = 0;           /* Select (BACK) edge: overlay toggle */
 
@@ -584,6 +585,7 @@ int inputInit(void)
     inputOpenPads();
 
     inputRebuildBinds();   /* D214: parse [Bind] now that configLoad() has run */
+    padRebuildBinds();
 
     /* Relative mouse mode for mouse-look. Click-to-lock: we start released
      * and wait for a click in the window (video.c -> inputNotifyClick). */
@@ -733,6 +735,194 @@ static int actHeld(const Uint8 *ks, int act)
     return 0;
 }
 
+
+/* ------------------------------------------------------------------------
+ * Gamepad rebinding. Each action lists up to 2 inputs: SDL controller
+ * button names ("a", "rightshoulder", ...) or the pseudo-buttons
+ * "lefttrigger" / "righttrigger". Defaults reproduce the old fixed layout.
+ * ---------------------------------------------------------------------- */
+enum { PA_FIRE, PA_AIM, PA_ACTION, PA_CROUCH, PA_NEXT, PA_PREV, PA_START, PA_COUNT };
+#define PADIN_LTRIG 100
+#define PADIN_RTRIG 101
+
+static const struct { const char *key; const char *def; const char *label; } kPadDefs[PA_COUNT] = {
+    [PA_FIRE]   = { "Input.Pad.Fire",       "righttrigger",  "Pad: Fire"        },
+    [PA_AIM]    = { "Input.Pad.Aim",        "lefttrigger",   "Pad: Aim"         },
+    [PA_ACTION] = { "Input.Pad.Action",     "a,x",           "Pad: Action/Use"  },
+    [PA_CROUCH] = { "Input.Pad.Crouch",     "b,y",           "Pad: Crouch"      },
+    [PA_NEXT]   = { "Input.Pad.NextWeapon", "rightshoulder", "Pad: Next weapon" },
+    [PA_PREV]   = { "Input.Pad.PrevWeapon", "leftshoulder",  "Pad: Prev weapon" },
+    [PA_START]  = { "Input.Pad.Start",      "start",         "Pad: Start"       },
+};
+static char g_padStr[PA_COUNT][48];
+static int  g_pad[PA_COUNT][2];
+
+static int padInputFromName(const char *n)
+{
+    if (!strcmp(n, "lefttrigger"))  return PADIN_LTRIG;
+    if (!strcmp(n, "righttrigger")) return PADIN_RTRIG;
+    SDL_GameControllerButton b = SDL_GameControllerGetButtonFromString(n);
+    return (b == SDL_CONTROLLER_BUTTON_INVALID) ? -1 : (int)b;
+}
+
+static const char *padInputName(int in)
+{
+    if (in == PADIN_LTRIG) return "lefttrigger";
+    if (in == PADIN_RTRIG) return "righttrigger";
+    return SDL_GameControllerGetStringForButton((SDL_GameControllerButton)in);
+}
+
+static void padRebuildBinds(void)
+{
+    for (int a = 0; a < PA_COUNT; a++) {
+        g_pad[a][0] = g_pad[a][1] = -1;
+        char buf[48];
+        strncpy(buf, g_padStr[a][0] ? g_padStr[a] : kPadDefs[a].def, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = 0;
+        int n = 0;
+        for (char *tok = strtok(buf, ","); tok && n < 2; tok = strtok(NULL, ",")) {
+            while (*tok == ' ') tok++;
+            int in = padInputFromName(tok);
+            if (in < 0) {
+                sysLogPrintf(LOG_WARNING, "input: %s: unknown pad input '%s'",
+                             kPadDefs[a].key, tok);
+                continue;
+            }
+            g_pad[a][n++] = in;
+        }
+    }
+}
+
+static int padInDown(SDL_GameController *pad, int in)
+{
+    if (in < 0) return 0;
+    if (in == PADIN_LTRIG)
+        return SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > padTriggerPct * 327;
+    if (in == PADIN_RTRIG)
+        return SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > padTriggerPct * 327;
+    return SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)in);
+}
+
+static int padActDown(SDL_GameController *pad, int act)
+{
+    return padInDown(pad, g_pad[act][0]) || padInDown(pad, g_pad[act][1]);
+}
+
+/* ---- rebinding UI backend (F10 overlay) ---- */
+static const char *const kKeyLabels[IA_COUNT] = {
+    "Key: Forward", "Key: Back", "Key: Strafe left", "Key: Strafe right",
+    "Key: Turn left", "Key: Turn right", "Key: Fire", "Key: Aim",
+    "Key: Action/Use", "Key: Cancel/Back", "Key: Lean left", "Key: Start",
+};
+static int bindCapture = -1;      /* row being captured, -1 = none */
+static int bindArmed   = 0;       /* set once every input has been released */
+
+int inputBindRowCount(void) { return IA_COUNT + PA_COUNT; }
+
+const char *inputBindLabel(int i)
+{
+    if (i < IA_COUNT) return kKeyLabels[i];
+    return kPadDefs[i - IA_COUNT].label;
+}
+
+void inputBindText(int i, char *out, int n)
+{
+    if (i == bindCapture) {
+        if (i >= IA_COUNT && !pads[0]) {
+            snprintf(out, n, "NO PAD DETECTED (Esc)");
+        } else {
+            snprintf(out, n, "press %s...", i < IA_COUNT ? "a key" : "a pad input");
+        }
+        return;
+    }
+    out[0] = 0;
+    if (i < IA_COUNT) {
+        const char *src = g_bindStr[i][0] ? g_bindStr[i] : kBindDefs[i].def;
+        snprintf(out, n, "%s", src);
+    } else {
+        int a = i - IA_COUNT;
+        const char *src = g_padStr[a][0] ? g_padStr[a] : kPadDefs[a].def;
+        snprintf(out, n, "%s", src);
+    }
+}
+
+void inputBindBegin(int i) { bindCapture = i; bindArmed = 0; }
+int  inputBindCapturing(void) { return bindCapture >= 0; }
+
+void inputBindReset(int i)
+{
+    if (i < IA_COUNT) { g_bindStr[i][0] = 0; inputRebuildBinds(); }
+    else              { g_padStr[i - IA_COUNT][0] = 0; padRebuildBinds(); }
+}
+
+/* Called every frame while the overlay is open. Returns 1 while a capture is
+ * in progress (the overlay then ignores its own navigation). Escape cancels,
+ * Backspace/Delete restores the default. */
+int inputBindPoll(void)
+{
+    if (bindCapture < 0) return 0;
+    const Uint8 *ks = SDL_GetKeyboardState(NULL);
+    SDL_GameController *pad = pads[0];
+
+    int anyDown = 0;
+    for (int sc = 1; sc < SDL_NUM_SCANCODES; sc++) if (ks[sc]) { anyDown = 1; break; }
+    if (pad) {
+        for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX; b++)
+            if (SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)b)) anyDown = 1;
+        if (padInDown(pad, PADIN_LTRIG) || padInDown(pad, PADIN_RTRIG)) anyDown = 1;
+    }
+    if (!bindArmed) {          /* wait for the activating key to be released */
+        if (!anyDown) bindArmed = 1;
+        return 1;
+    }
+
+    if (ks[SDL_SCANCODE_ESCAPE]) { bindCapture = -1; return 1; }
+    if (ks[SDL_SCANCODE_BACKSPACE] || ks[SDL_SCANCODE_DELETE]) {
+        inputBindReset(bindCapture);
+        bindCapture = -1;
+        return 1;
+    }
+
+    if (bindCapture < IA_COUNT) {
+        for (int sc = 4; sc < SDL_NUM_SCANCODES; sc++) {
+            if (!ks[sc]) continue;
+            const char *nm = SDL_GetScancodeName((SDL_Scancode)sc);
+            if (!nm || !*nm) continue;
+            snprintf(g_bindStr[bindCapture], sizeof(g_bindStr[0]), "%s", nm);
+            inputRebuildBinds();
+            bindCapture = -1;
+            return 1;
+        }
+    } else if (pad) {
+        int a = bindCapture - IA_COUNT;
+        int hit = -1;
+        {   /* diagnostics: report raw joystick activity that has no mapped button */
+            SDL_Joystick *js = SDL_GameControllerGetJoystick(pad);
+            static int lastRaw = -1;
+            int raw = -1;
+            if (js) {
+                for (int b = 0; b < SDL_JoystickNumButtons(js); b++)
+                    if (SDL_JoystickGetButton(js, b)) { raw = b; break; }
+                if (raw < 0 && SDL_JoystickNumHats(js) > 0 && SDL_JoystickGetHat(js, 0)) raw = 1000;
+            }
+            if (raw != lastRaw && raw >= 0)
+                sysLogPrintf(LOG_NOTE, "input: rebind capture sees raw joystick input %d (pad '%s')",
+                             raw, SDL_GameControllerName(pad));
+            lastRaw = raw;
+        }
+        for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX && hit < 0; b++)
+            if (SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)b)) hit = b;
+        if (hit < 0 && padInDown(pad, PADIN_LTRIG)) hit = PADIN_LTRIG;
+        if (hit < 0 && padInDown(pad, PADIN_RTRIG)) hit = PADIN_RTRIG;
+        if (hit >= 0) {
+            snprintf(g_padStr[a], sizeof(g_padStr[0]), "%s", padInputName(hit));
+            padRebuildBinds();
+            bindCapture = -1;
+        }
+    }
+    return 1;
+}
+
 /* Fill button mask + stick for controller idx. Returns the 16-bit mask. */
 unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
 {
@@ -765,7 +955,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
          * transition cannot immediately re-toggle it. */
         int selNow = pads[0] ? SDL_GameControllerGetButton(pads[0],
                                                            SDL_CONTROLLER_BUTTON_BACK) : 0;
-        if (selNow && !padSelectPrev) optionsOverlayToggle();
+        if (selNow && !padSelectPrev) { sysLogPrintf(LOG_NOTE, "input: pad BACK pressed -> toggling options overlay"); optionsOverlayToggle(); }
         padSelectPrev = selNow;
         optionsOverlayHandleInput();
         if (stick_x) *stick_x = 0;
@@ -1162,39 +1352,38 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
             if (ry < -RSTICK_THRESHOLD) button |= GE_CONT_E;
         }
 
-        int trigPt = padTriggerPct * 327;   /* % of the 0..32767 trigger travel */
-        if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > trigPt)
-            button |= GE_CONT_G;
-        if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > trigPt)
-            button |= GE_CONT_R;
+        /* Rebindable actions. In front-end menus A/B/Start keep their default
+         * physical buttons so a bad rebind can never lock the menus. */
+        if (padMenuMode) {
+            if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A) ||
+                SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X))
+                button |= GE_CONT_A;
+            if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B) ||
+                SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y))
+                button |= GE_CONT_B;
+            if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_START))
+                button |= GE_CONT_START;
+        } else {
+            if (padActDown(pad, PA_ACTION)) button |= GE_CONT_A;
+            if (padActDown(pad, PA_CROUCH)) button |= GE_CONT_B;
+            if (padActDown(pad, PA_START))  button |= GE_CONT_START;
+        }
+        if (padActDown(pad, PA_FIRE)) button |= GE_CONT_G;
+        if (padActDown(pad, PA_AIM))  button |= GE_CONT_R;
 
-        /* Modern dual-stick layout (Xbox re-release style; the Steam Deck
-         * target). A/X = action/use/reload (the game's context-sensitive A
-         * line), B/Y = crouch, and LB/RB rising edges cycle weapons.
-         * In-game cycling is an A edge (forward) or A+Z held on the same tick
-         * (backward -- bondview2.c weaponForwardOffset/weaponBackOffset, the
-         * same trick the mouse wheel uses above); emit for exactly one poll
-         * so holding RB cannot latch invButtons and block firing. */
-        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A) ||
-            SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X))
-            button |= GE_CONT_A;
-        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B) ||
-            SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y))
-            button |= GE_CONT_B;
+        /* LB/RB-style weapon cycling: rising edges. In-game cycling is an A
+         * edge (forward) or A+Z on the same tick (backward); emit for one poll
+         * so holding the input cannot latch invButtons and block firing. */
         {
-            int lbNow = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-            int rbNow = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+            int lbNow = padActDown(pad, PA_PREV);
+            int rbNow = padActDown(pad, PA_NEXT);
             int *prev = &padShoulderPrev[idx];
-            /* Track edge state in menus too: a shoulder held across the
-             * menu->game transition must not fire a cycle on entry. */
             if (!padMenuMode) {
-                if (rbNow && !(*prev & 1)) button |= GE_CONT_A;            /* next weapon */
-                if (lbNow && !(*prev & 2)) button |= GE_CONT_A | GE_CONT_G; /* prev weapon */
+                if (rbNow && !(*prev & 1)) button |= GE_CONT_A;
+                if (lbNow && !(*prev & 2)) button |= GE_CONT_A | GE_CONT_G;
             }
             *prev = (rbNow ? 1 : 0) | (lbNow ? 2 : 0);
         }
-        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_START))
-            button |= GE_CONT_START;
         if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_UP))
             button |= GE_CONT_UP;
         if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN))
@@ -1209,7 +1398,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
          * Deck). The game never reads BACK, so nothing is withheld. */
         {
             int selNow = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_BACK);
-            if (selNow && !padSelectPrev) optionsOverlayToggle();
+            if (selNow && !padSelectPrev) { sysLogPrintf(LOG_NOTE, "input: pad BACK pressed -> toggling options overlay"); optionsOverlayToggle(); }
             padSelectPrev = selNow;
         }
     }
@@ -1622,5 +1811,9 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     for (int a = 0; a < IA_COUNT; a++) {
         strncpy(g_bindStr[a], kBindDefs[a].def, sizeof(g_bindStr[a]) - 1);
         configRegisterString(kBindDefs[a].key, g_bindStr[a], sizeof(g_bindStr[a]));
+    }
+    for (int a = 0; a < PA_COUNT; a++) {
+        strncpy(g_padStr[a], kPadDefs[a].def, sizeof(g_padStr[a]) - 1);
+        configRegisterString(kPadDefs[a].key, g_padStr[a], sizeof(g_padStr[a]));
     }
 }
