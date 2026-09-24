@@ -480,3 +480,9 @@ The original work in this repository, the port layer (`port/`), the PC build
 system, `tools_pc/`, and the documentation, is released under the MIT License;
 see [`LICENSE`](LICENSE). Everything inherited from the upstream decompilation
 is covered by [`NOTICE`](NOTICE), not by that license.
+
+## Controls
+
+![Default controls](docs/img/controls.png)
+
+Press F10 in game to rebind keys and gamepad buttons (rows "Key:" / "Pad:"), or edit `data/ge007.ini`. Regenerate the diagram with `python3 tools_pc/gen_controls_diagram.py`.

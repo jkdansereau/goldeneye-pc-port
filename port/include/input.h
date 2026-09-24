@@ -65,6 +65,15 @@ short inputPadAxis(int idx, SDL_GameControllerAxis a);
  * ignored -- GE only cycles forward on a bare A edge. */
 void inputPostWheel(int notches);
 
+/* Rebinding backend for the F10 overlay (keyboard rows first, then pad rows). */
+int         inputBindRowCount(void);
+const char *inputBindLabel(int i);
+void        inputBindText(int i, char *out, int n);
+void        inputBindBegin(int i);      /* start capturing the next key/pad input */
+int         inputBindCapturing(void);
+void        inputBindReset(int i);      /* restore default */
+int         inputBindPoll(void);        /* per frame; 1 = capture in progress */
+
 /* Re-enumerate gamepads after a hotplug (SDL_CONTROLLERDEVICEADDED/REMOVED). */
 void inputRescanPads(void);
 

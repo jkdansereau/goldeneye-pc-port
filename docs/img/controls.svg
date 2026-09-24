@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="824" height="330" viewBox="0 0 1400 560" font-family="Helvetica, Arial, sans-serif">
+<rect width="1400" height="560" fill="#0e131b"/>
+<text x="40" y="40" font-size="22" fill="#fff" font-weight="bold">GoldenEye 007 PC - default controls</text>
+<text x="40" y="66" font-size="13" fill="#9fb0c8">Keyboard + mouse (left), gamepad (right). Mouse: move = look, click = fire, right click = aim, wheel = weapon.</text>
+<g transform="translate(40,90)">
+<rect x="0.0" y="0" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="21.0" y="22" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Esc</text>
+<text x="21.0" y="62" text-anchor="middle" font-size="11" fill="#ffd479">Cancel</text>
+<rect x="92.0" y="0" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="113.0" y="22" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">F10</text>
+<text x="113.0" y="62" text-anchor="middle" font-size="11" fill="#ffd479">Options</text>
+<rect x="161.0" y="0" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="182.0" y="22" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">F12</text>
+<text x="182.0" y="62" text-anchor="middle" font-size="11" fill="#ffd479">Screenshot</text>
+<rect x="0.0" y="72" width="65.0" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="32.5" y="94" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Tab</text>
+<text x="32.5" y="134" text-anchor="middle" font-size="11" fill="#ffd479">Start</text>
+<rect x="69.0" y="72" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="90.0" y="94" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Q</text>
+<text x="90.0" y="134" text-anchor="middle" font-size="11" fill="#ffd479">Lean left</text>
+<rect x="115.0" y="72" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="136.0" y="94" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">W</text>
+<text x="136.0" y="134" text-anchor="middle" font-size="11" fill="#ffd479">Forward</text>
+<rect x="161.0" y="72" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="182.0" y="94" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">E</text>
+<text x="182.0" y="134" text-anchor="middle" font-size="11" fill="#ffd479">Action</text>
+<rect x="207.0" y="72" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="228.0" y="94" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">R</text>
+<text x="228.0" y="134" text-anchor="middle" font-size="11" fill="#ffd479">Cancel</text>
+<rect x="0.0" y="144" width="76.5" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="38.25" y="166" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Shift</text>
+<text x="38.25" y="206" text-anchor="middle" font-size="11" fill="#ffd479">Aim</text>
+<rect x="80.5" y="144" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="101.5" y="166" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">A</text>
+<text x="101.5" y="206" text-anchor="middle" font-size="11" fill="#ffd479">Strafe L</text>
+<rect x="126.5" y="144" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="147.5" y="166" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">S</text>
+<text x="147.5" y="206" text-anchor="middle" font-size="11" fill="#ffd479">Back</text>
+<rect x="172.5" y="144" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="193.5" y="166" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">D</text>
+<text x="193.5" y="206" text-anchor="middle" font-size="11" fill="#ffd479">Strafe R</text>
+<rect x="218.5" y="144" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="239.5" y="166" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">F</text>
+<text x="239.5" y="206" text-anchor="middle" font-size="11" fill="#ffd479">Cancel</text>
+<rect x="0.0" y="216" width="65.0" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="32.5" y="238" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Ctrl</text>
+<text x="32.5" y="278" text-anchor="middle" font-size="11" fill="#ffd479">Fire</text>
+<rect x="69.0" y="216" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="90.0" y="238" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Z</text>
+<text x="90.0" y="278" text-anchor="middle" font-size="11" fill="#ffd479">Action</text>
+<rect x="115.0" y="216" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="136.0" y="238" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">X</text>
+<text x="136.0" y="278" text-anchor="middle" font-size="11" fill="#ffd479">Cancel</text>
+<rect x="0.0" y="288" width="180" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="90.0" y="310" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Space</text>
+<text x="90.0" y="350" text-anchor="middle" font-size="11" fill="#ffd479">Action</text>
+<rect x="276.0" y="360" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="297.0" y="382" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Left</text>
+<text x="297.0" y="422" text-anchor="middle" font-size="11" fill="#ffd479">Turn L</text>
+<rect x="322.0" y="360" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="343.0" y="382" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Down</text>
+<text x="343.0" y="422" text-anchor="middle" font-size="11" fill="#ffd479">Back</text>
+<rect x="368.0" y="360" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="389.0" y="382" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Right</text>
+<text x="389.0" y="422" text-anchor="middle" font-size="11" fill="#ffd479">Turn R</text>
+<rect x="322.0" y="288" width="42" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="343.0" y="310" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Up</text>
+<text x="343.0" y="350" text-anchor="middle" font-size="11" fill="#ffd479">Forward</text>
+<rect x="276.0" y="144" width="65.0" height="46" rx="6" fill="#26303f" stroke="#7aa2ff"/>
+<text x="308.5" y="166" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">Return</text>
+<text x="308.5" y="206" text-anchor="middle" font-size="11" fill="#ffd479">Start</text>
+</g>
+<g transform="translate(620,80)">
+<path d="M120 100 Q100 60 160 60 L440 60 Q500 60 480 100 L520 320 Q540 400 480 380 L400 320 L200 320 L140 380 Q80 400 100 320 Z" fill="#1c2430" stroke="#7aa2ff" stroke-width="2"/>
+<circle cx="120" cy="40" r="6" fill="#ffd479"/>
+<text x="106" y="38" text-anchor="end" font-size="13" fill="#fff" font-weight="bold">LT</text>
+<text x="106" y="53" text-anchor="end" font-size="11" fill="#ffd479">Aim</text>
+<circle cx="120" cy="90" r="6" fill="#ffd479"/>
+<text x="106" y="88" text-anchor="end" font-size="13" fill="#fff" font-weight="bold">LB</text>
+<text x="106" y="103" text-anchor="end" font-size="11" fill="#ffd479">Previous weapon</text>
+<circle cx="480" cy="40" r="6" fill="#ffd479"/>
+<text x="494" y="38" text-anchor="start" font-size="13" fill="#fff" font-weight="bold">RT</text>
+<text x="494" y="53" text-anchor="start" font-size="11" fill="#ffd479">Fire</text>
+<circle cx="480" cy="90" r="6" fill="#ffd479"/>
+<text x="494" y="88" text-anchor="start" font-size="13" fill="#fff" font-weight="bold">RB</text>
+<text x="494" y="103" text-anchor="start" font-size="11" fill="#ffd479">Next weapon</text>
+<circle cx="190" cy="250" r="6" fill="#ffd479"/>
+<text x="176" y="248" text-anchor="end" font-size="13" fill="#fff" font-weight="bold">Left stick</text>
+<text x="176" y="263" text-anchor="end" font-size="11" fill="#ffd479">Move (forward/back/strafe)</text>
+<circle cx="410" cy="330" r="6" fill="#ffd479"/>
+<text x="424" y="328" text-anchor="start" font-size="13" fill="#fff" font-weight="bold">Right stick</text>
+<text x="424" y="343" text-anchor="start" font-size="11" fill="#ffd479">Look / aim</text>
+<circle cx="200" cy="340" r="6" fill="#ffd479"/>
+<text x="186" y="338" text-anchor="end" font-size="13" fill="#fff" font-weight="bold">D-pad</text>
+<text x="186" y="353" text-anchor="end" font-size="11" fill="#ffd479">Menu navigation</text>
+<circle cx="470" cy="240" r="6" fill="#ffd479"/>
+<text x="484" y="238" text-anchor="start" font-size="13" fill="#fff" font-weight="bold">A / X</text>
+<text x="484" y="253" text-anchor="start" font-size="11" fill="#ffd479">Action / use / reload</text>
+<circle cx="520" cy="200" r="6" fill="#ffd479"/>
+<text x="534" y="198" text-anchor="start" font-size="13" fill="#fff" font-weight="bold">B / Y</text>
+<text x="534" y="213" text-anchor="start" font-size="11" fill="#ffd479">Crouch / cancel</text>
+<circle cx="330" cy="200" r="6" fill="#ffd479"/>
+<text x="344" y="198" text-anchor="start" font-size="13" fill="#fff" font-weight="bold">Start</text>
+<text x="344" y="213" text-anchor="start" font-size="11" fill="#ffd479">Pause / Start</text>
+<circle cx="270" cy="200" r="6" fill="#ffd479"/>
+<text x="256" y="198" text-anchor="end" font-size="13" fill="#fff" font-weight="bold">Back / Select</text>
+<text x="256" y="213" text-anchor="end" font-size="11" fill="#ffd479">Open options (F10)</text>
+</g>
+<text x="40" y="540" font-size="12" fill="#9fb0c8">Edit data/ge007.ini ([Input.Bind] and Input.Pad.*) or use F10 -> "Key:" / "Pad:" rows. Source: tools_pc/gen_controls_diagram.py</text>
+</svg>

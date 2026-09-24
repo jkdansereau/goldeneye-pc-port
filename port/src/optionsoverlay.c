@@ -63,7 +63,7 @@ extern s16   viGetY(void);
 
 /* ------------------------------------------------------------------------ */
 
-enum { ROW_TOGGLE, ROW_SLIDER, ROW_ENUM, ROW_MSAA, ROW_RES, ROW_ACTION, ROW_FPSCAP };
+enum { ROW_TOGGLE, ROW_SLIDER, ROW_ENUM, ROW_MSAA, ROW_RES, ROW_ACTION, ROW_FPSCAP, ROW_BIND };
 
 static const char *const kOnOff[]     = { "OFF", "ON", NULL };
 static const char *const kTexFilter[] = { "NEAREST", "BILINEAR", "3-POINT", NULL };
@@ -185,6 +185,27 @@ static struct Row rows[] = {
      * discoverable in-game way to exit, a real gap on Deck/controller-only
      * setups. Not config-backed (like __Resolution); activating it exits
      * the same way video.c's SDL_QUIT/Alt+F4 handlers already do. */
+    /* Rebinding rows: step = index into input.c's bind table. Enter/A
+     * starts a capture, Left/B restores the default. */
+    { "__Bind0", "Key: Forward", ROW_BIND, 0, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind1", "Key: Back", ROW_BIND, 1, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind2", "Key: Strafe left", ROW_BIND, 2, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind3", "Key: Strafe right", ROW_BIND, 3, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind4", "Key: Turn left", ROW_BIND, 4, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind5", "Key: Turn right", ROW_BIND, 5, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind6", "Key: Fire", ROW_BIND, 6, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind7", "Key: Aim", ROW_BIND, 7, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind8", "Key: Action/Use", ROW_BIND, 8, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind9", "Key: Cancel/Back", ROW_BIND, 9, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind10", "Key: Lean left", ROW_BIND, 10, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind11", "Key: Start", ROW_BIND, 11, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind12", "Pad: Fire", ROW_BIND, 12, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind13", "Pad: Aim", ROW_BIND, 13, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind14", "Pad: Action/Use", ROW_BIND, 14, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind15", "Pad: Crouch", ROW_BIND, 15, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind16", "Pad: Next weapon", ROW_BIND, 16, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind17", "Pad: Prev weapon", ROW_BIND, 17, NULL, 0, 0, 0, 0,0,0,0,0 },
+    { "__Bind18", "Pad: Start", ROW_BIND, 18, NULL, 0, 0, 0, 0,0,0,0,0 },
     { "__QuitToDesktop",          "Quit to desktop",  ROW_ACTION, 0,    NULL,       0, 0, 0,   0,0,0,0,0 },
 };
 #define NUM_ROWS ((int)(sizeof(rows) / sizeof(rows[0])))
@@ -405,7 +426,7 @@ static void overlayInit(void)
     configForEachOption(resolveCb, NULL);
 
     for (int i = 0; i < NUM_ROWS; i++) {
-        if (rows[i].kind == ROW_RES || rows[i].kind == ROW_ACTION) {
+        if (rows[i].kind == ROW_RES || rows[i].kind == ROW_ACTION || rows[i].kind == ROW_BIND) {
             rows[i].found = 1;   /* not config-backed */
             continue;
         }
@@ -591,6 +612,10 @@ static void rowAdjust(struct Row *r, int dir)
         videoRequestWindowSize(kResList[i][0], kResList[i][1]);
         break;
     }
+    case ROW_BIND:
+        if (dir > 0) inputBindBegin((int)r->step);
+        else         inputBindReset((int)r->step);
+        break;
     case ROW_ACTION:
         /* D293: same exit path as SDL_QUIT / Alt+F4 (video.c), just reachable
          * without OS window chrome or a keyboard. */
@@ -690,6 +715,10 @@ void optionsOverlayHandleInput(void)
     /* The overlay owns the mouse while it is open: force the OS cursor free +
      * visible (a stage poll would otherwise leave it locked/hidden). */
     inputSuspendForOverlay();
+
+    if (inputBindPoll()) {
+        return;   /* capturing a key/pad input for a rebind */
+    }
 
     overlayUpdateVisible();   /* % rows may have appeared/vanished (auto toggles) */
     overlayUpdateScroll();
@@ -839,6 +868,10 @@ static void valueText(const struct Row *r, char *out, int n)
     if (r->kind == ROW_MSAA) {
         if ((int)lround(v) <= 1) snprintf(out, n, "OFF");
         else                     snprintf(out, n, "%dx", (int)lround(v));
+        return;
+    }
+    if (r->kind == ROW_BIND) {
+        inputBindText((int)r->step, out, n);
         return;
     }
     if (r->kind == ROW_ACTION) {
