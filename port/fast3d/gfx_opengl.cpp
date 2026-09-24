@@ -1188,6 +1188,20 @@ static void gfx_opengl_update_framebuffer_parameters(int fb_id, uint32_t width, 
     width = max(width, 1U);
     height = max(height, 1U);
 
+    /* macOS GL 4.1 core: asking for more samples than GL_MAX_SAMPLES (e.g. 8x)
+     * makes the multisample renderbuffers incomplete and the screen goes dark
+     * (glReadPixels 0x506). Clamp to what the driver reports. */
+    if (msaa_level > 1) {
+        static GLint maxSamples = -1;
+        if (maxSamples < 0) {
+            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+            if (maxSamples < 1) maxSamples = 1;
+        }
+        if ((GLint)msaa_level > maxSamples) {
+            msaa_level = (uint32_t)maxSamples;
+        }
+    }
+
     if (gfx_framebuffers_enabled) {
         glBindFramebuffer(GL_FRAMEBUFFER, fb.fbo);
 
@@ -1284,7 +1298,8 @@ void gfx_opengl_resolve_msaa_color_buffer(int fb_id_target, int fb_id_source) {
     glBindFramebuffer(GL_READ_FRAMEBUFFER, fb_src.fbo);
     glBlitFramebuffer(0, 0, fb_src.width, fb_src.height, 0, 0, fb_dst.width, fb_dst.height, GL_COLOR_BUFFER_BIT,
                       GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, current_framebuffer);
+    /* current_framebuffer is an INDEX into framebuffers[], not a GL name; fb 0 is the window's default framebuffer (name 0). */
+    glBindFramebuffer(GL_FRAMEBUFFER, current_framebuffer == 0 ? 0 : framebuffers[current_framebuffer].fbo);
     glEnable(GL_SCISSOR_TEST);
 }
 
@@ -1348,7 +1363,7 @@ void gfx_opengl_copy_framebuffer(int fb_dst, int fb_src, int left, int top, bool
 
     glBlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffers[current_framebuffer].fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, current_framebuffer == 0 ? 0 : framebuffers[current_framebuffer].fbo);
 
     glReadBuffer(GL_BACK);
 
