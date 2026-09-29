@@ -6518,7 +6518,19 @@ void gunDrawSight(s32 *gdl) {
     f32 xypos[2];
     f32 halfedxy[2];
 
+#ifdef PORT
+    /* D436: opt-in persistent sight. With Video.CrosshairPersistent the
+     * NOTAIMING reason is ignored so the sprite is also drawn in hipfire, at
+     * the same crosshair_angle the shots use. Every other reason (Sight
+     * option / MP sight policy, cutscene, damage) and the MP menu still hide
+     * it. Default off = the N64 test. */
+    extern int portCrosshairPersistent(void);
+    s32 sightmode = g_CurrentPlayer->gunsightmode
+        & ~(portCrosshairPersistent() ? GUNSIGHTREASON_NOTAIMING : 0);
+    if ((sightmode == 0) && (g_CurrentPlayer->mpmenuon == FALSE)) {
+#else
     if ((g_CurrentPlayer->gunsightmode == 0) && (g_CurrentPlayer->mpmenuon == FALSE)) {
+#endif
 #ifdef PORT
         if (portCrosshairHide)
             return;
