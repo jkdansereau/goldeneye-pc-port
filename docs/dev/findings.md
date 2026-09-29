@@ -693,6 +693,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D406 | **front-end PC Options screen: long sections (INPUT, 17 visible rows) run off the bottom of the 440x330 paper, and rows past the silent 14-row page cap (Crouch mode, Reset to defaults, Bindings…) are unreachable from the front screen** (user report 2026-09-28, v0.4.0 pre-push review) — full `## D406` entry at file tail | RESOLVED (2026-09-28, port-layer only, Steam Deck-validated): in-section pagination in `frontoptions.c` (11 rows/page; the vertical stepper crosses page boundaries both ways; dim 'Page p/N' marker + bottom hint on every page; slider bars start past long labels; F10 overlay untouched). D406b/c/d same-cycle refinements (label/track overlap, hint visibility/wording, hint position). |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | OPEN (cosmetic, not root-caused past the handoff site). v0.4.0 decision: SkipIntro stays EXPERIMENTAL / not recommended for regular users — F10 row relabelled "Skip intro (EXPERIMENTAL)". |
+| D420 | **Crouched-rifle firing animation (`crouched_rifle_firing_animation_groupA`) never resolved on PC -> SIGSEGV in modelConstrainOrWrapAnimFrame when an MP player crouch-fires a rifle (2026-09-28).** — full `## D420` entry at file tail | FIXED — layout only (§D5 linker adjacency, D164 class): `crouched_rifle_firing_animation_group1` has no zero terminator and on N64 falls through into `...groupA` (source-order .data); GCC places groupA first, so groupA[0] kept the raw anim offset 0xB84. `#ifdef PORT` one array {right, left, terminator} + `groupA` alias (chr.c/chr.h); N64 resolution restored. |
 
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
@@ -15524,3 +15525,40 @@ included; D281 keeps the shipped mitigation + disclosure, zero-saves root cause 
 **v0.4.0 decision (user, 09-28):** `Game.SkipIntro` stays **EXPERIMENTAL — not recommended for regular users yet**, alongside its older unrooted audio-break report (D216 status note). The F10 row is relabelled "Skip intro (EXPERIMENTAL)" (`port/src/optionsoverlay.c`, mirroring the D387 AllUnlocked labelling precedent); the config var, default (off), and `lv.c` hook are unchanged.
 
 **Status:** OPEN — cosmetic (no crash, no data loss; the mission still records as failed/aborted and the menus are fully functional). Root-causing needs a side-by-side of front-end state (`current_menu`, `g_CurrentStageToLoad`, `mission_failed_or_aborted`, `g_isBondKIA`) on the fail return with SkipIntro off vs on — candidate for v0.5.0 alongside the D216 audio half.
+
+## D420 — crouched-rifle firing animation never resolved on PC (linker adjacency) -> MP crash (2026-09-28)
+
+**Symptom.** SIGSEGV in `modelConstrainOrWrapAnimFrame` from `playerTick`
+(bondview2.c ~11021) with `anim = 0xb84`, when a multiplayer player
+crouch-fires a rifle (found by the 5PLUS bot runs: Complex, 4 seats, M16,
+frame 5030; present in the 0.9.x friend bundles). Found on
+`exp/5plus-multiplayer` as "D341" (renamed D420 here: D341 is upstream's).
+
+**Root cause (layout, porting-notes §D5 "linker adjacency", D164 class).**
+`firing_animation_groups[1][5]` points at `crouched_rifle_firing_animation_groupA`
+(chr.c). The tables hold anim *offsets*; `initWeaponAnimGroups` ->
+`initResolveAnimGroupTable` rebases each table up to its zero terminator.
+`crouched_rifle_firing_animation_group1` has ONE entry and **no terminator**:
+on N64 .data is laid out in source order, so resolving group1 walks on into
+groupA (resolving it too, len 2). GCC placed groupA *below* group1, so
+groupA[0] kept the raw offset `PTR_ANIM_fire_kneel_left_leg` (0xB84) and
+`modelSetAnimation` received it as a `ModelAnimation*`. Side effect before
+the fix: crouching rifle guards saw len 1 instead of the N64's 2.
+
+**Not covered upstream:** upstream D392 (chraction.c firing-table fields)
+and D336 (bondhead.c) are different sites; chr.c/chr.h were unchanged on
+09278407.
+
+**Fix (8595a06e, `#ifdef PORT`, `#else` = decomp):** chr.c one array
+`{kneel_right_leg, kneel_left_leg, terminator}` (exactly the N64 layout);
+chr.h `#define crouched_rifle_firing_animation_groupA
+(&crouched_rifle_firing_animation_group1[1])`. Resolution and len are the
+N64's; no logic change. Upstream candidate (a real port bug).
+
+**Verified (programmer, 5plus + main):** repro (4 seats, bots, Complex,
+pinned seed, 18 078 frames x3) no crash, SH identical across runs; 8 seats
+remote mines no crash; every firing/struck anim table in chr.c scanned --
+this was the only unterminated one; gdb scan of all 24
+`firing_animation_groups` entries at run time: 1 bad pointer before, 0 after
+(also 0 on the main-line cherry-pick); P1 gate (1 324 recordings, frame
+dumps) unchanged; netplay 2P/4P identical.
