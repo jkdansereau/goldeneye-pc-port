@@ -9317,6 +9317,11 @@ static s32 portBottomHudScalePercent(void)
 }
 #endif
 
+#ifdef PORT
+/* D438: port/src/healthbars.c */
+extern Gfx *portHealthBarsAlways(Gfx *gdl);
+extern Gfx *portHealthBarsGauge(Gfx *gdl);
+#endif
 Gfx *maybe_mp_interface(Gfx *gdl)
 {
     s32 ulx;
@@ -9400,25 +9405,36 @@ Gfx *maybe_mp_interface(Gfx *gdl)
         gdl = microcode_constructor_related_to_menus(gdl, ulx, uly, lrx, lry, 160);
     }
 
+#ifdef PORT
+    {
+        /* D438: Game.HealthBars "Bars always" draws the compact bars here
+         * every frame; the two N64 gates below then draw nothing
+         * (portHealthBarsGauge). Presentation only: the show timers tick
+         * exactly as before. */
+        PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_CENTER);
+        gdl = portHealthBarsAlways(gdl);
+        PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_NONE);
+    }
+#endif
     if (bondviewGetIfCurrentPlayerHealthShowTime() &&
         (g_CurrentPlayer->watch_animation_state == 0))
     {
 #ifdef PORT
         PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_CENTER);
-#endif
-        gdl = bondviewRenderGaugeBars(gdl);
-#ifdef PORT
+        gdl = portHealthBarsGauge(gdl);   /* D438: the N64 arcs, or the bars */
         PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_NONE);
+#else
+        gdl = bondviewRenderGaugeBars(gdl);
 #endif
     }
     else if (mpwatchShouldDisplayGauges())
     {
 #ifdef PORT
         PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_CENTER);
-#endif
-        gdl = bondviewRenderGaugeBars(gdl);
-#ifdef PORT
+        gdl = portHealthBarsGauge(gdl);   /* D438 */
         PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_NONE);
+#else
+        gdl = bondviewRenderGaugeBars(gdl);
 #endif
         if (g_CurrentPlayer->healthdisplaytime > 0)
         {

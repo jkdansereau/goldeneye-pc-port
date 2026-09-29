@@ -693,6 +693,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D406 | **front-end PC Options screen: long sections (INPUT, 17 visible rows) run off the bottom of the 440x330 paper, and rows past the silent 14-row page cap (Crouch mode, Reset to defaults, Bindings…) are unreachable from the front screen** (user report 2026-09-28, v0.4.0 pre-push review) — full `## D406` entry at file tail | RESOLVED (2026-09-28, port-layer only, Steam Deck-validated): in-section pagination in `frontoptions.c` (11 rows/page; the vertical stepper crosses page boundaries both ways; dim 'Page p/N' marker + bottom hint on every page; slider bars start past long labels; F10 overlay untouched). D406b/c/d same-cycle refinements (label/track overlap, hint visibility/wording, hint position). |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | OPEN (cosmetic, not root-caused past the handoff site). v0.4.0 decision: SkipIntro stays EXPERIMENTAL / not recommended for regular users — F10 row relabelled "Skip intro (EXPERIMENTAL)". |
+| D438 | **Compact health / armour bars in the lower left, opt-in: `Game.HealthBars` = N64 arcs on hit (default) / Bars on hit (same window, same delayed values) / Bars always (2026-09-29).** — full `## D438` entry at file tail | FIXED (shipped 2026-09-29; presentation only: `port/src/healthbars.c` + the gauge calls in `maybe_mp_interface` routed through it). Default byte-identical; netplay SH identical mixed. |
 
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
@@ -15524,3 +15525,30 @@ included; D281 keeps the shipped mitigation + disclosure, zero-saves root cause 
 **v0.4.0 decision (user, 09-28):** `Game.SkipIntro` stays **EXPERIMENTAL — not recommended for regular users yet**, alongside its older unrooted audio-break report (D216 status note). The F10 row is relabelled "Skip intro (EXPERIMENTAL)" (`port/src/optionsoverlay.c`, mirroring the D387 AllUnlocked labelling precedent); the config var, default (off), and `lv.c` hook are unchanged.
 
 **Status:** OPEN — cosmetic (no crash, no data loss; the mission still records as failed/aborted and the menus are fully functional). Root-causing needs a side-by-side of front-end state (`current_menu`, `g_CurrentStageToLoad`, `mission_failed_or_aborted`, `g_isBondKIA`) on the fail return with SkipIntro off vs on — candidate for v0.5.0 alongside the D216 audio half.
+
+## D438 — compact health / armour bars (lower left), opt-in: N64 arcs on hit / Bars on hit / Bars always (2026-09-29)
+
+**Status:** FIXED (offered from the netplay line; presentation only, port-drawn). User grant in-thread 2026-09-29: "Go", segmented bars in the watch colours, on-hit mode shows the N64's delayed values. Default = N64.
+
+**What the N64 does.** A hit sets `healthshowtime = 0`; the tick runs it through `g_HealthDisplayDurations`, showing the old health/armour first (`apparent*`), then the drop to the real values, then hiding (`bondview2.c` "update health showtime"). The drawing is the watch's two arcs (`bondviewRenderGaugeBars`, `glass2.c hudMakeDamageSegments`) through an ortho projection, from the per-player HUD pass (`maybe_mp_interface`) while `healthshowtime > 0` and the watch is down; in MP also while the MP menu is up or for 1 s after the pause (`mpwatchShouldDisplayGauges`). `apparent*` and the show timers are draw-only state.
+
+**The option** `Game.HealthBars` (F10 > Gameplay > HUD > "Health display"): **N64 (watch, on hit)** = unchanged; **Bars on hit** = two compact bars in the same show windows from the same delayed `apparent*` values (the arcs are not drawn); **Bars always** = the bars every frame the player is in control (real `bondhealth/bondarmour`; hidden when dead, watch or MP menu up, `NOCONTROL` cutscenes, game over). `GE_HEALTHBARS=<0|1|2>` env override; `GE_HEALTHBARS_TEST="<h>,<a>"` draws test values (a hit cannot be scripted headless) and lets mode 1 draw outside a hit.
+
+**Implementation.** `port/src/healthbars.c` (new): 8 segments x 7 px per bar, 5 px tall, 1 px outline, health (255,210,48) over armour (96,144,255, drawn only when > 0), dim tracks; drawn as fill rects after `microcode_constructor` with `G_CC_PRIMITIVE`, anchored at `viGetViewLeft() + 12`, 12 px above the viewport bottom, inside `PORT_HUD_ASPECT(CENTER)`. Hook in `src/game/bondview2.c` `maybe_mp_interface` (`#ifdef PORT`, ): one call before the N64 gates (`portHealthBarsAlways`) and the two N64 gauge calls routed through `portHealthBarsGauge`, which draws the arcs in mode 0 (unchanged), the bars in mode 1, nothing in mode 2. The show timers and the MP 1 s bookkeeping run exactly as before; nothing is written to game state.
+
+**Verification** (headless, llvmpipe, mp-sandbox data, `GE_FIXEDSTEP=1 GE_TICKINPUT=1 GE_RSEED=12345`; sandboxes `build-pc/xh-hb-*`):
+
+| Check | Result |
+|---|---|
+| Default (N64), `-level_09` frames 600/1200/1800 vs the b200808b build | **BYTE-IDENTICAL** (no DL commands emitted) |
+| Bars on hit, no hit taken | identical to the default at 600/1200/1800 (nothing drawn outside the window) |
+| Bars always, full health | 3 738 px differ from the default, bbox x 27-204 y 575-595 of 869x652: the health bar only (no armour), lower left |
+| Bars always, `GE_HEALTHBARS_TEST=0.6,0.3` | bbox y 575-619: health 4 full + a partial segment, armour 2 full + a partial (crop viewed) |
+| Bars on hit, `GE_HEALTHBARS_TEST=0.45,0` | the health bar at 3 full + a partial segment, no armour bar |
+| F10 HUD page | "Health display  N64 (watch, on hit)" between Ammo on screen and HUD scale |
+| Netplay 2P loopback, A default / B Bars always | SH identical on 4 622 common ticks, 0 DESYNC (render-only) |
+| Netplay 2P loopback, B in **own view** (`GE_VIEWMODE=own`) with Bars always, frame 3600 | the bar sits in the lower left of B's full-window view (D17 transform handled it: classified with the HUD group, 0 `VMWARN`); SH identical on 4 622 ticks |
+
+**Not verified:** a real hit (the on-hit window is the N64's own gate, unchanged; only the drawing differs), the look at other HUD scales, and Bond's death fade over the bars.
+
+**Confidence: [H]** for neutrality and placement (measured); [M] for the look until played.
