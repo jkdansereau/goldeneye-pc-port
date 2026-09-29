@@ -693,6 +693,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D406 | **front-end PC Options screen: long sections (INPUT, 17 visible rows) run off the bottom of the 440x330 paper, and rows past the silent 14-row page cap (Crouch mode, Reset to defaults, Bindings…) are unreachable from the front screen** (user report 2026-09-28, v0.4.0 pre-push review) — full `## D406` entry at file tail | RESOLVED (2026-09-28, port-layer only, Steam Deck-validated): in-section pagination in `frontoptions.c` (11 rows/page; the vertical stepper crosses page boundaries both ways; dim 'Page p/N' marker + bottom hint on every page; slider bars start past long labels; F10 overlay untouched). D406b/c/d same-cycle refinements (label/track overlap, hint visibility/wording, hint position). |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | OPEN (cosmetic, not root-caused past the handoff site). v0.4.0 decision: SkipIntro stays EXPERIMENTAL / not recommended for regular users — F10 row relabelled "Skip intro (EXPERIMENTAL)". |
+| D435 | **Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).** — full `## D435` entry at file tail | FIXED — port-only: the render thread's `gfx_sdl_handle_events` drains the same SDL queue as video.c's host pump but had no case for `SDL_CONTROLLERDEVICEADDED/REMOVED`, so it usually swallowed them and `inputRescanPads` never ran. Both pumps now post a request; the rescan runs at the top of `inputUpdate`, on the thread that reads the pads. |
 
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
@@ -15524,3 +15525,22 @@ included; D281 keeps the shipped mitigation + disclosure, zero-saves root cause 
 **v0.4.0 decision (user, 09-28):** `Game.SkipIntro` stays **EXPERIMENTAL — not recommended for regular users yet**, alongside its older unrooted audio-break report (D216 status note). The F10 row is relabelled "Skip intro (EXPERIMENTAL)" (`port/src/optionsoverlay.c`, mirroring the D387 AllUnlocked labelling precedent); the config var, default (off), and `lv.c` hook are unchanged.
 
 **Status:** OPEN — cosmetic (no crash, no data loss; the mission still records as failed/aborted and the menus are fully functional). Root-causing needs a side-by-side of front-end state (`current_menu`, `g_CurrentStageToLoad`, `mission_failed_or_aborted`, `g_isBondKIA`) on the fail return with SkipIntro off vs on — candidate for v0.5.0 alongside the D216 audio half.
+
+## D435 — a replugged controller is never reopened: the render thread's event pump swallows the hot-plug events (2026-09-29)
+
+**Status:** FIXED, port-only. User report (GameSir-G7 Pro): "disconnecting the controller, then reconnecting it did not seem to be picked up". The play log had only the startup `input: rescanned pads` line.
+
+**Root cause.** Two threads drain the one SDL event queue:
+- `port/src/video.c` `videoPumpEvents`: `case SDL_CONTROLLERDEVICEADDED / REMOVED: inputRescanPads();`.
+- `port/fast3d/gfx_sdl2.cpp` `gfx_sdl_handle_events` (called from `gfx_run` on the render / scheduler thread every frame): **no case for them**. Whatever it dequeues is dropped.
+
+Whichever loop runs `SDL_PollEvent` first gets the event, and the render loop usually wins (the same race WI-1 documented for ESC). So the pads were never rescanned and `pads[]` kept the closed controller's handle. Headless repro with a virtual pad (attach, detach, re-attach): one rescan at startup, none at the detach, and at the re-attach the process aborted with `malloc(): unaligned tcache chunk detected` (stale handle). A second latent problem: `inputRescanPads` ran on the host thread while the scheduler thread reads `pads[]` in `inputComputePad`; closing pads under a reader is a race.
+
+**Fix.**
+- `gfx_sdl2.cpp`: new `case SDL_CONTROLLERDEVICEADDED / REMOVED: inputRequestRescan();`.
+- `video.c`: the case now calls `inputRequestRescan()` instead of `inputRescanPads()`.
+- `input.c`: `inputRequestRescan()` sets an atomic; `inputUpdate()` consumes it first thing and runs `inputRescanPads()` there, i.e. on the thread that is about to read the pads (the scheduler thread, or the game thread under tick input).
+
+**Verified** (on the netplay line, headless, virtual pads through a test seam): attach -> detach -> attach -> detach -> attach with no tick input: 5 rescans (startup + one per event), no crash, against 1 rescan then a heap-corruption abort before the fix; with tick input the pad's buttons are seen before, after the first and after the second re-attach; solo `-level_09` frame 1800 byte-identical to the base. Real-pad retest by the user (GameSir-G7 Pro, 2026-09-29): passed.
+
+**Residual (pre-existing):** `inputRumble` can run on the game thread while a rescan runs on the scheduler thread in non-tick mode: one poll of exposure instead of an arbitrary host-thread moment.

@@ -87,6 +87,7 @@ int  inputMenuPointerLive(void);
 
 /* Re-enumerate gamepads after a hotplug (SDL_CONTROLLERDEVICEADDED/REMOVED). */
 void inputRescanPads(void);
+void inputRequestRescan(void);   /* D435: from either SDL event pump; consumed by inputUpdate() */
 
 /* D401: Rumble Pak -> real gamepad haptics. The osMotor* shims in
  * libultra.c (game's src/joy.c rumble state machine) route here.
