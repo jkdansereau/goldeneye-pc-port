@@ -285,3 +285,4 @@ D405,CLOSED,"fast3d/OpenGL: MSAA above the driver max black-screens; two glBindF
 D406,RESOLVED,front-end PC Options screen:,"RESOLVED (2026-09-28, port-layer only, Steam Deck-validated):"
 D407,PARTIAL,Tanks cannot be boarded/exited on PC —,"PARTIAL (fix landed in v0.4.0, port-only):"
 D408,OPEN,Game.SkipIntro skips the post-mission failure dossier:,"OPEN (cosmetic, not root-caused past the handoff site)."
+D420,FIXED,Crouched-rifle firing animation (crouched_rifle_firing_animation_groupA) never resolved on PC -> SIGSEGV in modelConstrainOrWrapAnimFrame when an MP player cro…,"FIXED — layout only (§D5 linker adjacency, D164 class):"
