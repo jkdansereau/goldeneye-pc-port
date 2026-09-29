@@ -106,6 +106,8 @@ s32 portNoHitFlash = 0;
  * (gunfire.c gunDrawSight, #ifdef PORT). Default keeps the original
  * authored red sprite; hide is opt-in. */
 s32 portCrosshairHide = 0;
+static int cfgCrosshairPersistent = 0;   /* D436: 1 = draw the sight outside aim mode too */
+int portCrosshairPersistent(void) { return cfgCrosshairPersistent; }
 static int cfgCrosshairColor = 0;   /* 0 = authored sprite; 1..7 = presets; 8 = custom RGB */
 static int cfgCrosshairRed = 255, cfgCrosshairGreen = 255, cfgCrosshairBlue = 255;
 static int cfgCrosshairSize = 100;  /* 100% retains the original 32x32 drawing */
@@ -413,6 +415,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Game.SkipIntro", &portSkipIntro, 0, 1);
     configRegisterInt("Game.NoHitFlash", &portNoHitFlash, 0, 1);
     configRegisterInt("Video.CrosshairHide",  &portCrosshairHide, 0, 1);  /* v0.4.0 M2 (D373) */
+    configRegisterInt("Video.CrosshairPersistent", &cfgCrosshairPersistent, 0, 1);   /* D436 */
     configRegisterInt("Video.CrosshairColor", &cfgCrosshairColor, 0, 8);  /* 8 = custom; old ini values unchanged */
     configRegisterInt("Video.CrosshairRed",   &cfgCrosshairRed,   0, 255);
     configRegisterInt("Video.CrosshairGreen", &cfgCrosshairGreen, 0, 255);

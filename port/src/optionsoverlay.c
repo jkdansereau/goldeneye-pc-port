@@ -331,6 +331,7 @@ static struct Row rows[] = {
     /* D226: scales the ammo counter, pickup/status text and dialogue. */
     { .key="Game.HudScale", .label="HUD scale", .kind=ROW_SLIDER, .step=5, .unit="%" },
     { .key="Video.CrosshairHide", .label="Show crosshair", .kind=ROW_TOGGLE, .step=1, .names=kOnOffRev },
+    { .key="Video.CrosshairPersistent", .label="Crosshair when not aiming", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },   /* D436 */
     { .key="Video.CrosshairColor", .label="Crosshair colour", .kind=ROW_ENUM, .step=1, .names=kCrosshairColor },
     { .key="Video.CrosshairRed", .label="Red", .kind=ROW_SLIDER, .step=1, .shownWhen="Video.CrosshairColor", .shownValue=8 },
     { .key="Video.CrosshairGreen", .label="Green", .kind=ROW_SLIDER, .step=1, .shownWhen="Video.CrosshairColor", .shownValue=8 },
@@ -1316,6 +1317,7 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Video.DrawDistance",        250 },  /* midpoint: 50/100 */
     { "Video.LodDistance",         250 },  /* midpoint: 50/100 */
     { "Video.CrosshairHide",      0 },   /* = 0 (on, N64) */
+    { "Video.CrosshairPersistent", 0 },   /* D436: off = N64 (aim mode only) */
     { "Video.CrosshairColor",   0 },   /* = 0 (authored red sprite) */
     { "Video.CrosshairRed",   255 },
     { "Video.CrosshairGreen", 255 },
