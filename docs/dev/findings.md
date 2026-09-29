@@ -693,6 +693,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D406 | **front-end PC Options screen: long sections (INPUT, 17 visible rows) run off the bottom of the 440x330 paper, and rows past the silent 14-row page cap (Crouch mode, Reset to defaults, Bindings…) are unreachable from the front screen** (user report 2026-09-28, v0.4.0 pre-push review) — full `## D406` entry at file tail | RESOLVED (2026-09-28, port-layer only, Steam Deck-validated): in-section pagination in `frontoptions.c` (11 rows/page; the vertical stepper crosses page boundaries both ways; dim 'Page p/N' marker + bottom hint on every page; slider bars start past long labels; F10 overlay untouched). D406b/c/d same-cycle refinements (label/track overlap, hint visibility/wording, hint position). |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | OPEN (cosmetic, not root-caused past the handoff site). v0.4.0 decision: SkipIntro stays EXPERIMENTAL / not recommended for regular users — F10 row relabelled "Skip intro (EXPERIMENTAL)". |
+| D430 | **Couch 2P watch-menu text (the MP pause page) differs by +-1-2 per channel between builds whose only difference is data layout (2026-09-29).** — full `## D430` entry at file tail | FIXED — port-only (fast3d): `GL_TEXTURE_MAX_ANISOTROPY` is per-texture-object state that `gfx_opengl_set_sampler_parameters` set only when mipmapped and never reset; a GL texture id freed by `gfx_texture_cache_delete_range` (unordered_map order = texture address order) and reused for a non-mipmapped glyph kept 4x. Now always written (level or 1). Render-only; sim never affected. |
 
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
@@ -15524,3 +15525,44 @@ included; D281 keeps the shipped mitigation + disclosure, zero-saves root cause 
 **v0.4.0 decision (user, 09-28):** `Game.SkipIntro` stays **EXPERIMENTAL — not recommended for regular users yet**, alongside its older unrooted audio-break report (D216 status note). The F10 row is relabelled "Skip intro (EXPERIMENTAL)" (`port/src/optionsoverlay.c`, mirroring the D387 AllUnlocked labelling precedent); the config var, default (off), and `lv.c` hook are unchanged.
 
 **Status:** OPEN — cosmetic (no crash, no data loss; the mission still records as failed/aborted and the menus are fully functional). Root-causing needs a side-by-side of front-end state (`current_menu`, `g_CurrentStageToLoad`, `mission_failed_or_aborted`, `g_isBondKIA`) on the fail return with SkipIntro off vs on — candidate for v0.5.0 alongside the D216 audio half.
+
+## D430 — couch 2P watch-menu text differs between builds that only differ in data layout: stale per-texture anisotropy (2026-09-29)
+
+**Status:** FIXED, port-only (`port/fast3d/gfx_opengl.cpp`, `#ifdef PORT`). Render-only; the sim was never involved (state hashes identical throughout).
+
+**Symptom.** The couch 2P script (MULTIPLAYER-DEV §6), frame 2400 (the MP pause/watch menu, "PLAY / RANK: 1ST / SCORES") is not byte-identical between two builds that differ only in data layout:
+- 8b080caa vs 8b080caa + an unused 3 KB array in `expinput.c`;
+- the controller-pages merge;
+- R1's front.c/front.h array widening (programmer 1's bisect).
+
+About 55-922 pixels differ, a few glyphs only, each by +-1-2 (mostly green). Every build is deterministic against itself. A 4 KB array at the end of `expinput.c` did not reproduce it, and neither did the pre-sync base with R1: only some layouts trigger it.
+
+**Method (probes in fast3d, removed).** A (6c8915d7) vs B (A + the 3 KB array), frames 2398-2401:
+1. Every texture import (format, size, content hash): **identical** sequences in A and B.
+2. Every `gfx_flush` batch (VBO hash, depth mode, blend, viewport, scissor, combine mode, other modes, and for both texture slots the GL texture id, filter, clamp, content hash): **identical except the GL texture ids.** The same content is bound under different ids in A and B.
+3. So the difference lives in GL texture-object state.
+
+**Root cause.**
+- `gfx_opengl_set_sampler_parameters` (`gfx_opengl.cpp`, the `if (mipmaps) glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, current_anisotropy_level);` line) sets anisotropy only for mipmapped samplers and never resets it. Anisotropy is per-texture-object state; `Video.Anisotropy` defaults to 4.
+- GL ids are recycled: `gfx_texture_cache_delete_range` (`gfx_pc.cpp`) pushes freed ids onto `free_texture_ids` while walking the `std::unordered_map` in hash-bucket order. The key hash is the texture **address**, so the recycling order depends on where textures live.
+- A glyph texture (bilinear, no mipmaps) that inherits an id last used by a mipmapped world texture keeps `MAX_ANISOTROPY = 4`. llvmpipe then filters it slightly differently: the +-1-2 values.
+- A layout shift changes which glyph inherits which id, hence which frames differ.
+- Nothing in `src/game` is involved: no uninitialised read, no out-of-bounds read, no stale texture content (all ruled out by the probes and the earlier UBSan run).
+
+**Fix.** Always write the anisotropy when sampler parameters are set: the level when mipmapped, 1.0 (off) otherwise, so a recycled id carries nothing over. This is identity for any texture whose id never had a mipmapped owner, which is why the base frames are unchanged.
+
+**Verified (headless, silent, llvmpipe, scratch HOME, mp-sandbox data; 6c8915d7 base):**
+
+| Check | Result |
+|---|---|
+| Couch 2P frames 2300-2500 (step 10), fix vs fix + 3 KB array (the reproducing variant) | **0 of 21 frames differ** (before the fix: frames 2300-2420 differed) |
+| Couch 2P frames 2300-2500, base vs fix | 0 of 21 differ |
+| Solo `-level_09` frame 1800, base vs fix | byte-identical |
+| Couch 4P frame 2400, base vs fix | byte-identical |
+| Netplay 2P (local relay, 60 s) | SH identical over 2 671 ticks |
+
+**Residual risk (not fixed, noted).** Other per-object state can still follow a recycled id:
+- mip levels 1..n of a previous owner, if a texture uploaded without mipmaps is later sampled with a mipmapped min filter;
+- the free-id order is still address-dependent.
+
+The general fix would reset the whole object on reuse, or sort the ids that `delete_range` frees. Neither is needed for this symptom. **Confidence: [H]** for the cause and the fix (A/B reproduced, fixed, bisected to the one GL parameter).
