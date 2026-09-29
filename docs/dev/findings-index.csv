@@ -285,3 +285,4 @@ D405,CLOSED,"fast3d/OpenGL: MSAA above the driver max black-screens; two glBindF
 D406,RESOLVED,front-end PC Options screen:,"RESOLVED (2026-09-28, port-layer only, Steam Deck-validated):"
 D407,PARTIAL,Tanks cannot be boarded/exited on PC —,"PARTIAL (fix landed in v0.4.0, port-only):"
 D408,OPEN,Game.SkipIntro skips the post-mission failure dossier:,"OPEN (cosmetic, not root-caused past the handoff site)."
+D435,FIXED,"Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).","FIXED — port-only: the render thread's gfx_sdl_handle_events drains the same SDL queue as video.c's host pump but had no case for SDL_CONTROLLERDEVICEADDED/REMOVED, so it usually swallowed them and i…"

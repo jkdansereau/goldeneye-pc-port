@@ -10,6 +10,7 @@
 #include "input.h"
 
 extern "C" void videoRequestQuit(const char *why);   // port/src/video.c (D344)
+extern "C" void inputRequestRescan(void);   // port/src/input.c (D435)
 
 static SDL_Window* wnd;
 static SDL_GLContext ctx;
@@ -338,6 +339,10 @@ static void gfx_sdl_handle_events(void) {
                 break;
             case SDL_MOUSEWHEEL:
                 inputPostWheel(event.wheel.y);   // weapon cycle
+                break;
+            case SDL_CONTROLLERDEVICEADDED:     // D435: this pump and video.c's drain the same
+            case SDL_CONTROLLERDEVICEREMOVED:   // SDL queue; request a rescan, never rescan here
+                inputRequestRescan();
                 break;
             case SDL_WINDOWEVENT:
                 if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {

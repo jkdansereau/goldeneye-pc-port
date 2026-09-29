@@ -926,8 +926,23 @@ void inputDestroy(void)
 
 /* Poll once per controller-read: refresh SDL device state and integrate the
  * mouse-aim delta into the accumulator. */
+/* D435: controller hot-plug. SDL_CONTROLLERDEVICEADDED / REMOVED land on
+ * whichever of the two event pumps dequeues them first: video.c's host loop
+ * or fast3d's gfx_sdl_handle_events (render thread, every frame), and the
+ * latter used to drop them, so a replugged pad was never reopened. Both pumps
+ * now only post a request; the rescan runs here, at the top of inputUpdate(),
+ * on the thread that is about to read pads[], so a pad is never closed under
+ * a reader. */
+static SDL_atomic_t s_rescanReq;
+
+void inputRequestRescan(void)
+{
+    SDL_AtomicSet(&s_rescanReq, 1);
+}
+
 void inputUpdate(void)
 {
+    if (SDL_AtomicSet(&s_rescanReq, 0)) inputRescanPads();   /* D435 */
     SDL_GameControllerUpdate();
 
     /* D287: skip until the host thread has actually enabled relative mode

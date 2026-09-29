@@ -865,7 +865,7 @@ void videoPumpEvents(void)
             break;
         case SDL_CONTROLLERDEVICEADDED:
         case SDL_CONTROLLERDEVICEREMOVED:
-            inputRescanPads();
+            inputRequestRescan();   /* D435: the rescan runs on the pad-reading thread */
             break;
         case SDL_WINDOWEVENT:
             if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
