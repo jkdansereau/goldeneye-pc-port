@@ -884,6 +884,25 @@ struct anim_group_info *ptr_doubles_firing_animation_groups[] = {
     &ptr_doubles_firing_animation_group1
 };
 
+#ifdef PORT
+/* D420 (ABI/layout, porting-notes §D5 linker adjacency): on the N64,
+ * crouched_rifle_firing_animation_group1 has NO terminator and the linker
+ * places crouched_rifle_firing_animation_groupA right after it, so the one
+ * resolver pass over group1 (initResolveAnimGroupTable, via
+ * ptr_crouched_rifle_firing_animation_groups) walks into groupA and turns its
+ * anim offset into a pointer too; the table len is 2. GCC does not keep the
+ * two arrays adjacent (x86-64: groupA BELOW group1), so groupA[0] kept the raw
+ * offset 0xB84 (PTR_ANIM_fire_kneel_left_leg) and playerTick handed it to
+ * modelSetAnimation as a ModelAnimation* (SIGSEGV, crouched rifle fire), and
+ * crouching rifle guards saw len 1 instead of 2. One array restores the N64
+ * layout; groupA is its second entry (chr.h). Same data, same order. */
+struct weapon_firing_animation_table crouched_rifle_firing_animation_group1[] = {
+    { PTR_ANIM_fire_kneel_right_leg, 27.0, 0, 0, 0, -1.0, 35.0, 75.0, -1.0, -1.0, 31.0, 75.0, 0.87266463, -0.69813174, 0.90757126, -0.69813174, 1.5, 1.5 },
+    /* = crouched_rifle_firing_animation_groupA[0] */
+    { PTR_ANIM_fire_kneel_left_leg, 24.0, 0, 0, 0, -1.0, 46.0, 98.0, -1.0, -1.0, 41.0, 98.0, 0.87266463, -0.52359879, 1.134464, -0.69813174, 1.6, 1.6 },
+    {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
+};
+#else
 struct weapon_firing_animation_table crouched_rifle_firing_animation_group1[] = {
     { PTR_ANIM_fire_kneel_right_leg, 27.0, 0, 0, 0, -1.0, 35.0, 75.0, -1.0, -1.0, 31.0, 75.0, 0.87266463, -0.69813174, 0.90757126, -0.69813174, 1.5, 1.5 },
 };
@@ -892,6 +911,7 @@ struct weapon_firing_animation_table crouched_rifle_firing_animation_groupA[] = 
     { PTR_ANIM_fire_kneel_left_leg, 24.0, 0, 0, 0, -1.0, 46.0, 98.0, -1.0, -1.0, 41.0, 98.0, 0.87266463, -0.52359879, 1.134464, -0.69813174, 1.6, 1.6 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
+#endif
 
 struct anim_group_info ptr_crouched_rifle_firing_animation_group1 = { &crouched_rifle_firing_animation_group1, -1 };
 
