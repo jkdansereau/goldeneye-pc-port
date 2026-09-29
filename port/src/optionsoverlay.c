@@ -108,6 +108,8 @@ static const char *const kCrosshairColor[] = {
     "White", "Custom", NULL,
 };
 static const char *const kCrosshairStyle[] = { "Original", "Thin cross", NULL };
+/* D438: port/src/healthbars.c. */
+static const char *const kHealthBars[] = { "N64 (watch, on hit)", "Bars on hit", "Bars always", NULL };
 /* D186: the sim's own tick pacemaker is hardcoded to the console's native VI
  * rate (60Hz NTSC / 50Hz PAL, port/src/libultra.c) -- Video.FpsCap can only
  * throttle down from there, never past it, and throttling it below 30
@@ -328,6 +330,7 @@ static struct Row rows[] = {
       .names=kOnOff, .found=1, .uiMax=1, .cfgMax=1, .saveScoped=1 },
     { .key="Bond.Ammo", .label="Ammo on screen", .kind=ROW_TOGGLE,
       .names=kOnOff, .found=1, .uiMax=1, .cfgMax=1, .saveScoped=1 },
+    { .key="Game.HealthBars", .label="Health display", .kind=ROW_ENUM, .step=1, .names=kHealthBars },   /* D438 */
     /* D226: scales the ammo counter, pickup/status text and dialogue. */
     { .key="Game.HudScale", .label="HUD scale", .kind=ROW_SLIDER, .step=5, .unit="%" },
     { .key="Video.CrosshairHide", .label="Show crosshair", .kind=ROW_TOGGLE, .step=1, .names=kOnOffRev },
@@ -1316,6 +1319,7 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Video.DrawDistance",        250 },  /* midpoint: 50/100 */
     { "Video.LodDistance",         250 },  /* midpoint: 50/100 */
     { "Video.CrosshairHide",      0 },   /* = 0 (on, N64) */
+    { "Game.HealthBars",          0 },   /* D438: N64 arcs on hit */
     { "Video.CrosshairColor",   0 },   /* = 0 (authored red sprite) */
     { "Video.CrosshairRed",   255 },
     { "Video.CrosshairGreen", 255 },
