@@ -285,3 +285,16 @@ D405,CLOSED,"fast3d/OpenGL: MSAA above the driver max black-screens; two glBindF
 D406,RESOLVED,front-end PC Options screen:,"RESOLVED (2026-09-28, port-layer only, Steam Deck-validated):"
 D407,PARTIAL,Tanks cannot be boarded/exited on PC —,"PARTIAL (fix landed in v0.4.0, port-only):"
 D408,OPEN,Game.SkipIntro skips the post-mission failure dossier:,"OPEN (cosmetic, not root-caused past the handoff site)."
+D409,FIXED,macOS/arm64 (M0.4): #pragma weak X = Y has no Mach-O equivalent —,"FIXED (macOS port, lv.c/spectrum.c/objective_status.c) —"
+D410,FIXED,macOS/arm64 (M0.6): the decomp's include/ stubs shadow libc++'s wrapper headers —,"FIXED (macOS port) — new port/shim/math.h + generated hostmath.h; the existing host{string,stdlib,stddef}.h.in now also pull libc++'s c++/v1/<name>.h wrapper, guarded && defined(__cplusplus)."
+D411,FIXED,"macOS/arm64 (M0.2): __x86_64__ was used as the ""64-bit PC"" gate —","FIXED — 22 sites in 14 src/+assets/ files and port/include/pc_protos.h now use PLATFORM_64BIT (defined by CMake on every 64-bit PC target, undefined on N64, so the N64 branch is unchanged)."
+D412,FIXED,macOS/arm64 (M0.7/M0.8):,"FIXED — shm_open double-map (dram.c); Darwin ucontext registers + _XOPEN_SOURCE (crash.c, incl."
+D413,FIXED,"macOS/arm64 (M1): the port realises the N64 32-bit address space as host addresses; native arm64 cannot map the low 4 GiB, so the space is shifted up by PORT_A…","FIXED (port layer) — port/include/port_addr.h + port/src/port_addr.c (portAddrInit, portN64ToHost/portHostToN64, PORT_N64PTR); all chokepoints routed through them; DRAM/cart/stacks mapped at B+…; seg…"
+D414,FIXED,macOS/arm64: in-level SFX completely silent —,"FIXED — new portAddrIsInWindow() in port_addr.h, guard tests the real window."
+D415,FIXED,macOS/arm64: crash at stage unload —,"FIXED (cleanup_objects.c, D3x ABI/layout class) —"
+D416,FIXED,macOS/arm64: crash on guard gunfire —,FIXED (port_addr.h + chr.c) —
+D417,FIXED,"macOS/arm64: six more pointer truncations, found by a static -Wint-conversion census rather than by crashing.","FIXED (model.c x4, bondview2.c x11, bg.c) —"
+D418,FIXED,"macOS/arm64: texReadUncompressed() aligned its destination through u32 ((u32 *)(((u32)dst + 0xf) & ~0xf) x3), truncating a host pointer and then writing throug…","FIXED defensively (image.c), latent not live."
+D419,OPEN,"Intermittent renderer crash, level-agnostic, observed once on Dam:","OPEN — observed once, not investigated."
+D420,FIXED,PORT_ADDR_STRICT: a debug gate that catches the whole D414-D419 family at the conversion rather than at the fault.,FIXED (new CMake option + port_addr.h/port_addr.c).
+D421,FIXED,MSAA=8 produced a completely BLACK screen —,FIXED (port/fast3d/gfx_opengl.cpp) —

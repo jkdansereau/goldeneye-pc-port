@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "port_addr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include <bondtypes.h>
 #include "cheat.h"
 #include "chr.h"
@@ -100,7 +105,7 @@ struct Model *makeonebody(s32 body, s32 head, struct ModelFileHeader *bodyHeader
         if ((headHeader != 0) && (c_item_entries[body].hasHead == 0))
         {
             bodyHeader->numRecords -= headHeader->numRecords;
-            modelAttachHead(model, opcode, headHeader);
+            modelAttachHead(model, PORT_N64PTR(ModelNode, opcode), headHeader);
 
             if ((sunglasses == 0) && ((s32) headHeader->numSwitches > 0))
             {

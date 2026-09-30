@@ -4,7 +4,7 @@
 #include "model.h"
 
 // bss
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
 // D40: the N64 placeholder chain below (g_ModelHitEntries .. g_ModelHitEntriesPenultimate)
 // forms one contiguous 600 x 20-byte ModelHitEntry pool in CODE.bss. On x86-64
 // ModelHitEntry is 40 bytes (two pointer pairs), so initModelHitEntryFreeList()

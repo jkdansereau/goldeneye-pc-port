@@ -52,7 +52,7 @@
  * allocated later from this heap need N64-equivalent headroom on top, so
  * budget 0x38000 (init headroom ~19 KiB). PC only.
  */
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
 #define MUSIC_ALLOCATION_BYTES   0x38000
 #else
 #define MUSIC_ALLOCATION_BYTES   0x2E000
@@ -685,7 +685,7 @@ void musicSeqPlayerInit(void)
     {
         size = (u32)&_sfxtblSegmentRomStart - (u32)&_sfxctlSegmentRomStart;
 
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
         // D37: the PC-native bank image is larger than the ROM segment
         // (4-byte packed offsets become 8-byte pointer slots); allocate the
         // re-laid-out size, copy only the ROM bytes, then convert.
@@ -708,7 +708,7 @@ void musicSeqPlayerInit(void)
     {
         size = (u32)&_instrumentstblSegmentRomStart - (u32)&_instrumentsctlSegmentRomStart;
 
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
         // D37: as above.
         {
             u32 romSize = size;
@@ -876,7 +876,7 @@ void musicTrack1Play(s32 track)
     t3 = ALIGN16_a(g_musicTrackLength[g_musicXTrack1CurrentTrackNum]) + ALIGN16_a(NUM_MUSIC_TRACKS);
     trackSizeBytes = ALIGN16_a(g_musicTrackCompressedLength[g_musicXTrack1CurrentTrackNum]);
     thing.seqData = g_musicXTrack1SeqData;
-    temp_a0 = (u8*)((t3 + (s32)thing.seqData) - trackSizeBytes);
+    temp_a0 = (u8*)(((uintptr_t)thing.seqData + t3) - trackSizeBytes);
 
     romCopy(temp_a0, romAddress, trackSizeBytes);
     decompressdata(temp_a0, thing.seqData, &hlist);
@@ -1070,7 +1070,7 @@ void musicTrack2Play(s32 track)
     t3 = ALIGN16_a(g_musicTrackLength[g_musicXTrack2CurrentTrackNum]) + ALIGN16_a(NUM_MUSIC_TRACKS);
     trackSizeBytes = ALIGN16_a(g_musicTrackCompressedLength[g_musicXTrack2CurrentTrackNum]);
     thing.seqData = g_musicXTrack2SeqData;
-    temp_a0 = (u8*)((t3 + (s32)thing.seqData) - trackSizeBytes);
+    temp_a0 = (u8*)(((uintptr_t)thing.seqData + t3) - trackSizeBytes);
 
     romCopy(temp_a0, romAddress, trackSizeBytes);
     decompressdata(temp_a0, thing.seqData, &hlist);
@@ -1263,7 +1263,7 @@ void musicTrack3Play(s32 track)
     t3 = ALIGN16_a(g_musicTrackLength[g_musicXTrack3CurrentTrackNum]) + ALIGN16_a(NUM_MUSIC_TRACKS);
     trackSizeBytes = ALIGN16_a(g_musicTrackCompressedLength[g_musicXTrack3CurrentTrackNum]);
     thing.seqData = g_musicXTrack3SeqData;
-    temp_a0 = (u8*)((t3 + (s32)thing.seqData) - trackSizeBytes);
+    temp_a0 = (u8*)(((uintptr_t)thing.seqData + t3) - trackSizeBytes);
 
     romCopy(temp_a0, romAddress, trackSizeBytes);
     decompressdata(temp_a0, thing.seqData, &hlist);

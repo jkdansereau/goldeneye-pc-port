@@ -20,7 +20,7 @@
 
 #include "synthInternals.h"
 #include "include/assert.h"
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
 #include <stdio.h>
 #include <stdlib.h>
 #endif
@@ -122,7 +122,7 @@ void alSynNew(ALSynth *drvr, ALSynConfig *c)
         
         pv->channelKnob   = (ALFilter *)&pv->envmixer;
 
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
         /* D202/M-69 diag (temporary): GE_AUDIOTRACE=1 logs the full
          * PVoice -> decoder/resampler/env-state address map at synth init,
          * so offline voicedump slot addresses can be tied to WIRE filter

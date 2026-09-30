@@ -173,6 +173,26 @@ int romConvertEnsureSidecars(const unsigned char *romImg, const char *romRelPath
             break;
         }
     }
+    if (!convPath[0] && exedir[0]) {
+        /* Two layouts the "$E/" forms above miss. (1) On POSIX "$E/" resolves
+         * CWD-relative, not to the real exe dir, so a launch from another CWD
+         * needs the absolute form. (2) A macOS .app keeps prepare-assets/ in
+         * Contents/Resources/ — it cannot live in Contents/MacOS/, where
+         * codesign treats the directory as nested code and refuses to sign. */
+        static const char *candExe[3] = {
+            "prepare-assets/ge007-convert",
+            "../Resources/prepare-assets/ge007-convert",
+            "ge007-convert",
+        };
+        for (size_t i = 0; i < sizeof(candExe) / sizeof(candExe[0]); i++) {
+            char full[1024];
+            snprintf(full, sizeof(full), "%s/%s", exedir, candExe[i]);
+            if (fsExists(full)) {
+                snprintf(convPath, sizeof(convPath), "%s", full);
+                break;
+            }
+        }
+    }
 
     if (!convPath[0]) {
         sysLogPrintf(LOG_ERROR,

@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "port_addr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include "include/limits.h"
 #include <bondconstants.h>
 #include <bondtypes.h>
@@ -6256,14 +6261,14 @@ Gfx *generate_ammo_total_microcode(Gfx *gdl)
                     if (imageoffset_r != 0)
                     {
                         imageoffset_r += globalbank_rdram_offset;
-                        gdl = set_rgba_redirect_generate_microcode(gdl, (u8 *)imageoffset_r, (getPlayer_c_screenleft() + getPlayer_c_screenwidth()) - (f32)rightx, -1.0f,
+                        gdl = set_rgba_redirect_generate_microcode(gdl, PORT_N64PTR(u8, imageoffset_r), (getPlayer_c_screenleft() + getPlayer_c_screenwidth()) - (f32)rightx, -1.0f,
 #if defined(VERSION_EU)
                             (viGetViewTop() + viGetViewHeight()) - 30, 0,
 #else
                             (viGetViewTop() + viGetViewHeight()) - 20, 0,
 #endif
                             ammo_related[ammotype].IconYOffset, 1);
-                        textwidth_r = ((u8 *)imageoffset_r)[4];
+                        textwidth_r = (PORT_N64PTR(u8, imageoffset_r))[4];
                     }
 
                     gdl = microcode_constructor(gdl);
@@ -6328,14 +6333,14 @@ Gfx *generate_ammo_total_microcode(Gfx *gdl)
                     if (imageoffset_l != 0)
                     {
                         imageoffset_l += globalbank_rdram_offset;
-                        gdl = set_rgba_redirect_generate_microcode(gdl, (u8 *)imageoffset_l, getPlayer_c_screenleft() + (f32)leftx, -1.0f,
+                        gdl = set_rgba_redirect_generate_microcode(gdl, PORT_N64PTR(u8, imageoffset_l), getPlayer_c_screenleft() + (f32)leftx, -1.0f,
 #if defined(VERSION_EU)
                             (viGetViewTop() + viGetViewHeight()) - 30, 1,
 #else
                             (viGetViewTop() + viGetViewHeight()) - 20, 1,
 #endif
                             ammo_related[ammotype].IconYOffset, 1);
-                        textwidth_l = ((u8 *)imageoffset_l)[4];
+                        textwidth_l = (PORT_N64PTR(u8, imageoffset_l))[4];
                     }
 
                     gdl = microcode_constructor(gdl);
@@ -6426,12 +6431,12 @@ Gfx *gunDrawWatchAmmoDisplay(Gfx *gdl)
 
                 // Draw the ammo icon
 #if defined(VERSION_EU)
-                gdl = set_rgba_redirect_generate_microcode(gdl, (u8 *)imageoffset, 200.0f, 208.0f, (viGetViewTop() + viGetViewHeight()) - 30, 0, ammo_related[ammotype].IconYOffset, 1);
+                gdl = set_rgba_redirect_generate_microcode(gdl, PORT_N64PTR(u8, imageoffset), 200.0f, 208.0f, (viGetViewTop() + viGetViewHeight()) - 30, 0, ammo_related[ammotype].IconYOffset, 1);
 #else
-                gdl = set_rgba_redirect_generate_microcode(gdl, (u8 *)imageoffset, 200.0f, 180.0f, (viGetViewTop() + viGetViewHeight()) - 20, 0, ammo_related[ammotype].IconYOffset, 1);
+                gdl = set_rgba_redirect_generate_microcode(gdl, PORT_N64PTR(u8, imageoffset), 200.0f, 180.0f, (viGetViewTop() + viGetViewHeight()) - 20, 0, ammo_related[ammotype].IconYOffset, 1);
 #endif
 
-                textwidth = ((u8 *)imageoffset)[4];
+                textwidth = (PORT_N64PTR(u8, imageoffset))[4];
             }
 
             gdl = microcode_constructor(gdl);

@@ -63,6 +63,22 @@ endif()
 # (port/src/romassets_<region>.s, see scripts/gen_romassets.py).
 project(ge007 C CXX ASM)
 
+# Host base of the N64 address window (see port/include/port_addr.h). Must be
+# set BEFORE add_definitions below. 0 on Windows/Linux; 16 TiB on arm64 macOS
+# (overridable with -DPORT_ADDR_BASE=... for tooling, e.g. an ASan build whose
+# shadow region overlaps 16 TiB).
+if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+  set(PORT_ADDR_BASE 0x100000000000 CACHE STRING "Host base of the N64 address window (arm64 macOS)")
+else()
+  set(PORT_ADDR_BASE 0x0 CACHE STRING "Host base of the N64 address window")
+endif()
+
+# Debug gate: validate every u32 -> host-pointer conversion against the regions
+# the port actually maps, and report offenders at the conversion site with a
+# backtrace. Off by default (zero cost); enable with -DPORT_ADDR_STRICT=ON.
+# Catches the D414-D418 truncated/never-rebased-pointer family early.
+option(PORT_ADDR_STRICT "Validate N64->host address conversions at runtime" OFF)
+
 include(TargetArch)
 include(FindPkgConfig)
 
@@ -246,8 +262,13 @@ add_definitions(
   -D_LANGUAGE_C=1
   -DAVOID_UB=1
   -DPAL=${VERSION_IS_PAL}
+  -DPORT_ADDR_BASE=${PORT_ADDR_BASE}
   ${REGION_DEFS}
 )
+if(PORT_ADDR_STRICT)
+  add_definitions(-DPORT_ADDR_STRICT=1)
+  message(STATUS "PORT_ADDR_STRICT enabled: N64->host conversions are validated at runtime")
+endif()
 if(TARGET_IS_64BIT)
   add_definitions(-DPLATFORM_64BIT=1)
 endif()
@@ -271,7 +292,9 @@ add_compile_options(
 # runs the same way; the genuinely understood cases are still fixed properly
 # under #ifdef PORT (D189). A hardened Linux build would need the whole class
 # swept first — tracked in docs/dev/findings.md.
-add_compile_options(-fno-stack-protector)
+if(NOT GE_STACK_PROTECTOR_ALL)
+  add_compile_options(-fno-stack-protector)
+endif()
 # Keep frame pointers: dbghelp's StackWalk64 (crash handler + thread dumps)
 # cannot read DWARF unwind info on MinGW, so the EBP chain is the only way to
 # get a real backtrace of a hung/crashed game thread.
@@ -363,12 +386,20 @@ elseif(UNIX AND NOT APPLE)
   # This is the ELF analogue of the Windows build's fixed 0x140000000 base.
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Ttext-segment=0x20000000")
 elseif(APPLE)
-  # Mach-O executables normally reserve [0, 4 GiB) as __PAGEZERO. The port
-  # needs fixed mappings at 0x10000000 (ROM), 0x70000000 (s32-safe DRAM), and
-  # 0x80000000 (KSEG0 mirror), so retain null/low-pointer protection only up
-  # while leaving ample space before the first required mapping.
-  set(CMAKE_EXE_LINKER_FLAGS
-    "${CMAKE_EXE_LINKER_FLAGS} -Wl,-pagezero_size,0x10000")
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+    # Apple Silicon: shrinking __PAGEZERO gets the process SIGKILLed at exec
+    # and PIE is mandatory, so the fixed N64 mappings (0x10000000 / 0x70000000
+    # / 0x80000000) are impossible. The whole N64 address space is instead
+    # shifted to PORT_ADDR_BASE and reserved PROT_NONE by portAddrInit()
+    # (port/include/port_addr.h, docs/dev/MACOS-ARM64-PLAN.md).
+  else()
+    # Intel: Mach-O normally reserves [0, 4 GiB) as __PAGEZERO. The port needs
+    # fixed mappings at 0x10000000 (ROM), 0x70000000 (s32-safe DRAM), and
+    # 0x80000000 (KSEG0 mirror), so retain null/low-pointer protection only up
+    # while leaving ample space before the first required mapping.
+    set(CMAKE_EXE_LINKER_FLAGS
+      "${CMAKE_EXE_LINKER_FLAGS} -Wl,-pagezero_size,0x10000")
+  endif()
 endif()
 
 # port/shim first: PC-only shadow headers (bondtypes.h, bondconstants.h,
@@ -475,6 +506,7 @@ if(APPLE)
     OUTPUT "${SRC_ROMASSETS}"
     COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
+            --base "${PORT_ADDR_BASE}"
             "${SRC_ROMASSETS_INPUT}" "${SRC_ROMASSETS}"
     DEPENDS "${SRC_ROMASSETS_INPUT}"
             "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
@@ -483,6 +515,7 @@ if(APPLE)
     OUTPUT "${SRC_DRAM_SYMS}"
     COMMAND "${Python3_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
+            --base "${PORT_ADDR_BASE}"
             "${SRC_DRAM_SYMS_INPUT}" "${SRC_DRAM_SYMS}"
     DEPENDS "${SRC_DRAM_SYMS_INPUT}"
             "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"

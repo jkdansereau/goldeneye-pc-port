@@ -318,6 +318,9 @@ static LONG __stdcall crashHandler(PEXCEPTION_POINTERS exinfo)
 #include <ctype.h>
 #include <dlfcn.h>
 #include <sys/fcntl.h>
+#if defined(PLATFORM_MACOS)
+#include <mach-o/dyld.h> /* _dyld_get_image_vmaddr_slide (for atos) */
+#endif
 
 static struct sigaction prevSigAction;
 
@@ -363,6 +366,27 @@ static void crashStackTrace(char *msg, int sig, void *pc, ucontext_t *ucontext, 
                   (void *)ucontext->uc_mcontext.gregs[REG_RSP],
                   (void *)ucontext->uc_mcontext.gregs[REG_RBP]);
     }
+#elif defined(PLATFORM_MACOS) && defined(PLATFORM_ARM)
+    /* Darwin's uc_mcontext is a POINTER to __darwin_mcontext64; the arm64
+     * thread state is __ss.__x[0..28], __fp, __lr, __sp, __pc. */
+    if (ucontext) {
+        CRASH_MSG("REGS: x0=%p x1=%p x2=%p x3=%p x4=%p x5=%p x6=%p x7=%p\n",
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__x[0],
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__x[1],
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__x[2],
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__x[3],
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__x[4],
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__x[5],
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__x[6],
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__x[7]);
+        CRASH_MSG("Pc=%p Lr=%p Sp=%p Fp=%p\n",
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__pc,
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__lr,
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__sp,
+                  (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__fp);
+    }
+    CRASH_MSG("IMAGE SLIDE: 0x%lx\n",
+              (unsigned long)(uintptr_t)_dyld_get_image_vmaddr_slide(0));
 #endif
     CRASH_MSG("PC: ");
     if (pc) {
@@ -422,6 +446,8 @@ static void crashHandler(int sig, siginfo_t *siginfo, void *ctx)
         pc = (void *)ucontext->uc_mcontext.gregs[REG_RIP];
 #elif defined(PLATFORM_MACOS) && defined(PLATFORM_X86_64)
         pc = (void *)ucontext->uc_mcontext->__ss.__rip;
+#elif defined(PLATFORM_MACOS) && defined(PLATFORM_ARM)
+        pc = (void *)(uintptr_t)ucontext->uc_mcontext->__ss.__pc;
 #endif
     }
 

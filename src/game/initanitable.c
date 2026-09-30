@@ -6,6 +6,12 @@
 
 /* D33: ROM-file endianness fixup for the animation data segment (port layer). */
 #include "romdata.h"
+#if defined(PORT)
+#include "port_addr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 
 //bss
 
@@ -256,15 +262,15 @@ void expand_ani_table_entries(s32** arg0)
     while (*var_v0 != 0) {
         if (*var_v0 != 1) {
             *var_v0 = (s32)((s32)*var_v0 + (s32)(&ptr_animation_table->data));
-            ((struct anim_entry *)*var_v0)->unk08 += (s32)&ptr_animation_table->data;
-            ((struct anim_entry *)*var_v0)->unk10 += (s32)&ptr_animation_table->data;
+            PORT_N64PTR(struct anim_entry, *var_v0)->unk08 += (s32)&ptr_animation_table->data;
+            PORT_N64PTR(struct anim_entry, *var_v0)->unk10 += (s32)&ptr_animation_table->data;
         }
         var_v0++;
     }
 
     for (var_v0 = (s32 *)arg0; *var_v0 != 0; var_v0++) {
         if (*var_v0 != 1) {
-            *(s32 *)*var_v0 += (s32)&_animation_entriesSegmentRomStart;
+            *PORT_N64PTR(s32, *var_v0) += (s32)&_animation_entriesSegmentRomStart;
         }
     }
 }

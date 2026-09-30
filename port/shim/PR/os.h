@@ -41,11 +41,19 @@
 #        pragma pop_macro("sprintf")
 #        pragma pop_macro("errno")
 #    endif
+#    include "port_addr.h" /* PORT_ADDR_BASE for the V1-base subtractions */
 
 #    undef OS_K0_TO_PHYSICAL
-#    define OS_K0_TO_PHYSICAL(x) ((u32)((char *)(x) - 0x70000000))
+/* Offset of a DRAM V1 pointer from the V1 base. On macOS the V1 base is
+ * PORT_ADDR_BASE + 0x70000000, so the base must be subtracted too; the result
+ * is a small (< 8 MB) offset that fits s32 and that fast3d's seg_addr()
+ * re-bases into the V2/KSEG0 mirror. Identity behaviour at PORT_ADDR_BASE==0. */
+#    define OS_K0_TO_PHYSICAL(x) ((u32)((uintptr_t)(x) - (PORT_ADDR_BASE + 0x70000000ULL)))
 
 #    undef OS_PHYSICAL_TO_K0
+/* Identity: callers pass either a live V1 pointer (which is preserved with
+ * its full 64-bit value through the 64-bit GBI words) or a small physical
+ * offset (which fast3d re-bases). Both are unaffected by the window base. */
 #    define OS_PHYSICAL_TO_K0(x) ((void *)(x))
 
 #else

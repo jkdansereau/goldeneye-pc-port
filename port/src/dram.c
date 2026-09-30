@@ -48,6 +48,7 @@
 
 #include "platform.h"
 #include "system.h"
+#include "port_addr.h"
 
 #if defined(PLATFORM_WINDOWS)
 #include <windows.h>
@@ -60,8 +61,8 @@
 #include <unistd.h>
 #endif
 
-#define DRAM_V1_BASE   0x70000000UL /* s32-safe "virtual" view */
-#define DRAM_K0_BASE   0x80000000UL /* KSEG0 mirror view */
+#define DRAM_V1_BASE   (PORT_ADDR_BASE + 0x70000000ULL) /* s32-safe "virtual" view */
+#define DRAM_K0_BASE   (PORT_ADDR_BASE + 0x80000000ULL) /* KSEG0 mirror view */
 #define DRAM_SIZE      0x00800000UL /* 8 MB */
 
 void *dramReserve(void)

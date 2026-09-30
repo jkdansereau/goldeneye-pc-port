@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "port_addr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include <math.h>
 #include <bondtypes.h>
 #include "chr.h"
@@ -166,7 +171,7 @@ void sets_a_bunch_of_BONDdata_values_to_default(void)
     {
         sub_GAME_7F0062C0(
             // match hack: addu address calculated backwards
-            (void*)((s32)g_BondMoveAnimationSetup[i].anim_id + (s32)&ptr_animation_table->data),
+            PORT_N64PTR(void, (s32)g_BondMoveAnimationSetup[i].anim_id + (s32)&ptr_animation_table->data),
             (s32)g_BondMoveAnimationSetup[i].loopframe,
             (s32)g_BondMoveAnimationSetup[i].endframe,
             &spD0);
@@ -194,7 +199,7 @@ void sets_a_bunch_of_BONDdata_values_to_default(void)
     modelSetAnimation(
         &g_CurrentPlayer->model,
         // match hack: addu address calculated backwards
-        (struct ModelAnimation *) ((s32)g_BondMoveAnimationSetup[g_CurrentPlayer->headanim].anim_id + (s32)&ptr_animation_table->data),
+        (struct ModelAnimation *) PORT_N64PTR(void, (s32)g_BondMoveAnimationSetup[g_CurrentPlayer->headanim].anim_id + (s32)&ptr_animation_table->data),
         0,
         g_BondMoveAnimationSetup[g_CurrentPlayer->headanim].loopframe,
         0.5f,
