@@ -178,3 +178,9 @@ runtime. `ge007.ini` is written under `data/` on first launch.
 
 More diagnostic switches are cataloged in
 [`dev/GE-ENV-PROBES.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/GE-ENV-PROBES.md).
+
+## 6. Level sweep on your own runner (optional)
+
+To run the ROM-gated 21-level sweep in GitHub Actions on your own
+self-hosted runner (Windows or macOS) with your own ROM, see
+[Self-hosted level sweep](selfhosted-sweep.md).
