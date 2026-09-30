@@ -1,54 +1,51 @@
 # Self-hosted runtime (ROM-gated)
 #
-# Runs the build + the 21-level headless sweep (tools_pc/verify.sh) on the
-# self-hosted runner "corpyvt6agent01", the one machine that has a legal ROM.
-# This is the job class ci.yml explicitly does NOT do: CI is build-only, no
-# ROM, so runtime checks live here. Setup + rollout plan (gitignored, local):
-#   docs/dev/notes/SELFHOSTED-RUNNER-PLAN.md
+# Builds, then runs the 21-level headless sweep on a SELF-HOSTED runner that
+# has a legal ROM: the maintainer's box, or a contributor's own runner on a
+# fork. This is the job class ci.yml explicitly does NOT do (CI is
+# build-only, with no ROM). Setup for runner owners: docs/selfhosted-sweep.md.
 #
-# Persistence model — everything lives under the runner's own paths, managed
-# by the pipeline; no hand-maintained directories:
-#   - ccache  -> actions/cache (stored by the runner under _work/_temp)
-#   - ROM     -> actions/cache, key ge-rom-data-ntsc-v1. Bootstrap: copy the
-#                three files into {runner_home}/_rom-seed/ on the box; a run
-#                with an empty cache copies them in and attempts to save the
-#                cache entry. The seed dir is kept (NOT deleted) rather than
-#                treated as one-time -- actions/cache/save has been silently
-#                failing to persist on this box (warning, not a hard step
-#                failure; root cause open, see SELFHOSTED-RUNNER-PLAN.md), so
-#                the seed is the durable fallback every run re-copies from
-#                until that's fixed. Integrity is re-verified every run
-#                against the committed ge007.u.sha1 (repo-tracked US ROM hash).
-#   - MSYS2   -> machine-level install at C:\msys64 (verify.sh hardcodes the
-#                prefix), installed and its packages maintained BY HAND on
-#                the box. msys2/setup-msys2 still runs every job (it's what
-#                registers the `msys2 {0}` shell wrapper), but with
-#                `release: false` and update/install both omitted — verified
-#                against the action's source to do no pacman -Syu / pacman -S
-#                / network round-trip, just a fast reuse of the existing
-#                C:\msys64. Package presence is checked (not installed) by
-#                tools_pc/check-selfhosted-deps.sh, which fails fast with
-#                exact install instructions if something's missing.
+#   platform=windows : MSYS2 box, tools_pc/verify.sh sweep (the original G1 job)
+#   platform=macos   : Homebrew box, tools_pc/level_sweep_mac.sh
+#                      (SCAFFOLD: not yet run end to end; it needs the arm64
+#                      address model from #95 on the ref and exits early
+#                      without it)
+#
+# ROM model (both platforms): the ROM + sidecars are copied from a seed
+# directory on the runner, {runner_home}/_rom-seed by default, or the repo
+# variable GE_ROM_SEED_DIR. The ROM's sha1 is re-verified every run against
+# the committed ge007.u.sha1. The ROM is deliberately NOT stored in
+# actions/cache: cache entries live on GitHub's side and pull_request
+# workflows can restore base-branch caches, which would make the ROM readable
+# to any PR's workflow.
 #
 # Trigger gating (non-negotiable):
-#   - workflow_dispatch ONLY for now. Flip on `push: branches: [main]` once
-#     the first manual runs are reliably green.
+#   - workflow_dispatch ONLY.
 #   - NEVER add `pull_request`: unreviewed fork code must not be routable to
 #     a runner that can see the ROM.
 #
-# Leak rules (docs/dev/notes/AGENT-VM-FORGEJO-PLAN.md checklist):
-#   - The ROM + sidecars live in the runner-managed cache only; nothing in
-#     this workflow uploads from data/.
-#   - Artifacts here are console logs + a JSON verdict only. Rendered frames
-#     (ppm/) are ROM-derived content and are NOT uploaded.
+# Leak rules: nothing is uploaded from data/. Artifacts are console logs plus
+# a JSON verdict only. Rendered frames (ppm/) are ROM-derived content and are
+# NOT uploaded.
 
 name: Self-hosted runtime
 
 on:
   workflow_dispatch:
     inputs:
+      platform:
+        description: "Runner platform"
+        required: true
+        default: windows
+        type: choice
+        options: [ windows, macos ]
+      runner_labels:
+        description: 'Optional JSON array of runner labels, e.g. ["self-hosted","macOS","ARM64"] (blank = platform default)'
+        required: false
+        default: ""
+        type: string
       levels:
-        description: "Sweep subset, SWEEP_LEVELS format (blank = all 21)"
+        description: "Sweep subset, SWEEP_LEVELS format (blank = all 21; Windows only)"
         required: false
         default: ""
         type: string
@@ -57,21 +54,20 @@ permissions:
   contents: read
 
 # One ROM job at a time per ref; never cancel an in-flight sweep out from
-# under itself (the sweep is serialized by its own lockdir + watchdog). Group
-# + cancel-in-progress:false is what actually serializes runs — GitHub
-# Actions' workflow-level `concurrency` has no `max-parallel` key (that only
-# exists under a job's `strategy:` for matrix jobs); a stray one here is a
-# hard parse error that blocks every dispatch.
+# under itself. Group + cancel-in-progress:false is what serializes runs
+# (workflow-level `concurrency` has no `max-parallel` key; a stray one is a
+# hard parse error that blocks every dispatch).
 concurrency:
   group: selfhosted-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  ROM_CACHE_KEY: ge-rom-data-ntsc-v1
+  GE_ROM_SEED_DIR: ${{ vars.GE_ROM_SEED_DIR }}
 
 jobs:
-  build-and-sweep:
-    runs-on: [ self-hosted, windows ]
+  windows-sweep:
+    if: inputs.platform == 'windows'
+    runs-on: ${{ inputs.runner_labels != '' && fromJSON(inputs.runner_labels) || fromJSON('["self-hosted","windows"]') }}
     defaults:
       run:
         shell: msys2 {0}
@@ -79,107 +75,46 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 500M
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # `release: false` reuses the box's own C:\msys64 as-is instead of
-      # downloading/installing MSYS2 fresh (verified against the action's
-      # source: with this set, and update/install both omitted, it does
-      # exactly one `uname -a` + a pacman.conf sed tweak — no pacman -Syu,
-      # no pacman -S, no network round-trip). This step still has to run
-      # every time — it's what registers the `msys2 {0}` shell wrapper
-      # above — but does no install/update work.
-      - uses: msys2/setup-msys2@v2
+      # `release: false` reuses the box's own C:\msys64 as-is (no pacman
+      # -Syu / -S, no network). It still has to run: it registers the
+      # `msys2 {0}` shell wrapper.
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
         with:
           msystem: MINGW64
           release: false
 
-      # Packages themselves are hand-maintained on the box (never installed
-      # by this workflow) — fails fast with exact install instructions if
-      # one's missing, instead of a confusing failure deeper in the build.
       - name: Check self-hosted dependencies
         run: tools_pc/check-selfhosted-deps.sh
 
-      # --- ROM + sidecars: runner-managed cache, one-time seed --------------
-      - name: Restore ROM + sidecars (runner cache)
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            data/ge007.ntsc-final.z64
-            data/pcmodels-ntsc-final
-            data/pccg-ntsc-final
-          key: ${{ env.ROM_CACHE_KEY }}
-
-      - name: Check ROM store presence
-        id: romcheck
+      - name: Stage ROM + sidecars (runner seed dir)
         run: |
-          present=true
+          seed="${GE_ROM_SEED_DIR:-$(dirname "$(dirname "$RUNNER_WORKSPACE")")/_rom-seed}"
           for f in ge007.ntsc-final.z64 pcmodels-ntsc-final pccg-ntsc-final; do
-            if [ ! -f "data/$f" ]; then echo "missing from cache: $f"; present=false; fi
+            [ -e "$seed/$f" ] || {
+              echo "missing $seed/$f" >&2
+              echo "Copy ge007.ntsc-final.z64, pcmodels-ntsc-final/ and pccg-ntsc-final/ into $seed" >&2
+              echo "(or set the repo variable GE_ROM_SEED_DIR). See docs/selfhosted-sweep.md." >&2
+              exit 2
+            }
           done
-          echo "present=$present" >> "$GITHUB_OUTPUT"
-
-      # {runner_home} = two levels up from RUNNER_WORKSPACE ({home}/_work/{repo}).
-      # NOT deleted after the cache save below (see that step's comment) --
-      # kept as a durable fallback source until the cache save is proven to
-      # actually round-trip on this box.
-      - name: Seed ROM cache (from durable seed dir)
-        if: steps.romcheck.outputs.present == 'false'
-        run: |
-          seed="$(dirname "$(dirname "$RUNNER_WORKSPACE")")/_rom-seed"
-          [ -d "$seed" ] || {
-            echo "ROM cache is empty and no seed found at $seed." >&2
-            echo "One-time bootstrap: copy ge007.ntsc-final.z64, pcmodels-ntsc-final," >&2
-            echo "and pccg-ntsc-final into that directory on the runner, then re-run." >&2
-            exit 2
-          }
           mkdir -p data
-          # -r: pcmodels-*/pccg-* are directories, not single files (found by
-          # testing — a plain cp failed with "omitting directory").
           cp -r "$seed/ge007.ntsc-final.z64" "$seed/pcmodels-ntsc-final" \
                 "$seed/pccg-ntsc-final" data/
-          echo "seeded ROM store from $seed"
-
-      # Explicit save (restore alone never saves): persist the seeded store
-      # immediately, before the build/sweep can fail out from under it.
-      # KNOWN ISSUE (2026-09-12): this reliably logs a WARNING annotation
-      # ("Failed to save: ... tar.exe failed with exit code 2") on this box
-      # and never actually persists anything to the cache -- but
-      # actions/cache/save treats a save failure as non-fatal by design, so
-      # the step still reports success and the job carries on. Root cause not
-      # yet found (see docs/dev/notes/SELFHOSTED-RUNNER-PLAN.md). Consequence:
-      # do NOT delete the seed dir after this step (previously done, and it
-      # meant a *silent* cache-save failure combined with the delete wiped
-      # the only copy of the ROM every run -- exactly what broke rollout
-      # step 5's repeated dispatches). The seed dir now stays in place
-      # indefinitely as a durable fallback; "Check ROM store presence" /
-      # "Seed ROM cache" above already re-copy from it whenever the cache
-      # comes back empty, so this is safe to leave as a no-op once the cache
-      # save is fixed for real.
-      - name: Save ROM cache
-        if: steps.romcheck.outputs.present == 'false'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            data/ge007.ntsc-final.z64
-            data/pcmodels-ntsc-final
-            data/pccg-ntsc-final
-          key: ${{ env.ROM_CACHE_KEY }}
+          echo "staged ROM store from $seed"
 
       - name: Verify ROM integrity (committed US sha1)
         run: |
-          cd data
-          want="$(cut -d' ' -f1 ../ge007.u.sha1)"
-          got="$(sha1sum ge007.ntsc-final.z64 | cut -d' ' -f1)"
+          want="$(cut -d' ' -f1 ge007.u.sha1)"
+          got="$(sha1sum data/ge007.ntsc-final.z64 | cut -d' ' -f1)"
           [ "$want" = "$got" ] || { echo "ROM hash mismatch: want $want got $got" >&2; exit 2; }
           echo "ROM sha1 ok: $got"
 
-      # --- build -------------------------------------------------------------
-      # Same opt-in ccache CMakeLists.txt wires up (speed-ups plan Step 5);
-      # persisted via actions/cache like ci.yml's windows-build.
       - name: Restore ccache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-selfhosted-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
@@ -197,19 +132,26 @@ jobs:
       # symbolication -> pixcount -> framediff vs tools_pc/golden/. Serialized
       # + watchdog + one retry by design (D117: not frame-deterministic).
       - name: Level sweep (all 21, or dispatch subset)
+        env:
+          INPUT_LEVELS: ${{ inputs.levels }}
         run: |
-          [ -n "${{ inputs.levels }}" ] && export SWEEP_LEVELS='${{ inputs.levels }}'
+          if [ -n "$INPUT_LEVELS" ]; then
+            if ! printf '%s' "$INPUT_LEVELS" | grep -Eq '^[A-Za-z0-9]+:[0-9]+( [A-Za-z0-9]+:[0-9]+)*$'; then
+              echo "levels input must be space-separated Name:NN entries, e.g. 'Dam:33 Facility:34'" >&2
+              exit 1
+            fi
+            export SWEEP_LEVELS="$INPUT_LEVELS"
+          fi
           tools_pc/verify.sh sweep --json > sweep.log 2>&1
           rc=$?
           cat sweep.log
           exit $rc
 
-      # Pull the JSON verdict array out of the mixed stdout for easy review.
       - name: Extract JSON verdict
         if: always()
         run: |
           python -c "
-          import json, sys
+          import json
           s = open('sweep.log', encoding='utf-8', errors='replace').read()
           i = s.rfind('[{')
           out = '[]'
@@ -220,15 +162,140 @@ jobs:
           print(out)
           "
 
-      # Console logs + verdict only — no frames, no ROM bytes (leak rules).
+      # Console logs + verdict only: no frames, no ROM bytes (leak rules).
       - name: Upload sweep report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: selfhosted-sweep-${{ github.run_number }}
+          name: selfhosted-sweep-windows-${{ github.run_number }}
           path: |
             sweep.log
             sweep-verdict.json
             ge007.crash.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # SCAFFOLD (2026-09-30): written without a Mac runner to test on. Expect
+  # small fixes on the first real run; please report them on the macos branch.
+  macos-sweep:
+    if: inputs.platform == 'macos'
+    runs-on: ${{ inputs.runner_labels != '' && fromJSON(inputs.runner_labels) || fromJSON('["self-hosted","macOS","ARM64"]') }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The arm64 build needs the port_addr model (#95). level_sweep_mac.sh
+      # arrives with it too. Fail early and clearly on a ref without them.
+      - name: Check ref has the arm64 address model
+        run: |
+          for f in port/src/port_addr.c tools_pc/level_sweep_mac.sh; do
+            [ -f "$f" ] || {
+              echo "$f not on this ref: the macOS sweep needs the arm64 work (#95) merged in." >&2
+              exit 2
+            }
+          done
+
+      - name: Check macOS dependencies (Homebrew)
+        run: |
+          missing=0
+          for t in cmake python3 brew; do
+            command -v "$t" >/dev/null || { echo "missing: $t" >&2; missing=1; }
+          done
+          if command -v brew >/dev/null; then
+            ls "$(brew --prefix)"/bin/gcc-[0-9]* >/dev/null 2>&1 || { echo "missing: Homebrew gcc (gcc-N)" >&2; missing=1; }
+            for p in sdl2 zlib; do
+              brew list --versions "$p" >/dev/null || { echo "missing: brew $p" >&2; missing=1; }
+            done
+          fi
+          [ "$missing" = 0 ] || { echo "Install with: brew install cmake gcc sdl2 zlib python3" >&2; exit 2; }
+
+      - name: Stage ROM + sidecars (runner seed dir)
+        run: |
+          seed="${GE_ROM_SEED_DIR:-$(dirname "$(dirname "$RUNNER_WORKSPACE")")/_rom-seed}"
+          for f in ge007.ntsc-final.z64 pcmodels-ntsc-final pccg-ntsc-final; do
+            [ -e "$seed/$f" ] || {
+              echo "missing $seed/$f" >&2
+              echo "Copy ge007.ntsc-final.z64, pcmodels-ntsc-final/ and pccg-ntsc-final/ into $seed" >&2
+              echo "(or set the repo variable GE_ROM_SEED_DIR). See docs/selfhosted-sweep.md." >&2
+              exit 2
+            }
+          done
+          mkdir -p data
+          cp -R "$seed/ge007.ntsc-final.z64" "$seed/pcmodels-ntsc-final" \
+                "$seed/pccg-ntsc-final" data/
+          echo "staged ROM store from $seed"
+
+      - name: Verify ROM integrity (committed US sha1)
+        run: |
+          want="$(cut -d' ' -f1 ge007.u.sha1)"
+          got="$(shasum -a 1 data/ge007.ntsc-final.z64 | cut -d' ' -f1)"
+          [ "$want" = "$got" ] || { echo "ROM hash mismatch: want $want got $got" >&2; exit 2; }
+          echo "ROM sha1 ok: $got"
+
+      - name: Regenerate ROM-asset symbol file (US)
+        run: python3 scripts/gen_romassets.py u
+
+      - name: Build (ntsc-final)
+        run: |
+          ./build-pc.sh ntsc-final
+          # level_sweep_mac.sh runs build-pc/ge007.aarch64 (Apple Silicon only).
+          [ -x build-pc/ge007.aarch64 ] || { echo "build-pc/ge007.aarch64 not produced (Intel Macs are not supported by the sweep script yet)" >&2; exit 2; }
+
+      # level_sweep_mac.sh always exits 0, so the verdict step below decides
+      # pass/fail from its results file (/tmp/mac_sweep_results). Its logs go
+      # to /tmp/sweeplogs, which the script does not create itself.
+      - name: Level sweep (all 21)
+        run: |
+          rm -rf /tmp/sweeplogs /tmp/mac_sweep_results
+          mkdir -p /tmp/sweeplogs
+          bash tools_pc/level_sweep_mac.sh 2>&1 | tee sweep.log
+
+      - name: Extract JSON verdict (fails the job on CRASH/BLACK)
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, re, sys
+          try:
+              lines = open('/tmp/mac_sweep_results', encoding='utf-8', errors='replace').read().splitlines()
+          except OSError:
+              lines = []
+          rows, done = [], False
+          for ln in lines:
+              if ln.strip() == 'SWEEP DONE':
+                  done = True
+                  continue
+              m = re.match(r'^(\S+) \((\d+)\): (\w+)\s*(.*)$', ln)
+              if m:
+                  rows.append({'level': m.group(1), 'num': m.group(2),
+                               'status': m.group(3), 'detail': m.group(4).strip()})
+          open('sweep-verdict.json', 'w').write(json.dumps(rows, indent=1) + '\n')
+          print(json.dumps(rows, indent=1))
+          bad = [r for r in rows if r['status'] != 'OK']
+          if not done or not rows or bad:
+              print(f"sweep FAILED: done={done} levels={len(rows)} non-OK={len(bad)}", file=sys.stderr)
+              sys.exit(1)
+          print(f"sweep OK: {len(rows)} levels")
+          PY
+
+      - name: Collect console logs
+        if: always()
+        run: |
+          mkdir -p sweep-logs
+          cp /tmp/sweeplogs/*.log sweep-logs/ 2>/dev/null || true
+
+      # Console logs + verdict only: no frames, no ROM bytes (leak rules).
+      - name: Upload sweep report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: selfhosted-sweep-macos-${{ github.run_number }}
+          path: |
+            sweep.log
+            sweep-verdict.json
+            sweep-logs/
           if-no-files-found: ignore
           retention-days: 14
