@@ -51,6 +51,7 @@ extern MENU current_menu;
 #include "file.h"   /* save_data (D356 reset probe: second-file isolation) */
 #include "optionsoverlay.h"
 #include "watchsettings.h"
+#include "hudaspect.h"
 #include "../fast3d/gfx_api.h"
 
 /* file2.c; same extern as watchsettings.c (not in a header). */
@@ -1716,6 +1717,19 @@ void optionsOverlayHandleInput(void)
      * click lands on the same row it visually appears over. */
     int32_t rx = 0, ry = 0, rw = 0, rh = 0;
     gfx_get_ui_screen_rect(&rx, &ry, &rw, &rh);
+    /* D335b: the panel is pillarboxed, so map clicks into that centred 4:3
+     * region. Side-bar clicks stay outside the logical canvas. */
+    if (rw > 0 && portNativeAspect() > 1.3334f &&
+        gfx_current_dimensions.aspect_ratio > 0.01f) {
+        double vis = (double)gfx_current_native_aspect /
+                     (double)gfx_current_dimensions.aspect_ratio;
+        if (vis > 0.0 && vis < 1.0) {
+            double pillarW = (double)rw * vis;
+            double pillarX = (double)rx + ((double)rw - pillarW) * 0.5;
+            rx = (int32_t)pillarX;
+            rw = (int32_t)pillarW;
+        }
+    }
     if (rw > 0 && rh > 0) {
         double ox = (double)(mx - rx) * (double)viGetX() / rw;
         double oy = (double)(my - ry) * (double)viGetY() / rh;
@@ -2103,12 +2117,19 @@ Gfx *optionsOverlayEmit(void)
     gDPPipeSync(gdl++);
     gDPSetCycleType(gdl++, G_CYC_1CYCLE);
     gDPSetTexturePersp(gdl++, G_TP_NONE);
+    /* D335b: dim the full window, then pillarbox the 4:3 panel the same way
+     * the front end does (menu_jump_constructor_handler). */
+    PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_NONE);
     gDPSetScissor(gdl++, G_SC_NON_INTERLACE, 0, 0, W, H);
+    gdl = fillRect(gdl, 0, 0, W, H, 0, 0, 0, 150);
+    PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_CENTER);
+    if (portNativeAspect() > 1.3334f) {
+        gDPSetScissor(gdl++, G_SC_NON_INTERLACE, 0, 0, W, H);
+    }
 
     /* Dark glass like the previous F10 overlay; green ink and highlights
      * follow GE's watch options (options.c's Bank Gothic/0xA0FFA0F0).
      * No dossier paper, gold, 3D watch model or new assets. */
-    gdl = fillRect(gdl, 0, 0, W, H, 0, 0, 0, 150);
     gdl = fillRect(gdl, o.left, o.top, o.right, o.bottom,
                    5, 17, 13, 225);
     gdl = fillRect(gdl, o.left + 8, o.top + 25, o.right - 8, o.top + 26,
@@ -2259,6 +2280,12 @@ Gfx *optionsOverlayEmit(void)
                         s_scroll > (s_section >= 0 ? 1 : 0) ? "^ v" : "v",
                         0x80d58bff);
 
+    /* Aspect mode survives the frame. Clear it or the next frame's world
+     * is squeezed into this same 4:3 region. */
+    PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_NONE);
+    if (portNativeAspect() > 1.3334f) {
+        gDPSetScissor(gdl++, G_SC_NON_INTERLACE, 0, 0, W, H);
+    }
     gDPPipeSync(gdl++);
     gSPEndDisplayList(gdl++);
 
