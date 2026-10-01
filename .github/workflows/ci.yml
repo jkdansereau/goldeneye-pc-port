@@ -198,7 +198,7 @@ jobs:
             python3-pip libsdl2-dev zlib1g-dev libgl1-mesa-dev ccache patchelf
 
       - name: Restore ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-linux-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
@@ -316,7 +316,7 @@ jobs:
         run: tools_pc/check-selfhosted-deps.sh
 
       - name: Restore ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-windows-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
