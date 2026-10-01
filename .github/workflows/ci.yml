@@ -394,12 +394,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: goldeneye-pc-port-win64
           path: dist
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: goldeneye-pc-port-linux-x86_64
           path: dist
