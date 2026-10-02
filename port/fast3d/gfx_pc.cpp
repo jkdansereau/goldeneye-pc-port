@@ -1444,6 +1444,99 @@ static void gfx_matrix_mul(float res[4][4], const float a[4][4], const float b[4
     memcpy(res, tmp, sizeof(tmp));
 }
 
+/* D409: 120 FPS via frame interpolation (port-layer only, opt-in).
+ *
+ * GE's sim cannot tick faster than the console VI rate: waitForNextFrame()
+ * blocks until a whole 1/60 s has elapsed and every timer downstream of it
+ * (speedgraphframes -> g_ClockTimer) is an integer count of those ticks, so
+ * the game only ever produces 60 (PAL: 50) distinct frames a second. To show
+ * more, each game display list is rendered TWICE: first with every G_MTX
+ * blended halfway between the previous frame's matrix and this frame's, then
+ * as-is. Both passes run the same (intact) DL inside one osSpTaskStartGo, so
+ * no game state is touched and nothing extra is kept but the previous
+ * frame's decoded float matrices. Costs half a tick (~8 ms) of latency.
+ *
+ * Matrices are matched frame-to-frame by the first geometry the matrix is
+ * used for (the next G_VTX / G_DL / G_FLOATVTX_EXT target -- model and room
+ * geometry lives at stable addresses) plus an occurrence count for repeated
+ * instances of one model. A matrix with no match, or whose prev/cur values are
+ * too far apart to be the same object one tick apart (a camera cut, a draw
+ * order swap between two instances), is drawn at its current value. Screen-
+ * space geometry the CPU transformed itself does not move on the in-between
+ * frame. Off (mode OFF, no per-command cost) unless Video.FpsCap exceeds the
+ * VI rate. */
+enum { INTERP_OFF = 0, INTERP_RECORD, INTERP_BLEND };
+struct InterpMtx { float m[4][4]; };
+static int s_interp_mode = INTERP_OFF;
+static bool s_interp_enabled = false;
+static bool s_interp_have_prev = false;
+static uintptr_t s_interp_next_geo = 0;
+static uint64_t s_interp_last_run_ns = 0;
+static uint64_t s_interp_tick_ns = 16666667;   /* one VI tick */
+static uint64_t s_interp_refresh_ns = 0;       /* display refresh period; 0 = unknown */
+static bool s_interp_vsync = false;
+static double s_interp_pass_ema_ns = 0;        /* smoothed cost of one render pass */
+static bool s_interp_too_slow = false;
+/* Deferred present of the real frame (see gfx_run). */
+static bool s_present_pending = false;
+static uint64_t s_present_deadline_ns = 0;
+static uint64_t s_pass_render_ns = 0;          /* last pass: start -> just before swap */
+static std::unordered_map<uint64_t, InterpMtx> s_interp_prev, s_interp_cur;
+static std::unordered_map<uint64_t, uint32_t> s_interp_occ;
+
+static uint64_t gfx_interp_key(uintptr_t geo, bool proj) {
+    const uint64_t base = ((uint64_t)geo & 0x0000ffffffffffffULL) | (proj ? 0x8000000000000000ULL : 0);
+    const uint32_t occ = s_interp_occ[base]++;
+    return base ^ ((uint64_t)(occ & 0x7fff) << 48);
+}
+
+/* Could prev and cur be the same transform one sim tick apart? */
+static bool gfx_interp_plausible(const float a[4][4], const float b[4][4], bool proj) {
+    float d = 0, n = 0;
+    if (proj) {
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                d += (a[i][j] - b[i][j]) * (a[i][j] - b[i][j]);
+                n += b[i][j] * b[i][j];
+            }
+        }
+        return d <= 0.04f * n;
+    }
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 4; j++) {
+            d += (a[i][j] - b[i][j]) * (a[i][j] - b[i][j]);
+            n += b[i][j] * b[i][j];
+        }
+    }
+    if (d > 0.25f * n) { /* > ~35 deg of rotation, or a big scale change */
+        return false;
+    }
+    float dt = 0, nt = 0;
+    for (int j = 0; j < 3; j++) {
+        dt += (a[3][j] - b[3][j]) * (a[3][j] - b[3][j]);
+        nt += b[3][j] * b[3][j];
+    }
+    const float lim = 0.35f * sqrtf(nt) + 16.0f;
+    return dt <= lim * lim;
+}
+
+static void gfx_interp_matrix(float matrix[4][4], bool proj) {
+    const uint64_t key = gfx_interp_key(proj ? 0 : s_interp_next_geo, proj);
+    if (s_interp_mode == INTERP_RECORD) {
+        memcpy(s_interp_cur[key].m, matrix, sizeof(InterpMtx));
+        return;
+    }
+    auto it = s_interp_prev.find(key);
+    if (it == s_interp_prev.end() || !gfx_interp_plausible(it->second.m, matrix, proj)) {
+        return;
+    }
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            matrix[i][j] = 0.5f * (it->second.m[i][j] + matrix[i][j]);
+        }
+    }
+}
+
 static void gfx_sp_matrix(uint8_t parameters, const int32_t* addr) {
     float matrix[4][4];
 
@@ -1476,6 +1569,10 @@ static void gfx_sp_matrix(uint8_t parameters, const int32_t* addr) {
     // For a modified GBI where fixed point values are replaced with floats
     memcpy(matrix, addr, sizeof(matrix));
 #endif
+
+    if (s_interp_mode != INTERP_OFF && !addr_bad) {
+        gfx_interp_matrix(matrix, (parameters & G_MTX_PROJECTION) != 0);
+    }
 
     if (parameters & G_MTX_PROJECTION) {
         if (parameters & G_MTX_LOAD) {
@@ -3875,6 +3972,20 @@ static void gfx_run_dl(Gfx* cmd) {
                              (finding B1), so treating it as a no-op is safe. */
                 break;
             case G_MTX: {
+                if (s_interp_mode != INTERP_OFF) {
+                    /* D409: key the matrix by the geometry it transforms. */
+                    s_interp_next_geo = 0;
+                    for (int i = 1; i <= 24; i++) {
+                        const uint32_t op = cmd[i].words.w0 >> 24;
+                        if (op == G_VTX || op == G_DL || op == G_FLOATVTX_EXT) {
+                            s_interp_next_geo = (uintptr_t)seg_addr(cmd[i].words.w1);
+                            break;
+                        }
+                        if (op == (uint8_t)G_ENDDL || op == G_MTX) {
+                            break;
+                        }
+                    }
+                }
                 gfx_sp_matrix(C0(16, 8), (const int32_t*)seg_addr(cmd->words.w1));
                 break;
             }
@@ -4329,7 +4440,130 @@ static double s_perf_dl = 0, s_perf_run = 0, s_perf_present = 0, s_perf_interval
 static double s_perf_pre = 0, s_perf_post = 0, s_perf_swap = 0;
 static uint64_t s_perf_frames = 0, s_perf_last_start = 0;
 
+static void gfx_run_pass(Gfx* commands, bool swap);
+
+extern "C" void gfx_set_frame_interpolation(int on, int vi_rate, int refresh_hz, int vsync) {
+    if (vi_rate > 0) {
+        s_interp_tick_ns = 1000000000ULL / (uint64_t)vi_rate;
+    }
+    s_interp_refresh_ns = refresh_hz > 0 ? 1000000000ULL / (uint64_t)refresh_hz : 0;
+    s_interp_vsync = vsync != 0;
+    s_interp_enabled = on != 0;
+}
+
+/* Present hook for the extra frame (video.c counts it toward the FPS stats). */
+extern "C" void videoNoteInterpFrame(void);
+
+/* D409: microseconds until the deferred real-frame present is due (0 = due
+ * now), or -1 when nothing is pending. Polled by the scheduler thread's
+ * message wait (port/src/libultra.c osRecvMesg). */
+extern "C" int64_t gfx_pending_present_wait_us(void) {
+    if (!s_present_pending) {
+        return -1;
+    }
+    const uint64_t now = gfx_perf_now_ns();
+    return now >= s_present_deadline_ns ? 0 : (int64_t)((s_present_deadline_ns - now + 999) / 1000);
+}
+
+/* Swap the already-rendered real frame. Render (scheduler) thread only. */
+extern "C" void gfx_present_pending(void) {
+    if (!s_present_pending) {
+        return;
+    }
+    s_present_pending = false;
+    gfx_wapi->swap_buffers_begin();
+    gfx_rapi->finish_render();
+    gfx_wapi->swap_buffers_end();
+}
+
 extern "C" void gfx_run(Gfx* commands) {
+    /* A real frame still waiting for its slot is shown now rather than lost
+     * (only when the next DL beats its deadline). */
+    if (s_present_pending) {
+        gfx_present_pending();
+    }
+
+    if (!s_interp_enabled) {
+        if (s_interp_mode != INTERP_OFF) {
+            s_interp_mode = INTERP_OFF;
+            s_interp_have_prev = false;
+            s_interp_too_slow = false;
+            s_interp_pass_ema_ns = 0;
+            s_interp_prev.clear();
+            s_interp_cur.clear();
+        }
+        gfx_run_pass(commands, true);
+        return;
+    }
+
+    /* D409 pacing. The scheduler thread runs this inline, and that same
+     * thread is what forwards VI retraces to the game thread -- the game only
+     * starts its next frame on a forwarded retrace (boss.c). So it must not
+     * sit here waiting for the real frame's present slot: both passes are
+     * rendered back to back, the in-between frame is swapped at once, and the
+     * real frame's swap is DEFERRED to half a tick later, performed from the
+     * scheduler's own message wait (gfx_present_pending via osRecvMesg).
+     * (First cut waited inline at 2x the VI rate: gfx_run then held the
+     * thread for most of the tick, retraces were forwarded late, the sim
+     * slipped to 2-tick frames and the blend was dropped on those -- ~70-84
+     * fps measured on a user's machine.) */
+    const uint64_t now = gfx_perf_now_ns();
+    const bool stale = s_interp_last_run_ns == 0 || now - s_interp_last_run_ns > 4 * s_interp_tick_ns;
+    s_interp_last_run_ns = now;
+
+    /* Too slow to afford a second pass: hysteresis on the smoothed cost. */
+    if (s_interp_pass_ema_ns > 0.40 * (double)s_interp_tick_ns) {
+        s_interp_too_slow = true;
+    } else if (s_interp_pass_ema_ns < 0.30 * (double)s_interp_tick_ns) {
+        s_interp_too_slow = false;
+    }
+
+    bool blended = false;
+    if (s_interp_have_prev && !stale && !s_interp_too_slow) {
+        uintptr_t segs[16];
+        struct RSP rsp_saved;
+        memcpy(segs, segmentPointers, sizeof(segs));
+        memcpy(&rsp_saved, &rsp, sizeof(rsp));
+        s_interp_mode = INTERP_BLEND;
+        s_interp_occ.clear();
+        gfx_run_pass(commands, true);
+        if (!dropped_frame) {
+            gfx_rapi->finish_render();
+            gfx_wapi->swap_buffers_end();
+            videoNoteInterpFrame();
+            blended = true;
+        }
+        memcpy(segmentPointers, segs, sizeof(segs));
+        memcpy(&rsp, &rsp_saved, sizeof(rsp));
+    }
+    const uint64_t a_ns = gfx_perf_now_ns();
+
+    s_interp_mode = INTERP_RECORD;
+    s_interp_occ.clear();
+    s_interp_cur.clear();
+    gfx_run_pass(commands, !blended);
+    s_interp_prev.swap(s_interp_cur);
+    s_interp_have_prev = !dropped_frame;
+
+    const double pass = (double)s_pass_render_ns;
+    s_interp_pass_ema_ns = s_interp_pass_ema_ns > 0 ? 0.9 * s_interp_pass_ema_ns + 0.1 * pass : pass;
+
+    if (blended) {
+        /* Due half a tick after the in-between frame. With VSync the swap
+         * itself then waits for a refresh, so aim one refresh early. */
+        uint64_t delay = s_interp_tick_ns / 2;
+        if (s_interp_vsync && s_interp_refresh_ns) {
+            delay = delay > s_interp_refresh_ns ? delay - s_interp_refresh_ns : 0;
+        } else {
+            delay = delay > 500000 ? delay - 500000 : 0;
+        }
+        s_present_deadline_ns = a_ns + delay;
+        s_present_pending = true;
+    }
+}
+
+static void gfx_run_pass(Gfx* commands, bool swap) {
+    const uint64_t pass_t0 = gfx_perf_now_ns();
     s_hud_scale = 1.0f;   /* D226: never carry a HUD scale across frames */
     const uint64_t perf_t0 = gfx_perfstat_on() ? gfx_perf_now_ns() : 0;
     ++num_dls;
@@ -4386,7 +4620,10 @@ extern "C" void gfx_run(Gfx* commands) {
 
     gfx_rapi->end_frame();
     const uint64_t perf_tpost = perf_t0 ? gfx_perf_now_ns() : 0;
-    gfx_wapi->swap_buffers_begin();
+    s_pass_render_ns = gfx_perf_now_ns() - pass_t0;
+    if (swap) {
+        gfx_wapi->swap_buffers_begin();
+    }
     if (perf_t0) {
         s_perf_pre += (double)(perf_tpre - perf_t0) / 1.0e6;
         s_perf_post += (double)(perf_tpost - perf_t1) / 1.0e6;
@@ -4402,7 +4639,7 @@ extern "C" void gfx_run(Gfx* commands) {
 
 extern "C" void gfx_end_frame(void) {
     const uint64_t perf_t0 = gfx_perfstat_on() ? gfx_perf_now_ns() : 0;
-    if (!dropped_frame) {
+    if (!dropped_frame && !s_present_pending) { /* D409: a deferred present finishes itself */
         gfx_rapi->finish_render();
         gfx_wapi->swap_buffers_end();
     }

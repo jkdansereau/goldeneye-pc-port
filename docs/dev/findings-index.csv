@@ -285,3 +285,4 @@ D405,CLOSED,"fast3d/OpenGL: MSAA above the driver max black-screens; two glBindF
 D406,RESOLVED,front-end PC Options screen:,"RESOLVED (2026-09-28, port-layer only, Steam Deck-validated):"
 D407,PARTIAL,Tanks cannot be boarded/exited on PC —,"PARTIAL (fix landed in v0.4.0, port-only):"
 D408,OPEN,Game.SkipIntro skips the post-mission failure dossier:,"OPEN (cosmetic, not root-caused past the handoff site)."
+D409,RESOLVED,120 FPS: Video.FpsCap can only throttle - the sim is hard-locked to the VI rate (integer 1/60 s ticks in frametiming.c); a 120 cap alone is a no-op (user ask 2…,"RESOLVED (user-verified 2026-10-02, steady ~120 fps on Windows):"

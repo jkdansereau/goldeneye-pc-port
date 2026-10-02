@@ -44,6 +44,12 @@ void gfx_start_frame(void);
 void gfx_run(Gfx* commands);
 void gfx_end_frame(void);
 void gfx_set_target_fps(int);
+/* D409: render an interpolated in-between frame per game frame (see gfx_pc.cpp). */
+void gfx_set_frame_interpolation(int on, int vi_rate, int refresh_hz, int vsync);
+/* D409: deferred real-frame present, driven from the scheduler thread's
+ * message wait (port/src/libultra.c osRecvMesg). */
+int64_t gfx_pending_present_wait_us(void);
+void gfx_present_pending(void);
 void gfx_set_texture_filter(enum FilteringMode mode);
 void gfx_set_mipmap_filter(enum MipmapFilteringMode mode);
 void gfx_set_fix_mip_textures(int on);

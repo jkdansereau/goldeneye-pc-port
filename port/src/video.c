@@ -55,7 +55,7 @@ static int initDone = 0;
  * at modern resolutions without requiring 4x anti-aliasing.
  */
 static int cfgVSync         = 1;   /* swap interval: 0 = off, 1 = on            */
-static int cfgFpsCap        = 60;  /* frame cap in fps; 0 = uncapped (vsync); menu only exposes 30/60 */
+static int cfgFpsCap        = 60;  /* frame cap in fps; 0 = uncapped (vsync); menu exposes 30/60/120. Above the VI rate = D409 interpolation */
 static int cfgMSAA          = 2;   /* 1/2/4/8 samples; 2x default is lighter on low-end GPUs */
 static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N64 3-point + trilinear */
 static int cfgFixMipTex     = 1;   /* RC2: clip mip-contaminated texture uploads to base height */
@@ -608,6 +608,46 @@ static double fpsWindowStart = 0.0;
 static int fpsNumFrames = 0;
 static float vidAvgFPS = 0.f;
 
+/* D409: the in-between frame fast3d presents on its own (gfx_pc.cpp). */
+void videoNoteInterpFrame(void)
+{
+    ++fpsNumFrames;
+}
+
+/* D409: a cap above the console VI rate turns on fast3d's frame
+ * interpolation (the sim itself stays at 60/50 Hz -- see gfx_pc.cpp) and
+ * presents twice per VI tick. With VSync on, every swap waits for a
+ * display refresh, so on a display slower than that the two presents per
+ * tick would halve the SIM rate (D186); interpolation is held off there until
+ * VSync is turned off or the window lands on a fast enough display. */
+extern u32 osTvType; /* port/src/libultra.c: 1 = NTSC (60 Hz VI), else 50 Hz */
+
+static void videoApplyFpsCap(void)
+{
+    static int lastState = -1;
+    const int vi = (osTvType == 1) ? 60 : 50;
+    const int want = cfgFpsCap > vi;
+    const int hz = want ? gfx_sdl_get_refresh_rate() : 0;
+    const int ok = want && (!cfgVSync || hz >= 2 * vi - 5);
+    const int state = !want ? 0 : (ok ? 1 : 2);
+
+    /* With interpolation on, fast3d paces its own two presents per tick
+     * (gfx_pc.cpp gfx_run), so the window-level frame cap is off. */
+    gfx_set_frame_interpolation(ok, vi, hz, cfgVSync);
+    gfx_set_target_fps(ok ? 0 : (want ? vi : cfgFpsCap));
+
+    if (state != lastState) {
+        lastState = state;
+        if (state == 1) {
+            sysLogPrintf(LOG_INFO, "video: frame interpolation on (%d fps presents, %d Hz sim)", 2 * vi, vi);
+        } else if (state == 2) {
+            sysLogPrintf(LOG_WARNING, "video: FpsCap=%d needs a >=%d Hz display with VSync on "
+                         "(this one reports %d Hz); holding at %d fps -- turn VSync off to force it",
+                         cfgFpsCap, 2 * vi, hz, vi);
+        }
+    }
+}
+
 int videoInit(void)
 {
     wmAPI = &gfx_sdl;
@@ -655,7 +695,7 @@ int videoInit(void)
         sysLogPrintf(LOG_WARNING, "video: Video.FpsCap=%d too low (throttles the sim); using 0 (uncapped)", cfgFpsCap);
         cfgFpsCap = 0;
     }
-    gfx_set_target_fps(cfgFpsCap);   /* 0 = uncapped */
+    videoApplyFpsCap();   /* 0 = uncapped; > VI rate = D409 interpolation */
 
     /* Texture filtering. 1 = bilinear (default, matches prior behaviour),
      * 0 = crisp nearest, 2 = N64 3-point emulation + trilinear mips (opt-in;
@@ -774,7 +814,7 @@ void videoStartFrame(void)
     int dirty = SDL_AtomicSet(&liveCfgDirty, 0);
     if (dirty) {
         if (dirty & VCFG_VSYNC) wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
-        if (dirty & VCFG_FPS) gfx_set_target_fps(cfgFpsCap);
+        if (dirty & (VCFG_FPS | VCFG_VSYNC)) videoApplyFpsCap();
         if (dirty & VCFG_FILTER) videoApplyTexFilter();
         if (dirty & VCFG_FOV) portFovScale = (f32)cfgFovScale / 100.0f;
         if (dirty & VCFG_ANISO) gfx_set_anisotropy_level(cfgAniso);
@@ -782,6 +822,12 @@ void videoStartFrame(void)
         sysLogPrintf(LOG_INFO, "video: live config applied mask=%02x "
                      "(vsync=%d fpscap=%d texfilter=%d fov=%d aniso=%d)",
                      dirty, cfgVSync, cfgFpsCap, cfgTexFilter, cfgFovScale, cfgAniso);
+    }
+
+    /* D409: the window may have moved to a display with another refresh
+     * rate; re-check the interpolation guard about every two seconds. */
+    if (cfgFpsCap > 60 && (frames % 120) == 0) {
+        videoApplyFpsCap();
     }
 
     gfx_start_frame();

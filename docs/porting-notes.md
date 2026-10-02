@@ -1477,7 +1477,13 @@ darkening from a nonzero `ENV_ALPHA` LERP factor is very likely faithful
   stalls with it. On console the CPU never waits on RSP/RDP/VI. A PC frame
   cap must therefore drop *presented* frames without sleeping that thread;
   `Video.FpsCap < 30` is currently just refused (clamped to uncapped) as a
-  stopgap.
+  stopgap. **D409 hit this again and shows the working pattern:** the 120 FPS
+  interpolation's first cut waited inline for its second present slot and
+  measured 70-84 fps (retraces forwarded late -> 2-tick sim frames). The fix
+  renders, returns, and performs the timed GL work from the scheduler's own
+  idle wait (`osRecvMesg` on the retrace queue does a timed wait to the
+  deadline, then `gfx_present_pending()`). Any future "do render-thread work
+  later" need should hook that same wait, not sleep inside `gfx_run`.
 - **D24-implications; host-scheduling nondeterminism / fake priority
   semantics:** the pthread kernel does not enforce N64's 0–31 priorities
   (`osYieldThread` = `Sleep(0)`), so interleavings impossible on console can

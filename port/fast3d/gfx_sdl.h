@@ -23,6 +23,9 @@ void gfx_sdl_park_for_exit(void);
  * host thread's event pump). */
 void gfx_sdl_update_cached_size(void);
 
+/* D409: refresh rate (Hz) of the display the window is on; 0 = unknown. */
+int gfx_sdl_get_refresh_rate(void);
+
 #ifdef __cplusplus
 }
 #endif

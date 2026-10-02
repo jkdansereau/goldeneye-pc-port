@@ -120,7 +120,12 @@ static const char *const kCrosshairStyle[] = { "Original", "Thin cross", NULL };
  * have it, but it's dropped from the menu: with VSync on (the default) it's
  * indistinguishable from 60, and with VSync off it just burns GPU time
  * re-presenting the same simulated frame -- confusing for no real benefit. */
-static const int         kFpsCapSeq[] = { 30, 60 };
+/* D409: 120 re-adds a value above the console rate, but not as a plain cap:
+ * above the VI rate video.c turns on fast3d's frame interpolation (one
+ * blended in-between frame per sim tick; the sim itself still ticks at
+ * 60/50 Hz). Needs a >=120 Hz display with VSync on, or VSync off. */
+static const int         kFpsCapSeq[] = { 30, 60, 120 };
+#define FPSCAP_N ((int)(sizeof(kFpsCapSeq) / sizeof(kFpsCapSeq[0])))
 
 /* Windowed-mode resolution presets. Filtered at init to those that fit the
  * desktop; the Resolution row cycles the surviving list. */
@@ -1215,10 +1220,10 @@ static void rowAdjust(struct Row *r, int dir)
     }
     case ROW_FPSCAP: {
         int idx = 0;
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < FPSCAP_N; i++) {
             if (kFpsCapSeq[i] == (int)lround(v)) idx = i;
         }
-        idx = (idx + dir + 2) % 2;
+        idx = (idx + dir + FPSCAP_N) % FPSCAP_N;
         rowSet(r, (double)kFpsCapSeq[idx]);
         break;
     }

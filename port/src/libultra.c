@@ -59,6 +59,9 @@
 
 /* fast3d (C++): the software RSP entry point. */
 extern void gfx_run(Gfx *commands);
+/* D409: fast3d's deferred real-frame present (port/fast3d/gfx_pc.cpp). */
+extern int64_t gfx_pending_present_wait_us(void);
+extern void gfx_present_pending(void);
 
 /* ------------------------------------------------------------------------ */
 /* Globals the game expects to exist (normally set by osInitialize).        */
@@ -697,6 +700,29 @@ s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
             sysLogPrintf(LOG_NOTE, "first block on mq=%p from %p (rel %p)",
                          (void *)mq, ra,
                          (void *)((uintptr_t)ra - sysImageBase()));
+        }
+        /* D409: the scheduler thread (sole consumer of the retrace queue,
+         * and the thread that owns the GL context) idles here between
+         * frames; with frame interpolation on, fast3d leaves the real frame
+         * rendered but unswapped so this thread can keep forwarding retraces
+         * meanwhile. Wake at its present deadline, swap it, keep waiting. */
+        if (mq == g_viRetraceMQ) {
+            const int64_t waitUs = gfx_pending_present_wait_us();
+            if (waitUs == 0) {
+                pthread_mutex_unlock(&pq->lock);
+                gfx_present_pending();
+                pthread_mutex_lock(&pq->lock);
+                continue;
+            }
+            if (waitUs > 0) {
+                struct timespec ts;
+                clock_gettime(CLOCK_REALTIME, &ts);
+                uint64_t ns = (uint64_t)ts.tv_nsec + (uint64_t)waitUs * 1000u;
+                ts.tv_sec += (time_t)(ns / 1000000000u);
+                ts.tv_nsec = (long)(ns % 1000000000u);
+                pthread_cond_timedwait(&pq->cond, &pq->lock, &ts);
+                continue;
+            }
         }
         pthread_cond_wait(&pq->cond, &pq->lock);
     }

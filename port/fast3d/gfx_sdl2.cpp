@@ -410,6 +410,15 @@ extern "C" void gfx_sdl_update_cached_size(void) {
     }
 }
 
+extern "C" int gfx_sdl_get_refresh_rate(void) {
+    SDL_DisplayMode mode;
+    const int idx = wnd ? SDL_GetWindowDisplayIndex(wnd) : -1;
+    if (idx < 0 || SDL_GetCurrentDisplayMode(idx, &mode) != 0) {
+        return 0;
+    }
+    return mode.refresh_rate;
+}
+
 static bool gfx_sdl_start_frame(void) {
     return true;
 }
