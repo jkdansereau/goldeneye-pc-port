@@ -196,6 +196,11 @@ build-pc-cmd.bat
 # v0.4.0 modern-options wave: per-landing sweep capture dirs (capture.sh output)
 tools_pc/sweep-captures/capture-*/
 
+# Sweep capture output dirs and PPM dumps: regenerable framebuffer captures
+# (capture.sh OUTDIR), useful on disk, never in the tracked tree.
+tools_pc/sweep-captures/cap-*/
+tools_pc/sweep-captures/**/*.ppm
+
 # Stray full CPython install that landed in repo root (2026-09-28);
 # referenced by no project tooling. Never commit.
 /Python/

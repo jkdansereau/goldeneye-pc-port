@@ -1,9 +1,13 @@
 # GoldenEye 007 PC Port — v<version>
 
 <p align="center">
-  <img src="https://github.com/jkdansereau/goldeneye-pc-port/raw/v<version>/docs/media/goldeneye-gh-preview.gif" width="480"
-       alt="~24 s gameplay montage from live play sessions, opening on the Runway tank (no audio track)">
+  <img src="https://github.com/jkdansereau/goldeneye-pc-port/raw/v<version>/docs/img/shots/shot-28.jpg" width="340" alt="Streets, rendered by the port">
+  <img src="https://github.com/jkdansereau/goldeneye-pc-port/raw/v<version>/docs/img/shots/shot-01.jpg" width="340" alt="Dam, rendered by the port">
 </p>
+
+<!-- MAINTAINER: header stills are from the public capture set (docs/img/shots/).
+     The 15 MB gameplay-montage gif was dropped from the repo on the v0.5.0
+     docs media pass (C3); the project index now uses a still carousel. -->
 
 Platforms: **Windows x86-64** and **Linux x86-64 (including Steam Deck)**.
 Region: **NTSC-U (US) only**. See [Known issues](#known-issues).
@@ -12,185 +16,155 @@ Region: **NTSC-U (US) only**. See [Known issues](#known-issues).
      build was played on (e.g. "Played on Windows and Steam Deck: campaign
      spot-checks, 2-4P split-screen, a controller-only session"). -->
 
-The headline is **2–4 player split-screen multiplayer**, the largest feature
-the N64 original had that this port was still missing. Alongside it come
-controller presets and rebinding, audio output options, a steady 60 fps on
-low-end hardware, and a round of fidelity and stability fixes checked against
-the N64 game.
+The headline is **the settings interface, rebuilt**. Both options screens are
+merged into one, laid out like the Perfect Dark PC port's menu, with plain-English
+wording, real-unit sliders and a one-line description under whichever option you
+select. Alongside it: the game's own N64 control styles as a per-seat preset,
+emulator save files that load directly, a scalable HUD overlay, and a round of
+fidelity fixes checked frame-by-frame against the N64 game.
 
 ---
 
 ## New features
 
-### 2–4 player split-screen multiplayer (#99)
+### One options menu, PD-style layout (D504, D519)
 
-- Local multiplayer on every MP map, with the N64's own setup flow,
-  pause/watch menus and per-player HUD.
-- **Who controls which player:** with one controller, keyboard/mouse is
-  player 1 and the controller is player 2; with two or more controllers, the
-  controllers take players 1–4. `Input.MPMode` in `ge007.ini` picks Auto
-  (default), PadsOnly or KbmP1.
-- A controller unplugged and replugged mid-match keeps its player (thanks to
-  dolent, #122). Each controller's LED shows its player number.
+- The file-select **PC Options** entry now opens the same menu the F10 overlay
+  shows — there is only one options UI, one place to learn (D519).
+- Options are grouped into six sections in the Perfect Dark port's order
+  (Video, Sound, Controls, Game, …), with **checkboxes, sliders and dropdowns**
+  instead of the old numbered rows (D504).
+- **Display mode** is a dropdown; **Backspace** goes back, matching the rest of
+  the game's menus (D504 follow-up).
 
-### Controller presets and rebinding (D469, D498)
+### Menu wording, units and help text (D505–D507)
 
-F10 → Input → **Controller** (also in the front-end PC Options):
+- 27 maintainer-approved wording edits across both menus: option names say what
+  they do, not what the internal variable is called (D505).
+- Sliders carry **real units** — percent, frames, seconds, pixels — and their
+  values are standardised across the two menus (D506).
+- Selecting an option shows a **one-line description** of it in the same menu
+  (D507).
 
-- **Layout preset:** the Xbox release's four styles: "1.1 Jinx" (the
-  default, identical to before), "1.2 Christmas", "1.3 Frost" and
-  "1.4 Elektra" (they swap which stick moves, looks, strafes and turns), or
-  **Custom**.
-- **Custom:** rebind every action per controller, up to two buttons each.
-  Tap B or Back to cancel a capture, hold Back to clear. Menus always keep
-  A/X accept and B/Y cancel, so you can't lock yourself out.
-- Builds on ideas from italoarruda's #109 (credited as co-author).
-- In the tank, the pad follows your layout too: the weapon button switches
-  the tank's weapon and the use button gets out (D495).
+### Control styles: the game's own N64 layouts (D513, D516, D518)
 
-### PlayStation and Nintendo button names (D471)
+- **Control style** offers **Ext** (this port's scheme, unchanged) and
+  **Original**, which shows the game's own N64 styles 1.1–2.4 (D513, D516).
+- The style is chosen **per seat** and saved with the Bond file, so each player
+  keeps their own (D518, D516).
+- The Xbox-release presets (1.1 Jinx, 1.2 Christmas, 1.3 Frost, 1.4 Elektra) and
+  Custom rebinding from v0.4.x are unchanged. Preset names refer to the Xbox
+  release's control styles; this project is not affiliated with Microsoft or Rare.
+- Here the right stick aims and the D-pad strafes, as on the N64; the Xbox
+  release's "left stick aims the crosshair" and "D-pad copies the left stick"
+  behaviours are not reproduced.
 
-PlayStation and Switch controllers show their own button names in the
-menus (Cross/Circle, ZL/ZR, …). Xbox and Steam Deck text is unchanged.
+### Emulator save files load directly (D514)
 
-### Audio output options (D470)
+- An emulator-format `ge007.eep` sitting next to the executable is read on first
+  launch, so a save from Project64, mupen or 1964 continues in the port without
+  conversion. (Live playtest owed; the converter `eep_convert.py` still does
+  explicit two-way conversion.)
 
-- **Master volume**, applied after the music and FX volumes.
-- **Output device:** pick your audio device. A missing or unplugged device
-  falls back to the system default.
+### HUD and overlay scaling (D510, D512)
 
-### Presets, filtering and the original look (D440, D447, D499)
+- The F10 overlay and the FPS counter are now the **same on-screen size** on the
+  front end and inside a level (D510).
+- **Game.HudScale** scales the F10 overlay and FPS counter along with the in-game
+  HUD (D512).
 
-- **Original N64 preset** (F10 → Graphics) sets every value the port changes
-  back to the N64's; **Port defaults preset** restores the port's modern
-  defaults.
-- **Aspect → Original** shows the exact 4:3 frame with bars (16:9 while the
-  game's own Ratio setting is 16:9).
-- **Texture filter → Trilinear**, next to Bilinear: smooths distant
-  textures that the game has no mipmaps for.
+### New settings (D511)
 
-### Options polish (D443, D472, D497, D502)
+- **Fullscreen mode**, **Center window**, **crosshair opacity** and
+  **crosshair colour by health** — the four settings the Perfect Dark port has
+  that this port was missing.
 
-- **Restart game** row: applies restart-only settings such as anti-aliasing
-  with one click.
-- Clearer values: mouse sensitivity as ×, deadzone, vibration and volumes in
-  whole %, field of view in horizontal degrees, anti-aliasing up to 16×.
-- Front-end PC Options pages like the game's own dossiers: PREVIOUS and
-  NEXT folder tabs, and B goes back a page. With a controller, the first
-  item is highlighted when you open a section and you return to where you
-  were when you leave it.
-- The F10 overlay is pillarboxed in widescreen (instead of stretched),
-  experimental options are shown in red, an unknown `ge007.ini` key shows a
-  warning (#90), and with several controllers the one that opened the
-  overlay drives it.
+### Overlay controls are antialiased (D520)
 
-### `All unlocked` no longer touches your save (D442)
+- Slider wedges, slider markers and dropdown arrows no longer step in whole
+  canvas pixels (which grew visibly at large window sizes); they are drawn
+  smooth at every size.
 
-It's now a memory-only override: switch it off and your real progress is
-back. Fake unlocks written by older builds are not repaired, so back up
-`data/ge007.eep` if you used it before.
+### Watch menu keeps its own settings (D349, corrected)
+
+- Closing the in-level **Watch** menu now saves the watch's own screen size and
+  ratio, and they no longer fight the front-end **Aspect ratio** setting. The
+  earlier note in the findings log was corrected.
 
 ---
 
-## Performance
+## Fidelity and stability fixes
 
-- **A steady 60 fps on low-end hardware (D481, #92).** Rendering ran on the
-  same thread that delivers the game's 60 Hz timing signal, so slower GPUs
-  regularly missed their frame slot and dropped to 30–45 fps. Rendering now
-  runs on its own thread, like the N64's graphics chip. A 2011 laptop (Intel
-  HD 3000) went from ~45 to a steady 60 fps at every setting.
-- **Lighter first-launch defaults on Atom/Celeron-class GPUs (D482, #92).**
-  On Intel HD 400–605 / UHD 600–605 class GPUs and software renderers, the
-  first launch lowers draw distance, LOD distance and anti-aliasing. Settings
-  you've changed yourself are never touched.
-- **No more in-play shader stutter (D480):** shaders the game has used are
-  compiled at startup on the next launch.
-- **Render-thread CPU roughly halved in typical scenes (D473),** plus fewer
-  redundant texture lookups and palette re-imports (D474, D476).
-
----
-
-## Fidelity fixes (checked against the N64 game)
-
-- **Draw distance no longer changes AI behaviour (D466, #125).** The
-  extended draw distance (default 250%) let guards "see" you from beyond the
-  N64's fog, so Xenia's fight on Jungle could start early. AI awareness now
-  uses the level's original distance; you can still see, shoot and use
-  everything that's drawn.
-- **Ultrawide and high field of view (D468):** the AI keeps the N64's widest
-  (16:9) view. Turn on *Guards see the wider view* if you prefer the old
-  behaviour.
-- **Sniper rifle (#136):** the scope zooms all the way in again (it was
-  capped at about a third of the original magnification, D484); zoom speed
-  matches the N64 (it was about twice as fast at 60 fps, D485); the crouch
-  key now crouches and stands with it out, as it does in GEPD (D494).
-- **Turrets and explosions at 60 fps (D486, #126):** turret fire rate,
-  tracers, explosion density and screen-shake length now match the N64.
-  Damage is unchanged. (Explosions that sometimes don't appear in heavy
-  firefights are the N64's own behaviour: it has six explosion slots.)
-- **Weapons (#114–#118):** automatic-fire cadence follows the N64's rules at
-  any frame rate; grenade launcher recoil is back; the gun sways with mouse
-  look again; the tank turns with the mouse; the run-over death sound no
-  longer loops.
-- **Light fixtures go dark when shot, with the right impact effects
-  (#119).**
-- **Dam/Caverns water (D465, #127):** the water animation no longer slides
-  side to side, and it scrolls at the N64's rate.
-- **Kneeling guards** use their crouched-rifle firing animation (D445,
-  thanks dolent, #120).
-- **Dam:** the first-tower guard walks his whole patrol instead of a small
-  circle (D490).
-- **The Rareware logo** in the intro renders correctly (D75).
-- Props near some doorways no longer count as being in extra rooms, and
-  ejected casings spin as authored (D491).
-
----
-
-## Stability & fixes
-
-- **Knife-slash crash fixed (D454).**
-- **64-bit memory-layout fixes** (D441, D453, D456, D457, D461, D462): two
-  item/vertex tables were sized with N64 strides, and several pointer fields
-  were truncated.
-- A split-screen zero-size texture crash is guarded (D463); stale
-  anisotropic filtering on recycled textures is fixed (D446, thanks dolent,
-  #121).
-- *Skip intro* no longer skips the failure dossier after a failed mission
-  (D408).
-- Adjusting the music volume with a controller in F10 no longer drops the
-  frame rate (D489).
-- Steam Deck: the Deck preset now also applies after a first launch in
-  Desktop Mode (D283).
-- Aztec: the area by the shuttle with the four turrets no longer breaks
-  into stray triangles. The per-frame vertex buffer, sized for what the
-  N64 could see, could overflow with the port's wider view (D500).
-- In 3- and 4-player games, weapon pickup messages no longer show stray
-  characters (D496).
-- A controller no longer keeps vibrating after you quit mid-firefight
-  (D493).
-- *Aspect → Original* no longer shows a one-pixel strip of flickering
-  pixels at the left and right edges (D493).
-- Crash logs now include resolved stack frames, which makes reports far
-  easier to act on.
+- **Fog:** objects far in fog are hidden as on the N64 (fog snap); in widescreen
+  the wider view can still show a faint distant building edge (e.g. Surface's
+  dish from the start area) — 4:3 matches the N64 (D503).
+- **Aspect ratio:** forced ratios now letterbox/pillarbox without re-cropping the
+  play area (D508); the rare gun/hand model glitch after changing ratio
+  mid-level is largely fixed, a rare remainder is logged (D509).
+- **FPS counter:** holding left/right on a Bond settings row no longer drops the
+  FPS counter (D517).
+- **Build:** a fresh build directory no longer produces an untagged executable
+  name (D515).
+- **Tooling:** the asset converter's argument quoting and sidecar size check are
+  tightened; the CI cache actions no longer carry stale ROM paths. The golden-frame
+  tooling is now non-destructive and drift-free: a verification sweep used to
+  overwrite your own `data/ge007.ini` and leave the previous level's save file
+  behind, and now pins both idempotently (your ini and save are restored whatever
+  the run does); the capture helper reads its frame windows out of the gate instead
+  of a hardcoded copy that had gone stale (D524). The gate's recipe was re-based
+  too: per-level windows that sit in settled gameplay rather than inside the intro
+  flyby, and the save file pinned present (D522, D523).
+- **Harness:** the debug capture/launch env vars are documented — `GE_PCDUMP` must be
+  `first-last:step` (a colon where the dash belongs silently dumps every frame, D527),
+  and a `GE_STARTMENU` boot skips the EEPROM import, so the imported-save test must run
+  from a normal boot (D528). A per-triangle draw-state census probe
+  (`GE_D526`/`GE_D526BOX`/`GE_D526MAX`) is available for transparency/texture triage
+  (D526; the P13 Dam-ending grate show-through it targeted was confirmed faithful N64
+  behaviour on 1964/GEPD, so no change shipped).
 
 ---
 
 ## Known issues
 
-- **NTSC-U (US) ROMs only.** PAL and JP ROMs convert, build and boot from
-  source on this release's code, but the release packages don't support them
-  yet (#85).
-- **No macOS or ARM builds yet.**
-- The first frame of a level takes a little longer while its textures
-  upload: a brief dip in the FPS counter.
-- **`Skip intro` and `All unlocked` are still experimental.**
-- Far objects almost hidden in fog can show as a faint outline with
-  straight edges (e.g. the satellite dish seen from Surface's start area).
-  The N64's 16-bit colour hid it (D503).
-- The full list, with workarounds, is the
-  [known-issues table](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/ROADMAP.md#known-issues).
+| Issue | Impact | Workaround |
+|---|---|---|
+| PAL and JP ROMs aren't supported in release packages | NTSC-U only | Use an NTSC-U ROM. Both regions convert, build and boot from source; packaging is still open |
+| Changing aspect ratio inside a level can briefly glitch the gun/hand model, rarely | Cosmetic, one-off | Change the ratio from the front-end PC Options, or accept it |
+| No macOS or ARM builds | Platform | — |
+| Saves from builds before v0.4.1 can hold fake unlocks from `All unlocked` | Save data | Not repaired automatically. Since v0.4.1 the option never writes the save; keep a backup of `data/ge007.eep` from before you used it |
+| `Skip intro` and `All unlocked` are experimental | Opt-in options | Leave them off for a normal playthrough |
+| The first frame of a level takes a little longer while its textures upload | Brief FPS-counter dip | None needed |
+| Far objects almost fully in fog are now hidden as on the N64, except in widescreen where a faint distant building edge can still show (e.g. Surface's dish from the start area); 4:3 matches the N64 | Cosmetic | Higher Draw/LOD distance shows more |
+
+The full list, with workarounds, is the
+[known-issues table](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/ROADMAP.md#known-issues).
+
+**Not yet playtested live** (merged, build- and review-verified, owed a play
+session before this release is announced): the four new settings (D511),
+`Game.HudScale` (D512), Control style Original on a pad (D513/D516 per seat),
+emulator-save import (D514), and the D519 profile-chooser row / no-click-through
+follow-ups.
+<!-- MAINTAINER: if the play session did not cover all of the above, keep the
+     sentence "these were merged and review-verified but not playtested live"
+     in the body; never imply a full playtest. -->
+
+**Golden-gate state for this release:** both platforms carry the full 21-level
+reference-frame set (63 frames each) at the same stems, and each platform's gate
+is green against its own goldens. The cross-platform spread (0.348-3.983% of
+pixels over tol 2 on the 20 non-Cuba levels, structural tier 21/21 clean) is
+informational only — it is not a cross-platform pixel-parity claim, and the
+linux *pixel* gate did not run on the capture box (its GL probe fails closed
+there; the linux crash gate did). The Dam ending cutscene has not been checked
+by eye in a live session.
 
 ---
+
+## Thanks
+
+Outside contributions merged for this release: dolent (PRs #120–#122), MST246
+(#125 draw-distance investigation), italoarruda (#109 gamepad-preset ideas),
+TenebrusoM (DexDrive / the D514 save-format sample), plus reporter credits on
+the issue numbers named above.
 
 ## Downloads
 
@@ -231,13 +205,6 @@ Full steps, controls and troubleshooting are in the bundled `README.md`.
 sha256sum -c goldeneye-pc-port-<version>-win64.zip.sha256
 sha256sum -c goldeneye-pc-port-<version>-linux-x86_64.tar.gz.sha256
 ```
-
-## Thanks
-
-dolent (#120, #121, #122), italoarruda (#107, #109), MST246 (the #125
-investigation and handoff used for the fix), JosephAHK (#133), MistaEcho
-(#119 via #87), and everyone who filed #92, #114–#119, #125, #126, #127,
-#129, #130 and #136.
 
 ## Source & docs
 

@@ -4,7 +4,7 @@ description: What a release actually installs (no networking, no telemetry, no R
 and how faithfully the port tracks the original N64 game's logic.
 ---
 
-# Security & fidelity status
+## Security & fidelity status
 
 This page answers two questions plainly: *what does installing this put on
 your machine*, and *how faithfully does the port actually reproduce the

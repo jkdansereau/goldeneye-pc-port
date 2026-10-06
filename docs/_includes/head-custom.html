@@ -3,154 +3,166 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
 
 <style>
   /* ----------------------------------------------------------------------
-     Hand-rolled site theme (replaces jekyll-theme-cayman, 2026-09-28).
-     Look: committed charcoal/off-white/amber "night desk" — flat and square,
-     serif display type (Libre Baskerville) over a system sans body, thin
-     amber rules between sections, text navigation separated by middots.
-     No gradients, no shadows, no rounded corners, no theme switcher.
+     Site theme (replaces the 2026-09-28 "night desk" theme).
+     Look: a dark, minimal "amber terminal" -- near-black space background
+     (a faint starfield), a single amber accent (GoldenEye gold), a
+     console/mono identity for chrome (IBM Plex Mono) over a clean
+     readable sans body (IBM Plex Sans). Flat and calm: to reduce eye
+     strain and evoke the old-school web. Content is untouched; this is
+     a presentation layer only.
      --------------------------------------------------------------------- */
   :root {
-    --bg:        #1b1b1d;   /* charcoal page            */
-    --bg-soft:   #232326;   /* code / alt rows          */
-    --bg-deep:   #141416;   /* code blocks, masthead    */
-    --ink:       #e8e6e3;   /* off-white body text      */
-    --ink-soft:  #b5b1a9;   /* secondary text           */
-    --ink-mute:  #8d897f;   /* captions, footer         */
-    --line:      #3a3a3e;   /* 1px borders              */
-    --accent:    #ffb454;   /* amber/gold               */
-    --accent-hi: #ffd08a;   /* link hover               */
-    --measure:   44rem;
+    --bg:        #050607;   /* true near-black        */
+    --bg-frame:  #0c0d0f;   /* the page frame         */
+    --bg-panel:  #121316;   /* code / cards / tables  */
+    --ink:       #e6e4df;   /* warm off-white         */
+    --ink-soft:  #a9a7a0;   /* secondary text         */
+    --ink-mute:  #70706a;   /* captions, footer       */
+    --line:      #26282c;   /* 1px borders            */
+    --line-2:    #3a3d44;   /* stronger borders       */
+    --accent:    #e8a13a;   /* GoldenEye gold (amber) */
+    --accent-hi: #ffca7a;   /* link / accent hover    */
+    --code-ink:  #ffcf9e;   /* code text (warm)       */
+    --th:        #15161a;   /* table header fill      */
+    --zebra:     #0e0f12;   /* alt row fill           */
+    --measure:   46rem;
+    --mono: "IBM Plex Mono","Courier New",monospace;
+    --sans: "IBM Plex Sans",Verdana,Geneva,sans-serif;
   }
 
   html { background: var(--bg); }
 
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                 "Helvetica Neue", Arial, sans-serif;
-    font-size: 16.5px;
-    line-height: 1.7;
     color: var(--ink);
-    background: var(--bg);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.62;
+    /* faint starfield (the old-school "space" tile, softened) */
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(1px 1px at 22px 34px,  rgba(255,255,255,.50), transparent),
+      radial-gradient(1px 1px at 120px 82px, rgba(255,255,255,.28), transparent),
+      radial-gradient(1.4px 1.4px at 68px 138px, rgba(232,161,58,.45), transparent),
+      radial-gradient(1px 1px at 172px 44px, rgba(255,255,255,.20), transparent),
+      radial-gradient(1px 1px at 92px 172px,  rgba(255,255,255,.32), transparent);
+    background-size: 200px 200px;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
 
-  /* ---- Masthead -------------------------------------------------------- */
-  .site-masthead {
-    background: var(--bg-deep);
-    border-bottom: 1px solid var(--accent);
-  }
-  .masthead-inner {
-    max-width: 52rem;
-    margin: 0 auto;
-    padding: 2.6rem 1.5rem 1.6rem;
-    text-align: center;
-  }
-  .masthead-title {
-    display: inline-block;
-    font-family: "Libre Baskerville", Georgia, "Times New Roman", serif;
-    font-weight: 700;
-    font-size: 2.1rem;
-    line-height: 1.25;
-    color: var(--ink);
-    text-decoration: none;
-    letter-spacing: 0.01em;
-  }
-  .masthead-title:hover { color: var(--accent); }
-  .masthead-tagline {
-    margin-top: 0.5rem;
-    color: var(--ink-mute);
-    font-size: 0.95rem;
-  }
-  .masthead-nav {
-    margin-top: 1.3rem;
-    font-size: 0.9rem;
-  }
-  .masthead-nav a {
-    color: var(--accent);
-    text-decoration: none;
-    padding: 0.1rem 0.15rem;
-  }
-  .masthead-nav a:hover { color: var(--accent-hi); text-decoration: underline; }
-  .nav-sep { color: var(--ink-mute); padding: 0 0.35rem; }
-
-  /* ---- Content ---------------------------------------------------------- */
-  .doc-content {
-    max-width: 52rem;
-    margin: 0 auto;
-    padding: 2.5rem 1.5rem 1rem;
-  }
-  .doc-content p,
-  .doc-content ul,
-  .doc-content ol,
-  .doc-content blockquote { max-width: var(--measure); }
-
-  .doc-content h1,
-  .doc-content h2,
-  .doc-content h3,
-  .doc-content h4 {
-    font-family: "Libre Baskerville", Georgia, "Times New Roman", serif;
-    font-weight: 700;
-    line-height: 1.35;
-    color: var(--ink);
-    margin-top: 2.4rem;
-    margin-bottom: 0.9rem;
-  }
-  .doc-content h1 { font-size: 1.75rem; }
-  .doc-content h2 { font-size: 1.35rem; }
-  .doc-content h3 { font-size: 1.1rem; }
-  .doc-content > h1:first-child { margin-top: 0.5rem; }
-
-  .doc-content a {
+  a {
     color: var(--accent);
     text-decoration: underline;
-    text-decoration-color: rgba(255, 180, 84, 0.45);
+    text-decoration-color: rgba(232,161,58,.45);
     text-underline-offset: 2px;
   }
-  .doc-content a:hover {
+  a:hover { color: var(--accent-hi); text-decoration-color: currentColor; }
+
+  /* ---- the centred "page" frame -------------------------------------- */
+  .frame {
+    max-width: 50rem;
+    margin: 20px auto 32px;
+    background: var(--bg-frame);
+    border: 1px solid var(--line-2);
+    box-shadow: 0 0 0 1px #000, 0 18px 50px -30px #000;
+  }
+
+  /* ---- banner -------------------------------------------------------- */
+  .banner { text-align: center; padding: 2.4rem 1rem 1.4rem; }
+  .banner .t {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 1.7rem;
+    letter-spacing: .05em;
+    color: var(--ink);
+  }
+  .banner .tag { color: var(--ink-mute); font-size: .82rem; margin-top: .55rem; }
+
+  /* ---- top nav row --------------------------------------------------- */
+  .sitenav {
+    text-align: center;
+    padding: .5rem 1rem;
+    font-family: var(--mono);
+    font-size: .78rem;
+    letter-spacing: .05em;
+  }
+  .sitenav a {
+    color: var(--accent);
+    text-decoration: none;
+    padding: 0 .35rem;
+  }
+  .sitenav a:hover { color: var(--accent-hi); text-decoration: underline; }
+  .sitenav .sep { color: var(--ink-mute); }
+
+  /* the amber rule */
+  .rule { border: 0; height: 1px; background: var(--line); margin: 0; }
+  .rule.g {
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    height: 1px; opacity: .55;
+  }
+
+  /* ---- content ------------------------------------------------------- */
+  .doc-content { padding: 1.6rem 1.6rem .6rem; }
+  .doc-content p, .doc-content ul, .doc-content ol,
+  .doc-content blockquote { max-width: var(--measure); }
+
+  .doc-content h1 {
+    font-family: var(--mono);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: .02em;
+    margin: .2rem 0 1rem;
+  }
+  .doc-content > h1:first-child { margin-top: .2rem; }
+  .doc-content h2 {
+    font-family: var(--mono);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: .03em;
+    margin: 2rem 0 .8rem;
+    padding-bottom: .35rem;
+    border-bottom: 1px solid var(--line-2);
+  }
+  .doc-content h2::before { content: "\25aa  "; color: var(--accent); }
+  .doc-content h3 {
+    font-family: var(--mono);
+    font-size: .92rem;
     color: var(--accent-hi);
-    text-decoration-color: currentColor;
+    margin: 1.6rem 0 .5rem;
+  }
+  .doc-content > p > em:only-child {
+    font-style: normal; color: var(--ink-soft); font-size: 1.05rem;
   }
 
   .doc-content hr {
-    border: 0;
-    height: 1px;
-    background: var(--accent);
-    opacity: 0.5;
-    margin: 2.5rem 0;
+    border: 0; height: 1px; background: var(--line-2); margin: 2rem 0;
   }
 
   .doc-content blockquote {
     color: var(--ink-soft);
     border-left: 3px solid var(--accent);
-    padding: 0.2rem 0 0.2rem 1.1rem;
+    padding: .2rem 0 .2rem 1rem;
     margin-left: 0;
-    font-style: normal;
   }
 
-  /* Lead paragraph on doc pages (the italic summary under the H1) */
-  .doc-content > p > em:only-child {
-    font-style: normal;
-    color: var(--ink-soft);
-    font-size: 1.05rem;
-  }
-
-  /* ---- Code ------------------------------------------------------------ */
+  /* ---- code ---------------------------------------------------------- */
   .doc-content code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.86em;
-    background: var(--bg-soft);
+    font-family: var(--mono);
+    font-size: .86em;
+    background: var(--bg-panel);
     border: 1px solid var(--line);
-    padding: 0.12em 0.4em;
-    color: var(--ink);
+    padding: .1em .4em;
+    color: var(--code-ink);
   }
   .doc-content pre {
-    background: var(--bg-deep);
+    background: var(--bg-panel);
     border: 1px solid var(--line);
     padding: 1rem 1.15rem;
     max-width: var(--measure);
@@ -158,105 +170,98 @@
     line-height: 1.55;
   }
   .doc-content pre code {
-    background: transparent;
-    border: 0;
-    padding: 0;
-    color: var(--ink);
-    font-size: 0.84rem;
+    background: transparent; border: 0; padding: 0;
+    color: var(--code-ink); font-size: .84rem;
   }
 
-  /* ---- Tables ----------------------------------------------------------- */
+  /* ---- tables -------------------------------------------------------- */
   .doc-content table {
-    border-collapse: collapse;
-    width: 100%;
-    max-width: var(--measure);
-    margin: 1.5rem 0;
-    font-size: 0.92rem;
+    border-collapse: collapse; width: 100%;
+    max-width: var(--measure); margin: 1.5rem 0; font-size: .9rem;
   }
-  .doc-content table th,
-  .doc-content table td {
-    border: 1px solid var(--line);
-    padding: 0.5rem 0.75rem;
-    text-align: left;
+  .doc-content th, .doc-content td {
+    border: 1px solid var(--line); padding: .5rem .7rem; text-align: left;
   }
-  .doc-content table th { background: var(--bg-soft); font-weight: 600; }
-  .doc-content table tr:nth-child(2n) { background: #1f1f22; }
+  .doc-content th {
+    background: var(--th); color: var(--accent);
+    font-family: var(--mono); font-size: .74rem;
+    letter-spacing: .05em; font-weight: 600;
+  }
+  .doc-content tr:nth-child(2n) td { background: var(--zebra); }
 
-  /* ---- Images & gallery -------------------------------------------------- */
+  /* ---- images -------------------------------------------------------- */
   .doc-content img {
-    border: 1px solid var(--line);
-    border-radius: 0;
-    max-width: 100%;
+    border: 1px solid var(--line); border-radius: 0; max-width: 100%;
   }
 
+  /* ---- details / summary (the "full gallery" collapse) --------------- */
   .doc-content details {
     max-width: var(--measure);
     border: 1px solid var(--line);
-    background: var(--bg-soft);
-    padding: 0.6rem 0.9rem;
-    margin: 1.5rem 0;
+    background: var(--bg-panel);
+    padding: .6rem .9rem; margin: 1.5rem 0;
   }
-  .doc-content summary { cursor: pointer; color: var(--accent); }
+  .doc-content summary {
+    cursor: pointer; color: var(--accent);
+    font-family: var(--mono); font-size: .85rem; letter-spacing: .03em;
+  }
 
-  /* ---- Footer ------------------------------------------------------------- */
-  .site-footer {
-    max-width: 52rem;
-    margin: 3rem auto 0;
-    padding: 1.5rem 1.5rem 2.5rem;
-    border-top: 1px solid var(--line);
+  /* ---- console-viewer carousel (home page media) --------------------- */
+  .viewer {
+    max-width: 38rem; margin: 1rem auto;
+    border: 1px solid var(--line-2);
+    background: var(--bg-panel);
+    font-family: var(--mono);
   }
-  .footer-inner { max-width: var(--measure); }
+  .viewer .vbar {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .4rem .6rem; border-bottom: 1px solid var(--line);
+    font-size: .72rem; color: var(--ink-mute); letter-spacing: .05em;
+  }
+  .viewer .vbar .dots { display: flex; gap: .3rem; }
+  .viewer .vbar .dots i {
+    width: 8px; height: 8px; border: 1px solid var(--line-2);
+    display: inline-block;
+  }
+  .viewer .vbar .dots i:nth-child(1) { border-color: var(--accent); }
+  .viewer .vbar .lbl { flex: 1; }
+  .viewer .vbar .idx { color: var(--accent); }
+  .viewer .vstage { position: relative; background: #000; aspect-ratio: 16 / 9; }
+  .viewer .vstage img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .viewer .vbtn {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    background: rgba(6,7,8,.55);
+    border: 1px solid var(--line-2);
+    color: var(--accent);
+    font-family: var(--mono); font-size: 1.3rem; line-height: 1;
+    width: 34px; height: 52px; cursor: pointer; padding: 0;
+  }
+  .viewer .vbtn:hover { color: var(--accent-hi); border-color: var(--accent); }
+  .viewer .vbtn.prev { left: 0; }
+  .viewer .vbtn.next { right: 0; }
+  .viewer .vcap {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: .45rem .6rem; border-top: 1px solid var(--line);
+    font-size: .74rem; color: var(--ink-soft); letter-spacing: .02em;
+  }
+
+  /* ---- footer -------------------------------------------------------- */
+  .site-footer { text-align: center; padding: 1.2rem 1rem 1.6rem; }
   .footer-stamp {
-    color: var(--ink-soft);
-    font-size: 0.88rem;
-    margin: 0 0 0.8rem;
+    font-family: var(--mono); font-size: .78rem;
+    letter-spacing: .03em; color: var(--ink-soft);
+    margin: 0 0 .7rem;
   }
   .footer-stamp a { color: var(--accent); text-decoration: none; }
   .footer-stamp a:hover { color: var(--accent-hi); text-decoration: underline; }
   .footer-legal {
-    color: var(--ink-mute);
-    font-size: 0.8rem;
-    line-height: 1.6;
-    margin: 0;
+    color: var(--ink-mute); font-size: .72rem; line-height: 1.55;
+    margin: 0 auto; max-width: var(--measure);
   }
 
-  @media (max-width: 42rem) {
-    .masthead-title { font-size: 1.7rem; }
-    .masthead-inner { padding: 2rem 1rem 1.2rem; }
-    .doc-content { padding-top: 1.8rem; }
+  @media (max-width: 40rem) {
+    .frame { margin: 8px; }
+    .banner .t { font-size: 1.35rem; }
   }
 
-  /* ---- Mermaid diagrams ---------------------------------------------------- */
-  /* Kramdown renders ```mermaid fences as <pre><code class="language-mermaid">.
-     The script below hands their text to mermaid and swaps in the SVG. Keep
-     the pre unstyled (no code-block background) while it waits to render. */
-  .doc-content pre.mermaid,
-  .doc-content pre > code.language-mermaid {
-    background: transparent;
-    border: 0;
-    color: var(--ink);
-    padding: 0;
-  }
-  .doc-content pre.mermaid { text-align: center; overflow-x: auto; }
-  .doc-content pre.mermaid:not([data-processed]) { visibility: hidden; }
 </style>
-
-<script type="module">
-  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-
-  // Move each ```mermaid code block's text into a <pre class="mermaid"> that
-  // mermaid.run() recognises.
-  document.querySelectorAll("pre > code.language-mermaid").forEach((code) => {
-    const pre = document.createElement("pre");
-    pre.className = "mermaid";
-    pre.textContent = code.textContent;
-    code.parentElement.replaceWith(pre);
-  });
-
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: "loose", // our own docs; needed for <br/> in node labels
-    theme: "dark",
-  });
-  mermaid.run({ querySelector: "pre.mermaid" });
-</script>

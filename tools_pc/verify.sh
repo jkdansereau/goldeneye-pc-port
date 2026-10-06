@@ -6,6 +6,8 @@
 # framediff): see docs/dev/notes/AGENTIC-SPEEDUPS-PLAN.md Step 2 / N6.
 #
 # Usage:
+#   (no arguments)               prints this usage and EXITS 1 (D529: a no-arg
+#                                run must never read as a green verdict)
 #   verify.sh <level>            single level: name (dam, bunker1, "surface 1")
 #                                 or -level_XX number (09, 33, ...)
 #   verify.sh sweep [subset]     all 21 solo levels, or SWEEP_LEVELS-style
@@ -30,16 +32,41 @@
 #                          stdout: {level, platform, status, frames,
 #                          worst_cell, crash_sym}
 #   --against DIR          parity mode only: the other platform's capture dir
+
+# Update (D521, P7): the linux pixcount/framediff skip is driver-conditional,
+# not platform-conditional -- see the GLX_RENDERER probe below. On a box with a
+# real GL driver the full pixel gate runs on linux, so a linux verdict is
+# directly comparable to the win/ goldens (same recipe, same stems).
 #
 # Status values: PASS | CRASH | NO-FRAMES | STALLED | REGRESSION
 # (STALLED is this tool's extension of the plan's 4-value enum — see
 # level_sweep.sh's D117/D134 note: a level that renders a few frames then
 # stops moving is a load-sensitivity flake, not a real pass or fail.)
 #
-# Known limitation (N6 / M-48): on --platform linux, GE_PCDUMP reads back
-# black frames on llvmpipe/WSLg (a glReadPixels tooling bug, not a render
-# bug — the live window renders fine). pixcount/framediff are therefore
-# skipped on linux and the verdict is crash-detection only, flagged NOTE.
+# Known limitation (N6 / M-48) — REVISED D521: GE_PCDUMP reads back black
+# frames on llvmpipe/WSLg (a glReadPixels tooling bug, not a render bug —
+# the live window renders fine). That is a property of the GL *driver*, not
+# of the platform, so the skip below is driver-conditional: a `glxinfo -B`
+# renderer probe sets LINUX_SOFTWARE_GL and only a software renderer
+# (llvmpipe/softpipe/swrast/dynrecomp) skips pixcount/framediff. The probe
+# FAILS CLOSED: glxinfo absent, a non-zero exit, no renderer line, or an
+# unknown sentinel all keep the old skip, and the NOTE text is unchanged,
+# so an unknown box behaves exactly as before. On a real GL driver the
+# full pixel gate runs on linux and a linux verdict is directly comparable
+# to the win/ goldens (same recipe, same stems).
+#
+# Cross-platform golden rule (D521): a fixed frame stem is only comparable
+# across platforms at settled gameplay. The intro flyby is wall-clock paced
+# (D117) while the capture harness steps SIM frames — GE_PCDUMP and GE_QUITFRAME
+# both key off `frames` (port/src/video.c:1406, ++frames in videoEndFrame()),
+# which advances once per portRenderGfxTask() (port/src/libultra.c:1256), i.e.
+# once per retrace actually consumed by __scMain (dropped retraces at
+# port/src/libultra.c:753 never reach the game). A box that cannot hold 60 fps
+# therefore settles the flyby at a different frame: pick stems past the slowest
+# platform's settle point, or report in-flyby stems as a scene offset and never
+# gate on them (P7: Dam frame 900 linux-vs-win = 92.863% over tol 2, phash 83).
+#
+# Status values: PASS | CRASH | NO-FRAMES | STALLED | REGRESSION
 set -u
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
@@ -51,7 +78,17 @@ USER_DUMP=0; USER_SCRIPT=0
 # Per-level golden recipe overrides: Cuba is the ending cutscene + credits (it
 # drops back to the boot screens before frame 1200, and START would skip it),
 # so it captures the cutscene itself with no input.
-golden_dump_for()   { case "$1" in cuba) echo "300-900:300" ;; *) echo "$GOLDEN_DUMP" ;; esac; }
+golden_dump_for()   { case "$1" in cuba) echo "300-900:300" ;; dam) echo "1500-1700:100" ;; frigate|surface2|streets|depot|cradle) echo "1000-1400:200" ;; *) echo "$GOLDEN_DUMP" ;; esac; }
+# D522 re-base (2026-10-05): the 900 stem is NOT settled gameplay on every level.
+# Measured on this build with honest sequential passes: at 900 the per-pixel limit
+# fails on Surface 2 / Streets / Depot / Cradle / Frigate, and Dam's 900 is still
+# inside the flyby. Those six levels capture their window later, where three
+# independent runs agree within tol 2 (frigate + the four: 1000/1200/1400 all
+# 0.000% max-pair; Dam needed 1500-1700 — its 1200 agreed on two runs then
+# diverged 5.761% on a third, and 1600 keeps ~40 moving pixels at 0.013%).
+# framediff walks the CANDIDATE frames, so a sweep's --dump must hit the golden
+# stems exactly -- never widen a stride. Windows live here so golden/README.md
+# and both platforms stay in sync.
 # Second tier: per-pixel (framediff --exact) limit, % of pixels over a
 # per-channel tolerance of 2. Measured 2026-10-02 run to run (21 levels x 2
 # captures): <= 0.57% everywhere except Jungle 1.75% / Surface 2 2.33% (moving
@@ -60,7 +97,13 @@ golden_dump_for()   { case "$1" in cuba) echo "300-900:300" ;; *) echo "$GOLDEN_
 # over the noise and still catches whole-frame render changes.
 golden_tolpct_for() { case "$1" in cuba) echo "" ;; jungle|surface2) echo "3.0" ;; *) echo "1.0" ;; esac; }
 golden_script_for() { case "$1" in cuba) echo "1:SNONE" ;; *) echo "20:START" ;; esac; }
-GOLDEN_SEED="${GE_RSEED:-0x0123456789abcdef}"
+# D532: the seed is PINNED, not env-overridable -- a stray GE_RSEED in the
+# environment used to silently re-seed the gate (frames shift -> spurious
+# verdicts). Warn and ignore it.
+GOLDEN_SEED=0x0123456789abcdef
+if [ -n "${GE_RSEED:-}" ] && [ "$GE_RSEED" != "$GOLDEN_SEED" ]; then
+  echo "warning: ignoring GE_RSEED=$GE_RSEED from the environment; the golden gate uses its pinned seed $GOLDEN_SEED (D532)" >&2
+fi
 POSARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -78,7 +121,14 @@ set -- "${POSARGS[@]:-}"
 case "${1:-}" in
   sweep)  MODE=sweep; shift; SWEEP_SUBSET="${*:-}" ;;
   parity) MODE=parity; LEVEL_ARG="${2:-}"; shift 2 2>/dev/null || true ;;
-  ""|-h)  sed -n '2,32p' "$0"; exit 0 ;;
+  -h)     sed -n '2,32p' "$0"; exit 0 ;;
+  "")
+    # D529 never-do 4: a no-arg run must NEVER look like a green verdict. It
+    # prints the usage and exits NON-zero (2026-10-07: a no-arg pair was
+    # cited as a "double-green" 21/21 because it exited 0).
+    sed -n '2,32p' "$0"
+    echo "error: no mode given -- a sweep is 'verify.sh sweep', one level is 'verify.sh <level>' (never cite a no-arg run as a gate result; D529)" >&2
+    exit 1 ;;
   *)      MODE=single; LEVEL_ARG="$1" ;;
 esac
 
@@ -96,6 +146,27 @@ if [ "$PLATFORM" = win ]; then
 else
   BUILD_DIR=build-linux
   EXE="$ROOT/build-linux/ge007.x86_64"
+fi
+
+# D521 (P7): the llvmpipe/WSLg black read-back limitation (N6 / M-48) is a
+# property of the GL *driver*, not of the linux platform. Probe the renderer
+# and only skip pixcount/framediff when the context is software (llvmpipe/
+# softpipe/swrast/dynrecomp). A real driver (Mesa iGPU/dGPU, NVIDIA) reads
+# back fine, so the pixel gate runs on linux too. glxinfo missing or
+# unrecognised -> stay conservative (skip), i.e. an unknown box behaves
+# exactly as before.
+LINUX_SOFTWARE_GL=1
+if [ "$PLATFORM" = linux ]; then
+  # Fail-closed: only a CLEAN probe may enable the pixel gate. glxinfo absent,
+  # a non-zero exit, no "OpenGL renderer string:" line, an unknown sentinel, or
+  # a software renderer all leave LINUX_SOFTWARE_GL=1 (today's skip, same NOTE).
+  GLX_INFO=$(glxinfo -B 2>/dev/null); GLX_RC=$?
+  GLX_RENDERER=$(printf '%s\n' "$GLX_INFO" | sed -n 's/.*OpenGL renderer string:[[:space:]]*//p' | head -n1)
+  if [ "$GLX_RC" = 0 ] && [ -n "$GLX_RENDERER" ] && \
+     ! printf '%s\n' "$GLX_RENDERER" | grep -qiE '^(unknown|n/?a|none|null)$' && \
+     ! printf '%s\n' "$GLX_RENDERER" | grep -qiE 'llvmpipe|softpipe|swrast|dynrecomp'; then
+    LINUX_SOFTWARE_GL=0
+  fi
 fi
 
 # Only ever stop the game process THIS script started (never other instances:
@@ -163,19 +234,64 @@ INI="$ROOT/data/ge007.ini"
 INI_BAK=""
 INI_CREATED=0
 pin_ini_640x480() {
-  if [ -f "$INI" ]; then
-    INI_BAK=$(mktemp)
-    cp "$INI" "$INI_BAK"
-  else
-    INI_CREATED=1
+  # Idempotent (sweep mode calls this once per level, and the game rewrites
+  # ge007.ini after every run): snapshot the USER's ini on the FIRST call only,
+  # then re-pin. Snapshotting on every call used to back up the previous level's
+  # game-written ini, so a sweep left the user's personal settings replaced on
+  # disk by compiled-in defaults, and leaked one temp file per level.
+  # D532: fail CLOSED (the old `2>/dev/null || true` call sites ran the gate
+  # under an unpinned ini when the write failed -- the frame depends on a
+  # defaults-only 640x480 ini, same as the save pin, so an unpinned ini is a
+  # spurious-verdict source, not a skipped nicety). Matches pin_eep's
+  # fail-closed style.
+  if [ -z "$INI_BAK" ] && [ "$INI_CREATED" = 0 ]; then
+    if [ -f "$INI" ]; then
+      INI_BAK=$(mktemp)
+      cp "$INI" "$INI_BAK" ||
+        { echo "error: cannot snapshot $INI (D532) -- the gate must not run with the user's ini unpinned" >&2; exit 2; }
+    else INI_CREATED=1; fi
   fi
-  printf '[Window]\nWidth = 640\nHeight = 480\n' > "$INI"
+  printf '[Window]\nWidth = 640\nHeight = 480\n' > "$INI" ||
+    { echo "error: cannot write the pinned ini $INI (D532) -- the gate must not run with the ini unpinned" >&2; exit 2; }
 }
 restore_ini() {
   if [ -n "$INI_BAK" ]; then cp "$INI_BAK" "$INI" && rm -f "$INI_BAK"
   elif [ "$INI_CREATED" = 1 ]; then rm -f "$INI"; fi
 }
-trap 'restore_ini; kill_ours' EXIT INT TERM
+trap 'restore_ini; restore_eep; kill_ours' EXIT INT TERM
+
+# --- save pin (D523, SUPERSEDED by D529): the goldens were captured with a
+#     save file PRESENT. D529 (2026-10-07 A/B) proved the frame depends on the
+#     save's CONTENT, not just its presence -- D523's "presence, not which
+#     save" claim had only been measured on Archives (worst_cell 0.175625 on
+#     each of the four candidate saves, 21.557% with none), and the 2026-10-07
+#     sweep (facility 177.47 scene-level on the local playtest save vs 0.0-0.25
+#     on every other candidate on disk) refutes it. The gate now INSTALLS THE
+#     CANONICAL SAVE (tools_pc/golden/ge007.eep, 2 KB, in-tree so a fresh
+#     clone or CI can run it) the same way it pins the ini: snapshot the local
+#     file if any, install the canonical one, restore (or remove) on exit.
+EEP_PIN="$ROOT/data/ge007.eep"
+CANON_EEP="$ROOT/tools_pc/golden/ge007.eep"
+EEP_PIN_BAK=""
+EEP_PIN_HAD=0
+pin_eep() {
+  [ -f "$CANON_EEP" ] || { echo "error: canonical golden save missing: $CANON_EEP (D529)" >&2; exit 2; }
+  # Same idempotence rule as pin_ini_640x480: keep the FIRST snapshot (the save
+  # as it was before the sweep), not the previous level's written save.
+  if [ -z "$EEP_PIN_BAK" ]; then
+    EEP_PIN_BAK=$(mktemp)
+    if [ -f "$EEP_PIN" ]; then EEP_PIN_HAD=1; cp "$EEP_PIN" "$EEP_PIN_BAK"; fi
+  fi
+  # Every level starts from the SAME save state: the runs write the save, and
+  # the frame depends on its CONTENT (D529), so feed each run the canonical
+  # copy rather than a local playtest save or level N-1's write.
+  cp "$CANON_EEP" "$EEP_PIN"
+}
+restore_eep() {
+  [ -n "$EEP_PIN_BAK" ] || return 0
+  if [ "$EEP_PIN_HAD" = 1 ]; then cp "$EEP_PIN_BAK" "$EEP_PIN"; else rm -f "$EEP_PIN"; fi
+  rm -f "$EEP_PIN_BAK"
+}
 
 # --- run one level -> sets globals: R_STATUS R_FRAMES R_SYM R_BRIEF -------
 run_one() {
@@ -274,7 +390,7 @@ verify_level() {
   local status="$R_STATUS" frames="$R_FRAMES" sym="$R_SYM" worst="" note=""
 
   if [ "$status" = PASS ]; then
-    if [ "$PLATFORM" = linux ]; then
+    if [ "$PLATFORM" = linux ] && [ "$LINUX_SOFTWARE_GL" = 1 ]; then
       note="GE_PCDUMP reads black on llvmpipe/WSLg — pixcount/framediff skipped, crash-detect only"
     else
       local last; last=$(ls "$CAPDIR"/ppm/*.ppm 2>/dev/null | tail -1)
@@ -352,7 +468,8 @@ case "$MODE" in
     [ -z "$resolved" ] && { echo "unknown level '$LEVEL_ARG'" >&2; exit 2; }
     name="${resolved%%:*}"; num="${resolved##*:}"
     [ "${resolved%%:*}" = num ] && name=$(name_for_num "$num")
-    pin_ini_640x480 2>/dev/null || true
+    pin_ini_640x480
+    pin_eep
     verify_level "$name" "$num" "${DUMP:-$GOLDEN_DUMP}"
     ;;
 
@@ -364,7 +481,8 @@ case "$MODE" in
     [ -n "$subset" ] && read -ra entries <<< "$subset"
     for e in "${entries[@]}"; do
       n="${e%%:*}"; num="${e##*:}"
-      pin_ini_640x480 2>/dev/null || true
+      pin_ini_640x480
+      pin_eep
       out=$(verify_level "$n" "$num" "${DUMP:-$GOLDEN_DUMP}" 60)
       rc=$?
       [ "$rc" -ne 0 ] && RC=1
@@ -400,7 +518,8 @@ case "$MODE" in
     resolved=$(resolve_level "$LEVEL_ARG")
     [ -z "$resolved" ] && { echo "unknown level '$LEVEL_ARG'" >&2; exit 2; }
     name="${resolved%%:*}"; num="${resolved##*:}"
-    pin_ini_640x480 2>/dev/null || true
+    pin_ini_640x480
+    pin_eep
     run_one "$name" "$num" "${DUMP:-$GOLDEN_DUMP}" 90
     if [ "$R_STATUS" != PASS ]; then
       emit_verdict "$name" "$R_STATUS" "$R_FRAMES" "" "$R_SYM"

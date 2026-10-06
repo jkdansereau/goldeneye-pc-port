@@ -1,7 +1,7 @@
 # D357 — Settings thresholds & values: align display units/defaults with the PD port + Turok PC
 
 Status: **IMPLEMENTED 2026-09-30 (findings D443) for mouse sens ×, deadzone whole-%, volume step, FOV degrees, MSAA 16×, Restart game; texture filter unchanged by decision; frame-rate cap deferred (§0 presets + custom = separate project). Approved with changes; see §0.** Proposal dated 2026-09-27. Baselines: the PD port
-checkout (`C:\Users\james\Source\Repos\pd_port`, `port/src/optionsmenu.c` +
+checkout (`<repos>\pd_port`, `port/src/optionsmenu.c` +
 `input.c`/`video.c` config registrations), the Turok PC (Nightdive) list from
 the maintainer's notes (`docs/dev/notes/OPTIONS-MENU-PLAN.md` §6 — *taken from
 user notes, not checked independently*), and the N64 watch (ground truth for

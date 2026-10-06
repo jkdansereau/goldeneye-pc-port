@@ -9,9 +9,10 @@
 and Steam Deck.** Native widescreen, a steady 60 fps, 2–4 player
 split-screen, mouse and keyboard or a modern controller, rebindable controls
 and an in-game options menu. No
-emulator: the original game's own code, rebuilt from the
-[GoldenEye 007 decompilation](https://github.com/n64decomp/007), running from
-your own ROM.
+emulator, and not a binary recompilation: the game's own
+reconstructed C, rebuilt from the
+[GoldenEye 007 decompilation](https://github.com/n64decomp/007), compiled
+for your PC and running from your own ROM.
 
 **[Download the latest release](https://github.com/jkdansereau/goldeneye-pc-port/releases)**,
 then follow the [Quick start](#quick-start).
@@ -23,22 +24,23 @@ then follow the [Quick start](#quick-start).
 > downloads contain no Nintendo code or assets, and no ROM. See
 > [What's a ROM?](#whats-a-rom) and [Legal](#legal).
 
-**v0.4.1** is the current release. It is a **pre-1.0 release, not a
+**v0.5.0** is the current release. It is a **pre-1.0 release, not a
 finished product**: the campaign and split-screen multiplayer play end to
 end, but expect missing pieces (PAL/JP ROMs, macOS) and the occasional
 breaking change between versions. v1.0 is the target for a feature-complete
 build.
 
-**AI disclosure:** this port was developed agentically, with Claude Code and a
-local open-weight model, directed by one person in their spare time. The
+**AI disclosure:** this port was developed using AI coding agents (Claude
+Code and a local open-weight model), directed by one person in their spare time. The
 project is as much a study of that process as it is a port. See
 [How it was made](#how-it-was-made).
 
 <p align="center">
-  <img src="docs/media/goldeneye-gh-preview.gif" width="64%"
-       alt="~24 s gameplay montage from live play sessions">
-  <br><em>All in-engine, running in the port: a ~24&nbsp;s gameplay montage
-  from live v0.4.0 play sessions, opening on the Runway tank ·
+  <img src="docs/img/shots/shot-28.jpg" width="23%" alt="Streets, rendered by the port">
+  <img src="docs/img/shots/shot-01.jpg" width="23%" alt="Dam, rendered by the port">
+  <img src="docs/img/shots/shot-03.jpg" width="23%" alt="Runway, rendered by the port">
+  <img src="docs/img/shots/shot-24.jpg" width="23%" alt="Aztec, rendered by the port">
+  <br><em>All in-engine, running in the port ·
   <a href="docs/index.md">12 level stills in the project index</a></em>
 </p>
 
@@ -46,6 +48,14 @@ project is as much a study of that process as it is a port. See
 
 ## News
 
+- **2026-10-05** — **v0.5.0**: one options menu laid out like the Perfect Dark
+  port's, with plain-English wording, real-unit sliders and a one-line description
+  per option; the game's own N64 control styles as a per-seat preset; emulator save
+  files that load directly; a scalable HUD overlay; fullscreen mode, window centring
+  and crosshair settings; antialiased overlay controls; and a fidelity round checked
+  frame-by-frame against the N64 game (fog, aspect-ratio letterboxing, the Watch
+  menu's own settings). The reference-frame gate was re-based on both platforms
+  (21 levels, 63 frames each). [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0).
 - **v0.4.1**: 2–4 player split-screen multiplayer, controller presets and
   rebinding, PlayStation/Nintendo button names, master volume and audio
   device selection, a steady 60 fps on low-end GPUs, and fidelity fixes
@@ -159,7 +169,8 @@ hold B to bind B itself, hold Back to clear; Y clears the selected slot).
 Each action takes up to two buttons. Menus always keep A/X accept and B/Y
 cancel, so you can't lock yourself out. There is no warning yet when two
 actions share a button, and the Xbox release's "left stick aims the
-crosshair" and "D-pad copies the left stick" behaviors are not reproduced.
+crosshair" and "D-pad copies the left stick" behaviors are not reproduced
+(here the right stick aims and the D-pad strafes, as on the N64).
 
 **Split-screen:** pick Multiplayer from the main menu. With one controller,
 keyboard/mouse is player 1 and the controller is player 2; with two or more
@@ -214,7 +225,7 @@ and the end-of-campaign credits load, render and run crash-free; the full
 campaign was playtested end to end at Agent difficulty on Windows, Linux and
 real Steam Deck hardware for v0.4.0. Split-screen multiplayer was played live
 in 2P on every MP map and in 4P on Temple.
-<!-- MAINTAINER: after the v0.4.1 play session, add what it covered here. -->
+<!-- MAINTAINER: after the v0.5.0 play session, add what it covered here. -->
 
 **Known issues:** see the **[known-issues table](docs/ROADMAP.md#known-issues)**
 (what you'll notice, impact, workarounds). The short version: NTSC-U ROMs
@@ -258,6 +269,12 @@ never writes to `%APPDATA%`, the registry or any system location.
 | `data/pcmodels-<region>/`, `data/pccg-<region>/` | Asset files generated from your ROM on first start. Safe to delete: they are made again on the next start. |
 | `data/ge007.shaders` | A list of the graphics shaders the game used, compiled at startup to avoid stutter. Safe to delete. |
 | `ge007.crash.log` | Written in the folder you launched from if the game crashes. |
+
+**Removing ROM-derived content:** the only files on your machine that come
+from the game are the ROM you put there and the two generated asset folders
+(`data/pcmodels-<region>/`, `data/pccg-<region>/`). Delete those and every
+ROM-derived file is gone; your save (`ge007.eep`) and settings (`ge007.ini`)
+are separate files, yours to keep or delete.
 
 **`ge007.ini`** uses `[Section]` headers and `Key = value` lines. A few
 common keys and their defaults:
@@ -387,7 +404,7 @@ these matter to you, open an issue — it helps prioritize.
 
 The port was built by two coding agents, directed by one person part-time.
 A local open-weight model (`unsloth/Qwen3.8-27B-GGUF` on one RTX 5090, via the
-[pi](https://pi.dev/) agent) did the groundwork: build, boot chain,
+[pi](https://github.com/earendil-works/pi) agent) did the groundwork: build, boot chain,
 software-RSP integration, asset pipeline, first frames. **Claude Code**
 (Sonnet 5, Opus 5 for the hardest bugs) joined for the collaborative phase:
 the 21-level sweep, the ABI finding catalog, SDL input, front end. The two
@@ -413,7 +430,7 @@ code with this one.
 | | This project | The other well-known "GoldenEye on PC" recompilation projects (and their Steam Deck builds) |
 |---|---|---|
 | **What it ports** | The original **Nintendo 64** game (1997) | The **Xbox 360 XBLA** HD remaster (built ~2007, never released) |
-| **How** | Decompilation-based source port: human-reconstructed C, compiled for the host; game logic runs as written | Static binary recompilation: the shipped machine code is auto-translated to C; no source-level understanding |
+| **How** | Decompilation-based source port: human-reconstructed C, compiled for the host; game logic runs as written | Static binary recompilation: the shipped machine code is auto-translated to C; the source is machine-generated |
 | **Lineage** | [GoldenEye 007 decompilation](https://github.com/n64decomp/007) + [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) engine family | Xbox 360 "…Recompiled" static-recompilation family |
 | **Renderer** | Software RSP → OpenGL | Hardware (Vulkan) |
 | **Status** | Pre-1.0 releases; full campaign and split-screen playable at 60 fps (see [Status](#status)) | Playable full game |
@@ -464,21 +481,25 @@ repo root, put your ROM in it as in [What's a ROM?](#whats-a-rom), and run
 
 ## How it works
 
-The game code in `src/` is the decompilation's, and its control flow is
-ground truth. Everything that would touch N64 hardware is redirected into
+The game code in `src/` is the decompilation's, and its control flow is the
+reference we preserve. Everything that would touch N64 hardware is redirected into
 `port/`: a **software RSP** (`port/fast3d/`, adapted from the Perfect Dark
-port) that interprets the GBI display list the game builds each frame and
+port) that interprets the graphics command stream (the GBI display list)
+the game builds each frame and
 emits OpenGL, bypassing the RDP; libultra OS shims (`port/src/libultra.c`,
 game threads as real host threads) that let the game's own scheduler run,
 with the software RSP on its own render thread as the RSP was its own chip;
 and SDL2/OpenGL/filesystem backends for video, audio, input and storage.
-Edits inside `src/` are rare, marked `#ifdef PORT`, and each one is
-documented: mostly mechanical 64-bit fixes (a struct or pointer field that
-the 32→64-bit move misaligned or truncated), plus a few maintainer-approved
-timing fixes where per-frame N64 code ran too fast at the PC's 60 fps (for
-example sniper zoom and turret fire), and the opt-in *All unlocked* hook. Where it diverges from the Perfect Dark port: GoldenEye's N64
-serialized asset formats are converted offline by Python "sidecar" converters
-in `tools_pc/` rather than fixed up at load time. Full detail:
+Every port change inside `src/` is gated behind `#ifdef PORT` and
+documented. They are few in kind, all narrow in scope: mechanical 32→64-bit
+pointer/struct fixes (the pointer-width transition touches many structs, so
+there are a lot of them), a few maintainer-approved timing fixes where
+per-frame N64 code ran too fast at the PC's 60 fps (for example sniper zoom
+and turret fire), the opt-in *All unlocked* hook, and env-gated diagnostic
+probes tied to the bug catalogue (off by default, no behavior change). Where it diverges from the Perfect Dark port: GoldenEye's N64
+serialized asset formats are converted in a separate step rather than
+fixed up at load time — on first start for a download, or by the offline
+Python converters in `tools_pc/` for a source build. Full detail:
 [`docs/internals.md`](docs/internals.md) and
 [`docs/porting-notes.md`](docs/porting-notes.md).
 
@@ -576,20 +597,39 @@ This port is a thin layer on a large amount of other people's work.
 
 **Tools and models used to develop the port**
 
-- Qwen 3.8 (Alibaba Qwen team), run locally from the
-  [`unsloth/Qwen3.8-27B-GGUF`](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF)
-  repo — `UD-Q4_K_XL` as the primary quant, with other quants used along the
-  way; [Unsloth](https://unsloth.ai) (the GGUF quantisation and Unsloth
-  Desktop) as the local model server.
-- [pi](https://pi.dev/): the local coding-agent harness.
-- [Claude / Claude Code](https://claude.com/claude-code) (Anthropic).
+Development ran for most of its life on a single local model — **Unsloth's
+Qwen 3.8 27B** — which did nearly all of the local (groundwork) work on its
+own. In the final week that grew into a small menu, and the **current standard
+is NInfer + Strata**; tools are chosen per task, with local models carrying
+the high-volume work and hosted models the exception. The full record of the
+models used, and the harnesses that drove them:
+
+| Model | Ran as | How it was used |
+|---|---|---|
+| **Qwen 3.8 27B** ([Unsloth](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF)) | `UD-Q4_K_XL`, one RTX 5090 | The primary local workhorse for the bulk of the port's development. |
+| **Qwen 3.8 27B** via [NInfer](https://github.com/natpate/ninfer-windows) (Windows) | base, NVFP4 and NVFP4-full artifacts; MTP (DFlash2) spec-decode; one 5090 | Trialed in the final week, now half of the standard; the fast day-to-day local driver. |
+| **Qwen 3.8 27B** ([ISTA-DASLab](https://huggingface.co/ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF)) | `IQ3_S` (GSQ-RCO), larger context | Briefly trialed for larger-context workloads; shelved, little use since v0.2.0. |
+| **Qwen 3.8 Flash-Next** via [Strata](https://github.com/Niko1221/Strata) | 125B MoE, `IQ1_M` (1-bit), one gaming GPU | The big-context local tier: a model that normally needs a server, run locally for the largest-context passes. |
+| **Claude** (Anthropic) | Sonnet 5 / Opus 5, now **Sonnet 5.5 / Opus 5.5** (out in the last few weeks) | The orchestrator in the two-agent phase: held what the 27B couldn't close, took over on limit handoff; the 5.5 tier has driven the most recent work. |
+| **GPT-6 (Sol)** (OpenAI), via [OpenRouter](https://openrouter.ai) | a frontier hosted model | Trialed. |
+
+*Harnesses and tooling:*
+
+- **[pi](https://github.com/earendil-works/pi)** — the local coding-agent
+  harness that drives the local models.
+- **[Claude Code](https://github.com/anthropics/claude-code)** (Anthropic) —
+  the agentic harness that drove the Claude models above; the orchestrator in
+  the two-agent phase.
+- **[claude-code-delegate-local](https://github.com/fegone/claude-code-delegate-local)** —
+  the MCP bridge that let Claude and the local models talk (delegating Claude's
+  subagents to the local engines).
 
 ## Legal
 
 This is a non-commercial fan preservation/research project, in the same
 category as the many other N64 decompilation and native-port repositories on
 GitHub. It is **not affiliated with, endorsed by, or sponsored by** Nintendo,
-Rare, Microsoft, MGM, Danjaq, EON Productions, or any rights holder in
+Rare, Microsoft, Valve, MGM, Danjaq, EON Productions, or any rights holder in
 GoldenEye or James Bond. "GoldenEye 007", "007", "James Bond" and related
 marks belong to their respective owners; they are used here only to say which
 game this port runs. No official logos, box art, or marketing assets are used.
@@ -635,4 +675,4 @@ is covered by [`NOTICE`](NOTICE), not by that license.
 
 ---
 
-*Last updated 2026-10-03 — v0.4.1 · <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a> · <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>*
+*Last updated 2026-10-05 — v0.5.0 · <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a> · <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>*

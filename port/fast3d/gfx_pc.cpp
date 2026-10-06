@@ -1892,7 +1892,8 @@ static inline bool tri_dbg(void) {
         const char* a = getenv("GE_D75D");
         const char* b = getenv("GE_ZF");
         const char* c = getenv("GE_D303");
-        s_tri_dbg = ((a && *a) || (b && *b) || (c && *c)) ? 1 : 0;
+        const char* d = getenv("GE_D526");
+        s_tri_dbg = ((a && *a) || (b && *b) || (c && *c) || (d && *d)) ? 1 : 0;
     }
     return s_tri_dbg != 0;
 }
@@ -1976,6 +1977,125 @@ static void d75d_note_emit_z(uint32_t f, struct LoadedVertex* const* v_arr, int 
     d75d_comb = rdp.combine_mode;
     d75d_prim[0]=rdp.prim_color.r; d75d_prim[1]=rdp.prim_color.g; d75d_prim[2]=rdp.prim_color.b; d75d_prim[3]=rdp.prim_color.a;
     d75d_env[0]=rdp.env_color.r; d75d_env[1]=rdp.env_color.g; d75d_env[2]=rdp.env_color.b; d75d_env[3]=rdp.env_color.a;
+}
+
+/* D526 (docs/dev/findings.md §D526): per-triangle draw-state census
+ * probe, text-only. Retained as a generic transparency/texture triage
+ * tool (the D195/D266/D268/D273 bug class; the P13 Dam-ending grate it
+ * targeted, D526, was confirmed faithful N64 behaviour on 1964/GEPD,
+ * so no fix was needed). GE_D526="lo-hi" = sim-frame range (the same
+ * dash syntax as GE_D75D); optional GE_D526BOX="x0 y0 x1 y1" targets
+ * an NDC region (same syntax as GE_ZFBOX; default = on-screen);
+ * GE_D526MAX caps per-triangle lines (default 400). For every emitted
+ * triangle in range whose NDC bbox intersects the region, one line:
+ * frame, NDC bbox, z/w, geometry_mode, other_mode_l/h, combine word,
+ * sampled tile 0 (and 1 in 2-cycle) tmem/fmt/siz, first_tile_index,
+ * prim alpha, vertex alpha min/max, use_alpha/modulate/invisible.
+ * Plus one per-frame line aggregating the in-region tris by
+ * (comb, oml, omh, alpha) signature, so a suspect surface's signature
+ * stands out without enumerating every tri. Zero cost unless
+ * GE_D75D/GE_ZF/GE_D303/GE_D526 is set (folded into the D474 tri_dbg
+ * gate). */
+static int d526_on = -1;
+static int d526_lo = -1, d526_hi = 0x7FFFFFFF, d526_max = 400;
+static uint32_t d526_lines = 0;
+static float d526_box[4] = { -1.05f, -1.05f, 1.05f, 1.05f };
+static int d526_box_on = 0;
+#define D526_SIGS 32
+static struct { uint64_t comb; uint32_t oml, omh; int alpha; uint32_t cnt; } d526_sigs[D526_SIGS];
+static int d526_nsigs = 0;
+static uint32_t d526_sig_frame = 0, d526_sig_total = 0;
+
+static void d526_flush_sigs(uint32_t f) {
+    if (d526_nsigs == 0) { d526_sig_frame = f; return; }
+    fprintf(stderr, "D526F: f=%u inbox=%u sigs: ", f, d526_sig_total);
+    for (int i = 0; i < d526_nsigs; i++)
+        fprintf(stderr, "(comb=0x%016llx oml=0x%08x omh=0x%08x a=%d)x%u ",
+                (unsigned long long)d526_sigs[i].comb, d526_sigs[i].oml,
+                d526_sigs[i].omh, d526_sigs[i].alpha, d526_sigs[i].cnt);
+    fprintf(stderr, "\n");
+    d526_nsigs = 0; d526_sig_total = 0;
+    d526_sig_frame = f;
+}
+static void d526_atexit(void) { d526_flush_sigs(0xFFFFFFFFu); }
+static void d526_init(void) {
+    if (d526_on >= 0) return;
+    d526_on = 0;
+    const char* e = getenv("GE_D526");
+    if (e && *e) {
+        d526_on = 1;
+        d526_lo = atoi(e);
+        const char* dash = strchr(e, '-');
+        if (dash) d526_hi = atoi(dash + 1);
+    }
+    if (d526_on) {
+        const char* m = getenv("GE_D526MAX");
+        if (m && *m) d526_max = atoi(m);
+        const char* b = getenv("GE_D526BOX");
+        if (b && *b && sscanf(b, "%f %f %f %f",
+                              &d526_box[0], &d526_box[1], &d526_box[2], &d526_box[3]) == 4)
+            d526_box_on = 1;
+        atexit(d526_atexit);
+    }
+}
+static void d526_note_emit(uint32_t f, struct LoadedVertex* const* v_arr, int use_alpha, int use_modulate) {
+    d526_init();
+    if (!d526_on) return;
+    if (f < (uint32_t)d526_lo || f > (uint32_t)d526_hi) return;
+    if (f != d526_sig_frame) d526_flush_sigs(f);
+    float mnx = 1e9f, mxx = -1e9f, mny = 1e9f, mxy = -1e9f;
+    float zsum = 0.f, wsum = 0.f; int vmin = 255, vmax = -1, ok = 0;
+    for (int i = 0; i < 3; i++) {
+        float w = v_arr[i]->w;
+        if (w <= 0.f) continue;
+        float nx = v_arr[i]->x / w, ny = v_arr[i]->y / w;
+        if (nx < mnx) mnx = nx; if (nx > mxx) mxx = nx;
+        if (ny < mny) mny = ny; if (ny > mxy) mxy = ny;
+        zsum += v_arr[i]->z / w; wsum += w;
+        int a = v_arr[i]->color.a;
+        if (a < vmin) vmin = a; if (a > vmax) vmax = a;
+        ok = 1;
+    }
+    if (!ok) return;
+    if (d526_box_on)
+        if (mxx < d526_box[0] || mnx > d526_box[2] || mxy < d526_box[1] || mny > d526_box[3]) return;
+    else if (mxx < -1.05f || mnx > 1.05f || mxy < -1.05f || mny > 1.05f) return; // off-screen
+    d526_sig_total++;
+    int found = 0;
+    for (int i = 0; i < d526_nsigs; i++) {
+        if (d526_sigs[i].comb == rdp.combine_mode && d526_sigs[i].oml == rdp.other_mode_l &&
+            d526_sigs[i].omh == rdp.other_mode_h && d526_sigs[i].alpha == use_alpha) {
+            d526_sigs[i].cnt++; found = 1; break;
+        }
+    }
+    if (!found && d526_nsigs < D526_SIGS) {
+        d526_sigs[d526_nsigs].comb = rdp.combine_mode;
+        d526_sigs[d526_nsigs].oml = rdp.other_mode_l;
+        d526_sigs[d526_nsigs].omh = rdp.other_mode_h;
+        d526_sigs[d526_nsigs].alpha = use_alpha;
+        d526_sigs[d526_nsigs].cnt = 1;
+        d526_nsigs++;
+    }
+    if (d526_lines++ >= (uint32_t)d526_max) return;
+    const uint32_t fi = rdp.first_tile_index;
+    const uint32_t t0 = fi + gfx_lod_tile_offset(0);
+    const uint32_t omh = rdp.other_mode_h;
+    const int two = ((omh & (3U << G_MDSFT_CYCLETYPE)) == G_CYC_2CYCLE);
+    const uint32_t t1 = two ? fi + gfx_lod_tile_offset(1) : t0;
+    const int inv = (rdp.other_mode_l & (3u << 24)) == ((uint32_t)G_BL_0 << 24) &&
+                    (rdp.other_mode_l & (3u << 20)) == ((uint32_t)G_BL_CLR_MEM << 20);
+    fprintf(stderr,
+        "D526: f=%u ndc=(%.3f,%.3f)-(%.3f,%.3f) zw=%.4f gm=0x%08x oml=0x%08x omh=0x%08x comb=0x%016llx fi=%u "
+        "tile0[tmem=%u fmt=%u siz=%u]",
+        f, mnx, mny, mxx, mxy, (wsum > 0.f ? zsum / wsum : -1.f),
+        rsp.geometry_mode, rdp.other_mode_l, omh,
+        (unsigned long long)rdp.combine_mode, fi,
+        rdp.texture_tile[t0].tmem, rdp.texture_tile[t0].fmt, rdp.texture_tile[t0].siz);
+    if (two)
+        fprintf(stderr, " tile1[tmem=%u fmt=%u siz=%u]",
+                rdp.texture_tile[t1].tmem, rdp.texture_tile[t1].fmt, rdp.texture_tile[t1].siz);
+    fprintf(stderr, " pa=%u va=[%d,%d] alpha=%d mod=%d inv=%d 2cyc=%d\n",
+            rdp.prim_color.a, vmin, vmax, use_alpha, use_modulate, inv, two);
 }
 
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* vertices) {
@@ -2735,6 +2855,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         d75d_note_emit(videoGetFrameCount(), v_arr); // survived all rejection gates -> reaches GL
         d303_note_emit(videoGetFrameCount(), v_arr); // TEMP D303
         zf_note_emit(videoGetFrameCount(), v_arr);   // TEMP D306/D308
+        d526_note_emit(videoGetFrameCount(), v_arr, use_alpha ? 1 : 0, use_modulate ? 1 : 0); // D526 census
         d75d_note_emit_z(videoGetFrameCount(), v_arr, (used_textures[0] || used_textures[1]) ? 1 : 0, comb->used_textures[0] ? 1 : 0);
     }
     for (int i = 0; i < 3; i++) {

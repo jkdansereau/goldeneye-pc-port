@@ -13,7 +13,6 @@
     .\tools_pc\audiodebug.ps1 -Fire                    # + scripted PPK fire pulses
     .\tools_pc\audiodebug.ps1 -Fire -Trace             # + per-sndPlaySfx trace + index histogram
     .\tools_pc\audiodebug.ps1 -Fire -Trace -Dump       # + raw mixed PCM to audiodump.raw
-    .\tools_pc\audiodebug.ps1 -AB -Fire                # run BOTH modes, print before/after table
     .\tools_pc\audiodebug.ps1 -Play                    # INTERACTIVE playtest, no timeout (D202)
     .\tools_pc\audiodebug.ps1 -Soak                    # 5-minute stability soak
 
@@ -49,9 +48,8 @@ param(
     [switch]$Dump,                  # GE_AUDIODUMP=1  -> audiodump.raw
     [switch]$VoiceDump,             # GE_VOICEDUMP=1  -> voicedump.raw (per-voice, D202/M-67)
     [switch]$MixerTrace,            # GE_MIXERTRACE=1 -- SLOW, see warning below
-    [switch]$Old,                   # GE_D204_OLD=1: pre-D204 behaviour
-    # NOTE: GE_D204_OLD was removed from the game; -AB is now a no-op.
-    [switch]$AB,                    # run twice (old, then new) and compare
+    # (the -AB/-Old A/B switches were removed 2026-10-07, D532: GE_D204_OLD no
+    # longer exists in the game, so they were documented no-ops)
 
     # Plumbing
     [switch]$NoBuild,
@@ -121,7 +119,7 @@ if ($GameArgs) { $gameArgv += @($GameArgs | Where-Object { $_ }) }
 
 # ----------------------------------------------------------- run one -------
 function Invoke-AudioRun {
-    param([string]$Tag, [bool]$OldMode)
+    param([string]$Tag)
 
     $stdout = Join-Path $buildDir "audiodebug_$Tag.log"
     Remove-Item -ErrorAction SilentlyContinue $stdout,
@@ -131,14 +129,13 @@ function Invoke-AudioRun {
 
     # Set the probes on THIS process; cmd.exe and the game both inherit them.
     $env:GE_D204 = "1"
-    if ($OldMode)     { $env:GE_D204_OLD = "1" }   else { Remove-Item -EA SilentlyContinue Env:\GE_D204_OLD }
     if ($Trace)       { $env:GE_AUDIOTRACE = "1" } else { Remove-Item -EA SilentlyContinue Env:\GE_AUDIOTRACE }
     if ($Dump)        { $env:GE_AUDIODUMP = "1" }  else { Remove-Item -EA SilentlyContinue Env:\GE_AUDIODUMP }
     if ($VoiceDump)   { $env:GE_VOICEDUMP = "1" }  else { Remove-Item -EA SilentlyContinue Env:\GE_VOICEDUMP }
     if ($MixerTrace)  { $env:GE_MIXERTRACE = "1" } else { Remove-Item -EA SilentlyContinue Env:\GE_MIXERTRACE }
     if ($inputScript) { $env:GE_INPUTSCRIPT = $inputScript } else { Remove-Item -EA SilentlyContinue Env:\GE_INPUTSCRIPT }
 
-    $mode = if ($OldMode) { "GE_D204_OLD (pre-fix)" } else { "current build" }
+    $mode = "current build"
     $what = if ($Play) { "interactive - play until you close the window" } else { "$Seconds s" }
     Write-Host "`n>>> run [$Tag] $mode - $what" -ForegroundColor Green
     if ($inputScript) {
@@ -293,26 +290,8 @@ function Show-TraceSummary {
 }
 
 # ------------------------------------------------------------------ go -----
-if ($AB) {
-    $oldLog = Invoke-AudioRun -Tag "old" -OldMode $true
-    $newLog = Invoke-AudioRun -Tag "new" -OldMode $false
-    $a = Get-AudioSummary -LogPath $oldLog -Tag "old"
-    $b = Get-AudioSummary -LogPath $newLog -Tag "new"
-    Show-AudioVerdict $a
-    Show-AudioVerdict $b
-    Write-Host "`n===================== A/B =====================" -ForegroundColor Yellow
-    Write-Host ("  {0,-24} {1,12} {2,12}" -f "", "GE_D204_OLD", "current")
-    Write-Host ("  {0,-24} {1,12:N3} {2,12:N3}" -f "rt (min, steady)", $a.RtMin,  $b.RtMin)
-    Write-Host ("  {0,-24} {1,12} {2,12}"      -f "queue min",        $a.QMin,   $b.QMin)
-    Write-Host ("  {0,-24} {1,12} {2,12}"      -f "queue max",        $a.QMax,   $b.QMax)
-    Write-Host ("  {0,-24} {1,12} {2,12}"      -f "dropped blocks",   $a.Drop,   $b.Drop)
-    Write-Host ("  {0,-24} {1,12} {2,12}"      -f "largest block",    $a.MaxBlock, $b.MaxBlock)
-    Write-Host "`n  Both runs used the SAME binary (GE_D204_OLD switches behaviour at" -ForegroundColor DarkGray
-    Write-Host "  runtime), so this is free of build-to-build variance." -ForegroundColor DarkGray
-} else {
-    $log = Invoke-AudioRun -Tag "run" -OldMode ([bool]$Old)
-    Show-AudioVerdict (Get-AudioSummary -LogPath $log -Tag "run")
-}
+$log = Invoke-AudioRun -Tag "run"
+Show-AudioVerdict (Get-AudioSummary -LogPath $log -Tag "run")
 if ($Trace) { Show-TraceSummary }
 
 Write-Host "`nlogs: build-pc\audiodebug_*.log" -ForegroundColor DarkGray

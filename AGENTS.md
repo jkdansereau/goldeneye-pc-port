@@ -17,6 +17,44 @@
 4. **`src/libultrare/Makefile.libultrare` is ground truth** for original-vs-Rare libultra files (finding B3). The PC build compiles: `libultra/audio`, `libultrare/audio` (drvrNew/env/reverb), `libultra/gu`, and `libultrare/io/vitbl.c` only. All other `io/` + `os/` files are excluded and shimmed in `port/src/libultra.c`.
 5. **`rsp/graphics/gmain.s` is the RSP ground truth** — the authoritative reference for which GBI commands GE emits (modified fast3d, 1545 lines). We do not run it on PC; `port/fast3d/` replaces it. Use it to validate the software RSP's command decoding and the custom CC/RM modes.
 
+## Tree hygiene & release gate
+
+Standing rules for anything that lands in the tracked tree or in a push. These
+exist because the repo is public, MIT-licensed, forked, and its history is
+mostly agent-authored.
+
+1. **No local machine paths.** Tracked files carry no local absolute paths and
+   no usernames. Use the placeholder convention: `<repo>` = this working
+   directory, `<repos>` = the local source-repos root, `<games>` / `<videos>` =
+   local media roots, `<python>` = the local CPython install, `<temp>` = a
+   writable native temp dir (legend at the top of
+   `docs/dev/HANDOFF-ARCHIVE.md`). Tools must not default to a machine-specific
+   path — take the path as an argument and error if it is missing.
+2. **No contributor emails in prose.** Credit people by name plus the PR/issue
+   that carries the change ("co-authored with X (#123)"), never an inline
+   `<email>` trailer inside findings text or docs. Commit-trailer emails must
+   be noreply forms, never a contributor's real address.
+3. **Every vendored third-party component is declared in `NOTICE`** with its
+   license and holder — the "Third-party code vendored into the port layer" and
+   "Vendored build tooling" lists. GPL sources must ship their license text
+   in-tree (`tools/gzipsrc/COPYING`). MIT covers only our original work; never
+   relicense inherited code and never re-license the repo (forks depend on the
+   MIT `LICENSE` staying put).
+4. **Screenshots are game content.** A framebuffer capture is a derivative work
+   of Nintendo/MGM art regardless of which engine drew it. Keep repo imagery
+   documentary and small (bug shots, previews — downscaled), and never commit
+   bulk ROM-derived captures: capture output dirs are gitignored
+   (`tools_pc/sweep-captures/cap-*/`, `tools_pc/sweep-captures/**/*.ppm`); the
+   only bulk imagery in the tree is `tools_pc/golden/*.png`, which exists
+   because `verify.sh` consumes it. Downloads ship no game content at all.
+5. **Batch, don't spam.** Accumulate approved doc/tree fixes across a session
+   into ONE commit; no per-item branches.
+6. **Release gate.** Before pushing a release: the PII scrub and legal/copyright
+   review reports (gitignored, `docs/dev/notes/`) must be run and clean, and the
+   README Legal section must name every rights holder the game's trademarks
+   implicate. Rewriting pushed history (squash) needs explicit maintainer
+   consent, and any such report states the remote + branch it applies to.
+
 ## Critical files
 
 | File | Role |

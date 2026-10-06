@@ -1,5 +1,10 @@
 # HANDOFF ARCHIVE — session-by-session narrative
 
+> **Local machine paths are genericised** in this archive: `<repo>` = this repo's
+> working directory, `<repos>` = the local source-repos root, `<games>` / `<videos>`
+> = the local games / video roots, `<python>` = the local CPython install, `<temp>`
+> = a writable native temp dir. Session facts are unchanged.
+
 > **Reference only.** Current state lives in the [README](../../README.md)
 > "Status" section and `docs/dev/LEVEL-STATUS.md`; per-finding detail is in
 > [`findings.md`](findings.md) §F/§H — look up via
@@ -985,7 +990,7 @@ In KEEP-A test (sky quad only), the band shows (98,97,128) = fog color. This mea
 ### Environment & build
 
 - Build: `export PATH="/c/msys64/mingw64/bin:$PATH" && cmake --build build-pc -j 8`
-- Python: `"C:\Users\james\AppData\Local\Programs\Python\Python313\python.exe"` (has numpy+PIL)
+- Python: `"<python>\python.exe"` (has numpy+PIL)
 - Run: from repo root, ROM in `./data/`. Level: `-level_36`
 - Frame capture: F12 → `ppm/frame_NNN.ppm`; or `GE_PCDUMP=lo-hi:step`
 - Input script: `GE_INPUTSCRIPT="120:START;..."` (M-99: CANNOT reach mouselook)
@@ -1081,7 +1086,7 @@ Facility = `-level_34` (stageId 34 = `LEVELID_FACILITY`; `boss.c` decodes `-leve
 4. Diff behaviour vs a level whose opening beat DOES work (e.g. Dam `-level_33`) to isolate "Facility data" vs "general beat machinery".
 5. Any fix: port-only unless it's the documented ABI/layout class; new finding = D266+; append to `docs/porting-notes.md` if a new bug class emerges.
 
-**Environment (unchanged from prior sessions):** build `export PATH="/c/msys64/mingw64/bin:$PATH" && cmake --build build-pc -j 8` (or `./build-pc.sh ntsc-final`); kill any running `ge007*` before linking. Exe `build-pc/ge007.x86_64.exe`, run from repo root (ROM in `./data/`). Headless: `GE_INPUTSCRIPT` (tokens A/B/Z/START/UP/DOWN/LEFT/RIGHT/CUP/CDOWN/CLEFT/CRIGHT/SDOWN/SNONE, `tick:TOKEN;…`, pulse = 6 reads), `GE_PCDUMP=lo-hi:step`, `GE_INPUTLOG=1`, F12 → `ppm/shot_NNN.ppm`. Python (PIL/numpy) at `/c/Users/james/AppData/Local/Programs/Python/Python313/python.exe`; **cast uint8 arrays to int32 before bit shifts**.
+**Environment (unchanged from prior sessions):** build `export PATH="/c/msys64/mingw64/bin:$PATH" && cmake --build build-pc -j 8` (or `./build-pc.sh ntsc-final`); kill any running `ge007*` before linking. Exe `build-pc/ge007.x86_64.exe`, run from repo root (ROM in `./data/`). Headless: `GE_INPUTSCRIPT` (tokens A/B/Z/START/UP/DOWN/LEFT/RIGHT/CUP/CDOWN/CLEFT/CRIGHT/SDOWN/SNONE, `tick:TOKEN;…`, pulse = 6 reads), `GE_PCDUMP=lo-hi:step`, `GE_INPUTLOG=1`, F12 → `ppm/shot_NNN.ppm`. Python (PIL/numpy) at `<python>`; **cast uint8 arrays to int32 before bit shifts**.
 
 ---
 
@@ -1345,7 +1350,7 @@ will do a full manual playtest in lieu of the `verify.sh` sweep.
 3. **Steam Deck test session (~1 hr, needs the hardware — who has the Deck?):** install tarball via USB, Facility walk+fire (D203 repro profile), gamepad check, `Video.DisplayFPS` on Dam + Streets, grab `ge007.crash.log` if anything faults.
 4. Tag `v0.2.0-pre`; publish pre-release with known issues: D243 (Dam end race), D230 (music quality), D245 (water seam), D246 (edge strips), D197 (face wrap on Silo), D75 (front-end models), the D251 4K ghost row, and "not yet verified on real Deck hardware". Flip to final after the user's playtest passes.
 
-**Environment:** build as before (`/c/msys64/usr/bin/bash.exe -lc 'export PATH=/c/msys64/mingw64/bin:$PATH; cd /c/Users/james/Source/Repos/gh-fullhist && ./build-pc.sh ntsc-final'`). CI (`.github/workflows/ci.yml`) builds Linux per push — the `linux-build` job's artifact is the bundle source for the tarball if local Linux testing isn't available.
+**Environment:** build as before (`/c/msys64/usr/bin/bash.exe -lc 'export PATH=/c/msys64/mingw64/bin:$PATH; cd <repo> && ./build-pc.sh ntsc-final'`). CI (`.github/workflows/ci.yml`) builds Linux per push — the `linux-build` job's artifact is the bundle source for the tarball if local Linux testing isn't available.
 
 ## F10 overlay QoL session (2026-09-13, shipped in v0.2.0-pre) — D251; known bug: intermittent 4K-fullscreen "repeat of top entry" at panel bottom (MSAA×fullscreen driver suspect, unverified)
 
@@ -1373,7 +1378,7 @@ will do a full manual playtest in lieu of the `verify.sh` sweep.
 **Environment / state notes:**
 - User's live `data/ge007.ini` already has `Fullscreen = 1`, `MSAA = 4` (backup at `/tmp/ge007.ini.bak` — I did not modify their ini). Monitor: single display 3072×1728, window fullscreen at 0,0.
 - `ppm/user4k.png` exists from a PowerShell `CopyFromScreen` capture but was taken with the overlay **closed** — low value; user asked to stop analyzing captures.
-- Build: `/c/msys64/usr/bin/bash.exe -lc 'export PATH=/c/msys64/mingw64/bin:$PATH; cd /c/Users/james/Source/Repos/gh-fullhist && ./build-pc.sh ntsc-final'`. Launch from repo root: `./build-pc/ge007.x86_64.exe &` (needs `./data/` ROM).
+- Build: `/c/msys64/usr/bin/bash.exe -lc 'export PATH=/c/msys64/mingw64/bin:$PATH; cd <repo> && ./build-pc.sh ntsc-final'`. Launch from repo root: `./build-pc/ge007.x86_64.exe &` (needs `./data/` ROM).
 - Design doc for the overlay: `docs/dev/OPTIONS-MENU-PLAN.md` (approach C: port-layer overlay, zero src/ menu edits).
 
 ## M-123 (2026-09-14) — D194 ① log mined + wrap-spike fixed; spazz NOT in our writes (they're rock-stable); next: live capture with the new residue/autoaim logging, then user A/B playtest
@@ -1398,7 +1403,7 @@ will do a full manual playtest in lieu of the `verify.sh` sweep.
 
 ## M-122 (2026-09-13) — D194 GEPD-mirror aim IMPLEMENTED + user-confirmed "mechanically works"; three items left: ① crosshair/arm spazz glitch, ② aim-mode FPS drop (perf.ps1), ③ sensitivity tuning. Next session starts at ①.
 
-**The aim rewrite landed.** After four failed stick-synthesis models (absolute → dial → relative-angle → velocity-mapped stick; see M-121 + commits `8a8d066b`/`650b7f63`/`7f65ed15`), the session found and read **GEPD's actual source** (`C:\Users\james\Games\Emulators\Nintendo 64\1964_GEPD_Edition\1964\source.tar.xz` → `MouseInjectorPlugin/games/goldeneye.c`, extracted copy at `/c/Users/james/AppData/Local/Temp/gepd-src/`) and mirrored its model exactly. **User verdict: "mechanically it works... the aim mode works how we'd want."** Committed as `ef49d9e6` on `fix/d194-mouse-dt-decouple` (branch is up to date with main; PR #75/#76 already merged in).
+**The aim rewrite landed.** After four failed stick-synthesis models (absolute → dial → relative-angle → velocity-mapped stick; see M-121 + commits `8a8d066b`/`650b7f63`/`7f65ed15`), the session found and read **GEPD's actual source** (`<games>\Emulators\Nintendo 64\1964_GEPD_Edition\1964\source.tar.xz` → `MouseInjectorPlugin/games/goldeneye.c`, extracted copy at `<temp>/gepd-src/`) and mirrored its model exactly. **User verdict: "mechanically it works... the aim mode works how we'd want."** Committed as `ef49d9e6` on `fix/d194-mouse-dt-decouple` (branch is up to date with main; PR #75/#76 already merged in).
 
 **The model (all in `port/src/input.c`, `aimGepdCompute()` ~line 1377):** mouse delta moves a crosshair POSITION accumulator (`s_gepdCrossX/Y`, clamped ±`GEPD_CROSSHAIR_LIMIT`=5.16); each tick it writes `crosshair_x/y_pos` + `gun_azimuth_angle/turning` (GEPD formulas, failsafe weapon offsets 0.15/0, RATIOFACTOR=1 for our 4:3, `GEPD_BASE_FOV`=90) and edge-scrolls the camera only past 72% toward the screen edge (`(ratio-0.72)*475*dt*(fov/90)`). **No look stick is emitted while aiming.** On aim release we stop writing and the game's own damping eases crosshair+arm back to centre; every non-aim tick adopts `crosshair_x/y_pos` so re-entry starts where the game left it (GEPD does the same).
 
@@ -1437,7 +1442,7 @@ will do a full manual playtest in lieu of the `verify.sh` sweep.
 **RMB aim-mode (D194 continuation): two more attempts this session, both did not land, session ended mid-plan on the weekly usage limit.**
 
 - **Attempt 1 (small, safe): raised `AIM_MOVE_THRESH` 0.3->2.5px and lowered `Input.MouseAimSpeed` default 16->14 (matching the user's live ini, which had drifted to 50).** User's verdict: **"didn't actually fix anything"** — confirms the core problem isn't a magnitude/gain issue, it's the shape of the response.
-- **Real root cause found via code reading (still valid, not invalidated by what follows):** `bondviewProcessInput(s8 stick_x, s8 stick_y, ...)` in `src/game/bondview2.c` takes a **signed 8-bit stick** — the smallest representable nonzero aim-turn value is a hard jump to 10% speed (stick=61; `(stick-60)/10` is exactly 0 at stick<=60). No threshold/curve tuning on the port's synthesis side can produce a smooth ramp through an integer that can only be 60 or >=61. Confirmed via `pd_port` (`C:\Users\james\Source\Repos\pd_port`) reference: PD's own mouse-look (`src/game/player.c:3669`, `src/game/bondeyespy.c:945`) never synthesizes an N64 stick at all -- it's `theta += mdx * scale`, a continuous float angle accumulator, no floor, no int8 quantization anywhere.
+- **Real root cause found via code reading (still valid, not invalidated by what follows):** `bondviewProcessInput(s8 stick_x, s8 stick_y, ...)` in `src/game/bondview2.c` takes a **signed 8-bit stick** — the smallest representable nonzero aim-turn value is a hard jump to 10% speed (stick=61; `(stick-60)/10` is exactly 0 at stick<=60). No threshold/curve tuning on the port's synthesis side can produce a smooth ramp through an integer that can only be 60 or >=61. Confirmed via `pd_port` (`<repos>\pd_port`) reference: PD's own mouse-look (`src/game/player.c:3669`, `src/game/bondeyespy.c:945`) never synthesizes an N64 stick at all -- it's `theta += mdx * scale`, a continuous float angle accumulator, no floor, no int8 quantization anywhere.
 - **User also reported a second, more specific symptom mid-investigation: aim resets to center the instant mouse movement pauses (even while still holding RMB), breaking precision tasks (shoot-the-lock, watch-laser-cuts-metal-in-train puzzles).** Traced `bondviewCurrentPlayerUpdateSpeedTheta`/`speedVertaUp`/`Down` (bondview2.c) in detail: confirmed this is a smoothed rate-based decel model (`g_CurrentPlayer->speedtheta` eases toward 0 over several ticks when input stops, does NOT hard-reset) -- so a literal snap-to-center was not found in that specific mechanism. Root cause of the reset symptom specifically was **not conclusively identified** before moving to the rewrite.
 - **Attempt 2 (bigger, PD-style, approved by user before starting): bypassed the s8-stick synthesis entirely for aim-mode.** `port/src/input.c` computed a continuous -1..1 turn/vert speed (`inputGetContinuousAimSpeed()`, new function + header decl) instead of synthesizing `sx`/`sy`; `src/game/bondview2.c`'s aim-mode block (`#ifdef PORT`) read it directly, bypassing the `(stick-60)/10` conversion but leaving all downstream `speedtheta`/`speedverta` easing untouched. Removed the now-dead `Input.AimBand`/`Input.MouseAimCurve` knobs. **Compiled clean (verified both PORT and N64 `#ifdef` brace balance carefully), crash-free in a headless sanity check -- but broke live: "somethings broken... can't aim at all... it locks my input completely with the mouse."** Root cause of THAT breakage was not identified (no repro available headlessly; ran out of session before a careful live-debug pass). **Fully reverted** (`git checkout -- src/game/bondview2.c port/src/input.c port/include/input.h` back to the `db6eba2b` merge commit) — repo confirmed clean, PR #62's mouse work is back to its pre-session (working, if imperfectly-tuned) state. Live ini's `MouseAimSpeed` also manually restored 14->16 to match the reverted code default.
 
@@ -1893,7 +1898,7 @@ current testing, folded in:
    player's already-fixed 1P viewmodel isn't implicated. Narrows the
    search surface.
 3. **D194 mouse feel — external corroboration, not a new mechanism.**
-   Investigated `C:\Users\james\Games\Emulators\Nintendo 64\1964_GEPD_Edition`
+   Investigated `<games>\Emulators\Nintendo 64\1964_GEPD_Edition`
    (the user's reference point for "feels better") — the 1964 emulator's
    bundled `Mouse_Injector.dll` (closed-source, no source available; the
    emulator's own `source.tar.xz` is just the stock 1964 core). Its exports
@@ -2839,7 +2844,7 @@ except `bg.c`'s `GE_D63` lines which are not `#ifdef PORT`-guarded).
 
 ## Playtest bug reports (M-49 cont., 2026-09-04) — logged for future triage, NOT v0.1.0 blockers
 
-User playtested the **v0.1.0 win64 bundle** (`C:\Users\james\Games\goldeneye-pc-port-0.1.0-win64`,
+User playtested the **v0.1.0 win64 bundle** (`<games>\goldeneye-pc-port-0.1.0-win64`,
 fresh save). Bugs filed in findings §F (D191–D197), all alpha-acceptable.
 NB: Cradle does **not** crash — it's the D193 scripted-sequence stall (an
 earlier note here wrongly said "Cradle also crashes").
@@ -3303,7 +3308,7 @@ collision geometry. Full ranked next-steps in findings.md D205.
 6. Build + smoke after probe removal: `./build-pc.sh ntsc-final`, then
    `-level_09` 60 s crash-free with `GE_AUDIOTRACE=1`.
 ### Environment (unchanged except noted):
-- Build: `/c/msys64/usr/bin/bash.exe -lc 'cd /c/Users/james/Source/Repos/gh-fullhist && ./build-pc.sh ntsc-final'` (login shell for MINGW64 PATH; SDL2.dll at `/c/msys64/mingw64/bin`).
+- Build: `/c/msys64/usr/bin/bash.exe -lc 'cd <repo> && ./build-pc.sh ntsc-final'` (login shell for MINGW64 PATH; SDL2.dll at `/c/msys64/mingw64/bin`).
 - Capture run: `GE_AUDIOTRACE=1 GE_INPUTSCRIPT="$(cat ../scratchpad/exact_run3_script.txt)" ./ge007.x86_64.exe -level_09` from `build-pc/`; kill with `taskkill //F //PID <pid>` (msys `kill` does not work).
 - `mupen64/` (N64 emulator, user's A/B reference) at repo root — added to .gitignore this session.
 - `scratchpad/` is gitignored: banktest/, exact_match.py, fire scripts, match outputs are all local-only. To re-verify the bank exoneration: `scratchpad/banktest/harness.exe` (rebuild from harness.c against port/src/romdata.c if stale) then `python scratchpad/banktest/diff_bank.py`.
@@ -3391,7 +3396,7 @@ archived user capture: `scratchpad/d202-m66/` (`check_dump.py`,
 The `[EXPIRE]` line and the guard/expire code STAY (permanent, documented).
 Build note for this shell: toolchain at `/c/msys64/mingw64/bin`, and
 `cmake --build -j` hit "Cannot create temporary file in C:\\Windows\\" —
-`ninja -j1` with `TMP/TEMP=C:/Users/james/AppData/Local/Temp` works.
+`ninja -j1` with a writable native `TMP/TEMP` works.
 
 ## Done this session (M-66) — D202 ROOT CAUSE ESTABLISHED: the audible stuck door loop is sound 203 behaving exactly as ROM + ground-truth code specify — faithful N64 behaviour (original quirk), not a port bug. Disposition A/B/C pending user decision.
 
@@ -4765,7 +4770,7 @@ does not.
 Build locally: `cmake -S . -B build-linux -G Ninja -DROMID=ntsc-final
 -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14` then `ninja -C
 build-linux` (~20s on drvfs). WSL `Ubuntu` distro provisioned (toolchain +
-SDL2/zlib/GL dev); repo at `/mnt/c/Users/james/Source/Repos/gh-fullhist`
+SDL2/zlib/GL dev); repo at `<repo>`
 (fixed the malformed `/etc/wsl.conf` `[automount]` + `wsl --shutdown`).
 `data/` has the ROM + sidecars already.
 
@@ -5074,7 +5079,7 @@ playtest handoff: `docs/dev/M-35-PLAYTEST-CHECKLIST.md`; WI-3 design:
 (`d43_emit.py` / `d69_emit.py` / `d88_emit.py --regen`, all pass clean) → `./build-pc.sh
 ntsc-final` links 242/242, `-level_09` runs crash-free past frame 1200. **No `assets/*.bin`
 extraction needed** — the committed `assets/` is self-sufficient; the ROM is runtime-only.
-The old repo at `C:/Users/james/Source/Repos/007` has the ROM + a prior build.
+The old repo at `<repos>/007` has the ROM + a prior build.
 
 - **D168 — VERIFIED.** Rebuilt with the flip fix, captured `-level_09` frame 320:
   the exit arrow points up, ammo "7|93" reads normally bottom-right — matches

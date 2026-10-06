@@ -38,7 +38,7 @@ More is already in place than "audio not started" suggests:
   `osAiGetLength()` in `port/src/libultra.c:852-862` discard everything
   (`osAiGetLength` returns 0), and `port/src/audio.c` never opens an SDL
   device. `main.c:141-142` already calls `audioInit()` / `mixerInit()`.
-- **The PD reference is local** at `C:\Users\james\Source\Repos\pd_port`,
+- **The PD reference is local** at `<repos>\pd_port`,
   with the full audio stack: `port/src/audio.c` (75 lines, SDL device +
   queue), `port/src/mixer.c` (~720 lines, software RSP-audio-ucode), and the
   wiring trick in `include/PR/abi.h`.
@@ -201,4 +201,4 @@ M-50) → v0.4.0".
 | `port/src/libultra.c:848-863` | `osAi*` shims — wire to audio.c (Phase 1) |
 | `port/src/libultra.c:1237` | M_AUDTASK branch — stays a completing no-op; hosts `GE_AUDIOTRACE` |
 | `port/src/ucode.c` | Dummy `aspMain*` markers stay forever under CPU-bypass — document decision |
-| `C:\Users\james\Source\Repos\pd_port\port\src\{audio,mixer}.c`, `include\PR\abi.h` | PD ground truth: device glue + DSP cores + the macro-swap pattern |
+| `<repos>\pd_port\port\src\{audio,mixer}.c`, `include\PR\abi.h` | PD ground truth: device glue + DSP cores + the macro-swap pattern |

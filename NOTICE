@@ -18,6 +18,19 @@ Third-party code vendored into the port layer keeps its own license:
     libultraship / sm64-port lineage; see port/fast3d/LICENSE.txt.
   * port/fast3d/glad/ - generated OpenGL loader (glad), public domain / MIT.
 
+Vendored build tooling keeps its own license (none of it is compiled or linked
+into the PC port; it belongs to the N64 decompilation build):
+
+  * tools/ido5.3_recomp/rabbitizer/ - disassembler library (rabbitizer), MIT,
+    (c) 2022 Decompollaborate; license text in that directory's LICENSE file.
+  * tools/armips.cpp - assembler (armips), MIT, (c) 2009-2020 Kingcom.
+  * tools/extractor/puff.c, puff.h - puff-style inflate, zlib-style license,
+    (c) Mark Adler.
+  * tools/gzipsrc/ - gzip 1.x sources, GPL-2.0-or-later, (c) 1992-1993
+    Jean-loup Gailly; the GPL-2.0 text is tools/gzipsrc/COPYING. These sources
+    are build tooling only: they are never linked into the port, and they are
+    not part of any download package.
+
 It does NOT cover:
 
   * src/, include/, assets/, Makefile, tools/, rsp/, ld/, and the other

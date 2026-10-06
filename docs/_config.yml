@@ -1,15 +1,15 @@
 # GitHub Pages config. Site is served from the /docs folder on the default
 # branch (Settings -> Pages -> Deploy from a branch -> main / docs).
 title: GoldenEye 007 PC Port
-# v0.2.1 (Bing SEO): keep this SHORT -- jekyll-seo-tag splices it into the
+# Keep this SHORT (Bing SEO): jekyll-seo-tag splices it into the
 # home page <title> whenever the page title equals the site title, and the
 # long version made a ~230-char title. It also renders as the masthead
 # tagline on every page. Per-page meta/og descriptions come from each page's
 # front matter `description:` (see index.md), not from here.
 description: GoldenEye 007 (Nintendo 64, 1997) on the PC - decompiled, ported, and playable.
 # No GitHub theme: the site uses a hand-rolled _layouts/default.html plus the
-# design in _includes/head-custom.html (charcoal/off-white/amber, square and
-# flat.)
+# design in _includes/head-custom.html (the dark "amber terminal" theme: a
+# near-black starfield, a single amber accent, mono chrome over a sans body).
 show_downloads: false
 
 # Canonical site location - used by jekyll-seo-tag (canonical URLs, og: tags)
@@ -19,7 +19,7 @@ baseurl: /goldeneye-pc-port
 
 # Link-preview card image for jekyll-seo-tag (og:image / twitter:image).
 # Path is relative to the site root; the plugin prepends url + baseurl.
-image: /img/attract-bunker1.png
+image: /img/shots/shot-28.jpg
 
 # Both are on the GitHub Pages plugin whitelist - no Gemfile needed.
 # jekyll-seo-tag: per-page <title>/description/canonical/OpenGraph via {% seo %}
@@ -35,35 +35,47 @@ plugins:
 # instead, so they resolve from the published pages too.
 
 # ---------------------------------------------------------------------------
-# The site publishes a small curated set (see docs/dev/notes/DE-SLOP-DOCS-PLAN.md):
-#   index.md, building.md, internals.md, porting-notes.md, dev-process.md,
-#   dev/agentic-development.md
+# The site publishes a small curated set:
+#   index.md, under-the-hood.md (the "under the hood" hub), building.md, plus
+#   the four docs grouped behind that hub: internals.md, porting-notes.md,
+#   dev-process.md, dev/agentic-development.md, the five short topic notes
+#   grouped under it (the-software-rsp.md, the-asset-pipeline.md,
+#   framerate-and-pacing.md, input-and-aim.md, saves.md), and
+#   security-and-fidelity-status.md (linked from index.md's Known issues).
 # Everything else under docs/ is working material - the finding log, level
-# status, backlogs, plans, inherited decomp guides. It stays in the repo (and
-# on GitHub) but is excluded from the site build so it never shows up as a
-# published page or in sitemap.xml.
+# status, backlogs, plans, session notes, inherited decomp guides. It stays in
+# the repo (and on GitHub) but is excluded from the site build so it never
+# shows up as a published page or in sitemap.xml.
+# NOTE: keep this list in sync as dev/ working docs are added; a new unlisted
+# .md under docs/ is silently published to the site + sitemap.xml.
 exclude:
-  - BACKLOG.md
   - HANDOFF.md
   - ROADMAP.md
   - SetupGuide.md
-  - StructureGuide.md
   - StyleGuide.md
+  - dev/ACCURACY-AUDIT-2026-09-20.md
   - dev/AUDIO-PLAN.md
   - dev/AUDIT-M6-player-offsets.md
+  - dev/CONTROLLER-INPUT-PLAN.md
+  - dev/CUT-CONTENT-BACKLOG.md
   - dev/D176a-SKY-NOTES.md
+  - dev/D356-SETTINGS-REGROUP-PLAN.md
+  - dev/D357-SETTINGS-VALUES-PLAN.md
   - dev/GE-ENV-PROBES.md
+  - dev/GEPD-INPUT-PLAN.md
   - dev/HANDOFF-ARCHIVE.md
   - dev/LEVEL-OBJECTIVES.md
   - dev/LEVEL-PLAYTEST.md
   - dev/LEVEL-STATUS.md
-  - dev/MODERN-PORT-FEATURES-BACKLOG.md
+  - dev/notes
   - dev/OPTIONS-MENU-PLAN.md
+  - dev/preview-video.md
   - dev/QOL-INVENTORY.md
+  - dev/RUMBLE-PLAN.md
   - dev/TEXTURE-GLITCH-ANALYSIS.md
   - dev/UNLOCKED-FPS-PLAN.md
   - dev/VIEWMODEL-RESEARCH.md
-  - dev/WIDESCREEN-FOV-PLAN.md
+  - dev/WATCH-SETTINGS-PLAN.md
   - dev/findings-index.csv
   - dev/findings.md
   - dev/game-behavior-reference.md
