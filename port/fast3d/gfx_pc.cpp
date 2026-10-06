@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <vector>
 #include <list>
+#include <set>
 #include <stack>
 #include <string>
 #include <iostream>
@@ -27,6 +28,7 @@
 
 #include "platform.h"
 #include "portaddr.h"   /* Stage B: arena windows */
+#include "envflag.h"
 
 #include "gfx_pc.h"
 #include "gfx_cc.h"
@@ -160,6 +162,13 @@ struct LoadedTexture {
      * a CI8 index stream apart from real RGBA16 pixels when a later tile
      * re-declares the same TMEM in another format -- see import_texture. */
     uint8_t src_fmt = 0xFF;
+    /* D75: set by gfx_dp_load_block when the load used dxt == 0. The RDP's
+     * LoadBlock only swaps odd rows on the way INTO TMEM when its dxt counter
+     * advances; TMEM reads always swap odd rows (addr ^ 4). With dxt == 0 the
+     * load-side swap never happens, so the sampled image is the memory image
+     * with the two 32-bit halves of every 8-byte group swapped on odd rows.
+     * Rare relies on this for the Rareware logo's text mip textures. */
+    bool dxt0 = false;
 };
 
 static struct RDP {
@@ -332,12 +341,95 @@ static void gfx_flush(void) {
     }
 }
 
+/* D480: shader pre-warm. A combiner seen for the first time compiles its GL
+ * program mid-frame (2.5-11.5 ms each on the dev box; up to ~19 ms frames in
+ * play). The generated GLSL is a pure function of (shader_id0, shader_id1) and
+ * the GL version, so every pair ever created is remembered in $S/ge007.shaders
+ * and compiled at the top of the first gfx_run (and again after a filter change
+ * clears the pool). Output-identical; GE_NOSHADERWARM=1 turns it off. */
+#define SHADERWARM_HEADER "ge007-shaders v1"
+#define SHADERWARM_MAX 1024
+static bool s_shader_warm_pending = true;
+static int s_shader_list_state = 0; /* 0 = not opened, 1 = writable, -1 = disabled */
+static std::string s_shader_list_path;
+static std::set<std::pair<uint64_t, uint32_t>> s_shader_list_known;
+
+static bool gfx_shader_list_open(void) {
+    if (s_shader_list_state == 0) {
+        s_shader_list_state = -1;
+        if (GE_ENVFLAG("GE_NOSHADERWARM")) {
+            return false;
+        }
+        s_shader_list_path = sysResolvePath("$S/ge007.shaders");
+        bool header_ok = false;
+        if (FILE* f = fopen(s_shader_list_path.c_str(), "r")) {
+            char line[64];
+            if (fgets(line, sizeof line, f) && !strncmp(line, SHADERWARM_HEADER, strlen(SHADERWARM_HEADER))) {
+                header_ok = true;
+                unsigned long long id0;
+                unsigned int id1;
+                while (s_shader_list_known.size() < SHADERWARM_MAX && fgets(line, sizeof line, f)) {
+                    if (sscanf(line, "%llx %x", &id0, &id1) == 2) {
+                        s_shader_list_known.insert(std::make_pair((uint64_t)id0, (uint32_t)id1));
+                    }
+                }
+            }
+            fclose(f);
+        }
+        if (!header_ok) {
+            /* missing, foreign or corrupt: start a fresh list */
+            FILE* f = fopen(s_shader_list_path.c_str(), "w");
+            if (f == NULL) {
+                return false;
+            }
+            fprintf(f, "%s\n", SHADERWARM_HEADER);
+            fclose(f);
+        }
+        s_shader_list_state = 1;
+    }
+    return s_shader_list_state == 1;
+}
+
+static void gfx_shader_list_record(uint64_t shader_id0, uint32_t shader_id1) {
+    if (!gfx_shader_list_open() || s_shader_list_known.size() >= SHADERWARM_MAX) {
+        return;
+    }
+    if (!s_shader_list_known.insert(std::make_pair(shader_id0, shader_id1)).second) {
+        return;
+    }
+    if (FILE* f = fopen(s_shader_list_path.c_str(), "a")) {
+        fprintf(f, "%016llx %08x\n", (unsigned long long)shader_id0, (unsigned int)shader_id1);
+        fclose(f);
+    }
+}
+
+static void gfx_shader_prewarm(void) {
+    s_shader_warm_pending = false;
+    if (!gfx_shader_list_open() || s_shader_list_known.empty()) {
+        return;
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    int compiled = 0;
+    gfx_rapi->unload_shader(rendering_state.shader_program);
+    rendering_state.shader_program = nullptr;
+    for (const auto& id : s_shader_list_known) {
+        if (gfx_rapi->lookup_shader(id.first, id.second) == NULL) {
+            struct ShaderProgram* prg = gfx_rapi->create_and_load_new_shader(id.first, id.second);
+            gfx_rapi->unload_shader(prg);
+            compiled++;
+        }
+    }
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    sysLogPrintf(LOG_NOTE, "SHADERWARM: compiled %d of %d in %.1f ms", compiled, (int)s_shader_list_known.size(), ms);
+}
+
 static struct ShaderProgram* gfx_lookup_or_create_shader_program(uint64_t shader_id0, uint32_t shader_id1) {
     struct ShaderProgram* prg = gfx_rapi->lookup_shader(shader_id0, shader_id1);
     if (prg == NULL) {
         gfx_rapi->unload_shader(rendering_state.shader_program);
         prg = gfx_rapi->create_and_load_new_shader(shader_id0, shader_id1);
         rendering_state.shader_program = prg;
+        gfx_shader_list_record(shader_id0, shader_id1);
     }
     return prg;
 }
@@ -1143,6 +1235,16 @@ static void import_texture(int i, int tile, bool importReplacement) {
     } else {
         key = { orig_addr, {}, fmt, siz, palette_index, loaded_texture.size_bytes, 0u };
     }
+    /* D75: a dxt==0 load samples with swapped odd rows -> distinct image.
+     * Only compiled-in (exe-image) assets: the runtime texture pipeline
+     * (tex.c/image.c, 0x70xxxxxx) loads dxt==0 too, but D159 no-ops its
+     * compensating pre-swap, so those are already linear. */
+    const bool d75_swap = loaded_texture.dxt0 && siz != G_IM_SIZ_32b &&
+                          gfx_tex_source_is_c_array(orig_addr) &&
+                          rdp.texture_tile[tile].line_size_bytes != 0 &&
+                          (rdp.texture_tile[tile].line_size_bytes & 7) == 0 &&
+                          loaded_texture.size_bytes > rdp.texture_tile[tile].line_size_bytes;
+    if (d75_swap) key.palette_hash ^= 0xD75D75D7u;
 
     /* Intro blood (M-201): textures the game regenerates IN PLACE in the
      * per-frame dynamic pool (dynAllocate, [g_VtxBuffers[0], g_VtxBuffers[2]))
@@ -1210,6 +1312,26 @@ static void import_texture(int i, int tile, bool importReplacement) {
             loaded_texture.addr = destride_buf.data();
             loaded_texture.full_image_line_size_bytes = src_line;
         }
+    }
+
+    /* D75: emulate the RDP's odd-row TMEM read swap for dxt==0 loads (see
+     * LoadedTexture::dxt0). Done after destride so rows are contiguous. */
+    std::vector<uint8_t> d75_buf;
+    if (d75_swap) {
+        const uint32_t ln = rdp.texture_tile[tile].line_size_bytes;
+        const uint32_t rows = loaded_texture.size_bytes / ln;
+        d75_buf.assign(loaded_texture.addr, loaded_texture.addr + (size_t)rows * ln +
+                       (loaded_texture.size_bytes - rows * ln));
+        for (uint32_t r = 1; r < rows; r += 2) {
+            uint8_t* row = &d75_buf[(size_t)r * ln];
+            for (uint32_t b = 0; b + 8 <= ln; b += 8) {
+                uint8_t t4[4];
+                memcpy(t4, row + b, 4);
+                memcpy(row + b, row + b + 4, 4);
+                memcpy(row + b + 4, t4, 4);
+            }
+        }
+        loaded_texture.addr = d75_buf.data();
     }
 
     /* GE_DTEX: dump the load parameters for the first N textures of a frame so
@@ -3195,6 +3317,7 @@ static void gfx_dp_load_block(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t
     loaded_texture.raw_tex_metadata = rdp.texture_to_load.raw_tex_metadata;
     loaded_texture.addr = rdp.texture_to_load.addr;
     loaded_texture.src_fmt = rdp.texture_to_load.fmt; /* D229 */
+    loaded_texture.dxt0 = (dxt == 0);                 /* D75 */
 
     rdp.textures_changed[0] = rdp.textures_changed[1] = true;
 }
@@ -3236,6 +3359,7 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     loaded_texture.raw_tex_metadata = rdp.texture_to_load.raw_tex_metadata;
     loaded_texture.addr = rdp.texture_to_load.addr + start_offset_bytes;
     loaded_texture.src_fmt = rdp.texture_to_load.fmt; /* D229 */
+    loaded_texture.dxt0 = false;                      /* D75 */
 
     rdp.texture_tile[tile].uls = uls;
     rdp.texture_tile[tile].ult = ult;
@@ -4235,6 +4359,10 @@ extern "C" void gfx_run(Gfx* commands) {
     }
     dropped_frame = false;
 
+    if (s_shader_warm_pending) {
+        gfx_shader_prewarm();   /* D480 */
+    }
+
     gfx_rapi->update_framebuffer_parameters(0, gfx_current_window_dimensions.width,
                                             gfx_current_window_dimensions.height, 1, false, true, true,
                                             !game_renders_to_framebuffer);
@@ -4344,6 +4472,7 @@ extern "C" void reset_texture_state() {
         rendering_state.shader_program = nullptr;
     }
     gfx_rapi->clear_shaders();
+    s_shader_warm_pending = true;   /* D480: re-warm on the next frame */
     color_combiner_pool.clear();
     prev_combiner = color_combiner_pool.end();
 }

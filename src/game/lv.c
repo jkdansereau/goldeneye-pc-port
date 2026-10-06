@@ -407,11 +407,18 @@ void lvlStageLoad(s32 stage)
                 extern struct mp_stage_setup multi_stage_setups[];
                 extern void init_mp_options_for_scenario(s32 numplayers);
                 extern s32 selected_num_players;
+                extern s32 selected_folder_num;
                 s32 np = (s32)strtol(smp, NULL, 0);
                 const char *comma = strchr(smp, ',');
                 if (np < 2) np = 2;
                 if (np > 4) np = 4;
                 gamemode = GAMEMODE_MULTI;
+                /* D479: the file-select screen a real MP launch passes through
+                 * sets selected_folder_num = -1 (front.c), so the stage load's
+                 * fileLoadSettingsForFolder applies no Bond file's options.
+                 * Without this the harness applied a blank folder-1 record
+                 * (options 0: ammo counter, sight and auto-aim off). */
+                selected_folder_num = -1;
                 init_mp_options_for_scenario(np);
                 if (comma) MP_stage_selected = (s32)strtol(comma + 1, NULL, 0);
                 selected_stage = multi_stage_setups[MP_stage_selected].stage_id;

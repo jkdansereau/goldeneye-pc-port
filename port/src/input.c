@@ -2785,11 +2785,26 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                         !p->pause_state && !p->mpmenuon && !g_PlayerIsInTank &&
                         !lvlGetControlsLockedFlag() &&
                         !gameScriptedCameraActive();
+        int weaponBlocks = 0;
         if (canCrouch && (crouchNow || s_crouchApplied)) {   /* weapon lookup only when it can matter */
-            canCrouch = !bondwalkItemCheckBitflags(p->hands[GUNRIGHT].weaponnum,
-                                                   WEAPONSTATBITFLAG_DISABLE_CROUCH);
+            weaponBlocks = bondwalkItemCheckBitflags(p->hands[GUNRIGHT].weaponnum,
+                                                     WEAPONSTATBITFLAG_DISABLE_CROUCH);
+            canCrouch = !weaponBlocks;
         }
-        if (canCrouch && crouchNow) {
+        static int frozenLogged = 0;
+        if (!weaponBlocks) frozenLogged = 0;
+        if (weaponBlocks) {
+            /* D483 (#136): a weapon with DISABLE_CROUCH (the sniper rifle)
+             * blocks the native crouch-down AND crouch-up (bondview2.c), so
+             * on the N64 Bond keeps whatever stance he had when he switched
+             * to it. Freeze the port stance the same way: don't apply a new
+             * crouch, don't stand up, and never feed C-down (it zooms out
+             * with this weapon). Switching back resumes the normal rules. */
+            if (!frozenLogged && configGetInputLog())
+                sysLogPrintf(LOG_NOTE, "GE_INPUTLOG free crouch frozen (weapon %d disables crouch, crouchpos=%d, key=%d)",
+                             (int)p->hands[GUNRIGHT].weaponnum, (int)p->crouchpos, crouchNow);
+            frozenLogged = 1;
+        } else if (canCrouch && crouchNow) {
             /* In aim mode the native crouchUp branch runs every tick without
              * C-down, undoing the port stance by one step. Feed the native
              * axis ONLY while aiming; hipfire still crouches by stance alone. */

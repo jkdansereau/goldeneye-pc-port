@@ -68,11 +68,15 @@ extern void videoSyncSplitScreen(void); /* D416 */
 u64 osClockRate = 6250000;          /* RSP counter rate (Hz) — see PD port */
 u32 osMemSize   = 16 * 1024 * 1024; /* pretend 16MB RDRAM (+expansion)     */
 /* TV type (normally set from console hardware in os/initialize.c, excluded).
- * The game reads it to pick PAL/NTSC behaviour (e.g. schedulerInitThread
- * checks osTvType == OS_TV_MPAL). Set to match the emulated region: PAL
- * consoles report MPAL, NTSC consoles report NTSC. */
+ * Set to what the matching console reports: a European (PAL) N64 reports
+ * OS_TV_PAL (0); OS_TV_MPAL (2) is Brazil's 60 Hz PAL-M console. GE's shared
+ * code only tests for MPAL (sched.c / init.c / fr.c: MPAL LAN1 mode, else
+ * NTSC LAN1), so on a real PAL console those take the NTSC branch and the
+ * EU build's own video_related_8 (fr.c, #ifdef VERSION_EU) then installs
+ * the PAL modes. D488: this used to be MPAL (a scaffolding-era inference
+ * from those checks), which sent the port down the Brazil-only branches. */
 #ifdef REFRESH_PAL
-u32 osTvType    = OS_TV_MPAL;       /* EU: PAL  (0=PAL 1=NTSC 2=MPAL)      */
+u32 osTvType    = OS_TV_PAL;        /* EU: PAL  (0=PAL 1=NTSC 2=MPAL)      */
 #else
 u32 osTvType    = OS_TV_NTSC;       /* US/JP: NTSC                         */
 #endif
@@ -329,7 +333,7 @@ void portKernelInit(void)
     g_lastFrameUs = sysGetMicroseconds();
     g_lastHeartbeatUs = g_lastFrameUs;
 
-    if (osTvType == OS_TV_MPAL || osTvType == OS_TV_PAL) {
+    if (osTvType == OS_TV_PAL) {    /* D488: MPAL (PAL-M) is a 60 Hz system */
         g_tickIntervalUs = 1000000 / 50; /* PAL: 50 frames/s -> 20ms */
         g_determQuantum = 931050;
     } else {
@@ -820,7 +824,29 @@ void osViSetMode(OSViMode *vm)
      * every frame into a half-height band. */
     u32 w = vm->comRegs.width;
     s32 h = (s32)(((vm->fldRegs[0].yScale & 0xFFF) * 480u) / 0x800u);
+#ifdef VERSION_EU
+    /* D487: the EU build's video_related_8 (src/fr.c, #ifdef VERSION_EU)
+     * encodes yScale = bufy * 0x800 / (0x220 + (bufy == 330 ? 28 : 0)),
+     * i.e. against 544 (572) lines, not 480. Inverting with 480 gave a CFB
+     * ~12% too short (269 -> 237), so fast3d cropped the bottom of every
+     * PAL frame (HUD ammo counter reduced to a dot). Recover bufy exactly:
+     * the smallest height whose EU encoding reproduces this yScale. Keyed on
+     * the build, not the OS_VI_BIT_PAL ctrl bit: the modes reaching here
+     * (the scheduler's LAN1 start mode and the EU video_related_8 modes) do
+     * not reliably carry that bit (observed: yScale 0x400 = 272 without it). */
+    {
+        u32 ys = vm->fldRegs[0].yScale & 0xFFF;
+        s32 cand;
+        for (cand = 1; cand <= 576; cand++) {
+            u32 den = 0x220u + (cand == 330 ? 28u : 0u);
+            if (((u32)cand * 0x800u) / den == ys) { h = cand; break; }
+        }
+        if (cand > 576) h = 0;
+    }
+    if (h <= 0 || h > 576) h = 272; /* fallback: the EU CFB height (fr.h SCREEN_HEIGHT_272) */
+#else
     if (h <= 0 || h > 480) h = pal ? 272 : 240; /* fallback: LAN1 CFB height */
+#endif
     if (w > 640) w = 640;
     videoUpdateNativeResolution((s32)w, h);
 }
@@ -982,7 +1008,8 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
             char win[1200] = "";
             char *wp = win;
             for (int i = 0; i < 32; i++) {
-                wp += snprintf(wp, win + sizeof(win) - (wp - win),
+                /* D478: the bound is the bytes left, not a pointer. */
+                wp += snprintf(wp, sizeof(win) - (size_t)(wp - win),
                                " %p", (void *)sp[i]);
             }
 #if defined(PLATFORM_WINDOWS)
@@ -1312,6 +1339,109 @@ s32 osMotorStop(OSPfs *pfs)
 
 void osSpTaskLoad(OSTask *t) { (void)t; /* nothing to load on the host */ }
 
+static void portRenderGfxTask(Gfx *dl)
+{
+    uint64_t t0 = sysGetMicroseconds();
+    videoStartFrame();
+    videoSyncSplitScreen();
+    gfx_run(dl);
+    videoEndFrame();
+    g_lastFrameUs = sysGetMicroseconds();
+    if (++g_framesRendered <= 5 || (g_framesRendered % 300) == 0)
+        sysLogPrintf(LOG_NOTE, "frame %d rendered in %llu us",
+                     g_framesRendered,
+                     (unsigned long long)(sysGetMicroseconds() - t0));
+}
+
+/* D481: render worker. The N64 RSP/RDP run beside the CPU; the scheduler
+ * starts a task and learns it finished from the SP/DP interrupts. The port
+ * used to run fast3d inline here, on the scheduler thread, so a VI retrace
+ * arriving mid-render was forwarded to the game only after the render: the
+ * game frame started late, the next retrace came < half a frame after it, and
+ * boss.c's tick gate skipped it (a 33 ms frame). Invisible with 1-3 ms
+ * renders, ~1 frame in 4 on an Intel HD 3000 (8-12 ms renders). Gfx tasks now
+ * go to this worker; it posts SP/DP done exactly as the inline path did.
+ * One-slot mailbox: the game submits frame N+1 only after frame N's done event
+ * has round-tripped (worker -> interruptQ -> __scTaskComplete -> client DONE
+ * -> boss.c), so the slot is always empty at hand-off. GE_DETERM keeps the
+ * inline path (its retrace synthesis is call-sequenced, see osRecvMesg), and
+ * GE_RENDERINLINE=1 restores it as a falsifier. */
+static pthread_mutex_t s_rwLock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t s_rwCond = PTHREAD_COND_INITIALIZER;
+static Gfx *s_rwTask = NULL;   /* submitted display list; NULL = worker idle */
+static int s_rwMode = 0;       /* 0 = undecided, 1 = worker, -1 = inline */
+
+static void *portRenderWorker(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        pthread_mutex_lock(&s_rwLock);
+        while (s_rwTask == NULL) {
+            /* Quit while idle: stop taking frames and never touch GL again.
+             * The host only waits for the renderer while it is inside a frame
+             * (video.c videoHostExitIfRequested), so an idle worker is already
+             * a safe exit point; a frame that is running parks itself at its
+             * boundary as before (D344). */
+            if (videoQuitRequested()) {
+                pthread_mutex_unlock(&s_rwLock);
+                for (;;) sysSleep(100000);
+            }
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_nsec += 100 * 1000 * 1000;
+            if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+            pthread_cond_timedwait(&s_rwCond, &s_rwLock, &ts);
+        }
+        Gfx *dl = s_rwTask;
+        pthread_mutex_unlock(&s_rwLock);
+
+        portRenderGfxTask(dl);
+
+        pthread_mutex_lock(&s_rwLock);
+        s_rwTask = NULL;
+        pthread_cond_broadcast(&s_rwCond);
+        pthread_mutex_unlock(&s_rwLock);
+        portPostEventForce(OS_EVENT_SP);   /* D134: must not be dropped */
+        portPostEventForce(OS_EVENT_DP);   /* gfx task is its own DP task */
+    }
+    return NULL;
+}
+
+static int portRenderWorkerOn(void)
+{
+    if (s_rwMode == 0) {
+        s_rwMode = -1;
+        if (g_determEnabled) {
+            sysLogPrintf(LOG_NOTE, "D481: GE_DETERM -> gfx tasks run inline");
+        } else if (getenv("GE_RENDERINLINE") != NULL) {
+            sysLogPrintf(LOG_NOTE, "D481: GE_RENDERINLINE -> gfx tasks run inline");
+        } else {
+            pthread_attr_t attr;
+            pthread_t th;
+            pthread_attr_init(&attr);
+#if !defined(_WIN32)
+            /* Same low stack as the game threads (see portAllocLowStack). */
+            void *lowStack = portAllocLowStack(PORT_THREAD_STACK);
+            if (lowStack)
+                pthread_attr_setstack(&attr, lowStack, PORT_THREAD_STACK);
+            else
+                pthread_attr_setstacksize(&attr, PORT_THREAD_STACK);
+#else
+            pthread_attr_setstacksize(&attr, PORT_THREAD_STACK);
+#endif
+            if (pthread_create(&th, &attr, portRenderWorker, NULL) == 0) {
+                pthread_detach(th);
+                s_rwMode = 1;
+                sysLogPrintf(LOG_NOTE, "D481: render worker started");
+            } else {
+                sysLogPrintf(LOG_ERROR, "D481: render worker failed to start; gfx tasks run inline");
+            }
+            pthread_attr_destroy(&attr);
+        }
+    }
+    return s_rwMode == 1;
+}
+
 void osSpTaskStartGo(OSTask *t)
 {
     if (g_determTraceEnabled && !g_determTaskEverRun) {
@@ -1324,18 +1454,23 @@ void osSpTaskStartGo(OSTask *t)
         /* Phase 3: execute the audio ucode against t->t.data_ptr (an Acmd
          * list). For now the task simply completes; libaudio's amMain still
          * runs its per-frame bookkeeping. */
+    } else if (portRenderWorkerOn()) {
+        /* D481: hand the display list to the render worker; it posts the
+         * SP/DP done events when the frame is presented. */
+        pthread_mutex_lock(&s_rwLock);
+        if (s_rwTask != NULL) {
+            sysLogPrintf(LOG_ERROR, "D481: gfx task submitted while the previous one is still rendering (invariant broken); waiting");
+            while (s_rwTask != NULL) {
+                pthread_cond_wait(&s_rwCond, &s_rwLock);
+            }
+        }
+        s_rwTask = (Gfx *)t->t.data_ptr;
+        pthread_cond_broadcast(&s_rwCond);
+        pthread_mutex_unlock(&s_rwLock);
+        return;
     } else {
-        /* Graphics task: run the software RSP on the display list. */
-        uint64_t t0 = sysGetMicroseconds();
-        videoStartFrame();
-        videoSyncSplitScreen();
-        gfx_run((Gfx *)t->t.data_ptr);
-        videoEndFrame();
-        g_lastFrameUs = sysGetMicroseconds();
-        if (++g_framesRendered <= 5 || (g_framesRendered % 300) == 0)
-            sysLogPrintf(LOG_NOTE, "frame %d rendered in %llu us",
-                         g_framesRendered,
-                         (unsigned long long)(sysGetMicroseconds() - t0));
+        /* Graphics task: run the software RSP on the display list inline. */
+        portRenderGfxTask((Gfx *)t->t.data_ptr);
     }
 
     portPostEventForce(OS_EVENT_SP);   /* D134: must not be dropped */

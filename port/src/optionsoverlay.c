@@ -1809,7 +1809,20 @@ static int s_d314Enabled = -1;   /* -1 = not yet resolved */
  * changes it; its name only selects it. Reset actions use the whole row. */
 static int overlayControlSpan(int i, s32 *x0, s32 *x1);
 
+/* D481: HandleInput runs on the scheduler thread (controller poll) and Emit on
+ * the render worker; both rebuild s_visIdx/s_visN/s_scroll/s_sel. They used to
+ * share one thread, so serialise them now that rendering has its own. */
+static SDL_SpinLock s_ovLock;
+
+static void overlayHandleInputLocked(void);
 void optionsOverlayHandleInput(void)
+{
+    SDL_AtomicLock(&s_ovLock);
+    overlayHandleInputLocked();
+    SDL_AtomicUnlock(&s_ovLock);
+}
+
+static void overlayHandleInputLocked(void)
 {
     static int prevUp, prevDn, prevLf, prevRt, prevLmb, prevRmb, prevPadBack;
     /* D347: hold-to-repeat state (18/4-frame cadence, same as the options
@@ -2416,7 +2429,16 @@ static Gfx *drawBodyFit(Gfx *gdl, s32 x, s32 y, s32 maxW, const char *str, u32 c
     return drawBody(gdl, x, y, out, colour);
 }
 
+static Gfx *overlayEmitLocked(void);
 Gfx *optionsOverlayEmit(void)
+{
+    SDL_AtomicLock(&s_ovLock);   /* D481: see optionsOverlayHandleInput */
+    Gfx *dl = overlayEmitLocked();
+    SDL_AtomicUnlock(&s_ovLock);
+    return dl;
+}
+
+static Gfx *overlayEmitLocked(void)
 {
     if (!s_inited) {
         overlayInit();

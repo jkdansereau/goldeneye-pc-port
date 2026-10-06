@@ -6,6 +6,9 @@
 
   ---------------------------------------------------------------------*/
 
+#ifdef PORT
+#include "porttick.h" /* D486 */
+#endif
 #include <ultra64.h>
 #include <math.h>
 #ifdef PORT
@@ -6338,6 +6341,11 @@ s32 objTick(struct PropRecord *prop)
 
 			if ((autogun->is_active != 0) && (!(obj->flags & PROPFLAG_IS_DRONE_GUN)))
 			{
+#ifdef PORT
+				/* D486 (RULE-2): the shot counter advanced per frame; step it at the N64's 2-ticks-per-frame pace */
+				if (portN64FrameStep())
+				{
+#endif
 				autogun->unkAC = autogun->unkAC + 1;
 				sp13C = (autogun->unkAC & 1) == 0;
 
@@ -6345,6 +6353,9 @@ s32 objTick(struct PropRecord *prop)
 				{
 					sp138 = (autogun->unkAC & 1) == 1;
 				}
+#ifdef PORT
+				}
+#endif
 
 				if (autogun->unkC0 < g_GlobalTimer)
 				{
@@ -6439,7 +6450,12 @@ s32 objTick(struct PropRecord *prop)
 						if ((temp_f20_4 <= (((beam_xdiff * beam_xdiff) + (beam_ydiff * beam_ydiff)) + (beam_collisionTile * beam_collisionTile))) && (bondviewGetIfCurrentPlayerDamageShowTime() == 0))
 						{
 							temp_f0_35 = sqrtf(temp_f20_4);
+#ifdef PORT
+							/* D486: one shot now spans a 2-tick N64 frame below 2 ticks/frame, so charge that frame's delta (damage per second unchanged) */
+							var_f2_7 = (0.16f * (g_ClockTimer >= 2 ? OBJECT_INTERACTION_TIMER_DELTA : 2.0f)) * g_AutogunPendingDamageTick;
+#else
 							var_f2_7 = (0.16f * OBJECT_INTERACTION_TIMER_DELTA) * g_AutogunPendingDamageTick;
+#endif
 							if (temp_f0_35 > 200.0f)
 							{
 								var_f2_7 *= 200.0f / temp_f0_35;

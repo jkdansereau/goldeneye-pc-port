@@ -23,6 +23,7 @@
 
 #include <PR/ultratypes.h>
 #include <PR/gbi.h>
+#include <bondconstants.h>   /* LEVELID_TITLE (D416); MinGW's SDL.h pulled it in by accident, glibc's doesn't */
 
 #include "platform.h"
 #include "system.h"
@@ -37,11 +38,12 @@
 #include "../fast3d/gfx_sdl.h"
 #include "../fast3d/gfx_opengl.h"
 
-/* GE's internal resolution: NTSC LAN1 is 640x480; PAL LAN1 shows a
- * 640x400 area. The window opens at the native size (1:1) by default. */
+/* GE's internal resolution before the game's first osViSetMode (which then
+ * sets the real CFB size): NTSC 640x480; PAL is taller, not shorter -- the EU
+ * game renders 320x269 at 50 Hz with no borders (TCRF), so 2x = 640x538 (D487). */
 #ifdef REFRESH_PAL
 #define GE_NATIVE_W 640
-#define GE_NATIVE_H 400
+#define GE_NATIVE_H 538
 #else
 #define GE_NATIVE_W 640
 #define GE_NATIVE_H 480
@@ -75,6 +77,7 @@ static int cfgSafeAreaCrop  = 1;   /* crop the N64 TV-overscan safe-area margin 
 static int cfgAspectMode    = 0;   /* D447: 0 = Window (fill the window), 1 = Original (pillar/letterbox to the console aspect: 4:3, or 16:9 while the game's Ratio option is 16:9) */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
 static int cfgDeckPresetApplied = 0; /* D283: 1 once the Steam Deck preset has been considered */
+static int cfgLowEndConsidered = 0;  /* D482: 1 once the low-end GPU defaults have been considered */
 
 /*
  * [Window] persistence. W/H = 0 -> auto (gfx_sdl2 fits a 4:3 window into ~85%
@@ -246,6 +249,11 @@ f32 portNativeAspect(void)
 
 f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
 {
+    /* D484 (#136): the 20-degree floor below guards the port's own widening,
+     * but it also raised the game's narrow zoom FOVs (sniper/camera down to
+     * 7 degrees, the watch zoom) to 20, capping scope magnification at about
+     * a third of the N64's. Never floor above the game's own value. */
+    const f32 floorFovY = fovy < 20.0f ? fovy : 20.0f;
     if (!isTitleScreen) {
         /* D334: native widescreen already widens the horizontal FOV through
          * the projection aspect; the Phase-4 vertical boost below was the
@@ -259,8 +267,8 @@ f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
             fovy *= portFovScale;
         }
     }
-    if (fovy > 160.0f) { fovy = 160.0f; }
-    if (fovy < 20.0f)  { fovy = 20.0f; }
+    if (fovy > 160.0f)    { fovy = 160.0f; }
+    if (fovy < floorFovY) { fovy = floorFovY; }
     return fovy;
 }
 
@@ -503,6 +511,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Window.Y",            &cfgWinY,      -1, 16384);
     configRegisterInt("Window.Maximized",    &cfgWinMax,     0, 1);
     configRegisterInt("Video.DeckPresetApplied", &cfgDeckPresetApplied, 0, 1);   /* D283 */
+    configRegisterInt("Video.LowEndConsidered", &cfgLowEndConsidered, 0, 1);     /* D482 */
 }
 
 /* D283: Steam Deck preset. Called from main() right AFTER configLoad(), so
@@ -589,6 +598,81 @@ void videoApplySteamDeckPreset(void)
                      why, cfgFullscreen, cfgWinMax);
     }
     cfgDeckPresetApplied = 1;
+    configSave();
+}
+
+/* D482: lighter defaults on Atom/Celeron-class GPUs (#92).
+ * Measured (Lenovo X220 + the PD port on the same box): fast3d costs no more
+ * per batch/triangle than PD's; the gap on very weak hardware is workload.
+ * DrawDistance/LodDistance 250 send 2.5-3x the draw batches of the authored
+ * distance and MSAA 2x adds ~25-30% GPU time -- PD ships authored distance and
+ * no MSAA. On Intel HD 400-class GPUs (Bay Trail/Braswell/Apollo Lake/Gemini
+ * Lake) and software renderers, lower those three to 100/100/1, but only where
+ * the value is still the port default, and only once per ini
+ * (Video.LowEndConsidered). Core-series iGPUs (HD 2000-6000, HD 5xx, UHD 6xx
+ * except 600/605) keep the full defaults; an HD 3000 holds 60 with them.
+ * The bare "Intel(R) HD Graphics" (no number) counts as low-end on purpose: it
+ * is what Bay Trail and Celeron/Pentium parts report; no Core-series part
+ * reports it, and a miss costs one reversible lightening. Don't tighten this
+ * without measurements.
+ * Must run after gfx_init (needs GL_RENDERER), so it cannot sit next to
+ * videoApplySteamDeckPreset in main.c, which runs before any GL context. The
+ * two touch disjoint keys (Deck: window/fullscreen; this: DD/LOD/MSAA).
+ * GE_FAKE_LOWEND=1/0 forces the classification for testing. */
+static int videoIsLowEndRenderer(const char *r, const char **why)
+{
+    static const char *const kTags[] = {
+        "(BYT)", "(BSW)", "(CHV)", "(APL)", "(GLK)",
+        "Bay Trail", "Braswell", "Cherryview", "Apollo Lake", "Gemini Lake",
+        "llvmpipe", "softpipe", "SVGA3D", "Microsoft Basic Render", "GDI Generic",
+    };
+    static const int kModels[] = { 400, 405, 500, 505, 600, 605 };
+    const char *p;
+
+    for (int i = 0; i < (int)(sizeof(kTags) / sizeof(kTags[0])); i++) {
+        if (strstr(r, kTags[i])) { *why = kTags[i]; return 1; }
+    }
+    p = strstr(r, "HD Graphics");
+    if (p) {
+        int n = 0, digits = 0;
+        p += strlen("HD Graphics");
+        while (*p == ' ') p++;
+        while (*p >= '0' && *p <= '9') { n = n * 10 + (*p - '0'); p++; digits++; }
+        if (!digits) { *why = "numberless HD Graphics"; return 1; }
+        for (int i = 0; i < (int)(sizeof(kModels) / sizeof(kModels[0])); i++) {
+            if (n == kModels[i]) { *why = "HD Graphics 400-605 class"; return 1; }
+        }
+    }
+    *why = "";
+    return 0;
+}
+
+static void videoApplyLowEndDefaults(void)
+{
+    const char *r = gfx_opengl_renderer_string();
+    const char *why = "";
+    const char *fake = getenv("GE_FAKE_LOWEND");
+    int low;
+
+    if (cfgLowEndConsidered) return;
+    if (fake && *fake) {
+        low = atoi(fake) != 0;
+        why = "GE_FAKE_LOWEND";
+    } else {
+        low = videoIsLowEndRenderer(r, &why);
+    }
+    if (low) {
+        int changed = 0;
+        if (cfgDrawDistance == 250) { cfgDrawDistance = 100; changed++; }
+        if (cfgLodDistance == 250)  { cfgLodDistance = 100; changed++; }
+        if (cfgMSAA == 2)           { cfgMSAA = 1; gfx_msaa_level = 1; changed++; }
+        sysLogPrintf(LOG_INFO, "video: low-end renderer \"%s\" (%s); lowered %d default(s): DrawDistance=%d LodDistance=%d MSAA=%d",
+                     r, why, changed, cfgDrawDistance, cfgLodDistance, cfgMSAA);
+    } else {
+        sysLogPrintf(LOG_INFO, "video: renderer \"%s\" (%s); not low-end, defaults kept",
+                     r, why[0] ? why : "no match");
+    }
+    cfgLowEndConsidered = 1;
     configSave();
 }
 
@@ -860,6 +944,7 @@ int videoInit(void)
     };
 
     gfx_init(&set);
+    videoApplyLowEndDefaults();   /* D482: needs GL_RENDERER; before the first frame */
 
     /* VSync + optional fps cap; fast3d paces the window itself. */
     wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
@@ -1016,8 +1101,9 @@ void videoStartFrame(void)
         videoRenderPark();
     }
 
-    /* Rendering runs on the game's scheduler thread; the GL context was
-     * created on the host main thread. */
+    /* Rendering runs on the D481 render worker (or the scheduler thread with
+     * GE_RENDERINLINE/GE_DETERM); the GL context was created on the host
+     * main thread. */
     gfx_sdl_make_context_current();
 
     int dirty = SDL_AtomicSet(&liveCfgDirty, 0);

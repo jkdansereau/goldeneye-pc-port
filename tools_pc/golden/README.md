@@ -1,23 +1,29 @@
 # Golden baseline frames
 
-`frame_NNNNNN.png` — reference `GE_PCDUMP` captures for `framediff.py`
-(`-level_09` BUNKER1: settled gameplay after the intro). Compared structurally, not exactly — the port
-is not frame-deterministic (see `docs/internals.md` "D117").
+`<level>/<platform>/frame_NNNNNN.png`: reference `GE_PCDUMP` captures for
+`tools_pc/verify.sh`, one folder per solo level (all 21, `cuba` = the ending)
+and per platform (`win` today; `linux` to come).
 
-Regenerate after a deliberate visual change:
+**Recipe** (2026-10-02 re-base; `verify.sh` applies all of it):
+- `data/ge007.ini` pinned to ONLY `[Window] Width = 640, Height = 480` (every
+  other option at its compiled-in default; verify.sh backs yours up).
+- `GE_RSEED=0x0123456789abcdef` (pinned PRNG).
+- `GE_INPUTSCRIPT="20:START"` (skips the intro flyby; the scripted pad is
+  the only input) and `GE_PCDUMP="900-1500:300"`: frames 900/1200/1500 are
+  settled gameplay on every level. **Cuba** instead: no input
+  (`1:SNONE`) and `300-900:300` (the ending cutscene; it returns to the boot
+  screens before frame 1200).
+- Every run ends via `GE_QUITFRAME` (orderly quit; never a hard kill, D344).
 
-```sh
-# data/ge007.ini must hold ONLY this (back yours up) — every other option at
-# its compiled-in default; a personal FovScale/DrawDistance/MSAA fails the gate
-printf '[Window]
-Width = 640
-Height = 480
-' > data/ge007.ini
-GE_PCDUMP="640-1120:240" ./build-pc/ge007.x86_64.exe -level_09
-python tools_pc/framediff.py ppm --update    # then git rm any stale stems
-```
+**Gate** (two tiers): the structural framediff (cell means, coverage,
+phash) catches gross breakage; then a per-pixel `--exact --tol 2` check
+with a per-level limit: 1% of pixels, 3% for Jungle and Surface 2, Cuba
+structural only. Measured run to run: <= 0.57% on 18 levels, Jungle 1.75%,
+Surface 2 2.33%, Cuba 36%; a global texture-filter switch measured 22%.
 
-`tools_pc/verify.sh bunker1` does the ini pin + capture + diff for you.
+Regenerate one level after a deliberate visual change: run
+`tools_pc/verify.sh <level>` twice to confirm the new look is stable, then
+capture with the recipe above and replace `<level>/<platform>/*.png`.
 
 ## History
 
@@ -39,3 +45,9 @@ python tools_pc/framediff.py ppm --update    # then git rm any stale stems
   its camera is nondeterministic (D117): 1 in ~5 gate runs failed it (dmean
   0.7 vs 20.7 run to run). All three frames are now settled gameplay; three
   independent captures agree (worst dmean ≤ 6.8).
+- **2026-10-02:** re-based and extended to all 21 levels (`<level>/win/`),
+  recipe above. The flat bunker1 set at the folder root was retired. Two
+  independent 21-level passes agreed; noise per level measured as listed.
+  `verify.sh` no longer hard-kills (taskkill of every `ge007.x86_64.exe`,
+  including a maintainer's game); it quits via `GE_QUITFRAME` and only stops
+  its own PID as a watchdog fallback.

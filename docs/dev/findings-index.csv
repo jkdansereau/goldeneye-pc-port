@@ -7,7 +7,7 @@ D43-D50,RESOLVED,"model-file loading → offline sidecar ""Plan B"" (d43_emit.py
 D51-D58,RESOLVED,"font pixeldata, osGetCount tick rate, model RW pools, cseq BE header, synth slots, RLE menu bg, watch raw offsets, gun-barrel DL",resolved
 D59-D68,RESOLVED,"intro render: blood-RLE clobber, DMA validate, OSMesgQueue, HEADS/BODIES sentinels, romCopy width, image_entry, Globalimagetable BE→LE",resolved
 D70-D74,RESOLVED,"intro-logo pixels: C-array bswap, UV path, sinf/cosf DVAL(), texture-import truncation",resolved
-D75,PARTIAL,front-end 3D model transforms (D77 audio split out below —,PARTIAL (M-197 fixed the logo texture blobs; v0.4.0 campaign 2026-09-28:
+D75,FIXED,front-end 3D model transforms (D77 audio split out below —,FIXED 2026-10-02 (branch fix/fidelity-gaps; by-eye check owed):
 D76 · D164,FIXED,Legal screen only draws line 1 —,"FIXED — this row and the ## D164 entry below were stale; the proposed one-line #ifdef PORT fix was actually committed 8dfc578f4 (2026-08-31), well before this correction (2026-09-18)."
 D159,FIXED,"front-end wallet-Bond photo ""interlaced""/combed (RC1 / D149) —",FIXED (#ifdef PORT no-op the swap in image.c)
 D161,FIXED,Depot (-level_30) ceiling = bright-blue speckle + radial rays (B2).,FIXED (port/fast3d/gfx_pc.cpp)
@@ -337,4 +337,12 @@ D474,FIXED,fast3d micro-optimisations:,FIXED 2026-10-01 (local); output-identica
 D475,OPEN,Statue/Cradle hitches diagnosed:,OPEN (diagnosed 2026-10-01):
 D476,FIXED,CI4 textures keyed on their own 16-entry palette bank instead of the whole 256-entry table (D217 hash):,FIXED 2026-10-02 (local); Statue sweep CI4 cache misses 189 -> 36
 D477,?,CI8 palette re-imports measured and ruled out as a CPU-side hitch cause:,MEASURED 2026-10-02 (local); premise of the D475/D476 follow-up refuted on the dev box; GPU/driver-side cost unmeasured
+D478,FIXED,"D441 read-side census re-run (319 warnings, 129 outside the chr.c D34 initialisers) triaged against the current tree:","FIXED 2026-10-02 (local; snprintf bound); census triage recorded, Stage B items listed"
+D479,FIXED,Split-screen GE_STARTMP harness hid the ammo counter:,"FIXED 2026-10-02 (local); harness-only, 2P frame shows the counter in both halves"
+D480,FIXED,"Shader pre-warm: every created shader pair (shader_id0, shader_id1) is remembered in $S/ge007.shaders and compiled at the first frame of the next session, so a…","FIXED 2026-10-02 (local, perf/shader-prewarm); output-identical (menu frame exact), 0 in-play compiles on the warm run"
+D481,FIXED,Low-end ~45/30 fps (#92):,"FIXED 2026-10-02 (local, perf/render-worker); X220 (HD 3000) 44-46 -> 60.0 fps, GE_RENDERINLINE=1 falsifier restores 45.9"
+D482,FIXED,Lighter first-launch defaults on Atom/Celeron-class GPUs (#92 follow-up):,"FIXED 2026-10-02 (local, perf/lowend-defaults); X220 forced-path:"
+D483,FIXED,#136: the PC crouch key stood Bond up when he switched to the sniper rifle; the N64 keeps the stance (the weapon's DISABLE_CROUCH flag blocks both crouch-down…,"FIXED 2026-10-02 (local, fix/d483-sniper); scripted crouch -> switch -> release keeps SQUAT"
+D484,FIXED,"#136: portScaleFovY's 20-degree floor raised the game's own zoom FOVs, capping sniper/camera magnification at 20 degrees instead of the N64's 7 (about a third…","FIXED 2026-10-02 (local, fix/d483-sniper, maintainer-approved 2026-10-02); full zoom renders at 7 degrees, normal views pixel-identical"
+D485,FIXED,"#136: sniper/camera zoom stepped once per game frame with no tick scaling, so at the port's 1 tick/frame it zoomed 2x faster in real time than the N64 at 2 tic…","FIXED 2026-10-02 (local, fix/d483-sniper); 15 -> 7 takes 16 frames at 60 fps (was 8) = the N64 at 30 fps"
 D450,FIXED,"Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).","FIXED — port-only: the render thread's gfx_sdl_handle_events drains the same SDL queue as video.c's host pump but had no case for SDL_CONTROLLERDEVICEADDED/REMOVED, so it usually swallowed them and i…"

@@ -18,10 +18,14 @@
 #
 # Options:
 #   --platform win|linux   default: autodetect via `uname -s`
-#   --dump lo-hi:step      GE_PCDUMP window (default: 640-1120:240 single level,
-#                          80-400:40 sweep — matches the existing golden set
-#                          and level_sweep.sh respectively)
-#   --script "..."         GE_INPUTSCRIPT passthrough (scripted input)
+#   --dump lo-hi:step      GE_PCDUMP window (default: 900-1500:300, the golden
+#                          capture window for every level and both modes)
+#   --script "..."         GE_INPUTSCRIPT (default "20:START": skip the intro
+#                          flyby so frame 900+ is settled gameplay)
+#
+# Golden recipe (2026-10-02 re-base): 640x480 defaults-only ini, GE_RSEED pinned
+# (GOLDEN_SEED below), GE_INPUTSCRIPT "20:START", GE_PCDUMP 900-1500:300,
+# goldens in tools_pc/golden/<level>/<platform>/. See tools_pc/golden/README.md.
 #   --json                 also emit one JSON object (or array, for sweep) to
 #                          stdout: {level, platform, status, frames,
 #                          worst_cell, crash_sym}
@@ -41,13 +45,28 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 
 # --- arg parsing -------------------------------------------------------------
-MODE=""; LEVEL_ARG=""; PLATFORM=""; DUMP=""; SCRIPT=""; JSON=0; AGAINST=""
+MODE=""; LEVEL_ARG=""; PLATFORM=""; DUMP=""; SCRIPT="20:START"; JSON=0; AGAINST=""
+GOLDEN_DUMP="900-1500:300"
+USER_DUMP=0; USER_SCRIPT=0
+# Per-level golden recipe overrides: Cuba is the ending cutscene + credits (it
+# drops back to the boot screens before frame 1200, and START would skip it),
+# so it captures the cutscene itself with no input.
+golden_dump_for()   { case "$1" in cuba) echo "300-900:300" ;; *) echo "$GOLDEN_DUMP" ;; esac; }
+# Second tier: per-pixel (framediff --exact) limit, % of pixels over a
+# per-channel tolerance of 2. Measured 2026-10-02 run to run (21 levels x 2
+# captures): <= 0.57% everywhere except Jungle 1.75% / Surface 2 2.33% (moving
+# foliage/fog) and Cuba 36% (cutscene animation timing; structural tier only).
+# A global texture-filter change measured 22% on Dam, so 1% leaves ~2x margin
+# over the noise and still catches whole-frame render changes.
+golden_tolpct_for() { case "$1" in cuba) echo "" ;; jungle|surface2) echo "3.0" ;; *) echo "1.0" ;; esac; }
+golden_script_for() { case "$1" in cuba) echo "1:SNONE" ;; *) echo "20:START" ;; esac; }
+GOLDEN_SEED="${GE_RSEED:-0x0123456789abcdef}"
 POSARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --platform) PLATFORM="$2"; shift 2 ;;
-    --dump)     DUMP="$2"; shift 2 ;;
-    --script)   SCRIPT="$2"; shift 2 ;;
+    --dump)     DUMP="$2"; USER_DUMP=1; shift 2 ;;
+    --script)   SCRIPT="$2"; USER_SCRIPT=1; shift 2 ;;
     --against)  AGAINST="$2"; shift 2 ;;
     --json)     JSON=1; shift ;;
     -h|--help)  sed -n '2,32p' "$0"; exit 0 ;;
@@ -74,12 +93,17 @@ if [ "$PLATFORM" = win ]; then
   BUILD_DIR=build-pc
   EXE="$ROOT/build-pc/ge007.x86_64.exe"
   export PATH="/c/msys64/mingw64/bin:$PATH"   # addr2line + runtime DLLs
-  KILL() { taskkill //F //IM ge007.x86_64.exe >/dev/null 2>&1; }
 else
   BUILD_DIR=build-linux
   EXE="$ROOT/build-linux/ge007.x86_64"
-  KILL() { pkill -f ge007.x86_64 >/dev/null 2>&1; }
 fi
+
+# Only ever stop the game process THIS script started (never other instances:
+# the maintainer may be playing), and only as a watchdog fallback -- every run
+# normally ends through GE_QUITFRAME's orderly quit (D344: a hard kill of a
+# live GL/audio process has caused a host BSOD).
+GAMEPID=""
+kill_ours() { [ -n "$GAMEPID" ] && kill "$GAMEPID" >/dev/null 2>&1; GAMEPID=""; }
 
 # name -> -level_XX  (mission order; matches playtest.sh / level_sweep.sh)
 LEVELS=(
@@ -129,9 +153,6 @@ golden_dir_for() {
   local name="$1"
   local per="$ROOT/tools_pc/golden/$name/$PLATFORM"
   if [ -d "$per" ] && ls "$per"/*.png >/dev/null 2>&1; then echo "$per"; return; fi
-  if [ "$name" = "bunker1" ] && ls "$ROOT/tools_pc/golden"/*.png >/dev/null 2>&1; then
-    echo "$ROOT/tools_pc/golden"; return
-  fi
   echo ""
 }
 
@@ -154,52 +175,49 @@ restore_ini() {
   if [ -n "$INI_BAK" ]; then cp "$INI_BAK" "$INI" && rm -f "$INI_BAK"
   elif [ "$INI_CREATED" = 1 ]; then rm -f "$INI"; fi
 }
-trap 'restore_ini; KILL' EXIT INT TERM
+trap 'restore_ini; kill_ours' EXIT INT TERM
 
 # --- run one level -> sets globals: R_STATUS R_FRAMES R_SYM R_BRIEF -------
 run_one() {
   local name="$1" num="$2" dump="$3" watchdog="${4:-90}"
   local capdir; capdir=$(mktemp -d)
+  [ "$USER_DUMP" = 1 ] || dump=$(golden_dump_for "$name")
+  local script="$SCRIPT"
+  [ "$USER_SCRIPT" = 1 ] || script=$(golden_script_for "$name")
   R_STATUS=""; R_FRAMES=0; R_SYM=""; R_BRIEF=""
 
   rm -f "$ROOT/ge007.crash.log"
-  KILL; sleep 0.3
 
-  # Speed-up: a level only needs to render its intro pan + spawn-in once --
-  # everything after the last requested GE_PCDUMP frame is wasted wall-clock
-  # (the process used to always idle out the full watchdog, ~30s/level of
-  # nothing on top of the ~15s that actually matters -- 21 levels x that
-  # waste is most of a sweep's runtime). Poll for the last frame's PPM (or a
-  # crash) and kill the instant it lands; `watchdog` remains the safety net
-  # for a level that never gets there (hang / load-sensitivity flake).
-  local lo hi step lastframe target=""
+  # Quit right after the last requested GE_PCDUMP frame via GE_QUITFRAME (an
+  # orderly D344 quit), instead of idling out the watchdog; the watchdog stays
+  # the safety net for a level that never gets there (hang / flake).
+  local lo hi step lastframe quitframe=""
   IFS='-:' read -r lo hi step <<< "$dump"
   if [[ "$lo" =~ ^-?[0-9]+$ && "$hi" =~ ^-?[0-9]+$ ]]; then
     [[ "$step" =~ ^[0-9]+$ && "$step" -gt 0 ]] || step=1
     lastframe=$(( lo + step * ( (hi - lo) / step ) ))
-    target=$(printf "%s/ppm/frame_%06d.ppm" "$ROOT" "$lastframe")
+    quitframe=$(( lastframe + 2 ))
   fi
 
   ( cd "$ROOT" && export GE_PCDUMP="$dump"
-    [ -n "$SCRIPT" ] && export GE_INPUTSCRIPT="$SCRIPT"
-    if [ -n "$target" ]; then "$EXE" "-level_$num"; else timeout "$watchdog" "$EXE" "-level_$num"; fi ) \
-      >"$capdir/run.log" 2>&1 &
+    [ -n "$quitframe" ] && export GE_QUITFRAME="$quitframe"
+    [ -n "$script" ] && export GE_INPUTSCRIPT="$script"
+    export GE_RSEED="$GOLDEN_SEED"
+    exec "$EXE" "-level_$num" ) >"$capdir/run.log" 2>&1 &
   local gamepid=$!
+  GAMEPID=$gamepid
 
-  if [ -n "$target" ]; then
-    local ticks=0 max_ticks=$(( watchdog * 5 ))   # 0.2s ticks
-    while [ "$ticks" -lt "$max_ticks" ]; do
-      if [ -f "$target" ] || [ -f "$ROOT/ge007.crash.log" ]; then
-        sleep 0.2   # let the just-written frame's fclose() settle
-        break
-      fi
-      kill -0 "$gamepid" 2>/dev/null || break   # exited/crashed on its own
-      sleep 0.2
-      ticks=$((ticks + 1))
-    done
-    KILL
+  local ticks=0 max_ticks=$(( watchdog * 5 ))   # 0.2s ticks
+  while kill -0 "$gamepid" 2>/dev/null && [ "$ticks" -lt "$max_ticks" ]; do
+    sleep 0.2
+    ticks=$((ticks + 1))
+  done
+  if kill -0 "$gamepid" 2>/dev/null; then
+    echo "  watchdog: $name still running after ${watchdog}s, stopping it" >&2
+    kill_ours
   fi
   wait "$gamepid" 2>/dev/null
+  GAMEPID=""
   mv "$ROOT"/ppm "$capdir/ppm" 2>/dev/null || mkdir -p "$capdir/ppm"
 
   R_FRAMES=$(ls "$capdir/ppm"/*.ppm 2>/dev/null | wc -l)
@@ -284,13 +302,21 @@ except Exception:
           # exit 1 = a real per-frame threshold fail (pixel/cell/hash delta).
           # exit 2 = a structural mismatch (missing/size) -- most commonly the
           # golden's frame stems don't line up with this run's --dump window
-          # (today's only golden, level_09, was captured at 640-1120:240; a
+          # (goldens are captured at GOLDEN_DUMP; a
           # sweep using a different stride has nothing to compare against
           # rather than a real regression). Only exit 1 is a verdict fail.
           case "$fexit" in
             1) status=REGRESSION; note="framediff vs $gdir" ;;
             2) note="golden frame stems don't match --dump window ($dump) for $gdir" ;;
           esac
+          local tolpct; tolpct=$(golden_tolpct_for "$name")
+          if [ "$fexit" = 0 ] && [ -n "$tolpct" ]; then
+            local xout; xout=$(python3 "$ROOT/tools_pc/framediff.py" "$CAPDIR/ppm" --golden "$gdir" --exact --tol 2 --tol-pct "$tolpct" 2>&1)
+            if [ $? -eq 1 ]; then
+              status=REGRESSION
+              note="per-pixel: $(echo "$xout" | grep -m1 FAIL | sed 's/^FAIL //') (limit ${tolpct}%)"
+            fi
+          fi
         else
           note="no golden for $name/$PLATFORM yet (Step 3)"
         fi
@@ -327,7 +353,7 @@ case "$MODE" in
     name="${resolved%%:*}"; num="${resolved##*:}"
     [ "${resolved%%:*}" = num ] && name=$(name_for_num "$num")
     pin_ini_640x480 2>/dev/null || true
-    verify_level "$name" "$num" "${DUMP:-640-1120:240}"
+    verify_level "$name" "$num" "${DUMP:-$GOLDEN_DUMP}"
     ;;
 
   sweep)
@@ -339,7 +365,7 @@ case "$MODE" in
     for e in "${entries[@]}"; do
       n="${e%%:*}"; num="${e##*:}"
       pin_ini_640x480 2>/dev/null || true
-      out=$(verify_level "$n" "$num" "${DUMP:-80-400:40}" 45)
+      out=$(verify_level "$n" "$num" "${DUMP:-$GOLDEN_DUMP}" 60)
       rc=$?
       [ "$rc" -ne 0 ] && RC=1
       # Pre-existing bug (found alongside D244's diagnostics): `head -1` here
@@ -375,7 +401,7 @@ case "$MODE" in
     [ -z "$resolved" ] && { echo "unknown level '$LEVEL_ARG'" >&2; exit 2; }
     name="${resolved%%:*}"; num="${resolved##*:}"
     pin_ini_640x480 2>/dev/null || true
-    run_one "$name" "$num" "${DUMP:-640-1120:240}" 90
+    run_one "$name" "$num" "${DUMP:-$GOLDEN_DUMP}" 90
     if [ "$R_STATUS" != PASS ]; then
       emit_verdict "$name" "$R_STATUS" "$R_FRAMES" "" "$R_SYM"
       rm -rf "$CAPDIR"; exit 1

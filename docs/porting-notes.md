@@ -1266,6 +1266,14 @@ non-flag ones (data loads, one-time validation, subsystem init) explicitly.
 Grepping the skipped `init_*`/`update_*` functions for calls with no
 matching state flag is the concrete check.
 
+Second instance (D479): the `GE_STARTMP` split-screen harness skipped the
+file-select screen, whose init sets `selected_folder_num = -1` for an MP
+launch. The harness left the boot default `FOLDER1`, so every stage load ran
+`fileLoadSettingsForFolder(0)` against an unvalidated (all-zero) `saves[]`
+record: options 0, i.e. ammo counter, sight and auto-aim off in harness
+matches only. A real menu launch never applies a Bond file in MP. Symptom
+looked like a HUD bug; the tell was that it never reproduced from the menu.
+
 ## D11. A chr's own per-tick animation-position logic can silently overwrite an AI script's scripted position in the same frame (D243)
 
 `chrTick` (`src/game/chr.c:2442`) always runs one of three `chr->actiontype`-
@@ -1399,6 +1407,21 @@ A port stub that forces a value to `-1` (D154 `texnum`, D135) can hide latent la
 
 ## D19. A "click after the shot" report needs the trigger-hold duration, not just the state machine (D433/D467)
 State-machine audits of a gun's fire/dry-fire path (GE: `gunTickHandState`, CLICKY weapons) are tick-driven and match the console at any tick/frame ratio; an extra click/sound that appears "with the shot" is usually the trigger still being down when the recoil state ends (about 14 ticks for the Golden Gun). Measure with `GE_STARTWEAPON` + `GE_INPUTSCRIPT` holds of 4/9/16 frames and a `state/mag/88C/890/clk` log at the sound-play sites before suspecting the audio layer; and remember `GE_QUITFRAME` counts frames from boot, the level's `g_GlobalTimer` starts ~270 later.
+
+## D20. Running an RCP task inline on the scheduler thread delays retrace delivery (D481)
+The N64 scheduler (`src/sched.c` `__scMain`) both starts RSP/RDP tasks and forwards each VI retrace to the game. On hardware the task runs on separate processors, so the scheduler is never busy. If the port executes the task synchronously inside `osSpTaskStartGo`, any retrace that arrives during it reaches the game late, and `boss.c`'s half-frame tick gate then skips the following retrace (33 ms frames). Tell: frame rate stuck below 60 at every graphics setting, moderate render and GPU times, and the lost frames failing the tick check (`skip_tick`), not the pending-gfx check. It only shows when the task takes a large fraction of a frame (slow hardware), so a fast dev box never sees it. Run hardware-side work off the scheduler thread and signal completion with the same events the hardware would.
+
+## D21. `gDPLoadBlock` with dxt = 0 depends on the RDP's odd-row TMEM read swap; static assets need it emulated, the tex.c pipeline must not get it (D75)
+
+The RDP swaps the two 32-bit halves of every 8-byte group on odd TMEM rows when *reading*, and compensates on *load* only when LoadBlock's dxt counter advances. A `gsDPLoadBlock(..., dxt = 0)` of a multi-row image therefore samples as "memory with odd rows pair-swapped". Rare's compiled-in assets that load this way (the Rareware logo's RAREWARE text, `DL_RAREWARETEXT`) are pre-swapped in the data and look scrambled ("interleaved/combed", identical at every texture-filter setting) if fast3d uploads them linearly. `tex.c` uses dxt = 0 for the whole runtime texture pipeline too, but there `texSwapAltRowBytes` was the matching pre-swap and D159 no-ops it, so those images are already linear. fast3d (`import_texture`) therefore swaps only dxt = 0 loads whose source is a compiled-in C array (`gfx_tex_source_is_c_array`). Generalisable tells: a texture that looks identically garbled at filter 0/1/2, interlaced along ROWS with a 2-texel horizontal shift, drawn from `assets/*.c`; decode the C array offline both ways before suspecting filtering/clamp. Counting how often a new texture-path branch fires on a level boot (a temporary env-gated log) caught a ~300-per-level over-reach before it shipped.
+
+## D22. Per-frame counters: gate them with `portN64FrameStep()` (D486)
+
+Decomp code that advances a counter once per *call* (per rendered frame) instead of by `g_ClockTimer` runs 2-3x faster in real time at the port's 1 tick/frame (and every frame when uncapped, `clk == 0`). D486 found three on the explosion/turret path: autogun shot counter (`unkAC++`), explosion part spawning, explosion/smoke shake decay. `port/include/porttick.h` `portN64FrameStep()` is the shared Rule-2 gate: true on every call at >= 2 ticks/frame (N64-identical), every second tick below, so the counter keeps the N64's 2-ticks-per-frame pace (the D427/D451 reference). If the gated counter also scales a per-event quantity by `g_GlobalTimerDelta` (autogun damage per shot), charge the full 2-tick frame on gated calls or the rate halves. Verify by A/B at `Video.FpsCap` 60 vs 30: the two must match. Any such gate is game logic and needs Rule-2 sign-off.
+
+## D23. Region bring-up: tooling and port code silently assume NTSC-U (D258)
+
+PAL/JP had never been built. What broke was all port-side: (1) asset emitters hard-coded `scripts/filelist.u.csv` (so on a PAL/JP ROM they would use US offsets with no error); (2) `romdata.c` treated "not PAL" as NTSC-U (rejecting a JP ROM's country byte); (3) port code referenced globals that exist only under a region-specific define (`LEFTOVERDEBUG` is US/JP-only), which surfaces as a PAL-only link error; (4) the decomp's PAL/JP filelists were incomplete and mislabelled. With a real ROM, prove every filelist row by bytes (same-name US file comparison, constant-shift search, header-walk for variable files) instead of trusting labels. Whenever port code touches a symbol inside a `#if` region block, check all three `REGION_DEFS` sets.
 
 ## E. Process / method notes
 

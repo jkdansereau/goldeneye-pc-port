@@ -151,6 +151,7 @@ int main(int argc, char **argv)
      *     cheat-unlock bit in the save block at read time (per-slot CRC
      *     recomputed via the game's own fileGenerateCRC), so the cheat
      *     menu is fully populated without completed levels. */
+#if defined(LEFTOVERDEBUG) /* the debug unlock flags only exist with LEFTOVERDEBUG (not PAL); D442's query-time hooks cover All unlocked everywhere */
     {
         extern s32 portAllUnlocked;            /* port/src/video.c */
         extern s32 debug_enable_all_levels_flag;  /* src/game/debugmenu_handler.c */
@@ -162,6 +163,7 @@ int main(int argc, char **argv)
                         "(Game.AllUnlocked=1)");
         }
     }
+#endif
 
     /* 2. Load the ROM and map segments. */
     if (romdataInit() != 0) {

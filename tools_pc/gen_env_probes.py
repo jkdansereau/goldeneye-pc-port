@@ -26,8 +26,13 @@ DOC = ROOT / "docs" / "dev" / "GE-ENV-PROBES.md"
 SCAN_DIRS = ["src", "port"]
 # envflag.h's GE_ENVFLAG/GE_ENVSTR are the cached-env wrappers most port code
 # uses; matching only bare getenv() reported every wrapper-read var as GONE.
+# d466Env (port/src/drawdistgameplay.c) is a local cached wrapper of the same
+# shape: d466Env("GE_...", &cache).
 GETENV_RE = re.compile(
-    r'(?:getenv|GE_ENVFLAG|GE_ENVSTR)\(\s*"(GE_[A-Z0-9_]+)"\s*\)')
+    r'(?:getenv|GE_ENVFLAG|GE_ENVSTR)\(\s*"(GE_[A-Z0-9_]+)"\s*\)'
+    r'|d466Env\(\s*"(GE_[A-Z0-9_]+)"\s*,')
+# The wrapper macros' own names appear in the doc's prose; they are not vars.
+NOT_VARS = {"GE_ENVFLAG", "GE_ENVSTR"}
 
 
 def live_sites() -> dict[str, list[str]]:
@@ -43,7 +48,7 @@ def live_sites() -> dict[str, list[str]]:
             for n, line in enumerate(lines, 1):
                 for m in GETENV_RE.finditer(line):
                     rel = path.relative_to(ROOT).as_posix()
-                    sites.setdefault(m.group(1), []).append(f"{rel}:{n}")
+                    sites.setdefault(m.group(1) or m.group(2), []).append(f"{rel}:{n}")
     return sites
 
 
@@ -60,6 +65,7 @@ def doc_vars() -> tuple[set[str], set[str]]:
         # names it plainly in the table's first cell, so it is still picked up.
         vs = [m.group(1) for m in re.finditer(r"(GE_[A-Z0-9_]+)(\[?)", line)
               if not m.group(2)]
+        vs = [v for v in vs if v not in NOT_VARS]
         named.update(vs)
         if "tombstone" in line.lower():
             tombstone.update(vs)

@@ -951,10 +951,19 @@ static bool gfx_opengl_supports_shaders(void) {
     return GLAD_GL_EXT_gpu_shader4;
 }
 
+/* D482: GL_RENDERER as read at init, for video.c's low-end default check.
+ * A copy, never the driver's pointer; "" when the driver gave nothing. */
+static char gl_renderer_str[256] = "";
+
+extern "C" const char *gfx_opengl_renderer_string(void) {
+    return gl_renderer_str;
+}
+
 static void gfx_opengl_log_info(void) {
     const char *version = (const char *)glGetString(GL_VERSION);
     const char *vendor = (const char *)glGetString(GL_VENDOR);
     const char *renderer = (const char *)glGetString(GL_RENDERER);
+    snprintf(gl_renderer_str, sizeof(gl_renderer_str), "%s", renderer ? renderer : "");
     const char *glsl_version = (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION);
     sysLogPrintf(LOG_NOTE, "GL: version: %s", version ? version : "unknown");
     sysLogPrintf(LOG_NOTE, "GL: vendor: %s", vendor ? vendor : "unknown");
@@ -1032,6 +1041,11 @@ static void gfx_opengl_init(void) {
     gl_es = (val == SDL_GL_CONTEXT_PROFILE_ES);
 
     gfx_opengl_init_extensions();
+
+    {   /* D482: always capture GL_RENDERER (log_info below is --debug-gl only). */
+        const char *renderer = (const char *)glGetString(GL_RENDERER);
+        snprintf(gl_renderer_str, sizeof(gl_renderer_str), "%s", renderer ? renderer : "");
+    }
 
     if (sysArgCheck("--debug-gl")) {
         gfx_opengl_enable_debug();

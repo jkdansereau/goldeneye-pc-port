@@ -44,7 +44,8 @@ if len(sys.argv) > 1:
 ROM_PATH = f"data/ge007.{REGION}.z64"
 OUT_DIR = f"data/pcmodels-{REGION}"
 TABLE = "assets/obseg/file_resource_table.inc.c"
-FILELIST = "scripts/filelist.u.csv"
+# D258: each region has its own ROM layout; read its own filelist
+FILELIST = "scripts/filelist.%s.csv" % {"ntsc-final": "u", "pal-final": "e", "jpn-final": "j"}[REGION]
 
 rom = open(ROM_PATH, "rb").read()
 rows = list(csv.reader(open(FILELIST)))

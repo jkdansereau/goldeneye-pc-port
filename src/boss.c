@@ -146,9 +146,6 @@ struct memallocstring memallocstringtable[] = {
 };
 
 s32 g_MainStageNum = LEVELID_NONE;
-#ifdef PORT
-static s32 g_d235ReloadStage = -1, g_d235ReloadWait = 0;   /* TEMP D235 verification */
-#endif
 s32 g_BossIsDebugMenuOpen = FALSE;
 
 OSScMsg g_bossGfxDoneMsg = { OS_SC_DONE_MSG };
@@ -524,35 +521,7 @@ void bossMainloop(void)
             if (ge_d235)
                 osSyncPrintf("D235: stage=%d texcache entries purged at load=%d\n",
                              (s32)g_StageNum, gfx_texture_cache_count());
-            if (!getenv("GE_D235_OFF"))   /* TEMP: A/B switch for verification */
-                videoResetTextureCache();
-
-            /* TEMP (D235 verification, remove with the probe):
-             * GE_D235_RELOAD=<frames> re-enters the first level once, <frames>
-             * retraces after the title stage loads following it (e.g. after a
-             * watch Abort) -- so the front end has rendered its own textures
-             * into the reset stage arena first, like a real death/restart --
-             * via the same bossSetLoadedStage() call the front end's mission
-             * start makes (front.c). Inert when unset. */
-            {
-                static int s_reload = -2, s_firstLevel = -1;
-                if (s_reload == -2) {
-                    const char *e = getenv("GE_D235_RELOAD");
-                    s_reload = e ? atoi(e) : -1;
-                }
-                if (s_reload >= 0) {
-                    if (g_StageNum != LEVELID_TITLE && s_firstLevel < 0)
-                        s_firstLevel = g_StageNum;
-                    else if (g_StageNum == LEVELID_TITLE && s_firstLevel >= 0 &&
-                             g_d235ReloadStage < 0 && g_d235ReloadWait == 0) {
-                        /* GE_D235_NEXT=<stage id>: load a DIFFERENT stage
-                         * instead (level A -> title -> level B leaks). */
-                        const char *nx = getenv("GE_D235_NEXT");
-                        g_d235ReloadStage = (nx && *nx) ? (s32)strtol(nx, NULL, 0) : s_firstLevel;
-                        g_d235ReloadWait = s_reload + 1;
-                    }
-                }
-            }
+            videoResetTextureCache();
         }
 #endif
 
@@ -630,13 +599,6 @@ void bossMainloop(void)
                     {
                         if (g_MainStageNum < 0 && pendingGfx < 2U)
                         {
-#ifdef PORT
-                            /* TEMP D235 verification (see GE_D235_RELOAD above) */
-                            if (g_d235ReloadWait > 0 && --g_d235ReloadWait == 0) {
-                                osSyncPrintf("D235: RELOAD re-entering stage %d\n", g_d235ReloadStage);
-                                bossSetLoadedStage(g_d235ReloadStage);
-                            }
-#endif
                             if (get_is_ramrom_flag())
                             {
                                 iterate_ramrom_entries_handle_camera_out();
@@ -671,7 +633,7 @@ void bossMainloop(void)
 			                	joyButtons = joyGetButtons(0, ANY_BUTTON);
 			                	g_BossIsDebugMenuOpen = debug_menu_processor(joyStickXPos, joyStickYPos, joyButtons, joyGetButtonsPressedThisFrame(0, ANY_BUTTON));
 			                }
-#elif defined(PORT)
+#elif defined(PORT) && defined(LEFTOVERDEBUG) /* the debug-menu globals only exist with LEFTOVERDEBUG (not PAL) */
                             // GE_DEBUGMENU=1 -- diagnostic-only: enable leftover debug-menu open
                             // path (D243). Unset (default) reproduces the #ifndef DEBUGMENU
                             // behavior below exactly -- no behavior change.

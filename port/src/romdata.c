@@ -75,8 +75,10 @@ unsigned char *g_pc_animdata_base = NULL;
  * data/ takes precedence. */
 static const char *romFileCandidates(void)
 {
-#if GE007_IS_PAL
+#if defined(VERSION_EU)
     return "ge007.pal-final.z64|baserom.e.z64";
+#elif defined(VERSION_JP)
+    return "ge007.jpn-final.z64|baserom.j.z64";
 #else
     return "ge007.ntsc-final.z64|baserom.u.z64";
 #endif
@@ -85,8 +87,10 @@ static const char *romFileCandidates(void)
 static int romHeaderValid(const u8 *h, char *err, size_t errsz)
 {
     static const u8 magic[4] = { 0x80, 0x37, 0x12, 0x40 };
-#if GE007_IS_PAL
+#if defined(VERSION_EU)
     const char country = 'P';
+#elif defined(VERSION_JP)
+    const char country = 'J';
 #else
     const char country = 'E';
 #endif

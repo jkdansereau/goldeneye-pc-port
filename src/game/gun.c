@@ -1278,10 +1278,37 @@ f32 get_item_in_hand_zoom(void) {
     return get_ptr_item_statistics(get_item_in_hand_or_watch_menu(GUNRIGHT))->Zoom;
 }
 
+#ifdef PORT
+/* D485 RULE-2-SIGNOFF (maintainer, 2026-10-02: "approve the rule 2 change to
+ * match the N64 real time speed"). The sniper/camera zoom steps once per game
+ * FRAME with no tick scaling. The N64 ran these frames at ~2 ticks each
+ * (30 fps; 20 fps = 3), the port at 1 tick per frame, so the port zoomed 2x
+ * faster in real time. Scale the per-frame factor to base^(ticks/2): one
+ * N64 frame at 2 ticks gets exactly the original factor, and the port's
+ * 1-tick frame gets its square root. Same "N64 frame = 2 ticks" convention as
+ * the D427 fire gate. g_ClockTimer == 0 (paused/locked) means no step. */
+float sqrtf(float);
+static f32 gunZoomStepFactor(f32 zoom)
+{
+	f32 half = sqrtf(1.0f + (zoom * 0.1f));
+	f32 factor = 1.0f;
+	s32 i;
+
+	for (i = 0; i < g_ClockTimer; i++) {
+		factor *= half;
+	}
+
+	return factor;
+}
+#define GUN_ZOOM_STEP(zoom) gunZoomStepFactor(zoom)
+#else
+#define GUN_ZOOM_STEP(zoom) (1.0f + ((zoom) * 0.1f))
+#endif
+
 void camera_sniper_zoom_out(f32 zoom)
 {
 	if (get_item_in_hand_or_watch_menu(GUNRIGHT) == ITEM_SNIPERRIFLE) {
-		g_CurrentPlayer->sniper_zoom *= (1.0f + (zoom * 0.1f));
+		g_CurrentPlayer->sniper_zoom *= GUN_ZOOM_STEP(zoom);
 		if (g_CurrentPlayer->sniper_zoom > 60.0f) {
 			g_CurrentPlayer->sniper_zoom = 60.0f;
 		}
@@ -1289,7 +1316,7 @@ void camera_sniper_zoom_out(f32 zoom)
 	else
 	{
 		if (get_item_in_hand_or_watch_menu(GUNRIGHT) == ITEM_CAMERA) {
-			g_CurrentPlayer->camera_zoom *= (1.0f + (zoom * 0.1f));
+			g_CurrentPlayer->camera_zoom *= GUN_ZOOM_STEP(zoom);
 			if (g_CurrentPlayer->camera_zoom > 60.0f) {
 				g_CurrentPlayer->camera_zoom = 60.0f;
 			}
@@ -1300,7 +1327,7 @@ void camera_sniper_zoom_out(f32 zoom)
 void camera_sniper_zoom_in(f32 zoom)
 {
 	if (get_item_in_hand_or_watch_menu(GUNRIGHT) == ITEM_SNIPERRIFLE) {
-		g_CurrentPlayer->sniper_zoom /= (1.0f + (zoom * 0.1f));
+		g_CurrentPlayer->sniper_zoom /= GUN_ZOOM_STEP(zoom);
 		if (g_CurrentPlayer->sniper_zoom < 7.0f) {
 			g_CurrentPlayer->sniper_zoom = 7.0f;
 		}
@@ -1308,7 +1335,7 @@ void camera_sniper_zoom_in(f32 zoom)
 	else
 	{
 		if (get_item_in_hand_or_watch_menu(GUNRIGHT) == ITEM_CAMERA) {
-			g_CurrentPlayer->camera_zoom /= (1.0f + (zoom * 0.1f));
+			g_CurrentPlayer->camera_zoom /= GUN_ZOOM_STEP(zoom);
 			if (g_CurrentPlayer->camera_zoom < 7.0f) {
 				g_CurrentPlayer->camera_zoom = 7.0f;
 			}

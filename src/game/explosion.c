@@ -1,3 +1,6 @@
+#ifdef PORT
+#include "porttick.h" /* D486 */
+#endif
 #include <ultra64.h>
 #include <PR/os.h>
 #include <PR/gbi.h>
@@ -434,6 +437,22 @@ void explosionScreenShake(coord3d* source_pos, coord3d* source_mag, coord3d* res
         }
     }
 
+#ifdef PORT
+    /* D486 (RULE-2): the shake counters decayed once per frame; decay at the N64's 2-ticks-per-frame pace */
+    if (g_NumSmokeEntries > 0)
+    {
+        if (portN64FrameStep())
+        {
+            g_NumSmokeEntries--;
+        }
+        explosion_mag++;
+    }
+
+    if (portN64FrameStep())
+    {
+        g_NumExplosionEntries--;
+    }
+#else
     if (g_NumSmokeEntries > 0)
     {
         g_NumSmokeEntries--;
@@ -441,6 +460,7 @@ void explosionScreenShake(coord3d* source_pos, coord3d* source_mag, coord3d* res
     }
 
     g_NumExplosionEntries--;
+#endif
     if (g_NumExplosionEntries & 2)
     {
         result->y = explosion_mag;
@@ -721,6 +741,13 @@ s32 explosionTick(PropRecord* arg0)
         }
 
         sp9C = (s32) (((f32)explosiontype->propagationrate * (f32)exp->age) / (f32)explosiontype->duration) + 1;
+#ifdef PORT
+        /* D486 (RULE-2): parts spawned once per frame; spawn at the N64's 2-ticks-per-frame pace */
+        if (!portN64FrameStep())
+        {
+            sp9C = 0;
+        }
+#endif
         for (var_s4 = 0; var_s4 < sp9C; var_s4++)
         {
             for (j=0; j<EXPLOSION_PARTS_LEN; j++)
