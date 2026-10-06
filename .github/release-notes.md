@@ -118,7 +118,7 @@ back. Fake unlocks written by older builds are not repaired, so back up
   uses the level's original distance; you can still see, shoot and use
   everything that's drawn.
 - **Ultrawide and high field of view (D468):** the AI keeps the N64's widest
-  (16:9) view. Turn on *AI sees the wider view* if you prefer the old
+  (16:9) view. Turn on *Guards see the wider view* if you prefer the old
   behaviour.
 - **Sniper rifle (#136):** the scope zooms all the way in again (it was
   capped at about a third of the original magnification, D484); zoom speed

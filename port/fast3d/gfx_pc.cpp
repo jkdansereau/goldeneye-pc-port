@@ -279,6 +279,11 @@ extern "C" void gfx_set_safe_area_crop(int on) {
  * winner alternate frame to frame). While a 2+ player stage is running the
  * N64's own split layout is used unmodified. */
 static bool g_split_screen = false;
+/* D510: set while the port-layer overlay DL (F10 panel / FPS counter) runs.
+ * That is PC chrome, not game content: it maps the logical canvas onto the
+ * whole window, bypassing the safe-area crop (which follows the game's last
+ * viewport and so differed between the front end and a level). */
+static bool g_overlay_window_space = false;
 extern "C" void gfx_set_split_screen(int on) {
     g_split_screen = !!on;
 }
@@ -290,8 +295,20 @@ extern "C" void gfx_set_split_screen(int on) {
 static float g_output_aspect = 0.0f;
 static struct XYWidthHeight g_output_rect = { 0, 0, 0, 0 };
 
+/* D509: the render worker applies a new output aspect at the start of its next
+ * frame, but the game thread has already built the next one or two display lists
+ * with the old projection (portNativeAspect reads the render side's last
+ * aspect). Drawn into the new rect those frames are mis-projected for one or two
+ * frames (visible as a flash, worst on the gun/hand model). Hold the previous
+ * image for the frames that could carry the old aspect: gfx_run drops them through
+ * the same path a minimised window uses. */
+static int g_aspect_settle = 0;
+#define ASPECT_SETTLE_FRAMES 2
+
 extern "C" void gfx_set_output_aspect(float aspect) {
-    g_output_aspect = aspect > 0.1f ? aspect : 0.0f;
+    const float a = aspect > 0.1f ? aspect : 0.0f;
+    if (a != g_output_aspect) g_aspect_settle = ASPECT_SETTLE_FRAMES;
+    g_output_aspect = a;
 }
 
 extern "C" void gfx_get_output_rect(int32_t *outX, int32_t *outY, int32_t *outW, int32_t *outH) {
@@ -2130,6 +2147,11 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
 
             float fog_z = z * winv * rsp.fog_mul + rsp.fog_offset;
             d->fog = clampf(fog_z, 0.f, 255.f);
+            /* D503: the N64's 16-bit framebuffer hid objects ~97% fogged;
+             * 32-bit output reveals them as silhouettes. Snap to full fog. */
+            if (d->fog >= 247.f) {
+                d->fog = 255.f;
+            }
         } else {
             d->fog = rdp.fog_color.a;
         }
@@ -2962,14 +2984,15 @@ static void gfx_sp_extra_geometry_mode(uint32_t clear, uint32_t set) {
     gfx_update_aspect_mode();
 }
 
-static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_aspect = false) {
+static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_aspect = false, bool window_space = false) {
+    window_space = window_space || g_overlay_window_space;   /* D510 */
     // HACK: assume all target framebuffers have the same aspect
     // Use floor/ceil to ensure scissor fully contains the logical region
     // and prevents sub-pixel gaps at viewport edges
     // g_gpSafeTop already plays the exact role SCREEN_HEIGHT plays below
     // (both are the bottom-up Y value of the mapped region's TOP edge) --
     // this reduces to the untouched original formula when crop is off.
-    const bool crop = g_safe_area_crop_enabled && !g_split_screen && g_gpSafeHeight > 0.0f;
+    const bool crop = g_safe_area_crop_enabled && !g_split_screen && !window_space && g_gpSafeHeight > 0.0f;
     const float safeTop = crop ? g_gpSafeTop : (float)SCREEN_HEIGHT;
     const float safeHeight = crop ? g_gpSafeHeight : (float)SCREEN_HEIGHT;
     const float ratioY = gfx_current_dimensions.height / safeHeight;
@@ -2987,8 +3010,8 @@ static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_as
     // TV-overscan margin) and fold it into the same toggle: trim the same
     // fixed 1-unit margin from both edges rather than trying to force
     // content to reach a boundary it may never actually be drawn to.
-    const float safeLeft = (g_safe_area_crop_enabled && !g_split_screen) ? 1.0f : 0.0f;
-    const float safeWidth = (g_safe_area_crop_enabled && !g_split_screen) ? (float)SCREEN_WIDTH - 2.0f : (float)SCREEN_WIDTH;
+    const float safeLeft = (g_safe_area_crop_enabled && !g_split_screen && !window_space) ? 1.0f : 0.0f;
+    const float safeWidth = (g_safe_area_crop_enabled && !g_split_screen && !window_space) ? (float)SCREEN_WIDTH - 2.0f : (float)SCREEN_WIDTH;
     const float ratioX = gfx_current_dimensions.width / safeWidth;
 
     float x1 = (area->x - safeLeft) * ratioX;
@@ -3033,7 +3056,7 @@ static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_as
  * and gfx_current_game_window_viewport's documented convention. */
 extern "C" void gfx_get_ui_screen_rect(int32_t *outX, int32_t *outY, int32_t *outW, int32_t *outH) {
     struct XYWidthHeight area = { 0, (int16_t)SCREEN_HEIGHT, (uint32_t)SCREEN_WIDTH, (uint32_t)SCREEN_HEIGHT };
-    gfx_adjust_viewport_or_scissor(&area, false);
+    gfx_adjust_viewport_or_scissor(&area, false, true);   /* D510: the overlay is window-space */
     *outX = area.x;
     *outY = area.y;
     *outW = (int32_t)area.width;
@@ -3142,7 +3165,7 @@ static void gfx_dp_set_scissor(uint32_t mode, uint32_t ulx, uint32_t uly, uint32
     // edges showed live scene/background pixels. Keep the geometry unscaled
     // and scissor those two logical columns out instead, so they show the
     // frame clear (black) like the rest of the overscan border.
-    if (!g_safe_area_crop_enabled && !g_split_screen) {
+    if (!g_safe_area_crop_enabled && !g_split_screen && !g_overlay_window_space) {
         const float edge = 1.0f;
         if (x < edge) {
             width -= edge - x;
@@ -3539,7 +3562,31 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 static float s_hud_scale = 1.0f;
 static int32_t s_hud_ax = 0, s_hud_ay = 0;   /* anchor, 10.2 fixed (px*4) */
 
+/* D510: uniform scale about the origin for the port overlay DL, which lays
+ * itself out on a canonical 320-wide canvas whatever the game's current VI
+ * canvas is (440x330 on the front end). Applied after the HUD span scale. */
+static float s_overlay_scale = 1.0f;
+extern "C" void gfx_set_overlay_scale(float s) {
+    s_overlay_scale = (s > 0.0f) ? s : 1.0f;
+}
+
 static inline void gfx_hud_scale_rect(int32_t& ulx, int32_t& uly, int32_t& lrx, int32_t& lry) {
+    if (s_overlay_scale != 1.0f && g_overlay_window_space) {
+        const bool hud = (s_hud_scale != 1.0f);
+        if (hud) {
+            ulx = s_hud_ax + (int32_t)lroundf((float)(ulx - s_hud_ax) * s_hud_scale);
+            lrx = s_hud_ax + (int32_t)lroundf((float)(lrx - s_hud_ax) * s_hud_scale);
+            uly = s_hud_ay + (int32_t)lroundf((float)(uly - s_hud_ay) * s_hud_scale);
+            lry = s_hud_ay + (int32_t)lroundf((float)(lry - s_hud_ay) * s_hud_scale);
+        }
+        ulx = (int32_t)lroundf((float)ulx * s_overlay_scale);
+        lrx = (int32_t)lroundf((float)lrx * s_overlay_scale);
+        uly = (int32_t)lroundf((float)uly * s_overlay_scale);
+        lry = (int32_t)lroundf((float)lry * s_overlay_scale);
+        if (ulx < 0) ulx = 0;
+        if (uly < 0) uly = 0;
+        return;
+    }
     if (s_hud_scale == 1.0f) {
         return;
     }
@@ -3556,10 +3603,11 @@ static inline void gfx_hud_scale_rect(int32_t& ulx, int32_t& uly, int32_t& lrx, 
 
 static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry, uint8_t tile, int16_t uls,
                                      int16_t ult, int16_t dsdx, int16_t dtdy, bool flip) {
-    if (s_hud_scale != 1.0f) {   /* D226 */
+    const float ov = (g_overlay_window_space && s_overlay_scale != 1.0f) ? s_overlay_scale : 1.0f;   /* D510 */
+    if (s_hud_scale != 1.0f || ov != 1.0f) {   /* D226 */
         gfx_hud_scale_rect(ulx, uly, lrx, lry);
-        dsdx = (int16_t)lroundf((float)dsdx / s_hud_scale);
-        dtdy = (int16_t)lroundf((float)dtdy / s_hud_scale);
+        dsdx = (int16_t)lroundf((float)dsdx / (s_hud_scale * ov));
+        dtdy = (int16_t)lroundf((float)dtdy / (s_hud_scale * ov));
     }
     uint64_t saved_combine_mode = rdp.combine_mode;
     if ((rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE)) == G_CYC_COPY) {
@@ -4341,6 +4389,11 @@ extern "C" void gfx_run(Gfx* commands) {
         dropped_frame = true;
         return;
     }
+    if (g_aspect_settle > 0) {   /* D509: hold the old image, see gfx_set_output_aspect */
+        --g_aspect_settle;
+        dropped_frame = true;
+        return;
+    }
     dropped_frame = false;
 
     if (s_shader_warm_pending) {
@@ -4362,7 +4415,10 @@ extern "C" void gfx_run(Gfx* commands) {
     {
         Gfx* overlay = optionsOverlayEmit();
         if (overlay != nullptr) {
+            g_overlay_window_space = true;   /* D510 */
             gfx_run_dl(overlay);
+            g_overlay_window_space = false;
+            s_overlay_scale = 1.0f;
         }
     }
     gfx_flush();

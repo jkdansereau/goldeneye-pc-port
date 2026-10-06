@@ -226,7 +226,7 @@ D345,FIXED,"Front-end crosshair snaps away from the pointer on screen/page chang
 D346,CLOSED,PC-settings wording pass:,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D347,FIXED,F10 overlay controller:,"FIXED (port-only, optionsoverlay.c):"
 D348,CLOSED,"File-select ""PC Options"" label:",CLOSED (2026-09-28 bookkeeping:
-D349,CLOSED,GE watch settings are not normally saved to the Bond file:,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
+D349,CLOSED,GE watch settings ARE saved to the Bond file when the watch closes:,"SUPERSEDED (2026-10-04, P2b correction):"
 D350,CLOSED,Watch-backed PC options:,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D351,FIXED,Existing D346 value/unit rows had positional initializers shifted into hidePtr:,"FIXED (port-only): designated row initializers restore unit, deadzone divisor and hide-if-auto fields; build clean, headless smoke clean."
 D352,FIXED,D350 review of 1303c0eb:,"FIXED (port-only, port/src/watchsettings.c):"
@@ -306,7 +306,7 @@ D432,FIXED,"Gunshot sounds ""off"" after D427:",FIXED in tree (gate offset round
 D433,OPEN,"Slight audible difference in automatic-gun shot sound vs GEPD/1964 after cadence was matched (user by-ear, Caverns).",OPEN (not a timing issue; audio layer suspected).
 D434,FIXED,Raw ((u8*)&g_Textures[n])[0] & 0xf hit-type reads are wrong on PC; latent OOB once D431 returned real texture ids (found by sub-agent review).,"FIXED (.hitTexture at 3 sites, port-guarded); live check owed."
 D440,FIXED,"""Original N64"" / ""Port defaults"" one-press presets in the F10 overlay and front-end PC Options (+ -n64preset/-portpreset).",FIXED (port-only; headless-verified; user live accept owed).
-D441,PARTIAL,64-bit pointer-width sweep (part 1):,"PARTIAL (census + GE_HIGHARENA_BASE tier-1 build + 35 sites fixed + CI ratchet, 2026-10-03; tier-1 menu and -level_09 pixel-identical; owed tier-1 all-level sweep and the above-4-GiB tier)."
+D441,PARTIAL,64-bit pointer-width sweep (part 1):,"PARTIAL (census + GE_HIGHARENA_BASE tier-1 build + 35 sites fixed + CI ratchet, 2026-10-03; tier-1 all-level sweep 21/21 PASS, 0 crashes, 2026-10-05; the above-4-GiB tier still owed)."
 D442,FIXED,Game.AllUnlocked reworked into a pure RAM/query-time override:,"FIXED; verified 2026-10-03 headless (mission select all 20 / only real progress when OFF, full cheat menu, eep byte-identical)."
 D443,FIXED,"D357 settings-display cleanup (mouse ×, whole-% deadzone and volume steps, FOV in horizontal degrees, MSAA 16×) plus a ""Restart game"" action (orderly D344 quit…",FIXED (port-only; reset probes pass; both-UI visual check and one Restart click owed; Linux relaunch path not compiled).
 D454,FIXED,Knife slash crashed on Windows:,FIXED (verified by maintainer live:
@@ -351,7 +351,7 @@ D488,FIXED,PAL build reported the Brazilian MPAL TV type instead of PAL (osTvTyp
 D489,FIXED,FPS dropped sharply while adjusting F10 watch sliders (music/FX) with a pad or arrow keys:,"FIXED 2026-10-02 (port-only UI layer, fix/d489-pad-slider-commit, merged into release/v0.4.1 2026-10-03); maintainer pad check passed 2026-10-03"
 D490,FIXED,Dam first-tower guard walked a small circle:,"FIXED 2026-10-02 (fix/d490-glass-hull, merged into release/v0.4.1 2026-10-03); maintainer by-eye Dam check passed 2026-10-02"
 D491,FIXED,"Struct reads across separately-declared adjacent globals (the D5/D215 class), found by the D24 overflow audit:","FIXED 2026-10-03 (fix/d491-adjacent-global-reads, local); builds clean, 900-frame -level_09 smoke clean; no by-eye effect expected beyond room-membership-driven behaviour"
-D492,OPEN,Emulator .eep saves are not drop-in compatible:,OPEN (investigated 2026-10-03; fix decided:
+D492,CLOSED,Emulator .eep saves are not drop-in compatible:,CLOSED (converter shipped 2026-10-04:
 D493,FIXED,Pad rumble kept going after quitting the game:,"FIXED 2026-10-03, maintainer-verified in play (DualSense; Original-mode edges incl."
 D494,FIXED,"Sniper rifle: the PC crouch key now crouches/stands freely with a disable-crouch weapon (GEPD parity), never injecting C-down for it; supersedes D483's stance…","FIXED 2026-10-03, maintainer-verified in play"
 D495,FIXED,"Tank: with the default pad preset X changed the tank weapon and Y left it, because in-tank faces fell back to the fixed menu faces; PadMapCtx.tank routes Next/…","FIXED 2026-10-03, maintainer-verified in play"
@@ -362,5 +362,22 @@ D499,FIXED,Trilinear texture filter option:,"FIXED 2026-10-03, maintainer-checke
 D500,FIXED,"Aztec shuttle area: polygons ""fell apart""; the per-frame vtx pool (dyn.c, no bounds check, Aztec -mvtx40) could overrun into the half the render worker draws;…","FIXED 2026-10-03, maintainer-verified at the Aztec spot"
 D501,CLOSED,Ultrawide 16:9 pillarbox for cutscenes and the watch:,CLOSED (reverted 31ade91f)
 D502,FIXED,PC Options pad navigation:,"FIXED 2026-10-03, maintainer-verified with a pad"
-D503,?,Surface far dish shows as a faint silhouette with straight edges:,KNOWN ISSUE
+D503,PARTIAL,"Surface: near-full-fog silhouettes on 32-bit output (fog snap applied); the remaining Surface dish is the widescreen frustum, 4:3 matches N64 —",FIX LANDED (by-eye pass owed)
+D504,FIXED,F10 / PC Options menu:,FIXED (port-only; by-eye pass vs the PD port owed)
+D505,FIXED,Menu wording pass: 27 maintainer-approved text edits across both PC options UIs —,FIXED (port-only; by-eye pass owed)
+D506,FIXED,Menu slider values standardized:,FIXED (port-only; by-eye pass owed)
+D507,FIXED,Menu: one-line description of the focused option in both PC options UIs —,FIXED (by-eye pass owed)
+D508,FIXED,Forced aspect ratios:,FIXED (by-eye pass owed)
+D509,FIXED,Held frames after an aspect-ratio change:,FIXED (by-eye pass owed)
+D510,FIXED,F10 overlay + FPS counter the same on-screen size on the front end and in a level —,FIXED (live check owed)
+D511,OPEN,Four PD-parity settings:,DONE headless (live checks owed)
+D512,OPEN,Game.HudScale also scales the F10 overlay and FPS counter —,DONE headless (live check owed)
+D513,OPEN,"Input.ControlScheme: Modern / OG controls (#139, T7) —",DONE headless (pad pass owed)
+D514,OPEN,Emulator saves load directly:,DONE headless (by-eye mission select owed)
+D515,FIXED,Empty arch tag from a fresh build dir:,FIXED (headless-verified)
+D516,FIXED,"Control style Original shows the game's own N64 styles (1.1-2.4, per seat, saved to the Bond file) instead of the D498 presets —",FIXED (live pass 2026-10-04 incl.
+D517,FIXED,Holding left/right on a Bond settings row dropped the fps:,FIXED (live pass 2026-10-04)
+D518,FIXED,Pad layout preset was one global value:,FIXED (live pass 2026-10-04 incl.
+D519,FIXED,"One PC options UI: the file-select ""PC Options"" entry opens the F10 overlay; the MENU_PC_OPTIONS screen is deleted —",FIXED (headless-verified 2026-10-04; by-eye pass owed)
+D520,FIXED,"F10 overlay slider wedge, slider marker and dropdown arrow antialiased (they stepped in whole canvas pixels that grow with the window) —",FIXED (headless before/after capture; by-eye owed)
 D450,FIXED,"Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).","FIXED — port-only: the render thread's gfx_sdl_handle_events drains the same SDL queue as video.c's host pump but had no case for SDL_CONTROLLERDEVICEADDED/REMOVED, so it usually swallowed them and i…"

@@ -82,7 +82,6 @@
 #include "input.h"
 #include "envflag.h"
 #include "optionsoverlay.h"
-#include "frontoptions.h"
 #include "video.h"
 /* D194 absolute aim: read-only access to the live camera (struct player).
  * Game header pulled in through the same shim path every other compiled game
@@ -188,6 +187,7 @@ extern f32 portScaleFovY(f32 fovy, s32 isTitleScreen);
 extern s32 lvlGetCurrentStageToLoad(void);
 #define CONTROLLER_CONFIG_HONEY_    0
 #define CONTROLLER_CONFIG_SOLITARE_ 1
+#define CONTROLLER_CONFIG_GOODNIGHT_ 3   /* 1.4: SOLITARE movement, swapped button roles (bondview2.c) */
 #define MENU_POINTER_GAIN  1.5
 #define TRIG_THRESHOLD     (30 * 256)
 #define RSTICK_THRESHOLD   0x4000
@@ -288,6 +288,7 @@ extern s32 lvlGetCurrentStageToLoad(void);
 static void applyGrab(int want);
 static void reconcileGrab(int menuMode);
 static void applyCursorVisibility(void);
+static void overlayFrontEndCrosshair(void);
 
 static int numControllers = 1;
 static int connectedMask   = 0x1;   /* controller 0 always present */
@@ -375,6 +376,16 @@ static struct player *slotPlayer(void)
     return g_CurrentPlayer;
 }
 
+/* D511: Video.CrosshairHealthColor input -- health + armour of the player whose
+ * crosshair is being built (gunDrawSight runs on that player's game thread). */
+float portCrosshairHealthRatio(void)
+{
+    struct player *p = g_CurrentPlayer;
+    if (!p) return 1.0f;
+    float r = p->bondhealth + p->bondarmour;
+    return r < 0.0f ? 0.0f : (r > 2.0f ? 2.0f : r);
+}
+
 /* In a 2+ player stage this file never calls a game entry point that acts on
  * g_CurrentPlayer (bond_interact_object, reload, gadget cycle, control-type
  * setter): the poll thread is not the game thread, so re-pointing the
@@ -458,12 +469,13 @@ static const struct { const char *key; const char *label; const char *def; } kPa
 typedef struct { u32 mask[PA_COUNT]; } PadBinds;
 typedef struct { PadBinds seat[MAX_PADS]; } PadTable;
 
-static int  padPreset = 0;                       /* Input.PadPreset */
+static int  padPreset[MAX_PADS] = {0};           /* D518: per-seat (Input.PadPreset[2/3/4]) */
 /* D194/D238: 1 = force GE's own 1.2/SOLITARE
  * control style for continuous analog pitch;
  * 0 = legacy 1.1/HONEY + D166 digital pulse.
  * (D498: declared here so the stick-style helpers below can read it.) */
 static int naturalPitchMode = 1;                 /* Input.NaturalPitch */
+static int controlScheme = 0;                    /* D513 Input.ControlScheme: 0 Modern (port forces the style), 1 OG (the game's own selection is honoured) */
 static char padStr[MAX_PADS][PA_COUNT][32];      /* Input.Pad[N].<Action> */
 static char padStrKey[MAX_PADS][PA_COUNT][40];
 static PadTable padTabBuf[2];
@@ -502,27 +514,57 @@ static void padBuildBinds(PadBinds *b, int seat, int custom, int *bad)
     if (!b->mask[PA_START]) b->mask[PA_START] = PSM(PS_START);   /* lockout guard: keep a pause path */
 }
 
-/* D498: preset 3 is Custom; 4 = 1.4 Elektra is a fixed mapping, not custom. */
-static int padPresetCustom(void) { return padPreset == 3; }
+/* D498: preset 3 is Custom; 4 = 1.4 Elektra is a fixed mapping, not custom.
+ * D518: per seat -- editing another player's preset must not touch this one. */
+static int padPresetCustom(int seat) { return padPreset[seat] == 3; }
+/* D516: in Original the D498 port presets are not offered (the game's own
+ * styles are); the stored preset is ignored (plain N64 layout) unless it is
+ * Custom, whose binds still apply (edited in Ext only). Ext: exactly padPreset. */
+static int padPresetEff(int seat) { return (controlScheme && padPreset[seat] != 3) ? 0 : padPreset[seat]; }
 
 /* D498: stick style for the active preset. 1.2 Christmas / 1.3 Frost force
  * HONEY and 1.4 Elektra forces SOLITARE (for mouse and keyboard too, since
  * the game runs one control style per player). 1.1 Jinx (the default) and
  * Custom keep Input.NaturalPitch, so the NaturalPitch=0 escape hatch still
- * works exactly as before D498. */
-static int stickSolitare(void) {
-    if (padPreset == 1 || padPreset == 2) return 0;
-    if (padPreset == 4) return 1;
+ * works exactly as before D498. D518: per seat. */
+static int stickSolitare(int seat) {
+    if (padPresetEff(seat) == 1 || padPresetEff(seat) == 2) return 0;
+    if (padPresetEff(seat) == 4) return 1;
     return naturalPitchMode;
 }
+/* D513: which stick mapping the port emits for the active player. Modern:
+ * exactly stickSolitare() (the port forces the style, D498 pins included).
+ * OG: follow the game's own live style -- 1.2 SOLITARE and 1.4 GOODNIGHT use
+ * the natural-look (stick = look, C-buttons = move) roles; 1.1 / 1.3 and the
+ * 2.x dual-controller styles use the HONEY roles for the first pad. In OG the
+ * game really runs a 2.x style and reads its second stick from controller
+ * playernum + playerCount (bondview2.c ~4997-5003, faithful to the N64): the
+ * port only maps this pad, so with one pad that second stick is idle, as on an
+ * N64. Buttons pass through as N64 buttons (no 1.3/1.4 role permutation:
+ * faithful). With no
+ * player yet (front end) it falls back to the Modern value, which menus
+ * ignore anyway. */
+static int styleIsSolitare(int seat)
+{
+    if (!controlScheme) return stickSolitare(seat);
+    struct player *p = slotPlayer();
+    if (!p) return stickSolitare(seat);
+    int t = p->cur_player_control_type_0;
+    return t == CONTROLLER_CONFIG_SOLITARE_ || t == CONTROLLER_CONFIG_GOODNIGHT_;
+}
 /* D498: 1.3 Frost / 1.4 Elektra swap the two sticks (never in menus). */
-static int stickSwap(void) { return padPreset == 2 || padPreset == 4; }
+static int stickSwap(int seat) { return padPresetEff(seat) == 2 || padPresetEff(seat) == 4; }
 
-/* Signature of everything the table depends on (preset only unless Custom). */
+/* Signature of everything the table depends on (presets only unless a seat is Custom). */
 static unsigned padComputeSig(void)
 {
-    unsigned h = 2166136261u ^ (unsigned)padPreset;
-    if (padPresetCustom())
+    int anyCustom = 0;
+    unsigned h = 2166136261u;
+    for (int s = 0; s < MAX_PADS; s++) {
+        h ^= (unsigned)padPreset[s] * 16777619u;
+        if (padPresetCustom(s)) anyCustom = 1;
+    }
+    if (anyCustom)
         for (int s = 0; s < MAX_PADS; s++)
             for (int a = 0; a < PA_COUNT; a++)
                 for (const char *p = padStr[s][a]; *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
@@ -543,12 +585,13 @@ static const PadTable *padTabGet(void)
         PadTable *cur = (PadTable *)SDL_AtomicGetPtr((void **)&padTabPub);
         PadTable *spare = (cur == &padTabBuf[0]) ? &padTabBuf[1] : &padTabBuf[0];
         int bad = 0;
-        for (int s = 0; s < MAX_PADS; s++) padBuildBinds(&spare->seat[s], s, padPresetCustom(), &bad);
+        for (int s = 0; s < MAX_PADS; s++) padBuildBinds(&spare->seat[s], s, padPresetCustom(s), &bad);
         SDL_AtomicSetPtr((void **)&padTabPub, spare);
         padTabSig = sig;
         padTabValid = 1;
-        sysLogPrintf(LOG_INFO, "input: pad table rebuilt (preset %d%s, %d unknown name(s))",
-                     padPreset, padPresetCustom() ? " custom" : "", bad);   /* D498 */
+        sysLogPrintf(LOG_INFO, "input: pad table rebuilt (presets %d/%d/%d/%d%s, %d unknown name(s))",
+                     padPreset[0], padPreset[1], padPreset[2], padPreset[3],
+                     padPresetCustom(0) || padPresetCustom(1) || padPresetCustom(2) || padPresetCustom(3) ? " custom" : "", bad);   /* D498, D518 */
         SDL_AtomicUnlock(&rebuildLock);
         return spare;
     }
@@ -984,7 +1027,7 @@ static int padLookSensX    = 100;             /* right-stick look: horizontal se
 static int padLookSensY    = 100;             /* right-stick look: vertical (pitch) sensitivity, % */
 static int padSouthpaw     = 0;               /* 1 = swap fire (G) / grenade (R) trigger actions */
 static int padLookSmooth   = 0;               /* right-stick look low-pass strength, 0-10 (0 = off, 10 = max) */
-static int padTriggerPct   = 23;              /* trigger press point, % of travel (~30*256) */
+static int padTriggerPct   = 25;              /* trigger press point, % of travel (~30*256) */
 static int padLookInvertY  = 0;               /* 1 = invert right-stick (look) Y */
 /* Per-pad look-smoothing EMA state (Wave A item 5), one X/Y pair per pad. Reset
  * on hot-unplug (inputRescanPads) so a smoothed value can't stick after the
@@ -1471,8 +1514,6 @@ static unsigned scriptApply(int slot, unsigned button)
 static void inputRebuildBinds(void);   /* D214; defined below with keyDown() */
 static void inputMigrateBinds(void);   /* D380; after configLoad */
 static void inputBindingProbe(void);   /* D383/D384; opt-in, restores ini state */
-static void pcOptionsKeyboardPad(const Uint8 *ks, Uint32 mb, int blocked,
-                                 unsigned *button, int *sx, int *sy);
 
 static int bindsVersion = 0; /* D380/D386: versioned migration of effective ini binds */
 static int crouchMode = 0;   /* 0 = hold, 1 = toggle (latched crouch input) */
@@ -1966,19 +2007,8 @@ static void inputBindingProbe(void)
     ok &= strcmp(g_bindStr[a], "NONE,Mouse 5") == 0;
     memcpy(g_bindStr[a], saved, sizeof(saved));
     inputBindingsApply();
-    Uint8 keys[SDL_NUM_SCANCODES] = {0};
-    unsigned menuButton = 0;
-    int menuX = 0, menuY = 0;
-    keys[SDL_SCANCODE_A] = keys[SDL_SCANCODE_D] = keys[SDL_SCANCODE_C] = 1;
-    pcOptionsKeyboardPad(keys, 0, 0, &menuButton, &menuX, &menuY);
-    ok &= !menuButton && !menuX && !menuY; /* gameplay keys cannot steer editor */
-    keys[SDL_SCANCODE_LEFT] = keys[SDL_SCANCODE_RETURN] = 1;
-    pcOptionsKeyboardPad(keys, 0, 0, &menuButton, &menuX, &menuY);
-    ok &= menuX == -STICK_MAX && !menuY && menuButton == GE_CONT_A;
-    pcOptionsKeyboardPad(keys, 0, 1, &menuButton, &menuX, &menuY);
-    ok &= !menuButton && !menuX && !menuY;
     sysLogPrintf(ok ? LOG_INFO : LOG_ERROR,
-                 "GE_BINDPROBE: %s (2 slots, mouse 1-5, sparse/comma, A/D/C ignored, arrows/Enter, modal isolation; ini restored)",
+                 "GE_BINDPROBE: %s (2 slots, mouse 1-5, sparse/comma, ini restored)",
                  ok ? "PASS" : "FAIL");
 }
 
@@ -1997,24 +2027,6 @@ static int actHeld(const Uint8 *ks, int act)
                    keyDown(ks, (SDL_Scancode)code)) return 1;
     }
     return 0;
-}
-
-/* PC settings use immutable keyboard navigation, independent of gameplay
- * bindings (which are being edited here). Do not consume A/D/C as controls. */
-static void pcOptionsKeyboardPad(const Uint8 *ks, Uint32 mb, int blocked,
-                                 unsigned *button, int *sx, int *sy)
-{
-    *button = 0;
-    *sx = *sy = 0;
-    if (blocked) return;
-    if (ks[SDL_SCANCODE_UP] || ks[SDL_SCANCODE_KP_8] || ks[SDL_SCANCODE_W]) *sy = STICK_MAX;
-    if (ks[SDL_SCANCODE_DOWN] || ks[SDL_SCANCODE_KP_2] || ks[SDL_SCANCODE_S]) *sy = -STICK_MAX;
-    if (ks[SDL_SCANCODE_LEFT] || ks[SDL_SCANCODE_KP_4]) *sx = -STICK_MAX;
-    if (ks[SDL_SCANCODE_RIGHT] || ks[SDL_SCANCODE_KP_6]) *sx = STICK_MAX;
-    if (ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_KP_ENTER]) *button |= GE_CONT_A;
-    if (ks[SDL_SCANCODE_ESCAPE]) *button |= GE_CONT_B;
-    if (mb & SDL_BUTTON(SDL_BUTTON_LEFT)) *button |= GE_CONT_A;
-    if (mb & SDL_BUTTON(SDL_BUTTON_RIGHT)) *button |= GE_CONT_B;
 }
 
 /* Direct use/reload and modern face buttons share the same game-state gate.
@@ -2087,9 +2099,21 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
      * anything else ever calls the setter (menu, save load) in between. */
     if ((idx == 0 || inputMpSplit()) && slotPlayer() != NULL &&
         (idx == 0 || idx < getPlayerCount())) {   /* D416: each slot rewrites only its own player's style */
-        int wantSolitare = stickSolitare() ? CONTROLLER_CONFIG_SOLITARE_ : CONTROLLER_CONFIG_HONEY_;   /* D498 */
+        int wantSolitare = stickSolitare(idx) ? CONTROLLER_CONFIG_SOLITARE_ : CONTROLLER_CONFIG_HONEY_;   /* D498, D518 */
         struct player *sp = slotPlayer();
-        if (!inputMpSplit()) {
+        if (controlScheme) {
+            /* D513 OG controls: the port never writes the style; the game's own
+             * selection (watch / save / MP setup) stands. Log each change once. */
+            static int lastStyle[4] = { -1, -1, -1, -1 };
+            if (idx < 4 && sp->cur_player_control_type_0 != lastStyle[idx]) {
+                lastStyle[idx] = sp->cur_player_control_type_0;
+                char dual[80] = "";
+                if (lastStyle[idx] >= 4)
+                    snprintf(dual, sizeof(dual), "; dual-controller style: second stick read from controller %d", idx + (int)getPlayerCount());
+                sysLogPrintf(LOG_INFO, "input: original control style, slot %d style %d (%s)%s", idx, lastStyle[idx],
+                             styleIsSolitare(idx) ? "natural-look roles" : "1.1 roles", dual);
+            }
+        } else if (!inputMpSplit()) {
             if (cur_player_get_control_type() != wantSolitare)
                 cur_player_set_control_type(wantSolitare);
         } else if (sp->cur_player_control_type_0 != wantSolitare) {
@@ -2147,6 +2171,10 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
             if (closeNow) optionsOverlayToggle();
         }
         optionsOverlayHandleInput();
+        if (mouseEnabled && current_menu != GE_MENU_RUN_STAGE && current_menu != GE_MENU_INVALID) {
+            overlayFrontEndCrosshair();   /* D519: crosshair stays the pointer over the overlay */
+            mouseRequestCursor(0);        /* ...so hide the OS cursor (one pointer, not two) */
+        }
         if (stick_x) *stick_x = 0;
         if (stick_y) *stick_y = 0;
         s_menuPointerLive = 0;   /* D345(b): the overlay owns the mouse */
@@ -2161,7 +2189,7 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                         current_menu != GE_MENU_INVALID);
 
         /* D345: detect front-end screen changes (any current_menu flip,
-         * including into MENU_PC_OPTIONS / the F10 overlay's parent state)
+         * including into the F10 overlay's parent state)
          * and open a short re-assert window. Runs every poll so the
          * countdown drains even when the pointer block below is skipped
          * (mouse disabled, unfocused window, legacy velocity mode). */
@@ -2220,10 +2248,10 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
         /* D345(d): natural pitch is an in-stage aim scheme -- the N64 front
          * end navigates on the analog stick only, so in menus W/S (and the
          * Up/Down arrows) must emit stick even with NaturalPitch=1, or no
-         * front-end screen (file select, cheat, MENU_PC_OPTIONS) can be
+         * front-end screen (file select, cheat) can be
          * driven vertically from the keyboard. Watch/pause keeps the C-button
          * mapping: it is current_menu==RUN_STAGE (menuMode 0), N64-style. */
-        if (stickSolitare() && !menuMode) {   /* D498 */
+        if (styleIsSolitare(idx) && !menuMode) {   /* D498, D513, D518 */
             if (actHeld(ks, IA_FORWARD)) button |= GE_CONT_E;   /* C-up = forward   */
             if (actHeld(ks, IA_BACK))    button |= GE_CONT_D;   /* C-down = back    */
         } else {
@@ -2641,7 +2669,7 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                 sx += (int)(hipEdx * hipSens * MOUSE_TURN_GAIN * (inTankHip ? tankAimScale / 100.0 : 1.0));
                 if (inTankHip) {
                     /* no pitch/drive from the mouse in a tank */
-                } else if (stickSolitare()) {   /* D498 */
+                } else if (styleIsSolitare(idx)) {   /* D498, D513, D518 */
                     /* D194/D238: SOLITARE gives hipfire pitch the same
                      * continuous analog stick treatment as yaw -- same
                      * formula as the sx line above, so X and Y are, by
@@ -2683,22 +2711,6 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
          * and chasing the menu cursor (user repro, bind log). Physical arrow
          * keys and Enter/Escape are fixed menu controls; mouse/pad still
          * work. Scripted QA input remains the sole source when active. */
-        if (current_menu == MENU_PC_OPTIONS && !scriptIsActive(0))
-        {
-            pcOptionsKeyboardPad(ks, mb, optionsBindingInputBlocked(), &button, &sx, &sy);
-            /* D407(b): on this screen the mouse wheel scrolls the row list
-             * -- wheel up = step UP, wheel down = step DOWN (same sign
-             * convention as the W/S keys above: +STICK_MAX = up). The
-             * original mapping had them swapped (2026-09-28 user report).
-             * Front-end menus otherwise leave the wheel queue unconsumed in
-             * menu mode -- clear it here so a scroll can't leak into the
-             * next stage's weapon cycle (D223). */
-            if (!optionsBindingInputBlocked())
-            {
-                if (wheelBack > 0)      { sy = STICK_MAX;  wheelBack = 0; }   /* wheel up   */
-                else if (wheelFwd > 0)  { sy = -STICK_MAX; wheelFwd = 0; }    /* wheel down */
-            }
-        }
         menuPrevActive = menuMode;
         s_menuPointerLive = (menuMode && mouseEnabled && !mouseGrabbed) ? 1 : 0;
 
@@ -2728,14 +2740,14 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                            current_menu != GE_MENU_INVALID);
 
         /* D498: 1.3 Frost / 1.4 Elektra swap the two sticks; menus never swap. */
-        if (!padMenuMode && stickSwap()) { int tx = lx, ty = ly; lx = rx; ly = ry; rx = tx; ry = ty; }
+        if (!padMenuMode && stickSwap(idx)) { int tx = lx, ty = ly; lx = rx; ly = ry; rx = tx; ry = ty; }   /* D518 */
 
         if (padMenuMode) {
             int px = scaleAxis(lx, padDeadzoneL);
             int py = -scaleAxis(ly, padDeadzoneL);       /* SDL up = negative -> N64 up = positive */
             if (px) sx = px;
             if (py) sy = py;
-        } else if (stickSolitare()) {   /* D498 */
+        } else if (styleIsSolitare(idx)) {   /* D498, D513, D518 */
             /* D194/D238: SOLITARE swaps stick roles -- left stick becomes
              * digital-step movement (same analog-for-movement tradeoff as
              * the keyboard remap above), right stick becomes continuous
@@ -2821,9 +2833,8 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
          * Deck). The game never reads BACK, so nothing is withheld. */
         {
             int selNow = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_BACK);
-            /* D343: not on the PC options screen (one options UI at a time). */
             /* D472: only opens here (closing is the owner's, in the overlay path) */
-            if (selNow && !padSelectPrev[idx] && !frontOptionsBlocksOverlay() && !optionsOverlayIsOpen()) {
+            if (selNow && !padSelectPrev[idx] && !optionsOverlayIsOpen()) {
                 s_ovOwner = idx;
                 optionsOverlayToggle();
             }
@@ -3090,6 +3101,37 @@ short inputPadAxis(int idx, SDL_GameControllerAxis a)
 {
     if (idx < 0 || idx >= MAX_PADS || !pads[idx]) return 0;
     return SDL_GameControllerGetAxis(pads[idx], a);
+}
+
+/* D519: on the front end the game's red crosshair is the mouse pointer (D345).
+ * While the overlay is open it keeps following the OS mouse so it can be
+ * used over the overlay. Unlike the menu-pointer block (which insets the
+ * range by 20 px like the game's own clamp) this maps window -> canvas
+ * exactly, so the drawn crosshair sits where the overlay hit-tests the click
+ * (optionsoverlay.c maps the same OS position). The OS cursor is hidden by the
+ * caller so there is one pointer, not two. */
+static void overlayFrontEndCrosshair(void)
+{
+    SDL_Window *w = SDL_GetMouseFocus();
+    int mx = 0, my = 0, ww = 0, wh = 0;
+    if (!w) return;
+    SDL_GetMouseState(&mx, &my);
+    SDL_GetWindowSize(w, &ww, &wh);
+    if (ww <= 0 || wh <= 0) return;
+    double fx = (double)mx / ww, fy = (double)my / wh;
+    double rx0, ry0, rx1, ry1;
+    videoGetOutputRectFrac(&rx0, &ry0, &rx1, &ry1);
+    if (rx1 > rx0 && ry1 > ry0) { fx = (fx - rx0) / (rx1 - rx0); fy = (fy - ry0) / (ry1 - ry0); }
+    extern f32 portNativeAspect(void);
+    f32 na = portNativeAspect();
+    if (na > (4.0f / 3.0f)) { double vis = (4.0 / 3.0) / (double)na; fx = (fx - (1.0 - vis) * 0.5) / vis; }
+    double sw = getPlayer_c_screenwidth(), sh = getPlayer_c_screenheight();
+    double sl = getPlayer_c_screenleft(),  st = getPlayer_c_screentop();
+    if (!(sw > 200.0 && sw < 2000.0 && sh > 150.0 && sh < 2000.0)) return;
+    double h = sl + fx * sw, v = st + fy * sh;
+    double loH = sl + 20.0, hiH = sl + sw - 20.0, loV = st + 20.0, hiV = st + sh - 20.0;
+    cursor_h_pos = (float)(h < loH ? loH : h > hiH ? hiH : h);
+    cursor_v_pos = (float)(v < loV ? loV : v > hiV ? hiV : v);
 }
 
 void inputSuspendForOverlay(void)
@@ -3597,6 +3639,13 @@ unsigned inputPadHeldSources(int seat)
 {
     return (seat >= 0 && seat < MAX_PADS) ? padReadRaw(pads[seat]) : 0;
 }
+/* D518: the overlay re-points its "Layout preset" row (and the Custom-only
+ * bind rows' visibility) at the selected seat's value. */
+int *inputPadPresetPtr(int seat)
+{
+    return &padPreset[(seat >= 0 && seat < MAX_PADS) ? seat : 0];
+}
+
 int inputPadPresetStep(int cur, int dir)
 {
     /* D498: display order Jinx, Christmas, Frost, Elektra, Custom (stored 0,1,2,4,3). */
@@ -3711,10 +3760,11 @@ static void padMapSelfTest(void)
         }
 
     /* Custom: seat 0 Fire := a, seat 1 untouched, seat 2 Use := y. */
-    int savedPreset = padPreset;
+    int savedPreset[MAX_PADS];
     char saved[MAX_PADS][PA_COUNT][32];
+    memcpy(savedPreset, padPreset, sizeof(savedPreset));
     memcpy(saved, padStr, sizeof(saved));
-    padPreset = 3;
+    for (int s = 0; s < MAX_PADS; s++) padPreset[s] = 3;
     snprintf(padStr[0][PA_FIRE], sizeof(padStr[0][0]), "a");
     snprintf(padStr[2][PA_USE], sizeof(padStr[0][0]), "y,none");
     snprintf(padStr[2][PA_NEXTWPN], sizeof(padStr[0][0]), "none");
@@ -3741,7 +3791,7 @@ static void padMapSelfTest(void)
                  c1, c2, c3, c4, c5, c6, c7);
     fail += !(c1 && c2 && c3 && c4 && c5 && c6 && c7);
     /* Preset != Custom ignores the strings. */
-    padPreset = 0;
+    for (int s = 0; s < MAX_PADS; s++) padPreset[s] = 0;
     t = padTabGet();
     padMapPure(&t->seat[0], PSM(PS_RT), 0, 0, &play, &o);
     int c8 = (o.button & GE_CONT_G) != 0;
@@ -3762,14 +3812,19 @@ static void padMapSelfTest(void)
     fail += !(c10 && c11);
 
     memcpy(padStr, saved, sizeof(saved));
-    padPreset = savedPreset;
+    memcpy(padPreset, savedPreset, sizeof(savedPreset));
     padTabValid = 0;
     sysLogPrintf(fail ? LOG_ERROR : LOG_INFO, "GE_PADMAPTEST: %s", fail ? "FAIL" : "PASS");
 }
 
 PD_CONSTRUCTOR static void inputConfigInit(void)
 {
-    configRegisterInt("Input.PadPreset", &padPreset, 0, 4);   /* D498: 0 Jinx 1.1, 1 Christmas 1.2, 2 Frost 1.3, 3 Custom, 4 Elektra 1.4 */
+    /* D518: per seat. The pre-D518 global key is kept as seat 1's, so an
+     * existing ini keeps its value for P1 and P2-P4 start at Jinx. */
+    configRegisterInt("Input.PadPreset",  &padPreset[0], 0, 4);   /* D498: 0 Jinx 1.1, 1 Christmas 1.2, 2 Frost 1.3, 3 Custom, 4 Elektra 1.4 */
+    configRegisterInt("Input.PadPreset2", &padPreset[1], 0, 4);
+    configRegisterInt("Input.PadPreset3", &padPreset[2], 0, 4);
+    configRegisterInt("Input.PadPreset4", &padPreset[3], 0, 4);
     for (int seat = 0; seat < MAX_PADS; seat++)
         for (int a = 0; a < PA_COUNT; a++) {
             if (seat == 0) snprintf(padStrKey[seat][a], sizeof(padStrKey[seat][a]), "Input.Pad.%s", kPadAct[a].key);
@@ -3817,6 +3872,7 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.MouseSensitivity", &mouseSensitivity, 1, 500);  /* D238 */
     configRegisterInt("Input.MouseAimCurve", &aimCurveGamma, 50, 400);  /* D194(a), x100 */
     configRegisterInt("Input.NaturalPitch", &naturalPitchMode, 0, 1);  /* D194/D238 */
+    configRegisterInt("Input.ControlScheme", &controlScheme, 0, 1);    /* D513: 0 Modern, 1 OG controls */
     configRegisterInt("Input.PadDeadzone", &padDeadzone, 0, 30000);  /* legacy; Wave A migrates to L/R */
     configRegisterInt("Input.PadDeadzoneL", &padDeadzoneL, 0, 30000);  /* Wave A: left (movement) stick */
     configRegisterInt("Input.PadDeadzoneR", &padDeadzoneR, 0, 30000);  /* Wave A: right (look) stick */

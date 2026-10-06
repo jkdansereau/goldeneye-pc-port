@@ -85,6 +85,10 @@ for l in SDL2 zlib gcc-libs libwinpthread mingw-w64; do
   [ -d "$MINGW/share/licenses/$l" ] && cp -r "$MINGW/share/licenses/$l" "$OUT/licenses/$l"
 done
 
+# --- save converter (D492): emulator .eep <-> port .eep, stdlib-only -----
+mkdir -p "$OUT/tools"
+cp tools_pc/eep_convert.py "$OUT/tools/"
+
 # --- asset-prep tool -------------------------------------------------
 # The port needs two ROM-derived directories (data/pcmodels-<region>/ and
 # data/pccg-<region>/) that we cannot ship. prepare-assets.py regenerates

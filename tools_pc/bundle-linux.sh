@@ -11,7 +11,7 @@
 #     goldeneye-pc-port-<VERSION>-linux-x86_64.tar.gz  + .tar.gz.sha256
 #
 # The bundle contains ONLY: the engine executable, its SDL2 library, a README,
-# license texts, and the prepare-assets/ tool. It contains NO ROM and NO game
+# license texts, the prepare-assets/ tool and tools/eep_convert.py. It contains NO ROM and NO game
 # assets. SDL2 is bundled (copied next to the exe, whose rpath is set to
 # $ORIGIN) so the tarball runs as-is on any distro — including a sideloaded
 # Steam Deck — with nothing installed; zlib and libGL are expected from the
@@ -95,6 +95,10 @@ cp LICENSE "$OUT/licenses/LICENSE-port-MIT.txt"
 # it exists (Debian/Ubuntu), skip silently elsewhere.
 SDL2_LIC="$(dpkg -L libsdl2-2.0-0 2>/dev/null | grep -m1 '/copyright$' || true)"
 [ -n "$SDL2_LIC" ] && [ -f "$SDL2_LIC" ] && cp "$SDL2_LIC" "$OUT/licenses/SDL2.txt"
+
+# --- save converter (D492): emulator .eep <-> port .eep, stdlib-only -----
+mkdir -p "$OUT/tools"
+cp tools_pc/eep_convert.py "$OUT/tools/"
 
 # --- asset-prep tool (identical assembly to bundle-win.sh) -----------
 PREP="$OUT/prepare-assets"

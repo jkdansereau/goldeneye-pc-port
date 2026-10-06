@@ -98,14 +98,15 @@ SDL-supported pads); split-screen needs one controller per extra player.
    click **More info**, then **Run anyway**.
 4. The first start takes a few extra seconds: the port reads your ROM and
    generates its asset files once. After that it starts normally.
-5. Play. **F10** (pad: **Select**) opens the options overlay; the
+5. Play. **F10** (pad: **Select**) opens the options overlay; on the file-select
+   screen the *PC Options* entry opens the same overlay. The
    [Controls](#controls) table lists the default keys.
 
 **Steam Deck:** the Linux tarball is the Deck build. Download it on the Deck
 (or copy it over from your PC), extract it, add your ROM to `data/`, launch
 it once, and add the executable as a non-Steam game. On first start it
 applies Deck-friendly display defaults (native 1280×800 fullscreen); if the
-resolution is wrong, set it under F10 → *Resolution*.
+resolution is wrong, set it under F10 → *Video → Resolution*.
 
 ---
 
@@ -130,16 +131,35 @@ resolution is wrong, set it under F10 → *Resolution*.
 The keyboard defaults are a GEPD-style layout. The controller layout matches
 Rare's Xbox 1.1 (Jinx) button roles; the other Xbox styles (1.2 Christmas,
 1.3 Frost, 1.4 Elektra, which swap the stick roles) are selectable under
-*Input → Controller → Layout preset*. PlayStation and Nintendo controllers
+*Controller* (pick a player first, then *Layout preset*). PlayStation and Nintendo controllers
 show their own button names in the menus.
 
-**Rebinding:** *Input → Bindings…* in the options overlay rebinds the
-keyboard and mouse (*Movement…* and *Actions…*). Controller buttons are
-rebindable per controller under *Input → Controller*: set *Layout preset* to
+**Control style:** *Controller → Control style* (named after the watch's own
+setting, with Perfect Dark's "Ext" for the port's controls) picks how the
+game's controller style (the watch's 1.1–1.4 selector) is treated. **Ext**
+(the default) keeps the port's feel and fixes the style itself, so the watch's
+selector has no effect. **Original** stops the port from touching the style:
+pick 1.1, 1.2, 1.3 or 1.4 on the watch (or in the multiplayer setup) and it
+behaves as on the N64, and the Controller page then offers the game's own
+styles ("Controller style", 1.1 Honey to 2.4 Goodhead, saved in the Bond file
+like the watch's) instead of the layout presets, which apply in Ext only. Buttons are passed
+through as the N64's buttons, so 1.3 and 1.4 move fire and aim exactly as the
+console does. The 2.x dual-controller styles run faithfully too: the game
+reads their second stick from the next controller slot, which the port does not
+map yet (a second pad assigned to that slot should provide it, untested), so with
+one pad pick a 1.x style. Saves made with earlier builds may hold 1.2 (the port wrote its
+forced style back into the save), so when you switch to the Original control style, pick
+your style on the watch once.
+
+**Rebinding:** *Key Bindings* in the options overlay rebinds the
+keyboard and mouse (one list: movement, then actions). Controller buttons are
+rebindable per controller under *Controller* (pick a player first): set *Layout preset* to
 *Custom*, select an action and press a pad button (tap B or Esc to cancel,
 hold B to bind B itself, hold Back to clear; Y clears the selected slot).
 Each action takes up to two buttons. Menus always keep A/X accept and B/Y
-cancel, so you can't lock yourself out.
+cancel, so you can't lock yourself out. There is no warning yet when two
+actions share a button, and the Xbox release's "left stick aims the
+crosshair" and "D-pad copies the left stick" behaviors are not reproduced.
 
 **Split-screen:** pick Multiplayer from the main menu. With one controller,
 keyboard/mouse is player 1 and the controller is player 2; with two or more
@@ -160,22 +180,24 @@ Select again) closes. With a keyboard, use `F10` and the arrow keys/Enter.
   sits at the screen edges, and 4:3 menus are pillarboxed. FOV and draw/LOD
   distance are adjustable, and AI behaviour stays as on the N64 whatever you
   set them to.
-- **The original look in one click:** the *Original N64 preset* restores the
-  N64's settings, *Aspect → Original* shows the exact 4:3 frame, and the
-  *Port defaults preset* goes back.
+- **The original look in one click:** the *Display mode* row (F10 → *Video*) switches
+  between *Modern* and *Original N64* (it reads *Custom* once you edit a setting it covers),
+  and *Aspect ratio → Original* shows the exact 4:3 frame.
 - **A steady 60 fps**, with VSync and a frame cap (30 or 60), including on
   low-end GPUs.
-- **Graphics options:** resolution, borderless fullscreen, MSAA (up to 16×),
-  anisotropic filtering, and nearest, bilinear, trilinear or the N64's own
-  3-point texture filter.
-- **Mouse aim** in your choice of style (the N64's, or centred FPS-style) with
+- **Graphics options:** resolution, borderless or exclusive fullscreen,
+  a Center window action while windowed, MSAA (up to 16×), anisotropic
+  filtering, and nearest, bilinear, trilinear or the N64's own 3-point
+  texture filter.
+- **Mouse aim** in your choice of style (the N64's, or centered FPS-style) with
   per-device sensitivity, smoothing and Y-inversion.
 - **Modern controller support:** dual-stick layout, deadzones, sensitivity,
   southpaw, trigger thresholds, rumble-pak vibration, and PlayStation/Nintendo
   button names.
 - **Rebindable controls** for keyboard, mouse and each controller.
-- **HUD and crosshair options:** HUD scale, an optional customizable
-  crosshair, and a no-hit-flash option.
+- **HUD and crosshair options:** HUD scale (also scales the in-game options
+  menu), an optional customizable crosshair with adjustable opacity and a
+  health-based color, and a no-hit-flash option.
 - **Full audio:** in-level music and sound effects, with music, FX and master
   volume and a choice of output device.
 - **An in-game options overlay** (F10 / pad Select) for all of the above,
@@ -207,6 +229,10 @@ only in the release packages, and no macOS/ARM builds yet.
 What a release installs (no networking, no telemetry, no ROM or game assets)
 and how faithfully the port tracks the original game's logic:
 [Security & fidelity status](docs/security-and-fidelity-status.md).
+The binaries are not code-signed; from v0.5.0 on each release artifact also
+carries a GitHub build-provenance attestation you can check with
+`gh attestation verify <file> --repo jkdansereau/goldeneye-pc-port`
+(see [SECURITY.md](.github/SECURITY.md)).
 
 ---
 
@@ -214,9 +240,12 @@ and how faithfully the port tracks the original game's logic:
 
 **Options overlay:** press **F10** (pad: **Select**) in game or in the menus.
 Changes are saved automatically. Most settings live in `ge007.ini`; the
-ones that come from the game's own watch menu (auto-aim, look ahead, sight
-and ammo on screen, music and FX volume) are part of your save, as on the
-N64.
+ones that come from the game's own watch menu (look up/down, auto-aim, aim
+control, sight, look ahead, ammo on screen, screen size, screen ratio, music
+and FX volume) are part of your save, as on the N64. Screen size (Full / Wide /
+Cinema) and screen ratio (Normal / 16:9) combine with the PC **Aspect ratio**
+setting: Aspect ratio owns the window shape, while the watch's two options
+only change what the game renders inside it.
 
 **Where files live:** everything stays inside the game's own folder. The port
 never writes to `%APPDATA%`, the registry or any system location.
@@ -281,6 +310,28 @@ and `ge007.ini` from the old `data/` folder into the new one. Don't copy the
 generated `pcmodels-*` and `pccg-*` folders: the new version makes its own on first start, and
 stale ones from an older version can cause glitches.
 
+## Using an emulator save
+
+Saves from N64 emulators (1964, Project64, …) load directly: with the game
+closed, just copy your `.eep` to `data/ge007.eep`. On first launch the game
+detects the emulator byte order and converts it in place, keeping a backup of
+the original file next to it as `ge007.eep.emulator.bak` (never overwriting an
+existing one). Any slot that is corrupt in both formats is left alone and gets
+reset by the game, exactly as before. An existing port save is untouched.
+
+To take a save back into an emulator, use the small converter that ships in
+the release folder as `tools/eep_convert.py`
+(`tools_pc/eep_convert.py` in a source checkout; plain Python 3, no
+dependencies):
+
+```sh
+python tools/eep_convert.py pc-to-n64 data/ge007.eep back-to-emulator.eep  # port -> emulator
+python tools/eep_convert.py verify some-file.eep    # which format is this?
+```
+
+`verify` checks every save checksum and, without `--as n64|pc`, tells you
+which convention the file uses.
+
 ## Uninstalling
 
 Delete the folder. The port writes nothing anywhere else, so that removes the
@@ -297,7 +348,7 @@ want to keep your progress.
   **More info**, then **Run anyway**.
 - **Black screen or no window:** update your graphics driver; the port needs
   OpenGL 3.0.
-- **Wrong resolution on the Steam Deck:** F10 → *Resolution*.
+- **Wrong resolution on the Steam Deck:** F10 → *Video → Resolution*.
 - **Where are my saves?** `data/ge007.eep`. Copy it somewhere safe while the
   game is not running to back it up.
 - **The game crashes:** open an
@@ -322,9 +373,6 @@ place: [`docs/ROADMAP.md`](docs/ROADMAP.md). In brief:
 - **macOS and ARM builds**.
 - The remaining small accuracy differences, each checked against the N64
   game in an emulator.
-- **Emulator saves**: a converter so saves from 1964, Project64 and other N64
-  emulators can be moved to and from the port (they need converting today; a
-  straight copy is wiped).
 - **1.0 sign-off**: a full campaign playthrough at more than one difficulty
   plus a split-screen session, on every platform that ships.
 

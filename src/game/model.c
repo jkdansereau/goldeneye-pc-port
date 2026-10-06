@@ -3612,41 +3612,6 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
 
             speed = model->speed;
 
-#ifdef PORT
-            /* D243 M-183: clamp playspeed to a sane range during scripted
-             * camera modes when it exceeds a threshold. M-186 correction:
-             * this is NOT a D100/D140 struct-punning/pointer-widening issue
-             * -- Model is accessed everywhere by named field, no raw-offset
-             * alias exists here. The actual mechanism (still not fully root-
-             * caused, see findings.md D243): modelSetAnimation2 (line ~2720,
-             * unmodified decomp) never resets unkb0/unkb4/unkac/animrate on
-             * a scripted animation restart; a restart landing while unkb0 is
-             * stale-nonzero divides by it using a mismatched unkac/animrate
-             * pair from the previous animation, producing huge playspeed
-             * spikes (~388-410, vs. a legitimate max of ~2.0).
-             * M-187: was mistakenly gated on a diagnostic env var, so it
-             * never fired for a real player. Fixed to gate on the camera-mode test
-             * alone (gameScriptedCameraActive()) so it's actually active by
-             * default.
-             * M-189 (2026-09-18) found and fixed the ACTUAL root cause (a
-             * stale hardcoded 32-bit sizeof(Model) literal in bondview2.c's
-             * model-carving buffer, user-verified live): this clamp no longer
-             * fires in practice. It is retained as defense-in-depth against
-             * any future out-of-range playspeed reaching a scripted camera.
-             * RULE-2-SIGNOFF (2026-09-19, release review): ungated
-             * behavior-modifying guard in src/game, approved for retention
-             * by the user as the stability-maximizing option for v0.3.0;
-             * candidate for removal post-release once all cutscenes are
-             * re-verified clean without it (findings.md D243 / M-192).
-             * Threshold: 10.0 is way above any legitimate playspeed (normal
-             * is ~1.0, max observed in gameplay is ~2.0). */
-            extern int gameScriptedCameraActive(void);
-            if (gameScriptedCameraActive() && playspeed > 10.0f)
-            {
-                playspeed = 1.0f;
-            }
-#endif
-
             frame += playspeed * speed;
 
             if (model->anim2 != NULL) 
@@ -3677,31 +3642,6 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
             {
                 animlast = model->anim->unk04 - 1;
                 endframe = model->endframe;
-
-#ifdef PORT
-            /* D243 M-185: clamp corrupted endframe values during scripted
-             * camera modes, producing huge negative values like
-             * -604462909807314587353088.0 that cause the animation to loop
-             * indefinitely or behave unexpectedly. Clamp to a reasonable
-             * range (0-1000) to prevent this.
-             * M-186 correction: NOT a D100/D140 struct-punning/pointer-
-             * widening issue -- see the M-183 comment above for the
-             * corrected mechanism and for M-189's actual root-cause fix
-             * (stale 32-bit sizeof(Model) literal in bondview2.c); with that
-             * fix in place this clamp no longer fires in practice and is
-             * retained as defense-in-depth. RULE-2-SIGNOFF (2026-09-19,
-             * release review): approved for retention by the user for
-             * v0.3.0; candidate for removal post-release (findings.md D243 /
-             * M-192).
-             * M-187: was mistakenly gated on a diagnostic env var, so it
-             * never fired for a real player. Fixed to
-             * gate on the camera-mode test alone (gameScriptedCameraActive()). */
-            extern int gameScriptedCameraActive(void);
-            if (gameScriptedCameraActive() && (endframe < 0.0f || endframe > 1000.0f))
-            {
-                endframe = 100.0f;
-            }
-#endif
 
                 if (endframe);
 

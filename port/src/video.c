@@ -31,7 +31,6 @@
 #include "video.h"
 #include "input.h"
 #include "optionsoverlay.h"
-#include "frontoptions.h"
 #include "audio.h"
 
 #include "../fast3d/gfx_api.h"
@@ -74,8 +73,9 @@ static int cfgLodDistance         = 250; /* % of authored geometry LOD distance;
 static int cfgLodDistanceAutoFov  = 0; /* legacy ini option, no longer exposed in the menu */
 static int cfgAniso         = 4;   /* D212: anisotropic filtering samples; 4 = the value fast3d already applied (no visual delta at default) */
 static int cfgSafeAreaCrop  = 1;   /* crop the N64 TV-overscan safe-area margin (visible as black top/bottom bars on PC) instead of showing it; on by default */
-static int cfgAspectMode    = 0;   /* D447: 0 = Window (fill the window), 1 = Original (pillar/letterbox to the console aspect: 4:3, or 16:9 while the game's Ratio option is 16:9) */
+static int cfgAspectMode    = 0;   /* D447: 0 = Window (fill the window), 1 = Original (pillar/letterbox to the console aspect: 4:3, or 16:9 while the game's Ratio option is 16:9). D508: 2 = 16:9, 3 = 21:9 (forced) */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
+static int cfgFullscreenMode = 0;  /* D511: fullscreen flavour, 0 = borderless desktop, 1 = exclusive */
 static int cfgDeckPresetApplied = 0; /* D283: 1 once the Steam Deck preset has been considered */
 static int cfgLowEndConsidered = 0;  /* D482: 1 once the low-end GPU defaults have been considered */
 
@@ -116,6 +116,9 @@ static int cfgCrosshairColor = 0;   /* 0 = authored sprite; 1..7 = presets; 8 = 
 static int cfgCrosshairRed = 255, cfgCrosshairGreen = 255, cfgCrosshairBlue = 255;
 static int cfgCrosshairSize = 100;  /* 100% retains the original 32x32 drawing */
 static int cfgCrosshairStyle = 0;   /* 0 = original; 1 = unused beta asset */
+static int cfgCrosshairAlpha = 100; /* D511: % of the original sprite alpha (0x6E); 100 = untouched */
+static int cfgCrosshairHealth = 0;  /* D511: 1 = tint follows health (PD ramp); 0 = Crosshair color rules */
+extern float portCrosshairHealthRatio(void);   /* input.c: health + armour, 0..2 */
 
 int portCrosshairStyle(void) { return cfgCrosshairStyle; }
 float portCrosshairScale(void) { return cfgCrosshairSize / 100.0f; }
@@ -133,14 +136,43 @@ float portCrosshairScale(void) { return cfgCrosshairSize / 100.0f; }
  * skips this rewrite, keeping the original game's DL byte-identical. */
 void portCrosshairApplyTintCombine(Gfx *envCommand)
 {
-    if (cfgCrosshairColor == 0 || !envCommand) return;
+    if (!envCommand) return;
+    if (cfgCrosshairAlpha != 100) {
+        /* D511: the env colour command carries the sprite alpha (0x6E in the
+         * call site); scale just that byte, keep the tint. Original (100) skips this. */
+        s32 r, g, b;
+        portCrosshairTint(&r, &g, &b);
+        gDPSetEnvColor(envCommand, r, g, b, (0x6E * cfgCrosshairAlpha + 50) / 100);
+    }
+    if (cfgCrosshairColor == 0 && !cfgCrosshairHealth) return;
     gDPSetCombineLERP(envCommand + 1,
         ENVIRONMENT, 0, TEXEL0_ALPHA, 0, TEXEL0, 0, ENVIRONMENT, 0,
         ENVIRONMENT, 0, TEXEL0_ALPHA, 0, TEXEL0, 0, ENVIRONMENT, 0);
 }
 
+/* D511: PD's health ramp (pd_port src/game/sight.c sightGetCrosshairHealthColor,
+ * "on green" variant; MIT). ratio = health + armour, 0..2 (GE: both 0..1). */
+static void crosshairHealthTint(float ratio, s32 *r, s32 *g, s32 *b)
+{
+    if (ratio < 0.0f) ratio = 0.0f;
+    if (ratio > 2.0f) ratio = 2.0f;
+    int red, green, blue;
+    if (ratio < 0.2f)      { red = 255; green = 0; blue = 0; }
+    else if (ratio < 0.6f) { red = 255; green = (int)(255.0f * ((ratio - 0.2f) / 0.4f)); blue = 0; }
+    else if (ratio < 1.0f) { red = (int)(255.0f * ((ratio - 0.6f) / 0.4f)); green = 255; blue = 0; }
+    else                   { red = 0; green = 255; blue = (int)(255.0f * (ratio - 1.0f)); }
+    *r = red; *g = green; *b = blue;
+}
+
 void portCrosshairTint(s32 *r, s32 *g, s32 *b)
 {
+    /* D511: health colour wins over Crosshair color (PD: SIGHT_COLOUR uses the
+     * health ramp instead of the chosen colour). Only reached from gunDrawSight
+     * (live player) and the preview (which passes through here too: full health). */
+    if (cfgCrosshairHealth) {
+        crosshairHealthTint(portCrosshairHealthRatio(), r, g, b);
+        return;
+    }
     static const unsigned char kTints[8][3] = {
         { 0xFF, 0xFF, 0xFF }, /* Original red sprite (identity multiplier) */
         { 0x40, 0xFF, 0x40 }, /* Green */
@@ -168,7 +200,7 @@ void portCrosshairTint(s32 *r, s32 *g, s32 *b)
  * representative red swatch for it rather than misleadingly showing white. */
 void portCrosshairPreview(s32 *r, s32 *g, s32 *b)
 {
-    if (cfgCrosshairColor == 0) {
+    if (cfgCrosshairColor == 0 && !cfgCrosshairHealth) {
         *r = 255; *g = 40; *b = 40;
     } else {
         portCrosshairTint(r, g, b);
@@ -332,12 +364,16 @@ f32 portFovHorizDegrees(s32 pct)
  * playtest found a straight 1:1 FovScale coupling still faded guards in
  * noticeably close on Dam, so the auto coupling is 2x FovScale, not 1x).
  * An explicit Video.DrawDistance != 100 overrides that coupling outright.
- * Clamped to <=4.0x -- pushing the far plane much further out risks
- * far-field z-fighting against the level's original near-plane precision;
- * raised again (M-121 live playtest: 2x FovScale still showed a "blue
- * glow" on far Dam tunnel geometry, so auto coupling is now 4x FovScale)
- * to give headroom (max portFovScale is 1.5 at Video.FovScale's registered
- * ceiling of 150, so 4x tops out at 6.0x -- ceiling raised to match).
+ * Clamp history: an explicit Video.DrawDistance goes up to 800 (8.0x cap,
+ * raised 2026-10-04 at the maintainer's request). The auto-FOV coupling is
+ * 4x FovScale (M-121 live playtest: 2x FovScale still showed a "blue glow"
+ * on far Dam tunnel geometry); max portFovScale is 1.5 at Video.FovScale's
+ * registered ceiling of 150, so the coupling still tops out at 6.0x.
+ * The multiplier scales Visibility.FarFog (bgfog.c), so it moves the far
+ * clip plane as well as the fog ramp, while the near plane stays fixed.
+ * Pushing the far plane out risks far-field z-fighting against the level's
+ * original depth precision; 8x halves the precision margin compared with
+ * 4x. A by-eye check at 600-800 is owed (ROADMAP section 3).
  * Identity (1.0f) at DrawDistance=100 with auto-FOV off. NOTE: end-to-end
  * re-check of fogLoadCurrentEnvironment (bgfog.c) found the fog RAMP
  * itself (not just the far-clip cutoff) already scales correctly with
@@ -357,7 +393,7 @@ f32 portDrawDistanceMultiplier(void)
     } else {
         return 1.0f;
     }
-    if (mult > 6.0f) { mult = 6.0f; }
+    if (mult > 8.0f) { mult = 8.0f; }
     if (mult < 1.0f) { mult = 1.0f; }
     return mult;
 }
@@ -373,7 +409,7 @@ f32 portDrawDistanceMultiplier(void)
  * option, default OFF) can couple it to Video.FovScale the same
  * direction as draw distance if ever wanted; off by default so this stays a
  * standalone dial and doesn't quietly add cost as FovScale widens. Clamped
- * to a [0.25, 4.0] distance multiplier (== effective LodDistance 25-400%) --
+ * to a [0.125, 4.0] distance multiplier (== effective LodDistance 25-800%) --
  * far outside that band either does nothing visible (LOD never triggers) or
  * thrashes every frame. Identity (1.0f) at Video.LodDistance=100
  * with auto-FOV off. */
@@ -388,7 +424,7 @@ f32 portLodDistanceMultiplier(void)
         return 1.0f;
     }
     if (pct < 25.0f)  { pct = 25.0f; }
-    if (pct > 400.0f) { pct = 400.0f; }
+    if (pct > 800.0f) { pct = 800.0f; }
     return 100.0f / pct;
 }
 
@@ -485,6 +521,8 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.CrosshairBlue",  &cfgCrosshairBlue,  0, 255);
     configRegisterInt("Video.CrosshairSize",  &cfgCrosshairSize, 50, 200);
     configRegisterInt("Video.CrosshairStyle", &cfgCrosshairStyle, 0, 1);
+    configRegisterInt("Video.CrosshairAlpha", &cfgCrosshairAlpha, 0, 100);        /* D511 */
+    configRegisterInt("Video.CrosshairHealthColor", &cfgCrosshairHealth, 0, 1);   /* D511 */
     configRegisterInt("Game.AllUnlocked", &portAllUnlocked, 0, 1);
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
@@ -497,14 +535,15 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.WidescreenAuto", &cfgWidescreenAuto, 0, 1);
     configRegisterInt("Video.NativeWidescreen", &cfgNativeWidescreen, 0, 1);   /* D334 */
     configRegisterInt("Game.HudScale", &cfgHudScale, 75, 150);   /* D226: capped at 150 (user: little benefit above) */
-    configRegisterInt("Video.DrawDistance", &cfgDrawDistance, 100, 400);
+    configRegisterInt("Video.DrawDistance", &cfgDrawDistance, 100, 800);
     configRegisterInt("Video.DrawDistanceAutoFov", &cfgDrawDistanceAutoFov, 0, 1);
-    configRegisterInt("Video.LodDistance", &cfgLodDistance, 25, 400);
+    configRegisterInt("Video.LodDistance", &cfgLodDistance, 25, 800);
     configRegisterInt("Video.LodDistanceAutoFov", &cfgLodDistanceAutoFov, 0, 1);
     configRegisterInt("Video.Anisotropy", &cfgAniso, 1, 16);
     configRegisterInt("Video.SafeAreaCrop", &cfgSafeAreaCrop, 0, 1);
-    configRegisterInt("Video.AspectMode", &cfgAspectMode, 0, 1);   /* D447 */
+    configRegisterInt("Video.AspectMode", &cfgAspectMode, 0, 3);   /* D447; D508 forced ratios 2..3 */
     configRegisterInt("Video.Fullscreen",    &cfgFullscreen, 0, 1);
+    configRegisterInt("Video.FullscreenMode", &cfgFullscreenMode, 0, 1);   /* D511: 0 borderless, 1 exclusive */
     configRegisterInt("Window.Width",        &cfgWinW,       0, 16384);
     configRegisterInt("Window.Height",       &cfgWinH,       0, 16384);
     configRegisterInt("Window.X",            &cfgWinX,      -1, 16384);
@@ -803,7 +842,7 @@ void videoRequestLiveConfigForKey(const char *key)
  * SDL_SetWindowFullscreen pump the Win32 message loop and must run on the
  * window's creating thread. The overlay posts a request here; the host-thread
  * event pump drains it in videoDrainWindowRequests(). */
-static volatile int winReqKind = 0;          /* 0 none, 1 resize, 2 fullscreen */
+static volatile int winReqKind = 0;          /* 0 none, 1 resize, 2 fullscreen, 3 centre (D511), 4 fullscreen mode (D511) */
 static volatile int winReqA = 0, winReqB = 0;
 
 void videoRequestWindowSize(int w, int h)
@@ -814,6 +853,16 @@ void videoRequestWindowSize(int w, int h)
 void videoRequestFullscreen(int on)
 {
     winReqA = on ? 1 : 0; winReqKind = 2;
+}
+
+void videoRequestFullscreenMode(int exclusive)
+{
+    winReqA = exclusive ? 1 : 0; winReqKind = 4;
+}
+
+void videoRequestCenterWindow(void)
+{
+    winReqKind = 3;
 }
 
 void videoGetOutputRectFrac(double *x0, double *y0, double *x1, double *y1)
@@ -888,6 +937,26 @@ static void videoDrainWindowRequests(void)
         gfx_sdl_update_cached_size();
         cfgFullscreen = on ? 1 : 0;
         sysLogPrintf(LOG_INFO, "video: fullscreen %s", on ? "on" : "off");
+    } else if (kind == 3) {   /* D511: Center window (windowed only) */
+        uint32_t ww = 0, hh = 0; int32_t cx = 0, cy = 0, px = 0, py = 0;
+        if (wmAPI->get_fullscreen_state && wmAPI->get_fullscreen_state()) return;
+        if ((wmAPI->get_maximized_state && wmAPI->get_maximized_state()) || cfgWinMax) {   /* set_dimensions on a maximized window is undefined across platforms */
+            sysLogPrintf(LOG_INFO, "video: center window ignored (window is maximized)");
+            return;
+        }
+        if (!wmAPI->get_dimensions || !wmAPI->get_centered_positions || !wmAPI->set_dimensions) return;
+        wmAPI->get_dimensions(&ww, &hh, &cx, &cy);
+        wmAPI->get_centered_positions((int32_t)ww, (int32_t)hh, &px, &py);
+        wmAPI->set_dimensions(ww, hh, px, py);
+        cfgWinX = px; cfgWinY = py;
+        sysLogPrintf(LOG_INFO, "video: center window %ux%u: (%d,%d) -> (%d,%d)", ww, hh, cx, cy, px, py);
+    } else if (kind == 4) {   /* D511: borderless vs exclusive; re-enters fullscreen when already on */
+        int ex = winReqA;
+        if (wmAPI->set_fullscreen_exclusive) wmAPI->set_fullscreen_exclusive(ex != 0);
+        gfx_sdl_update_cached_size();
+        cfgFullscreenMode = ex ? 1 : 0;
+        sysLogPrintf(LOG_INFO, "video: fullscreen mode %s (fullscreen now %d)", ex ? "exclusive" : "borderless",
+                     wmAPI->get_fullscreen_state ? (int)wmAPI->get_fullscreen_state() : -1);
     }
 }
 
@@ -940,7 +1009,7 @@ int videoInit(void)
             .x = havePos ? cfgWinX : 100,
             .y = havePos ? cfgWinY : 100,
             .fullscreen = cfgFullscreen != 0,
-            .fullscreen_is_exclusive = false,
+            .fullscreen_is_exclusive = cfgFullscreenMode != 0,
             .maximized = cfgWinMax != 0,
             .centered = !havePos,
             .allow_hidpi = false,
@@ -1085,8 +1154,14 @@ void videoDestroy(void)
 extern int get_screen_ratio(void);
 static float videoOutputAspect(void)
 {
-    if (cfgAspectMode != 1) return 0.0f;
-    return get_screen_ratio() == 1 /* SCREEN_RATIO_16_9 */ ? (16.0f / 9.0f) : (4.0f / 3.0f);
+    switch (cfgAspectMode) {
+    case 1:   /* Original: the console's own shape */
+        return get_screen_ratio() == 1 /* SCREEN_RATIO_16_9 */ ? (16.0f / 9.0f) : (4.0f / 3.0f);
+    case 2: return 16.0f / 9.0f;   /* D508: forced ratios; with Native widescreen the world
+                                      projects at this aspect (it is the output rect's own) */
+    case 3: return 21.0f / 9.0f;   /* also stands in for 2.35:1 cinema */
+    default: return 0.0f;          /* Window: fill the window */
+    }
 }
 
 void videoStartFrame(void)
@@ -1174,11 +1249,8 @@ void videoPumpEvents(void)
             } else if (ev.key.keysym.sym == SDLK_F12 && !ev.key.repeat) {
                 screenshotReq = 1;
             } else if (ev.key.keysym.sym == SDLK_F10 && !ev.key.repeat) {
-                /* F10: port-layer options overlay -- not on the PC options
-                 * screen (D343: one options UI at a time). */
-                if (optionsOverlayIsOpen() || !frontOptionsBlocksOverlay()) {
-                    optionsOverlayToggle();
-                }
+                /* F10: port-layer options overlay (the one PC options UI). */
+                optionsOverlayToggle();
             } else if (ev.key.keysym.sym == SDLK_ESCAPE && !ev.key.repeat) {
                 /* Overlay open: ESC backs out of a category, then closes (swallowed). Otherwise
                  * WI-1: in click-to-lock mode ESC frees the captured cursor

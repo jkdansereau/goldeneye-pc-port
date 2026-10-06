@@ -12,6 +12,7 @@ enum WatchSettingField {
     WATCH_SETTING_SIGHT,
     WATCH_SETTING_LOOKAHEAD,
     WATCH_SETTING_AMMO,
+    WATCH_SETTING_CONTROL,   /* D516: control style 0..7 (save options bits 8-10), per seat; stage only */
     WATCH_SETTING_COUNT
 };
 
@@ -44,5 +45,9 @@ int watchSettingsBlankValue(enum WatchSettingField field);
  * contexts -- nothing is queued there). Drives the in-stage reset probe's
  * dispatch check. */
 int watchSettingsQueueCount(void);
+/* D516: which controller seat WATCH_SETTING_CONTROL reads/edits (the F10
+ * Controller page's player). Any thread. WATCH_SETTING_CONTROL reads -1 when
+ * the seat has no live player (front end, seat beyond the player count). */
+void watchSettingsSetControlSeat(int seat);
 
 #endif

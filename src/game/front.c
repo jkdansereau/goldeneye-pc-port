@@ -958,7 +958,7 @@ Gfx *constructor_menu13_mpscenario(Gfx *DL);
 Gfx *constructor_menu14_mpteams(Gfx *DL);
 Gfx *constructor_menu15_cheat(Gfx *DL);
 #ifdef PORT
-#include "frontoptions.h"   /* D343: MENU_PC_OPTIONS lives in port/src/frontoptions.c */
+#include "frontoptions.h"   /* optionsFileSelectLabel: file-select "PC Options" entry */
 #include "envflag.h"
 #endif
 Gfx *constructor_menu16_nocontrollers(Gfx *DL);
@@ -2788,7 +2788,7 @@ Gfx *constructor_menu05_fileselect(Gfx *DL)
 
 #ifdef PORT
         /* D343: "PC Options" at the right end of this bar; a click enters
-         * MENU_PC_OPTIONS. All logic lives in port/src/frontoptions.c. */
+         * the F10 overlay over file select. Logic: port/src/frontoptions.c. */
         DL = optionsFileSelectLabel(DL);
 #endif
 
@@ -8682,9 +8682,6 @@ void menu_init(void)
             case MENU_NO_CONTROLLERS:         update_menu16_nocontrollers();        break;
             case MENU_DISPLAY_CAST:           update_menu18_displaycast();          break;
             case MENU_SPECTRUM_EMU:           update_menu19_spectrum();             break;
-#ifdef PORT
-            case MENU_PC_OPTIONS:             frontOptionsMenuUpdate();             break;
-#endif
         }
 
         if (menu_update > MENU_INVALID)
@@ -8725,9 +8722,6 @@ void menu_init(void)
             case MENU_NO_CONTROLLERS:         init_menu16_nocontroller();           break;
             case MENU_DISPLAY_CAST:           init_menu18_displaycast();            break;
             case MENU_SPECTRUM_EMU:           init_menu19_spectrum();               break;
-#ifdef PORT
-            case MENU_PC_OPTIONS:             frontOptionsMenuInit();               break;
-#endif
         }
     }
 
@@ -8757,9 +8751,6 @@ void menu_init(void)
         case MENU_NO_CONTROLLERS:         interface_menu16_nocontrollers();         break;
         case MENU_DISPLAY_CAST:           interface_menu18_displaycast();           break;
         case MENU_SPECTRUM_EMU:           interface_menu19_spectrum();              break;
-#ifdef PORT
-        case MENU_PC_OPTIONS:             frontOptionsMenuInterface();              break;
-#endif
         case MENU_RUN_STAGE:
             if (interface_menu0B_runstage())
             {
@@ -8879,11 +8870,6 @@ Gfx * menu_jump_constructor_handler(Gfx *DL)
             break;
         case MENU_SPECTRUM_EMU:
             DL = constructor_menu19_spectrum(DL);
-#ifdef PORT
-            break;
-        case MENU_PC_OPTIONS:
-            DL = frontOptionsMenuDraw(DL);
-#endif
     }
 
 #ifdef PORT

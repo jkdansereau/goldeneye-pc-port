@@ -83,6 +83,8 @@ void videoRequestLiveConfigForKey(const char *key);
  * (host thread) applies. The Get* helpers are read-only and thread-safe. */
 void videoRequestWindowSize(int w, int h);
 void videoRequestFullscreen(int on);
+void videoRequestFullscreenMode(int exclusive);   /* D511 */
+void videoRequestCenterWindow(void);               /* D511 */
 void videoGetWindowSize(int *w, int *h);
 /* D447: the output rect as fractions of the window (0..1, top-left origin);
  * (0,0,1,1) unless Video.AspectMode = Original is letter/pillarboxing. */

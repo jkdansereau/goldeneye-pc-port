@@ -1108,6 +1108,10 @@ static void geEepromLoad(void)
     if (s_eepromLoaded) return;
     s_eepromLoaded = 1;
     const char *path = sysResolvePath(GE_EEP_PATH);
+    /* D514: before the game's first EEPROM read, convert an emulator-format
+     * save in place (port/src/eepimport.c). Runs before fopen so the load
+     * below sees the converted bytes; no-op for a port-format save. */
+    geEepImportEmulatorSave(path);
     FILE *fp = fopen(path, "rb");
     if (fp) {
         fread(s_eeprom, 1, GE_EEP_SIZE, fp);
@@ -1132,6 +1136,7 @@ static void geEepromStore(void)
 }
 
 extern int geLegacyCrcMaybeMigrateSlots(u8 *slots5); /* port/src/legacycrc.c (D297) */
+extern int geEepImportEmulatorSave(const char *path); /* port/src/eepimport.c (D514) */
 
 /* D442: Game.AllUnlocked is a pure RAM/query-time override (file2.c
  * fileGetIsCheatUnlocked + the debug flags seeded in main.c). The EEPROM

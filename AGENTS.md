@@ -93,6 +93,20 @@ Needs CMake + SDL2 + zlib + OpenGL, and must run from the MSYS2 MINGW64 shell
    shell the re-exec itself is legitimately needed (no TMP), so the probe
    is correct. Verified: MSYS2-PATH shell, forced `TMP=C:\Windows\`, and a
    no-change incremental run all exit 0 with a fresh exe.
+   **FIXED 2026-10-04 (`fix/build-arch-tag`, D515):** a FRESH build dir
+   configured through the re-exec cached `CMAKE_HOST_SYSTEM_PROCESSOR ""` /
+   `CMAKE_SYSTEM_PROCESSOR ""` (the stripped env also drops
+   `PROCESSOR_ARCHITECTURE`, which CMake reads for the host processor — same
+   class as PATHEXT/ComSpec), so `cmake/TargetArch.cmake` produced an empty
+   arch tag: `Target arch:  (64bit=FALSE)`, binary named `ge007..exe`
+   (a correct 64-bit build; only the name was wrong — found during T7, D513).
+   The `.ps1` now restores `PROCESSOR_ARCHITECTURE` from the machine
+   environment (fallback `AMD64`; `SystemRoot`/`windir` likewise) and logs
+   the four vars to the diag log; `cmake/TargetArch.cmake` falls back to
+   `${CMAKE_C_COMPILER} -dumpmachine` when `CMAKE_SYSTEM_PROCESSOR` is empty
+   and FATAL_ERRORs instead of emitting an untagged binary. Existing build
+   dirs are unaffected (value already cached); a dir configured before the
+   fix picks up x86_64 on its next in-place reconfigure.
 2. **`cannot open output file ge007.x86_64.exe: Permission denied`.** A
    **running** `ge007.x86_64.exe` locks the output file (Windows rule; you
    can't relink over a live PE). Check with `Get-Process | Where-Object {

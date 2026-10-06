@@ -151,6 +151,23 @@ $env:PATH = "$UsrBin;$Bin;C:\Windows\System32;C:\Windows;C:\Windows\System32\Wbe
 # stays $null (the rc=2 "did not execute" regression). Restore them.
 $env:PATHEXT = '.COM;.EXE;.BAT;.CMD'
 if (-not $env:ComSpec) { $env:ComSpec = 'C:\Windows\System32\cmd.exe' }
+# D515: same class of bug as PATHEXT/ComSpec above — a stripped re-exec env
+# can also drop PROCESSOR_ARCHITECTURE, which CMake reads to fill
+# CMAKE_HOST_SYSTEM_PROCESSOR; empty value -> empty TARGET_ARCH -> "ge007..".
+# Restore it from the machine environment (fallback 'AMD64'), and restore
+# SystemRoot/windir the same way (standard Windows vars native tools expect).
+if (-not $env:PROCESSOR_ARCHITECTURE) {
+    $env:PROCESSOR_ARCHITECTURE = [Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITECTURE', 'Machine')
+    if (-not $env:PROCESSOR_ARCHITECTURE) { $env:PROCESSOR_ARCHITECTURE = 'AMD64' }
+}
+if (-not $env:SystemRoot) {
+    $env:SystemRoot = [Environment]::GetEnvironmentVariable('SystemRoot', 'Machine')
+    if (-not $env:SystemRoot) { $env:SystemRoot = 'C:\Windows' }
+}
+if (-not $env:windir) {
+    $env:windir = [Environment]::GetEnvironmentVariable('windir', 'Machine')
+    if (-not $env:windir) { $env:windir = 'C:\Windows' }
+}
 # Writable temp for the native toolchain. [System.IO.Path]::GetTempPath()
 # CANNOT be used here: it honours the inherited (broken) TMP/TEMP env vars
 # and returned C:\Windows\. Pick the first writable candidate instead.
@@ -169,6 +186,10 @@ if ($null -eq $tmpdir) { "no writable temp dir found" | Out-File $diag -Encoding
 $env:TMP = $tmpdir
 $env:TEMP = $tmpdir
 "start UsrBin=[$UsrBin] Bin=[$Bin] MsysRoot=[$MsysRoot] Here=[$Here] BuildDir=[$BuildDir] RomId=[$RomId] tmp=[$tmpdir]" | Out-File $diag -Encoding ascii
+# D515 diag: the stripped re-exec env can also drop PROCESSOR_ARCHITECTURE,
+# which CMake reads to fill CMAKE_HOST_SYSTEM_PROCESSOR (empty value ->
+# empty TARGET_ARCH -> "ge007.."). One line, cheap, useful next time.
+"env PROCESSOR_ARCHITECTURE=[$env:PROCESSOR_ARCHITECTURE] PROCESSOR_ARCHITEW6432=[$env:PROCESSOR_ARCHITEW6432] SystemRoot=[$env:SystemRoot] windir=[$env:windir]" | Out-File $diag -Append -Encoding ascii
 $exe = "$Bin\cmake.exe"
 "exe=[$exe] exists=[$(Test-Path -LiteralPath $exe)]" | Out-File $diag -Append -Encoding ascii
 # A missing exe makes `& $exe` throw (caught below) and leaves LASTEXITCODE

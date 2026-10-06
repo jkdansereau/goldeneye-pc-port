@@ -84,7 +84,9 @@ int inputBindingSetSlot(const char *key, int slot, int code);
 int inputBindingResetKey(const char *key);
 
 /* D469: gamepad action table, presets and per-seat rebinding.
- * Input.PadPreset 0 = Jinx 1.1 (default), 3 = Custom (Input.Pad[N].<Action>).
+ * D518: the preset is per seat -- Input.PadPreset (seat 1; pre-D518 global
+ * key) plus Input.PadPreset2/3/4. 0 = Jinx 1.1 (default), 3 = Custom
+ * (Input.Pad[N].<Action>).
  * Seat = pads[] index. Sources are indices into the SDL-name table
  * (inputPadSourceName); -1 = none. */
 int  inputPadActionCount(void);
@@ -95,6 +97,7 @@ const char *inputPadSourceName(int src);
 int  inputPadSeatPresent(int seat);
 unsigned inputPadHeldSources(int seat);            /* bit i = source i held */
 int  inputPadPresetStep(int cur, int dir);
+int *inputPadPresetPtr(int seat);                 /* D518: per-seat preset value */
 void inputPadBindingText(int seat, int act, int slot, char *out, int n);
 int  inputPadBindingSet(int seat, int act, int slot, int src);   /* src < 0 clears */
 int  inputPadBindingReset(int act);                /* all seats; returns seats changed */

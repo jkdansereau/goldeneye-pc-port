@@ -35,6 +35,27 @@ run into as a result:
   actions it uses (by commit SHA), so what ships is reproducible from this
   repository.
 
+### Verifying a release build (build provenance)
+
+From **v0.5.0** on, the tag-only CI job attaches an in-toto SLSA
+build-provenance attestation to each release artifact (the zip/tarball and
+its `.sha256` sidecars). The attestation is signed by GitHub's OIDC key for
+*this repository's* workflow running the tagged commit. It does not replace a
+code signature — but it proves that the exact file you downloaded was produced
+by this repo's CI from the release tag, and nothing else. Verify any
+downloaded artifact with:
+
+```sh
+gh attestation verify goldeneye-pc-port-0.5.0-win64.zip \
+  --repo jkdansereau/goldeneye-pc-port
+```
+
+(use the name of the file you downloaded, e.g.
+`goldeneye-pc-port-0.5.0-linux-x86_64.tar.gz` on Linux). A passing check confirms both
+the file's digest and its provenance; a tampered or foreign file fails.
+Releases before v0.5.0 have no attestations — for those, the per-file
+`.sha256` sidecars and a from-source build are the available checks.
+
 ## Reporting a vulnerability
 
 Please **do not** open a public issue for a security problem.

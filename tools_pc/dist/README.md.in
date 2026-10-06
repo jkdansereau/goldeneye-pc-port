@@ -86,6 +86,7 @@ Everything stays inside this folder; nothing is written anywhere else.
 | File | What it is |
 |---|---|
 | `data/ge007.eep` | Your game progress. Copy it somewhere safe (with the game closed) to back it up. |
+| `tools/eep_convert.py` | Converts a save from an N64 emulator (1964, Project64, ...) to this port, or back: `python tools/eep_convert.py n64-to-pc my-save.eep data/ge007.eep`. A straight copy of an emulator save is wiped on first launch. Needs Python 3; back up `data/ge007.eep` first. |
 | `data/ge007.ini` | Your settings. |
 | `data/pcmodels-*/`, `data/pccg-*/`, `data/ge007.shaders` | Generated files. Safe to delete; they are made again. |
 | `ge007.crash.log` | Written in the folder you launched from if the game crashes. |

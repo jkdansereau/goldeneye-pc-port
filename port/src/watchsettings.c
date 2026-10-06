@@ -8,6 +8,7 @@
 #include "file.h"
 #include "file2.h"
 #include "front.h"
+#include "language.h"   /* j_text_trigger */
 #include "options.h"
 #include "player.h"
 #include "system.h"
@@ -50,15 +51,31 @@ static int wsStageWasActive = 0;
 
 static const char *const keys[WATCH_SETTING_COUNT] = {
     "Bond.Music", "Bond.FX", "Bond.Look", "Bond.AutoAim",
-    "Bond.AimControl", "Bond.Sight", "Bond.LookAhead", "Bond.Ammo"
+    "Bond.AimControl", "Bond.Sight", "Bond.LookAhead", "Bond.Ammo", "Bond.Control"
 };
 static const u16 bits[WATCH_SETTING_COUNT] = {
     0, 0, OPTION_INVERTLOOK, OPTION_AUTOAIM, OPTION_AIMCONTROL,
-    OPTION_SIGHTONSCREEN, OPTION_LOOKAHEAD, OPTION_DISPLAYAMMO
+    OPTION_SIGHTONSCREEN, OPTION_LOOKAHEAD, OPTION_DISPLAYAMMO, OPTION_CONTROLTYPE
 };
 
-/* Explicit chooser is separate from selected_folder_num (which frontoptions
- * assigns FOLDER1 merely to draw its dossier background). -1 means none
+/* D516: WATCH_SETTING_CONTROL is a 3-bit value (options bits 8-10), not a
+ * flag. The seat it addresses is chosen by the F10 Controller page. It is
+ * stage-only: the style lives on the live player (the front end has none). */
+static SDL_atomic_t controlSeat;
+void watchSettingsSetControlSeat(int seat)
+{
+    SDL_AtomicSet(&controlSeat, seat < 0 ? 0 : (seat > 3 ? 3 : seat));
+}
+/* The seat's live player, or NULL. Solo: g_CurrentPlayer (seat 0 only).
+ * Split-screen: player N owns seat N (D416). Reads only; never swaps
+ * g_CurrentPlayer (the poll thread is not the game thread). */
+static struct player *controlPlayer(int seat)
+{
+    if (getPlayerCount() > 1) return (seat >= 0 && seat < 4 && seat < getPlayerCount()) ? g_playerPointers[seat] : NULL;
+    return seat == 0 ? g_CurrentPlayer : NULL;
+}
+
+/* Explicit chooser is separate from selected_folder_num (the folder file select is viewing). -1 means none
  * (unresolved; frontFolder() lazily defaults it). D352: guarded by uiLock;
  * D354: also read/written by F10 front-end contexts (input thread), which
  * is why the lock exists. */
@@ -69,7 +86,7 @@ static SDL_SpinLock uiLock;
 
 /* Bounded producer (F10 controller poll) -> consumer (game thread) queues.
  * Snapshot is also guarded; F10 input/render never call GE save routines. */
-struct Command { int folder, field, value, commit; };
+struct Command { int folder, field, value, commit, seat; };   /* seat: D516, WATCH_SETTING_CONTROL only */
 #define CMD_CAP 128
 static struct Command cmds[CMD_CAP];
 static int head, count;
@@ -194,6 +211,7 @@ int watchSettingsBlankValue(enum WatchSettingField field)
     if ((unsigned)field >= WATCH_SETTING_COUNT) return 0;
     if (field == WATCH_SETTING_MUSIC) return ((int)kBlankSave.music_vol << 7) | (kBlankSave.music_vol >> 1);
     if (field == WATCH_SETTING_FX)    return ((int)kBlankSave.sfx_vol << 7) | (kBlankSave.sfx_vol >> 1);
+    if (field == WATCH_SETTING_CONTROL) return (kBlankSave.options & OPTION_CONTROLTYPE) >> 8;
     return (kBlankSave.options & bits[field]) ? 1 : 0;
 }
 
@@ -234,7 +252,7 @@ static int frontFolder(void)
 int watchSettingsAvailable(void)
 {
     if (!stageActive()) {
-        /* Front end: MENU_PC_OPTIONS, or F10 over file select / title.
+        /* Front end: F10 over file select / title.
          * D354: F10 front contexts were mis-routed through the stage path
          * (and returned "unavailable"), disabling every Bond row. */
         return validSave(frontFolder()) != NULL;
@@ -250,12 +268,21 @@ static int savedValue(const save_data *save, enum WatchSettingField field)
 {
     if (field == WATCH_SETTING_MUSIC) return ((int)save->music_vol << 7) | (save->music_vol >> 1);
     if (field == WATCH_SETTING_FX) return ((int)save->sfx_vol << 7) | (save->sfx_vol >> 1);
+    if (field == WATCH_SETTING_CONTROL) return (save->options & OPTION_CONTROLTYPE) >> 8;
     return (save->options & bits[field]) ? 1 : 0;
 }
 
 int watchSettingsRead(enum WatchSettingField field)
 {
     if ((unsigned)field >= WATCH_SETTING_COUNT) return 0;
+    if (field == WATCH_SETTING_CONTROL) {   /* D516: snapshot only; -1 = no live player */
+        int v = -1;
+        SDL_AtomicLock(&lock);
+        if (stageActive() && snapFolder >= FOLDER1 && snapFolder < MAX_FOLDER_COUNT)
+            v = snapshot[field];
+        SDL_AtomicUnlock(&lock);
+        return v;
+    }
     if (!stageActive()) {
         int f = frontFolder(), stagedVal = -1;
         SDL_AtomicLock(&uiLock);
@@ -285,6 +312,9 @@ static int watchSettingsPersistField(int folder, enum WatchSettingField field)
         sysLogPrintf(LOG_WARNING, "watchsettings: persist field %d skipped: no current player", field);
         return 0;
     }
+    /* D516: the style is saved to the Bond file in solo only (file2.c
+     * fileLoadSettingsForFolder forces 1.1 for 2+ players, as on the N64). */
+    if (field == WATCH_SETTING_CONTROL && getPlayerCount() != 1) return 1;
     save_data *save = validSave(folder);
     if (!save) {
         sysLogPrintf(LOG_WARNING, "watchsettings: persist field %d in Bond file %d: no valid save (CRC?)", field, folder + 1);
@@ -318,6 +348,7 @@ static int watchSettingsPersistField(int folder, enum WatchSettingField field)
  * (which also applies the chosen file's audio volume to the front end). */
 static void saveFrontField(int folder, enum WatchSettingField field, int value)
 {
+    if (field == WATCH_SETTING_CONTROL) return;   /* D516: stage only */
     save_data *save = validSave(folder);
     if (!save) {
         sysLogPrintf(LOG_WARNING, "watchsettings: save field %d in Bond file %d: no valid save (CRC?)", field, folder + 1);
@@ -347,6 +378,7 @@ static void saveFrontField(int folder, enum WatchSettingField field, int value)
 void watchSettingsSet(enum WatchSettingField field, int value, int commit)
 {
     if ((unsigned)field >= WATCH_SETTING_COUNT || !watchSettingsAvailable()) return;
+    if (field == WATCH_SETTING_CONTROL && !stageActive()) return;   /* D516: no live player */
     if (!stageActive()) {
         int f = frontFolder();
         SDL_AtomicLock(&uiLock);
@@ -392,7 +424,7 @@ void watchSettingsSet(enum WatchSettingField field, int value, int commit)
      * setters fire once per frame instead of once per detent. */
     for (int i = 0; i < count; i++) {
         struct Command *c = &cmds[(head + i) % CMD_CAP];
-        if (c->field == (int)field) {
+        if (c->field == (int)field && (field != WATCH_SETTING_CONTROL || c->seat == SDL_AtomicGet(&controlSeat))) {
             c->value = value;
             c->commit |= commit;
             snapshot[field] = value;
@@ -400,7 +432,7 @@ void watchSettingsSet(enum WatchSettingField field, int value, int commit)
             return;
         }
     }
-    struct Command cmd = { snapFolder, field, value, commit };
+    struct Command cmd = { snapFolder, field, value, commit, SDL_AtomicGet(&controlSeat) };
     if (count < CMD_CAP) {
         cmds[(head + count++) % CMD_CAP] = cmd;
         snapshot[field] = value; /* immediate UI feedback for held adjustments */
@@ -441,8 +473,33 @@ static int liveValue(enum WatchSettingField field)
     case WATCH_SETTING_SIGHT: return cur_player_get_sight_onscreen_control();
     case WATCH_SETTING_LOOKAHEAD: return cur_player_get_lookahead();
     case WATCH_SETTING_AMMO: return cur_player_get_ammo_onscreen_setting();
+    case WATCH_SETTING_CONTROL: {   /* D516: -1 when the seat has no live player */
+        struct player *p = controlPlayer(SDL_AtomicGet(&controlSeat));
+        return p ? (int)p->cur_player_control_type_0 : -1;
+    }
     default: return 0;
     }
+}
+
+static void applyControl(int seat, int value)
+{
+    /* D516: same fields cur_player_set_control_type (options.c) writes. Solo
+     * uses the setter itself (the watch's own path); split-screen writes the
+     * seat's player struct directly (no g_CurrentPlayer swap, D416). */
+    if (value < 0) value = 0;
+    if (value > 7) value = 7;
+    if (getPlayerCount() == 1) {
+        if (seat == 0) cur_player_set_control_type(value);
+        return;
+    }
+    struct player *p = controlPlayer(seat);
+    if (!p) return;
+    p->cur_player_control_type_0 = value;
+    p->cur_player_control_type_1 = value;
+    p->cur_player_control_type_2 = (float)value;
+    p->neg_vspacing_for_control_type_entry = -((j_text_trigger ? 14 : 10) * value);
+    p->has_set_control_type_data = TRUE;
+    sysLogPrintf(LOG_INFO, "watchsettings: seat %d control style %d", seat, value);
 }
 
 static void applyValue(enum WatchSettingField field, int value)
@@ -608,6 +665,11 @@ void watchSettingsGameTick(void)
         if (c->folder != selected_folder_num ||
             (unsigned)c->field >= WATCH_SETTING_COUNT ||
             !validSave(c->folder)) continue;
+        if (c->field == WATCH_SETTING_CONTROL) {
+            applyControl(c->seat, c->value);
+            if (c->commit && c->seat == 0) watchSettingsPersistField(c->folder, WATCH_SETTING_CONTROL);
+            continue;
+        }
         applyValue((enum WatchSettingField)c->field, c->value);
         if (c->commit) watchSettingsPersistField(c->folder, (enum WatchSettingField)c->field);
     }
