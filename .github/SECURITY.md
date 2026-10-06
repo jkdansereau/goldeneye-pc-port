@@ -12,7 +12,7 @@ surface is:
 
 A full walkthrough of what a release actually installs on your machine, and
 what a from-source build pulls in, is in
-[`docs/security-and-fidelity-status.md`](../docs/security-and-fidelity-status.md).
+[`docs/security.md`](../docs/security.md).
 
 ### Why the binaries are unsigned
 

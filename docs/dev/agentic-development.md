@@ -12,8 +12,8 @@ part-time direction. The goal, the setup, the timeline, and an honest read on
 what did and didn't work.*
 
 > *Snapshot as of the v0.3.0 milestone (20 Sep 2026; findings through D321).
-> v0.4.0 (28 Sep) extended the timeline with the options/input work -- the
-> README's Background section carries the final project numbers.*
+> v0.4.0 (28 Sep) extended the timeline with the options/input work — the
+> README's "How it was made" section carries the final project numbers.*
 
 ## Contents
 
@@ -300,25 +300,8 @@ last few weeks), which has driven the most recent work. The local menu:
   **mostly deprecated now**: hand-offs between agents are done by hand for now,
   pending a better parallel-agent handoff system that drops the MCP overhead.
 - **GPT-6 (Sol)** via [OpenRouter](https://openrouter.ai) — a frontier hosted
-  model, **trialed** to see how it held up (not the hardest-work tool). Its
-  code output is still owed a code-quality audit in this doc.
+  model, **trialed** to see how it held up (not the hardest-work tool).
 
 The practical effect: the project stopped depending on any one model or its
 usage limits. The local GPU is now the default path for high-volume work, with
 hosted frontier models reserved for the problems the local models can't close.
-
-**Measurement owed.** Which of these was best on a given task — and each
-model's rough cost-to-performance ratio — has not yet been measured properly;
-attributing individual commits to the model that produced them is still a
-manual pass. That includes a **code-quality audit of the GPT-6 (Sol) trial**.
-All of it is pending and will be added here when it lands.
-
-A concrete reason the commit-date route is unreliable: the `D350` commit
-(`1303c0eb`, "expose watch-backed Bond settings in PC options and F10")
-carries a **27 Sep** timestamp on both its author and committer dates, but
-the session notes place that work on **4 Oct**. Because the two git dates
-agree, this is **not** a rebase artifact (a rebase would have moved the
-committer date while preserving the author date); it is a genuine divergence
-between the recorded commit time and the working session, and resolving it
-takes the session log, not the commit date. This is the class of edge case
-the attribution pass has to walk by hand.

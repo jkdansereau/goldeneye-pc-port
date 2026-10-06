@@ -5,6 +5,16 @@ description: >-
   A native PC port of GoldenEye 007 (Nintendo 64, 1997), built from
   decompiled source with a software RSP. v0.5.0 for Windows, Linux and
   Steam Deck.
+# Freshness signals for jekyll-seo-tag (article:published_time / modified_time
+# and the WebPage JSON-LD dates). Keep these equal to the last real content
+# change of THIS page, not to the last release.
+date: '2026-10-05'
+modified_time: '2026-10-05'
+locale: en_US
+# The masthead is this page's title, so its first content h2 must NOT get the
+# amber page-title look (double header). See the .flat-title rule in
+# _includes/head-custom.html.
+flat_title: true
 ---
 
 A native PC port of _GoldenEye 007_ (Rare, 1997, Nintendo 64), compiled from
@@ -16,60 +26,82 @@ in a dedicated `port/` layer, following the architecture of the
 [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark), the same
 Rare "Indy" engine family, one hardware generation apart.
 
-[Download](#download) · [News](#news) · [See it running](#see-it-running) · [Known issues](#known-issues) · [Documentation](#documentation)
+[Status](#status) · [Download](#download) · [See it running](#see-it-running) · [Known issues](#known-issues) · [Documentation](#documentation)
 
-**Status: v0.5.0 (2026-10-05) — fully playable, with a small set of known
-caveats.** The single-player campaign and the 2–4 player split-screen
-multiplayer both run at a steady 60 fps. The single-player campaign is
-completable end to end (all 20 missions plus the ending-credits sequence),
-and the 2–4 player split-screen campaign is supported on every multiplayer
-map; both were playtested on Windows, Linux and Steam Deck. This release
-adds **one
-options menu** (laid out like the Perfect Dark port's, with plain-English
-wording, real-unit sliders and a one-line description per option), the game's
-own **N64 control styles as a per-seat preset**, **direct loading of
-emulator save files**, a **scalable HUD overlay**, fullscreen and
-window-centring controls, and a **fidelity round checked frame-by-frame
-against the N64 game** (fog, aspect-ratio letterboxing, the Watch menu's own
-settings). What remains is a short list, under
-[Known issues](#known-issues).
+## Status
 
-**This is a pre-1.0 release, not a finished product** — v1.0 is the target
+<div class="cblock">
+
+### v0.5.0 (2026-10-05) — the campaign and split-screen both run end to end.
+
+- **Single-player campaign complete.** All 20 missions plus the
+  ending-credits sequence, completable end to end at a steady 60 fps.
+- **2–4 player split-screen multiplayer.** Supported on every multiplayer
+  map; playtested on Windows, Linux and Steam Deck.
+- **One real options system.** A single menu, laid out like the Perfect
+  Dark port's — plain-English wording, real-unit sliders, a one-line
+  description per option — with the game's own **N64 control styles as a
+  per-seat preset**.
+- **Emulator save files load directly.** Copy a 1964 / Project64 save into
+  `data/` and it is converted on first launch.
+- **A scalable HUD overlay**, fullscreen and window-centring controls, and
+  antialiased overlay controls.
+- **A fidelity round checked frame-by-frame against the N64 game** (fog,
+  aspect-ratio letterboxing, the Watch menu's own settings), with the
+  reference-frame gate re-based on both platforms (21 levels, 63 frames
+  each).
+- The small stuff: a menu wording, units and help-text pass, and
+  standardised menu spelling.
+
+</div>
+
+What remains is a short list, under [Known issues](#known-issues).
+
+**This is a pre-1.0 release, not a finished product.** v1.0 is the target
 for a polished, feature-complete build; expect missing features and the
-occasional breaking change until then. See the
-[README's Roadmap section](https://github.com/jkdansereau/goldeneye-pc-port#roadmap)
-for direction (PAL/JP ROM support, macOS and ARM builds, the remaining small
-accuracy differences, and post-1.0 opt-in extras).
+occasional breaking change until then. The [README's Roadmap
+section](https://github.com/jkdansereau/goldeneye-pc-port#roadmap) is the
+single tracker for what comes next.
 
-## News
+<details id="known-issues">
+<summary>Known issues</summary>
 
-- **2026-10-05** — **v0.5.0**: one options menu with plain-English wording,
-  real-unit sliders and a one-line description per option; the N64 control
-  styles as a per-seat preset; direct emulator-save loading; a scalable HUD
-  overlay; fullscreen and window-centring controls; and a fidelity round
-  checked frame-by-frame against the N64 game. The reference-frame gate was
-  re-based on both platforms (21 levels, 63 frames each).
-  [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0) ·
-  [downloads](#download).
-- **2026-09-28** — **v0.4.0**: native widescreen, a complete aim system for
-  mouse and controller, in-game key rebinding, crosshair customization,
-  rumble-pak haptics, a rebuilt options overlay, and a broad fidelity-fix
-  pass (water, particles, billboard trees, front-end logo, gunshot SFX, a
-  true stable 60 fps). [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.4.0) ·
-  [downloads](#download).
-- **2026-09-20** — **v0.3.0**: the first release with the complete campaign
-  playable end to end at 60 fps on Windows, Linux, and Steam Deck.
-  [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.3.0).
-- **2026-09-04 → 2026-09-16** — **v0.1.0 – v0.2.2**: the alpha and beta
-  cycle — build chain, software RSP, first rendered frames, front end, and
-  per-level stabilization across the campaign.
+<p>Full table in the <a href="https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/ROADMAP.md#known-issues">roadmap's known-issues section</a>; root causes in the <a href="https://github.com/jkdansereau/goldeneye-pc-port/tree/main/docs/dev">finding log</a>.</p>
+
+<ul>
+<li><strong>NTSC-U ROMs only in the release packages.</strong> PAL and JP ROMs convert, build and run from source, but release packages ship the US (NTSC-U) ROM. On the roadmap.</li>
+<li><strong>Changing the aspect ratio in a level can briefly glitch the gun/hand model</strong> (cosmetic, one-off). Change the ratio from the front-end PC Options, or accept it (D509).</li>
+<li><strong>No macOS or ARM builds yet.</strong> Today the release ships Windows, Linux and Steam Deck (keyboard, mouse and controller-button rebinding are all supported, defaults in the <a href="https://github.com/jkdansereau/goldeneye-pc-port#controls">README's Controls section</a>); macOS and ARM are on the roadmap.</li>
+<li><strong><code>Skip intro</code> and <code>All unlocked</code> are experimental</strong> — leave them off for a normal playthrough. <code>All unlocked</code> has not written your save since v0.4.1, but saves made while it was on in builds before v0.4.1 can hold fake unlocks and are not repaired; back up <code>data/ge007.eep</code> if you used it on an older build (D442, D387).</li>
+<li><strong>The first frame of a level takes a little longer</strong> while its textures upload — a brief FPS-counter dip; nothing to fix (D475, D480).</li>
+<li><strong>In widescreen, far objects almost fully in fog can still show a faint distant building edge</strong> (4:3 matches the N64). Cosmetic (D503).</li>
+</ul>
+
+</details>
+
+<details>
+<summary>Release history</summary>
+
+<p class="warn"><strong>Warning:</strong> always use the latest release — earlier builds are kept in the release history for reference only; they lack the features and fixes of newer versions, so don't install an older release.</p>
+
+<ul>
+<li><strong>2026-10-05 — v0.5.0</strong>: what it adds is the Status list above. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0">Release notes</a>.</li>
+<li><strong>2026-09-28 — v0.4.0</strong>: native widescreen, a complete aim system for mouse and controller, in-game key rebinding, crosshair customization, rumble-pak haptics, a rebuilt options overlay, and a broad fidelity-fix pass. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.4.0">Release notes</a>.</li>
+<li><strong>2026-09-20 — v0.3.0</strong>: the first release with the complete campaign playable end to end at 60 fps on Windows, Linux, and Steam Deck. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.3.0">Release notes</a>.</li>
+<li><strong>2026-09-04 → 2026-09-16 — v0.1.0 – v0.2.2</strong>: the alpha and beta cycle — build chain, software RSP, first rendered frames, front end, and per-level stabilization across the campaign.</li>
+</ul>
+
+</details>
 
 ## Download
+
+<div class="cblock">
 
 | Platform | Bundle | Notes |
 |---|---|---|
 | **Windows** (x86_64) | [win64.zip](https://github.com/jkdansereau/goldeneye-pc-port/releases) | Engine + runtime DLLs + the one-time asset tool. |
 | **Linux** (x86_64) / **Steam Deck** | [linux tarball](https://github.com/jkdansereau/goldeneye-pc-port/releases) | SDL2 is bundled, so it runs as-is on any distro, and sideloads onto a Deck with nothing installed. |
+| macOS / ARM Linux | — | Roadmap: not shipped yet. |
 
 **Bring your own ROM.** Both bundles contain no ROM and no game assets: you
 supply your own GoldenEye 007 N64 ROM (the
@@ -79,8 +111,16 @@ ROM; PAL and JP are on the roadmap. Then: unpack, drop the ROM in `data/`,
 and launch; the first run generates the derived assets automatically (no
 Python or other tooling needed). The full steps are in the
 [Quick start](https://github.com/jkdansereau/goldeneye-pc-port#quick-start);
-pre-built releases are legal to distribute precisely because they're useless
-without a ROM you already own.
+  the packages carry no ROM or game assets, and run only with a ROM you
+already own. The binaries are not code-signed; each
+release artifact carries a GitHub build-provenance attestation you can
+verify with `gh attestation verify <file> --repo
+jkdansereau/goldeneye-pc-port`.
+
+</div>
+
+What the release actually installs is covered on [Security status](security.md);
+how faithfully it tracks the N64 game, on [Fidelity status](fidelity.md).
 
 ## See it running
 
@@ -91,74 +131,17 @@ without a ROM you already own.
     <span class="idx" id="vIdx">1 / 12</span>
   </div>
   <div class="vstage">
-    <img id="vImg" src="img/shots/shot-01.jpg" alt="in-engine capture">
+    <img id="vImg" src="img/shots/shot-01.jpg" alt="GoldenEye 007 PC port — Dam (v0.4.0 intro attract), in-engine capture">
     <button class="vbtn prev" id="vPrev" aria-label="previous capture">&#8249;</button>
     <button class="vbtn next" id="vNext" aria-label="next capture">&#8250;</button>
   </div>
   <div class="vcap"><span id="vCap">Dam &mdash; v0.4.0 intro attract</span></div>
 </div>
 
-<details>
-<summary><strong>Full gallery</strong>: 12 in-engine captures from a v0.4.0 intro-attract pass (3072×1728 widescreen, Sep 2026)</summary>
-
-<p align="center">
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-01.jpg" width="100%" alt="In-engine: Dam (v0.4.0 intro attract)">
-    <div><small>Dam</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-03.jpg" width="100%" alt="In-engine: Runway (v0.4.0 intro attract)">
-    <div><small>Runway</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-04.jpg" width="100%" alt="In-engine: Surface (v0.4.0 intro attract)">
-    <div><small>Surface</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-09.jpg" width="100%" alt="In-engine: Frigate (v0.4.0 intro attract)">
-    <div><small>Frigate</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-11.jpg" width="100%" alt="In-engine: Surface 2 (v0.4.0 intro attract)">
-    <div><small>Surface 2</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-16.jpg" width="100%" alt="In-engine: Statue (v0.4.0 intro attract)">
-    <div><small>Statue</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-20.jpg" width="100%" alt="In-engine: Archives (v0.4.0 intro attract)">
-    <div><small>Archives</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-21.jpg" width="100%" alt="In-engine: Cradle (v0.4.0 intro attract)">
-    <div><small>Cradle</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-24.jpg" width="100%" alt="In-engine: Aztec (v0.4.0 intro attract)">
-    <div><small>Aztec</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-27.jpg" width="100%" alt="In-engine: Control (v0.4.0 intro attract)">
-    <div><small>Control</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-28.jpg" width="100%" alt="In-engine: Streets (v0.4.0 intro attract)">
-    <div><small>Streets</small></div>
-  </div>
-  <div style="width:32%;text-align:center;margin:4px">
-    <img src="img/shots/shot-29.jpg" width="100%" alt="In-engine: Jungle (v0.4.0 intro attract)">
-    <div><small>Jungle</small></div>
-  </div>
-</p>
-</details>
-
-More captures may land here as playtesting continues.
-
 ## Play it, or take it apart
 
 - **Try it yourself**: grab a bundle above, bring your own ROM, and play the
-  campaign. It's an early cut for exactly this: if something breaks, an
+  campaign. It's a pre-1.0 build for exactly this: if something breaks, an
   [issue](https://github.com/jkdansereau/goldeneye-pc-port/issues) with what
   you were doing is genuinely useful.
 - **Read the code**: the game logic in `src/` is unmodified decompilation;
@@ -172,80 +155,51 @@ More captures may land here as playtesting continues.
   asset sidecar. [CONTRIBUTING](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/CONTRIBUTING.md)
   has the ground rules that keep it faithful to the original game.
 - **AI disclosure**: development here used AI coding agents — Claude Code
-  plus a local open-weight model on a single RTX 5090, directed by one person in their
-  spare time. The project is as much a study of that process as it is a
-  port, and the write-up is written to let you judge the result for yourself;
-  it records what happened and takes no position for or against using LLMs
-  on a project like this. See [the full
+  plus a local open-weight model on a single RTX 5090, directed by one person
+  in their spare time. The project is as much a study of that process as it
+  is a port; the write-up records what happened and takes no position for or
+  against using LLMs on a project like this. See [the full
   write-up](dev/agentic-development.md) — the setup, timeline, handoff
   workflow, and an honest account of what did and didn't work.
 
 ## How it works
 
-The R4300 game code's logic and control flow are the decompilation's, and remain the
-reference we preserve. The port's changes inside `src/` are few in kind (mostly mechanical 32→64-bit pointer fixes, a couple of approved timing fixes, and the opt-in *All unlocked* hook), each gated behind `#ifdef PORT`. The N64's Reality Signal Processor, the graphics
-coprocessor that builds and executes each frame's display list, is emulated in
-software: the port interprets the graphics command stream (GBI) the game emits and translates it
-to OpenGL, bypassing the RDP entirely. Everything else that would touch N64
-hardware (video, audio, input, timers, save storage) is shimmed in a small
-dedicated layer, following the architecture of the Perfect Dark PC port from
-the same Rare engine family. Full detail: [Internals](internals.md); the bug
+The R4300 game code's logic and control flow are the decompilation's, and
+remain the reference we preserve. The port's changes inside `src/` are few in
+kind and each is gated behind `#ifdef PORT`: mechanical 32→64-bit
+pointer-width fixes, a couple of approved timing fixes, and the opt-in
+*All unlocked* and *Skip intro* hooks. The N64's Reality Signal Processor
+(RSP), the graphics coprocessor that builds and executes each frame's
+display list, is emulated in software: the port interprets the graphics
+command stream (GBI) the game emits and translates it to OpenGL, bypassing
+the RDP entirely. Everything else that would touch N64 hardware (video,
+audio, input, timers, save storage) is shimmed in a small dedicated layer,
+following the architecture of the Perfect Dark PC port from the same Rare
+engine family. Full detail: [Internals](internals.md); the bug
 catalogue: [Porting notes](porting-notes.md).
-
-## Known issues
-
-Known defects and limitations as of v0.5.0, each with its finding-log
-reference. The full list, with root causes and fix status: the
-[release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases)
-and the [finding log](https://github.com/jkdansereau/goldeneye-pc-port/tree/main/docs/dev).
-
-- **Facility — gas leak during Ourumov's monologue (D318).** If gas leaks,
-  he can pause for up to ~10 s before the scripted shootout resumes. The
-  race exists in the N64 original too (where it softlocks permanently);
-  the port detects it and auto-recovers.
-- **F10 options overlay under native widescreen (D335b).** The overlay
-  stretches with the window instead of pillarboxing like the front-end
-  menus. Legible, cosmetic only; the F10 *Native widescreen* toggle
-  restores the old stretched frame throughout. The world/HUD widescreen
-  rendering itself is correct.
-- **Front-end Rareware logo (D75).** A subtle texture-filtering artifact;
-  the Nintendo logo and legal page are clean. Cosmetic only.
-- **`All unlocked` is experimental (D387).** The fresh-install corruption
-  case is fixed, but saves made while it is on are not guaranteed
-  recoverable by switching it off — complete a level normally first, and
-  back up `data/ge007.eep` before enabling it.
-- **No macOS or ARM builds yet** (both are on the
-  [roadmap](https://github.com/jkdansereau/goldeneye-pc-port#roadmap));
-  today the release ships Windows, Linux and Steam Deck. Keyboard, mouse
-  and controller-button rebinding are all supported (defaults in the
-  [README's Controls section](https://github.com/jkdansereau/goldeneye-pc-port#controls)).
-
-What the release actually installs, and how faithfully it tracks the N64
-game: [Security & fidelity status](security-and-fidelity-status.md).
 
 ## Documentation
 
-The technical docs live under [under the
-hood](under-the-hood.md) — the architecture, the N64→PC bug catalogue, and
-how the project is developed. [Building](building.md) covers building and
-running from source.
+The technical docs live on the [Documentation](documentation.md) page — the
+architecture, the N64→PC bug catalogue, and how the project is developed.
+[Building](building.md) covers building and running from source.
 
 <script>
   // console-viewer carousel: one media slot, cycle the captures. Vanilla JS.
   (function () {
     var slides = [
-      { src:"img/shots/shot-01.jpg", cap:"Dam &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-03.jpg", cap:"Runway &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-04.jpg", cap:"Surface &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-09.jpg", cap:"Frigate &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-11.jpg", cap:"Surface 2 &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-16.jpg", cap:"Statue &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-20.jpg", cap:"Archives &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-21.jpg", cap:"Cradle &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-24.jpg", cap:"Aztec &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-27.jpg", cap:"Control &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-28.jpg", cap:"Streets &mdash; v0.4.0 intro attract" },
-      { src:"img/shots/shot-29.jpg", cap:"Jungle &mdash; v0.4.0 intro attract" }
+      { src:"img/shots/shot-01.jpg", cap:"Dam — v0.4.0 intro attract" },
+      { src:"img/shots/shot-03.jpg", cap:"Runway — v0.4.0 intro attract" },
+      { src:"img/shots/shot-04.jpg", cap:"Surface — v0.4.0 intro attract" },
+      { src:"img/shots/shot-09.jpg", cap:"Frigate — v0.4.0 intro attract" },
+      { src:"img/shots/shot-11.jpg", cap:"Surface 2 — v0.4.0 intro attract" },
+      { src:"img/shots/shot-16.jpg", cap:"Statue — v0.4.0 intro attract" },
+      { src:"img/shots/shot-20.jpg", cap:"Archives — v0.4.0 intro attract" },
+      { src:"img/shots/shot-21.jpg", cap:"Cradle — v0.4.0 intro attract" },
+      { src:"img/shots/shot-24.jpg", cap:"Aztec — v0.4.0 intro attract" },
+      { src:"img/shots/shot-27.jpg", cap:"Control — v0.4.0 intro attract" },
+      { src:"img/shots/shot-28.jpg", cap:"Streets — v0.4.0 intro attract" },
+      { src:"img/shots/shot-29.jpg", cap:"Jungle — v0.4.0 intro attract" }
     ];
     var img = document.getElementById("vImg"),
         cap = document.getElementById("vCap"),
@@ -254,7 +208,9 @@ running from source.
     function show(n) {
       i = (n + slides.length) % slides.length;
       img.src = slides[i].src;
-      cap.innerHTML = slides[i].cap;
+      img.alt = "GoldenEye 007 PC port — " + slides[i].cap +
+                ", in-engine capture, 3072×1728";
+      cap.textContent = slides[i].cap;
       idx.textContent = (i + 1) + " / " + slides.length;
     }
     document.getElementById("vPrev").addEventListener("click", function () { show(i - 1); });
@@ -265,4 +221,42 @@ running from source.
     });
     show(0);
   })();
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Software",
+  "name": "GoldenEye 007 PC Port",
+  "genericName": "Native PC port of a Nintendo 64 game",
+  "softwareName": "GoldenEye 007 PC Port",
+  "category": "GameCategory",
+  "description": "A native PC build of GoldenEye 007 (Rare, 1997, Nintendo 64), compiled from the n64decomp/007 decompilation with the N64's RSP emulated in software. Ships no ROM and no game assets; you supply your own.",
+  "softwareVersion": "0.5.0",
+  "datePublished": "2026-10-05",
+  "dateModified": "2026-10-05",
+  "operatingSystem": ["Windows", "Linux", "Steam Deck"],
+  "downloadUrl": "https://github.com/jkdansereau/goldeneye-pc-port/releases",
+  "distributionType": "Software-Offline",
+  "officialDistribution": {
+    "@type": "SoftwareDistribution",
+    "downloadUrl": "https://github.com/jkdansereau/goldeneye-pc-port/releases",
+    "distributionLicense": "MIT"
+  },
+  "license": "https://opensource.org/licenses/MIT",
+  "isFreeApplication": true,
+  "url": "https://jkdansereau.github.io/goldeneye-pc-port/",
+  "sameAs": "https://github.com/jkdansereau/goldeneye-pc-port",
+  "publisher": {
+    "@type": "Person",
+    "name": "jkdansereau",
+    "url": "https://github.com/jkdansereau"
+  },
+  "gallery": [
+    "https://jkdansereau.github.io/goldeneye-pc-port/img/shots/shot-28.jpg",
+    "https://jkdansereau.github.io/goldeneye-pc-port/img/shots/shot-01.jpg",
+    "https://jkdansereau.github.io/goldeneye-pc-port/img/shots/shot-24.jpg"
+  ],
+  "alternateName": "GoldenEye 007 (Nintendo 64, 1997) on the PC"
+}
 </script>

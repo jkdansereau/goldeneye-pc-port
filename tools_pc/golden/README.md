@@ -24,13 +24,13 @@ and per platform (`win`, and `linux` — 21 levels x 3 frames on each, captured
   D523, **superseded by D529**): the frame depends on the save's **content**, not
   its presence — D523's "presence, not which save" claim (worst_cell 0.175625 on
   each of the four candidate saves, 21.557% with none) was only ever measured on
-  Archives, and the 2026-10-07 A/B refutes it (facility 177.47 scene-level on the
+  Archives, and the 2026-10-05 A/B refutes it (facility 177.47 scene-level on the
   2026-10-05 playtest save, 0.0-0.25 on every other candidate on disk). `verify.sh`
   and `capture_p7.sh` install the canonical eep the same way they pin the ini
   (snapshot the local file if any, install the canonical one, restore-or-remove on
   exit), so the gate is reproducible on a fresh clone and in CI. A local playtest
   save is **never** the gate's input. The linux 63-frame set was re-captured
-  on the box under the canonical eep 2026-10-07 (D531; the 2026-10-05
+  on the box under the canonical eep 2026-10-05 (D531; the 2026-10-05
   re-round, D530, turned out to have run under the box-LOCAL save — the
   `capture_p7.sh` per-level re-pin bug, fixed in D531) and is valid.
 - Every run ends via `GE_QUITFRAME` (orderly quit; never a hard kill, D344).
@@ -66,7 +66,7 @@ capture with the recipe above and replace `<level>/<platform>/*.png`.
 
 ## History
 
-- **D531 (2026-10-07):** `capture_p7.sh`'s D529 adaptation was incomplete —
+- **D531 (2026-10-05):** `capture_p7.sh`'s D529 adaptation was incomplete —
   the per-level re-pin restored the pre-capture LOCAL save (D524-era line),
   silently overwriting D529's pre-loop canonical install, so the 2026-10-05
   box re-round (D530) ran under the box-local save, not the canonical one.
@@ -74,7 +74,7 @@ capture with the recipe above and replace `<level>/<platform>/*.png`.
   and re-captured: fresh 21/21 box round, 63 frames committed, replacing the
   D530 set (47/63 frames differ — save content demonstrably moves the frames;
   16 byte-identical save-independent scenes).
-- **D530 (2026-10-07, AMENDED BY D531):** the linux set was re-rounded on the
+- **D530 (2026-10-05, AMENDED BY D531):** the linux set was re-rounded on the
   box (X220, tree `442eb2ff`; `~/p7-reround.log` hit `P7 re-round DONE`
   2026-10-05 12:53 EDT, 21/21 rc=0) and committed, replacing the D525
   cleared-eep set (51/63 frames differ; 12 save-independent scenes byte-

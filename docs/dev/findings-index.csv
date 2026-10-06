@@ -382,14 +382,16 @@ D519,FIXED,"One PC options UI: the file-select ""PC Options"" entry opens the F1
 D520,FIXED,"F10 overlay slider wedge, slider marker and dropdown arrow antialiased (they stepped in whole canvas pixels that grow with the window) —",FIXED (headless before/after capture; by-eye owed)
 D521,PARTIAL,A fixed-frame golden window that overlaps the intro flyby is platform-nondeterministic (cross-platform goldens); verify.sh's linux pixel-gate skip is driver-co…,PARTIAL (rule recorded 2026-10-04; the two residual bands CLOSED 2026-10-05 by D525's box re-round —
 D522,FIXED,The golden window's frame-900 stem is not settled gameplay on several levels —,FIXED 2026-10-05 (recipe-side re-base:
-D523,CLOSED,The golden recipe does not pin save state:,SUPERSEDED by D529 (2026-10-07) —
+D523,CLOSED,The golden recipe does not pin save state:,SUPERSEDED by D529 (2026-10-05) —
 D524,FIXED,The golden tooling was destructive and drift-prone:,FIXED 2026-10-05 (both pins idempotent —
 D525,FIXED,"The whole <level>/linux/ golden set was stale, not just on the six re-based levels —","FIXED 2026-10-05 (21-level box re-round, 63 frames, save pinned present; structural parity 21/21, Archives/Streets bands attributed to save state, not a renderer)"
-D526,CLOSED,P13 Dam-ending grate / edge-railing transparency is faithful N64 behaviour (port == 1964/GEPD); the per-triangle census probe is retained as a generic draw-sta…,"CLOSED — faithful, confirmed on 1964/GEPD (2026-10-07):"
+D526,CLOSED,P13 Dam-ending grate / edge-railing transparency is faithful N64 behaviour (port == 1964/GEPD); the per-triangle census probe is retained as a generic draw-sta…,"CLOSED — faithful, confirmed on 1964/GEPD (2026-10-05):"
 D527,OPEN,GE_PCDUMP written first:last (a colon where the dash belongs) silently dumps EVERY frame —,OPEN (harness documentation; a log-or-fail-closed fix is owed in the port layer)
 D528,OPEN,"GE_STARTMENU skips the EEPROM read, so front-end-only sessions never import the emulator save —",OPEN (harness documentation; the D514 imported-save test must run from a normal boot; a log-or-import fix is owed in the port layer)
-D529,FIXED,The golden gate depends on the save file's CONTENT —,FIXED 2026-10-07 (canonical save in-tree at tools_pc/golden/ge007.eep; verify.sh installs it like the ini pin; all 21 win sets re-captured under it —
-D530,?,The box (X220) linux golden re-round landed —,AMENDED BY D531 (2026-10-07) —
-D531,FIXED,capture_p7.sh's D529 adaptation was incomplete —,"FIXED 2026-10-07 (loop re-pins the canonical save per level + cd ""$ROOT""; fresh 21/21 box re-capture committed —"
-D532,FIXED,The three P12 U5 should-fixes applied —,FIXED 2026-10-07 (tooling-only:
+D529,FIXED,The golden gate depends on the save file's CONTENT —,FIXED 2026-10-05 (canonical save in-tree at tools_pc/golden/ge007.eep; verify.sh installs it like the ini pin; all 21 win sets re-captured under it —
+D530,?,The box (X220) linux golden re-round landed —,AMENDED BY D531 (2026-10-05) —
+D531,FIXED,capture_p7.sh's D529 adaptation was incomplete —,"FIXED 2026-10-05 (loop re-pins the canonical save per level + cd ""$ROOT""; fresh 21/21 box re-capture committed —"
+D532,FIXED,The three P12 U5 should-fixes applied —,FIXED 2026-10-05 (tooling-only:
+D533,FIXED,"The probe-doc drift that would have failed CI, plus three tracked-file accuracy/hygiene fixes (release-sweep spot-check) —",FIXED 2026-10-05 (GE-ENV-PROBES.md missing the GE_D526 family → gen_env_probes.py --check rc 1 = a CI-failing step; build-pc.sh local MSYS2 root in two messages; docs/fidelity.md og line; release-not…
+D534,FIXED,Pre-release review of the 2026-10-05 local batch —,FIXED 2026-10-05 (verify.sh/capture_p7.sh INT/TERM trap; release-notes linux-gate wording; dead security-and-fidelity-status.md links; future-dated 2026-10-07 labels normalised; D526 probe dangling-e…
 D450,FIXED,"Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).","FIXED — port-only: the render thread's gfx_sdl_handle_events drains the same SDL queue as video.c's host pump but had no case for SDL_CONTROLLERDEVICEADDED/REMOVED, so it usually swallowed them and i…"

@@ -1,6 +1,8 @@
 ---
 title: Input and aim
 description: How the GoldenEye 007 PC port maps keyboard, mouse and modern controllers onto the N64's controller, including mouse aim.
+date: '2026-10-05'
+modified_time: '2026-10-05'
 ---
 
 ## Input and aim

@@ -48,7 +48,7 @@ param(
     [switch]$Dump,                  # GE_AUDIODUMP=1  -> audiodump.raw
     [switch]$VoiceDump,             # GE_VOICEDUMP=1  -> voicedump.raw (per-voice, D202/M-67)
     [switch]$MixerTrace,            # GE_MIXERTRACE=1 -- SLOW, see warning below
-    # (the -AB/-Old A/B switches were removed 2026-10-07, D532: GE_D204_OLD no
+    # (the -AB/-Old A/B switches were removed 2026-10-05, D532: GE_D204_OLD no
     # longer exists in the game, so they were documented no-ops)
 
     # Plumbing

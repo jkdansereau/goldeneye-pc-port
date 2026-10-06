@@ -1,6 +1,8 @@
 ---
 title: The asset pipeline
 description: How the GoldenEye 007 PC port turns N64 ROM assets into the model and graphics files it loads at runtime.
+date: '2026-10-05'
+modified_time: '2026-10-05'
 ---
 
 ## The asset pipeline

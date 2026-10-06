@@ -112,7 +112,7 @@ while [ $# -gt 0 ]; do
     --script)   SCRIPT="$2"; USER_SCRIPT=1; shift 2 ;;
     --against)  AGAINST="$2"; shift 2 ;;
     --json)     JSON=1; shift ;;
-    -h|--help)  sed -n '2,32p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,34p' "$0"; exit 0 ;;
     *)          POSARGS+=("$1"); shift ;;
   esac
 done
@@ -121,12 +121,12 @@ set -- "${POSARGS[@]:-}"
 case "${1:-}" in
   sweep)  MODE=sweep; shift; SWEEP_SUBSET="${*:-}" ;;
   parity) MODE=parity; LEVEL_ARG="${2:-}"; shift 2 2>/dev/null || true ;;
-  -h)     sed -n '2,32p' "$0"; exit 0 ;;
+  -h)     sed -n '2,34p' "$0"; exit 0 ;;
   "")
     # D529 never-do 4: a no-arg run must NEVER look like a green verdict. It
-    # prints the usage and exits NON-zero (2026-10-07: a no-arg pair was
+    # prints the usage and exits NON-zero (2026-10-05: a no-arg pair was
     # cited as a "double-green" 21/21 because it exited 0).
-    sed -n '2,32p' "$0"
+    sed -n '2,34p' "$0"
     echo "error: no mode given -- a sweep is 'verify.sh sweep', one level is 'verify.sh <level>' (never cite a no-arg run as a gate result; D529)" >&2
     exit 1 ;;
   *)      MODE=single; LEVEL_ARG="$1" ;;
@@ -257,14 +257,21 @@ pin_ini_640x480() {
 restore_ini() {
   if [ -n "$INI_BAK" ]; then cp "$INI_BAK" "$INI" && rm -f "$INI_BAK"
   elif [ "$INI_CREATED" = 1 ]; then rm -f "$INI"; fi
+  INI_BAK=""; INI_CREATED=0
 }
-trap 'restore_ini; restore_eep; kill_ours' EXIT INT TERM
+# D534: restore on EXIT only; INT/TERM just exit (which fires EXIT). A combined
+# `EXIT INT TERM` trap restored on Ctrl-C and then let the sweep CONTINUE --
+# the next level's pin re-installed the canonical save with the snapshot
+# already deleted, so the user's own ge007.eep was left replaced on disk.
+trap 'restore_ini; restore_eep; kill_ours' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # --- save pin (D523, SUPERSEDED by D529): the goldens were captured with a
-#     save file PRESENT. D529 (2026-10-07 A/B) proved the frame depends on the
+#     save file PRESENT. D529 (2026-10-05 A/B) proved the frame depends on the
 #     save's CONTENT, not just its presence -- D523's "presence, not which
 #     save" claim had only been measured on Archives (worst_cell 0.175625 on
-#     each of the four candidate saves, 21.557% with none), and the 2026-10-07
+#     each of the four candidate saves, 21.557% with none), and the 2026-10-05
 #     sweep (facility 177.47 scene-level on the local playtest save vs 0.0-0.25
 #     on every other candidate on disk) refutes it. The gate now INSTALLS THE
 #     CANONICAL SAVE (tools_pc/golden/ge007.eep, 2 KB, in-tree so a fresh
@@ -291,6 +298,7 @@ restore_eep() {
   [ -n "$EEP_PIN_BAK" ] || return 0
   if [ "$EEP_PIN_HAD" = 1 ]; then cp "$EEP_PIN_BAK" "$EEP_PIN"; else rm -f "$EEP_PIN"; fi
   rm -f "$EEP_PIN_BAK"
+  EEP_PIN_BAK=""; EEP_PIN_HAD=0
 }
 
 # --- run one level -> sets globals: R_STATUS R_FRAMES R_SYM R_BRIEF -------

@@ -36,19 +36,29 @@ plugins:
 
 # ---------------------------------------------------------------------------
 # The site publishes a small curated set:
-#   index.md, under-the-hood.md (the "under the hood" hub), building.md, plus
+#   index.md, documentation.md (the documentation hub), building.md, plus
+#   404.html (themed not-found page),
 #   the four docs grouped behind that hub: internals.md, porting-notes.md,
-#   dev-process.md, dev/agentic-development.md, the five short topic notes
-#   grouped under it (the-software-rsp.md, the-asset-pipeline.md,
-#   framerate-and-pacing.md, input-and-aim.md, saves.md), and
-#   security-and-fidelity-status.md (linked from index.md's Known issues).
-# Everything else under docs/ is working material - the finding log, level
-# status, backlogs, plans, session notes, inherited decomp guides. It stays in
-# the repo (and on GitHub) but is excluded from the site build so it never
-# shows up as a published page or in sitemap.xml.
+#   dev-process.md, dev/agentic-development.md, and
+#   security-and-fidelity-status.md (split on review 2026-10-05 into
+#   security.md + fidelity.md, linked from index.md's Download section and
+#   the hub).
+# The five short topic notes (the-software-rsp.md, the-asset-pipeline.md,
+# framerate-and-pacing.md, input-and-aim.md, saves.md) were dropped from the
+# site on review 2026-10-05: the Perfect Dark port documents the same
+# subjects and nothing here was significantly new; they stay in the repo as
+# working material. Everything else under docs/ is working material - the
+# finding log, level status, backlogs, plans, session notes, inherited
+# decomp guides. It stays in the repo (and on GitHub) but is excluded from
+# the site build so it never shows up as a published page or in sitemap.xml.
 # NOTE: keep this list in sync as dev/ working docs are added; a new unlisted
 # .md under docs/ is silently published to the site + sitemap.xml.
 exclude:
+  - the-software-rsp.md
+  - the-asset-pipeline.md
+  - framerate-and-pacing.md
+  - input-and-aim.md
+  - saves.md
   - HANDOFF.md
   - ROADMAP.md
   - SetupGuide.md

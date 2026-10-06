@@ -1,0 +1,20 @@
+---
+title: 404
+description: Page not found.
+layout: default
+permalink: /404.html
+---
+
+## 404
+
+This page doesn't exist. The site's real pages are linked from the
+nav: [home]({{ '/' | relative_url }}) ·
+[documentation]({{ '/documentation' | relative_url }}) ·
+[building]({{ '/building' | relative_url }}).
+
+*Note for anyone following a moved link: the old "under the hood" page now
+lives at [documentation]({{ '/documentation' | relative_url }}).*
+
+<!-- Links use the | relative_url filter on purpose: a 404 page is served for
+     ANY unknown path, so plain relative links would resolve against the
+     requested (dead) URL instead of the site root. -->

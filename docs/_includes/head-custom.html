@@ -21,7 +21,9 @@
     --bg-panel:  #121316;   /* code / cards / tables  */
     --ink:       #e6e4df;   /* warm off-white         */
     --ink-soft:  #a9a7a0;   /* secondary text         */
-    --ink-mute:  #70706a;   /* captions, footer       */
+    --ink-mute:  #8a8a83;   /* captions, footer (>=4.5:1 on --bg-frame:
+                               the old #70706a measured 3.9:1 and failed
+                               WCAG AA on the tagline + legal line) */
     --line:      #26282c;   /* 1px borders            */
     --line-2:    #3a3d44;   /* stronger borders       */
     --accent:    #e8a13a;   /* GoldenEye gold (amber) */
@@ -40,8 +42,9 @@
     margin: 0;
     color: var(--ink);
     font-family: var(--sans);
-    font-size: 14px;
-    line-height: 1.62;
+    font-size: 15px;          /* 14px read as console chrome, but the
+                                 body is prose people actually read */
+    line-height: 1.6;
     /* faint starfield (the old-school "space" tile, softened) */
     background-color: var(--bg);
     background-image:
@@ -63,6 +66,14 @@
   }
   a:hover { color: var(--accent-hi); text-decoration-color: currentColor; }
 
+  /* keyboard focus + selection: the amber thread again, so a focused
+     control is visible on the near-black ground (a11y / keyboard users) */
+  :focus-visible {
+    outline: 2px solid var(--accent-hi);
+    outline-offset: 2px;
+  }
+  ::selection { background: var(--accent); color: #0b0b0d; }
+
   /* ---- the centred "page" frame -------------------------------------- */
   .frame {
     max-width: 50rem;
@@ -75,11 +86,13 @@
   /* ---- banner -------------------------------------------------------- */
   .banner { text-align: center; padding: 2.4rem 1rem 1.4rem; }
   .banner .t {
+    margin: 0;                /* it is an <h1> now (see the layout) */
     font-family: var(--mono);
     font-weight: 700;
     font-size: 1.7rem;
     letter-spacing: .05em;
-    color: var(--ink);
+    color: var(--accent); /* brand name in goldeneye gold -- the amber
+                           thread (masthead -> nav -> rule -> page title) */
   }
   .banner .tag { color: var(--ink-mute); font-size: .82rem; margin-top: .55rem; }
 
@@ -131,6 +144,23 @@
     border-bottom: 1px solid var(--line-2);
   }
   .doc-content h2::before { content: "\25aa  "; color: var(--accent); }
+  /* Page-title look: the 2026-09 SEO pass demoted page headings to h2
+     (the masthead owns h1; no duplicate page titles) -- see the SEO
+     conventions note in scratch/pr-seo-revise-prompt.md. The first
+     content h2 of each page gets the h1 look; presentation only, the
+     heading levels stay per-convention. (On the home page the masthead
+     itself is the title, so its first h2 -- Status -- leads as a section.) */
+  /* .flat-title (front matter on the home page): the masthead IS the
+     page title there, so the first h2 must read as a plain section --
+     otherwise masthead-h1 + amber first-h2 stack as a double header. */
+  .doc-content:not(.flat-title) > h2:first-of-type {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin: .2rem 0 1rem;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
   .doc-content h3 {
     font-family: var(--mono);
     font-size: .92rem;
@@ -189,21 +219,88 @@
   }
   .doc-content tr:nth-child(2n) td { background: var(--zebra); }
 
+  /* ---- console blocks ------------------------------------------------ */
+  /* Status / News / Download / Known issues panels (home page). Same
+     amber-terminal language as the code blocks above, but the content
+     keeps its semantic list/table markup (SEO + screen readers).
+
+     Site formatting rules (2026-10-05 PR pass + 2026-09 SEO conventions)
+     — keep these:
+     - Heading LEVELS follow the SEO pass: the page heading is h2 (the
+       masthead owns h1; no duplicate page titles), sections are h2,
+       h3 labels a real sub-topic only (e.g. the current-release line
+       under Status). The first content h2 gets the amber "page-title"
+       look via CSS only (.doc-content > h2:first-of-type) -- never by
+       promoting the markup to h1.
+     - h2 = the section, outside the panel.
+     - Directives ("always use the latest release") are .callouts inside
+       panels, or a .warn line (amber rule, ink text) where no panel
+       exists; never headings — headings label topics,
+       never emphasis.
+     - List intros ("what a player will notice…") stay plain paragraphs.
+     - Dated list-item leads ("2026-10-05 — v0.5.0") stay <strong> leads
+       inside the <li>, not headings.
+     - Headings must be single source lines: marked ends an ATX heading at
+       the line break, so a wrapped "### …" silently becomes a heading plus
+       a stray paragraph (Jekyll/other renderers differ — don't rely on
+       multi-line headings at all). */
+  .doc-content .cblock {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    padding: 1.1rem 1.3rem .9rem;
+    margin: 1.6rem 0;
+  }
+
+  /* Expandable panels (<details>, e.g. the release history folded under
+     Status): same panel language as .cblock; the summary line is the
+     amber handle. The content is in the DOM either way -- collapsing is
+     presentation, not hiding from search. */
+  .doc-content details {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    padding: .3rem 1.3rem .8rem;
+    margin: 1.6rem 0;
+  }
+  .doc-content summary {
+    font-family: var(--mono);
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: .03em;
+    cursor: pointer;
+  }
+  .cblock h3 { margin-top: 0; color: var(--ink); }
+  .cblock p, .cblock ul, details p, details ul {
+    font-family: var(--mono);
+    font-size: .88rem;
+    line-height: 1.6;
+  }
+  .cblock li, details li { margin: .5rem 0; }
+  .cblock li::marker, details li::marker { color: var(--accent); }
+  .cblock strong, details strong { color: var(--accent); font-weight: 600; }
+  .cblock code, details code { background: transparent; border: 0; padding: 0; }
+  .doc-content .callout {
+    border-left: 3px solid var(--accent);
+    padding: .15rem 0 .15rem .8rem;
+    margin: 0 0 1rem;
+  }
+  .doc-content .callout p { color: var(--ink-soft); }
+
+  /* Inline directive marker -- "Warning:" leading a sentence, amber like
+     the rest of the accent thread, no panel around it. */
+  .doc-content details .warn {
+    border-left: 3px solid var(--accent);
+    padding: .1rem 0 .1rem .7rem;
+    margin: .2rem 0 .9rem;
+    font-weight: 600;
+  }
+  .cblock table { background: transparent; margin: 1rem 0 .4rem; }
+  .cblock > p:last-child { margin-bottom: 0; }
+
   /* ---- images -------------------------------------------------------- */
   .doc-content img {
     border: 1px solid var(--line); border-radius: 0; max-width: 100%;
-  }
-
-  /* ---- details / summary (the "full gallery" collapse) --------------- */
-  .doc-content details {
-    max-width: var(--measure);
-    border: 1px solid var(--line);
-    background: var(--bg-panel);
-    padding: .6rem .9rem; margin: 1.5rem 0;
-  }
-  .doc-content summary {
-    cursor: pointer; color: var(--accent);
-    font-family: var(--mono); font-size: .85rem; letter-spacing: .03em;
+    height: auto;                 /* no squashed stills when a width= is set */
   }
 
   /* ---- console-viewer carousel (home page media) --------------------- */
@@ -261,7 +358,11 @@
 
   @media (max-width: 40rem) {
     .frame { margin: 8px; }
+    .banner { padding: 1.4rem .8rem 1rem; }
     .banner .t { font-size: 1.35rem; }
+    .doc-content { padding: 1.1rem 1rem .5rem; }
+    .doc-content table { font-size: .82rem; }
+    .doc-content pre { padding: .7rem .8rem; }
   }
 
 </style>

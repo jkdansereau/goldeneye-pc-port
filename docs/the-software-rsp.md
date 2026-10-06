@@ -1,6 +1,8 @@
 ---
 title: The software RSP
 description: How the GoldenEye 007 PC port emulates the N64's Reality Signal Processor (the graphics coprocessor) in software and bypasses the RDP.
+date: '2026-10-05'
+modified_time: '2026-10-05'
 ---
 
 ## The software RSP

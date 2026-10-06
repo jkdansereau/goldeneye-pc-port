@@ -3,26 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Paint the browser chrome (scrollbars, form controls, new-tab cards)
+       dark before CSS loads, so the page never flashes white on mobile. -->
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#050607">
+  <!-- Indexing is NOT restricted: this only asks Google/Bing to show the
+       large image preview in search cards, which is what makes the
+       in-engine stills legible in a coverage roundup. -->
+  <meta name="robots" content="max-image-preview:large">
   <link rel="icon" type="image/jpeg" href="{{ '/img/shots/shot-28.jpg' | relative_url }}">
+  <!-- Entity disambiguation: the maintainer behind every page. -->
+  <link rel="me" href="https://github.com/jkdansereau">
   {%- seo -%}
   {%- include head-custom.html -%}
 </head>
 <body>
   <div class="frame">
 
+    <!-- The masthead IS the page's h1: every page gets exactly one h1
+         (the brand), and the page's own heading starts at h2. A <div>
+         here left the document with no h1 at all, which is what search
+         and screen readers key on. Presentation only -- the CSS class
+         carries the look. -->
     <header class="banner">
-      <div class="t">{{ site.title }}</div>
-      <div class="tag">{{ site.description }}</div>
+      <h1 class="t">{{ site.title }}</h1>
+      <p class="tag">{{ site.description }}</p>
     </header>
 
-    <nav class="sitenav">
+    <nav class="sitenav" aria-label="Site navigation">
       <a href="{{ '/' | relative_url }}">home</a><span class="sep">/</span>
-      <a href="{{ '/under-the-hood' | relative_url }}">under the hood</a><span class="sep">/</span>
+      <a href="{{ '/documentation' | relative_url }}">documentation</a><span class="sep">/</span>
       <a href="{{ '/building' | relative_url }}">building</a>
     </nav>
     <div class="rule g"></div>
 
-    <main class="doc-content">
+    <!-- flat_title: this page's masthead IS its title, so the layout opts
+         out of the amber first-h2 "page-title" look (no double header).
+         Jekyll + the preview builder both honour this conditional. -->
+    <main class="doc-content{% if page.flat_title %} flat-title{% endif %}">
       {{ content }}
     </main>
 
@@ -30,7 +48,8 @@
 
     <footer class="site-footer">
       <div class="footer-stamp">
-        last updated: 2026-10-07 &middot; v0.5.0
+        <a href="https://github.com/jkdansereau">maintained by jkdansereau</a>
+        &nbsp;&middot;&nbsp; last updated: 2026-10-05 &middot; v0.5.0
         &nbsp;&middot;&nbsp; <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a>
         &nbsp;&middot;&nbsp; <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">releases</a>
       </div>

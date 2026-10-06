@@ -1,6 +1,8 @@
 ---
 title: Saves
 description: How the GoldenEye 007 PC port backs the N64's EEPROM save with a plain file you can back up.
+date: '2026-10-05'
+modified_time: '2026-10-05'
 ---
 
 ## Saves

@@ -2057,9 +2057,9 @@ static void d526_note_emit(uint32_t f, struct LoadedVertex* const* v_arr, int us
         ok = 1;
     }
     if (!ok) return;
-    if (d526_box_on)
+    if (d526_box_on) {
         if (mxx < d526_box[0] || mnx > d526_box[2] || mxy < d526_box[1] || mny > d526_box[3]) return;
-    else if (mxx < -1.05f || mnx > 1.05f || mxy < -1.05f || mny > 1.05f) return; // off-screen
+    } else if (mxx < -1.05f || mnx > 1.05f || mxy < -1.05f || mny > 1.05f) return; // off-screen
     d526_sig_total++;
     int found = 0;
     for (int i = 0; i < d526_nsigs; i++) {

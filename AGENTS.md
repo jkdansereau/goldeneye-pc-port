@@ -9,6 +9,33 @@
 - **Current status:** the README "Status" section (`docs/dev/LEVEL-STATUS.md` is a historical per-level sweep record). Current task + environment: `docs/HANDOFF.md` (a rolling local working file — may be absent in a fresh clone; fall back to the README "Status" section).
 - **Dispatching subagents?** `docs/dev-process.md` — task budgets/deadlines, file partitioning, pre-flight, the standard brief template. Every investigation subagent reads `docs/porting-notes.md` first and appends to it.
 
+## Public site pages (`docs/`) — presentation layer, not a source of truth
+
+The repo's homepage and sub-pages are published by GitHub Pages; the local
+preview is `node scratch/build_preview.mjs site` → `scratch/_site/` (served
+with `node scratch/serve_preview.mjs 8777`). The site is a **presentation
+layer over the reference docs, kept in a separate area, and allowed to go
+stale** — never let it poison a work item:
+
+- **Pure site pages** — `docs/index.md`, `documentation.md`,
+  `the-software-rsp.md`, `the-asset-pipeline.md`, `framerate-and-pacing.md`,
+  `input-and-aim.md`, `saves.md`, `security.md`, `fidelity.md` —
+  summarise the ROADMAP / README / finding log / release notes. **Do not
+  consult them as work information, cross-check against them, or treat a
+  mismatch with `docs/ROADMAP.md` or the finding log as a bug** (that is
+  the expected, independent-staleness case). Update them only when the task
+  says so, and source every fact from the ROADMAP / README / finding log —
+  never the other way round. The footer "last updated" date in
+  `docs/_layouts/default.html` is the same class of site-only detail.
+- **Shared files** — `docs/internals.md`, `porting-notes.md`,
+  `building.md`, `dev-process.md`, `dev/agentic-development.md` are
+  authoritative working docs that the site publishes verbatim; edit them
+  normally as part of dev work and the site picks up the change for free.
+
+Keep the split intact: no working notes migrate into pure site pages, and
+never edit a shared doc merely to make the site read better — if the site is
+stale, fix the site page (or the fact upstream, as its own task).
+
 ## Non-negotiables
 
 1. **N64 build untouched.** `Makefile`, `tools/`, `rsp/`, `ld/` belong to the N64 build. Never modify them for the PC port.
@@ -45,8 +72,10 @@ mostly agent-authored.
    documentary and small (bug shots, previews — downscaled), and never commit
    bulk ROM-derived captures: capture output dirs are gitignored
    (`tools_pc/sweep-captures/cap-*/`, `tools_pc/sweep-captures/**/*.ppm`); the
-   only bulk imagery in the tree is `tools_pc/golden/*.png`, which exists
-   because `verify.sh` consumes it. Downloads ship no game content at all.
+   only bulk imagery in the tree is `tools_pc/golden/**/*.png`
+   (63 frames × 2 platforms, 126 total, nested per level at
+   `tools_pc/golden/<level>/{win,linux}/`), which exists because `verify.sh`
+   consumes it. Downloads ship no game content at all.
 5. **Batch, don't spam.** Accumulate approved doc/tree fixes across a session
    into ONE commit; no per-item branches.
 6. **Release gate.** Before pushing a release: the PII scrub and legal/copyright
@@ -83,8 +112,9 @@ Needs CMake + SDL2 + zlib + OpenGL, and must run from the MSYS2 MINGW64 shell
 1. **`Cannot create temporary file in C:\Windows\: Permission denied`** at the
    link step. The PE toolchain (ninja → cmd → gcc/ld) needs a writable
    TMP/TEMP; the msys→native env conversion drops it in non-login shells
-   (agent harnesses; the `C:/msys64` tree here was built for `D:/M/msys64`,
-   so its conversion is unreliable). `build-pc.sh` now **self-heals**: it
+   (agent harnesses; the `C:/msys64` tree here was built for a relocated MSYS2
+   root — `<msys>` in the placeholder legend — so its path conversion is
+   unreliable). `build-pc.sh` now **self-heals**: it
    probes a native child's TMP (via a file — piped `cmd.exe` stdout is
    unreliable under msys console emulation) and, if broken, re-runs
    cmake+build under PowerShell with `TMP`/`TEMP` set natively (the

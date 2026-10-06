@@ -19,14 +19,14 @@ good that you are looking at one of these.
 
 ## Contents
 
-- [A. Pointer-width struct growth (32→64); the dominant class](#a-pointer-width-struct-growth-3264--the-dominant-class)
+- [A. Pointer-width struct growth (32→64); the dominant class](#a-pointer-width-struct-growth-3264-the-dominant-class)
 - [B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64](#b-16-byte-pc-gfx--vtx-vs-8-byte-n64)
 - [C. Big-endian rodata / ROM data read on little-endian PC](#c-big-endian-rodata--rom-data-read-on-little-endian-pc)
 - [C2. Port-layer / SDL shims](#c2-port-layer--sdl-shims)
 - [D. N64 hardware idioms fast3d does not emulate](#d-n64-hardware-idioms-fast3d-does-not-emulate)
-- [D2. The HUD/model "X-mirror"; RESOLVED](#d2-the-hudmodel-x-mirror-d114d116--resolved-it-was-an-upside-down-capture)
+- [D2. The HUD/model "X-mirror"; RESOLVED](#d2-the-hudmodel-x-mirror-d114d116-resolved-it-was-an-upside-down-capture)
 - [D3. GCC/mingw makes an all-non-negative `enum` UNSIGNED](#d3-gccmingw-makes-an-all-non-negative-enum-unsigned)
-- [D4. N64 "interrupts off" must be a real lock on PC](#d4-n64-interrupts-off-is-not-free-on-pc--it-must-be-a-real-lock)
+- [D4. N64 "interrupts off" must be a real lock on PC](#d4-n64-interrupts-off-is-not-free-on-pc-it-must-be-a-real-lock)
 - [D5. Loop bounds that assume linker adjacency of two globals](#d5-loop-bounds-that-assume-linker-adjacency-of-two-file-scope-globals)
 - [D12. Collapsing an LOD binding to tile 0 breaks a DETAIL binding](#d12-collapse-an-lod-binding-to-tile-0-is-wrong-for-a-two-texture-detail-binding-d236)
 - [D13. Per-render accumulation is not associative (1 vs 2–3 ticks/frame)](#d13-per-render-accumulation-is-not-associative-the-ports-1-tickframe-can-reach-states-the-n64s-23-ticksframe-never-did-d329)

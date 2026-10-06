@@ -54,7 +54,11 @@ cleanup() {
   if [ "$EEP_HAD" = 1 ]; then cp "$EEP_ORIG" "$EEP" 2>/dev/null; else rm -f "$EEP" 2>/dev/null; fi
   rm -f "$INI_ORIG" "$EEP_ORIG" 2>/dev/null
 }
-trap cleanup EXIT INT TERM
+# D534: restore on EXIT only; INT/TERM just exit (which fires EXIT), so an
+# interrupted capture cannot continue past the restore with the snapshot gone.
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # recipe comes from the tracked gate tool, not from this file
 eval "$(grep -m1 '^GOLDEN_DUMP=' "$VSH")"

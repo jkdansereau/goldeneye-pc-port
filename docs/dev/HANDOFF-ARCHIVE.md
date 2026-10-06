@@ -3,7 +3,8 @@
 > **Local machine paths are genericised** in this archive: `<repo>` = this repo's
 > working directory, `<repos>` = the local source-repos root, `<games>` / `<videos>`
 > = the local games / video roots, `<python>` = the local CPython install, `<temp>`
-> = a writable native temp dir. Session facts are unchanged.
+> = a writable native temp dir, `<msys>` = the local MSYS2 install root.
+> Session facts are unchanged.
 
 > **Reference only.** Current state lives in the [README](../../README.md)
 > "Status" section and `docs/dev/LEVEL-STATUS.md`; per-finding detail is in
@@ -6168,3 +6169,217 @@ Run from the **repo root**, not `build-pc/`.
    rating, don't hack it in.
 3. Prefer an **offline sidecar converter** (`tools_pc/d*_emit.py`,
    D43/D69/D88 pattern) over a runtime fixup for a whole ROM-asset format.
+---
+
+# Appended 2026-10-05 (session 07j) — moved verbatim from `docs/HANDOFF.md` (briefs 2026-10-05 (session 07d) → 2026-10-05 (session 07g))
+
+# HANDOFF — 2026-10-05 (session 07d)
+
+## Branch
+`release/v0.4.1` @ `e9cf2ddf` (D530 addendum), tree clean.
+Local-only commits on top of `442eb2ff`: `aa19b354` (site SEO/redundancy),
+`2c378e7e`+`24b084d0` (Known issues), `ada7bbb1` (D530 goldens), `e9cf2ddf`
+(D530 addendum). **Nothing pushed.**
+
+## This session (2026-10-05 (session 07d), user stepped away ~10:45, returns ~14:00 EDT)
+
+1. **HANDOFF 07c item 1 (critical path) — DONE, committed (`ada7bbb1`):**
+   - The X220 P7 re-round had completed on the box 2026-10-05 (tree `442eb2ff`,
+     worktree `~/gh-fullhist-wt-p7`, `~/p7-reround.log` hit `P7 re-round DONE`
+     12:53 EDT, **21/21 levels rc=0** under the canonical `ge007.eep`).
+   - Pulled the 63 PNGs (15 MB tarball → `scratch/p7-pull/`, log →
+     `scratch/p7-reround-pull.log`) and committed them into
+     `tools_pc/golden/<level>/linux/`, replacing the D525 cleared-eep set:
+     **51/63 differ; 12/63 byte-identical** (save-independent scenes,
+     including frigate's first stem 001000 — a D117 stability signal).
+   - **D117 flaky-four first-stem check (D529 never-do 6, first cross-machine
+     test):** dam@1500 worst_cell 1.70 (phash 0), frigate@1000 byte-identical,
+     streets@1000 1.78 (phash 0), jungle@900 5.12 (phash 3) — all in
+     stable-level range, **none red → NO first-stem exclusion/widening**.
+   - Structural tier all `ok` (cradle@40 documented exception; Cuba 26.4%
+     within the documented 23.7–36.3% structural-only range). The `fail` rows
+     in the box report are the expected cross-eep diffs vs the old set.
+   - **Closes D529 never-do 3:** the index/README v0.5.0 "re-based on both
+     platforms (21 levels, 63 frames each)" line now stands on a
+     canonical-eep linux set → linux numbers unblocked (B7 satisfied).
+   - Wrote **D530** (findings.md detail + §F table: D523 now SUPERSEDED-by-
+     D529, D529 row was missing from the table — the 07c CSV had been
+     hand-patched, which is why `gen_findings_index.py --check` drifted;
+     regenerated) + `tools_pc/golden/README.md` linux-set text + History.
+
+2. **DONE: fresh `verify.sh sweep` on the box against the NEW goldens**
+   (shipped the 51 PNGs to `~/gh-fullhist-wt-p7`, box diff = 51 = the
+   tree delta; fired 10:5x EDT, finished ~11:10 EDT): **21/21 PASS, 0
+   FAIL** — but the run was **crash-detect only** (GE_PCDUMP reads black
+   on the box's llvmpipe/WSLg, the D244 note; no pixel gate). So it is a
+   stability re-check; the D117 cross-machine *pixel* evidence remains the
+   re-round capture itself (the D530 first-stem check). Recorded as the
+   D530 addendum (`e9cf2ddf`) with the residual: a pixel-gated box verify
+   needs a working WSLg GPU session (the 10-05 re-round's pixel comparisons
+   ran fine, so one exists).
+   - Log pulled: `scratch/p7-verify-new-pull.log` (tail: `21` PASS, `0`
+     FAIL, `SWEEP DONE`).
+
+3. **DONE (partial, at push time still owed): PII scrub addendum for the 51
+   new golden PNGs** — EXIF/text metadata sweep over all 63 linux PNGs:
+   **0 metadata tags** (PIL); new doc text (D530, golden README) uses
+   "X220" + `~/` paths only — no absolute paths/usernames/private IPs in
+   tracked files (the box LAN address lives only in the gitignored
+   HANDOFF + scratch logs). Addendum appended to
+   `docs/dev/notes/PII-SCRUB-REPORT.md` (gitignored). The full
+   LEGAL-review pass (game-content rule for screenshots) is still owed at
+   push time.
+
+## User to review at ~14:00 EDT
+- Local batch of 5 doc/golden commits (`aa19b354` SEO/redundancy;
+  `2c378e7e`+`24b084d0` Known issues; `ada7bbb1` D530 goldens; `e9cf2ddf`
+  D530 addendum — box sweep 21/21 crash-detect PASS).
+- Then the standing HANDOFF 07c items: 2. maintainer review of the 12-file
+  batch; 3. P12 U2/U5/U6/U7 (deferred light-unit mechanical review);
+  4. re-cut squash → B7/B8/B9 (README linux numbers now unblocked);
+  5. push `release/v0.5.0` + tag.
+
+## Environment
+- Preview: `:8777` (PID may be stale after a reboot — `node
+  scratch/build_preview.mjs site && node scratch/serve_preview.mjs 8777`).
+- Box ssh: `ssh the test box` (Windows→box works; box has no sshd —
+  everything rides the same session's stdin/stdout; pushes via
+  `cat f | ssh ... 'cat > dest'` or tar pipes).
+- 3 parked worktrees (ci/d441/modpatch) untouched.
+
+---
+
+# HANDOFF — 2026-10-05 (session 07e) (D531 + P12 U5)
+
+## Branch
+`release/v0.4.1` @ `164920c6`, tree clean. Three more local-only commits on
+top of `e9cf2ddf`: `4829fd94` (D531 blocker fix + canonical re-capture),
+`d2d75e11` (ROADMAP rows), `164920c6` (D531 addendum). **Nothing pushed.**
+
+## This session (2026-10-05 (session 07e))
+
+**D531 — `capture_p7.sh` canonical-re-pin blocker (P12 U5 review finding),
+fixed + re-captured. AMENDS D530.**
+
+- U5 reviewed `tools_pc/**` (the release-diff unit that owed the P7 merge):
+  small diffs all mechanical/clean; `p7_report.py`, `eep_convert.py`,
+  `abi_ratchet.py`, `docs_budget.py`, `abpad/` clean (list-arg subprocess,
+  raw_decode JSON, no shell, no destructive ops); deletions clean (probe
+  tools + the 433k-line sweep-capture PPM set). **But** `capture_p7.sh`'s
+  D529 adaptation was incomplete: the D524-era per-level re-pin
+  (`cp "$EEP_ORIG" "$EEP"`, restoring the pre-capture LOCAL save) silently
+  overwrote D529's pre-loop canonical install from level 1 — so **the
+  10-05 box re-round (D530) ran under the box-local save, not the
+  canonical eep**. D530's "canonical eep" provenance claim and first-stem
+  table are void as canonical-save evidence (D530 entry + README amended in
+  place; the table's numbers do check out against the 10-05 report).
+  **The win set is unaffected** — `verify.sh`'s `pin_eep` was correct.
+- Fix: the loop now re-pins `cp "$CANON_EEP" "$EEP"` per level (EEP_ORIG
+  kept for the exit-restore only); `cd "$ROOT"` added (the loop's
+  dump/golden paths are root-relative, contradicting the header's
+  "invoked from anywhere" claim).
+- **Re-captured:** shipped the fixed script to the box (sha matched), fresh
+  21-level round with `DISPLAY=:0` → 21/21 rc=0, 63 frames. **47/63 differ
+  from the D530 box-local-save set** (save content demonstrably moves
+  frames), 16 byte-identical. Committed into the linux goldens.
+- **Renderer finding (corrects the 07d item-2 note):** even with
+  `DISPLAY=:0` the box today reports no usable glxinfo renderer (software
+  fallback → black read-backs) — the WSLg GPU display is
+  **session-state-dependent** (the 10-05 re-round's p7_report pixel table
+  proves it was GPU-backed then). Today's `verify.sh sweep` against the new
+  goldens: **21/21 PASS, 0 FAIL, crash-detect only** (log
+  `scratch/p7-verify-pixel-pull.log`). The pixel-gated verdict (incl. the
+  four D117 flaky first stems) is owed for a GPU-display window.
+- Docs: D531 entry + §F row (regenerated CSV, 394 lines, `--check` OK),
+  D530 amended in place, golden README intro + History, ROADMAP Golden
+  baselines row (was still on D523 framing) + new P12 U5 row. PII addendum
+  #2 (63 PNGs, 0 metadata tags).
+
+**U5 should-fixes (rows on the ROADMAP, not yet applied):**
+1. `verify.sh` `pin_ini_640x480 2>/dev/null || true` fails OPEN (pin_eep
+   fails closed) — a failed ini write runs the gate under the user's
+   personal ini → spurious verdicts. Make it abort.
+2. `GOLDEN_SEED="${GE_RSEED:-…}"` lets a stray env var re-seed the gate —
+   warn or hard-pin (capture inherits the same override via its eval out
+   of verify.sh, so gate/capture stay consistent either way).
+3. `audiodebug.ps1` `-AB`/`-Old` are documented dead no-ops (nit).
+
+## User to review at ~14:00 EDT (supersedes the 07d list)
+- 8 local commits: `aa19b354` (site SEO/redundancy), `2c378e7e` +
+  `24b084d0` (Known issues), `ada7bbb1` (D530 goldens — now AMENDED BY
+  D531), `e9cf2ddf` (D530 addendum), `4829fd94` (D531), `d2d75e11`
+  (ROADMAP), `164920c6` (D531 addendum).
+- Preview: `node scratch/build_preview.mjs site` → `scratch/_site/` on :8777.
+
+## Still owed (unchanged, plus)
+- Pixel-gated box verify in a WSLg GPU-display window (never-do 6 applies
+  if the flaky four go red: exclude/widen, do NOT recapture).
+- The three U5 should-fixes above; P12 U2/U6/U7; HANDOFF 07c item 2
+  (maintainer review of the 12-file docs batch); squash → B7/B8/B9; push
+  `release/v0.5.0` + tag.
+- LEGAL review pass at push time (screenshots rule — 47 new linux PNGs are
+  the same class: box-captured, no metadata).
+
+---
+
+# HANDOFF — 2026-10-05 (session 07f) (D532 + squash re-cut + PUSH)
+
+## Pushed (2026-10-05 (session 07e)/f, maintainer approved)
+- **GitHub** `origin`: new branch `release/v0.5.0` (the re-cut squashed
+  chain, 33 commits, tip `f077435a`) + annotated tag `v0.5.0`.
+  **`origin/main` untouched** (`0e8c2ce2`) — main merge + public release
+  wait for the maintainer's playtest.
+- **Forgejo mirror**: `release/v0.5.0-squashed` + tag `v0.5.0`.
+- Squash re-cut: `scratch/p11b-squash.py` (p11 + new tip `4dd1d56d`,
+  assert 488, new group 33 covering D529-D532 + the site/amber pass).
+  Tip tree byte-identical (B7), LAN scrub of intermediate trees
+  re-applied, `pre-squash-v050` -> `4dd1d56d` (B6), tag message in
+  `scratch/tag-msg-v050.txt` (B8), PII/legal addenda on the final tree
+  (B9: clean; 4 pre-existing toolchain-path sites only).
+- **D532** (`4dd1d56d`) landed before the cut: verify.sh fail-closed
+  ini pin + hard-pinned seed (warn on stray `GE_RSEED`), audiodebug
+  dead switches removed. Docs: D532 entry/row, ROADMAP U5 row applied.
+
+## Now owed (in order)
+1. **Maintainer playtest** (C6 list: D511-D514/D519 items) on the
+   `release/v0.5.0` build → then remove the "not yet playtested live"
+   block and cut the `gh release` (C1-C9; bundles built FROM the pushed
+   tree).
+2. **Pixel-gated box verify** in a WSLg GPU-display window (D531; the
+   box worktree `~/gh-fullhist-wt-p7` is still at `442eb2ff` — needs a
+   bundle transfer of the new tip; no LAN route, options per the P7
+   handback §8).
+3. **P12 U2/U6/U7** quick passes (U1/U3/U4/U5 PASS; U6 = build+CI
+   diff, U7 = docs diff — read-only, ROADMAP rows for should-fixes).
+4. CI on the new GitHub branch: first real run of the SLSA
+   build-provenance attestation (ROADMAP "Release build-provenance
+   attestation" row: confirm, then delete).
+5. Box-side parallel: self-gate on the release branch (crash-detect
+   until the GPU window).
+
+## Local state
+`release/v0.4.1` @ `4dd1d56d` (== the pushed squashed tip tree), tree
+clean. `release/v0.5.0` / `release/v0.5.0-squashed` @ `f077435a`.
+`pre-squash-v050` @ `4dd1d56d`. Nothing else pending locally.
+
+---
+
+# HANDOFF — 2026-10-05 (session 07g) (push reverted; held local)
+
+- **GitHub push REVERTED** (branch `release/v0.5.0` + tag `v0.5.0` deleted,
+  verified via `git ls-remote`); backup lives on the private Forgejo mirror
+  (`release/v0.5.0-squashed` + tag `v0.5.0` @ `f077435a`). Local refs:
+  `release/v0.5.0` / `release/v0.5.0-squashed` @ `f077435a`,
+  `pre-squash-v050` @ `4dd1d56d`.
+- **Standing rule (maintainer):** backups → Forgejo, never GitHub; GitHub
+  pushes only after the maintainer approves everything.
+- **Docs finalization owed:** the batch review (`scratch/docs-batch-review.txt`,
+  commit `ba29c558` — 16 text files) and the **PR/SEO language pass**
+  (brief written: `scratch/pr-seo-revise-prompt.md` — tiers T1/T2/T3, voice,
+  SEO parity checklist, hard rules; example fix = the v0.5.0 News tagline
+  leading with "plain-English wording" + the UK/US spelling item demoted to
+  "small stuff").
+- Then: playtest (C6) → `gh release` (C1–C9) → the ONE approved GitHub push
+  (release branch + tag + release) → main.
+
+---

@@ -45,7 +45,7 @@ BUILD_DIR="${BUILD_DIR:-build-pc}"
 # MSYS2 install). Whatever `cmake`/`gcc` happen to be first on PATH is not
 # trustworthy: Git Bash's /mingw64 has no toolchain, and a pip-installed
 # cmake in a Python Scripts dir can shadow the MSYS2 one. GE_MSYS2_ROOT
-# (e.g. D:\M\msys64) overrides the search.
+# (e.g. C:\msys64) overrides the search.
 _ge_find_mingw_bin() {
     local c root
     root="${GE_MSYS2_ROOT:-}"
@@ -67,7 +67,7 @@ _ge_find_mingw_bin() {
 if [ -n "${MSYSTEM:-}" ] && [ -z "${GE_PC_BUILD_VIA_NATIVE:-}" ]; then
     _mingw_bin="$(_ge_find_mingw_bin)" || {
         echo "ERROR: could not find the MSYS2 MinGW64 toolchain (mingw64/bin with cmake.exe + gcc.exe)." >&2
-        echo "Install it (see docs/building.md) or point GE_MSYS2_ROOT at the MSYS2 root, e.g. GE_MSYS2_ROOT='D:\M\msys64'." >&2
+        echo "Install it (see docs/building.md) or point GE_MSYS2_ROOT at the MSYS2 root, e.g. GE_MSYS2_ROOT='C:\msys64'." >&2
         exit 1
     }
     # Failure mode 3 (AGENTS.md): the toolchain's DLL dir must be on PATH,

@@ -1,6 +1,8 @@
 ---
 title: Framerate and pacing
 description: How the GoldenEye 007 PC port holds a steady 60 fps and keeps per-frame game timing correct on a fast CPU.
+date: '2026-10-05'
+modified_time: '2026-10-05'
 ---
 
 ## Framerate and pacing

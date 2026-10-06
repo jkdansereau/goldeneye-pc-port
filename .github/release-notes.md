@@ -16,12 +16,12 @@ Region: **NTSC-U (US) only**. See [Known issues](#known-issues).
      build was played on (e.g. "Played on Windows and Steam Deck: campaign
      spot-checks, 2-4P split-screen, a controller-only session"). -->
 
-The headline is **the settings interface, rebuilt**. Both options screens are
-merged into one, laid out like the Perfect Dark PC port's menu, with plain-English
-wording, real-unit sliders and a one-line description under whichever option you
-select. Alongside it: the game's own N64 control styles as a per-seat preset,
-emulator save files that load directly, a scalable HUD overlay, and a round of
-fidelity fixes checked frame-by-frame against the N64 game.
+The headline is **one real options system**: both options
+screens merged into a single menu, laid out like the Perfect Dark PC port's,
+with the game's own N64 control styles as a per-seat preset, emulator save
+files that load directly, and a scalable HUD overlay. A round of fidelity
+fixes, checked frame-by-frame against the N64 game, rounds out the feature
+list.
 
 ---
 
@@ -36,15 +36,6 @@ fidelity fixes checked frame-by-frame against the N64 game.
   instead of the old numbered rows (D504).
 - **Display mode** is a dropdown; **Backspace** goes back, matching the rest of
   the game's menus (D504 follow-up).
-
-### Menu wording, units and help text (D505–D507)
-
-- 27 maintainer-approved wording edits across both menus: option names say what
-  they do, not what the internal variable is called (D505).
-- Sliders carry **real units** — percent, frames, seconds, pixels — and their
-  values are standardised across the two menus (D506).
-- Selecting an option shows a **one-line description** of it in the same menu
-  (D507).
 
 ### Control styles: the game's own N64 layouts (D513, D516, D518)
 
@@ -79,18 +70,6 @@ fidelity fixes checked frame-by-frame against the N64 game.
   **crosshair colour by health** — the four settings the Perfect Dark port has
   that this port was missing.
 
-### Overlay controls are antialiased (D520)
-
-- Slider wedges, slider markers and dropdown arrows no longer step in whole
-  canvas pixels (which grew visibly at large window sizes); they are drawn
-  smooth at every size.
-
-### Watch menu keeps its own settings (D349, corrected)
-
-- Closing the in-level **Watch** menu now saves the watch's own screen size and
-  ratio, and they no longer fight the front-end **Aspect ratio** setting. The
-  earlier note in the findings log was corrected.
-
 ---
 
 ## Fidelity and stability fixes
@@ -101,13 +80,19 @@ fidelity fixes checked frame-by-frame against the N64 game.
 - **Aspect ratio:** forced ratios now letterbox/pillarbox without re-cropping the
   play area (D508); the rare gun/hand model glitch after changing ratio
   mid-level is largely fixed, a rare remainder is logged (D509).
+- **Watch menu:** closing the in-level **Watch** menu now saves the watch's own
+  screen size and ratio, and they no longer fight the front-end **Aspect ratio**
+  setting; the earlier note in the findings log was corrected (D349).
+- **Overlay controls:** slider wedges, slider markers and dropdown arrows no
+  longer step in whole canvas pixels (which grew visibly at large window sizes);
+  they are drawn smooth at every size (D520).
 - **FPS counter:** holding left/right on a Bond settings row no longer drops the
   FPS counter (D517).
 - **Build:** a fresh build directory no longer produces an untagged executable
   name (D515).
 - **Tooling:** the asset converter's argument quoting and sidecar size check are
-  tightened; the CI cache actions no longer carry stale ROM paths. The golden-frame
-  tooling is now non-destructive and drift-free: a verification sweep used to
+  tightened; the CI cache actions no longer carry stale ROM paths. The
+  reference-frame tooling is now non-destructive and drift-free: a verification sweep used to
   overwrite your own `data/ge007.ini` and leave the previous level's save file
   behind, and now pins both idempotently (your ini and save are restored whatever
   the run does); the capture helper reads its frame windows out of the gate instead
@@ -121,6 +106,16 @@ fidelity fixes checked frame-by-frame against the N64 game.
   (`GE_D526`/`GE_D526BOX`/`GE_D526MAX`) is available for transparency/texture triage
   (D526; the P13 Dam-ending grate show-through it targeted was confirmed faithful N64
   behaviour on 1964/GEPD, so no change shipped).
+
+---
+
+## The small stuff
+
+27 menu-wording edits across both menus (option names say what they do, not
+what the internal variable is called, D505); sliders carrying **real units** —
+percent, frames, seconds, pixels — standardised across the two menus (D506);
+a **one-line description** of the selected option in the same menu (D507);
+and menu spelling standardised to one convention across both menus.
 
 ---
 
@@ -148,10 +143,16 @@ follow-ups.
      sentence "these were merged and review-verified but not playtested live"
      in the body; never imply a full playtest. -->
 
-**Golden-gate state for this release:** both platforms carry the full 21-level
-reference-frame set (63 frames each) at the same stems, and each platform's gate
-is green against its own goldens. The cross-platform spread (0.348-3.983% of
-pixels over tol 2 on the 20 non-Cuba levels, structural tier 21/21 clean) is
+**Reference-frame gate for this release:** both platforms carry the full 21-level
+reference-frame set (63 frames each) at the same stems. The Windows gate is green
+against its own goldens (21/21, three consecutive clean sweeps); on Linux the
+crash gate is green and the pixel verdict is still owed (see below). The recipe pins the run for you: the save file's
+CONTENT is pinned (the gate installs its own canonical save per level, the same
+way it pins the display ini — D529) and the PRNG seed is hard-pinned (a stray
+`GE_RSEED` in your environment warns and is ignored rather than re-seeding the
+gate — D532), so a gate run and a capture run see the same starting state. The
+cross-platform spread measured on the shipped pairs (0.380-5.120% of pixels over
+tol 2 on the 20 non-Cuba levels, structural tier 21/21 clean) is
 informational only — it is not a cross-platform pixel-parity claim, and the
 linux *pixel* gate did not run on the capture box (its GL probe fails closed
 there; the linux crash gate did). The Dam ending cutscene has not been checked

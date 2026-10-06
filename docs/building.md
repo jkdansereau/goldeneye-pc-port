@@ -51,7 +51,7 @@ toolchain is involved in extraction or in the PC build.** (The IDO toolchain is
 only needed to build the N64 ROM itself, and its proprietary SGI binaries are
 not distributed here; see [`SetupGuide.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/SetupGuide.md) "Recompile IDO".)
 On Windows this is easiest under WSL or a Linux VM. Full details and
-alternatives (Docker) are in [`SetupGuide.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/SetupGuide.md).
+alternatives (Docker) are in `SetupGuide.md`.
 
 ---
 
@@ -98,7 +98,8 @@ On Windows, `build-pc.sh` also locates the MSYS2 MinGW64 toolchain itself
 `cmake` earlier on PATH) and, if native child processes would get an
 unwritable `TMP`, re-runs the configure+build under PowerShell with a
 writable one. If MSYS2 is not installed at `C:\msys64`, set
-`GE_MSYS2_ROOT` (e.g. `GE_MSYS2_ROOT='D:\M\msys64'`). Re-exec logs:
+`GE_MSYS2_ROOT` (e.g. `GE_MSYS2_ROOT='C:\tools\msys64'` for a custom
+install location). Re-exec logs:
 `build-pc/ge007-native-reexec-*.log`.
 
 For PAL/JP you must first generate that region's ROM-asset symbol file

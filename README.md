@@ -48,14 +48,17 @@ project is as much a study of that process as it is a port. See
 
 ## News
 
-- **2026-10-05** — **v0.5.0**: one options menu laid out like the Perfect Dark
-  port's, with plain-English wording, real-unit sliders and a one-line description
-  per option; the game's own N64 control styles as a per-seat preset; emulator save
-  files that load directly; a scalable HUD overlay; fullscreen mode, window centring
-  and crosshair settings; antialiased overlay controls; and a fidelity round checked
-  frame-by-frame against the N64 game (fog, aspect-ratio letterboxing, the Watch
-  menu's own settings). The reference-frame gate was re-based on both platforms
-  (21 levels, 63 frames each). [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0).
+- **2026-10-05** — **v0.5.0**: one real options system: a
+  single menu (laid out like the Perfect Dark port's) covering every setting,
+  the game's own N64 control styles as a per-seat preset, and your emulator
+  saves loading directly; a scalable HUD overlay; fullscreen, window-centring
+  and crosshair settings; and a fidelity round checked frame-by-frame against
+  the N64 game (fog, aspect-ratio letterboxing, the Watch menu's own
+  settings). The reference-frame gate was re-based on both platforms (21
+  levels, 63 frames each). Plus the small stuff: a menu wording, units and
+  help-text pass, standardised menu spelling, and antialiased overlay
+  controls.
+  [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0).
 - **v0.4.1**: 2–4 player split-screen multiplayer, controller presets and
   rebinding, PlayStation/Nintendo button names, master volume and audio
   device selection, a steady 60 fps on low-end GPUs, and fidelity fixes
@@ -239,7 +242,7 @@ only in the release packages, and no macOS/ARM builds yet.
 
 What a release installs (no networking, no telemetry, no ROM or game assets)
 and how faithfully the port tracks the original game's logic:
-[Security & fidelity status](docs/security-and-fidelity-status.md).
+[Security](docs/security.md) and [fidelity](docs/fidelity.md) status.
 The binaries are not code-signed; from v0.5.0 on each release artifact also
 carries a GitHub build-provenance attestation you can check with
 `gh attestation verify <file> --repo jkdansereau/goldeneye-pc-port`
