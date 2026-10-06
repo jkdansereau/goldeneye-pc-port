@@ -403,9 +403,10 @@ int inputOverlayOwnerPad(void)
  * Sources are SDL controller buttons plus the two analog triggers treated as
  * digital (padTriggerPct). Each action is bound to up to two sources, written
  * in the ini as SDL names joined by a comma ("a,x", "righttrigger", "none").
- * Input.PadPreset: 0 = Jinx 1.1 (the pre-D469 hard-wired mapping; default),
- * 1/2 = Jinx 1.2/1.3 (NOT defined by D394: reserved, resolve to 1.1),
- * 3 = Custom (the per-seat Input.Pad.* strings). Seat 0 keys are
+ * Input.PadPreset: 0 = 1.1 Jinx (the pre-D469 hard-wired mapping; default),
+ * 1 = 1.2 Christmas, 2 = 1.3 Frost (D498: D394 stick roles, same buttons),
+ * 3 = Custom (the per-seat Input.Pad.* strings), 4 = 1.4 Elektra (D498).
+ * Seat 0 keys are
  * Input.Pad.<Action>; seats 1..3 are Input.Pad2/3/4.<Action>. Seat = pads[]
  * index (D448), not the controller slot.
  *
@@ -458,6 +459,11 @@ typedef struct { u32 mask[PA_COUNT]; } PadBinds;
 typedef struct { PadBinds seat[MAX_PADS]; } PadTable;
 
 static int  padPreset = 0;                       /* Input.PadPreset */
+/* D194/D238: 1 = force GE's own 1.2/SOLITARE
+ * control style for continuous analog pitch;
+ * 0 = legacy 1.1/HONEY + D166 digital pulse.
+ * (D498: declared here so the stick-style helpers below can read it.) */
+static int naturalPitchMode = 1;                 /* Input.NaturalPitch */
 static char padStr[MAX_PADS][PA_COUNT][32];      /* Input.Pad[N].<Action> */
 static char padStrKey[MAX_PADS][PA_COUNT][40];
 static PadTable padTabBuf[2];
@@ -496,7 +502,21 @@ static void padBuildBinds(PadBinds *b, int seat, int custom, int *bad)
     if (!b->mask[PA_START]) b->mask[PA_START] = PSM(PS_START);   /* lockout guard: keep a pause path */
 }
 
-static int padPresetCustom(void) { return padPreset >= 3; }
+/* D498: preset 3 is Custom; 4 = 1.4 Elektra is a fixed mapping, not custom. */
+static int padPresetCustom(void) { return padPreset == 3; }
+
+/* D498: stick style for the active preset. 1.2 Christmas / 1.3 Frost force
+ * HONEY and 1.4 Elektra forces SOLITARE (for mouse and keyboard too, since
+ * the game runs one control style per player). 1.1 Jinx (the default) and
+ * Custom keep Input.NaturalPitch, so the NaturalPitch=0 escape hatch still
+ * works exactly as before D498. */
+static int stickSolitare(void) {
+    if (padPreset == 1 || padPreset == 2) return 0;
+    if (padPreset == 4) return 1;
+    return naturalPitchMode;
+}
+/* D498: 1.3 Frost / 1.4 Elektra swap the two sticks (never in menus). */
+static int stickSwap(void) { return padPreset == 2 || padPreset == 4; }
 
 /* Signature of everything the table depends on (preset only unless Custom). */
 static unsigned padComputeSig(void)
@@ -527,9 +547,8 @@ static const PadTable *padTabGet(void)
         SDL_AtomicSetPtr((void **)&padTabPub, spare);
         padTabSig = sig;
         padTabValid = 1;
-        sysLogPrintf(LOG_INFO, "input: pad table rebuilt (preset %d%s%s, %d unknown name(s))",
-                     padPreset, padPresetCustom() ? " custom" : "",
-                     padPreset == 1 || padPreset == 2 ? " [1.2/1.3 undefined -> 1.1]" : "", bad);
+        sysLogPrintf(LOG_INFO, "input: pad table rebuilt (preset %d%s, %d unknown name(s))",
+                     padPreset, padPresetCustom() ? " custom" : "", bad);   /* D498 */
         SDL_AtomicUnlock(&rebuildLock);
         return spare;
     }
@@ -557,7 +576,7 @@ static u32 padActHeld(const PadBinds *b, u32 raw)
     return h;
 }
 
-typedef struct { int facePlayable; int slotNative; int southpaw; } PadMapCtx;
+typedef struct { int facePlayable; int slotNative; int southpaw; int tank; } PadMapCtx;
 typedef struct { unsigned button; int crouch; int gadgetEdge; u32 actHeld; } PadMapOut;
 
 /* The pure mapping: raw source bits + bindings + previous action state ->
@@ -587,6 +606,15 @@ static void padMapPure(const PadBinds *b, u32 raw, u32 actPrev, unsigned buttonI
         if (edge & (1u << PA_NEXTWPN)) button |= GE_CONT_A;
         if (edge & (1u << PA_PREVWPN)) button |= GE_CONT_A | GE_CONT_G;   /* same backward-cycle idiom as the mouse wheel */
         if (raw & b->mask[PA_AIM] & ~PS_TRIGGERS)  button |= GE_CONT_R;   /* digital sources (LB aim): playable only, after the swap */
+        if (raw & b->mask[PA_FIRE] & ~PS_TRIGGERS) button |= GE_CONT_G;
+    } else if (c->tank) {
+        /* D495: driving the tank. The native A (change weapon) and B (exit,
+         * sent by the locked use path in inputComputePadSlot) follow the
+         * player's bindings like on foot, instead of the fixed menu faces
+         * (A/X = A, B/Y = B): with the default preset X switched the tank
+         * weapon and Y left the tank. */
+        if (edge & ((1u << PA_NEXTWPN) | (1u << PA_PREVWPN))) button |= GE_CONT_A;
+        if (raw & b->mask[PA_AIM] & ~PS_TRIGGERS)  button |= GE_CONT_R;
         if (raw & b->mask[PA_FIRE] & ~PS_TRIGGERS) button |= GE_CONT_G;
     } else {
         if (raw & (PSM(PS_A) | PSM(PS_X))) button |= GE_CONT_A;   /* menu lockout guard: fixed native accept/cancel */
@@ -940,9 +968,6 @@ static int padDirectCompute(int dx, int dy);   /* D404: pad twin of the above */
 static int    s_absAimSuspend = 0;
 
 static int aimAbsCompute(double dxPx, double dyPx, int *outSx, int *outSy);  /* D194 */
-static int naturalPitchMode = 1;    /* D194/D238: 1 = force GE's own 1.2/SOLITARE
-                                      * control style for continuous analog pitch;
-                                      * 0 = legacy 1.1/HONEY + D166 digital pulse. */
 static Uint64 s_lastLookPollCounter = 0;  /* D194(b): monotonic clock, gameplay-look drain only */
 
 /* Gamepad tuning -- defaults reproduce the old hardcoded constants exactly.
@@ -1178,13 +1203,27 @@ static void inputOpenPads(void)
  * Same entry syntax; "frame" = count of THAT controller's reads since
  * launch. Slots 1-3 have no mouse path, so mouse tokens (MDX/MDY) and
  * CHOLD/CREL are ignored there (one warning per script if they appear).
- * Unset => the seat stays idle exactly as before. */
-#define INPUTSCRIPT_MAX     64
-#define INPUTSCRIPT_PULSE   6
+ * Unset => the seat stays idle exactly as before.
+ *
+ * GE_INPUTSCRIPT_MS=1 (abpad, tools_pc/abpad): every slot's "frame" is
+ * instead milliseconds since SDL init (SDL_GetTicks), and buttons pulse for
+ * INPUTSCRIPT_PULSE_MS. Read rates vary across the intro and menus, so a
+ * read count can't be lined up with a wall-clock reference (1964). */
+#define INPUTSCRIPT_MAX       64
+#define INPUTSCRIPT_PULSE     6
+#define INPUTSCRIPT_PULSE_MS  50
+
+static int scriptMsMode(void)
+{
+    static int ms = -1;
+    if (ms < 0) ms = GE_ENVFLAG("GE_INPUTSCRIPT_MS") ? 1 : 0;
+    return ms;
+}
 
 struct scriptEntry { long frame; unsigned mask; int sx, sy; int hasStick;
                      int hasMouse, mdx, mdy; int hasHold, hold;    /* D337 mouse/aim tokens */
                      int hasZHold, zhold;                          /* D207: sustained fire */
+                     int hasCHold; unsigned chold;                 /* abpad: sustained C buttons (1.2 walk/strafe) */
                      int hasCrouch, crouch;                       /* D377: free-crouch QA */
                      int hasUse, use, hasReload, reload; };        /* D378: split-action QA */
 /* Per-slot state. Slot 0 is the original GE_INPUTSCRIPT harness (byte-for-
@@ -1197,6 +1236,7 @@ struct scriptSlot {
     int curSX, curSY; /* stick set by the last scriptApply() for this slot */
     int mouseOn, mdx, mdy;   /* sustained scripted mouse (slot 0 only) */
     int hold, zhold, crouch, use, reload;  /* latest sustained holds */
+    unsigned chold;          /* latest sustained C-button mask */
     int ignoredWarned;       /* P1..P3: warned once about mouse/crouch tokens */
 };
 static struct scriptSlot scriptSlots[4] = {
@@ -1261,6 +1301,13 @@ static void scriptApplyToken(struct scriptEntry *e, const char *s, int n,
      * independent of RHOLD so aim + fire can be held together. */
     if (n == 5 && SDL_strncasecmp("ZHOLD", s, 5) == 0) { e->hasZHold = 1; e->zhold = 1; return; }
     if (n == 4 && SDL_strncasecmp("ZREL", s, 4) == 0)  { e->hasZHold = 1; e->zhold = 0; return; }
+    /* abpad: CUPHOLD/CDOWNHOLD/CLEFTHOLD/CRIGHTHOLD hold C buttons until CNONE
+     * (the port forces 1.2 SOLITARE, where C-up/down walk and C-left/right strafe). */
+    if (n == 7 && SDL_strncasecmp("CUPHOLD", s, 7) == 0)    { e->hasCHold = 1; e->chold |= GE_CONT_E; return; }
+    if (n == 9 && SDL_strncasecmp("CDOWNHOLD", s, 9) == 0)  { e->hasCHold = 1; e->chold |= GE_CONT_D; return; }
+    if (n == 9 && SDL_strncasecmp("CLEFTHOLD", s, 9) == 0)  { e->hasCHold = 1; e->chold |= GE_CONT_C; return; }
+    if (n == 10 && SDL_strncasecmp("CRIGHTHOLD", s, 10) == 0) { e->hasCHold = 1; e->chold |= GE_CONT_F; return; }
+    if (n == 5 && SDL_strncasecmp("CNONE", s, 5) == 0)      { e->hasCHold = 1; e->chold = 0; return; }
     if ((n == 5 && SDL_strncasecmp("CHOLD", s, 5) == 0) ||
         (n == 4 && SDL_strncasecmp("CREL", s, 4) == 0)) {
         if (slot > 0) {   /* no crouch path on slots 1-3: ignore, warn once */
@@ -1315,6 +1362,7 @@ static void scriptParse(int slot)
         e->hasMouse = e->mdx = e->mdy = 0;
         e->hasHold = e->hold = 0;
         e->hasZHold = e->zhold = 0;
+        e->hasCHold = 0; e->chold = 0;
         e->hasCrouch = e->crouch = 0;
         e->hasUse = e->use = e->hasReload = e->reload = 0;
         while (*p && *p != ';') {
@@ -1351,7 +1399,7 @@ static int scriptIsActive(int slot)
 static void scriptRefreshHolds(int slot)
 {
     struct scriptSlot *st = &scriptSlots[slot];
-    long bestM = -1, bestH = -1, bestZ = -1, bestC = -1, bestU = -1, bestR = -1;
+    long bestM = -1, bestH = -1, bestZ = -1, bestC = -1, bestU = -1, bestR = -1, bestCH = -1;
     for (int i = 0; i < st->count; ++i) {
         long d = st->frame - st->entries[i].frame;
         if (d < 0) continue;
@@ -1368,6 +1416,10 @@ static void scriptRefreshHolds(int slot)
         if (st->entries[i].hasZHold && st->entries[i].frame > bestZ) {
             bestZ = st->entries[i].frame;
             st->zhold = st->entries[i].zhold;
+        }
+        if (st->entries[i].hasCHold && st->entries[i].frame > bestCH) {
+            bestCH = st->entries[i].frame;
+            st->chold = st->entries[i].chold;
         }
         if (st->entries[i].hasCrouch && st->entries[i].frame > bestC) {
             bestC = st->entries[i].frame;
@@ -1390,12 +1442,15 @@ static unsigned scriptApply(int slot, unsigned button)
     if (!scriptIsActive(slot)) {
         return button;
     }
+    int ms = scriptMsMode();
+    if (ms) st->frame = (long)SDL_GetTicks();
     scriptRefreshHolds(slot);   /* D207: refresh sustained holds even off the mouse path (idempotent) */
     unsigned m = 0;
     long bestStickFrame = -1;
+    long pulse = ms ? INPUTSCRIPT_PULSE_MS : INPUTSCRIPT_PULSE;
     for (int i = 0; i < st->count; ++i) {
         long d = st->frame - st->entries[i].frame;
-        if (d >= 0 && d < INPUTSCRIPT_PULSE) {
+        if (d >= 0 && d < pulse) {
             m |= st->entries[i].mask;
         }
         /* sustained stick: the latest-starting entry that carried a stick token */
@@ -1408,7 +1463,8 @@ static unsigned scriptApply(int slot, unsigned button)
     if (st->hold == 1) m |= GE_CONT_R;   /* D337 RHOLD */
     if (st->hold == 2) m |= GE_CONT_L;   /* D337 LHOLD (Q / "LeanLeft") */
     if (st->zhold) m |= GE_CONT_G;       /* D207 ZHOLD (fire) */
-    st->frame++;
+    m |= st->chold;                      /* abpad C-button holds */
+    if (!ms) st->frame++;
     return m;
 }
 
@@ -1435,6 +1491,11 @@ int inputInit(void)
      * be set before the pads below are opened. */
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1");
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1");
+    /* abpad live A/B: GE_PAD_BACKGROUND=1 keeps pad input flowing while the
+     * window is unfocused, so one real pad can drive the port and 1964 at once.
+     * Off by default (SDL ignores pads in unfocused windows). */
+    if (getenv("GE_PAD_BACKGROUND") && getenv("GE_PAD_BACKGROUND")[0] == '1')
+        SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 
     for (int i = 0; i < MAX_PADS; ++i) {
         pads[i] = NULL;
@@ -2026,7 +2087,7 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
      * anything else ever calls the setter (menu, save load) in between. */
     if ((idx == 0 || inputMpSplit()) && slotPlayer() != NULL &&
         (idx == 0 || idx < getPlayerCount())) {   /* D416: each slot rewrites only its own player's style */
-        int wantSolitare = naturalPitchMode ? CONTROLLER_CONFIG_SOLITARE_ : CONTROLLER_CONFIG_HONEY_;
+        int wantSolitare = stickSolitare() ? CONTROLLER_CONFIG_SOLITARE_ : CONTROLLER_CONFIG_HONEY_;   /* D498 */
         struct player *sp = slotPlayer();
         if (!inputMpSplit()) {
             if (cur_player_get_control_type() != wantSolitare)
@@ -2162,7 +2223,7 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
          * front-end screen (file select, cheat, MENU_PC_OPTIONS) can be
          * driven vertically from the keyboard. Watch/pause keeps the C-button
          * mapping: it is current_menu==RUN_STAGE (menuMode 0), N64-style. */
-        if (naturalPitchMode && !menuMode) {
+        if (stickSolitare() && !menuMode) {   /* D498 */
             if (actHeld(ks, IA_FORWARD)) button |= GE_CONT_E;   /* C-up = forward   */
             if (actHeld(ks, IA_BACK))    button |= GE_CONT_D;   /* C-down = back    */
         } else {
@@ -2580,7 +2641,7 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                 sx += (int)(hipEdx * hipSens * MOUSE_TURN_GAIN * (inTankHip ? tankAimScale / 100.0 : 1.0));
                 if (inTankHip) {
                     /* no pitch/drive from the mouse in a tank */
-                } else if (naturalPitchMode) {
+                } else if (stickSolitare()) {   /* D498 */
                     /* D194/D238: SOLITARE gives hipfire pitch the same
                      * continuous analog stick treatment as yaw -- same
                      * formula as the sx line above, so X and Y are, by
@@ -2666,12 +2727,15 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
         int padMenuMode = (current_menu != GE_MENU_RUN_STAGE &&
                            current_menu != GE_MENU_INVALID);
 
+        /* D498: 1.3 Frost / 1.4 Elektra swap the two sticks; menus never swap. */
+        if (!padMenuMode && stickSwap()) { int tx = lx, ty = ly; lx = rx; ly = ry; rx = tx; ry = ty; }
+
         if (padMenuMode) {
             int px = scaleAxis(lx, padDeadzoneL);
             int py = -scaleAxis(ly, padDeadzoneL);       /* SDL up = negative -> N64 up = positive */
             if (px) sx = px;
             if (py) sy = py;
-        } else if (naturalPitchMode) {
+        } else if (stickSolitare()) {   /* D498 */
             /* D194/D238: SOLITARE swaps stick roles -- left stick becomes
              * digital-step movement (same analog-for-movement tradeoff as
              * the keyboard remap above), right stick becomes continuous
@@ -2742,6 +2806,8 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
             pc.facePlayable = (idx == 0 || inputMpSplit()) && inputCanUseGameplayActions(padMenuMode);
             pc.slotNative = (idx > 0 || inputMpPadsOwnP1());
             pc.southpaw = padSouthpaw;
+            pc.tank = !pc.facePlayable && idx == 0 && !padMenuMode && g_PlayerIsInTank == 1 &&
+                      slotPlayer() && slotPlayer()->outside_watch_menu && !slotPlayer()->pause_state;
             const PadBinds *pb = &padTabGet()->seat[padSeatForSlot(idx)];
             padMapPure(pb, padReadRaw(pad), padActPrev[idx], button, &pc, &po);
             button = po.button;
@@ -2785,37 +2851,30 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                         !p->pause_state && !p->mpmenuon && !g_PlayerIsInTank &&
                         !lvlGetControlsLockedFlag() &&
                         !gameScriptedCameraActive();
+        /* D483/D494 (#136): a weapon with DISABLE_CROUCH (the sniper rifle)
+         * makes the native code turn aim-mode C-up/C-down into zoom, so the
+         * N64 pad cannot change stance with it out. GEPD's crouch key (the
+         * mouse injector, the reference for this preset) writes the stance
+         * directly and ignores the flag: Bond crouches and stands freely with
+         * the sniper (maintainer A/B on 1964 GEPD, 2026-10-03). Do the same,
+         * but never feed C-down for such a weapon (it would zoom out). */
         int weaponBlocks = 0;
-        if (canCrouch && (crouchNow || s_crouchApplied)) {   /* weapon lookup only when it can matter */
+        if (canCrouch && (crouchNow || s_crouchApplied))   /* weapon lookup only when it can matter */
             weaponBlocks = bondwalkItemCheckBitflags(p->hands[GUNRIGHT].weaponnum,
                                                      WEAPONSTATBITFLAG_DISABLE_CROUCH);
-            canCrouch = !weaponBlocks;
-        }
-        static int frozenLogged = 0;
-        if (!weaponBlocks) frozenLogged = 0;
-        if (weaponBlocks) {
-            /* D483 (#136): a weapon with DISABLE_CROUCH (the sniper rifle)
-             * blocks the native crouch-down AND crouch-up (bondview2.c), so
-             * on the N64 Bond keeps whatever stance he had when he switched
-             * to it. Freeze the port stance the same way: don't apply a new
-             * crouch, don't stand up, and never feed C-down (it zooms out
-             * with this weapon). Switching back resumes the normal rules. */
-            if (!frozenLogged && configGetInputLog())
-                sysLogPrintf(LOG_NOTE, "GE_INPUTLOG free crouch frozen (weapon %d disables crouch, crouchpos=%d, key=%d)",
-                             (int)p->hands[GUNRIGHT].weaponnum, (int)p->crouchpos, crouchNow);
-            frozenLogged = 1;
-        } else if (canCrouch && crouchNow) {
+        if (canCrouch && crouchNow) {
             /* In aim mode the native crouchUp branch runs every tick without
              * C-down, undoing the port stance by one step. Feed the native
              * axis ONLY while aiming; hipfire still crouches by stance alone. */
-            if (p->insightaimmode || (button & (GE_CONT_R | GE_CONT_L)))
+            if (!weaponBlocks && (p->insightaimmode || (button & (GE_CONT_R | GE_CONT_L))))
                 button |= GE_CONT_D;
             p->crouchpos = CROUCH_SQUAT;
             if (!s_crouchApplied && configGetInputLog())
-                sysLogPrintf(LOG_NOTE, "GE_INPUTLOG free crouch applied (aim=%d)", p->insightaimmode);
+                sysLogPrintf(LOG_NOTE, "GE_INPUTLOG free crouch applied (aim=%d, weapon disables crouch=%d)",
+                             p->insightaimmode, weaponBlocks);
             s_crouchApplied = 1;
             s_crouchPlayer = p;
-        } else if (!(canCrouch && (button & GE_CONT_D) && p->insightaimmode)) {
+        } else if (!(canCrouch && !weaponBlocks && (button & GE_CONT_D) && p->insightaimmode)) {
             /* If native C-down is still held in aim, let the game retain its
              * own crouch on this tick rather than force a stand. */
             if (s_crouchApplied && configGetInputLog())
@@ -3092,8 +3151,13 @@ int inputRumbleSupported(int idx)
     return padRumbleOn[idx];
 }
 
+/* D493: set once inputRumbleStopAll has run at exit, so the still-running
+ * game thread cannot start a new rumble after the pads were silenced. */
+static SDL_atomic_t s_rumbleStopped;
+
 void inputRumble(int idx, f32 strength, f32 time)
 {
+    if (SDL_AtomicGet(&s_rumbleStopped)) return;
     if (idx < 0 || idx >= MAX_PADS) return;
     SDL_GameController *rpad = slotPad(idx);
     const int rIdx = (inputMpSplit() && inputMpKbmP1()) ? idx - 1 : idx;
@@ -3109,6 +3173,21 @@ void inputRumble(int idx, f32 strength, f32 time)
             time *= 1000.f;
         }
         SDL_GameControllerRumble(rpad, (Uint16)strength, (Uint16)strength, (Uint32)time);
+    }
+}
+
+/* D493: silence every open pad at a clean exit. SDL_GameControllerRumble
+ * runs for its duration on the pad itself, so a rumble started just before
+ * the window closed kept going after the process ended (seen on a DualSense
+ * when quitting mid-firefight). inputDestroy never runs: the host loop exits
+ * through exit(0), so this is called from main.c's atexit handler. */
+void inputRumbleStopAll(void)
+{
+    SDL_AtomicSet(&s_rumbleStopped, 1);
+    for (int i = 0; i < MAX_PADS; ++i) {
+        if (pads[i] && padRumbleOn[i]) {
+            SDL_GameControllerRumble(pads[i], 0, 0, 0);
+        }
     }
 }
 
@@ -3520,8 +3599,11 @@ unsigned inputPadHeldSources(int seat)
 }
 int inputPadPresetStep(int cur, int dir)
 {
-    (void)dir;   /* only Jinx 1.1 (0) and Custom (3) are defined; 1/2 are reserved (D394 does not define 1.2/1.3) */
-    return cur == 0 ? 3 : 0;
+    /* D498: display order Jinx, Christmas, Frost, Elektra, Custom (stored 0,1,2,4,3). */
+    static const int order[5] = { 0, 1, 2, 4, 3 };
+    for (int i = 0; i < 5; i++)
+        if (order[i] == cur) return order[(i + (dir > 0 ? 1 : 4)) % 5];
+    return 0;   /* unknown stored value -> Jinx */
 }
 
 /* "a,x" -> src[0]=A, src[1]=X; empty/none/unknown -> -1 (positional). */
@@ -3687,7 +3769,7 @@ static void padMapSelfTest(void)
 
 PD_CONSTRUCTOR static void inputConfigInit(void)
 {
-    configRegisterInt("Input.PadPreset", &padPreset, 0, 3);   /* D469: 0 Jinx 1.1, 1/2 reserved (= 1.1), 3 Custom */
+    configRegisterInt("Input.PadPreset", &padPreset, 0, 4);   /* D498: 0 Jinx 1.1, 1 Christmas 1.2, 2 Frost 1.3, 3 Custom, 4 Elektra 1.4 */
     for (int seat = 0; seat < MAX_PADS; seat++)
         for (int a = 0; a < PA_COUNT; a++) {
             if (seat == 0) snprintf(padStrKey[seat][a], sizeof(padStrKey[seat][a]), "Input.Pad.%s", kPadAct[a].key);

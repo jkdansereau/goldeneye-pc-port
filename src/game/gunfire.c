@@ -87,6 +87,10 @@ extern u32 D_80035CC0;
 extern u32 D_80035D00;
 extern u32 D_80035D04[];
 extern u32 D_80035EA4;
+#ifdef PORT
+extern u32 D_80035EA8;
+extern u32 D_80035EAC;
+#endif
 extern u32 watchControllerButtonBases[];
 extern GunModelFileRecord gitem_structs[];
 extern struct gun_trigger_state g_ZeroTriggerState;
@@ -5346,7 +5350,16 @@ void sub_GAME_7F068508(GUNHAND handnum, f32 floor_y_pos)
         return;
     }
  
+#ifdef PORT
+    /* D491: N64 reads rot across the adjacent globals D_80035EA4/A8/AC (gun.c,
+     * all zero); mingw lays them out in reverse, so y/z came from
+     * g_ZeroTriggerState. Read the named globals. Layout only (porting-notes D5). */
+    rot.x = *(f32 *) &D_80035EA4;
+    rot.y = *(f32 *) &D_80035EA8;
+    rot.z = *(f32 *) &D_80035EAC;
+#else
     rot = *((coord3d *) (&D_80035EA4));
+#endif
     casing->floor_y_pos = floor_y_pos;
  
     if (((((weaponid == ITEM_WPPK) || (weaponid == ITEM_WPPKSIL)) || (weaponid == ITEM_TT33)) || (weaponid == ITEM_SILVERWPPK)) || (weaponid == ITEM_GOLDWPPK))
@@ -5663,7 +5676,16 @@ void sub_GAME_7F068508(GUNHAND handnum, f32 floor_y_pos)
         return;
     }
  
+#ifdef PORT
+    /* D491: N64 reads rot across the adjacent globals D_80035EA4/A8/AC (gun.c,
+     * all zero); mingw lays them out in reverse, so y/z came from
+     * g_ZeroTriggerState. Read the named globals. Layout only (porting-notes D5). */
+    rot.x = *(f32 *) &D_80035EA4;
+    rot.y = *(f32 *) &D_80035EA8;
+    rot.z = *(f32 *) &D_80035EAC;
+#else
     rot = *((coord3d *) (&D_80035EA4));
+#endif
     casing->floor_y_pos = floor_y_pos;
  
     if (((((weaponid == ITEM_WPPK) || (weaponid == ITEM_WPPKSIL)) || (weaponid == ITEM_TT33)) || (weaponid == ITEM_SILVERWPPK)) || (weaponid == ITEM_GOLDWPPK))

@@ -2571,14 +2571,6 @@ void texLoad(s32 *updateword, struct texpool *pool)
 
         if (TRUE)
         {
-#ifdef PORT
-            /* TEMP D66: catch oversized texLoad ROM reads. */
-            if (getenv("GE_D63"))
-                osSyncPrintf("D66 texLoad texnum=%d thisoff=%08x nextoff=%08x size=%08x compbuf=%p\n",
-                             g_TexNumToLoad, thisoffset, nextoffset,
-                             (unsigned)(((u32)(nextoffset - thisoffset) + 0x1f) >> 4 << 4),
-                             (void *)alignedcompbuffer);
-#endif
             // Copy the compressed texture to RAM
             romCopy(alignedcompbuffer,
                     (u32) &_imagesSegmentRomStart + (thisoffset & 0xfffffff8),

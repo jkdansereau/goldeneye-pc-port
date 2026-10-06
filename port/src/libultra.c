@@ -586,39 +586,9 @@ void osEnqueueMesg(OSMesgQueue *mq, OSMesg msg)
     pthread_mutex_unlock(&pq->lock);
 }
 
-/* TEMP D62: full message-flow trace (env GE_D62=1 -> d62mesg.log). */
-static FILE *s_d62log = NULL;
-static int s_d62opened = 0;
-static pthread_mutex_t s_d62lock = PTHREAD_MUTEX_INITIALIZER;
-static void d62log(const char *op, OSMesgQueue *mq, OSMesg msg)
-{
-    if (!s_d62opened) {
-        s_d62opened = 1;
-        if (getenv("GE_D62"))
-            s_d62log = fopen("d62mesg.log", "w");
-    }
-    if (s_d62log) {
-        pthread_mutex_lock(&s_d62lock);
-        fprintf(s_d62log, "%s mq=%p msg=%p valid=%d/%d first=%d\n",
-                op, (void *)mq, (void *)msg, mq->validCount,
-                mq->msgCount, mq->first);
-        fflush(s_d62log);
-        pthread_mutex_unlock(&s_d62lock);
-    }
-}
-
-
 s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
 {
     PortQueue *pq = portQueueGet(mq);
-    d62log("SEND", mq, msg); /* TEMP D62 */
-    /* TEMP D51: watch sends to the 32-slot queues (sched cmdQ + client Qs) */
-    static int s_d51 = -1; if (s_d51 < 0) s_d51 = getenv("GE_D51") != NULL; /* D302: per-message path */
-    if (s_d51 && mq->msgCount == 32 && !(g_viRetraceMQ && mq == g_viRetraceMQ)) {
-        void *ra = __builtin_return_address(0);
-        sysLogPrintf(LOG_NOTE, "D51 send32 mq=%p from %p msg=%p valid=%d/%d",
-                     (void *)mq, ra, (void *)msg, mq->validCount, mq->msgCount);
-    }
     pthread_mutex_lock(&pq->lock);
     while (mq->validCount >= mq->msgCount) {
         if (flag != OS_MESG_BLOCK) {
@@ -634,25 +604,11 @@ s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
     return 0;
 }
 
-/* TEMP D60: gfxFrameMsgQ receive watch (env GE_D60=1). The main loop only
- * acts on msg type 1 (retrace) / 4 (RSP done); anything else means the
- * message object's .type field was clobbered. */
 extern OSMesgQueue gfxFrameMsgQ; /* src/init.c */
-static void d60logRecv(OSMesgQueue *mq, OSMesg m) {
-    static int s_d60r = -1; if (s_d60r < 0) s_d60r = getenv("GE_D60") != NULL; /* D302 */
-    if (mq != &gfxFrameMsgQ || !s_d60r) return;
-    static uint64_t n = 0;
-    const u16 type = *(const u16 *)m; /* OSScMsg.type */
-    if (n < 20 || (n % 300) == 0 || (type != 1 && type != 4))
-        sysLogPrintf(LOG_NOTE, "D60 recv #%llu mq=%p msg=%p type=%u",
-                     (unsigned long long)n, (void *)mq, (void *)m, type);
-    ++n;
-}
 
 s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
 {
     PortQueue *pq = portQueueGet(mq);
-    d62log("RECV", mq, 0); /* TEMP D62 */
     pthread_mutex_lock(&pq->lock);
     while (mq->validCount == 0) {
         if (flag != OS_MESG_BLOCK) {
@@ -711,7 +667,6 @@ s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
     mq->first = (mq->first + 1) % mq->msgCount;
     --mq->validCount;
     if (msg) *msg = m;
-    d60logRecv(mq, m); /* TEMP D60 */
     pthread_cond_signal(&pq->cond);
     pthread_mutex_unlock(&pq->lock);
     /* gfxFrameMsgQ is consumed only by boss.c's game thread. Apply queued
@@ -789,8 +744,6 @@ void osViSetEvent(OSMesgQueue *mq, OSMesg msg, u32 retraceCount)
     g_viRetraceMsg = msg;
 }
 
-/* TEMP D51: instrument the retrace pacemaker */
-static uint64_t g_viPostCount = 0;
 static void portPostVIEvent(void)
 {
     if (g_viRetraceMQ) {
@@ -798,17 +751,9 @@ static void portPostVIEvent(void)
          * end of a synchronous fast3d frame. A retrace posted into a backlog
          * is stale anyway -- sched has not drained the previous one yet. */
         if (g_viRetraceMQ->validCount >= g_viRetraceMQ->msgCount - 2) return;
-        s32 r = osSendMesg(g_viRetraceMQ, g_viRetraceMsg, OS_MESG_NOBLOCK);
-        if (++g_viPostCount % 60 == 1 || r != 0) {
-            sysLogPrintf(r != 0 ? LOG_ERROR : LOG_NOTE,
-                         "D51 vi post #%llu mq=%p msg=%d valid=%d/%d ret=%d",
-                         (unsigned long long)g_viPostCount, (void *)g_viRetraceMQ,
-                         (int)g_viRetraceMsg, g_viRetraceMQ->validCount,
-                         g_viRetraceMQ->msgCount, r);
-        }
+        osSendMesg(g_viRetraceMQ, g_viRetraceMsg, OS_MESG_NOBLOCK);
     }
 }
-/* END TEMP D51 */
 
 void osViSetMode(OSViMode *vm)
 {
@@ -910,35 +855,9 @@ void osAiSetConvert(u32 convert) { (void)convert; }
  * completion; osPiStartDma() below replicates that, because the game blocks
  * in romReceiveMesg()/osRecvMesg() after every romCopy().
  */
-/* TEMP D60: identify sidecar model reads (env GE_D60=1). srcPA-base is the
- * manifest offset; cross-reference data/pcmodels-<region>/manifest.csv for
- * the file name. */
-extern uintptr_t pcmodelsSidecarBase(void);
-extern uint32_t  pcmodelsTotalSize(void);
-/* D69: same diagnostic for the bg/stan sidecar image. */
-extern uintptr_t pccgSidecarBase(void);
-extern uint32_t  pccgTotalSize(void);
-static void d60logSidecarRead(u32 srcPA, void *dstVA, u32 size) {
-    static int s_d60s = -1; if (s_d60s < 0) s_d60s = getenv("GE_D60") != NULL; /* D302 */
-    if (!s_d60s) return;
-    uintptr_t base = pcmodelsSidecarBase();
-    if (base && srcPA >= base && srcPA < base + pcmodelsTotalSize()) {
-        sysLogPrintf(LOG_NOTE, "D60 sidecar read off=%llu size=0x%X dst=%p",
-                     (unsigned long long)(srcPA - base), size, dstVA);
-        return;
-    }
-    uintptr_t cgBase = pccgSidecarBase();
-    if (cgBase && srcPA >= cgBase && srcPA < cgBase + pccgTotalSize())
-        sysLogPrintf(LOG_NOTE, "D69 pccg sidecar read off=%llu size=0x%X dst=%p",
-                     (unsigned long long)(srcPA - cgBase), size, dstVA);
-}
-
-/* TEMP D60/D61: a ROM-read DMA target must land in the game DRAM views
+/* A ROM-read DMA target must land in the game DRAM views
  * (V1/V2) or the current thread's stack (texLoad's compbuffer). Anything
  * else is unmapped host memory on PC. */
-static FILE *s_d61log = NULL;
-static int s_d61opened = 0;
-
 static int dramHostAddrValid(uintptr_t addr, u32 size)
 {
     static const uintptr_t bases[2] = { PORT_DRAM_V1_BASE, PORT_DRAM_K0_BASE };   /* portaddr.h */
@@ -974,7 +893,6 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
     if (size == 0)
         return;
     if (direction == OS_READ) {
-        d60logSidecarRead(srcPA, dstVA, size); /* TEMP D60 */
         if (!romdataCartAddrValid(srcPA, size)) {
             sysLogPrintf(LOG_WARNING,
                          "osPiStartDma: ROM read out of range "
@@ -982,23 +900,8 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
                          srcPA, size);
             return;
         }
-        /* TEMP D60: validate the DMA target too. The N64 PI happily DMAs to
-         * any KSEG address; on PC an unmapped target is a wild memcpy.
-         * Log the whole call chain (romCopy <- doRomCopy <- osPiStartDma) so
-         * the game-side caller can be symbolicated offline. */
-        /* TEMP D61: log every ROM read (dst/src/size). The last line before
-         * a crash identifies the culprit; dst symbolizes offline via nm. */
-        static int s_d61env = -1; if (s_d61env < 0) s_d61env = getenv("GE_D61") != NULL; /* D302 */
-        if (!s_d61opened && s_d61env) {
-            s_d61log = fopen("d61dma.log", "w");
-            s_d61opened = 1;
-        }
-        if (s_d61log) {
-            static int d61count = 0;
-            fprintf(s_d61log, "D61 %06d dst=%p src=0x%08X size=0x%X\n",
-                    ++d61count, dstVA, srcPA, size);
-            fflush(s_d61log);
-        }
+        /* Validate the DMA target too. The N64 PI happily DMAs to any KSEG
+         * address; on PC an unmapped target is a wild memcpy. */
         if (!dramHostAddrValid((uintptr_t)dstVA, size)) {
             /* No __builtin_return_address here: the caller's frame chain is
              * not always walkable (it faulted). Log the raw stack window

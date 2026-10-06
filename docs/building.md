@@ -139,8 +139,12 @@ python3 tools_pc/d69_emit.py ntsc-final          # -> data/pccg-ntsc-final/{pccg
 python3 tools_pc/d88_emit.py ntsc-final --regen  #    appends the 21 solo Usetup*Z + 13 multiplayer Ump_setup*Z stage-setup files -> ~3.6 MB
 ```
 
-**PAL / JP note:** sidecar generation for these regions is currently broken at
-the source-data level (finding D258); use an NTSC-U ROM until issue #85 lands.
+**PAL / JP note:** both regions convert, build and boot from source (finding
+D258, fixed 2026-10-02; D487/D488 fixed the PAL frame height and TV type).
+Run the three emit passes with `pal-final` or `jpn-final`, and build into a
+separate directory, for example `BUILD_DIR=build-pal ./build-pc.sh pal-final`.
+Release packages are still NTSC-U only until per-region packaging lands
+(issue #85).
 
 These are **pure-stdlib Python 3** (no MIPS toolchain, independent of the
 step-2 asset extraction) and read only the ROM plus files already committed to

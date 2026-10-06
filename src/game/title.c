@@ -492,7 +492,11 @@ void initializeGunBarrelIntro(u8 *gfxBuffer, s32 bufferSize)
     bufferSize -= 0x200;
     gfxBuffer += 0x200;
     
+#ifdef PORT
+    createGunbarrelRenderHole((struct s_display_list_something *)(uintptr_t)(u32)(barrelDisplayListPtr), 0x1E);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     createGunbarrelRenderHole(barrelDisplayListPtr, 0x1E);
+#endif
     
     gunbarrelgfxListPointer = (Gfx*)gfxBuffer;
 #ifdef PORT
@@ -632,14 +636,6 @@ void clearChrGunModelInstances(void)
  * Address: 0x7F009254
 */
 Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
-#ifdef PORT
-    if (GE_ENVFLAG("GE_D63")) {
-        static int n = 0;
-        if ((++n % 200) == 1)
-            osSyncPrintf("D63 gb-render call #%d mode=%d slot=%08x\n",
-                         n, (int)gunbarrel_mode, *(const u32 *)0x7012EC38);
-    }
-#endif
     D_8002A7D0 = (1 - D_8002A7D0);
     switch (gunbarrel_mode - 2)
     {

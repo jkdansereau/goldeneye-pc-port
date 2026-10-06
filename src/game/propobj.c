@@ -5741,7 +5741,11 @@ s32 objTick(struct PropRecord *prop)
 #endif
 				temp_s0_6 = render_pad2F4->model;
 
+#ifdef PORT
+				if (temp_s0_6->anim == (ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs2[1])) /* D32/D33 */  /* D441: zero-extend s32-held DRAM ptr */
+#else
 				if (temp_s0_6->anim == (ModelAnimation *)animation_table_ptrs2[1]) /* D32/D33 */
+#endif
 				{
 					modelSetAnimTranslationScale(temp_s0_6, 10.438f);
 					setsubroty(render_pad2F4->model, M_PI_F);
@@ -10435,6 +10439,14 @@ void generate_language_specific_text_for_weapon(u8 *finalstring, ITEM_IDS itemty
     u32 morethan2players;
 
     morethan2players = FALSE;
+
+#ifdef AVOID_UB
+    /* D496: with 3+ players the non-JP path below never writes finalstring
+     * before strcat'ing onto it, and the caller's buffer is an uninitialised
+     * stack array, so leftover stack bytes were drawn as the pickup message
+     * (garbled, oversized weapon-pickup text in 3P/4P split-screen). */
+    finalstring[0] = '\0';
+#endif
 
     if (j_text_trigger != 0)
     {

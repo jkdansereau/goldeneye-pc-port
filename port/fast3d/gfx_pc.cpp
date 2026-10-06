@@ -810,7 +810,11 @@ void gfx_texture_cache_delete_range(const uint8_t* start, const uint8_t* end) {
 static bool gfx_tex_source_is_c_array(const uint8_t* addr) {
     const uintptr_t a = (uintptr_t)addr;
     if (a >= 0x10000000u && a < 0x20000000u) return false; // cart map + sidecar
-    if (a >= PORT_DRAM_V1_BASE && a < 0x90000000u) return false; // V1 dram + KSEG0 mirror (portaddr.h)
+    // V1 dram + KSEG0 mirror: the two mapped views (port/src/dram.c). D441:
+    // was `a >= V1 && a < 0x90000000`, which went empty with the arena at
+    // 0x90000000 and bswapped every DRAM texture (mirrored texel pairs).
+    if (a >= PORT_DRAM_V1_BASE && a < PORT_DRAM_V1_BASE + PORT_DRAM_SIZE) return false;
+    if (a >= PORT_DRAM_K0_BASE && a < PORT_DRAM_K0_BASE + PORT_DRAM_SIZE) return false;
     return true; // exe image: C-compiled array
 }
 
@@ -830,13 +834,6 @@ static const uint8_t* gfx_tex_normalize_source(const uint8_t* addr, uint32_t ext
     uint32_t* dst = (uint32_t*)buf.data();
     for (uint32_t i = 0; i < n / 4; i++)
         dst[i] = PD_BE32(src[i]);
-    {
-        static int ge_d71log = -1;
-        if (ge_d71log < 0) ge_d71log = getenv("GE_D71LOG") != NULL;
-        if (ge_d71log)
-            fprintf(stderr, "[D71] normalized C-array texture source %p (%u bytes)\n",
-                    (const void*)addr, extent);
-    }
     return s_c_array_tex_norms.emplace(addr, std::move(buf)).first->second.data();
 }
 
@@ -2800,23 +2797,6 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             buf_vbo[buf_vbo_len++] = u / tex_width[t];
             buf_vbo[buf_vbo_len++] = v / tex_height[t];
 
-#ifdef PORT
-            {
-                static int ge_d116 = -1;
-                if (ge_d116 < 0) ge_d116 = getenv("GE_D116") ? 1 : 0;
-                if (ge_d116 && is_rect && t == 0 && tex_width[t] > 0 && tex_width[t] <= 32) {
-                    fprintf(stderr,
-                        "[D116/vbo] rect vtx%d  x=%.4f y=%.4f  u=%.4f v=%.4f  "
-                        "(raw v->u=%.1f  texw=%.0f texw2=%u  tile.uls=%d lrs=%d cms=%d)\n",
-                        i, v_arr[i]->x, v_arr[i]->y, u / tex_width[t], v / tex_height[t],
-                        (double)v_arr[i]->u, (double)tex_width[t], (unsigned)tex_width2[i],
-                        (int)rdp.texture_tile[rdp.first_tile_index + tile].uls,
-                        (int)rdp.texture_tile[rdp.first_tile_index + tile].lrs,
-                        (int)rdp.texture_tile[rdp.first_tile_index + tile].cms);
-                }
-            }
-#endif
-
             bool clampS = tm & (1 << 2 * t);
             bool clampT = tm & (1 << (2 * t + 1));
 
@@ -3156,6 +3136,25 @@ static void gfx_dp_set_scissor(uint32_t mode, uint32_t ulx, uint32_t uly, uint32
     float y = lry / 4.0f;
     float width = (lrx - ulx) / 4.0f;
     float height = (lry - uly) / 4.0f;
+
+    // D493b: with the overscan crop off (the Original N64 preset turns it
+    // off) D246's 1-unit trim is off too, and its gap at the left/right
+    // edges showed live scene/background pixels. Keep the geometry unscaled
+    // and scissor those two logical columns out instead, so they show the
+    // frame clear (black) like the rest of the overscan border.
+    if (!g_safe_area_crop_enabled && !g_split_screen) {
+        const float edge = 1.0f;
+        if (x < edge) {
+            width -= edge - x;
+            x = edge;
+        }
+        if (x + width > (float)SCREEN_WIDTH - edge) {
+            width = (float)SCREEN_WIDTH - edge - x;
+        }
+        if (width < 0.0f) {
+            width = 0.0f;
+        }
+    }
 
     rdp.scissor.x = x;
     rdp.scissor.y = y;
@@ -3604,21 +3603,6 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
         ll->v = ult;
         ur->u = uls;
         ur->v = lrt;
-    }
-
-    {
-        static int ge_d116 = -1;
-        if (ge_d116 < 0) ge_d116 = getenv("GE_D116") ? 1 : 0;
-        if (ge_d116) {
-            const auto& tt = rdp.texture_tile[tile];
-            fprintf(stderr,
-                "[D116/f3d] tile=%d flip=%d ul(%d,%d) lr(%d,%d) uls=%d ult=%d dsdx=%d dtdy=%d "
-                "-> lrs=%.2f lrt=%.2f ul.u=%.2f lr.u=%.2f | TILE siz=%d fmt=%d line_bytes=%d "
-                "uls=%d lrs=%d width=%d height=%d cms=%d\n",
-                tile, (int)flip, ulx, uly, lrx, lry, (int)uls, (int)ult, (int)dsdx, (int)dtdy,
-                lrs, lrt, ul->u, lr->u,
-                tt.siz, tt.fmt, tt.line_size_bytes, tt.uls, tt.lrs, tt.width, tt.height, tt.cms);
-        }
     }
 
     uint8_t saved_tile = rdp.first_tile_index;

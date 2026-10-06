@@ -397,7 +397,7 @@ void lvlStageLoad(s32 stage)
          * Not compiled without PORT; no effect unless the env var is set. */
         {
             const char *sm = getenv("GE_STARTMENU");
-            /* D416 harness: GE_STARTMP="<players>[,<mpStageIdx>]" starts a local
+            /* D416 harness: GE_STARTMP="<players>[,<mpStageIdx>[,<scenario>]]" starts a local
              * multiplayer match with the menu's own default options (what
              * MP options -> START does), so split-screen can be tested with no
              * one at the menu. Needs GE_MPVIRT=<n-1> for the controller count. */
@@ -421,6 +421,13 @@ void lvlStageLoad(s32 stage)
                 selected_folder_num = -1;
                 init_mp_options_for_scenario(np);
                 if (comma) MP_stage_selected = (s32)strtol(comma + 1, NULL, 0);
+                /* optional third field: scenario (MPSCENARIOS, e.g. 7 = 2v1) */
+                if (comma && strchr(comma + 1, ',')) {
+                    extern void reset_mp_options_for_scenario(MPSCENARIOS scenarioid);
+                    extern s32 scenario;
+                    reset_mp_options_for_scenario((MPSCENARIOS)strtol(strchr(comma + 1, ',') + 1, NULL, 0));
+                    osSyncPrintf("GE_STARTMP: scenario=%d\n", scenario);
+                }
                 selected_stage = multi_stage_setups[MP_stage_selected].stage_id;
                 briefingpage = -1;
                 prev_keypresses = TRUE;

@@ -96,7 +96,11 @@ extern u8* _GlobalimagetableSegmentRomStart;
 
 
 void texSetBitstring(s32 pos) {
+#ifdef PORT
+    img_curpos = (u8 *)(uintptr_t)(u32)(pos);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     img_curpos = pos;
+#endif
     img_curdatatable = 0;
     img_bitcount = 0;
 }

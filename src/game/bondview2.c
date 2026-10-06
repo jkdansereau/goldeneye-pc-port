@@ -652,7 +652,11 @@ void solo_char_load(void)
                 pitemheader = NULL;
             }
 
+#ifdef PORT
+            something_with_generating_object(self, prop, item, 0, (WeaponObjRecord *)(uintptr_t)(u32)(helddst), (ItemModelFileRecord *)pitemheader);  /* D441: zero-extend s32-held DRAM ptr */
+#else
             something_with_generating_object(self, prop, item, 0, (WeaponObjRecord *)helddst, (ItemModelFileRecord *)pitemheader);
+#endif
         }
 
         chrlvMergeKneelToStand(self, 0.0f);
@@ -2210,18 +2214,6 @@ s32 bondviewTryMoveToStan(struct coord3d *arg0, StandTile **stan)
     {
         sp90 = g_CurrentPlayer->field_488.current_tile_ptr;
 
-#ifdef PORT
-        if (sp90 == NULL && getenv("GE_D90")) {
-            static int d90n = 0;
-            if (d90n++ < 8)
-                fprintf(stderr, "D90 bondviewTryMoveToStan: current_tile_ptr NULL "
-                        "(prop=%p prop->stan=%p ctp4p=%p pos=%.1f,%.1f,%.1f)\n",
-                        (void *)g_CurrentPlayer->prop,
-                        (void *)(g_CurrentPlayer->prop ? g_CurrentPlayer->prop->stan : NULL),
-                        (void *)g_CurrentPlayer->field_488.current_tile_ptr_for_portals,
-                        arg0->f[0], arg0->f[1], arg0->f[2]);
-        }
-#endif
 
         if (obj_collision_flag)
         {
@@ -8119,7 +8111,11 @@ void bondviewMovePlayerUpdateViewport(s8 stick_x, s8 stick_y, u16 buttons)
 
     if ((cameraBufferToggle != 0) && (viGetFrameBuf2() == (u8*)(cfb_16[1])))
     {
+#ifdef PORT
+        viSetFrameBuf2((u8 *)(uintptr_t)(u32)(resolution));  /* D441: zero-extend s32-held DRAM ptr */
+#else
         viSetFrameBuf2((u8 *) resolution);
+#endif
     }
 
 #ifdef VERSION_EU
@@ -8906,7 +8902,11 @@ void mp_respawn_handler(void)
     start_pos.z = g_Startpad[var_v1]->pos.z;
     start_stan = g_Startpad[var_v1]->stan;
 
+#ifdef PORT
+    stan_height = bondviewYPositionRelated((StandTile *)(uintptr_t)(u32)(start_stan), start_pos.x, start_pos.z);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     stan_height = bondviewYPositionRelated(start_stan, start_pos.x, start_pos.z);
+#endif
 
     start_pos.y = g_CurrentPlayer->eyeheight + stan_height;
     g_CurrentPlayer->field_70 = stan_height;
@@ -8921,7 +8921,11 @@ void mp_respawn_handler(void)
     g_CurrentPlayer->field_6C = (f32) (stan_height / 0.17000002f);
 #endif
 
+#ifdef PORT
+    change_player_pos_to_target(&g_CurrentPlayer->field_488, &start_pos, (StandTile *)(uintptr_t)(u32)(start_stan));  /* D441: zero-extend s32-held DRAM ptr */
+#else
     change_player_pos_to_target(&g_CurrentPlayer->field_488, &start_pos, start_stan);
+#endif
 
     g_CurrentPlayer->field_488.theta_transform.x = -sinf(start_look_angle);
     g_CurrentPlayer->field_488.theta_transform.y = 0.0f;
@@ -8929,7 +8933,11 @@ void mp_respawn_handler(void)
     g_CurrentPlayer->prop->pos.x = g_CurrentPlayer->bondprevpos.x = start_pos.f[0];
     g_CurrentPlayer->prop->pos.y = g_CurrentPlayer->bondprevpos.y = start_pos.f[1];
     g_CurrentPlayer->prop->pos.z = g_CurrentPlayer->bondprevpos.z = start_pos.f[2];
+#ifdef PORT
+    g_CurrentPlayer->prop->stan = (StandTile *)(uintptr_t)(u32)(start_stan);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     g_CurrentPlayer->prop->stan = start_stan;
+#endif
 #if defined(VERSION_EU)
     g_CurrentPlayer->field_3B8.x = (f32) (g_CurrentPlayer->field_488.pos.x / 0.118799984f);
     g_CurrentPlayer->field_3B8.y = (f32) (g_CurrentPlayer->field_488.pos.y / 0.118799984f);
@@ -10989,7 +10997,11 @@ join_768:
             if (ppointers[index]->bodyModel->anim2 == NULL)
             {
                 startframe = (0.0f <= frame) ? (frame) : (0.0f);
+#ifdef PORT
+                modelSetAnimation(ppointers[index]->bodyModel, (ModelAnimation *)(uintptr_t)(u32)(anim), 0, startframe, angle, 16.0f);  /* D441: zero-extend s32-held DRAM ptr */
+#else
                 modelSetAnimation(ppointers[index]->bodyModel, (ModelAnimation *) anim, 0, startframe, angle, 16.0f);
+#endif
                 ppointers[index]->players_cur_animation = anim;
                 ppointers[index]->field_1288 = angle;
  

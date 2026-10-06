@@ -12,7 +12,8 @@ struct GfxClipParameters {
     bool invert_y;
 };
 
-enum FilteringMode { FILTER_NONE, FILTER_LINEAR, FILTER_THREE_POINT };
+/* Trilinear option (playtest 2026-10-03) */
+enum FilteringMode { FILTER_NONE, FILTER_LINEAR, FILTER_THREE_POINT, FILTER_TRILINEAR };
 enum MipmapFilteringMode { MIPMAP_DISABLED, MIPMAP_NEAREST, MIPMAP_LINEAR };
 
 struct GfxRenderingAPI {

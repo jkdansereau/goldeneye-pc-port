@@ -49,14 +49,22 @@ void sub_GAME_7F0762E0(ModelFileHeader *objheader, u8 *name, u8 *dst, struct tex
 
     if (gdl != 0)
     {
+#ifdef PORT
+        name = (u8 *)(uintptr_t)(u32)((pcremaining - ((s32) (((u8 *) objheader->Switches) + (((u32) gdl) & 0x00ffffff)))) + ((s32) filedata));  /* D441: zero-extend s32-held DRAM ptr */
+#else
         name = (u8 *) ((pcremaining - ((s32) (((u8 *) objheader->Switches) + (((u32) gdl) & 0x00ffffff)))) + ((s32) filedata));
+#endif
         
         /* The signed lvalue cast is required for the compiler to choose the target registers. */
         replacementgdl = (u32)*(s32 *)&gdl;
         
         delta = ((s32) ((romremaining + filedata) - (s32) name)) - ((s32) (((u8 *) objheader->Switches) + (((u32) gdl) & 0x00ffffff)));
         
+#ifdef PORT
+        texCopyGdls((Gfx *) (((u8 *) objheader->Switches) + (((u32) gdl) & 0x00ffffff)), (Gfx *)(uintptr_t)(u32)((romremaining + filedata) - (s32) name), (s32) name);  /* D441: zero-extend s32-held DRAM ptr */
+#else
         texCopyGdls((Gfx *) (((u8 *) objheader->Switches) + (((u32) gdl) & 0x00ffffff)), (Gfx *) ((romremaining + filedata) - (s32) name), (s32) name);
+#endif
 
         texLoadFromModelFileHeader(objheader, buffer);
 
@@ -70,11 +78,19 @@ void sub_GAME_7F0762E0(ModelFileHeader *objheader, u8 *name, u8 *dst, struct tex
                 
                 if (gdl != 0)
                 {
+#ifdef PORT
+                    name = (u8 *)(uintptr_t)(u32)(((s32) gdl) - ((s32) curgdl));  /* D441: zero-extend s32-held DRAM ptr */
+#else
                     name = (u8 *) (((s32) gdl) - ((s32) curgdl));
+#endif
                 }
                 else
                 {
+#ifdef PORT
+                    name = (u8 *)(uintptr_t)(u32)(((((s32) (filedata + pcremaining)) - ((s32) objheader->Switches)) - (((u32) curgdl) & 0x00ffffff)));  /* D441: zero-extend s32-held DRAM ptr */
+#else
                     name = (u8 *) ((((s32) (filedata + pcremaining)) - ((s32) objheader->Switches)) - (((u32) curgdl) & 0x00ffffff));
+#endif
                 }
                 
                 modelNodeReplaceGdl((u32) objheader, curnode, curgdl, (Gfx *) replacementgdl);
@@ -84,9 +100,17 @@ void sub_GAME_7F0762E0(ModelFileHeader *objheader, u8 *name, u8 *dst, struct tex
             while (node != 0);
         }
 
+#ifdef PORT
+        name = (u8 *)(uintptr_t)(u32)(((s32) (((u8 *) objheader->Switches) + (replacementgdl & 0x00ffffff))) - filedata);  /* D441: zero-extend s32-held DRAM ptr */
+#else
         name = (u8 *) (((s32) (((u8 *) objheader->Switches) + (replacementgdl & 0x00ffffff))) - filedata);
+#endif
 
+#ifdef PORT
+        fileSetSize(filenum, (u8 *)(uintptr_t)(u32)(filedata), (((s32) name + 0xf) & (~0xf)), dst == 0);  /* D441: zero-extend s32-held DRAM ptr */
+#else
         fileSetSize(filenum, (u8 *) filedata, (((s32) name + 0xf) & (~0xf)), dst == 0);
+#endif
     }
 }
 
@@ -139,14 +163,6 @@ void load_object_fill_header(struct ModelFileHeader *objheader, u8 *name, u8* ds
     
     objheader->RootNode = (struct ModelNode *)&objheader->Textures[objheader->numtextures];
 
-#if defined(PORT) /* TEMP D86: correlate header identity with the model name at load time */
-    if (getenv("GE_D86")) {
-        fprintf(stderr, "[D86] load_object_fill_header name=%s objheader=%p filedata=%p RootNode=%p numSwitches=%d numtextures=%d\n",
-                (const char *)name, (void *)objheader, (void *)filedata, (void *)objheader->RootNode,
-                objheader->numSwitches, objheader->numtextures);
-        fflush(stderr);
-    }
-#endif
 #ifdef PORT
     sub_GAME_7F075A90(objheader, 0x5000000, (uintptr_t)filedata);
 #else

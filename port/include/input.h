@@ -21,6 +21,8 @@ extern "C" {
 /* Initialize SDL input. Returns 0 on success. */
 int  inputInit(void);
 void inputDestroy(void);
+/* D493: stop all pad rumble and block new rumble (clean exit). */
+void inputRumbleStopAll(void);
 
 /* Poll once per frame; updates the connected-controller state that
  * osContStartReadData / osContRead will return. */

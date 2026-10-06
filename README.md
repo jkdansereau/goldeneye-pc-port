@@ -1,50 +1,43 @@
 # GoldenEye 007 PC Port
 
 [![CI](https://github.com/jkdansereau/goldeneye-pc-port/actions/workflows/ci.yml/badge.svg)](https://github.com/jkdansereau/goldeneye-pc-port/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/jkdansereau/goldeneye-pc-port?include_prereleases&label=download)](https://github.com/jkdansereau/goldeneye-pc-port/releases)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20Steam%20Deck-blue)
 ![license](https://img.shields.io/badge/license-MIT-ffb454)
 
-<p align="center"><em>GoldenEye 007 (Nintendo 64, 1997) on the PC —
-decompiled, ported, and playable at 60 fps.</em></p>
+**GoldenEye 007 (Nintendo 64, 1997) as a native PC game for Windows, Linux
+and Steam Deck.** Native widescreen, a steady 60 fps, 2–4 player
+split-screen, mouse and keyboard or a modern controller, rebindable controls
+and an in-game options menu. No
+emulator: the original game's own code, rebuilt from the
+[GoldenEye 007 decompilation](https://github.com/n64decomp/007), running from
+your own ROM.
 
-[Download](#download) · [News](#news) · [Status](#status) · [Roadmap](#roadmap) · [Building](#building) · [Docs](#documentation) · [Legal](#legal)
+**[Download the latest release](https://github.com/jkdansereau/goldeneye-pc-port/releases)**,
+then follow the [Quick start](#quick-start).
 
-A native PC port of _GoldenEye 007_ (Rare, 1997, Nintendo 64), compiled from
-the [GoldenEye 007 decompilation](https://github.com/n64decomp/007): the
-original N64 game running from reconstructed source, not the Xbox 360
-remaster. The N64's graphics coprocessor (RSP) is emulated in software; every
-other hardware surface (video, audio, input, timers, save storage) is shimmed
-in a dedicated `port/` layer, following the architecture of the
-[Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark), the same
-Rare "Indy" engine family, one hardware generation apart.
-
-**v0.4.0** (released 2026-09-28) is out for Windows and Linux (including
-Steam Deck, where the Linux bundle sideloads as-is). It is the most complete
-release to date: the full campaign runs at a steady 60 fps with the known
-issues now few and mostly cosmetic ([Status](#status)). Free to download,
-build on and modify (you bring the ROM).
-
-**This is a pre-1.0 release, not a finished product.** v1.0 is the target
-for a polished, feature-complete build; until then, expect missing features
-and the occasional breaking change between versions. See [Status](#status)
-for what works today and [Roadmap](#roadmap) for where this is headed.
-
-**AI disclosure:** development here was agentic - Claude Pro plus a local
-open-weight model on a single RTX 5090, as of August–September 2026. This
-project is as much a study of *that process* as it is a port: whether
-current LLMs can carry a codebase like this, and what actually goes wrong
-along the way. Judge the result for yourself. I'm one person doing this in my
-spare time, not a team. See [Background](#background) for the full setup,
-timeline, and an honest account of what worked and what didn't.
+[Quick start](#quick-start) · [Controls](#controls) · [Features](#features) · [Settings and files](#settings-and-files) · [Troubleshooting](#troubleshooting) · [Roadmap](#roadmap) · [Building](#building-from-source) · [Legal](#legal)
 
 > [!IMPORTANT]
-> **You must supply your own GoldenEye 007 ROM.** This repository contains no
-> Nintendo code or assets, and no ROM. Nothing here is distributable as a
-> playable game: see [Requirements](#requirements) and [Legal](#legal).
+> **You must supply your own GoldenEye 007 ROM.** This repository and its
+> downloads contain no Nintendo code or assets, and no ROM. See
+> [What's a ROM?](#whats-a-rom) and [Legal](#legal).
+
+**v0.4.1** is the current release. It is a **pre-1.0 release, not a
+finished product**: the campaign and split-screen multiplayer play end to
+end, but expect missing pieces (PAL/JP ROMs, macOS) and the occasional
+breaking change between versions. v1.0 is the target for a feature-complete
+build.
+
+**AI disclosure:** this port was developed agentically, with Claude Code and a
+local open-weight model, directed by one person in their spare time. The
+project is as much a study of that process as it is a port. See
+[How it was made](#how-it-was-made).
 
 <p align="center">
   <img src="docs/media/goldeneye-gh-preview.gif" width="64%"
        alt="~24 s gameplay montage from live play sessions">
-  <br><em>All in-engine, running in the port — a ~24&nbsp;s gameplay montage
+  <br><em>All in-engine, running in the port: a ~24&nbsp;s gameplay montage
   from live v0.4.0 play sessions, opening on the Runway tank ·
   <a href="docs/index.md">12 level stills in the project index</a></em>
 </p>
@@ -53,177 +46,305 @@ timeline, and an honest account of what worked and what didn't.
 
 ## News
 
+- **v0.4.1**: 2–4 player split-screen multiplayer, controller presets and
+  rebinding, PlayStation/Nintendo button names, master volume and audio
+  device selection, a steady 60 fps on low-end GPUs, and fidelity fixes
+  checked against the N64 game (AI visibility at long draw distances, sniper
+  zoom, turret pacing, Dam/Caverns water, weapons).
+  [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases).
 - **2026-09-28** — **v0.4.0**: native widescreen, a complete aim system for
   mouse and controller, in-game key rebinding, crosshair customization,
   rumble-pak haptics, a rebuilt options overlay, and a broad fidelity-fix
   pass (water, particles, billboard trees, front-end logo, gunshot SFX, a
-  true stable 60 fps). [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.4.0) ·
-  [downloads](#download).
+  true stable 60 fps). [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.4.0).
 - **2026-09-20** — **v0.3.0**: the first release with the complete campaign
   playable end to end at 60 fps on Windows, Linux, and Steam Deck.
   [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.3.0).
 - **2026-09-04 → 2026-09-16** — **v0.1.0 – v0.2.2**: the alpha and beta
-  cycle — build chain, software RSP, first rendered frames, front end, and
+  cycle: build chain, software RSP, first rendered frames, front end, and
   per-level stabilization across the campaign.
 
 ---
 
-## Download
+## System requirements
 
-| Platform | Bundle | Notes |
-|---|---|---|
-| **Windows** (x86_64) | [win64.zip](https://github.com/jkdansereau/goldeneye-pc-port/releases) | Engine + runtime DLLs + the one-time asset tool. |
-| **Linux** (x86_64) / **Steam Deck** | [linux tarball](https://github.com/jkdansereau/goldeneye-pc-port/releases) | SDL2 is bundled, so it runs as-is on any distro, and sideloads onto a Deck with nothing installed. |
+**Windows:** Windows 10 or 11, 64-bit. Nothing else to install: the
+download carries its own runtime libraries and the one-time asset tool (no
+Python, no emulator).
 
-Both bundles contain **no ROM and no game assets**: you supply your own
-(see [Requirements](#requirements)), which keeps the release legal to
-distribute. Earlier builds: v0.3.0, v0.2.2, v0.2.1, v0.2.0, and v0.1.0
-alpha, same page. You can also build it yourself; see [Building](#building).
+**Linux / Steam Deck:** 64-bit x86 Linux. SDL2 is bundled, so the tarball
+runs as-is; it sideloads onto a Steam Deck with nothing installed.
 
-### Quick start
+**Both:** a GPU with OpenGL 3.0 drivers (practically any PC GPU from the last
+fifteen years; keep the driver up to date). A 2011 laptop with Intel HD
+3000 graphics holds 60 fps; on very weak integrated GPUs (Atom/Celeron class)
+the first launch lowers draw distance and anti-aliasing to keep up. A
+keyboard and mouse, or a controller (Xbox, PlayStation, Switch and most
+SDL-supported pads); split-screen needs one controller per extra player.
 
-You need a GoldenEye 007 N64 ROM (`.z64`, big-endian). This release supports
-the **NTSC-U (US)** version; PAL and JP are on the roadmap ([issue
-#85](https://github.com/jkdansereau/goldeneye-pc-port/issues/85)). No ROM or game asset is
-included or distributed. Then:
+**Not yet:** macOS, ARM Linux and Windows 7 are on the [roadmap](#roadmap).
 
-1. Download the Windows or Linux bundle from [Releases](https://github.com/jkdansereau/goldeneye-pc-port/releases) and unpack it.
-2. Make a `data/` folder next to the executable and drop the ROM in as `ge007.ntsc-final.z64`.
-3. Launch the executable from that folder. The first run takes a few extra seconds: it detects the ROM and generates the derived asset folders once (no Python or other tooling needed).
+## Quick start
 
-Read the [Status](#status) section first: the small number of known issues
-in this release are listed plainly there.
+1. From [Releases](https://github.com/jkdansereau/goldeneye-pc-port/releases),
+   download the **win64.zip** (Windows) or the **linux tarball** (Linux and
+   Steam Deck), and extract it. On Windows, never run the exe from inside the
+   zip.
+2. Make a `data/` folder next to the executable and put your ROM in it as
+   `ge007.ntsc-final.z64`. Only the **US (NTSC-U)** ROM works today; see
+   [What's a ROM?](#whats-a-rom) to check yours.
+3. Launch the executable from that folder. Windows may show "Windows
+   protected your PC" (SmartScreen, because the exe is not code-signed):
+   click **More info**, then **Run anyway**.
+4. The first start takes a few extra seconds: the port reads your ROM and
+   generates its asset files once. After that it starts normally.
+5. Play. **F10** (pad: **Select**) opens the options overlay; the
+   [Controls](#controls) table lists the default keys.
+
+**Steam Deck:** the Linux tarball is the Deck build. Download it on the Deck
+(or copy it over from your PC), extract it, add your ROM to `data/`, launch
+it once, and add the executable as a non-Steam game. On first start it
+applies Deck-friendly display defaults (native 1280×800 fullscreen); if the
+resolution is wrong, set it under F10 → *Resolution*.
 
 ---
 
+## Controls
+
+| Action              | Keyboard / mouse         | Controller    |
+|---------------------|--------------------------|---------------|
+| Move / strafe       | `W` `A` `S` `D`           | Left stick (or D-pad) |
+| Move / turn         | Arrow keys               | —             |
+| Aim / look          | Mouse                    | Right stick   |
+| Fire                | Left mouse               | Right trigger |
+| Aim mode            | Right mouse / `LShift`   | Left trigger / LB |
+| Use / interact      | `E`                       | A             |
+| Reload              | `R`                       | X             |
+| Crouch              | `LCtrl`                   | Left or right stick click |
+| Cycle owned gadgets | Watch inventory          | B             |
+| Next weapon         | Mouse wheel down / `Q`   | Y             |
+| Previous weapon     | Mouse wheel up           | —             |
+| Start               | `Enter` / `Tab`          | Start         |
+| Options overlay     | `F10`                    | Select        |
+
+The keyboard defaults are a GEPD-style layout. The controller layout matches
+Rare's Xbox 1.1 (Jinx) button roles; the other Xbox styles (1.2 Christmas,
+1.3 Frost, 1.4 Elektra, which swap the stick roles) are selectable under
+*Input → Controller → Layout preset*. PlayStation and Nintendo controllers
+show their own button names in the menus.
+
+**Rebinding:** *Input → Bindings…* in the options overlay rebinds the
+keyboard and mouse (*Movement…* and *Actions…*). Controller buttons are
+rebindable per controller under *Input → Controller*: set *Layout preset* to
+*Custom*, select an action and press a pad button (tap B or Esc to cancel,
+hold B to bind B itself, hold Back to clear; Y clears the selected slot).
+Each action takes up to two buttons. Menus always keep A/X accept and B/Y
+cancel, so you can't lock yourself out.
+
+**Split-screen:** pick Multiplayer from the main menu. With one controller,
+keyboard/mouse is player 1 and the controller is player 2; with two or more
+controllers, the controllers take players 1–4 (`Input.MPMode` in `ge007.ini`
+changes this). A controller unplugged mid-match keeps its player when
+plugged back in.
+
+**Options overlay with a controller** (also how it works on the Deck):
+**Select** opens it, the D-pad or left stick moves between options, **A**
+steps the selected option forward, **B** steps it back, and **Start** (or
+Select again) closes. With a keyboard, use `F10` and the arrow keys/Enter.
+
+## Features
+
+- **2–4 player split-screen multiplayer** on every MP map, with the N64's own
+  setup flow and per-player HUD.
+- **Native widescreen** at any aspect ratio: the world is undistorted, the HUD
+  sits at the screen edges, and 4:3 menus are pillarboxed. FOV and draw/LOD
+  distance are adjustable, and AI behaviour stays as on the N64 whatever you
+  set them to.
+- **The original look in one click:** the *Original N64 preset* restores the
+  N64's settings, *Aspect → Original* shows the exact 4:3 frame, and the
+  *Port defaults preset* goes back.
+- **A steady 60 fps**, with VSync and a frame cap (30 or 60), including on
+  low-end GPUs.
+- **Graphics options:** resolution, borderless fullscreen, MSAA (up to 16×),
+  anisotropic filtering, and nearest, bilinear, trilinear or the N64's own
+  3-point texture filter.
+- **Mouse aim** in your choice of style (the N64's, or centred FPS-style) with
+  per-device sensitivity, smoothing and Y-inversion.
+- **Modern controller support:** dual-stick layout, deadzones, sensitivity,
+  southpaw, trigger thresholds, rumble-pak vibration, and PlayStation/Nintendo
+  button names.
+- **Rebindable controls** for keyboard, mouse and each controller.
+- **HUD and crosshair options:** HUD scale, an optional customizable
+  crosshair, and a no-hit-flash option.
+- **Full audio:** in-level music and sound effects, with music, FX and master
+  volume and a choice of output device.
+- **An in-game options overlay** (F10 / pad Select) for all of the above,
+  saved automatically.
+- **Faithful N64 progression by default.** Opt-in extras: *Skip intro* and
+  *All unlocked* (every level, 007 mode and the full cheat menu, without
+  touching your save; both experimental).
+- **Saves in a plain file** next to the game, so backing up is a file copy.
+
 ## Status
 
-**v0.4.0 - fully playable, with a small set of known caveats.** The full
-single-player campaign is completable end to end (all 20 missions, Agent
-difficulty, playtested), at a steady 60 fps; all 20 solo missions — plus
-the end-of-campaign credits sequence — load, render and run crash-free,
-verified on Windows, Linux and real Steam Deck hardware. The most common
-defect classes from earlier releases — particle colour drift, water seams,
-z-fighting, billboard trees, muzzle flashes, the front-end Nintendo logo,
-gunshot SFX — are fixed in this version; what remains is a short list,
-below. Feedback is very welcome.
-
-What a release actually installs (no networking, no telemetry, no ROM or
-game assets shipped) and how faithfully the port tracks the original N64
-game's logic: [Security & fidelity status](docs/security-and-fidelity-status.md).
-
-**Working:** boot sequence and front end (menu → mission select → briefing →
-start), front-end menu navigation on the left stick to match the F10 overlay
-(D282); all 20 solo missions load, render and are crash-free (full campaign
-playtested end to end at Agent difficulty, including the ending sequence); steady 60 fps
-(software RSP off the presentation critical path); full audio: in-level music and SFX; keyboard + mouse (click-to-lock, an aim style of your
-choice — N64 or centred FPS-style — with per-device sensitivity) and a modern
-dual-stick controller layout (use/reload/weapon-cycle on A/X/Y, rumble-pak
-vibration on supported pads); native widescreen at any aspect ratio
-(undistorted world, HUD anchored to the screen edges, 4:3 menus pillarboxed);
-in-game key rebinding (keyboard/mouse) with a GEPD-style default layout;
-crosshair customization (opt-in); Bond is fixed in cutscenes (no more
-floating or spin-glitching) and his third-person model positioning generally
-is right the large majority of the time now, at most a small drift when off; file-backed saves; faithful N64 progression
-by default (F10 → *All unlocked* opens every level, 007 mode and the full
-cheat menu); F10 in-game options overlay (video, input, gameplay, HUD,
-graphics, audio; frame cap, MSAA, filtering, FOV, sensitivity, key rebinding,
-crosshair, vibration); Windows and
-Linux, including Steam Deck.
+**Fully playable, with a small set of known caveats.** All 20 solo missions
+and the end-of-campaign credits load, render and run crash-free; the full
+campaign was playtested end to end at Agent difficulty on Windows, Linux and
+real Steam Deck hardware for v0.4.0. Split-screen multiplayer was played live
+in 2P on every MP map and in 4P on Temple.
+<!-- MAINTAINER: after the v0.4.1 play session, add what it covered here. -->
 
 **Known issues:** see the **[known-issues table](docs/ROADMAP.md#known-issues)**
-(what you'll notice, impact, workarounds). The short version: no multiplayer
-yet, NTSC-U ROMs only, no macOS/ARM builds, and a couple of cosmetic defects.
+(what you'll notice, impact, workarounds). The short version: NTSC-U ROMs
+only in the release packages, and no macOS/ARM builds yet.
 
-> **Before first using `All unlocked`, back up `data/ge007.eep`.** Saves made
-> with it on no longer write the fake unlocks to disk (D387), but a save that an
-> earlier build already polluted stays polluted, and cheats you earn while it is
-> on are not kept. It applies at the next launch.
+> ***All unlocked* never changes your save** since v0.4.1: it unlocks every
+> level and cheat in memory only, and switching it off shows your real
+> progress. Builds before v0.4.1 could write fake unlocks into the save, and
+> those are not repaired; if you used it on an older build, keep a backup of
+> `data/ge007.eep`.
 
-### Steam Deck
+What a release installs (no networking, no telemetry, no ROM or game assets)
+and how faithfully the port tracks the original game's logic:
+[Security & fidelity status](docs/security-and-fidelity-status.md).
 
-The Linux bundle is the Deck build. SFTP it over from your PC, or download
-it straight from the [releases page](https://github.com/jkdansereau/goldeneye-pc-port/releases) on the Deck itself:
-extract, drop your ROM in `data/`, launch it once (the first run generates the
-derived assets), and add the executable as a non-Steam game. SDL2 is bundled, so no dependencies need
-installing. The port detects a Steam Deck by its hardware id (Linux DMI, or
-`STEAMOS`) and, once per `ge007.ini`, applies Deck-friendly display defaults:
-native 1280×800 fullscreen. VSync, 2× MSAA and 250% draw/LOD distance are
-already the port's defaults (the N64-authored fade distances read short on the
-close-up 7" panel). The preset only applies while the display settings are still
-untouched, so an ini created earlier (for example by a Desktop Mode test launch)
-no longer skips it for good (D283); everything is changeable in the options
-overlay and persists afterwards. If your resolution isn't 1280×800 on first
-boot, just set it manually: F10 → *Resolution*. The
-renderer is CPU-bound (software RSP); expect original N64-era performance at
-60 fps rather than more. This release was playtested on real Deck hardware;
-the v0.1.0-era Facility crash (D203) did not recur: its root cause was
-identified and fixed (D253), and a separate intermittent SIGSEGV in heavy
-firefights/terminal destruction (D255) and an audio-thread crash (D305) are
-both fixed and live-verified on real hardware as of this release.
+---
 
-**In-game settings on the Deck.** The options overlay is fully gamepad-driven:
-it opens with **Select**, the D-pad or left stick (up/down) moves between
-options, **A** steps the selected option forward, **B** steps it back, and
-**Start** (or Select again) closes. Toggles flip, resolution / MSAA /
-filtering cycle, sliders step in increments. With a keyboard attached the same
-overlay is `F10` + arrows/Enter.
+## Settings and files
+
+**Options overlay:** press **F10** (pad: **Select**) in game or in the menus.
+Changes are saved automatically. Most settings live in `ge007.ini`; the
+ones that come from the game's own watch menu (auto-aim, look ahead, sight
+and ammo on screen, music and FX volume) are part of your save, as on the
+N64.
+
+**Where files live:** everything stays inside the game's own folder. The port
+never writes to `%APPDATA%`, the registry or any system location.
+
+| File | What it is |
+|---|---|
+| `data/ge007.ntsc-final.z64` | Your ROM (you put it there). |
+| `data/ge007.eep` | Your game progress (the N64 save). |
+| `data/ge007.ini` | Settings, written on first start. |
+| `data/pcmodels-<region>/`, `data/pccg-<region>/` | Asset files generated from your ROM on first start. Safe to delete: they are made again on the next start. |
+| `data/ge007.shaders` | A list of the graphics shaders the game used, compiled at startup to avoid stutter. Safe to delete. |
+| `ge007.crash.log` | Written in the folder you launched from if the game crashes. |
+
+**`ge007.ini`** uses `[Section]` headers and `Key = value` lines. A few
+common keys and their defaults:
+
+```ini
+[Video]
+Fullscreen = 0
+VSync = 1
+FpsCap = 60
+MSAA = 2
+TextureFilter = 1
+NativeWidescreen = 1
+FovScale = 100
+DrawDistance = 250
+
+[Audio]
+MasterVolume = 100
+```
+
+`Fullscreen` 1 is borderless fullscreen; `TextureFilter` is 0 nearest,
+1 bilinear, 2 the N64 3-point filter, 3 trilinear; `FovScale` and `DrawDistance` are
+percentages of the original (the options overlay shows the field of view in
+degrees). On Atom/Celeron-class GPUs the first launch writes lighter values
+for draw distance, LOD distance and `MSAA`. Edit the file with the game
+closed: it is rewritten on a clean exit, and comments are dropped.
+
+**Launch options:** `-fresh` wipes the save and settings before starting (a
+clean-slate run). `--version` prints the build id.
+
+## What's a ROM?
+
+A ROM is a copy of the game cartridge's data, made with a cartridge dumper
+from a cartridge you own. This project can't provide or link one. The port
+needs the big-endian `.z64` format, and supports the US version today:
+
+| Region | ROM filename (in `data/`) | SHA-1 | Supported |
+|--------|---------------------------|-------|-----------|
+| NTSC-U (US) | `ge007.ntsc-final.z64` | `abe01e4aeb033b6c0836819f549c791b26cfde83` | yes |
+| PAL (EU)    | `ge007.pal-final.z64`  | `167c3c433dec1f1eb921736f7d53fac8cb45ee31` | not yet ([#85](https://github.com/jkdansereau/goldeneye-pc-port/issues/85)) |
+| NTSC-J (JP) | `ge007.jpn-final.z64`  | `2a5dade32f7fad6c73c659d2026994632c1b3174` | not yet ([#85](https://github.com/jkdansereau/goldeneye-pc-port/issues/85)) |
+
+To check which file you have, compute its SHA-1: on Windows,
+`certutil -hashfile ge007.ntsc-final.z64 SHA1`; on Linux,
+`sha1sum ge007.ntsc-final.z64`.
+
+## Updating
+
+Extract the new release into a new folder, then copy your ROM, `ge007.eep`
+and `ge007.ini` from the old `data/` folder into the new one. Don't copy the
+generated `pcmodels-*` and `pccg-*` folders: the new version makes its own on first start, and
+stale ones from an older version can cause glitches.
+
+## Uninstalling
+
+Delete the folder. The port writes nothing anywhere else, so that removes the
+game, your save and your settings; back up `data/ge007.eep` first if you
+want to keep your progress.
+
+## Troubleshooting
+
+- **The game says the ROM is missing or wrong:** check it is in `data/`, named
+  `ge007.ntsc-final.z64`, in `.z64` byte order, and that its SHA-1 matches the
+  US row in [What's a ROM?](#whats-a-rom). PAL and JP ROMs are not supported
+  yet.
+- **Windows shows a SmartScreen warning:** the exe is not code-signed. Click
+  **More info**, then **Run anyway**.
+- **Black screen or no window:** update your graphics driver; the port needs
+  OpenGL 3.0.
+- **Wrong resolution on the Steam Deck:** F10 → *Resolution*.
+- **Where are my saves?** `data/ge007.eep`. Copy it somewhere safe while the
+  game is not running to back it up.
+- **The game crashes:** open an
+  [issue](https://github.com/jkdansereau/goldeneye-pc-port/issues/new/choose)
+  and attach `ge007.crash.log` (in the folder you launched from), the output of
+  `--version`, your OS, your GPU and your ROM's SHA-1. **Never attach the ROM
+  itself.**
 
 ---
 
 ## Roadmap
 
 The goal is a **feature-complete, faithful** port: every mode and region the
-N64 cartridge ships, behaving 1:1 with the original. The full list of open
-items, and which ones are waiting on a decision, lives in one place:
-[`docs/ROADMAP.md`](docs/ROADMAP.md). In brief:
+N64 cartridge ships, behaving 1:1 with the original, with modern options on
+top that can always be switched back to the original look and feel. The full
+list of open items, and which ones are waiting on a decision, lives in one
+place: [`docs/ROADMAP.md`](docs/ROADMAP.md). In brief:
 
-- **Split-screen multiplayer** (2–4 players), the largest missing N64 feature
-  ([#99](https://github.com/jkdansereau/goldeneye-pc-port/issues/99)).
-- **PAL and JP ROM support**. NTSC-U is the only supported region today.
-- The remaining small accuracy differences (audio timbre, a few cosmetic
-  rendering details).
-- **macOS/ARM builds**.
-- **Ongoing security/fidelity review**: a review pass after each release to keep
-  the [security policy](.github/SECURITY.md) and the known-issues list current,
-  moving the mechanical parts (dependency/secret scanning) toward automation.
+- **PAL and JP ROM support** in the release packages
+  ([#85](https://github.com/jkdansereau/goldeneye-pc-port/issues/85)). Both
+  regions already convert, build and boot from source.
+- **macOS and ARM builds**.
+- The remaining small accuracy differences, each checked against the N64
+  game in an emulator.
+- **Emulator saves**: a converter so saves from 1964, Project64 and other N64
+  emulators can be moved to and from the port (they need converting today; a
+  straight copy is wiped).
+- **1.0 sign-off**: a full campaign playthrough at more than one difficulty
+  plus a split-screen session, on every platform that ships.
 
 This is spare-time work, so there's no timeline. Opt-in extras beyond the N64
-game (LAN play, bots, HD textures) come after feature-complete, if at all.
-Not currently planned: co-op or other modes GE never shipped, online
-multiplayer, ray tracing. If any of these matter to you, open an issue — it
-helps prioritize.
+game (LAN play, bots, co-op, HD textures, enhanced visuals, frame rates above
+60) come after 1.0, and always off by default. Not planned: online
+multiplayer over the internet, achievements or cloud saves, remake-scope
+assets (new models, music or voice), and new movement mechanics. If any of
+these matter to you, open an issue — it helps prioritize.
 
----
+## How it was made
 
-## Beyond playing
-
-- **Tweak it**: `ge007.ini` and the F10 in-game overlay expose resolution,
-  frame cap, MSAA, texture filtering, FOV/draw distance, mouse feel, key
-  rebinding, crosshair and vibration; launch with `-fresh` for a clean-slate
-  run.
-- **Read it**: [`docs/internals.md`](docs/internals.md) maps the
-  architecture and the software RSP; [`docs/porting-notes.md`](docs/porting-notes.md)
-  is the catalogue of N64→PC bug classes hit along the way. Game logic in
-  `src/` is unmodified decompilation; every hardware surface lives in the
-  MIT-licensed `port/` layer.
-- **Mod it**: the port layer, build system and `tools_pc/` are yours to
-  extend (see [License](#license)); [`CONTRIBUTING.md`](CONTRIBUTING.md) has
-  the ground rules for getting changes in, and [`docs/dev/`](docs/dev/) is
-  the raw engineering record behind every fix.
-
----
-
-## Background
-
-The port was built by two coding agents, a local open-weight model
-(`unsloth/Qwen3.8-27B-GGUF` on one RTX 5090, via the [pi](https://pi.dev/)
-agent) doing the groundwork (build, boot chain, software-RSP integration,
-asset pipeline, first frames), and **Claude Code** (Sonnet 5, Opus 5 for the
-hardest bugs) joining for the collaborative phase (the 21-level sweep, the
-ABI finding catalog, SDL input, front end), handing work back and forth
-through shared written notes, directed by one person part-time. In short:
-43 days (16 Aug – 28 Sep), 1005 commits, 286 findings root-caused and logged
+The port was built by two coding agents, directed by one person part-time.
+A local open-weight model (`unsloth/Qwen3.8-27B-GGUF` on one RTX 5090, via the
+[pi](https://pi.dev/) agent) did the groundwork: build, boot chain,
+software-RSP integration, asset pipeline, first frames. **Claude Code**
+(Sonnet 5, Opus 5 for the hardest bugs) joined for the collaborative phase:
+the 21-level sweep, the ABI finding catalog, SDL input, front end. The two
+handed work back and forth through shared written notes. Up to v0.4.0: 43
+days (16 Aug – 28 Sep), 1005 commits, 286 findings root-caused and logged
 (`D1`–`D408`).
 
 The full write-up (timeline, handoff mechanism, effort breakdown, an honest
@@ -231,8 +352,6 @@ The full write-up (timeline, handoff mechanism, effort breakdown, an honest
 The workflow itself: [`docs/dev-process.md`](docs/dev-process.md). To cite the
 project or its findings: [`CITATION.cff`](CITATION.cff) (GitHub's "Cite this
 repository" menu).
-
----
 
 ## How this differs from the other GoldenEye PC projects
 
@@ -249,43 +368,18 @@ code with this one.
 | **How** | Decompilation-based source port: human-reconstructed C, compiled for the host; game logic runs as written | Static binary recompilation: the shipped machine code is auto-translated to C; no source-level understanding |
 | **Lineage** | [GoldenEye 007 decompilation](https://github.com/n64decomp/007) + [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) engine family | Xbox 360 "…Recompiled" static-recompilation family |
 | **Renderer** | Software RSP → OpenGL | Hardware (Vulkan) |
-| **Status** | v0.4.0 public release; full campaign playable at 60 fps (see [Status](#status)) | Playable full game |
-| **Why it exists** | To run the *original* N64 game from source, and as a [case study in AI-agent collaboration](#background) on a hard low-level codebase | To get a playable PC release of the remaster |
-
-They answer a different question: how to get the *remaster* onto PC by
-machine translation. This project answers how to get the *original 1997
-game* onto PC, running from its reconstructed source.
+| **Status** | Pre-1.0 releases; full campaign and split-screen playable at 60 fps (see [Status](#status)) | Playable full game |
+| **Why it exists** | To run the *original* N64 game from source, and as a [case study in AI-agent collaboration](#how-it-was-made) on a hard low-level codebase | To get a playable PC release of the remaster |
 
 ---
 
-## Requirements
+## Building from source
 
-You need a GoldenEye 007 (Nintendo 64) ROM that you legally own, in
-big-endian (`.z64`) format, matching one of:
-
-| Region | ROMID | ROM filename (in `data/`) | SHA-1 |
-|--------|-------|---------------------------|-------|
-| NTSC-U (US)  | `ntsc-final` | `ge007.ntsc-final.z64` | `abe01e4aeb033b6c0836819f549c791b26cfde83` |
-| PAL (EU)     | `pal-final`  | `ge007.pal-final.z64`  | `167c3c433dec1f1eb921736f7d53fac8cb45ee31` |
-| NTSC-J (JP)  | `jpn-final`  | `ge007.jpn-final.z64`  | `2a5dade32f7fad6c73c659d2026994632c1b3174` |
-
-This release supports the US (NTSC-U) version; PAL and JP ROMs are
-recognised by region but not yet supported (on the roadmap, [issue
-#85](https://github.com/jkdansereau/goldeneye-pc-port/issues/85)).
-
-The port also relies on the decompilation's asset-extraction step, which pulls
-the level, model, texture and music data out of your ROM at build time. That
-step, too, requires your ROM and is part of [Building](#building).
-
----
-
-## Building
-
-Prerequisites: CMake >= 3.16, a C/C++ toolchain, SDL2, zlib, OpenGL, Python 3,
-plus the decompilation's own build dependencies (an IRIX MIPS toolchain via
-`qemu-irix`, used only for the one-time asset extraction). See
-[`docs/building.md`](docs/building.md) for the full walkthrough and the
-asset-extraction details.
+Prerequisites: CMake >= 3.16, a C/C++ toolchain, SDL2, zlib, OpenGL and
+Python 3, plus MIPS binutils, `make` and `git` for the one-time asset
+extraction (no IDO/IRIX toolchain is involved; on Windows the extraction is
+easiest under WSL). See [`docs/building.md`](docs/building.md) for the full
+walkthrough and the asset-extraction details.
 
 ### Windows (MSYS2)
 
@@ -299,7 +393,7 @@ git clone https://github.com/jkdansereau/goldeneye-pc-port.git
 cd goldeneye-pc-port
 # 1. extract assets from your ROM (see docs/building.md)
 # 2. build the port
-./build-pc.sh ntsc-final         # NTSC-U; PAL/JP engine builds compile, but their asset sidecars are not yet producible (issue #85)
+./build-pc.sh ntsc-final         # NTSC-U; PAL/JP: see docs/building.md
 ```
 
 ### Linux
@@ -316,71 +410,25 @@ cd goldeneye-pc-port
 ```
 
 The executable is written to `build-pc/ge007.x86_64` (on Windows,
-`build-pc/ge007.x86_64.exe`).
-
----
-
-## Running
-
-1. Create a `data/` directory in the repo root.
-2. Put your ROM in it, named as in the table above
-   (e.g. `data/ge007.ntsc-final.z64`).
-3. Run the executable from the repo root:
-   `./build-pc/ge007.x86_64`.
-
-Configuration is written to `ge007.ini` on first run; game progress
-lives in `ge007.eep`. Launch with `-fresh` to wipe both before starting
-(a clean-slate run for playtesting).
-
-### Default controls
-
-| Action              | Keyboard / mouse         | Controller    |
-|---------------------|--------------------------|---------------|
-| Move / strafe       | `W` `A` `S` `D` / arrows  | Left stick (or D-pad) |
-| Aim / look          | Mouse                    | Right stick   |
-| Fire                | Left mouse               | Right trigger |
-| Aim mode            | Right mouse / `LShift`   | Left trigger / LB |
-| Use / interact      | `E`                       | A             |
-| Reload              | `R`                       | X             |
-| Crouch              | `LCtrl`                   | Left or right stick click |
-| Cycle owned gadgets | Watch inventory          | B             |
-| Next weapon         | Mouse wheel down / `Q`   | Y             |
-| Previous weapon     | Mouse wheel up           | —             |
-| Start               | `Enter` / `Tab`          | Start         |
-| Options overlay     | `F10`                    | Select (A toggles/steps; B backs; D-pad/stick adjusts sliders; Start closes) |
-
-The default layout is the GEPD-style preset on the keyboard and the standard
-dual-stick scheme on controllers (left stick move, right stick look,
-triggers fire/aim, A use, X reload, B gadget cycle, Y weapon cycle, stick
-click crouch). The watch gadget cycle selects the next owned gadget in the
-N64 inventory. The controller layout matches Rare's Xbox 1.1 (Jinx) button
-roles (user-tested on a physical pad; D394), and the remaining Xbox schemes
-(1.2 Christmas, 1.3 Frost, 1.4 Elektra) are planned as selectable presets
-and not yet available. Keyboard → Bindings edits **keyboard/mouse only**.
-Controller buttons are rebindable per controller under *Input → Controller*
-(F10 overlay or the front-end PC Options): pick *Custom* and bind each
-action by pressing a pad button (tap B or Back to cancel, hold Back to
-clear, hold B to bind B). Menus always keep A/X accept and B/Y cancel.
-
-Mouse sensitivity, Y-inversion and the aim/turn split are tunable in the
-F10 overlay (*Keyboard → Sensitivity*) or the `[Input]` section of
-`ge007.ini`.
-
----
+`build-pc/ge007.x86_64.exe`). To run a source build, create `data/` in the
+repo root, put your ROM in it as in [What's a ROM?](#whats-a-rom), and run
+`./build-pc/ge007.x86_64` from the repo root.
 
 ## How it works
 
-The R4300 game code in `src/` is compiled completely unmodified; the
-decompilation's control flow is ground truth. Everything that would touch N64
-hardware is redirected into `port/`: a **software RSP** (`port/fast3d/`,
-adapted from the Perfect Dark port) that interprets the GBI display list the
-game builds each frame and emits OpenGL, bypassing the RDP; libultra OS shims
-(`port/src/libultra.c`, game threads as real host threads) that let the
-game's own scheduler run and drive the software RSP inline; and SDL2/OpenGL/filesystem backends
-for video, audio, input and storage. The 32→64-bit transition forces a small,
-cataloged class of mechanical ABI-only edits to ROM-serialized structs
-(pointer-width reconciliation); these change no behavior and are documented
-individually. Where it diverges from the Perfect Dark port: GoldenEye's N64
+The game code in `src/` is the decompilation's, and its control flow is
+ground truth. Everything that would touch N64 hardware is redirected into
+`port/`: a **software RSP** (`port/fast3d/`, adapted from the Perfect Dark
+port) that interprets the GBI display list the game builds each frame and
+emits OpenGL, bypassing the RDP; libultra OS shims (`port/src/libultra.c`,
+game threads as real host threads) that let the game's own scheduler run,
+with the software RSP on its own render thread as the RSP was its own chip;
+and SDL2/OpenGL/filesystem backends for video, audio, input and storage.
+Edits inside `src/` are rare, marked `#ifdef PORT`, and each one is
+documented: mostly mechanical 64-bit fixes (a struct or pointer field that
+the 32→64-bit move misaligned or truncated), plus a few maintainer-approved
+timing fixes where per-frame N64 code ran too fast at the PC's 60 fps (for
+example sniper zoom and turret fire), and the opt-in *All unlocked* hook. Where it diverges from the Perfect Dark port: GoldenEye's N64
 serialized asset formats are converted offline by Python "sidecar" converters
 in `tools_pc/` rather than fixed up at load time. Full detail:
 [`docs/internals.md`](docs/internals.md) and
@@ -389,7 +437,7 @@ in `tools_pc/` rather than fixed up at load time. Full detail:
 ```
 CMakeLists.txt      PC build (parallel to the decomp's Makefile, which is untouched)
 build-pc.sh         configure + build helper
-src/  include/      the decompilation (game + libultra) - compiled unmodified
+src/  include/      the decompilation (game + libultra); port edits are #ifdef PORT
 port/
   fast3d/           software RSP -> OpenGL
   src/              port layer (main, OS shims, video, audio, input, fs, ...)
@@ -399,8 +447,6 @@ tools_pc/           PC-port helper + analysis scripts
 docs/               see below
 ```
 
----
-
 ## Documentation
 
 Key docs are also published as a site:
@@ -408,13 +454,22 @@ Key docs are also published as a site:
 
 | Doc | What's in it |
 |---|---|
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | The single tracker of open work and known issues. |
 | [`docs/building.md`](docs/building.md) | Full build + asset-extraction guide. |
 | [`docs/internals.md`](docs/internals.md) | Architecture, the RSP-emulation approach, GE-vs-PD engine differences, the phased plan. |
 | [`docs/porting-notes.md`](docs/porting-notes.md) | The recurring N64→PC bug classes hit during the port, with fixes. |
 | [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md) | The research angle: the two-agent setup, timeline, handoff workflow, and an assessment of what did and didn't work. |
 | [`docs/dev-process.md`](docs/dev-process.md) | The investigation workflow in detail: budgets, file partitioning, the finding-log discipline. |
-| [`docs/dev/`](docs/dev/) | The raw engineering record: the full finding log, per-level status, graphics backlog, playtest matrices, and [`docs/dev/game-behavior-reference.md`](docs/dev/game-behavior-reference.md) (a secondary-sourced playtest reference for how the retail game is meant to behave; repo-only, code is ground truth). |
+| [`docs/dev/`](docs/dev/) | The raw engineering record: the full finding log, per-level status, playtest matrices, and [`docs/dev/game-behavior-reference.md`](docs/dev/game-behavior-reference.md) (a secondary-sourced playtest reference for how the retail game is meant to behave; repo-only, code is ground truth). |
 | [`docs/SetupGuide.md`](docs/SetupGuide.md), [`docs/StyleGuide.md`](docs/StyleGuide.md) | Inherited from the decompilation this repo forks. |
+
+## Contributing and forking
+
+Issues and pull requests are welcome, and so are forks: the port layer, build
+system and `tools_pc/` are MIT-licensed and exist to be extended. Read
+[`CONTRIBUTING.md`](CONTRIBUTING.md) first: it has the ground rules that keep
+the port faithful (game logic stays unmodified), what to verify before a
+pull request, and what a fork is asked to keep.
 
 ---
 
@@ -460,6 +515,12 @@ This port is a thin layer on a large amount of other people's work.
   Kids decompilation write-up), the agent-workflow practices in
   [`docs/dev-process.md`](docs/dev-process.md) are adapted from it.
 
+**Contributors**
+
+- **dolent** (#120, #121, #122), **italoarruda** (#107, #109),
+  **JosephAHK** (#133), and **MST246** (the #125 investigation), plus
+  everyone who filed issues.
+
 **Consultation**
 
 - **f1zz1ec0ke** ([GitHub](https://github.com/f1zz1ec0ke)): LLM consultation on model
@@ -475,33 +536,47 @@ This port is a thin layer on a large amount of other people's work.
 - [pi](https://pi.dev/): the local coding-agent harness.
 - [Claude / Claude Code](https://claude.com/claude-code) (Anthropic).
 
----
-
 ## Legal
 
 This is a non-commercial fan preservation/research project, in the same
 category as the many other N64 decompilation and native-port repositories on
-GitHub. It follows the same conventions they do:
-
-- **No ROM and no game assets are distributed**: not in this repository and
-  not in any release. Textures, audio, models, level data and in-game text are
-  extracted from a ROM *you already own*, on *your* machine, at build time.
-- The repository is a fork of the public
-  [GoldenEye 007 decompilation](https://github.com/n64decomp/007) and inherits
-  its contents unmodified (see [`NOTICE`](NOTICE) for what that includes).
-- No official logos, box art, or marketing assets are used. "GoldenEye 007",
-  "007", "James Bond" and related marks belong to their respective owners
-  (Nintendo, Microsoft/Rare, MGM, Danjaq, EON Productions).
-- Pre-built binaries published under [Releases](https://github.com/jkdansereau/goldeneye-pc-port/releases) contain
-  only the engine (the `port/` layer plus the compiled decompilation, with no
-  game data of any kind), bundled with permissively-licensed runtime libraries
-  (SDL2, zlib, the MinGW runtime; their licenses travel in the download). Any
-  build, yours or ours, is useless without a ROM you supply.
-
-This project is **not affiliated with, endorsed by, or sponsored by** Nintendo,
+GitHub. It is **not affiliated with, endorsed by, or sponsored by** Nintendo,
 Rare, Microsoft, MGM, Danjaq, EON Productions, or any rights holder in
-GoldenEye or James Bond. If you are a rights holder with a concern, open an
-issue and it will be addressed.
+GoldenEye or James Bond. "GoldenEye 007", "007", "James Bond" and related
+marks belong to their respective owners; they are used here only to say which
+game this port runs. No official logos, box art, or marketing assets are used.
+
+### What the download contains
+
+- **The engine:** the `port/` layer plus the compiled decompilation.
+- **Runtime libraries** under permissive licenses (SDL2, zlib, the MinGW
+  runtime); their licenses travel in the download.
+- **The one-time asset tool**, which reads your ROM on your machine.
+
+It contains **no ROM and no game assets of any kind**. Any build, yours or a
+release, is useless without a ROM you supply.
+
+### What happens on your computer
+
+Textures, audio, models, level data and in-game text are extracted from a ROM
+*you already own*, on *your* machine, the first time you start the game. The
+port has no network access and never uploads anything.
+
+### This repository
+
+The repository is a fork of the public
+[GoldenEye 007 decompilation](https://github.com/n64decomp/007) and inherits
+its contents (see [`NOTICE`](NOTICE) for what that includes). The few
+port-specific edits inside the decompiled code are marked `#ifdef PORT`.
+
+### Your part
+
+- Only use a ROM that you dumped from a cartridge you own.
+- Never ask for, link to or share ROMs or extracted game files in issues,
+  discussions or pull requests.
+
+If you are a rights holder with a concern, open an issue and it will be
+addressed.
 
 ## License
 
@@ -512,4 +587,4 @@ is covered by [`NOTICE`](NOTICE), not by that license.
 
 ---
 
-*Last updated 2026-09-28 — v0.4.0 · <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a> · <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>*
+*Last updated 2026-10-03 — v0.4.1 · <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a> · <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>*

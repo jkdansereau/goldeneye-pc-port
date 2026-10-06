@@ -2502,15 +2502,6 @@ s32 bgLoadRoomPrimaryGdl(s32 roomnum, u8 *dst, s32 allocsize)
 
     obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, scratch, fileoffset, size);
 
-#if defined(PORT)
-    if (getenv("GE_D69BB")) {
-        osSyncPrintf("D69bb primGdl room=%d fileoffset=%08x size=%d "
-                     "compbytes=%02x%02x%02x%02x%02x%02x%02x%02x\n",
-                     roomnum, (unsigned)fileoffset, (int)size,
-                     scratch[0], scratch[1], scratch[2], scratch[3],
-                     scratch[4], scratch[5], scratch[6], scratch[7]);
-    }
-#endif
 
     // Decompress from the end-of-buffer location at dst.
     expanded_size = bgDecompress(scratch, dst);
@@ -2521,15 +2512,6 @@ s32 bgLoadRoomPrimaryGdl(s32 roomnum, u8 *dst, s32 allocsize)
     expanded_size = bgWidenRoomGdl(dst, expanded_size);
 #endif
 
-#if defined(PORT)
-    if (getenv("GE_D69BB")) {
-        osSyncPrintf("D69bb primGdl room=%d expanded=%d dstbytes="
-                     "%02x%02x%02x%02x%02x%02x%02x%02x\n",
-                     roomnum, (int)expanded_size,
-                     dst[0], dst[1], dst[2], dst[3],
-                     dst[4], dst[5], dst[6], dst[7]);
-    }
-#endif
 
     /**
      * Copy the decompressed GDL back to the end of the buffer as scratch.
@@ -2551,30 +2533,7 @@ s32 bgLoadRoomPrimaryGdl(s32 roomnum, u8 *dst, s32 allocsize)
     roominfo->ptr_expanded_mapping_info = dst;
     roominfo->usize_primary_DL_binary = expanded_size;
 
-#if defined(PORT)
-    /* TEMP D85: dump the post-texLoadFromGdl primary GDL command stream. */
-    if (getenv("GE_D85DUMP")) {
-        Gfx *g = (Gfx *)dst;
-        s32 k;
-        osSyncPrintf("D85DUMP room=%d dst=%p size=%d\n", roomnum, (void *)dst, (int)size);
-        for (k = 0; k < 400; k++) {
-            u32 w0 = (u32)g[k].words.w0;
-            u32 w1 = (u32)g[k].words.w1;
-            osSyncPrintf("D85DUMP  [%3d] op=%02x w0=%08x w1=%08x\n", k, (u8)(w0 >> 24), w0, w1);
-            if ((u8)(w0 >> 24) == 0xB8) break; /* G_ENDDL */
-        }
-    }
-#endif
 
-#if defined(PORT)
-    /* TEMP D63: log primary GDL load result (env GE_D63=1) */
-    if (getenv("GE_D63")) {
-        u32 *w = (u32 *)dst;
-        osSyncPrintf("D63 bgLoadRoomPrimaryGdl room=%d dst=%p expanded=%d final=%d w0..3=(%08x,%08x,%08x,%08x)\n",
-                     roomnum, (void *)dst, (int)expanded_size, (int)size,
-                     w[0], w[1], w[2], w[3]);
-    }
-#endif
 
     // Return the uncompressed data size.
     return expanded_size;
@@ -2970,18 +2929,6 @@ Gfx *bgRenderRoomPrimary(Gfx *gdl, s32 room_index)
         {
             gdl = applyRoomMatrixToDisplayList(gdl, room_index);
 
-#if defined(PORT)
-            /* TEMP D63: log primary GDL at render time (env GE_D63=1) */
-            static int d63on_p = -1; /* D302-class cache: per room, per frame */
-            if (d63on_p < 0) d63on_p = getenv("GE_D63") != NULL;
-            if (d63on_p) {
-                u32 *w = (u32 *)g_BgRoomInfo[room_index].ptr_expanded_mapping_info;
-                osSyncPrintf("D63 bgRenderRoomPrimary room=%d ptr=%p usize=%d w0..3=(%08x,%08x,%08x,%08x)\n",
-                             room_index, (void *)g_BgRoomInfo[room_index].ptr_expanded_mapping_info,
-                             (int)g_BgRoomInfo[room_index].usize_primary_DL_binary,
-                             w[0], w[1], w[2], w[3]);
-            }
-#endif
             gSPSegment(gdl++, SPSEGMENT_BG_VTX, OS_K0_TO_PHYSICAL(g_BgRoomInfo[room_index].vertices));
             gSPDisplayList(gdl++, OS_K0_TO_PHYSICAL(g_BgRoomInfo[room_index].ptr_expanded_mapping_info));
 
@@ -3017,18 +2964,6 @@ Gfx *bgRenderRoomSecondary(Gfx *gdl, s32 room_index)
         {
             gdl = applyRoomMatrixToDisplayList(gdl, room_index);
 
-#if defined(PORT)
-            /* TEMP D63: log secondary GDL at render time (env GE_D63=1) */
-            static int d63on_s = -1; /* D302-class cache: per room, per frame */
-            if (d63on_s < 0) d63on_s = getenv("GE_D63") != NULL;
-            if (d63on_s) {
-                u32 *w = (u32 *)g_BgRoomInfo[room_index].ptr_secondary_expanded_mapping_info;
-                osSyncPrintf("D63 bgRenderRoomSecondary room=%d ptr=%p usize=%d w0..3=(%08x,%08x,%08x,%08x)\n",
-                             room_index, (void *)g_BgRoomInfo[room_index].ptr_secondary_expanded_mapping_info,
-                             (int)g_BgRoomInfo[room_index].usize_secondary_DL_binary,
-                             w[0], w[1], w[2], w[3]);
-            }
-#endif
             gSPSegment(gdl++, SPSEGMENT_BG_VTX, OS_K0_TO_PHYSICAL(g_BgRoomInfo[room_index].vertices));
             gSPDisplayList(gdl++, OS_K0_TO_PHYSICAL(g_BgRoomInfo[room_index].ptr_secondary_expanded_mapping_info));
 
@@ -3086,21 +3021,6 @@ void bgBuildRoomVtxBounds(s32 roomID)
     cmdindex = 0;
     numpoints = 0;
 
-#if defined(PORT)
-    /* TEMP D69: log the vtx-bounds walk (env GE_D69BB=1) */
-    if (getenv("GE_D69BB")) {
-        osSyncPrintf("D69bb room=%d gdl=%p vertices=%p usizePrim=%d usizePts=%d\n",
-                     roomID, (void *)gdl, (void *)vertices,
-                     (int)g_BgRoomInfo[roomID].usize_primary_DL_binary,
-                     (int)g_BgRoomInfo[roomID].usize_point_index_binary);
-        for (cmdindex = 0; cmdindex < 8; cmdindex++) {
-            osSyncPrintf("D69bb  cmd[%d] cmd=%02x par=%08x addr=%08x\n",
-                         cmdindex, gdl[cmdindex].dma.cmd,
-                         (unsigned)gdl[cmdindex].dma.par,
-                         (unsigned)gdl[cmdindex].dma.addr);
-        }
-    }
-#endif
 
     while (gdl[cmdindex].dma.cmd != G_ENDDL)
     {
@@ -3508,11 +3428,6 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
     {
         static s32 d154_calls = 0;
         d154_calls++;
-        if (d154_calls <= 64 && getenv("GE_D154")) {
-            osSyncPrintf("D154 call#%d room=%d gdlidx=%d vtxoff=%d op=%d hdr w0=%08x w1=%08x\n",
-                         d154_calls, (int)roomnum, (int)point->gdlindex, (int)vtxoff,
-                         (int)op, (unsigned)(u32)gdl[-1].words.w0, (unsigned)(u32)gdl[-1].words.w1);
-        }
     }
 #endif
 
@@ -3535,13 +3450,6 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                 idx[0] = (((u8 *) gdl)[5] / 10) - vtxoff;
                 idx[1] = (((u8 *) gdl)[6] / 10) - vtxoff;
                 idx[2] = (((u8 *) gdl)[7] / 10) - vtxoff;
-#endif
-#ifdef PORT
-                static int d154on = -1; /* D302-class cache: inner GDL walk, fires per bullet hit */
-                if (d154on < 0) d154on = getenv("GE_D154") != NULL;
-                if (d154on)
-                    osSyncPrintf("D154   TRI1 w1=%08x idx=%d,%d,%d\n",
-                                 (unsigned)(u32)gdl->words.w1, (int)idx[0], (int)idx[1], (int)idx[2]);
 #endif
                 i = 0;
                 
@@ -3727,14 +3635,6 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                             idx2[1] = (((u32 *) gdl)[1] >> 28) - vtxoff;
                             idx2[2] = (((u32) ((u16 *) gdl)[1]) >> 12) - vtxoff;
                         }
-#endif
-#ifdef PORT
-                        static int d154on4 = -1; /* D302-class cache: inner GDL walk, fires per bullet hit */
-                        if (d154on4 < 0) d154on4 = getenv("GE_D154") != NULL;
-                        if (d154on4)
-                            osSyncPrintf("D154   TRI4 s2=%d w0=%08x w1=%08x idx2=%d,%d,%d\n",
-                                         (int)s2, (unsigned)(u32)gdl->words.w0, (unsigned)(u32)gdl->words.w1,
-                                         (int)idx2[0], (int)idx2[1], (int)idx2[2]);
 #endif
 
                         i = 0;
@@ -6038,8 +5938,23 @@ void sub_GAME_7F0BA2D4(coord3d *bbmin, coord3d *bbmax, s32 *room_list, s32 *coun
                         goto next_portal;
                     }
                     
+#ifdef PORT
+                    /* D491: the N64 read each coord3d across three separately-declared
+                     * adjacent s32 globals (D_80044904..0C = FLT_MAX bits, D_80044910..18 =
+                     * -FLT_MAX bits). mingw lays them out in reverse order, so the reads
+                     * picked up neighbouring data: portal_max started as {-FLT_MAX, FLT_MAX,
+                     * FLT_MAX} and every portal's Y/Z max stuck at FLT_MAX. Read the named
+                     * globals instead. Layout only (porting-notes D5), no logic change. */
+                    portal_min.x = *(f32 *) &D_80044904;
+                    portal_min.y = *(f32 *) &D_80044908;
+                    portal_min.z = *(f32 *) &D_8004490C;
+                    portal_max.x = *(f32 *) &D_80044910;
+                    portal_max.y = *(f32 *) &D_80044914;
+                    portal_max.z = *(f32 *) &D_80044918;
+#else
                     portal_min = *(coord3d *) &D_80044904;
                     portal_max = *(coord3d *) &D_80044910;
+#endif
                     portal_pts = g_BgPortals[portal_idx].offset_portal;
                     
                     for (j = 0; j < portal_pts->numPoints; j++)

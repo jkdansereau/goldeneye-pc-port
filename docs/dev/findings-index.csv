@@ -172,7 +172,7 @@ D290,FIXED,"Watch's in-game ""controller"" section shows no control-pad graphic 
 D291,CLOSED,"Dam: texture glitches when the truck drives past (M-141, Steam Deck user playtest).","CLOSED — duplicate of D306, faithful (M-201, 2026-09-26:"
 D292,FIXED,Death animations are glitched —,"MOSTLY FIXED as a side effect of D243 (2026-09-18, user-confirmed alongside D173) —"
 D293,FIXED,"QoL ask: no discoverable way to quit the game from the UI (M-141, Steam Deck user playtest —","FIXED (M-141) — ""Quit to desktop"" row added to the F10 overlay; build-verified Win+Linux, not yet live-confirmed.…"
-D294,PARTIAL,"Statue: ground geometry near the large CCCP/hammer-and-sickle monument briefly renders solid black over a wide area, then self-recovers 10-30 seconds later… —",PARTIAL -> fix landed pending by-eye check (2026-09-30:
+D294,PARTIAL,"Statue: ground geometry near the large CCCP/hammer-and-sickle monument briefly renders solid black over a wide area, then self-recovers 10-30 seconds later… —",PARTIAL -> fix landed pending by-eye check (2026-10-03:
 D295,FIXED,"Campaign-halting crash at the end of Control Center on 00 Agent difficulty, then a crash on every subsequent relaunch/resume (GitHub #87, user campaign playtes…",FIXED (M-149) — M-148 root-caused + reproduced on HEAD; fix landed:
 D296,CLOSED,"Control Center, 00 Agent:","CLOSED (2026-09-26, user-approved:"
 D297,FIXED,v0.3.0 silently wipes ALL pre-fix player saves on first launch (D284 side effect; found during D295/M-148).,FIXED (M-150) — migration shim landed:
@@ -306,8 +306,8 @@ D432,FIXED,"Gunshot sounds ""off"" after D427:",FIXED in tree (gate offset round
 D433,OPEN,"Slight audible difference in automatic-gun shot sound vs GEPD/1964 after cadence was matched (user by-ear, Caverns).",OPEN (not a timing issue; audio layer suspected).
 D434,FIXED,Raw ((u8*)&g_Textures[n])[0] & 0xf hit-type reads are wrong on PC; latent OOB once D431 returned real texture ids (found by sub-agent review).,"FIXED (.hitTexture at 3 sites, port-guarded); live check owed."
 D440,FIXED,"""Original N64"" / ""Port defaults"" one-press presets in the F10 overlay and front-end PC Options (+ -n64preset/-portpreset).",FIXED (port-only; headless-verified; user live accept owed).
-D441,PARTIAL,64-bit pointer-width sweep (part 1):,"PARTIAL (mechanical widening landed, build/run verified on Bunker and Silo; census/provenance table for the remaining sites still owed)."
-D442,FIXED,Game.AllUnlocked reworked into a pure RAM/query-time override:,FIXED (build and eep-diff verified; level-select/cheat-menu live check owed).
+D441,PARTIAL,64-bit pointer-width sweep (part 1):,"PARTIAL (census + GE_HIGHARENA_BASE tier-1 build + 35 sites fixed + CI ratchet, 2026-10-03; tier-1 menu and -level_09 pixel-identical; owed tier-1 all-level sweep and the above-4-GiB tier)."
+D442,FIXED,Game.AllUnlocked reworked into a pure RAM/query-time override:,"FIXED; verified 2026-10-03 headless (mission select all 20 / only real progress when OFF, full cheat menu, eep byte-identical)."
 D443,FIXED,"D357 settings-display cleanup (mouse ×, whole-% deadzone and volume steps, FOV in horizontal degrees, MSAA 16×) plus a ""Restart game"" action (orderly D344 quit…",FIXED (port-only; reset probes pass; both-UI visual check and one Restart click owed; Linux relaunch path not compiled).
 D454,FIXED,Knife slash crashed on Windows:,FIXED (verified by maintainer live:
 D461,FIXED,Item-slot allocation overran into the next stage-bank block:,FIXED (maintainer-verified:
@@ -345,4 +345,22 @@ D482,FIXED,Lighter first-launch defaults on Atom/Celeron-class GPUs (#92 follow-
 D483,FIXED,#136: the PC crouch key stood Bond up when he switched to the sniper rifle; the N64 keeps the stance (the weapon's DISABLE_CROUCH flag blocks both crouch-down…,"FIXED 2026-10-02 (local, fix/d483-sniper); scripted crouch -> switch -> release keeps SQUAT"
 D484,FIXED,"#136: portScaleFovY's 20-degree floor raised the game's own zoom FOVs, capping sniper/camera magnification at 20 degrees instead of the N64's 7 (about a third…","FIXED 2026-10-02 (local, fix/d483-sniper, maintainer-approved 2026-10-02); full zoom renders at 7 degrees, normal views pixel-identical"
 D485,FIXED,"#136: sniper/camera zoom stepped once per game frame with no tick scaling, so at the port's 1 tick/frame it zoomed 2x faster in real time than the N64 at 2 tic…","FIXED 2026-10-02 (local, fix/d483-sniper); 15 -> 7 takes 16 frames at 60 fps (was 8) = the N64 at 30 fps"
+D486,FIXED,#126: explosions dropped in heavy firefights (turrets on Cradle/Egypt/Aztec):,"FIXED (a)(c)(d); drops + (b) faithful, closed."
+D487,FIXED,"PAL: the in-level ammo counter was not drawn (only a small dot where the ""7 / 93"" counter should be) —",FIXED; maintainer PAL play check 2026-10-02:
+D488,FIXED,PAL build reported the Brazilian MPAL TV type instead of PAL (osTvType) —,FIXED
+D489,FIXED,FPS dropped sharply while adjusting F10 watch sliders (music/FX) with a pad or arrow keys:,"FIXED 2026-10-02 (port-only UI layer, fix/d489-pad-slider-commit, merged into release/v0.4.1 2026-10-03); maintainer pad check passed 2026-10-03"
+D490,FIXED,Dam first-tower guard walked a small circle:,"FIXED 2026-10-02 (fix/d490-glass-hull, merged into release/v0.4.1 2026-10-03); maintainer by-eye Dam check passed 2026-10-02"
+D491,FIXED,"Struct reads across separately-declared adjacent globals (the D5/D215 class), found by the D24 overflow audit:","FIXED 2026-10-03 (fix/d491-adjacent-global-reads, local); builds clean, 900-frame -level_09 smoke clean; no by-eye effect expected beyond room-membership-driven behaviour"
+D492,OPEN,Emulator .eep saves are not drop-in compatible:,OPEN (investigated 2026-10-03; fix decided:
+D493,FIXED,Pad rumble kept going after quitting the game:,"FIXED 2026-10-03, maintainer-verified in play (DualSense; Original-mode edges incl."
+D494,FIXED,"Sniper rifle: the PC crouch key now crouches/stands freely with a disable-crouch weapon (GEPD parity), never injecting C-down for it; supersedes D483's stance…","FIXED 2026-10-03, maintainer-verified in play"
+D495,FIXED,"Tank: with the default pad preset X changed the tank weapon and Y left it, because in-tank faces fell back to the fixed menu faces; PadMapCtx.tank routes Next/…","FIXED 2026-10-03, maintainer-verified in play"
+D496,FIXED,3P/4P split-screen: weapon-pickup messages garbled and oversized —,"FIXED 2026-10-03 (condensed 3+P text is faithful, maintainer-confirmed)"
+D497,FIXED,PC Options paging now matches the game's dossiers:,"FIXED 2026-10-03, maintainer-verified in play"
+D498,FIXED,Xbox 1.2 Christmas / 1.3 Frost / 1.4 Elektra gamepad presets:,"FIXED 2026-10-03, maintainer-verified with a pad"
+D499,FIXED,Trilinear texture filter option:,"FIXED 2026-10-03, maintainer-checked (no visible difference; kept)"
+D500,FIXED,"Aztec shuttle area: polygons ""fell apart""; the per-frame vtx pool (dyn.c, no bounds check, Aztec -mvtx40) could overrun into the half the render worker draws;…","FIXED 2026-10-03, maintainer-verified at the Aztec spot"
+D501,CLOSED,Ultrawide 16:9 pillarbox for cutscenes and the watch:,CLOSED (reverted 31ade91f)
+D502,FIXED,PC Options pad navigation:,"FIXED 2026-10-03, maintainer-verified with a pad"
+D503,?,Surface far dish shows as a faint silhouette with straight edges:,KNOWN ISSUE
 D450,FIXED,"Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).","FIXED — port-only: the render thread's gfx_sdl_handle_events drains the same SDL queue as video.c's host pump but had no case for SDL_CONTROLLERDEVICEADDED/REMOVED, so it usually swallowed them and i…"

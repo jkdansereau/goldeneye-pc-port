@@ -83,6 +83,7 @@ static void portAtExit(void)
 {
     /* Clean-exit only (exit(0) from videoPumpEvents). Crash/fatal paths call
      * abort(), which does not run atexit handlers. */
+    inputRumbleStopAll();   /* D493: no pad left rumbling after exit */
     videoSaveWindowState();
     configSave();
     /* D443: Restart game -- runs only on the orderly D344 exit path, after the
@@ -146,11 +147,10 @@ int main(int argc, char **argv)
      *     writes only -- no game-logic edits (AGENTS rule 2), same class as
      *     the existing GE_UNLOCK_ALL getenv hook in the getter. No active
      *     cheats (invincibility / all guns) are enabled; weapons remain
-     *     per-mission pickups as on the N64. Separately, the eep shim
-     *     (libultra.c geEepromPatchAllCheats) sets every progression-gated
-     *     cheat-unlock bit in the save block at read time (per-slot CRC
-     *     recomputed via the game's own fileGenerateCRC), so the cheat
-     *     menu is fully populated without completed levels. */
+     *     per-mission pickups as on the N64. D442: the cheat menu and every
+     *     COMPLETED check come from the query-time hooks in file2.c
+     *     (fileGetIsCheatUnlocked, fileIsStageUnlockedAtDifficulty); the
+     *     save is never patched. */
 #if defined(LEFTOVERDEBUG) /* the debug unlock flags only exist with LEFTOVERDEBUG (not PAL); D442's query-time hooks cover All unlocked everywhere */
     {
         extern s32 portAllUnlocked;            /* port/src/video.c */

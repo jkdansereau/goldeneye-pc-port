@@ -1474,14 +1474,6 @@ void proplvreset2(enum LEVELID stageId)
                 pad->pos.f[1] *= roompos_1;
                 pad->pos.f[2] *= roompos_1;
 
-#if defined(PORT) && !defined(DEBUG)
-                if (getenv("GE_D88")) {
-                    fprintf(stderr, "D88 pad idx=%d plink=%p str=%s pos=%f,%f,%f\n",
-                            (s32)(pad - g_CurrentSetup.pads), (void *)pad->plink,
-                            pad->plink ? pad->plink : "(null)",
-                            pad->pos.f[0], pad->pos.f[1], pad->pos.f[2]);
-                }
-#endif
 
 #ifdef DEBUG
                 {
@@ -1497,15 +1489,6 @@ void proplvreset2(enum LEVELID stageId)
                 }
 #else
                 init_pathtable_something(pad, pad->plink, &pad->stan);
-#endif
-#ifdef PORT
-                if (getenv("GE_D90")) {
-                    fprintf(stderr, "D90 pad idx=%d plink=%s pos=%.1f,%.1f,%.1f stan=%p%s\n",
-                            (s32)(pad - g_CurrentSetup.pads),
-                            pad->plink ? (char *)pad->plink : "(null)",
-                            pad->pos.f[0], pad->pos.f[1], pad->pos.f[2],
-                            (void *)pad->stan, pad->stan ? "" : "  <-- NULL");
-                }
 #endif
 
                 if (1);

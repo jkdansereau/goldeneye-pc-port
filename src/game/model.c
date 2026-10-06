@@ -124,15 +124,6 @@ Model *modelmgrInstantiateModel(ModelFileHeader *header)
 
     if (model != NULL) 
     {
-#ifdef PORT /* TEMP D51 */
-        if (getenv("GE_D51")) {
-            static FILE *f = NULL;
-            if (!f) { f = fopen("d52rw.log", "a"); setvbuf(f, NULL, _IONBF, 0); }
-            fprintf(f, "INST model=%p header=%p numRecords=%d rwdata=%p rwdatalen=%d lvreset=%d\n",
-                    (void *)model, (void *)header, header->numRecords,
-                    (void *)rwdata, rwdatalen, g_ModelIsLvResetting);
-        }
-#endif
         modelInit(model, header, rwdata);
         ((struct ModelSlot *)model)->unk02 = rwdatalen;
     }
@@ -226,32 +217,10 @@ Model *modelmgrInstantiateModelWithAnim(ModelFileHeader *modelFileHeader)
             }
         }
 #endif
-#ifdef PORT /* TEMP D56: log slot-scan outcome incl. failure */
-        if (getenv("GE_D56")) {
-            fprintf(stderr, "[D56] animInstantiate header=%p numRecords=%d maxslots=%d newModel=%p\n",
-                    (void *)modelFileHeader, modelFileHeader->numRecords,
-                    g_MaxAnimModelSlots, (void *)newModel);
-            if (newModel == NULL) {
-                for (i2 = 0; i2 < g_MaxAnimModelSlots; i2++)
-                    fprintf(stderr, "[D56]   slot%d unk08=%d unk10=%p unk02=%d\n", i2,
-                            g_AnimModelSlots[i2].unk08, g_AnimModelSlots[i2].unk10,
-                            g_AnimModelSlots[i2].unk02);
-            }
-        }
-#endif
     }
 
     if (newModel != NULL) 
     {
-#ifdef PORT /* TEMP D51 */
-        if (getenv("GE_D51")) {
-            static FILE *f = NULL;
-            if (!f) { f = fopen("d52rw.log", "a"); setvbuf(f, NULL, _IONBF, 0); }
-            fprintf(f, "INSTA model=%p header=%p numRecords=%d rwdatas=%p rwdatalen=%d lvreset=%d\n",
-                    (void *)newModel, (void *)modelFileHeader, modelFileHeader->numRecords,
-                    (void *)rwdatas, rwdatalen, g_ModelIsLvResetting);
-        }
-#endif
         animInit(newModel, modelFileHeader, rwdatas);
         newModel->rwdatalen = rwdatalen;
     }
@@ -543,15 +512,6 @@ union ModelRwData* modelGetNodeRwData(Model *Objinst, ModelNode *root)
     }
 
 #ifdef PORT
-    /* TEMP D51: trace rwdata pool addressing */
-    if (GE_ENVFLAG("GE_D51")) {
-        static FILE *f = NULL;
-        if (!f) { f = fopen("d52rw.log", "a"); setvbuf(f, NULL, _IONBF, 0); }
-        fprintf(f, "GND obj=%p datas=%p idx=%d rwdatalen=%d op=%d data=%p res=%p\n",
-                (void *)Objinst, (void *)data, index, Objinst->rwdatalen,
-                root->Opcode & 0xff, (void *)data,
-                (void *)&data[index]);
-    }
     return (union ModelRwData *)&data[index];
 #else
     return &data[index];
@@ -828,14 +788,6 @@ void setsubroty(Model *model, f32 angle)
 
 void modelSetScale(Model *objinst, f32 scale)
 {
-#ifdef PORT /* TEMP D56: identify the crashing caller */
-    static int d56count = 0;
-    if (getenv("GE_D56")) {
-        fprintf(stderr, "[D56] modelSetScale #%d objinst=%p scale=%.4f ret=%p\n",
-                d56count++, (void *)objinst, scale,
-                __builtin_return_address(0));
-    }
-#endif
     objinst->scale = scale;
 }
 
@@ -4568,13 +4520,6 @@ void modelRenderNodeGundl(ModelRenderData* renderdata, ModelNode* arg1)
                 modelApplyRenderModeType2(renderdata);
             }
 
-#if defined(PORT)
-        /* TEMP D63: log Primary/Secondary before emit (env GE_D63=1) */
-        if (GE_ENVFLAG("GE_D63") && ((renderdata->flags & 1) && rodata->Primary))
-            osSyncPrintf("D63 modelRenderNodeGundl Primary=%p Secondary=%p BaseAddr=%p ModelType=%d\n",
-                         (void *)rodata->Primary, (void *)rodata->Secondary,
-                         (void *)rodata->BaseAddr, (int)rodata->ModelType);
-#endif
             gSPDisplayList(renderdata->gdl++, rodata->Primary);
 
             if ((rodata->ModelType == 3) && rodata->Secondary)
@@ -6574,13 +6519,6 @@ void modelInitRwData(Model *model, ModelNode *startnode)
 
     while (node)
     {
-#if defined(PORT) /* TEMP D86: trace node walk to catch the bad pointer before deref */
-        if (getenv("GE_D86")) {
-            fprintf(stderr, "[D86] modelInitRwData model=%p header=%p node=%p\n",
-                    (void *)model, (void *)(model ? model->obj : NULL), (void *)node);
-            fflush(stderr);
-        }
-#endif
         u32 type = node->Opcode & 0xFF;
 
         switch (type)

@@ -93,8 +93,8 @@ static const char *const kOnOff[]     = { "Off", "On", NULL };
 static const char *const kReverse[]   = { "Reverse", "Upright", NULL };
 static const char *const kHold[]      = { "Hold", "Toggle", NULL };
 static const char *const kAspectMode[] = { "Window", "Original", NULL };   /* D447: Original = 4:3 (16:9 with the game Ratio) bars */
-static const char *const kTexFilter[] = { "Nearest", "Bilinear", "3-Point", NULL };
-static const char *const kPadPreset[] = { "Jinx 1.1", "Jinx 1.2 (n/a)", "Jinx 1.3 (n/a)", "Custom", NULL };   /* D469: 1.2/1.3 undefined by D394 -> behave as 1.1 */
+static const char *const kTexFilter[] = { "Nearest", "Bilinear", "3-Point", "Trilinear", NULL };   /* Trilinear option (playtest 2026-10-03) */
+static const char *const kPadPreset[] = { "1.1 Jinx", "1.2 Christmas", "1.3 Frost", "Custom", "1.4 Elektra", NULL };   /* D498: index = stored value; inputPadPresetStep gives the display order */
 static int s_padSeat = 0;   /* D469: seat edited by the Controller page rows */
 static const char *const kAimMode[]   = { "N64", "Centred (PC)", NULL };   /* D337 */
 static const char *const kAimRange[]  = { "PC", "N64", NULL };             /* D338 */
@@ -146,6 +146,12 @@ static int s_resFitN = 0;
 static int s_resSel  = 0;       /* index into s_resFit */
 static int s_dragRow = -1;      /* scheduler-thread mouse drag */
 static SDL_atomic_t s_dragWatchField; /* field+1, host may close F10 mid-drag */
+/* D489: field+1 of a watch slider stepped by D-pad/stick/arrows. Each commit
+ * is three joyDisablePoll/joyEnablePoll handshakes plus an EEPROM file
+ * rewrite on the game thread, so committing every held-repeat detent stalled
+ * frames. Steps stage like a mouse drag; optionsAdjustCommitPending() saves
+ * once when the direction is released. */
+static SDL_atomic_t s_adjWatchField;
 
 struct Row {
     const char        *key;
@@ -1386,8 +1392,19 @@ static void rowAdjust(struct Row *r, int dir)
     }
     case ROW_ENUM: {
         double lo = r->cfgMin, hi = r->cfgMax;
-        if (!strcmp(r->key, "Input.PadPreset")) {   /* D469: only Jinx 1.1 and Custom are defined */
+        if (!strcmp(r->key, "Input.PadPreset")) {   /* D498: step through the preset display order (0,1,2,4,3) */
             rowSet(r, (double)inputPadPresetStep((int)lround(v), dir));
+            break;
+        }
+        if (!strcmp(r->key, "Video.TextureFilter")) {
+            /* D499: menu order Nearest, Bilinear, Trilinear, 3-Point (stored
+             * 0, 1, 3, 2: 2 stays 3-Point for existing inis and the Original
+             * N64 preset), so Bilinear and Trilinear sit side by side for A/B. */
+            static const int order[4] = { 0, 1, 3, 2 };
+            int cur = (int)lround(v), i = 0;
+            while (i < 4 && order[i] != cur) i++;
+            if (i == 4) i = 0;
+            rowSet(r, (double)order[(i + (dir > 0 ? 1 : 3)) % 4]);
             break;
         }
         v += dir;
@@ -1468,9 +1485,25 @@ static void rowAdjust(struct Row *r, int dir)
             rowSet(r, (double)p);
             break;
         }
+        {
+            int field = watchSettingsFieldForKey(r->key);
+            if (field >= 0) {
+                /* D489: stage only; a different pending field saves first. */
+                int prev = SDL_AtomicSet(&s_adjWatchField, field + 1);
+                if (prev > 0 && prev != field + 1) watchSettingsCommit(prev - 1);
+                rowSetCommit(r, v + dir * r->step, 0);
+                break;
+            }
+        }
         rowSet(r, v + dir * r->step);
         break;
     }
+}
+
+void optionsAdjustCommitPending(void)
+{
+    int pending = SDL_AtomicSet(&s_adjWatchField, 0);
+    if (pending > 0) watchSettingsCommit(pending - 1);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1721,6 +1754,7 @@ void optionsOverlayToggle(void)
         if (optionsBindingCaptureActive()) return; /* Escape cancels modal */
         int pending = SDL_AtomicSet(&s_dragWatchField, 0);
         if (pending > 0) watchSettingsCommit(pending - 1);
+        optionsAdjustCommitPending();   /* D489 */
     }
     s_open = !s_open;
     if (s_open) {
@@ -1833,6 +1867,7 @@ static void overlayHandleInputLocked(void)
         prevUp = prevDn = prevLf = prevRt = prevLmb = prevRmb = 0;
         s_dragRow = -1;
         SDL_AtomicSet(&s_dragWatchField, 0);
+        optionsAdjustCommitPending();   /* D489: closed by the host mid-hold */
         navDir = adjDir = 0;
         SDL_AtomicSet(&s_wheelPending, 0);
         return;
@@ -2015,6 +2050,9 @@ static void overlayHandleInputLocked(void)
         } else {
             adjDir = 0;
         }
+        /* D489: save a stepped watch slider once, on release (also covers
+         * mouse click/right-click steps, which never hold left/right). */
+        if (!(rt || lf)) optionsAdjustCommitPending();
     }
 
     /* ---- mouse ----
@@ -2258,6 +2296,10 @@ static void valueText(int i, char *out, int n)
     }
     if (!strcmp(r->key, "Input.MouseSensitivity")) {   /* D443/D357: raw 100 = 1.0x */
         snprintf(out, n, "%.1fx", v / 100.0);
+        return;
+    }
+    if (!strcmp(r->key, "Input.RumbleScale")) {   /* D357: whole %, like deadzone/volume; storage stays 0..1 */
+        snprintf(out, n, "%d%%", (int)lround(v * 100.0));
         return;
     }
     if (r->kind == ROW_SLIDER && r->type == CONFIG_OPT_FLOAT) {

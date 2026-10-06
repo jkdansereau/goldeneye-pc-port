@@ -1425,39 +1425,17 @@ u32 frontCheckCursorOnNextTab(void)
 //********************************************************************************************************
 //LEGAL SCREEN
 //********************************************************************************************************
-#ifdef PORT
-/* TEMP D63: log each intro-menu init that reuses ptr_logo_and_walletbond_DL,
- * with the word at base+0x200 (the gun-barrel sub-DL slot) before/after. */
-static void d63MenuProbe(const char *menu)
-{
-    if (!getenv("GE_D63") || !ptr_logo_and_walletbond_DL) return;
-    u32 before = *(u32 *)(ptr_logo_and_walletbond_DL + 0x200);
-    osSyncPrintf("D63 menu init %s: base=%p word@+0x200 before=%08x\n", menu, (void *)ptr_logo_and_walletbond_DL, before);
-}
-static void d63MenuProbeAfter(const char *menu)
-{
-    if (!getenv("GE_D63") || !ptr_logo_and_walletbond_DL) return;
-    u32 after = *(u32 *)(ptr_logo_and_walletbond_DL + 0x200);
-    osSyncPrintf("D63 menu init %s: word@+0x200 after=%08x\n", menu, after);
-}
-#endif
 
 void init_menu00_legalscreen(void)
 {
     s32 padding;
     struct coord3d pos;
 
-#ifdef PORT
-    d63MenuProbe("legalscreen");
-#endif
     musicTrack1Stop();
     maybe_is_in_menu = TRUE;
     g_MenuTimer = 0;
     pos = legalpage_pos;
     load_object_fill_header(PitemZ_entries[PROP_LEGALPAGE].header, PitemZ_entries[PROP_LEGALPAGE].filename, ptr_logo_and_walletbond_DL, 0x3c000, 0);
-#ifdef PORT
-    d63MenuProbeAfter("legalscreen");
-#endif
     modelCalculateRwDataLen(PitemZ_entries[PROP_LEGALPAGE].header);
 
     logoinst = modelmgrInstantiateModel(PitemZ_entries[PROP_LEGALPAGE].header);
@@ -1669,13 +1647,7 @@ void init_menu01_nintendo(void)
 
     g_MenuTimer = 0;
     pos = nintendologo_pos;
-#ifdef PORT
-    d63MenuProbe("nintendologo");
-#endif
     load_object_fill_header(PitemZ_entries[PROP_NINTENDOLOGO].header, PitemZ_entries[PROP_NINTENDOLOGO].filename, ptr_logo_and_walletbond_DL, 0x3c000, 0);
-#ifdef PORT
-    d63MenuProbeAfter("nintendologo");
-#endif
     modelCalculateRwDataLen(PitemZ_entries[PROP_NINTENDOLOGO].header);
     logoinst = modelmgrInstantiateModel(PitemZ_entries[PROP_NINTENDOLOGO].header);
     modelSetScale(logoinst, 1.0f);
@@ -1856,13 +1828,7 @@ Gfx *constructor_menu01_nintendo(Gfx *DL)
 */
 void init_menu02_rarelogo(void)
 {
-#ifdef PORT
-    d63MenuProbe("rarelogo");
-#endif
     setupRarewareLogoData(ptr_logo_and_walletbond_DL, 0x78000);
-#ifdef PORT
-    d63MenuProbeAfter("rarelogo");
-#endif
     sndPlaySfx(g_musicSfxBufferPtr, RARELOGO_SFX, 0);
 }
 
@@ -1908,9 +1874,6 @@ Gfx * constructor_menu02_rareware(Gfx * DL) {
 //GUNBARREL
 //********************************************************************************************************
 void init_menu03_gunbarrel(void) {
-#ifdef PORT
-    d63MenuProbe("gunbarrel");
-#endif
     initializeGunBarrelIntro(ptr_logo_and_walletbond_DL, 0x78000);
     musicTrack1Play(M_INTRO);
     maybe_is_in_menu = TRUE;
@@ -1955,13 +1918,7 @@ void init_menu04_goldeneyelogo(void)
 
     g_MenuTimer = 0;
     pos = goldeneyelogo_pos;
-#ifdef PORT
-    d63MenuProbe("goldeneyelogo");
-#endif
     load_object_fill_header(PitemZ_entries[PROP_GOLDENEYELOGO].header, PitemZ_entries[PROP_GOLDENEYELOGO].filename, ptr_logo_and_walletbond_DL, 0x3c000, 0);
-#ifdef PORT
-    d63MenuProbeAfter("goldeneyelogo");
-#endif
     modelCalculateRwDataLen(PitemZ_entries[PROP_GOLDENEYELOGO].header);
     logoinst = modelmgrInstantiateModel(PitemZ_entries[PROP_GOLDENEYELOGO].header);
     #ifdef DEBUG
@@ -6696,20 +6653,7 @@ void load_briefing_text_for_stage(void)
      * and the objective/briefing text renders blank (D143).  Decode in
      * place, mirroring langFixupLoadedBank() in language.c. */
     if (ptrbriefingdata) {
-        if (getenv("GE_D178")) {
-            const u16 *w = (const u16 *)ptrbriefingdata;
-            fprintf(stderr, "D178 %s raw brief=%04x,%04x,%04x,%04x obj0=%04x/%04x obj3=%04x/%04x seldiff=%d\n",
-                    (const char *)mission_folder_setup_entries[briefingpage].briefing_name_ptr,
-                    w[0], w[1], w[2], w[3], w[4], w[5], w[10], w[11],
-                    (int)selected_difficulty);
-        }
         romdataFixupBriefing((u8 *)ptrbriefingdata);
-        if (getenv("GE_D178")) {
-            const u16 *w = (const u16 *)ptrbriefingdata;
-            fprintf(stderr, "D178 %s fix brief=%04x,%04x,%04x,%04x obj0=%04x/%04x obj3=%04x/%04x\n",
-                    (const char *)mission_folder_setup_entries[briefingpage].briefing_name_ptr,
-                    w[0], w[1], w[2], w[3], w[4], w[5], w[10], w[11]);
-        }
     }
 #endif
 
@@ -7965,15 +7909,6 @@ void init_menu18_displaycast(void)
     randomly_selected_intro_animation = randomGetNext() % ((u32) intro_animation_count);
     body = intro_char_table[intro_character_index].body;
     head = intro_char_table[intro_character_index].head;
-#ifdef PORT
-    /* TEMP D64: dump the live cast-table entry (suspected .data clobber). */
-    if (getenv("GE_D63")) {
-        const u32 *e = (const u32 *)&intro_char_table[intro_character_index];
-        osSyncPrintf("D64 cast-table idx=%d body=%d head=%08x raw=[%08x %08x %08x %08x %08x]\n",
-                     (int)intro_character_index, (int)body, (unsigned)head,
-                     e[0], e[1], e[2], e[3], e[4]);
-    }
-#endif
     cameraPreset = intro_animation_table[randomly_selected_intro_animation].camera_preset;
     
     if (body == BODY_Special_Operations_Uniform)
@@ -8040,15 +7975,6 @@ void init_menu18_displaycast(void)
     bufferRemaining -= allocSize;
     bufferPtr += allocSize;
 
-#ifdef PORT
-    /* TEMP D64: dump head/body/index state right before the wild access. */
-    if (getenv("GE_D63")) {
-        extern u32 num_male_heads, num_female_heads;
-        osSyncPrintf("D64 pre-citem idx=%d body=%d head=%08x nmh=%u nfh=%u\n",
-                     (int)intro_character_index, (int)body, (unsigned)head,
-                     num_male_heads, num_female_heads);
-    }
-#endif
     if (head >= 0)
     {
         headHeader = c_item_entries[head].header;
@@ -8127,7 +8053,11 @@ void init_menu18_displaycast(void)
 #else
     modelSetAnimPlaySpeed(cast_model, 0.5f, 0);
 #endif
+#ifdef PORT
+    modelSetAnimation(cast_model, (ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[intro_animation_table[randomly_selected_intro_animation].animID]), flip, intro_animation_table[randomly_selected_intro_animation].startframeoffset, intro_animation_table[randomly_selected_intro_animation].playback_speed, 0.0f);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     modelSetAnimation(cast_model, animation_table_ptrs1[intro_animation_table[randomly_selected_intro_animation].animID], flip, intro_animation_table[randomly_selected_intro_animation].startframeoffset, intro_animation_table[randomly_selected_intro_animation].playback_speed, 0.0f);
+#endif
 
     g_MenuTimer = 0;
     cast_camera_dist_start = ((((f32) ((u32) randomGetNext())) * (1.0f / U32_MAX)) * 80.0f) + 70.0f;
@@ -8234,27 +8164,14 @@ void interface_menu18_displaycast(void)
         }
 
         f = intro_character_index;
-#ifdef PORT
-        /* TEMP D65: trace the cast-end decision. */
-        if (GE_ENVFLAG("GE_D63"))
-            osSyncPrintf("D65 cast-end f=%d body=%d\n", (int)f, (int)intro_char_table[f].body);
-#endif
         if (intro_char_table[f].body < 0)
         {
             intro_character_index = 0;
             f = 0;
-#ifdef PORT
-            if (GE_ENVFLAG("GE_D63"))
-                osSyncPrintf("D65 cast-end RESET idx=0\n");
-#endif
         }
 
         if (intro_character_index > 0)
         {
-#ifdef PORT
-            if (GE_ENVFLAG("GE_D63"))
-                osSyncPrintf("D65 cast-end frontChangeMenu idx=%d\n", (int)intro_character_index);
-#endif
             frontChangeMenu(MENU_DISPLAY_CAST, 1);
         }
         else if (full_actor_intro != 0)
@@ -8517,18 +8434,6 @@ Gfx *constructor_menu18_displaycast(Gfx *DL)
  
     DL = microcode_constructor(DL);
  
-#ifdef PORT
-    /* TEMP D65: dump index state at the crashing langGet. */
-    if (getenv("GE_D63")) {
-        int i65 = (int)intro_character_index;
-        osSyncPrintf("D65 ctor idx=%d full=%d\n", i65, (int)full_actor_intro);
-        if (i65 >= 0 && i65 <= 40) {
-            const u32 *e = (const u32 *)&intro_char_table[i65];
-            osSyncPrintf("D65 ctor raw=[%08x %08x %08x %08x %08x]\n",
-                         e[0], e[1], e[2], e[3], e[4]);
-        }
-    }
-#endif
     if (full_actor_intro == FALSE)
     {
         text = langGet( (u16)intro_char_table[intro_character_index].text1);
@@ -8719,7 +8624,11 @@ void menu_init(void)
     {
         if (viGetFrameBuf2() == (cfb_16[1]))
         {
+#ifdef PORT
+            viSetFrameBuf2((u8 *)(uintptr_t)(u32)(ptr_menu_videobuffer));  /* D441: zero-extend s32-held DRAM ptr */
+#else
             viSetFrameBuf2(ptr_menu_videobuffer);
+#endif
         }
 
         viSetAspect(MENU_INIT_ASPECT_440);

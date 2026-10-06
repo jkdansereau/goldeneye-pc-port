@@ -100,7 +100,11 @@ struct Model *makeonebody(s32 body, s32 head, struct ModelFileHeader *bodyHeader
         if ((headHeader != 0) && (c_item_entries[body].hasHead == 0))
         {
             bodyHeader->numRecords -= headHeader->numRecords;
+#ifdef PORT
+            modelAttachHead(model, (ModelNode *)(uintptr_t)(u32)(opcode), headHeader);  /* D441: zero-extend s32-held DRAM ptr */
+#else
             modelAttachHead(model, opcode, headHeader);
+#endif
 
             if ((sunglasses == 0) && ((s32) headHeader->numSwitches > 0))
             {

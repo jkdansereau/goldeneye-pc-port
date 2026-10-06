@@ -2486,11 +2486,23 @@ s32 chrTick(PropRecord *prop)
     {
         if (D_8002C904)
         {
+#ifdef PORT
+            if (((ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[g_AnimationTablePointerCountRelated])) != ((ModelAnimation *)1))  /* D441: zero-extend s32-held DRAM ptr */
+#else
             if (((ModelAnimation *)animation_table_ptrs1[g_AnimationTablePointerCountRelated]) != ((ModelAnimation *)1))
+#endif
             {
+#ifdef PORT
+                if (objecthandlerGetModelAnim(model) != ((ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[g_AnimationTablePointerCountRelated])))  /* D441: zero-extend s32-held DRAM ptr */
+#else
                 if (objecthandlerGetModelAnim(model) != ((ModelAnimation *)animation_table_ptrs1[g_AnimationTablePointerCountRelated]))
+#endif
                 {
+#ifdef PORT
+                    modelSetAnimation(model, (ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[g_AnimationTablePointerCountRelated]), 0, 0.0f, 0.5f, 0.0f);  /* D441: zero-extend s32-held DRAM ptr */
+#else
                     modelSetAnimation(model, (ModelAnimation *)animation_table_ptrs1[g_AnimationTablePointerCountRelated], 0, 0.0f, 0.5f, 0.0f);
+#endif
                 }
             }
         }

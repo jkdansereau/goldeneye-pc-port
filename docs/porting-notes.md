@@ -294,6 +294,8 @@ When a PC-larger asset gets a bigger reservation inside a shared scratch buffer 
 
 **A1 cross-tag (D457, 2026-09-30): a pure pointer-width retype can change behaviour by shifting the allocation layout.** Widening `struct player` (+32 B) / `struct Model` (+16 B, inline x4 in player) flipped the default-boot file-select menu to an all-black frame (no crash, identical log) while `-level_09` was fine; allocating the player block at its old size restored it. The menu depends on the MEMPOOL_STAGE layout (player block precedes `g_GfxBuffers[0]`, D98) through something address-sensitive. After any struct widening, run the default-boot menu with a `GE_PCDUMP` frame (not only a level) and check the frame extrema, not just rc. Also: a hardcoded record stride (`vtxstore.c` `n * 0x14` for a record that is 0x18 bytes on x86-64) is a silent overrun that widening makes worse; grep literals near allocs of retyped structs.
 
+**A1 cross-tag (D441, 2026-10-03): the read side, `s32` back to a pointer, sign-extends.** An arena pointer stored in an `s32` (a local, a global, a field, a function parameter named like an id: `pathid`, `opcode`, `resolution`, `helddst`) truncates harmlessly below 4 GiB, but `(T *)s32` and the implicit `s32` -> `T *` conversion (a `-Wint-conversion` "makes pointer from integer", no cast to grep for) sign-extend bit 31. Invisible while the arena sits below 0x80000000; the tier-1 test build (`GE_HIGHARENA_BASE=0x90000000`) turns each one into a 0xffffffff9xxxxxxx fault, in crash order. Fix: `(T *)(uintptr_t)(u32)(EXPR)` under `#ifdef PORT`. Also grep the port layer for address-range **upper bounds**, not only base literals: fast3d's DRAM-vs-C-array texture test ended at a `0x90000000` literal, so with the arena moved there every DRAM texture was bswapped (mirrored texel pairs, no crash). Ranges must come from `portaddr.h` (base + `PORT_DRAM_SIZE`). And pin `GE_RSEED` + `GE_INPUTSCRIPT` before diffing level frames between builds: unseeded runs differ every frame.
+
 ## B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64
 
 Any buffer reservation, `memcpy` size, slot stride, or pool budget
@@ -1109,6 +1111,13 @@ past it (walk off the end).
   links 0x60 bytes *before* `legalpage_text_array` → only line 1 renders
   (== the D76 "disclaimer half-drawn" bug; it was never an image-table
   issue). Fix: `#ifdef PORT` uses `array + ARRAY_COUNT(array)`.
+- Instance: **D491**; the same assumption in struct reads, not loop bounds:
+  `*(coord3d *)&D_80044904` (bg.c portal bbox seeds) and
+  `*(coord3d *)&D_80035EA4` (gunfire.c casing rot) read three separately
+  declared scalars as one struct. mingw emits such runs in **reverse** order,
+  so the read picks up a different neighbour. `-Warray-bounds` flags these
+  ("partly outside array bounds of 's32[1]'"); confirm with `nm -n` on the
+  exe. Fix: `#ifdef PORT` reads each named global.
 - Grep for `= &` / `(TYPE *)&` on the RHS of a loop-terminator compare, and
   any `for`/`while`/`do` whose end pointer is the address of a *different*
   symbol than the one being iterated.
@@ -1404,6 +1413,8 @@ A port stub that forces a value to `-1` (D154 `texnum`, D135) can hide latent la
 - **Techniques that worked:** run the original traversal twice with a port flag that pins the single far read (a static read, never `viSetZRange`) and snapshot the result; keep the "gameplay verdict" in an unused bit of a u8 flag byte (`prop->flags & 0x80`) written by every setter of the dual-use flag; store the authored fog values at load time instead of recomputing from the live multiplier.
 - **Triage trap:** check whether a `PROPFLAG_*` hit is on `prop->flags` (runtime u8) or on `obj->flags` / pdef flags (u32 definition bits) before treating it as a reader (`propobj.c:8417`, `prop.c` 233-467 are the latter).
 - **Remaining class member:** FOV/widescreen widening of `camIsPosInScreen` and `c_lodscalez` (D222).
+- **Fixed-size per-frame budgets are readers too (D500):** the dyn.c vtx pool (`-mvtx`, as low as 40 KB) is bump-allocated with no bounds check and sized for what the N64 could see; widened views overran it (Aztec triangles). Look for unchecked per-frame pools sized by per-level tokens when a widening feature shows corruption only in busy scenes.
+- **Reveal, not regression (D503):** the N64's 16-bit framebuffer hid 2-5 level differences (near-full fog against haze); 32-bit output shows them, plus the room-scissor edges of nearly fogged objects. Measure pixel values against the fog colour before blaming draw distance.
 
 ## D19. A "click after the shot" report needs the trigger-hold duration, not just the state machine (D433/D467)
 State-machine audits of a gun's fire/dry-fire path (GE: `gunTickHandState`, CLICKY weapons) are tick-driven and match the console at any tick/frame ratio; an extra click/sound that appears "with the shot" is usually the trigger still being down when the recoil state ends (about 14 ticks for the Golden Gun). Measure with `GE_STARTWEAPON` + `GE_INPUTSCRIPT` holds of 4/9/16 frames and a `state/mag/88C/890/clk` log at the sound-play sites before suspecting the audio layer; and remember `GE_QUITFRAME` counts frames from boot, the level's `g_GlobalTimer` starts ~270 later.
@@ -1422,6 +1433,12 @@ Decomp code that advances a counter once per *call* (per rendered frame) instead
 ## D23. Region bring-up: tooling and port code silently assume NTSC-U (D258)
 
 PAL/JP had never been built. What broke was all port-side: (1) asset emitters hard-coded `scripts/filelist.u.csv` (so on a PAL/JP ROM they would use US offsets with no error); (2) `romdata.c` treated "not PAL" as NTSC-U (rejecting a JP ROM's country byte); (3) port code referenced globals that exist only under a region-specific define (`LEFTOVERDEBUG` is US/JP-only), which surfaces as a PAL-only link error; (4) the decomp's PAL/JP filelists were incomplete and mislabelled. With a real ROM, prove every filelist row by bytes (same-name US file comparison, constant-shift search, header-walk for variable files) instead of trusting labels. Whenever port code touches a symbol inside a `#if` region block, check all three `REGION_DEFS` sets.
+
+## D24. Decomp out-of-bounds writes that the N64 stack layout absorbed (D490)
+
+Some decomp functions write past a local array in edge cases. On the N64, IDO's stack layout put a padding local (often a `pad[]` the decomp keeps for matching) right after the array, so the overflow was harmless. GCC lays the stack out differently, so the same write corrupts a live neighbour. D490: `sub_GAME_7F03ECC0` writes up to 6 entries into `s32 rem[4]` when an object's bbox is flat, overwriting `pts[0]` and giving every glass pane a phantom collision vertex (guards circled pads they could not reach). Tells: a bug that only appears for degenerate inputs (flat or zero-size boxes, coincident points); a value that is exactly 0 or a tiny denormal where a real number belongs; a `pad[]` local next to a fixed-size array in the decomp. Fix pattern: enlarge the array under `#ifdef AVOID_UB`, keep the original under `#else`, change no reads, so the result matches the N64's uncorrupted path.
+
+Also the read side: D496 (`generate_language_specific_text_for_weapon` strcat'd onto an uninitialised caller stack buffer for 3+ players; init under `AVOID_UB`).
 
 ## E. Process / method notes
 
@@ -1847,6 +1864,8 @@ PAL/JP had never been built. What broke was all port-side: (1) asset emitters ha
 ### Poll-thread input must never re-point `g_CurrentPlayer` (D419)
 
 `inputComputePad` runs on the scheduler thread (`joyPoll`), a real pthread, not the game thread. Any save/swap/restore of `g_CurrentPlayer`/`player_num`/`g_playerPerm` from there races the game tick's own `set_cur_player`: the restore can leave the game thread on the wrong player and it then spins in list walks that compare against `g_CurrentPlayer->...` (seen: `bondinvCycleForward` infinite loop after a split-screen respawn). Resolve the owning player explicitly (`g_playerPointers[slot]`) and touch its fields directly; for game functions that take no player argument, present a native button bit instead of calling them.
+
+**A1 cross-tag (D492, 2026-10-03): serialized multi-byte fields are host-endian in this port.** Structs copied raw to a file (the EEPROM save via `geEepromRW`) store s32/u16 fields little-endian, while N64 images are big-endian. A raw-byte CRC over the region gives the same value on both, which hides the difference until the stored checksum words themselves are compared. Tell: data that is intact but fails validation, with `calc_crc` equal to the big-endian reading of the stored word. Any field inside the CRC range must be swapped *before* recomputing the checksum.
 
 **A1 cross-tag (D455, 2026-09-30):** an exe-static address (array/global/function in `.data`/`.rodata`/`.text`) held in a `u32`/`s32` truncates on Windows (image base `0x140000000`; Linux 0x20000000 hides it). Binary tell: `mov r64,[rip+.refptr.X]` ... `mov r32,r32` before the pointer is used or passed. The address load may precede a `jmp` join, so an adjacent-instruction scan misses it; follow jumps. A census of the whole exe found only the D454 site; `_*Segment*` linker symbols are ROM constants (`.set` in `romassets_u.s`), not exe addresses, and are benign in `(u32)` casts.
 

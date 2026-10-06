@@ -86,6 +86,7 @@ void        optionsRowSetFraction(int i, double f);
 void        optionsRowCommit(int i); /* slider release; watch rows persist once */
 void        optionsRowValueText(int i, char *out, int n);
 void        optionsRowAdjust(int i, int dir);
+void        optionsAdjustCommitPending(void); /* D489: save a stepped watch slider on release */
 
 /* D356: per-section "Reset to defaults" rows (ROW_ACTION, keys
  * "__Reset*"). Activation is edge-triggered and two-step (arm -> confirm

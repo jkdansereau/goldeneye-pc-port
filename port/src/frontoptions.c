@@ -52,6 +52,8 @@
 extern Gfx *frontSetupMenuBackground(Gfx *DL);
 extern Gfx *frontAddPreviousTabText(Gfx *DL);
 extern s32  frontCheckCursorOnPreviousTab(void);
+extern Gfx *frontAddNextTabText(Gfx *DL);
+extern u32  frontCheckCursorOnNextTab(void);
 extern Gfx *frontDrawCursor(Gfx *DL);
 extern Gfx *frontPrintText(Gfx *gdl, s32 *x, s32 *y, s8 *text, struct fontchar *second_font_table,
                            struct font *first_font_table, s32 arg6, s32 view_x, s32 view_y,
@@ -83,7 +85,7 @@ extern struct rectbbox folder_option_ERASE_bound;   /* front.c:439 */
 #define VAL_R      372           /* values right-aligned here */
 #define BAR_X0     232
 #define BAR_X1     316
-#define ROW_HIT_X0 40.0f
+#define ROW_HIT_X0 24.0f   /* D502: covers the pad crosshair snap at x = 32 */
 #define ROW_HIT_X1 385.0f
 
 /* ---- file-select label: right end of the Select / Copy / Erase bar ---- */
@@ -245,12 +247,12 @@ static void cursorToItemRaw(int k)
 {
     /* D345(g): snap into the left gutter (x=44), not onto the row text
      * (the old ROW_X+20 centred the sprite over the label/highlight box).
-     * 44 stays inside [ROW_HIT_X0..1] so the highlight hit-test still
+     * 32 (D502; was 44) stays inside [ROW_HIT_X0..1] so the hit-test still
      * resolves row k, and clears the number column (NUM_X=55) / highlight
      * boxes (from x=53/73). The PREVIOUS-tab hitbox (x>390 && y>223) is
      * far away. Mouse users are unaffected: the pointer sits under the
      * real mouse, never at this snap position. */
-    cursor_h_pos = 44.0f;
+    cursor_h_pos = 32.0f;   /* D502: was 44; the sprite overlapped the "1." / row text */
     cursor_v_pos = (f32)(rowY(k) + 6);
     s_prevH = cursor_h_pos;   /* D444: our own snap is not pointer motion */
     s_prevV = cursor_v_pos;
@@ -265,6 +267,14 @@ static void cursorToItem(int k)
      * movement. Keyboard/D-pad users (stale mouse) keep the snap. */
     if (inputMenuPointerLive()) return;
     cursorToItemRaw(k);
+}
+
+/* D502: highlight for a screen change. Pad/keyboard users get item k
+ * highlighted (the crosshair was just snapped onto it); with a live mouse the
+ * pointer owns the selection, so start unselected and let hover pick. */
+static int navHighlight(int k)
+{
+    return inputMenuPointerLive() ? -1 : k;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -358,7 +368,7 @@ static void goBack(void)
         for (int k = 0; k < s_rowN; k++)
             if (optionsRowChildHeader(s_rowIdx[k]) == child) selected = k + 1;
         cursorToItem(selected);
-        s_hl = -1; s_lastHover = -2;
+        s_hl = navHighlight(selected); s_lastHover = -2;   /* D502 */
         sysLogPrintf(LOG_INFO, "frontoptions: back to %s", optionsRowLabel(activeHeader()));
         return;
     }
@@ -366,6 +376,10 @@ static void goBack(void)
         s_level = 0;
         s_pageno = 0;   /* D406 */
         cursorToItem(s_page);
+        /* D502: the highlight is an item index of the level being shown;
+         * leaving it at the section's row index landed pad users on another
+         * section (row 1 inside Input -> "Graphics"). */
+        s_hl = navHighlight(s_page); s_lastHover = -2;
         sysLogPrintf(LOG_INFO, "frontoptions: back to section list");
         return;
     }
@@ -374,22 +388,32 @@ static void goBack(void)
     frontChangeMenu(MENU_FILE_SELECT, FALSE);
 }
 
-/* D444: Previous/Next page controls on the bottom hint row of a multi-page
- * section. Returns -1 (previous), +1 (next) or 0 (none / not over an enabled
- * control). Same geometry the draw code uses. */
-static const char kPrevPage[] = "Previous page";
-static const char kNextPage[] = "Next page";
-static int pageCtlAt(void)
+/* D497: paging mirrors the mission dossiers (front.c briefing screen): the
+ * folder's PREVIOUS tab (and B) turns back a page, or leaves the section from
+ * its first page; a NEXT tab is shown while a later page exists. This replaced
+ * D444's "Previous page / Next page" links under the rows. */
+static int hasNextPage(void)
 {
-    if (s_level < 1 || s_rowTotal <= ROWS_PER_PAGE || tab_prev_highlight) return 0;
-    if (cursor_v_pos < (f32)(rowY(s_rowN + 1) - 3) ||
-        cursor_v_pos >= (f32)(rowY(s_rowN + 1) + ROW_DY - 3)) return 0;
-    int last = s_pageno * ROWS_PER_PAGE + s_rowN >= s_rowTotal;
-    if (s_pageno > 0 && cursor_h_pos >= ROW_X - 2 &&
-        cursor_h_pos <= ROW_X + measureW(kPrevPage) + 4) return -1;
-    if (!last && cursor_h_pos <= VAL_R + 2 &&
-        cursor_h_pos >= VAL_R - measureW(kNextPage) - 4) return +1;
-    return 0;
+    return s_level >= 1 && s_pageno * ROWS_PER_PAGE + s_rowN < s_rowTotal;
+}
+
+static void turnPage(int dir)
+{
+    playSfx(DOOR_METAL_CLOSE2_SFX);
+    if (s_dragRow >= 0) optionsRowCommit(s_dragRow);
+    s_dragRow = -1;
+    optionsResetClear();
+    s_pageno += dir;
+    buildPages();
+    cursorToItem(dir > 0 ? 1 : 0);
+    s_hl = navHighlight(dir > 0 ? 1 : 0); s_lastHover = -2;   /* D502 */
+}
+
+/* PREVIOUS tab / B: previous page, else back out. */
+static void goPrevious(void)
+{
+    if (s_level >= 1 && s_pageno > 0) turnPage(-1);
+    else goBack();
 }
 
 void frontOptionsMenuInterface(void)
@@ -414,8 +438,11 @@ void frontOptionsMenuInterface(void)
         int hit = -1;
         int moved = (cursor_h_pos != s_prevH || cursor_v_pos != s_prevV);
         tab_prev_highlight = FALSE;
+        tab_next_highlight = FALSE;
         if (frontCheckCursorOnPreviousTab()) {
             tab_prev_highlight = TRUE;
+        } else if (hasNextPage() && frontCheckCursorOnNextTab()) {
+            tab_next_highlight = TRUE;   /* D497 */
         } else if (cursor_h_pos >= ROW_HIT_X0 && cursor_h_pos <= ROW_HIT_X1) {
             for (int k = itemCount() - 1; k >= 0; k--) {
                 if (cursor_v_pos >= (f32)(rowY(k) - 3) &&
@@ -445,13 +472,9 @@ void frontOptionsMenuInterface(void)
         s_prevV = cursor_v_pos;
     }
 
-    /* D444: Previous/Next page controls (mouse click; Up/Down keep paging). */
-    int pageCtl = pageCtlAt();
-    if (pageCtl != 0 && joyGetButtonsPressedThisFrame(PLAYER_1, A_BUTTON | Z_TRIG)) {
-        playSfx(DOOR_LOCK_SFX);
-        s_pageno += pageCtl;
-        buildPages();
-        s_hl = -1;   /* wheel/keys/hover pick a row afresh; no snap */
+    /* D497: NEXT folder tab (mouse click; Up/Down still page too). */
+    if (tab_next_highlight && joyGetButtonsPressedThisFrame(PLAYER_1, A_BUTTON | Z_TRIG)) {
+        turnPage(+1);
     } else if (joyGetButtonsPressedThisFrame(PLAYER_1, A_BUTTON | Z_TRIG | START_BUTTON)) {
         /* D444: a click acts on the row under the pointer, not on a stale
          * wheel/key selection (keyboard Enter: the snap put the pointer on
@@ -459,7 +482,7 @@ void frontOptionsMenuInterface(void)
         if (!tab_prev_highlight && joyGetButtonsPressedThisFrame(PLAYER_1, A_BUTTON | Z_TRIG))
             s_hl = s_hoverHit;
         if (tab_prev_highlight) {
-            goBack();
+            goPrevious();   /* D497 */
         } else if (s_hl >= 0 && s_level == 0) {
             playSfx(DOOR_METAL_CLOSE2_SFX);
             s_page = s_hl;
@@ -468,7 +491,7 @@ void frontOptionsMenuInterface(void)
             sysLogPrintf(LOG_INFO, "frontoptions: section %d", s_page + 1);
             buildPages();
             cursorToItem(0);
-            s_hl = -1; s_lastHover = -2;
+            s_hl = navHighlight(0); s_lastHover = -2;   /* D502 */
         } else if (s_hl == 0 && s_level >= 1) {
             /* D356: the top save-file row -- A steps to the next file (the
              * D352 chooser; folders only, "none" retired, plan §5.5). */
@@ -493,7 +516,7 @@ void frontOptionsMenuInterface(void)
                 sysLogPrintf(LOG_INFO, "frontoptions: opened %s (depth %d)",
                              optionsRowLabel(child), s_level);
                 cursorToItem(0);
-                s_hl = -1; s_lastHover = -2;
+                s_hl = navHighlight(0); s_lastHover = -2;   /* D502 */
             } else if (optionsRowIsSlider(i) && bx0 <= BAR_X1 - 12 &&
                        cursor_h_pos >= bx0 - 4 && cursor_h_pos <= BAR_X1 + 4) {
                 optionsRowSetFraction(i, ((double)cursor_h_pos - bx0) / (BAR_X1 - bx0));
@@ -517,7 +540,7 @@ void frontOptionsMenuInterface(void)
             }
         }
     } else if (joyGetButtonsPressedThisFrame(PLAYER_1, B_BUTTON)) {
-        goBack();
+        goPrevious();   /* D497: as the dossiers, B turns back a page first */
     }
 
     /* Drag a slider while A is held. */
@@ -564,8 +587,10 @@ void frontOptionsMenuInterface(void)
             }
         }
         s_repeatDir = dir;
+        if (dir == 0) optionsAdjustCommitPending();   /* D489: save once on release */
     } else {
         s_repeatDir = 0;
+        optionsAdjustCommitPending();
     }
 
     /* D356: reset arm state -- the screen's selected rows[] index (s_hl 0 is
@@ -794,31 +819,11 @@ Gfx *frontOptionsMenuDraw(Gfx *DL)
                 ? "Press pad button  tap {B} cancel  hold Back clear\n"
                 : "{A}: bind  Left/Right: slot  {Y}: clear  {B}: back\n");
             DL = ink(DL, ROW_X, rowY(s_rowN + 2), d471buf1, INK_DIM);
-        } else if (s_rowTotal > ROWS_PER_PAGE) {
-            /* D406b: bottom hint on every page of a multi-page section (11
-             * rows per page leaves the last line of the paper for it). */
-            int last = s_pageno * ROWS_PER_PAGE + s_rowN >= s_rowTotal;
-            int first = s_pageno == 0;
-            /* D406d: one row below the last content row (rowY(s_rowN + 1))
-             * -- pitch-aligned with the list; +2 sat ~26px clear of it and
-             * looked orphaned at the paper's bottom edge. */
-            int hov = pageCtlAt(), hy = rowY(s_rowN + 1);
-            if (!first) {
-                if (hov < 0)
-                    DL = microcode_constructor_related_to_menus(DL, ROW_X - 2, hy - 1,
-                            ROW_X + measureW(kPrevPage) + 4, hy + 0xE, HILITE);
-                DL = ink(DL, ROW_X, hy, "Previous page\n", INK);
-            }
-            if (!last) {
-                if (hov > 0)
-                    DL = microcode_constructor_related_to_menus(DL, VAL_R - measureW(kNextPage) - 4, hy - 1,
-                            VAL_R + 2, hy + 0xE, HILITE);
-                DL = inkR(DL, VAL_R, hy, "Next page\n", INK);
-            }
         }
     }
 
     DL = frontAddPreviousTabText(DL);
+    if (hasNextPage()) DL = frontAddNextTabText(DL);   /* D497 */
     DL = frontDrawCursor(DL);
     return DL;
 }

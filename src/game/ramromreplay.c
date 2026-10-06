@@ -296,14 +296,6 @@ s32 ramrom_replay_handler(struct contsample *arg0, s32 arg1)
     temp_a2 = (s32) ptr_active_demofile->size_cmds;
     temp_t2 = ramrom_blkbuf_2->count;
 
-#if defined(PORT) /* TEMP D87: trace consumer before the crash-site deref */
-    if (getenv("GE_D87")) {
-        fprintf(stderr, "[D87] replay_handler: ramrom_blkbuf_3=%p temp_a2=%d temp_t2=%d arg1=%d\n",
-                (void *)ramrom_blkbuf_3, temp_a2, temp_t2, arg1);
-        fflush(stderr);
-    }
-#endif
-
     for (var_a3 = 0; var_a3 < temp_t2; var_a3++)
     {
         arg1 = (s32) (arg1 + 1) % CONTSAMPLE_LEN;
@@ -363,17 +355,6 @@ void iterate_ramrom_entries_handle_camera_out(void)
     
     ramrom_blkbuf_2 = romCopyAligned(ramrom_data_target + 0x1F8, address_demo_loaded, sizeof(struct ramrom_seed));
 
-#if defined(PORT) /* TEMP D87: trace ramrom block setup */
-    if (getenv("GE_D87")) {
-        fprintf(stderr, "[D87] iterate: address_demo_loaded=%p ramrom_blkbuf_2=%p count=%d speedframes=%d size_cmds=%d\n",
-                (void *)address_demo_loaded, (void *)ramrom_blkbuf_2,
-                ramrom_blkbuf_2 ? ramrom_blkbuf_2->count : -1,
-                ramrom_blkbuf_2 ? ramrom_blkbuf_2->speedframes : -1,
-                ptr_active_demofile ? ptr_active_demofile->size_cmds : -1);
-        fflush(stderr);
-    }
-#endif
-
     var_a3 = ramrom_blkbuf_2->count;
     if (var_a3 > 0)
     {
@@ -381,13 +362,6 @@ void iterate_ramrom_entries_handle_camera_out(void)
             ramrom_data_target + 0x21E,
             address_demo_loaded + 4,
             ptr_active_demofile->size_cmds * sizeof(struct ramrom_blockbuf) * ramrom_blkbuf_2->count);
-#if defined(PORT) /* TEMP D87 */
-        if (getenv("GE_D87")) {
-            fprintf(stderr, "[D87] iterate: ramrom_blkbuf_3=%p len=%d\n", (void *)ramrom_blkbuf_3,
-                    (int)(ptr_active_demofile->size_cmds * sizeof(struct ramrom_blockbuf) * ramrom_blkbuf_2->count));
-            fflush(stderr);
-        }
-#endif
     }
 
     var_a3 = ramrom_blkbuf_2->count;

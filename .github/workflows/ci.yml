@@ -349,6 +349,12 @@ jobs:
       - name: Build (ntsc-final)
         run: ./build-pc.sh ntsc-final
 
+      # D441 ratchet: fail if the per-file count of 64-bit pointer/int ABI
+      # warnings rises relative to tools_pc/abi_baseline.json. Re-baseline
+      # locally with `python tools_pc/abi_ratchet.py build-pc --update`.
+      - name: ABI warning ratchet (D441)
+        run: python tools_pc/abi_ratchet.py build-pc
+
       - name: ccache stats
         run: ccache -s
 

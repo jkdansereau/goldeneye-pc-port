@@ -608,7 +608,11 @@ void chrlvPerformAnimationForActor(ChrRecord *self, s32 animID, s32 startframe, 
 
     chrStopFiring(self);
 
+#ifdef PORT
+    modelSetAnimation(self->model, (void *)(uintptr_t)(u32)(animation_table_ptrs1[animID]), (bitfield & ANIM_MIRROR) != 0, startframef, phi_f0, (f32)interpol_time60);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     modelSetAnimation(self->model, (void *)animation_table_ptrs1[animID], (bitfield & ANIM_MIRROR) != 0, startframef, phi_f0, (f32)interpol_time60);
+#endif
 
     if (endframe >= 0)
     {
@@ -4981,7 +4985,11 @@ bool if_actor_able_set_on_path(ChrRecord *self, s32 pathid)
 {
     if (pathid && chrIsNotDeadOrShot(self))
     {
+#ifdef PORT
+        set_actor_on_path(self, (struct patrol_path *)(uintptr_t)(u32)(pathid));  /* D441: zero-extend s32-held DRAM ptr */
+#else
         set_actor_on_path(self, pathid);
+#endif
         return TRUE;
     }
 

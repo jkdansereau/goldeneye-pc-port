@@ -190,7 +190,11 @@ s32 initResolveAnimTable(struct StruckAnim *entries)
             count++;
             entry++;
             ptr_animation_table_addr = (struct StruckAnim *)(&ptr_animation_table);
+#ifdef PORT
+            entry[-1].struck_anim = (ModelAnimation *)(uintptr_t)(u32)((*((s32 *)entries)) + (0, address));  /* D441: zero-extend s32-held DRAM ptr */
+#else
             entry[-1].struck_anim = (ModelAnimation *)((*((s32 *)entries)) + (0, address));
+#endif
         }
         while (entry->struck_anim != 0);
     }

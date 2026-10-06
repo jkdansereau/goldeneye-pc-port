@@ -277,30 +277,9 @@ void stanBuildRoomData(void)
 
     tile = stan_prefix->ptr_firstroom;
 
-#if defined(PORT)
-    /* TEMP D69: log the tile walk (env GE_D69STAN=1) */
-    if (getenv("GE_D69STAN")) {
-        osSyncPrintf("D69stan start tile=%p firstroom_raw=%p\n",
-                     (void *)tile, (void *)stan_prefix->ptr_firstroom);
-    }
-#endif
 
     while (*(u32 *)tile)
     {
-#if defined(PORT)
-        /* TEMP D69: log the tile walk (env GE_D69STAN=1) */
-        if (getenv("GE_D69STAN")) {
-            static s32 s_n = 0;
-            s32 pc = tile->tail.hdrTail.pointCount & 0xf;
-            if (s_n < 20 || pc == 0 || list_of_tilesizes[pc] == 0)
-                osSyncPrintf("D69stan n=%d tile=%p room=%d mid=%04x "
-                             "tail=%04x pc=%d sz=%d\n",
-                             (int)s_n, (void *)tile, tile->room,
-                             (u16)tile->mid.half, (u16)tile->tail.half,
-                             (int)pc, (int)list_of_tilesizes[pc]);
-            s_n++;
-        }
-#endif
         if (tile->room != lastRoom)
         {
             lastRoom = tile->room;
@@ -3150,37 +3129,6 @@ struct StandTilePoint *stanMatchTileName(char *id)
 
     tile = stan_prefix->ptr_firstroom;
 
-#ifdef PORT
-    if (getenv("GE_D88")) {
-        s32 iters = 0;
-        StandTilePoint *t0 = tile;
-        fprintf(stderr, "D88 stanMatchTileName id=%s hi=%04x lo=%02x stan_prefix=%p firstroom=%p\n",
-                id, stanIdHi, stanIdLo, (void *)stan_prefix, (void *)tile);
-        while (*(u32 *)tile != 0) {
-            if ((u16)tile->x == stanIdHi) {
-                if (*((u8 *)&tile->y) == stanIdLo) {
-                    fprintf(stderr, "D88   matched after %d iters tile=%p\n", iters, (void *)tile);
-                    return tile;
-                }
-            }
-            tmp = tile->link;
-            tile = (StandTilePoint *)((u8 *)tile +
-                list_of_tilesizes[(tmp >> 12) & 0xf]);
-            iters++;
-            if (iters < 20 || (iters % 5000) == 0) {
-                fprintf(stderr, "D88   iter=%d tile=%p tmp(link)=%04x stride=%d delta_from_start=%lld\n",
-                        iters, (void *)tile, (u16)tmp, list_of_tilesizes[(tmp >> 12) & 0xf],
-                        (long long)((u8 *)tile - (u8 *)t0));
-            }
-            if (iters > 200000) {
-                fprintf(stderr, "D88   ABORT runaway walk\n");
-                return NULL;
-            }
-        }
-        fprintf(stderr, "D88   no match, %d iters\n", iters);
-        return NULL;
-    }
-#endif
 
     while (*(u32 *)tile != 0) {
         if ((u16)tile->x == stanIdHi) {

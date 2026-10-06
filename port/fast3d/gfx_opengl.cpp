@@ -744,7 +744,8 @@ static void gfx_opengl_upload_texture(const uint8_t* rgba32_buf, uint32_t width,
     }
 #endif
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba32_buf);
-	if (gen_mipmaps || current_filter_mode == FILTER_THREE_POINT) {
+	/* Trilinear option (playtest 2026-10-03): force mips for TRILINEAR too. */
+	if (gen_mipmaps || current_filter_mode == FILTER_THREE_POINT || current_filter_mode == FILTER_TRILINEAR) {
 		glGenerateMipmap(GL_TEXTURE_2D);
 	}
 }
@@ -764,24 +765,28 @@ static uint32_t gfx_cm_to_opengl(uint32_t val) {
 }
 
 static void gfx_opengl_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt, bool mipmaps) {
-    const GLint min_filters[3][3] = {
+    const GLint min_filters[4][3] = {
         // MIPMAP_DISABLED   MIPMAP_NEAREST               MIPMAP_LINEAR
         {  GL_NEAREST,       GL_NEAREST_MIPMAP_NEAREST,   GL_NEAREST_MIPMAP_LINEAR  }, // FILTER_NONE
         {  GL_LINEAR,        GL_LINEAR_MIPMAP_NEAREST,    GL_LINEAR_MIPMAP_LINEAR   }, // FILTER_BILINEAR
         {  GL_NEAREST,       GL_LINEAR_MIPMAP_NEAREST,    GL_LINEAR_MIPMAP_LINEAR   }, // FILTER_THREE_POINT
+        {  GL_LINEAR,        GL_LINEAR_MIPMAP_LINEAR,     GL_LINEAR_MIPMAP_LINEAR   }, // FILTER_TRILINEAR (Trilinear option, playtest 2026-10-03)
     };
 
     // B1: the shader does 3-point on magnification; for minification let the
     // hardware do trilinear mips. THREE_POINT force-generates mips at upload
     // (see gfx_opengl_upload_texture) so it can always sample them here -- this
     // is what kills the grazing-angle shimmer (Depot roof, docs/BRIEF-B2).
-    if (current_filter_mode == FILTER_THREE_POINT) {
+    /* Trilinear option (playtest 2026-10-03): TRILINEAR force-generates mips
+     * at upload too, so it can always sample them here. */
+    if (current_filter_mode == FILTER_THREE_POINT || current_filter_mode == FILTER_TRILINEAR) {
         mipmaps = true;
     }
     mipmaps = mipmaps && (current_mipmap_filter_mode != MIPMAP_DISABLED);
     const int mip_idx = mipmaps ? current_mipmap_filter_mode : 0;
     const GLint min_filter = linear_filter ? min_filters[current_filter_mode][mip_idx] : GL_NEAREST;
-    const GLint max_filter = linear_filter && (current_filter_mode == FILTER_LINEAR) ? GL_LINEAR : GL_NEAREST;
+    /* Trilinear option (playtest 2026-10-03): TRILINEAR magnifies LINEAR too. */
+    const GLint max_filter = linear_filter && (current_filter_mode == FILTER_LINEAR || current_filter_mode == FILTER_TRILINEAR) ? GL_LINEAR : GL_NEAREST;
 
     glActiveTexture(GL_TEXTURE0 + tile);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);

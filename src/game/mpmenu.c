@@ -1424,7 +1424,11 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
 #else
             h2 = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1D_KILLS)), /* KILLS */
 #endif
+#ifdef PORT
+                sprintf(rankbuffer, ascii_pnum_KILLS, (char *)(uintptr_t)(u32)(q), curplayernum + 1, (char *) h2); /* -> "P<n> KILLS" */ /* D441: zero-extend s32-held DRAM ptr */
+#else
                 sprintf(rankbuffer, ascii_pnum_KILLS, (char *) q, curplayernum + 1, (char *) h2); /* -> "P<n> KILLS" */
+#endif
  
             textMeasure(&textheight, &textwidth, rankbuffer, ptrFontBankGothicChars, ptrFontBankGothic, 0);
             x = ((viGetViewLeft() + two_player_x_offset) - (textwidth >> 1)) + 80;
@@ -1498,7 +1502,11 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
 #else
             h2 = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1E_LOSSES)), /* LOSSES */
 #endif
+#ifdef PORT
+                sprintf(rankbuffer, ascii_pnum_LOSSES, (char *)(uintptr_t)(u32)(q), curplayernum + 1, (char *) h2); /* -> "P<n> LOSSES" */ /* D441: zero-extend s32-held DRAM ptr */
+#else
                 sprintf(rankbuffer, ascii_pnum_LOSSES, (char *) q, curplayernum + 1, (char *) h2); /* -> "P<n> LOSSES" */
+#endif
  
             textMeasure(&textheight, &textwidth, rankbuffer, ptrFontBankGothicChars, ptrFontBankGothic, 0);
             x = ((viGetViewLeft() + two_player_x_offset) - (textwidth >> 1)) + 80;

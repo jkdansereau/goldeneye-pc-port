@@ -421,7 +421,26 @@ endif()
 
 # Absolute symbols inside the reserved N64-DRAM region (port/src/dram.c):
 # cfb_16 (replaces src/cfb.c) and _bssSegmentEnd (mempool start marker).
-set(SRC_DRAM_SYMS "${CMAKE_SOURCE_DIR}/port/src/dram_syms.s")
+set(SRC_DRAM_SYMS "${CMAKE_SOURCE_DIR}/port/src/dram_syms.S")
+
+# D441 high-arena test flavour: relocate the DRAM arena for test builds
+# (tier 1 = 0x90000000). Build option only — the default build is unchanged.
+#   GE_HIGHARENA_BASE=0x90000000 ./build-pc.sh ntsc-final
+# or -DGE_HIGHARENA_BASE=0x90000000 at configure time. The value must be a
+# C/asm integer literal; it overrides PORT_DRAM_V1_BASE in portaddr.h for
+# C, CXX and ASM (dram.c's mapping and the dram_syms.S absolute symbols both
+# follow it).
+set(GE_HIGHARENA_BASE "" CACHE STRING "Override PORT_DRAM_V1_BASE for test builds (high-arena flavour)")
+if(NOT GE_HIGHARENA_BASE)
+  set(GE_HIGHARENA_BASE "$ENV{GE_HIGHARENA_BASE}")
+endif()
+if(GE_HIGHARENA_BASE)
+  message(STATUS "GE_HIGHARENA_BASE = ${GE_HIGHARENA_BASE}")
+  set(_d441_arena_def "-DPORT_DRAM_V1_BASE=${GE_HIGHARENA_BASE}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${_d441_arena_def}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_d441_arena_def}")
+  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${_d441_arena_def}")
+endif()
 
 # Game code — compiled unmodified.
 file(GLOB_RECURSE SRC_GAME "${CMAKE_SOURCE_DIR}/src/game/*.c")
