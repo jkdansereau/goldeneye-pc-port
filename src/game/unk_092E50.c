@@ -265,13 +265,28 @@ void sub_GAME_7F092E50(void)
     MipMap2C_Something_Setup[2].loadtile.tl = flt_CODE_bss_80079E84;
     MipMap2C_Something_Setup[3].loadtile.sl = ((s32)flt_CODE_bss_80079E80 + 90) & 0xFF;
     MipMap2C_Something_Setup[3].loadtile.tl = ((s32)flt_CODE_bss_80079E84 + 150) & 0xFF;
+#ifdef PORT
+    /* D465 (porting-notes B, 16-byte PC Gfx): u32 index 8 is N64 Gfx[4].w0,
+     * the gsDPSetPrimColor whose low byte is the PRIM LOD fraction (the water
+     * shimmer). On PC index 8 is Gfx[2].w0 -- tile 0's SetTileSize -- so the
+     * shimmer value overwrote the T scroll offset every tick (water sliding
+     * side to side, #127) and the crossfade never animated. Same write, on the
+     * command's own word (the N64 word lives in the low dword of w0). */
+    MipMap2C_Something_Setup[4].words.w0 = (MipMap2C_Something_Setup[4].words.w0 & ~(uintptr_t)0xFF) | (u32) ((sinf(flt_CODE_bss_80079E88) * 127.0f) + 128.0f);
+#else
     ((u32 *) MipMap2C_Something_Setup)[8] = (((u32 *) MipMap2C_Something_Setup)[8] & ~0xFF) | (u32) ((sinf(flt_CODE_bss_80079E88) * 127.0f) + 128.0f);
+#endif
 
     MipMap2C_Something2_Setup[2].loadtile.sl = flt_CODE_bss_80079E80;
     MipMap2C_Something2_Setup[2].loadtile.tl = flt_CODE_bss_80079E84;
     MipMap2C_Something2_Setup[3].loadtile.sl = ((s32)flt_CODE_bss_80079E80 + 90) & 0xFF;
     MipMap2C_Something2_Setup[3].loadtile.tl = ((s32)flt_CODE_bss_80079E84 + 150) & 0xFF;
+#ifdef PORT
+    /* D465: as above; reads Something_Setup's word, exactly as the original. */
+    MipMap2C_Something2_Setup[4].words.w0 = (MipMap2C_Something_Setup[4].words.w0 & ~(uintptr_t)0xFF) | (u32) ((sinf(flt_CODE_bss_80079E88) * 127.0f) + 128.0f);
+#else
     ((u32 *) MipMap2C_Something2_Setup)[8] = (((u32 *) MipMap2C_Something_Setup)[8] & ~0xFF) | (u32) ((sinf(flt_CODE_bss_80079E88) * 127.0f) + 128.0f);
+#endif
 }
 
 

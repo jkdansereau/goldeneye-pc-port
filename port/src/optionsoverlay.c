@@ -310,6 +310,9 @@ static struct Row rows[] = {
     /* D232: the community "no damage flash" toggle (suppresses the red/green
      * hit-flash overlay in bondview2). */
     { .key="Game.NoHitFlash", .label="No hit flash", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
+    /* D468: off = AI awareness keeps the cartridge-widest view (16:9 at the
+     * game's FOV) under ultrawide or a raised FOV; on = AI sees the full view. */
+    { .key="Game.AIWideView", .label="AI sees the wider view", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     /* D257: everything-unlocked goodie. The C initializers (port/src/video.c)
      * start it OFF (0) -- the old "default ON" note was stale and is
      * corrected by D356. Consumed at startup by main.c -- applies from the

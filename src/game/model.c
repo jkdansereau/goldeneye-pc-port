@@ -6204,8 +6204,23 @@ u32 *sub_GAME_7F07549C(void *arg0, f32 *arg1, f32 *arg2, ModelNode **nodeptr)
  * Address 7F0754BC.
  * Copy animation from ROM to RAM
 */
+#ifdef PORT
+u8 *loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
+#else
 s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
+#endif
 {
+#ifdef PORT
+    /* D457: the result is a frame-buffer address (host pointer), and the copy
+     * destination is computed at pointer width (was s32 ret / u32 dest). */
+    u8 *ret;
+    s32 source;
+    s32 frameSize;
+    uintptr_t dest;
+    u32 size;
+
+    ret = NULL;
+#else
     s32 ret;
     s32 source;
     s32 frameSize;
@@ -6213,18 +6228,28 @@ s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
     u32 size;
 
     ret = 0;
+#endif
     frameSize = anim->unk0E >> 3; // divide by 8
 
     if (anim->address & 0x80000000) // If animation's address is in RAM
     {
         // Load that frame from RAM
+#ifdef PORT
+        ret = (u8 *)(uintptr_t)(u32)(anim->address + (frame * frameSize));
+#else
         ret = anim->address + (frame * frameSize);
+#endif
     }
     else if (D_80036414 != NULL) // should never be NULL after initAnimationsBuffer is called
     {
         // Get dest from this D_80036414 which points to an array. Align to 16 bytes.
+#ifdef PORT
+        dest = ((uintptr_t) (D_80036414->animBufferPtr2 + 15) >> 4) * 16;
+        ret = (u8 *)dest;
+#else
         dest = ((u32) (D_80036414->animBufferPtr2 + 15) >> 4) * 16;
         ret = dest;
+#endif
 
         // Get source of this animation in ROM with the offset of the frame we'll load
         source = anim->address + (frame * frameSize);
@@ -6246,7 +6271,11 @@ s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
 
         // Set this to point to the end of the copied frame
         // This allows to copy another frame after this one
+#ifdef PORT
+        D_80036414->animBufferPtr2 = (char *)(dest + size);
+#else
         D_80036414->animBufferPtr2 = dest + size;
+#endif
     }
     return ret;
 }
@@ -6266,9 +6295,19 @@ void modelResetAnimationsScratchBuffer(void)
 }
 
 
+#ifdef PORT
+/* D457: rebase at pointer width. The N64 form wraps the sum at 32 bits
+ * (`(u32)var + diff`), which truncates any file base at or above 4 GiB.
+ * `diff` is now an intptr_t (fileramaddr - vma) and `var` is read at full
+ * width (model slots hold the raw vma zero-extended). */
+#define PROMOTE(var) \
+    if (var) \
+        var = (void *)((uintptr_t)var + diff)
+#else
 #define PROMOTE(var) \
     if (var) \
         var = (void *)((u32)var + diff)
+#endif
 
 #ifdef PORT
 /* PC port (D43/D45): Vertex.LinkedTo is a raw vma (u32), not a pointer —
@@ -6278,9 +6317,15 @@ void modelResetAnimationsScratchBuffer(void)
         var = (u32)((u32)var + diff)
 #endif
 
+#ifdef PORT
+void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, uintptr_t fileramaddr)
+{
+    intptr_t diff = (intptr_t)(fileramaddr - (uintptr_t)vma);
+#else
 void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr)
 {
     s32 diff = fileramaddr - vma;
+#endif
     s32 i;
 
     while (node)
@@ -6482,8 +6527,13 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
 /**
  * Address 7F075A90.
 */
+#ifdef PORT
+void sub_GAME_7F075A90(ModelFileHeader *header, s32 vma, uintptr_t addr) {
+    intptr_t diff = (intptr_t)(addr - (uintptr_t)(u32)vma);
+#else
 void sub_GAME_7F075A90(ModelFileHeader *header, s32 vma, u32 addr) {
     s32 diff = addr - vma;
+#endif
     s32 i;
 
     for(i = 0;i < header->numSwitches;i++)

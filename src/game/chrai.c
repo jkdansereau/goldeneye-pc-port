@@ -1,4 +1,7 @@
 #include "chrai.h"
+#ifdef PORT
+#include "drawdistgameplay.h"
+#endif
 #include "bg.h"
 #include "bgfog.h"
 #include "bondinv.h"
@@ -1913,7 +1916,11 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 case AI_IFImOnScreen:
                 {
                     AiIFImOnScreenRecord *ai = AiListp + Offset;
+#ifdef PORT
+                    if (portPropGameplayOnScreen(ChrEntityp->prop)) /* D466: authored-distance on-screen */
+#else
                     if ((ChrEntityp->prop->flags & PROPFLAG_ONSCREEN))
+#endif
                     {
                         Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
@@ -1927,7 +1934,11 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 {
                     AiIFMyRoomIsOnScreenRecord *ai = AiListp + Offset;
 
+#ifdef PORT
+                    if (portRoomGameplayVisible(getTileRoom(ChrEntityp->prop->stan))) /* D466: authored-distance room set */
+#else
                     if (getROOMID_isRendered(getTileRoom(ChrEntityp->prop->stan))) // embedded func to match, must be s32 not u8
+#endif
                     {
                         Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }

@@ -14,6 +14,9 @@
 #include "debugmenu_handler.h"
 #include "decompress.h"
 #include "bgfog.h"
+#ifdef PORT
+#include "drawdistgameplay.h"
+#endif
 #include "lv.h"
 #include "math_ceil.h"
 #include "matrixmath.h"
@@ -1479,6 +1482,11 @@ bool bgIsRoomOnScreen(s32 roomID, struct rectbbox *screenbox)
     count_bottom = 0;
 
     viGetZRange(zrange);
+#ifdef PORT
+    /* D466: pass 1 of bgDetermineVisibleRooms asks "what would the N64 admit
+     * at the authored far distance". Static read only -- never viSetZRange. */
+    if (portD466InAuthoredPass()) { zrange[1] = portD466AuthoredFar(); }
+#endif
 
     zrange[1] = zrange[1] / mCurrentLevelVisibilityScale;
 
@@ -1600,6 +1608,10 @@ s32 sub_GAME_7F0B5528(s32 portalnum, f32 arg1, coord3d *arg2)
     matrix = camGetWorldToScreenMtxf();
     allbehind = 1;
     viGetZRange(zrange);
+#ifdef PORT
+    /* D466: see bgIsRoomOnScreen. */
+    if (portD466InAuthoredPass()) { zrange[1] = portD466AuthoredFar(); }
+#endif
     zrange[1] /= mCurrentLevelVisibilityScale;
 
     for (i = 0; i < g_BgPortals[portalnum].offset_portal->numPoints; i++) {
@@ -4863,7 +4875,11 @@ void *sub_GAME_7F0B8A24(s32 *pc)
 /**
  * Address: 7F0B8A6C
  */
+#ifdef PORT
+static void bgDetermineVisibleRoomsImpl(void)
+#else
 void bgDetermineVisibleRooms(void) 
+#endif
 {
     f32 screenbounds[4];
     s32 var_s0;
@@ -4875,6 +4891,10 @@ void bgDetermineVisibleRooms(void)
     s32 i;
 
     bgUpdateCurrentPlayerScreenMinMax();
+#ifdef PORT
+    /* D468: the authored (gameplay) pass sees only the cartridge-widest view. */
+    if (portD466InAuthoredPass()) { portD468ShrinkBox(&g_CurrentPlayer->screensize.min.x); }
+#endif
 
     screenbounds[0] = g_CurrentPlayer->screensize.min.x;
     screenbounds[1] = g_CurrentPlayer->screensize.min.y;
@@ -4983,6 +5003,42 @@ void bgDetermineVisibleRooms(void)
         }
     }
 }
+
+
+#ifdef PORT
+/**
+ * D466 (#125): Video.DrawDistance must not change gameplay visibility.
+ * When the draw-distance multiplier is > 1 (or GE_D466_FORCE), run the
+ * original body TWICE: first with the zrange far reads pinned to the level's
+ * authored FarFog (what the N64 would admit), snapshotting room_rendered /
+ * room_neighbor_to_rendered into port arrays that the gameplay readers use
+ * (portRoomGameplayVisible); then the normal extended pass, which rendering
+ * uses. Order matters: pass 2 resets every piece of draw-list state, so the
+ * extended result is exactly what it was before this change. Pass 1 loads
+ * nothing (room loading happens in bgRenderRoom*, gated on D_80044858, which
+ * is restored). The authored set is a subset of the extended set.
+ */
+void bgDetermineVisibleRooms(void)
+{
+    portD468UpdateClamp();   /* D468: per player view, before portD466Active() */
+    if (portD466Active()) {
+        s32 savedStagger = D_80044858;
+        s32 i;
+
+        portD466SetAuthoredPass(1);
+        bgDetermineVisibleRoomsImpl();
+        portD466SetAuthoredPass(0);
+
+        for (i = 0; i < MAXROOMCOUNT; i++) {
+            portD466StoreRoom(i, g_BgRoomInfo[i].room_rendered, g_BgRoomInfo[i].room_neighbor_to_rendered);
+        }
+        D_80044858 = savedStagger;
+    }
+
+    bgDetermineVisibleRoomsImpl();
+    portD466FrameLog();
+}
+#endif
 
 
 /**
@@ -5306,7 +5362,14 @@ void bgRoomCalcBB(s32 room) // canonical name
     limits.maxY = -0x7fff;
     limits.maxZ = -0x7fff;
 
+#ifdef PORT
+    /* D441 (#107, italoarruda): the induction variable is a full host pointer;
+     * an (s32) bound sign-extends/truncates above 2 GiB, the loop never runs and
+     * the room keeps an inverted bounding box. Same byte arithmetic. */
+    for (; vertices < (Vtx *) ((uintptr_t) g_BgRoomInfo[room].vertices + g_BgRoomInfo[room].usize_point_index_binary); vertices++)
+#else
     for (; vertices < (Vtx *) ((s32) g_BgRoomInfo[room].vertices + g_BgRoomInfo[room].usize_point_index_binary); vertices++)
+#endif
     {
         for (j = 0; j < 3; j++)
         {

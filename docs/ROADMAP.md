@@ -60,8 +60,9 @@ The port is **feature complete** when all of these hold:
 difficulty, plus a split-screen session, on a build with the §3
 verification debt cleared.
 
-Where things stand (2026-09-29): 1–7 hold for NTSC-U, with the small
-accuracy gaps listed in §2. 8 and 9 are open.
+Where things stand (2026-10-01): 1–7 hold for NTSC-U, with the small
+accuracy gaps listed in §2. 8 is merged on `release/v0.4.1` (2P verified on
+every MP map; 3P/4P with real pads owed). 9 is open (Stage B).
 
 **Parity rule (decided 2026-09-30):** every platform we release for
 carries the same sign-off gate: a full 21-level sweep plus a campaign
@@ -102,9 +103,9 @@ below).
 
 | Issue | Impact | Workaround | Tracking |
 |---|---|---|---|
-| Multiplayer isn't available yet | Missing feature | — | #99, §1 |
+| Multiplayer isn't available yet | Missing feature | **Fixed on `release/v0.4.1`** (2–4 player split-screen, merged 2026-10-01); delete this row when it ships | #99, §1 |
 | PAL and JP ROMs aren't supported | NTSC-U only | Use an NTSC-U ROM | D258, §1 |
-| `All unlocked` may already have written fake unlocks into a save from an older build | Save corruption | **Fixed on `release/v0.4.1` for new saves** (D387). Back up `data/ge007.eep` before first use; fakes an older build wrote are not repaired; cheats earned while ON are not kept. Delete this row when it ships. | D387, §5a |
+| `All unlocked` may already have written fake unlocks into a save from an older build | Save corruption | **Fixed on `release/v0.4.1`**: `All unlocked` is now a RAM-only override (D442) and never writes the save. Fakes an older build already wrote are not repaired; back up `data/ge007.eep`. Delete this row when it ships. | D442, D387, §5a |
 | `Game.SkipIntro` also skips the post-mission failure dossier | Minor | Leave SkipIntro off | D408, §2 |
 | F10 overlay stretches in native widescreen (menus pillarbox correctly) | Cosmetic | — | D335b, §5a |
 | Rareware logo shows a subtle texture-filtering artifact | Cosmetic | — | D75, §2 |
@@ -119,7 +120,7 @@ below).
 
 | Item | Status | Refs | Notes |
 |---|---|---|---|
-| **2–4 player split-screen multiplayer** | parked | #99, D416–D423, branch `feat/mp-splitscreen-99` | The largest missing N64 feature. 2P has been live-tested (M&K + pad, respawn, 16:9 HUD). Before merge: Rule-2 review of `PROP__PORT_SIGNED` (D417) and a golden gate run on the maintainer's console. Open on the branch: D422 (no centred aim for P2+), and D428's sway accumulator is player-0-only. D420 (Scores page big number) FIXED, D421 closed (moot), D423 closed (faithful level shadow), all 2026-10-01; pause/unpause, watch-menu pages, exit-confirm and the F10 overlay during a match run clean headlessly in 2P/3P/4P. Untested: pads-only mode, MP audio, most stages, and the full N64 MP setup screens (scenarios, handicaps, teams). Needs per-pad seats (§5). An outside restore exists for reference: birdturtle `feature/local-mp-input`. |
+| **2–4 player split-screen multiplayer** | verify | #99, D416–D423, merged into `release/v0.4.1` 2026-10-01 (from `mp/virtual-seats`) | Merged 2026-10-01. D417 Rule-2 approved. Maintainer live test: every MP map in 2P (2–4 kills per map, each player scored), 4P Temple, two Xbox pads mapped P1/P2. Headless 2P/3P/4P pause, watch-menu pages, exit-confirm and F10-overlay runs clean. D420 fixed (Scores overrun), D421 closed (moot: no MP gadgets), D423 closed (faithful shadow). Still owed: 3P/4P with real pads, pads-only mode, MP audio, the full N64 MP setup screens (scenarios, handicaps, teams), D422 centred aim live on P2+ (`AimMode = 1`), D428 sway on P2+, and whether the `GE_STARTMP` harness skips something the ammo counter needs (seen only in harness launches). Per-pad seats (§5) done (D448/D450). |
 | **PAL and JP ROM support** | open | D258, D75 (pal/jpn sidecar regen), #85 | **Scheduled for Stage B (decided 2026-09-30):** done just before 1.0 so that region-specific issues can be unwound in isolation. Conversion is broken at the source-data level (filelist naming). A repair path has been verified but not applied. Needs PAL/JP ROMs to test. #85 was closed as "retired for now", not won't-do, so public users currently have no tracker. Reopen it or file a fresh one when work starts. |
 | Drop-in ROM converter, remaining parts | decision | #6, [`dev/release-dropin-rom-plan.md`](dev/release-dropin-rom-plan.md) | NTSC-U drop-in shipped. Left: per-region output names and re-exec guard (with PAL/JP), native C emitters to replace the PyInstaller converter. |
 | Cut content (TCRF weapons/items) | decision | [`dev/CUT-CONTENT-BACKLOG.md`](dev/CUT-CONTENT-BACKLOG.md) | Not part of the shipped game. Tier 0 already works via the debug/cheat menus. Tier 1 (config-toggle grants) is small and port-only. Tier 2/3 (placing props, re-enabling unused MP maps) need game data changes and are out of scope for this repo. |
@@ -128,16 +129,19 @@ below).
 
 | Item | Status | Refs | Notes |
 |---|---|---|---|
-| Auto-fire gunshot sound slightly differs from 1964/GEPD | decision | D433, #114 | Cadence matches the N64 rules exactly. The residual is subtle differences in the click/empty-magazine sounds between shots during continuous AK47 fire. **Maintainer-owned (2026-09-30):** possibly already fixed; it needs a recorded A/B against 1964/GEPD, which isn't suited to agents. Done together with the WrapFix check below. |
+| Auto-fire gunshot sound slightly differs from 1964/GEPD | open | D433, #114 | Cadence matches the N64 rules exactly. The residual is subtle differences in the click/empty-magazine sounds between shots during continuous AK47 fire. **Maintainer-owned (2026-09-30):** possibly already fixed; it needs a recorded A/B against 1964/GEPD, which isn't suited to agents. Done together with the WrapFix check below. **Decided 2026-10-01:** code-side audit of the fire/empty-click sound path first (with #130), before any by-ear A/B. |
 | Auto-fire gate at unstable 40–55 fps | partial | D427 | Exact at a steady 60 or 30 fps. At fluctuating rates it can flip between 1× and 2×, because `field_88C` is never rescaled. |
 | Third-person Bond offset residual | partial | D173, D292 | Mostly fixed. A small drift remains about 1 time in 10. |
 | Statue corner flicker at max FOV | verify | D294 | Room-pool cap raised 2.0 -> 2.5 (2026-09-30; Statue needs about 2.17x). It is unproven: the exhaustion log never fired at spawn. **Owed:** strafe fast past the Statue corners at max FOV and max draw distance. |
-| Crash on save slots 1/3/4, plus a host BSOD (fltmgr.sys) | open | #94 | Needs a repro. Two maintainer retest requests (v0.3.0, v0.4.0) got no reply. Likely D299/D301 (save-slot crash, fixed) and D344 (BSOD on exit, fixed). Close as stale if there's still no reply, and reproduce locally rather than asking the reporter again. |
+| Gameplay visibility vs modern view options (FOV, ultrawide) | verify | D466, D468, D334, D222; maintainer's local policy note | **Policy approved 2026-10-01 and implemented:** AI awareness may see what an N64 player could have seen in some configuration the cartridge supports. D466: the AI uses the authored draw distance (the player can still shoot, use and photograph whatever is drawn). Widescreen up to 16:9 is faithful (the cartridge's own Ratio 16:9 mode). **D468 (merged 2026-10-01):** under ultrawide or `Video.FovScale` > 100 the AI's on-screen view is clamped to the 16:9 / game-FOV view; option `Game.AIWideView` (F10 Gameplay, default off) gives the AI the full view. **Owed:** by-eye check on an ultrawide window or at a high FOV. Known D466 residual: chrs in the extended band take the visible animation / WAYMODE_MAGIC path. |
+| Golden Gun plays the empty click with each shot | open | #130 | Outside report: the out-of-ammo sound plays alongside the firing sound, unlike 1964. Check by ear together with the D433 auto-fire A/B (maintainer-owned). |
+| A mine in Control's mainframe room didn't destroy anything | open | #126 | Outside report; the reporter is unsure. Sanity-check on 1964 first (the objects may be indestructible there). |
+| Crash on save slots 1/3/4, plus a host BSOD (fltmgr.sys) | decided | #94 | Needs a repro. Two maintainer retest requests (v0.3.0, v0.4.0) got no reply. Likely D299/D301 (save-slot crash, fixed) and D344 (BSOD on exit, fixed). **Decided 2026-10-01: close as stale when the release ships**, pointing at D299/D301/D344; no GitHub activity before then. |
 | SkipIntro skips the post-mission failure dossier | verify | D408, D216 | Fixed 2026-09-30: the hook is gated to first boot. **Owed:** fail or abort a mission with SkipIntro on and check the dossier shows; also listen for whether D216's audio break is gone. |
 | Front-end: Rareware logo filtering, cast-roll models | partial | D75 | Cosmetic. The other front-end logos are fixed. The cast-roll character models have never been verified. |
-| Authored mip chains not sampled for explicit-LOD textures | parked | D323 | Distant textures use driver mips instead of Rare's hand-authored chain (heaviest on Statue/Aztec). Parked as a fidelity enhancement. |
+| Authored mip chains not sampled for explicit-LOD textures | post-1.0 | D323 | Distant textures use driver mips instead of Rare's hand-authored chain (heaviest on Statue/Aztec). Parked as a fidelity enhancement. **Decided 2026-10-01:** after 1.0, together with the LOD-fraction approximation as one "real RDP LOD" project. |
 | Approximations in the software RSP | open | `gfx_pc.cpp` `G_CCMUX_LOD_FRACTION`; `Video.WrapFix` (§F row `RC3 · D167`, D74 family) | The LOD-fraction CC input is an eyeballed approximation. The non-power-of-two wrap fix is still opt-in (default off), with unknown visible impact. Both need a comparison against 1964. **2026-09-30 triage** (`docs/dev/notes/FIDELITY-TRIAGE.md`): the LOD-fraction input is bundled with D323 as one "real RDP LOD" project (fix later, large). **WrapFix is maintainer-owned:** a 1964 Depot-ceiling screenshot vs the port with WrapFix on/off decides the default. |
-| Latent 64-bit ABI hazards | partial | D441, #107, #108; ~396 `-Wpointer-to-int-cast` sites at the start of the sweep (185 remain in the 17 touched files; many are intentional `(s32)&ANIM_DATA_*` offsets, D34); AUDIT-M6 `struct player`/`struct hand` raw offsets (porting-notes §A1) | Part 1 landed (D441): 17 files widened to `uintptr_t` under `#ifdef PORT`, build and Bunker/Silo runs verified. **Still owed:** the full census with per-site provenance (H/R/I/?, table not yet written) plus a **store-to-u32 vs arithmetic-only** tag per site (a `uintptr_t` widening is enough only for arithmetic; sites that store back into a u32 field need `portHostToN64` under the macOS port_addr model), an env-gated high-arena test mode, and a check under an arena above 4 GB. Harmless today because the arena sits low. They would bite on macOS/ARM/ASLR. **#108 concern:** widening the `sndPlaySfx` bound disables the guard on every platform; prefer a range check. **#107 will now conflict** with D441 in `bg.c` (`bgRoomCalcBB`), so rebase or close it during the outside-PR review. A read-only provenance pass over the remaining sites is a good local-Qwen delegate task. |
+| Latent 64-bit ABI hazards | partial | D441, #107, #108; ~396 `-Wpointer-to-int-cast` sites at the start of the sweep (185 remain in the 17 touched files; many are intentional `(s32)&ANIM_DATA_*` offsets, D34); AUDIT-M6 `struct player`/`struct hand` raw offsets (porting-notes §A1) | Part 1 landed (D441): 17 files widened to `uintptr_t` under `#ifdef PORT`, build and Bunker/Silo runs verified. **Still owed:** the full census with per-site provenance (H/R/I/?, table not yet written) plus a **store-to-u32 vs arithmetic-only** tag per site (a `uintptr_t` widening is enough only for arithmetic; sites that store back into a u32 field need `portHostToN64` under the macOS port_addr model), an env-gated high-arena test mode, and a check under an arena above 4 GB. Harmless today because the arena sits low. They would bite on macOS/ARM/ASLR. **#108 concern:** widening the `sndPlaySfx` bound disables the guard on every platform; prefer a range check. **#107 will now conflict** with D441 in `bg.c` (`bgRoomCalcBB`), so rebase or close it during the outside-PR review. A read-only provenance pass over the remaining sites is a good local-Qwen delegate task. **2026-10-01:** D457(c)(d) merged (player matrix pointers, Model/PROMOTE/vtxstore pointer width); #107's two sites fixed (D441); read-side census part 2 (403 `-Wint-conversion`/`-Wint-to-pointer-cast` warnings, triaged by file) in the local note `ABI-CENSUS-D441-PART2.md`; model.c rows need a re-run after D457(d). |
 
 ## 3. Verification debt (fixed; a live check is owed)
 
@@ -149,6 +153,8 @@ A single campaign pass with these on the checklist would clear most of them.
 | Probe strip (2026-09-30) | D245, D302, D318 | Frigate or Dam water/sky A/B against the previous build (the s16 sky path was removed); one Facility playthrough to confirm the D318 watchdog stays silent. |
 | Infra fixes | D179, build-pc.sh, crash.c, CI | The 2026-09-30 re-exec no-op (PATHEXT=.CPL in the inherited env) is fixed and verified from the agent shell (see AGENTS.md). `./build-pc.sh` from a genuine MSYS2 login shell; the next CI run (pinned actions, workflow input check). `GE_CRASHTEST=6` shows resolved frames. The romdata `VirtualAlloc` failure path now fails boot instead of falling back to the heap copy: confirm you want that. |
 | Light-fixture hit-type reads (impact sound + sparks) | D434, #119 | Shoot fixtures on Bunker and Caverns. |
+| Dam/Caverns water animation | D465, #127 | Fixed 2026-10-01 (16-byte `Gfx` raw-index write). Maintainer: still "slightly faster" than 1964 on Dam; measured rate equals N64 within 0.1%. Optional objective check: time ten shimmer cycles on both (expect ~26 s). |
+| End credits after Cradle | #129 | Did not reproduce on `release/v0.4.1` 2026-10-01 (maintainer finished Cradle on Agent, credits played, clean exit). Close #129 as not reproducing when the release ships. |
 | v0.4.1 batch (unreleased; fixes live on `release/v0.4.1`) | D424–D432; #114 fire rate, #115 tank-crush audio loop, #116 tank movement, #117 sway, #118 GL recoil, #119 light fixtures | All user-verified against GEPD/1964 on 2026-09-29. Close the issues when it ships. |
 | FOV-scale edge culling | D222 | Max FOV, pan across NPCs at the screen edge. |
 | Water pulse, Surface 2 | D229 | Frigate is verified. Only the Surface 2 by-eye check is owed. |
@@ -192,13 +198,13 @@ Background research lives in the maintainer's local notes (gitignored):
 | Item | Status | Refs | Notes |
 |---|---|---|---|
 | "Original N64" preset: pillarbox at the original aspect | verify | D440, D447 | Landed 2026-09-30 (D447): `Video.AspectMode` (Window/Original), set by the Original N64 preset. Exact 4:3, or 16:9 while the game's watch Ratio is 16:9. Letterboxes in taller windows. `Crop overscan` no longer eats the game's Wide/Cinema letterbox. Measured: 160 px bars at 1280x720. Window-mode frame diff is within the run-to-run noise floor (dmean 0.93 vs base-vs-base 0.85). **Owed:** compare 4:3 and 16:9 against 1964; Wide/Cinema with crop on; menu mouse alignment in Original mode; MSAA 4/8/16, fullscreen toggle, Linux build. F10 full-window is deferred to an F10 polish pass. Known: with crop off, the D246 one-unit edge line shows at the rect edges. |
-| `All unlocked` rework: RAM override instead of save patching | open | D387, D259 | **Approved 2026-09-30.** Levels are already RAM-only (the game's `debug_enable_all_levels_flag`/`debug_007_unlock_flag`, `port/src/main.c`). Replace the cheat half, a block-4 EEPROM read patch plus the D387 write merge in `port/src/libultra.c`, with one opt-in `#ifdef PORT` hook at the cheat-unlocked check (`src/game/file2.c` `fileGetIsCheatUnlocked`, and confirm every caller including `front.c` `frontCheckIfCheatIsUnlocked`). The save is then never touched: earned cheats and times persist normally, OFF restores real progress, and the D259 silent-volume quirk goes away. This is a `src/game` edit for an opt-in port feature, so document it as such (maintainer-approved). Then remove the D387 merge machinery. Already-persisted fakes from older builds stay unrepaired. |
-| Settings units and values cleanup | open | D357 ([plan](dev/D357-SETTINGS-VALUES-PLAN.md)) | **Approved 2026-09-30 with changes** (recorded in the plan's §0): FOV in degrees; FPS cap presets 30/60/90/120/144/240/Uncapped **plus** a free custom value; MSAA adds 16×; mouse invert stays a separate toggle; the texture filter keeps "N64 3-point" (the plan's rename rests on a wrong premise). Refresh the plan's stale "Now" column first (the deadzone is split L/R; draw/LOD defaults are 250). |
-| Restart button in the settings menus | open | — | QoL (2026-09-30): next to Quit to desktop, a "Restart game" action so that restart-required changes (MSAA, etc.) apply in one click. Relaunch the same exe with the same args after an orderly quit (the D344 path, since hard exits have BSOD'd). Offer it wherever a changed row is flagged "restart". |
-| Front-end PC Options: Previous/Next paging for mouse users | open | — | QoL (2026-09-30): add clickable Previous/Next (page) controls to the main-menu settings screen, so mouse users don't have to rely on wheel scrolling. Today the wheel scroll competes with mouse hover: any small mouse nudge re-selects a row and snaps the scroll back. Fix that interaction too. Hover must not reset the scroll position, and it should only change the selection once the pointer moves onto a different row. Owner: the D357/D443 track (same file, `port/src/frontoptions.c`). |
-| Outside PRs #107–#109, #122–#124 | open | #122 hot-plugged pads never reopen, #123 persistent crosshair (`gunfire.c`), #124 compact health/armour bars (`bondview2.c`); #107/#108/#109 (italoarruda) | **#120 and #121 merged locally into `release/v0.4.1` on 2026-09-30** (dolent's original commits kept for credit; relabelled D445/D446; the review is in `docs/dev/notes/PR-REVIEW-120-121.md`). Close both on GitHub when the branch is pushed. **Owed live:** kneeling rifle guards (#120), and the 2P watch-menu text (#121, on the MP branch). **Remaining order (proposed; approval owed):** #122 (then rebase split-screen on it; #122/#109/MP all touch `input.c`) → #107 (fold remaining sites into the D441 census, then close) → #108 (ask for a range check; belongs with `macos`) → #109 (after split-screen settles `input.c`) → #123/#124. **Policy:** any PR that adds a *feature* (#109, #123, #124, …) gets a **design review before any work**: compare against other PC ports and remasters (PD port, Nightdive, GE+/XBLA), then approve, or send suggestions back and defer until the submitter revises. **Their finding labels clash with ours:** relabel on merge. `src/game` touches (#120/#123/#124) each need a Rule-2 or ABI-exception check. |
+| `All unlocked` rework: RAM override instead of save patching | verify | D442, D387, D259 | **Landed 2026-09-30 (D442)** on `release/v0.4.1`: query-time hooks in `file2.c` (`fileGetIsCheatUnlocked`, `fileIsStageUnlockedAtDifficulty`), RULE-2-SIGNOFF recorded; the EEPROM patch and the D387 merge are removed. **Owed:** every level at every difficulty with a cheat on; Magnum/Laser/Golden Gun rows; MP characters; OFF restores real progress. |
+| Settings units and values cleanup | verify | D357, D443 | **Landed 2026-09-30 (D443):** mouse ×, whole-% deadzone and volume, FOV in horizontal degrees, MSAA 16×. FPS presets above 60 are deferred to the frame-rate-above-60 work (the sim ticks at 60 Hz). **Owed:** the new values in both settings UIs. |
+| Restart button in the settings menus | verify | D443 | **Landed 2026-09-30 (D443):** a "Restart game" row (orderly D344 quit, then relaunch). **Owed:** click it once on Windows (no BSOD); the Linux relaunch path has never been compiled. |
+| Front-end PC Options: Previous/Next paging for mouse users | verify | D444 | **Landed 2026-09-30 (D444):** Previous/Next page buttons; hover no longer snaps the wheel selection. **Owed:** a mouse pass through Input and Graphics. |
+| Outside PRs #107–#109, #122–#124 | decided | #122 hot-plugged pads never reopen, #123 persistent crosshair (`gunfire.c`), #124 compact health/armour bars (`bondview2.c`); #107/#108/#109 (italoarruda) | **Decided 2026-10-01 after design reviews (notes: `docs/dev/notes/PR-REVIEW-109.md`, `PR-REVIEW-123-124.md`, local):** **#120/#121/#122** merged locally (#122 = D450, with split-screen); close all three when the branch is pushed. **#123** (persistent crosshair): accept-with-changes, **deferred**; later, either amend their PR or do the work ourselves (add to the Original N64 preset, relabel D436, our Rule-2 line, 2P + sniper-zoom check). **#124** (compact health/armour bars): **deferred** (pre- or post-1.0); too many issues to merge now: ignores HudScale, overlaps the bottom-left status text, 4:3-edge anchoring on ultrawide, draws extra commands when off, mixed apparent/real values, a test knob in shipping code, not in the Original N64 preset, split-screen untested. Either we take it on or ask the author to address the list when GitHub activity resumes. **#109** (pad rebinding): **decline as-is**. It conflicts in all 4 files, would revert the D394 Jinx defaults, uses global (not per-seat) bindings, and its cancel is keyboard-only. Supersede with our own pad presets + rebinding (§5a row below), crediting the author's two-names format, menu lockout guard and release-before-capture arming (Co-authored-by); close with thanks and the change list when GitHub activity resumes. **#107**: folded into D441 on 2026-10-01 (both sites fixed with the author's `uintptr_t` arithmetic, Co-authored-by); close it on push. **#108**: belongs with `macos`; ask for a range check instead of widening the bound. Relabel any outside D-labels on merge. |
 | Gamepad rebinding + modern controller presets | open | PR #109, D394 | QoL (maintainer, 2026-09-30), one item: rebindable controller buttons, plus presets taken from the modern Xbox Series X release's control scheme (the D394 "Jinx" 1.1 layout, with a 1.2/1.3 selector). The remaining D394 gap is the **gadget category**: the camera, the GoldenEye key copier, bombs, and other devices planted on things. Also pad-initiated binding capture. Keyboard/mouse rebinding has shipped. Review #109 under the feature design-review policy first. |
-| Per-pad tuning (device index, hot-plug seats) | open | — | Needed for split-screen anyway. |
+| Per-pad tuning (device index, hot-plug seats) | verify | D448, D450 (#122) | Pad seats keyed by SDL instance id, reserved in a match; hot-plug events reach the input layer. Merged with split-screen 2026-10-01. **Owed:** unplug and replug a pad mid-match. |
 | Full-gamepad menu navigation audit, Xbox/PS button glyphs | open | — | Menus are only partly audited for pad-only use. There are no glyphs yet. |
 | Mute and auto-pause on focus loss; PNG screenshots to `screenshots/` | parked | D231, PR #56 (closed unmerged), `docs/dev/notes/parked/0001-QoL-*.patch` (local) | Deprioritised by the maintainer on 2026-09-25. F12 today is the dev PPM dump. |
 | F10 overlay polish | open | D335b, #90 | Pillarbox the overlay in widescreen; colour experimental rows red; warn on unknown `ge007.ini` keys (promised in #90; today they are only logged). |
@@ -209,9 +215,9 @@ Background research lives in the maintainer's local notes (gitignored):
 
 | Item | Status | Refs | Notes |
 |---|---|---|---|
-| Disable knockback / hitstun, damage sound, endless death cam | decision | hooks at `chraction.c:2233`, `gunfire.c:3334`, `bondview2.c:8354` | Needs one batched Rule-2 sign-off. |
-| Bodies stay where they fell | decision | — | |
-| Port-native third-person camera | decision | #110 | The 007 Plus ROM patch itself is out of scope. Decide whether a port-native TP camera is in or out. |
+| Disable knockback / hitstun, damage sound, endless death cam | post-1.0 | hooks at `chraction.c:2233`, `gunfire.c:3334`, `bondview2.c:8354` | Needs one batched Rule-2 sign-off. **Decided 2026-10-01:** after 1.0, all opt-in (default OFF), one batched Rule-2 sign-off. |
+| Bodies stay where they fell | post-1.0 | — | **Decided 2026-10-01:** after 1.0, opt-in. |
+| Port-native third-person camera | post-1.0 | #110 | The 007 Plus ROM patch itself is out of scope. Decide whether a port-native TP camera is in or out. **Decided 2026-10-01:** decide in/out after 1.0 with the other §5b options. |
 
 ### 5c. Enhanced visuals (optional; after feature-complete)
 
@@ -222,11 +228,12 @@ needs Rule-2 review.
 
 | Item | Status | Notes |
 |---|---|---|
-| Post-process chain: FXAA/SMAA, bloom, depth of field, colour grade/LUT, CRT filter, brightness/gamma, colourblind filters, SSAO | decision | Build the framebuffer pass once. Every effect defaults OFF. |
-| Render scale / supersampling, integer scaling, "authentic 320×240" mode | open | |
-| Dynamic/coloured lighting, dynamic shadows, water reflections | decision | Large. Consult the PD port first. #105 is about the fork's version of reflections, not ours. |
-| HD texture packs: loader + texnum dumper; model packs | decision | #100. There is a staged design. Step 1 (texture identity registry) touches `src/game`, so it needs Rule-2 framing. |
-| Animation smoothing (keyframe slerp) | open | |
+| Post-process chain: FXAA/SMAA, bloom, depth of field, colour grade/LUT, CRT filter, brightness/gamma, colourblind filters, SSAO | post-1.0 | Build the framebuffer pass once. Every effect defaults OFF. **Decided 2026-10-01:** after 1.0; our own opt-in implementation (default OFF; the Original N64 preset restores the N64 look); thepont's fork is reference only. |
+| Render scale / supersampling, integer scaling, "authentic 320×240" mode | post-1.0 | **Decided 2026-10-01:** after 1.0; our own opt-in implementation (default OFF; the Original N64 preset restores the N64 look); thepont's fork is reference only. |
+| Dynamic/coloured lighting, dynamic shadows, water reflections | post-1.0 | Large. Consult the PD port first. #105 is about the fork's version of reflections, not ours. **Decided 2026-10-01:** after 1.0; our own opt-in implementation (default OFF; the Original N64 preset restores the N64 look); thepont's fork is reference only. |
+| Path-traced render mode (opt-in, RTGL1) | post-1.0 | Experimental, for fun (maintainer, 2026-10-01): **deprioritised to after 1.0**. Plan in the maintainer's local notes: vendor MIT RTGL1 behind `port/rt/`, default OFF; fast3d stays the default backend and the fidelity ground truth; Phase 0 is a toolchain spike (RTGL1 under MSYS2/MINGW64). Nothing starts before 1.0. |
+| HD texture packs: loader + texnum dumper; model packs | post-1.0 | #100. There is a staged design. Step 1 (texture identity registry) touches `src/game`, so it needs Rule-2 framing. **Decided 2026-10-01:** after 1.0; our own opt-in implementation (default OFF; the Original N64 preset restores the N64 look); thepont's fork is reference only. |
+| Animation smoothing (keyframe slerp) | post-1.0 | **Decided 2026-10-01:** after 1.0; our own opt-in implementation (default OFF; the Original N64 preset restores the N64 look); thepont's fork is reference only. |
 
 ### 5d. Extras (nice to have)
 
@@ -242,10 +249,10 @@ and a stage loader.
 
 | Item | Status | Refs | Notes |
 |---|---|---|---|
-| LAN netplay | decision | — | Depends on split-screen. Determinism groundwork is D117 (not achieved). |
-| MP bots | decision | #111 | Not N64 (GoldenEye's MP is human-only; Simulants are Perfect Dark). birdturtle `simulants` is an outside prototype. |
-| Co-op campaign | decision | — | Not N64. thepont `feature/coop` is an outside prototype. Listed under Not planned unless this changes. |
-| Cheats beyond the N64 cheat menu | decision | #113 | Only in scope as an opt-in toggle. |
+| LAN netplay | post-1.0 | — | Depends on split-screen. Determinism groundwork is D117 (not achieved). **Decided 2026-10-01:** in scope after 1.0. |
+| MP bots | post-1.0 | #111 | Not N64 (GoldenEye's MP is human-only; Simulants are Perfect Dark). birdturtle `simulants` is an outside prototype. **Decided 2026-10-01:** in scope after 1.0 (opt-in; not N64). |
+| Co-op campaign | post-1.0 | — | Not N64. thepont `feature/coop` is an outside prototype. Listed under Not planned unless this changes. **Decided 2026-10-01:** in scope after 1.0 (opt-in; not N64). |
+| Cheats beyond the N64 cheat menu | post-1.0 | #113 | Only in scope as an opt-in toggle. **Decided 2026-10-01:** in scope after 1.0, opt-in toggles only. |
 
 ## 7. Tooling, infrastructure, security
 
@@ -275,20 +282,15 @@ and a stage loader.
 Decided 2026-09-30 (moved into the rows above): PAL/JP goes in Stage B;
 `All unlocked` becomes a RAM override; D357 approved with changes;
 platform parity gate; feature PRs get a design review first; the
-#88/#95 address model is port_addr. Still owed:
+#88/#95 address model is port_addr. Decided 2026-10-01: D417 approved (split-screen merged); the gameplay-visibility policy (§2); §5b, §5c and §6 are post-1.0 and opt-in (co-op included); D433 gets a code audit, D323 goes post-1.0; #94 closes as stale on release. Still owed:
 
-1. **Split-screen:** approve the D417 Rule-2 change (`PROP__PORT_SIGNED`) when the branch is ready to merge.
-2. **Outside PR review order:** final approval of the order proposed in §5a.
-3. **GE+ gameplay options (§5b)** and a port-native third-person camera: in or out?
-4. **Enhanced visuals (§5c):** build our own, adopt parts of thepont's stack, or skip?
-5. **Beyond-N64 multiplayer (§6):** netplay, bots, co-op, cheats. In scope after feature-complete, or not?
-6. **D433 gunshot timbre, D323 authored mips:** decided per gap during the Stage A fidelity triage.
+Nothing else owed right now (outside PRs decided 2026-10-01, see §5a).
 
 ## Not planned
 
 Online (non-LAN) multiplayer, matchmaking, leaderboards, anti-cheat,
-cross-play · Steamworks, achievements, cloud saves (no storefront) · ray
-tracing, HDR, frame generation, stereo 3D · remake-scope assets (new
+cross-play · Steamworks, achievements, cloud saves (no storefront) · HDR,
+frame generation, stereo 3D (ray tracing only as the opt-in post-1.0
+experiment in §5c) · remake-scope assets (new
 models, music or voice) · new movement mechanics (jump, roll, melee) · the
-007 Plus ROM patch as such (#110) · co-op (unless decision 7 changes it) ·
-Windows 7 (#98, pending decision).
+007 Plus ROM patch as such (#110) · Windows 7 (#98, pending decision).

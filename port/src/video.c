@@ -263,6 +263,28 @@ f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
     return fovy;
 }
 
+/* D468: the factor portScaleFovY applies to an in-level fovy (clamps
+ * ignored), so gameplay can recover the game's own FOV from the rendered one.
+ * 1.0f at the defaults (native widescreen on, FovScale 100). */
+f32 portFovYScaleFactor(void)
+{
+    f32 k = 1.0f;
+    if (cfgWidescreenAuto && !cfgNativeWidescreen &&
+        gfx_current_dimensions.aspect_ratio > 0.01f) {
+        k *= sqrtf(gfx_current_dimensions.aspect_ratio / (4.0f / 3.0f));
+    }
+    if (portFovScale > 0.4f && portFovScale < 2.01f && portFovScale != 1.0f) {
+        k *= portFovScale;
+    }
+    return k;
+}
+
+/* D468: Game.AIWideView -- 0 (default) = AI awareness keeps the cartridge's
+ * widest view (16:9 at the game's own FOV) when the window is wider or
+ * FovScale > 100; 1 = AI sees the full rendered view (the PD-port model). */
+static int cfgAIWideView = 0;
+int portAIWideView(void) { return cfgAIWideView; }
+
 /* D443 (D357): horizontal FOV in degrees for a Video.FovScale percent, for the
  * settings display only. Mirrors portScaleFovY + the gameplay projection:
  * vertical FOV = FOV_Y_F (60) * [WidescreenAuto stretch-era boost] * pct/100,
@@ -446,6 +468,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
     configRegisterInt("Game.SkipIntro", &portSkipIntro, 0, 1);
     configRegisterInt("Game.NoHitFlash", &portNoHitFlash, 0, 1);
+    configRegisterInt("Game.AIWideView", &cfgAIWideView, 0, 1);   /* D468 */
     configRegisterInt("Video.CrosshairHide",  &portCrosshairHide, 0, 1);  /* v0.4.0 M2 (D373) */
     configRegisterInt("Video.CrosshairColor", &cfgCrosshairColor, 0, 8);  /* 8 = custom; old ini values unchanged */
     configRegisterInt("Video.CrosshairRed",   &cfgCrosshairRed,   0, 255);

@@ -319,8 +319,13 @@ D445,FIXED,Crouched-rifle firing animation (crouched_rifle_firing_animation_grou
 D446,FIXED,Couch 2P watch-menu text (the MP pause page) differs by +-1-2 per channel between builds whose only difference is data layout (2026-09-29).,FIXED — port-only (fast3d):
 D448,PARTIAL,Split-screen pad seats:,"PARTIAL (committed 918ac5f9 on feat/mp-splitscreen-99, build + 2P smoke OK; plug/unplug behaviour not exercised at runtime)."
 D456,?,"Font-pointer / text-string-pointer slots retyped from s32 to real pointers (ABI/layout exception; front.c, options.c, language.c, bondview*, mpmenu.c, propobj.…",
+D457,?,64-bit ABI retypes part 2:,
 D453,?,"memp allocator API made 64-bit clean (D441 step 0; ABI/layout exception, §A1).",2026-09-30
 D451,FIXED,Automatic-fire gate at unsteady frame rates (D427 follow-up) and D173 residual.,"FIXED (RULE-2-SIGNOFF, maintainer 2026-09-30:"
 D463,FIXED,fast3d divided by zero (0xc0000094) importing a texture for a zero-area TextureRectangle on a tile with line = 0:,FIXED (port-layer guard in import_texture; 8 repeats of the crashing config + the 18-run sweep + solo -level_09 + menu boot all rc=0 with no crash; the guard fired in 3 of 8 repeats).
 D464,PARTIAL,"GE_MEMPREDZONE=1: 64-byte red-zone checker for the memp bump allocator (all banks), side table + checks at level unload / every 60 frames / orderly quit; re-in…","TOOL LANDED (local, feat/memp-redzone); MP sweep owed."
+D465,FIXED,#127 Dam/Caverns/Complex water slid side to side:,"FIXED 2026-10-01 (fix/d465-water-primlod, local); rate measured = N64; maintainer by-eye on Dam:"
+D466,FIXED,#125 Xenia's boss fight on Jungle triggers early:,"FIXED 2026-10-01 (fix/d466-drawdist-gameplay, local); RULE-2-SIGNOFF (port-feature leak fix; design-review approval); verified headless (room sets, on-screen counts), player-facing shot/autoaim/use/p…"
+D467,CLOSED,#130 Golden Gun empty click with each shot:,CLOSED: faithful by code + log (audited 2026-10-01; by-ear check of held-trigger behaviour vs 1964 is maintainer-owned)
+D468,FIXED,AI view clamp: under ultrawide (> 16:9) or Video.FovScale > 100 the AI's on-screen tests used the wider rendered frustum; they now keep the cartridge-widest vi…,"FIXED 2026-10-01 (feat/d468-ai-view-clamp, local); RULE-2-SIGNOFF (policy approved by the maintainer 2026-10-01); verified headless (clamp on/off switching + falsifier)."
 D450,FIXED,"Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).","FIXED — port-only: the render thread's gfx_sdl_handle_events drains the same SDL queue as video.c's host pump but had no case for SDL_CONTROLLERDEVICEADDED/REMOVED, so it usually swallowed them and i…"

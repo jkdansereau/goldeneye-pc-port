@@ -36,6 +36,7 @@
 #ifdef PORT
 #include <stdio.h>
 #include <stdlib.h>
+#include "drawdistgameplay.h"
 /* GE_D193A=1 — per-second locomotion telemetry for one/all scripted chrs
  * (D193: "AI travels slower than N64" — the frame clock was ruled out in
  * M-80, so measure the anim-root-motion path directly). For each ticked
@@ -2465,6 +2466,9 @@ s32 chrTick(PropRecord *prop)
     ChrRecord *chr;
     Model *model;
     s32 headSwitchVisible;
+#ifdef PORT
+    s32 gpVisible = 0; /* D466: headSwitchVisible at the authored draw distance */
+#endif
     s32 headVisible;
     s32 tickamount;
 #ifdef PORT
@@ -2568,6 +2572,9 @@ s32 chrTick(PropRecord *prop)
     if (chr->chrflags & CHRFLAG_HIDDEN)
     {
         headSwitchVisible = 0;
+#ifdef PORT
+        gpVisible = 0;
+#endif
     }
     else
     {
@@ -2615,6 +2622,9 @@ s32 chrTick(PropRecord *prop)
         if (((prop->type == PROP_TYPE_VIEWER) && (g_playerPointers[getPlayerPointerIndex(prop)]->cameramode == 1)) || (chr->chrflags & CHRFLAG_CULL_USING_HITBOX))
         {
             headSwitchVisible = 1;
+#ifdef PORT
+            gpVisible = 1;
+#endif
 
             if (((chr->actiontype == ACT_ANIM) && (chr->act_anim.unk02c == 0)) && (chr->act_anim.noTranslate != 0))
             {
@@ -2633,6 +2643,9 @@ s32 chrTick(PropRecord *prop)
             if (((chr->actiontype == ACT_PATROL) && (chr->act_patrol.waydata.mode == WAYMODE_MAGIC)) || ((chr->actiontype == ACT_GOPOS) && (chr->act_gopos.waydata.mode == WAYMODE_MAGIC)))
             {
                 headSwitchVisible = posIsOnScreen(prop, &prop->pos, getinstsize(model), 1);
+#ifdef PORT
+                gpVisible = portD466LastPosVerdict(); /* D466 */
+#endif
 
                 if (headSwitchVisible)
                 {
@@ -2651,9 +2664,26 @@ s32 chrTick(PropRecord *prop)
             {
                 chrUpdateAnim(chr, tickamount);
                 headSwitchVisible = posIsOnScreen(prop, &prop->pos, getinstsize(model), 1);
+#ifdef PORT
+                gpVisible = portD466LastPosVerdict(); /* D466 */
+#endif
 
                 if (headSwitchVisible)
                 {
+#ifdef PORT
+                    /* D466: gameplay timestamp -- authored-distance verdict only. */
+                    if (gpVisible)
+                    {
+                        if (chr->actiontype == ACT_PATROL)
+                        {
+                            chr->act_patrol.lastvisible60 = g_GlobalTimer;
+                        }
+                        else if (chr->actiontype == ACT_GOPOS)
+                        {
+                            chr->act_gopos.unk9c = g_GlobalTimer;
+                        }
+                    }
+#else
                     if (chr->actiontype == ACT_PATROL)
                     {
                         chr->act_patrol.lastvisible60 = g_GlobalTimer;
@@ -2662,12 +2692,16 @@ s32 chrTick(PropRecord *prop)
                     {
                         chr->act_gopos.unk9c = g_GlobalTimer;
                     }
+#endif
                 }
             }
         }
         else if ((chr->actiontype == ACT_ANIM) && (chr->act_anim.unk02c == 0))
         {
             headSwitchVisible = posIsOnScreen(prop, &prop->pos, getinstsize(model), 1);
+#ifdef PORT
+            gpVisible = portD466LastPosVerdict(); /* D466 */
+#endif
 
             if (headSwitchVisible && (chr->act_anim.noTranslate == 0))
             {
@@ -2681,6 +2715,9 @@ s32 chrTick(PropRecord *prop)
         else if (chr->actiontype == ACT_STAND)
         {
             headSwitchVisible = posIsOnScreen(prop, &prop->pos, getinstsize(model), 1);
+#ifdef PORT
+            gpVisible = portD466LastPosVerdict(); /* D466 */
+#endif
 
             if (headSwitchVisible || (chr->chrflags & CHRFLAG_INIT))
             {
@@ -2703,6 +2740,9 @@ s32 chrTick(PropRecord *prop)
             }
 
             headSwitchVisible = posIsOnScreen(prop, &prop->pos, getinstsize(model), 1);
+#ifdef PORT
+            gpVisible = portD466LastPosVerdict(); /* D466 */
+#endif
         }
     }
 
@@ -2775,7 +2815,18 @@ after_position_update:
         if (get_debug_chrnum_flag()) {}
 
         prop->flags |= PROPFLAG_ONSCREEN;
+#ifdef PORT
+        /* D466 (#125): ONSCREEN stays the (extended) render gate; the
+         * gameplay-only "has been seen" flag and the gameplay on-screen bit
+         * follow the authored-draw-distance verdict. Identity at mult 1. */
+        portPropSetGameplayOnScreen(prop, gpVisible);
+        if (gpVisible)
+        {
+            chr->chrflags |= CHRFLAG_HAS_BEEN_ON_SCREEN;
+        }
+#else
         chr->chrflags |= CHRFLAG_HAS_BEEN_ON_SCREEN;
+#endif
 
 #ifdef BUGFIX_R1
     if (cheatIsActive(12))
@@ -2921,6 +2972,9 @@ after_position_update:
             hatmodel = hatobj->model;
 
             chr->handle_positiondata_hat->flags |= PROPFLAG_ONSCREEN;
+#ifdef PORT
+            portPropSetGameplayOnScreen(chr->handle_positiondata_hat, gpVisible); /* D466 */
+#endif
 
             renderdata.basemtx = modelFindNodeMtx(model, hatmodel->attachedto_objinst, 0);
             renderdata.mtxlist = dynAllocate(hatmodel->obj->numMatrices * (sizeof(Mtxf)));

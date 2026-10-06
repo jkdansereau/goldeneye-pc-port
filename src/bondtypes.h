@@ -1589,8 +1589,14 @@ typedef union
              * Offset 0x32.
             */
             s16               frameb;
+#ifdef PORT
+            /* D457: animation-frame bitstream pointers (loadAnimationFrame result), were s32. */
+            u8               *unk34;
+            u8               *unk38;
+#else
             s32               unk34;
             s32               unk38;
+#endif
             f32               endframe;
 
             f32               speed; /*0x40*/
@@ -1616,8 +1622,13 @@ typedef union
             */
             s16               frame2b;
 
+#ifdef PORT
+            u8               *unk64;
+            u8               *unk68;
+#else
             s32               unk64;
             s32               unk68;
+#endif
             f32               unk6c;
             // 0x70
             f32               speed2;

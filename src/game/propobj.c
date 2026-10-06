@@ -58,6 +58,7 @@
 #include "vtxstore.h"
 #ifdef PORT
 #include "envflag.h"   /* cached getenv for per-tick probes (D302) */
+#include "drawdistgameplay.h"
 #endif
 
 
@@ -3642,6 +3643,10 @@ void sub_GAME_7F0442DC(PropRecord* prop)
     {
         mtx = modelFindNodeMtx(model->attachedto, model->attachedto_objinst, 0);
         prop->flags |= PROPFLAG_ONSCREEN;
+#ifdef PORT
+        /* D466: an embedded object is visible exactly when its parent is. */
+        portPropSetGameplayOnScreen(prop, prop->parent ? portPropGameplayOnScreen(prop->parent) : 1);
+#endif
         model->render_pos = (RenderPosView*)dynAllocate(model->obj->numMatrices << 6);
 
         matrix_4x4_multiply_homogeneous(mtx, &obj->embedment->matrix, (Mtxf*)model->render_pos);
@@ -5876,6 +5881,9 @@ s32 objTick(struct PropRecord *prop)
 		}
 	}
 
+#ifdef PORT
+	portD466SetLastPosVerdict(1); /* D466: forced-visible branches below are also gameplay-visible */
+#endif
 	if ((obj->type == PROPDEF_TANK) && (get_ptr_for_players_tank() == prop))
 	{
 		var_v1_5 = 1;
@@ -5897,6 +5905,9 @@ s32 objTick(struct PropRecord *prop)
 		}
 
 		prop->flags |= PROPFLAG_ONSCREEN;
+#ifdef PORT
+		portPropSetGameplayOnScreen(prop, portD466LastPosVerdict()); /* D466 */
+#endif
 		mtxs = dynAllocate(model->obj->numMatrices << 6);
 		model->render_pos = (RenderPosView *) mtxs;
 
@@ -7211,7 +7222,11 @@ void sub_GAME_7F04AC20(PropRecord *prop, ModelRenderData *mrData, s32 arg2)
 
         if (destroyed)
         {
+#ifdef PORT
+            destroyed = (get_BONDdata_field_10E0() != NULL);
+#else
             destroyed = get_BONDdata_field_10E0();
+#endif
             destroyed = destroyed != 0;
         }
 
@@ -12194,6 +12209,9 @@ void chrRenderHeldWeapon(void *renderContext, GUNHAND hand, Gfx **gdl)
 
                 chrModel = chr->model;
                 prop->flags |= PROPFLAG_ONSCREEN;
+#ifdef PORT
+                portPropSetGameplayOnScreen(prop, portPropGameplayOnScreen(chr->prop)); /* D466: held weapon follows its chr */
+#endif
 
                 renderData.basemtx = modelFindNodeMtx(chrModel, heldModel->attachedto_objinst, 0);
 
@@ -13591,6 +13609,45 @@ bool sub_GAME_7F054C58(coord3d *coord, f32 arg1)
 }
 
 
+#ifdef PORT
+/* D466: sub_GAME_7F054C58 at the authored draw distance -- i.e. WITHOUT the
+ * D222/D218 `/ portDrawDistanceMultiplier()` division (multiplier treated as
+ * 1), which exists only to widen the RENDER range. */
+static bool portSub7F054C58Gameplay(coord3d *coord, f32 arg1)
+{
+    bool result = TRUE;
+    coord3d *ptr = (coord3d*)fogGetNearFogValuesP();
+    coord3d tmp;
+    f32 sp20;
+
+    if (ptr != NULL)
+    {
+        coord3d *campos = bondviewGetCurrentPlayersPosition();
+        Mtxf *mtx = camGetWorldToScreenMtxf();
+
+        tmp.x = coord->x - campos->x;
+        tmp.y = coord->y - campos->y;
+        tmp.z = coord->z - campos->z;
+
+        sp20 = tmp.f[0] * mtx->m[0][0] + tmp.f[1] * mtx->m[0][1] + tmp.f[2] * mtx->m[0][2];
+
+        if (sp20 > ptr->z)
+        {
+            f32 scalez = getPlayer_c_lodscalez();
+            sp20 = ((sp20 - ptr->z) * 100 / arg1 + ptr->z) * scalez;
+
+            if (sp20 >= ptr->y)
+            {
+                result = FALSE;
+            }
+        }
+    }
+
+    return result;
+}
+#endif
+
+
 /**
  * Address: 7F054D6C
  */
@@ -13643,6 +13700,39 @@ bool posIsOnScreen(PropRecord *prop, coord3d *pos, f32 arg2, bool arg3)
         roomnum = *rooms;
         result = FALSE;
     }
+
+#ifdef PORT
+    /* D466 (#125): record whether this position would ALSO be "on screen" at
+     * the level's authored draw distance (authored room set + authored fog,
+     * multiplier treated as 1). `result` (extended) keeps deciding what is
+     * drawn; callers that set gameplay state (chr.c, below) read the verdict.
+     * Gameplay-visible is always a subset of result. */
+    {
+        int gameplayVisible = 1;
+        if (portD466Active()) {
+            gameplayVisible = 0;
+            if (result) {
+                s32 *rp;
+                for (rp = room_ids; *rp >= 0; rp++) {
+                    if (portRoomGameplayVisible(*rp)) {
+                        gameplayVisible = portFogPositionVisibleGameplay(pos->f, arg2)
+                            && (!arg3 || portSub7F054C58Gameplay(pos, arg2));
+                        /* D468: AI awareness stays inside the cartridge-widest
+                         * view (16:9 at the game's FOV) under ultrawide or a
+                         * raised FovScale: a centred sub-box of the screen. */
+                        if (gameplayVisible && portD468ClampActive()) {
+                            bbox2d faithful = g_CurrentPlayer->screensize;
+                            portD468ShrinkBox(&faithful.min.x);
+                            gameplayVisible = camIsPosInScreenBox(pos, arg2, &faithful);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        portD466SetLastPosVerdict(gameplayVisible);
+    }
+#endif
 
     return result;
 }

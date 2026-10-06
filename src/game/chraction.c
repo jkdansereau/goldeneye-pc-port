@@ -2,6 +2,9 @@
 #include <bondaicommands.h>
 #include <bondgame.h>
 #include <bondconstants.h>
+#ifdef PORT
+#include "drawdistgameplay.h"
+#endif
 #include "chraction.h"
 #include <limits.h>
 #include <math.h>
@@ -2985,7 +2988,11 @@ s32 chrlvStanRoomRelated(ChrRecord *self, coord3d *arg1, StandTile *tile)
     {
         for (i=0; i<tile_something; i++)
         {
+#ifdef PORT
+            if (portRoomGameplayVisible(sp48[i]) != 0) /* D466 */
+#else
             if (getROOMID_isRendered(sp48[i]) != 0)
+#endif
             {
                 return 0;
             }
@@ -3924,7 +3931,11 @@ void set_actor_on_path(ChrRecord *self, struct patrol_path *path)
 
     pad = chrlvGetNextPatrolStepPad(self);
 
+#ifdef PORT
+    if (portPropGameplayOnScreen(self->prop) == FALSE) /* D466 */
+#else
     if ((self->prop->flags & PROPFLAG_ONSCREEN) == FALSE)
+#endif
     {
         if (chrlvStanRoomRelatedPad(self, pad) != 0)
         {
@@ -4381,7 +4392,11 @@ bool chrCheckTargetInSight(ChrRecord *self)
             )
         )
         {
+#ifdef PORT
+            if (vec2rd < portFogScaledFarFogIntensitySquaredGameplay()) /* D466: authored far fog */
+#else
             if (vec2rd < fogGetScaledFarFogIntensitySquared())
+#endif
             {
                 distance = (s32)((sqrtf(vec2rd) * 30.0f) / 16000.0f);
 
@@ -9315,7 +9330,11 @@ void chrlvTickGoPos(ChrRecord *self)
         chrlvActGoposRelated(self, &sp58, &sp54);
 
         if ((sp74 == 0)
+#ifdef PORT
+            && (portPropGameplayOnScreen(self_prop) || (chrlvStanRoomRelated(self, &sp58, sp54) == 0))) /* D466 */
+#else
             && ((self_prop->flags & PROPFLAG_ONSCREEN) || (chrlvStanRoomRelated(self, &sp58, sp54) == 0)))
+#endif
         {
             chrlvActGoposSetTargetPosRelated(self);
             self->act_gopos.unk9c = g_GlobalTimer;
@@ -9462,7 +9481,11 @@ void chrlvTickPatrol(ChrRecord *self)
     if (self->act_patrol.waydata.mode == WAYMODE_MAGIC)
     {
         if ((sp34 == 0)
+#ifdef PORT
+            && (portPropGameplayOnScreen(self_prop) || (chrlvStanRoomRelatedPad(self, temp_v0) == 0))) /* D466 */
+#else
             && ((self_prop->flags & PROPFLAG_ONSCREEN) || (chrlvStanRoomRelatedPad(self, temp_v0) == 0)))
+#endif
         {
             self->act_patrol.lastvisible60 = g_GlobalTimer;
             chrlvSetNextActPatrolStepPadPos(self);
@@ -9836,7 +9859,11 @@ bool check_if_room_for_preset_loaded(ChrRecord *self, s32 padnum)
 
     if (padstan)
     {
+#ifdef PORT
+        return portRoomGameplayVisible(getTileRoom(padstan)); /* D466 */
+#else
         return getROOMID_isRendered(getTileRoom(padstan));
+#endif
     }
 
     return FALSE;
@@ -10730,7 +10757,11 @@ s32 chrIsPosOffScreen(coord3d *arg0, StandTile *tile)
 
     offscreen = TRUE;
 
+#ifdef PORT
+    if (portRoomGameplayVisible(getTileRoom(tile)) && portFogPositionVisibleGameplay(arg0->f, 0.0f)) /* D466 */
+#else
     if (getROOMID_isRendered(getTileRoom(tile)) && fogPositionIsVisibleThroughFog(arg0, 0.0f))
+#endif
     {
         if (bgGet2dBboxByRoomId(getTileRoom(tile), &box))
         {

@@ -8451,8 +8451,13 @@ void bondviewUpdateCameraMatrices(coord3d* cam_pos, coord3d* cam_look_dir, coord
 
     g_CurrentPlayer->field_5C = dynAllocateMatrix();
     g_CurrentPlayer->field_60 = dynAllocateMatrix();
+#ifdef PORT
+    g_CurrentPlayer->field_64 = (Mtxf *)dynAllocateMatrix();
+    g_CurrentPlayer->field_68 = (Mtxf *)dynAllocateMatrix();
+#else
     g_CurrentPlayer->field_64 = dynAllocateMatrix();
     g_CurrentPlayer->field_68 = dynAllocateMatrix();
+#endif
 
     lookat = dynAllocateLights(2);
 
@@ -8507,7 +8512,11 @@ void bondviewUpdateCameraMatrices(coord3d* cam_pos, coord3d* cam_look_dir, coord
 	}
 
     guMtxF2L((f32 (*)[4]) &sp60, temp_s0);
+#ifdef PORT
+    set_BONDdata_field_10E0(temp_s0);
+#else
     set_BONDdata_field_10E0((s32) temp_s0);
+#endif
 
     scale = bgGetLevelVisibilityScale();
 
@@ -8520,7 +8529,11 @@ void bondviewUpdateCameraMatrices(coord3d* cam_pos, coord3d* cam_look_dir, coord
     currentPlayerSetMatrix10CC((Mtxf* ) g_CurrentPlayer->field_64);
     currentPlayerSetViewToWorldMtxf((Mtxf* ) g_CurrentPlayer->field_68);
 
+#ifdef PORT
+    sub_GAME_7F078464(lookat);
+#else
     sub_GAME_7F078464((s32) lookat);
+#endif
     bondviewUpdateFrustumPlanes();
     store_BONDdata_curpos_to_previous();
 }

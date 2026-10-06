@@ -292,6 +292,8 @@ When a PC-larger asset gets a bigger reservation inside a shared scratch buffer 
 
 **A1 cross-tag (D441, 2026-09-30):** the 32→64 widening of `(u32)`/`(s32)` *pointer casts* (rebase arithmetic on RAM copies, segment/anim-table bases) is the same class. Pattern: `#ifdef PORT` `(uintptr_t)` arm + untouched `#else`. Exception: `(s32)&ANIM_DATA_x` is an intentional offset (D34: 4 GiB-aligned base, low 32 bits = segment offset) — widen only the *base* it is added to, never the offset. Census of the remaining ~185 sites in the touched files is still owed (D441).
 
+**A1 cross-tag (D457, 2026-09-30): a pure pointer-width retype can change behaviour by shifting the allocation layout.** Widening `struct player` (+32 B) / `struct Model` (+16 B, inline x4 in player) flipped the default-boot file-select menu to an all-black frame (no crash, identical log) while `-level_09` was fine; allocating the player block at its old size restored it. The menu depends on the MEMPOOL_STAGE layout (player block precedes `g_GfxBuffers[0]`, D98) through something address-sensitive. After any struct widening, run the default-boot menu with a `GE_PCDUMP` frame (not only a level) and check the frame extrema, not just rc. Also: a hardcoded record stride (`vtxstore.c` `n * 0x14` for a record that is 0x18 bytes on x86-64) is a silent overrun that widening makes worse; grep literals near allocs of retyped structs.
+
 ## B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64
 
 Any buffer reservation, `memcpy` size, slot stride, or pool budget
@@ -312,6 +314,9 @@ expressed in N64 `Gfx`/`Vtx` units is **half-size** on PC.
   `(word >> (8*(3-i))) & 0xff`). `gdl++` (advances by `sizeof(Gfx)`) is already
   correct. Watch `(s32)ptr` truncation in vtx-base math and `x | 0x80000000`
   KSEG0 folds (identity on PC; just drop the OR, and guard segmented w1).
+  Also raw-index **writes** into static DLs: D465 (`unk_092E50.c` water
+  controller patched `((u32*)dl)[8]`, meaning N64 `Gfx[4].w0`, which hit
+  `Gfx[2]` on PC; use `dl[n].words.w0` instead).
   Instances: `bgTestHitOnObj` (`propobj.c`, FIXED); `bgTestRayIntersectionInRoom`
   + `bgTestBulletHitBackground` tail (`bg.c`, D154; ported M-28, re-audited +
   bug-fixed M-30, playtest-gated).
@@ -1382,6 +1387,18 @@ them — the symptom was obvious in one montage.
 ## D17. Un-stubbing a `-1` sentinel re-activates every dormant consumer of the value (D431/D434)
 
 A port stub that forces a value to `-1` (D154 `texnum`, D135) can hide latent layout bugs in its other readers. When restoring a real value, grep ALL readers of the field first and check each for raw-layout reads and table-bounds assumptions. Instance: D431 made light-fixture hits return real image ids, which reached `chrprop.c`/`propobj.c` reading `((u8*)&g_Textures[n])[0] & 0xf` as a hit type -- on PC byte 0 is the low byte of `dataoffset` (LE bitfield layout, D67), so it indexed `g_HitTypeSounds[13]` with 0..15. Use the `.hitTexture`/`.hitSound` bitfields (as `chr.c` does).
+
+## D18. A port feature that widens a shared range (draw distance, FOV) leaks into gameplay through every reader of the state it widened (D466)
+
+`Video.DrawDistance` scaled the one far-clip value that both the renderer and gameplay read, so `room_rendered`, `PROPFLAG_ONSCREEN`, `CHRFLAG_HAS_BEEN_ON_SCREEN` and the fog intensities all grew with it, and AI scripts ("on screen", "seen", target-in-sight, spawn out of view) fired earlier than on N64. Rule: when adding a "see farther / wider" option, grep every reader of the state it feeds and split render from gameplay; the render consumer keeps the extended value, the gameplay readers get a stored copy computed at the authored value.
+
+- **Tell:** `PROPFLAG_ONSCREEN`-style flags are dual-use (render gate AND AI input), so never gate the flag itself; store a separate verdict bit.
+- **Techniques that worked:** run the original traversal twice with a port flag that pins the single far read (a static read, never `viSetZRange`) and snapshot the result; keep the "gameplay verdict" in an unused bit of a u8 flag byte (`prop->flags & 0x80`) written by every setter of the dual-use flag; store the authored fog values at load time instead of recomputing from the live multiplier.
+- **Triage trap:** check whether a `PROPFLAG_*` hit is on `prop->flags` (runtime u8) or on `obj->flags` / pdef flags (u32 definition bits) before treating it as a reader (`propobj.c:8417`, `prop.c` 233-467 are the latter).
+- **Remaining class member:** FOV/widescreen widening of `camIsPosInScreen` and `c_lodscalez` (D222).
+
+## D19. A "click after the shot" report needs the trigger-hold duration, not just the state machine (D433/D467)
+State-machine audits of a gun's fire/dry-fire path (GE: `gunTickHandState`, CLICKY weapons) are tick-driven and match the console at any tick/frame ratio; an extra click/sound that appears "with the shot" is usually the trigger still being down when the recoil state ends (about 14 ticks for the Golden Gun). Measure with `GE_STARTWEAPON` + `GE_INPUTSCRIPT` holds of 4/9/16 frames and a `state/mag/88C/890/clk` log at the sound-play sites before suspecting the audio layer; and remember `GE_QUITFRAME` counts frames from boot, the level's `g_GlobalTimer` starts ~270 later.
 
 ## E. Process / method notes
 

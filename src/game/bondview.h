@@ -369,11 +369,20 @@ struct player
    * Used as parameter to gbi macro.
    * Offset 0x005c.
    */
+#ifdef PORT
+  /* D457: host matrix pointers (dynAllocateMatrix), were s32. */
+  Mtx *field_5C;
+
+  /* 0x0060 */ Mtx *field_60;
+  /* 0x0064 */ Mtxf *field_64;
+  /* 0x0068 */ Mtxf *field_68;
+#else
   s32 field_5C;
 
   /* 0x0060 */ s32 field_60;
   /* 0x0064 */ s32 field_64;
   /* 0x0068 */ s32 field_68;
+#endif
 
   /**
    * Collision / clipping related.
@@ -1211,8 +1220,13 @@ struct player
   Mtxf* viewtoworldmtxf;
   Mtx* projmatrix;
   Mtxf* projmatrixf;
+#ifdef PORT
+  Mtx *field_10E0; // ptr (D457: was s32)
+  LookAt *field_10E4; // ptr (D457: was s32)
+#else
   s32 field_10E0; // ptr
   s32 field_10E4; // ptr
+#endif
   Mtxf* field_10E8;
   Mtxf* field_10EC;
   f32 c_scalelod60; // canonical name
@@ -2882,8 +2896,13 @@ f32 bondviewGetPlayerYawRadians(void);
 Mtxf *camGetWorldToScreenMtxf(void);
 void transformAndNormalizeByLength2Dto3D(struct coord2d *in, coord3d *out, f32 value);
 void bondviewTransformManyPosToViewMatrix(RenderPosView *arg0, s32 arg1);
+#ifdef PORT
+LookAt *sub_GAME_7F078474(void);
+Mtx *get_BONDdata_field_10E0(void);
+#else
 s32 sub_GAME_7F078474(void);
 s32 get_BONDdata_field_10E0(void);
+#endif
 Mtx *currentPlayerGetProjectionMatrix(void);
 Gfx *bondviewRenderProp(PropRecord *arg0, Gfx *arg1, s32 arg2);
 f32 getPlayer_c_lodscalez(void);
