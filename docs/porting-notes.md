@@ -290,6 +290,8 @@ The offline model converter sizes each record's trailing arrays from its count f
 
 When a PC-larger asset gets a bigger reservation inside a shared scratch buffer (D45: the wallet model 0xA000 -> 0x17000 in `ptr_logo_and_walletbond_DL`), grep for every other user of that buffer that computes a fixed offset (`base + 4096*10`). Those still point into the old boundary and silently overwrite the enlarged asset; the corruption only shows when the asset is not reloaded.
 
+**A1 cross-tag (D441, 2026-09-30):** the 32→64 widening of `(u32)`/`(s32)` *pointer casts* (rebase arithmetic on RAM copies, segment/anim-table bases) is the same class. Pattern: `#ifdef PORT` `(uintptr_t)` arm + untouched `#else`. Exception: `(s32)&ANIM_DATA_x` is an intentional offset (D34: 4 GiB-aligned base, low 32 bits = segment offset) — widen only the *base* it is added to, never the offset. Census of the remaining ~185 sites in the touched files is still owed (D441).
+
 ## B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64
 
 Any buffer reservation, `memcpy` size, slot stride, or pool budget
@@ -633,6 +635,7 @@ through a converter or a runtime bswap fixup reads scrambled.
 
 - **A texture re-declared in another format must be normalised with the geometry it was IMPORTED with (D245).** GE's sky water loads a CI8 image and draws it through an RGBA16 tile; fast3d imports it as CI8 (D229) but its triangle path computed the UV divisor from the RGBA16 tile (half the width) and the whole mip-chain height (43 rows, not the 32-row mask period). Anything that changes the importer's format/extent must change the tri-path `tex_width/tex_height` with it, and wrap must equal the N64 mask period.
 - **CPU-built RDP triangles need float vertices, not `Vtx` (D245).** Where GE builds RDP edge/texture coefficients on the CPU (sky/water), 32-bit S/T and positions are normal; squeezing them through s16 `tc`/`ob` costs visible precision on horizon-scale geometry. Use `G_FLOATVTX_EXT` (`port/include/floatvtx.h`).
+- **A first-run-only preset is skipped forever by any earlier launch that created the ini, and window keys are not an "untouched" signal (D283).** Seeding values *before* `configLoad()` only works when no `ge007.ini` exists; one launch in a different environment (SteamOS Desktop Mode has no `STEAMOS`) writes a plain ini and the preset never runs. Apply presets *after* the load, record a one-shot flag key, and gate on keys the user must change deliberately (`Video.Fullscreen`, `Window.Maximized`) — `Window.Width/Height` are rewritten from the live window on every clean exit (`videoSaveWindowState`), so "still at default" never holds for them.
 
 ## D. N64 hardware idioms fast3d does not emulate
 
@@ -1747,3 +1750,21 @@ A port stub that forces a value to `-1` (D154 `texnum`, D135) can hide latent la
   `propobj.c:~2393`) — those 4 rely on div-by-zero yielding NaN/inf without
   trapping on both MIPS and x86-64 SSE, matching retail behavior; do not
   "fix" them.
+
+- **x64 Windows backtraces: unwind with the PE's .pdata, never walk RBP.**
+  `-fno-omit-frame-pointer` on MinGW-w64 GCC does not give an RBP chain:
+  most prologues set `RBP = RSP + N` (Win64 allows an offset frame
+  pointer), so `[RBP]` is not the saved RBP and a manual walk dies at
+  frame 1. `RtlLookupFunctionEntry` + `RtlVirtualUnwind` from the
+  exception CONTEXT is reliable and needs no dbghelp/symbols (crash.c,
+  2026-09-30). Print `va = preferred ImageBase + RVA` per frame so
+  `addr2line -e ge007.x86_64.exe` resolves it even if the image was
+  relocated. Test with `GE_CRASHTEST=<N>`.
+- **Crossing msys -> native: pass files, not quoted strings; get paths from
+  bash's own `pwd -W`.** The msys argv conversion re-escapes embedded `"`
+  as `\"`, which `cmd.exe` does not understand, so an inline
+  `cmd //c "... \"C:\path\" ..."` silently never runs (build-pc.sh's TMP
+  probe was dead this way). And with Git Bash plus MSYS2 `usr/bin` on one
+  PATH, `/tmp`, `mktemp` and `cygpath` can belong to different runtimes
+  (different Windows dirs). Never trust `command -v cmake` for the MSYS2
+  toolchain either: a pip-installed cmake can shadow it (2026-09-30).

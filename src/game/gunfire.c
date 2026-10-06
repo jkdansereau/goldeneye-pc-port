@@ -3351,23 +3351,6 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                             sndDeactivate((struct ALSoundState *) handptr->field_A48);
                         }
 
-#ifdef PORT
-                        /* TEMP D207/D241 (M-201): classify every shot-sound
-                         * attempt: into handle 1, handle 2, or SKIPPED because
-                         * both per-hand handles are still held (the stop above
-                         * is async). GE_D207S=1; one line per attempt. */
-                        if (bondwalkItemGetSound(var_s1) != 0)
-                        {
-                            extern char *getenv(const char *name);
-                            static int d207s = -1;
-                            if (d207s < 0) d207s = getenv("GE_D207S") != NULL;
-                            if (d207s)
-                                osSyncPrintf("D207S t=%d hand=%d item=%d rate=%d -> %s\n", (int)g_GlobalTimer, (int)hand,
-                                             (int)var_s1, (int)bondwalkItemGetSoundTriggerRate(var_s1),
-                                             handptr->audioHandle == NULL ? "H1"
-                                             : (struct ALSoundState *)handptr->field_A48 == 0 ? "H2" : "SKIP");
-                        }
-#endif
                         if (bondwalkItemGetSound(var_s1) != 0)
                         {
                             if (handptr->audioHandle == NULL)

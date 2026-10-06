@@ -56,6 +56,10 @@ void gfx_set_safe_area_crop(int on);       /* crop the N64 TV-overscan safe-area
  * crop above -- for inverting a window mouse click into logical 2D UI space
  * (see port/src/optionsoverlay.c, D316). */
 void gfx_get_ui_screen_rect(int32_t *outX, int32_t *outY, int32_t *outW, int32_t *outH);
+/* D447: 0 = fill the window; >0 = pillar/letterbox the output to this aspect (call before gfx_start_frame). */
+void gfx_set_output_aspect(float aspect);
+/* Current output rect in window pixels, top-left origin (the whole window when no aspect is forced). */
+void gfx_get_output_rect(int32_t *outX, int32_t *outY, int32_t *outW, int32_t *outH);
 void gfx_texture_cache_clear(void);
 int gfx_texture_cache_count(void); /* D235 */
 void gfx_texture_cache_delete(const uint8_t *orig_addr);

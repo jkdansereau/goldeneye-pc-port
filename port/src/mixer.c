@@ -54,6 +54,7 @@ static int mixerTraceOn(void)
 #include "system.h"
 #include "mixer.h"
 #include "audio.h"
+#include "envflag.h"   /* cached getenv for per-opcode probes (D302) */
 
 /* Largest DMEM address GE's audio call sites use is AL_AUX_R_OUT (2048) +
  * up to AL_MAX_RSP_SAMPLES (160) samples * 2 bytes; round up generously. */
@@ -127,7 +128,7 @@ void aClearBufferImpl(u16 addr, u32 count)
      * list, so this must be a no-op; if it silences the stuck drone, some
      * opcode is reading scratch DMEM left over from the previous frame.
      * Remove once root-caused. */
-    if (addr == 1088 /* AL_MAIN_L_OUT */ && getenv("GE_DMEMWIPE")) {
+    if (addr == 1088 /* AL_MAIN_L_OUT */ && GE_ENVFLAG("GE_DMEMWIPE")) {
         memset(sDmem, 0, sizeof(sDmem));
     }
     memset(DMEM_U8(addr), 0, count);
@@ -395,7 +396,7 @@ void aSetVolumeImpl(u32 flags, u16 v, u16 t, u16 r)
          * (D199). If muting the send silences the stuck drone, the drone is
          * an undamped reverb feedback loop, not a stuck voice.
          * Remove once root-caused. */
-        if (getenv("GE_NOWET")) {
+        if (GE_ENVFLAG("GE_NOWET")) {
             sVol.wetamt = 0;
         }
     } else if (flags & A_VOL) {
@@ -432,7 +433,7 @@ void aEnvMixerImpl(u32 flags, u32 stateAddr)
            flags, (void *)saved, sCtx.in, sCtx.out, sCtx.dryR, sCtx.wetL, sCtx.wetR, sCtx.count);
     const s16 *in = DMEM_S16(sCtx.in);
 
-    if (getenv("GE_VOICEDUMP")) {
+    if (GE_ENVFLAG("GE_VOICEDUMP")) {
         if (!s_voiceDumpFile)
             s_voiceDumpFile = fopen("voicedump.raw", "wb");
         if (s_voiceDumpFile) {

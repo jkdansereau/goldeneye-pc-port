@@ -68,20 +68,31 @@ Needs CMake + SDL2 + zlib + OpenGL, and must run from the MSYS2 MINGW64 shell
    In `.ps1`, `-DROMID=$Var` is a literal (bare tokens don't expand) — it
    must be `"-DROMID=$Var"`. Launch powershell plainly — `env -i` before it
    breaks the nested cmake launch (verified 2026-09-28).
-   **OPEN (next session):** the guard still fails *inside* `build-pc.sh`
-   (cmake "did not execute": the `.ps1` runs, but `$LASTEXITCODE` stays
-   empty) while the *identical* standalone invocation succeeds (cmake runs
-   and the build completes — that is how the D401 builds were made). First
-   test: diff the heredoc-generated `.ps1` against a hand-extracted copy
-   (suspect: heredoc line-ending/whitespace corruption).
-   **Working workaround:** extract the heredoc `.ps1` and run
-   `powershell -NoProfile -ExecutionPolicy Bypass -File <ps1> "C:\msys64\usr\bin" "C:\msys64\mingw64\bin" C:/msys64 <repo-win-path> build-pc <romid>`.
-   Re-confirmed 2026-09-28: in-script re-exec fails again (cmake configure
-   dies inside the ps1; re-exec logs left stale) while the identical
-   standalone invocation reconfigured and built cleanly (extract with
-   `awk "/<<'PS1'\$/{f=1;next} /^PS1\$/{f=0} f" build-pc.sh > /tmp/ps1`
-   — mind the leading whitespace, and `export PATH` to include mingw/bin
-   first, failure mode 3).
+   **FIXED 2026-09-30 (`fix/build-pc-tmp-reexec`):** the heredoc `.ps1`
+   was byte-identical to a hand-extracted copy — not line endings. Three
+   real bugs: (a) the TMP probe's inline `cmd //c "... \"path\" ..."` never
+   ran (msys re-escapes embedded quotes as `\"`, which cmd rejects), so
+   *every* build took the re-exec, and it only tested that TMP existed;
+   (b) the `.ps1`'s toolchain dirs were derived from `command -v cmake`,
+   which in Git Bash/agent shells is a pip cmake (no MSYS2 toolchain) —
+   the hand-run worked because it passed explicit `C:\msys64\...` paths;
+   (c) `/tmp` + `cygpath` disagree when Git Bash and MSYS2 `usr/bin` are
+   both on PATH, so the `.ps1` could be written to one `/tmp` and
+   powershell pointed at the other (it then exits 0 having done nothing).
+   Now: the MSYS2 `mingw64/bin` is located and validated (override:
+   `GE_MSYS2_ROOT`) and prepended to PATH; the probe is a `.cmd` file that
+   tests TMP *writability*; all native-facing files live in the build dir
+   with paths from bash's own `pwd -W`. Verified from an agent Git Bash
+   shell: fresh + incremental builds, both on the direct path and with a
+   forced unwritable TMP (`TMP=C:\Windows\`) through the re-exec.
+   **FIXED 2026-09-30 (`fix/build-pc-reexec-noop`): the re-exec exited rc=2
+   with the diag log ending `cmake ran LASTEXITCODE=[]`.** From a shell with
+   MSYS2 `usr/bin` first on PATH, powershell inherits a stripped ~13-var env
+   with `PATHEXT=.CPL` and no ComSpec/TMP/TEMP, so `& cmake.exe` silently
+   launches nothing. The `.ps1` now restores PATHEXT and ComSpec. In that
+   shell the re-exec itself is legitimately needed (no TMP), so the probe
+   is correct. Verified: MSYS2-PATH shell, forced `TMP=C:\Windows\`, and a
+   no-change incremental run all exit 0 with a fresh exe.
 2. **`cannot open output file ge007.x86_64.exe: Permission denied`.** A
    **running** `ge007.x86_64.exe` locks the output file (Windows rule; you
    can't relink over a live PE). Check with `Get-Process | Where-Object {

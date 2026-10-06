@@ -87,20 +87,22 @@ enum { ROW_TOGGLE, ROW_SLIDER, ROW_ENUM, ROW_MSAA, ROW_RES, ROW_ACTION, ROW_FPSC
 static const char *const kOnOff[]     = { "Off", "On", NULL };
 static const char *const kReverse[]   = { "Reverse", "Upright", NULL };
 static const char *const kHold[]      = { "Hold", "Toggle", NULL };
+static const char *const kAspectMode[] = { "Window", "Original", NULL };   /* D447: Original = 4:3 (16:9 with the game Ratio) bars */
 static const char *const kTexFilter[] = { "Nearest", "Bilinear", "3-Point", NULL };
 static const char *const kAimMode[]   = { "N64", "Centred (PC)", NULL };   /* D337 */
 static const char *const kAimRange[]  = { "PC", "N64", NULL };             /* D338 */
-static const int         kMsaaSeq[]   = { 1, 2, 4, 8 };
+static const int         kMsaaSeq[]   = { 1, 2, 4, 8, 16 };   /* D443: 16x added */
+#define MSAA_N ((int)(sizeof(kMsaaSeq) / sizeof(kMsaaSeq[0])))
 /* v0.4.0 modern options wave: value names for the new rows (they land
  * in the functional sections -- Turok standard, D356 -- not a bucket). */
 static const char *const kOnOffRev[]  = { "On", "Off", NULL }; /* 0 = On */
-/* M7 (v0.4.0, D387): AllUnlocked ships as a loudly-documented EXPERIMENTAL,
- * irreversible option. Enabling it and then saving (even a profile-settings
- * change) bakes synthetic cheat/completion times into the EEPROM that
- * switching OFF does not undo; it also breaks audio/aim on a fresh save with
- * no real save yet (D257/D259/D281). Back up data/ge007.eep before enabling.
+/* D442: AllUnlocked is a pure query-time/RAM override (file2.c
+ * fileGetIsCheatUnlocked + fileIsStageUnlockedAtDifficulty, plus the debug
+ * flags seeded in main.c at startup): no save bytes are patched, read or
+ * written, so the old D259 silent-volume quirk is gone. It applies from the
+ * next launch. Saves polluted by builds before D442 are not repaired.
  * Display-only value names; config still stores 0/1. */
-static const char *const kAllUnlocked[] = { "Off", "ON - UNSAFE", NULL };
+static const char *const kAllUnlocked[] = { "Off", "ON (restart)", NULL };
 /* D379: the authored N64 sprite is red. Original is the identity path;
  * White at index 7 uses the same alpha-mask combiner as other true hues. */
 static const char *const kCrosshairColor[] = {
@@ -192,7 +194,8 @@ static struct Row rows[] = {
      * watchSettingsActiveFolder(). All rows use designated initializers
      * (D351 class). */
     { .key="__HdrInput", .label="INPUT", .kind=ROW_HEADER },
-    { .key="Input.MouseSensitivity", .label="Mouse horizontal sensitivity", .kind=ROW_SLIDER, .step=5 }, /* calibrated UI midpoint = raw 100 */
+    { .key="Input.MouseSensitivity", .label="Mouse horizontal sensitivity", .kind=ROW_SLIDER, .step=10,
+      .uiMin=10, .uiMax=300 }, /* D443/D357: shown as a multiplier, raw 100 = 1.0x; storage unchanged */
     /* Wave A (v0.5.0, CONTROLLER-INPUT-PLAN item 6): the pre-existing
      * Input.MouseYScale key (extra vertical/pitch sensitivity, %) finally gets
      * a row so the asymmetric X/Y mouse aim is tunable without editing the ini.
@@ -227,8 +230,8 @@ static struct Row rows[] = {
      * (left = movement, right = look) replaces the single "Stick deadzone" row;
      * the look-sensitivity / look-smoothing / southpaw knobs are right-stick
      * (natural-pitch) feel options, identity at their defaults. All port-layer. */
-    { .key="Input.PadDeadzoneL", .label="Deadzone (left stick)", .kind=ROW_SLIDER, .step=500 },
-    { .key="Input.PadDeadzoneR", .label="Deadzone (right stick)", .kind=ROW_SLIDER, .step=500 },
+    { .key="Input.PadDeadzoneL", .label="Deadzone (left stick)", .kind=ROW_SLIDER, .step=300, .unit="%", .dispDiv=300 },
+    { .key="Input.PadDeadzoneR", .label="Deadzone (right stick)", .kind=ROW_SLIDER, .step=300, .unit="%", .dispDiv=300 },
     { .key="Input.PadLookSensX", .label="X axis look sensitivity (controller)", .kind=ROW_SLIDER, .step=5 },
     { .key="Input.PadLookSensY", .label="Y axis look sensitivity (controller)", .kind=ROW_SLIDER, .step=5 },
     { .key="Input.PadLookSmooth", .label="Look smoothing (controller)", .kind=ROW_SLIDER, .step=1, .dispMax=10 },
@@ -320,6 +323,9 @@ static struct Row rows[] = {
      * setups. Not config-backed (like __Resolution); activating it exits
      * the same way video.c's SDL_QUIT/Alt+F4 handlers already do. */
     { .key="__QuitToDesktop", .label="Quit to desktop", .kind=ROW_ACTION },
+    /* D443: orderly quit (D344) + relaunch, so "(restart)" rows like
+     * Anti-aliasing can be applied without leaving the game by hand. */
+    { .key="__RestartGame", .label="Restart game (for restart options)", .kind=ROW_ACTION },
 
     /* D388: Gameplay -> HUD collects both profile HUD visibility and global
      * crosshair/scale controls. Its reset honours each row's own scope. */
@@ -343,10 +349,13 @@ static struct Row rows[] = {
     { .key="Video.MSAA", .label="Anti-aliasing", .kind=ROW_MSAA, .restart=1 },
     { .key="Video.TextureFilter", .label="Texture filter", .kind=ROW_ENUM, .step=1, .names=kTexFilter },
     { .key="Video.Anisotropy", .label="Anisotropic filtering", .kind=ROW_SLIDER, .step=1, .unit="x" },
-    { .key="Video.FovScale", .label="FOV scale", .kind=ROW_SLIDER, .step=5, .unit="%" },
+    { .key="Video.FovScale", .label="Field of view", .kind=ROW_SLIDER, .step=1 }   /* D443/D357: shown as horizontal degrees; storage stays Video.FovScale % */,
     /* D334: native widescreen (world projected at the window aspect, Hor+).
      * While on, "Widescreen auto FOV" has no effect (it was the stretch-era
      * vertical-FOV compensation). */
+    /* D447: Original letter/pillarboxes to the console aspect (4:3, or 16:9 while
+     * the watch-menu Ratio is 16:9); Window fills the window. */
+    { .key="Video.AspectMode", .label="Aspect", .kind=ROW_ENUM, .step=1, .names=kAspectMode },
     { .key="Video.NativeWidescreen", .label="Native widescreen", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     { .key="Video.WidescreenAuto", .label="Widescreen auto FOV", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     { .key="Video.SafeAreaCrop", .label="Crop overscan", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
@@ -370,6 +379,14 @@ static struct Row rows[] = {
      * reads as to a player. Pulled from the menu until it covers all
      * screen-shake/view-bob sources, not just explosions. Config var + fr.c
      * hook stay in place. */
+    /* D440: one-press presets (arm -> confirm, like the reset
+     * rows). "Original N64" snaps every value the port changed from the N64
+     * back (3-point filter, 4:3 projection, no overscan crop, 100% draw/LOD,
+     * stock FOV, N64 aim range, ...); "Port defaults" is its inverse. The
+     * key table lives in video.c (videoApplyPreset). Not a mode: nothing is
+     * remembered, the keys themselves are written. */
+    { .key="__PresetN64", .label="Original N64 preset", .kind=ROW_ACTION },
+    { .key="__PresetPort", .label="Port defaults preset", .kind=ROW_ACTION },
     { .key="__ResetGraphics", .label="Reset to defaults", .kind=ROW_ACTION },
 
     { .key="__HdrAudio", .label="AUDIO", .kind=ROW_HEADER },
@@ -377,9 +394,9 @@ static struct Row rows[] = {
      * "AUDIO (BOND FILE)" header was retired with the BOND FILE section).
      * A port-level master volume (M3) will join here as Turok's
      * Master/Sound/Music trio. */
-    { .key="Bond.Music", .label="Music volume", .kind=ROW_SLIDER, .step=128,
+    { .key="Bond.Music", .label="Music volume", .kind=ROW_SLIDER, .step=328,
       .uiMax=32767, .cfgMax=32767, .found=1, .unit="%", .dispDiv=328, .saveScoped=1 },
-    { .key="Bond.FX", .label="FX volume", .kind=ROW_SLIDER, .step=128,
+    { .key="Bond.FX", .label="FX volume", .kind=ROW_SLIDER, .step=328,
       .uiMax=32767, .cfgMax=32767, .found=1, .unit="%", .dispDiv=328, .saveScoped=1 },
     { .key="__ResetAudio", .label="Reset to defaults", .kind=ROW_ACTION },
 
@@ -829,6 +846,8 @@ static void resolveCb(const char *key, int type, void *ptr, double min, double m
     }
 }
 
+static void presetProbe(void);   /* D440 GE_PRESETPROBE, below */
+
 static void overlayInit(void)
 {
     if (s_inited) {
@@ -943,6 +962,8 @@ static void overlayInit(void)
                      "GE_OPTIONTREEPROBE: %s (5 roots, nested links/back, two bind pages, HUD, row caps, no M5)",
                      bad ? "FAIL" : "PASS");
     }
+
+    if (getenv("GE_PRESETPROBE")) presetProbe();
 
     /* Build the windowed-resolution preset list: presets that fit the desktop,
      * plus the current window size snapped to the nearest surviving entry. */
@@ -1062,10 +1083,10 @@ static double rowHi(const struct Row *r)
  * piecewise mapping, so the shown number always matches the filled bar. */
 static double calibratedDefault(const struct Row *r)
 {
-    if (!strcmp(r->key, "Input.MouseSensitivity")) return 100.0;
     if (!strcmp(r->key, "Input.MouseYScale")) return 100.0;     /* Wave A item 6: native */
-    if (!strcmp(r->key, "Input.PadDeadzoneL")) return 7000.0;   /* Wave A: = STICK_DEADZONE */
-    if (!strcmp(r->key, "Input.PadDeadzoneR")) return 7000.0;   /* Wave A: = STICK_DEADZONE */
+    /* D443/D357: MouseSensitivity (x multiplier) and PadDeadzoneL/R (whole %)
+     * left the calibrated 50/100 mapping -- they now show real units on a
+     * linear bar (storage unchanged). */
     if (!strcmp(r->key, "Input.PadLookSensX")) return 100.0;    /* Wave A: native */
     if (!strcmp(r->key, "Input.PadLookSensY")) return 100.0;    /* Wave A: native */
     if (!strcmp(r->key, "Input.PadTriggerPct")) return 23.0;
@@ -1177,6 +1198,7 @@ static void rowSet(struct Row *r, double v) { rowSetCommit(r, v, 1); }
 /* D356 reset rows (defined below, in the reset block). */
 static struct Row *rowAt(int i);
 static int isResetRow(const struct Row *r);
+static int isArmRow(const struct Row *r);
 static void rowActivateReset(struct Row *r);
 
 static void rowAdjust(struct Row *r, int dir)
@@ -1196,12 +1218,12 @@ static void rowAdjust(struct Row *r, int dir)
         break;
     case ROW_MSAA: {
         int idx = 0;
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < MSAA_N; i++) {
             if (kMsaaSeq[i] == (int)lround(v)) idx = i;
         }
-        /* Wrap like a normal settings-menu cycle: OFF->2x->4x->8x->OFF, in
-         * both directions (left/right click and arrows all roll). */
-        idx = (idx + dir + 4) % 4;
+        /* Wrap like a normal settings-menu cycle: OFF->2x->4x->8x->16x->OFF,
+         * in both directions (left/right click and arrows all roll). */
+        idx = (idx + dir + MSAA_N) % MSAA_N;
         rowSet(r, (double)kMsaaSeq[idx]);
         break;
     }
@@ -1242,14 +1264,34 @@ static void rowAdjust(struct Row *r, int dir)
          * contract (edge-triggered by their callers: fresh key press / fresh
          * click / A-press -- the held-repeat paths below never re-fire them).
          * The quit row is the only non-reset ROW_ACTION left. */
-        if (isResetRow(r)) { rowActivateReset(r); break; }
+        if (isArmRow(r)) { rowActivateReset(r); break; }
         /* D293: same exit path as SDL_QUIT / Alt+F4 (video.c), just reachable
          * without OS window chrome or a keyboard. */
+        if (!strcmp(r->key, "__RestartGame")) {
+            /* D443: same orderly D344 quit; main.c's atexit handler saves
+             * config again and then relaunches (sysRelaunchSelf). */
+            sysLogPrintf(LOG_INFO, "optionsoverlay: restart game requested");
+            configSave();
+            videoRequestRestart("Restart game");
+            break;
+        }
         sysLogPrintf(LOG_INFO, "optionsoverlay: quit to desktop requested");
         configSave();
         videoRequestQuit("Quit to desktop");   /* D344: never exit() off the host thread */
         break;
     default: /* ROW_SLIDER */
+        if (!strcmp(r->key, "Video.FovScale")) {
+            /* D443: step the DISPLAYED horizontal degree, not the raw %:
+             * walk the stored % until the rounded degree value changes. */
+            int cur = (int)lround(portFovHorizDegrees((s32)lround(v)));
+            int p = (int)lround(v);
+            for (int k = 0; k < 20; k++) {
+                p += (dir >= 0) ? 1 : -1;
+                if ((int)lround(portFovHorizDegrees((s32)p)) != cur) break;
+            }
+            rowSet(r, (double)p);
+            break;
+        }
         rowSet(r, v + dir * r->step);
         break;
     }
@@ -1274,10 +1316,23 @@ static int isResetRow(const struct Row *r)
     return r->kind == ROW_ACTION && strncmp(r->key, "__Reset", 7) == 0;
 }
 
+/* D440: the preset rows share the reset rows' two-step arm ->
+ * confirm activation (and every edge-trigger guard that comes with it), but
+ * are NOT section resets (the GE_WSPROBE_RESET probe keeps isResetRow). */
+static int isPresetRow(const struct Row *r)
+{
+    return r->kind == ROW_ACTION && strncmp(r->key, "__Preset", 8) == 0;
+}
+
+static int isArmRow(const struct Row *r)
+{
+    return isResetRow(r) || isPresetRow(r);
+}
+
 int optionsRowIsReset(int i)
 {
     struct Row *r = rowAt(i);
-    return r && isResetRow(r);
+    return r && isArmRow(r);
 }
 
 /* ini rows reset to the port's C initializers (verified at implementation
@@ -1313,6 +1368,7 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Video.NativeWidescreen",      1 },  /* = 1 */
     { "Video.WidescreenAuto",        1 },  /* = 1 */
     { "Video.SafeAreaCrop",          1 },  /* = 1 */
+    { "Video.AspectMode",            0 },  /* = 0 (Window), D447 */
     { "Video.DrawDistance",        250 },  /* midpoint: 50/100 */
     { "Video.LodDistance",         250 },  /* midpoint: 50/100 */
     { "Video.CrosshairHide",      0 },   /* = 0 (on, N64) */
@@ -1394,11 +1450,19 @@ static void rowResetSection(int iReset)
  * paths; the held-repeat branches skip reset rows entirely. */
 static void rowActivateReset(struct Row *r)
 {
-    if (!isResetRow(r)) return;
+    if (!isArmRow(r)) return;
     uint64_t now = sysGetMicroseconds();
     int i = (int)(r - rows);
     if (s_resetArmedRow == i && now - s_resetArmedUs <= RESET_ARM_US) {
         s_resetArmedRow = -1;
+        if (isPresetRow(r)) {
+            /* D440: ini keys only (live-applied; persisted on
+             * close like any ini edit). Never window/resolution, bindings,
+             * volumes or save-file rows. */
+            videoApplyPreset(strcmp(r->key, "__PresetN64") == 0
+                             ? VIDEO_PRESET_N64 : VIDEO_PRESET_PORT);
+            return;
+        }
         rowResetSection(i);   /* exactly one commit per confirmed activation */
         return;
     }
@@ -1406,8 +1470,11 @@ static void rowActivateReset(struct Row *r)
     s_resetArmedUs = now;
     int h = i - 1;
     while (h >= 0 && rows[h].kind != ROW_HEADER) h--;
-    sysLogPrintf(LOG_INFO, "optionsoverlay: section reset '%s' armed (confirm within 3 s)",
-                 h >= 0 ? rows[h].label : "?");
+    if (isPresetRow(r))
+        sysLogPrintf(LOG_INFO, "optionsoverlay: '%s' armed (confirm within 3 s)", r->label);
+    else
+        sysLogPrintf(LOG_INFO, "optionsoverlay: section reset '%s' armed (confirm within 3 s)",
+                     h >= 0 ? rows[h].label : "?");
 }
 
 void optionsRowActivateReset(int i)
@@ -1429,6 +1496,34 @@ void optionsResetMaintain(int selRow)
 void optionsResetClear(void)
 {
     s_resetArmedRow = -1;
+}
+
+/* D440 GE_PRESETPROBE (dev, opt-in, one-shot at overlay init):
+ * drives both preset rows through the real arm -> confirm activation
+ * (rowActivateReset, the path F10 and the front screen use) and checks that
+ * the row is "Active" afterwards and the other preset is not. Mutates the
+ * live config like a real press -- use a throwaway data dir. */
+static void valueText(int i, char *out, int n);
+static void presetProbe(void)
+{
+    static const struct { const char *key; int which; } kRows[] = {
+        { "__PresetN64", VIDEO_PRESET_N64 }, { "__PresetPort", VIDEO_PRESET_PORT },
+    };
+    int bad = 0;
+    for (int k = 0; k < 2; k++) {
+        int i = rowIndexByKey(kRows[k].key);
+        char val[32] = "";
+        if (i < 0 || !optionsRowIsReset(i)) { bad++; continue; }
+        optionsRowActivateReset(i);                       /* arm */
+        valueText(i, val, sizeof(val));
+        if (strcmp(val, "Confirm") != 0) bad++;
+        optionsRowActivateReset(i);                       /* confirm -> apply */
+        valueText(i, val, sizeof(val));
+        if (!videoPresetIsActive(kRows[k].which) || strcmp(val, "Active") != 0) bad++;
+        if (videoPresetIsActive(!kRows[k].which)) bad++;
+        sysLogPrintf(LOG_INFO, "GE_PRESETPROBE: %s -> value '%s', bad=%d", kRows[k].key, val, bad);
+    }
+    sysLogPrintf(bad ? LOG_ERROR : LOG_INFO, "GE_PRESETPROBE: %s", bad ? "FAIL" : "PASS");
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1698,7 +1793,7 @@ void optionsOverlayHandleInput(void)
                 /* D356: reset actions are edge-triggered -- the held-repeat
                  * re-fires adjust rows but must never re-fire a reset (a held
                  * key could arm AND confirm, or commit repeatedly). */
-                if (s_section >= 0 && s_sel != 0 && !isResetRow(&rows[s_visIdx[s_sel]]))
+                if (s_section >= 0 && s_sel != 0 && !isArmRow(&rows[s_visIdx[s_sel]]))
                     rowAdjust(&rows[s_visIdx[s_sel]], adjDir);
             }
         } else {
@@ -1797,7 +1892,7 @@ void optionsOverlayHandleInput(void)
         if (rmb && !prevRmb && hoverVis >= 0 && !onClose && s_section >= 0) {
             int i = s_visIdx[hoverVis];
             s32 x0, x1;
-            if (!isResetRow(&rows[i]) && overlayControlSpan(i, &x0, &x1) &&
+            if (!isArmRow(&rows[i]) && overlayControlSpan(i, &x0, &x1) &&
                 ox >= x0 && ox < x1) {
                 s_sel = hoverVis;
                 overlayUpdateScroll();
@@ -1860,6 +1955,12 @@ static void valueText(int i, char *out, int n)
             /* D356: the label is the button; the value column shows the
              * armed state so the confirm step is discoverable. */
             snprintf(out, n, s_resetArmedRow == i ? "Confirm" : "");
+        } else if (isPresetRow(r)) {
+            /* D440: same arm/confirm cue, plus "Active" while every
+             * preset key already holds that preset's value. */
+            int which = strcmp(r->key, "__PresetN64") == 0 ? VIDEO_PRESET_N64 : VIDEO_PRESET_PORT;
+            snprintf(out, n, "%s", s_resetArmedRow == i ? "Confirm" :
+                                   videoPresetIsActive(which) ? "Active" : "");
         } else {
             snprintf(out, n, "[ENTER]");
         }
@@ -1892,6 +1993,14 @@ static void valueText(int i, char *out, int n)
             snprintf(out, n, "%s", r->names[idx]);
             return;
         }
+    }
+    if (!strcmp(r->key, "Video.FovScale")) {   /* D443/D357: horizontal degrees */
+        snprintf(out, n, "%d deg", (int)lround(portFovHorizDegrees((s32)lround(v))));
+        return;
+    }
+    if (!strcmp(r->key, "Input.MouseSensitivity")) {   /* D443/D357: raw 100 = 1.0x */
+        snprintf(out, n, "%.1fx", v / 100.0);
+        return;
     }
     if (r->kind == ROW_SLIDER && r->type == CONFIG_OPT_FLOAT) {
         snprintf(out, n, "%.2f", v);
@@ -1996,8 +2105,8 @@ static int overlayControlSpan(int i, s32 *x0, s32 *x1)
     if (r->kind == ROW_HEADER || (r->kind == ROW_SLIDER && !r->found))
         return 0;
     *x1 = o.right - 7;
-    if (isResetRow(r)) {
-        *x0 = o.left + 7; /* reset is an action, not a setting name */
+    if (isArmRow(r)) {
+        *x0 = o.left + 7; /* reset/preset is an action, not a setting name */
     } else {
         valueText(i, val, sizeof(val));
         s32 limit = r->kind == ROW_SLIDER ? o.barX0 :
@@ -2203,7 +2312,7 @@ Gfx *optionsOverlayEmit(void)
             gdl = drawBodyR(gdl, o.valueR, rowY, "(restart)", 0x498053ff);
         } else {
             u32 valueInk = (strncmp(val, "ON", 2) == 0 ||
-                            (isResetRow(r) && strcmp(val, "Confirm") == 0))
+                            (isArmRow(r) && strcmp(val, "Confirm") == 0))
                            ? 0xa0ffa0ff : ink;
             gdl = drawBodyR(gdl, o.valueR, rowY, val, valueInk);
         }

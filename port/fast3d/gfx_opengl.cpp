@@ -787,9 +787,21 @@ static void gfx_opengl_set_sampler_parameters(int tile, bool linear_filter, uint
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, max_filter);
 
+#ifdef PORT
+    /* D446: anisotropy is per-texture-object state. It was only ever SET
+     * (when mipmapped), never reset, so a GL texture id freed by
+     * gfx_texture_cache_delete_range and reused for a non-mipmapped texture
+     * (HUD / watch text glyphs) kept the previous owner's 4x -- llvmpipe then
+     * filters that glyph differently (+-1..2 per channel). Which id a texture
+     * inherits follows the unordered_map iteration order, i.e. the texture
+     * ADDRESSES, so the frame changed with the binary's data layout. Always
+     * write it: the level when mipmapped, 1 (off) otherwise. */
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, mipmaps ? (float)current_anisotropy_level : 1.0f);
+#else
     if (mipmaps) {
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, current_anisotropy_level);
     }
+#endif
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gfx_cm_to_opengl(cms));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gfx_cm_to_opengl(cmt));

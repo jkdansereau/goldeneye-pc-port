@@ -49,7 +49,11 @@ void alCSeqNew(ALCSeq *seq, u8 *ptr)
         {
             flagTmp = 1 << i;
             seq->validTracks |= flagTmp;
+#ifdef PORT
+            seq->curLoc[i] = (u8*)((uintptr_t)ptr + tmpOff);
+#else
             seq->curLoc[i] = (u8*)((u32)ptr + tmpOff);
+#endif
             seq->evtDeltaTicks[i] = __readVarLen(seq,i);
             /*__alCSeqGetTrackEvent(seq,i); prime the event buffers  */
         }

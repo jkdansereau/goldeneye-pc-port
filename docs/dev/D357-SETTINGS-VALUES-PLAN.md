@@ -1,6 +1,6 @@
 # D357 — Settings thresholds & values: align display units/defaults with the PD port + Turok PC
 
-Status: **PROPOSAL — awaiting sign-off** (2026-09-27). Baselines: the PD port
+Status: **IMPLEMENTED 2026-09-30 (findings D443) for mouse sens ×, deadzone whole-%, volume step, FOV degrees, MSAA 16×, Restart game; texture filter unchanged by decision; frame-rate cap deferred (§0 presets + custom = separate project). Approved with changes; see §0.** Proposal dated 2026-09-27. Baselines: the PD port
 checkout (`C:\Users\james\Source\Repos\pd_port`, `port/src/optionsmenu.c` +
 `input.c`/`video.c` config registrations), the Turok PC (Nightdive) list from
 the maintainer's notes (`docs/dev/notes/OPTIONS-MENU-PLAN.md` §6 — *taken from
@@ -13,6 +13,23 @@ Companion change landed with this doc's review: the terminology settled on
 front top row reads **Profile**, the per-file row tag reads
 **"(per profile)"** and the F10 unavailable value reads **"Select a
 profile"** (§4).
+
+## 0. Sign-off (2026-09-30) — these override §3 where they differ
+
+- **FOV:** display in **degrees** (the PC standard). Storage stays unchanged.
+- **Frame rate cap:** presets **30 / 60 / 90 / 120 / 144 / 240 / Uncapped**,
+  **plus** an arbitrary custom value. This keeps the ini's free range and
+  adds a custom entry in the menu, instead of the plan's presets-only grid.
+- **MSAA:** add **16×**.
+- **Mouse invert:** stays a separate On/Off toggle.
+- **Texture filter: do NOT rename.** The §3 premise ("3-point *is*
+  trilinear") is wrong. 3-point is the N64's own 3-sample bilinear
+  approximation, and "Linear" and "Bilinear" name the same thing. Keep
+  "N64 3-point" and check the current enum strings before touching them.
+- **Refresh §3's "Now" column before implementing.** The stick deadzone is
+  already split L/R, and the draw/LOD defaults are 250, not 150.
+- Related QoL, tracked separately in ROADMAP §5a: a **Restart game** action
+  next to Quit to desktop, for restart-flagged rows such as MSAA.
 
 ## 1. Problem
 
@@ -64,6 +81,23 @@ volume trio (master still M3-backlog).
 
 Current state from `optionsoverlay.c` `rows[]` + the `configRegister*`
 ranges (2026-09-27). "Display" = what the value column shows today.
+
+### Implemented 2026-09-30 (D443) -- refreshed "Now" vs. result
+
+The per-row tables below keep the 2026-09-27 audit text for history. Actual
+pre-change state and what shipped (all port-only; no default or storage change,
+so `kResetDefaults` is untouched and `GE_WSPROBE_RESET` stays failures=0):
+
+| Row | Actual "Now" (pre-D443) | Shipped |
+|---|---|---|
+| Mouse horizontal sensitivity | 1-500 · step 5 · shown as calibrated `N/100` (50/100 at raw 100) | UI range 10-300, step 10, shown `%.1fx` (raw/100), linear bar; left the calibrated mapping |
+| Stick deadzone L / R | already split `Input.PadDeadzoneL/R` 0-30000 · step 500 · calibrated `N/100` | step 300 + `dispDiv=300` `%` (whole-% grid, no key migration); left the calibrated mapping |
+| Music / FX volume | step 128, `/328` | step 328 (1 display-%) |
+| FOV | `Video.FovScale` 50-150 · step 5 · `%` | row "Field of view", horizontal degrees (see D443 formula); key/storage unchanged, step walks the displayed degree |
+| Anti-aliasing | 1/2/4/8 · default 2 (C initialiser) | + 16x; range 1-16 (GL clamps to `GL_MAX_SAMPLES`) |
+| Texture filter | Nearest / Bilinear / 3-Point | unchanged (decision §0) |
+| Frame-rate cap | 30/60 toggle (sim ticks at 60 Hz) | unchanged this round |
+| Restart game | -- | new action row after Quit to desktop (both UIs, shared table) |
 
 ### INPUT
 

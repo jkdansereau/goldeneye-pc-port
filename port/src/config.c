@@ -272,6 +272,60 @@ static void applyKV(const char *dottedKey, const char *val)
     sysLogPrintf(LOG_NOTE, "config: unknown key '%s' (ignored)", dottedKey);
 }
 
+/* Preset plumbing (Original-N64 / port-defaults presets, D440;
+ * the D283 Deck preset): set / read a registered numeric option by its
+ * dotted key, with the same clamp a file load applies. Returns 1 if the key
+ * is registered as an int/uint/float option, 0 otherwise (strings are not
+ * preset material). */
+int configSetValue(const char *key, double v)
+{
+    for (int i = 0; i < numIntOpts; i++) {
+        if (ci_eq(intOpts[i].key, key)) {
+            int iv = (int)(v < 0 ? v - 0.5 : v + 0.5);
+            if (intOpts[i].min != intOpts[i].max) {
+                if (iv < intOpts[i].min) iv = intOpts[i].min;
+                if (iv > intOpts[i].max) iv = intOpts[i].max;
+            }
+            *intOpts[i].value = iv;
+            return 1;
+        }
+    }
+    for (int i = 0; i < numUIntOpts; i++) {
+        if (ci_eq(uintOpts[i].key, key)) {
+            unsigned int uv = (v <= 0) ? 0u : (unsigned int)(v + 0.5);
+            if (uintOpts[i].min != uintOpts[i].max) {
+                if (uv < uintOpts[i].min) uv = uintOpts[i].min;
+                if (uv > uintOpts[i].max) uv = uintOpts[i].max;
+            }
+            *uintOpts[i].value = uv;
+            return 1;
+        }
+    }
+    for (int i = 0; i < numFloatOpts; i++) {
+        if (ci_eq(floatOpts[i].key, key)) {
+            float fv = (float)v;
+            if (floatOpts[i].min != floatOpts[i].max) {
+                if (fv < floatOpts[i].min) fv = floatOpts[i].min;
+                if (fv > floatOpts[i].max) fv = floatOpts[i].max;
+            }
+            *floatOpts[i].value = fv;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int configGetValue(const char *key, double *out)
+{
+    for (int i = 0; i < numIntOpts; i++)
+        if (ci_eq(intOpts[i].key, key)) { *out = *intOpts[i].value; return 1; }
+    for (int i = 0; i < numUIntOpts; i++)
+        if (ci_eq(uintOpts[i].key, key)) { *out = *uintOpts[i].value; return 1; }
+    for (int i = 0; i < numFloatOpts; i++)
+        if (ci_eq(floatOpts[i].key, key)) { *out = *floatOpts[i].value; return 1; }
+    return 0;
+}
+
 void configLoad(void)
 {
     const char *path = sysResolvePath(INI_PATH);

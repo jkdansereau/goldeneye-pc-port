@@ -28,6 +28,7 @@
 
 #ifdef PORT
 #include <stdlib.h>
+#include "envflag.h"
 #endif
 
 
@@ -221,7 +222,11 @@ Gfx *sub_GAME_7F007F30(Gfx *gdl, s32 count, Mtxf *matrix)
 
             if (gunbarrelTimer == BOND_EYE_ANIM_START)
             {
+#ifdef PORT
+                modelSetAnimation(chrModelInstance, (struct ModelAnimation *) ((s32) &ANIM_DATA_bond_eye_fire + (uintptr_t) &ptr_animation_table->data), 0, 2.0f, 0.910000026f, 16.0f);
+#else
                 modelSetAnimation(chrModelInstance, (struct ModelAnimation *) ((s32) &ANIM_DATA_bond_eye_fire + (s32) &ptr_animation_table->data), 0, 2.0f, 0.910000026f, 16.0f);
+#endif
             }
 
             if (gunbarrelTimer == BOND_EYE_ANIM_SPEEDUP)
@@ -559,7 +564,11 @@ void initializeGunBarrelIntro(u8 *gfxBuffer, s32 bufferSize)
     modelSetAnimPlaySpeed(chrModelInstance, S_7F008E80_ANIM_SPEED, 0.0f);
 #undef S_7F008E80_ANIM_SPEED
     
+#ifdef PORT
+    animation = (struct ModelAnimation*)((uintptr_t)ptr_animation_table + (s32)&ANIM_DATA_bond_eye_walk);
+#else
     animation = (struct ModelAnimation*)((s32)ptr_animation_table + (s32)&ANIM_DATA_bond_eye_walk);
+#endif
     startframe = animation->unk04 - 0x44;
     while (startframe < 0)
     {
@@ -624,7 +633,7 @@ void clearChrGunModelInstances(void)
 */
 Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
 #ifdef PORT
-    if (getenv("GE_D63")) {
+    if (GE_ENVFLAG("GE_D63")) {
         static int n = 0;
         if ((++n % 200) == 1)
             osSyncPrintf("D63 gb-render call #%d mode=%d slot=%08x\n",

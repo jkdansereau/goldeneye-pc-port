@@ -20,9 +20,17 @@ extern "C" {
 #endif
 
 /* Initialize the window + GL context. Returns 0 on success. */
-/* Steam Deck first-run preset; must run after the config constructor and
- * before configLoad() (see video.c). No-op effect once an ini exists. */
-void videoApplySteamOSDefaults(void);
+/* D283 Steam Deck preset (hardware-detected; GE_FAKE_DECK overrides); runs
+ * right after configLoad(), at most once per ini (see video.c). */
+void videoApplySteamDeckPreset(void);
+/* D440: "Original N64" / "Port defaults" settings presets. An
+ * action, not a mode: writes the existing config keys (see the table in
+ * video.c), queues the live-apply for Video.* keys, and returns how many
+ * values changed. videoPresetIsActive reports whether every key currently
+ * holds that preset's value. */
+enum { VIDEO_PRESET_PORT = 0, VIDEO_PRESET_N64 = 1 };
+int  videoApplyPreset(int which);
+int  videoPresetIsActive(int which);
 int  videoInit(void);
 void videoDestroy(void);
 
@@ -43,6 +51,12 @@ void videoPumpEvents(void);
  * could be inside the GL driver (the 0x119 bugchecks). */
 void videoRequestQuit(const char *why);
 int  videoQuitRequested(void);
+/* D443: orderly quit + relaunch (main.c atexit reads videoRestartRequested). */
+void videoRequestRestart(const char *why);
+int  videoRestartRequested(void);
+/* D443: horizontal FOV in degrees for a Video.FovScale percent, at the
+ * projection aspect the game currently uses (menu display only). */
+f32  portFovHorizDegrees(s32 pct);
 
 /* The game's native video mode (NTSC 640x480, PAL 640x400). fast3d scales
  * N64 screen coordinates into window pixels using this. */
@@ -70,6 +84,9 @@ void videoRequestLiveConfigForKey(const char *key);
 void videoRequestWindowSize(int w, int h);
 void videoRequestFullscreen(int on);
 void videoGetWindowSize(int *w, int *h);
+/* D447: the output rect as fractions of the window (0..1, top-left origin);
+ * (0,0,1,1) unless Video.AspectMode = Original is letter/pillarboxing. */
+void videoGetOutputRectFrac(double *x0, double *y0, double *x1, double *y1);
 void videoGetDesktopSize(int *w, int *h);
 int  videoIsFullscreen(void);
 

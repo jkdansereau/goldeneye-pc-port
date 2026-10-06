@@ -135,8 +135,10 @@ Linux, including Steam Deck.
 (what you'll notice, impact, workarounds). The short version: no multiplayer
 yet, NTSC-U ROMs only, no macOS/ARM builds, and a couple of cosmetic defects.
 
-> **Before enabling `All unlocked`, back up `data/ge007.eep`.** Saving with it
-> on can permanently write fake unlocks into your save (D387).
+> **Before first using `All unlocked`, back up `data/ge007.eep`.** Saves made
+> with it on no longer write the fake unlocks to disk (D387), but a save that an
+> earlier build already polluted stays polluted, and cheats you earn while it is
+> on are not kept. It applies at the next launch.
 
 ### Steam Deck
 
@@ -144,15 +146,15 @@ The Linux bundle is the Deck build. SFTP it over from your PC, or download
 it straight from the [releases page](https://github.com/jkdansereau/goldeneye-pc-port/releases) on the Deck itself:
 extract, drop your ROM in `data/`, launch it once (the first run generates the
 derived assets), and add the executable as a non-Steam game. SDL2 is bundled, so no dependencies need
-installing. On SteamOS the first launch seeds `ge007.ini` with Deck-friendly
-defaults: native 1280×800 fullscreen, VSync, 2× MSAA, and 250% draw/LOD
-distance (the N64-authored fade distances read short on the close-up 7"
-panel); everything is changeable in the options overlay and persists
-afterwards. **Do that first launch in Game Mode, not Desktop Mode** — an ini
-created by an earlier Desktop Mode launch (e.g. while testing before adding
-it as a Steam shortcut) permanently skips the Deck preset, since any
-existing ini always wins over it (D283). If your resolution isn't 1280×800
-on first Game Mode boot, just set it manually: F10 → *Resolution*. The
+installing. The port detects a Steam Deck by its hardware id (Linux DMI, or
+`STEAMOS`) and, once per `ge007.ini`, applies Deck-friendly display defaults:
+native 1280×800 fullscreen. VSync, 2× MSAA and 250% draw/LOD distance are
+already the port's defaults (the N64-authored fade distances read short on the
+close-up 7" panel). The preset only applies while the display settings are still
+untouched, so an ini created earlier (for example by a Desktop Mode test launch)
+no longer skips it for good (D283); everything is changeable in the options
+overlay and persists afterwards. If your resolution isn't 1280×800 on first
+boot, just set it manually: F10 → *Resolution*. The
 renderer is CPU-bound (software RSP); expect original N64-era performance at
 60 fps rather than more. This release was playtested on real Deck hardware;
 the v0.1.0-era Facility crash (D203) did not recur: its root cause was
@@ -182,6 +184,9 @@ items, and which ones are waiting on a decision, lives in one place:
 - The remaining small accuracy differences (audio timbre, a few cosmetic
   rendering details).
 - **macOS/ARM builds** and controller-button rebinding.
+- **Ongoing security/fidelity review**: a review pass after each release to keep
+  the [security policy](.github/SECURITY.md) and the known-issues list current,
+  moving the mechanical parts (dependency/secret scanning) toward automation.
 
 This is spare-time work, so there's no timeline. Opt-in extras beyond the N64
 game (LAN play, bots, HD textures) come after feature-complete, if at all.

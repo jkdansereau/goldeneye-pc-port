@@ -242,7 +242,11 @@ void texReset(void)
 
     size = (u32)&_GlobalimagetableSegmentEnd - (u32)&_GlobalimagetableSegmentStart;
     pGlobalimagetable = mempAllocBytesInBank(size + 0x1000, MEMPOOL_STAGE);
+#ifdef PORT
+    pGlobalimagetable = (s32 *)(((uintptr_t)pGlobalimagetable + 0xFFFU) & ~(uintptr_t)0xFFF);
+#else
     pGlobalimagetable = ((u32)pGlobalimagetable + 0xFFFU) & 0xFFFFF000;
+#endif
 
     romCopy(pGlobalimagetable, &_GlobalimagetableSegmentRomStart, size);
 

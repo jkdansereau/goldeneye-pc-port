@@ -1740,34 +1740,6 @@ static void skyPortCaptureTile(Gfx *start, Gfx *end)
     }
 }
 
-/* Re-emit every captured tile with shifts/shiftt replaced. k == 0 on both axes
- * restores the original commands, which is how the sky hands the tiles back
- * unshifted for whatever draws next. */
-static Gfx *skyPortEmitTileShift(Gfx *gdl, s32 kS, s32 kT)
-{
-    s32 i;
-
-    for (i = 0; i < SKY_NUM_CAPTURED_TILES; i++)
-    {
-        Gfx cmd;
-
-        if (!s_skyTileCmdOk[i])
-            continue;
-
-        cmd = s_skyTileCmd[i];
-        cmd.words.w1 &= ~((u32) SKY_SETTILE_FIELD_MASK << SKY_SETTILE_SHIFTT_SHIFT);
-        cmd.words.w1 &= ~((u32) SKY_SETTILE_FIELD_MASK);
-        if (kT > 0)
-            cmd.words.w1 |= (u32) (16 - kT) << SKY_SETTILE_SHIFTT_SHIFT;
-        if (kS > 0)
-            cmd.words.w1 |= (u32) (16 - kS);
-
-        *gdl++ = cmd;
-    }
-
-    return gdl;
-}
-
 /* Smallest k in [0, SKY_TC_MAX_SHIFT] for which the whole span still fits an
  * s16 once divided by 2^k. `span` is the fan's S or T extent in S10.5 units;
  * the +SKY_TC_WRAP covers the fold's rebase to a tile boundary. Normally
@@ -1895,22 +1867,11 @@ static void skyPortForceFanShift(s32 kS, s32 kT)
  */
 static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
 {
-    Vtx *vtx = dynAllocateVertices(nverts < 3 ? 3 : nverts);
-    Mtxf projf;
-    Mtx *proj = dynAllocateMatrix();
-    Mtx *mv = dynAllocateMatrix();
     f32 l = getPlayer_c_screenleft();
     f32 t = getPlayer_c_screentop();
     f32 r = l + getPlayer_c_screenwidth();
     f32 b = t + getPlayer_c_screenheight();
-    f32 maxAbsW, wScale;
     s32 i;
-    /* D227 (M-100). Fan-wide when skyPortBeginFan() ran (the only callers
-     * today); a lone primitive falls back to sizing the shift off its own
-     * span, which is self-consistent because k never changes the decoded
-     * coordinate -- only its granularity. */
-    s32 tcShiftS = s_skyFanShiftS;
-    s32 tcShiftT = s_skyFanShiftT;
 
     /* D176(a) Defect 1 (M-82), as corrected by D227 (M-100): unk20/unk24 are
      * S/T for the 64x64 cloud tile (s_skywaterimages[0]) in Vtx.tc's own S10.5
@@ -1934,19 +1895,13 @@ static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
     }
     else
     {
-        f32 maxS, maxT;
-
-        foldS = maxS = v[0]->unk20;
-        foldT = maxT = v[0]->unk24;
+        foldS = v[0]->unk20;
+        foldT = v[0]->unk24;
         for (i = 1; i < nverts; i++)
         {
             if (v[i]->unk20 < foldS) foldS = v[i]->unk20;
             if (v[i]->unk24 < foldT) foldT = v[i]->unk24;
-            if (v[i]->unk20 > maxS) maxS = v[i]->unk20;
-            if (v[i]->unk24 > maxT) maxT = v[i]->unk24;
         }
-        tcShiftS = skyPortPickShift(maxS - foldS);
-        tcShiftT = skyPortPickShift(maxT - foldT);
         foldS = (f32) ((s32) floorf(foldS / (f32) SKY_TC_WRAP) * SKY_TC_WRAP);
         foldT = (f32) ((s32) floorf(foldT / (f32) SKY_TC_WRAP) * SKY_TC_WRAP);
     }
@@ -1971,43 +1926,15 @@ static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
      * horizon edge. Fix: build a real perspective (w != 1) transform so the
      * existing fast3d vertex/triangle pipeline (same one every other
      * textured draw in the game already relies on) does the perspective
-     * divide for us, exactly like the RDP would.
-     *
-     * ob[] is s16 so we can't store camera-space w (unk0c, up to ~2e5 near
-     * the horizon) directly; instead each vertex's NDC xy is pre-multiplied
-     * by its own w/wScale (wScale keeps the product in s16 range) and a
-     * custom projection matrix multiplies that by wScale again for clip.x/y
-     * and routes ob[2] (=w/wScale) through to clip.w -- see the matrix
-     * comment below. Z is unused for the sky (draws first, into a cleared
-     * buffer -- M-46) so clip.z is left 0.
+     * divide for us, exactly like the RDP would. Z is unused for the sky
+     * (draws first, into a cleared buffer -- M-46) so clip.z is left 0.
      */
-    /* D227 (M-95): prefer the whole-fan wScale set by skyPortBeginFan() so
-     * every triangle in a multi-call fan quantizes its shared vertices
-     * against the same scale (see the comment above skyPortBeginFan()).
-     * Falls back to the old per-call-local computation if unset. */
-    if (s_skyFanWScale > 0.0f)
-    {
-        wScale = s_skyFanWScale;
-    }
-    else
-    {
-        maxAbsW = 0.0f;
-        for (i = 0; i < nverts; i++)
-        {
-            f32 aw = SKYABS(v[i]->unk0c);
-            if (aw > maxAbsW) maxAbsW = aw;
-        }
-        wScale = (maxAbsW > 30000.0f) ? (maxAbsW / 30000.0f) : 1.0f;
-    }
-
     /* D245 (M-201): full-precision path. Hand fast3d the clip-space position
      * (ndcX*w, ndcY*w, 0, w) and the folded S/T as floats (G_FLOATVTX_EXT,
      * port/include/floatvtx.h) instead of squeezing them through s16 Vtx
      * ob/tc: no wScale position quantisation, no 2^k tc shift. The fold is
      * still applied (a multiple of the repeat period, exact under wrapping)
-     * to keep the float magnitudes small. GE_D245_OLDVTX=1 restores the old
-     * s16 route for A/B. */
-    if (!GE_ENVFLAG("GE_D245_OLDVTX"))
+     * to keep the float magnitudes small. */
     {
         PortFloatVtx *fv = (PortFloatVtx *) dynAllocateVertices(2 * (nverts < 3 ? 3 : nverts));
 
@@ -2043,88 +1970,7 @@ static Gfx *skyPortRenderPoly(Gfx *gdl, SkyRelated38 **v, s32 nverts)
         {
             gSP1Triangle(gdl++, 0, 1, 2, 0);
         }
-
-        return gdl;
     }
-
-    guMtxIdentF(projf.m);
-    /* row = input axis (matches this codebase's row-vector * M convention,
-     * e.g. sub_GAME_7F097388 / gfx_pc.cpp's own MP_matrix use):
-     *   clip.x = ob[0]*wScale                = (ndcX*w/wScale)*wScale = ndcX*w
-     *   clip.y = ob[1]*wScale                = ndcY*w
-     *   clip.z = 0
-     *   clip.w = ob[2]*wScale                = (w/wScale)*wScale     = w
-     * so the GPU's normal perspective divide recovers ndcX/ndcY at each
-     * vertex exactly (screen position unchanged) while interpolating
-     * everything else -- tc included -- with real 1/w weighting. */
-    projf.m[0][0] = wScale;
-    projf.m[1][1] = wScale;
-    projf.m[2][2] = 0.0f;
-    projf.m[2][3] = wScale;
-    projf.m[3][3] = 0.0f;
-    guMtxF2L(projf.m, proj);
-    guMtxIdent(mv);
-
-    for (i = 0; i < nverts; i++)
-    {
-        f32 screenX = v[i]->unk28 * 0.25f;
-        f32 screenY = v[i]->unk2c * 0.25f;
-        f32 ndcX = 2.0f * ((screenX - l) / (r - l)) - 1.0f;
-        f32 ndcY = 1.0f - 2.0f * ((screenY - t) / (b - t));
-        f32 wv = v[i]->unk0c / wScale;
-
-        vtx[i].v.ob[0] = (s16) (ndcX * wv);
-        vtx[i].v.ob[1] = (s16) (ndcY * wv);
-        vtx[i].v.ob[2] = (s16) wv;
-        vtx[i].v.flag  = 0;
-        /* D227 (M-100): unk20/unk24 are ALREADY in tc's own S10.5 units, so
-         * they go through 1:1 -- see the unit note above skyPortBeginFan().
-         * The 2^k divide is the overflow safety valve, normally k == 0; the
-         * tile shift emitted below multiplies it back out. */
-        vtx[i].v.tc[0] = (s16) ((v[i]->unk20 - foldS) / (f32) (1 << tcShiftS));
-        vtx[i].v.tc[1] = (s16) ((v[i]->unk24 - foldT) / (f32) (1 << tcShiftT));
-        vtx[i].v.cn[0] = (u8) v[i]->r;
-        vtx[i].v.cn[1] = (u8) v[i]->g;
-        vtx[i].v.cn[2] = (u8) v[i]->b;
-        vtx[i].v.cn[3] = (u8) v[i]->a;
-
-        /* D227 (M-100) probe: dumps the per-vertex S/T/w actually handed to
-         * the rasteriser. This is what proved the seam is s16 tc overflow --
-         * one sky quad spans ~30,000 texels in S and T, but tc is S10.5, so
-         * (S - foldS) * 32 only holds +/-1024 texels. Same env-gate style as
-         * the GE_D176 probes above. */
-        if (GE_ENVFLAG("GE_D227V")) {
-            static int n = 0;
-            if (n++ < 200)
-                fprintf(stderr, "D227V poly nv=%d i=%d w=%.1f 1/w=%.6g sx=%.1f sy=%.1f S=%.1f T=%.1f "
-                        "kS=%d kT=%d tc=%d,%d tileOk=%d\n",
-                        nverts, i, (double) v[i]->unk0c, (double) v[i]->unk34,
-                        (double) screenX, (double) screenY,
-                        (double) v[i]->unk20, (double) v[i]->unk24,
-                        tcShiftS, tcShiftT, vtx[i].v.tc[0], vtx[i].v.tc[1],
-                        (s32) s_skyTileCmdOk);
-        }
-    }
-
-    gSPMatrix(gdl++, osVirtualToPhysical(proj), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
-    gSPMatrix(gdl++, osVirtualToPhysical(mv), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPClearGeometryMode(gdl++, G_LIGHTING | G_CULL_BOTH | G_FOG);
-    gSPSetGeometryMode(gdl++, G_SHADE | G_SHADING_SMOOTH);
-    gdl = skyPortEmitTileShift(gdl, tcShiftS, tcShiftT);
-    gSPVertex(gdl++, osVirtualToPhysical(vtx), nverts, 0);
-
-    if (nverts >= 4)
-    {
-        gSP2Triangles(gdl++, 0, 1, 3, 0, 3, 2, 0, 0);
-    }
-    else
-    {
-        gSP1Triangle(gdl++, 0, 1, 2, 0);
-    }
-
-    /* Hand the tile back unshifted so nothing downstream inherits it. */
-    if (tcShiftS > 0 || tcShiftT > 0)
-        gdl = skyPortEmitTileShift(gdl, 0, 0);
 
     return gdl;
 }

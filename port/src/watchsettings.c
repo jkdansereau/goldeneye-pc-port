@@ -212,10 +212,10 @@ static int stageActive(void)
  * player is viewing (selected_folder_num, set by file select) > the first
  * valid folder. The first two are pure reads of stable menu state, safe from
  * the F10 input thread (D350 gate: no GE writes from it; only chosen is
- * written, under uiLock). A fresh PC eeprom is booted with a BLANKSAVEDATA
- * slot per folder (libultra.c D259/D281 patch), so a default almost always
- * resolves; the game-thread fallback in watchSettingsGameTick builds one if
- * it does not. */
+ * written, under uiLock). D442 removed the boot-time BLANKSAVEDATA slot patch:
+ * a fresh PC eeprom now has no valid slot until the player creates a profile,
+ * so the default resolves only once one exists; the game-thread fallback in
+ * watchSettingsGameTick builds a blank file 1 when none does. */
 static int frontFolder(void)
 {
     SDL_AtomicLock(&uiLock);
@@ -540,10 +540,10 @@ void watchSettingsGameTick(void)
     if (!stageActive() || !g_CurrentPlayer) {
         wsStageWasActive = 0;
         /* D354: one-shot fallback -- if not a single folder holds a valid
-         * save (wiped/corrupt eeprom), build the game's own blank save for
+         * save (wiped/corrupt/fresh eeprom), build the game's own blank save for
          * file 1 (game thread, so the EEPROM write is on the owning thread)
-         * and default to it. A fresh PC eeprom never reaches this: boot
-         * patches in a BLANKSAVEDATA slot per folder (libultra.c D259/D281).
+         * and default to it. (D442 removed the old boot-time BLANKSAVEDATA
+         * patch, so a fresh eeprom does reach this.)
          * frontFolder() re-checks, so an explicit chooser pick is respected. */
         if (!stageActive() && frontFolder() < FOLDER1) {
             static int wsAutoInitTried = 0;

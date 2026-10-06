@@ -1,5 +1,13 @@
-/* d318watchdog.c -- D318: port-side deadlock recovery for the Facility
- * (level_34) Ourumov/Trevelyan execution softlock.
+/* d318watchdog.c -- D318: port-side pin DETECTOR for the Facility
+ * (level_34) Ourumov/Trevelyan execution softlock and its D320 siblings.
+ *
+ * DETECT-AND-LOG ONLY (strip-temp-probes pass, 2026-09-30): D329 fixed the
+ * cause (a tick-granularity anim-pin divergence in model.c, Rule-2), so the
+ * pin no longer occurs. The recovery action described below (re-seeding the
+ * attack via sub_GAME_7F025560) has been REMOVED; the watchdog now only logs
+ * `D318W:` lines if the signature ever reappears, so a regression of D329 is
+ * visible in a playtest log instead of being silently papered over. The
+ * history below is kept for context.
  *
  * What this is (full writeup: docs/dev/findings.md, D318):
  *
@@ -113,7 +121,7 @@
  * action breaks the state. Full re-arm only when the signature has been
  * absent for D318_REARM_TICKS.
  *
- * Opt out (research only): GE_D318W=0
+ * Opt out (silences the detector): GE_D318W=0
  */
 #include <stdlib.h>
 #include <string.h>
@@ -135,11 +143,6 @@ extern s32 chraiGetAIListID(AIRecord *AIList, bool *isGlobalAIList);
 /* src/bondaicommands.h:467 -- kept local so this port file doesn't pull in
  * the AI-command header just for one bit constant. */
 #define D320_TARGET_AIM_ONLY 0x0020 /* "Aim at target instead of firing"   */
-
-/* chraction.c internal (not in chraction.h): the fresh-attack entry point.
- * Signature from the definition; call form mirrors chrlvTickAttack's own
- * re-init at chraction.c:7401. */
-extern void sub_GAME_7F025560(ChrRecord *self, s32 attack_type, s32 arg2);
 
 #define D318_LIST_AI22       0x0417 /* Ourumov's execution list (ai_22)      */
 #define D318_OURUMOV_CHR     78
@@ -232,7 +235,7 @@ void d318WatchdogTick(void)
     static s32   s_run[D318W_NENTRIES];   /* sig-held ticks per entry         */
     static s32   s_absent[D318W_NENTRIES];/* sig-absent ticks per entry       */
     static s32   s_cool[D318W_NENTRIES];  /* ticks since last fire (sig up)   */
-    static s32   s_fires[D318W_NENTRIES]; /* rescues this occurrence          */
+    static s32   s_fires[D318W_NENTRIES]; /* reports this occurrence          */
     static bool  s_fired[D318W_NENTRIES];
     s32 e, i;
 
@@ -286,13 +289,11 @@ void d318WatchdogTick(void)
                 s_run[e]++;
                 if (s_run[e] >= D318_DEADLOCK_TICKS)
                 {
-                    osSyncPrintf("D318W: t=%d [%s] anim pin confirmed -- re-initializing "
-                                 "c%d's attack (sub_GAME_7F025560 atk=0x%x ent=%d) to break it\n",
+                    osSyncPrintf("D318W: t=%d [%s] anim pin CONFIRMED on c%d (atk=0x%x ent=%d) "
+                                 "-- detect-only, no recovery; D329 should prevent this, please report\n",
                                  (int)g_GlobalTimer, en->tag, (int)hit->chrnum,
                                  (unsigned)hit->act_attack.attacktype,
                                  (int)hit->act_attack.entityid);
-                    sub_GAME_7F025560(hit, (s32)hit->act_attack.attacktype,
-                                      (s32)hit->act_attack.entityid);
                     s_fired[e] = TRUE;
                     s_fires[e] = 1;
                     s_cool[e]  = 0;
@@ -300,16 +301,14 @@ void d318WatchdogTick(void)
             }
             else if (++s_cool[e] >= D318W_REFIRE_TICKS)
             {
-                /* The beat re-rolled and re-pinned (see header). No cap: */
+                /* Signature still held: periodic reminder, detect-only. */
                 s_cool[e] = 0;
-                osSyncPrintf("D318W: t=%d [%s] re-pin rescued (%d) -- c%d off=%d "
+                osSyncPrintf("D318W: t=%d [%s] pin still held (report %d) -- c%d off=%d "
                              "atk=0x%x ent=%d\n",
                              (int)g_GlobalTimer, en->tag, s_fires[e] + 1,
                              (int)hit->chrnum, (int)hit->aioffset,
                              (unsigned)hit->act_attack.attacktype,
                              (int)hit->act_attack.entityid);
-                sub_GAME_7F025560(hit, (s32)hit->act_attack.attacktype,
-                                  (s32)hit->act_attack.entityid);
                 s_fires[e]++;
             }
         }
@@ -317,7 +316,7 @@ void d318WatchdogTick(void)
         {
             s_run[e]  = 0;
             s_cool[e] = 0;
-            /* Once the signature has been clear for a while after a fire,
+            /* Once the signature has been clear for a while after a report,
              * re-arm so a later replay of the level in the same process
              * (AllUnlocked) is still covered. */
             if (s_fired[e] && ++s_absent[e] >= D318_REARM_TICKS)

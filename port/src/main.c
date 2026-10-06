@@ -85,6 +85,13 @@ static void portAtExit(void)
      * abort(), which does not run atexit handlers. */
     videoSaveWindowState();
     configSave();
+    /* D443: Restart game -- runs only on the orderly D344 exit path, after the
+     * ini is written, so the new instance reads the saved settings. */
+    if (videoRestartRequested()) {
+        if (sysRelaunchSelf() != 0) {
+            sysLogPrintf(LOG_ERROR, "restart: relaunch failed");
+        }
+    }
 }
 
 int main(int argc, char **argv)
@@ -120,15 +127,12 @@ int main(int argc, char **argv)
         else                  sysLogPrintf(LOG_NOTE, "fresh: no %s to remove", eep);
     }
 
-    /* 1. Platform + config + filesystem. Steam Deck / SteamOS: seed the
-     * first-run preset (native 1280x800 fullscreen, MSAA 2, midpoint draw/LOD
-     * distances) before the load so a missing ini saves these values; an
-     * existing ini always wins. */
-    if (getenv("STEAMOS")) {
-        sysLogPrintf(LOG_INFO, "video: SteamOS detected; applying Steam Deck first-run defaults");
-        videoApplySteamOSDefaults();
-    }
+    /* 1. Platform + config + filesystem. D283: the Steam Deck preset runs
+     * AFTER the load (hardware-detected, once per ini, only while the display
+     * keys are untouched), so a first launch from Desktop Mode no longer
+     * skips it for good. */
     configLoad();
+    videoApplySteamDeckPreset();
     atexit(portAtExit);   /* persist config + window geometry on clean exit */
 
     /* 1a. D257: Game.AllUnlocked (default OFF; F10 'All unlocked' enables)
@@ -161,8 +165,9 @@ int main(int argc, char **argv)
 
     /* 2. Load the ROM and map segments. */
     if (romdataInit() != 0) {
-        sysLogPrintf(LOG_ERROR, "Failed to load ROM (expected a .z64 in the "
-                    "data/ dir, see README)");
+        sysLogPrintf(LOG_ERROR, "Failed to load the ROM (no .z64 in the data/ dir, "
+                    "asset conversion failed, or it could not be mapped): "
+                    "see the earlier log lines for the cause");
         return 1;
     }
 

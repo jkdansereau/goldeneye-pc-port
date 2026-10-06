@@ -507,7 +507,11 @@ void chrlvKneelingAnimationRelated(ChrRecord *self)
 
         if ((s32)objecthandlerGetModelAnim(self->model) == (s32)&ANIM_DATA_fire_kneel_forward_one_handed_weapon_slow + (s32)&ptr_animation_table->data)
         {
+#ifdef PORT
+            modelSetAnimation(self->model, (struct ModelAnimation*)((s32)&ANIM_DATA_fire_kneel_forward_one_handed_weapon_slow + (uintptr_t)&ptr_animation_table->data), (s32) self->model->gunhand, 109.0f, chrlvGetGuard007SpeedRating(self, 0.5f, 0.8f), 16.0f);
+#else
             modelSetAnimation(self->model, (struct ModelAnimation*)((s32)&ANIM_DATA_fire_kneel_forward_one_handed_weapon_slow + (s32)&ptr_animation_table->data), (s32) self->model->gunhand, 109.0f, chrlvGetGuard007SpeedRating(self, 0.5f, 0.8f), 16.0f);
+#endif
             modelSetAnimEndFrame(self->model, 140.0f);
         }
         else
@@ -2822,7 +2826,11 @@ s32 chrlvExplosionDamage(ChrRecord *self, coord3d *arg1, f32 damage, s32 arg3)
 
         modelSetAnimation(
             self_model,
+#ifdef PORT
+            (struct ModelAnimation *) ((s32)sp38->anonymous_0 + (uintptr_t)&ptr_animation_table->data),
+#else
             (struct ModelAnimation *) ((s32)sp38->anonymous_0 + (s32)&ptr_animation_table->data),
+#endif
             sp38->anonymous_1,
             sp38->anonymous_3,
             sp38->anonymous_2,
@@ -5075,7 +5083,11 @@ void chrlvTickStand(ChrRecord *self)
                     modelSetAnimation(
                         self->model,
                         // awkward fix: addu instruction is backwards
+#ifdef PORT
+                        (struct ModelAnimation *)((s32)&ANIM_DATA_walking_unarmed + (uintptr_t)&ptr_animation_table->data),
+#else
                         (struct ModelAnimation *)((s32)&ANIM_DATA_walking_unarmed + (s32)&ptr_animation_table->data),
+#endif
                         i,
                         0.0f,
                         0.5f,
@@ -5083,14 +5095,22 @@ void chrlvTickStand(ChrRecord *self)
 
                     modelSetAnimEndFrame(
                         self->model,
+#ifdef PORT
+                        (((u16*)((s32)&ANIM_DATA_walking_unarmed + (uintptr_t)&ptr_animation_table->data))[2] - 1));
+#else
                         (((u16*)((s32)&ANIM_DATA_walking_unarmed + (s32)&ptr_animation_table->data))[2] - 1));
+#endif
                 }
                 else if ((right != NULL) || (left != NULL))
                 {
                     modelSetAnimation(
                         self->model,
                         // awkward fix: addu instruction is backwards
+#ifdef PORT
+                        (struct ModelAnimation *)((s32)&ANIM_DATA_walking + (uintptr_t)&ptr_animation_table->data),
+#else
                         (struct ModelAnimation *)((s32)&ANIM_DATA_walking + (s32)&ptr_animation_table->data),
+#endif
                         left != NULL,
                         0.0f,
                         0.5f,
@@ -5098,7 +5118,11 @@ void chrlvTickStand(ChrRecord *self)
 
                     modelSetAnimEndFrame(
                         self->model,
+#ifdef PORT
+                        (((u16*)((s32)&ANIM_DATA_walking + (uintptr_t)&ptr_animation_table->data))[2] - 1));
+#else
                         (((u16*)((s32)&ANIM_DATA_walking + (s32)&ptr_animation_table->data))[2] - 1));
+#endif
                 }
             }
             else if (self->act_stand.face_entitytype & 0x10)
@@ -5450,13 +5474,25 @@ void chrlvTickDie(ChrRecord *self)
         {
             modelSetAnimation(
                 model,
+#ifdef PORT
+                (void*)((s32)&ANIM_DATA_jump_backwards + (uintptr_t)&ptr_animation_table->data),
+#else
                 (void*)((s32)&ANIM_DATA_jump_backwards + (s32)&ptr_animation_table->data),
+#endif
                 objecthandlerGetModelGunhand(model) == 0,
                 50.0f,
                 0.3f,
+#ifdef PORT
+                (((u16*)((s32)&ANIM_DATA_jump_backwards + (uintptr_t)&ptr_animation_table->data))[2] - 1.0f) - 50.0f);
+#else
                 (((u16*)((s32)&ANIM_DATA_jump_backwards + (s32)&ptr_animation_table->data))[2] - 1.0f) - 50.0f);
+#endif
 
+#ifdef PORT
+            modelSetAnimSpeed(model, 0.5f, (((u16*)((s32)&ANIM_DATA_jump_backwards + (uintptr_t)&ptr_animation_table->data))[2] - 1.0f) - 50.0f);
+#else
             modelSetAnimSpeed(model, 0.5f, (((u16*)((s32)&ANIM_DATA_jump_backwards + (s32)&ptr_animation_table->data))[2] - 1.0f) - 50.0f);
+#endif
 
             return;
         }
@@ -9160,8 +9196,16 @@ void chrlvTravelTick(ChrRecord *self, coord3d *arg1, StandTile *arg2, struct way
 
         if ((phi_s3 == NULL) || ((self->hidden & CHRHIDDEN_OFFSCREEN_PATROL) != 0))
         {
+#ifdef PORT
+            if ((objecthandlerGetModelAnim(self->model) == (struct ModelAnimation *)((s32)&ANIM_DATA_idle_unarmed + (uintptr_t)&ptr_animation_table->data))
+#else
             if ((objecthandlerGetModelAnim(self->model) == (struct ModelAnimation *)((s32)&ANIM_DATA_idle_unarmed + (s32)&ptr_animation_table->data))
+#endif
+#ifdef PORT
+                || (objecthandlerGetModelAnim(self->model) == (struct ModelAnimation *)((s32)&ANIM_DATA_idle + (uintptr_t)&ptr_animation_table->data)))
+#else
                 || (objecthandlerGetModelAnim(self->model) == (struct ModelAnimation *)((s32)&ANIM_DATA_idle + (s32)&ptr_animation_table->data)))
+#endif
             {
                 if (self->actiontype == ACT_PATROL)
                 {
@@ -10144,30 +10188,6 @@ bool chrGoToBond(ChrRecord *self, SPEED speed)
 {
     PropRecord *bondprop;
 
-#ifdef PORT
-    /* D309 (diagnosis only, GE_D309=1): the Caverns->intro complete freeze
-     * spins in ai() on m_RunToBondPersistent the first time TRYRunToBond
-     * FAILS for a guard on that list (the 1-byte AI_PRINT record is then
-     * mis-sized by chraiitemsize's NUL scan -> phantom GotoNext(0) ->
-     * chraiGoToLabel returns 0 -> tight restart loop, see findings.md D309).
-     * The code+data are byte-matched ground truth, so the open question is
-     * WHICH failure branch fires and in what game state at Caverns' end --
-     * dead/shot gate, seen-count gate, or plot_course (whose three sub-
-     * conditions are logged here: own stan-path, Bond's stan-path, route).
-     * Read-only probe: chrlvStanPathRelated/waypointFindRoute are pure
-     * lookups. No behavior change; N64 build unaffected. */
-    extern char *getenv(const char *);
-    extern u8 m_RunToBondPersistent[];
-    extern s32 g_MainStageNum;
-    extern LEVELID bossGetStageNum(void);
-    static int s_d309 = -1;
-    static int s_d309n = 0;
-    int d309log;
-
-    if (s_d309 < 0) { s_d309 = getenv("GE_D309") != NULL; }
-    d309log = s_d309 && (self->ailist == (AIRecord *)m_RunToBondPersistent) && (s_d309n < 400);
-#endif
-
     if (chrIsNotDeadOrShot(self) && (g_SeenBondRecentlyGuardCount < 10))
     {
         bondprop = getCurrentPlayerProp();
@@ -10176,39 +10196,7 @@ bool chrGoToBond(ChrRecord *self, SPEED speed)
         {
             return TRUE;
         }
-#ifdef PORT
-        if (d309log)
-        {
-            waypoint *wpSelf = chrlvStanPathRelated(&self->prop->pos, self->prop->stan);
-            waypoint *wpBond = chrlvStanPathRelated(&bondprop->pos, bondprop->stan);
-            s32 route = -1;
-
-            if (wpSelf && wpBond)
-            {
-                waypoint sp44[MAX_CHRWAYPOINTS];
-
-                route = waypointFindRoute(wpSelf, wpBond, sp44, MAX_CHRWAYPOINTS);
-            }
-            osSyncPrintf("D309: FAIL-plot chr=%d act=%d flags2=0x%x stage=%d curload=%d mainstage=%d cammode=%d stoptime=%d seen=%d bondprop=%p bondstan=%p wpSelf=%p wpBond=%p route=%d\n",
-                         (int)self->chrnum, (int)self->actiontype, (int)self->chrflags & 0xffff,
-                         (int)bossGetStageNum(), (int)lvlGetCurrentStageToLoad(), (int)g_MainStageNum,
-                         (int)g_CameraMode, (int)stop_time_flag, (int)g_SeenBondRecentlyGuardCount,
-                         (void *)bondprop, (void *)bondprop->stan, (void *)wpSelf, (void *)wpBond, (int)route);
-            s_d309n++;
-        }
-#endif
     }
-#ifdef PORT
-    else if (d309log)
-    {
-        osSyncPrintf("D309: FAIL-gate chr=%d act=%d deadOrShot=%d seen=%d stage=%d curload=%d mainstage=%d cammode=%d stoptime=%d\n",
-                     (int)self->chrnum, (int)self->actiontype, (int)(!chrIsNotDeadOrShot(self)),
-                     (int)g_SeenBondRecentlyGuardCount,
-                     (int)bossGetStageNum(), (int)lvlGetCurrentStageToLoad(), (int)g_MainStageNum,
-                     (int)g_CameraMode, (int)stop_time_flag);
-        s_d309n++;
-    }
-#endif
 
     return FALSE;
 }

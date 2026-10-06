@@ -117,6 +117,13 @@ static int s_pageno = 0;         /* D406: page within the active section */
 static int s_rowTotal = 0;       /* D406: visible rows in the active section */
 static int s_subHeader = -1;     /* rows[] header index for the nested page */
 static int s_hl = -1;            /* highlighted row / section, -1 = none */
+/* D444: hover model. s_hl is now PERSISTENT (set by hover, wheel/keys or
+ * paging); hover only re-selects when the pointer MOVES onto a DIFFERENT row
+ * than the last row it hovered (s_lastHover), and never touches the page. The
+ * keyboard/wheel snap (cursorToItemRaw) is not pointer motion (s_prevH/V). */
+static int s_hoverHit = -1;      /* row under the pointer this frame, -1 = none */
+static int s_lastHover = -2;     /* last hovered row (-2 = none yet) */
+static f32 s_prevH = -1e9f, s_prevV = -1e9f;   /* cursor at the previous frame */
 static int s_dragRow = -1;       /* global row index being dragged */
 static int s_repeatDir = 0, s_repeatTimer = 0;
 /* D345(e): hold-to-repeat state for vertical row stepping (separate from
@@ -245,6 +252,8 @@ static void cursorToItemRaw(int k)
      * real mouse, never at this snap position. */
     cursor_h_pos = 44.0f;
     cursor_v_pos = (f32)(rowY(k) + 6);
+    s_prevH = cursor_h_pos;   /* D444: our own snap is not pointer motion */
+    s_prevV = cursor_v_pos;
 }
 
 /* Put the crosshair on item k (entering a page / going back). */
@@ -286,6 +295,9 @@ void frontOptionsMenuInit(void)
     s_pageno = 0;   /* D406 */
     s_subHeader = -1;
     s_hl = -1;
+    s_hoverHit = -1;
+    s_lastHover = -2;
+    s_prevH = s_prevV = -1e9f;
     s_dragRow = -1;
     s_repeatDir = 0;
     s_vrepeatDir = 0;
@@ -346,7 +358,7 @@ static void goBack(void)
         for (int k = 0; k < s_rowN; k++)
             if (optionsRowChildHeader(s_rowIdx[k]) == child) selected = k + 1;
         cursorToItem(selected);
-        s_hl = -1;
+        s_hl = -1; s_lastHover = -2;
         sysLogPrintf(LOG_INFO, "frontoptions: back to %s", optionsRowLabel(activeHeader()));
         return;
     }
@@ -360,6 +372,24 @@ static void goBack(void)
     configSave();
     sysLogPrintf(LOG_INFO, "frontoptions: closed");
     frontChangeMenu(MENU_FILE_SELECT, FALSE);
+}
+
+/* D444: Previous/Next page controls on the bottom hint row of a multi-page
+ * section. Returns -1 (previous), +1 (next) or 0 (none / not over an enabled
+ * control). Same geometry the draw code uses. */
+static const char kPrevPage[] = "Previous page";
+static const char kNextPage[] = "Next page";
+static int pageCtlAt(void)
+{
+    if (s_level < 1 || s_rowTotal <= ROWS_PER_PAGE || tab_prev_highlight) return 0;
+    if (cursor_v_pos < (f32)(rowY(s_rowN + 1) - 3) ||
+        cursor_v_pos >= (f32)(rowY(s_rowN + 1) + ROW_DY - 3)) return 0;
+    int last = s_pageno * ROWS_PER_PAGE + s_rowN >= s_rowTotal;
+    if (s_pageno > 0 && cursor_h_pos >= ROW_X - 2 &&
+        cursor_h_pos <= ROW_X + measureW(kPrevPage) + 4) return -1;
+    if (!last && cursor_h_pos <= VAL_R + 2 &&
+        cursor_h_pos >= VAL_R - measureW(kNextPage) - 4) return +1;
+    return 0;
 }
 
 void frontOptionsMenuInterface(void)
@@ -381,32 +411,53 @@ void frontOptionsMenuInterface(void)
 
     /* Highlight: as the cheat screen, recomputed while A is not held. */
     if (joyGetButtons(PLAYER_1, A_BUTTON | Z_TRIG) == 0) {
+        int hit = -1;
+        int moved = (cursor_h_pos != s_prevH || cursor_v_pos != s_prevV);
         tab_prev_highlight = FALSE;
-        s_hl = -1;
         if (frontCheckCursorOnPreviousTab()) {
             tab_prev_highlight = TRUE;
         } else if (cursor_h_pos >= ROW_HIT_X0 && cursor_h_pos <= ROW_HIT_X1) {
             for (int k = itemCount() - 1; k >= 0; k--) {
                 if (cursor_v_pos >= (f32)(rowY(k) - 3) &&
                     cursor_v_pos <  (f32)(rowY(k) + ROW_DY - 3)) {
-                    s_hl = k;
+                    hit = k;
                     break;
                 }
             }
             /* D407(b): past the top/bottom edge of the visible rows, clamp
-             * the highlight to the edge row instead of dropping it (a
-             * mouse-only user keeps a row selected at the page edge; wheel
-             * / S then turns the page). */
-            if (s_hl < 0 && itemCount() > 0) {
+             * the hit to the edge row instead of dropping it. */
+            if (hit < 0 && itemCount() > 0) {
                 if (cursor_v_pos < (f32)rowY(0))
-                    s_hl = 0;
+                    hit = 0;
                 else if (cursor_v_pos <= (f32)(rowY(itemCount() - 1) + ROW_DY))
-                    s_hl = itemCount() - 1;
+                    hit = itemCount() - 1;
             }
         }
+        s_hoverHit = hit;
+        /* D444: hover selects only when the pointer moved onto a DIFFERENT
+         * row; a small nudge inside the same row (or none at all) leaves the
+         * wheel/key/page-chosen selection alone. */
+        if (moved && hit != s_lastHover) {
+            s_lastHover = hit;
+            s_hl = hit;
+        }
+        s_prevH = cursor_h_pos;
+        s_prevV = cursor_v_pos;
     }
 
-    if (joyGetButtonsPressedThisFrame(PLAYER_1, A_BUTTON | Z_TRIG | START_BUTTON)) {
+    /* D444: Previous/Next page controls (mouse click; Up/Down keep paging). */
+    int pageCtl = pageCtlAt();
+    if (pageCtl != 0 && joyGetButtonsPressedThisFrame(PLAYER_1, A_BUTTON | Z_TRIG)) {
+        playSfx(DOOR_LOCK_SFX);
+        s_pageno += pageCtl;
+        buildPages();
+        s_hl = -1;   /* wheel/keys/hover pick a row afresh; no snap */
+    } else if (joyGetButtonsPressedThisFrame(PLAYER_1, A_BUTTON | Z_TRIG | START_BUTTON)) {
+        /* D444: a click acts on the row under the pointer, not on a stale
+         * wheel/key selection (keyboard Enter: the snap put the pointer on
+         * s_hl, so the hit equals it). */
+        if (!tab_prev_highlight && joyGetButtonsPressedThisFrame(PLAYER_1, A_BUTTON | Z_TRIG))
+            s_hl = s_hoverHit;
         if (tab_prev_highlight) {
             goBack();
         } else if (s_hl >= 0 && s_level == 0) {
@@ -417,7 +468,7 @@ void frontOptionsMenuInterface(void)
             sysLogPrintf(LOG_INFO, "frontoptions: section %d", s_page + 1);
             buildPages();
             cursorToItem(0);
-            s_hl = -1;
+            s_hl = -1; s_lastHover = -2;
         } else if (s_hl == 0 && s_level >= 1) {
             /* D356: the top save-file row -- A steps to the next file (the
              * D352 chooser; folders only, "none" retired, plan §5.5). */
@@ -442,7 +493,7 @@ void frontOptionsMenuInterface(void)
                 sysLogPrintf(LOG_INFO, "frontoptions: opened %s (depth %d)",
                              optionsRowLabel(child), s_level);
                 cursorToItem(0);
-                s_hl = -1;
+                s_hl = -1; s_lastHover = -2;
             } else if (optionsRowIsSlider(i) && bx0 <= BAR_X1 - 12 &&
                        cursor_h_pos >= bx0 - 4 && cursor_h_pos <= BAR_X1 + 4) {
                 optionsRowSetFraction(i, ((double)cursor_h_pos - bx0) / (BAR_X1 - bx0));
@@ -724,7 +775,7 @@ Gfx *frontOptionsMenuDraw(Gfx *DL)
             if (buf[0]) {
                 u32 col = (buf[0] == 'O' && buf[1] == 'N') ? INK_ON : INK;
                 /* D346: kOnOff is title-case; M7 (D387) tags the
-                 * experimental AllUnlocked ON value "ON - UNSAFE". */
+                 * experimental AllUnlocked ON value "ON (restart)". */
                 strcat(buf, "\n");
                 DL = inkR(DL, VAL_R, y, buf, col);
             }
@@ -743,11 +794,19 @@ Gfx *frontOptionsMenuDraw(Gfx *DL)
             /* D406d: one row below the last content row (rowY(s_rowN + 1))
              * -- pitch-aligned with the list; +2 sat ~26px clear of it and
              * looked orphaned at the paper's bottom edge. */
-            DL = ink(DL, ROW_X, rowY(s_rowN + 1),
-                     first ? "Down: next page\n"
-                     : last ? "Up: previous page\n"
-                            : "Up: previous page   Down: next page\n",
-                     INK_DIM);
+            int hov = pageCtlAt(), hy = rowY(s_rowN + 1);
+            if (!first) {
+                if (hov < 0)
+                    DL = microcode_constructor_related_to_menus(DL, ROW_X - 2, hy - 1,
+                            ROW_X + measureW(kPrevPage) + 4, hy + 0xE, HILITE);
+                DL = ink(DL, ROW_X, hy, "Previous page\n", INK);
+            }
+            if (!last) {
+                if (hov > 0)
+                    DL = microcode_constructor_related_to_menus(DL, VAL_R - measureW(kNextPage) - 4, hy - 1,
+                            VAL_R + 2, hy + 0xE, HILITE);
+                DL = inkR(DL, VAL_R, hy, "Next page\n", INK);
+            }
         }
     }
 

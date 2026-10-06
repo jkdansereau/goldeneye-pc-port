@@ -105,13 +105,48 @@ static void crashStackTraceRaw(char *msg, PEXCEPTION_POINTERS exinfo)
 }
 
 /*
- * Phase 2 — backtrace by walking the EBP chain manually. The build keeps
- * frame pointers (-fno-omit-frame-pointer), so every frame is a pair of
- * qwords at RBP: [saved RBP, return address]. No dbghelp, no allocation:
- * each pointer is validated against the thread's stack bounds BEFORE being
- * dereferenced, and the chain must strictly ascend (x64 stacks grow down),
- * so a corrupted chain terminates instead of re-faulting. Addresses are
- * symbolicated offline with addr2line when needed.
+ * Module info for one code address: load base, module basename, and the
+ * image's *preferred* ImageBase from its PE header. addr2line wants the
+ * link-time VA (preferred base + RVA), not the ASLR-relocated runtime
+ * address, so each frame prints both. Reads only the loaded image's own
+ * headers (always mapped while the module is loaded) — no allocation.
+ */
+static uintptr_t crashModuleInfo(uintptr_t addr, const char **name, uintptr_t *prefbase)
+{
+    static char path[MAX_PATH];
+    const uintptr_t base = (uintptr_t)crashGetModuleBase((const void *)addr);
+    *name = "?";
+    *prefbase = 0;
+    if (!base) return 0;
+    if (GetModuleFileNameA((HMODULE)base, path, sizeof(path))) {
+        const char *slash = strrchr(path, '\\');
+        *name = slash ? slash + 1 : path;
+    }
+    const IMAGE_DOS_HEADER *dos = (const IMAGE_DOS_HEADER *)base;
+    if (dos->e_magic == IMAGE_DOS_SIGNATURE) {
+        const IMAGE_NT_HEADERS *nt = (const IMAGE_NT_HEADERS *)(base + dos->e_lfanew);
+        if (nt->Signature == IMAGE_NT_SIGNATURE) {
+            *prefbase = (uintptr_t)nt->OptionalHeader.ImageBase;
+        }
+    }
+    return base;
+}
+
+/*
+ * Phase 2 — backtrace by x64 table-based unwinding from the exception
+ * CONTEXT (RtlLookupFunctionEntry + RtlVirtualUnwind over the image's
+ * .pdata/.xdata, which MinGW-w64 always emits for SEH). This replaces the
+ * old RBP-chain walk, which died at frame 1: with -fno-omit-frame-pointer
+ * MinGW-w64 GCC still mostly emits `lea N(%rsp),%rbp` (RBP = an offset
+ * inside the frame, as the Win64 ABI allows) rather than `mov %rsp,%rbp`
+ * (1386 vs 565 functions in the 2026-09-30 build), so [RBP] is usually not
+ * a [saved RBP, return address] pair and the chain breaks one hop out. No dbghelp, no allocation; RSP is
+ * validated against the thread's stack bounds before every unwind step so
+ * a corrupted stack terminates the walk instead of re-faulting.
+ *
+ * Per frame: runtime address, [module base]+RVA, module name, and
+ * va=<preferred ImageBase + RVA> — feed that to
+ * `addr2line -f -e ge007.x86_64.exe <va>` offline.
  */
 static void crashStackTraceSym(char *msg, PEXCEPTION_POINTERS exinfo)
 {
@@ -125,32 +160,41 @@ static void crashStackTraceSym(char *msg, PEXCEPTION_POINTERS exinfo)
         return;
     }
 
-    uintptr_t fp = context.Rbp;
-    int i = 0;
-    CRASH_MSG("\nBACKTRACE:\n#00: %p  (crash PC)\n", exinfo->ExceptionRecord->ExceptionAddress);
+    int i;
+    CRASH_MSG("\nBACKTRACE:\n");
+    for (i = 0; i < CRASH_MAX_FRAMES; ++i) {
+        const uintptr_t pc = (uintptr_t)context.Rip;
+        if (!pc) break;
 
-    while (i < CRASH_MAX_FRAMES - 1) {
-        /* The frame record must live inside the committed stack. */
-        if (fp < (uintptr_t)low || fp > (uintptr_t)high) break;
-
-        const uintptr_t *frame = (const uintptr_t *)fp;
-        const uintptr_t saved_fp = frame[0];
-        const uintptr_t ret_addr = frame[1];
-
-        CRASH_MSG("#%02d: %p", i + 1, (void *)ret_addr);
-        const uintptr_t modbase = (uintptr_t)crashGetModuleBase((void *)ret_addr);
+        const char *modname;
+        uintptr_t prefbase;
+        const uintptr_t modbase = crashModuleInfo(pc, &modname, &prefbase);
+        CRASH_MSG("#%02d: %p", i, (void *)pc);
         if (modbase) {
-            CRASH_MSG("  [%p]+%llx", (void *)modbase,
-                      (unsigned long long)(ret_addr - modbase));
+            CRASH_MSG("  [%p]+%llx %s va=0x%llx", (void *)modbase,
+                      (unsigned long long)(pc - modbase), modname,
+                      (unsigned long long)(prefbase + (pc - modbase)));
         }
-        CRASH_MSG("\n");
+        CRASH_MSG("%s\n", i == 0 ? "  (crash PC)" : "");
 
-        /* Chain must ascend; stop on the first frame that doesn't. */
-        if (saved_fp <= fp || saved_fp > (uintptr_t)high) break;
-        fp = saved_fp;
-        ++i;
+        /* The unwinder reads the frame at RSP; it must be on this stack. */
+        if (context.Rsp < (DWORD64)(uintptr_t)low || context.Rsp >= (DWORD64)(uintptr_t)high) break;
+
+        DWORD64 imgbase = 0;
+        PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(context.Rip, &imgbase, NULL);
+        if (fn) {
+            PVOID handlerdata = NULL;
+            DWORD64 establisher = 0;
+            RtlVirtualUnwind(UNW_FLAG_NHANDLER, imgbase, context.Rip, fn, &context,
+                             &handlerdata, &establisher, NULL);
+        } else {
+            /* Leaf function (no unwind info): return address is at RSP. */
+            context.Rip = *(const DWORD64 *)(uintptr_t)context.Rsp;
+            context.Rsp += 8;
+        }
+        if (context.Rsp < (DWORD64)(uintptr_t)low || context.Rsp > (DWORD64)(uintptr_t)high) break;
     }
-    if (i == CRASH_MAX_FRAMES - 1) {
+    if (i == CRASH_MAX_FRAMES) {
         CRASH_MSG("...\n");
     }
 #else
@@ -286,7 +330,7 @@ static LONG __stdcall crashHandler(PEXCEPTION_POINTERS exinfo)
     fflush(stdout);
     crashWriteLog(msg, 0);
 
-    /* Phase 2: EBP-chain backtrace (validated reads only — see
+    /* Phase 2: unwind-table backtrace (validated reads only — see
      * crashStackTraceSym). The raw data is already on disk either way. */
     {
         char sym[CRASH_MAX_MSG + 1] = { 0 };
@@ -474,6 +518,31 @@ void crashDumpThreads(const unsigned long *tids, const char **names, int count)
 
 int g_CrashEnabled = 0;
 
+/*
+ * GE_CRASHTEST=<N>: deliberate-crash hook for verifying the handler. Right
+ * after the handler is installed, recurse N frames deep and fault with a
+ * null write, so the log should show N crashTestRecurse frames + crashInit
+ * + main + CRT frames. Unset/0 = no effect. Not a game-logic change.
+ */
+static volatile int *crashTestNull;
+
+static __attribute__((noinline)) int crashTestRecurse(int depth)
+{
+    volatile int guard = depth; /* keeps each frame alive (no tail call) */
+    int r = (depth <= 1) ? (*crashTestNull = depth) : crashTestRecurse(depth - 1);
+    return r + guard;
+}
+
+static void crashTestMaybe(void)
+{
+    const char *env = getenv("GE_CRASHTEST");
+    const int depth = env ? atoi(env) : 0;
+    if (depth > 0) {
+        sysLogPrintf(LOG_WARNING, "GE_CRASHTEST=%d: faulting deliberately", depth);
+        crashTestRecurse(depth > 64 ? 64 : depth);
+    }
+}
+
 void crashInit(void)
 {
 #if defined(PLATFORM_WINDOWS)
@@ -490,6 +559,7 @@ void crashInit(void)
     sigaction(SIGILL,  &sigact, &prevSigAction);
     g_CrashEnabled = 1;
 #endif
+    crashTestMaybe();
 }
 
 void crashShutdown(void)

@@ -207,7 +207,7 @@ Acmd *alAdpcmPull(void *filter, s16 *outp, s32 outCount, s32 sampleOffset, Acmd 
      * instead of going silent -- which is what "the door sound loops until
      * you quit" would actually sound like. Assert it directly, rate-limited.
      * Remove once root-caused. */
-    if (getenv("GE_PULLTRACE")) {
+    if (GE_ENVFLAG("GE_PULLTRACE")) {
         static s32 reported = 0;
         s32 totalSamples = (f->table->len / ADPCMFBYTES) * ADPCMFSIZE;
         if (f->sample > totalSamples + ADPCMFSIZE && nOver == 0 && reported < 40) {

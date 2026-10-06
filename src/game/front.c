@@ -959,6 +959,7 @@ Gfx *constructor_menu14_mpteams(Gfx *DL);
 Gfx *constructor_menu15_cheat(Gfx *DL);
 #ifdef PORT
 #include "frontoptions.h"   /* D343: MENU_PC_OPTIONS lives in port/src/frontoptions.c */
+#include "envflag.h"
 #endif
 Gfx *constructor_menu16_nocontrollers(Gfx *DL);
 Gfx *constructor_menu17_switchscreens(Gfx *DL);
@@ -2179,7 +2180,11 @@ void load_walletbond(void)
             b = (struct ModelNode *)mnode;
             srecord = b->Data;
 
+#ifdef PORT
+            arg0 = (Gfx_le *)((uintptr_t)srecord->BaseAddr + ((u32)(uintptr_t)srecord->Primary & 0xffffff));
+#else
             arg0 = (s32)srecord->BaseAddr + ((s32)srecord->Primary & 0xffffff);
+#endif
             bgApplyDynamicCCRMLUT(arg0, NULL, CCRMLUT_WALLETBOND);
         }
     }
@@ -8207,7 +8212,7 @@ void interface_menu18_displaycast(void)
         f = intro_character_index;
 #ifdef PORT
         /* TEMP D65: trace the cast-end decision. */
-        if (getenv("GE_D63"))
+        if (GE_ENVFLAG("GE_D63"))
             osSyncPrintf("D65 cast-end f=%d body=%d\n", (int)f, (int)intro_char_table[f].body);
 #endif
         if (intro_char_table[f].body < 0)
@@ -8215,7 +8220,7 @@ void interface_menu18_displaycast(void)
             intro_character_index = 0;
             f = 0;
 #ifdef PORT
-            if (getenv("GE_D63"))
+            if (GE_ENVFLAG("GE_D63"))
                 osSyncPrintf("D65 cast-end RESET idx=0\n");
 #endif
         }
@@ -8223,7 +8228,7 @@ void interface_menu18_displaycast(void)
         if (intro_character_index > 0)
         {
 #ifdef PORT
-            if (getenv("GE_D63"))
+            if (GE_ENVFLAG("GE_D63"))
                 osSyncPrintf("D65 cast-end frontChangeMenu idx=%d\n", (int)intro_character_index);
 #endif
             frontChangeMenu(MENU_DISPLAY_CAST, 1);

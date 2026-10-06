@@ -56,6 +56,9 @@
 #include "tex.h"
 #include "textrelated.h"
 #include "vtxstore.h"
+#ifdef PORT
+#include "envflag.h"   /* cached getenv for per-tick probes (D302) */
+#endif
 
 
 #if defined(VERSION_JP) || defined(VERSION_EU)
@@ -12782,7 +12785,7 @@ s32 sub_GAME_7F053894(coord3d *pos, f32 low, f32 high)
      * Log the hit pos, nearest player pos, distance and resulting vol so a
      * "loud impact that N64 plays silent" can be told apart as wrong-HIT vs
      * wrong-DISTANCE. Remove with probe set. */
-    if (getenv("GE_AUDIOTRACE")) {
+    if (GE_ENVFLAG("GE_AUDIOTRACE")) {
         geTracePrintf("audiotrace.log",
             "[DISTVOL] pos=(%.0f,%.0f,%.0f) player=(%.0f,%.0f,%.0f) dist=%.1f vol=%d\n",
             (double)pos->x, (double)pos->y, (double)pos->z,
@@ -12869,7 +12872,7 @@ void sub_GAME_7F053A3C(DoorRecord* arg0)
 void doorSndProbe(const char *where, DoorRecord *door, void *pendingState)
 {
     static FILE *fd = NULL;
-    if (!getenv("GE_AUDIOTRACE"))
+    if (!GE_ENVFLAG("GE_AUDIOTRACE"))
         return;
     if (!fd) {
         fd = fopen("audiotrace.log", "a");
@@ -14485,7 +14488,7 @@ void handle_alarm_gas_timer_calldamage(void)
      * root-cause "alarm SFX starves all other audio and never recovers".
      * GE_FORCEALARM pins alarm_timer so alarmIsActive() stays true. Remove
      * once root-caused. */
-    if (getenv("GE_FORCEALARM")) {
+    if (GE_ENVFLAG("GE_FORCEALARM")) {
         static int fa_frames;
         ++fa_frames;
         if (fa_frames == 120 || fa_frames == 900) alarmActivate();

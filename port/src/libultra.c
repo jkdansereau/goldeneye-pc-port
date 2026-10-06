@@ -608,7 +608,8 @@ s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
     PortQueue *pq = portQueueGet(mq);
     d62log("SEND", mq, msg); /* TEMP D62 */
     /* TEMP D51: watch sends to the 32-slot queues (sched cmdQ + client Qs) */
-    if (getenv("GE_D51") && mq->msgCount == 32 && !(g_viRetraceMQ && mq == g_viRetraceMQ)) {
+    static int s_d51 = -1; if (s_d51 < 0) s_d51 = getenv("GE_D51") != NULL; /* D302: per-message path */
+    if (s_d51 && mq->msgCount == 32 && !(g_viRetraceMQ && mq == g_viRetraceMQ)) {
         void *ra = __builtin_return_address(0);
         sysLogPrintf(LOG_NOTE, "D51 send32 mq=%p from %p msg=%p valid=%d/%d",
                      (void *)mq, ra, (void *)msg, mq->validCount, mq->msgCount);
@@ -633,7 +634,8 @@ s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
  * message object's .type field was clobbered. */
 extern OSMesgQueue gfxFrameMsgQ; /* src/init.c */
 static void d60logRecv(OSMesgQueue *mq, OSMesg m) {
-    if (mq != &gfxFrameMsgQ || !getenv("GE_D60")) return;
+    static int s_d60r = -1; if (s_d60r < 0) s_d60r = getenv("GE_D60") != NULL; /* D302 */
+    if (mq != &gfxFrameMsgQ || !s_d60r) return;
     static uint64_t n = 0;
     const u16 type = *(const u16 *)m; /* OSScMsg.type */
     if (n < 20 || (n % 300) == 0 || (type != 1 && type != 4))
@@ -890,7 +892,8 @@ extern uint32_t  pcmodelsTotalSize(void);
 extern uintptr_t pccgSidecarBase(void);
 extern uint32_t  pccgTotalSize(void);
 static void d60logSidecarRead(u32 srcPA, void *dstVA, u32 size) {
-    if (!getenv("GE_D60")) return;
+    static int s_d60s = -1; if (s_d60s < 0) s_d60s = getenv("GE_D60") != NULL; /* D302 */
+    if (!s_d60s) return;
     uintptr_t base = pcmodelsSidecarBase();
     if (base && srcPA >= base && srcPA < base + pcmodelsTotalSize()) {
         sysLogPrintf(LOG_NOTE, "D60 sidecar read off=%llu size=0x%X dst=%p",
@@ -958,7 +961,8 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
          * the game-side caller can be symbolicated offline. */
         /* TEMP D61: log every ROM read (dst/src/size). The last line before
          * a crash identifies the culprit; dst symbolizes offline via nm. */
-        if (!s_d61opened && getenv("GE_D61")) {
+        static int s_d61env = -1; if (s_d61env < 0) s_d61env = getenv("GE_D61") != NULL; /* D302 */
+        if (!s_d61opened && s_d61env) {
             s_d61log = fopen("d61dma.log", "w");
             s_d61opened = 1;
         }
@@ -1196,175 +1200,13 @@ static void geEepromStore(void)
     }
 }
 
-/* D257: Game.AllUnlocked -- mirror of src/game/file.h save_data (96 bytes;
- * keep in sync). Two things are patched in at read time:
- *  - the progression-gated cheat-unlock bits (front.c
- *    frontCheckIfCheatIsUnlocked) test per-LEVEL bits in
- *    unlocked_cheats_1/2/3 that normal play sets when each level is
- *    completed, so a fresh save has an empty cheat menu;
- *  - every stage/difficulty completion time. When ANY single-player cheat
- *    is active, g_AppendCheatSinglePlayer makes the mission-select screen
- *    (front.c get_highest_unlocked_difficulty_for_level) only accept levels
- *    whose status is STAGESTATUS_COMPLETED (3), not merely UNLOCKED (1) --
- *    so AllUnlocked must read as a fully-completed campaign or enabling a
- *    cheat locks every level. Existing (nonzero) player times are kept;
- *    only empty slots get the max time (0x3FF). */
-typedef struct ge_save_slot {
-    s32 chksum1;
-    s32 chksum2;
-    u8  completion_bitflags;
-    u8  flag_007;
-    u8  music_vol;
-    u8  sfx_vol;
-    u16 options;
-    u8  unlocked_cheats_1;
-    u8  unlocked_cheats_2;
-    u8  unlocked_cheats_3;
-    u8  padding;
-    u8  times[76];   /* (SP_LEVEL_MAX-1)*4: 19 levels x 4 difficulties */
-} ge_save_slot;   /* sizeof == 96 == save_data (file.h) -- enforced below */
-
-/* If this ever fires, the mirror drifted from save_data and the AllUnlocked
- * cheat patch silently no-ops (the block-read size check stops matching). */
-typedef char ge_save_slot_size_check[(sizeof(ge_save_slot) == 96) ? 1 : -1];
-
-/* Game-side CRC (src/game/crc.c) over [completion_bitflags, next slot),
- * stored in the slot's own chksum1/2 -- exactly what fileValidateSaves
- * re-checks after the block read. */
-extern void fileGenerateCRC(u8 *addressA, u8 *addressB, void *retval);
-
 extern int geLegacyCrcMaybeMigrateSlots(u8 *slots5); /* port/src/legacycrc.c (D297) */
 
-extern s32 portAllUnlocked;   /* port/src/video.c */
-
-/* Bit math mirrors fileGetSaveStageDifficultyTime / fileSetDifficultyStageTime
- * (src/game/file2.c): 10-bit time fields, offset = (difficulty*20+level)*10,
- * difficulties 0..2 (agent/secret/00) only -- 007 times are virtual. */
-static u32 geSaveGetTime(const u8 *t, s32 difficulty, s32 level)
-{
-    s32 offset = (difficulty * 20 + level) * 10;
-    s32 index  = offset >> 3;
-    switch (7 - (offset & 7)) {
-    case 7: return ((u32)(t[index] & 0xFF) << 2) | ((u32)(t[index + 1] & 0xc0) >> 6);
-    case 5: return ((u32)(t[index] & 0x3f) << 4) | ((u32)(t[index + 1] & 0xf0) >> 4);
-    case 3: return ((u32)(t[index] & 0x0f) << 6) | ((u32)(t[index + 1] & 0xfc) >> 2);
-    case 1: return ((u32)(t[index] & 0x03) << 8) | (u32)(t[index + 1] & 0xFF);
-    default: return 0;
-    }
-}
-
-static void geSaveSetTime(u8 *t, s32 difficulty, s32 level, u32 newtime)
-{
-    s32 offset = (difficulty * 20 + level) * 10;
-    s32 index  = offset >> 3;
-    switch (7 - (offset & 7)) {
-    case 7:
-        t[index]     = (u8)((t[index] & 0x00) | ((newtime >> 2) & 0xFF));
-        t[index + 1] = (u8)((t[index + 1] & 0x3F) | ((newtime << 6) & 0xC0));
-        break;
-    case 5:
-        t[index]     = (u8)((t[index] & 0xC0) | ((newtime >> 4) & 0x3F));
-        t[index + 1] = (u8)((t[index + 1] & 0x0F) | ((newtime << 4) & 0xF0));
-        break;
-    case 3:
-        t[index]     = (u8)((t[index] & 0xF0) | ((newtime >> 6) & 0x0F));
-        t[index + 1] = (u8)((t[index + 1] & 0x03) | ((newtime << 2) & 0xFC));
-        break;
-    case 1:
-        t[index]     = (u8)((t[index] & 0xFC) | ((newtime >> 8) & 0x03));
-        t[index + 1] = (u8)(newtime & 0xFF);
-        break;
-    }
-}
-
-static void geEepromPatchAllCheats(u8 *buf)
-{
-    /* buf holds the five save slots read from block 4. The sixth local slot
-     * is only a CRC end-boundary for the last one (fileGenerateCRC reads
-     * [A, B), so its contents are irrelevant). */
-    static ge_save_slot slots[6];
-    memcpy(slots, buf, sizeof(ge_save_slot) * 5);
-    memset(&slots[5], 0, sizeof(ge_save_slot));
-
-    int changed = 0;
-
-    /* D259 + D281: a fresh ge007.eep is zero-filled, so every slot reads as
-     * all-zero. Without this patch such a slot fails fileValidateSaves' CRC
-     * and becomes a free BLANKSAVEDATA slot (fileResetSave), after which
-     * fileBuildWriteNewSave fills the first free slot for each folder with
-     * no save, in folder order. This patch gives every slot a valid CRC
-     * below, so an all-zero slot would instead SURVIVE as-is: five slots all
-     * claiming folder 1 with volume 0 (D259: silence) and options 0 (D281:
-     * sight-on-screen, auto-aim, look-ahead and ammo display all off, which
-     * reads as "RMB aim broken"). D259 seeded only the volumes. Reproduce
-     * the game's full result instead: all-zero slots take the folders that
-     * no real slot holds, in order, built exactly as fileBuildWriteNewSave
-     * builds them (BLANKSAVEDATA + folder + not-free + bond); any left over
-     * become free BLANKSAVEDATA slots. Real saves keep their bytes. */
-    {
-        extern void fileSetSaveFoldernum(void *save, u32 folder);
-        extern void fileSetSaveFlagDoReset(void *save, s32 enable);
-        extern void fileSetSelectedBond(void *save, s32 bond);
-        static const ge_save_slot blank = {
-            0, 0, 0x80 /* SAVEFLAGS_SET(0,0,BOND_BROSNAN,1): free */, 0x00,
-            0xFF, 0xFF, 0x3A /* DEFAULT_OPTIONS */, 0, 0, 0, 0, {0}
-        };
-        int allzero[5], present[4] = {0, 0, 0, 0};
-        for (int i = 0; i < 5; i++) {
-            const u8 *raw = (const u8 *)&slots[i];
-            allzero[i] = 1;
-            for (int b = 0; b < (int)sizeof(ge_save_slot); b++)
-                if (raw[b]) { allzero[i] = 0; break; }
-            if (!allzero[i] && !(slots[i].completion_bitflags & 0x80 /* DORESET */)) {
-                int f = slots[i].completion_bitflags & 0x7;   /* SAVEFLAG_FOLDER */
-                if (f < 4) present[f] = 1;                    /* MAX_FOLDER_COUNT */
-            }
-        }
-        int folder = 0;
-        for (int i = 0; i < 5; i++) {
-            if (!allzero[i]) continue;
-            slots[i] = blank;
-            while (folder < 4 && present[folder]) folder++;
-            if (folder < 4) {
-                fileSetSaveFoldernum(&slots[i], (u32)folder);
-                fileSetSaveFlagDoReset(&slots[i], 0);
-                fileSetSelectedBond(&slots[i], folder);
-                present[folder] = 1;
-            }
-            changed = 1;
-        }
-    }
-
-    for (int i = 0; i < 5; i++) {
-        /* Cheat ids are level ids 0..19 (CHEAT_INPUT_BUFFER_SIZE == 20):
-         * bits 0-7 in _1, 8-15 in _2, 16-19 in the low nibble of _3. */
-        if (slots[i].unlocked_cheats_1 != 0xFF ||
-            slots[i].unlocked_cheats_2 != 0xFF ||
-            (slots[i].unlocked_cheats_3 & 0x0F) != 0x0F) {
-            slots[i].unlocked_cheats_1 = 0xFF;
-            slots[i].unlocked_cheats_2 = 0xFF;
-            slots[i].unlocked_cheats_3 |= 0x0F;
-            changed = 1;
-        }
-        /* Fully-completed campaign: fill empty completion times with the
-         * max (0x3FF). Needed so mission select still works while any cheat
-         * is active (see header comment); player records are preserved. */
-        for (s32 diff = 0; diff < 3; diff++) {
-            for (s32 lvl = 0; lvl < 20; lvl++) {
-                if (geSaveGetTime(slots[i].times, diff, lvl) == 0) {
-                    geSaveSetTime(slots[i].times, diff, lvl, 0x3FF);
-                    changed = 1;
-                }
-            }
-        }
-    }
-    if (!changed) return;
-
-    for (int i = 0; i < 5; i++)
-        fileGenerateCRC(&slots[i].completion_bitflags, (u8 *)&slots[i + 1],
-                        &slots[i]);
-    memcpy(buf, slots, sizeof(ge_save_slot) * 5);
-}
+/* D442: Game.AllUnlocked is a pure RAM/query-time override (file2.c
+ * fileGetIsCheatUnlocked + the debug flags seeded in main.c). The EEPROM
+ * bytes the game reads and writes are always the raw disk bytes -- the old
+ * read-time save patch (D257/D259/D281) and its write-time merge (D387) are
+ * gone. */
 
 static s32 geEepromRW(u8 block, u8 *buf, int nbytes, int write)
 {
@@ -1379,11 +1221,9 @@ static s32 geEepromRW(u8 block, u8 *buf, int nbytes, int write)
         /* D297: one-time migration of pre-D284 slot CRCs (port/src/legacycrc.c).
          * This IS the read fileValidateSaves performs (block 4, five slots), so
          * the re-stamped checksums are exactly what the game validates — no
-         * ordering hazard. Runs BEFORE geEepromPatchAllCheats so that only
-         * pristine+migrated bytes are ever persisted; AllUnlocked patches stay
-         * read-time-only as before. Block-0 smallSave is deliberately untouched
-         * (factory seal, see D297). */
-        if (block == 4 && nbytes == (int)(sizeof(ge_save_slot) * 5)) {
+         * ordering hazard. Only pristine+migrated bytes are ever persisted.
+         * Block-0 smallSave is deliberately untouched (factory seal, D297). */
+        if (block == 4 && nbytes == (int)(96 * 5) /* 5 x save_data, file.h */) {
             int migrated = geLegacyCrcMaybeMigrateSlots(buf);
             if (migrated) {
                 memcpy(s_eeprom + off, buf, nbytes);
@@ -1392,11 +1232,6 @@ static s32 geEepromRW(u8 block, u8 *buf, int nbytes, int write)
                              "eeprom: D297-migrated %d pre-D284 save slot(s) to current CRC",
                              migrated);
             }
-        }
-        /* fileValidateSaves' block read: five save slots from block 4. */
-        if (portAllUnlocked && block == 4 &&
-            nbytes == (int)(sizeof(ge_save_slot) * 5)) {
-            geEepromPatchAllCheats(buf);
         }
     }
     return 0;

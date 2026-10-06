@@ -108,7 +108,11 @@ s32 initResolveAnimGroupTable(struct weapon_firing_animation_table *animconfig)
 
         do
         {
+#ifdef PORT
+            config->anim.anim = (struct ModelAnimation *)(((0, animoffset)) + ((uintptr_t)ptr_animation_table));
+#else
             config->anim.anim = (struct ModelAnimation *)(((0, animoffset)) + ((s32)ptr_animation_table));
+#endif
             endframe = floorFloatToInt(config->unk04);
             angle16 = sub_GAME_7F0001F0(config->anim.anim, 0, endframe) & 0xffff;
             duration = config->unk04;
@@ -195,8 +199,13 @@ s32 initResolveAnimTable(struct StruckAnim *entries)
 }
 
 
+#ifdef PORT
+#define ANIM_PTR(anim) \
+    ((ModelAnimation *)((s32)&anim + ((uintptr_t)ptr_animation_table)))
+#else
 #define ANIM_PTR(anim) \
     ((ModelAnimation *)((s32)&anim + ((s32)ptr_animation_table)))
+#endif
 
 #define ANIM_FRAC(anim) \
     ((((f32)sub_GAME_7F000290(ANIM_PTR(anim), 0, ANIM_PTR(anim)->unk04 - 1)) * 0.10000001f) / \

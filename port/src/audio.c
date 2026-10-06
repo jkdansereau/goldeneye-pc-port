@@ -225,7 +225,7 @@ void audioSetNextBuffer(const s16 *buf, u32 len)
      * unbuffered per-opcode log slows the process enough to starve the audio
      * thread on its own (that artifact is what M-63 measured as "13 % of
      * real time"; see docs/dev/findings.md D204). Remove once D204 closes. */
-    if (getenv("GE_D204")) {
+    if (GE_ENVFLAG("GE_D204")) {
         static u64 startUs = 0, nextReportUs = 0, produced = 0;
         static u32 maxLen = 0;
         u64 now = sysGetMicroseconds();
@@ -276,7 +276,7 @@ void audioSetNextBuffer(const s16 *buf, u32 len)
      * peak/RMS reading of *this* buffer into the SAME file/lock
      * (geTracePrintf) so the two can be correlated by line order without
      * per-line timestamps. Remove once D77 closes. */
-    if (buf && len && getenv("GE_AUDIOTRACE")) {
+    if (buf && len && GE_ENVFLAG("GE_AUDIOTRACE")) {
         static u64 lastReportUs = 0;
         u64 now = sysGetMicroseconds();
         if (now - lastReportUs >= 1000000ull) {

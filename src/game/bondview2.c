@@ -981,7 +981,11 @@ void bondviewSetCameraMode(s32 arg0)
             solo_char_load();
 
             // HACK: ptr_animation_table->data regalloc is backwards
+#ifdef PORT
+            sp38 = (struct ModelAnimation *)((s32)stage_intro_anim_table[g_IntroAnimationIndex].anonymous_0 + (uintptr_t)&ptr_animation_table->data);
+#else
             sp38 = (struct ModelAnimation *)((s32)stage_intro_anim_table[g_IntroAnimationIndex].anonymous_0 + (s32)&ptr_animation_table->data);
+#endif
             sp78 = stage_intro_anim_table[g_IntroAnimationIndex].anonymous_2;
             ftemp_1 = stage_intro_anim_table[g_IntroAnimationIndex].anonymous_1;
             ftemp_3 = stage_intro_anim_table[g_IntroAnimationIndex].anonymous_3;
@@ -1317,7 +1321,11 @@ void bondviewCalcIntroSwirlCamera(s32 index, f32 time, coord3d *pos, coord3d *lo
         lookat->y = g_CurrentPlayer->field_3C8;
         lookat->z = g_CurrentPlayer->field_3CC;
 
+#ifdef PORT
+        swirl = (void *)(((uintptr_t) g_IntroSwirl) + (uintptr_t) base);
+#else
         swirl = (void *)(((u32) g_IntroSwirl) + (u32) base);
+#endif
 
         if (!(swirl->bitflags & 4))
         {
@@ -4572,7 +4580,11 @@ void bondviewMoveAnimationTick(f32 speed, f32 speedforwards, f32 speedsideways)
             // HACK: ptr_animation_table dereference addition is backwards.
             // this should be:
             // ptr_animation_table->data[g_bondviewBondDeathAnimations[((u32) randomGetNext() % (u32) g_bondviewBondDeathAnimationsCount)]]
+#ifdef PORT
+            bheadStartDeathAnimation((struct ModelAnimation *) ((s32)g_bondviewBondDeathAnimations[((u32) randomGetNext() % (u32) g_bondviewBondDeathAnimationsCount)] + (uintptr_t)&ptr_animation_table->data[0]), randomGetNext() & 1, 0.0f, 1.0f);
+#else
             bheadStartDeathAnimation((struct ModelAnimation *) ((s32)g_bondviewBondDeathAnimations[((u32) randomGetNext() % (u32) g_bondviewBondDeathAnimationsCount)] + (s32)&ptr_animation_table->data[0]), randomGetNext() & 1, 0.0f, 1.0f);
+#endif
             g_CurrentPlayer->startnewbonddie = FALSE;
         }
 
@@ -9057,7 +9069,11 @@ void mp_respawn_handler(void)
             switch (intro_record->type) 
             {
                 case 0: // INTROTYPE_SPAWN
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroSpawn));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroSpawn));
+#endif
                     break;
                 case 1: // INTROTYPE_ITEM
                     if (check_ramrom_flags() == ((struct SetupIntroAmmo*)intro_record)->is_demo_playback) {
@@ -9067,28 +9083,56 @@ void mp_respawn_handler(void)
                             bondinvAddInvItem(((struct SetupIntroItem*)intro_record)->item_right);
                         }
                     }
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroItem));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroItem));
+#endif
                     break;
                 case 2: // INTROTYPE_AMMO
                     if (check_ramrom_flags() == ((struct SetupIntroAmmo*)intro_record)->is_demo_playback) {
                         give_cur_player_ammo(((struct SetupIntroAmmo*)intro_record)->ammo_type, ((struct SetupIntroAmmo*)intro_record)->ammo_amount);
                     }
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroAmmo));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroAmmo));
+#endif
                     break;
                 case 3: // INTROTYPE_SWIRL
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroSwirl));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroSwirl));
+#endif
                     break;
                 case 4: // INTROTYPE_ANIM
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroAnim));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroAnim));
+#endif
                     break;
                 case 5: // INTROTYPE_CUFF
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroCuff));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroCuff));
+#endif
                     break;
                 case 6: // INTROTYPE_CAMERA
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroCamera));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroCamera));
+#endif
                     break;
                 default: // INTROTYPE_WATCH, INTROTYPE_CREDITS
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroEmpty));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroEmpty));
+#endif
                     break;
             }
     #ifdef DEBUG
@@ -10399,7 +10443,11 @@ Gfx* hudmsgBottomRender(Gfx* arg0)
             }
 
             view_vert = view_top - view_top_offset;
+#ifdef PORT
+            arg0 = draw_blackbox_to_screen(arg0, &view_left, &view_vert, &view_horiz, &view_top);
+#else
             arg0 = draw_blackbox_to_screen(arg0, (s32) &view_left, (s32) &view_vert, (s32) &view_horiz, (s32) &view_top);
+#endif
             arg0 = combiner_bayer_lod_perspective(textRenderOutlined(arg0, &view_left, &view_vert, stringbuffer_lowerleft[status_bar_text_buffer_index], BONDVIEW_2ND_FONTTABLE(status_bar_text_buffer_index), BONDVIEW_1ST_FONTTABLE(status_bar_text_buffer_index), -1, 0x646464FFU, (s16) (s32) viGetX(), (s16) viGetY(), 0, 0));
         }
     }
@@ -11412,7 +11460,11 @@ void sub_GAME_7F08BEEC(Mtxf *matrices, s32 count)
 
     for (i = 0, j = 0; i < count; i++, j += sizeof(Mtxf))
     {
+#ifdef PORT
+        matrix_4x4_multiply_homogeneous(currentPlayerGetViewToWorldMtxf(), (Mtxf *)((uintptr_t)matrices + j), &sp40);
+#else
         matrix_4x4_multiply_homogeneous(currentPlayerGetViewToWorldMtxf(), (Mtxf *)((u32)matrices + j), &sp40);
+#endif
 
         sp40.m[3][0] -= g_CurrentPlayer->current_model_pos.f[0];
         sp40.m[3][1] -= g_CurrentPlayer->current_model_pos.f[1];

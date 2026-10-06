@@ -300,7 +300,7 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
         /* D202/M-67 diag (temporary): log every event the player processes,
          * so each VOICE- can be attributed to the exact killing event.
          * Remove once root-caused. */
-        if (getenv("GE_AUDIOTRACE")) {
+        if (GE_ENVFLAG("GE_AUDIOTRACE")) {
             extern uint64_t sysGetMicroseconds(void);
             geTracePrintf("audiotrace.log", "[EVT] t=%llu type=%d state=%p\n",
                     (unsigned long long)sysGetMicroseconds(),
@@ -437,7 +437,7 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                                 alEvtqPostEvent(&sndp->evtq, (ALEvent *) event, DELTA_1_MS + 1);
                             } else {
                                 // No lower-priority sound to preempt, so stop the sound.
-                                if (getenv("GE_AUDIOTRACE")) { /* D207 diag: SFX actually dropped (pool full, nothing preemptable); remove with the D202 probe set */
+                                if (GE_ENVFLAG("GE_AUDIOTRACE")) { /* D207 diag: SFX actually dropped (pool full, nothing preemptable); remove with the D202 probe set */
                                     geTracePrintf("audiotrace.log",
                                         "[D207-DROP] site=preempt-scan state=%p prio=%d flags=%d count=%d/%d\n",
                                         soundState, soundState->priority, soundState->unk3e,
@@ -451,7 +451,7 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                             // Perhaps it would be better to look for a sound to preempt, just like when the limit is
                             // reached. It's strange that we only check for sounds to preempt when the limit is reached,
                             // but not when it hasn't been.
-                            if (getenv("GE_AUDIOTRACE")) { /* D207 diag: dropped on the "limit not reached" path; remove with the D202 probe set */
+                            if (GE_ENVFLAG("GE_AUDIOTRACE")) { /* D207 diag: dropped on the "limit not reached" path; remove with the D202 probe set */
                                 geTracePrintf("audiotrace.log",
                                     "[D207-DROP] site=no-limit state=%p prio=%d flags=%d count=%d/%d\n",
                                     soundState, soundState->priority, soundState->unk3e,
@@ -472,7 +472,7 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                 /* D202/M-65 diag (temporary): pair every voice acquire with
                  * its release to find which sounds hold the 8 voices for
                  * good. Remove once root-caused. */
-                if (getenv("GE_AUDIOTRACE")) {
+                if (GE_ENVFLAG("GE_AUDIOTRACE")) {
                     geTracePrintf("audiotrace.log", "[VOICE+] sound=%p state=%p flags=%d count=%d\n",
                             (void *)sound, (void *)soundState, (int)soundState->unk3e,
                             (int)g_sndAllocatedVoicesCount);
@@ -559,7 +559,7 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
                             /* D202/M-67 diag (temporary): log the release ramp a
                              * STOP/DEACTIVATE computes; delta==0 means the voice
                              * is disposed immediately. Remove once root-caused. */
-                            if (getenv("GE_AUDIOTRACE")) {
+                            if (GE_ENVFLAG("GE_AUDIOTRACE")) {
                                 geTracePrintf("audiotrace.log", "[STOP-EVT] type=%d state=%p playingState=%d deltaUs=%d\n",
                                         (int)event->common.type, (void *)soundState,
                                         (int)soundState->playingState, (int)delta);
@@ -614,7 +614,7 @@ void sndHandleEvent(ALSndPlayer *sndp, ALSndpEvent *event) {
             case AL_SNDP_VOL_EVT:
                 soundState->vol = event->vol.vol;
 #ifdef PORT
-                if (getenv("GE_AUDIOTRACE")) { /* D202 diag: distance-vol value per VOL event; remove with the other probes */
+                if (GE_ENVFLAG("GE_AUDIOTRACE")) { /* D202 diag: distance-vol value per VOL event; remove with the other probes */
                     extern uint64_t sysGetMicroseconds(void);
                     geTracePrintf("audiotrace.log", "[VOL] t=%llu state=%p rawVol=%d playing=%d\n",
                             (unsigned long long)sysGetMicroseconds(), (void *)soundState,
@@ -944,7 +944,7 @@ void sndUnlinkClearSound(ALSoundState *state)
     {
         g_sndAllocatedVoicesCount--;
 #ifdef PORT
-        if (getenv("GE_AUDIOTRACE")) { /* D202/M-65 diag; remove once root-caused */
+        if (GE_ENVFLAG("GE_AUDIOTRACE")) { /* D202/M-65 diag; remove once root-caused */
             geTracePrintf("audiotrace.log", "[VOICE-] sound=%p state=%p flags=%d count=%d\n",
                     (void *)state->sound, (void *)state, (int)state->unk3e,
                     (int)g_sndAllocatedVoicesCount);
@@ -1082,7 +1082,7 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
         /* D202 diag probe (temporary): trace which soundIndex resolves to
          * which ALSound*, to root-cause the M-52 "wrong sample plays"
          * playtest report. Remove once root-caused. */
-        if (getenv("GE_AUDIOTRACE")) {
+        if (GE_ENVFLAG("GE_AUDIOTRACE")) {
             extern unsigned long long audioDumpBytePos(void);
             geTracePrintf("audiotrace.log", "[AUDIOTRACE] dumppos=%llu sndPlaySfx: bank=%p soundIndex=%d -> sound=%p keyMap=%p wavetable=%p base=%p len=%d type=%d flags=%d book=%p\n",
                     (unsigned long long)audioDumpBytePos(),
@@ -1120,7 +1120,7 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
         /* D202 diag probe (temporary): log the ALSoundState* handed back per
          * soundIndex so a later sndDeactivate trace can be correlated back
          * to "which chain link was this". Remove once root-caused. */
-        if (getenv("GE_AUDIOTRACE")) {
+        if (GE_ENVFLAG("GE_AUDIOTRACE")) {
             ALKeyMap *kmp = sound ? sound->keyMap : NULL;
             /* D202/M-65: the retrigger machinery is what the user's three
              * symptoms all route through, and none of it was traced before.
@@ -1256,7 +1256,7 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
              * forever, until sndDeactivate clears bit 0x10. A stuck looping
              * sound IS this event never stopping; a "piling up" mix is this
              * period being far too short. Remove once root-caused. */
-            if (getenv("GE_AUDIOTRACE")) {
+            if (GE_ENVFLAG("GE_AUDIOTRACE")) {
                 geTracePrintf("audiotrace.log", "[AUDIOTRACE] RETRIGGER-POST: state=%p soundIndex=%d delayUs=%d (%.1f ms)\n",
                         (void *)nextState, (int)eventSoundIndex, (int)playSfxDelta,
                         (double)playSfxDelta / 1000.0);
@@ -1275,7 +1275,7 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
          * write IS how a looping SFX gets an owner that can later stop it.
          * Log it so "slot never written" can be told apart from "slot
          * written then cleared". Remove once root-caused. */
-        if (getenv("GE_AUDIOTRACE")) {
+        if (GE_ENVFLAG("GE_AUDIOTRACE")) {
             geTracePrintf("audiotrace.log", "[SLOTWRITE] slot=%p <- state=%p (was %p)\n",
                     (void *)pendingState, (void *)nextState,
                     (void *)pendingState->link.next);
@@ -1303,7 +1303,7 @@ void sndDeactivate(ALSoundState *state)
     /* D202 diag probe (temporary): does this ever fire for the stuck
      * door-loop voice? Correlate against the sndPlaySfx newState= trace.
      * Remove once root-caused. */
-    if (getenv("GE_AUDIOTRACE")) {
+    if (GE_ENVFLAG("GE_AUDIOTRACE")) {
         geTracePrintf("audiotrace.log", "[AUDIOTRACE] sndDeactivate: state=%p (%s)\n",
                 (void *)state, state ? "non-null" : "NULL-noop");
     }

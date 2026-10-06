@@ -35,6 +35,7 @@
 #include <ultra64.h>
 #ifdef PORT
 #include <stdlib.h>
+#include "envflag.h"
 #endif
 
 // hack? used to match as called with 2 args, but decompiled code takes 1
@@ -796,26 +797,6 @@ s32 chraiGoToLabel(AIRecord *AIList, s32 Offset, u8 LabelNum)
         }
         else if (AIList[Offset].cmd == AI_EndList)
         {
-#ifdef PORT
-            /* D309 (diagnosis only, GE_D309=1): label scan ran off the end of
-             * the list -- the decomp's own comment says the restart-PC-to-0
-             * return "causes infinite loop outside of debug". This is the
-             * spin signature; logging it catches any AI list (not just
-             * m_RunToBondPersistent) whose mis-sized skip produced a phantom
-             * GotoNext to a nonexistent label. */
-            {
-                static int s_d309g = -1;
-                static int s_d309gn = 0;
-
-                if (s_d309g < 0) { s_d309g = getenv("GE_D309") != NULL; }
-                if (s_d309g && s_d309gn < 400)
-                {
-                    osSyncPrintf("D309: LABEL-NOT-FOUND list=%p off=%d label=%d\n",
-                                 (void *)AIList, (int)Offset, (int)LabelNum);
-                    s_d309gn++;
-                }
-            }
-#endif
             // restart ai list PC if next label not found - causes infinite loop outside of debug
             listID = chraiGetAIListID(AIList, &isGlobalAIList);
 #ifdef DEBUG
@@ -1161,7 +1142,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                      * every time this specific anim_id fires. Env-gated
                      * (GE_D243M, already cached elsewhere), essentially free
                      * when unset. Diagnosis only. */
-                    if (getenv("GE_D243M") != NULL)
+                    if (GE_ENVFLAG("GE_D243M"))
                     {
                         /* M-170 correction: the first version of this probe
                          * filtered on anim_id==0xb100 and got ZERO hits
@@ -3410,30 +3391,6 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
 
                     /* D310: size the PRINT per list origin (see d310ItemSize). */
                     (void)chraiGetAIListID(AiListp, &d310global);
-                    /* D309 (diagnosis only, GE_D309=1): log each step on a
-                     * PRINT record with the size actually used and the
-                     * command byte we land on. A repeating line (same
-                     * chr/list/off) means ai() re-executes the same path every
-                     * tick without advancing -- the standing-still signature;
-                     * landcmd==0x00 (AI_GotoNext) is the D309 spin variant.
-                     * Capped so a stuck loop can't flood stderr. */
-                    {
-                        static int s_d309p = -1;
-                        static int s_d309pn = 0;
-
-                        if (s_d309p < 0) { s_d309p = getenv("GE_D309") != NULL; }
-                        if (s_d309p && s_d309pn < 400)
-                        {
-                            s32 sz = d310ItemSize(AiListp, Offset, d310global);
-
-                            osSyncPrintf("D309: PRINT chr=%d list=%p off=%d size=%d landcmd=0x%02x global=%d\n",
-                                         ChrEntityp ? (int)ChrEntityp->chrnum : -1,
-                                         (void *)AiListp, (int)Offset, (int)sz,
-                                         (int)(AiListp[Offset + sz].cmd & 0xff),
-                                         (int)d310global);
-                            s_d309pn++;
-                        }
-                    }
 #endif
     #ifdef ENABLE_LOG
                     AIRecord *ai = AiListp + Offset;

@@ -93,6 +93,14 @@ cmake -S . -B build-pc -DROMID=ntsc-final
 cmake --build build-pc -j
 ```
 
+On Windows, `build-pc.sh` also locates the MSYS2 MinGW64 toolchain itself
+(so it works from Git Bash or a non-login shell too, even with another
+`cmake` earlier on PATH) and, if native child processes would get an
+unwritable `TMP`, re-runs the configure+build under PowerShell with a
+writable one. If MSYS2 is not installed at `C:\msys64`, set
+`GE_MSYS2_ROOT` (e.g. `GE_MSYS2_ROOT='D:\M\msys64'`). Re-exec logs:
+`build-pc/ge007-native-reexec-*.log`.
+
 For PAL/JP you must first generate that region's ROM-asset symbol file
 (the US one is committed):
 

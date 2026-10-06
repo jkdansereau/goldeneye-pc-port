@@ -10,7 +10,11 @@ This page answers two questions plainly: *what does installing this put on
 your machine*, and *how faithfully does the port actually reproduce the
 original N64 game's logic*. Both were reviewed end-to-end on 2026-09-15 and
 re-verified for the v0.3.0 release bundles on 2026-09-18 (bundle contents,
-no-networking source check, and the asset converter). The full engineering
+no-networking source check, and the asset converter). The no-networking source
+check was repeated against the `release/v0.4.1` tree on 2026-09-30 (no socket,
+HTTP or name-resolution calls in `src/` or `port/`; neither the engine nor the
+bundled `SDL2.dll` imports a networking DLL; no registry calls in the port's
+own code); the bundle contents were not re-checked then. The full engineering
 record behind each item is in the project's finding log
 ([`docs/dev/findings.md`](dev/findings.md)).
 
@@ -41,7 +45,10 @@ reads your ROM and writes new files — has no network access at all,
 verifies your ROM against a fixed table of known retail GoldenEye 007
 hashes before touching it (an unrecognized file is rejected outright), and
 writes only inside the bundle folder. Its full source ships right next to
-the compiled version in every release if you'd like to read it yourself.
+the compiled version in every release if you'd like to read it yourself. The
+engine starts it automatically on the first run, when the two derived asset
+folders (`data/pcmodels-*`, `data/pccg-*`) are missing, passing it the ROM it
+found and the output folder; after that first run it is not launched again.
 
 See [`SECURITY.md`](../.github/SECURITY.md) for why the binaries are
 unsigned and what that means in practice (a SmartScreen prompt on first
@@ -52,13 +59,12 @@ run, and why some antivirus engines flag the converter specifically).
 Cloning and building pulls in only standard, well-known packages: MSYS2
 `pacman` packages on Windows, `apt` packages on Linux — no `npm`, no
 `cargo`, nothing downloaded at CMake configure time, no git submodules, and
-no prebuilt binaries checked into the repository. **One real gap**: the CI
-build installs `pyinstaller` from PyPI without pinning a version, which is
-used to freeze the release's asset-converter tool. It's a widely-used
-packaging tool, and what it packages is entirely in-repo, stdlib-only
-Python — but an unpinned dependency means a future PyInstaller release
-could change what ships without a corresponding diff in this repository.
-Pinning it is a tracked follow-up.
+no prebuilt binaries checked into the repository. The CI build freezes the release's asset-converter tool with `pyinstaller`,
+which is pinned to an exact version, and every third-party GitHub Action the
+workflows use is pinned to a full commit SHA (both from the release after
+v0.4.0; earlier releases installed an unpinned `pyinstaller`). What
+PyInstaller packages is entirely in-repo, stdlib-only Python, so a release is
+reproducible from a diff of this repository.
 
 One development-only backdoor exists in source builds: the `GE_DEBUG_UNLOCKALL`
 environment variable (`src/game/file2.c`) pre-unlocks all cheat options at boot.

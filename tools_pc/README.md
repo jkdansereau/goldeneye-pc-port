@@ -40,6 +40,7 @@ investigation artifacts.
 | `disasm.py` | Minimal MIPS disassembler for the BE ROM (RAM-addr → file offset). |
 | `ppm2bmp.py` | PPM → 24-bit BMP, no deps — eyeball `GE_PCDUMP` frames without PIL. |
 | `gen_findings_index.py` | Regenerate `docs/dev/findings-index.csv` (grep-before-you-read aid for the 200 KB finding log). `--check` in CI-style use. |
+| `docs_budget.py` | Context cost (approx tokens) of the docs every agent session loads, against per-file and tier-1 budgets; exits 1 when over. `--toc FILE` prints a heading TOC, `--json` for scripting. |
 | `gen_env_probes.py` | Drift check for `docs/dev/GE-ENV-PROBES.md` — re-greps live `getenv("GE_*")` sites, reports NEW/GONE. |
 
 ## Living — compiler-verified layout probes (kept: re-run when structs change)

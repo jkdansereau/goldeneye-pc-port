@@ -83,6 +83,7 @@
 #include "envflag.h"
 #include "optionsoverlay.h"
 #include "frontoptions.h"
+#include "video.h"
 /* D194 absolute aim: read-only access to the live camera (struct player).
  * Game header pulled in through the same shim path every other compiled game
  * file uses; we only READ vv_theta/vv_verta/speedtheta/speedverta/aspect. */
@@ -1802,6 +1803,17 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                         if ((mx != lastMenuMouseX || my != lastMenuMouseY) ||
                             (menuPointerTransitionFrames > 0 && mouseRecent)) {
                             double fx = (double)mx / (double)ww;
+                            double fy = (double)my / (double)wh;
+                            /* D447: Video.AspectMode = Original draws into a
+                             * letter/pillarboxed rect; map across that rect. */
+                            {
+                                double rx0, ry0, rx1, ry1;
+                                videoGetOutputRectFrac(&rx0, &ry0, &rx1, &ry1);
+                                if (rx1 > rx0 && ry1 > ry0) {
+                                    fx = (fx - rx0) / (rx1 - rx0);
+                                    fy = (fy - ry0) / (ry1 - ry0);
+                                }
+                            }
                             /* D335: under native widescreen the front end is
                              * pillarboxed to a centred 4:3 region
                              * (front.c menu_jump_constructor_handler), so map
@@ -1814,7 +1826,6 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                                     fx = (fx - (1.0 - vis) * 0.5) / vis;
                                 }
                             }
-                            double fy = (double)my / (double)wh;
                             if (fx < 0.0) fx = 0.0; else if (fx > 1.0) fx = 1.0;
                             if (fy < 0.0) fy = 0.0; else if (fy > 1.0) fy = 1.0;
                             cursor_h_pos = (float)(loH + fx * (hiH - loH));

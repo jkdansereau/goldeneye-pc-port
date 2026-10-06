@@ -136,7 +136,11 @@ void finalize_ramrom_on_hw(void)
     u8 *p;
     void *a1;
 
+#ifdef PORT
+    p = (u8 *)ALIGN16_a((uintptr_t)buffer);
+#else
     p = ALIGN16_a((s32)buffer);
+#endif
     p[0] = 0;
     p[1] = 0;
 

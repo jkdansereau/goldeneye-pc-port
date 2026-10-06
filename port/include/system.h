@@ -55,6 +55,8 @@ const char *sysGetExeDir(void);
 
 /* Store the host argv (call once from main). */
 void sysSetArgs(int argc, char **argv);
+/* D443: relaunch this executable (same argv/cwd); atexit-time only. 0 = ok. */
+int  sysRelaunchSelf(void);
 /* Nonzero if the given argument (e.g. "--debug-gl") was passed. */
 int  sysArgCheck(const char *arg);
 /* Value following the given argument on the command line, or NULL. */

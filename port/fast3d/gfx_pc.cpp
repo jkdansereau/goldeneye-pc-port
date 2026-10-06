@@ -263,6 +263,24 @@ extern "C" void gfx_set_safe_area_crop(int on) {
     g_safe_area_crop_enabled = !!on;
 }
 
+/* D447: output rect (Video.AspectMode = Original). 0 = fill the window (the
+ * historical behaviour, bit-identical). >0 = letter/pillarbox the frame to
+ * exactly this aspect, centred; set once per frame by the port layer before
+ * gfx_start_frame. g_output_rect is top-left-origin window pixels. */
+static float g_output_aspect = 0.0f;
+static struct XYWidthHeight g_output_rect = { 0, 0, 0, 0 };
+
+extern "C" void gfx_set_output_aspect(float aspect) {
+    g_output_aspect = aspect > 0.1f ? aspect : 0.0f;
+}
+
+extern "C" void gfx_get_output_rect(int32_t *outX, int32_t *outY, int32_t *outW, int32_t *outH) {
+    *outX = g_output_rect.x;
+    *outY = g_output_rect.y;
+    *outW = (int32_t)g_output_rect.width;
+    *outH = (int32_t)g_output_rect.height;
+}
+
 uint32_t gfx_msaa_level = 1;
 
 static bool dropped_frame;
@@ -1209,36 +1227,6 @@ static void import_texture(int i, int tile, bool importReplacement) {
         }
     }
 
-#ifdef PORT
-    /* D157-I (M-158): import census for the D219/D252 rainbow-spark repro.
-     * Logs every small-texture (<= 16 KiB) import inside the known-bad frame
-     * window of the Bunker1 -level_09 repro, deduped per source address (first
-     * 3 hits each). Paired with the D157T vertex probe: the census names the
-     * exact source addresses bound during the spark frames (the smoke/flare/
-     * scattered family should appear in lockstep with the scripted shots),
-     * which the vertex lines can then be grepped by. Remove once root-caused.
-     * D250: cached getenv, inert unless GE_D157 is set. */
-    static int ge_d157i = -1;
-    if (ge_d157i < 0) ge_d157i = getenv("GE_D157") != NULL;
-    if (ge_d157i) {
-        extern uint32_t num_dls;
-        /* 2026-09-18: dropped the old num_dls in [90,240] gate here too (see
-         * the matching D157T comment) -- per-address dedup below already
-         * bounds this to 3 lines per distinct texture for the whole session. */
-        if (loaded_texture.size_bytes <= 16384) {
-            static std::map<const void*, int> d157i_seen;
-            int& n = d157i_seen[(const void*)orig_addr];
-            if (++n <= 3) {
-                sysLogPrintf(LOG_NOTE,
-                    "D157I: frame=%u hit#%d addr=%p fmt=%u siz=%u size=%u line=%u tile=%u tmem=%u",
-                    num_dls, n, (const void*)orig_addr, fmt, siz,
-                    loaded_texture.size_bytes, loaded_texture.line_size_bytes,
-                    tile, rdp.texture_tile[tile].tmem);
-            }
-        }
-    }
-#endif
-
     static int ge_texdump = -1;
     if (ge_texdump < 0) ge_texdump = getenv("GE_TEXDUMP") != NULL;
     if (ge_texdump) {
@@ -1298,7 +1286,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
             snprintf(nm2, sizeof nm2, "texdump/a%05d_%ux%u.bin", tdc - 1, tw, th);
             FILE* bf2 = fopen(nm2, "wb");
             if (bf2) { fwrite(loaded_texture.addr, 1, loaded_texture.size_bytes, bf2); fclose(bf2); }
-            extern uint32_t num_dls; // same counter the D157I probe uses
+            extern uint32_t num_dls;
             sysLogPrintf(LOG_NOTE,
                 "GE_TEXA[%d] dls=%u addr=%p fmt=%u siz=%u size=%u min=%u max=%u nonzero=%u/%u file=%s",
                 tdc - 1, num_dls, (void*)orig_addr, fmt, siz,
@@ -1372,15 +1360,13 @@ static void import_texture(int i, int tile, bool importReplacement) {
              * carries the whole mip chain (32x32 base + mips = 1400 B), which
              * made a 32x43 image whose GL REPEAT period (43 rows) differs from
              * the N64's mask period (32). See the tri-path counterpart. */
-            static int d245_oldtex = -1;
-            if (d245_oldtex < 0) d245_oldtex = getenv("GE_D245_OLDTEX") != NULL;
             const uint8_t maskt = rdp.texture_tile[tile].maskt;
             /* Crop by the TILE line size (the importer's row width): for a
              * LoadBlock, loaded_texture.line_size_bytes is the whole block, so
              * testing against it never cropped (M-201 follow-up: the mip rows
              * then showed as coloured dashes on Frigate's water). */
             const uint32_t d245_row = rdp.texture_tile[tile].line_size_bytes;
-            if (!d245_oldtex && fmt == G_IM_FMT_RGBA && siz == G_IM_SIZ_16b && maskt > 0 && maskt < 12 &&
+            if (fmt == G_IM_FMT_RGBA && siz == G_IM_SIZ_16b && maskt > 0 && maskt < 12 &&
                 d245_row > 0 && loaded_texture.size_bytes > d245_row * (1u << maskt)) {
                 LoadedTexture lt = loaded_texture;
                 lt.size_bytes = d245_row * (1u << maskt);
@@ -1822,12 +1808,6 @@ static void d75d_note_emit_z(uint32_t f, struct LoadedVertex* const* v_arr, int 
     d75d_env[0]=rdp.env_color.r; d75d_env[1]=rdp.env_color.g; d75d_env[2]=rdp.env_color.b; d75d_env[3]=rdp.env_color.a;
 }
 
-/* D252 TEMP (2026-09-26): F12 with GE_D157 set opens a full-detail D157T
- * burst (every small-texture vertex, no sampling) for ~90 frames, so a live
- * sighting is captured even after the continuous cap has dropped to 1-in-50.
- * Armed from videoEndFrame's screenshot path via gfxD157Burst(). */
-static volatile uint32_t s_d157BurstUntil = 0;
-
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* vertices) {
     const size_t d75_di0 = dest_index; /* D75 probe: loop below mutates dest_index */
     SUPPORT_CHECK(n_vertices <= MAX_VERTICES);
@@ -1956,102 +1936,6 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
             d->color.g = vcn->g;
             d->color.b = vcn->b;
         }
-
-#ifdef PORT
-        /* D157 diag (temporary, session 2026-09-16/17): does bullet_spark_render
-         * (glass2.c) actually draw with G_LIGHTING on? The M-110 mechanism
-         * (this vertex's v.cn[]/n.n[] union reinterpretation above) was
-         * already ruled out for explosion.c's particles (5000/5000 samples
-         * measured LIGHTING=off, see the D219 comment a few hundred lines
-         * below) -- don't assume it holds for glass2.c's bullet sparks
-         * without measuring. Key on the ORIGINAL authored bytes
-         * (v->v.cn[], readable regardless of which branch fired above,
-         * since n.n[]/cn[] are the same union storage) matching one of
-         * glass2.c's g_BulletSparkColors[] entries exactly. */
-        static int ge_d157 = -1;
-        if (ge_d157 < 0) ge_d157 = getenv("GE_D157") != NULL;
-        if (ge_d157) {
-            static const uint8_t known[][4] = {
-                {0xFF,0xFF,0xFF,0xFF}, {0xFF,0xFF,0xC8,0xFF}, {0xFF,0x00,0x00,0xFF},
-            };
-            /* 2026-09-26: this match was uncapped and white (255,255,255,255)
-             * hits every HUD/text/effect vertex -> ~200k lines in 18 s, 4-6 fps
-             * in live play. Now: first 500 hits, then only inside an F12 burst. */
-            extern uint32_t num_dls;
-            static int d157m_n = 0;
-            const bool d157m_on = d157m_n < 500 || num_dls <= s_d157BurstUntil;
-            if (d157m_on) for (const auto& k : known) {
-                if (v->v.cn[0] == k[0] && v->v.cn[1] == k[1] && v->v.cn[2] == k[2] && v->v.cn[3] == k[3]) {
-                    d157m_n++;
-                    sysLogPrintf(LOG_NOTE,
-                        "D157: bulletspark-color-match cn=(%d,%d,%d,%d) geometry_mode=%08x LIGHTING=%s -> shaded=(%d,%d,%d)",
-                        v->v.cn[0], v->v.cn[1], v->v.cn[2], v->v.cn[3], rsp.geometry_mode,
-                        (rsp.geometry_mode & G_LIGHTING) ? "ON" : "off",
-                        (int)d->color.r, (int)d->color.g, (int)d->color.b);
-                    break;
-                }
-            }
-
-            /* D157-B (M-158): the exact-color-match key above NEVER caught the
-             * pale-yellow (255,255,200) door-spark vertices in the Bunker1
-             * rainbow repro (only 2 white hits, both LIGHTING=off), so per
-             * D219 M-157's revised next step this sibling block keys on
-             * TEXTURE IDENTITY instead: any vertex whose render tile (tile 0)
-             * holds a small loaded texture (size <= 16 KiB -- the spark
-             * family is IA 64x64, promoted 8b->16b by texSelect) inside the
-             * known-bad frame window of that repro (shots at frames 60-350,
-             * visible rainbow frames 108-220). Logs the full RGBA path per
-             * vertex: authored cn, shaded result, LIGHTING, geometry_mode,
-             * combine_mode (texSelect sets G_CC_MODULATEIA for these -- a
-             * different value here is a combiner-state leak), and the tile's
-             * source identity (addr/fmt/siz/size = the TextureCacheKey for
-             * non-CI textures, so cache-collision reasoning works offline).
-             * Frame window + size key are repro-specific; widen if re-running
-             * elsewhere. Remove once D219/D252 is root-caused. */
-            {
-                extern uint32_t num_dls;
-                /* 2026-09-18: dropped the old num_dls in [90,240] gate -- that
-                 * window only fit the original short GE_INPUTSCRIPT repro; a
-                 * real interactive session runs for thousands of frames before
-                 * the player actually triggers the bug, so the gate silently
-                 * discarded 100% of useful data in live play. The existing
-                 * per-run hit caps below already bound log growth without it. */
-                {
-                    const uint32_t tile0 = rdp.first_tile_index;
-                    LoadedTexture& lt0 = rdp.loaded_texture[rdp.texture_tile[tile0].tmem];
-                    if (lt0.addr && lt0.size_bytes <= 16384) {
-                        static int d157b_n = 0;
-                        d157b_n++;
-                        /* Raised from 400/1-in-200 (sized for a ~250-frame
-                         * scripted repro) to a much larger continuous window
-                         * so a real, minutes-long play session doesn't drop
-                         * to sparse 1-in-200 sampling before the player
-                         * actually triggers the bug. */
-                        static int d157burst_n = 0;
-                        const bool burst = num_dls <= s_d157BurstUntil && d157burst_n < 60000;
-                        if (burst) d157burst_n++;
-                        /* 2026-09-26: continuous logging cut to a 2000-line baseline;
-                         * the 20000 + 1-in-50 tail was a big share of the
-                         * live-play slowdown. Full detail now comes from F12. */
-                        if (burst || d157b_n <= 2000) {
-                            sysLogPrintf(LOG_NOTE,
-                                "D157T%s: frame=%u cn=(%d,%d,%d,%d) shaded=(%d,%d,%d) LIGHTING=%s geom=%08x combine=%llx | "
-                                "tile0=%u tmem=%u fmt=%u siz=%u addr=%p size=%u line=%u | uv=(%d,%d)",
-                                burst ? "B" : "", num_dls,
-                                v->v.cn[0], v->v.cn[1], v->v.cn[2], v->v.cn[3],
-                                (int)d->color.r, (int)d->color.g, (int)d->color.b,
-                                (rsp.geometry_mode & G_LIGHTING) ? "ON" : "off", rsp.geometry_mode,
-                                (unsigned long long)rdp.combine_mode,
-                                tile0, rdp.texture_tile[tile0].tmem,
-                                rdp.texture_tile[tile0].fmt, rdp.texture_tile[tile0].siz,
-                                (const void*)lt0.addr, lt0.size_bytes, lt0.line_size_bytes,
-                                (int)U, (int)V);
-                        }
-                    }
-                }
-            }
-        }
-#endif
 
         d->u = U;
         d->v = V;
@@ -2256,49 +2140,6 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             d75d_note_rej(videoGetFrameCount(), 0);
             return;
         }
-
-        /* D288 diag (M-152, frame-gated M-155, any_behind-restricted
-         * M-155-follow-up): the silo intro's screen-filling stray triangle
-         * (bounded to level_20 frames ~562-741) isn't explained by this
-         * function's existing D233/D106 guards on static review -- log any
-         * triangle whose clip-space NDC bbox covers an unreasonable chunk
-         * of the screen, together with each vertex's w and the render-mode
-         * word (oml), to catch it at draw time. M-155: the first ungated
-         * run fired 116k times in ~1500-2000 frames -- bbox_frac >0.15
-         * alone is a common occurrence for ordinary near-camera geometry,
-         * not a distinguishing signature. Gated to the reported frame
-         * window (num_dls, the pattern the since-removed GE_D236RM
-         * probe also used) and the
-         * threshold raised well above the ~0.15 "normal" baseline M-155
-         * established, so a hit here is actually rare. M-155 follow-up:
-         * for any_behind_camera==1 triangles the x/w perspective divide is
-         * meaningless (w near zero or negative -> arbitrarily large
-         * "bbox_frac" for perfectly ordinary geometry), which is exactly
-         * why the code above defers those to GL's own clipper -- so the
-         * probe now skips them entirely; a hit here has comfortably
-         * positive w's and is a genuine large-NDC-bbox triangle. oml is
-         * logged so the culprit's material/model can be identified against
-         * the level's asset tables (the flat RGB(83,62,44) color grep
-         * found nothing in the .c sources -- binary model blobs). Remove
-         * once D288 is root-caused. */
-        static int ge_d288 = -1;
-        if (ge_d288 < 0) ge_d288 = getenv("GE_D288") != NULL;
-        if (ge_d288 && !any_behind_camera) {
-            extern uint32_t num_dls;
-            if (num_dls >= 550 && num_dls <= 755) {
-                float minx = std::fmin(std::fmin(v1->x / v1->w, v2->x / v2->w), v3->x / v3->w);
-                float maxx = std::fmax(std::fmax(v1->x / v1->w, v2->x / v2->w), v3->x / v3->w);
-                float miny = std::fmin(std::fmin(v1->y / v1->w, v2->y / v2->w), v3->y / v3->w);
-                float maxy = std::fmax(std::fmax(v1->y / v1->w, v2->y / v2->w), v3->y / v3->w);
-                float bbox_frac = (maxx - minx) * (maxy - miny) / 4.0f; // NDC quad is [-1,1]^2
-                if (!std::isfinite(bbox_frac) || bbox_frac > 0.5f) {
-                    fprintf(stderr, "D288: dl=%u tri w=(%.6f,%.6f,%.6f) bbox_frac=%.3f oml=0x%08x color=(%d,%d,%d)\n",
-                            num_dls, v1->w, v2->w, v3->w, bbox_frac,
-                            (unsigned)rdp.other_mode_l,
-                            v1->color.r, v1->color.g, v1->color.b);
-                }
-            }
-        }
     }
 
     if ((rsp.geometry_mode & G_CULL_BOTH) != 0) {
@@ -2483,10 +2324,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
              * (32, not 32/2 = 16, which doubled the S frequency) and height =
              * the mask period (32, not 1400/32 = 43 rows of mip chain). */
             {
-                static int d245_oldtex2 = -1;
-                if (d245_oldtex2 < 0) d245_oldtex2 = getenv("GE_D245_OLDTEX") != NULL;
                 const auto& ltx = rdp.loaded_texture[rdp.texture_tile[tile].tmem];
-                if (!d245_oldtex2 && rdp.texture_tile[tile].fmt == G_IM_FMT_RGBA &&
+                if (rdp.texture_tile[tile].fmt == G_IM_FMT_RGBA &&
                     rdp.texture_tile[tile].siz == G_IM_SIZ_16b && ltx.src_fmt == G_IM_FMT_CI) {
                     const uint8_t mkt = rdp.texture_tile[tile].maskt;
                     tex_width[i] = rdp.texture_tile[tile].line_size_bytes;
@@ -2989,7 +2828,7 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
 static inline void gfx_update_aspect_mode(void) {
     const uint32_t side = rsp.aspect_mode & G_ASPECT_CENTER_EXT;
 
-    rsp.aspect_scale = rsp.aspect_mode ? gfx_current_native_aspect : gfx_current_window_dimensions.aspect_ratio;
+    rsp.aspect_scale = rsp.aspect_mode ? gfx_current_native_aspect : gfx_current_dimensions.aspect_ratio; /* D447: == window aspect unless the output rect is active */
 
     if (side == G_ASPECT_LEFT_EXT) {
         rsp.aspect_ofs = 1.f - gfx_current_dimensions.aspect_ratio / gfx_current_native_aspect;
@@ -3107,9 +2946,19 @@ static void gfx_calc_and_set_viewport(const Vp_t* viewport) {
     /* Cache the raw (pre window-scale) viewport bounds for the safe-area
      * crop above -- guard against a degenerate/zero-height viewport so a
      * later divide can't ever see one. */
-    if (height > 1.0f) {
+    if (height >= 0.9f * (float)SCREEN_HEIGHT) {
         g_gpSafeTop = y;
         g_gpSafeHeight = height;
+    } else if (height > 1.0f && g_gpSafeHeight <= 0.0f) {
+        /* D447: Wide/Cinema (and split-screen) viewports are the player's own
+         * letterbox, never the overscan margin: don't let them define the crop
+         * band, or the crop would stretch them to fill the window. If no full
+         * viewport has been seen yet, seed the standard centred 220-line band
+         * (VIEWPORT_HEIGHT_DEFAULT_NTSC) around this viewport's centre. */
+        const float centre = y - height * 0.5f;
+        const float bandH = 220.0f * (float)SCREEN_HEIGHT / 240.0f;
+        g_gpSafeTop = centre + bandH * 0.5f;
+        g_gpSafeHeight = bandH;
     }
 
     gfx_adjust_viewport_or_scissor(&rdp.viewport);
@@ -4243,8 +4092,37 @@ extern "C" void gfx_start_frame(void) {
 
     gfx_current_dimensions = gfx_current_window_dimensions;
 
+    gfx_current_game_window_viewport.x = 0;
+    gfx_current_game_window_viewport.y = 0;
     gfx_current_game_window_viewport.width = gfx_current_dimensions.width;
     gfx_current_game_window_viewport.height = gfx_current_dimensions.height;
+    g_output_rect = { 0, 0, gfx_current_window_dimensions.width, gfx_current_window_dimensions.height };
+
+    if (g_output_aspect > 0.0f) {
+        /* D447: pillar/letterbox to the exact target aspect, centred, even
+         * sizes. dims == game viewport size, so different_size stays false and
+         * gfx_adjust_viewport_or_scissor's existing offset path places every
+         * canvas rect inside the rect. */
+        const uint32_t ww = gfx_current_window_dimensions.width;
+        const uint32_t wh = gfx_current_window_dimensions.height;
+        uint32_t rw = ww, rh = wh;
+        if ((float)ww / (float)wh > g_output_aspect) {
+            rw = (uint32_t)std::lround((float)wh * g_output_aspect);
+        } else {
+            rh = (uint32_t)std::lround((float)ww / g_output_aspect);
+        }
+        rw &= ~1u;
+        rh &= ~1u;
+        if (rw < 2) rw = 2;
+        if (rh < 2) rh = 2;
+        if (rw > ww) rw = ww;
+        if (rh > wh) rh = wh;
+        g_output_rect = { (int16_t)((ww - rw) / 2), (int16_t)((wh - rh) / 2), rw, rh };
+        gfx_current_dimensions.width = rw;
+        gfx_current_dimensions.height = rh;
+        gfx_current_dimensions.aspect_ratio = g_output_aspect;
+        gfx_current_game_window_viewport = g_output_rect;
+    }
 
     if (gfx_current_dimensions.height != gfx_prev_dimensions.height) {
         for (auto& fb : framebuffers) {
@@ -4256,8 +4134,8 @@ extern "C" void gfx_start_frame(void) {
                     gfx_adjust_width_height_for_scale(width, height);
                 } else {
                     // assume this is a fullscreen fb
-                    width = gfx_current_dimensions.width;
-                    height = gfx_current_dimensions.height;
+                    width = gfx_current_window_dimensions.width;
+                    height = gfx_current_window_dimensions.height;
                 }
                 if (width != fb.second.applied_width || height != fb.second.applied_height) {
                     gfx_rapi->update_framebuffer_parameters(fb.first, width, height, 1, true, true, true, true);
@@ -4299,16 +4177,6 @@ extern "C" void gfx_start_frame(void) {
 }
 
 uint32_t num_dls = 0;
-
-/* D252 TEMP: see s_d157BurstUntil. No-op unless GE_D157 is set. */
-extern "C" void gfxD157Burst(void) {
-    static int on = -1;
-    if (on < 0) on = getenv("GE_D157") != NULL;
-    if (!on) return;
-    s_d157BurstUntil = num_dls + 90;
-    sysLogPrintf(LOG_NOTE, "D157 burst: F12 at frame=%u, full logging to frame=%u",
-                 num_dls, (uint32_t)s_d157BurstUntil);
-}
 
 /* F10 port-layer options overlay (port/src/optionsoverlay.c). Returns a
  * self-contained 2D display list to draw on top of the game's frame, or NULL
@@ -4513,8 +4381,11 @@ extern "C" void gfx_copy_framebuffer(int fb_dst, int fb_src, int left, int top, 
             // upscale the position
             left = left * gfx_current_dimensions.width / gfx_current_native_viewport.width;
             top = top * gfx_current_dimensions.height / gfx_current_native_viewport.height;
+            // D447: offset into the output rect (0,0 when the rect fills the window)
+            left += gfx_current_game_window_viewport.x;
+            top += gfx_current_game_window_viewport.y;
             // flip Y
-            top = gfx_current_dimensions.height - top - 1;
+            top = gfx_current_window_dimensions.height - top - 1;
         }
         if (use_back && gfx_msaa_level > 1) {
             // read from the framebuffer we've been rendering to
