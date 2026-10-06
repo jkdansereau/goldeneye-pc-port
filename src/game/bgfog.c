@@ -344,6 +344,15 @@ int portFogPositionVisibleGameplay(float *pos3, float range)
 #endif
 
 
+#ifdef PORT
+/* D540: Video.FogDistance helpers (port rendering option, like D218's draw
+ * distance; game logic unchanged -- identity at the defaults). */
+extern f32 portDrawDistanceMultiplier(void);
+extern f32 portFogDistanceMultiplier(void);
+static EnvironmentRecord *s_portFogEnv = NULL;   /* last env loaded, for live re-apply */
+static f32 s_portFogDD, s_portFogFM;              /* multipliers it was built with */
+#endif
+
 /**
  * Address 0x7F0BA758.
 */
@@ -379,8 +388,17 @@ void fogLoadCurrentEnvironment(EnvironmentRecord *arg0)
      * a per-frame copy. Identity at DrawDistance=100/DrawDistanceAutoFov's
      * FovScale=100 default. */
     {
-        extern f32 portDrawDistanceMultiplier(void);
-        scaledFarFog = arg0->Visibility.FarFog * portDrawDistanceMultiplier();
+        /* D540: the far clip follows FOG distance, capped by Draw distance:
+         * beyond the fog's end everything is solid fog, so a further clip
+         * shows nothing -- but it pushed the authored per-mille fog positions
+         * so close to 1000 that the s32 rounding pulled the fog visibly in
+         * (Cradle's distant truss fogged out vs 1964 at Draw 2.5x; exact at
+         * Draw 1.0x). At Fog 1.0x the clip is the authored far: exact N64 at
+         * any Draw distance. Draw distance still scales prop draw distance
+         * (propobj.c) and the room pool within that clip. */
+        f32 clipMult = portFogDistanceMultiplier();
+        if (clipMult > portDrawDistanceMultiplier()) clipMult = portDrawDistanceMultiplier();
+        scaledFarFog = arg0->Visibility.FarFog * clipMult;
     }
     viSetZRange(arg0->Visibility.BlendMultiplier, scaledFarFog);
 #else
@@ -425,6 +443,12 @@ void fogLoadCurrentEnvironment(EnvironmentRecord *arg0)
 
     g_CurrentEnvironment.DifferenceFromFarIntensity = (s32) arg0->Fog.DifferenceFromFarIntensity;
     g_CurrentEnvironment.FarIntensity = arg0->Fog.FarIntensity;
+#ifdef PORT
+    /* D540: remember the env + multipliers for the live re-apply below. */
+    s_portFogEnv = arg0;
+    s_portFogDD = portDrawDistanceMultiplier();
+    s_portFogFM = portFogDistanceMultiplier();
+#endif
     g_CurrentEnvironment.Red = arg0->Sky.Red;
     g_CurrentEnvironment.Green = arg0->Sky.Green;
     g_CurrentEnvironment.Blue = arg0->Sky.Blue;
@@ -527,6 +551,7 @@ void fogLoadLevelEnvironment(s32 level_id, s32 arg1)
     g_PortAuthoredScaledFarFogIntensity = FLT_MAX;
     g_PortAuthoredScaledDifferenceFromFarFogIntensity = 0.0f;
     g_PortAuthoredFarFog = 10000.0f;
+    s_portFogEnv = NULL;   /* D540: no live re-apply until this level's env loads */
 #endif
 
     if (arg1)
@@ -689,6 +714,17 @@ Gfx *fogSetRenderFogColor(Gfx *gdl, s32 arg1)
     {
         return gdl;
     }
+
+#ifdef PORT
+    /* D540: Draw distance / Fog distance apply live (they used to wait for
+     * the next level load): rebuild the fog state from the same environment
+     * on the game thread when either multiplier changed. */
+    if (s_portFogEnv != NULL &&
+        (portDrawDistanceMultiplier() != s_portFogDD || portFogDistanceMultiplier() != s_portFogFM))
+    {
+        fogLoadCurrentEnvironment(s_portFogEnv);
+    }
+#endif
 
     // note: both branches are exactly the same.
     // maybe one has debug code?

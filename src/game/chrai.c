@@ -4177,20 +4177,6 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             chr->chrflags   = chr->chrflags | CHRFLAG_INIT;
                             setsubroty(chr->model, FacingDirection);
                             setsuboffset(chr->model, &pos);
-#ifdef PORT
-                            /* D243 M-169: signal the real shot-change moment
-                             * to the X3/X4 render-pos freeze experiments --
-                             * see the d243NotifyTeleport() definition
-                             * (bondview2.c) for the full rationale. This is
-                             * the exact decomp call (setsuboffset, line
-                             * above, unmodified) that a legitimate cutscene
-                             * teleport already performs; the notify is a
-                             * side-channel observer only, no logic change. */
-                            {
-                                extern void d243NotifyTeleport(void);
-                                d243NotifyTeleport();
-                            }
-#endif
                             chrDetectRooms(chr);
                             if (chr->prop == g_CurrentPlayer->prop)
                             {

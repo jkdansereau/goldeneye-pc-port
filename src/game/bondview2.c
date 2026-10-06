@@ -352,15 +352,6 @@ int gameScriptedCameraActive(void)
            (g_CameraMode == CAMERAMODE_SWIRL) || (g_CameraMode == CAMERAMODE_FADESWIRL);
 }
 
-/* D243 M-169: a monotonic epoch counter bumped by chrai.c's
- * AI_TRYTeleportingChrToPad case right after the decomp call that
- * legitimately re-anchors a chr's model root joint via setsuboffset() for a
- * real cutscene shot-change. playerTick() polls it to re-seed the camera
- * look-at filter exactly on a shot-change (M-190). Global, not per-chr:
- * sufficient for this cutscene's scope. */
-static u32 g_d243TeleportEpoch = 0;
-void d243NotifyTeleport(void) { g_d243TeleportEpoch++; }
-u32 d243GetTeleportEpoch(void) { return g_d243TeleportEpoch; }
 #endif
 
 void solo_char_load(void)
@@ -10629,64 +10620,16 @@ s32 playerTick(PropRecord *prop)
                 RenderPosView *rp = g_playerPointers[index]->bodyModel->render_pos;
                 matrix_4x4_multiply_homogeneous(currentPlayerGetViewToWorldMtxf(), (Mtxf *) rp, (Mtxf *) mtx);
 #ifdef PORT
-                /* D243 M-170 (superseded by M-190 below): the original "fix"
-                 * unconditionally froze field_488.pos during POSEND, only
-                 * letting a write through on the tick a shot-change teleport
-                 * fired. That killed the shake but also killed legitimate
-                 * camera tracking of Bond's real per-tick motion within a
-                 * shot -- the M-189 buffer-overlap fix that landed this same
-                 * session removed the actual cause of the shake (corrupted
-                 * render-skeleton data), so freezing is no longer needed and
-                 * was actively wrong (user-reported: "camera angles do not
-                 * follow bond"). */
-                /* D243 M-190: write field_488.pos every tick unconditionally
-                 * (real tracking restored), and instead re-seed the look-at
-                 * filter's leaky-integrator accumulator (field_3B8, read by
-                 * bondviewUpdatePlayerCollisionPositionFields) the instant a
-                 * legitimate shot-change teleport fires, rather than letting
-                 * it slowly converge over ~20 ticks (M-143's original shake
-                 * mechanism, confirmed PC-only vs N64 in M-144). Detected via
-                 * the same d243TeleportEpoch counter M-170 already used
-                 * (bumped by d243NotifyTeleport() in chrai.c's
-                 * AI_TRYTeleportingChrToPad handler) -- only the response to
-                 * an epoch change is different now: reset the filter to the
-                 * new position instead of freezing the input to it. */
-                extern u32 d243GetTeleportEpoch(void);
-                static u32 s_d243LastEpoch = 0;
-                static int s_d243HaveEpoch = 0;
-                u32 epoch;
-                int justTeleported;
-                epoch = d243GetTeleportEpoch();
-                justTeleported = (!s_d243HaveEpoch) || (epoch != s_d243LastEpoch);
-                s_d243LastEpoch = epoch;
-                s_d243HaveEpoch = 1;
+                /* D243 history (M-170 freeze, M-190 teleport re-seed) removed
+                 * 2026-10-06 (D552): the shake's real cause was the M-189
+                 * sizeof(Model) buffer overlap; the remaining ~20-tick filter
+                 * convergence after a shot-change teleport is the original
+                 * camera swivel onto Bond (Dam ending), so the write below
+                 * and the look-at filter are the decomp's, unmodified. */
 #endif
                 g_playerPointers[index]->field_488.pos.x = mtx[12] + (mtx[4] * 7.0f);
                 g_playerPointers[index]->field_488.pos.y = mtx[13] + (mtx[5] * 7.0f);
                 g_playerPointers[index]->field_488.pos.z = mtx[14] + (mtx[6] * 7.0f);
-#ifdef PORT
-                if ((g_CameraMode == CAMERAMODE_POSEND) && justTeleported)
-                {
-                    f32 fx = g_playerPointers[index]->field_488.pos.x;
-                    f32 fy = g_playerPointers[index]->field_488.pos.y;
-                    f32 fz = g_playerPointers[index]->field_488.pos.z;
-                    /* Re-seed so the filter's steady state (field_3C4/8/C =
-                     * field_3B8 * FACTOR_2) already equals the new position,
-                     * instead of a fresh ~20-tick geometric decay toward it
-                     * (bondviewUpdatePlayerCollisionPositionFields, the
-                     * FACTOR_1/FACTOR_2 pair). field_3B8 is the PRE-scale
-                     * accumulator, so it must be seeded at pos/FACTOR_2, not
-                     * pos itself -- field_3C4/8/C (what the camera actually
-                     * reads) are set directly to the real position so it's
-                     * correct even before the next tick's filter update. */
-                    g_playerPointers[index]->field_3B8.f[0] = fx / S7F081478_FACTOR_2;
-                    g_playerPointers[index]->field_3B8.f[1] = fy / S7F081478_FACTOR_2;
-                    g_playerPointers[index]->field_3B8.f[2] = fz / S7F081478_FACTOR_2;
-                    g_playerPointers[index]->field_3C4 = fx;
-                    g_playerPointers[index]->field_3C8 = fy;
-                    g_playerPointers[index]->field_3CC = fz;
-                }
-#endif
             }
  
             return ret;

@@ -6242,7 +6242,7 @@ Local-only commits on top of `442eb2ff`: `aa19b354` (site SEO/redundancy),
 ## Environment
 - Preview: `:8777` (PID may be stale after a reboot — `node
   scratch/build_preview.mjs site && node scratch/serve_preview.mjs 8777`).
-- Box ssh: `ssh the test box` (Windows→box works; box has no sshd —
+- Box ssh: `ssh` to the X220 box (Windows→box works; box has no sshd —
   everything rides the same session's stdin/stdout; pushes via
   `cat f | ssh ... 'cat > dest'` or tar pipes).
 - 3 parked worktrees (ci/d441/modpatch) untouched.

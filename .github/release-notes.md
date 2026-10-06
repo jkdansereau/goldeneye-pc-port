@@ -12,9 +12,8 @@
 Platforms: **Windows x86-64** and **Linux x86-64 (including Steam Deck)**.
 Region: **NTSC-U (US) only**. See [Known issues](#known-issues).
 
-<!-- MAINTAINER: after the play session, add one line here saying what this
-     build was played on (e.g. "Played on Windows and Steam Deck: campaign
-     spot-checks, 2-4P split-screen, a controller-only session"). -->
+Played on Windows and Steam Deck: campaign spot-checks, 2-4 player
+split-screen and controller-only sessions.
 
 The headline is **one real options system**: both options
 screens merged into a single menu, laid out like the Perfect Dark PC port's,
@@ -74,6 +73,31 @@ list.
 
 ## Fidelity and stability fixes
 
+- **Dam ending camera:** the first shot of the ending cutscene swivels up onto
+  Bond again, as on the N64; an old port workaround snapped it straight onto
+  him (D552).
+- **Fog rework (Surface 2, from Deck playtest):** ground fog no longer "chunks"
+  away tile by tile, and the sky fades into fog toward the horizon as on the
+  N64 (D540). Large near-camera triangles are now clipped against the near
+  plane the way the N64's RSP does, with per-vertex fog recomputed on the
+  clipped edge, so the haze around Bond stays steady as he moves instead of
+  brightening and darkening (D543, D553; compared against hardware-level
+  emulation). A new **Fog distance** setting (100% = N64) is independent of
+  Draw distance, and Draw and Fog distance now apply live instead of on the
+  next level load.
+- **Banded walls near explosions:** in Aztec's dark corridor, walls near rocket
+  fire turned into black/white/yellow/blue bands (also seen on the Deck); fixed
+  by clamping colour-combiner inputs to the range the N64 can produce (D548).
+  Build-verified; a live Aztec re-check is owed.
+- **Rocket and thrown-item crashes/clipping:** a player-fired rocket could pass
+  through the ground when fired near Bond's feet (a stack-layout difference
+  from the N64, D545), and the same class of bug is fixed in thrown grenades,
+  knives and objects (D549).
+- **Menu double-trigger (Steam Deck):** one A press could advance two menu
+  screens, and one B could back out two overlay pages. A short release
+  hold-off on menu A/B/Start and a single back action per press are now in
+  place. This is a mitigation: the exact cause is unconfirmed (the Deck
+  re-check passed) (D541).
 - **Fog:** objects far in fog are hidden as on the N64 (fog snap); in widescreen
   the wider view can still show a faint distant building edge (e.g. Surface's
   dish from the start area) — 4:3 matches the N64 (D503).
@@ -117,6 +141,40 @@ percent, frames, seconds, pixels — standardised across the two menus (D506);
 a **one-line description** of the selected option in the same menu (D507);
 and menu spelling standardised to one convention across both menus.
 
+- **Settings standardised (D546):** Draw and LOD distance default to 2.0x
+  (N64 = 1.0x), stick deadzone to 25%, and the mouse sensitivity maximum is 4x.
+  **FOV** is now vertical degrees, 30-90, with 60 = the N64 view. The old
+  "Guard AI uses full wide view" row is now **Gameplay view area**
+  (Original / Extended). Untouched old values migrate once; existing
+  `ge007.ini` files still load.
+- **Optional update check (D551):** a new **Check for updates** option in Game,
+  **off by default**. When on, it makes one HTTPS request to GitHub per launch
+  and shows an "Update available" row linking to the releases page.
+- **Settings menu wording pass (D554):** clearer tips that wrap to two lines
+  instead of being cut off, one `Key: Action` style for the control hints,
+  consistent casing and names (Original / Extended, "Original layout").
+  *Skip intro* and *All unlocked* are no longer marked experimental.
+  The game's own *Look up/down* option is gone from the menu; use *Invert look*
+  on the Mouse and Controller pages (D564).
+- **Crosshair mouse pointer and scrollbar in the settings menu (D555, D556):**
+  the game's own crosshair is the pointer while F10 / PC Options is open (Mouse →
+  Crosshair pointer to turn it off), long pages get a draggable scrollbar, and
+  tips are kept only where a setting needs explaining. Long tips are no longer
+  cut off inside a level (D558).
+- **New defaults (D556, D557):** Crouch mode defaults to Toggle (new installs and
+  Reset to defaults), and new profiles start with Look ahead off, which fights
+  mouse look on PC; an existing save's untouched empty folders (no progress,
+  factory options) get the same when first played (D559). Played or
+  customised profiles and existing settings are not changed.
+- **All unlocked** now applies live from the options menu, with no restart
+  (D547).
+- **F10 overlay mouse:** the OS cursor is always shown (no more flicker on the
+  main menu), right-click goes back, and the tip line follows the hovered row
+  (D544).
+- **Window:** the title bar is now static (no per-second "NN fps" refresh; the
+  FPS readout is still in the F10 overlay), and the window and taskbar icon is a
+  new project mark instead of a game still (D550). Live icon/title check owed.
+
 ---
 
 ## Known issues
@@ -127,36 +185,25 @@ and menu spelling standardised to one convention across both menus.
 | Changing aspect ratio inside a level can briefly glitch the gun/hand model, rarely | Cosmetic, one-off | Change the ratio from the front-end PC Options, or accept it |
 | No macOS or ARM builds | Platform | — |
 | Saves from builds before v0.4.1 can hold fake unlocks from `All unlocked` | Save data | Not repaired automatically. Since v0.4.1 the option never writes the save; keep a backup of `data/ge007.eep` from before you used it |
-| `Skip intro` and `All unlocked` are experimental | Opt-in options | Leave them off for a normal playthrough |
 | The first frame of a level takes a little longer while its textures upload | Brief FPS-counter dip | None needed |
 | Far objects almost fully in fog are now hidden as on the N64, except in widescreen where a faint distant building edge can still show (e.g. Surface's dish from the start area); 4:3 matches the N64 | Cosmetic | Higher Draw/LOD distance shows more |
 
 The full list, with workarounds, is the
 [known-issues table](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/ROADMAP.md#known-issues).
 
-**Not yet playtested live** (merged, build- and review-verified, owed a play
-session before this release is announced): the four new settings (D511),
-`Game.HudScale` (D512), Control style Original on a pad (D513/D516 per seat),
-emulator-save import (D514), and the D519 profile-chooser row / no-click-through
-follow-ups.
-<!-- MAINTAINER: if the play session did not cover all of the above, keep the
-     sentence "these were merged and review-verified but not playtested live"
-     in the body; never imply a full playtest. -->
-
-**Reference-frame gate for this release:** both platforms carry the full 21-level
-reference-frame set (63 frames each) at the same stems. The Windows gate is green
-against its own goldens (21/21, three consecutive clean sweeps); on Linux the
-crash gate is green and the pixel verdict is still owed (see below). The recipe pins the run for you: the save file's
+**Reference-frame gate for this release:** Windows, Linux and Steam Deck each
+carry the full 21-level reference-frame set (63 frames each) at the same stems,
+re-captured for this release's fog and near-plane changes and confirmed by two
+independent capture passes per platform. The full pixel gate is green on all
+three against their own goldens on the final build: Windows 21/21, Linux
+(Intel HD 3000) 21/21 and Steam Deck 21/21. The recipe pins the run for you: the save file's
 CONTENT is pinned (the gate installs its own canonical save per level, the same
 way it pins the display ini — D529) and the PRNG seed is hard-pinned (a stray
 `GE_RSEED` in your environment warns and is ignored rather than re-seeding the
 gate — D532), so a gate run and a capture run see the same starting state. The
-cross-platform spread measured on the shipped pairs (0.380-5.120% of pixels over
-tol 2 on the 20 non-Cuba levels, structural tier 21/21 clean) is
-informational only — it is not a cross-platform pixel-parity claim, and the
-linux *pixel* gate did not run on the capture box (its GL probe fails closed
-there; the linux crash gate did). The Dam ending cutscene has not been checked
-by eye in a live session.
+cross-platform spread on the shipped sets (0.188-4.553% of pixels over tol 2 on
+the 20 non-Cuba levels) is informational only — it is not a cross-platform
+pixel-parity claim.
 
 ---
 

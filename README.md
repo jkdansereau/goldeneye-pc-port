@@ -1,5 +1,7 @@
 # GoldenEye 007 PC Port
 
+<p align="center"><img src="docs/img/icon/ge007-icon.png" width="96" alt="project mark: a generic version of the game's default aim cross -- a circle with N/S/E/W lines crossing its edge (original generated art, see tools_pc/make_icon.py -- no game content)"></p>
+
 [![CI](https://github.com/jkdansereau/goldeneye-pc-port/actions/workflows/ci.yml/badge.svg)](https://github.com/jkdansereau/goldeneye-pc-port/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/jkdansereau/goldeneye-pc-port?include_prereleases&label=download)](https://github.com/jkdansereau/goldeneye-pc-port/releases)
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20Steam%20Deck-blue)
@@ -218,7 +220,8 @@ Select again) closes. With a keyboard, use `F10` and the arrow keys/Enter.
   saved automatically.
 - **Faithful N64 progression by default.** Opt-in extras: *Skip intro* and
   *All unlocked* (every level, 007 mode and the full cheat menu, without
-  touching your save; both experimental).
+  touching your save), and *Check for updates* (off
+  by default; one request to GitHub per launch when on, see Security).
 - **Saves in a plain file** next to the game, so backing up is a file copy.
 
 ## Status
@@ -240,7 +243,7 @@ only in the release packages, and no macOS/ARM builds yet.
 > those are not repaired; if you used it on an older build, keep a backup of
 > `data/ge007.eep`.
 
-What a release installs (no networking, no telemetry, no ROM or game assets)
+What a release installs (no networking unless you turn on the opt-in update check, which is off by default and makes one HTTPS request to GitHub per launch; no telemetry, no ROM or game assets)
 and how faithfully the port tracks the original game's logic:
 [Security](docs/security.md) and [fidelity](docs/fidelity.md) status.
 The binaries are not code-signed; from v0.5.0 on each release artifact also
@@ -651,7 +654,7 @@ release, is useless without a ROM you supply.
 
 Textures, audio, models, level data and in-game text are extracted from a ROM
 *you already own*, on *your* machine, the first time you start the game. The
-port has no network access and never uploads anything.
+port has no network access unless you turn on the opt-in *Check for updates* option (`Game.CheckUpdates`, off by default). When on, it makes one HTTPS request per launch to GitHub's releases API to look for a newer release (GitHub sees the request and your IP, as with any web request), never downloads or installs anything, and never uploads anything.
 
 ### This repository
 
@@ -659,6 +662,10 @@ The repository is a fork of the public
 [GoldenEye 007 decompilation](https://github.com/n64decomp/007) and inherits
 its contents (see [`NOTICE`](NOTICE) for what that includes). The few
 port-specific edits inside the decompiled code are marked `#ifdef PORT`.
+
+The project mark / favicon is original *generated* art -- a generic version
+of the game's default aim cross (a circle with N/S/E/W lines crossing its
+edge), no game screenshots or logos in it.
 
 ### Your part
 

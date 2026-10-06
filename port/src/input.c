@@ -122,7 +122,7 @@ extern void gunRequestHandWeaponChange(enum GUNHAND hand, s32 nextWeapon, s32 cy
 #define GE_CONT_F      0x0001  /* C-right */
 
 #define MAX_PADS            4
-#define STICK_DEADZONE      7000
+#define STICK_DEADZONE      7500   /* 25 %; D546 (was 7000 = 23 %) */
 #define STICK_MAX          80
 
 /* Front-end pointer mode: GE's menu cursor ("crosshair") is stick-driven
@@ -791,6 +791,14 @@ static void mouseRequestCursor(int show)
     SDL_AtomicUnlock(&s_mouseReqLock);
 }
 
+/* D555 (reworked 2026-10-06): Input.CrosshairCursor -- while the F10 overlay /
+ * PC Options is open the OS cursor is HIDDEN and optionsoverlay.c draws the
+ * game's own crosshair sprite at the mouse position, last in its display list
+ * (so it is above the card). Off: the OS arrow over the overlay, as before. */
+static int cfgCrosshairCursor = 1;
+int inputCrosshairCursorOn(void) { return cfgCrosshairCursor; }
+static int s_cursorShown = -1;   /* host thread only: last SDL_ShowCursor state applied */
+
 /* Host thread only (videoPumpEvents, inputInit). */
 void inputApplyMouseRequests(void)
 {
@@ -806,9 +814,15 @@ void inputApplyMouseRequests(void)
             SDL_GetRelativeMouseState(NULL, NULL);   /* drain the accumulated jump */
         }
     }
-    if (cur >= 0 && cur != s_appCursor) {
-        s_appCursor = cur;
-        SDL_ShowCursor(cur ? SDL_ENABLE : SDL_DISABLE);
+    if (cur >= 0) s_appCursor = cur;
+    if (s_appCursor >= 0) {
+        /* D555: with the crosshair pointer on, the overlay draws its own
+         * pointer, so the OS cursor stays hidden while it is open. */
+        const int show = s_appCursor == 1 && !(cfgCrosshairCursor && optionsOverlayIsOpen());
+        if (show != s_cursorShown) {
+            s_cursorShown = show;
+            SDL_ShowCursor(show ? SDL_ENABLE : SDL_DISABLE);
+        }
     }
 }
 
@@ -1029,6 +1043,7 @@ static int padSouthpaw     = 0;               /* 1 = swap fire (G) / grenade (R)
 static int padLookSmooth   = 0;               /* right-stick look low-pass strength, 0-10 (0 = off, 10 = max) */
 static int padTriggerPct   = 25;              /* trigger press point, % of travel (~30*256) */
 static int padLookInvertY  = 0;               /* 1 = invert right-stick (look) Y */
+static int inputDefaultsRev = 0;              /* D546: 1 once the deadzone default migration ran */
 /* Per-pad look-smoothing EMA state (Wave A item 5), one X/Y pair per pad. Reset
  * on hot-unplug (inputRescanPads) so a smoothed value can't stick after the
  * stick snaps back; the low-pass otherwise recentres it toward 0 on its own. */
@@ -1516,7 +1531,7 @@ static void inputMigrateBinds(void);   /* D380; after configLoad */
 static void inputBindingProbe(void);   /* D383/D384; opt-in, restores ini state */
 
 static int bindsVersion = 0; /* D380/D386: versioned migration of effective ini binds */
-static int crouchMode = 0;   /* 0 = hold, 1 = toggle (latched crouch input) */
+static int crouchMode = 1;   /* 0 = hold, 1 = toggle (latched crouch input); D556: toggle by default (existing ini values kept) */
 
 static void padMapSelfTest(void);
 int inputInit(void)
@@ -1553,6 +1568,14 @@ int inputInit(void)
      * Runs before any configSave, so the saved L/R values are always valid. */
     if (padDeadzoneL == PAD_DZ_UNSET) padDeadzoneL = padDeadzone;
     if (padDeadzoneR == PAD_DZ_UNSET) padDeadzoneR = padDeadzone;
+    /* D546: one-time move of the untouched old deadzone default (7000 = 23 %)
+     * to the standardized 25 % (7500); a value the player set is kept. */
+    if (inputDefaultsRev < 1) {
+        if (padDeadzone  == 7000) padDeadzone  = STICK_DEADZONE;
+        if (padDeadzoneL == 7000) padDeadzoneL = STICK_DEADZONE;
+        if (padDeadzoneR == 7000) padDeadzoneR = STICK_DEADZONE;
+        inputDefaultsRev = 1;
+    }
     if (getenv("GE_BINDPROBE")) inputBindingProbe();
 
     sysLogPrintf(LOG_INFO, "input: PC bindings, crouch mode %s",
@@ -2172,8 +2195,9 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
         }
         optionsOverlayHandleInput();
         if (mouseEnabled && current_menu != GE_MENU_RUN_STAGE && current_menu != GE_MENU_INVALID) {
-            overlayFrontEndCrosshair();   /* D519: crosshair stays the pointer over the overlay */
-            mouseRequestCursor(0);        /* ...so hide the OS cursor (one pointer, not two) */
+            overlayFrontEndCrosshair();   /* D519: the game cursor tracks the mouse (D555: the overlay pointer is drawn exactly over it) */
+            /* D544: the OS cursor stays visible (inputSuspendForOverlay) -- the crosshair
+             * draws under the overlay box, so it alone could not point at F10 rows. */
         }
         if (stick_x) *stick_x = 0;
         if (stick_y) *stick_y = 0;
@@ -2897,6 +2921,23 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
         }
     }
 
+    /* D541: front-end release hold-off. One physical press can reach the menu
+     * through two OR'd sources a few ms apart -- on a Steam Deck in Desktop
+     * Mode, Steam's desktop layout types Enter for A (Escape for B) while SDL
+     * also reads the raw pad -- and a gap between them is a second edge, so
+     * one A press advanced two screens. A menu button only counts as released
+     * after ~70 ms up; press edges are untouched. Menus only. */
+    if (idx >= 0 && idx < MAX_PADS &&
+        current_menu != GE_MENU_RUN_STAGE && current_menu != GE_MENU_INVALID) {
+        static Uint32 s_menuBtnDownAt[MAX_PADS][3];
+        static const u16 kHoldBits[3] = { GE_CONT_A, GE_CONT_B, GE_CONT_START };
+        Uint32 now = SDL_GetTicks();
+        for (int k = 0; k < 3; k++) {
+            if (button & kHoldBits[k]) s_menuBtnDownAt[idx][k] = now;
+            else if (s_menuBtnDownAt[idx][k] && now - s_menuBtnDownAt[idx][k] < 70) button |= kHoldBits[k];
+        }
+    }
+
     if (idx == 0 && scriptIsActive(0)) {
         /* D263: apply BEFORE the stick is written out -- scripted stick
          * tokens (SUP/SDOWN/SLEFT/SRIGHT) used to be discarded. */
@@ -3134,6 +3175,25 @@ static void overlayFrontEndCrosshair(void)
     cursor_v_pos = (float)(v < loV ? loV : v > hiV ? hiV : v);
 }
 
+/* D555 rework: INVERSE of overlayFrontEndCrosshair's mapping. Where the game's
+ * front-end cursor (cursor_h_pos/cursor_v_pos, which frontDrawCursor draws at)
+ * lands, as fractions of the UI screen rect (the rect the overlay's full-canvas
+ * DL maps to), plus the x scale of the front-end canvas inside it (D335
+ * native-widescreen pillarbox: vis, else 1). 0 = not available. */
+int inputFrontEndCursorUiFrac(double *fx, double *fy, double *xscale)
+{
+    double sw = getPlayer_c_screenwidth(), sh = getPlayer_c_screenheight();
+    double sl = getPlayer_c_screenleft(),  st = getPlayer_c_screentop();
+    if (!(sw > 200.0 && sw < 2000.0 && sh > 150.0 && sh < 2000.0)) return 0;
+    double x = ((double)cursor_h_pos - sl) / sw, y = ((double)cursor_v_pos - st) / sh;
+    double vis = 1.0;
+    extern f32 portNativeAspect(void);
+    f32 na = portNativeAspect();
+    if (na > (4.0f / 3.0f)) { vis = (4.0 / 3.0) / (double)na; x = x * vis + (1.0 - vis) * 0.5; }
+    *fx = x; *fy = y; *xscale = vis;
+    return 1;
+}
+
 void inputSuspendForOverlay(void)
 {
     if (mouseGrabbed) {
@@ -3141,6 +3201,9 @@ void inputSuspendForOverlay(void)
         mouseRequestRelative(0);
         mouseDX = mouseDY = 0.0;
     }
+    /* D544: the OS cursor is always shown while the overlay is open, so the
+     * pointer draws OVER the menu (maintainer). The front-end path no longer
+     * hides it, which also removes the show/hide race that flickered. */
     mouseRequestCursor(1);
 }
 
@@ -3834,6 +3897,7 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
         }
     configRegisterInt("Input.MPMode", &mpInputMode, 0, 2);   /* D416: 0 Auto, 1 PadsOnly, 2 KbmP1 */
     configRegisterInt("Input.MouseEnabled", &mouseEnabled, 0, 1);
+    configRegisterInt("Input.CrosshairCursor", &cfgCrosshairCursor, 0, 1);   /* D555 */
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
     configRegisterInt("Input.PdMouseAim",     &pdMouseAim,     0, 1);   /* legacy -> AimStyle 1 */
     configRegisterInt("Input.AimStyle",       &aimStyleLegacy, 0, 2);   /* D333 legacy -> AimMode */
@@ -3876,6 +3940,7 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.PadDeadzone", &padDeadzone, 0, 30000);  /* legacy; Wave A migrates to L/R */
     configRegisterInt("Input.PadDeadzoneL", &padDeadzoneL, 0, 30000);  /* Wave A: left (movement) stick */
     configRegisterInt("Input.PadDeadzoneR", &padDeadzoneR, 0, 30000);  /* Wave A: right (look) stick */
+    configRegisterInt("Input.DefaultsRev", &inputDefaultsRev, 0, 1);   /* D546 */
     configRegisterInt("Input.PadLookSensX", &padLookSensX, 25, 200);   /* Wave A: look horizontal sensitivity (%) */
     configRegisterInt("Input.PadLookSensY", &padLookSensY, 25, 200);   /* Wave A: look vertical (pitch) sensitivity (%) */
     configRegisterInt("Input.PadSouthpaw", &padSouthpaw, 0, 1);        /* Wave A: swap fire/grenade triggers */

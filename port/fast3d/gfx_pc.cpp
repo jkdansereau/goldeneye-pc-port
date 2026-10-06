@@ -81,12 +81,19 @@ struct NormalColor {
     };
 };
 
+/* D540: set by the GL backend at init. gfx_rdp_affine: RDP-style
+ * screen-affine shade colour. gfx_fog_vertex: 1 = per-vertex RSP fog
+ * (default, D543), 0 = the D540 exact per-pixel fog (GE_FOGPIXEL=1). */
+int gfx_rdp_affine = 0;
+int gfx_fog_vertex = 0;
+
 struct LoadedVertex {
     float x, y, z, w;
     float u, v;
     struct RGBA color;
     uint8_t fog;
     uint8_t clip_rej;
+    float fog_n;   /* D540: fog sent to the GPU (0..255): the RSP value (default), or fog * w (GE_FOGPIXEL) */
 };
 
 static struct {
@@ -2261,19 +2268,27 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
             }
 
             float winv = 1.0f / w;
-            if (winv < 0.0f) {
+            /* D540: the RSP divides by a negative w as-is: a vertex behind
+             * the camera gets z/w at/beyond the far end of the range (full
+             * fog), continuously. The old override (winv < 0 -> +32767)
+             * flipped the sign, so a corner crossing behind the player
+             * jumped no-fog <-> full-fog and big ground triangles popped
+             * one at a time (Deck playtest). */
+            if (!gfx_fog_vertex && winv < 0.0f) {
                 winv = std::numeric_limits<int16_t>::max();
             }
 
             float fog_z = z * winv * rsp.fog_mul + rsp.fog_offset;
             d->fog = clampf(fog_z, 0.f, 255.f);
-            /* D503: the N64's 16-bit framebuffer hid objects ~97% fogged;
-             * 32-bit output reveals them as silhouettes. Snap to full fog. */
-            if (d->fog >= 247.f) {
-                d->fog = 255.f;
-            }
+            /* D543 default: the per-vertex RSP value (as the N64; D543's CPU
+             * near clip lerps it for clip-created vertices like the RSP).
+             * GE_FOGPIXEL=1 (D540): the GPU gets fog * w (z*mul + w*off,
+             * linear in clip space) and the shader divides by w -- exact
+             * per-pixel fog. The D503 full-fog snap is opt-in (GE_FOGSNAP=1). */
+            d->fog_n = gfx_fog_vertex ? d->fog : d->z * rsp.fog_mul + d->w * rsp.fog_offset;
         } else {
             d->fog = rdp.fog_color.a;
+            d->fog_n = gfx_fog_vertex ? d->fog : d->fog * d->w;
         }
 
         d->color.a = vcn->a; // can be required for SHADE_ALPHA even if fog is enabled
@@ -2858,14 +2873,106 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         d526_note_emit(videoGetFrameCount(), v_arr, use_alpha ? 1 : 0, use_modulate ? 1 : 0); // D526 census
         d75d_note_emit_z(videoGetFrameCount(), v_arr, (used_textures[0] || used_textures[1]) ? 1 : 0, comb->used_textures[0] ? 1 : 0);
     }
-    for (int i = 0; i < 3; i++) {
-        float z = v_arr[i]->z, w = v_arr[i]->w;
+    /* D543: RSP-style near-plane clipping on the CPU. The GPU clips the
+     * triangle itself against the near plane, but it interpolates the
+     * noperspective shade colour and the fog value in screen space (D548
+     * bands, D540 light/dark cycling, D543 bright lit area at Bond's feet),
+     * so a big ground triangle that crosses the camera plane extrapolates
+     * them. The RSP instead clips in clip space and lerps every vertex
+     * attribute linearly there (t = dA / (dA - dB)); do the same, so GL
+     * receives only fully-in-front triangles and never clips. Skipped for
+     * rects, G_NO_CLIPPING_EXT, and GE_NEARCLIP=0 (A/B). Fog on a vertex
+     * the clip creates is re-derived from its own z/w (as gfx_sp_vertex
+     * does), like the RSP, whose clipper runs new vertices through the same
+     * vertex-finish code: at the near plane that is a constant, so the haze
+     * at the player's feet stays static (D553; maintainer compared against
+     * LLE mupen64plus, cxd4 + angrylion). GE_NEARCLIPFOG=lerp restores the
+     * old interpolation from the parents (whose behind-the-eye corner flips
+     * between 0 and 255 fog as w crosses 0 -> the dark/bright popping) for
+     * A/B. The new vertices live on the stack: rsp.loaded_vertices is
+     * game-visible. */
+    static int nearclip_on = -1, nearclip_fog_recompute = -1;
+    if (nearclip_on < 0) {
+        const char* e = getenv("GE_NEARCLIP");
+        nearclip_on = !(e && e[0] == '0');
+        const char* f = getenv("GE_NEARCLIPFOG");
+        nearclip_fog_recompute = (f && strcmp(f, "lerp") == 0) ? 0 : 1;   /* D553: recompute by default */
+    }
+    struct LoadedVertex* emit_v[6] = { v1, v2, v3, NULL, NULL, NULL };
+    int n_out_tris = 1;
+    struct LoadedVertex nc_vtx[2];
+    if (nearclip_on && !is_rect && (rsp.extra_geometry_mode & G_NO_CLIPPING_EXT) == 0) {
+        const float NEAR_EPS = 1e-4f;
+        float d[3];
+        int n_in = 0;
+        for (int i = 0; i < 3; i++) {
+            d[i] = v_arr[i]->z + v_arr[i]->w - NEAR_EPS;
+            if (d[i] > 0.0f) n_in++;
+        }
+        if (n_in == 0) {
+            return; // entirely behind the near plane
+        }
+        if (n_in < 3) {
+            struct LoadedVertex* poly[4];
+            int n_poly = 0, n_new = 0;
+            for (int i = 0; i < 3; i++) {
+                int j = (i + 1) % 3;
+                struct LoadedVertex* a = v_arr[i];
+                struct LoadedVertex* b = v_arr[j];
+                if (d[i] > 0.0f) poly[n_poly++] = a;
+                if ((d[i] > 0.0f) != (d[j] > 0.0f)) {
+                    float t = d[i] / (d[i] - d[j]);
+                    struct LoadedVertex* o = &nc_vtx[n_new++];
+                    o->x = a->x + (b->x - a->x) * t;
+                    o->y = a->y + (b->y - a->y) * t;
+                    o->z = a->z + (b->z - a->z) * t;
+                    o->w = a->w + (b->w - a->w) * t;
+                    o->u = a->u + (b->u - a->u) * t;
+                    o->v = a->v + (b->v - a->v) * t;
+                    o->color.r = (uint8_t)clampf(floorf(a->color.r + (b->color.r - a->color.r) * t + 0.5f), 0.f, 255.f);
+                    o->color.g = (uint8_t)clampf(floorf(a->color.g + (b->color.g - a->color.g) * t + 0.5f), 0.f, 255.f);
+                    o->color.b = (uint8_t)clampf(floorf(a->color.b + (b->color.b - a->color.b) * t + 0.5f), 0.f, 255.f);
+                    o->color.a = (uint8_t)clampf(floorf(a->color.a + (b->color.a - a->color.a) * t + 0.5f), 0.f, 255.f);
+                    o->clip_rej = 0;
+                    o->fog_n = a->fog_n + (b->fog_n - a->fog_n) * t;
+                    if (nearclip_fog_recompute) {
+                        if (rsp.geometry_mode & G_FOG) {
+                            float fw = o->w;
+                            if (fabsf(fw) < 0.001f) fw = 0.001f;
+                            float winv = 1.0f / fw;
+                            if (!gfx_fog_vertex && winv < 0.0f) winv = std::numeric_limits<int16_t>::max();
+                            o->fog = clampf(o->z * winv * rsp.fog_mul + rsp.fog_offset, 0.f, 255.f);
+                        } else {
+                            o->fog = a->fog;
+                        }
+                    } else {
+                        o->fog = (uint8_t)clampf(floorf(a->fog + ((float)b->fog - (float)a->fog) * t + 0.5f), 0.f, 255.f);
+                    }
+                    if (gfx_fog_vertex) o->fog_n = o->fog; // as gfx_sp_vertex
+                    poly[n_poly++] = o;
+                }
+            }
+            // n_poly is 3 or 4 here (one or two vertices inside)
+            emit_v[0] = poly[0]; emit_v[1] = poly[1]; emit_v[2] = poly[2];
+            if (n_poly == 4) {
+                emit_v[3] = poly[0]; emit_v[4] = poly[2]; emit_v[5] = poly[3];
+                n_out_tris = 2;
+            }
+        }
+    }
+    const int n_emit_verts = n_out_tris * 3;
+    if (buf_vbo_num_tris + n_out_tris > MAX_BUFFERED) {
+        gfx_flush(); // buf_vbo holds MAX_BUFFERED triangles; make room for 1-2
+    }
+    for (int i = 0; i < n_emit_verts; i++) {
+        struct LoadedVertex* vi = emit_v[i];
+        float z = vi->z, w = vi->w;
         if (clip_parameters.z_is_from_0_to_1) {
             z = (z + w) / 2.0f;
         }
 
-        buf_vbo[buf_vbo_len++] = v_arr[i]->x;
-        buf_vbo[buf_vbo_len++] = clip_parameters.invert_y ? -v_arr[i]->y : v_arr[i]->y;
+        buf_vbo[buf_vbo_len++] = vi->x;
+        buf_vbo[buf_vbo_len++] = clip_parameters.invert_y ? -vi->y : vi->y;
         buf_vbo[buf_vbo_len++] = z;
         buf_vbo[buf_vbo_len++] = w;
 
@@ -2877,8 +2984,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             // TODO: fix this; for now just ignore smaller mips
             const uint32_t tile = gfx_lod_tile_offset(t);
 
-            float u = v_arr[i]->u / 32.0f;
-            float v = v_arr[i]->v / 32.0f;
+            float u = vi->u / 32.0f;
+            float v = vi->v / 32.0f;
 
             int shifts = rdp.texture_tile[rdp.first_tile_index + tile].shifts;
             int shiftt = rdp.texture_tile[rdp.first_tile_index + tile].shiftt;
@@ -2955,7 +3062,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             buf_vbo[buf_vbo_len++] = rdp.fog_color.r / 255.0f;
             buf_vbo[buf_vbo_len++] = rdp.fog_color.g / 255.0f;
             buf_vbo[buf_vbo_len++] = rdp.fog_color.b / 255.0f;
-            buf_vbo[buf_vbo_len++] = v_arr[i]->fog / 255.0f; // fog factor
+            buf_vbo[buf_vbo_len++] = vi->fog_n / 255.0f; // D540: see LoadedVertex.fog_n
         }
 
         if (use_grayscale) {
@@ -2976,10 +3083,10 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
                         color = &rdp.prim_color;
                         break;
                     case G_CCMUX_SHADE:
-                        color = &v_arr[i]->color;
+                        color = &vi->color;
                         break;
                     case G_CCMUX_SHADE_ALPHA:
-                        tmp.r = tmp.g = tmp.b = v_arr[i]->color.a;
+                        tmp.r = tmp.g = tmp.b = vi->color.a;
                         color = &tmp;
                         break;
                     case G_CCMUX_ENVIRONMENT:
@@ -3032,7 +3139,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         }
     }
 
-    if (++buf_vbo_num_tris == MAX_BUFFERED) {
+    buf_vbo_num_tris += n_out_tris;
+    if (buf_vbo_num_tris >= MAX_BUFFERED) {
         gfx_flush();
     }
 }
@@ -3943,6 +4051,7 @@ static void gfx_sp_vertex_float(size_t n_vertices, size_t dest_index, const Port
         d->z = z;
         d->w = w;
         d->fog = rdp.fog_color.a;
+        d->fog_n = gfx_fog_vertex ? d->fog : d->fog * w;
     }
 }
 

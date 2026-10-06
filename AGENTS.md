@@ -73,8 +73,9 @@ mostly agent-authored.
    bulk ROM-derived captures: capture output dirs are gitignored
    (`tools_pc/sweep-captures/cap-*/`, `tools_pc/sweep-captures/**/*.ppm`); the
    only bulk imagery in the tree is `tools_pc/golden/**/*.png`
-   (63 frames × 2 platforms, 126 total, nested per level at
-   `tools_pc/golden/<level>/{win,linux}/`), which exists because `verify.sh`
+   (63 frames × 3 platforms, 189 total, nested per level at
+   `tools_pc/golden/<level>/{win,linux,deck}/`; the `deck` set added
+   2026-10-05 with maintainer approval), which exists because `verify.sh`
    consumes it. Downloads ship no game content at all.
 5. **Batch, don't spam.** Accumulate approved doc/tree fixes across a session
    into ONE commit; no per-item branches.

@@ -24,6 +24,7 @@
 #include "platform.h"
 #include "system.h"
 #include "config.h"
+#include "updatecheck.h"
 #include "fs.h"
 #include "romdata.h"
 #include "dram.h"
@@ -95,6 +96,33 @@ static void portAtExit(void)
     }
 }
 
+/* D257/D442: Game.AllUnlocked applies live. Called at boot and on every F10
+ * row change. On seeds the game's own RAM unlock flags (mission select offers
+ * every solo level at every difficulty plus 007 mode); Off clears only the
+ * flags this setting seeded, so GE_UNLOCK_ALL / debug-menu unlocks survive.
+ * Port-layer memory writes only (AGENTS rule 2); the cheat menu and COMPLETED
+ * checks come from D442's query-time hooks in file2.c, which read
+ * portAllUnlocked live. The debug flags exist only with LEFTOVERDEBUG (not
+ * PAL); the file2.c hooks cover All unlocked everywhere. */
+void portAllUnlockedApply(void)
+{
+#if defined(LEFTOVERDEBUG)
+    extern s32 portAllUnlocked;            /* port/src/video.c */
+    extern s32 debug_enable_all_levels_flag;  /* src/game/debugmenu_handler.c */
+    extern s32 debug_007_unlock_flag;         /* ditto */
+    static int s_seededLevels, s_seeded007;
+    if (portAllUnlocked) {
+        if (!debug_enable_all_levels_flag) { debug_enable_all_levels_flag = 1; s_seededLevels = 1; }
+        if (!debug_007_unlock_flag)        { debug_007_unlock_flag = 1;        s_seeded007 = 1; }
+    } else {
+        if (s_seededLevels) { debug_enable_all_levels_flag = 0; s_seededLevels = 0; }
+        if (s_seeded007)    { debug_007_unlock_flag = 0;        s_seeded007 = 0; }
+    }
+    sysLogPrintf(LOG_INFO, "all-unlocked: Game.AllUnlocked=%d (levels flag %d, 007 flag %d)",
+                 (int)portAllUnlocked, (int)debug_enable_all_levels_flag, (int)debug_007_unlock_flag);
+#endif
+}
+
 int main(int argc, char **argv)
 {
     sysSetArgs(argc, argv);
@@ -134,6 +162,7 @@ int main(int argc, char **argv)
      * skips it for good. */
     configLoad();
     videoApplySteamDeckPreset();
+    updateCheckStart();   /* opt-in (Game.CheckUpdates, default off); no-op otherwise */
     atexit(portAtExit);   /* persist config + window geometry on clean exit */
 
     /* 1a. D257: Game.AllUnlocked (default OFF; F10 'All unlocked' enables)
@@ -151,19 +180,7 @@ int main(int argc, char **argv)
      *     COMPLETED check come from the query-time hooks in file2.c
      *     (fileGetIsCheatUnlocked, fileIsStageUnlockedAtDifficulty); the
      *     save is never patched. */
-#if defined(LEFTOVERDEBUG) /* the debug unlock flags only exist with LEFTOVERDEBUG (not PAL); D442's query-time hooks cover All unlocked everywhere */
-    {
-        extern s32 portAllUnlocked;            /* port/src/video.c */
-        extern s32 debug_enable_all_levels_flag;  /* src/game/debugmenu_handler.c */
-        extern s32 debug_007_unlock_flag;         /* ditto */
-        if (portAllUnlocked) {
-            debug_enable_all_levels_flag = 1;
-            debug_007_unlock_flag = 1;
-            sysLogPrintf(LOG_INFO, "all-unlocked: RAM unlock flags seeded "
-                        "(Game.AllUnlocked=1)");
-        }
-    }
-#endif
+    portAllUnlockedApply();
 
     /* 2. Load the ROM and map segments. */
     if (romdataInit() != 0) {

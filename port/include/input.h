@@ -59,6 +59,8 @@ int  inputReleaseCapture(void);
 /* F10 options overlay: force the OS cursor free + visible while the overlay
  * owns the mouse. Safe to call every poll. */
 void inputSuspendForOverlay(void);
+int  inputFrontEndCursorUiFrac(double *fx, double *fy, double *xscale);   /* D555 */
+int  inputCrosshairCursorOn(void);   /* D555: Input.CrosshairCursor (overlay draws the game crosshair as the pointer) */
 
 /* Raw gamepad state for controller idx (the F10 options overlay's gamepad
  * navigation). Unaffected by the overlay's pad-swallow, which happens at our

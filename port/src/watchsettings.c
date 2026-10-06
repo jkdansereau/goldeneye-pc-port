@@ -28,6 +28,7 @@ extern u16 get_mTrack2Vol(void);
 extern void fileBuildWriteNewSave(u32 folder);
 extern void set_cur_player_look_vertical_inverted(u32 value);
 extern void cur_player_set_aim_control(u32 value);
+extern void cur_player_set_lookahead(u32 value);
 extern void cur_player_set_sight_onscreen_control(u32 value);
 extern void cur_player_set_ammo_onscreen_setting(u32 value);
 
@@ -532,6 +533,32 @@ static void applyValue(enum WatchSettingField field, int value)
     }
 }
 
+/* D559 (maintainer-approved, port layer only): D557 turned Look ahead off in
+ * DEFAULT_OPTIONS, but folders created before it hold the OLD factory options.
+ * When a folder is started to play (the stage becomes active; the stage load's
+ * fileLoadSettingsForFolder then reads the saved options), clear OPTION_LOOKAHEAD
+ * iff the folder is untouched: no stage time at any difficulty (times[] all
+ * zero), no 007 flag, no unlocked cheats, and options EXACTLY the old factory
+ * default with control-type bits 0. Any progress or any other option bit
+ * (including a deliberately-set Look ahead on a played folder) is never touched.
+ * Persists through fileWriteSave, as saveFrontField does. Game thread only.
+ * Returns 1 when it changed the save. */
+#define OLD_FACTORY_OPTIONS (OPTION_AUTOAIM | OPTION_SIGHTONSCREEN | OPTION_LOOKAHEAD | OPTION_DISPLAYAMMO)
+static int migrateUntouchedLookAhead(int folder)
+{
+    save_data *save = validSave(folder);
+    if (!save || save->options != OLD_FACTORY_OPTIONS) return 0;
+    if (save->flag_007 || save->unlocked_cheats_1 || save->unlocked_cheats_2 || save->unlocked_cheats_3) return 0;
+    for (size_t i = 0; i < sizeof(save->times); i++)
+        if (save->times[i]) return 0;
+    if (!fileGamePakProbe()) return 0;
+    save->options = (u16)(save->options & ~OPTION_LOOKAHEAD);
+    fileWriteSave(save);
+    sysLogPrintf(LOG_INFO, "watchsettings: Bond file %d is untouched and has the old factory options; Look ahead set off (D559)", folder + 1);
+    return 1;
+}
+static int wsLookAheadChecked = 0;   /* once per stage activation */
+
 void watchSettingsGameTick(void)
 {
     /* Drain F10 front-end commits on the game thread. This MUST run before
@@ -566,7 +593,9 @@ void watchSettingsGameTick(void)
     {
         static int wsResetProbePhase = 0;
         static int wsProbeFrontTicks = 0, wsProbeStageTicks = 0;
-        if (getenv("GE_WSPROBE_RESET")) {
+        static int wsResetProbeOn = -1;   /* cached: this runs every tick (D250/D302 class) */
+        if (wsResetProbeOn < 0) wsResetProbeOn = getenv("GE_WSPROBE_RESET") != NULL;
+        if (wsResetProbeOn) {
             if (!stageActive()) {
                 if (wsResetProbePhase == 0 && ++wsProbeFrontTicks == 120) {
                     optionsResetProbePrepare();
@@ -594,8 +623,22 @@ void watchSettingsGameTick(void)
      * during a level/menu transition. Each command's folder is re-checked
      * against selected_folder_num at apply time, so a stale cross-file edit
      * is still dropped, never misapplied. */
+    /* D564: the game's own "Look up/down" option is not exposed (the port's
+     * Mouse / Controller "Invert look" rows are the inversion controls). Pin it
+     * to its factory value (0, as a blank profile has it) so a value saved by an
+     * older build or set via the in-game watch menu cannot silently flip the
+     * pad stick on the game's pitch path. RAM only; one int compare per tick. */
+    if (stageActive() && g_CurrentPlayer && get_cur_player_look_vertical_inverted() != 0)
+        set_cur_player_look_vertical_inverted(0);
+
     if (!stageActive() || !g_CurrentPlayer) {
         wsStageWasActive = 0;
+        if (!stageActive()) wsLookAheadChecked = 0;
+        else if (!wsLookAheadChecked) {   /* D559: stage starting, before the stage load reads the save */
+            wsLookAheadChecked = 1;
+            if (migrateUntouchedLookAhead(selected_folder_num) && getPlayerCount() == 1)
+                cur_player_set_lookahead(0);   /* harmless if the stage load re-reads the save after this */
+        }
         /* D354: one-shot fallback -- if not a single folder holds a valid
          * save (wiped/corrupt/fresh eeprom), build the game's own blank save for
          * file 1 (game thread, so the EEPROM write is on the owning thread)
@@ -649,6 +692,11 @@ void watchSettingsGameTick(void)
      * init_watch re-applies the saved music value to the X track; resync the
      * BGM (track 1) to the same live value once per activation so the player's
      * music setting survives level starts, not just live F10 edits. */
+    if (!wsLookAheadChecked) {   /* D559: no tick saw the stage before its load: fix the live setting too */
+        wsLookAheadChecked = 1;
+        if (migrateUntouchedLookAhead(selected_folder_num) && getPlayerCount() == 1)
+            cur_player_set_lookahead(0);
+    }
     if (!wsStageWasActive && musicTrack1GetVolume() != get_mTrack2Vol())
         musicTrack1ApplySeqpVol(get_mTrack2Vol());
     wsStageWasActive = 1;

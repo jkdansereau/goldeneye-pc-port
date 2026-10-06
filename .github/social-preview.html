@@ -55,11 +55,9 @@
   .tab span { writing-mode:vertical-rl; text-orientation:mixed;
     font-family:'Arimo',sans-serif; font-weight:700; font-size:15px;
     letter-spacing:4px; color:#3b3b33; transform:rotate(180deg); }
-  .reticle { position:absolute; right:34px; top:246px; width:44px; height:44px; z-index:5; }
-  .reticle::before, .reticle::after { content:""; position:absolute; background:#c62828; }
-  .reticle::before { left:50%; top:-6px; width:3px; height:56px; margin-left:-1.5px; }
-  .reticle::after { top:50%; left:-6px; height:3px; width:56px; margin-top:-1.5px; }
-  .reticle i { position:absolute; inset:4px; border:3px solid #c62828; border-radius:50%; }
+  /* the project mark: in-game default crosshair proportions (ring outer r 18,
+     bars reach ~1.43x r with an open centre ~0.24x r); see tools_pc/make_icon.py */
+  .reticle { position:absolute; right:30px; top:242px; width:52px; height:52px; z-index:5; }
 
   /* the parchment card */
   .card { position:absolute; left:40px; top:40px; right:96px; bottom:40px;
@@ -124,12 +122,12 @@
     <div class="rep">REPORT:</div>
 
     <div class="rows">
-      <div class="statusline">Status: <span class="status">RELEASED v0.4.0 &mdash; WINDOWS &middot; LINUX &middot; STEAM DECK</span></div>
+      <div class="statusline">Status: <span class="status">RELEASED v0.5.0 &mdash; WINDOWS &middot; LINUX &middot; STEAM DECK</span></div>
       <div class="stats">
         <span class="k">Statistics:</span><span>All 20 solo missions &mdash; full campaign completed in playtesting</span>
-        <span></span><span>~230 game-code units, compiled unmodified</span>
-        <span></span><span>~25k lines C/C++ &nbsp;&middot;&nbsp; ~14k Python  (port layer + tools)</span>
-        <span></span><span>286 findings root-caused &nbsp;&middot;&nbsp; two coding agents, one human, part-time</span>
+        <span></span><span>~210 game-code units, compiled unmodified</span>
+        <span></span><span>~34k lines C/C++ &nbsp;&middot;&nbsp; ~10k Python  (port layer + tools)</span>
+        <span></span><span>407 findings logged &nbsp;&middot;&nbsp; two coding agents, one human, part-time</span>
       </div>
     </div>
 
@@ -142,6 +140,6 @@
     <div class="tab"><span>NEXT</span></div>
     <div class="tab"><span>PREVIOUS</span></div>
   </div>
-  <div class="reticle"><i></i></div>
+  <svg class="reticle" viewBox="-26 -26 52 52" aria-hidden="true"><g fill="none" stroke="#c62828" stroke-width="3"><circle r="16.5"/><path d="M0-26V-4.5M0 4.5V26M-26 0H-4.5M4.5 0H26"/></g></svg>
 </body>
 </html>

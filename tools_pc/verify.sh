@@ -19,7 +19,22 @@
 #                                 a directory of PPMs/PNGs pulled off that box)
 #
 # Options:
-#   --platform win|linux   default: autodetect via `uname -s`
+#   --platform win|linux|deck
+#                          default: autodetect via `uname -s`. `deck` (Steam
+#                          Deck) behaves like linux (build-linux/ge007.x86_64)
+#                          but its goldens live in tools_pc/golden/<level>/deck/
+#                          (per-level pixel limits = the linux ones for now).
+#   -j N                   sweep only: run up to N levels concurrently (default
+#                          1). Every level runs in its OWN temp work dir (own
+#                          data/ copy + ini + canonical save + ppm/), so
+#                          concurrent runs cannot clobber each other and the
+#                          repo's data/ is only ever READ (never pinned or
+#                          modified). Verdicts print in level order. Each game
+#                          quits via GE_QUITFRAME (never hard-killed). PIXEL
+#                          RESULTS ASSUME EACH INSTANCE HOLDS 60 fps (D117: the
+#                          intro flyby is wall-clock paced): use -j 2-3 on a
+#                          strong GPU with nothing else loading it (no local
+#                          LLM loaded); use -j 1 on weak boxes.
 #   --dump lo-hi:step      GE_PCDUMP window (default: 900-1500:300, the golden
 #                          capture window for every level and both modes)
 #   --script "..."         GE_INPUTSCRIPT (default "20:START": skip the intro
@@ -72,7 +87,7 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 
 # --- arg parsing -------------------------------------------------------------
-MODE=""; LEVEL_ARG=""; PLATFORM=""; DUMP=""; SCRIPT="20:START"; JSON=0; AGAINST=""
+MODE=""; LEVEL_ARG=""; PLATFORM=""; DUMP=""; SCRIPT="20:START"; JSON=0; AGAINST=""; JOBS=1
 GOLDEN_DUMP="900-1500:300"
 USER_DUMP=0; USER_SCRIPT=0
 # Per-level golden recipe overrides: Cuba is the ending cutscene + credits (it
@@ -108,25 +123,28 @@ POSARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --platform) PLATFORM="$2"; shift 2 ;;
+    -j)         JOBS="$2"; shift 2 ;;
+    -j[0-9]*)   JOBS="${1#-j}"; shift ;;
     --dump)     DUMP="$2"; USER_DUMP=1; shift 2 ;;
     --script)   SCRIPT="$2"; USER_SCRIPT=1; shift 2 ;;
     --against)  AGAINST="$2"; shift 2 ;;
     --json)     JSON=1; shift ;;
-    -h|--help)  sed -n '2,34p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,49p' "$0"; exit 0 ;;
     *)          POSARGS+=("$1"); shift ;;
   esac
 done
 set -- "${POSARGS[@]:-}"
+case "$JOBS" in ''|*[!0-9]*|0) echo "error: -j needs a positive integer (got '$JOBS')" >&2; exit 2 ;; esac
 
 case "${1:-}" in
   sweep)  MODE=sweep; shift; SWEEP_SUBSET="${*:-}" ;;
   parity) MODE=parity; LEVEL_ARG="${2:-}"; shift 2 2>/dev/null || true ;;
-  -h)     sed -n '2,34p' "$0"; exit 0 ;;
+  -h)     sed -n '2,49p' "$0"; exit 0 ;;
   "")
     # D529 never-do 4: a no-arg run must NEVER look like a green verdict. It
     # prints the usage and exits NON-zero (2026-10-05: a no-arg pair was
     # cited as a "double-green" 21/21 because it exited 0).
-    sed -n '2,34p' "$0"
+    sed -n '2,49p' "$0"
     echo "error: no mode given -- a sweep is 'verify.sh sweep', one level is 'verify.sh <level>' (never cite a no-arg run as a gate result; D529)" >&2
     exit 1 ;;
   *)      MODE=single; LEVEL_ARG="$1" ;;
@@ -139,6 +157,7 @@ if [ -z "$PLATFORM" ]; then
   esac
 fi
 
+case "$PLATFORM" in win|linux|deck) ;; *) echo "error: --platform must be win, linux or deck (got '$PLATFORM')" >&2; exit 2 ;; esac
 if [ "$PLATFORM" = win ]; then
   BUILD_DIR=build-pc
   EXE="$ROOT/build-pc/ge007.x86_64.exe"
@@ -156,7 +175,7 @@ fi
 # unrecognised -> stay conservative (skip), i.e. an unknown box behaves
 # exactly as before.
 LINUX_SOFTWARE_GL=1
-if [ "$PLATFORM" = linux ]; then
+if [ "$PLATFORM" = linux ] || [ "$PLATFORM" = deck ]; then
   # Fail-closed: only a CLEAN probe may enable the pixel gate. glxinfo absent,
   # a non-zero exit, no "OpenGL renderer string:" line, an unknown sentinel, or
   # a software renderer all leave LINUX_SOFTWARE_GL=1 (today's skip, same NOTE).
@@ -227,90 +246,49 @@ golden_dir_for() {
   echo ""
 }
 
-# --- ini pin: golden frames are captured at 640x480 with every other option
-#     at its compiled-in default (a personal ini -- FovScale, DrawDistance,
-#     MSAA... -- changes the frame and would fail the golden); back up + restore
-INI="$ROOT/data/ge007.ini"
-INI_BAK=""
-INI_CREATED=0
-pin_ini_640x480() {
-  # Idempotent (sweep mode calls this once per level, and the game rewrites
-  # ge007.ini after every run): snapshot the USER's ini on the FIRST call only,
-  # then re-pin. Snapshotting on every call used to back up the previous level's
-  # game-written ini, so a sweep left the user's personal settings replaced on
-  # disk by compiled-in defaults, and leaked one temp file per level.
-  # D532: fail CLOSED (the old `2>/dev/null || true` call sites ran the gate
-  # under an unpinned ini when the write failed -- the frame depends on a
-  # defaults-only 640x480 ini, same as the save pin, so an unpinned ini is a
-  # spurious-verdict source, not a skipped nicety). Matches pin_eep's
-  # fail-closed style.
-  if [ -z "$INI_BAK" ] && [ "$INI_CREATED" = 0 ]; then
-    if [ -f "$INI" ]; then
-      INI_BAK=$(mktemp)
-      cp "$INI" "$INI_BAK" ||
-        { echo "error: cannot snapshot $INI (D532) -- the gate must not run with the user's ini unpinned" >&2; exit 2; }
-    else INI_CREATED=1; fi
-  fi
-  printf '[Window]\nWidth = 640\nHeight = 480\n' > "$INI" ||
-    { echo "error: cannot write the pinned ini $INI (D532) -- the gate must not run with the ini unpinned" >&2; exit 2; }
+# --- per-run isolation (replaces the old ini/eep pin + restore of <repo>/data):
+#     every level runs with CWD = a fresh temp work dir holding its OWN data/
+#     (the game resolves data/ from its CWD first, port/src/system.c) and its own
+#     ppm/ -- the repo's data/ is only READ, never modified, so concurrent runs
+#     (-j N) cannot clobber each other and an interrupted run cannot leave the
+#     maintainer's ge007.ini / ge007.eep swapped. Golden frames are captured at
+#     640x480 with every other option at its compiled-in default (a personal ini
+#     changes the frame), and the frame depends on the save's CONTENT (D529), so
+#     each work dir gets the pinned defaults-only ini + the canonical save
+#     (tools_pc/golden/ge007.eep, in-tree so a fresh clone or CI can run it).
+CANON_EEP="$ROOT/tools_pc/golden/ge007.eep"
+[ -f "$CANON_EEP" ] || { echo "error: canonical golden save missing: $CANON_EEP (D529)" >&2; exit 2; }
+ROMID="${GE_ROMID:-$(sed -n 's/^ROMID:[A-Za-z]*=//p' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null | head -n1)}"
+ROMID="${ROMID:-ntsc-final}"
+for need in "ge007.$ROMID.z64" "pccg-$ROMID" "pcmodels-$ROMID"; do
+  [ -e "$ROOT/data/$need" ] || { echo "error: $ROOT/data/$need missing (needed to build the per-run work dir; set GE_ROMID to pick another region)" >&2; exit 2; }
+done
+# stage_workdir DIR -> populate DIR/data (the game creates DIR/ppm itself)
+stage_workdir() {
+  local d="$1"
+  mkdir -p "$d/data" &&
+  cp "$ROOT/data/ge007.$ROMID.z64" "$d/data/" &&
+  cp -r "$ROOT/data/pccg-$ROMID" "$ROOT/data/pcmodels-$ROMID" "$d/data/" &&
+  cp "$CANON_EEP" "$d/data/ge007.eep" &&
+  printf '[Window]\nWidth = 640\nHeight = 480\n' > "$d/data/ge007.ini"
 }
-restore_ini() {
-  if [ -n "$INI_BAK" ]; then cp "$INI_BAK" "$INI" && rm -f "$INI_BAK"
-  elif [ "$INI_CREATED" = 1 ]; then rm -f "$INI"; fi
-  INI_BAK=""; INI_CREATED=0
-}
-# D534: restore on EXIT only; INT/TERM just exit (which fires EXIT). A combined
-# `EXIT INT TERM` trap restored on Ctrl-C and then let the sweep CONTINUE --
-# the next level's pin re-installed the canonical save with the snapshot
-# already deleted, so the user's own ge007.eep was left replaced on disk.
-trap 'restore_ini; restore_eep; kill_ours' EXIT
+# EXIT only (D534): INT/TERM just exit, which fires EXIT.
+CUR_CAPDIR=""
+trap 'kill_ours; kill $(jobs -rp) 2>/dev/null; [ -n "${SWEEP_TMP:-}" ] && rm -rf "$SWEEP_TMP"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-
-# --- save pin (D523, SUPERSEDED by D529): the goldens were captured with a
-#     save file PRESENT. D529 (2026-10-05 A/B) proved the frame depends on the
-#     save's CONTENT, not just its presence -- D523's "presence, not which
-#     save" claim had only been measured on Archives (worst_cell 0.175625 on
-#     each of the four candidate saves, 21.557% with none), and the 2026-10-05
-#     sweep (facility 177.47 scene-level on the local playtest save vs 0.0-0.25
-#     on every other candidate on disk) refutes it. The gate now INSTALLS THE
-#     CANONICAL SAVE (tools_pc/golden/ge007.eep, 2 KB, in-tree so a fresh
-#     clone or CI can run it) the same way it pins the ini: snapshot the local
-#     file if any, install the canonical one, restore (or remove) on exit.
-EEP_PIN="$ROOT/data/ge007.eep"
-CANON_EEP="$ROOT/tools_pc/golden/ge007.eep"
-EEP_PIN_BAK=""
-EEP_PIN_HAD=0
-pin_eep() {
-  [ -f "$CANON_EEP" ] || { echo "error: canonical golden save missing: $CANON_EEP (D529)" >&2; exit 2; }
-  # Same idempotence rule as pin_ini_640x480: keep the FIRST snapshot (the save
-  # as it was before the sweep), not the previous level's written save.
-  if [ -z "$EEP_PIN_BAK" ]; then
-    EEP_PIN_BAK=$(mktemp)
-    if [ -f "$EEP_PIN" ]; then EEP_PIN_HAD=1; cp "$EEP_PIN" "$EEP_PIN_BAK"; fi
-  fi
-  # Every level starts from the SAME save state: the runs write the save, and
-  # the frame depends on its CONTENT (D529), so feed each run the canonical
-  # copy rather than a local playtest save or level N-1's write.
-  cp "$CANON_EEP" "$EEP_PIN"
-}
-restore_eep() {
-  [ -n "$EEP_PIN_BAK" ] || return 0
-  if [ "$EEP_PIN_HAD" = 1 ]; then cp "$EEP_PIN_BAK" "$EEP_PIN"; else rm -f "$EEP_PIN"; fi
-  rm -f "$EEP_PIN_BAK"
-  EEP_PIN_BAK=""; EEP_PIN_HAD=0
-}
 
 # --- run one level -> sets globals: R_STATUS R_FRAMES R_SYM R_BRIEF -------
 run_one() {
   local name="$1" num="$2" dump="$3" watchdog="${4:-90}"
   local capdir; capdir=$(mktemp -d)
+  CUR_CAPDIR="$capdir"
+  stage_workdir "$capdir" ||
+    { echo "error: cannot stage the work dir $capdir (data copy failed)" >&2; rm -rf "$capdir"; exit 2; }
   [ "$USER_DUMP" = 1 ] || dump=$(golden_dump_for "$name")
   local script="$SCRIPT"
   [ "$USER_SCRIPT" = 1 ] || script=$(golden_script_for "$name")
   R_STATUS=""; R_FRAMES=0; R_SYM=""; R_BRIEF=""
-
-  rm -f "$ROOT/ge007.crash.log"
 
   # Quit right after the last requested GE_PCDUMP frame via GE_QUITFRAME (an
   # orderly D344 quit), instead of idling out the watchdog; the watchdog stays
@@ -323,10 +301,11 @@ run_one() {
     quitframe=$(( lastframe + 2 ))
   fi
 
-  ( cd "$ROOT" && export GE_PCDUMP="$dump"
+  ( cd "$capdir" && export GE_PCDUMP="$dump"
     [ -n "$quitframe" ] && export GE_QUITFRAME="$quitframe"
     [ -n "$script" ] && export GE_INPUTSCRIPT="$script"
     export GE_RSEED="$GOLDEN_SEED"
+    export GE_FAKE_DECK=0   # the D283 Deck preset forces 1280x800 fullscreen over the pinned ini
     exec "$EXE" "-level_$num" ) >"$capdir/run.log" 2>&1 &
   local gamepid=$!
   GAMEPID=$gamepid
@@ -342,20 +321,20 @@ run_one() {
   fi
   wait "$gamepid" 2>/dev/null
   GAMEPID=""
-  mv "$ROOT"/ppm "$capdir/ppm" 2>/dev/null || mkdir -p "$capdir/ppm"
+  mkdir -p "$capdir/ppm"
 
   R_FRAMES=$(ls "$capdir/ppm"/*.ppm 2>/dev/null | wc -l)
 
-  if [ -f "$ROOT/ge007.crash.log" ]; then
+  if [ -f "$capdir/ge007.crash.log" ]; then
     R_STATUS=CRASH
-    cp "$ROOT/ge007.crash.log" "$capdir/crash.log"
+    cp "$capdir/ge007.crash.log" "$capdir/crash.log"
     # Step 9 (R5): crash_brief.py owns address extraction + symbolication
     # (both platforms -- the old inline `0x1[0-9a-fA-F]{8,}` grep here
     # assumed the Windows 0x140000000 image base and would never match a
     # Linux no-PIE 0x20000000-based address) and prints a dispatch-ready
     # brief with known-parked-signature and porting-notes/findings hits.
     R_BRIEF=$(python "$ROOT/tools_pc/crash_brief.py" \
-      --crash-log "$capdir/crash.log" --exe "$EXE" --platform "$PLATFORM" \
+      --crash-log "$capdir/crash.log" --exe "$EXE" --platform "${PLATFORM/deck/linux}" \
       --level "$name" --json 2>&1)
     R_SYM=$(echo "$R_BRIEF" | python -c "
 import json,sys
@@ -398,7 +377,7 @@ verify_level() {
   local status="$R_STATUS" frames="$R_FRAMES" sym="$R_SYM" worst="" note=""
 
   if [ "$status" = PASS ]; then
-    if [ "$PLATFORM" = linux ] && [ "$LINUX_SOFTWARE_GL" = 1 ]; then
+    if { [ "$PLATFORM" = linux ] || [ "$PLATFORM" = deck ]; } && [ "$LINUX_SOFTWARE_GL" = 1 ]; then
       note="GE_PCDUMP reads black on llvmpipe/WSLg — pixcount/framediff skipped, crash-detect only"
     else
       local last; last=$(ls "$CAPDIR"/ppm/*.ppm 2>/dev/null | tail -1)
@@ -476,8 +455,6 @@ case "$MODE" in
     [ -z "$resolved" ] && { echo "unknown level '$LEVEL_ARG'" >&2; exit 2; }
     name="${resolved%%:*}"; num="${resolved##*:}"
     [ "${resolved%%:*}" = num ] && name=$(name_for_num "$num")
-    pin_ini_640x480
-    pin_eep
     verify_level "$name" "$num" "${DUMP:-$GOLDEN_DUMP}"
     ;;
 
@@ -487,26 +464,55 @@ case "$MODE" in
     subset="${SWEEP_LEVELS:-${SWEEP_SUBSET:-}}"
     entries=("${LEVELS[@]}")
     [ -n "$subset" ] && read -ra entries <<< "$subset"
+    # -j N: up to N levels at once, each in its own work dir (see above).
+    # Per-level stdout/stderr/rc are buffered in $SWEEP_TMP and replayed in the
+    # ORIGINAL level order, so the output is identical to a sequential sweep.
+    SWEEP_TMP=$(mktemp -d)
+    wd=60; [ "$JOBS" -gt 1 ] && wd=90   # slower under contention; still only a fallback
+    nxt=0
+    flush_done() {   # emit every finished level that is next in order
+      local blocking="${1:-0}" rc nm j
+      while [ "$nxt" -lt "${#entries[@]}" ]; do
+        if [ ! -f "$SWEEP_TMP/$nxt.rc" ]; then
+          [ "$blocking" = 1 ] && { sleep 0.2; continue; }
+          return
+        fi
+        rc=$(cat "$SWEEP_TMP/$nxt.rc")
+        [ -s "$SWEEP_TMP/$nxt.err" ] && cat "$SWEEP_TMP/$nxt.err" >&2
+        [ "$rc" -ne 0 ] && RC=1
+        if [ -s "$SWEEP_TMP/$nxt.out" ]; then
+          # Pre-existing bug (found alongside D244's diagnostics): `head -1`
+          # silently discarded emit_verdict's --json line on every sweep run;
+          # keep the verdict line (head -1) and pull the JSON line separately.
+          head -1 "$SWEEP_TMP/$nxt.out"
+          if [ "$JSON" = 1 ]; then
+            j=$(grep -m1 '^{' "$SWEEP_TMP/$nxt.out")
+            [ -n "$j" ] && RESULTS_JSON+=("$j")
+          fi
+        else
+          nm="${entries[$nxt]%%:*}"
+          echo "$nm: NO-FRAMES  frames=0  (setup failed -- see stderr)"
+          RC=1
+        fi
+        nxt=$((nxt + 1))
+      done
+    }
+    idx=0
     for e in "${entries[@]}"; do
       n="${e%%:*}"; num="${e##*:}"
-      pin_ini_640x480
-      pin_eep
-      out=$(verify_level "$n" "$num" "${DUMP:-$GOLDEN_DUMP}" 60)
-      rc=$?
-      [ "$rc" -ne 0 ] && RC=1
-      # Pre-existing bug (found alongside D244's diagnostics): `head -1` here
-      # silently discarded emit_verdict's --json line (its 2nd line of
-      # output, starting with `{`) on every sweep run -- RESULTS_JSON above
-      # was declared for exactly this and never actually populated, so
-      # `--json` sweeps have never produced a usable verdict array; the
-      # workflow's "Extract JSON verdict" step (scans for the last `[{` in
-      # sweep.log) always got an empty `[]`.
-      echo "$out" | head -1
-      if [ "$JSON" = 1 ]; then
-        j=$(echo "$out" | grep -m1 '^{')
-        [ -n "$j" ] && RESULTS_JSON+=("$j")
-      fi
+      while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do sleep 0.2; flush_done; done
+      (
+        trap 'kill_ours; [ -n "$CUR_CAPDIR" ] && rm -rf "$CUR_CAPDIR"; exit 143' TERM
+        RCV=2   # an `exit` inside run_one (setup failure) still writes an rc
+        trap 'echo "$RCV" > "$SWEEP_TMP/$idx.rc"' EXIT
+        verify_level "$n" "$num" "${DUMP:-$GOLDEN_DUMP}" "$wd" >"$SWEEP_TMP/$idx.out" 2>"$SWEEP_TMP/$idx.err"
+        RCV=$?
+      ) &
+      idx=$((idx + 1))
+      flush_done
     done
+    flush_done 1
+    wait
     echo "SWEEP DONE"
     if [ "$JSON" = 1 ] && [ "${#RESULTS_JSON[@]}" -gt 0 ]; then
       { printf '['
@@ -526,8 +532,6 @@ case "$MODE" in
     resolved=$(resolve_level "$LEVEL_ARG")
     [ -z "$resolved" ] && { echo "unknown level '$LEVEL_ARG'" >&2; exit 2; }
     name="${resolved%%:*}"; num="${resolved##*:}"
-    pin_ini_640x480
-    pin_eep
     run_one "$name" "$num" "${DUMP:-$GOLDEN_DUMP}" 90
     if [ "$R_STATUS" != PASS ]; then
       emit_verdict "$name" "$R_STATUS" "$R_FRAMES" "" "$R_SYM"

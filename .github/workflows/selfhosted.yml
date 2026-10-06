@@ -1,7 +1,7 @@
 # Self-hosted runtime (ROM-gated)
 #
 # Runs the build + the 21-level headless sweep (tools_pc/verify.sh) on the
-# self-hosted runner "corpyvt6agent01", the one machine that has a legal ROM.
+# self-hosted runner, the one machine that has a legal ROM.
 # This is the job class ci.yml explicitly does NOT do: CI is build-only, no
 # ROM, so runtime checks live here. Setup + rollout plan (gitignored, local):
 #   docs/dev/notes/SELFHOSTED-RUNNER-PLAN.md

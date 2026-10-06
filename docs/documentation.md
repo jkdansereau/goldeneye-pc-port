@@ -28,6 +28,6 @@ separate [Building](building.md) page.)
   how the two-AI-agent setup ran, its timeline and numbers, and an honest
   read on what did and didn't work.
 - **[Security status](security.md)** — what the release packages install
-  (and don't): no networking, no telemetry, no ROM, no system writes.
+  (and don't): no networking unless you opt in to the update check, no telemetry, no ROM, no system writes.
 - **[Fidelity status](fidelity.md)** — how faithfully the port reproduces
   the N64 game's logic, and what was audited to back that claim.

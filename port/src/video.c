@@ -63,13 +63,14 @@ static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N
 static int cfgFixMipTex     = 1;   /* RC2: clip mip-contaminated texture uploads to base height */
 static int cfgDetailBaseTile = 1;  /* D236: TEXTURETYPE_DETAIL -> sample the base image, not the detail tile */
 static int cfgWrapFix       = 0;   /* D74 sub-tile UV pre-wrap + RC3/D167 non-PoT mask-period wrap (opt-in; GE_WRAPFIX env overrides) */
-static int cfgFovScale      = 100; /* D211: percent of the original vertical FOV; 100 = unchanged (byte-identical) */
+static float cfgFovScale    = 100.0f; /* D211: percent of the original vertical FOV; 100 = unchanged (byte-identical). D546: float so the 5-degree UI steps are exact */
 static int cfgWidescreenAuto = 1;  /* WIDESCREEN-FOV-PLAN Phase 4: auto-scale vertical FOV by window aspect ratio; on by default, no-op at 4:3 */
 static int cfgNativeWidescreen = 1; /* D334 (WIDESCREEN-FOV-PLAN Phase 2): project the world at the real window aspect (Hor+); no-op at 4:3 */
 static int cfgHudScale = 100;        /* D226: HUD text/ammo scale %, 100 = original (no emission) */
-static int cfgDrawDistance      = 250; /* % of authored far clip; 250% is the UI's 50/100 midpoint */
+static int cfgDrawDistance      = 200; /* % of authored far clip; D546: 2.0x default (was 2.5x) */
+static int cfgFogDistance       = 100; /* D540: % of the authored fog distances; 100 = N64 */
 static int cfgDrawDistanceAutoFov = 0; /* legacy ini option, no longer exposed in the menu */
-static int cfgLodDistance         = 250; /* % of authored geometry LOD distance; 50/100 in the UI */
+static int cfgLodDistance         = 200; /* % of authored geometry LOD distance; D546: 2.0x default (was 2.5x) */
 static int cfgLodDistanceAutoFov  = 0; /* legacy ini option, no longer exposed in the menu */
 static int cfgAniso         = 4;   /* D212: anisotropic filtering samples; 4 = the value fast3d already applied (no visual delta at default) */
 static int cfgSafeAreaCrop  = 1;   /* crop the N64 TV-overscan safe-area margin (visible as black top/bottom bars on PC) instead of showing it; on by default */
@@ -78,6 +79,7 @@ static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   
 static int cfgFullscreenMode = 0;  /* D511: fullscreen flavour, 0 = borderless desktop, 1 = exclusive */
 static int cfgDeckPresetApplied = 0; /* D283: 1 once the Steam Deck preset has been considered */
 static int cfgLowEndConsidered = 0;  /* D482: 1 once the low-end GPU defaults have been considered */
+static int cfgDefaultsRev = 0;       /* D546: 1 once the 2.5x -> 2.0x draw/LOD default migration ran */
 
 /*
  * [Window] persistence. W/H = 0 -> auto (gfx_sdl2 fits a 4:3 window into ~85%
@@ -208,14 +210,14 @@ void portCrosshairPreview(s32 *r, s32 *g, s32 *b)
 }
 
 /* D257: Game.AllUnlocked — everything-unlocked goodie, OFF by default
- * (faithful N64 progression: levels unlock as you complete them). Consumed
- * once at startup by main.c, which sets the game's own RAM unlock flags
+ * (faithful N64 progression: levels unlock as you complete them). Applied
+ * by portAllUnlockedApply (main.c) at startup and on every F10 change: it
+ * sets the game's own RAM unlock flags
  * (debug_enable_all_levels_flag / debug_007_unlock_flag in
  * src/game/debugmenu_handler.c, live because the PC build defines
  * LEFTOVERDEBUG) — port-layer memory writes only, no game-code edits.
  * 1 = every solo level selectable at every difficulty plus 007 mode from
- * the first launch. F10 'All unlocked' row toggles it; takes effect next
- * run. Cheats are unlocked at query time via fileGetIsCheatUnlocked
+ * the first launch. F10 'All unlocked' row toggles it live. Cheats are unlocked at query time via fileGetIsCheatUnlocked
  * (src/game/file2.c, D442) -- the save file is never patched. */
 s32 portAllUnlocked = 0;
 
@@ -398,6 +400,15 @@ f32 portDrawDistanceMultiplier(void)
     return mult;
 }
 
+/* D540: Video.FogDistance -- multiplier on the level's authored fog start/end
+ * DISTANCES, independent of Video.DrawDistance (which moves the far clip).
+ * bgfog.c caps the fog at the far clip, so the fog always hides the edge of
+ * the drawn world. 1.0f (100) = the N64's own fog. */
+f32 portFogDistanceMultiplier(void)
+{
+    return (f32)cfgFogDistance / 100.0f;
+}
+
 /* D249: Video.LodDistance -- multiplier on the *distance* term
  * modelUpdateDistanceRelations() (src/game/model.c) tests against each LOD
  * node's MinDistance/MaxDistance, composed on top of the game's own
@@ -531,11 +542,12 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.FixMipTextures", &cfgFixMipTex, 0, 1);
     configRegisterInt("Video.DetailBaseTile", &cfgDetailBaseTile, 0, 1);
     configRegisterInt("Video.WrapFix", &cfgWrapFix, 0, 1);
-    configRegisterInt("Video.FovScale", &cfgFovScale, 50, 150);
+    configRegisterFloat("Video.FovScale", &cfgFovScale, 50.f, 150.f);
     configRegisterInt("Video.WidescreenAuto", &cfgWidescreenAuto, 0, 1);
     configRegisterInt("Video.NativeWidescreen", &cfgNativeWidescreen, 0, 1);   /* D334 */
     configRegisterInt("Game.HudScale", &cfgHudScale, 75, 150);   /* D226: capped at 150 (user: little benefit above) */
     configRegisterInt("Video.DrawDistance", &cfgDrawDistance, 100, 800);
+    configRegisterInt("Video.FogDistance", &cfgFogDistance, 50, 800);   /* D540 */
     configRegisterInt("Video.DrawDistanceAutoFov", &cfgDrawDistanceAutoFov, 0, 1);
     configRegisterInt("Video.LodDistance", &cfgLodDistance, 25, 800);
     configRegisterInt("Video.LodDistanceAutoFov", &cfgLodDistanceAutoFov, 0, 1);
@@ -551,6 +563,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Window.Maximized",    &cfgWinMax,     0, 1);
     configRegisterInt("Video.DeckPresetApplied", &cfgDeckPresetApplied, 0, 1);   /* D283 */
     configRegisterInt("Video.LowEndConsidered", &cfgLowEndConsidered, 0, 1);     /* D482 */
+    configRegisterInt("Video.DefaultsRev", &cfgDefaultsRev, 0, 1);               /* D546 */
 }
 
 /* D283: Steam Deck preset. Called from main() right AFTER configLoad(), so
@@ -686,6 +699,20 @@ static int videoIsLowEndRenderer(const char *r, const char **why)
     return 0;
 }
 
+/* D546: one-time move of untouched old defaults to the standardized ones
+ * (draw/LOD distance 2.5x -> 2.0x). A value the player changed is kept; same
+ * "considered" flag pattern as D482. */
+static void videoMigrateDefaults(void)
+{
+    int changed = 0;
+    if (cfgDefaultsRev >= 1) return;
+    if (cfgDrawDistance == 250) { cfgDrawDistance = 200; changed++; }
+    if (cfgLodDistance == 250)  { cfgLodDistance = 200; changed++; }
+    sysLogPrintf(LOG_INFO, "video: defaults rev 1 (D546): %d value(s) moved to 2.0x", changed);
+    cfgDefaultsRev = 1;
+    configSave();
+}
+
 static void videoApplyLowEndDefaults(void)
 {
     const char *r = gfx_opengl_renderer_string();
@@ -702,8 +729,8 @@ static void videoApplyLowEndDefaults(void)
     }
     if (low) {
         int changed = 0;
-        if (cfgDrawDistance == 250) { cfgDrawDistance = 100; changed++; }
-        if (cfgLodDistance == 250)  { cfgLodDistance = 100; changed++; }
+        if (cfgDrawDistance == 200) { cfgDrawDistance = 100; changed++; }   /* D546: the default is 2.0x */
+        if (cfgLodDistance == 200)  { cfgLodDistance = 100; changed++; }
         if (cfgMSAA == 2)           { cfgMSAA = 1; gfx_msaa_level = 1; changed++; }
         sysLogPrintf(LOG_INFO, "video: low-end renderer \"%s\" (%s); lowered %d default(s): DrawDistance=%d LodDistance=%d MSAA=%d",
                      r, why, changed, cfgDrawDistance, cfgLodDistance, cfgMSAA);
@@ -734,8 +761,9 @@ static const struct { const char *key; double n64, port; } kVideoPresets[] = {
     { "Video.WidescreenAuto",        0,   1 },   /* stock vertical FOV at any window aspect */
     { "Video.SafeAreaCrop",          0,   1 },   /* show the VI frame as output, borders included */
     { "Video.AspectMode",            1,   0 },   /* D447: exact console aspect, bars around it */
-    { "Video.DrawDistance",        100, 250 },   /* authored far clip / fog (D218) */
-    { "Video.LodDistance",         100, 250 },   /* authored LOD switch distances (D249) */
+    { "Video.DrawDistance",        100, 200 },   /* authored far clip (D218); D546 2.0x */
+    { "Video.FogDistance",         100, 100 },   /* D540: N64 fog in both presets */
+    { "Video.LodDistance",         100, 200 },   /* authored LOD switch distances (D249); D546 2.0x */
     { "Video.DrawDistanceAutoFov",   0,   0 },   /* legacy coupling: off = identity */
     { "Video.LodDistanceAutoFov",    0,   0 },
     { "Video.FovScale",            100, 100 },   /* stock FOV (D211) */
@@ -794,7 +822,7 @@ static SDL_atomic_t liveCfgDirty;
  * plain float the game re-reads each frame; anisotropy goes to fast3d. */
 static void videoApplyImageOptions(void)
 {
-    portFovScale = (f32)cfgFovScale / 100.0f;
+    portFovScale = cfgFovScale / 100.0f;
     gfx_set_anisotropy_level(cfgAniso);
     gfx_set_safe_area_crop(cfgSafeAreaCrop);
 }
@@ -1017,6 +1045,7 @@ int videoInit(void)
     };
 
     gfx_init(&set);
+    videoMigrateDefaults();       /* D546: before D482, which compares against the new defaults */
     videoApplyLowEndDefaults();   /* D482: needs GL_RENDERER; before the first frame */
 
     /* VSync + optional fps cap; fast3d paces the window itself. */
@@ -1190,11 +1219,11 @@ void videoStartFrame(void)
         if (dirty & VCFG_VSYNC) wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
         if (dirty & VCFG_FPS) gfx_set_target_fps(cfgFpsCap);
         if (dirty & VCFG_FILTER) videoApplyTexFilter();
-        if (dirty & VCFG_FOV) portFovScale = (f32)cfgFovScale / 100.0f;
+        if (dirty & VCFG_FOV) portFovScale = cfgFovScale / 100.0f;
         if (dirty & VCFG_ANISO) gfx_set_anisotropy_level(cfgAniso);
         if (dirty & VCFG_CROP) gfx_set_safe_area_crop(cfgSafeAreaCrop);
         sysLogPrintf(LOG_INFO, "video: live config applied mask=%02x "
-                     "(vsync=%d fpscap=%d texfilter=%d fov=%d aniso=%d)",
+                     "(vsync=%d fpscap=%d texfilter=%d fov=%.1f aniso=%d)",
                      dirty, cfgVSync, cfgFpsCap, cfgTexFilter, cfgFovScale, cfgAniso);
     }
 
@@ -1299,17 +1328,8 @@ void videoPumpEvents(void)
         }
     }
 
-    /* Refresh the window title with the live FPS about once a second. */
-    if (wmAPI && wmAPI->set_window_title) {
-        static double lastTitle = 0.0;
-        double now = wmAPI->get_time();
-        if (now - lastTitle >= 1.0) {
-            lastTitle = now;
-            char title[64];
-            snprintf(title, sizeof(title), "GoldenEye 007  -  %.0f fps", vidAvgFPS);
-            wmAPI->set_window_title(title);
-        }
-    }
+    /* D550: static title bar -- the "GoldenEye 007 - NN fps" per-second
+     * refresh used to live here (maintainer request 2026-10-17). */
 
     /* D287: apply anything the events above (click-to-lock, focus) queued. */
     inputApplyMouseRequests();

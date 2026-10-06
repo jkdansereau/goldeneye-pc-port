@@ -3,11 +3,13 @@
 `<level>/<platform>/frame_NNNNNN.png`: reference `GE_PCDUMP` captures for
 `tools_pc/verify.sh`, one folder per solo level (all 21, `cuba` = the ending)
 and per platform (`win`, and `linux` — 21 levels x 3 frames on each, captured
-2026-10-05 at the same stems).
+2026-10-05 at the same stems; `deck` = the Steam Deck set, captured with
+`capture_p7.sh -p deck`, per-level pixel limits = the linux ones for now).
 
 **Recipe** (2026-10-02 re-base; `verify.sh` applies all of it):
 - `data/ge007.ini` pinned to ONLY `[Window] Width = 640, Height = 480` (every
-  other option at its compiled-in default; verify.sh backs yours up).
+  other option at its compiled-in default). Each run gets its own copy in a
+  temp work dir (see Isolation below); your `data/ge007.ini` is never touched.
 - `GE_RSEED=0x0123456789abcdef` (pinned PRNG).
 - `GE_INPUTSCRIPT="20:START"` (skips the intro flyby; the scripted pad is
   the only input). Window per level, exactly as `verify.sh`'s `golden_dump_for`
@@ -26,14 +28,27 @@ and per platform (`win`, and `linux` — 21 levels x 3 frames on each, captured
   each of the four candidate saves, 21.557% with none) was only ever measured on
   Archives, and the 2026-10-05 A/B refutes it (facility 177.47 scene-level on the
   2026-10-05 playtest save, 0.0-0.25 on every other candidate on disk). `verify.sh`
-  and `capture_p7.sh` install the canonical eep the same way they pin the ini
-  (snapshot the local file if any, install the canonical one, restore-or-remove on
-  exit), so the gate is reproducible on a fresh clone and in CI. A local playtest
+  and `capture_p7.sh` install the canonical eep into each run's own work dir
+  (the repo's `data/` is never modified), so the gate is reproducible on a fresh clone and in CI. A local playtest
   save is **never** the gate's input. The linux 63-frame set was re-captured
   on the box under the canonical eep 2026-10-05 (D531; the 2026-10-05
   re-round, D530, turned out to have run under the box-LOCAL save — the
   `capture_p7.sh` per-level re-pin bug, fixed in D531) and is valid.
 - Every run ends via `GE_QUITFRAME` (orderly quit; never a hard kill, D344).
+- **Isolation + parallelism:** `verify.sh` and `capture_p7.sh` run every level with
+  CWD = a fresh temp work dir holding its own `data/` (ROM, `pccg-<romid>/`,
+  `pcmodels-<romid>/`, the canonical save, the pinned ini) and its own `ppm/`; the
+  repo's `data/` is only read (the old pin/restore of `data/ge007.ini`/`.eep` is
+  gone). That makes levels safe to run concurrently:
+  `tools_pc/verify.sh sweep -j 3` / `tools_pc/capture_p7.sh -j 2 ...`. Pixel
+  results assume each instance holds 60 fps (D117): `-j 2-3` only on a strong GPU
+  with nothing else loading it (no local LLM loaded), `-j 1` on weak boxes.
+  Measured 2026-10-05 with a busy GPU (an LLM resident at ~100%): Surface 1's
+  frame 900 failed at `-j 2` and `-j 3` and passed at `-j 1`.
+- Windows set: from Git Bash, `bash tools_pc/capture_p7.sh -b build-pc -p win -j 3 <level>:<num> ...`
+  (no DISPLAY on Windows; `-j 1` if the GPU is loaded).
+- Deck set: on the device (Desktop Mode, `DISPLAY=:0`, prebuilt binary at
+  `<build>/ge007.x86_64`): `bash tools_pc/capture_p7.sh -b <build> -p deck <level>:<num> ...`.
 
 **Gate** (two tiers): the structural framediff (cell means, coverage,
 phash) catches gross breakage; then a per-pixel `--exact --tol 2` check
@@ -143,3 +158,69 @@ capture with the recipe above and replace `<level>/<platform>/*.png`.
   ssh shell) so `verify.sh`'s fail-closed probe keeps the pixcount/framediff skip even
   though the game's readback works; the cross-platform numbers are computed on Windows
   against the merged linux PNGs. See D525.
+- **2026-10-05 (isolated + parallel capture, `deck` platform):** `verify.sh` and
+  `capture_p7.sh` now run each level in its own temp work dir (own `data/` copy,
+  pinned ini, canonical save, `ppm/`) instead of pinning/restoring the repo's
+  `data/`; added `-j N` (concurrent levels, verdicts in level order) and a `deck`
+  platform (`verify.sh --platform deck`, `capture_p7.sh -p deck`).
+- **2026-10-05 (D540 re-base #2, win only):** final fog design (far clip scales
+  by min(Fog, Draw distance); the game's fog math untouched, so fogged levels
+  render the N64's own fog at defaults). Re-captured whole levels: aztec, cradle,
+  dam, egypt, jungle, statue, surface1, streets (24 frames, win). Side-by-sides:
+  fog only (Cradle's distant truss is a faint ghost, Frigate's sea unchanged);
+  props, characters, gun and HUD present, no overlays. Pass-A vs pass-B
+  (over tol 2): <=0.30% (aztec 0.19, egypt 0.26, statue 0.30), cradle/dam/jungle/
+  surface1 <=0.003%; streets 0.75-2.1% (timer digits jitter; promoted from the
+  pass whose state the confirming runs reproduce). Confirming pass 21/21 PASS
+  (silo failed once with worst_cell 127 and passed on the single re-run; streets
+  failed twice before its re-promotion, then passed twice). The `<level>/linux/`
+  set is stale on the re-captured levels until the box re-captures.
+- **2026-10-05 (D540, linux re-base + first `deck` set):** same final fog code,
+  captured concurrently on the two boxes. **linux** (X220, `-j 1`, rebuilt from
+  the working tree): pass A against the existing set; 13 levels already within
+  limit and were left; re-captured aztec, cradle, egypt, statue, surface1, dam,
+  jungle (A/B 0.00-0.45%, dam 0.000%, jungle 1.7% under its 3% limit; dam/jungle
+  differ from the old set by the fog change, 8.4% / 37.9%). streets/silo A/B run
+  0.3-3.0% on the box (left as captured earlier; they match their goldens).
+  **deck** (Steam Deck, Desktop Mode, the X220-built binary + bundled SDL2,
+  `capture_p7.sh -p deck -j 2`): all 21 levels, A/B <= 0.04% except jungle
+  1.65% and statue 0.44%; `-j 3` failed its validation on the Deck (archives
+  4.96%, frigate 7-11%), `-j 2` agreed (<= 0.031%), 286 s per 21-level pass.
+  Both tools now set `GE_FAKE_DECK=0` on every run: on a Deck the D283 preset
+  otherwise forces 1280x800 fullscreen over the pinned ini. Also on 2026-10-05,
+  before the final fog design, a first D540 win re-base (17 levels) was
+  superseded by re-base #2 above; the levels it alone touched pass re-base #2's
+  confirming pass. **Run sweeps with the GPU otherwise idle** (no local LLM
+  loaded): 60 fps pacing is part of the gate (D117).
+- **2026-10-06 (v0.5.0 re-base, linux + deck):** D543 (CPU near-plane clip +
+  per-vertex N64 fog) and D546 (Draw/LOD 2.0x default) re-captured on both
+  boxes concurrently from one X220-built binary (tree `21c5b5c5`), canonical
+  eep md5-checked on each box. Two full passes each (X220 `-j 1` 551 s/pass,
+  Deck `-j 2` 286 s/pass, every run rc 0). Pass A vs B over tol 2: deck 63/63
+  within limit; linux 60/63 — Dam drifted 5.2-6.0% between A and B (Bond's
+  settle position after the wall-clock-paced flyby, D117), so two Dam-only
+  runs C/D were taken: C vs D <= 0.022% and C vs the previous golden <= 0.023%,
+  so C was promoted (A and B were the outliers). Change vs the previous set is
+  concentrated where fog/draw distance bites: Statue ~26%, Surface 2 20-27%,
+  Streets 19-20%, Surface 1 ~13%, Depot ~10%, Cradle ~5%; indoor levels
+  <= 0.4%. Cradle and Frigate compared by eye against 1964/GEPD stills: match.
+  **win (same day, same tree):** `capture_p7.sh` now runs on Windows too
+  (Git Bash; `-b build-pc -p win`, no DISPLAY; picks the python that has
+  Pillow). Two passes at `-j 3` on the dev box (190 s each, every run rc 0,
+  a local LLM resident on the GPU): 62/63 A/B-stable; Streets 1400 jittered
+  1.5% (timer digits), two Streets-only `-j 1` runs C/D sat within 0.81% of
+  pass B, so B was promoted for Streets, A elsewhere. Deltas vs the previous
+  win set mirror linux/deck (Statue ~26%, Surface 2 ~27%, Streets ~20%,
+  Surface 1 ~13%, Depot ~10%, Cradle ~5%). Cross-platform spread on the new
+  sets, over tol 2, non-Cuba: win-linux 0.406-4.553%, win-deck 0.188-3.264%,
+  linux-deck 0.281-3.828% (informational, not a parity gate).
+- **2026-10-06 (D553, near-clip fog recomputed):** Windows sweep after the
+  change flagged surface1/depot/cradle; re-captured surface1/depot/statue/
+  cradle on all three platforms, two passes each. Only **cradle** really
+  moved (~4.9% over tol 2, A/B <= 0.12% on every platform; the near walkway
+  is very slightly lighter, still in line with the 1964 still) and was
+  re-based x3. depot/surface1 "regressions" were `-j 3` pacing flakes with a
+  local LLM on the GPU: captured alone, depot is pixel-identical to its
+  golden and surface1/statue are within 0.5% -- those sets were left as-is.
+  The Deck must be in Desktop Mode for captures (Game Mode = Wayland/
+  gamescope: every run times out with 0 frames).

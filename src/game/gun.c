@@ -1728,7 +1728,13 @@ void gunInitProjectileFromPlayer(ObjectRecord *obj, coord3d *targetpos, Mtxf *ar
     u8 rooms[2];
     s32 pad_rooms;
     u8 pad_a[0x4c];
+#ifdef AVOID_UB
+    s32 sp54[0x14]; /* D545: bgFindRoomsAlongSegment below writes up to 0x14 room
+                     numbers here; on N64 the overflow landed in `pad_a`
+                     (0x4c = 19 more s32), on PC it could hit live locals */
+#else
     s32 sp54;
+#endif
     s32 sp50;
     s32 pad_sp;
 
@@ -1788,7 +1794,11 @@ void gunInitProjectileFromPlayer(ObjectRecord *obj, coord3d *targetpos, Mtxf *ar
         rooms[0] = bondviewGetCurrentPlayersRoom();
         rooms[1] = 0xff;
 
+#ifdef AVOID_UB
+        bgFindRoomsAlongSegment(bondviewGetCurrentPlayersPosition3(), &pos, rooms, obj->projectile->unkCC, sp54, &sp50, 0x14);
+#else
         bgFindRoomsAlongSegment(bondviewGetCurrentPlayersPosition3(), &pos, rooms, obj->projectile->unkCC, &sp54, &sp50, 0x14);
+#endif
     }
 }
 
@@ -1807,7 +1817,13 @@ void generate_player_thrown_grenade(s32 hand)
     Mtxf spA0_a;
     struct WeaponObjRecord *wor;
     s32 new_prop_type;
+#ifdef AVOID_UB
+    struct coord3d sp94; /* D549: bullet_path_from_screen_center writes a coord3d here;
+                            on N64 the 8-byte overflow hit a dead stack slot, on PC it
+                            can hit live locals (wor/new_prop_type/...) */
+#else
     s32 sp94; // sp148
+#endif
     struct coord3d base_speed_vec; // sp136
     struct PropRecord* player_prop; // sp132
     struct coord3d *bondprevpos;  // sp128
@@ -1898,7 +1914,13 @@ void generate_player_thrown_knife(s32 hand)
     Mtxf spA0_a;
     s32 padding;
     s32 new_prop_type;
+#ifdef AVOID_UB
+    struct coord3d sp94; /* D549: bullet_path_from_screen_center writes a coord3d here;
+                            on N64 the 8-byte overflow hit a dead stack slot, on PC it
+                            can hit live locals (wor/new_prop_type/...) */
+#else
     s32 sp94;
+#endif
     struct coord3d base_speed_vec;
     Mtxf sp40_f;
     struct PropRecord* player_prop;
@@ -1988,7 +2010,13 @@ void generate_player_thrown_object(s32 hand)
     Mtxf spA0_a;
     struct WeaponObjRecord *wor;
     s32 new_prop_type;
+#ifdef AVOID_UB
+    struct coord3d sp94; /* D549: bullet_path_from_screen_center writes a coord3d here;
+                            on N64 the 8-byte overflow hit a dead stack slot, on PC it
+                            can hit live locals (wor/new_prop_type/...) */
+#else
     s32 sp94; // sp148
+#endif
     struct coord3d base_speed_vec; // sp136
     struct PropRecord* player_prop; // sp132
     struct coord3d *bondprevpos;  // sp128

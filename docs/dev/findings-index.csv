@@ -40,7 +40,7 @@ D230,FIXED,In-level music quality:,"FIXED (M-121, v0.2.0) —"
 D231,CLOSED,"QoL batch: mute-on-focus-loss + screenshot-hotkey productization (M-105, roadmap Tier 3, port-only).","CLOSED — PARKED/DEPRIORITIZED (user, 2026-09-25)."
 D233,FIXED,All levels (intermittent):,"FIXED (port/fast3d/gfx_pc.cpp, gfx_sp_tri1) —…"
 D234,FIXED,"Dam: guard towers along the dam structure invisible except the first one (M-106, user QA report).",VISUALLY VERIFIED FIXED (M-108) —…
-D244,OPEN,Self-hosted CI runner (corpyvt6agent01) link failure:,"OPEN, not yet fixed. Next…"
+D244,OPEN,Self-hosted CI runner link failure:,"OPEN, not yet fixed. Next…"
 D228,FIXED,AK47 white missing-texture patches after D217's texpool fix —,"FIXED (port/fast3d/gfx_pc.cpp, palette_to_rgba32) —"
 D204,FIXED,PC audio ran ~2 % below real time permanently (AI feedback loop's 3 ms setpoint vs PC jitter).,"FIXED (port/src/audio.c, port/src/libultra.c, port/include/audio.h) —"
 D203,CLOSED,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",CLOSED — root cause + fix in D253.
@@ -283,11 +283,35 @@ D403,RESOLVED,Deck v0.4.0-pre test:,"RESOLVED (2026-09-27, user-confirmed on the
 D404,RESOLVED,"""Aim style: Centred (PC)"" (Input.AimMode=1, D333/D337) has no effect when aiming with a gamepad; the row's own doc comment over-promises (""applies to every aim…","RESOLVED (2026-09-28, port-layer only):"
 D405,CLOSED,"fast3d/OpenGL: MSAA above the driver max black-screens; two glBindFramebuffer calls pass an index where a GL name is required (PR #106, italoarruda, 2026-09-25…","CLOSED (2026-09-28). Merged from PR #106 (code file only; security-reviewed clean - port-layer GL state fixes, no external input, no allocations)."
 D406,RESOLVED,front-end PC Options screen:,"RESOLVED (2026-09-28, port-layer only, Steam Deck-validated):"
+D541,PARTIAL,One A press advanced two menu screens on the Steam Deck (Desktop Mode) —,"PARTIAL 2026-10-05 (mitigation landed, port-only:"
+D542,OPEN,"Stray polygons left of Bond's gun, frequent on foggy levels (Streets, Surface 2) —",OPEN 2026-10-05 (triage:
+D543,FIXED,Surface 2: lit area following Bond brighter than 1964 —,"FIXED 2026-10-06 (CPU RSP-style near clip in gfx_sp_tri1 + per-vertex fog default; build-verified, by-eye vs 1964 at next playtest)"
+D544,FIXED,OS cursor flickers with F10 open on the main menu —,"FIXED 2026-10-05 (port-only, input.c; build-verified, maintainer mouse check owed)"
+D545,FIXED,Player rockets can pass through the ground when fired near Bond's feet —,"FIXED 2026-10-06 (AVOID_UB array, gun.c; maintainer Archives preset A/B:"
+D546,FIXED,PC settings standardization:,FIXED 2026-10-05 (port-only; build + maintainer check owed; golden re-base batched with D543)
+D547,FIXED,Game.AllUnlocked applies live (no restart) —,"FIXED 2026-10-05 (port-only, main.c/optionsoverlay.c; build-verified, maintainer mission-select check owed)"
+D548,FIXED,Walls near rocket fire/explosions banded black/white/yellow/blue (Aztec dark corridor; also seen on Deck) —,FIXED 2026-10-06 (gfx_opengl.cpp input clamp; root fix = D543 CPU near clip; maintainer Aztec re-check owed)
+D549,FIXED,Thrown grenade/knife/object:,"FIXED 2026-10-06 (AVOID_UB coord3d, gun.c x3; build-verified)"
+D550,FIXED,"Static title bar (no more per-second ""NN fps"" refresh) + project mark as favicon / window / taskbar icon —","FIXED 2026-10-17 (port + tooling only, video.c/gfx_sdl2.cpp/make_icon.py; ninja-command-verified + full build 249/249; maintainer live window/taskbar check owed)"
+D551,?,"Opt-in update check (Game.CheckUpdates, default off):",ADDED 2026-10-06 (port layer only; live-verified Windows/Linux/Deck + F10 UI capture; security review fixes applied)
+D552,FIXED,Dam ending cutscene: the first camera shot no longer swivels up onto Bond —,FIXED 2026-10-06 (port-only addition removed; code path back to the decomp; maintainer-verified live)
+D553,FIXED,Surface 2: the haze around Bond brightened/darkened as he moved —,FIXED 2026-10-06 (fast3d:
+D554,OPEN,F10 settings menu: wording/casing pass + two-line tips —,DONE 2026-10-06 (port/src/optionsoverlay.c; maintainer by-eye check owed)
+D555,OPEN,Crosshair mouse pointer over the F10 / PC Options overlay —,"DONE 2026-10-06 (port/src/input.c, optionsoverlay.c, tools_pc/make_icon.py; maintainer by-eye check owed)"
+D556,OPEN,"F10 feedback pass (tips trimmed, conditional-row order, wording fixes) + mouse scrollbar —","DONE 2026-10-06 (port/src/optionsoverlay.c; build only, by-eye check owed)"
+D557,FIXED,"New/blank profiles start with Look ahead OFF on PC (Rule-2 sign-off, maintainer 2026-10-06) —",FIXED 2026-10-06 (src/game/file2.h DEFAULT_OPTIONS under #ifdef PORT; existing saves untouched; win gate 21/21)
+D558,FIXED,F10 overlay tips cut off in a level (not on the front end) —,FIXED 2026-10-06 (optionsoverlay.c textRenderWide; verified by in-level capture)
+D559,FIXED,"Look ahead off for untouched existing folders (maintainer-approved, port layer only) —",FIXED 2026-10-06 (watchsettings.c migrateUntouchedLookAhead)
+D560,FIXED,F10 copy pass 3 (maintainer line review) —,FIXED 2026-10-06 (optionsoverlay.c tips/labels/value names; display text only)
+D561,FIXED,"F10: ""Menu pointer"" row removed (front-end-only legacy option; confused players) —","FIXED 2026-10-06 (row/tip/names removed; Input.MenuPointerMode ini key, Direct default and the legacy code path kept for one release)"
+D562,FIXED,F10 crosshair pointer hidden while a pad/keyboard drives the menu —,FIXED 2026-10-06 (drawCrosshairPointer draws only while s_mouseActive)
+D563,FIXED,F10 root hub: Left/Right no longer open pages; held nav inputs latched on open/page change —,FIXED 2026-10-06
+D564,FIXED,"F10: game's own ""Look up/down"" row removed (dead for mouse and centred pad, stacked with Invert look); value pinned to factory; tip polish —","FIXED 2026-10-06 (port only; Mouse / Controller ""Invert look"" are the inversion controls)"
 D407,CLOSED,Tanks cannot be boarded/exited on PC —,CLOSED (2026-09-28 bookkeeping:
 D408,FIXED,Game.SkipIntro skips the post-mission failure dossier:,FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed).
 D415,FIXED,"Shooting a light fixture does not ""kill"" its flickering light (Bunker, Caverns):",FIXED (2026-09-29 bookkeeping:
 D416,RESOLVED,"2-player split-screen crashes (issue #99, v0.3.0 4827bc8, fault addr 0xa43a0ed4, PC 0x14009e758):",RESOLVED in-harness (converter + D417 + D418 fix the 2P crash and split-screen flicker; 18/18 2P/3P/4P x 6-stage load runs clean; live pad play still owed).
-D417,RESOLVED,enum PROP unsigned on GCC:,"RESOLVED (src/bondconstants.h PROP__PORT_SIGNED = -1, D3/D142 precedent; Rule-2 review owed)."
+D417,RESOLVED,enum PROP unsigned on GCC:,"RESOLVED (src/bondconstants.h PROP__PORT_SIGNED = -1, D3/D142 precedent; Rule-2 review done 2026-10-06:"
 D418,RESOLVED,"Split-screen: fast3d safe-area crop stretched the last-set (half-height) viewport over the whole window, so each player's view filled the screen and the last-d…","RESOLVED (gfx_set_split_screen, port-only)."
 D419,RESOLVED,Split-screen input shared between players / P1 lost solo controls:,"RESOLVED (per-slot slotPlayer(), port-only; no current-player swaps from the poll thread; live-tested OK)."
 D420,FIXED,MP score / stats screen shows an odd big number (issue #99) —,FIXED 2026-10-01 (mp/virtual-seats); 2P/3P/4P watch-menu runs show 0s.
@@ -394,4 +418,5 @@ D531,FIXED,capture_p7.sh's D529 adaptation was incomplete —,"FIXED 2026-10-05 
 D532,FIXED,The three P12 U5 should-fixes applied —,FIXED 2026-10-05 (tooling-only:
 D533,FIXED,"The probe-doc drift that would have failed CI, plus three tracked-file accuracy/hygiene fixes (release-sweep spot-check) —",FIXED 2026-10-05 (GE-ENV-PROBES.md missing the GE_D526 family → gen_env_probes.py --check rc 1 = a CI-failing step; build-pc.sh local MSYS2 root in two messages; docs/fidelity.md og line; release-not…
 D534,FIXED,Pre-release review of the 2026-10-05 local batch —,FIXED 2026-10-05 (verify.sh/capture_p7.sh INT/TERM trap; release-notes linux-gate wording; dead security-and-fidelity-status.md links; future-dated 2026-10-07 labels normalised; D526 probe dangling-e…
+D540,FIXED,Fog rework (Deck playtest):,FIXED 2026-10-05 (port:
 D450,FIXED,"Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).","FIXED — port-only: the render thread's gfx_sdl_handle_events drains the same SDL queue as video.c's host pump but had no case for SDL_CONTROLLERDEVICEADDED/REMOVED, so it usually swallowed them and i…"

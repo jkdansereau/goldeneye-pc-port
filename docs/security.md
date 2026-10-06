@@ -1,6 +1,6 @@
 ---
 title: Security status
-description: What a GoldenEye PC port release installs and doesn't: no networking, no telemetry, no ROM, no system writes — re-verified against the v0.5.0 source.
+description: What a GoldenEye PC port release installs and doesn't: no networking unless you opt in to the update check, no telemetry, no ROM, no system writes — re-verified against the v0.5.0 source.
 date: '2026-10-05'
 modified_time: '2026-10-05'
 ---
@@ -20,7 +20,9 @@ bundle contents were not re-checked then.
 **v0.5.0 update pass, 2026-10-05:** the source checks were re-run against
 the current tree — no socket/network includes, no network symbols and no
 HTTP string literals in the compiled `src/` and `port/` sets; no registry
-or library-loading calls in either; the converter's Python sources
+or library-loading calls in either (since D551 the one exception is the
+opt-in update check: a System32 `winhttp.dll` load on Windows or a `curl`
+process on Linux, only when `Game.CheckUpdates` is on); the converter's Python sources
 (`prepare-assets.py` and its emit-script imports) import no network
 module. The bundle contents were re-checked against the packaging
 manifests (`tools_pc/bundle-win.sh` / `bundle-linux.sh` — the scripts CI
@@ -44,8 +46,15 @@ legally-owned copy.
 
 At runtime, the engine:
 
-- has **no networking of any kind** (no sockets, no HTTP, checked directly
-  against the source),
+- has **no networking unless you turn on the opt-in update check**
+  (`Game.CheckUpdates`, off by default): then it makes one HTTPS request to
+  GitHub's releases API per launch (a fixed User-Agent; GitHub sees the
+  request and your IP, as with any web request) and never downloads or
+  installs anything. On Windows it loads the system `winhttp.dll` from
+  System32 at runtime only in that case (it is not in the import table); on
+  Linux/Steam Deck it runs the system `curl`. With the setting off there
+  are no sockets and no HTTP (D551; checked against the source and run live
+  on Windows, Linux and Steam Deck),
 - has **no telemetry, crash reporting, or analytics** of any kind,
 - **never touches the Windows registry** and **never requests elevated
   permissions**,

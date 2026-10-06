@@ -1,7 +1,12 @@
 # Security Policy
 
 This project is a non-commercial, fan-made research port. It has no server
-component, no networking of any kind, and no telemetry. Each release ships
+component and no telemetry, and no networking unless you turn on the opt-in
+update check (`Game.CheckUpdates`, off by default), which makes one HTTPS
+request to GitHub's releases API per launch (GitHub sees that request and
+your IP, as with any web request). On Windows it loads the system
+`winhttp.dll` from System32 only then; on Linux/Steam Deck it runs the
+system `curl`. It never downloads or installs anything. Each release ships
 prebuilt Windows and Linux binaries, but never a ROM or any game asset — you
 supply those yourself from a copy you legally own. The realistic security
 surface is:
