@@ -1130,44 +1130,6 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         endframe = -1;
                     }
 
-#ifdef PORT
-                    /* D243 M-170: which chr does a scripted guard_play_animation
-                     * actually land on during the Dam abseil (anim_id 0xb100)?
-                     * M-145 (static-only) claimed this targets an empty,
-                     * model-less "false GUARD" driver chr -- but that theory's
-                     * own stated binding rule (ailist ID >= 0x1000) doesn't
-                     * apply to ai_17's registered ID (0x412), and the user's
-                     * live memory of the real N64 cutscene has Bond visibly
-                     * jumping/falling with the camera tracking him, which is
-                     * hard to reconcile with "no model to animate." One-shot
-                     * empirical check: log ChrEntityp's chrnum + whether it
-                     * has a model + whether it IS the visible player chr,
-                     * every time this specific anim_id fires. Env-gated
-                     * (GE_D243M, already cached elsewhere), essentially free
-                     * when unset. Diagnosis only. */
-                    if (GE_ENVFLAG("GE_D243M"))
-                    {
-                        /* M-170 correction: the first version of this probe
-                         * filtered on anim_id==0xb100 and got ZERO hits
-                         * across a full Dam-abseil capture that otherwise
-                         * clearly exercised ai_17 (3 successful teleports,
-                         * GE_D243X3/X4's epoch counter went 0->3). Rather
-                         * than guess why, log every AI_PlayAnimation call
-                         * unfiltered so the next capture shows what anim_id
-                         * values (if any) actually arrive at this case
-                         * during the cutscene -- confirms/refutes whether
-                         * the filter itself was wrong (byte-order, wrong
-                         * literal) or the case is never reached at all for
-                         * this cutscene's actor. */
-                        osSyncPrintf("D243M: playanim anim=0x%x chr=%p chrnum=%d model=%p "
-                                     "isPlayerChr=%d\n",
-                                     (unsigned) anim_id, (void *) ChrEntityp,
-                                     ChrEntityp ? (int) ChrEntityp->chrnum : -1,
-                                     ChrEntityp ? (void *) ChrEntityp->model : NULL,
-                                     (int) (ChrEntityp && g_CurrentPlayer && g_CurrentPlayer->prop
-                                            && (void *) ChrEntityp == (void *) g_CurrentPlayer->prop->chr));
-                    }
-#endif
                     if (ChrEntityp)
                     {
                         check_if_able_to_then_perform_animation(ChrEntityp, anim_id, startframe, endframe, ai->BITFIELD, ai->INTERPOL_TIME60);

@@ -608,30 +608,6 @@ void chrlvPerformAnimationForActor(ChrRecord *self, s32 animID, s32 startframe, 
 
     chrStopFiring(self);
 
-#ifdef PORT
-    /* D243 M-187: log animation-restart entry state before modelSetAnimation()
-     * touches anything, to test whether unkb0/unkb4/unkac/animrate (which
-     * modelSetAnimation2, model.c:2720, never resets on a scripted restart --
-     * only modelSetAnimPlaySpeed touches them) are already stale/nonzero at
-     * this moment -- the open question from findings.md's D243 entry (M-178
-     * onward). Env-gated via bondview2.c's d243mProbeActive() (folds in the
-     * POSEND/INTRO/SWIRL/FADESWIRL camera-mode gate already used by the rest
-     * of the D243M probe family); zero cost/behaviour change when unset. */
-    {
-        extern int d243mProbeActive(void);
-        extern int d243mGetFrameCounter(void);
-        if (d243mProbeActive() && self->model != NULL)
-        {
-            osSyncPrintf("D243M: animrestart frame=%d chr=%d animID=%d startframe=%d "
-                         "unkb0=%.3f unkb4=%.3f unkac=%.3f animrate=%.3f playspeed=%.3f\n",
-                         d243mGetFrameCounter(), self->chrnum, (int) animID, (int) startframe,
-                         (double) self->model->unkb0, (double) self->model->unkb4,
-                         (double) self->model->unkac, (double) self->model->animrate,
-                         (double) self->model->playspeed);
-        }
-    }
-#endif
-
     modelSetAnimation(self->model, (void *)animation_table_ptrs1[animID], (bitfield & ANIM_MIRROR) != 0, startframef, phi_f0, (f32)interpol_time60);
 
     if (endframe >= 0)

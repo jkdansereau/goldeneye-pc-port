@@ -2876,24 +2876,6 @@ void modelSetAnimationWithMerge(Model *model, ModelAnimation *modelAnimation, s3
 
 
 void modelSetAnimation(Model *model, ModelAnimation *modelAnimation, s32 flip, f32 startframe, f32 speed, f32 merge) {
-#ifdef PORT
-    /* D173 M-175: identify the actual caller that sets the intro puppet's
-     * first animation (M-174's firing_animation_groups probe got zero hits,
-     * ruling that path out -- rather than keep guessing which function it
-     * is, catch it at the one place all callers funnel through and resolve
-     * the caller with addr2line against the built exe afterward. Filters
-     * on g_CurrentPlayer->bodyModel specifically so normal chr/guard
-     * animation-sets (which fire constantly) don't spam the log. */
-    extern int d243mProbeActive(void);
-    extern int d243mGetFrameCounter(void);
-    extern struct player *g_CurrentPlayer;
-    if (d243mProbeActive() && g_CurrentPlayer && (model == g_CurrentPlayer->bodyModel))
-    {
-        osSyncPrintf("D243M: setanim_caller frame=%d model=%p startframe=%.1f speed=%.2f merge=%.1f retaddr=%p\n",
-                     d243mGetFrameCounter(), (void *) model, (double) startframe,
-                     (double) speed, (double) merge, __builtin_return_address(0));
-    }
-#endif
     modelCopyAnimForMerge(model, merge);
     modelSetAnimation2(model, modelAnimation, flip, startframe, speed, merge);
 }
@@ -2981,19 +2963,6 @@ void modelSetAnimSpeed(Model *model, f32 anim_speed, f32 startframe) {
                      (double)model->oldspeed, (double)model->newspeed,
                      (double)model->timespeed, (void *)model);
     }
-    /* D243 M-180: log all modelSetAnimSpeed calls during scripted camera modes
-     * to identify if unusual speed values are being set during cutscenes.
-     * Env-gated on GE_D243M (already cached elsewhere). */
-    extern int d243mProbeActive(void);
-    extern int d243mGetFrameCounter(void);
-    if (d243mProbeActive() && model != NULL) {
-        osSyncPrintf("D243M: setanimspeed frame=%d model=%p speed=%.3f startframe=%.1f "
-                     "timespeed=%.1f oldspeed=%.3f newspeed=%.3f elapsespeed=%.1f\n",
-                     d243mGetFrameCounter(), (void *) model, (double) anim_speed,
-                     (double) startframe, (double) model->timespeed,
-                     (double) model->speed, (double) model->newspeed,
-                     (double) model->elapsespeed);
-    }
 #endif
 
     if (startframe > 0.0f) {
@@ -3037,20 +3006,6 @@ void sub_GAME_7F06FE90(Model *model, f32 arg1, f32 arg2)
 }
 
 void modelSetAnimPlaySpeed(Model *model, f32 animation_rate, f32 startframe) {
-#ifdef PORT
-    /* D243 M-181: log all modelSetAnimPlaySpeed calls during scripted camera
-     * modes to identify if unusual playspeed values are being set during
-     * cutscenes. Env-gated on GE_D243M (already cached elsewhere). */
-    extern int d243mProbeActive(void);
-    extern int d243mGetFrameCounter(void);
-    if (d243mProbeActive() && model != NULL) {
-        osSyncPrintf("D243M: setanimplayspeed frame=%d model=%p rate=%.3f startframe=%.1f "
-                     "unkb0=%.1f playspeed=%.3f animrate=%.3f\n",
-                     d243mGetFrameCounter(), (void *) model, (double) animation_rate,
-                     (double) startframe, (double) model->unkb0,
-                     (double) model->playspeed, (double) model->animrate);
-    }
-#endif
     if (startframe > 0.0f) {
         model->unkb0 = startframe;
         model->animrate = animation_rate;
@@ -3627,28 +3582,6 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
     f32 frame2;
     f32 animlast;
 
-#ifdef PORT
-    /* D243 M-182: log playspeed at the start of every tick during scripted
-     * camera modes to identify when and how it changes. Env-gated on
-     * GE_D243M (already cached elsewhere). */
-    extern int d243mProbeActive(void);
-    extern int d243mGetFrameCounter(void);
-    if (d243mProbeActive() && model != NULL)
-    {
-        /* D243 M-187: numticks added -- this is the D193 multi-tick
-         * catch-up burst size for this call; >1 here at the moment of a
-         * scripted restart is the leading PC-specific candidate for why
-         * unkb0/unkb4 could be stale in a way N64's single-tick-per-frame
-         * execution would never produce (see findings.md D243). */
-        osSyncPrintf("D243M: tickstart frame=%d model=%p numticks=%d playspeed=%.3f animrate=%.3f "
-                     "unkb0=%.1f unkb4=%.1f unkac=%.3f endframe=%.1f\n",
-                     d243mGetFrameCounter(), (void *) model, (int) numticks,
-                     (double) model->playspeed, (double) model->animrate,
-                     (double) model->unkb0, (double) model->unkb4,
-                     (double) model->unkac, (double) model->endframe);
-    }
-#endif
-
     frame = model->animframe1;
     frame2 = model->animframe2;
 
@@ -3739,11 +3672,10 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
              * stale-nonzero divides by it using a mismatched unkac/animrate
              * pair from the previous animation, producing huge playspeed
              * spikes (~388-410, vs. a legitimate max of ~2.0).
-             * M-187: was mistakenly gated on d243mProbeActive() (requires
-             * GE_D243M=1), so it never fired for a real player -- only during
-             * a diagnostic capture. Fixed to gate on the camera-mode test
+             * M-187: was mistakenly gated on a diagnostic env var, so it
+             * never fired for a real player. Fixed to gate on the camera-mode test
              * alone (gameScriptedCameraActive()) so it's actually active by
-             * default. Logging stays separately gated on d243mProbeActive().
+             * default.
              * M-189 (2026-09-18) found and fixed the ACTUAL root cause (a
              * stale hardcoded 32-bit sizeof(Model) literal in bondview2.c's
              * model-carving buffer, user-verified live): this clamp no longer
@@ -3756,55 +3688,14 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
              * re-verified clean without it (findings.md D243 / M-192).
              * Threshold: 10.0 is way above any legitimate playspeed (normal
              * is ~1.0, max observed in gameplay is ~2.0). */
-            extern int d243mProbeActive(void);
             extern int gameScriptedCameraActive(void);
             if (gameScriptedCameraActive() && playspeed > 10.0f)
             {
-                if (d243mProbeActive())
-                {
-                    osSyncPrintf("D243M: clamp playspeed %.3f → 1.0\n", (double) playspeed);
-                }
                 playspeed = 1.0f;
             }
 #endif
 
             frame += playspeed * speed;
-
-#ifdef PORT
-            /* M-184: log frame progression after advancement */
-            extern int d243mProbeActive(void);
-            if (d243mProbeActive() && model != NULL)
-            {
-                osSyncPrintf("D243M: postadv frame=%.2f endframe=%.1f\n",
-                             (double) frame, (double) endframe);
-            }
-#endif
-
-#ifdef PORT
-            /* D243 M-179: log large per-tick animation advancements to identify
-             * whether rapid cutscene anim advancement is due to playspeed, speed,
-             * or numticks. Fires when a single tick advances >5 frames (normal
-             * is ~0.5-3). Env-gated on GE_D243M (already cached elsewhere). */
-            {
-                extern int d243mProbeActive(void);
-                extern int d243mGetFrameCounter(void);
-                if (d243mProbeActive())
-                {
-                    f32 advancement = playspeed * speed;
-                    if (advancement > 5.0f)
-                    {
-                        osSyncPrintf("D243M: biganim frame=%d model=%p adv=%.2f "
-                                     "playspeed=%.2f speed=%.2f numticks=%d "
-                                     "unkb0=%.1f unk88=%.1f timespeed=%.1f\n",
-                                     d243mGetFrameCounter(), (void *) model,
-                                     (double) advancement, (double) playspeed,
-                                     (double) speed, numticks,
-                                     (double) model->unkb0, (double) model->unk88,
-                                     (double) model->timespeed);
-                    }
-                }
-            }
-#endif
 
             if (model->anim2 != NULL) 
             {
@@ -3850,18 +3741,12 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
              * release review): approved for retention by the user for
              * v0.3.0; candidate for removal post-release (findings.md D243 /
              * M-192).
-             * M-187: was mistakenly gated on d243mProbeActive() (requires
-             * GE_D243M=1), so it never fired for a real player. Fixed to
-             * gate on the camera-mode test alone (gameScriptedCameraActive()).
-             * Logging stays separately gated on d243mProbeActive(). */
-            extern int d243mProbeActive(void);
+             * M-187: was mistakenly gated on a diagnostic env var, so it
+             * never fired for a real player. Fixed to
+             * gate on the camera-mode test alone (gameScriptedCameraActive()). */
             extern int gameScriptedCameraActive(void);
             if (gameScriptedCameraActive() && (endframe < 0.0f || endframe > 1000.0f))
             {
-                if (d243mProbeActive())
-                {
-                    osSyncPrintf("D243M: clamp endframe %.1f → 100.0\n", (double) endframe);
-                }
                 endframe = 100.0f;
             }
 #endif

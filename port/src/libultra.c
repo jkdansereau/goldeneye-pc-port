@@ -915,7 +915,7 @@ static int s_d61opened = 0;
 
 static int dramHostAddrValid(uintptr_t addr, u32 size)
 {
-    static const uintptr_t bases[2] = { 0x70000000UL, 0x80000000UL };
+    static const uintptr_t bases[2] = { PORT_DRAM_V1_BASE, PORT_DRAM_K0_BASE };   /* portaddr.h */
     for (int i = 0; i < 2; i++) {
         if (addr >= bases[i] && addr + size <= bases[i] + 0x00800000UL)
             return 1;

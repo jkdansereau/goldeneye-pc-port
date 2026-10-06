@@ -342,79 +342,22 @@ f32 g_MpSwirlDistance;
 #define ALIGN64_V3(val) (((val) | 0x3f) ^ 0x3f)
 
 #ifdef PORT
-/* D243 (M-145): model-lifecycle probe for the Dam-abseil "two Bonds + camera
- * shake" (M-143/M-145: the gBondViewCutscene POSEND look-at reads
- * field_3C4/8/C, a leaky-integrator filter of Bond's real position that is
- * never reset when a cutscene warps him; M-145 ties both symptoms to a
- * suspected model-remove/recreate window around the CHR_BOND_CINEMA pad
- * teleports). GE_D243M=1 logs:
- *   D243M: CREATE/REMOVE -- every bodyModel assignment/removal (the only two
- *     sites in this file), with camera mode at the moment it happened;
- *   D243M: tick -- once per playerTick() call while the third-person model
- *     exists OR a cutscene camera mode (POSEND/INTRO) is active: index, model
- *     pointer, g_CameraMode, dword_CODE_bss_80079A18, prop->pos,
- *     field_488.pos, and the filter fields field_3B8 + field_3C4/8/C;
- *   D243M: draw -- once per on-screen render_pos submission, so a second
- *     Bond instance shows up as two draw lines (different idx or model
- *     pointer) at the same frame number.
- * The frame counter increments once per playerTick() call (solo play: once
- * per frame); it is NOT necessarily numerically identical to port's internal
- * g_framesRendered -- cross-reference by elapsed offset, same convention as
- * front.c's GE_D243 trace. D250: getenv cached. Diagnosis only; zero
- * behaviour change when unset.
- */
-static int d243mEnabled(void)
-{
-    static int s = -1;
-    if (s < 0) { s = getenv("GE_D243M") != NULL; }
-    return s;
-}
-
-static int g_d243mFrameCounter = 0;
-
-/* M-154: accessors for the D243M: chrdraw census probe in objecthandler.c's
- * drawjointlist (which does not include bondview.h). ProbeActive() folds in
- * the scripted-camera gate (POSEND/INTRO/SWIRL/FADESWIRL) so callers need no
- * camera-mode knowledge; silent during FPS play. */
-int d243mProbeActive(void)
-{
-    return d243mEnabled() &&
-           ((g_CameraMode == CAMERAMODE_POSEND) || (g_CameraMode == CAMERAMODE_INTRO) ||
-            (g_CameraMode == CAMERAMODE_SWIRL) || (g_CameraMode == CAMERAMODE_FADESWIRL));
-}
-
-int d243mGetFrameCounter(void) { return g_d243mFrameCounter; }
-
-/* D243 M-187: the scripted-camera-mode test alone, WITHOUT the GE_D243M
- * getenv gate -- originally added for the always-on M-183/M-185 sanity
- * clamps in model.c (playspeed/endframe), which must fire for every real
- * player regardless of whether the diagnostic env var happens to be set
- * (before this, both clamps were mistakenly gated on d243mProbeActive(),
- * env-var AND camera-mode, so they only ever fired during a diagnostic
- * capture). Renamed from d243mCutsceneActive (M-190): the same "is the
- * game in a scripted/no-control camera state" test is also the missing
- * gate port/src/input.c's hipDirectCompute() documented but never
- * implemented -- see that function's comment and M-190 in findings.md. */
+/* D243 M-187/M-190: the scripted-camera-mode test, used by model.c's
+ * playspeed/endframe clamps and by port/src/input.c's hipDirectCompute()
+ * gate (the same "is the game in a scripted/no-control camera state"
+ * test; see M-190 in findings.md). */
 int gameScriptedCameraActive(void)
 {
     return (g_CameraMode == CAMERAMODE_POSEND) || (g_CameraMode == CAMERAMODE_INTRO) ||
            (g_CameraMode == CAMERAMODE_SWIRL) || (g_CameraMode == CAMERAMODE_FADESWIRL);
 }
 
-/* D243 M-169: the "real signal" named as next-step (b) in findings.md's
- * D243 CONSOLIDATED NEXT STEPS -- a monotonic epoch counter bumped by
- * chrai.c's AI_TRYTeleportingChrToPad case (the exact decomp call, chrai.c
- * ~4064-4119, that legitimately re-anchors a chr's model root joint via
- * setsuboffset() for a real cutscene shot-change) right after that call.
- * chr.c's GE_D243X4 (render_pos freeze) and this file's GE_D243X3
- * (field_488.pos freeze) both poll this to re-baseline their frozen
- * snapshot exactly on a legitimate shot-change instead of either freezing
- * forever (losing real repositioning) or guessing a position-delta
- * threshold (next-step (a), not attempted). Global, not per-chr: sufficient
- * for this cutscene's scope (one chr teleported at a time); revisit if a
- * future cutscene needs per-chr tracking. Diagnosis/experiment plumbing
- * only -- zero cost and zero behaviour change when GE_D243M is unset, since
- * nothing reads the epoch unless the X3/X4 experiments are also enabled. */
+/* D243 M-169: a monotonic epoch counter bumped by chrai.c's
+ * AI_TRYTeleportingChrToPad case right after the decomp call that
+ * legitimately re-anchors a chr's model root joint via setsuboffset() for a
+ * real cutscene shot-change. playerTick() polls it to re-seed the camera
+ * look-at filter exactly on a shot-change (M-190). Global, not per-chr:
+ * sufficient for this cutscene's scope. */
 static u32 g_d243TeleportEpoch = 0;
 void d243NotifyTeleport(void) { g_d243TeleportEpoch++; }
 u32 d243GetTeleportEpoch(void) { return g_d243TeleportEpoch; }
@@ -684,20 +627,6 @@ void solo_char_load(void)
         self->chrflags |= CHRFLAG_INIT;
         setsuboffset((*pp)->bodyModel, &(*pp)->prop->pos);
         setsubroty(g_CurrentPlayer->bodyModel, yaw);
-#ifdef PORT
-        if (d243mEnabled()) {
-            osSyncPrintf("D243M: CREATE frame=%d model=%p prop=%p pos=%.1f,%.1f,%.1f cam=%d subcam=%d "
-                         "sizeofModel=%zu\n",
-                         g_d243mFrameCounter,
-                         (void *) g_CurrentPlayer->bodyModel,
-                         (void *) g_CurrentPlayer->prop,
-                         (double) g_CurrentPlayer->prop->pos.f[0],
-                         (double) g_CurrentPlayer->prop->pos.f[1],
-                         (double) g_CurrentPlayer->prop->pos.f[2],
-                         (int) g_CameraMode, (int) dword_CODE_bss_80079A18,
-                         sizeof(Model));
-        }
-#endif
 #ifndef VERSION_US
         self->headnum = head;
         self->bodynum = body;
@@ -750,15 +679,6 @@ void solo_char_load(void)
  */
 void bondviewRemovePlayerBody(void)
 {
-#ifdef PORT
-    if (d243mEnabled()) {
-        osSyncPrintf("D243M: REMOVE frame=%d had_model=%d chr=%p cam=%d subcam=%d\n",
-                     g_d243mFrameCounter,
-                     (int)(g_CurrentPlayer->bodyModel != 0),
-                     (void *) g_CurrentPlayer->prop->chr,
-                     (int) g_CameraMode, (int) dword_CODE_bss_80079A18);
-    }
-#endif
     if ((g_CurrentPlayer->prop->chr) && (getPlayerCount() == 1))
     {
         chrpropCleanupForRemoval(g_CurrentPlayer->prop);
@@ -1697,18 +1617,6 @@ void bondviewFrozenCameraTick(u16 buttons, u16 oldbuttons, struct coord3d *pos, 
             arg6->f[1] = g_CameraLookAtBondPad->pos.f[1];
             arg6->f[2] = g_CameraLookAtBondPad->pos.f[2];
 
-#ifdef PORT
-            /* D243 (M-142): sibling probe to GE_D243CAM below, for the
-             * look-at-pad branch of CAMERAMODE_POSEND (untested as of
-             * M-141/M-142 -- the pad-orbit branch below was ruled out with
-             * zero hits, so the Dam cutscene must be reaching this branch
-             * or the gBondViewCutscene branch further down instead). */
-            if (GE_ENVFLAG("GE_D243CAM")) {
-                osSyncPrintf("D243CAM lookatpad: pos=%.2f,%.2f,%.2f pos2=%.2f,%.2f,%.2f\n",
-                             (double) pos->f[0], (double) pos->f[1], (double) pos->f[2],
-                             (double) pos2->f[0], (double) pos2->f[1], (double) pos2->f[2]);
-            }
-#endif
 
             return;
         }
@@ -1748,21 +1656,6 @@ void bondviewFrozenCameraTick(u16 buttons, u16 oldbuttons, struct coord3d *pos, 
                 pos2->f[2] = pos->f[2] - (cosf(gBondViewCutscene->verta) * cosf(gBondViewCutscene->theta));
             }
 
-#ifdef PORT
-            /* D243 (M-142): sibling probe to GE_D243CAM below, for the
-             * gBondViewCutscene spherical-angle branch of CAMERAMODE_POSEND
-             * -- the other untested candidate for the Dam abseil cutscene's
-             * camera path (the pad-orbit branch below was ruled out with
-             * zero hits in M-141/M-142). theta/verta are the spherical
-             * angles driving pos2's look-at offset from pos; a jump/jitter
-             * in either between calls would show up as the reported shake. */
-            if (GE_ENVFLAG("GE_D243CAM")) {
-                osSyncPrintf("D243CAM cutscene: pos=%.2f,%.2f,%.2f pos2=%.2f,%.2f,%.2f theta=%.4f verta=%.4f\n",
-                             (double) pos->f[0], (double) pos->f[1], (double) pos->f[2],
-                             (double) pos2->f[0], (double) pos2->f[1], (double) pos2->f[2],
-                             (double) gBondViewCutscene->theta, (double) gBondViewCutscene->verta);
-            }
-#endif
 
             return;
         }
@@ -1790,26 +1683,6 @@ void bondviewFrozenCameraTick(u16 buttons, u16 oldbuttons, struct coord3d *pos, 
         pos->f[1] = setupPad->pos.f[1] + flt_CODE_bss_80079A10 + flt_CODE_bss_80079A0C;
         pos->f[2] = setupPad->pos.f[2] + (cosf(flt_CODE_bss_80079A00) * flt_CODE_bss_80079A08) + sinf(flt_CODE_bss_80079A00) * 0.0f;
 
-#ifdef PORT
-        /* D243 (M-142): the abseil/end-of-Dam cutscene's camera is this
-         * orbit -- a fixed look-at (pos2, above setupPad) with the eye (pos)
-         * circling it at radius flt_CODE_bss_80079A08, angle accumulated by
-         * flt_CODE_bss_80079A04 * g_GlobalTimerDelta each tick. User-confirmed
-         * live (M-142): the visible "violent shake" reproduces even on a run
-         * where the separate D146 stale-memory burst never fires at all --
-         * decouples the two symptoms M-107 had been treating as related.
-         * This dumps the angle delta and computed eye position every call so
-         * a live capture can show whether g_GlobalTimerDelta (the D155/D193
-         * wall-clock sim-tick count, normally clamped to <=6 but not
-         * necessarily steady at 1) is jittering frame-to-frame in a way that
-         * would show up as this exact judder. */
-        if (GE_ENVFLAG("GE_D243CAM")) {
-            osSyncPrintf("D243CAM: dt=%.4f angle=%.4f pos=%.2f,%.2f,%.2f pad=%d\n",
-                         (double) g_GlobalTimerDelta, (double) flt_CODE_bss_80079A00,
-                         (double) pos->f[0], (double) pos->f[1], (double) pos->f[2],
-                         (int) dword_CODE_bss_80079A14);
-        }
-#endif
 
         flt_CODE_bss_80079A00 += flt_CODE_bss_80079A04 * g_GlobalTimerDelta;
 
@@ -10720,84 +10593,6 @@ s32 playerTick(PropRecord *prop)
     index = getPlayerPointerIndex(prop);
     chr = prop->chr;
 
-#ifdef PORT
-    /* GE_D243SWIRL=<tick> -- diagnostic-only: force CAMERAMODE_SWIRL once, at the
-     * given tick of this per-player function (called once/frame while playing),
-     * to make ai_25's AI_IFCameraIsInBondSwirl poll jump into ai_17 (the Dam
-     * abseil cutscene) without navigating to the ledge (D243). Independent of
-     * GE_D243M/d243mEnabled() so it works with just this one flag set. No-op,
-     * zero cost, when unset. */
-    {
-        static int d243SwirlTarget = -2; /* -2 = uncached, -1 = disabled */
-        static int d243SwirlTick = 0;
-        if (d243SwirlTarget == -2) {
-            const char *e = getenv("GE_D243SWIRL");
-            d243SwirlTarget = e ? atoi(e) : -1;
-        }
-        if (d243SwirlTarget >= 0) {
-            d243SwirlTick++;
-            if (d243SwirlTick == d243SwirlTarget) {
-                osSyncPrintf("D243SWIRL: forcing CAMERAMODE_SWIRL at tick=%d\n", d243SwirlTick);
-                bondviewSetCameraMode(CAMERAMODE_SWIRL);
-            }
-        }
-    }
-    if (d243mEnabled()) {
-        struct player *pp = g_playerPointers[index];
-        int cutsceneCam = ((g_CameraMode == CAMERAMODE_POSEND) || (g_CameraMode == CAMERAMODE_INTRO));
-        g_d243mFrameCounter++;
-        if (cutsceneCam || (pp->bodyModel != NULL)) {
-            /* M-154: rp = the render_pos pointer itself (a change between
-             * phases would mean the Model's matrix buffer is being
-             * reassigned/aliased). The raw pre-view translation used to be
-             * logged here too, but see M-154 fix 2 below -- it is captured
-             * by the chrdraw census at draw time instead. */
-            RenderPosView *d243mrp = (pp->bodyModel != NULL) ? pp->bodyModel->render_pos : NULL;
-            /* M-154 fix 2 (second abseil crash, same PC/fault addr): the
-             * NULL/-1 guard was NOT sufficient -- render_pos is assigned by
-             * instcalcmatrices() during the draw pass (model.c:2453), i.e.
-             * AFTER this probe point, so between CREATE and the first draw
-             * it holds whatever the reused AnimModelSlot last had: observed
-             * as the 0xFF tombstone (-1) on run 1, and a different bad
-             * value that passed the sentinel guard on run 2 (fault addr was
-             * still exactly -1). Sentinel-whack-a-mole is the wrong shape
-             for a probe: NEVER dereference render_pos at tick time. The raw
-             * root translation is captured by the D243M chrdraw census in
-             * drawjointlist instead, where the game itself dereferences
-             * render_pos moments later (gSPSegment), so validity is
-             * guaranteed there -- and draw-time is the more accurate sample
-             * anyway (tick-time would read the previous frame's buffer).
-             * rp=%p stays: logging the pointer value costs no deref. */
-            /* M-154b: propptr/chrptr -- the phase-3 A,A,B,C position cycle
-             * with smoothly falling y could mean pp->prop itself rotates
-             * among three PropRecords per frame; a changing pointer proves
-             * it, a constant one points at a cycling x/z source (script /
-             * anim table). */
-            osSyncPrintf("D243M: tick frame=%d idx=%d model=%p propptr=%p chrptr=%p "
-                         "cam=%d subcam=%d "
-                         "prop=%.1f,%.1f,%.1f f488pos=%.1f,%.1f,%.1f "
-                         "f3B8=%.1f,%.1f,%.1f f3C4=%.1f,%.1f,%.1f "
-                         "rp=%p\n",
-                         g_d243mFrameCounter, index,
-                         (void *) pp->bodyModel,
-                         (void *) pp->prop, (void *) pp->prop->chr,
-                         (int) g_CameraMode, (int) dword_CODE_bss_80079A18,
-                         (double) pp->prop->pos.f[0],
-                         (double) pp->prop->pos.f[1],
-                         (double) pp->prop->pos.f[2],
-                         (double) pp->field_488.pos.f[0],
-                         (double) pp->field_488.pos.f[1],
-                         (double) pp->field_488.pos.f[2],
-                         (double) pp->field_3B8.f[0],
-                         (double) pp->field_3B8.f[1],
-                         (double) pp->field_3B8.f[2],
-                         (double) pp->field_3C4,
-                         (double) pp->field_3C8,
-                         (double) pp->field_3CC,
-                         (void *) d243mrp);
-        }
-    }
-#endif
  
     if (chr != NULL)
     {
@@ -10823,35 +10618,9 @@ s32 playerTick(PropRecord *prop)
  
             if (prop->flags & PROPFLAG_ONSCREEN)
             {
-#ifdef PORT
-                if (d243mEnabled()) {
-                    osSyncPrintf("D243M: draw frame=%d idx=%d model=%p\n",
-                                 g_d243mFrameCounter, index,
-                                 (void *) g_playerPointers[index]->bodyModel);
-                }
-#endif
                 RenderPosView *rp = g_playerPointers[index]->bodyModel->render_pos;
                 matrix_4x4_multiply_homogeneous(currentPlayerGetViewToWorldMtxf(), (Mtxf *) rp, (Mtxf *) mtx);
 #ifdef PORT
-                /* D243 M-167: M-162/M-163 smoothed prop->pos (chr.c) but the
-                 * visible shake was UNCHANGED -- because field_488.pos, which
-                 * THIS site writes and which is what the camera's look-at
-                 * filter (M-143's field_3B8/field_3C4-8-C) actually chases,
-                 * comes from render_pos here -- a completely separate data
-                 * path from prop->pos, driven by the model's own animated
-                 * skeleton (subcalcmatrices/instcalcmatrices, computed inside
-                 * chrTick's chrUpdateAnim -> modelTickAnim/subcalcpos calls,
-                 * upstream of and independent from prop->pos). M-163's live
-                 * capture confirmed this directly: field_488.pos kept cycling
-                 * every tick (228.8/229.3/79.3/-1214.7 repeating) while
-                 * prop->pos in the same capture was smooth. This experiment
-                 * targets the actual variable the filter reads: skip this
-                 * write entirely while active, freezing field_488.pos at
-                 * whatever it was the moment suppression engaged. Gated on
-                 * GE_D243X3 (separate from GE_D243X2 so results aren't
-                 * conflated) + the same POSEND-active gate. THIS IS A TEST,
-                 * NOT A FIX -- revert once it reports (see docs/dev/findings.md
-                 * D243 M-167). */
                 /* D243 M-170 (superseded by M-190 below): the original "fix"
                  * unconditionally froze field_488.pos during POSEND, only
                  * letting a write through on the tick a shot-change teleport
@@ -10908,15 +10677,6 @@ s32 playerTick(PropRecord *prop)
                     g_playerPointers[index]->field_3C4 = fx;
                     g_playerPointers[index]->field_3C8 = fy;
                     g_playerPointers[index]->field_3CC = fz;
-                }
-                if (d243mEnabled()) {
-                    osSyncPrintf("D243M: f488write frame=%d idx=%d cam=%d reseed=%d epoch=%u f488pos=%.1f,%.1f,%.1f\n",
-                                 g_d243mFrameCounter, index,
-                                 (int) g_CameraMode, (int) (justTeleported && g_CameraMode == CAMERAMODE_POSEND),
-                                 (unsigned) epoch,
-                                 (double) g_playerPointers[index]->field_488.pos.x,
-                                 (double) g_playerPointers[index]->field_488.pos.y,
-                                 (double) g_playerPointers[index]->field_488.pos.z);
                 }
 #endif
             }
@@ -11193,22 +10953,6 @@ lean_return_to_centre:
             angle *= fa->x;
             local90 = fa->z;
             frame = fa->y;
-
-#ifdef PORT
-            /* D173 M-174: name the exact firing_animation_groups[group][sub]
-             * entry the puppet's per-tick animation selector lands on, so
-             * the ~328-unit float (M-172/M-173) can be traced to a specific
-             * table row instead of guessed from a static read (the group/sub
-             * selection logic above is too branchy to trust a static guess
-             * -- already tried and got it wrong once this session). Fires
-             * whenever this table lookup runs, gated on the existing
-             * d243mEnabled(); zero cost when GE_D243M is unset. */
-            if (d243mEnabled()) {
-                osSyncPrintf("D243M: firinganim frame=%d idx=%d group=%d sub=%d fa_y=%.1f fa_z=%.1f fa_x=%.2f\n",
-                             g_d243mFrameCounter, index, (int) group, (int) sub,
-                             (double) fa->y, (double) fa->z, (double) fa->x);
-            }
-#endif
         }
  
         cur = ppointers[index]->players_cur_animation;

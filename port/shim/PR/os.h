@@ -26,12 +26,13 @@
  */
 #ifndef _PORT_SHIM_OS_H_
 #define _PORT_SHIM_OS_H_
+#include "portaddr.h"
 
 #if defined(PORT)
 #    include "include/PR/os.h"
 
 #    undef OS_K0_TO_PHYSICAL
-#    define OS_K0_TO_PHYSICAL(x) ((u32)((char *)(x) - 0x70000000))
+#    define OS_K0_TO_PHYSICAL(x) ((u32)((char *)(x) - PORT_DRAM_V1_BASE))
 
 #    undef OS_PHYSICAL_TO_K0
 #    define OS_PHYSICAL_TO_K0(x) ((void *)(x))

@@ -58,7 +58,7 @@ D169,FIXED,Front-end mouse pointer can't reach the outer cells of the mission/le
 D178,FIXED,Pre-mission briefing screen:,FIXED (M-36) — high confidence
 D175,CLOSED,In-game stutter / brief hang during normal play —,"CLOSED (v0.4.0 campaign sign-off 2026-09-28, user:"
 D176,FIXED,"Surface exterior renders wrong (-level_36), two independent defects.",FIXED (2026-09-29 bookkeeping:
-D177,FIXED,Ladders non-functional —,FIXED (M-36) — high confidence; interactive climb test owed
+D177,FIXED,Ladders non-functional —,"FIXED (M-36) — high confidence; interactive climb test owed Owed climb test considered cleared by the 2026-09-28 v0.4.0 campaign sign-off (ROADMAP §3 bookkeeping, 2026-10-01); reopen if seen."
 D172,FIXED,"Bullet-impact / blood / spark particles render magenta or cyan instead of dark red (M-82, ROOT CAUSE FOUND + FIXED).",FIXED (port/fast3d/gfx_pc.cpp gfx_lod_tile_offset)…
 D174,CLOSED,"""No blood effect"" (user QA report).","CLOSED — faithful (2026-09-26, user side-by-side on 1964:"
 D183,CLOSED,"M-36 Family A (""texture line/pitch shear"") is DISPROVEN for the Surface repro (-level_36).","CLOSED (2026-09-26, user-approved:"
@@ -90,7 +90,7 @@ D108-D112,RESOLVED,skeletal models: d43_emit.py put_f32 byte-reversal bug,resolv
 D113-D116,FIXED,portal BFS ok · matrix chain ok · player raw-offset audit + gunfire.c THROW* · HUD text X-mirror,"D114/D116 CLOSED — NOT A BUG (M-33, see D168):"
 D117,CLOSED,"Frame nondeterminism root-caused; GE_DETERM attempted, not achieved.",CLOSED (2026-09-28 bookkeeping:
 D118,RESOLVED,"SDL input layer; M-24 mouse-look rework (mode-aware map, real INI); D118b/c FIXED.",resolved (D118a residual)
-D150,FIXED,watch OBJECTIVES / BRIEF page crash:,FIXED (src/str.c #ifdef PORT); interactive re-verify pending
+D150,FIXED,watch OBJECTIVES / BRIEF page crash:,"FIXED (src/str.c #ifdef PORT); interactive re-verify pending Owed re-verify considered cleared by the 2026-09-28 v0.4.0 campaign sign-off (ROADMAP §3 bookkeeping, 2026-10-01); reopen if seen."
 D260-D265,CLOSED,"v0.2.1 hotfix batch: D260 wheel direction swap (fixed) · D261 watch-menu nav auto-repeat (fixed, feel-check owed) · D262 watch item-preview model missing → roo…",CLOSED (2026-09-26 bookkeeping:
 D266-D269,CLOSED,"D236/D265 wall, second pass:",CLOSED (2026-09-26 bookkeeping:
 D270,CLOSED,Backfilled (M-132) — this label was never given its own row; only code comments and the HANDOFF archive documented it.,CLOSED (2026-09-26 bookkeeping:
@@ -332,4 +332,9 @@ D469,FIXED,Gamepad presets + per-seat controller rebinding (ROADMAP 5a; supersed
 D470,FIXED,Audio master volume + output-device selection (ROADMAP 5a):,FIXED (live listening test owed)
 D471,FIXED,Controller-family button names (no glyphs) in the PC menus + player-index LEDs:,FIXED 2026-10-01 (local); headless captures for Xbox/PS/Nintendo; live PS/Nintendo pad check owed
 D472,FIXED,"F10 overlay polish: multi-pad ownership (audit G1-G3), widescreen pillarbox (D335b), red EXPERIMENTAL rows, unknown-ini-key warning.","FIXED 2026-10-01 (merged; port-only, no src/game)."
+D473,FIXED,"Uncached getenv(""GE_D75V"") on every G_VTX:",FIXED 2026-10-01 (local); Statue display-list CPU about -55% in steady windows
+D474,FIXED,fast3d micro-optimisations:,FIXED 2026-10-01 (local); output-identical by construction; measured gain on the dev machine within noise
+D475,OPEN,Statue/Cradle hitches diagnosed:,OPEN (diagnosed 2026-10-01):
+D476,FIXED,CI4 textures keyed on their own 16-entry palette bank instead of the whole 256-entry table (D217 hash):,FIXED 2026-10-02 (local); Statue sweep CI4 cache misses 189 -> 36
+D477,?,CI8 palette re-imports measured and ruled out as a CPU-side hitch cause:,MEASURED 2026-10-02 (local); premise of the D475/D476 follow-up refuted on the dev box; GPU/driver-side cost unmeasured
 D450,FIXED,"Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).","FIXED — port-only: the render thread's gfx_sdl_handle_events drains the same SDL queue as video.c's host pump but had no case for SDL_CONTROLLERDEVICEADDED/REMOVED, so it usually swallowed them and i…"

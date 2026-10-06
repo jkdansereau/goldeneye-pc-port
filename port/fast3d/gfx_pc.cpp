@@ -26,6 +26,7 @@
 #include "gbiex.h" /* GE's G_TRI4 + PD extension opcodes (see header) */
 
 #include "platform.h"
+#include "portaddr.h"   /* Stage B: arena windows */
 
 #include "gfx_pc.h"
 #include "gfx_cc.h"
@@ -717,7 +718,7 @@ void gfx_texture_cache_delete_range(const uint8_t* start, const uint8_t* end) {
 static bool gfx_tex_source_is_c_array(const uint8_t* addr) {
     const uintptr_t a = (uintptr_t)addr;
     if (a >= 0x10000000u && a < 0x20000000u) return false; // cart map + sidecar
-    if (a >= 0x70000000u && a < 0x90000000u) return false; // V1 dram + KSEG0 mirror
+    if (a >= PORT_DRAM_V1_BASE && a < 0x90000000u) return false; // V1 dram + KSEG0 mirror (portaddr.h)
     return true; // exe image: C-compiled array
 }
 
@@ -1123,8 +1124,22 @@ static void import_texture(int i, int tile, bool importReplacement) {
 
     TextureCacheKey key;
     if (fmt == G_IM_FMT_CI) {
+        /* D476: a CI4 texture decodes only its 16-entry bank
+         * (rdp.palette + palette_index * 16, see import_texture_ci4), so key it
+         * on that bank's content. The whole-table D217 hash made unrelated
+         * TLUT loads elsewhere in the table re-import unchanged CI4 textures.
+         * CI8 reads all 256 entries and keeps the whole-table hash. */
+        uint32_t ph = rdp.palette_hash;
+        if (siz == G_IM_SIZ_4b) {
+            ph = 2166136261u;
+            const uint8_t* pb = (const uint8_t*)(rdp.palette + (palette_index & 15) * 16);
+            for (uint32_t k = 0; k < 16 * sizeof(uint16_t); ++k) {
+                ph ^= pb[k];
+                ph *= 16777619u;
+            }
+        }
         key = { orig_addr, { rdp.palette_addrs[0], rdp.palette_addrs[1] }, fmt, siz, palette_index,
-                loaded_texture.size_bytes, rdp.palette_hash }; // D217: key on palette content
+                loaded_texture.size_bytes, ph }; // D217/D476: key on (used) palette content
     } else {
         key = { orig_addr, {}, fmt, siz, palette_index, loaded_texture.size_bytes, 0u };
     }
@@ -1142,8 +1157,8 @@ static void import_texture(int i, int tile, bool importReplacement) {
          * 0x80000000 (port/src/dram.c V2) -- normalise to the V1 view the
          * dyn pool pointers use before the range test. */
         const uint8_t* v1addr = orig_addr;
-        if ((uintptr_t)v1addr >= 0x80000000UL && (uintptr_t)v1addr < 0x80800000UL) {
-            v1addr -= 0x10000000UL;
+        if ((uintptr_t)v1addr >= PORT_DRAM_K0_BASE && (uintptr_t)v1addr < PORT_DRAM_K0_BASE + PORT_DRAM_SIZE) {
+            v1addr -= (PORT_DRAM_K0_BASE - PORT_DRAM_V1_BASE);
         }
         if (g_VtxBuffers[0] && v1addr >= g_VtxBuffers[0] && v1addr < g_VtxBuffers[2]) {
             uint32_t h = 2166136261u;
@@ -1731,6 +1746,21 @@ static void d303_note_emit(uint32_t f, struct LoadedVertex* const* v_arr) {
         v_arr[0]->color.r, v_arr[0]->color.g, v_arr[0]->color.b);
 }
 
+/* D474 (low-end perf): one cached gate for the per-triangle / per-vertex debug
+ * hooks (D75D, ZF, D303). All three are off for players; without this every
+ * triangle paid several calls + frame-counter reads just to return. Same
+ * enable semantics as each hook's own lazy init (non-empty env value). */
+static int s_tri_dbg = -1;
+static inline bool tri_dbg(void) {
+    if (s_tri_dbg < 0) {
+        const char* a = getenv("GE_D75D");
+        const char* b = getenv("GE_ZF");
+        const char* c = getenv("GE_D303");
+        s_tri_dbg = ((a && *a) || (b && *b) || (c && *c)) ? 1 : 0;
+    }
+    return s_tri_dbg != 0;
+}
+
 static void d75d_note_tri(uint32_t f, uint32_t maxidx) {
     d75d_init();
     if (d75d_lo < 0 || f < (uint32_t)d75d_lo || f > (uint32_t)d75d_hi) return;
@@ -2001,7 +2031,12 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
      * Remove once D75 is root-caused. */
     {
         static int d75v_lo = -1, d75v_hi = 0;
-        if (d75v_lo < 0) {
+        /* D473: a separate init flag. d75v_lo == -1 also means "disabled", so
+         * the old `if (d75v_lo < 0)` re-ran getenv on EVERY G_VTX when the env
+         * was unset -- ~55% of render-thread CPU (D302/D250 class). */
+        static bool d75v_init = false;
+        if (!d75v_init) {
+            d75v_init = true;
             const char* v = getenv("GE_D75V");
             d75v_lo = 1; d75v_hi = 0x7fffffff;
             if (!v || sscanf(v, "%d-%d", &d75v_lo, &d75v_hi) != 2)
@@ -2112,7 +2147,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
     if (vtx1_idx < MAX_VERTICES && vtx2_idx < MAX_VERTICES && vtx3_idx < MAX_VERTICES) {
         uint32_t d75d_mx = vtx1_idx > vtx2_idx ? (vtx1_idx > vtx3_idx ? vtx1_idx : vtx3_idx)
                                                : (vtx2_idx > vtx3_idx ? vtx2_idx : vtx3_idx);
-        d75d_note_tri(videoGetFrameCount(), d75d_mx);
+        if (tri_dbg()) d75d_note_tri(videoGetFrameCount(), d75d_mx);
     }
     struct LoadedVertex* v1 = &rsp.loaded_vertices[vtx1_idx];
     struct LoadedVertex* v2 = &rsp.loaded_vertices[vtx2_idx];
@@ -2141,7 +2176,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         bool any_behind_camera = (v1->w < 0) || (v2->w < 0) || (v3->w < 0);
         if (!any_behind_camera && (v1->clip_rej & v2->clip_rej & v3->clip_rej)) {
             // The whole triangle lies outside the visible area
-            d75d_note_rej(videoGetFrameCount(), 0);
+            if (tri_dbg()) d75d_note_rej(videoGetFrameCount(), 0);
             return;
         }
     }
@@ -2167,19 +2202,19 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         switch (rsp.geometry_mode & G_CULL_BOTH) {
             case G_CULL_FRONT:
                 if (cross <= 0) {
-                    d75d_note_rej(videoGetFrameCount(), 1);
+                    if (tri_dbg()) d75d_note_rej(videoGetFrameCount(), 1);
                     return;
                 }
                 break;
             case G_CULL_BACK:
                 if (cross >= 0) {
-                    d75d_note_rej(videoGetFrameCount(), 1);
+                    if (tri_dbg()) d75d_note_rej(videoGetFrameCount(), 1);
                     return;
                 }
                 break;
             case G_CULL_BOTH:
                 // Why is this even an option?
-                d75d_note_rej(videoGetFrameCount(), 1);
+                if (tri_dbg()) d75d_note_rej(videoGetFrameCount(), 1);
                 return;
         }
     }
@@ -2555,10 +2590,12 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
 
     struct GfxClipParameters clip_parameters = gfx_rapi->get_clip_parameters();
 
-    d75d_note_emit(videoGetFrameCount(), v_arr); // survived all rejection gates -> reaches GL
-    d303_note_emit(videoGetFrameCount(), v_arr); // TEMP D303
-    zf_note_emit(videoGetFrameCount(), v_arr);   // TEMP D306/D308
-    d75d_note_emit_z(videoGetFrameCount(), v_arr, (used_textures[0] || used_textures[1]) ? 1 : 0, comb->used_textures[0] ? 1 : 0);
+    if (tri_dbg()) {   /* D474: one cached gate for the debug hooks */
+        d75d_note_emit(videoGetFrameCount(), v_arr); // survived all rejection gates -> reaches GL
+        d303_note_emit(videoGetFrameCount(), v_arr); // TEMP D303
+        zf_note_emit(videoGetFrameCount(), v_arr);   // TEMP D306/D308
+        d75d_note_emit_z(videoGetFrameCount(), v_arr, (used_textures[0] || used_textures[1]) ? 1 : 0, comb->used_textures[0] ? 1 : 0);
+    }
     for (int i = 0; i < 3; i++) {
         float z = v_arr[i]->z, w = v_arr[i]->w;
         if (clip_parameters.z_is_from_0_to_1) {
@@ -2976,7 +3013,7 @@ static void gfx_sp_moveword(uint8_t index, uint16_t offset, uintptr_t data) {
         case G_MW_SEGMENT:
             // GE registers segment bases as OS_K0_TO_PHYSICAL(ptr); store the
             // live host pointer so seg_addr() resolves seg+offset correctly.
-            segmentPointers[(offset >> 2) & 0xff] = (data < 0x800000) ? (data + 0x80000000) : data;
+            segmentPointers[(offset >> 2) & 0xff] = (data < PORT_DRAM_SIZE) ? (data + PORT_DRAM_K0_BASE) : data;
             break;
     }
 }
@@ -3038,29 +3075,44 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
         siz = G_IM_SIZ_8b;
     }
 
-    rdp.texture_tile[tile].palette = palette; // palette should set upper 4 bits of color index in 4b mode
-    rdp.texture_tile[tile].fmt = fmt;
-    rdp.texture_tile[tile].siz = siz;
-    rdp.texture_tile[tile].cms = cms;
-    rdp.texture_tile[tile].cmt = cmt;
-    rdp.texture_tile[tile].masks = masks; /* RC3 */
-    rdp.texture_tile[tile].maskt = maskt; /* RC3 */
-    rdp.texture_tile[tile].shifts = shifts;
-    rdp.texture_tile[tile].shiftt = shiftt;
-    rdp.texture_tile[tile].line_size_bytes = line * 8;
-    rdp.texture_tile[tile].tmem = tmem;
+    /* D474 (low-end perf): a set_tile that changes nothing must not mark the
+     * textures dirty -- that forces a texture-cache lookup AND a gfx_flush()
+     * (batch break / extra draw call) on the next triangle. Loads, TLUTs and
+     * G_TEXTURE still dirty the textures through their own paths. */
+    auto& tt = rdp.texture_tile[tile];
+    const bool same = tt.palette == palette && tt.fmt == fmt && tt.siz == siz &&
+                      tt.cms == cms && tt.cmt == cmt && tt.masks == masks && tt.maskt == maskt &&
+                      tt.shifts == shifts && tt.shiftt == shiftt &&
+                      tt.line_size_bytes == line * 8 && tt.tmem == tmem;
+    tt.palette = palette; // palette should set upper 4 bits of color index in 4b mode
+    tt.fmt = fmt;
+    tt.siz = siz;
+    tt.cms = cms;
+    tt.cmt = cmt;
+    tt.masks = masks; /* RC3 */
+    tt.maskt = maskt; /* RC3 */
+    tt.shifts = shifts;
+    tt.shiftt = shiftt;
+    tt.line_size_bytes = line * 8;
+    tt.tmem = tmem;
 
-    rdp.textures_changed[0] = true;
-    rdp.textures_changed[1] = true;
+    if (!same) {
+        rdp.textures_changed[0] = true;
+        rdp.textures_changed[1] = true;
+    }
 }
 
 static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
-    rdp.texture_tile[tile].uls = uls;
-    rdp.texture_tile[tile].ult = ult;
-    rdp.texture_tile[tile].lrs = lrs;
-    rdp.texture_tile[tile].lrt = lrt;
-    rdp.texture_tile[tile].width = (lrs - uls + 4) / 4;
-    rdp.texture_tile[tile].height = (lrt - ult + 4) / 4;
+    auto& tt = rdp.texture_tile[tile];
+    if (tt.uls == uls && tt.ult == ult && tt.lrs == lrs && tt.lrt == lrt) {
+        return;   /* D474: unchanged tile size -- no re-import, no batch break */
+    }
+    tt.uls = uls;
+    tt.ult = ult;
+    tt.lrs = lrs;
+    tt.lrt = lrt;
+    tt.width = (lrs - uls + 4) / 4;
+    tt.height = (lrt - ult + 4) / 4;
     rdp.textures_changed[0] = true;
     rdp.textures_changed[1] = true;
 }
@@ -3650,8 +3702,8 @@ static inline void *seg_addr(uintptr_t w1) {
     // GE passes OS_K0_TO_PHYSICAL(ptr) == ptr - 0x80000000 for RAM that lives
     // in the reserved N64-DRAM region (port/src/dram.c); map it back. The
     // region is 8 MB, so any offset below 0x800000 came from there.
-    if (w1 < 0x800000) {
-        return (void *)(w1 + 0x80000000);
+    if (w1 < PORT_DRAM_SIZE) {
+        return (void *)(w1 + PORT_DRAM_K0_BASE);
     }
     // D131: a GBI DL built by game code can reference a COMPILED symbol via
     // osVirtualToPhysical() (a u32-returning shim), which truncates the
@@ -3666,7 +3718,7 @@ static inline void *seg_addr(uintptr_t w1) {
     {
         static const uintptr_t mod_hi =
             ((uintptr_t)(void *)&segmentPointers[0]) & 0xffffffff00000000ULL;
-        if (mod_hi && w1 >= 0x40000000 && w1 < 0x70000000) {
+        if (mod_hi && w1 >= 0x40000000 && w1 < PORT_DRAM_V1_BASE) {   /* below the arena (portaddr.h) */
             return (void *)(mod_hi | w1);
         }
     }
@@ -3711,7 +3763,7 @@ static void gfx_run_dl(Gfx* cmd) {
                 break;
             case G_VTX:
                 gfx_sp_vertex(C0(0, 16) / sizeof(Vtx), C0(16, 4), (const Vtx*)seg_addr(cmd->words.w1));
-                d75d_note_vtx(videoGetFrameCount(), C0(0, 16) / sizeof(Vtx), C0(16, 4));
+                if (tri_dbg()) d75d_note_vtx(videoGetFrameCount(), C0(0, 16) / sizeof(Vtx), C0(16, 4));
                 break;
             case G_DL: {
                 if (C0(16, 1) == 0) {
@@ -4166,6 +4218,8 @@ static int gfx_perfstat_on(void) {
 static double s_perf_dl = 0, s_perf_run = 0, s_perf_present = 0, s_perf_interval = 0;
 static double s_perf_pre = 0, s_perf_post = 0, s_perf_swap = 0;
 static uint64_t s_perf_frames = 0, s_perf_last_start = 0;
+static double s_perf_maxiv = 0, s_perf_maxiv_dl = 0, s_perf_maxiv_run = 0;
+static uint64_t s_perf_maxiv_frame = 0, s_perf_over20 = 0, s_perf_over33 = 0;
 
 extern "C" void gfx_run(Gfx* commands) {
     s_hud_scale = 1.0f;   /* D226: never carry a HUD scale across frames */
@@ -4233,7 +4287,20 @@ extern "C" void gfx_run(Gfx* commands) {
         const uint64_t t2 = gfx_perf_now_ns();
         s_perf_dl += (double)(perf_t1 - perf_tpre) / f;
         s_perf_run += (double)(t2 - perf_t0) / f;
-        if (s_perf_last_start) s_perf_interval += (double)(perf_t0 - s_perf_last_start) / f;
+        if (s_perf_last_start) {
+            const double iv = (double)(perf_t0 - s_perf_last_start) / f;
+            s_perf_interval += iv;
+            /* Spike stats (hitches hide in 300-frame averages): the worst
+             * frame's interval and its own dl/run, plus counts over 20/33 ms. */
+            if (iv > s_perf_maxiv) {
+                s_perf_maxiv = iv;
+                s_perf_maxiv_dl = (double)(perf_t1 - perf_tpre) / f;
+                s_perf_maxiv_run = (double)(t2 - perf_t0) / f;
+                s_perf_maxiv_frame = s_perf_frames + 1;
+            }
+            if (iv > 20.0) s_perf_over20++;
+            if (iv > 33.4) s_perf_over33++;
+        }
         s_perf_last_start = perf_t0;
     }
 }
@@ -4255,6 +4322,11 @@ extern "C" void gfx_end_frame(void) {
                     (unsigned long long)s_perf_frames, s_perf_dl / n, s_perf_run / n, s_perf_present / n,
                     s_perf_interval / n, s_perf_interval > 0 ? 1000.0 * n / s_perf_interval : 0.0,
                     (double)s_perf_tris / n, (double)s_perf_batches / n);
+            fprintf(stderr, "PERFSTAT spikes: max=%.2fms at frame %llu (dl=%.2f run=%.2f) >20ms=%llu >33ms=%llu\n",
+                    s_perf_maxiv, (unsigned long long)s_perf_maxiv_frame, s_perf_maxiv_dl, s_perf_maxiv_run,
+                    (unsigned long long)s_perf_over20, (unsigned long long)s_perf_over33);
+            s_perf_maxiv = s_perf_maxiv_dl = s_perf_maxiv_run = 0;
+            s_perf_maxiv_frame = s_perf_over20 = s_perf_over33 = 0;
             s_perf_dl = s_perf_run = s_perf_present = s_perf_interval = 0;
             s_perf_tris = s_perf_batches = 0;
         }
