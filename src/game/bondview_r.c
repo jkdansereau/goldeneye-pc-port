@@ -424,9 +424,11 @@ void bondviewLoadSetupIntroSection(void)
             extern char *getenv(const char *name);
             extern int atoi(const char *s);
             const char *ic = getenv("GE_INTROCAM");
-            if (ic || getenv("GE_D306C")) osSyncPrintf("D306: intro camera index %d of %d%s\n", (int)rand_camera_index,
-                         (int)g_SetupIntroCameraCount, ic ? " (GE_INTROCAM override)" : "");
-            if (ic) rand_camera_index = (s32)((u32)atoi(ic) % (u32)g_SetupIntroCameraCount);
+            if (ic) {
+                osSyncPrintf("D306: intro camera index %d of %d\n", (int)rand_camera_index,
+                             (int)g_SetupIntroCameraCount);
+                rand_camera_index = (s32)((u32)atoi(ic) % (u32)g_SetupIntroCameraCount);
+            }
         }
 #endif
         while (rand_camera_index > 0)

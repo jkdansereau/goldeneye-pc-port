@@ -2558,40 +2558,6 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
     d75d_note_emit(videoGetFrameCount(), v_arr); // survived all rejection gates -> reaches GL
     d303_note_emit(videoGetFrameCount(), v_arr); // TEMP D303
     zf_note_emit(videoGetFrameCount(), v_arr);   // TEMP D306/D308
-    /* TEMP D306 (M-201): depth-state census of emitted triangles in a frame
-     * window, GE_D306C="f0 f1". One line per tri: depth flags as sent to GL,
-     * geometry_mode, other_mode_l, tile-0 texture, NDC centroid, z/w range and
-     * min w (<=0 = crosses the eye plane). Cap 60000. */
-    {
-        static int d306c = -1; static uint32_t d306f0 = 0, d306f1 = 0, d306n = 0; static float d306wmax = 1e30f;
-        if (d306c < 0) {
-            const char* e = getenv("GE_D306C");
-            d306c = (e && sscanf(e, "%u %u %f", &d306f0, &d306f1, &d306wmax) >= 2) ? 1 : 0;
-        }
-        const uint32_t fc = videoGetFrameCount();
-        if (d306c && fc >= d306f0 && fc <= d306f1 && d306n < 60000) {
-            float cx = 0, cy = 0, zmin = 1e9f, zmax = -1e9f, wmin = 1e9f;
-            for (int i = 0; i < 3; i++) {
-                const float w = v_arr[i]->w;
-                if (w < wmin) wmin = w;
-                if (w > 0.f) {
-                    const float zn = v_arr[i]->z / w;
-                    cx += v_arr[i]->x / w; cy += v_arr[i]->y / w;
-                    if (zn < zmin) zmin = zn;
-                    if (zn > zmax) zmax = zn;
-                }
-            }
-            cx /= 3.f; cy /= 3.f;
-            if (wmin > d306wmax) goto d306c_skip; /* optional 3rd arg: near geometry only */
-            {
-            const void* t0 = rendering_state.textures[0] ? (const void*)rendering_state.textures[0]->first.texture_addr : nullptr;
-            d306n++;
-            fprintf(stderr, "D306C f=%u dm=%02x geom=%08x oml=%08x tex0=%p c=(%.3f,%.3f) z=[%.5f,%.5f] wmin=%.2f\n",
-                    fc, rendering_state.depth_mode, rsp.geometry_mode, rdp.other_mode_l, t0, cx, cy, zmin, zmax, wmin);
-            }
-        }
-        d306c_skip:;
-    }
     d75d_note_emit_z(videoGetFrameCount(), v_arr, (used_textures[0] || used_textures[1]) ? 1 : 0, comb->used_textures[0] ? 1 : 0);
     for (int i = 0; i < 3; i++) {
         float z = v_arr[i]->z, w = v_arr[i]->w;

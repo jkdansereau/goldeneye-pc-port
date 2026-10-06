@@ -222,6 +222,10 @@ static char *trim(char *s)
     return s;
 }
 
+/* D472: unknown ge007.ini keys seen by the last configLoad. */
+static int s_unknownKeys;
+static char s_unknownFirst[48];
+
 static void applyKV(const char *dottedKey, const char *val)
 {
     for (int i = 0; i < numIntOpts; i++) {
@@ -270,7 +274,14 @@ static void applyKV(const char *dottedKey, const char *val)
         }
     }
     sysLogPrintf(LOG_NOTE, "config: unknown key '%s' (ignored)", dottedKey);
+    if (s_unknownKeys++ == 0) {   /* D472: surfaced once in the F10 overlay */
+        strncpy(s_unknownFirst, dottedKey, sizeof(s_unknownFirst) - 1);
+        s_unknownFirst[sizeof(s_unknownFirst) - 1] = 0;
+    }
 }
+
+int configUnknownKeyCount(void) { return s_unknownKeys; }
+const char *configUnknownKeyFirst(void) { return s_unknownFirst; }
 
 /* Preset plumbing (Original-N64 / port-defaults presets, D440;
  * the D283 Deck preset): set / read a registered numeric option by its
@@ -338,6 +349,8 @@ void configLoad(void)
 
     char line[512];
     char section[64] = "";
+    s_unknownKeys = 0;
+    s_unknownFirst[0] = 0;
     while (fgets(line, sizeof(line), f)) {
         char *p = trim(line);
         if (!*p || *p == '#' || *p == ';')

@@ -503,7 +503,8 @@ void frontOptionsMenuInterface(void)
                  * pages but cannot enter a modal that only a key can finish.
                  * Enter or a mouse click still starts ordinary key capture. */
                 const Uint8 *ks = SDL_GetKeyboardState(NULL);
-                if (ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_KP_ENTER] ||
+                if (optionsRowIsPadBind(i) ||   /* D469: pad-driven capture; arming waits for the A release */
+                    ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_KP_ENTER] ||
                     (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON(SDL_BUTTON_LEFT)))
                     optionsRowBeginBind(i);
             } else if (optionsRowIsReset(i)) {
@@ -782,10 +783,17 @@ Gfx *frontOptionsMenuDraw(Gfx *DL)
         }
         if (strcmp(optionsRowLabel(activeHeader()), "MOVEMENT") == 0 ||
             strcmp(optionsRowLabel(activeHeader()), "ACTIONS") == 0) {
-            DL = ink(DL, ROW_X, rowY(s_rowN + 2),
-                     optionsBindingCaptureActive()
-                         ? "Press key/mouse  B/ESC cancel  DEL clear\n"
-                         : "Keys/mouse only  Enter: bind  B: back\n", INK_DIM);
+            static char d471buf0[96];   /* D471: pad names for the menu pad's family */
+            inputPadHelpFmt(d471buf0, sizeof(d471buf0), optionsBindingCaptureActive()
+                ? "Press key/mouse  {B}/ESC cancel  DEL clear\n"
+                : "Keys/mouse only  Enter: bind  {B}: back\n");
+            DL = ink(DL, ROW_X, rowY(s_rowN + 2), d471buf0, INK_DIM);
+        } else if (strcmp(optionsRowLabel(activeHeader()), "CONTROLLER") == 0) {
+            static char d471buf1[96];   /* D471: pad names for the menu pad's family */
+            inputPadHelpFmt(d471buf1, sizeof(d471buf1), optionsBindingCaptureActive()
+                ? "Press pad button  tap {B} cancel  hold Back clear\n"
+                : "{A}: bind  Left/Right: slot  {Y}: clear  {B}: back\n");
+            DL = ink(DL, ROW_X, rowY(s_rowN + 2), d471buf1, INK_DIM);
         } else if (s_rowTotal > ROWS_PER_PAGE) {
             /* D406b: bottom hint on every page of a multi-page section (11
              * rows per page leaves the last line of the paper for it). */

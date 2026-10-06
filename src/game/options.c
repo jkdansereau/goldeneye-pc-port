@@ -3572,7 +3572,13 @@ Gfx *draw_watch_controller(Gfx *gdl)
         }
         else
         {
+#ifdef PORT
+            /* D441 (missed sibling of D290): the (s32) cast truncates a 64-bit
+             * stack pointer; latent while Windows thread stacks sit below 2 GiB. */
+            gdl = watchRenderControllerOpaque(gdl, &finalmtx, 1, &table2, &contpadnum1);
+#else
             gdl = watchRenderControllerOpaque(gdl, &finalmtx, 1, (s32) (&table2), &contpadnum1);
+#endif
         }
     }
 

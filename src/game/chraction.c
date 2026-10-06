@@ -3931,11 +3931,7 @@ void set_actor_on_path(ChrRecord *self, struct patrol_path *path)
 
     pad = chrlvGetNextPatrolStepPad(self);
 
-#ifdef PORT
-    if (portPropGameplayOnScreen(self->prop) == FALSE) /* D466 */
-#else
     if ((self->prop->flags & PROPFLAG_ONSCREEN) == FALSE)
-#endif
     {
         if (chrlvStanRoomRelatedPad(self, pad) != 0)
         {
@@ -9330,11 +9326,7 @@ void chrlvTickGoPos(ChrRecord *self)
         chrlvActGoposRelated(self, &sp58, &sp54);
 
         if ((sp74 == 0)
-#ifdef PORT
-            && (portPropGameplayOnScreen(self_prop) || (chrlvStanRoomRelated(self, &sp58, sp54) == 0))) /* D466 */
-#else
             && ((self_prop->flags & PROPFLAG_ONSCREEN) || (chrlvStanRoomRelated(self, &sp58, sp54) == 0)))
-#endif
         {
             chrlvActGoposSetTargetPosRelated(self);
             self->act_gopos.unk9c = g_GlobalTimer;
@@ -9481,11 +9473,7 @@ void chrlvTickPatrol(ChrRecord *self)
     if (self->act_patrol.waydata.mode == WAYMODE_MAGIC)
     {
         if ((sp34 == 0)
-#ifdef PORT
-            && (portPropGameplayOnScreen(self_prop) || (chrlvStanRoomRelatedPad(self, temp_v0) == 0))) /* D466 */
-#else
             && ((self_prop->flags & PROPFLAG_ONSCREEN) || (chrlvStanRoomRelatedPad(self, temp_v0) == 0)))
-#endif
         {
             self->act_patrol.lastvisible60 = g_GlobalTimer;
             chrlvSetNextActPatrolStepPadPos(self);

@@ -50,7 +50,9 @@ extern MENU current_menu;
 #include "front.h"   /* selected_folder_num (D356 stage probe) */
 #include "file.h"   /* save_data (D356 reset probe: second-file isolation) */
 #include "optionsoverlay.h"
+#include "hudaspect.h"   /* D335b/D472: PORT_HUD_ASPECT */
 #include "watchsettings.h"
+#include "audio.h"
 #include "../fast3d/gfx_api.h"
 
 /* file2.c; same extern as watchsettings.c (not in a header). */
@@ -80,7 +82,10 @@ extern s16   viGetY(void);
 /* ------------------------------------------------------------------------ */
 
 enum { ROW_TOGGLE, ROW_SLIDER, ROW_ENUM, ROW_MSAA, ROW_RES, ROW_ACTION, ROW_FPSCAP,
-       ROW_HEADER, ROW_BOND_FILE, ROW_BIND /* key / mouse-button capture */ };
+       ROW_HEADER, ROW_BOND_FILE, ROW_BIND /* key / mouse-button capture */,
+       ROW_PADBIND /* D469: gamepad button capture (per seat) */,
+       ROW_PADSEAT /* D469: which controller seat the pad rows edit */,
+       ROW_AUDIODEV /* D470: audio output device (string, cycles Default + enumerated) */ };
 
 /* D346: wording pass -- Nightdive/Turok + PD-port conventions: title-case
  * On/Off, no all-caps value strings. Display-only; config stores 0/1 either way. */
@@ -89,6 +94,8 @@ static const char *const kReverse[]   = { "Reverse", "Upright", NULL };
 static const char *const kHold[]      = { "Hold", "Toggle", NULL };
 static const char *const kAspectMode[] = { "Window", "Original", NULL };   /* D447: Original = 4:3 (16:9 with the game Ratio) bars */
 static const char *const kTexFilter[] = { "Nearest", "Bilinear", "3-Point", NULL };
+static const char *const kPadPreset[] = { "Jinx 1.1", "Jinx 1.2 (n/a)", "Jinx 1.3 (n/a)", "Custom", NULL };   /* D469: 1.2/1.3 undefined by D394 -> behave as 1.1 */
+static int s_padSeat = 0;   /* D469: seat edited by the Controller page rows */
 static const char *const kAimMode[]   = { "N64", "Centred (PC)", NULL };   /* D337 */
 static const char *const kAimRange[]  = { "PC", "N64", NULL };             /* D338 */
 static const int         kMsaaSeq[]   = { 1, 2, 4, 8, 16 };   /* D443: 16x added */
@@ -256,6 +263,7 @@ static struct Row rows[] = {
     { .key="Input.CrouchMode", .label="Crouch mode", .kind=ROW_ENUM, .step=1, .names=kHold },
     { .key="__ResetInput", .label="Reset to defaults", .kind=ROW_ACTION },
     { .key="__OpenBindings", .label="Bindings...", .kind=ROW_ACTION },
+    { .key="__OpenController", .label="Controller...", .kind=ROW_ACTION },
 
     /* D388: nested Input -> Bindings -> two short pages, each with a reset.
      * Mouse buttons 1-5 share the visible slots with keys; pads stay fixed. */
@@ -282,6 +290,22 @@ static struct Row rows[] = {
     { .key="Input.Bind.Reload", .label="Reload", .kind=ROW_BIND },
     { .key="Input.Bind.Crouch", .label="Crouch", .kind=ROW_BIND },
     { .key="__ResetActionKeys", .label="Reset to defaults", .kind=ROW_ACTION },
+
+    /* D469: nested Input -> Controller. Preset selector; Custom unlocks per-seat,
+     * per-action pad rebinding (two slots per action, pad-driven capture). */
+    { .key="__HdrController", .label="CONTROLLER", .kind=ROW_HEADER },
+    { .key="Input.PadPreset", .label="Layout preset", .kind=ROW_ENUM, .step=1, .names=kPadPreset },
+    { .key="__PadSeat", .label="Controller", .kind=ROW_PADSEAT, .shownWhen="Input.PadPreset", .shownValue=3 },
+    { .key="Input.Pad.Fire", .label="Fire", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3 },
+    { .key="Input.Pad.Aim", .label="Aim", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3 },
+    { .key="Input.Pad.Use", .label="Use / action", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3 },
+    { .key="Input.Pad.Reload", .label="Reload", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3 },
+    { .key="Input.Pad.Crouch", .label="Crouch", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3 },
+    { .key="Input.Pad.NextWeapon", .label="Next weapon", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3 },
+    { .key="Input.Pad.PrevWeapon", .label="Previous weapon", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3 },
+    { .key="Input.Pad.Gadget", .label="Cycle gadget", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3 },
+    { .key="Input.Pad.Start", .label="Pause / start", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3 },
+    { .key="__ResetController", .label="Reset to defaults", .kind=ROW_ACTION },
 
     { .key="__HdrGameplay", .label="GAMEPLAY", .kind=ROW_HEADER },
     /* D356 exposure filter (menu surface only, the D181/D216/D304 pattern --
@@ -393,6 +417,10 @@ static struct Row rows[] = {
     { .key="__ResetGraphics", .label="Reset to defaults", .kind=ROW_ACTION },
 
     { .key="__HdrAudio", .label="AUDIO", .kind=ROW_HEADER },
+    /* D470: port-level master volume (final gain on the mixed output, whole %)
+     * and the output device (live switch; Default = system default). */
+    { .key="Audio.MasterVolume", .label="Master volume", .kind=ROW_SLIDER, .step=5, .unit="%" },
+    { .key="Audio.Device", .label="Output device", .kind=ROW_AUDIODEV },
     /* D356: the per-file volume sliders get a real AUDIO section (the D353
      * "AUDIO (BOND FILE)" header was retired with the BOND FILE section).
      * A port-level master volume (M3) will join here as Turok's
@@ -434,7 +462,8 @@ int optionsRowHeaderParent(int i)
 {
     if (i < 0 || i >= NUM_ROWS || rows[i].kind != ROW_HEADER) return -1;
     const char *key = rows[i].key;
-    if (!strcmp(key, "__HdrBindings")) return rowIndexByKey("__HdrInput");
+    if (!strcmp(key, "__HdrBindings") || !strcmp(key, "__HdrController"))
+        return rowIndexByKey("__HdrInput");
     if (!strcmp(key, "__HdrMoveKeys") || !strcmp(key, "__HdrActionKeys"))
         return rowIndexByKey("__HdrBindings");
     if (!strcmp(key, "__HdrHUD")) return rowIndexByKey("__HdrGameplay");
@@ -446,6 +475,7 @@ int optionsRowChildHeader(int i)
     if (i < 0 || i >= NUM_ROWS) return -1;
     const char *key = rows[i].key;
     if (!strcmp(key, "__OpenBindings")) return rowIndexByKey("__HdrBindings");
+    if (!strcmp(key, "__OpenController")) return rowIndexByKey("__HdrController");
     if (!strcmp(key, "__OpenMoveKeys")) return rowIndexByKey("__HdrMoveKeys");
     if (!strcmp(key, "__OpenActionKeys")) return rowIndexByKey("__HdrActionKeys");
     if (!strcmp(key, "__OpenHud")) return rowIndexByKey("__HdrHUD");
@@ -475,8 +505,37 @@ static SDL_SpinLock s_bindCaptureLock;
 static int s_bindPending = -1, s_bindCaptureRow = -1, s_bindError = 0;
 static SDL_atomic_t s_bindHold; /* captured key/mouse button, shared with pad poll */
 
+/* D469: gamepad capture (Controller page). Same modal flag as the key/mouse
+ * capture (so F10/Back/Start cannot close the page mid-capture), but driven
+ * by the edited seat's pad. Arming: nothing is accepted until every source
+ * is released (the A press that opened the modal must not bind itself).
+ * Cancel: Esc, tap B, or tap Back (either pad 0 or the edited pad), so a
+ * controller-only user is never trapped (D395). Clear: Delete, or HOLD Back.
+ * B itself is bindable by HOLDING it (a tap cancels). */
+static int s_padCapMode = 0, s_padCapRow = -1, s_padCapSeat = 0, s_padCapArmed = 0, s_padCapSwallow = 0;
+static uint64_t s_padCapBackT = 0, s_padCapBT = 0;
+#define PADCAP_HOLD_US 600000
+
 static void bindingBegin(struct Row *r)
 {
+    if (r && r->found && r->kind == ROW_PADBIND) {
+        SDL_AtomicLock(&s_bindCaptureLock);
+        s_bindPending = -1;
+        SDL_AtomicUnlock(&s_bindCaptureLock);
+        s_bindError = 0;
+        s_padCapMode = 1;
+        s_padCapRow = (int)(r - rows);
+        s_padCapSeat = s_padSeat;
+        s_padCapArmed = 0;
+        s_padCapSwallow = 0;
+        s_padCapBackT = s_padCapBT = 0;
+        s_bindCaptureRow = s_padCapRow;
+        SDL_AtomicSet(&s_bindPadCancelHold, 0);
+        SDL_AtomicSet(&s_bindHold, SDL_SCANCODE_UNKNOWN);
+        SDL_AtomicSet(&s_bindCaptureActive, 1);
+        return;
+    }
+    s_padCapMode = 0;
     if (!r || !r->found || r->kind != ROW_BIND) return;
     SDL_AtomicLock(&s_bindCaptureLock);
     s_bindPending = -1;
@@ -511,6 +570,14 @@ int optionsBindingKeyDown(const SDL_KeyboardEvent *ev)
     if ((ev->keysym.sym == SDLK_F4 && (ev->keysym.mod & KMOD_ALT))) return 0;
     if (ev->repeat) return 1;
     SDL_Scancode sc = ev->keysym.scancode;
+    if (s_padCapMode) {   /* D469: pad capture takes only Esc (cancel) / Delete (clear) from the keyboard */
+        if (sc == SDL_SCANCODE_ESCAPE || sc == SDL_SCANCODE_DELETE) {
+            SDL_AtomicLock(&s_bindCaptureLock);
+            if (s_bindPending < 0) s_bindPending = (int)sc;
+            SDL_AtomicUnlock(&s_bindCaptureLock);
+        }
+        return 1;
+    }
     if (sc == SDL_SCANCODE_F10 || sc == SDL_SCANCODE_F12 ||
         sc == SDL_SCANCODE_UNKNOWN) return 1;
     SDL_AtomicLock(&s_bindCaptureLock);
@@ -523,6 +590,7 @@ int optionsBindingKeyDown(const SDL_KeyboardEvent *ev)
 int optionsBindingMouseDown(const SDL_MouseButtonEvent *ev)
 {
     if (!optionsBindingCaptureActive()) return 0;
+    if (s_padCapMode) return 1;   /* D469: swallow clicks during a pad capture */
     if (ev->button >= 1 && ev->button <= 5) {
         SDL_AtomicLock(&s_bindCaptureLock);
         if (s_bindPending < 0) s_bindPending = INPUT_BIND_MOUSE(ev->button);
@@ -534,18 +602,102 @@ int optionsBindingMouseDown(const SDL_MouseButtonEvent *ev)
 /* The capturing screen calls this once per input tick. Return 1 while the
  * modal is active and through the captured key's release, so it cannot
  * simultaneously trigger menu navigation or a second action. */
+static void padCapFinish(void)
+{
+    SDL_AtomicSet(&s_bindCaptureActive, 0);
+    s_padCapSwallow = 1;   /* swallow until every button is released again */
+}
+
+static int padCaptureTick(void)
+{
+    int seat = s_padCapSeat;
+    unsigned raw = inputPadHeldSources(seat);
+    int back = inputPadButton(seat, SDL_CONTROLLER_BUTTON_BACK) || inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_BACK);
+    int bHeld = inputPadButton(seat, SDL_CONTROLLER_BUTTON_B) || inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_B);
+    int act = inputPadActionForKey(rows[s_padCapRow].key);
+    uint64_t now = sysGetMicroseconds();
+
+    SDL_AtomicLock(&s_bindCaptureLock);
+    int key = s_bindPending;
+    s_bindPending = -1;
+    SDL_AtomicUnlock(&s_bindCaptureLock);
+    if (key == SDL_SCANCODE_ESCAPE) { padCapFinish(); return 1; }
+    if (key == SDL_SCANCODE_DELETE) {
+        inputPadBindingSet(seat, act, rows[s_padCapRow].bindSlot, -1);
+        configSave();
+        padCapFinish();
+        return 1;
+    }
+    if (!s_padCapArmed) {   /* release-before-capture arming */
+        if (!raw && !back && !bHeld) s_padCapArmed = 1;
+        return 1;
+    }
+    /* Back: tap = cancel, hold = clear */
+    if (back) {
+        if (!s_padCapBackT) s_padCapBackT = now;
+        if (now - s_padCapBackT >= PADCAP_HOLD_US) {
+            inputPadBindingSet(seat, act, rows[s_padCapRow].bindSlot, -1);
+            configSave();
+            sysLogPrintf(LOG_INFO, "pad bind: %s seat %d slot %d cleared", rows[s_padCapRow].key, seat + 1, rows[s_padCapRow].bindSlot + 1);
+            padCapFinish();
+        }
+        return 1;
+    } else if (s_padCapBackT) {
+        padCapFinish();   /* released early: cancel */
+        return 1;
+    }
+    /* B: tap = cancel, hold = bind B (to the edited pad only) */
+    if (bHeld) {
+        if (!s_padCapBT) s_padCapBT = now;
+        if (now - s_padCapBT >= PADCAP_HOLD_US && (raw & 2u)) {
+            inputPadBindingSet(seat, act, rows[s_padCapRow].bindSlot, 1 /* b */);
+            configSave();
+            sysLogPrintf(LOG_INFO, "pad bind: %s seat %d slot %d = b", rows[s_padCapRow].key, seat + 1, rows[s_padCapRow].bindSlot + 1);
+            padCapFinish();
+        }
+        return 1;
+    } else if (s_padCapBT) {
+        padCapFinish();   /* tap: cancel */
+        return 1;
+    }
+    for (int src = 0; src < inputPadSourceCount(); src++) {
+        if (raw & (1u << src)) {
+            inputPadBindingSet(seat, act, rows[s_padCapRow].bindSlot, src);
+            configSave();
+            sysLogPrintf(LOG_INFO, "pad bind: %s seat %d slot %d = %s", rows[s_padCapRow].key, seat + 1,
+                         rows[s_padCapRow].bindSlot + 1, inputPadSourceName(src));
+            padCapFinish();
+            return 1;
+        }
+    }
+    return 1;
+}
+
 int optionsBindingCaptureTick(void)
 {
+    if (s_padCapMode) {   /* D469 */
+        if (optionsBindingCaptureActive()) return padCaptureTick();
+        if (s_padCapSwallow) {
+            unsigned raw = inputPadHeldSources(s_padCapSeat);
+            if (raw || inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_B) || inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_A) ||
+                inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_X) || inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_BACK) ||
+                inputPadButton(s_padCapSeat, SDL_CONTROLLER_BUTTON_BACK))
+                return 1;
+            s_padCapSwallow = 0;
+        }
+        s_padCapMode = 0;
+        return 0;
+    }
     /* D395: capture only accepts keyboard/mouse. A controller B must be
      * able to cancel a modal entered with a keyboard/mouse; swallow B until
      * release so that the same press cannot also back out of the page. */
     if (SDL_AtomicGet(&s_bindPadCancelHold)) {
-        if (!inputPadButton(0, SDL_CONTROLLER_BUTTON_B))
+        if (!inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_B))
             SDL_AtomicSet(&s_bindPadCancelHold, 0);
         return 1;
     }
     if (optionsBindingCaptureActive()) {
-        if (inputPadButton(0, SDL_CONTROLLER_BUTTON_B)) {
+        if (inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_B)) {
             SDL_AtomicLock(&s_bindCaptureLock);
             s_bindPending = -1;
             SDL_AtomicUnlock(&s_bindCaptureLock);
@@ -868,6 +1020,7 @@ static void overlayInit(void)
     for (int i = 0; i < NUM_ROWS; i++) {
         if (rows[i].kind == ROW_RES || rows[i].kind == ROW_ACTION ||
             rows[i].kind == ROW_HEADER || rows[i].kind == ROW_BOND_FILE ||
+            rows[i].kind == ROW_PADSEAT || rows[i].kind == ROW_PADBIND || rows[i].kind == ROW_AUDIODEV ||
             watchSettingsFieldForKey(rows[i].key) >= 0) {
             rows[i].found = 1;   /* not config-backed */
             continue;
@@ -926,6 +1079,7 @@ static void overlayInit(void)
             { "__HdrActionKeys", "Input.Bind.Fire", "__ResetActionKeys", 14 },
             { "__HdrGameplay", "__OpenHud", "__ResetGameplay", 14 },
             { "__HdrHUD", "Video.CrosshairColor", "__ResetHUD", 14 },
+            { "__HdrController", "Input.PadPreset", "__ResetController", 14 },
             { "__HdrVideo", "Video.FpsCap", "__ResetVideo", 14 },
         };
         for (size_t k = 0; k < sizeof(pages) / sizeof(pages[0]); k++) {
@@ -1232,6 +1386,10 @@ static void rowAdjust(struct Row *r, int dir)
     }
     case ROW_ENUM: {
         double lo = r->cfgMin, hi = r->cfgMax;
+        if (!strcmp(r->key, "Input.PadPreset")) {   /* D469: only Jinx 1.1 and Custom are defined */
+            rowSet(r, (double)inputPadPresetStep((int)lround(v), dir));
+            break;
+        }
         v += dir;
         if (v < lo) v = hi;
         if (v > hi) v = lo;
@@ -1259,8 +1417,23 @@ static void rowAdjust(struct Row *r, int dir)
         break;
     }
     case ROW_BIND:
+    case ROW_PADBIND:
         r->bindSlot = (r->bindSlot + dir + INPUT_BIND_SLOTS) % INPUT_BIND_SLOTS;
         break;
+    case ROW_PADSEAT:
+        s_padSeat = (s_padSeat + (dir >= 0 ? 1 : 3)) % 4;
+        break;
+    case ROW_AUDIODEV: {
+        /* D470: cycle Default + enumerated outputs; applied live on the audio thread. */
+        int n = audioDeviceRefresh();
+        int idx = 0;   /* 0 = Default */
+        for (int k = 0; k < n; k++)
+            if (!strcmp(audioDeviceName(k), audioDeviceCurrentName())) idx = k + 1;
+        idx = (idx + (dir >= 0 ? 1 : n) ) % (n + 1);
+        audioDeviceRequest(idx == 0 ? "" : audioDeviceName(idx - 1));
+        sysLogPrintf(LOG_INFO, "optionsoverlay: audio device -> \"%s\"", idx == 0 ? "Default" : audioDeviceName(idx - 1));
+        break;
+    }
     case ROW_ACTION:
         if (optionsRowChildHeader((int)(r - rows)) >= 0) break; /* link, not a Quit or value */
         /* D356: reset rows arm/confirm through the shared activation
@@ -1363,6 +1536,7 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Input.PadTriggerPct",     23 },  /* = 23 */
     { "Input.RumbleScale", 0.5 },       /* = gRumbleScale (0.5f), D401 */
     { "Input.CrouchMode",        0 },   /* = 0 (hold) */
+    { "Input.PadPreset",         0 },   /* = 0 (Jinx 1.1), D469 */
     /* GRAPHICS (port/src/video.c initializers) */
     { "Video.MSAA",                 2 },   /* = 2 */
     { "Video.TextureFilter",        1 },   /* = 1 (bilinear) */
@@ -1391,6 +1565,8 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Video.VSync",        1 }, /* = 1 (on) */
     { "Video.FpsCap",      60 }, /* = 60 */
     { "Video.DisplayFPS",   0 }, /* registered 0 */
+    /* AUDIO (port/src/audio.c, D470) */
+    { "Audio.MasterVolume", 100 }, /* = 100 (bit-identical passthrough) */
 };
 
 static double kResetDefault(const char *key)
@@ -1430,6 +1606,13 @@ static void rowResetSection(int iReset)
             r->bindSlot = 0;
             continue;
         }
+        if (r->kind == ROW_AUDIODEV) { audioDeviceRequest(""); continue; }   /* D470 */
+        if (r->kind == ROW_PADBIND) {   /* D469: reset the action on every seat */
+            inputPadBindingReset(inputPadActionForKey(r->key));
+            r->bindSlot = 0;
+            continue;
+        }
+        if (r->kind == ROW_PADSEAT) continue;
         int field = watchSettingsFieldForKey(r->key);
         if (field >= 0) {
             watchSettingsSet((enum WatchSettingField)field,
@@ -1698,27 +1881,27 @@ void optionsOverlayHandleInput(void)
      * on an edge, not slider adjustment. Only D-pad/left-stick X (or keyboard
      * left/right) adjust sliders, with hold-repeat. The pad is swallowed by
      * input.c while the overlay owns it. Start/Select still close it. */
-    int gUp = inputPadButton(0, SDL_CONTROLLER_BUTTON_DPAD_UP)
-           || inputPadAxis(0, SDL_CONTROLLER_AXIS_LEFTY) < -12000;
-    int gDn = inputPadButton(0, SDL_CONTROLLER_BUTTON_DPAD_DOWN)
-           || inputPadAxis(0, SDL_CONTROLLER_AXIS_LEFTY) > 12000;
-    int gLf = inputPadButton(0, SDL_CONTROLLER_BUTTON_DPAD_LEFT)
-            || inputPadAxis(0, SDL_CONTROLLER_AXIS_LEFTX) < -12000;
-    int gRt = inputPadButton(0, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
-            || inputPadAxis(0, SDL_CONTROLLER_AXIS_LEFTX) > 12000;
+    int gUp = inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_DPAD_UP)
+           || inputPadAxis(inputOverlayOwnerPad(), SDL_CONTROLLER_AXIS_LEFTY) < -12000;
+    int gDn = inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_DPAD_DOWN)
+           || inputPadAxis(inputOverlayOwnerPad(), SDL_CONTROLLER_AXIS_LEFTY) > 12000;
+    int gLf = inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_DPAD_LEFT)
+            || inputPadAxis(inputOverlayOwnerPad(), SDL_CONTROLLER_AXIS_LEFTX) < -12000;
+    int gRt = inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
+            || inputPadAxis(inputOverlayOwnerPad(), SDL_CONTROLLER_AXIS_LEFTX) > 12000;
     int up = ks[SDL_SCANCODE_UP]    || ks[SDL_SCANCODE_KP_8] || gUp;
     int dn = ks[SDL_SCANCODE_DOWN]  || ks[SDL_SCANCODE_KP_2] || gDn;
     int lf = ks[SDL_SCANCODE_LEFT] || ks[SDL_SCANCODE_KP_4] || gLf;
     int rightNav = ks[SDL_SCANCODE_RIGHT] || ks[SDL_SCANCODE_KP_6] || gRt;
     int accept = ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_KP_ENTER] ||
-                 inputPadButton(0, SDL_CONTROLLER_BUTTON_A) ||
-                 inputPadButton(0, SDL_CONTROLLER_BUTTON_X);
+                 inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_A) ||
+                 inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_X);
     int rt = rightNav || accept;
-    int padBack = inputPadButton(0, SDL_CONTROLLER_BUTTON_B);
+    int padBack = inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_B);
 
     static int prevStart = 0;   /* not reset while closed: a Start held across
                                   close must not re-close on the next open */
-    int startNow = inputPadButton(0, SDL_CONTROLLER_BUTTON_START);
+    int startNow = inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_START);
     if (startNow && !prevStart) {
         prevStart = startNow;
         optionsOverlayToggle();   /* Start closes */
@@ -1734,6 +1917,20 @@ void optionsOverlayHandleInput(void)
         return;
     }
     prevPadBack = padBack;
+
+    /* D469: Y or Delete clears the selected pad-binding slot (one press, no modal). */
+    {
+        static int prevYClr = 0, prevDelClr = 0;
+        int yNow = inputPadButton(inputOverlayOwnerPad(), SDL_CONTROLLER_BUTTON_Y), delNow = ks[SDL_SCANCODE_DELETE];
+        if (s_section >= 0 && s_sel > 0 && ((yNow && !prevYClr) || (delNow && !prevDelClr))) {
+            struct Row *cr = &rows[s_visIdx[s_sel]];
+            if (cr->kind == ROW_PADBIND) {
+                inputPadBindingSet(s_padSeat, inputPadActionForKey(cr->key), cr->bindSlot, -1);
+                configSave();
+            }
+        }
+        prevYClr = yNow; prevDelClr = delNow;
+    }
 
     /* ---- keyboard / D-pad nav (clamped at the ends; scroll follows).
      * D347: hold-to-repeat so a controller (and held keys) can traverse the
@@ -1774,7 +1971,10 @@ void optionsOverlayHandleInput(void)
                 } else {
                 struct Row *r = &rows[s_visIdx[s_sel]];
                 int keyConfirm = ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_KP_ENTER];
-                if (r->kind == ROW_BIND && dir > 0 && keyConfirm) {
+                if (r->kind == ROW_PADBIND && dir > 0 && accept && !rightNav) {
+                    bindingBegin(r);   /* D469: A/X/Enter starts pad capture; D-pad right changes the slot */
+                    adjDir = 0;
+                } else if (r->kind == ROW_BIND && dir > 0 && keyConfirm) {
                     bindingBegin(r);
                     adjDir = 0;
                 } else if (r->kind == ROW_BIND && dir > 0 && accept && !rightNav) {
@@ -1816,6 +2016,14 @@ void optionsOverlayHandleInput(void)
     gfx_get_ui_screen_rect(&rx, &ry, &rw, &rh);
     if (rw > 0 && rh > 0) {
         double ox = (double)(mx - rx) * (double)viGetX() / rw;
+        {   /* D335b/D472: the card is drawn into a centred 4:3 region under native widescreen */
+            f32 na = portNativeAspect();
+            if (na > 1.3334f) {
+                double vis = (4.0 / 3.0) / (double)na;
+                double fx = (double)(mx - rx) / rw;
+                ox = ((fx - (1.0 - vis) * 0.5) / vis) * (double)viGetX();
+            }
+        }
         double oy = (double)(my - ry) * (double)viGetY() / rh;
         int hoverVis = overlayRowAtY(ox, oy);
         /* Opt-in diagnostic for D391: distinguish hit-band/scroll errors
@@ -1870,7 +2078,7 @@ void optionsOverlayHandleInput(void)
                             s_dragRow = i;
                             int field = watchSettingsFieldForKey(r->key);
                             SDL_AtomicSet(&s_dragWatchField, field + 1);
-                        } else if (r->kind == ROW_BIND) {
+                        } else if (r->kind == ROW_BIND || r->kind == ROW_PADBIND) {
                             bindingBegin(r); /* mouse selects slot via arrows; click captures */
                         } else {
                             rowAdjust(r, +1);   /* toggle / cycle forward (wraps) */
@@ -1966,6 +2174,40 @@ static void valueText(int i, char *out, int n)
                                    videoPresetIsActive(which) ? "Active" : "");
         } else {
             snprintf(out, n, "[ENTER]");
+        }
+        return;
+    }
+    if (r->kind == ROW_AUDIODEV) {
+        const char *cur = audioDeviceCurrentName();
+        if (!cur[0]) snprintf(out, n, "Default");
+        else if (strlen(cur) > 24) snprintf(out, n, "%.22s..", cur);
+        else snprintf(out, n, "%s", cur);
+        return;
+    }
+    if (r->kind == ROW_PADSEAT) {
+        snprintf(out, n, "Pad %d%s", s_padSeat + 1, inputPadSeatPresent(s_padSeat) ? "" : " (none)");
+        return;
+    }
+    if (r->kind == ROW_PADBIND) {
+        if (optionsBindingCaptureActive() && i == s_bindCaptureRow) {
+            snprintf(out, n, "Press button...");
+        } else {
+            static const char *const kSlotName[INPUT_BIND_SLOTS] = { "Primary", "Secondary" };
+            char nm[32];
+            inputPadBindingText(s_padSeat, inputPadActionForKey(r->key), r->bindSlot, nm, sizeof(nm));
+            static const struct { const char *a, *b; } pretty[] = {
+                { "leftshoulder", "LB" }, { "rightshoulder", "RB" }, { "lefttrigger", "LT" },
+                { "righttrigger", "RT" }, { "leftstick", "L-Click" }, { "rightstick", "R-Click" },
+                { "dpup", "D-Up" }, { "dpdown", "D-Down" }, { "dpleft", "D-Left" }, { "dpright", "D-Right" },
+            };
+            const char *show = nm;
+            for (size_t k = 0; k < sizeof(pretty) / sizeof(pretty[0]); k++)
+                if (!strcmp(nm, pretty[k].a)) show = pretty[k].b;
+            {   /* D471: PlayStation / Nintendo names for the pad being edited */
+                const char *fam = inputPadSourceFamilyName(s_padSeat, nm);
+                if (fam) show = fam;
+            }
+            snprintf(out, n, "%s: %s", kSlotName[r->bindSlot], show);
         }
         return;
     }
@@ -2221,6 +2463,10 @@ Gfx *optionsOverlayEmit(void)
      * follow GE's watch options (options.c's Bank Gothic/0xA0FFA0F0).
      * No dossier paper, gold, 3D watch model or new assets. */
     gdl = fillRect(gdl, 0, 0, W, H, 0, 0, 0, 150);
+    /* D335b/D472: the dim stays full-window; the card + text are drawn under
+     * the centre aspect mode so native widescreen shows an undistorted,
+     * centred 4:3 panel (no emission at <= 4:3: byte-identical there). */
+    PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_CENTER);
     gdl = fillRect(gdl, o.left, o.top, o.right, o.bottom,
                    5, 17, 13, 225);
     gdl = fillRect(gdl, o.left + 8, o.top + 25, o.right - 8, o.top + 26,
@@ -2284,7 +2530,9 @@ Gfx *optionsOverlayEmit(void)
     for (int p = s_scroll; p <= pLast; p++) {
         const struct Row *r = &rows[s_visIdx[p]];
         s32 rowY = o.contentY + (p - s_scroll) * OV_LINE;
+        int expRow = strstr(r->label, "EXPERIMENTAL") != NULL;   /* D472: red ink */
         u32 ink = !r->found ? 0x498053ff :
+                  expRow ? (p == s_sel ? 0xff8a80ff : 0xd05a50ff) :
                   p == s_sel ? 0xa0ffa0ff : 0x66ca77ff;
         char val[48];
         if (s_section < 0) {
@@ -2316,7 +2564,7 @@ Gfx *optionsOverlayEmit(void)
         } else {
             u32 valueInk = (strncmp(val, "ON", 2) == 0 ||
                             (isArmRow(r) && strcmp(val, "Confirm") == 0))
-                           ? 0xa0ffa0ff : ink;
+                           ? (expRow ? 0xff8a80ff : 0xa0ffa0ff) : ink;
             gdl = drawBodyR(gdl, o.valueR, rowY, val, valueInk);
         }
     }
@@ -2324,19 +2572,25 @@ Gfx *optionsOverlayEmit(void)
      * started after CONTROLS: and ran under / beyond the right edge. Reserve
      * two lines in overlayLayout so the footer never covers the last row. */
     const char *help1, *help2;
-    if (optionsBindingCaptureActive()) {
+    if (optionsBindingCaptureActive() && s_padCapMode) {
+        help1 = "PRESS PAD BUTTON  HOLD {B}=BIND {B}";
+        help2 = "TAP {B}/ESC CANCEL  HOLD {BACK} CLEAR";
+    } else if (optionsBindingCaptureActive()) {
         help1 = "PRESS KEY/MOUSE 1-5";
-        help2 = "B/ESC CANCEL   DEL CLEAR";
+        help2 = "{B}/ESC CANCEL   DEL CLEAR";
     } else if (s_section < 0) {
-        help1 = "A/ENTER SELECT";
-        help2 = "B/F10 CLOSE";
+        help1 = "{A}/ENTER SELECT";
+        help2 = "{B}/F10 CLOSE";
+    } else if (!strcmp(rows[s_section].key, "__HdrController")) {
+        help1 = "{A} BIND  LEFT/RIGHT SLOT  {Y} CLEAR";
+        help2 = "{B}/ESC BACK   F10 CLOSE";
     } else if (!strcmp(rows[s_section].key, "__HdrMoveKeys") ||
                !strcmp(rows[s_section].key, "__HdrActionKeys")) {
         help1 = "KEY/MOUSE ONLY   LEFT/RIGHT SLOT";
-        help2 = "ENTER BIND   B/ESC BACK";
+        help2 = "ENTER BIND   {B}/ESC BACK";
     } else {
-        help1 = "A SELECT   LEFT/RIGHT CHANGE";
-        help2 = "B/ESC BACK   F10 CLOSE";
+        help1 = "{A} SELECT   LEFT/RIGHT CHANGE";
+        help2 = "{B}/ESC BACK   F10 CLOSE";
     }
     s32 helpX = o.left + 16 + metaWidth("CONTROLS:");
     s32 helpRight = o.right - 10;
@@ -2363,6 +2617,32 @@ Gfx *optionsOverlayEmit(void)
         }
     }
     gdl = drawMeta(gdl, o.left + 11, o.footerY, "CONTROLS:", 0xa6baaaff);
+    {   /* D471: pad button names for the menu pad's family (Xbox = old text) */
+        static char h1buf[80], h2buf[80];
+        inputPadHelpFmt(h1buf, sizeof(h1buf), help1);
+        inputPadHelpFmt(h2buf, sizeof(h2buf), help2);
+        /* Long PlayStation names must not run past the card: fall back to
+         * the Xbox letters for a line that would overflow. */
+        {
+            /* Too wide: first compact "LEFT/RIGHT" to "L/R", then fall back
+             * to the Xbox letters, so a line never runs past the card. */
+            const char *tm[2] = { help1, help2 };
+            char *bf[2] = { h1buf, h2buf };
+            s32 av[2] = { helpRight - helpX, helpRight - (o.left + 16) };
+            for (int L = 0; L < 2; L++) {
+                if (bodyWidth(bf[L]) <= av[L]) continue;
+                char compact[80]; size_t o2 = 0;
+                for (const char *p = tm[L]; *p && o2 + 1 < sizeof(compact); ) {
+                    if (!strncmp(p, "LEFT/RIGHT", 10)) { memcpy(compact + o2, "L/R", 3); o2 += 3; p += 10; }
+                    else compact[o2++] = *p++;
+                }
+                compact[o2] = 0;
+                inputPadHelpFmt(bf[L], 80, compact);
+                if (bodyWidth(bf[L]) > av[L]) inputPadHelpFmtFam(bf[L], 80, tm[L], 0);
+            }
+        }
+        help1 = h1buf; help2 = h2buf;
+    }
     gdl = drawBody(gdl, helpX, o.footerY, help1, 0x829e91ff);
     gdl = drawBody(gdl, o.left + 16, o.footerY + OV_FOOTER_LINE,
                    help2, 0x829e91ff);
@@ -2371,6 +2651,13 @@ Gfx *optionsOverlayEmit(void)
                         s_scroll > (s_section >= 0 ? 1 : 0) ? "^ v" : "v",
                         0x80d58bff);
 
+    if (s_section < 0 && configUnknownKeyCount() > 0) {   /* D472: non-blocking ini warning */
+        char w[64];
+        snprintf(w, sizeof(w), "%d UNKNOWN INI KEY%s - SEE LOG", configUnknownKeyCount(),
+                 configUnknownKeyCount() == 1 ? "" : "S");
+        gdl = drawBodyR(gdl, o.right - 28, o.top + 8, w, 0xe0b050ff);
+    }
+    PORT_HUD_ASPECT(gdl, GE_HUD_ASPECT_NONE);
     gDPPipeSync(gdl++);
     gSPEndDisplayList(gdl++);
 
@@ -2429,7 +2716,13 @@ int optionsRowIsSlider(int i)
 int optionsRowIsBind(int i)
 {
     struct Row *r = rowAt(i);
-    return r && r->kind == ROW_BIND;
+    return r && (r->kind == ROW_BIND || r->kind == ROW_PADBIND);
+}
+
+int optionsRowIsPadBind(int i)
+{
+    struct Row *r = rowAt(i);
+    return r && r->kind == ROW_PADBIND;
 }
 
 void optionsRowBeginBind(int i)

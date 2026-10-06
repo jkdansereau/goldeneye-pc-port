@@ -2670,20 +2670,6 @@ s32 chrTick(PropRecord *prop)
 
                 if (headSwitchVisible)
                 {
-#ifdef PORT
-                    /* D466: gameplay timestamp -- authored-distance verdict only. */
-                    if (gpVisible)
-                    {
-                        if (chr->actiontype == ACT_PATROL)
-                        {
-                            chr->act_patrol.lastvisible60 = g_GlobalTimer;
-                        }
-                        else if (chr->actiontype == ACT_GOPOS)
-                        {
-                            chr->act_gopos.unk9c = g_GlobalTimer;
-                        }
-                    }
-#else
                     if (chr->actiontype == ACT_PATROL)
                     {
                         chr->act_patrol.lastvisible60 = g_GlobalTimer;
@@ -2692,7 +2678,6 @@ s32 chrTick(PropRecord *prop)
                     {
                         chr->act_gopos.unk9c = g_GlobalTimer;
                     }
-#endif
                 }
             }
         }

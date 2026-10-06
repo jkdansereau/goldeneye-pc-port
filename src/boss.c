@@ -832,8 +832,16 @@ void bossMainloop(void)
                                 indycommHostSendDump(taskGrabBuffer, (u8*)0x80000000, 0x400000);
                             }
 
+#ifdef PORT
+                            /* D441 (census TOP-10 item 8): the reply message is a stack
+                             * local; routing its address through the s32 rspReplyMsg
+                             * truncates a 64-bit pointer (latent while the main thread's
+                             * stack sits below 2 GiB). Pass the pointer itself. */
+                            rspGfxTaskStart(firstGdl, gdl, 0, (OSMesg)&localGfxDoneMsg);
+#else
                             rspReplyMsg = (s32)(&localGfxDoneMsg);
                             rspGfxTaskStart(firstGdl, gdl, 0, (s32*)rspReplyMsg);
+#endif
 
                             pendingGfx++;
                             memaSingleDefragPass();

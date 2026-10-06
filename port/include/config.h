@@ -17,6 +17,8 @@ extern "C" {
 
 /* Load the config file (no-op if it doesn't exist yet). */
 void configLoad(void);
+int  configUnknownKeyCount(void);          /* D472: unknown ini keys in the last load */
+const char *configUnknownKeyFirst(void);   /* D472: first such dotted key */
 /* Save the current values back to the config file. */
 void configSave(void);
 

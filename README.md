@@ -183,7 +183,7 @@ items, and which ones are waiting on a decision, lives in one place:
 - **PAL and JP ROM support**. NTSC-U is the only supported region today.
 - The remaining small accuracy differences (audio timbre, a few cosmetic
   rendering details).
-- **macOS/ARM builds** and controller-button rebinding.
+- **macOS/ARM builds**.
 - **Ongoing security/fidelity review**: a review pass after each release to keep
   the [security policy](.github/SECURITY.md) and the known-issues list current,
   moving the mechanical parts (dependency/secret scanning) toward automation.
@@ -356,9 +356,11 @@ click crouch). The watch gadget cycle selects the next owned gadget in the
 N64 inventory. The controller layout matches Rare's Xbox 1.1 (Jinx) button
 roles (user-tested on a physical pad; D394), and the remaining Xbox schemes
 (1.2 Christmas, 1.3 Frost, 1.4 Elektra) are planned as selectable presets
-and not yet available. Keyboard → Bindings edits **keyboard/mouse only**; a
-controller can navigate those pages and use B to go back, but
-controller-button rebinding is not supported yet.
+and not yet available. Keyboard → Bindings edits **keyboard/mouse only**.
+Controller buttons are rebindable per controller under *Input → Controller*
+(F10 overlay or the front-end PC Options): pick *Custom* and bind each
+action by pressing a pad button (tap B or Back to cancel, hold Back to
+clear, hold B to bind B). Menus always keep A/X accept and B/Y cancel.
 
 Mouse sensitivity, Y-inversion and the aim/turn split are tunable in the
 F10 overlay (*Keyboard → Sensitivity*) or the `[Input]` section of

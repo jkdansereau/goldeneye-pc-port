@@ -382,17 +382,311 @@ static struct player *slotPlayer(void)
  * and hung the game in bondinvCycleForward after a respawn). Match play
  * routes use/reload through the native B button instead, and reads/writes
  * the slot player's fields directly. */
-static int padBPrev[MAX_PADS];          /* B/Y edges; track through menus too */
-static int padYPrev[MAX_PADS];
-static int padAPrev[MAX_PADS];          /* D416: slots 1+ use/reload edges */
-static int padXPrev[MAX_PADS];
-static int padSelectPrev = 0;           /* Select (BACK) edge: overlay toggle */
+static int padTriggerPct;               /* defined (with its default) further down */
+static u32 padActPrev[MAX_PADS];        /* D469: per-slot previous action-held bitset (edges track through menus too) */
+static int padSelectPrev[MAX_PADS];     /* Select (BACK) edge per pad (D472: was one shared flag) */
+static int s_ovOwner = -1;              /* D472: pad that opened the F10 overlay (-1 = keyboard/none) */
+
+/* D472: the pad that drives the F10 overlay: the opener while it is attached,
+ * else the lowest attached pad (keyboard-opened, or the owner detached), else 0. */
+int inputOverlayOwnerPad(void)
+{
+    if (s_ovOwner >= 0 && s_ovOwner < MAX_PADS && pads[s_ovOwner]) return s_ovOwner;
+    for (int i = 0; i < MAX_PADS; i++)
+        if (pads[i]) return i;
+    return 0;
+}
+
+/* ------------------------------------------------------------------------
+ * D469: data-driven gamepad action table + presets + per-seat rebinding.
+ *
+ * Sources are SDL controller buttons plus the two analog triggers treated as
+ * digital (padTriggerPct). Each action is bound to up to two sources, written
+ * in the ini as SDL names joined by a comma ("a,x", "righttrigger", "none").
+ * Input.PadPreset: 0 = Jinx 1.1 (the pre-D469 hard-wired mapping; default),
+ * 1/2 = Jinx 1.2/1.3 (NOT defined by D394: reserved, resolve to 1.1),
+ * 3 = Custom (the per-seat Input.Pad.* strings). Seat 0 keys are
+ * Input.Pad.<Action>; seats 1..3 are Input.Pad2/3/4.<Action>. Seat = pads[]
+ * index (D448), not the controller slot.
+ *
+ * Not rebindable (menu lockout guard): menu accept/cancel (A,X -> native A;
+ * B,Y -> native B outside a playable stage), D-pad -> N64 D-pad, sticks,
+ * Back (opens the overlay). Start is forced back to `start` if a Custom table
+ * leaves it unbound. Threading: the poll thread reads an immutable published
+ * table (atomic pointer) rebuilt into a spare buffer only when the config
+ * signature changes; no strtok.
+ * ------------------------------------------------------------------------ */
+enum { PS_A, PS_B, PS_X, PS_Y, PS_LB, PS_RB, PS_LS, PS_RS, PS_START,
+       PS_DUP, PS_DDOWN, PS_DLEFT, PS_DRIGHT, PS_LT, PS_RT, PS_COUNT };
+#define PSM(s)        (1u << (s))
+#define PS_TRIGGERS   (PSM(PS_LT) | PSM(PS_RT))
+static const struct { const char *name; int btn; } kPadSrc[PS_COUNT] = {
+    [PS_A] = { "a", SDL_CONTROLLER_BUTTON_A },
+    [PS_B] = { "b", SDL_CONTROLLER_BUTTON_B },
+    [PS_X] = { "x", SDL_CONTROLLER_BUTTON_X },
+    [PS_Y] = { "y", SDL_CONTROLLER_BUTTON_Y },
+    [PS_LB] = { "leftshoulder", SDL_CONTROLLER_BUTTON_LEFTSHOULDER },
+    [PS_RB] = { "rightshoulder", SDL_CONTROLLER_BUTTON_RIGHTSHOULDER },
+    [PS_LS] = { "leftstick", SDL_CONTROLLER_BUTTON_LEFTSTICK },
+    [PS_RS] = { "rightstick", SDL_CONTROLLER_BUTTON_RIGHTSTICK },
+    [PS_START] = { "start", SDL_CONTROLLER_BUTTON_START },
+    [PS_DUP] = { "dpup", SDL_CONTROLLER_BUTTON_DPAD_UP },
+    [PS_DDOWN] = { "dpdown", SDL_CONTROLLER_BUTTON_DPAD_DOWN },
+    [PS_DLEFT] = { "dpleft", SDL_CONTROLLER_BUTTON_DPAD_LEFT },
+    [PS_DRIGHT] = { "dpright", SDL_CONTROLLER_BUTTON_DPAD_RIGHT },
+    [PS_LT] = { "lefttrigger", -1 },
+    [PS_RT] = { "righttrigger", -1 },
+};
+
+enum { PA_FIRE, PA_AIM, PA_USE, PA_RELOAD, PA_CROUCH, PA_NEXTWPN, PA_PREVWPN,
+       PA_GADGET, PA_START, PA_COUNT };
+/* Jinx 1.1 (D394) = def. Fire/Aim analog triggers act in any state; every
+ * digital source only acts while a stage is playable (facePlayable). */
+static const struct { const char *key; const char *label; const char *def; } kPadAct[PA_COUNT] = {
+    [PA_FIRE]    = { "Fire",       "Fire",             "righttrigger" },
+    [PA_AIM]     = { "Aim",        "Aim",              "lefttrigger,leftshoulder" },
+    [PA_USE]     = { "Use",        "Use / action",     "a" },
+    [PA_RELOAD]  = { "Reload",     "Reload",           "x" },
+    [PA_CROUCH]  = { "Crouch",     "Crouch",           "leftstick,rightstick" },
+    [PA_NEXTWPN] = { "NextWeapon", "Next weapon",      "y" },
+    [PA_PREVWPN] = { "PrevWeapon", "Previous weapon",  "none" },
+    [PA_GADGET]  = { "Gadget",     "Cycle gadget",     "b" },
+    [PA_START]   = { "Start",      "Start / pause",    "start" },
+};
+
+typedef struct { u32 mask[PA_COUNT]; } PadBinds;
+typedef struct { PadBinds seat[MAX_PADS]; } PadTable;
+
+static int  padPreset = 0;                       /* Input.PadPreset */
+static char padStr[MAX_PADS][PA_COUNT][32];      /* Input.Pad[N].<Action> */
+static char padStrKey[MAX_PADS][PA_COUNT][40];
+static PadTable padTabBuf[2];
+static SDL_atomic_t padTabPub;                   /* published PadTable* */
+static unsigned padTabSig = 0;
+static int padTabValid = 0;
+
+/* Parse "a,x" / "none" into a source mask (no strtok). *bad counts unknown names. */
+static u32 padParseMask(const char *s, int *bad)
+{
+    u32 m = 0;
+    while (s && *s) {
+        while (*s == ' ' || *s == ',') s++;
+        const char *e = s;
+        while (*e && *e != ',' && *e != ' ') e++;
+        size_t n = (size_t)(e - s);
+        if (n) {
+            int hit = 0;
+            for (int i = 0; i < PS_COUNT; i++)
+                if (strlen(kPadSrc[i].name) == n && !SDL_strncasecmp(s, kPadSrc[i].name, n)) {
+                    m |= PSM(i);
+                    hit = 1;
+                    break;
+                }
+            if (!hit && !(n == 4 && !SDL_strncasecmp(s, "none", 4)) && bad) (*bad)++;
+        }
+        s = e;
+    }
+    return m;
+}
+
+static void padBuildBinds(PadBinds *b, int seat, int custom, int *bad)
+{
+    for (int a = 0; a < PA_COUNT; a++)
+        b->mask[a] = padParseMask(custom ? padStr[seat][a] : kPadAct[a].def, bad);
+    if (!b->mask[PA_START]) b->mask[PA_START] = PSM(PS_START);   /* lockout guard: keep a pause path */
+}
+
+static int padPresetCustom(void) { return padPreset >= 3; }
+
+/* Signature of everything the table depends on (preset only unless Custom). */
+static unsigned padComputeSig(void)
+{
+    unsigned h = 2166136261u ^ (unsigned)padPreset;
+    if (padPresetCustom())
+        for (int s = 0; s < MAX_PADS; s++)
+            for (int a = 0; a < PA_COUNT; a++)
+                for (const char *p = padStr[s][a]; *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
+    return h;
+}
+
+/* Poll thread: rebuild into the spare buffer and publish atomically. */
+static const PadTable *padTabGet(void)
+{
+    static SDL_SpinLock rebuildLock;   /* callers on several threads (poll, overlay, UI) */
+    unsigned sig = padComputeSig();
+    if (!padTabValid || sig != padTabSig) {
+        SDL_AtomicLock(&rebuildLock);
+        if (padTabValid && padComputeSig() == padTabSig) {   /* another thread just rebuilt */
+            SDL_AtomicUnlock(&rebuildLock);
+            return (const PadTable *)SDL_AtomicGetPtr((void **)&padTabPub);
+        }
+        PadTable *cur = (PadTable *)SDL_AtomicGetPtr((void **)&padTabPub);
+        PadTable *spare = (cur == &padTabBuf[0]) ? &padTabBuf[1] : &padTabBuf[0];
+        int bad = 0;
+        for (int s = 0; s < MAX_PADS; s++) padBuildBinds(&spare->seat[s], s, padPresetCustom(), &bad);
+        SDL_AtomicSetPtr((void **)&padTabPub, spare);
+        padTabSig = sig;
+        padTabValid = 1;
+        sysLogPrintf(LOG_INFO, "input: pad table rebuilt (preset %d%s%s, %d unknown name(s))",
+                     padPreset, padPresetCustom() ? " custom" : "",
+                     padPreset == 1 || padPreset == 2 ? " [1.2/1.3 undefined -> 1.1]" : "", bad);
+        SDL_AtomicUnlock(&rebuildLock);
+        return spare;
+    }
+    return (const PadTable *)SDL_AtomicGetPtr((void **)&padTabPub);
+}
+
+/* Current raw source state of a pad (digital buttons + triggers). */
+static u32 padReadRaw(SDL_GameController *pad)
+{
+    u32 raw = 0;
+    if (!pad) return 0;
+    for (int i = 0; i < PS_LT; i++)
+        if (SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)kPadSrc[i].btn)) raw |= PSM(i);
+    int trigPt = padTriggerPct * 327;   /* % of the 0..32767 trigger travel */
+    if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > trigPt) raw |= PSM(PS_LT);
+    if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > trigPt) raw |= PSM(PS_RT);
+    return raw;
+}
+
+static u32 padActHeld(const PadBinds *b, u32 raw)
+{
+    u32 h = 0;
+    for (int a = 0; a < PA_COUNT; a++)
+        if (raw & b->mask[a]) h |= 1u << a;
+    return h;
+}
+
+typedef struct { int facePlayable; int slotNative; int southpaw; } PadMapCtx;
+typedef struct { unsigned button; int crouch; int gadgetEdge; u32 actHeld; } PadMapOut;
+
+/* The pure mapping: raw source bits + bindings + previous action state ->
+ * N64 button mask / crouch / gadget edge. buttonIn is whatever the keyboard
+ * / stick code already put in the mask (the southpaw swap acts on it exactly
+ * as the pre-D469 inline code did). No SDL, no game state: GE_PADMAPTEST. */
+static void padMapPure(const PadBinds *b, u32 raw, u32 actPrev, unsigned buttonIn,
+                       const PadMapCtx *c, PadMapOut *o)
+{
+    unsigned button = buttonIn;
+    u32 held = padActHeld(b, raw);
+    if (raw & b->mask[PA_FIRE] & PS_TRIGGERS) button |= GE_CONT_G;
+    if (raw & b->mask[PA_AIM] & PS_TRIGGERS)  button |= GE_CONT_R;
+    if (c->southpaw) {   /* Wave A: swap fire/grenade after the raw trigger edges */
+        unsigned t = button;
+        button = (t & ~(GE_CONT_G | GE_CONT_R))
+               | ((t & GE_CONT_G) ? GE_CONT_R : 0)
+               | ((t & GE_CONT_R) ? GE_CONT_G : 0);
+    }
+    o->crouch = 0;
+    o->gadgetEdge = 0;
+    u32 edge = held & ~actPrev;
+    if (c->facePlayable) {
+        if (held & (1u << PA_CROUCH)) o->crouch = 1;
+        if (c->slotNative && (edge & ((1u << PA_USE) | (1u << PA_RELOAD)))) button |= GE_CONT_B;
+        if (edge & (1u << PA_GADGET)) o->gadgetEdge = 1;
+        if (edge & (1u << PA_NEXTWPN)) button |= GE_CONT_A;
+        if (edge & (1u << PA_PREVWPN)) button |= GE_CONT_A | GE_CONT_G;   /* same backward-cycle idiom as the mouse wheel */
+        if (raw & b->mask[PA_AIM] & ~PS_TRIGGERS)  button |= GE_CONT_R;   /* digital sources (LB aim): playable only, after the swap */
+        if (raw & b->mask[PA_FIRE] & ~PS_TRIGGERS) button |= GE_CONT_G;
+    } else {
+        if (raw & (PSM(PS_A) | PSM(PS_X))) button |= GE_CONT_A;   /* menu lockout guard: fixed native accept/cancel */
+        if (raw & (PSM(PS_B) | PSM(PS_Y))) button |= GE_CONT_B;
+    }
+    if (held & (1u << PA_START)) button |= GE_CONT_START;
+    if (raw & PSM(PS_DUP))    button |= GE_CONT_UP;
+    if (raw & PSM(PS_DDOWN))  button |= GE_CONT_DOWN;
+    if (raw & PSM(PS_DLEFT))  button |= GE_CONT_LEFT;
+    if (raw & PSM(PS_DRIGHT)) button |= GE_CONT_RIGHT;
+    o->button = button;
+    o->actHeld = held;
+}
+
+/* Legacy reference: the pre-D469 inline pad block, transcribed verbatim from
+ * release/v0.4.1 (input.c, trigger/face-button section) onto raw source bits.
+ * Used ONLY by GE_PADMAPTEST to prove preset 0 is byte-identical. */
+static void padMapLegacy(u32 raw, u32 prevA, u32 prevB, u32 prevX, u32 prevY, unsigned buttonIn,
+                         const PadMapCtx *c, PadMapOut *o)
+{
+    unsigned button = buttonIn;
+    int crouchNow = 0, gadget = 0;
+    if (raw & PSM(PS_RT)) button |= GE_CONT_G;
+    if (raw & PSM(PS_LT)) button |= GE_CONT_R;
+    if (c->southpaw) {
+        int t = button;
+        button = (t & ~(GE_CONT_G | GE_CONT_R))
+               | ((t & GE_CONT_G) ? GE_CONT_R : 0)
+               | ((t & GE_CONT_R) ? GE_CONT_G : 0);
+    }
+    int padA = !!(raw & PSM(PS_A)), padX = !!(raw & PSM(PS_X));
+    int padB = !!(raw & PSM(PS_B)), padY = !!(raw & PSM(PS_Y));
+    if (c->facePlayable) {
+        if ((raw & PSM(PS_LS)) || (raw & PSM(PS_RS))) crouchNow = 1;
+        if (c->slotNative) {
+            if ((padA && !prevA) || (padX && !prevX)) button |= GE_CONT_B;
+        }
+        if (padB && !prevB) gadget = 1;
+        if (padY && !prevY) button |= GE_CONT_A;
+    } else {
+        if (padA || padX) button |= GE_CONT_A;
+        if (padB || padY) button |= GE_CONT_B;
+    }
+    if (c->facePlayable && (raw & PSM(PS_LB))) button |= GE_CONT_R;
+    if (raw & PSM(PS_START)) button |= GE_CONT_START;
+    if (raw & PSM(PS_DUP))    button |= GE_CONT_UP;
+    if (raw & PSM(PS_DDOWN))  button |= GE_CONT_DOWN;
+    if (raw & PSM(PS_DLEFT))  button |= GE_CONT_LEFT;
+    if (raw & PSM(PS_DRIGHT)) button |= GE_CONT_RIGHT;
+    o->button = button;
+    o->crouch = crouchNow;
+    o->gadgetEdge = gadget;
+    o->actHeld = 0;
+}
+
+/* Seat that feeds controller slot idx (pads[] index; D448/D416). */
+static int padSeatForSlot(int idx)
+{
+    if (idx < 0) idx = 0;
+    if (idx >= MAX_PADS) idx = MAX_PADS - 1;
+    if (inputMpSplit() && inputMpKbmP1() && idx > 0) return idx - 1;
+    return idx;
+}
 
 /* D401: per-pad haptics (N64 Rumble Pak -> SDL_GameControllerRumble).
  * padRumbleOn is detected when the pad opens (inputOpenPads); gRumbleScale
  * is the single global Input.RumbleScale config value (0 = silent,
  * 1 = full), applied to every pad. */
 static int padRumbleOn[MAX_PADS];
+
+/* D471: controller family per seat, for button NAMES in the PC menus (no
+ * glyphs). Detected once when a pad is seated; 0 = Xbox-style (default,
+ * also Steam Deck / unknown), 1 = PlayStation, 2 = Nintendo. SDL's default
+ * GAMECONTROLLER_USE_BUTTON_LABELS=1 means BUTTON_A is the button printed
+ * "A" on a Nintendo pad, so only shoulders/triggers/Back/Start differ there. */
+enum { PADFAM_XBOX = 0, PADFAM_PS = 1, PADFAM_NINTENDO = 2 };
+static u8 padFamily[MAX_PADS];
+
+static void padDetectFamily(int seat)
+{
+    padFamily[seat] = PADFAM_XBOX;
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+    switch (SDL_GameControllerGetType(pads[seat])) {
+    case SDL_CONTROLLER_TYPE_PS3:
+    case SDL_CONTROLLER_TYPE_PS4:
+#if SDL_VERSION_ATLEAST(2, 0, 14)
+    case SDL_CONTROLLER_TYPE_PS5:
+#endif
+        padFamily[seat] = PADFAM_PS; break;
+    case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_PRO:
+#if SDL_VERSION_ATLEAST(2, 24, 0)
+    case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
+    case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
+    case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
+#endif
+        padFamily[seat] = PADFAM_NINTENDO; break;
+    default: break;
+    }
+#endif
+}
 static float gRumbleScale = 0.5f;
 
 static int mouseEnabled   = 1;
@@ -764,10 +1058,14 @@ static void inputOpenPads(void)
         if (pads[s] && !SDL_GameControllerGetAttached(pads[s])) {
             sysLogPrintf(LOG_NOTE, "input: seat %d pad detached%s", s,
                          inMatch ? " (seat kept for the match)" : "");
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+            SDL_GameControllerSetPlayerIndex(pads[s], -1);   /* D471: LED off */
+#endif
             SDL_GameControllerClose(pads[s]);
             pads[s] = NULL;
             padInst[s] = -1;
             padRumbleOn[s] = 0;
+            padFamily[s] = PADFAM_XBOX;
             if (inMatch) s_seatCompactOwed = 1;
         }
     }
@@ -781,6 +1079,7 @@ static void inputOpenPads(void)
                 pads[d] = pads[s];           pads[s] = NULL;
                 padInst[d] = padInst[s];     padInst[s] = -1;
                 padRumbleOn[d] = padRumbleOn[s]; padRumbleOn[s] = 0;
+                padFamily[d] = padFamily[s]; padFamily[s] = PADFAM_XBOX;   /* D471 */
                 sysLogPrintf(LOG_NOTE, "input: pad '%s' moved seat %d -> %d",
                              SDL_GameControllerName(pads[d]), s, d);
             }
@@ -809,6 +1108,7 @@ static void inputOpenPads(void)
         if (pads[seat]) {
             padInst[seat] = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[seat]));
             padDetectRumble(seat);
+            padDetectFamily(seat);   /* D471 */
             sysLogPrintf(LOG_NOTE, "input: opened gamepad %d '%s' as seat %d (rumble %s)",
                          i, SDL_GameControllerName(pads[seat]), seat, padRumbleOn[seat] ? "yes" : "no");
         }
@@ -831,6 +1131,13 @@ static void inputOpenPads(void)
         /* keyboard/mouse is controller 0; seat s is controller s + 1 */
         connectedMask = (0x1 | (seatMask << 1)) & ((1 << MAX_PADS) - 1);
     }
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+    /* D471 (PD-port parity): the pad's player LED shows its player number;
+     * seat s is player s + 1 when keyboard/mouse is P1. Re-applied on every
+     * (re)scan, so compaction and MP-mode changes pick it up. */
+    for (int s = 0; s < MAX_PADS; ++s)
+        if (pads[s]) SDL_GameControllerSetPlayerIndex(pads[s], s + (inputMpKbmP1() ? 1 : 0));
+#endif
     {   /* D416 test harness: GE_MPVIRT=<n> reports n extra idle controllers
          * (1..3) so the MP menu unlocks and a 2P+ stage loads with no pads. */
         const char *v = getenv("GE_MPVIRT");
@@ -1114,6 +1421,7 @@ static void pcOptionsKeyboardPad(const Uint8 *ks, Uint32 mb, int blocked,
 static int bindsVersion = 0; /* D380/D386: versioned migration of effective ini binds */
 static int crouchMode = 0;   /* 0 = hold, 1 = toggle (latched crouch input) */
 
+static void padMapSelfTest(void);
 int inputInit(void)
 {
     if (!SDL_WasInit(SDL_INIT_GAMECONTROLLER)) {
@@ -1165,6 +1473,8 @@ int inputInit(void)
 
     applyCursorVisibility();   /* hide the OS cursor if we start focused */
     inputApplyMouseRequests(); /* inputInit runs on the host thread */
+
+    if (GE_ENVFLAG("GE_PADMAPTEST")) padMapSelfTest();   /* D469 */
 
     sysLogPrintf(LOG_INFO, "input: ready (mask=0x%x, %d controller(s), aimSpeed=%d)",
                  connectedMask, numControllers, mouseAimSpeed);
@@ -1741,24 +2051,40 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
      * (neutral pad, no stick) and the nav keys / wheel / gamepad drive the
      * overlay instead. Mirrors the WI-1 "cursor free in a stage -> withhold
      * input" pattern. Controllers 1-3 are untouched. */
+    if (idx == 0 && !optionsOverlayIsOpen()) s_ovOwner = -1;   /* D472: ownership lasts one open */
+
+    /* D472: a non-zero owner pad is swallowed too (neutral) while the overlay
+     * is open; pad 0 below still hosts the overlay tick. */
+    if (idx != 0 && optionsOverlayIsOpen() && idx == inputOverlayOwnerPad()) {
+        padActPrev[idx] = pads[idx] ? padActHeld(&padTabGet()->seat[padSeatForSlot(idx)], padReadRaw(pads[idx])) : 0;
+        if (stick_x) *stick_x = 0;
+        if (stick_y) *stick_y = 0;
+        return 0;
+    }
+
     if (idx == 0 && optionsOverlayIsOpen()) {
         const Uint8 *overlayKs = SDL_GetKeyboardState(NULL);
-        s_useHeldPrev = actHeld(overlayKs, IA_CANCEL) ||
-            (pads[0] && SDL_GameControllerGetButton(pads[0], SDL_CONTROLLER_BUTTON_A));
-        s_reloadHeldPrev = actHeld(overlayKs, IA_RELOAD) ||
-            (pads[0] && SDL_GameControllerGetButton(pads[0], SDL_CONTROLLER_BUTTON_X));
+        /* D469: pad use/reload/edge state follows the bound actions, not fixed A/X/B/Y */
+        u32 ovHeld = pads[0] ? padActHeld(&padTabGet()->seat[0], padReadRaw(pads[0])) : 0;
+        s_useHeldPrev = actHeld(overlayKs, IA_CANCEL) || (ovHeld & (1u << PA_USE));
+        s_reloadHeldPrev = actHeld(overlayKs, IA_RELOAD) || (ovHeld & (1u << PA_RELOAD));
         s_crouchLatch = 0;
         s_crouchHeldPrev = 0;
         inputDropCrouch();
-        padBPrev[0] = pads[0] ? SDL_GameControllerGetButton(pads[0], SDL_CONTROLLER_BUTTON_B) : 0;
-        padYPrev[0] = pads[0] ? SDL_GameControllerGetButton(pads[0], SDL_CONTROLLER_BUTTON_Y) : 0;
-        /* Select closes the overlay. padSelectPrev is tracked on this path
-         * and the open path below alike, so a button held across the
-         * transition cannot immediately re-toggle it. */
-        int selNow = pads[0] ? SDL_GameControllerGetButton(pads[0],
-                                                           SDL_CONTROLLER_BUTTON_BACK) : 0;
-        if (selNow && !padSelectPrev) optionsOverlayToggle();
-        padSelectPrev = selNow;
+        padActPrev[0] = ovHeld;
+        /* D472: the OWNER pad's Select closes the overlay; every pad's edge is
+         * tracked here and on the open path alike, so a button held across
+         * the transition cannot immediately re-toggle it. */
+        {
+            int own = inputOverlayOwnerPad();
+            int closeNow = 0;
+            for (int i = 0; i < MAX_PADS; i++) {
+                int selNow = pads[i] ? SDL_GameControllerGetButton(pads[i], SDL_CONTROLLER_BUTTON_BACK) : 0;
+                if (i == own && selNow && !padSelectPrev[i]) closeNow = 1;
+                padSelectPrev[i] = selNow;
+            }
+            if (closeNow) optionsOverlayToggle();
+        }
         optionsOverlayHandleInput();
         if (stick_x) *stick_x = 0;
         if (stick_y) *stick_y = 0;
@@ -1925,8 +2251,9 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
          * combined edges prevent a held input from repeatedly using a door.
          * In menus/watch/tank the pad keeps native accept/cancel buttons. */
         SDL_GameController *slot0Pad = slotPad(0);
-        int padUse = slot0Pad && SDL_GameControllerGetButton(slot0Pad, SDL_CONTROLLER_BUTTON_A);
-        int padReload = slot0Pad && SDL_GameControllerGetButton(slot0Pad, SDL_CONTROLLER_BUTTON_X);
+        u32 slot0Held = slot0Pad ? padActHeld(&padTabGet()->seat[padSeatForSlot(0)], padReadRaw(slot0Pad)) : 0;
+        int padUse = (slot0Held & (1u << PA_USE)) != 0;       /* D469: bound actions (Jinx 1.1: A / X) */
+        int padReload = (slot0Held & (1u << PA_RELOAD)) != 0;
         int useNow = scriptIsActive(0) ? scriptSlots[0].use : (actHeld(ks, IA_CANCEL) || padUse);
         int reloadNow = scriptIsActive(0) ? scriptSlots[0].reload : (actHeld(ks, IA_RELOAD) || padReload);
         int playable = inputCanUseGameplayActions(menuMode);
@@ -2404,61 +2731,24 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
             if (ry < -RSTICK_THRESHOLD) button |= GE_CONT_E;
         }
 
-        int trigPt = padTriggerPct * 327;   /* % of the 0..32767 trigger travel */
-        if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > trigPt)
-            button |= GE_CONT_G;
-        if (SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > trigPt)
-            button |= GE_CONT_R;
-        /* Wave A: southpaw swaps the fire (G) and grenade (R) trigger actions
-         * (right<->left trigger), after the raw edges above are captured. */
-        if (padSouthpaw) {
-            int t = button;
-            button = (t & ~(GE_CONT_G | GE_CONT_R))
-                   | ((t & GE_CONT_G) ? GE_CONT_R : 0)
-                   | ((t & GE_CONT_R) ? GE_CONT_G : 0);
+        /* D469: triggers/faces/shoulders/Start/D-pad via the data-driven
+         * action table (preset 0 == the pre-D469 mapping: RT fire, LT/LB aim,
+         * A use, X reload, B gadget, Y next weapon, stick clicks crouch,
+         * Start; menus keep native A/X accept + B/Y cancel). Xbox 1.1
+         * Jinx-style; RB's remaster HD toggle is unavailable. */
+        {
+            PadMapCtx pc;
+            PadMapOut po;
+            pc.facePlayable = (idx == 0 || inputMpSplit()) && inputCanUseGameplayActions(padMenuMode);
+            pc.slotNative = (idx > 0 || inputMpPadsOwnP1());
+            pc.southpaw = padSouthpaw;
+            const PadBinds *pb = &padTabGet()->seat[padSeatForSlot(idx)];
+            padMapPure(pb, padReadRaw(pad), padActPrev[idx], button, &pc, &po);
+            button = po.button;
+            if (po.crouch) crouchNow = 1;
+            if (po.gadgetEdge) inputCycleGadget();
+            padActPrev[idx] = po.actHeld;
         }
-
-        /* Xbox 1.1 Jinx-style gameplay: A=use, X=reload (handled by the
-         * keyboard action gate), B=gadgets, Y=weapons, stick clicks=crouch,
-         * LB=aim. RB's remaster HD toggle is unavailable in the N64 port.
-         * Menus/watch/tank retain native accept/cancel mappings. */
-        int padA = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A);
-        int padX = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X);
-        int padB = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B);
-        int padY = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y);
-        int facePlayable = (idx == 0 || inputMpSplit()) && inputCanUseGameplayActions(padMenuMode);
-        if (facePlayable) {
-            if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSTICK) ||
-                SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSTICK))
-                crouchNow = 1;
-            if (idx > 0 || inputMpPadsOwnP1()) {
-                /* Slots 1+ (and a pad-owned P1) have no keyboard block: pad A / X = the native B
-                 * button on the press edge (use, reload when nothing to use). */
-                if ((padA && !padAPrev[idx]) || (padX && !padXPrev[idx]))
-                    button |= GE_CONT_B;
-            }
-            if (padB && !padBPrev[idx]) inputCycleGadget();
-            if (padY && !padYPrev[idx]) button |= GE_CONT_A;
-        } else {
-            if (padA || padX) button |= GE_CONT_A;
-            if (padB || padY) button |= GE_CONT_B;
-        }
-        padBPrev[idx] = padB;
-        padYPrev[idx] = padY;
-        padAPrev[idx] = padA;
-        padXPrev[idx] = padX;
-        if (facePlayable && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER))
-            button |= GE_CONT_R;
-        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_START))
-            button |= GE_CONT_START;
-        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_UP))
-            button |= GE_CONT_UP;
-        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN))
-            button |= GE_CONT_DOWN;
-        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT))
-            button |= GE_CONT_LEFT;
-        if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT))
-            button |= GE_CONT_RIGHT;
 
         /* Select (BACK) opens the F10 options overlay -- the gamepad
          * equivalent of the F10 key for controller-only machines (Steam
@@ -2466,8 +2756,12 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
         {
             int selNow = SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_BACK);
             /* D343: not on the PC options screen (one options UI at a time). */
-            if (selNow && !padSelectPrev && !frontOptionsBlocksOverlay()) optionsOverlayToggle();
-            padSelectPrev = selNow;
+            /* D472: only opens here (closing is the owner's, in the overlay path) */
+            if (selNow && !padSelectPrev[idx] && !frontOptionsBlocksOverlay() && !optionsOverlayIsOpen()) {
+                s_ovOwner = idx;
+                optionsOverlayToggle();
+            }
+            padSelectPrev[idx] = selNow;
         }
     }
 
@@ -2645,6 +2939,73 @@ int inputReleaseCapture(void)
  * stage) would persist and the mouse UI would be unusable. Force the cursor
  * free + visible every poll; the normal reconcile resumes once the overlay
  * closes and the early-return no longer fires. */
+/* D471: family of a seat's pad (GE_PADFAMILY=xbox|ps|nintendo overrides,
+ * a cached dev knob for headless screenshots). */
+int inputPadFamily(int seat)
+{
+    static int ov = -2;
+    if (ov == -2) {
+        const char *e = getenv("GE_PADFAMILY");
+        ov = !e ? -1 : !SDL_strcasecmp(e, "ps") ? PADFAM_PS
+           : !SDL_strcasecmp(e, "nintendo") ? PADFAM_NINTENDO
+           : !SDL_strcasecmp(e, "xbox") ? PADFAM_XBOX : -1;
+    }
+    if (ov >= 0) return ov;
+    return (seat >= 0 && seat < MAX_PADS && pads[seat]) ? padFamily[seat] : PADFAM_XBOX;
+}
+
+/* D471: expand {A} {B} {X} {Y} {BACK} {START} in a menu help template with
+ * the names of the menu pad's family (seat 0, which drives the menus). Xbox
+ * expands to exactly the old text. */
+void inputPadHelpFmtFam(char *out, size_t n, const char *tmpl, int fam)
+{
+    static const char *const names[3][6] = {
+        { "A", "B", "X", "Y", "BACK", "START" },
+        { "CROSS", "CIRCLE", "SQUARE", "TRIANGLE", "SHARE", "OPTIONS" },
+        { "A", "B", "X", "Y", "MINUS", "PLUS" },
+    };
+    static const char *const keys[6] = { "{A}", "{B}", "{X}", "{Y}", "{BACK}", "{START}" };
+    if (fam < 0 || fam > 2) fam = PADFAM_XBOX;
+    size_t o = 0;
+    if (n == 0) return;
+    while (*tmpl && o + 1 < n) {
+        int hit = -1;
+        if (*tmpl == '{')
+            for (int k = 0; k < 6; k++)
+                if (!strncmp(tmpl, keys[k], strlen(keys[k]))) { hit = k; break; }
+        if (hit >= 0) {
+            for (const char *p = names[fam][hit]; *p && o + 1 < n; p++) out[o++] = *p;
+            tmpl += strlen(keys[hit]);
+        } else {
+            out[o++] = *tmpl++;
+        }
+    }
+    out[o] = 0;
+}
+
+void inputPadHelpFmt(char *out, size_t n, const char *tmpl)
+{
+    inputPadHelpFmtFam(out, n, tmpl, inputPadFamily(optionsOverlayIsOpen() ? inputOverlayOwnerPad() : 0));  /* D472 */
+}
+
+/* D471: display name for a binding source token (kPadSrc names) on a seat's
+ * pad family; NULL = keep the caller's existing Xbox-style text. */
+const char *inputPadSourceFamilyName(int seat, const char *src)
+{
+    static const struct { const char *src, *ps, *nin; } t[] = {
+        { "a", "Cross", NULL }, { "b", "Circle", NULL }, { "x", "Square", NULL }, { "y", "Triangle", NULL },
+        { "start", "Options", "Plus" },
+        { "leftshoulder", "L1", "L" }, { "rightshoulder", "R1", "R" },
+        { "lefttrigger", "L2", "ZL" }, { "righttrigger", "R2", "ZR" },
+        { "leftstick", "L3", NULL }, { "rightstick", "R3", NULL },
+    };
+    int fam = inputPadFamily(seat);
+    if (fam == PADFAM_XBOX) return NULL;
+    for (size_t k = 0; k < sizeof(t) / sizeof(t[0]); k++)
+        if (!strcmp(src, t[k].src)) return fam == PADFAM_PS ? t[k].ps : t[k].nin;
+    return NULL;
+}
+
 int inputPadButton(int idx, SDL_GameControllerButton b)
 {
     if (idx < 0 || idx >= MAX_PADS || !pads[idx]) return 0;
@@ -3120,8 +3481,205 @@ int portMouseAimPdGetTurn(f32 *tx, f32 *ty)
     return 1;
 }
 
+/* ------------------------------------------------------------------------
+ * D469: UI-facing pad binding API (F10 overlay + front-end PC Options) and
+ * the GE_PADMAPTEST self-test.
+ * ------------------------------------------------------------------------ */
+int inputPadActionCount(void) { return PA_COUNT; }
+const char *inputPadActionLabel(int act) { return (act >= 0 && act < PA_COUNT) ? kPadAct[act].label : ""; }
+int inputPadSourceCount(void) { return PS_COUNT; }
+const char *inputPadSourceName(int src) { return (src >= 0 && src < PS_COUNT) ? kPadSrc[src].name : "none"; }
+int inputPadActionForKey(const char *key)
+{
+    char want[48];
+    for (int a = 0; a < PA_COUNT; a++) {
+        snprintf(want, sizeof(want), "Input.Pad.%s", kPadAct[a].key);
+        if (key && !strcmp(key, want)) return a;
+    }
+    return -1;
+}
+int inputPadSeatPresent(int seat) { return seat >= 0 && seat < MAX_PADS && pads[seat] != NULL; }
+unsigned inputPadHeldSources(int seat)
+{
+    return (seat >= 0 && seat < MAX_PADS) ? padReadRaw(pads[seat]) : 0;
+}
+int inputPadPresetStep(int cur, int dir)
+{
+    (void)dir;   /* only Jinx 1.1 (0) and Custom (3) are defined; 1/2 are reserved (D394 does not define 1.2/1.3) */
+    return cur == 0 ? 3 : 0;
+}
+
+/* "a,x" -> src[0]=A, src[1]=X; empty/none/unknown -> -1 (positional). */
+static void padSlotSources(const char *s, int src[INPUT_BIND_SLOTS])
+{
+    src[0] = src[1] = -1;
+    for (int slot = 0; slot < INPUT_BIND_SLOTS && s; slot++) {
+        const char *e = strchr(s, ',');
+        size_t n = e ? (size_t)(e - s) : strlen(s);
+        for (int i = 0; i < PS_COUNT; i++)
+            if (strlen(kPadSrc[i].name) == n && !SDL_strncasecmp(s, kPadSrc[i].name, n)) { src[slot] = i; break; }
+        s = e ? e + 1 : NULL;
+    }
+}
+
+void inputPadBindingText(int seat, int act, int slot, char *out, int n)
+{
+    int src[INPUT_BIND_SLOTS];
+    if (seat < 0 || seat >= MAX_PADS || act < 0 || act >= PA_COUNT || slot < 0 || slot >= INPUT_BIND_SLOTS) {
+        snprintf(out, n, "none");
+        return;
+    }
+    padSlotSources(padStr[seat][act], src);
+    snprintf(out, n, "%s", src[slot] >= 0 ? kPadSrc[src[slot]].name : "none");
+}
+
+/* src < 0 clears the slot. Returns 1 on success. Writes the seat's Input.Pad*
+ * string (the poll thread notices the signature change and republishes). */
+int inputPadBindingSet(int seat, int act, int slot, int src)
+{
+    int t[INPUT_BIND_SLOTS];
+    if (seat < 0 || seat >= MAX_PADS || act < 0 || act >= PA_COUNT ||
+        slot < 0 || slot >= INPUT_BIND_SLOTS || src >= PS_COUNT) return 0;
+    padSlotSources(padStr[seat][act], t);
+    t[slot] = src < 0 ? -1 : src;
+    char buf[sizeof(padStr[0][0])];
+    snprintf(buf, sizeof(buf), "%s", t[0] >= 0 ? kPadSrc[t[0]].name : "none");
+    if (t[1] >= 0) {
+        size_t l = strlen(buf);
+        snprintf(buf + l, sizeof(buf) - l, ",%s", kPadSrc[t[1]].name);
+    }
+    snprintf(padStr[seat][act], sizeof(padStr[seat][act]), "%s", buf);
+    return 1;
+}
+
+/* Reset one action to the Jinx 1.1 default on every seat. Returns seats changed. */
+int inputPadBindingReset(int act)
+{
+    int n = 0;
+    if (act < 0 || act >= PA_COUNT) return 0;
+    for (int s = 0; s < MAX_PADS; s++) {
+        if (strcmp(padStr[s][act], kPadAct[act].def)) n++;
+        snprintf(padStr[s][act], sizeof(padStr[s][act]), "%s", kPadAct[act].def);
+    }
+    return n;
+}
+
+/* GE_PADMAPTEST=1: boot-time proof (logs, then the game continues).
+ *  1. preset 0 == the pre-D469 mapping, exhaustively (every raw source
+ *     combination x prev A/B/X/Y x facePlayable/slotNative/southpaw x 5
+ *     incoming masks);
+ *  2. a per-source table for preset 0 (menu and playable);
+ *  3. Custom remap moves the action; seats are independent; Start guard;
+ *  4. published-table path (padTabGet) honours the preset/strings.
+ * Config values are restored afterwards so nothing is persisted. */
+static void padMapSelfTest(void)
+{
+    int fail = 0;
+    PadBinds p0;
+    int bad = 0;
+    padBuildBinds(&p0, 0, 0, &bad);
+    static const unsigned kIn[5] = { 0, GE_CONT_G, GE_CONT_R, GE_CONT_G | GE_CONT_R, 0xffffu };
+    long compared = 0, mism = 0;
+    for (u32 raw = 0; raw < (1u << PS_COUNT); raw++)
+        for (u32 pv = 0; pv < 16; pv++) {
+            u32 prevRaw = (pv & 1 ? PSM(PS_A) : 0) | (pv & 2 ? PSM(PS_B) : 0) |
+                          (pv & 4 ? PSM(PS_X) : 0) | (pv & 8 ? PSM(PS_Y) : 0);
+            for (int cx = 0; cx < 8; cx++) {
+                PadMapCtx c = { cx & 1, (cx >> 1) & 1, (cx >> 2) & 1 };
+                for (int k = 0; k < 5; k++) {
+                    PadMapOut a, b;
+                    padMapPure(&p0, raw, padActHeld(&p0, prevRaw), kIn[k], &c, &a);
+                    padMapLegacy(raw, prevRaw & PSM(PS_A), prevRaw & PSM(PS_B), prevRaw & PSM(PS_X),
+                                 prevRaw & PSM(PS_Y), kIn[k], &c, &b);
+                    compared++;
+                    if (a.button != b.button || a.crouch != b.crouch || a.gadgetEdge != b.gadgetEdge) {
+                        if (mism++ < 5)
+                            sysLogPrintf(LOG_ERROR, "GE_PADMAPTEST MISMATCH raw=%04x prev=%x ctx=%d in=%04x new=%04x/%d/%d old=%04x/%d/%d",
+                                         raw, pv, cx, kIn[k], a.button, a.crouch, a.gadgetEdge,
+                                         b.button, b.crouch, b.gadgetEdge);
+                    }
+                }
+            }
+        }
+    sysLogPrintf(mism ? LOG_ERROR : LOG_INFO, "GE_PADMAPTEST: preset0 == legacy: %ld cases compared, %ld mismatches", compared, mism);
+    fail += mism != 0;
+
+    for (int s = 0; s < PS_COUNT; s++)
+        for (int play = 0; play < 2; play++) {
+            PadMapCtx c = { play, 0, 0 };
+            PadMapOut a;
+            padMapPure(&p0, PSM(s), 0, 0, &c, &a);
+            sysLogPrintf(LOG_INFO, "GE_PADMAPTEST: preset0 %-13s %-8s -> mask=%04x crouch=%d gadget=%d",
+                         kPadSrc[s].name, play ? "playable" : "menu", a.button, a.crouch, a.gadgetEdge);
+        }
+
+    /* Custom: seat 0 Fire := a, seat 1 untouched, seat 2 Use := y. */
+    int savedPreset = padPreset;
+    char saved[MAX_PADS][PA_COUNT][32];
+    memcpy(saved, padStr, sizeof(saved));
+    padPreset = 3;
+    snprintf(padStr[0][PA_FIRE], sizeof(padStr[0][0]), "a");
+    snprintf(padStr[2][PA_USE], sizeof(padStr[0][0]), "y,none");
+    snprintf(padStr[2][PA_NEXTWPN], sizeof(padStr[0][0]), "none");
+    snprintf(padStr[3][PA_START], sizeof(padStr[0][0]), "none");
+    const PadTable *t = padTabGet();
+    PadMapCtx play = { 1, 0, 0 };
+    PadMapOut o;
+    padMapPure(&t->seat[0], PSM(PS_A), 0, 0, &play, &o);
+    int c1 = (o.button & GE_CONT_G) != 0;
+    padMapPure(&t->seat[0], PSM(PS_RT), 0, 0, &play, &o);
+    int c2 = (o.button & GE_CONT_G) == 0;
+    padMapPure(&t->seat[1], PSM(PS_RT), 0, 0, &play, &o);
+    int c3 = (o.button & GE_CONT_G) != 0;       /* seat 1 still default */
+    padMapPure(&t->seat[1], PSM(PS_A), 0, 0, &play, &o);
+    int c4 = (o.button & GE_CONT_G) == 0;
+    PadMapCtx nat = { 1, 1, 0 };
+    padMapPure(&t->seat[2], PSM(PS_Y), 0, 0, &nat, &o);
+    int c5 = (o.button & GE_CONT_B) != 0 && !(o.button & GE_CONT_A);   /* Y is Use on seat 2 */
+    padMapPure(&t->seat[1], PSM(PS_Y), 0, 0, &nat, &o);
+    int c6 = (o.button & GE_CONT_A) != 0;       /* seat 1: Y still next weapon */
+    padMapPure(&t->seat[3], PSM(PS_START), 0, 0, &play, &o);
+    int c7 = (o.button & GE_CONT_START) != 0;   /* Start guard re-forces start */
+    sysLogPrintf(LOG_INFO, "GE_PADMAPTEST: custom: seat0 Fire=a moves(%d) RT-off(%d); seat1 independent RT(%d) A-off(%d); seat2 Use=y(%d); seat1 Y=next(%d); start guard(%d)",
+                 c1, c2, c3, c4, c5, c6, c7);
+    fail += !(c1 && c2 && c3 && c4 && c5 && c6 && c7);
+    /* Preset != Custom ignores the strings. */
+    padPreset = 0;
+    t = padTabGet();
+    padMapPure(&t->seat[0], PSM(PS_RT), 0, 0, &play, &o);
+    int c8 = (o.button & GE_CONT_G) != 0;
+    padMapPure(&t->seat[0], PSM(PS_A), 0, 0, &play, &o);
+    int c9 = (o.button & GE_CONT_G) == 0;
+    sysLogPrintf(LOG_INFO, "GE_PADMAPTEST: preset0 ignores Input.Pad.* (RT fire %d, A not fire %d)", c8, c9);
+    fail += !(c8 && c9);
+    /* binding API round trip */
+    inputPadBindingSet(1, PA_FIRE, 1, PS_RB);
+    char tx[32], ty[32];
+    inputPadBindingText(1, PA_FIRE, 0, tx, sizeof(tx));
+    inputPadBindingText(1, PA_FIRE, 1, ty, sizeof(ty));
+    int c10 = !strcmp(tx, "righttrigger") && !strcmp(ty, "rightshoulder") && !strcmp(padStr[1][PA_FIRE], "righttrigger,rightshoulder");
+    inputPadBindingSet(1, PA_FIRE, 0, -1);
+    inputPadBindingText(1, PA_FIRE, 0, tx, sizeof(tx));
+    int c11 = !strcmp(tx, "none") && !strcmp(padStr[1][PA_FIRE], "none,rightshoulder");
+    sysLogPrintf(LOG_INFO, "GE_PADMAPTEST: binding API round trip (%d) clear keeps slot (%d) [%s]", c10, c11, padStr[1][PA_FIRE]);
+    fail += !(c10 && c11);
+
+    memcpy(padStr, saved, sizeof(saved));
+    padPreset = savedPreset;
+    padTabValid = 0;
+    sysLogPrintf(fail ? LOG_ERROR : LOG_INFO, "GE_PADMAPTEST: %s", fail ? "FAIL" : "PASS");
+}
+
 PD_CONSTRUCTOR static void inputConfigInit(void)
 {
+    configRegisterInt("Input.PadPreset", &padPreset, 0, 3);   /* D469: 0 Jinx 1.1, 1/2 reserved (= 1.1), 3 Custom */
+    for (int seat = 0; seat < MAX_PADS; seat++)
+        for (int a = 0; a < PA_COUNT; a++) {
+            if (seat == 0) snprintf(padStrKey[seat][a], sizeof(padStrKey[seat][a]), "Input.Pad.%s", kPadAct[a].key);
+            else           snprintf(padStrKey[seat][a], sizeof(padStrKey[seat][a]), "Input.Pad%d.%s", seat + 1, kPadAct[a].key);
+            snprintf(padStr[seat][a], sizeof(padStr[seat][a]), "%s", kPadAct[a].def);
+            configRegisterString(padStrKey[seat][a], padStr[seat][a], sizeof(padStr[seat][a]));
+        }
     configRegisterInt("Input.MPMode", &mpInputMode, 0, 2);   /* D416: 0 Auto, 1 PadsOnly, 2 KbmP1 */
     configRegisterInt("Input.MouseEnabled", &mouseEnabled, 0, 1);
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);

@@ -31,6 +31,7 @@
 #include "input.h"
 #include "optionsoverlay.h"
 #include "frontoptions.h"
+#include "audio.h"
 
 #include "../fast3d/gfx_api.h"
 #include "../fast3d/gfx_sdl.h"
@@ -1061,6 +1062,10 @@ void videoPumpEvents(void)
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
+        case SDL_AUDIODEVICEREMOVED:
+            /* D470: an open output device vanished; audio.c falls back to default. */
+            if (!ev.adevice.iscapture) audioNotifyDeviceRemoved(ev.adevice.which);
+            break;
         case SDL_QUIT:
             videoRequestQuit("quit event");
             break;
