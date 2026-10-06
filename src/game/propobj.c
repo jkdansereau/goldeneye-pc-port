@@ -9682,7 +9682,12 @@ void objHit(ShotData *shotdata, BulletHit *hit)
             }
             else
             {
+#ifdef PORT
+                /* D434: raw byte 0 of the PORT image_entry is dataoffset's low byte, not the hit type. */
+                impact_sounds = g_HitTypeSounds[g_Textures[texturenum].hitTexture];
+#else
                 impact_sounds = g_HitTypeSounds[((u8 *)&g_Textures[texturenum])[0] & 0x0f];
+#endif
             }
 
             thing2_index = randomGetNext() % impact_sounds->thing2_len;

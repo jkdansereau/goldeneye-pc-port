@@ -7,6 +7,7 @@
 #include <fr.h>
 #include <memp.h>
 #include "bg.h"
+#include "lightfixture.h"
 #include "bondview.h"
 #include "chr.h"
 #include "debug_camera.h"
@@ -3603,7 +3604,8 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                         else
                         {
                             #ifdef PORT
-                            texnum = -1;  /* D154: KSEG0 texnum deref invalid for converted GDLs (cf. D135) */
+                            /* D154: KSEG0 texnum deref invalid for converted GDLs (cf. D135). D431 (#119): light fixtures are the one texture class the game acts on, so recover their image id from the fixture table. */
+                            texnum = lightFixtureTexnumForGfx(gdl, roomnum);
 #else
                             temp.word = ((u32 *) tcmd)[1] - 8;
                             texnum = *((u16 *) (temp.word | 0x80000000));
@@ -3788,7 +3790,8 @@ bool bgTestRayIntersectionInRoom(coord3d *from, coord3d *to, coord3d *dir, RoomV
                                 else
                                 {
                                     #ifdef PORT
-                                    texnum = -1;  /* D154: KSEG0 texnum deref invalid for converted GDLs (cf. D135) */
+                                    /* D154: KSEG0 texnum deref invalid for converted GDLs (cf. D135). D431 (#119): light fixtures are the one texture class the game acts on, so recover their image id from the fixture table. */
+                                    texnum = lightFixtureTexnumForGfx(gdl, roomnum);
 #else
                                     temp.word = ((u32 *) tcmd)[1] - 8;
                                     texnum = *((u16 *) (temp.word | 0x80000000));

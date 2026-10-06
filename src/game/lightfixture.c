@@ -141,6 +141,39 @@ void lightFixtureEntryEnd(Gfx *DL)
 }
 
 
+#ifdef PORT
+/* D431 (#119): tex.c calls this right after lightFixtureEntryBegin() with the
+ * fixture texture's image id. */
+void lightFixtureSetTexnum(s32 texnum)
+{
+    if (current_light_fixture_slot != LIGHTFIXTURE_TABLE_MAX)
+    {
+        light_fixture_table[current_light_fixture_slot].RESERVED = (s16) texnum;
+    }
+}
+
+/* Returns the light texture's image id when `gfx` lies in a fixture entry of
+ * `room_index`, else -1. Same room/range test lightFixtureBreak uses. */
+s32 lightFixtureTexnumForGfx(Gfx *gfx, s32 room_index)
+{
+    s32 i;
+
+    for (i = 0; i < LIGHTFIXTURE_TABLE_MAX; i++)
+    {
+        /* room_index 0 marks a FREE slot whose DL range may still dangle into a
+         * freed room (see clear_light_fixturetable_in_room); never match it. */
+        if (light_fixture_table[i].room_index == 0) { continue; }
+        if (room_index != light_fixture_table[i].room_index) { continue; }
+        if (gfx < light_fixture_table[i].ptr_start_pertinent_DL) { continue; }
+        if (gfx >= light_fixture_table[i].ptr_end_pertinent_DL) { continue; }
+        return light_fixture_table[i].RESERVED;
+    }
+
+    return -1;
+}
+#endif
+
+
 bool check_if_imageID_is_light(s32 imageID)
 {
     if ((imageID == IMAGE_WALL_LAMP)     ||
@@ -195,6 +228,49 @@ Vtx *lightFindVertexBaseForTri(Gfx *gfx, s32 room_index)
 
 void extract_vertex_indices_from_triangle(Gfx* gfx, u32 tri_type, s32* idx1, s32* idx2, s32* idx3)
 {
+#ifdef PORT
+    /* D430 (#119): this is an unported N64 GBI parser -- raw ((u8*)gfx)[k] /
+     * ((u32*)gfx)[i] / gfx->tri.tri.v[] indexing assumes the 8-byte N64 Gfx, but
+     * the room DL is the 16-byte PC Gfx (D85 bgWidenRoomGdl). Same class + fix as
+     * D154 (bg.c bgTestBulletHitBackground): recover the two N64 32-bit words from
+     * the low dwords of words.w0/.w1. On PC every read returned garbage (all-zero
+     * indices), so a shot fixture darkened vertex 0 of its batch instead of its own
+     * vertices. Semantics otherwise unchanged (no vtxoff, as on the N64).
+     * tri_type 0 = G_TRI1; 1..4 = the four triangles of a G_TRI4. */
+    {
+        const u32 gw0 = (u32) gfx->words.w0;
+        const u32 gw1 = (u32) gfx->words.w1;
+        switch (tri_type)
+        {
+        case 0:
+            *idx1 = (s32)((gw1 >> 16) & 0xff) / 10;
+            *idx2 = (s32)((gw1 >>  8) & 0xff) / 10;
+            *idx3 = (s32)( gw1        & 0xff) / 10;
+            break;
+        case 1:
+            *idx1 =  gw1        & 0xf;
+            *idx2 = (gw1 >>  4) & 0xf;
+            *idx3 =  gw0        & 0xf;
+            break;
+        case 2:
+            *idx1 = (gw1 >>  8) & 0xf;
+            *idx2 = (gw1 >> 12) & 0xf;
+            *idx3 = (gw0 >>  4) & 0xf;
+            break;
+        case 3:
+            *idx1 = (gw1 >> 16) & 0xf;
+            *idx2 = (gw1 >> 20) & 0xf;
+            *idx3 = (gw0 >>  8) & 0xf;
+            break;
+        case 4:
+            *idx1 = (gw1 >> 24) & 0xf;
+            *idx2 = (gw1 >> 28) & 0xf;
+            *idx3 = (gw0 >> 12) & 0xf;
+            break;
+        }
+        return;
+    }
+#endif
     switch (tri_type) 
     {
         case 0:

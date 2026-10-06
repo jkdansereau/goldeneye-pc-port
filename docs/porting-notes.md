@@ -1346,6 +1346,10 @@ darkening from a nonzero `ENV_ALPHA` LERP factor is very likely faithful
 (possibly authored/original-dev-intentional tinting), not a bug — do not
 "fix" it without an N64/1964-GEPD reference screenshot proving otherwise.
 
+## D17. Un-stubbing a `-1` sentinel re-activates every dormant consumer of the value (D431/D434)
+
+A port stub that forces a value to `-1` (D154 `texnum`, D135) can hide latent layout bugs in its other readers. When restoring a real value, grep ALL readers of the field first and check each for raw-layout reads and table-bounds assumptions. Instance: D431 made light-fixture hits return real image ids, which reached `chrprop.c`/`propobj.c` reading `((u8*)&g_Textures[n])[0] & 0xf` as a hit type -- on PC byte 0 is the low byte of `dataoffset` (LE bitfield layout, D67), so it indexed `g_HitTypeSounds[13]` with 0..15. Use the `.hitTexture`/`.hitSound` bitfields (as `chr.c` does).
+
 ## E. Process / method notes
 
 - **Never `exit()` while another thread may be inside the GL driver (D344).**

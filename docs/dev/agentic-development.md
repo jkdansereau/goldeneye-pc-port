@@ -283,8 +283,6 @@ Honest notes, for anyone weighing whether this transfers.
   to Opus 5. Each tier earned its place on the problems the tier below it
   couldn't close.
 
-**Still outstanding** (the v0.3.0 known-issues list): cosmetic rendering
-defects (particle colours, Surface 1 billboard trees, front-end logos, water
-seam), stretched-not-native widescreen, PAL/JP support, a controller
-rebinding UI, and macOS/ARM builds. See the README's Status section and
-[`GRAPHICS-BACKLOG.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/GRAPHICS-BACKLOG.md).
+**Still outstanding:** see
+[`docs/ROADMAP.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/ROADMAP.md),
+the single tracker for open work.

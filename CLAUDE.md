@@ -16,6 +16,8 @@ Context is scarce. Load by tier; do not blind-read whole files.
   `docs/HANDOFF.md` (current state + next task + environment — a rolling
   local working file; may be absent in a fresh clone, in which case read
   the README "Status" section instead) — read fully;
+  `docs/ROADMAP.md` (the single tracker of open work — read the section
+  relevant to the task);
   `docs/porting-notes.md` (recurring bug classes) — skim the section
   headers, read the classes relevant to the task.
 - **Tier 2 — on demand only, do NOT read start-to-finish:**

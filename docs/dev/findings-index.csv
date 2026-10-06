@@ -13,7 +13,7 @@ D159,FIXED,"front-end wallet-Bond photo ""interlaced""/combed (RC1 / D149) —",
 D161,FIXED,Depot (-level_30) ceiling = bright-blue speckle + radial rays (B2).,FIXED (port/fast3d/gfx_pc.cpp)
 D165 · D166,FIXED,"Input-layer polish (M-31, port-only):",FIXED
 D180 · D181,FIXED,Native-PC input pass (QoL run):,FIXED (2026-09-26 bookkeeping:
-D186,OPEN,"Video.FpsCap throttles the sim, not just presentation (M-39 diag, M-42 clamp).","OPEN (2026-09-26, user direction:"
+D186,CLOSED,"Video.FpsCap throttles the sim, not just presentation (M-39 diag, M-42 clamp).",CLOSED (2026-09-28 bookkeeping:
 D187,FIXED,"HUD ammo-type/weapon icon vanished at -O2 (M-46 root-cause, M-47 fix + verify).","FIXED (src/game/gunfire.c, #ifdef AVOID_UB); PR #19"
 D188,FIXED,Linux -O2 boot crash:,"FIXED (src/libultrare/libc/xprintf.c, src/sprintf.c, #ifdef PORT); PR #22"
 D189,FIXED,Linux -fstack-protector aborts on the decomp's latent stack-buffer overruns (M-48) —,"FIXED (CMakeLists.txt, src/game/stan.c #ifdef PORT); PR #23"
@@ -31,7 +31,7 @@ D192,CLOSED,Front-end mission/level-select grid pointer still can't reach the ou
 D221,FIXED,SELECT FILE mouse hit-box offset —,"FIXED (M-91) — explicit {min,max} coord2d pairs under #ifdef PORT; human mouse-playtest confirmed."
 D222,FIXED,High Video.FovScale breaks culling —,"FIXED, awaiting visual verification (M-121)."
 D223,FIXED,QoL ask: mouse-wheel weapon cycling should be directional like a normal PC shooter —,"FIXED (M-105, port/src/input.c) —…"
-D224,PARTIAL,"QoL gap (M-87, from a PD-PC-port survey):","LANDED via D401 (2026-09-27, re-promoted from DEPRIORITIZED)."
+D224,CLOSED,"QoL gap (M-87, from a PD-PC-port survey):",CLOSED (2026-09-28 bookkeeping:
 D225,FIXED,"Dev-tooling QoL (M-87, user ask):","FIXED (2026-09-18) — GE_DEBUG_UNLOCKALL=1 short-circuits fileGetIsCheatUnlocked() (src/game/file2.c, #ifdef PORT, cached getenv) to always return TRUE; default off, no save mutation."
 D226,FIXED,"QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.","FIXED (2026-09-24): Game.HudScale 75–150% (user-verified, capped at 150) via fast3d G_HUDSCALE_EXT rect scaling about per-element anchors; dialogue/bottom messages width-capped."
 D227,FIXED,Sky renders as two independently-moving halves —,"FIXED (M-100b, PR #43) —"
@@ -47,7 +47,7 @@ D203,CLOSED,"Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle:",CLOSED �
 D201,FIXED,"src/libultra/audio/bnkf.c bank/instrument/sound/wavetable relocation offsets were s32, truncating the real 64-bit base pointer.",FIXED (src/libultra/audio/bnkf.c) —
 D202,FIXED,"Silenced PPK ""slap"" + broader real-time mixer corruption (M-52→M-67).","FIXED (2026-09-26, user by-ear:"
 D206,FIXED,PC played every SFX one bank slot too high —,"FIXED (M-76, src/snd.c:1001, #ifdef PORT) —"
-D207,FIXED,"Alarm klaxon starves combat SFX and doesn't recover after it stops (surfaced by D206, M-77).",MONITORING — user 2026-09-26:
+D207,CLOSED,"Alarm klaxon starves combat SFX and doesn't recover after it stops (surfaced by D206, M-77).",CLOSED (2026-09-28 bookkeeping:
 D208,FIXED,Player weapon-fire sound goes permanently silent mid-firefight (all other SFX unaffected) —,FIXED + user playtest-verified (M-78d) —
 D209,FIXED,Every AI character in the game is locked to a *walk* animation regardless of the speed the ailist commands —,FIXED + user-playtest-verified (M-81).
 D210,FIXED,chrToPatrol() leaves act_patrol.lastvisible60 uninitialised on PC —,"FIXED (chraction.c:3872, #ifdef PORT → self->act_patrol.lastvisible60 = -1;, N64 line under #else).…"
@@ -57,12 +57,12 @@ D168,FIXED,GE_PCDUMP / F12 PPM captures were vertically flipped —,FIXED (port/
 D169,FIXED,Front-end mouse pointer can't reach the outer cells of the mission/level-select grid —,"FIXED (M-33, port/src/input.c, port-only, no #ifdef PORT)."
 D178,FIXED,Pre-mission briefing screen:,FIXED (M-36) — high confidence
 D175,CLOSED,In-game stutter / brief hang during normal play —,"CLOSED (v0.4.0 campaign sign-off 2026-09-28, user:"
-D176,FIXED,"Surface exterior renders wrong (-level_36), two independent defects.","(a) scroll-speed FIXED (fidelity pass; HIGH confidence on root cause, MODERATE on N64 parity); M-93 playtest + M-98 Defect-2 starburst screenshot in the sections."
+D176,FIXED,"Surface exterior renders wrong (-level_36), two independent defects.",FIXED (2026-09-29 bookkeeping:
 D177,FIXED,Ladders non-functional —,FIXED (M-36) — high confidence; interactive climb test owed
 D172,FIXED,"Bullet-impact / blood / spark particles render magenta or cyan instead of dark red (M-82, ROOT CAUSE FOUND + FIXED).",FIXED (port/fast3d/gfx_pc.cpp gfx_lod_tile_offset)…
 D174,CLOSED,"""No blood effect"" (user QA report).","CLOSED — faithful (2026-09-26, user side-by-side on 1964:"
 D183,CLOSED,"M-36 Family A (""texture line/pitch shear"") is DISPROVEN for the Surface repro (-level_36).","CLOSED (2026-09-26, user-approved:"
-D173,FIXED,Third-person Bond model spawns too high —,"MOSTLY FIXED as a side effect of D243 (2026-09-18, user-confirmed)."
+D173,PARTIAL,Third-person Bond model spawns too high —,PARTIAL (2026-09-29 bookkeeping:
 D179,FIXED,Packaged build crashes after the logos —,"Diagnosed, not fixed —"
 D180,FIXED,"Native-PC input pass (M-XX QoL run, qol/native-pc-input-menu, port-only).",FIXED (2026-09-26 bookkeeping:
 D181,FIXED,Game.ScreenShakeIntensity —,FIXED (2026-09-26 bookkeeping:
@@ -74,13 +74,13 @@ D214,FIXED,"Keyboard rebinding — [Input.Bind] config section (M-83, port-only,
 D215,FIXED,1P weapon viewmodel never drew in-level —,"FIXED (src/game/gunfire.c, #ifdef PORT)."
 D216,FIXED,"Game.SkipIntro — boot straight to the file-select menu (M-83, port + one #ifdef PORT game-code line, PD parity, Phase 4 quick win).",FIXED (2026-09-26 bookkeeping:
 D217,FIXED,1P weapon viewmodel + 3P Bond model textures garbled —,FIXED + merged (PR #47 + PR #49); white residual split out as D228.
-D218,FIXED,Wide FOV exposes the per-level draw-distance / fog boundary —,FIXED (2026-09-26 reclassified:
+D218,FIXED,Wide FOV exposes the per-level draw-distance / fog boundary —,FIXED (2026-09-26 reclassified; 2026-09-29 default corrected:
 D219,RESOLVED,"PPK explosions render purple on Dam (M-87, user QA, ""not 3D but noting"").","RESOLVED (M-115, 2026-09-12) for the original PPK-purple symptom."
 D220,CLOSED,"1P muzzle flash position shifts upward at higher Video.FovScale (M-87, user QA, Jungle/M16).","CLOSED — merged into D303 (2026-09-26, user:"
 D85,CLOSED,Room primary/secondary DL → texLoadFromGdl garbage.,"CLOSED (2026-09-26, user-approved:"
 D86 · D87,RESOLVED,modelInitRwData truncated ptr · attract-demo BE ramromfilestructure.,resolved
 D88.4,RESOLVED,propDefs polymorphic record stream not byteswapped → setupDoor crash.,resolved (d88_propdefs.py); layout audit M-20 → D132
-D132,PROPOSED,D88 propDefs layout audit (M-20):,proposed fix (not applied) —
+D132,CLOSED,D88 propDefs layout audit (M-20):,CLOSED (2026-09-28 bookkeeping:
 D157,FIXED,"Campaign never unlocks the next level (M-30, user bug —","FIXED (src/bondtypes.h, #ifdef PORT —…"
 D160,FIXED,Dam level-end cutscene (Bond off the dam / bungee) never plays —,"FIXED (user, 2026-09-26:"
 D89-D92,RESOLVED,"stage-load→frame: stan zero-fill overrun, portal address trunc, chr/AI spawn ptrs",resolved
@@ -88,13 +88,13 @@ D93-D102,RESOLVED,struct-pun / hardcoded-size pass:,resolved (D95 pool bump part
 D103-D107,RESOLVED,"BUNKER1 viewport height, depth-buffer clear (G_CLEAR_DEPTH_EXT), portal near-plane, LOD mip tile",resolved
 D108-D112,RESOLVED,skeletal models: d43_emit.py put_f32 byte-reversal bug,resolved
 D113-D116,FIXED,portal BFS ok · matrix chain ok · player raw-offset audit + gunfire.c THROW* · HUD text X-mirror,"D114/D116 CLOSED — NOT A BUG (M-33, see D168):"
-D117,OPEN,"Frame nondeterminism root-caused; GE_DETERM attempted, not achieved.","OPEN (mode attempted, not achieved)"
+D117,CLOSED,"Frame nondeterminism root-caused; GE_DETERM attempted, not achieved.",CLOSED (2026-09-28 bookkeeping:
 D118,RESOLVED,"SDL input layer; M-24 mouse-look rework (mode-aware map, real INI); D118b/c FIXED.",resolved (D118a residual)
 D150,FIXED,watch OBJECTIVES / BRIEF page crash:,FIXED (src/str.c #ifdef PORT); interactive re-verify pending
 D260-D265,CLOSED,"v0.2.1 hotfix batch: D260 wheel direction swap (fixed) · D261 watch-menu nav auto-repeat (fixed, feel-check owed) · D262 watch item-preview model missing → roo…",CLOSED (2026-09-26 bookkeeping:
 D266-D269,CLOSED,"D236/D265 wall, second pass:",CLOSED (2026-09-26 bookkeeping:
 D270,CLOSED,Backfilled (M-132) — this label was never given its own row; only code comments and the HANDOFF archive documented it.,CLOSED (2026-09-26 bookkeeping:
-D271,FIXED,"D236 wall, third pass —",FIXED-but-insufficient (src/game/bg.c #ifdef PORT) —
+D271,CLOSED,"D236 wall, third pass —",CLOSED (2026-09-29 bookkeeping:
 D276,CLOSED,"D236 wall, eighth pass —",CLOSED (2026-09-26 bookkeeping:
 D279,CLOSED,Backfilled — this label was consumed by an undocumented partial session (2026-09-14 ~23:00) that left artifacts in scratch/ (d279_run.log… —,CLOSED (2026-09-26 bookkeeping:
 D281,FIXED,"Game.AllUnlocked (D257) still breaks audio, and can also break right-mouse aim, when enabled before any save has ever been written (v0.2.1 user testing… —","FIXED (2026-09-23, port/src/libultra.c):"
@@ -123,7 +123,7 @@ D139,FIXED,Stage-unload crash root cause + fix (M-23).,"FIXED (src/game/cleanup_
 D140,FIXED,Pause-menu crash (M-23 open → M-27 fixed).,"FIXED (src/game/bondview.h, src/game/bondview2.c; #ifdef PORT)."
 D141,FIXED,"Watch-menu item-model crash (M-27), exposed by D140.","FIXED (src/game/gunfire.c, #ifdef PORT)."
 D152,FIXED,"Mission-failed / objective-failed → permanent black screen (M-28, user bug report —","FIXED (user, 2026-09-26:"
-D154,?,"bg.c room-geometry ray/hit-test GBI parser port (M-28, WRITTEN / UNVERIFIED / UNCOMMITTED).",M-30 re-audit + fixes (still playtest-gated for final verify).
+D154,CLOSED,"bg.c room-geometry ray/hit-test GBI parser port (M-28, WRITTEN / UNVERIFIED / UNCOMMITTED).",CLOSED (2026-09-28 bookkeeping:
 D156,FIXED,"Facility outro-cutscene ""hang"" —","FIXED (user, 2026-09-26:"
 D155,FIXED,"Facility outro-cutscene end → ""hang"" = unclamped deltaFrames spiral (M-29, user bug report).","FIXED (src/game/frametiming.c, #ifdef PORT —…"
 D153,RESOLVED,"-level_09 frame ~900–1400 0xc0000005 = D117/D134 load flakiness, NOT a bug (M-28).",NOT A BUG — closed. Run anchors on a quiet machine.
@@ -145,7 +145,7 @@ D245,FIXED,IsWater water: two competing patterns with a visible seam that moves 
 D246,FIXED,"Tiny pixel strips at the left and right edges of the screen, ""like overscan"" —","FIXED (2026-09-18 session, port-only, Video.SafeAreaCrop)."
 D247,FIXED,Black bars top and bottom of screen —,"FIXED (2026-09-18 session, port-only, Video.SafeAreaCrop)."
 D248,FIXED,"Port runs a stable 30 FPS instead of 60 FPS game-wide (M-117, user asked to verify FPS after the D209 timing-keystone fixes).","FIXED, root-caused to a genuine pointer-width ABI bug in src/sched.c (compiled for the PC build, not excluded)."
-D249,OPEN,"LOD/culling breaks down on large open levels (Streets, Egyptian named specifically) at *default* FOV —","OPEN — M-142 static review ruled out the unscaled-far-clip and LOD-multiplier suspects (both already correct); CLOSED (v0.4.0 campaign sign-off 2026-09-28, user:"
+D249,CLOSED,"LOD/culling breaks down on large open levels (Streets, Egyptian named specifically) at *default* FOV —",CLOSED (2026-09-28 bookkeeping:
 D250,FIXED,"FPS is inconsistent/low on many levels after 60 Hz shipped (M-119, user QA; D248 follow-on).","FIXED — per-call getenv() cost was the bottleneck; rock-steady 60-61 fps after, user re-tested 1440p/4K clean."
 D251,FIXED,F10 options overlay QoL pass:,"FIXED (port-only, port/src/optionsoverlay.c)."
 D252,FIXED,"Particle effects cycle through a rainbow palette (M-124, user playtest of the v0.2.0-pre candidate).","FIXED (M-201, 2026-09-26, user-verified):"
@@ -161,7 +161,7 @@ D262,FIXED,v0.2.1 (user report):,"FIXED (primary cause, D264) —"
 D264,FIXED,"D262's root cause (ABI/layout class, cf.","FIXED — build green, probes removed; visual confirmation pending."
 D263,RESOLVED,v0.2.1 (user report):,"RESOLVED (not a bug), refined (v0.2.1 further user testing, 2026-09-15)."
 D265,CLOSED,"D236 investigation (port-layer, port/fast3d/gfx_pc.cpp):",CLOSED (2026-09-26 bookkeeping:
-D258,PROPOSED,PAL/JP asset conversion is broken at the source-data level —,DEFERRED (user call 2026-09-28:
+D258,DEFERRED,PAL/JP asset conversion is broken at the source-data level —,DEFERRED (user call 2026-09-28:
 D284,FIXED,port/src/random.c's MIPS64 dsll32/dsrl32 shift helpers were backwards —,"FIXED, 21-level sweep clean, no crashes —"
 D285,FIXED,Steam Deck SIGSEGV during D255 live-testing = SEPARATE bug:,"FIXED (user, 2026-09-26:"
 D286,CLOSED,"User-confirmed real ~8s frame freeze on Caverns, Steam Deck —","CLOSED (2026-09-26, user-approved:"
@@ -172,7 +172,7 @@ D290,FIXED,"Watch's in-game ""controller"" section shows no control-pad graphic 
 D291,CLOSED,"Dam: texture glitches when the truck drives past (M-141, Steam Deck user playtest).","CLOSED — duplicate of D306, faithful (M-201, 2026-09-26:"
 D292,FIXED,Death animations are glitched —,"MOSTLY FIXED as a side effect of D243 (2026-09-18, user-confirmed alongside D173) —"
 D293,FIXED,"QoL ask: no discoverable way to quit the game from the UI (M-141, Steam Deck user playtest —","FIXED (M-141) — ""Quit to desktop"" row added to the F10 overlay; build-verified Win+Linux, not yet live-confirmed.…"
-D294,FIXED,"Statue: ground geometry near the large CCCP/hammer-and-sickle monument briefly renders solid black over a wide area, then self-recovers 10-30 seconds later… —","FIXED, user playtest confirmed (2026-09-25:"
+D294,PARTIAL,"Statue: ground geometry near the large CCCP/hammer-and-sickle monument briefly renders solid black over a wide area, then self-recovers 10-30 seconds later… —",PARTIAL (2026-09-29 bookkeeping:
 D295,FIXED,"Campaign-halting crash at the end of Control Center on 00 Agent difficulty, then a crash on every subsequent relaunch/resume (GitHub #87, user campaign playtes…",FIXED (M-149) — M-148 root-caused + reproduced on HEAD; fix landed:
 D296,CLOSED,"Control Center, 00 Agent:","CLOSED (2026-09-26, user-approved:"
 D297,FIXED,v0.3.0 silently wipes ALL pre-fix player saves on first launch (D284 side effect; found during D295/M-148).,FIXED (M-150) — migration shim landed:
@@ -225,7 +225,7 @@ D344,FIXED,Host PC bugchecks (BSOD 0x119 VIDEO_SCHEDULER_INTERNAL_ERROR) during 
 D345,FIXED,"Front-end crosshair snaps away from the pointer on screen/page changes (file select → mode select setCursorPOSforMode(0), front.c:2516; every MENU_PC_OPTIONS p…","Port-only, user-verified (parts a–g):"
 D346,CLOSED,PC-settings wording pass:,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D347,FIXED,F10 overlay controller:,"FIXED (port-only, optionsoverlay.c):"
-D348,?,"File-select ""PC Options"" label:",SUPERSEDED by D398 (glyph replaced with the IMG_DOT texture; no new art).
+D348,CLOSED,"File-select ""PC Options"" label:",CLOSED (2026-09-28 bookkeeping:
 D349,CLOSED,GE watch settings are not normally saved to the Bond file:,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D350,CLOSED,Watch-backed PC options:,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D351,FIXED,Existing D346 value/unit rows had positional initializers shifted into hidePtr:,"FIXED (port-only): designated row initializers restore unit, deadzone divisor and hide-if-auto fields; build clean, headless smoke clean."
@@ -243,8 +243,8 @@ D363,FIXED,F10 return to a dark overlay with the N64 watch's green/Bank Gothic v
 D364,FIXED,Settings UI feedback:,FIXED (user mostly accepted; D365 follows up on annotation size and click targets).
 D365,CLOSED,F10 annotation hierarchy and visible mouse change targets (2026-09-27).,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D366,CLOSED,Input calibration label:,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
-D367,?,F10 full-width control boxes misaligned with their contents (2026-09-27).,SUPERSEDED by D368 after user playtest:
-D368,?,Simplify F10 click targets:,"INPUT RULE KEPT; tinted strips user-rejected, removed in D369."
+D367,CLOSED,F10 full-width control boxes misaligned with their contents (2026-09-27).,CLOSED (2026-09-28 bookkeeping:
+D368,CLOSED,Simplify F10 click targets:,CLOSED (2026-09-28 bookkeeping:
 D369,FIXED,Remove F10 row boxes/strips entirely (2026-09-27).,FIXED (awaiting live acceptance):
 D370,CLOSED,F10 distance/volume drags hurt frame rate (2026-09-27).,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D371,FIXED,"GEPD key-layout preset + reload/crouch bindings, v0.4.0 modern options wave M3 (2026-09-27).",FIXED (headless-verified; awaiting user live accept):
@@ -253,13 +253,13 @@ D373,FIXED,"In-game crosshair on/off + colour (v0.4.0 modern options wave M2, 20
 D374,FIXED,"GEPD becomes the default key layout; preset layering fix (v0.4.0 M3 playtest feedback, 2026-09-27).",FIXED (headless + user live-tested):
 D375,CLOSED,Crouch wired to the wrong pad bit:,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D376,CLOSED,Crouch follow-up + modern-options spot check (2026-09-27).,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
-D377,FIXED,GEPD independent crouch (2026-09-27).,FIXED (scripted stance verified; user says live crouch was good; pad/hold-vs-toggle specifics owed):
-D378,FIXED,GEPD use/reload separation (2026-09-27).,FIXED (headless edges tested; user says E/R seemed good; targeted door/partial-mag cases owed):
-D379,FIXED,Crosshair colour: authored texture is red (2026-09-27).,FIXED (cyan frame capture; live yellow/blue recheck owed):
+D377,FIXED,GEPD independent crouch (2026-09-27).,FIXED (2026-09-28 bookkeeping:
+D378,FIXED,GEPD use/reload separation (2026-09-27).,FIXED (2026-09-28 bookkeeping:
+D379,FIXED,Crosshair colour: authored texture is red (2026-09-27).,FIXED (2026-09-28 bookkeeping:
 D380,FIXED,One PC keyboard layout; PD-style rebind design (2026-09-27).,FIXED (follow-up D383):
 D381,CLOSED,"RULE-2-SIGNOFF: opt-in RGB, size and Beta crosshair (2026-09-27).",CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D382,CLOSED,Crosshair menu placement and slider hitches (2026-09-27).,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
-D383,PARTIAL,PD-style keyboard rebinding in both options UIs (2026-09-27).,PARTIAL (2026-09-28).
+D383,CLOSED,PD-style keyboard rebinding in both options UIs (2026-09-27).,CLOSED (2026-09-28 bookkeeping:
 D384,CLOSED,Front PC Options key-bind navigation feedback + two-slot UI (2026-09-27).,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D385,CLOSED,Real mouse 1–5 action rebinding in the two-slot editor (2026-09-27).,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
 D386,CLOSED,Correct Aim default from SDL middle (Mouse 2) to right (Mouse 3) (2026-09-27).,CLOSED (2026-09-28). Shipped in v0.4.0; accepted in the user's final review / campaign playtest.
@@ -274,14 +274,26 @@ D394,PARTIAL,Xbox 1.1 Jinx controller parity —,PARTIAL (2026-09-28).
 D395,RESOLVED,Controller trapped in keyboard/mouse-only binding capture —,"RESOLVED (v0.4.0 campaign sign-off 2026-09-28, user:"
 D396,RESOLVED,"F10 pad B/A used as slider decrement/increment, not back/select —","RESOLVED (v0.4.0 campaign sign-off 2026-09-28, user:"
 D397,RESOLVED,SELECT FILE background + intro gun-barrel show an interlaced/comb look —,RESOLVED (2026-09-28):
-D398,FIXED,PC Options label: D348's procedural slider glyph replaced with an existing mainfolderimages texture (2026-09-27).,"SUPERSEDED by D400 (icon removed, text-only label; purple-hover bug moot; the D400 textMeasure arg-swap bug was found and fixed there)."
-D399,PARTIAL,File-select bottom row (SELECT FILE text + Copy/Erase + PC Options dot/label) shifted 15px left as a block (user sign-off 2026-09-27).,"LANDED (port-only, D343 class):"
-D400,PARTIAL,"File-select ""PC Options"" label:","LANDED (port-only, frontoptions.c):"
+D398,CLOSED,PC Options label: D348's procedural slider glyph replaced with an existing mainfolderimages texture (2026-09-27).,"SUPERSEDED by D400 (icon removed, text-only label; purple-hover bug moot; the D400 textMeasure arg-swap bug was found and fixed there)."
+D399,CLOSED,File-select bottom row (SELECT FILE text + Copy/Erase + PC Options dot/label) shifted 15px left as a block (user sign-off 2026-09-27).,CLOSED (2026-09-28 bookkeeping:
+D400,CLOSED,"File-select ""PC Options"" label:",CLOSED (2026-09-28 bookkeeping:
 D401,CLOSED,Rumble Pak → real gamepad haptics (re-promotes D224/M-87):,CLOSED (2026-09-28). Rumble shipped in v0.4.0 (D401); Steam Deck real-pad validation:
 D402,RESOLVED,First clean Linux (glibc / SteamOS) build of release/v0.4.0 broke in two port-layer include-resolution spots MinGW tolerated (bondconstants.h first-include cyc…,RESOLVED (Linux/Ubuntu-24.04 build → glibc-2.41-compatible binary for the Steam Deck):
 D403,RESOLVED,Deck v0.4.0-pre test:,"RESOLVED (2026-09-27, user-confirmed on the Deck:"
 D404,RESOLVED,"""Aim style: Centred (PC)"" (Input.AimMode=1, D333/D337) has no effect when aiming with a gamepad; the row's own doc comment over-promises (""applies to every aim…","RESOLVED (2026-09-28, port-layer only):"
 D405,CLOSED,"fast3d/OpenGL: MSAA above the driver max black-screens; two glBindFramebuffer calls pass an index where a GL name is required (PR #106, italoarruda, 2026-09-25…","CLOSED (2026-09-28). Merged from PR #106 (code file only; security-reviewed clean - port-layer GL state fixes, no external input, no allocations)."
 D406,RESOLVED,front-end PC Options screen:,"RESOLVED (2026-09-28, port-layer only, Steam Deck-validated):"
-D407,PARTIAL,Tanks cannot be boarded/exited on PC —,"PARTIAL (fix landed in v0.4.0, port-only):"
+D407,CLOSED,Tanks cannot be boarded/exited on PC —,CLOSED (2026-09-28 bookkeeping:
 D408,OPEN,Game.SkipIntro skips the post-mission failure dossier:,"OPEN (cosmetic, not root-caused past the handoff site)."
+D415,FIXED,"Shooting a light fixture does not ""kill"" its flickering light (Bunker, Caverns):",FIXED (2026-09-29 bookkeeping:
+D424,FIXED,WeaponStats.RecoilSpeed/b44[] byte order:,"FIXED in tree (WS_B44, port-guarded); user-verified vs GEPD/1964 2026-09-29."
+D425,FIXED,Tank run-over death sound loops:,FIXED (2026-09-29 bookkeeping:
+D426,RESOLVED,Tank cannot be steered with the mouse out of aim mode (issue #116).,RESOLVED (user 2026-09-29:
+D427,FIXED,"Automatic fire cadence is frame-counted, ~2-3x faster than N64 at 60 fps (issue #114).","FIXED in tree (modulus scaled by ticks/frame; measured 6 ticks/shot at 30 and 60 cap); user-verified vs GEPD/1964 2026-09-29 (AK47 mag empties in ~3 s, Klobb normal)."
+D428,FIXED,No gun turn-sway with direct mouse look (issue #117).,FIXED in tree (2nd pass:
+D429,CLOSED,Tank full pass: aim-mode (RMB) mouse behaviour and tank sticking forward/back (follow-up to D426).,CLOSED faithful (user 2026-09-29:
+D430,FIXED,Shot light fixtures do not go dark:,FIXED in tree (D154-style words.w0/.w1 decode); user-verified vs GEPD/1964 on Caverns 2026-09-29.
+D431,FIXED,Light fixtures never reached lightFixtureBreak on PC:,FIXED in tree (fixture table records the image id; bg.c hit code looks it up; free-slot guard); user-verified vs GEPD/1964 2026-09-29.
+D432,FIXED,"Gunshot sounds ""off"" after D427:",FIXED in tree (gate offset rounded to odd at 1 tick/frame); measured shot/sound cadence identical to N64 rules; residual audible difference vs 1964 tracked as D433.
+D433,OPEN,"Slight audible difference in automatic-gun shot sound vs GEPD/1964 after cadence was matched (user by-ear, Caverns).",OPEN (not a timing issue; audio layer suspected).
+D434,FIXED,Raw ((u8*)&g_Textures[n])[0] & 0xf hit-type reads are wrong on PC; latent OOB once D431 returned real texture ids (found by sub-agent review).,"FIXED (.hitTexture at 3 sites, port-guarded); live check owed."

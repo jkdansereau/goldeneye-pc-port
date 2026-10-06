@@ -61,10 +61,11 @@ struct tex {
  * u32 makes GCC pack the struct into exactly two words on both targets, and
  * putting dataoffset first satisfies the raw word read. The IMAGE() macro
  * initializer order is adjusted to match under PORT (see image.c).
- * NOTE: chrprop.c/propobj.c also read `((u8*)&entry)[0] & 0xf` as a hit
- * type; with this layout that yields the low nibble of dataoffset, which is
- * what the N64 binary does too (the .hitSound bitfield is used by the other
- * hit-sound paths in gunfire.c). */
+ * NOTE (D434): chrprop.c/propobj.c read `((u8*)&entry)[0] & 0xf` as the hit
+ * type. On the N64 (big-endian) byte 0 is the MSB of word 0, i.e. the hit
+ * type; with this LE layout byte 0 is the LOW byte of dataoffset, so that raw
+ * read is wrong on PC (out of range of g_HitTypeSounds[13] for nibbles >= 13).
+ * Those sites now use the .hitTexture bitfield under PORT (as chr.c does). */
 struct image_entry
 {
     u32 dataoffset : 24; // runtime: cumulative start offset within the images segment (image_entries_load converts sizes -> offsets)

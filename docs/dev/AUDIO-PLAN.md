@@ -1,5 +1,7 @@
 # AUDIO-PLAN — Phase 3 / ROADMAP B3 (libaudio → SDL)
 
+> **Historical record — do not act on status claims in this file.** The audio track shipped (D198–D204); the "gaps" and TODOs described below are closed. Kept for the architecture rationale. Current open work and status: [`docs/ROADMAP.md`](../ROADMAP.md) (2026-09-29).
+
 Status: plan of record for the audio track, 2026-09-05. Companion to
 `ROADMAP-1.0.md` §B3 ("audio (Phase 3)", "audio track parallel from M-50 →
 v0.4.0"). Independent of B1/B2 — can start immediately.

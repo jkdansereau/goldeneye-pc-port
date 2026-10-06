@@ -5,7 +5,8 @@
 - `n64decomp/007`: WIP decompilation of GoldenEye 007 (N64), byte-matches US/EU/JP ROMs.
 - Active work: **PC port** modelled on the Perfect Dark PC port (same Rare "Indy" engine family).
 - **Reference docs:** `docs/internals.md` — architecture, GE-specific RSP deltas, phased plan (§1–§10). `docs/dev/findings.md` — the `Dxx` finding log (§F + §H). **Look up findings via `docs/dev/findings-index.csv` (label, one-liner, status; regenerate with `tools_pc/gen_findings_index.py`), then read only the specific `## Dxx` entry (multi-pass labels like D202/D176(a) have large sections — grep within the section or read with offset/limit, don't slurp it whole). Never linear-read.** `docs/porting-notes.md` — the recurring N64→PC bug classes (dense; skim the headers, read what's relevant).
-- **Current status:** the README "Status" section, and `docs/dev/LEVEL-STATUS.md` for the per-level sweep. Current task + environment: `docs/HANDOFF.md` (a rolling local working file — may be absent in a fresh clone; fall back to the README "Status" section).
+- **Open work / known issues:** `docs/ROADMAP.md` — the single tracker; add new items there, never start a new backlog/roadmap file.
+- **Current status:** the README "Status" section (`docs/dev/LEVEL-STATUS.md` is a historical per-level sweep record). Current task + environment: `docs/HANDOFF.md` (a rolling local working file — may be absent in a fresh clone; fall back to the README "Status" section).
 - **Dispatching subagents?** `docs/dev-process.md` — task budgets/deadlines, file partitioning, pre-flight, the standard brief template. Every investigation subagent reads `docs/porting-notes.md` first and appends to it.
 
 ## Non-negotiables
@@ -23,7 +24,7 @@
 | `docs/internals.md` | Architecture + RSP deltas + phased plan (§1–§10). Reference, not a linear read. |
 | `docs/dev/findings.md` | The `Dxx` finding log (§F/§H); lookups via `docs/dev/findings-index.csv`. |
 | `CMakeLists.txt` | PC build (parallel to the N64 Makefile). Source list + `REGION_DEFS` live here. |
-| `port/src/` | Shims: `libultra.c` (OS API), `gesched.c` (scheduler), `n64stubs.c` (boot/TLB/FPU/rmon), `random.c` (PRNG ported verbatim from `random.s`), `ucode.c` (microcode segment markers), `main.c`, `video.c`, … |
+| `port/src/` | Shims: `libultra.c` (OS API; also shims the scheduler's hardware leaf calls and runs the software RSP inline — the game's real `src/sched.c` is compiled), `n64stubs.c` (boot/TLB/FPU/rmon), `random.c` (PRNG ported verbatim from `random.s`), `ucode.c` (microcode segment markers), `main.c`, `video.c`, … |
 | `port/fast3d/` | Software RSP (adapted from the PD port). The main Phase 2 work. |
 | `rsp/graphics/gmain.s` | GE's RSP ucode — ground truth for GBI/CC/RM. |
 | `reference/mouse-injector/README.md` | **Stub only** — the vendored GEPD-Edition Mouse Injector source (GPLv2) was removed from the public repo 2026-09-19 (license hygiene: GPL code + prebuilt binary in an MIT project; it was never compiled here). The stub records provenance + how to re-vendor locally (gitignored). The ported mouse-aim model lives in `port/src/input.c` (D194 lineage); design record: `docs/dev/GEPD-INPUT-PLAN.md`. |
@@ -94,25 +95,14 @@ Needs CMake + SDL2 + zlib + OpenGL, and must run from the MSYS2 MINGW64 shell
 
 ## Verification ritual (after any build-affecting change)
 
-1. **Undefined symbols.** Every symbol referenced by the compiled set (see `CMakeLists.txt`: `SRC_GAME`, `SRC_ENGINE`, `SRC_LIBAUDIO`, `SRC_LIBULTRARE_AUDIO`, `SRC_LIBULTRARE_DATA`, `SRC_GU`, `SRC_PORT*`) must be defined exactly once in the compiled set or in `port/`. Symbols that live in EXCLUDED files (`libultra/io/*`, `libultrare/io/*` except `vitbl.c`, `libultra/os/*`, `libultrare/os/*`, `sched.c`, `rmon.c`, `vi.c`, `src/*.s`) must be provided by `port/src/libultra.c`, `gesched.c`, `n64stubs.c`, `random.c`, or `ucode.c`.
+1. **Undefined symbols.** Every symbol referenced by the compiled set (see `CMakeLists.txt`: `SRC_GAME`, `SRC_ENGINE`, `SRC_LIBAUDIO`, `SRC_LIBULTRARE_AUDIO`, `SRC_LIBULTRARE_DATA`, `SRC_GU`, `SRC_PORT*`) must be defined exactly once in the compiled set or in `port/`. Symbols that live in EXCLUDED files (`libultra/io/*`, `libultrare/io/*` except `vitbl.c`, `libultra/os/*`, `libultrare/os/*`, `sched.c`, `rmon.c`, `vi.c`, `src/*.s`) must be provided by `port/src/libultra.c`, `n64stubs.c`, `random.c`, or `ucode.c`.
 2. **Duplicates.** No symbol defined twice across the compiled set (watch `sp_*` stacks, `rmon*`, `os*` shims, segment markers).
 3. **Syntax.** Every touched file must parse; `./build-pc.sh` is the final word.
 
 Run `/linkcheck` for this sweep. Record new findings in `docs/dev/findings.md` §F/§H style (next `Dxx` label after the last used) and add the label to the §F index.
 
-## Phase status (summary — see README + `docs/dev/findings.md` for detail)
+## Phase status
 
-- **Phase 0–1.5:** done. Build system, boot chain, OS-shim layer, fast3d
-  integration, first frames, full intro rendering.
-- **Phase 2 (rendering):** in progress. All 20 solo missions (plus the
-  ending-credits sequence, `-level_54`) load + render + survive an
-  unattended window; front end (menu → mission select → briefing →
-  start) is functional; file-backed EEPROM saves work. Cosmetic defects are
-  parked in `docs/dev/GRAPHICS-BACKLOG.md`.
-- **Phase 3 (audio + input):** input layer done (`port/src/input.c`); polish
-  bugs open (D118* mouse-look residuals; interactive feel-checks owed). Audio
-  mixer done (libaudio → SDL software mixer, D198–D201); D204 tempo drift
-  fixed + measured; D202 stuck door loop root-caused with a port-side
-  expiration (M-66b) awaiting by-ear verification.
-- **Phase 4 (saves + polish):** file-backed EEPROM done; widescreen, config,
-  rebinding UI outstanding.
+Do not keep a status summary here — it goes stale. Open work, known issues
+and decisions owed: **`docs/ROADMAP.md`** (the single tracker). Current
+release state: the README "Status" section.

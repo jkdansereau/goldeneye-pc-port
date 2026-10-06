@@ -3222,7 +3222,20 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                         && (currentPlayerGetIsAiming() == 0)
                         && (((s32) handptr->volley % 3) != 0)))
                 {
+                    #ifdef PORT
+                    /* D427 (#114): field_88C counts RENDERED frames and the
+                     * automatic-fire cadence is 88C % AutomaticFiringRate. The N64
+                     * renders ~2 ticks per frame; the port at 60 fps gives 1, so
+                     * every automatic gun fired 2-3x faster in wall time. Scale the
+                     * modulus so it spans the same number of TICKS the console's
+                     * 2-tick frames did (identical to N64 at >= 2 ticks/frame).
+                     * Only this gate changes: 88C itself and every other 88C==0
+                     * "first frame" gate stay per-frame, and animation time
+                     * (field_890) stays tick-scaled. */
+                    if (((s32) handptr->field_88C % (bondwalkItemGetAutomaticFiringRate(var_s1) * ((g_ClockTimer >= 2) ? 1 : 2))) == 0)
+#else
                     if (((s32) handptr->field_88C % bondwalkItemGetAutomaticFiringRate(var_s1)) == 0)
+#endif
                     {
                         if ((getPlayerCount() == 1) || ((checkGamePaused() == 0) && (g_CurrentPlayer->mpmenuon == 0)))
                         {
@@ -3302,7 +3315,19 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                     if ((g_CurrentPlayer->hands[1 - hand].field_A50 != g_GlobalTimer)
                         && (handptr->field_A4C < g_GlobalTimer))
                     {
+#ifdef PORT
+                        /* D432 (#114 follow-up): this gate compares against g_GlobalTimer
+                         * every gun tick. On the N64 (2 ticks/frame) it is only evaluated
+                         * every second tick, so the next sound lands on the first frame
+                         * boundary after rate+1 ticks: rate 4 -> 6, rate 3 -> 4. At 1
+                         * tick/frame the port let it fire after exactly rate+1 (5 for the
+                         * AK47), which, once D427 moved the shots to 6 ticks, made shot
+                         * and sound drift apart ("off"). Round the offset to odd (rate|1)
+                         * so the gate opens on the same even boundary the console used. */
+                        handptr->field_A4C = ((s32) bondwalkItemGetSoundTriggerRate(var_s1) | ((g_ClockTimer >= 2) ? 0 : 1)) + g_GlobalTimer;
+#else
                         handptr->field_A4C = bondwalkItemGetSoundTriggerRate(var_s1) + g_GlobalTimer;
+#endif
                         sp1B4 = 1;
                     }
                 }
@@ -3412,21 +3437,21 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
             weapon_stats = get_ptr_item_statistics(var_s1);
 
 #if defined(VERSION_US)
-            sp1A4 = weapon_stats->b44[0];
-            sp1A0 = weapon_stats->b44[1];
+            sp1A4 = WS_B44(weapon_stats, 0);
+            sp1A0 = WS_B44(weapon_stats, 1);
 #endif
 #if defined(VERSION_JP)
-            sp1A4 = weapon_stats->b44[0];
-            sp1A0 = weapon_stats->b44[1];
-            stat_2 = weapon_stats->b44[2];
-            stat_3 = weapon_stats->b44[3];
+            sp1A4 = WS_B44(weapon_stats, 0);
+            sp1A0 = WS_B44(weapon_stats, 1);
+            stat_2 = WS_B44(weapon_stats, 2);
+            stat_3 = WS_B44(weapon_stats, 3);
             stat_4 = weapon_stats->SingleFiringRate;
 #endif
 #if defined(VERSION_EU)
-            sp1A4 = ((s32)weapon_stats->b44[0] * 50) / 60;
-            sp1A0 = ((s32)weapon_stats->b44[1] * 50) / 60;
-            stat_2 = ((s32)weapon_stats->b44[2] * 50) / 60;
-            stat_3 = ((s32)weapon_stats->b44[3] * 50) / 60;
+            sp1A4 = ((s32)WS_B44(weapon_stats, 0) * 50) / 60;
+            sp1A0 = ((s32)WS_B44(weapon_stats, 1) * 50) / 60;
+            stat_2 = ((s32)WS_B44(weapon_stats, 2) * 50) / 60;
+            stat_3 = ((s32)WS_B44(weapon_stats, 3) * 50) / 60;
             stat_4 = weapon_stats->SingleFiringRate * 50 / 60;
 #endif
 
@@ -3456,19 +3481,19 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                 && (handptr->weapon_hold_time != 0)
 
 #if defined(VERSION_US)
-                && (handptr->field_890 >= weapon_stats->b44[2])
+                && (handptr->field_890 >= WS_B44(weapon_stats, 2))
 #endif
 #if defined(VERSION_JP) ||  defined(VERSION_EU)
                 && (handptr->field_890 >= stat_2)
 #endif
 
-                && (weapon_stats->b44[3] >= 0)
+                && (WS_B44(weapon_stats, 3) >= 0)
 
 #if defined(VERSION_US)
                 // HACK: registers are swapped
                 // addu a1, v1, a0
-                && (handptr->field_890 + weapon_stats->b44[3] < (0,sp1A4) + sp1A0)
-                && (handptr->field_890 + weapon_stats->b44[3] >= (s32)weapon_stats->b44[2])
+                && (handptr->field_890 + WS_B44(weapon_stats, 3) < (0,sp1A4) + sp1A0)
+                && (handptr->field_890 + WS_B44(weapon_stats, 3) >= (s32)WS_B44(weapon_stats, 2))
 #endif
 #if defined(VERSION_JP) ||  defined(VERSION_EU)
                 && (handptr->field_890 + stat_3 < sp1A4 + sp1A0)
@@ -3480,7 +3505,7 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                 handptr->field_890 = 0;
                 handptr->field_88C = 0;
 #if defined(VERSION_US)
-                handptr->field_8A8 = weapon_stats->b44[3];
+                handptr->field_8A8 = WS_B44(weapon_stats, 3);
 #endif
 #if defined(VERSION_JP) ||  defined(VERSION_EU)
                 handptr->field_8A8 = stat_3;

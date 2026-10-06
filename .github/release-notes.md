@@ -6,7 +6,7 @@
 </p>
 
 Platforms: **Windows x86-64** and **Linux x86-64 (including Steam Deck)**.
-Region: **NTSC-U (US) only** — see [Things to know](#things-to-know).
+Region: **NTSC-U (US) only** — see [Caveats](#caveats).
 
 v0.4.0 is a large feature and fidelity release. The full campaign runs at a
 steady 60 fps with music and SFX throughout, and has been playtested end to
@@ -24,7 +24,7 @@ The world now renders natively at your display's aspect ratio instead of
 stretched 4:3: geometry is undistorted (wider view, same vertical FOV), the
 in-level HUD keeps its shape and anchors to the screen edges, and the 4:3
 front-end menus and ending-credits sequence are pillarboxed. Turn it off
-with the **`Native widescreen`** toggle (F10 → Display) to restore the old
+with the **`Native widescreen`** toggle (F10 → Graphics) to restore the old
 stretched frame. (D334/D335)
 
 ### A true, stable 60 fps
@@ -56,19 +56,18 @@ frame cadence. Fixed at the root; the game now holds a rock-stable 60 fps
 ### Rebuilt options (F10 overlay + front-end PC Options)
 
 - Both options screens are reorganized into functional sections — **Input,
-  Gameplay, HUD, Graphics, Audio, Display** — each with its own *Reset to
+  Gameplay, HUD, Graphics, Audio, Video** — each with its own *Reset to
   defaults*; per-profile settings scoping; and the old "save file" wording
   is now **profile**. (D353–D356)
 - The **F10 in-game overlay** was refreshed GE-style: category headers,
   full controller support (value-adjust with hold-to-repeat), fixed pointer/
   keyboard navigation, and new rows: **Show FPS**, **Skip intro
-  (experimental)**, pad
-  **Invert look / Southpaw / Deadzone / Trigger threshold**. (D237/D345–
-  D347/D360–D370)
+  (EXPERIMENTAL)**, plus pad-only **Invert look / Southpaw / Deadzone /
+  Trigger threshold**. (D237/D345–D347/D360–D370)
 - The front end gained a **PC Options screen** beside the file-select bar,
   and save-file **Copy/Erase** moved into the bottom bar. Long sections
-  (Input) page within the screen -- a "Page 1/2" marker plus a bottom hint
-  on every page -- so every row stays on screen and stays reachable; the
+  (Input) page within the screen — a "Page 1/2" marker plus a bottom hint
+  on every page — so every row stays on screen and stays reachable; the
   mouse wheel and W/S also page the list, and the selection clamps at page
   edges. (D343/D406/D407)
 - Watch-only settings — **Auto-aim**, **Look ahead** and the rest — are now
@@ -79,10 +78,10 @@ frame cadence. Fixed at the root; the game now holds a rock-stable 60 fps
 
 ### Crosshair customization *(defaults leave the N64 crosshair untouched)*
 
-**Show crosshair** (on/off), **Crosshair colour** (the original red,
-or green / blue / yellow / cyan / magenta / white, or custom RGB), **Crosshair size**
-(default 100% of the original drawing), and **Crosshair style** (Original /
-Thin cross). (D373/D379/D381/D382)
+**Show crosshair** (on/off), **Crosshair colour** (default *Original
+(red)*, or Green / Red / Blue / Yellow / Cyan / Magenta / White, or custom
+RGB), **Crosshair size** (default 100% of the original drawing), and
+**Crosshair style** (Original / Thin cross). (D373/D379/D381/D382)
 
 ### In-game key rebinding + new default layout
 
@@ -97,7 +96,7 @@ ones migrate automatically. (D371/D374/D383/D385)
 - **Sane pad defaults**: **A = use/interact, X = reload, Y = weapon cycle**
   (v0.3.0 mapped two buttons to crouch and had no in-game use button). (D393)
 - Crouch uses the engine's real crouch input, with a **`Crouch mode`**
-  toggle (hold / latched). (D375)
+  toggle (Hold / Toggle). (D375)
 - Xbox-variant controller parity, **Southpaw**, and per-stick
   **deadzone** + **trigger threshold** rows. (D237/D394)
 - **The N64 Rumble Pak now drives real gamepad haptics** (Steam Deck
@@ -199,36 +198,51 @@ distances). (D402/D283)
 
 ## Options reference
 
-All settings available in v0.4.0, in both options screens (front-end
-**PC Options** and the in-game **F10 overlay**). Defaults in parentheses.
+Every setting in v0.4.0's options screens (front-end **PC Options** and the
+in-game **F10 overlay**), with the current default.
 
 | Setting | Section | Default |
 |---|---|---|
-| `Native widescreen` | Display | On |
-| `Frame rate cap` | Display | 60 (30 / 60) |
-| `Show FPS` | Display | Off |
-| `MSAA` | Display | 2× (1/2/4/8, clamped to driver max) |
 | `Aim style` | Input | N64 (N64 / Centred (PC)) |
-| `Aim range` | Input | PC (shown while Centred) |
-| `Mouse horizontal/vertical sensitivity` | Input | calibrated midpoint |
-| `Invert look (mouse)` / `Invert look (controller)` / `Southpaw` | Input | Off |
-| `X / Y axis look sensitivity (controller)` | Input | 100% (native) |
-| `Look smoothing (controller)` | Input | 0 |
+| `Aim range` | Input | PC (shown while Centred is selected) |
+| `Mouse horizontal sensitivity` / `Mouse vertical sensitivity` | Input | 100% (calibrated midpoint) |
+| `Invert look (mouse)` / `Invert look (controller)` | Input | Off |
+| `Southpaw` | Input | Off |
+| `X axis look sensitivity (controller)` / `Y axis look sensitivity (controller)` | Input | 100% (native) |
+| `Look smoothing (controller)` | Input | 0 (off) |
 | `Tank aim speed` | Input | 100% (`Input.TankAimScale`) |
-| `Deadzone (left/right stick)` | Input | 70% |
+| `Deadzone (left stick)` / `Deadzone (right stick)` | Input | 70% |
 | `Trigger threshold` | Input | 23% |
 | `Vibration` | Input | 50% |
-| `Crouch mode` | Input | Hold |
-| `Bindings…` (Movement / Actions editors) | Input | GEPD-style preset |
+| `Crouch mode` | Input | Hold (Hold / Toggle) |
+| `Bindings…` (`Movement…` / `Actions…`) | Input | GEPD-style preset |
 | `Auto-aim` / `Look ahead` | Gameplay | Off (watch-backed) |
-| `Skip intro` / `No hit flash` | Gameplay | Off |
+| `Skip intro (EXPERIMENTAL)` / `No hit flash` | Gameplay | Off |
 | `All unlocked (EXPERIMENTAL)` | Gameplay | Off |
+| `Sight on screen` / `Ammo on screen` | HUD | On (watch-backed) |
 | `HUD scale` | HUD | 100% (75–150%) |
-| `Show crosshair` / `Crosshair colour` / `Crosshair size` / `Crosshair style` | HUD | N64-intact (size 100%) |
+| `Show crosshair` | HUD | On |
+| `Crosshair colour` | HUD | Original (red) |
+| `Crosshair size` | HUD | 100% |
+| `Crosshair style` | HUD | Original (Original / Thin cross) |
+| `Native widescreen` | Graphics | On |
+| `Widescreen auto FOV` | Graphics | On |
+| `Crop overscan` | Graphics | On |
+| `Anti-aliasing` | Graphics | 2× (1/2/4/8, clamped to driver max) |
+| `Texture filter` | Graphics | Bilinear (Nearest / Bilinear / 3-Point) |
+| `Anisotropic filtering` | Graphics | 4× (1–16) |
+| `FOV scale` | Graphics | 100% |
+| `Draw distance` / `LOD distance` | Graphics | 250% (100–400%) |
+| `Music volume` / `FX volume` | Audio | 100% (watch-backed) |
+| `Fullscreen` | Video | Off (windowed) |
+| `Resolution` | Video | Auto windowed preset |
+| `VSync` | Video | On |
+| `Frame rate cap` | Video | 60 (30 / 60) |
+| `Show FPS` | Video | Off |
 
 ---
 
-## Things to know
+## Caveats
 
 - **NTSC-U (US) ROMs only.** PAL and JP ROMs are not supported in this
   version; asset repair for those regions is on the post-release roadmap.

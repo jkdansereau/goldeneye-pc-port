@@ -1,5 +1,7 @@
 # Release plan — "drop in your ROM and play"
 
+> **Historical record — do not act on status claims in this file.** Part A shipped as the NTSC-U drop-in ROM flow (PR #84, issue #6). The remaining Part B pieces are tracked in the roadmap. Current open work and status: [`docs/ROADMAP.md`](../ROADMAP.md) (2026-09-29).
+
 Status: proposal / not yet scheduled. Owner: TBD.
 
 ## Goal

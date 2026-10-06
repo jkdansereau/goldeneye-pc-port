@@ -7,9 +7,8 @@ body:
       value: |
         Thanks for filing a report. First, please check:
 
-        - The port is **Phase 2 of 4** — rendering is incomplete and many
-          cosmetic defects are already tracked in
-          [`docs/dev/GRAPHICS-BACKLOG.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/GRAPHICS-BACKLOG.md).
+        - Known open issues (rendering, audio, platform) are tracked in
+          [`docs/ROADMAP.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/ROADMAP.md).
           Search open issues and that file before filing.
         - Only the **Windows / MSYS2 MINGW64** build is tested. Linux and
           macOS are best-effort — build breaks there are expected.

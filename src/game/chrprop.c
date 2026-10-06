@@ -1151,7 +1151,13 @@ void chraiDefaultWeaponFireHandler(s32 hand)
             }
             else
             {
+#ifdef PORT
+                /* D434: byte 0 of the PORT image_entry is the low byte of dataoffset, not the
+                 * hit type (N64: byte 0 = MSB = hit type). Use the bitfield (cf. chr.c). */
+                impact_sounds = g_HitTypeSounds[g_Textures[bghit.texturenum].hitTexture];
+#else
                 impact_sounds = g_HitTypeSounds[((u8 *) (&g_Textures[bghit.texturenum]))[0] & 0xf];
+#endif
             }
 
             if (createSpark)
@@ -1184,7 +1190,12 @@ void chraiDefaultWeaponFireHandler(s32 hand)
             {
                 recall_joy2_hits_edit_flag(shotdata.weapon, finalpos, besttexture);
 
+#ifdef PORT
+                /* D434: see the impact_sounds read above (raw byte 0 != hit type on PC). */
+                if ((g_Textures[besttexture].hitTexture != 5) && (g_Textures[besttexture].hitTexture != 6))
+#else
                 if (((0xf & ((u8 *) g_Textures)[besttexture * 8]) != 5) && ((((u8 *) g_Textures)[besttexture * 8] & 0xf) != 6))
+#endif
                 {
                     rooms[0] = bestroom;
                     rooms[1] = 255;

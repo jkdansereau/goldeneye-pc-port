@@ -1,5 +1,7 @@
 # Texture Glitch Analysis — PC Port
 
+> **Historical record — do not act on status claims in this file.** Only the status table is current; the diagnosis from §1 onward is from 2026-08-29 and includes retracted fixes (RC4) — never apply them. Current open work and status: [`docs/ROADMAP.md`](../ROADMAP.md) (2026-09-29).
+
 **Original diagnosis:** 2026-08-29 (read-only) · **Status table refreshed:** 2026-08-31 (M-31)
 Companion artifacts: `<local-path>` (outside repo).
 

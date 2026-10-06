@@ -45,23 +45,18 @@ plugins:
 exclude:
   - BACKLOG.md
   - HANDOFF.md
+  - ROADMAP.md
   - SetupGuide.md
   - StructureGuide.md
   - StyleGuide.md
   - dev/AUDIO-PLAN.md
   - dev/AUDIT-M6-player-offsets.md
-  - dev/D172-PARTICLE-COLOR-RESEARCH.md
   - dev/D176a-SKY-NOTES.md
   - dev/GE-ENV-PROBES.md
-  - dev/GRAPHICS-BACKLOG.md
   - dev/HANDOFF-ARCHIVE.md
   - dev/LEVEL-OBJECTIVES.md
   - dev/LEVEL-PLAYTEST.md
   - dev/LEVEL-STATUS.md
-  - dev/LINUX-PORT.md
-  - dev/M-35-PLAYTEST-CHECKLIST.md
-  - dev/M-35-QOL-REVIEW.md
-  - dev/M-36-TRIAGE.md
   - dev/MODERN-PORT-FEATURES-BACKLOG.md
   - dev/OPTIONS-MENU-PLAN.md
   - dev/QOL-INVENTORY.md

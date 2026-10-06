@@ -10,7 +10,7 @@
 
 - name: rendering
   color: 5319e7
-  description: Graphics / fast3d / RSP output defect (see docs/dev/GRAPHICS-BACKLOG.md)
+  description: Graphics / fast3d / RSP output defect (see docs/ROADMAP.md)
 
 - name: audio
   color: 1d76db

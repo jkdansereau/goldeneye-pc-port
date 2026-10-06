@@ -54,7 +54,8 @@ def one_liner(cell: str, limit: int = 160) -> str:
 
 LEAD_RE = re.compile(
     r"^\**\s*(OPEN|RESOLVED|FIXED|PROPOSED|PARTIAL|LANDED|CLAMP|DISPROVEN"
-    r"|ROOT-CAUSED|GUARDED|ANALYZED|DIAGNOSTIC SHIPPED|NOT A BUG|CLOSED)",
+    r"|ROOT-CAUSED|GUARDED|ANALYZED|DIAGNOSTIC SHIPPED|NOT A BUG|CLOSED"
+    r"|DEFERRED|SUPERSEDED)",
     re.I,
 )
 
@@ -74,6 +75,7 @@ def bucket(status_cell: str) -> str:
             "ANALYZED": "PARTIAL",
             "DIAGNOSTIC SHIPPED": "PARTIAL",
             "NOT A BUG": "RESOLVED",
+            "SUPERSEDED": "CLOSED",
         }.get(tok, tok)
     for name, rx in STATUS_BUCKETS:
         if rx.search(status_cell):

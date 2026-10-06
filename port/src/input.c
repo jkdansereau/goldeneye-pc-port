@@ -505,6 +505,8 @@ static int aimGepdAccumulate(double dxPx, double dyLook);
 static void aimGepdEdgeScroll(void);
 static int aimGepdCompute(double dxPx, double dyLook);
 static int hipDirectCompute(double dxPx, double dyLook);
+static double s_hipThetaDegOut;   /* D428: yaw degrees the last hipDirectCompute applied */
+static void swayFeedTheta(double deg);
 static int padDirectCompute(int dx, int dy);   /* D404: pad twin of the above */
 /* D194: bondview2's "look-ahead" pitch centreing (docentreupdown) arms during
  * hip-fire walking whenever the pitch strays from the horizon target, and --
@@ -1914,14 +1916,21 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                  * unrecognised" and fast motion bang-bang). Falls through to
                  * the legacy stick path below when it declines (disabled, no
                  * player, or a safety gate is closed). */
-                if (mouseDirectLook && hipDirectCompute(hipEdx, hipDyLook)) {
+                /* D426 (#116): in a tank the hull turns from stick X (analogTurn) and stick Y
+                 * is drive, so the direct camera write is ignored/overwritten -- emit
+                 * mouse X as stick turn (scaled by Input.TankAimScale) and drop Y. */
+                int inTankHip = (g_PlayerIsInTank == 1);
+                if (!inTankHip && mouseDirectLook && hipDirectCompute(hipEdx, hipDyLook)) {
+                    swayFeedTheta(s_hipThetaDegOut);   /* D428: hipfire gun turn-lag */
                     /* Pitch handled inside hipDirectCompute too; nothing left
                      * to do for yaw/pitch this poll. Digital pitch-pulse
                      * (naturalPitchMode==0) still applies below only in the
                      * legacy path, so skip both branches here. */
                 } else {
-                sx += (int)(hipEdx * hipSens * MOUSE_TURN_GAIN);
-                if (naturalPitchMode) {
+                sx += (int)(hipEdx * hipSens * MOUSE_TURN_GAIN * (inTankHip ? tankAimScale / 100.0 : 1.0));
+                if (inTankHip) {
+                    /* no pitch/drive from the mouse in a tank */
+                } else if (naturalPitchMode) {
                     /* D194/D238: SOLITARE gives hipfire pitch the same
                      * continuous analog stick treatment as yaw -- same
                      * formula as the sx line above, so X and Y are, by
@@ -2584,6 +2593,42 @@ static int aimGepdCompute(double dxPx, double dyLook)
  * stick path); 0 to fall back (disabled, no player, or a safety gate is
  * closed -- e.g. mid-death or mid-cutscene, matching GEPD's !dead/!watch).
  */
+/* D428 (#117): the gun's turn-lag ("sway") is driven by player->speedtheta
+ * (gunSetBondWeaponSway, bondview2.c), which the game derives from STICK
+ * deflection. Direct mouse look writes vv_theta instead and leaves speedtheta
+ * at ~0, so the gun stayed glued to the view. Accumulate the yaw degrees the
+ * direct path applied (poll thread) and hand the game thread an equivalent
+ * turn speed once per tick: the exact inverse of the game's own yaw
+ * integration (see portGunSwayTheta). Hipfire only; display-side. */
+static SDL_atomic_t s_swayThetaMdeg;
+
+static void swayFeedTheta(double deg)
+{
+    SDL_AtomicAdd(&s_swayThetaMdeg, (int)lround(deg * 1000.0));
+}
+
+float portGunSwayTheta(float dt)
+{
+    int m = SDL_AtomicSet(&s_swayThetaMdeg, 0);
+    if (dt <= 0.0f)
+        return 0.0f;
+    /* Exact inverse of the game's own yaw integration (bondview2.c:
+     * vv_theta += speedtheta * dt * 3.5) and of its natural-turn speed, which is
+     * set straight from the stick with no ramp: speedtheta = (stick/70)^2 * fov/60,
+     * i.e. |speedtheta| <= fov/60 (~1.0). So a mouse turn of X degrees/tick gives
+     * the same gun lag the stick turning at that speed did on the N64. (An earlier
+     * version used the vertical axis' delta/(2*dt) clamped to 0.7: too weak at full
+     * speed, too strong at slow speed.) */
+    f32 fov = viGetFovY();
+    double lim = (fov > 0.0f) ? (double)fov / 60.0 : 1.0;
+    double v = (m / 1000.0) / (3.5 * (double)dt);
+    if (v >  lim) v =  lim;
+    if (v < -lim) v = -lim;
+    if (m != 0 && configGetInputLog())
+        sysLogPrintf(LOG_NOTE, "GE_INPUTLOG gunsway theta=%.1f deg speed=%.3f", m / 1000.0, v);
+    return (float)v;
+}
+
 static int hipDirectCompute(double dxPx, double dyLook)
 {
     struct player *p = g_CurrentPlayer;
@@ -2619,7 +2664,8 @@ static int hipDirectCompute(double dxPx, double dyLook)
     /* dyLook already carries MouseInvertY + MouseYScale (applied by the
      * caller before dt-scaling, same as every other consumer of dyLook) --
      * do not re-apply either here. */
-    p->vv_theta += (f32) (dxPx * 0.1 * sens * scale);
+    s_hipThetaDegOut = dxPx * 0.1 * sens * scale;
+    p->vv_theta += (f32) s_hipThetaDegOut;
     p->vv_verta -= (f32) (dyLook * 0.1 * sens * scale);
     if (p->vv_verta >  90.0f) p->vv_verta =  90.0f;
     if (p->vv_verta < -90.0f) p->vv_verta = -90.0f;

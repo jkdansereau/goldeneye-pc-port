@@ -10,7 +10,7 @@ description: Architecture behind the PC port; the software RSP-emulation approac
 > external references. The phased plan in section 8 is largely done through
 > Phase 2; for current status see the
 > [README](https://github.com/jkdansereau/goldeneye-pc-port#status) and
-> [`dev/LEVEL-STATUS.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/LEVEL-STATUS.md);
+> [`ROADMAP.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/ROADMAP.md);
 > for the blow-by-blow finding log see
 > [`dev/findings.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/findings.md).
 
@@ -411,7 +411,7 @@ sync/flush) is shared.
 * Bring in the PD `fast3d` (gfx_pc / gfx_opengl / gfx_cc / gfx_sdl2).
 * Verify the custom CC/RM modes against `gmain.s`; add a `G_SETTEX` decode
   path only if it turns out to be used (see §5; it appears unused).
-* Port `pdsched.c` (GE variant) to drive the software RSP.
+* Port `pdsched.c` (GE variant) to drive the software RSP. *(Done differently: GE compiles its real `src/sched.c` and shims its hardware leaf calls in `port/src/libultra.c`, which runs the software RSP inline — see the CMakeLists.txt `SRC_ENGINE` comment.)*
 * Goal: render the title screen / first level.
 
 ### Phase 3: Audio + input

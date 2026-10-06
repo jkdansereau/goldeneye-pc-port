@@ -131,32 +131,12 @@ graphics, audio; frame cap, MSAA, filtering, FOV, sensitivity, key rebinding,
 crosshair, vibration); Windows and
 Linux, including Steam Deck.
 
-**Known issues:**
+**Known issues:** see the **[known-issues table](docs/ROADMAP.md#known-issues)**
+(what you'll notice, impact, workarounds). The short version: no multiplayer
+yet, NTSC-U ROMs only, no macOS/ARM builds, and a couple of cosmetic defects.
 
-- On Facility, if gas leaks during Ourumov's monologue he can pause for up to
-  ~10 s before resuming the scripted shootout — a latent race that exists in
-  the N64 original too (where it softlocks permanently); the port detects and
-  auto-recovers it (D318).
-- With native widescreen on, the F10 options overlay stretches with the
-  window instead of pillarboxing like the front-end menus (legible; cosmetic;
-  the F10 *Native widescreen* toggle restores the old stretched frame
-  throughout). The world/HUD widescreen rendering itself is correct (D335b).
-- The Rareware front-end logo shows a subtle texture-filtering artifact
-  (Nintendo logo and legal page are clean). Cosmetic only (D75).
-- This release ships NTSC (US) assets; PAL/JP ROMs are not supported in this
-  version (D258).
-- **`All unlocked` is experimental: back up `data/ge007.eep` before enabling
-  it.** Any save while ON, even a profile-settings change, can permanently
-  write artificial cheat unlocks and completion times into the EEPROM;
-  switching OFF does not undo them (D387). Do not use it on a save whose
-  original progression you need to preserve.
-- Assorted further cosmetic defects are tracked in
-  [`docs/dev/GRAPHICS-BACKLOG.md`](docs/dev/GRAPHICS-BACKLOG.md).
-- No macOS or ARM support. Keyboard/mouse rebinding shipped in v0.4.0;
-  controller-button rebinding is not supported yet.
-
-Root causes and fix status for every item: the [release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases)
-and the finding log in [`docs/dev/findings.md`](docs/dev/findings.md).
+> **Before enabling `All unlocked`, back up `data/ge007.eep`.** Saving with it
+> on can permanently write fake unlocks into your save (D387).
 
 ### Steam Deck
 
@@ -191,23 +171,23 @@ overlay is `F10` + arrows/Enter.
 
 ## Roadmap
 
-No fixed timeline or committed feature list — this is spare-time work — but
-directionally, on the way to v1.0:
+The goal is a **feature-complete, faithful** port: every mode and region the
+N64 cartridge ships, behaving 1:1 with the original. The full list of open
+items, and which ones are waiting on a decision, lives in one place:
+[`docs/ROADMAP.md`](docs/ROADMAP.md). In brief:
 
-- Working through the [known issues](#status) above and the fuller list in
-  [`docs/dev/findings.md`](docs/dev/findings.md).
-- **PAL and JP ROM support** ([issue #85](https://github.com/jkdansereau/goldeneye-pc-port/issues/85)); NTSC-U is the only supported region today.
-- **Controller (pad) button rebinding UI** (keyboard/mouse rebinding shipped
-  in v0.4.0), and macOS/ARM builds.
-- **LAN multiplayer**: reviving GoldenEye's original split-screen/deathmatch
-  netplay across multiple PCs on a local network. Genuinely under
-  consideration, but early and not started; no ETA.
-- General polish: performance, remaining rendering/audio defects, save/config
-  robustness.
+- **Split-screen multiplayer** (2–4 players), the largest missing N64 feature
+  ([#99](https://github.com/jkdansereau/goldeneye-pc-port/issues/99)).
+- **PAL and JP ROM support**. NTSC-U is the only supported region today.
+- The remaining small accuracy differences (audio timbre, a few cosmetic
+  rendering details).
+- **macOS/ARM builds** and controller-button rebinding.
 
-Not currently planned: new game modes GE never shipped (e.g. co-op), online (non-LAN)
-multiplayer, ray tracing. If any of these matter to you, open an issue —
-it helps prioritize.
+This is spare-time work, so there's no timeline. Opt-in extras beyond the N64
+game (LAN play, bots, HD textures) come after feature-complete, if at all.
+Not currently planned: co-op or other modes GE never shipped, online
+multiplayer, ray tracing. If any of these matter to you, open an issue — it
+helps prioritize.
 
 ---
 
@@ -387,9 +367,9 @@ The R4300 game code in `src/` is compiled completely unmodified; the
 decompilation's control flow is ground truth. Everything that would touch N64
 hardware is redirected into `port/`: a **software RSP** (`port/fast3d/`,
 adapted from the Perfect Dark port) that interprets the GBI display list the
-game builds each frame and emits OpenGL, bypassing the RDP; a scheduler
-replacement (`port/src/gesched.c`) that drives it directly; single-threaded
-libultra OS shims (`port/src/libultra.c`); and SDL2/OpenGL/filesystem backends
+game builds each frame and emits OpenGL, bypassing the RDP; libultra OS shims
+(`port/src/libultra.c`, game threads as real host threads) that let the
+game's own scheduler run and drive the software RSP inline; and SDL2/OpenGL/filesystem backends
 for video, audio, input and storage. The 32→64-bit transition forces a small,
 cataloged class of mechanical ABI-only edits to ROM-serialized structs
 (pointer-width reconciliation); these change no behavior and are documented

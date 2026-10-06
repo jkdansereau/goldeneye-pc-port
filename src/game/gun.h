@@ -319,6 +319,14 @@ s32 bondwalkItemHasAmmo(ITEM_IDS item);
 
 void gunDrawSight(s32 *gdl);
 
+/* D424 (#118): b44 aliases the four bytes of the big-endian RecoilSpeed word;
+ * byte 0 is the MSB on the N64 but the LSB on little-endian PC. */
+#ifdef PORT
+#define WS_B44(ws, i) ((ws)->b44[3 - (i)])
+#else
+#define WS_B44(ws, i) ((ws)->b44[i])
+#endif
+
 WeaponStats *get_ptr_item_statistics(ITEM_IDS item);
 
 ITEM_IDS getCurrentPlayerWeaponId(GUNHAND hand);

@@ -1,5 +1,7 @@
 # LEVEL-PLAYTEST — WS6 human completion-validation checklist
 
+> **Historical record — do not act on status claims in this file.** This checklist predates the v0.4.0 input model (D332–D337) and the campaign sign-off; use it as a template only. Current open work and status: [`docs/ROADMAP.md`](../ROADMAP.md) (2026-09-29).
+
 Run **after** `docs/dev/LEVEL-STATUS.md` is all-21 load+render PASS. This is
 the part that needs real input — a human plays each level start to finish
 and confirms it matches retail. Findings feed a WS5-style triage round

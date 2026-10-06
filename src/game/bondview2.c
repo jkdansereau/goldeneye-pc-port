@@ -7722,6 +7722,16 @@ void MoveBond(s8 stick_x, s8 stick_y, u16 buttons, u16 oldbuttons)
         f32 weapon_speed_verta;
 
         sp14C_temp = g_CurrentPlayer->speedtheta;
+#ifdef PORT
+        {
+            /* D428 (#117): direct mouse look leaves speedtheta ~0; add the
+             * equivalent yaw speed so the gun lags turns again (player 0 owns
+             * the mouse). Defined in port/src/input.c. */
+            extern float portGunSwayTheta(float dt);
+            if (get_cur_playernum() == 0)
+                sp14C_temp += portGunSwayTheta(g_GlobalTimerDelta);
+        }
+#endif
         weapon_speed_verta =
             (g_CurrentPlayer->speedverta / 0.7f) +
             (g_CurrentPlayer->field_A4 / CHR_OBJ_MAXSPEED);
@@ -7865,10 +7875,19 @@ void MoveBond(s8 stick_x, s8 stick_y, u16 buttons, u16 oldbuttons)
                         if (sp6C->actiontype == ACT_DIE)
                         {
 #if defined(VERSION_US)
+                            /* D425 (#115): CHRFLAG is unsigned on GCC (has 0x80000000); N64 tests the sign bit */
+#ifdef PORT
+                            if (((s32)sp6C->chrflags << 7) >= 0)
+#else
                             if ((sp6C->chrflags << 7) >= 0)
 #endif
+#endif
 #if defined(VERSION_JP) || defined(VERSION_EU)
+#ifdef PORT
+                            if (((s32)sp6C->chrflags << 7) >= 0 && lvlGetControlsLockedFlag() == 0)
+#else
                             if ((sp6C->chrflags << 7) >= 0 && lvlGetControlsLockedFlag() == 0)
+#endif
 #endif
                             {
                                 sp6C->chrflags |= CHRFLAG_01000000;
