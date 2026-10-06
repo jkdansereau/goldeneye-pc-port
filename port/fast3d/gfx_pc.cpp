@@ -262,6 +262,17 @@ extern "C" void gfx_set_safe_area_crop(int on) {
     g_safe_area_crop_enabled = !!on;
 }
 
+/* D416: the crop above stretches the LAST set viewport's Y range over the
+ * whole window. Correct for one full-screen viewport; in split-screen every
+ * player's (half/quarter) viewport got stretched to fill the window, so the
+ * last-drawn player covered the others (and the shuffled draw order made the
+ * winner alternate frame to frame). While a 2+ player stage is running the
+ * N64's own split layout is used unmodified. */
+static bool g_split_screen = false;
+extern "C" void gfx_set_split_screen(int on) {
+    g_split_screen = !!on;
+}
+
 /* D447: output rect (Video.AspectMode = Original). 0 = fill the window (the
  * historical behaviour, bit-identical). >0 = letter/pillarbox the frame to
  * exactly this aspect, centred; set once per frame by the port layer before
@@ -1036,6 +1047,28 @@ static void import_texture(int i, int tile, bool importReplacement) {
     const uint8_t siz = rdp.texture_tile[tile].siz;
     const uint32_t tex_flags = loaded_texture.tex_flags;
     const uint8_t palette_index = rdp.texture_tile[tile].palette;
+
+    /* D463: a SETTILE with line=0 makes every importer divide by zero
+     * (height = size_bytes / line_size_bytes -- 0xc0000094 integer-divide on
+     * Windows x64; the crash PC was import_texture_i8). The game emits this
+     * legitimately: textrelated.c's outlined-text path renders ANY byte
+     * < 0x21 through chars[*text - 0x21], a zeroed fontchar (w=h=0,
+     * pixeldata=NULL), and gDPLoadTextureBlock(width=0) then expands to
+     * gsDPTile(line=0) + a zero-area gSPTextureRectangle. The N64 RDP draws
+     * nothing for a zero-area rect, so the decomp is correct -- fast3d must
+     * tolerate it. Skip the import entirely (no cache entry, no upload);
+     * the degenerate draw rasterizes no fragments, so whatever stays bound
+     * on this unit is never sampled. Nonzero line sizes take the exact
+     * original path below. */
+    if (rdp.texture_tile[tile].line_size_bytes == 0) {
+        static int d463_warned = 0;
+        if (d463_warned < 8)
+            sysLogPrintf(LOG_NOTE, "D463: texrect on zero-line tile -- import skipped "
+                                   "(tile=%d fmt=%u siz=%u tmem=%u)",
+                         tile, fmt, siz, rdp.texture_tile[tile].tmem);
+        d463_warned++;
+        return;
+    }
 
     // D74: only fall back when the tmem slot was never written by a load
     // command. The old `rdp.tex_lod && tile >= first+detail` branch also
@@ -2831,7 +2864,7 @@ static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_as
     // g_gpSafeTop already plays the exact role SCREEN_HEIGHT plays below
     // (both are the bottom-up Y value of the mapped region's TOP edge) --
     // this reduces to the untouched original formula when crop is off.
-    const bool crop = g_safe_area_crop_enabled && g_gpSafeHeight > 0.0f;
+    const bool crop = g_safe_area_crop_enabled && !g_split_screen && g_gpSafeHeight > 0.0f;
     const float safeTop = crop ? g_gpSafeTop : (float)SCREEN_HEIGHT;
     const float safeHeight = crop ? g_gpSafeHeight : (float)SCREEN_HEIGHT;
     const float ratioY = gfx_current_dimensions.height / safeHeight;
@@ -2849,8 +2882,8 @@ static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_as
     // TV-overscan margin) and fold it into the same toggle: trim the same
     // fixed 1-unit margin from both edges rather than trying to force
     // content to reach a boundary it may never actually be drawn to.
-    const float safeLeft = g_safe_area_crop_enabled ? 1.0f : 0.0f;
-    const float safeWidth = g_safe_area_crop_enabled ? (float)SCREEN_WIDTH - 2.0f : (float)SCREEN_WIDTH;
+    const float safeLeft = (g_safe_area_crop_enabled && !g_split_screen) ? 1.0f : 0.0f;
+    const float safeWidth = (g_safe_area_crop_enabled && !g_split_screen) ? (float)SCREEN_WIDTH - 2.0f : (float)SCREEN_WIDTH;
     const float ratioX = gfx_current_dimensions.width / safeWidth;
 
     float x1 = (area->x - safeLeft) * ratioX;

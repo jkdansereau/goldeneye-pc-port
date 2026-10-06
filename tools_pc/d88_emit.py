@@ -494,8 +494,11 @@ for line in open(TABLE):
     if m:
         table_names.append(m.group(1))
 
-usetup_names = sorted(set(n for n in table_names
-                           if n.startswith("Usetup") and n.endswith("Z")))
+def is_setup_name(n):
+    # Solo "Usetup*Z" and multiplayer "Ump_setup*Z" share the setup format.
+    return (n.startswith("Usetup") or n.startswith("Ump_setup")) and n.endswith("Z")
+
+usetup_names = sorted(set(n for n in table_names if is_setup_name(n)))
 
 manifest = []
 chunks = []
@@ -505,7 +508,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 bin_path = os.path.join(OUT_DIR, "pccg.bin")
 man_path = os.path.join(OUT_DIR, "manifest.csv")
 def is_usetup_row(nm):
-    return nm.startswith("Usetup") and nm.endswith("Z")
+    return is_setup_name(nm)
 
 def emit(name, data):
     global cur_off
@@ -573,7 +576,7 @@ for name in usetup_names:
         emit(name, comp_out)
         n_ok += 1
 
-print(f"converted: {n_ok}/{len(usetup_names)} Usetup*Z files")
+print(f"converted: {n_ok}/{len(usetup_names)} setup*Z files (solo + MP)")
 
 if errors:
     print(f"\n{len(errors)} ERRORS:")

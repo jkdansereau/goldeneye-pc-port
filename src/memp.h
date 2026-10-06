@@ -61,6 +61,9 @@ void *mempAllocPackedBytesInBank(u32 param_1);
 #else
 u32 mempAllocPackedBytesInBank(u32 param_1);
 #endif
+#ifdef PORT
+void mempRedzoneCheck(const char *why); /* D464: GE_MEMPREDZONE */
+#endif
 void mempResetBank(u8 bank);
 void mempNullNextEntryInBank(u8 bank);
 

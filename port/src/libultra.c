@@ -59,6 +59,7 @@
 
 /* fast3d (C++): the software RSP entry point. */
 extern void gfx_run(Gfx *commands);
+extern void videoSyncSplitScreen(void); /* D416 */
 
 /* ------------------------------------------------------------------------ */
 /* Globals the game expects to exist (normally set by osInitialize).        */
@@ -1327,6 +1328,7 @@ void osSpTaskStartGo(OSTask *t)
         /* Graphics task: run the software RSP on the display list. */
         uint64_t t0 = sysGetMicroseconds();
         videoStartFrame();
+        videoSyncSplitScreen();
         gfx_run((Gfx *)t->t.data_ptr);
         videoEndFrame();
         g_lastFrameUs = sysGetMicroseconds();

@@ -950,6 +950,10 @@ static void videoHostExitIfRequested(void)
                  SDL_AtomicGet(&s_parked) ? "parked"
                  : (SDL_AtomicGet(&s_inFrame) ? "STILL IN FRAME (timeout)" : "idle"),
                  (unsigned)(SDL_GetTicks() - start));
+    {
+        extern void mempRedzoneCheck(const char *why);
+        mempRedzoneCheck("orderly quit");
+    }
     exit(0);
 }
 
@@ -979,6 +983,11 @@ void videoStartFrame(void)
     }
     /* D344: enter the frame first, then check for a quit (see above). */
     SDL_AtomicSet(&s_inFrame, 1);
+    /* D464: GE_MEMPREDZONE periodic stage-bank red-zone check (cached env). */
+    if (frames % 60 == 59) {
+        extern void mempRedzoneCheck(const char *why);
+        mempRedzoneCheck("videoEndFrame/60");
+    }
     if (SDL_AtomicGet(&s_quitReq)) {
         videoRenderPark();
     }
@@ -1082,7 +1091,7 @@ void videoPumpEvents(void)
             break;
         case SDL_CONTROLLERDEVICEADDED:
         case SDL_CONTROLLERDEVICEREMOVED:
-            inputRescanPads();
+            inputRequestRescan();   /* D450: the rescan runs on the pad-reading thread */
             break;
         case SDL_WINDOWEVENT:
             if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
@@ -1116,11 +1125,26 @@ void videoPumpEvents(void)
     inputApplyMouseRequests();
 }
 
+/* D416: split-screen viewports are sub-rects; tell fast3d so its safe-area
+ * crop stays off. Called before every gfx_run (scheduler + videoSubmitCommands). */
+void videoSyncSplitScreen(void)
+{
+    {
+        extern s32 getPlayerCount(void);
+        extern s32 lvlGetCurrentStageToLoad(void);
+        static int lastSplit = -1;
+        int split = getPlayerCount() >= 2 && lvlGetCurrentStageToLoad() != LEVELID_TITLE;
+        if (split != lastSplit) { sysLogPrintf(LOG_NOTE, "D416 split=%d players=%d stage=%d", split, (int)getPlayerCount(), (int)lvlGetCurrentStageToLoad()); lastSplit = split; }
+        gfx_set_split_screen(split);
+    }
+}
+
 void videoSubmitCommands(Gfx *cmds)
 {
     if (!initDone) {
         return;
     }
+    videoSyncSplitScreen();
     gfx_run(cmds);
 }
 

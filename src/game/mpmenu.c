@@ -1065,7 +1065,16 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
 #else
     s32 h2;
 #endif
+#ifdef PORT
+    // D420 (D8 class): the decomp's [4] receives "Rank: 1st" (10 bytes incl.
+    // NUL) and "P<n> KILLS"/"P<n> LOSSES"; GCC places scores[] right after
+    // it, so the rank text overwrote the Scores page values ("1932599354" =
+    // ": 1s", "116" = 't'). Pure local stack scratch, zero ABI role; N64
+    // build keeps the decomp size.
+    char rankbuffer[64];
+#else
     char rankbuffer[4];
+#endif
     s32 two_player_x_offset;
     char *text;
     s32 scores[4];

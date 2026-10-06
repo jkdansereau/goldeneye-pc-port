@@ -2,6 +2,7 @@
 #include <math.h>
 #ifdef PORT
 #include <stdlib.h>
+#include <string.h>   /* D416 GE_STARTMP harness: strchr */
 #endif
 #include <os_extension.h>
 #include <PR/libaudio.h>
@@ -396,6 +397,31 @@ void lvlStageLoad(s32 stage)
          * Not compiled without PORT; no effect unless the env var is set. */
         {
             const char *sm = getenv("GE_STARTMENU");
+            /* D416 harness: GE_STARTMP="<players>[,<mpStageIdx>]" starts a local
+             * multiplayer match with the menu's own default options (what
+             * MP options -> START does), so split-screen can be tested with no
+             * one at the menu. Needs GE_MPVIRT=<n-1> for the controller count. */
+            const char *smp = getenv("GE_STARTMP");
+            if (smp && *smp) {
+                extern s32 MP_stage_selected;
+                extern struct mp_stage_setup multi_stage_setups[];
+                extern void init_mp_options_for_scenario(s32 numplayers);
+                extern s32 selected_num_players;
+                s32 np = (s32)strtol(smp, NULL, 0);
+                const char *comma = strchr(smp, ',');
+                if (np < 2) np = 2;
+                if (np > 4) np = 4;
+                gamemode = GAMEMODE_MULTI;
+                init_mp_options_for_scenario(np);
+                if (comma) MP_stage_selected = (s32)strtol(comma + 1, NULL, 0);
+                selected_stage = multi_stage_setups[MP_stage_selected].stage_id;
+                briefingpage = -1;
+                prev_keypresses = TRUE;
+                maybe_is_in_menu = TRUE;
+                menu_update = MENU_RUN_STAGE;
+                osSyncPrintf("GE_STARTMP: players=%d mpstage=%d stage_id=%d\n",
+                             np, MP_stage_selected, selected_stage);
+            } else
             if (sm && *sm) {
                 s32 want = (s32)strtol(sm, NULL, 0);
                 const char *pg = getenv("GE_STARTMENU_PAGE");

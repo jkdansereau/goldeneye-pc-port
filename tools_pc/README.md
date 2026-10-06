@@ -18,7 +18,7 @@ investigation artifacts.
 | `d43_emit.py` | Offline N64→PC model-file converter → RZ sidecar + `manifest.csv` (D50 / Plan B). Regen after any model-format change. |
 | `d43_convert.py` | Reference single-file model converter + full-512 layout/pointer validator (D43). |
 | `d69_emit.py` | Offline converter for stage `bg/*.seg` + `Tbg_*_stanZ` → concatenated sidecar (D69/D78–D82). |
-| `d88_emit.py` | Offline converter for per-level `Usetup*Z` stage-setup files → appended to the `pccg.bin` sidecar (D88). |
+| `d88_emit.py` | Offline converter for per-level `Usetup*Z` (solo, 21) and `Ump_setup*Z` (multiplayer, 13; D416) stage-setup files → appended to the `pccg.bin` sidecar (D88). |
 | `d88_propdefs.py` | The `propDefs` polymorphic-record stream N64→PC converter used by `d88_emit.py` (D88.4). |
 | `d69_emit.py` / `d88_emit.py` / `d43_emit.py` | Run all three (+ `d88_propdefs`) to rebuild `data/` sidecars from the ROM. |
 

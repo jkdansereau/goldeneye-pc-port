@@ -50,6 +50,7 @@ void gfx_set_fix_mip_textures(int on);
 void gfx_set_detail_base_tile(int on);  /* D236: sample the base image of a DETAIL binding */
 void gfx_set_wrap_fix(int on);
 void gfx_set_anisotropy_level(int level);  /* 1 = off; clamped to GL max */
+void gfx_set_split_screen(int on);         /* D416: 2+ player stage running -> viewports are sub-rects; safe-area crop must not remap them */
 void gfx_set_safe_area_crop(int on);       /* crop the N64 TV-overscan safe-area margin instead of showing it as black bars */
 /* On-window pixel rect (top-left origin) the full VI logical canvas (0,0)-
  * (SCREEN_WIDTH, SCREEN_HEIGHT) currently maps to, honoring the safe-area

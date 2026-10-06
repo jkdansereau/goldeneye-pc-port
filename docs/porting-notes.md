@@ -1016,7 +1016,10 @@ for (s = SP_LEVEL_EGYPT; s >= SP_LEVEL_DAM /* == 0 */; s--)   // never ends
 
 - Symptom: a silent hang (kernel-heartbeat stall, no crash log) inside a
   loop over an enum range; the counter holds a huge value in gdb.
-- Instances: **D142**; `LEVEL_SOLO_SEQUENCE` in
+- Instances: **D417** (`enum PROP`: `getPropForHeldItem()` returns -1 for the
+  fist and callers test `prop >= 0` -> unsigned enum lets -1 through ->
+  `modelLoad(-1)` crash in any 2P+ stage; sentinel `PROP__PORT_SIGNED`);
+  **D142**; `LEVEL_SOLO_SEQUENCE` in
   `fileGetHighestStageDifficultyCompletedForFolder` froze the SELECT FILE
   screen. `DIFFICULTY` was already safe (`DIFFICULTY_MULTI = -1`).
 - Fix: add a never-used negative sentinel enumerator under `#ifdef PORT`
@@ -1204,6 +1207,11 @@ and turns every such overrun into a fatal `*** stack smashing detected ***`
   the identical overflow is cosmetic (the JPN-cache pointer is valid memory in
   any language); the crash severity is a PC artifact of that global being NULL
   outside Japanese mode.
+- Instance (D420): `mpmenu.c` `mp_watch_menu_display` `char rankbuffer[4]`
+  receives "Rank: 1st" / "P<n> KILLS"; GCC puts `scores[4]` next to it, so
+  the MP Scores page printed the rank text's bytes as numbers (1932599354 =
+  ": 1s"). Tell: a displayed number whose hex is printable ASCII from a
+  neighbouring string. Widened to `[64]` under `#ifdef PORT`.
 - Fix policy: **`-fno-stack-protector` globally** (`CMakeLists.txt`) so Linux
   matches the N64 and MinGW builds; the code is byte-matched to the ROM and
   cannot be "fixed" per site without diverging. Where a case is cleanly
@@ -1350,6 +1358,27 @@ darkening from a nonzero `ENV_ALPHA` LERP factor is very likely faithful
 (possibly authored/original-dev-intentional tinting), not a bug — do not
 "fix" it without an N64/1964-GEPD reference screenshot proving otherwise.
 
+## D16. Split-screen: port-side "one full-screen viewport" assumptions break 2P+ (D418)
+
+Two traps from the #99 split-screen bring-up:
+
+- **Safe-area crop (`gfx_adjust_viewport_or_scissor`) caches the LAST SP
+  viewport's Y range and stretches it over the whole window.** Right for the
+  solo 220-line viewport, wrong for 2P+ (each player's viewport is a sub-rect):
+  every player's view filled the window and the last-drawn (order is shuffled
+  per frame, `get_nth_player_from_shuffled`) covered the rest -> alternating
+  full-screen flicker. Fix = `gfx_set_split_screen()`. Any new port feature that
+  assumes "the viewport is the screen" needs the same 2P+ gate.
+- **Per-frame port hooks must sit on the path frames really take.** The
+  scheduler calls `gfx_run` directly (`port/src/libultra.c`), NOT through
+  `videoSubmitCommands`; a hook placed only in the latter silently never ran.
+  Log once on the first state change when adding such a hook.
+
+Debug recipe that found it: capture consecutive frames after the stage starts
+(GE_PCDUMP range, or the harness `GE_STARTMP=<players>[,<stageIdx>]` +
+`GE_MPVIRT=<players-1>` to start a match with no one at the menu) and look at
+them — the symptom was obvious in one montage.
+
 ## D17. Un-stubbing a `-1` sentinel re-activates every dormant consumer of the value (D431/D434)
 
 A port stub that forces a value to `-1` (D154 `texnum`, D135) can hide latent layout bugs in its other readers. When restoring a real value, grep ALL readers of the field first and check each for raw-layout reads and table-bounds assumptions. Instance: D431 made light-fixture hits return real image ids, which reached `chrprop.c`/`propobj.c` reading `((u8*)&g_Textures[n])[0] & 0xf` as a hit type -- on PC byte 0 is the low byte of `dataoffset` (LE bitfield layout, D67), so it indexed `g_HitTypeSounds[13]` with 0..15. Use the `.hitTexture`/`.hitSound` bitfields (as `chr.c` does).
@@ -1368,6 +1397,11 @@ A port stub that forces a value to `-1` (D154 `texnum`, D135) can hide latent la
   `[Input] MouseEnabled = 0` in the pinned test ini. Script "frames" were
   about one per rendered frame on the file select screen; calibrate with a
   log, not by assumption.
+- **Per-slot headless scripts: `GE_INPUTSCRIPT_P1..P3` drive seats 2-4.**
+  Same entry syntax as `GE_INPUTSCRIPT` (slot 0); "frame" counts that
+  controller's reads. Mouse tokens and CHOLD/CREL are ignored on slots 1-3
+  (one warning per script). Recipe for a scripted 4P split-screen run:
+  `GE_STARTMP=4,<stage> GE_MPVIRT=3 GE_INPUTSCRIPT_P1=... GE_INPUTSCRIPT_P2=... GE_INPUTSCRIPT_P3=... GE_QUITFRAME=...`.
 - **`textMeasure` height is 0 without a trailing newline (D343).** It only
   counts completed lines. Measure `"text\n"` when you need a height (front.c's
   folder text does this); the width is unaffected.
@@ -1770,4 +1804,10 @@ A port stub that forces a value to `-1` (D154 `texnum`, D135) can hide latent la
   (different Windows dirs). Never trust `command -v cmake` for the MSYS2
   toolchain either: a pip-installed cmake can shadow it (2026-09-30).
 
+### Poll-thread input must never re-point `g_CurrentPlayer` (D419)
+
+`inputComputePad` runs on the scheduler thread (`joyPoll`), a real pthread, not the game thread. Any save/swap/restore of `g_CurrentPlayer`/`player_num`/`g_playerPerm` from there races the game tick's own `set_cur_player`: the restore can leave the game thread on the wrong player and it then spins in list walks that compare against `g_CurrentPlayer->...` (seen: `bondinvCycleForward` infinite loop after a split-screen respawn). Resolve the owning player explicitly (`g_playerPointers[slot]`) and touch its fields directly; for game functions that take no player argument, present a native button bit instead of calling them.
+
 **A1 cross-tag (D455, 2026-09-30):** an exe-static address (array/global/function in `.data`/`.rodata`/`.text`) held in a `u32`/`s32` truncates on Windows (image base `0x140000000`; Linux 0x20000000 hides it). Binary tell: `mov r64,[rip+.refptr.X]` ... `mov r32,r32` before the pointer is used or passed. The address load may precede a `jmp` join, so an adjacent-instruction scan misses it; follow jumps. A census of the whole exe found only the D454 site; `_*Segment*` linker symbols are ROM constants (`.set` in `romassets_u.s`), not exe addresses, and are benign in `(u32)` casts.
+
+**`GE_MEMPREDZONE=1` (D464): catch allocator overruns deterministically.** Set it before any run to pad every `mempAlloc*` block with a 64-byte pattern trailer and check at level unload, every 60 frames and on orderly quit. A hit prints `MEMPREDZONE: HIT ... caller=0x<addr>`; resolve with `addr2line -f -C -i -e build-pc/ge007.x86_64.exe 0x<addr>` to the allocation site, then compare its size expression with `sizeof` of how the buffer is indexed (an N64 literal stride vs a widened struct is the D461/D462 class). Zero hits is only "no overrun reached the trailer"; whole-bank allocations are unpadded until shrunk. Unset = one cached branch per allocation.

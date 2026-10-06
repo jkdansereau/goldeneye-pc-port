@@ -136,7 +136,7 @@ to d69's output):
 ```sh
 python3 tools_pc/d43_emit.py ntsc-final          # -> data/pcmodels-ntsc-final/{pcmodels.bin,manifest.csv}  (~1.3 MB)
 python3 tools_pc/d69_emit.py ntsc-final          # -> data/pccg-ntsc-final/{pccg.bin,manifest.csv}          (bg + stan)
-python3 tools_pc/d88_emit.py ntsc-final --regen  #    appends the 21 per-level Usetup*Z stage-setup files -> ~3.6 MB
+python3 tools_pc/d88_emit.py ntsc-final --regen  #    appends the 21 solo Usetup*Z + 13 multiplayer Ump_setup*Z stage-setup files -> ~3.6 MB
 ```
 
 **PAL / JP note:** sidecar generation for these regions is currently broken at

@@ -76,7 +76,7 @@ SIZEOF_N64 = {
 from collections import Counter
 
 for name, (addr, size) in sorted(fl_by_base.items()):
-    if not (name.startswith("Usetup") and name.endswith("Z")) or size == 0:
+    if not ((name.startswith("Usetup") or name.startswith("Ump_setup")) and name.endswith("Z")) or size == 0:
         continue
     comp = rom[addr:addr + size]
     if comp[:2] != b"\x11\x72":
