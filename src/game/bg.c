@@ -67,7 +67,7 @@ enum GlobalVisOpcode {
 };
 
 extern struct unk_portalstruct table_for_portals[PORTMAX];
-extern s32 ptr_bgdata_offsets;
+extern bg_addr_t ptr_bgdata_offsets;
 extern s32 dword_CODE_bss_8007FF88;
 extern s32 *dword_CODE_bss_8007FF90;
 extern f32 *dword_CODE_bss_8007FF94;
@@ -92,10 +92,10 @@ extern s32 dword_CODE_bss_800815f8;
 
 // bss
 //CODE.bss:8007BF90
-s32 ptr_bg_data;
+bg_addr_t ptr_bg_data; /* D457: host pointer (was s32) */
 
 //CODE.bss:8007BF94
-s32 gptr_stan;
+bg_addr_t gptr_stan; /* D457: host pointer (was s32) */
 
 /**
  * address 8007BF98
@@ -879,7 +879,7 @@ void load_bg_file(LEVEL_INDEX levelid)
  
     lightFixtureInitTables();
  
-    ptr_bg_data = (s32)header;
+    ptr_bg_data = (bg_addr_t)header;
     obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, (u8 *) ptr_bg_data, 0, 0x40);
 
     if (((levelid && ptr_bg_data) && levelentry_index));
@@ -889,10 +889,10 @@ void load_bg_file(LEVEL_INDEX levelid)
  
     size = (((((u32) ptr_bgdata_room_fileposition_list[1].pPointTableBin) & 0x00ffffff) - 1) | 0xf) + 1;
  
-    ptr_bg_data = (s32) mempAllocBytesInBank(size, 4);
+    ptr_bg_data = (bg_addr_t) mempAllocBytesInBank(size, 4);
     obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, (u8 *) ptr_bg_data, 0, size);
  
-    gptr_stan = (s32) _fileNameLoadToBank(levelinfotable[levelentry_index].bg_stan_filename, 2, 0, 4);
+    gptr_stan = (bg_addr_t) _fileNameLoadToBank(levelinfotable[levelentry_index].bg_stan_filename, 2, 0, 4);
  
     stanDetermineEOF((struct StanPrefixRecord *) gptr_stan, 0, (u8 *) gptr_stan);
     stanLoadFile((struct StanPrefixRecord *) gptr_stan);
@@ -914,7 +914,7 @@ void load_bg_file(LEVEL_INDEX levelid)
     if (dword_CODE_bss_8007BF98 == 0)
     {
         dword_CODE_bss_8007FF88 = 2;
-        ptr_bgdata_offsets = (s32)data;
+        ptr_bgdata_offsets = (bg_addr_t)data;
         ptr_bgdata_room_fileposition_list = (bg_room_data *) BG_SEG_TO_PTR(data, ((s32 *)ptr_bgdata_offsets)[1]);
         
         // Keep this fake goto for matching.
@@ -1923,7 +1923,7 @@ char *bgDebPrintROOMID(s32 roomId)
 bg_queued_portal_entry g_BgPortalQueue[BG_PORTAL_QUEUE_LEN];
 
 bg_portal_data_entry *g_BgPortals;
-s32 ptr_bgdata_offsets;
+bg_addr_t ptr_bgdata_offsets;
 s32 dword_CODE_bss_8007FF88;
 bg_room_data *ptr_bgdata_room_fileposition_list;
 s32 *dword_CODE_bss_8007FF90;

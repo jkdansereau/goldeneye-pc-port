@@ -72,20 +72,6 @@ static u32  lastBufferBytes = 0;
 static u32  dropCount = 0;
 static u32  oversizeCount = 0;
 
-/* D204 diag (temporary): GE_D204_OLD=1 restores the pre-fix behaviour --
- * osAiGetLength() reports the whole SDL queue depth and queueLimit goes back
- * to 8192 -- so before/after can be measured in ONE binary, without
- * build-to-build variance. Remove once D204 is closed. */
-static int d204OldMode(void)
-{
-    static int cached = -1;
-    if (cached < 0) {
-        cached = getenv("GE_D204_OLD") ? 1 : 0;
-        if (cached) queueLimit = 8192;
-    }
-    return cached;
-}
-
 int audioInit(void)
 {
 #if defined(_WIN32) && defined(SDL_HINT_AUDIODRIVER)
@@ -159,10 +145,6 @@ u32 audioGetAiLengthBytes(void)
 {
     u32 queued = dev ? SDL_GetQueuedAudioSize(dev) : 0;
 
-    if (d204OldMode()) {
-        return queued; /* pre-fix behaviour, for A/B measurement only */
-    }
-
     /* D204/F5 -- shift the regulator's setpoint off zero. THIS is the part
      * that measurably changes behaviour.
      *
@@ -202,8 +184,6 @@ void audioSetNextBuffer(const s16 *buf, u32 len)
             s_audioDumpFile = fopen("audiodump.raw", "wb");
         }
     }
-    (void)d204OldMode(); /* D204 diag: ensure the queueLimit override applies */
-
     /* D204 audio-health monitor: GE_D204=1 prints one line every 5 s of wall
      * clock with everything needed to see the pipeline degrade in real time:
      *

@@ -1297,6 +1297,7 @@ GE on N64 renders gameplay at ~20–30 fps, so `g_ClockTimer` (= `speedgraphfram
 - **Tell:** a state that holds forever at 60 fps, is frame-exact (integer frame, `fa == fb`), and has a per-tick step < 1.0 unit.
 - **Repro correctly:** force the granularity with `GE_D318B_CLK=N` (TEMP probe, lockstep N ticks/frame) and A/B N=1 vs N=2. Wall-clock runs on a slow host (WSLg renders ~5 fps → mixed clk 1–6) and `GE_DETERM=1` (advances per VI-retrace request, also mixed clk) both give uncalibrated results.
 - **Where else to look:** any `for/while (numticks)` accumulator followed by a single threshold/floor consumer; D193 (AI locomotion rate) and D243 (cutscene `numticks` bursts) touched the same axis from the other side.
+- **Frame-counter gates (D427/D451):** a gate that reads the current `g_ClockTimer` to rescale a frame counter (`88C % (rate*(clk>=2?1:2))`) is only exact at steady pacing. Prefer the tick accumulator already kept beside the counter (`field_890`) and test for a threshold *crossing* (`t/P != (t-clk)/P`): stateless and exact on average at any pacing.
 
 ## D15. A texture-rectangle idiom that is sub-1-native-pixel tall relies on the RDP's floor-based fixed-point scanline stepping — now replicated in `gfx_draw_rectangle` (D397, RESOLVED 2026-09-28)
 
@@ -1768,3 +1769,5 @@ A port stub that forces a value to `-1` (D154 `texnum`, D135) can hide latent la
   PATH, `/tmp`, `mktemp` and `cygpath` can belong to different runtimes
   (different Windows dirs). Never trust `command -v cmake` for the MSYS2
   toolchain either: a pip-installed cmake can shadow it (2026-09-30).
+
+**A1 cross-tag (D455, 2026-09-30):** an exe-static address (array/global/function in `.data`/`.rodata`/`.text`) held in a `u32`/`s32` truncates on Windows (image base `0x140000000`; Linux 0x20000000 hides it). Binary tell: `mov r64,[rip+.refptr.X]` ... `mov r32,r32` before the pointer is used or passed. The address load may precede a `jmp` join, so an adjacent-instruction scan misses it; follow jumps. A census of the whole exe found only the D454 site; `_*Segment*` linker symbols are ROM constants (`.set` in `romassets_u.s`), not exe addresses, and are benign in `(u32)` casts.

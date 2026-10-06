@@ -16,7 +16,14 @@ s32 img_bitcount;
 //8008D0AC
 s32 dword_CODE_bss_8008D0AC;
 //8008D0B0;
+#ifdef PORT
+/* D457: holds (base - 0x02000000) as a pointer-width value; adding an N64
+ * segmented image address (0x02000000 + off) yields the real pointer. The N64
+ * arm's 32-bit wrap trick (+0xFE000000) is only valid mod 2^32. */
+uintptr_t globalbank_rdram_offset;
+#else
 s32 globalbank_rdram_offset;
+#endif
 //8008D0B4;
 s32 *pGlobalimagetable;
 //8008D0B8;
@@ -257,7 +264,11 @@ void texReset(void)
     gimgFixupGlobalimagetable((u8 *)pGlobalimagetable);
 #endif
 
+#ifdef PORT
+    globalbank_rdram_offset = (uintptr_t)pGlobalimagetable - 0x02000000u;
+#else
     globalbank_rdram_offset = (u32)pGlobalimagetable + 0xFE000000;
+#endif
     genericimage = (void *) (globalbank_rdram_offset + GIMG_OFF(s_genericimage));
     impactimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_impactimages));
     explosion_smokeimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_explosion_smokeimages));
@@ -291,23 +302,23 @@ void texReset(void)
     mpcharselimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_mpcharselimages));
     mpstageselimages = (void *) (globalbank_rdram_offset + GIMG_OFF(s_mpstageselimages));
 
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x000), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x078), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x120), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x1c8), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x270), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x318), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x3c0), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x468), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x510), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x5b8), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x660), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x708), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x7b0), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x858), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x900), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0x9a8), 0);
-    texLoadFromDisplayList(globalbank_rdram_offset + GIMG_OFF(globalDL_0xa50), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x000)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x078)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x120)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x1c8)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x270)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x318)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x3c0)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x468)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x510)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x5b8)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x660)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x708)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x7b0)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x858)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x900)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0x9a8)), 0);
+    texLoadFromDisplayList((Gfx *)(globalbank_rdram_offset + GIMG_OFF(globalDL_0xa50)), 0);
 
     texLoad(genericimage, 0);
 

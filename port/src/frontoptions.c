@@ -53,8 +53,8 @@ extern Gfx *frontSetupMenuBackground(Gfx *DL);
 extern Gfx *frontAddPreviousTabText(Gfx *DL);
 extern s32  frontCheckCursorOnPreviousTab(void);
 extern Gfx *frontDrawCursor(Gfx *DL);
-extern Gfx *frontPrintText(Gfx *gdl, s32 *x, s32 *y, s8 *text, s32 second_font_table,
-                           s32 first_font_table, s32 arg6, s32 view_x, s32 view_y,
+extern Gfx *frontPrintText(Gfx *gdl, s32 *x, s32 *y, s8 *text, struct fontchar *second_font_table,
+                           struct font *first_font_table, s32 arg6, s32 view_x, s32 view_y,
                            s32 arg9, s32 arga);
 extern void load_walletbond(void);
 extern void disable_all_switches(Model *arg0);                                   /* front.c:967 */
@@ -152,8 +152,8 @@ static s32 measureW(const char *str)
 
 static Gfx *ink(Gfx *DL, s32 x, s32 y, const char *str, u32 colour)
 {
-    return frontPrintText(DL, &x, &y, (s8 *)str, (s32)(uintptr_t)ptrFontZurichBoldChars,
-                          (s32)(uintptr_t)ptrFontZurichBold, (s32)colour,
+    return frontPrintText(DL, &x, &y, (s8 *)str, ptrFontZurichBoldChars,
+                          ptrFontZurichBold, (s32)colour,
                           viGetX(), viGetY(), 0, 0);
 }
 

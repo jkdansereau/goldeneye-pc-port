@@ -9,7 +9,6 @@
 #include <cstdio>
 
 #include <map>
-#include <set>
 #include <unordered_map>
 #include <vector>
 #include <list>
@@ -763,32 +762,6 @@ static void import_texture_rgba16(int tile, const LoadedTexture& loaded_texture,
     const uint32_t width = rdp.texture_tile[tile].line_size_bytes / 2;
     const uint32_t height = size_bytes / rdp.texture_tile[tile].line_size_bytes;
 
-#ifdef PORT
-    /* D252 diag (temporary): compare the line_size_bytes-derived width/height
-     * against the SETTILESIZE-derived rdp.texture_tile[tile].width/height, and
-     * dump the raw texel data once per distinct (addr,size) pair so a fire
-     * tile can be checked against the source bytes by hand. Remove once
-     * D252 is resolved. */
-    static int s_d252 = -1;
-    if (s_d252 < 0) s_d252 = getenv("GE_D252") != NULL;
-    if (s_d252) {
-        static std::set<std::pair<const void*, uint32_t>> s_d252_seen;
-        if (s_d252_seen.emplace((const void*)addr, size_bytes).second) {
-            const auto& t = rdp.texture_tile[tile];
-            fprintf(stderr,
-                "[D252] tile=%d addr=%p size_bytes=%u line_size_bytes=%u "
-                "computed(w=%u h=%u) settilesize(w=%u h=%u) uls=%u ult=%u lrs=%u lrt=%u "
-                "masks=%u maskt=%u tmem=%u\n",
-                tile, (const void*)addr, size_bytes, line_size_bytes, width, height,
-                t.width, t.height, t.uls, t.ult, t.lrs, t.lrt, t.masks, t.maskt, t.tmem);
-            char rawpath[256];
-            snprintf(rawpath, sizeof(rawpath), "scratch/d252_raw_%p_%u.bin", (const void*)addr, size_bytes);
-            FILE* rf = fopen(rawpath, "wb");
-            if (rf) { fwrite(addr, 1, size_bytes, rf); fclose(rf); }
-        }
-    }
-#endif
-
 	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
     // DumpTexture(loaded_texture.otr_path, rgba32_buf, width, height);
 }
@@ -1129,10 +1102,8 @@ static void import_texture(int i, int tile, bool importReplacement) {
      * die_blood_image_routine -- reuse the same addresses frame after frame,
      * so an address-only key returns a stale GL texture from an earlier frame.
      * Key those on a content hash (FNV-1a) instead; static textures keep the
-     * free address key. GE_DYNTEXHASH_OFF=1 disables for A/B. */
+     * free address key. */
     {
-        static int dynhash_off = -1;
-        if (dynhash_off < 0) dynhash_off = getenv("GE_DYNTEXHASH_OFF") != NULL;
         /* Game code often reaches this memory through OS_K0_TO_PHYSICAL,
          * which fast3d resolves into the byte-identical KSEG0 mirror at
          * 0x80000000 (port/src/dram.c V2) -- normalise to the V1 view the
@@ -1141,7 +1112,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
         if ((uintptr_t)v1addr >= 0x80000000UL && (uintptr_t)v1addr < 0x80800000UL) {
             v1addr -= 0x10000000UL;
         }
-        if (!dynhash_off && g_VtxBuffers[0] && v1addr >= g_VtxBuffers[0] && v1addr < g_VtxBuffers[2]) {
+        if (g_VtxBuffers[0] && v1addr >= g_VtxBuffers[0] && v1addr < g_VtxBuffers[2]) {
             uint32_t h = 2166136261u;
             const uint32_t n = loaded_texture.size_bytes;
             for (uint32_t b = 0; b < n; b++) {

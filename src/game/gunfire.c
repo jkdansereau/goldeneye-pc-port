@@ -2717,6 +2717,24 @@ void sub_GAME_7F0649D8(enum GUNHAND hand)
 /**
  * Address: 7F064B28
  */
+#ifdef PORT
+/* D451 (D427 follow-up): automatic-fire gate measured in TICKS, not frames.
+ * The D427 fix scaled the modulus by (g_ClockTimer >= 2 ? 1 : 2) and kept the
+ * frame counter field_88C, so at an unsteady frame rate (clock flipping 1<->2)
+ * the window flips between rate and 2*rate frames and shots fire early/jittery.
+ * field_890 is the tick accumulator (+= g_ClockTimer per call, reset together
+ * with field_88C), so "a multiple of P ticks was crossed this call" is stateless
+ * and exact on average at any pacing: P = 2 ticks * rate = what the console's
+ * 2-tick frames gave. First frame (88C == 0) still fires, as before. */
+static int d427Gate(struct hand *h, s32 rate)
+{
+    s32 P = rate * 2;
+    s32 t1 = (s32) h->field_890;
+    s32 t0 = t1 - g_ClockTimer;
+    return (h->field_88C == 0) || (P > 0 && (t1 / P) != (t0 / P));
+}
+#endif
+
 void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
 {
 #if defined(VERSION_US)
@@ -2762,7 +2780,11 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
     struct PropRecord *temp_v0_8;
     Weapon1PTransformKeyframe *sp74;
     f32 temp_f0_2;
+#ifdef PORT
+    Weapon1PTransformKeyframe *var_a0_2; /* D454: see EU arm */
+#else
     u32 var_a0_2;
+#endif
     f32 temp_v1_9;
     struct hand *temp_v1_5;
     f32 un_f32_num = 0.0f;
@@ -2818,7 +2840,11 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
     Weapon1PTransformKeyframe *sp74;
     struct PropRecord *temp_v0_8;
     f32 temp_f0_2;
+#ifdef PORT
+    Weapon1PTransformKeyframe *var_a0_2; /* D454: see EU arm */
+#else
     u32 var_a0_2;
+#endif
     f32 temp_v1_9;
     struct hand *temp_v1_5;
     f32 un_f32_num = 0.0f;
@@ -2873,7 +2899,14 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
     Weapon1PTransformKeyframe *sp74;
     struct PropRecord *temp_v0_8;
     f32 temp_f0_2;
+#ifdef PORT
+    /* D454: was u32, which truncates the exe-data address of D_80034CA4/E0C
+     * (PE image base 0x140000000) before gunSample1PTransform; knife slash
+     * crashed on Windows. Pointer-width ABI fix only. */
+    Weapon1PTransformKeyframe *var_a0_2;
+#else
     u32 var_a0_2;
+#endif
     f32 temp_v1_9;
     struct hand *temp_v1_5;
     f32 un_f32_num = 0.0f;
@@ -3232,7 +3265,7 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                      * Only this gate changes: 88C itself and every other 88C==0
                      * "first frame" gate stay per-frame, and animation time
                      * (field_890) stays tick-scaled. */
-                    if (((s32) handptr->field_88C % (bondwalkItemGetAutomaticFiringRate(var_s1) * ((g_ClockTimer >= 2) ? 1 : 2))) == 0)
+                    if (d427Gate(handptr, bondwalkItemGetAutomaticFiringRate(var_s1)))
 #else
                     if (((s32) handptr->field_88C % bondwalkItemGetAutomaticFiringRate(var_s1)) == 0)
 #endif
@@ -4120,11 +4153,19 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
             || (handptr->weapon_action_state == GUN_ANIM_STATE_KNIFE_SLASH1_STRIKE)
             || (handptr->weapon_action_state == GUN_ANIM_STATE_KNIFE_SLASH1_RECOVER))
         {
+#ifdef PORT
+            var_a0_2 = (Weapon1PTransformKeyframe *) D_80034CA4;
+#else
             var_a0_2 = D_80034CA4;
+#endif
         }
         else
         {
+#ifdef PORT
+            var_a0_2 = (Weapon1PTransformKeyframe *) D_80034E0C;
+#else
             var_a0_2 = D_80034E0C;
+#endif
         }
 
         if (gunSample1PTransform(var_a0_2, sp88, &handptr->field_8EC, hand) != 0)
@@ -6216,9 +6257,17 @@ Gfx *generate_ammo_total_microcode(Gfx *gdl)
     s32 rightx;
     s32 reserveammo;
     s32 magammo;
+#ifdef PORT
+    uintptr_t imageoffset_r;
+#else
     u32 imageoffset_r;
+#endif
     s32 textwidth_r;
+#ifdef PORT
+    uintptr_t imageoffset_l;
+#else
     u32 imageoffset_l;
+#endif
     s32 textwidth_l;
 
     if (g_CurrentPlayer->gunammooff == 0)
@@ -6407,7 +6456,11 @@ Gfx *gunDrawWatchAmmoDisplay(Gfx *gdl)
     s32 ammotype;
     s32 reserveammo;
     s32 magammo;
+#ifdef PORT
+    uintptr_t imageoffset;
+#else
     u32 imageoffset;
+#endif
     s32 textwidth;
     s32 pad;
 

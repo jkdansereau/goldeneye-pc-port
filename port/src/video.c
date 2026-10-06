@@ -403,7 +403,7 @@ f32 portRoomPoolScale(void)
         /* Test hook: values < 1.0 shrink the pool BELOW the authored size
          * to stress-test the exhaustion path (D294 verification). */
         scale = (f32)atof(ov);
-        if (scale > 2.0f) { scale = 2.0f; }
+        if (scale > 2.5f) { scale = 2.5f; }
         if (scale < 0.25f) { scale = 0.25f; }
         return scale;
     }
@@ -423,14 +423,21 @@ f32 portRoomPoolScale(void)
      * -level_22 boots stayed clean headless). Reverted to sqrt + 2.0 cap,
      * the user-verified working state. Do not re-apply without the capture-bat
      * repro data (scratch/d294_capture.bat -> D156 hexdump + GE_D294BANK). */
-    t = sqrtf(portDrawDistanceMultiplier());
+    t = powf(portDrawDistanceMultiplier(), 0.66f);   /* D294 2026-09-30: was sqrtf; 4^0.66 = 2.5 */
     if (t > scale) { scale = t; }
 
-    t = sqrtf(1.0f / portLodDistanceMultiplier());
+    t = powf(1.0f / portLodDistanceMultiplier(), 0.66f);
     if (t > scale) { scale = t; }
 
-    if (scale > 2.0f) { scale = 2.0f; }
+    /* D294 (2026-09-30): cap 2.0 -> 2.5 so Statue's full 27-room set (487 KB
+     * = 2.17x its 225 KB authored pool) fits at max DD/Lod. The old 3x
+     * "regression" was D336 (uninitialised head-anim fields), not pool size.
+     * Worst case -ma350 row -> 875 KB; boss.c still clamps to STAGE bank - 128 KB. */
+    if (scale > 2.5f) { scale = 2.5f; }
     if (scale < 1.0f) { scale = 1.0f; }
+    /* boss.c truncates scale to quarter steps ((s64)(scale*4)); round UP to a
+     * quarter here so 4^0.66 = 2.497 lands on 2.5 instead of truncating to 2.25. */
+    scale = ceilf(scale * 4.0f - 0.01f) / 4.0f;
     return scale;
 }
 

@@ -433,7 +433,12 @@ void lvlStageLoad(s32 stage)
                  * so saves[] matches what the legal screen would have
                  * produced. */
                 extern s32 portSkipIntro;
-                if (portSkipIntro) {
+                /* D408: boot only. This block runs on EVERY title-stage load,
+                 * including the return from a mission; forcing file-select
+                 * there overwrote menu_update and skipped the post-mission
+                 * failure dossier. is_first_time_on_main_menu is TRUE only
+                 * until the first pass through here (cleared below). */
+                if (portSkipIntro && is_first_time_on_main_menu) {
                     extern void fileValidateSaves(void);
                     fileValidateSaves();
                     is_first_time_on_main_menu = FALSE;

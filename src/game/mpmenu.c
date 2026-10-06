@@ -1060,7 +1060,11 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
     s32 textheight;
     s32 m;
     s32 h1;
+#ifdef PORT
+    char *h2;
+#else
     s32 h2;
+#endif
     char rankbuffer[4];
     s32 two_player_x_offset;
     char *text;
@@ -1406,7 +1410,11 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
             q = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1C_P)); /* P */
  
             // Must remain a comma expression for matching
+#ifdef PORT
+            h2 = (char *) langGet(getStringID(LMPMENU, MPMENU_STR_1D_KILLS)), /* KILLS */
+#else
             h2 = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1D_KILLS)), /* KILLS */
+#endif
                 sprintf(rankbuffer, ascii_pnum_KILLS, (char *) q, curplayernum + 1, (char *) h2); /* -> "P<n> KILLS" */
  
             textMeasure(&textheight, &textwidth, rankbuffer, ptrFontBankGothicChars, ptrFontBankGothic, 0);
@@ -1476,7 +1484,11 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
             q = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1C_P)); /* P */
  
             // Must remain a comma expression for matching.
+#ifdef PORT
+            h2 = (char *) langGet(getStringID(LMPMENU, MPMENU_STR_1E_LOSSES)), /* LOSSES */
+#else
             h2 = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1E_LOSSES)), /* LOSSES */
+#endif
                 sprintf(rankbuffer, ascii_pnum_LOSSES, (char *) q, curplayernum + 1, (char *) h2); /* -> "P<n> LOSSES" */
  
             textMeasure(&textheight, &textwidth, rankbuffer, ptrFontBankGothicChars, ptrFontBankGothic, 0);
@@ -1593,7 +1605,7 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
             y = (viGetViewTop() - (fav_textheight >> 1)) + (37 + MPMENU_YOFF);
             viewleft = viGetX(); h1 = viGetY();
             gdl = textRender(gdl, &x, &y, text, ptrFontBankGothicChars, ptrFontBankGothic, 0x00ff00b0, viewleft, h1, 0, 0);
-            text = frontGetPlayersFavoriteWeaponInHand(curplayernum, 0);
+            text = (char *) frontGetPlayersFavoriteWeaponInHand(curplayernum, 0);
             textMeasure(&fav_textheight, &fav_textwidth, text, ptrFontBankGothicChars, ptrFontBankGothic, 0);
             x = ((viGetViewLeft() + fav_x_offset) - (fav_textwidth >> 1)) + 80;
             x2 = viGetViewTop();

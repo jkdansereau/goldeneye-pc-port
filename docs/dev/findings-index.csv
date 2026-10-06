@@ -172,7 +172,7 @@ D290,FIXED,"Watch's in-game ""controller"" section shows no control-pad graphic 
 D291,CLOSED,"Dam: texture glitches when the truck drives past (M-141, Steam Deck user playtest).","CLOSED — duplicate of D306, faithful (M-201, 2026-09-26:"
 D292,FIXED,Death animations are glitched —,"MOSTLY FIXED as a side effect of D243 (2026-09-18, user-confirmed alongside D173) —"
 D293,FIXED,"QoL ask: no discoverable way to quit the game from the UI (M-141, Steam Deck user playtest —","FIXED (M-141) — ""Quit to desktop"" row added to the F10 overlay; build-verified Win+Linux, not yet live-confirmed.…"
-D294,PARTIAL,"Statue: ground geometry near the large CCCP/hammer-and-sickle monument briefly renders solid black over a wide area, then self-recovers 10-30 seconds later… —",PARTIAL (2026-09-29 bookkeeping:
+D294,PARTIAL,"Statue: ground geometry near the large CCCP/hammer-and-sickle monument briefly renders solid black over a wide area, then self-recovers 10-30 seconds later… —",PARTIAL -> fix landed pending by-eye check (2026-09-30:
 D295,FIXED,"Campaign-halting crash at the end of Control Center on 00 Agent difficulty, then a crash on every subsequent relaunch/resume (GitHub #87, user campaign playtes…",FIXED (M-149) — M-148 root-caused + reproduced on HEAD; fix landed:
 D296,CLOSED,"Control Center, 00 Agent:","CLOSED (2026-09-26, user-approved:"
 D297,FIXED,v0.3.0 silently wipes ALL pre-fix player saves on first launch (D284 side effect; found during D295/M-148).,FIXED (M-150) — migration shim landed:
@@ -284,7 +284,7 @@ D404,RESOLVED,"""Aim style: Centred (PC)"" (Input.AimMode=1, D333/D337) has no e
 D405,CLOSED,"fast3d/OpenGL: MSAA above the driver max black-screens; two glBindFramebuffer calls pass an index where a GL name is required (PR #106, italoarruda, 2026-09-25…","CLOSED (2026-09-28). Merged from PR #106 (code file only; security-reviewed clean - port-layer GL state fixes, no external input, no allocations)."
 D406,RESOLVED,front-end PC Options screen:,"RESOLVED (2026-09-28, port-layer only, Steam Deck-validated):"
 D407,CLOSED,Tanks cannot be boarded/exited on PC —,CLOSED (2026-09-28 bookkeeping:
-D408,OPEN,Game.SkipIntro skips the post-mission failure dossier:,"OPEN (cosmetic, not root-caused past the handoff site)."
+D408,FIXED,Game.SkipIntro skips the post-mission failure dossier:,FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed).
 D415,FIXED,"Shooting a light fixture does not ""kill"" its flickering light (Bunker, Caverns):",FIXED (2026-09-29 bookkeeping:
 D424,FIXED,WeaponStats.RecoilSpeed/b44[] byte order:,"FIXED in tree (WS_B44, port-guarded); user-verified vs GEPD/1964 2026-09-29."
 D425,FIXED,Tank run-over death sound loops:,FIXED (2026-09-29 bookkeeping:
@@ -301,7 +301,14 @@ D440,FIXED,"""Original N64"" / ""Port defaults"" one-press presets in the F10 ov
 D441,PARTIAL,64-bit pointer-width sweep (part 1):,"PARTIAL (mechanical widening landed, build/run verified on Bunker and Silo; census/provenance table for the remaining sites still owed)."
 D442,FIXED,Game.AllUnlocked reworked into a pure RAM/query-time override:,FIXED (build and eep-diff verified; level-select/cheat-menu live check owed).
 D443,FIXED,"D357 settings-display cleanup (mouse ×, whole-% deadzone and volume steps, FOV in horizontal degrees, MSAA 16×) plus a ""Restart game"" action (orderly D344 quit…",FIXED (port-only; reset probes pass; both-UI visual check and one Restart click owed; Linux relaunch path not compiled).
+D454,FIXED,Knife slash crashed on Windows:,FIXED (verified by maintainer live:
+D461,FIXED,Item-slot allocation overran into the next stage-bank block:,FIXED (maintainer-verified:
+D462,FIXED,vtxstore.c sized its two record tables with the N64 stride 0x14 for a 24-byte struct unk_09B7A0_struct_parent on PC (Vertex* unk00 widened); both are indexed a…,FIXED (build + solo -level_09 and 4P GE_STARTMP=4 smoke runs exit clean; no crash; by-eye owed in solo).
 D444,FIXED,Front-end PC Options:,FIXED (build-verified; human mouse test owed)
+D455,FIXED,Binary-first census of exe-static addresses truncated to 32 bits (D454 class) (2026-09-30).,FIXED/CLEAN (no further REAL site beyond D454)
 D447,FIXED,Pillarbox output mode (Video.AspectMode = Original) for the Original N64 preset; crop overscan no longer cancels Wide/Cinema.,"FIXED (build + 3 captures verified; Wide/Cinema, 16:9 Ratio, mouse and 1964 comparison owed to a human)"
 D445,FIXED,Crouched-rifle firing animation (crouched_rifle_firing_animation_groupA) never resolved on PC -> SIGSEGV in modelConstrainOrWrapAnimFrame when an MP player cro…,"FIXED — layout only (§D5 linker adjacency, D164 class):"
 D446,FIXED,Couch 2P watch-menu text (the MP pause page) differs by +-1-2 per channel between builds whose only difference is data layout (2026-09-29).,FIXED — port-only (fast3d):
+D456,?,"Font-pointer / text-string-pointer slots retyped from s32 to real pointers (ABI/layout exception; front.c, options.c, language.c, bondview*, mpmenu.c, propobj.…",
+D453,?,"memp allocator API made 64-bit clean (D441 step 0; ABI/layout exception, §A1).",2026-09-30
+D451,FIXED,Automatic-fire gate at unsteady frame rates (D427 follow-up) and D173 residual.,"FIXED (RULE-2-SIGNOFF, maintainer 2026-09-30:"

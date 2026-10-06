@@ -351,62 +351,8 @@ void d318WatchdogTick(void)
 /* derailed state (random aim-variant endframe vs the hold frame H).  */
 /* ------------------------------------------------------------------ */
 
-/* Manual hex parse: MinGW's strtoull returns the sign-extended low 32 bits
- * for values above LLONG_MAX (verified: "deadbeefcafe0123" ->
- * ffffffffcafe0123). Parse by hand; stops at '@' or non-hex. */
-static u64 d318wParseHex(const char *s)
-{
-    u64 v = 0;
-
-    while (*s && *s != '@')
-    {
-        char c = *s++;
-
-        v <<= 4;
-        if (c >= '0' && c <= '9')      { v |= (u64)(c - '0'); }
-        else if (c >= 'a' && c <= 'f') { v |= (u64)(c - 'a' + 10); }
-        else if (c >= 'A' && c <= 'F') { v |= (u64)(c - 'A' + 10); }
-        else                           { break; }
-    }
-    return v;
-}
-
 void d318TimelineTick(void)
 {
-    /* E-B seed injection: GE_RSEED_LV=<hex64>[@tick] -- set g_randomSeed to
-     * the value read from N64 RAM (0x80024460) at a canonical moment, so the
-     * port's stream can be A/B-compared against the original from that point
-     * on. Test-only; inert without the env var. The DET line logs the running
-     * seed every 60 ticks for verifying stream parity afterwards. */
-    {
-        static int  s_seedArmed = 1;
-        static u64  s_seedVal   = 0;
-        static s32  s_seedTick  = 0;
-
-        if (s_seedArmed)
-        {
-            const char *e = getenv("GE_RSEED_LV");
-
-            s_seedArmed = 0;
-            if (e && e[0])
-            {
-                const char *at = strchr(e, '@');
-
-                s_seedVal  = d318wParseHex(e); /* MinGW strtoull mangles >LLONG_MAX */
-                s_seedTick = at ? (s32)strtol(at + 1, NULL, 10) : 0;
-            }
-        }
-        if (s_seedVal && (s32)g_GlobalTimer >= s_seedTick)
-        {
-            u64 v = s_seedVal;
-
-            g_randomSeed = v;
-            s_seedVal    = 0;
-            osSyncPrintf("D318T: t=%d RSEED_LV -> %016llx\n",
-                         (int)g_GlobalTimer, (unsigned long long)v);
-        }
-    }
-
     static int  s_on      = -1; /* -1 uncached, 0 off, 1 on (GE_D318T=1)   */
     static s32  s_obj     = -1;  /* last logged objectiveregisters1        */
     static s32  s_off     = -1;  /* last logged c78 aioffset               */

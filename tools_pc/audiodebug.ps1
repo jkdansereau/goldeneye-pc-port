@@ -50,6 +50,7 @@ param(
     [switch]$VoiceDump,             # GE_VOICEDUMP=1  -> voicedump.raw (per-voice, D202/M-67)
     [switch]$MixerTrace,            # GE_MIXERTRACE=1 -- SLOW, see warning below
     [switch]$Old,                   # GE_D204_OLD=1: pre-D204 behaviour
+    # NOTE: GE_D204_OLD was removed from the game; -AB is now a no-op.
     [switch]$AB,                    # run twice (old, then new) and compare
 
     # Plumbing

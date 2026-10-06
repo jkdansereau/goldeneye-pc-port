@@ -3906,7 +3906,12 @@ s32 sub_GAME_7F0448A8(struct PropRecord *argProp)
             if ((prop->type == PROP_TYPE_VIEWER) || (prop->type == PROP_TYPE_CHR))
             {
                 temp_v0_2 = prop->obj;
+#ifdef PORT
+                /* D456: prop->obj and prop->chr share a union slot; for VIEWER/CHR props it is a ChrRecord. N64 read ObjectRecord.model @0x14 == ChrRecord.chrflags @0x14; read the named field. */
+                if ((prop->chr == NULL) || !(prop->chr->chrflags & CHRFLAG_HIDDEN))
+#else
                 if ((temp_v0_2 == NULL) || !((s32) temp_v0_2->model & 0x400))
+#endif
                 {
                     chrpropGetCollisionBounds(prop, &radius, &height, &arbitratyNumber);
 
@@ -14483,25 +14488,6 @@ Gfx *countdownTimerRender(Gfx *DL)
 
 void handle_alarm_gas_timer_calldamage(void)
 {
-#ifdef PORT
-    /* D207 diag probe (temporary): force + trace the alarm klaxon to
-     * root-cause "alarm SFX starves all other audio and never recovers".
-     * GE_FORCEALARM pins alarm_timer so alarmIsActive() stays true. Remove
-     * once root-caused. */
-    if (GE_ENVFLAG("GE_FORCEALARM")) {
-        static int fa_frames;
-        ++fa_frames;
-        if (fa_frames == 120 || fa_frames == 900) alarmActivate();
-        if (fa_frames > 120 && fa_frames < 600) alarm_timer = 1;  /* sustain on ~2..10s */
-        if (fa_frames == 600) alarmDeactivate();                  /* explicit off at 10s */
-        if (fa_frames > 900) alarm_timer = 1;                     /* sustain on again */
-        geTracePrintf("audiotrace.log",
-            "[D207] f=%d active=%d ptr_alarm_sfx=%p playstate=%d locked=%d\n",
-            fa_frames, (int)alarmIsActive(), (void *)ptr_alarm_sfx,
-            ptr_alarm_sfx ? (int)sndGetPlayingState(ptr_alarm_sfx) : -1,
-            (int)lvlGetControlsLockedFlag());
-    }
-#endif
     if (alarmIsActive() != 0)
     {
         if ((ptr_alarm_sfx == 0) && (lvlGetControlsLockedFlag() == 0))

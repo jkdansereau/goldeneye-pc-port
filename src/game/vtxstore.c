@@ -105,7 +105,14 @@ void sub_GAME_7F09B820(void)
         }
     }
 
+#ifdef PORT
+    /* D462: struct unk_09B7A0_struct_parent is 24 bytes on x86-64 (Vertex* unk00 widened) but the
+     * N64 stride 0x14 was used to size both tables, which are indexed at the C stride below
+     * (heap overrun of ~4 bytes per entry, up to 500 entries). ABI/layout fix, section A1. */
+    tmp = sizeof(struct unk_09B7A0_struct_parent);
+#else
     tmp = 0x14;
+#endif
     dword_CODE_bss_8007A0E8 = mempAllocBytesInBank(dword_CODE_bss_8007A0D4 * tmp, MEMPOOL_STAGE);
     dword_CODE_bss_8007A0E0 = mempAllocBytesInBank(dword_CODE_bss_8007A0D0 * 0x10, MEMPOOL_STAGE);
     dword_CODE_bss_8007A0EC = mempAllocBytesInBank(dword_CODE_bss_8007A0DC * tmp, MEMPOOL_STAGE);

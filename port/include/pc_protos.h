@@ -211,7 +211,7 @@ void free();
  * truncated to int (crashed configGetFrameDump on Linux). */
 char * getenv();
 void * realloc();
-int frontGetPlayersFavoriteWeaponInHand();
+u16 * frontGetPlayersFavoriteWeaponInHand();
 void generate_player_thrown_grenade();
 void generate_player_thrown_knife();
 void generate_player_thrown_object();

@@ -20,7 +20,16 @@ struct levelentry
 // cannonical name
 #define PORTMAX 200
 
+#ifdef PORT
+/* D457: keep the base at pointer width. The N64 form wraps the whole sum mod 2^32
+ * (`(u32)base + (off + 0xF1000000)`), i.e. base + (off - 0x0F000000) with a
+ * signed delta; do the delta in s32 and add it to the full-width base. */
+#define BG_SEG_TO_PTR(base, off) ((void *) ((uintptr_t) (base) + (uintptr_t) (intptr_t) (s32) ((u32) (uintptr_t) (off) + 0xF1000000u)))
+typedef u8 *bg_addr_t;
+#else
 #define BG_SEG_TO_PTR(base, off) ((void *) (((u32) (base)) + (((u32) (off)) + 0xF1000000)))
+typedef s32 bg_addr_t;
+#endif
 
 typedef struct RoomVtxBatchBounds {
     s16 gdlindex;    // 0x00
