@@ -310,6 +310,8 @@ D564,FIXED,"F10: game's own ""Look up/down"" row removed (dead for mouse and cen
 D565,FIXED,AI awareness followed two player render settings:,FIXED 2026-10-06 (maintainer decision:
 D566,FIXED,Steam Deck Game Mode showed the on-screen keyboard at every launch (SDL text input left on) —,FIXED 2026-10-06 (port only:
 D567,FIXED,Front-end PC Options with a pad pulled the game's crosshair to the top-left (overlay synced the cursor to the untouched OS mouse) —,FIXED 2026-10-06 (port only:
+D568,FIXED,F10 dropdown popup drawn empty and misplaced for a long list on a mid-page row (negative top) —,FIXED 2026-10-06 (port only:
+D569,?,Crosshair color follows the PD port:,CHANGED 2026-10-06 (maintainer request; old presets migrate to Custom RGB)
 D407,CLOSED,Tanks cannot be boarded/exited on PC —,CLOSED (2026-09-28 bookkeeping:
 D408,FIXED,Game.SkipIntro skips the post-mission failure dossier:,FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed).
 D415,FIXED,"Shooting a light fixture does not ""kill"" its flickering light (Bunker, Caverns):",FIXED (2026-09-29 bookkeeping:

@@ -413,9 +413,9 @@ static struct Row rows[] = {
     SEP(G2),
     { .key="Video.CrosshairHide", .label="Show crosshair", .kind=ROW_TOGGLE, .step=1, .names=kOnOffRev },
     { .key="Video.CrosshairColor", .label="Crosshair color", .kind=ROW_ENUM, .step=1, .names=kCrosshairColor },
-    { .key="Video.CrosshairRed", .label="Red", .kind=ROW_SLIDER, .step=1, .shownWhen="Video.CrosshairColor", .shownValue=8 },
-    { .key="Video.CrosshairGreen", .label="Green", .kind=ROW_SLIDER, .step=1, .shownWhen="Video.CrosshairColor", .shownValue=8 },
-    { .key="Video.CrosshairBlue", .label="Blue", .kind=ROW_SLIDER, .step=1, .shownWhen="Video.CrosshairColor", .shownValue=8 },
+    { .key="Video.CrosshairRed", .label="Red", .kind=ROW_SLIDER, .step=5, .shownWhen="Video.CrosshairColor", .shownValue=8 },
+    { .key="Video.CrosshairGreen", .label="Green", .kind=ROW_SLIDER, .step=5, .shownWhen="Video.CrosshairColor", .shownValue=8 },
+    { .key="Video.CrosshairBlue", .label="Blue", .kind=ROW_SLIDER, .step=5, .shownWhen="Video.CrosshairColor", .shownValue=8 },
     { .key="Video.CrosshairSize", .label="Crosshair size", .kind=ROW_SLIDER, .step=5, .unit="%" },
     { .key="Video.CrosshairStyle", .label="Crosshair style", .kind=ROW_ENUM, .step=1, .names=kCrosshairStyle },
     { .key="Video.CrosshairAlpha", .label="Crosshair opacity", .kind=ROW_SLIDER, .step=5, .unit="%" },   /* D511 */
@@ -1630,6 +1630,12 @@ static void rowAdjust(struct Row *r, int dir)
             rowSetStepWatch(r, (double)inputPadPresetStep((int)lround(v), dir));
             break;
         }
+        if (!strcmp(r->key, "Video.CrosshairColor")) {
+            /* D569 (PD model): Original sprite or a Custom RGB colour; the old
+             * named presets (1..7) are migrated to Custom at startup (video.c). */
+            rowSetStepWatch(r, (int)lround(v) == 8 ? 0.0 : 8.0);
+            break;
+        }
         if (!strcmp(r->key, "Video.TextureFilter")) {
             /* D499: menu order Nearest, Bilinear, Trilinear, 3-Point (stored
              * 0, 1, 3, 2: 2 stays 3-Point for existing inis and the Original
@@ -1763,6 +1769,7 @@ static char s_ddLab[DD_MAX][40];
 static int rowIsDropdown(const struct Row *r)
 {
     if (!r->found) return 0;
+    if (r->kind == ROW_ENUM && !strcmp(r->key, "Video.CrosshairColor")) return 0;   /* D569: Original/Custom stepper (PD) */
     if (r->kind == ROW_ENUM || r->kind == ROW_MSAA || r->kind == ROW_FPSCAP) return 1;
     if (r->kind == ROW_RES) return !videoIsFullscreen() && s_resFitN > 0;
     if (r->kind == ROW_AUDIODEV) return 1;
@@ -1906,6 +1913,11 @@ static int ddGeom(s32 *x0, s32 *y0, s32 *x1, s32 *y1, int *vis)
     s32 H = ovH();
     *y0 = rowY + OV_LINE;
     if (*y0 + h > H - 4) *y0 = rowY - h;   /* no room below: open upward */
+    /* D568: no room above either (a long list on a mid-page row): keep the whole
+     * popup on screen, flush with the bottom margin. A negative top used to
+     * draw the labels above the screen while the fill wrapped down past the
+     * bottom edge (an empty, misplaced box). */
+    if (*y0 < 4) *y0 = (H - 4 - h > 4) ? H - 4 - h : 4;
     *y1 = *y0 + h;
     *vis = v;
     return 1;
@@ -2947,13 +2959,6 @@ static void valueText(int i, char *out, int n)
         snprintf(out, n, "%sx", t);
         return;
     }
-    /* D506: crosshair RGB channels as a percent of full intensity. */
-    if (strcmp(r->key, "Video.CrosshairRed") == 0 ||
-        strcmp(r->key, "Video.CrosshairGreen") == 0 ||
-        strcmp(r->key, "Video.CrosshairBlue") == 0) {
-        snprintf(out, n, "%d%%", (int)lround(v * 100.0 / 255.0));
-        return;
-    }
     /* D346: integer sliders -- optional raw->display divide + unit suffix. */
     if (r->dispDiv > 0) {
         v = (double)(int)lround(v / (double)r->dispDiv);
@@ -3748,6 +3753,7 @@ static const struct { const char *key, *help; } kRowHelp[] = {
     { "__DisplayMode", "Modern, original or custom graphics presets." },
     { "Video.AspectMode", "Fill window fits the picture to the whole window." },   /* D560: shown only while Fill window is selected (optionsRowHelp) */
     { "Video.CrosshairHide", "When off, the crosshair stays hidden, even with Sight on screen." },
+    { "Video.CrosshairColor", "Original keeps the game's red sight. Custom: set Red, Green and Blue (0-255)." },
     { "Video.CrosshairHealthColor", "The crosshair shifts from green to red as your health drops." },
     { "Video.WidescreenAuto", "This only applies when Native widescreen is off." },
     { "Game.ScreenShakeIntensity", "Sets how strongly explosions shake the screen." },

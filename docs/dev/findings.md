@@ -718,6 +718,8 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D565 | **AI awareness followed two player render settings: Fog distance below 100 (shortened clip) and FOV (gameplay fog cull scaled by the rendered FOV)** — full `## D565` entry at file tail | FIXED 2026-10-06 (maintainer decision: Fog distance floor 100 in `video.c` + overlay; `propobj.c portSub7F054C58Gameplay` rescaled to the game's own FOV, PORT-only D466 helper; identity at defaults; build-verified) |
 | D566 | **Steam Deck Game Mode showed the on-screen keyboard at every launch (SDL text input left on)** — full `## D566` entry at file tail | FIXED 2026-10-06 (port only: `gfx_sdl2.cpp` SDL_ENABLE_SCREEN_KEYBOARD=0 + SDL_StopTextInput; build-verified Win/Linux; Deck Game Mode check owed) |
 | D567 | **Front-end PC Options with a pad pulled the game's crosshair to the top-left (overlay synced the cursor to the untouched OS mouse)** — full `## D567` entry at file tail | FIXED 2026-10-06 (port only: sync gated on `optionsOverlayMouseActive()`; build-verified Win/Linux; Deck pad check owed) |
+| D568 | **F10 dropdown popup drawn empty and misplaced for a long list on a mid-page row (negative top)** — full `## D568` entry at file tail | FIXED 2026-10-06 (port only: `ddGeom` keeps the popup on screen; 1280x800 before/after capture) |
+| D569 | **Crosshair color follows the PD port: Original or Custom RGB, left/right stepper, 0-255 sliders** — full `## D569` entry at file tail | CHANGED 2026-10-06 (maintainer request; old presets migrate to Custom RGB) |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | **CLOSED (2026-09-28 bookkeeping: tank board/exit accepted by the user; shipped in v0.4.0).** Earlier: PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed). |
 | D415 | **Shooting a light fixture does not "kill" its flickering light (Bunker, Caverns): the fixture takes the hit but the flicker keeps going (community report, issue #87 comment by the reporter, 2026-09-28, 00 Agent playthrough of v0.4.0).** — full `## D415` entry at file tail | FIXED (2026-09-29 bookkeeping: root-caused and fixed as D430 + D431, user-verified vs GEPD/1964 on Caverns 2026-09-29; #119). Earlier: ROOT-CAUSED as D430 (see there); fix in tree, live check owed. |
@@ -18285,3 +18287,29 @@ starts at 0 on open and becomes 1 on a mouse move or click; new accessor
 users get the same tracking as before. **Verify:** builds on Windows and Linux
 (X220); deployed to the Deck play folder 2026-10-06 21:03; maintainer pad check
 owed (open PC Options from file select with the pad, the crosshair stays put).
+
+## D568: F10 dropdown popup drawn empty and misplaced for a long list on a mid-page row — FIXED 2026-10-06 (port only)
+
+**Report (maintainer, Deck, 2026-10-06):** the Crosshair color dropdown opened
+as an empty box with its items drawn too high. **Cause:** `optionsoverlay.c
+ddGeom` opens the popup below the row, or above it when there is no room below;
+with a 9-item list on a row in the middle of a scrolled page neither fits, and
+the upward top went negative. The labels then drew above the screen while the
+fill (negative top) ran from the row down past the bottom edge. Reproduced on
+Windows at 1280x800 (Game page scrolled to Crosshair style, Custom colour), so
+not Deck-specific. **Fix:** if the top is still off screen, the popup is placed
+flush with the bottom margin (it always fits: at most 9 rows). Applies to every
+dropdown. Verified by a 1280x800 in-level capture before/after.
+
+## D569: Crosshair color follows the PD port: Original or Custom RGB, left/right stepper — CHANGED 2026-10-06 (maintainer request)
+
+The row was a 9-entry dropdown of named presets (Green, Red, Blue, Yellow, Cyan,
+Magenta, White) plus Custom, with the Custom R/G/B sliders shown as percentages
+and moving one unit per press. The PD port has no presets: a colour page with
+0-255 sliders. GE keeps **Original** (the authored red sprite, drawn untouched,
+which no tint reproduces) and **Custom** (stored 8, the existing silhouette tint
+path). The row is now a left/right (or A) stepper with no popup; Red/Green/Blue
+show 0-255 and step by 5; the existing value swatch is the live preview; new tip.
+**Migration (`video.c videoInit`):** an ini holding a former preset 1..7 becomes
+Custom with that preset's RGB, so no saved colour changes (checked: 3 -> 8 with
+64/64/255). Display-mode presets and resets still use 0 (Original).

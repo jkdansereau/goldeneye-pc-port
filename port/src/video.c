@@ -114,8 +114,19 @@ s32 portNoHitFlash = 0;
  * (gunfire.c gunDrawSight, #ifdef PORT). Default keeps the original
  * authored red sprite; hide is opt-in. */
 s32 portCrosshairHide = 0;
-static int cfgCrosshairColor = 0;   /* 0 = authored sprite; 1..7 = presets; 8 = custom RGB */
+static int cfgCrosshairColor = 0;   /* 0 = authored sprite; 8 = custom RGB (D569: old presets 1..7 migrate to 8 at startup) */
 static int cfgCrosshairRed = 255, cfgCrosshairGreen = 255, cfgCrosshairBlue = 255;
+/* Former named presets (D373/D381), kept for the D569 ini migration. */
+static const unsigned char kTints[8][3] = {
+    { 0xFF, 0xFF, 0xFF }, /* Original red sprite (identity multiplier) */
+    { 0x40, 0xFF, 0x40 }, /* Green */
+    { 0xFF, 0x40, 0x40 }, /* Red */
+    { 0x40, 0x40, 0xFF }, /* Blue */
+    { 0xFF, 0xFF, 0x40 }, /* Yellow */
+    { 0x40, 0xFF, 0xFF }, /* Cyan */
+    { 0xFF, 0x40, 0xFF }, /* Magenta */
+    { 0xFF, 0xFF, 0xFF }, /* Actual white, through alpha silhouette */
+};
 static int cfgCrosshairSize = 100;  /* 100% retains the original 32x32 drawing */
 static int cfgCrosshairStyle = 0;   /* 0 = original; 1 = unused beta asset */
 static int cfgCrosshairAlpha = 100; /* D511: % of the original sprite alpha (0x6E); 100 = untouched */
@@ -175,16 +186,6 @@ void portCrosshairTint(s32 *r, s32 *g, s32 *b)
         crosshairHealthTint(portCrosshairHealthRatio(), r, g, b);
         return;
     }
-    static const unsigned char kTints[8][3] = {
-        { 0xFF, 0xFF, 0xFF }, /* Original red sprite (identity multiplier) */
-        { 0x40, 0xFF, 0x40 }, /* Green */
-        { 0xFF, 0x40, 0x40 }, /* Red */
-        { 0x40, 0x40, 0xFF }, /* Blue */
-        { 0xFF, 0xFF, 0x40 }, /* Yellow */
-        { 0x40, 0xFF, 0xFF }, /* Cyan */
-        { 0xFF, 0x40, 0xFF }, /* Magenta */
-        { 0xFF, 0xFF, 0xFF }, /* Actual white, through alpha silhouette */
-    };
     if (cfgCrosshairColor == 8) {
         *r = cfgCrosshairRed;
         *g = cfgCrosshairGreen;
@@ -1005,6 +1006,15 @@ static float vidAvgFPS = 0.f;
 
 int videoInit(void)
 {
+    /* D569: Crosshair color is Original (0) or Custom RGB (8), as in the PD
+     * port. Inis from v0.5.0 builds before this may hold a named preset 1..7:
+     * carry its colour into the Custom channels once, so nothing changes. */
+    if (cfgCrosshairColor >= 1 && cfgCrosshairColor <= 7) {
+        cfgCrosshairRed = kTints[cfgCrosshairColor][0];
+        cfgCrosshairGreen = kTints[cfgCrosshairColor][1];
+        cfgCrosshairBlue = kTints[cfgCrosshairColor][2];
+        cfgCrosshairColor = 8;
+    }
     /* D440 CLI route: -n64preset / -portpreset apply the preset
      * once at startup (after configLoad, before any value reaches fast3d) and
      * persist like an F10 press (the atexit configSave). */
