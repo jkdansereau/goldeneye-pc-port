@@ -23,6 +23,7 @@
 
 #include <PR/ultratypes.h>
 #include <PR/gbi.h>
+#include <bondconstants.h>   /* LEVELID_TITLE (D416); MinGW's SDL.h pulled it in by accident, glibc's doesn't */
 
 #include "platform.h"
 #include "system.h"
@@ -30,17 +31,18 @@
 #include "video.h"
 #include "input.h"
 #include "optionsoverlay.h"
-#include "frontoptions.h"
+#include "audio.h"
 
 #include "../fast3d/gfx_api.h"
 #include "../fast3d/gfx_sdl.h"
 #include "../fast3d/gfx_opengl.h"
 
-/* GE's internal resolution: NTSC LAN1 is 640x480; PAL LAN1 shows a
- * 640x400 area. The window opens at the native size (1:1) by default. */
+/* GE's internal resolution before the game's first osViSetMode (which then
+ * sets the real CFB size): NTSC 640x480; PAL is taller, not shorter -- the EU
+ * game renders 320x269 at 50 Hz with no borders (TCRF), so 2x = 640x538 (D487). */
 #ifdef REFRESH_PAL
 #define GE_NATIVE_W 640
-#define GE_NATIVE_H 400
+#define GE_NATIVE_H 538
 #else
 #define GE_NATIVE_W 640
 #define GE_NATIVE_H 480
@@ -56,22 +58,28 @@ static int initDone = 0;
  */
 static int cfgVSync         = 1;   /* swap interval: 0 = off, 1 = on            */
 static int cfgFpsCap        = 60;  /* frame cap in fps; 0 = uncapped (vsync); menu only exposes 30/60 */
-static int cfgMSAA          = 2;   /* 1/2/4/8 samples; 2x default is lighter on low-end GPUs */
-static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N64 3-point + trilinear */
+static int cfgMSAA          = 2;   /* 1/2/4/8/16 samples; 2x default is lighter on low-end GPUs */
+static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N64 3-point + trilinear, 3 = trilinear (Trilinear option, playtest 2026-10-03) */
 static int cfgFixMipTex     = 1;   /* RC2: clip mip-contaminated texture uploads to base height */
 static int cfgDetailBaseTile = 1;  /* D236: TEXTURETYPE_DETAIL -> sample the base image, not the detail tile */
 static int cfgWrapFix       = 0;   /* D74 sub-tile UV pre-wrap + RC3/D167 non-PoT mask-period wrap (opt-in; GE_WRAPFIX env overrides) */
-static int cfgFovScale      = 100; /* D211: percent of the original vertical FOV; 100 = unchanged (byte-identical) */
+static float cfgFovScale    = 100.0f; /* D211: percent of the original vertical FOV; 100 = unchanged (byte-identical). D546: float so the 5-degree UI steps are exact */
 static int cfgWidescreenAuto = 1;  /* WIDESCREEN-FOV-PLAN Phase 4: auto-scale vertical FOV by window aspect ratio; on by default, no-op at 4:3 */
 static int cfgNativeWidescreen = 1; /* D334 (WIDESCREEN-FOV-PLAN Phase 2): project the world at the real window aspect (Hor+); no-op at 4:3 */
 static int cfgHudScale = 100;        /* D226: HUD text/ammo scale %, 100 = original (no emission) */
-static int cfgDrawDistance      = 250; /* % of authored far clip; 250% is the UI's 50/100 midpoint */
+static int cfgDrawDistance      = 200; /* % of authored far clip; D546: 2.0x default (was 2.5x) */
+static int cfgFogDistance       = 100; /* D540: % of the authored fog distances; 100 = N64 */
 static int cfgDrawDistanceAutoFov = 0; /* legacy ini option, no longer exposed in the menu */
-static int cfgLodDistance         = 250; /* % of authored geometry LOD distance; 50/100 in the UI */
+static int cfgLodDistance         = 200; /* % of authored geometry LOD distance; D546: 2.0x default (was 2.5x) */
 static int cfgLodDistanceAutoFov  = 0; /* legacy ini option, no longer exposed in the menu */
 static int cfgAniso         = 4;   /* D212: anisotropic filtering samples; 4 = the value fast3d already applied (no visual delta at default) */
 static int cfgSafeAreaCrop  = 1;   /* crop the N64 TV-overscan safe-area margin (visible as black top/bottom bars on PC) instead of showing it; on by default */
+static int cfgAspectMode    = 0;   /* D447: 0 = Window (fill the window), 1 = Original (pillar/letterbox to the console aspect: 4:3, or 16:9 while the game's Ratio option is 16:9). D508: 2 = 16:9, 3 = 21:9 (forced) */
 static int cfgFullscreen    = 0;   /* 0 = windowed, 1 = borderless fullscreen   */
+static int cfgFullscreenMode = 0;  /* D511: fullscreen flavour, 0 = borderless desktop, 1 = exclusive */
+static int cfgDeckPresetApplied = 0; /* D283: 1 once the Steam Deck preset has been considered */
+static int cfgLowEndConsidered = 0;  /* D482: 1 once the low-end GPU defaults have been considered */
+static int cfgDefaultsRev = 0;       /* D546: 1 once the 2.5x -> 2.0x draw/LOD default migration ran */
 
 /*
  * [Window] persistence. W/H = 0 -> auto (gfx_sdl2 fits a 4:3 window into ~85%
@@ -106,10 +114,26 @@ s32 portNoHitFlash = 0;
  * (gunfire.c gunDrawSight, #ifdef PORT). Default keeps the original
  * authored red sprite; hide is opt-in. */
 s32 portCrosshairHide = 0;
-static int cfgCrosshairColor = 0;   /* 0 = authored sprite; 1..7 = presets; 8 = custom RGB */
+static int cfgCrosshairPersistent = 0;   /* D436: 1 = draw the sight outside aim mode too */
+int portCrosshairPersistent(void) { return cfgCrosshairPersistent; }
+static int cfgCrosshairColor = 0;   /* 0 = authored sprite; 8 = custom RGB (D569: old presets 1..7 migrate to 8 at startup) */
 static int cfgCrosshairRed = 255, cfgCrosshairGreen = 255, cfgCrosshairBlue = 255;
+/* Former named presets (D373/D381), kept for the D569 ini migration. */
+static const unsigned char kTints[8][3] = {
+    { 0xFF, 0xFF, 0xFF }, /* Original red sprite (identity multiplier) */
+    { 0x40, 0xFF, 0x40 }, /* Green */
+    { 0xFF, 0x40, 0x40 }, /* Red */
+    { 0x40, 0x40, 0xFF }, /* Blue */
+    { 0xFF, 0xFF, 0x40 }, /* Yellow */
+    { 0x40, 0xFF, 0xFF }, /* Cyan */
+    { 0xFF, 0x40, 0xFF }, /* Magenta */
+    { 0xFF, 0xFF, 0xFF }, /* Actual white, through alpha silhouette */
+};
 static int cfgCrosshairSize = 100;  /* 100% retains the original 32x32 drawing */
 static int cfgCrosshairStyle = 0;   /* 0 = original; 1 = unused beta asset */
+static int cfgCrosshairAlpha = 100; /* D511: % of the original sprite alpha (0x6E); 100 = untouched */
+static int cfgCrosshairHealth = 0;  /* D511: 1 = tint follows health (PD ramp); 0 = Crosshair color rules */
+extern float portCrosshairHealthRatio(void);   /* input.c: health + armour, 0..2 */
 
 int portCrosshairStyle(void) { return cfgCrosshairStyle; }
 float portCrosshairScale(void) { return cfgCrosshairSize / 100.0f; }
@@ -127,24 +151,43 @@ float portCrosshairScale(void) { return cfgCrosshairSize / 100.0f; }
  * skips this rewrite, keeping the original game's DL byte-identical. */
 void portCrosshairApplyTintCombine(Gfx *envCommand)
 {
-    if (cfgCrosshairColor == 0 || !envCommand) return;
+    if (!envCommand) return;
+    if (cfgCrosshairAlpha != 100) {
+        /* D511: the env colour command carries the sprite alpha (0x6E in the
+         * call site); scale just that byte, keep the tint. Original (100) skips this. */
+        s32 r, g, b;
+        portCrosshairTint(&r, &g, &b);
+        gDPSetEnvColor(envCommand, r, g, b, (0x6E * cfgCrosshairAlpha + 50) / 100);
+    }
+    if (cfgCrosshairColor == 0 && !cfgCrosshairHealth) return;
     gDPSetCombineLERP(envCommand + 1,
         ENVIRONMENT, 0, TEXEL0_ALPHA, 0, TEXEL0, 0, ENVIRONMENT, 0,
         ENVIRONMENT, 0, TEXEL0_ALPHA, 0, TEXEL0, 0, ENVIRONMENT, 0);
 }
 
+/* D511: PD's health ramp (pd_port src/game/sight.c sightGetCrosshairHealthColor,
+ * "on green" variant; MIT). ratio = health + armour, 0..2 (GE: both 0..1). */
+static void crosshairHealthTint(float ratio, s32 *r, s32 *g, s32 *b)
+{
+    if (ratio < 0.0f) ratio = 0.0f;
+    if (ratio > 2.0f) ratio = 2.0f;
+    int red, green, blue;
+    if (ratio < 0.2f)      { red = 255; green = 0; blue = 0; }
+    else if (ratio < 0.6f) { red = 255; green = (int)(255.0f * ((ratio - 0.2f) / 0.4f)); blue = 0; }
+    else if (ratio < 1.0f) { red = (int)(255.0f * ((ratio - 0.6f) / 0.4f)); green = 255; blue = 0; }
+    else                   { red = 0; green = 255; blue = (int)(255.0f * (ratio - 1.0f)); }
+    *r = red; *g = green; *b = blue;
+}
+
 void portCrosshairTint(s32 *r, s32 *g, s32 *b)
 {
-    static const unsigned char kTints[8][3] = {
-        { 0xFF, 0xFF, 0xFF }, /* Original red sprite (identity multiplier) */
-        { 0x40, 0xFF, 0x40 }, /* Green */
-        { 0xFF, 0x40, 0x40 }, /* Red */
-        { 0x40, 0x40, 0xFF }, /* Blue */
-        { 0xFF, 0xFF, 0x40 }, /* Yellow */
-        { 0x40, 0xFF, 0xFF }, /* Cyan */
-        { 0xFF, 0x40, 0xFF }, /* Magenta */
-        { 0xFF, 0xFF, 0xFF }, /* Actual white, through alpha silhouette */
-    };
+    /* D511: health colour wins over Crosshair color (PD: SIGHT_COLOUR uses the
+     * health ramp instead of the chosen colour). Only reached from gunDrawSight
+     * (live player) and the preview (which passes through here too: full health). */
+    if (cfgCrosshairHealth) {
+        crosshairHealthTint(portCrosshairHealthRatio(), r, g, b);
+        return;
+    }
     if (cfgCrosshairColor == 8) {
         *r = cfgCrosshairRed;
         *g = cfgCrosshairGreen;
@@ -162,7 +205,7 @@ void portCrosshairTint(s32 *r, s32 *g, s32 *b)
  * representative red swatch for it rather than misleadingly showing white. */
 void portCrosshairPreview(s32 *r, s32 *g, s32 *b)
 {
-    if (cfgCrosshairColor == 0) {
+    if (cfgCrosshairColor == 0 && !cfgCrosshairHealth) {
         *r = 255; *g = 40; *b = 40;
     } else {
         portCrosshairTint(r, g, b);
@@ -170,16 +213,15 @@ void portCrosshairPreview(s32 *r, s32 *g, s32 *b)
 }
 
 /* D257: Game.AllUnlocked — everything-unlocked goodie, OFF by default
- * (faithful N64 progression: levels unlock as you complete them). Consumed
- * once at startup by main.c, which sets the game's own RAM unlock flags
+ * (faithful N64 progression: levels unlock as you complete them). Applied
+ * by portAllUnlockedApply (main.c) at startup and on every F10 change: it
+ * sets the game's own RAM unlock flags
  * (debug_enable_all_levels_flag / debug_007_unlock_flag in
  * src/game/debugmenu_handler.c, live because the PC build defines
  * LEFTOVERDEBUG) — port-layer memory writes only, no game-code edits.
  * 1 = every solo level selectable at every difficulty plus 007 mode from
- * the first launch. F10 'All unlocked' row toggles it; takes effect next
- * run. Known quirk when ON with a fresh save: audio volumes load as 0
- * (silence) because the patched save block is CRC-valid and skips the
- * game's BLANKSAVEDATA reset that normally seeds max volume — see D259. */
+ * the first launch. F10 'All unlocked' row toggles it live. Cheats are unlocked at query time via fileGetIsCheatUnlocked
+ * (src/game/file2.c, D442) -- the save file is never patched. */
 s32 portAllUnlocked = 0;
 
 /* D211: Video.FovScale as a multiplier on the render FOV. Applied game-side
@@ -244,6 +286,11 @@ f32 portNativeAspect(void)
 
 f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
 {
+    /* D484 (#136): the 20-degree floor below guards the port's own widening,
+     * but it also raised the game's narrow zoom FOVs (sniper/camera down to
+     * 7 degrees, the watch zoom) to 20, capping scope magnification at about
+     * a third of the N64's. Never floor above the game's own value. */
+    const f32 floorFovY = fovy < 20.0f ? fovy : 20.0f;
     if (!isTitleScreen) {
         /* D334: native widescreen already widens the horizontal FOV through
          * the projection aspect; the Phase-4 vertical boost below was the
@@ -257,9 +304,57 @@ f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
             fovy *= portFovScale;
         }
     }
-    if (fovy > 160.0f) { fovy = 160.0f; }
-    if (fovy < 20.0f)  { fovy = 20.0f; }
+    if (fovy > 160.0f)    { fovy = 160.0f; }
+    if (fovy < floorFovY) { fovy = floorFovY; }
     return fovy;
+}
+
+/* D468: the factor portScaleFovY applies to an in-level fovy (clamps
+ * ignored), so gameplay can recover the game's own FOV from the rendered one.
+ * 1.0f at the defaults (native widescreen on, FovScale 100). */
+f32 portFovYScaleFactor(void)
+{
+    f32 k = 1.0f;
+    if (cfgWidescreenAuto && !cfgNativeWidescreen &&
+        gfx_current_dimensions.aspect_ratio > 0.01f) {
+        k *= sqrtf(gfx_current_dimensions.aspect_ratio / (4.0f / 3.0f));
+    }
+    if (portFovScale > 0.4f && portFovScale < 2.01f && portFovScale != 1.0f) {
+        k *= portFovScale;
+    }
+    return k;
+}
+
+/* D468: Game.AIWideView -- 0 (default) = AI awareness keeps the cartridge's
+ * widest view (16:9 at the game's own FOV) when the window is wider or
+ * FovScale > 100; 1 = AI sees the full rendered view (the PD-port model). */
+static int cfgAIWideView = 0;
+int portAIWideView(void) { return cfgAIWideView; }
+
+/* D443 (D357): horizontal FOV in degrees for a Video.FovScale percent, for the
+ * settings display only. Mirrors portScaleFovY + the gameplay projection:
+ * vertical FOV = FOV_Y_F (60) * [WidescreenAuto stretch-era boost] * pct/100,
+ * clamped 20..160; the projection aspect is the window aspect under native
+ * widescreen (portNativeAspect) or 4:3 otherwise (bondview2.c faspect for a
+ * full-screen viewport). hfov = 2*atan(tan(vfov/2)*aspect). 100% at 4:3 = 75.0
+ * deg, at 16:9 = 91.5 deg. */
+f32 portFovHorizDegrees(s32 pct)
+{
+    const double kRad = 3.14159265358979323846 / 180.0;
+    double v = 60.0;
+    double asp = (double)portNativeAspect();
+    if (asp <= 0.0) {
+        asp = 4.0 / 3.0;
+        if (cfgWidescreenAuto && gfx_current_dimensions.aspect_ratio > 0.01f) {
+            v *= sqrt((double)gfx_current_dimensions.aspect_ratio / (4.0 / 3.0));
+        }
+    }
+    if (pct > 40 && pct < 201) {
+        v *= (double)pct / 100.0;
+    }
+    if (v > 160.0) v = 160.0;
+    if (v < 20.0)  v = 20.0;
+    return (f32)(2.0 * atan(tan(v * 0.5 * kRad) * asp) / kRad);
 }
 
 /* D218: Video.DrawDistance -- multiplier applied to a level's authored
@@ -274,12 +369,16 @@ f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
  * playtest found a straight 1:1 FovScale coupling still faded guards in
  * noticeably close on Dam, so the auto coupling is 2x FovScale, not 1x).
  * An explicit Video.DrawDistance != 100 overrides that coupling outright.
- * Clamped to <=4.0x -- pushing the far plane much further out risks
- * far-field z-fighting against the level's original near-plane precision;
- * raised again (M-121 live playtest: 2x FovScale still showed a "blue
- * glow" on far Dam tunnel geometry, so auto coupling is now 4x FovScale)
- * to give headroom (max portFovScale is 1.5 at Video.FovScale's registered
- * ceiling of 150, so 4x tops out at 6.0x -- ceiling raised to match).
+ * Clamp history: an explicit Video.DrawDistance goes up to 800 (8.0x cap,
+ * raised 2026-10-04 at the maintainer's request). The auto-FOV coupling is
+ * 4x FovScale (M-121 live playtest: 2x FovScale still showed a "blue glow"
+ * on far Dam tunnel geometry); max portFovScale is 1.5 at Video.FovScale's
+ * registered ceiling of 150, so the coupling still tops out at 6.0x.
+ * The multiplier scales Visibility.FarFog (bgfog.c), so it moves the far
+ * clip plane as well as the fog ramp, while the near plane stays fixed.
+ * Pushing the far plane out risks far-field z-fighting against the level's
+ * original depth precision; 8x halves the precision margin compared with
+ * 4x. A by-eye check at 600-800 is owed (ROADMAP section 3).
  * Identity (1.0f) at DrawDistance=100 with auto-FOV off. NOTE: end-to-end
  * re-check of fogLoadCurrentEnvironment (bgfog.c) found the fog RAMP
  * itself (not just the far-clip cutoff) already scales correctly with
@@ -299,9 +398,18 @@ f32 portDrawDistanceMultiplier(void)
     } else {
         return 1.0f;
     }
-    if (mult > 6.0f) { mult = 6.0f; }
+    if (mult > 8.0f) { mult = 8.0f; }
     if (mult < 1.0f) { mult = 1.0f; }
     return mult;
+}
+
+/* D540: Video.FogDistance -- multiplier on the level's authored fog start/end
+ * DISTANCES, independent of Video.DrawDistance (which moves the far clip).
+ * bgfog.c caps the fog at the far clip, so the fog always hides the edge of
+ * the drawn world. 1.0f (100) = the N64's own fog. */
+f32 portFogDistanceMultiplier(void)
+{
+    return (f32)cfgFogDistance / 100.0f;
 }
 
 /* D249: Video.LodDistance -- multiplier on the *distance* term
@@ -315,7 +423,7 @@ f32 portDrawDistanceMultiplier(void)
  * option, default OFF) can couple it to Video.FovScale the same
  * direction as draw distance if ever wanted; off by default so this stays a
  * standalone dial and doesn't quietly add cost as FovScale widens. Clamped
- * to a [0.25, 4.0] distance multiplier (== effective LodDistance 25-400%) --
+ * to a [0.125, 4.0] distance multiplier (== effective LodDistance 25-800%) --
  * far outside that band either does nothing visible (LOD never triggers) or
  * thrashes every frame. Identity (1.0f) at Video.LodDistance=100
  * with auto-FOV off. */
@@ -330,7 +438,7 @@ f32 portLodDistanceMultiplier(void)
         return 1.0f;
     }
     if (pct < 25.0f)  { pct = 25.0f; }
-    if (pct > 400.0f) { pct = 400.0f; }
+    if (pct > 800.0f) { pct = 800.0f; }
     return 100.0f / pct;
 }
 
@@ -376,7 +484,7 @@ f32 portRoomPoolScale(void)
         /* Test hook: values < 1.0 shrink the pool BELOW the authored size
          * to stress-test the exhaustion path (D294 verification). */
         scale = (f32)atof(ov);
-        if (scale > 2.0f) { scale = 2.0f; }
+        if (scale > 2.5f) { scale = 2.5f; }
         if (scale < 0.25f) { scale = 0.25f; }
         return scale;
     }
@@ -396,14 +504,21 @@ f32 portRoomPoolScale(void)
      * -level_22 boots stayed clean headless). Reverted to sqrt + 2.0 cap,
      * the user-verified working state. Do not re-apply without the capture-bat
      * repro data (scratch/d294_capture.bat -> D156 hexdump + GE_D294BANK). */
-    t = sqrtf(portDrawDistanceMultiplier());
+    t = powf(portDrawDistanceMultiplier(), 0.66f);   /* D294 2026-09-30: was sqrtf; 4^0.66 = 2.5 */
     if (t > scale) { scale = t; }
 
-    t = sqrtf(1.0f / portLodDistanceMultiplier());
+    t = powf(1.0f / portLodDistanceMultiplier(), 0.66f);
     if (t > scale) { scale = t; }
 
-    if (scale > 2.0f) { scale = 2.0f; }
+    /* D294 (2026-09-30): cap 2.0 -> 2.5 so Statue's full 27-room set (487 KB
+     * = 2.17x its 225 KB authored pool) fits at max DD/Lod. The old 3x
+     * "regression" was D336 (uninitialised head-anim fields), not pool size.
+     * Worst case -ma350 row -> 875 KB; boss.c still clamps to STAGE bank - 128 KB. */
+    if (scale > 2.5f) { scale = 2.5f; }
     if (scale < 1.0f) { scale = 1.0f; }
+    /* boss.c truncates scale to quarter steps ((s64)(scale*4)); round UP to a
+     * quarter here so 4^0.66 = 2.497 lands on 2.5 instead of truncating to 2.25. */
+    scale = ceilf(scale * 4.0f - 0.01f) / 4.0f;
     return scale;
 }
 
@@ -412,59 +527,295 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterFloat("Game.ScreenShakeIntensity", &portScreenShakeScale, 0.0f, 10.0f);
     configRegisterInt("Game.SkipIntro", &portSkipIntro, 0, 1);
     configRegisterInt("Game.NoHitFlash", &portNoHitFlash, 0, 1);
+    configRegisterInt("Game.AIWideView", &cfgAIWideView, 0, 1);   /* D468 */
     configRegisterInt("Video.CrosshairHide",  &portCrosshairHide, 0, 1);  /* v0.4.0 M2 (D373) */
+    configRegisterInt("Video.CrosshairPersistent", &cfgCrosshairPersistent, 0, 1);   /* D436 */
     configRegisterInt("Video.CrosshairColor", &cfgCrosshairColor, 0, 8);  /* 8 = custom; old ini values unchanged */
     configRegisterInt("Video.CrosshairRed",   &cfgCrosshairRed,   0, 255);
     configRegisterInt("Video.CrosshairGreen", &cfgCrosshairGreen, 0, 255);
     configRegisterInt("Video.CrosshairBlue",  &cfgCrosshairBlue,  0, 255);
     configRegisterInt("Video.CrosshairSize",  &cfgCrosshairSize, 50, 200);
     configRegisterInt("Video.CrosshairStyle", &cfgCrosshairStyle, 0, 1);
+    configRegisterInt("Video.CrosshairAlpha", &cfgCrosshairAlpha, 0, 100);        /* D511 */
+    configRegisterInt("Video.CrosshairHealthColor", &cfgCrosshairHealth, 0, 1);   /* D511 */
     configRegisterInt("Game.AllUnlocked", &portAllUnlocked, 0, 1);
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
-    configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 8);
-    configRegisterInt("Video.TextureFilter", &cfgTexFilter,  0, 2);
+    configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 16);   /* D443: 16x added */
+    configRegisterInt("Video.TextureFilter", &cfgTexFilter,  0, 3);   /* Trilinear option (playtest 2026-10-03) */
     configRegisterInt("Video.FixMipTextures", &cfgFixMipTex, 0, 1);
     configRegisterInt("Video.DetailBaseTile", &cfgDetailBaseTile, 0, 1);
     configRegisterInt("Video.WrapFix", &cfgWrapFix, 0, 1);
-    configRegisterInt("Video.FovScale", &cfgFovScale, 50, 150);
+    configRegisterFloat("Video.FovScale", &cfgFovScale, 50.f, 150.f);
     configRegisterInt("Video.WidescreenAuto", &cfgWidescreenAuto, 0, 1);
     configRegisterInt("Video.NativeWidescreen", &cfgNativeWidescreen, 0, 1);   /* D334 */
     configRegisterInt("Game.HudScale", &cfgHudScale, 75, 150);   /* D226: capped at 150 (user: little benefit above) */
-    configRegisterInt("Video.DrawDistance", &cfgDrawDistance, 100, 400);
+    configRegisterInt("Video.DrawDistance", &cfgDrawDistance, 100, 800);
+    /* D565: floor 100 -- below the authored fog the shortened far clip also
+     * shrinks what AI awareness counts as on screen / in sight (D466 keeps
+     * gameplay on the authored distance only for extensions). */
+    configRegisterInt("Video.FogDistance", &cfgFogDistance, 100, 800);   /* D540 */
     configRegisterInt("Video.DrawDistanceAutoFov", &cfgDrawDistanceAutoFov, 0, 1);
-    configRegisterInt("Video.LodDistance", &cfgLodDistance, 25, 400);
+    configRegisterInt("Video.LodDistance", &cfgLodDistance, 25, 800);
     configRegisterInt("Video.LodDistanceAutoFov", &cfgLodDistanceAutoFov, 0, 1);
     configRegisterInt("Video.Anisotropy", &cfgAniso, 1, 16);
     configRegisterInt("Video.SafeAreaCrop", &cfgSafeAreaCrop, 0, 1);
+    configRegisterInt("Video.AspectMode", &cfgAspectMode, 0, 3);   /* D447; D508 forced ratios 2..3 */
     configRegisterInt("Video.Fullscreen",    &cfgFullscreen, 0, 1);
+    configRegisterInt("Video.FullscreenMode", &cfgFullscreenMode, 0, 1);   /* D511: 0 borderless, 1 exclusive */
     configRegisterInt("Window.Width",        &cfgWinW,       0, 16384);
     configRegisterInt("Window.Height",       &cfgWinH,       0, 16384);
     configRegisterInt("Window.X",            &cfgWinX,      -1, 16384);
     configRegisterInt("Window.Y",            &cfgWinY,      -1, 16384);
     configRegisterInt("Window.Maximized",    &cfgWinMax,     0, 1);
+    configRegisterInt("Video.DeckPresetApplied", &cfgDeckPresetApplied, 0, 1);   /* D283 */
+    configRegisterInt("Video.LowEndConsidered", &cfgLowEndConsidered, 0, 1);     /* D482 */
+    configRegisterInt("Video.DefaultsRev", &cfgDefaultsRev, 0, 1);               /* D546 */
 }
 
-/* Steam Deck / SteamOS first-run preset. Called from main() when STEAMOS is
- * set, BEFORE configLoad(): if no ge007.ini exists yet, configLoad's
- * first-run path saves these values to disk and every later launch reads the
- * file (user changes via F10 win outright); if an ini already exists its
- * values overwrite everything here. So this is a first-launch preset only.
- * 1280x800 is the Deck's native panel resolution; 2x MSAA + VSync keep
- * GPU cost modest. Draw/LOD distances use the standard midpoint (250%)
- * to avoid obvious N64-era pop-in on modern displays.
- * Note: the panel is 16:10 and the game renders 4:3, so this stretches
- * uniformly like any non-4:3 window today (letterboxing is the parked
- * WIDESCREEN-FOV-PLAN). */
-void videoApplySteamOSDefaults(void)
+/* D283: Steam Deck preset. Called from main() right AFTER configLoad(), so
+ * it sees the ini the user already has (the original preset only ran when no
+ * ini existed and only on STEAMOS, so a first launch from Desktop Mode --
+ * which does not export STEAMOS -- created a plain-Linux ini and the preset
+ * never applied, D283).
+ *
+ * Detection is by hardware: DMI board/sys vendor "Valve" + product
+ * "Jupiter" (LCD) or "Galileo" (OLED), read from /sys (Linux only); the
+ * STEAMOS env var is kept as an extra signal. GE_FAKE_DECK=1 forces the
+ * Deck path on any host (testing), GE_FAKE_DECK=0 forces it off.
+ *
+ * Applied at most once per ini (Video.DeckPresetApplied records it) and only
+ * while the display keys are still at the generic windowed state
+ * (Video.Fullscreen=0, Window.Maximized=0). Window.Width/Height are NOT a
+ * usable "untouched" signal: videoSaveWindowState() rewrites them from the
+ * live window on every clean exit. A user who already picked fullscreen keeps
+ * their settings; the flag is still set, so later F10 choices always win.
+ * The preset is display-only (borderless fullscreen, 1280x800 = the Deck
+ * panel as the windowed size). VSync 1 / MSAA 2 / draw+LOD 250 were part of
+ * the old first-run preset but are the generic defaults anyway, so they are
+ * no longer written (an existing ini's choices there are never clobbered). */
+#if defined(__linux__)
+static int videoReadDmi(const char *name, char *out, int n)
 {
-    cfgFullscreen   = 1;
-    cfgWinW         = 1280;
-    cfgWinH         = 800;
-    cfgVSync        = 1;
-    cfgMSAA         = 2;
-    cfgDrawDistance = 250;
-    cfgLodDistance  = 250;
+    char path[128];
+    FILE *f;
+    snprintf(path, sizeof(path), "/sys/class/dmi/id/%s", name);
+    out[0] = 0;
+    f = fopen(path, "r");
+    if (!f) return 0;
+    if (!fgets(out, n, f)) out[0] = 0;
+    fclose(f);
+    for (int i = (int)strlen(out) - 1; i >= 0 && (out[i] == '\n' || out[i] == '\r' || out[i] == ' '); i--)
+        out[i] = 0;
+    return out[0] != 0;
+}
+#endif
+
+static int videoDetectSteamDeck(const char **why)
+{
+    const char *fake = getenv("GE_FAKE_DECK");
+    if (fake && *fake) {
+        *why = "GE_FAKE_DECK";
+        return atoi(fake) != 0;
+    }
+#if defined(__linux__)
+    {
+        char vendor[64], sysVendor[64], product[64];
+        videoReadDmi("board_vendor", vendor, sizeof(vendor));
+        videoReadDmi("sys_vendor", sysVendor, sizeof(sysVendor));
+        videoReadDmi("product_name", product, sizeof(product));
+        if ((!strncmp(vendor, "Valve", 5) || !strncmp(sysVendor, "Valve", 5)) &&
+            (!strcmp(product, "Jupiter") || !strcmp(product, "Galileo"))) {
+            *why = "DMI Valve Jupiter/Galileo";
+            return 1;
+        }
+    }
+#endif
+    if (getenv("STEAMOS")) {
+        *why = "STEAMOS";
+        return 1;
+    }
+    *why = "";
+    return 0;
+}
+
+void videoApplySteamDeckPreset(void)
+{
+    const char *why = "";
+    if (!videoDetectSteamDeck(&why)) return;
+    if (cfgDeckPresetApplied) {
+        sysLogPrintf(LOG_INFO, "video: Steam Deck (%s); preset already considered for this ini", why);
+        return;
+    }
+    if (!cfgFullscreen && !cfgWinMax) {
+        cfgFullscreen = 1;
+        cfgWinW       = 1280;
+        cfgWinH       = 800;
+        sysLogPrintf(LOG_INFO, "video: Steam Deck (%s); applying Deck preset (fullscreen, 1280x800)", why);
+    } else {
+        sysLogPrintf(LOG_INFO, "video: Steam Deck (%s); display already user-set (fullscreen=%d maximized=%d), preset skipped",
+                     why, cfgFullscreen, cfgWinMax);
+    }
+    cfgDeckPresetApplied = 1;
+    configSave();
+}
+
+/* D482: lighter defaults on Atom/Celeron-class GPUs (#92).
+ * Measured (Lenovo X220 + the PD port on the same box): fast3d costs no more
+ * per batch/triangle than PD's; the gap on very weak hardware is workload.
+ * DrawDistance/LodDistance 250 send 2.5-3x the draw batches of the authored
+ * distance and MSAA 2x adds ~25-30% GPU time -- PD ships authored distance and
+ * no MSAA. On Intel HD 400-class GPUs (Bay Trail/Braswell/Apollo Lake/Gemini
+ * Lake) and software renderers, lower those three to 100/100/1, but only where
+ * the value is still the port default, and only once per ini
+ * (Video.LowEndConsidered). Core-series iGPUs (HD 2000-6000, HD 5xx, UHD 6xx
+ * except 600/605) keep the full defaults; an HD 3000 holds 60 with them.
+ * The bare "Intel(R) HD Graphics" (no number) counts as low-end on purpose: it
+ * is what Bay Trail and Celeron/Pentium parts report; no Core-series part
+ * reports it, and a miss costs one reversible lightening. Don't tighten this
+ * without measurements.
+ * Must run after gfx_init (needs GL_RENDERER), so it cannot sit next to
+ * videoApplySteamDeckPreset in main.c, which runs before any GL context. The
+ * two touch disjoint keys (Deck: window/fullscreen; this: DD/LOD/MSAA).
+ * GE_FAKE_LOWEND=1/0 forces the classification for testing. */
+static int videoIsLowEndRenderer(const char *r, const char **why)
+{
+    static const char *const kTags[] = {
+        "(BYT)", "(BSW)", "(CHV)", "(APL)", "(GLK)",
+        "Bay Trail", "Braswell", "Cherryview", "Apollo Lake", "Gemini Lake",
+        "llvmpipe", "softpipe", "SVGA3D", "Microsoft Basic Render", "GDI Generic",
+    };
+    static const int kModels[] = { 400, 405, 500, 505, 600, 605 };
+    const char *p;
+
+    for (int i = 0; i < (int)(sizeof(kTags) / sizeof(kTags[0])); i++) {
+        if (strstr(r, kTags[i])) { *why = kTags[i]; return 1; }
+    }
+    p = strstr(r, "HD Graphics");
+    if (p) {
+        int n = 0, digits = 0;
+        p += strlen("HD Graphics");
+        while (*p == ' ') p++;
+        while (*p >= '0' && *p <= '9') { n = n * 10 + (*p - '0'); p++; digits++; }
+        if (!digits) { *why = "numberless HD Graphics"; return 1; }
+        for (int i = 0; i < (int)(sizeof(kModels) / sizeof(kModels[0])); i++) {
+            if (n == kModels[i]) { *why = "HD Graphics 400-605 class"; return 1; }
+        }
+    }
+    *why = "";
+    return 0;
+}
+
+/* D546: one-time move of untouched old defaults to the standardized ones
+ * (draw/LOD distance 2.5x -> 2.0x). A value the player changed is kept; same
+ * "considered" flag pattern as D482. */
+static void videoMigrateDefaults(void)
+{
+    int changed = 0;
+    if (cfgDefaultsRev >= 1) return;
+    if (cfgDrawDistance == 250) { cfgDrawDistance = 200; changed++; }
+    if (cfgLodDistance == 250)  { cfgLodDistance = 200; changed++; }
+    sysLogPrintf(LOG_INFO, "video: defaults rev 1 (D546): %d value(s) moved to 2.0x", changed);
+    cfgDefaultsRev = 1;
+    configSave();
+}
+
+static void videoApplyLowEndDefaults(void)
+{
+    const char *r = gfx_opengl_renderer_string();
+    const char *why = "";
+    const char *fake = getenv("GE_FAKE_LOWEND");
+    int low;
+
+    if (cfgLowEndConsidered) return;
+    if (fake && *fake) {
+        low = atoi(fake) != 0;
+        why = "GE_FAKE_LOWEND";
+    } else {
+        low = videoIsLowEndRenderer(r, &why);
+    }
+    if (low) {
+        int changed = 0;
+        if (cfgDrawDistance == 200) { cfgDrawDistance = 100; changed++; }   /* D546: the default is 2.0x */
+        if (cfgLodDistance == 200)  { cfgLodDistance = 100; changed++; }
+        if (cfgMSAA == 2)           { cfgMSAA = 1; gfx_msaa_level = 1; changed++; }
+        sysLogPrintf(LOG_INFO, "video: low-end renderer \"%s\" (%s); lowered %d default(s): DrawDistance=%d LodDistance=%d MSAA=%d",
+                     r, why, changed, cfgDrawDistance, cfgLodDistance, cfgMSAA);
+    } else {
+        sysLogPrintf(LOG_INFO, "video: renderer \"%s\" (%s); not low-end, defaults kept",
+                     r, why[0] ? why : "no match");
+    }
+    cfgLowEndConsidered = 1;
+    configSave();
+}
+
+/* D440: "Original N64" preset + its inverse ("Port defaults").
+ * One row per config key whose port default differs from what the N64
+ * showed, plus the fidelity-identity keys a user may have moved away from
+ * (so the N64 preset really snaps every presentation value back). Each
+ * entry: key, N64 value, port default (the C initializer). The full audit,
+ * including the keys deliberately left OUT (MSAA, VSync, FpsCap, window /
+ * fullscreen, accuracy fixes, input feel, bindings, volumes, SkipIntro,
+ * AllUnlocked), is in findings D440.
+ * Culling needs no key of its own: frustum-cull planes, the fog/LOD scale
+ * (D222) and the room-pool budget (D294, portRoomPoolScale) all derive from
+ * FovScale / widescreen / draw / LOD distance and are identity when those
+ * are at the N64 values below. */
+static const struct { const char *key; double n64, port; } kVideoPresets[] = {
+    { "Video.TextureFilter",         2,   1 },   /* N64 3-point vs bilinear */
+    { "Video.Anisotropy",            1,   4 },   /* the RDP has no anisotropic filtering */
+    { "Video.NativeWidescreen",      0,   1 },   /* 4:3 projection (D334) */
+    { "Video.WidescreenAuto",        0,   1 },   /* stock vertical FOV at any window aspect */
+    { "Video.SafeAreaCrop",          0,   1 },   /* show the VI frame as output, borders included */
+    { "Video.AspectMode",            1,   0 },   /* D447: exact console aspect, bars around it */
+    { "Video.DrawDistance",        100, 200 },   /* authored far clip (D218); D546 2.0x */
+    { "Video.FogDistance",         100, 100 },   /* D540: N64 fog in both presets */
+    { "Video.LodDistance",         100, 200 },   /* authored LOD switch distances (D249); D546 2.0x */
+    { "Video.DrawDistanceAutoFov",   0,   0 },   /* legacy coupling: off = identity */
+    { "Video.LodDistanceAutoFov",    0,   0 },
+    { "Video.FovScale",            100, 100 },   /* stock FOV (D211) */
+    { "Game.HudScale",             100, 100 },   /* D226 */
+    { "Game.ScreenShakeIntensity",   1,   1 },   /* D181 */
+    { "Game.NoHitFlash",             0,   0 },   /* D232 */
+    { "Video.CrosshairHide",         0,   0 },   /* D373 */
+    { "Video.CrosshairPersistent",   0,   0 },   /* D436: aim mode only, as the N64 */
+    { "Video.CrosshairColor",        0,   0 },   /* authored red sprite */
+    { "Video.CrosshairSize",       100, 100 },
+    { "Video.CrosshairStyle",        0,   0 },
+    { "Input.AimMode",               0,   0 },   /* N64 aim (D337) */
+    { "Input.AimRange",              1,   0 },   /* N64 aim limits (D338) */
+};
+#define NUM_VIDEO_PRESETS ((int)(sizeof(kVideoPresets) / sizeof(kVideoPresets[0])))
+
+int videoApplyPreset(int which)
+{
+    int changed = 0;
+    for (int i = 0; i < NUM_VIDEO_PRESETS; i++) {
+        double want = which == VIDEO_PRESET_N64 ? kVideoPresets[i].n64 : kVideoPresets[i].port;
+        double cur = 0.0;
+        if (!configGetValue(kVideoPresets[i].key, &cur)) {
+            sysLogPrintf(LOG_WARNING, "video: preset key %s not registered", kVideoPresets[i].key);
+            continue;
+        }
+        if (cur == want) continue;
+        configSetValue(kVideoPresets[i].key, want);
+        if (initDone && !strncmp(kVideoPresets[i].key, "Video.", 6))
+            videoRequestLiveConfigForKey(kVideoPresets[i].key);
+        changed++;
+    }
+    sysLogPrintf(LOG_INFO, "video: applied %s preset (%d value(s) changed)",
+                 which == VIDEO_PRESET_N64 ? "Original N64" : "port defaults", changed);
+    return changed;
+}
+
+int videoPresetIsActive(int which)
+{
+    for (int i = 0; i < NUM_VIDEO_PRESETS; i++) {
+        double want = which == VIDEO_PRESET_N64 ? kVideoPresets[i].n64 : kVideoPresets[i].port;
+        double cur = 0.0;
+        if (!configGetValue(kVideoPresets[i].key, &cur) || cur != want) return 0;
+    }
+    return 1;
 }
 
 /* D382: record precisely which live video setting changed. Reticle/FOV/
@@ -479,14 +830,18 @@ static SDL_atomic_t liveCfgDirty;
  * plain float the game re-reads each frame; anisotropy goes to fast3d. */
 static void videoApplyImageOptions(void)
 {
-    portFovScale = (f32)cfgFovScale / 100.0f;
+    portFovScale = cfgFovScale / 100.0f;
     gfx_set_anisotropy_level(cfgAniso);
     gfx_set_safe_area_crop(cfgSafeAreaCrop);
 }
 
 static void videoApplyTexFilter(void)
 {
-    if (cfgTexFilter >= 2) {
+    /* Trilinear option (playtest 2026-10-03): value 3 = bilinear + generated mips. */
+    if (cfgTexFilter == 3) {
+        gfx_set_texture_filter(FILTER_TRILINEAR);
+        gfx_set_mipmap_filter(MIPMAP_LINEAR);
+    } else if (cfgTexFilter >= 2) {
         gfx_set_texture_filter(FILTER_THREE_POINT);
         gfx_set_mipmap_filter(MIPMAP_LINEAR);
     } else if (cfgTexFilter == 1) {
@@ -509,6 +864,7 @@ void videoRequestLiveConfigForKey(const char *key)
     else if (!strcmp(key, "Video.FovScale"))        mask = VCFG_FOV;
     else if (!strcmp(key, "Video.Anisotropy"))      mask = VCFG_ANISO;
     else if (!strcmp(key, "Video.SafeAreaCrop"))    mask = VCFG_CROP;
+    /* Video.AspectMode is read every frame in videoStartFrame: no dirty bit. */
     if (mask) {
         int old;
         do {
@@ -522,7 +878,7 @@ void videoRequestLiveConfigForKey(const char *key)
  * SDL_SetWindowFullscreen pump the Win32 message loop and must run on the
  * window's creating thread. The overlay posts a request here; the host-thread
  * event pump drains it in videoDrainWindowRequests(). */
-static volatile int winReqKind = 0;          /* 0 none, 1 resize, 2 fullscreen */
+static volatile int winReqKind = 0;          /* 0 none, 1 resize, 2 fullscreen, 3 centre (D511), 4 fullscreen mode (D511) */
 static volatile int winReqA = 0, winReqB = 0;
 
 void videoRequestWindowSize(int w, int h)
@@ -533,6 +889,30 @@ void videoRequestWindowSize(int w, int h)
 void videoRequestFullscreen(int on)
 {
     winReqA = on ? 1 : 0; winReqKind = 2;
+}
+
+void videoRequestFullscreenMode(int exclusive)
+{
+    winReqA = exclusive ? 1 : 0; winReqKind = 4;
+}
+
+void videoRequestCenterWindow(void)
+{
+    winReqKind = 3;
+}
+
+void videoGetOutputRectFrac(double *x0, double *y0, double *x1, double *y1)
+{
+    int32_t rx = 0, ry = 0, rw = 0, rh = 0;
+    double W = (double)gfx_current_window_dimensions.width;
+    double H = (double)gfx_current_window_dimensions.height;
+    gfx_get_output_rect(&rx, &ry, &rw, &rh);
+    if (W < 1.0 || H < 1.0 || rw <= 0 || rh <= 0) {
+        *x0 = 0.0; *y0 = 0.0; *x1 = 1.0; *y1 = 1.0;
+        return;
+    }
+    *x0 = rx / W; *y0 = ry / H;
+    *x1 = (rx + rw) / W; *y1 = (ry + rh) / H;
 }
 
 void videoGetWindowSize(int *w, int *h)
@@ -593,6 +973,26 @@ static void videoDrainWindowRequests(void)
         gfx_sdl_update_cached_size();
         cfgFullscreen = on ? 1 : 0;
         sysLogPrintf(LOG_INFO, "video: fullscreen %s", on ? "on" : "off");
+    } else if (kind == 3) {   /* D511: Center window (windowed only) */
+        uint32_t ww = 0, hh = 0; int32_t cx = 0, cy = 0, px = 0, py = 0;
+        if (wmAPI->get_fullscreen_state && wmAPI->get_fullscreen_state()) return;
+        if ((wmAPI->get_maximized_state && wmAPI->get_maximized_state()) || cfgWinMax) {   /* set_dimensions on a maximized window is undefined across platforms */
+            sysLogPrintf(LOG_INFO, "video: center window ignored (window is maximized)");
+            return;
+        }
+        if (!wmAPI->get_dimensions || !wmAPI->get_centered_positions || !wmAPI->set_dimensions) return;
+        wmAPI->get_dimensions(&ww, &hh, &cx, &cy);
+        wmAPI->get_centered_positions((int32_t)ww, (int32_t)hh, &px, &py);
+        wmAPI->set_dimensions(ww, hh, px, py);
+        cfgWinX = px; cfgWinY = py;
+        sysLogPrintf(LOG_INFO, "video: center window %ux%u: (%d,%d) -> (%d,%d)", ww, hh, cx, cy, px, py);
+    } else if (kind == 4) {   /* D511: borderless vs exclusive; re-enters fullscreen when already on */
+        int ex = winReqA;
+        if (wmAPI->set_fullscreen_exclusive) wmAPI->set_fullscreen_exclusive(ex != 0);
+        gfx_sdl_update_cached_size();
+        cfgFullscreenMode = ex ? 1 : 0;
+        sysLogPrintf(LOG_INFO, "video: fullscreen mode %s (fullscreen now %d)", ex ? "exclusive" : "borderless",
+                     wmAPI->get_fullscreen_state ? (int)wmAPI->get_fullscreen_state() : -1);
     }
 }
 
@@ -610,6 +1010,24 @@ static float vidAvgFPS = 0.f;
 
 int videoInit(void)
 {
+    /* D569: Crosshair color is Original (0) or Custom RGB (8), as in the PD
+     * port. Inis from v0.5.0 builds before this may hold a named preset 1..7:
+     * carry its colour into the Custom channels once, so nothing changes. */
+    if (cfgCrosshairColor >= 1 && cfgCrosshairColor <= 7) {
+        cfgCrosshairRed = kTints[cfgCrosshairColor][0];
+        cfgCrosshairGreen = kTints[cfgCrosshairColor][1];
+        cfgCrosshairBlue = kTints[cfgCrosshairColor][2];
+        cfgCrosshairColor = 8;
+    }
+    /* D440 CLI route: -n64preset / -portpreset apply the preset
+     * once at startup (after configLoad, before any value reaches fast3d) and
+     * persist like an F10 press (the atexit configSave). */
+    if (sysArgCheck("-n64preset") || sysArgCheck("--n64preset")) {
+        videoApplyPreset(VIDEO_PRESET_N64);
+    } else if (sysArgCheck("-portpreset") || sysArgCheck("--portpreset")) {
+        videoApplyPreset(VIDEO_PRESET_PORT);
+    }
+
     wmAPI = &gfx_sdl;
     renderingAPI = &gfx_opengl_api;
 
@@ -620,7 +1038,7 @@ int videoInit(void)
     gfx_detail_textures_enabled = false;
 
     /* MSAA: snap the requested sample count down to a supported power of two. */
-    gfx_msaa_level = cfgMSAA >= 8 ? 8 : cfgMSAA >= 4 ? 4 : cfgMSAA >= 2 ? 2 : 1;
+    gfx_msaa_level = cfgMSAA >= 16 ? 16 : cfgMSAA >= 8 ? 8 : cfgMSAA >= 4 ? 4 : cfgMSAA >= 2 ? 2 : 1;
 
     int winW = cfgWinW > 0 ? cfgWinW : 0;   /* 0 -> gfx_sdl2 auto-fits to the desktop */
     int winH = cfgWinH > 0 ? cfgWinH : 0;
@@ -636,7 +1054,7 @@ int videoInit(void)
             .x = havePos ? cfgWinX : 100,
             .y = havePos ? cfgWinY : 100,
             .fullscreen = cfgFullscreen != 0,
-            .fullscreen_is_exclusive = false,
+            .fullscreen_is_exclusive = cfgFullscreenMode != 0,
             .maximized = cfgWinMax != 0,
             .centered = !havePos,
             .allow_hidpi = false,
@@ -644,6 +1062,8 @@ int videoInit(void)
     };
 
     gfx_init(&set);
+    videoMigrateDefaults();       /* D546: before D482, which compares against the new defaults */
+    videoApplyLowEndDefaults();   /* D482: needs GL_RENDERER; before the first frame */
 
     /* VSync + optional fps cap; fast3d paces the window itself. */
     wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
@@ -714,6 +1134,19 @@ void videoRequestQuit(const char *why)
     }
 }
 
+/* D443: "Restart game" = the same orderly quit, plus a flag main.c's atexit
+ * handler reads (after config/window state are saved) to relaunch. */
+static int s_restartReq = 0;
+void videoRequestRestart(const char *why)
+{
+    s_restartReq = 1;
+    videoRequestQuit(why);
+}
+int videoRestartRequested(void)
+{
+    return s_restartReq;
+}
+
 int videoQuitRequested(void)
 {
     return SDL_AtomicGet(&s_quitReq) != 0;
@@ -745,6 +1178,10 @@ static void videoHostExitIfRequested(void)
                  SDL_AtomicGet(&s_parked) ? "parked"
                  : (SDL_AtomicGet(&s_inFrame) ? "STILL IN FRAME (timeout)" : "idle"),
                  (unsigned)(SDL_GetTicks() - start));
+    {
+        extern void mempRedzoneCheck(const char *why);
+        mempRedzoneCheck("orderly quit");
+    }
     exit(0);
 }
 
@@ -756,6 +1193,23 @@ void videoDestroy(void)
     }
 }
 
+/* D447: target aspect of the output rect for the current frame. Original mode
+ * does what the console did: 4:3, or 16:9 while the watch-menu Ratio option is
+ * 16:9 (the game pre-squashes for a stretching widescreen TV). get_screen_ratio()
+ * is read only, never written. Returns 0 for Window mode (fill the window). */
+extern int get_screen_ratio(void);
+static float videoOutputAspect(void)
+{
+    switch (cfgAspectMode) {
+    case 1:   /* Original: the console's own shape */
+        return get_screen_ratio() == 1 /* SCREEN_RATIO_16_9 */ ? (16.0f / 9.0f) : (4.0f / 3.0f);
+    case 2: return 16.0f / 9.0f;   /* D508: forced ratios; with Native widescreen the world
+                                      projects at this aspect (it is the output rect's own) */
+    case 3: return 21.0f / 9.0f;   /* also stands in for 2.35:1 cinema */
+    default: return 0.0f;          /* Window: fill the window */
+    }
+}
+
 void videoStartFrame(void)
 {
     if (!initDone) {
@@ -763,12 +1217,18 @@ void videoStartFrame(void)
     }
     /* D344: enter the frame first, then check for a quit (see above). */
     SDL_AtomicSet(&s_inFrame, 1);
+    /* D464: GE_MEMPREDZONE periodic stage-bank red-zone check (cached env). */
+    if (frames % 60 == 59) {
+        extern void mempRedzoneCheck(const char *why);
+        mempRedzoneCheck("videoEndFrame/60");
+    }
     if (SDL_AtomicGet(&s_quitReq)) {
         videoRenderPark();
     }
 
-    /* Rendering runs on the game's scheduler thread; the GL context was
-     * created on the host main thread. */
+    /* Rendering runs on the D481 render worker (or the scheduler thread with
+     * GE_RENDERINLINE/GE_DETERM); the GL context was created on the host
+     * main thread. */
     gfx_sdl_make_context_current();
 
     int dirty = SDL_AtomicSet(&liveCfgDirty, 0);
@@ -776,14 +1236,15 @@ void videoStartFrame(void)
         if (dirty & VCFG_VSYNC) wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
         if (dirty & VCFG_FPS) gfx_set_target_fps(cfgFpsCap);
         if (dirty & VCFG_FILTER) videoApplyTexFilter();
-        if (dirty & VCFG_FOV) portFovScale = (f32)cfgFovScale / 100.0f;
+        if (dirty & VCFG_FOV) portFovScale = cfgFovScale / 100.0f;
         if (dirty & VCFG_ANISO) gfx_set_anisotropy_level(cfgAniso);
         if (dirty & VCFG_CROP) gfx_set_safe_area_crop(cfgSafeAreaCrop);
         sysLogPrintf(LOG_INFO, "video: live config applied mask=%02x "
-                     "(vsync=%d fpscap=%d texfilter=%d fov=%d aniso=%d)",
+                     "(vsync=%d fpscap=%d texfilter=%d fov=%.1f aniso=%d)",
                      dirty, cfgVSync, cfgFpsCap, cfgTexFilter, cfgFovScale, cfgAniso);
     }
 
+    gfx_set_output_aspect(videoOutputAspect());
     gfx_start_frame();
 }
 
@@ -812,6 +1273,10 @@ void videoPumpEvents(void)
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
+        case SDL_AUDIODEVICEREMOVED:
+            /* D470: an open output device vanished; audio.c falls back to default. */
+            if (!ev.adevice.iscapture) audioNotifyDeviceRemoved(ev.adevice.which);
+            break;
         case SDL_QUIT:
             videoRequestQuit("quit event");
             break;
@@ -830,11 +1295,8 @@ void videoPumpEvents(void)
             } else if (ev.key.keysym.sym == SDLK_F12 && !ev.key.repeat) {
                 screenshotReq = 1;
             } else if (ev.key.keysym.sym == SDLK_F10 && !ev.key.repeat) {
-                /* F10: port-layer options overlay -- not on the PC options
-                 * screen (D343: one options UI at a time). */
-                if (optionsOverlayIsOpen() || !frontOptionsBlocksOverlay()) {
-                    optionsOverlayToggle();
-                }
+                /* F10: port-layer options overlay (the one PC options UI). */
+                optionsOverlayToggle();
             } else if (ev.key.keysym.sym == SDLK_ESCAPE && !ev.key.repeat) {
                 /* Overlay open: ESC backs out of a category, then closes (swallowed). Otherwise
                  * WI-1: in click-to-lock mode ESC frees the captured cursor
@@ -865,7 +1327,7 @@ void videoPumpEvents(void)
             break;
         case SDL_CONTROLLERDEVICEADDED:
         case SDL_CONTROLLERDEVICEREMOVED:
-            inputRescanPads();
+            inputRequestRescan();   /* D450: the rescan runs on the pad-reading thread */
             break;
         case SDL_WINDOWEVENT:
             if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
@@ -883,20 +1345,25 @@ void videoPumpEvents(void)
         }
     }
 
-    /* Refresh the window title with the live FPS about once a second. */
-    if (wmAPI && wmAPI->set_window_title) {
-        static double lastTitle = 0.0;
-        double now = wmAPI->get_time();
-        if (now - lastTitle >= 1.0) {
-            lastTitle = now;
-            char title[64];
-            snprintf(title, sizeof(title), "GoldenEye 007  -  %.0f fps", vidAvgFPS);
-            wmAPI->set_window_title(title);
-        }
-    }
+    /* D550: static title bar -- the "GoldenEye 007 - NN fps" per-second
+     * refresh used to live here (maintainer request 2026-10-17). */
 
     /* D287: apply anything the events above (click-to-lock, focus) queued. */
     inputApplyMouseRequests();
+}
+
+/* D416: split-screen viewports are sub-rects; tell fast3d so its safe-area
+ * crop stays off. Called before every gfx_run (scheduler + videoSubmitCommands). */
+void videoSyncSplitScreen(void)
+{
+    {
+        extern s32 getPlayerCount(void);
+        extern s32 lvlGetCurrentStageToLoad(void);
+        static int lastSplit = -1;
+        int split = getPlayerCount() >= 2 && lvlGetCurrentStageToLoad() != LEVELID_TITLE;
+        if (split != lastSplit) { sysLogPrintf(LOG_NOTE, "D416 split=%d players=%d stage=%d", split, (int)getPlayerCount(), (int)lvlGetCurrentStageToLoad()); lastSplit = split; }
+        gfx_set_split_screen(split);
+    }
 }
 
 void videoSubmitCommands(Gfx *cmds)
@@ -904,6 +1371,7 @@ void videoSubmitCommands(Gfx *cmds)
     if (!initDone) {
         return;
     }
+    videoSyncSplitScreen();
     gfx_run(cmds);
 }
 
@@ -929,21 +1397,19 @@ static void videoPreSwapCapture(void)
             ((int)frames - lo) % step == 0) {
             char path[128];
             snprintf(path, sizeof(path), "ppm/frame_%06d.ppm", (int)frames);
-            gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_dimensions.width,
-                                      (uint32_t)gfx_current_dimensions.height, path);
+            gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_window_dimensions.width,
+                                      (uint32_t)gfx_current_window_dimensions.height, path);   /* D447: whole window, bars included */
         }
     }
 
     if (screenshotReq) {
         screenshotReq = 0;
-        extern void gfxD157Burst(void); /* D252 TEMP, inert without GE_D157 */
-        gfxD157Burst();
         static int shotNum = 0;
         char path[128];
         GE_MKDIR("ppm");
         snprintf(path, sizeof(path), "ppm/shot_%03d.ppm", shotNum++);
-        if (gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_dimensions.width,
-                                      (uint32_t)gfx_current_dimensions.height, path)) {
+        if (gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_window_dimensions.width,
+                                      (uint32_t)gfx_current_window_dimensions.height, path)) {
             sysLogPrintf(LOG_INFO, "video: screenshot -> %s "
                          "(view with tools_pc/ppm2bmp.py)", path);
         } else {

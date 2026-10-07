@@ -63,6 +63,8 @@ static int gl_glsl_version = 130;
 static char gl_glsl_version_str[16] = "130";
 static GLenum gl_mirror_clamp = GL_MIRROR_CLAMP_TO_EDGE;
 static bool gl_es = false;
+extern int gfx_rdp_affine;   /* D540: defined in gfx_pc.cpp */
+extern int gfx_fog_vertex;   /* D540: defined in gfx_pc.cpp */
 static bool gl_core_profile = false;
 
 static int gfx_opengl_get_max_texture_size() {
@@ -149,13 +151,13 @@ static const char* shader_item_to_str(uint32_t item, bool with_alpha, bool only_
             case SHADER_1:
                 return with_alpha ? "vec4(1.0, 1.0, 1.0, 1.0)" : "vec3(1.0, 1.0, 1.0)";
             case SHADER_INPUT_1:
-                return with_alpha || !inputs_have_alpha ? "vInput1" : "vInput1.rgb";
+                return with_alpha || !inputs_have_alpha ? "cInput1" : "cInput1.rgb";
             case SHADER_INPUT_2:
-                return with_alpha || !inputs_have_alpha ? "vInput2" : "vInput2.rgb";
+                return with_alpha || !inputs_have_alpha ? "cInput2" : "cInput2.rgb";
             case SHADER_INPUT_3:
-                return with_alpha || !inputs_have_alpha ? "vInput3" : "vInput3.rgb";
+                return with_alpha || !inputs_have_alpha ? "cInput3" : "cInput3.rgb";
             case SHADER_INPUT_4:
-                return with_alpha || !inputs_have_alpha ? "vInput4" : "vInput4.rgb";
+                return with_alpha || !inputs_have_alpha ? "cInput4" : "cInput4.rgb";
             case SHADER_TEXEL0:
                 return with_alpha ? "texVal0" : "texVal0.rgb";
             case SHADER_TEXEL0A:
@@ -181,13 +183,13 @@ static const char* shader_item_to_str(uint32_t item, bool with_alpha, bool only_
             case SHADER_1:
                 return "1.0";
             case SHADER_INPUT_1:
-                return "vInput1.a";
+                return "cInput1.a";
             case SHADER_INPUT_2:
-                return "vInput2.a";
+                return "cInput2.a";
             case SHADER_INPUT_3:
-                return "vInput3.a";
+                return "cInput3.a";
             case SHADER_INPUT_4:
-                return "vInput4.a";
+                return "cInput4.a";
             case SHADER_TEXEL0:
                 return "texVal0.a";
             case SHADER_TEXEL0A:
@@ -277,9 +279,16 @@ static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shad
             }
         }
     }
+    /* D540: RDP-style screen-affine shade colour (see gfx_opengl_init).
+     * D543: fog is the per-vertex RSP value by default, which the RDP also
+     * interpolates screen-affine (it rides in shade alpha), so it shares the
+     * shade qualifier. GE_FOGPIXEL=1 (D540 per-pixel) needs a perspective
+     * attribute: it carries fog * w, divided by w in the shader. */
+    const char *shadeq = gfx_rdp_affine ? "noperspective " : "";
+    const char *fogq = gfx_fog_vertex ? shadeq : "";
     if (cc_features.opt_fog) {
         append_line(vs_buf, &vs_len, "INPUT vec4 aFog;");
-        append_line(vs_buf, &vs_len, "OUTPUT vec4 vFog;");
+        vs_len += sprintf(vs_buf + vs_len, "%sOUTPUT vec4 vFog;\n", fogq);
         num_floats += 4;
     }
 
@@ -291,7 +300,7 @@ static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shad
 
     for (int i = 0; i < cc_features.num_inputs; i++) {
         vs_len += sprintf(vs_buf + vs_len, "INPUT vec%d aInput%d;\n", cc_features.opt_alpha ? 4 : 3, i + 1);
-        vs_len += sprintf(vs_buf + vs_len, "OUTPUT vec%d vInput%d;\n", cc_features.opt_alpha ? 4 : 3, i + 1);
+        vs_len += sprintf(vs_buf + vs_len, "%sOUTPUT vec%d vInput%d;\n", shadeq, cc_features.opt_alpha ? 4 : 3, i + 1);
         num_floats += cc_features.opt_alpha ? 4 : 3;
     }
 
@@ -360,13 +369,13 @@ static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shad
         }
     }
     if (cc_features.opt_fog) {
-        append_line(fs_buf, &fs_len, "INPUT vec4 vFog;");
+        fs_len += sprintf(fs_buf + fs_len, "%sINPUT vec4 vFog;\n", fogq);
     }
     if (cc_features.opt_grayscale) {
         append_line(fs_buf, &fs_len, "INPUT vec4 vGrayscaleColor;");
     }
     for (int i = 0; i < cc_features.num_inputs; i++) {
-        fs_len += sprintf(fs_buf + fs_len, "INPUT vec%d vInput%d;\n", cc_features.opt_alpha ? 4 : 3, i + 1);
+        fs_len += sprintf(fs_buf + fs_len, "%sINPUT vec%d vInput%d;\n", shadeq, cc_features.opt_alpha ? 4 : 3, i + 1);
     }
 
     if (cc_features.used_textures[0]) {
@@ -441,6 +450,15 @@ static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shad
     }
 
     append_line(fs_buf, &fs_len, "void main() {");
+    /* D548: combiner inputs are 8-bit on the N64 (shade, prim, env), so never
+     * above 1.0. Under the D540 noperspective shade, GPU clipping of a big
+     * near-camera triangle can extrapolate them past 1.0; the CC wrap
+     * emulation below then turned walls into black/white/yellow/blue bands
+     * (Aztec, near rocket fire). Clamp to the hardware range first. */
+    for (int i = 0; i < cc_features.num_inputs; i++) {
+        fs_len += sprintf(fs_buf + fs_len, "    vec%d cInput%d = clamp(vInput%d, 0.0, 1.0);\n",
+                          cc_features.opt_alpha ? 4 : 3, i + 1, i + 1);
+    }
 
     for (int i = 0; i < 2; i++) {
         if (cc_features.used_textures[i]) {
@@ -503,10 +521,22 @@ static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shad
     append_line(fs_buf, &fs_len, "    texel = clamp(texel, 0.0, 1.0);");
     // TODO discard if alpha is 0?
     if (cc_features.opt_fog) {
+        /* D543 default: vFog.a is the per-vertex RSP value, used as-is
+         * (N64). GE_FOGPIXEL=1 (D540): vFog.a = fog * w, divided by w here =
+         * exact per-pixel fog from the pixel's own depth. */
+        append_line(fs_buf, &fs_len, gfx_fog_vertex ? "    float fogA = clamp(vFog.a, 0.0, 1.0);"
+                                                    : "    float fogA = clamp(vFog.a * gl_FragCoord.w, 0.0, 1.0);");
+        /* D540: the D503 snap is OFF by default -- its hard 97% edge swept
+         * across the ground in tile-shaped chunks as the player walked
+         * (Deck playtest; maintainer-confirmed with it off). GE_FOGSNAP=1
+         * restores it. */
+        static int fogSnap = -1;
+        if (fogSnap < 0) { const char *e = getenv("GE_FOGSNAP"); fogSnap = (e && e[0] == '1'); }
+        if (fogSnap) append_line(fs_buf, &fs_len, "    if (fogA >= 247.0 / 255.0) fogA = 1.0;");
         if (cc_features.opt_alpha) {
-            append_line(fs_buf, &fs_len, "    texel = vec4(mix(texel.rgb, vFog.rgb, vFog.a), texel.a);");
+            append_line(fs_buf, &fs_len, "    texel = vec4(mix(texel.rgb, vFog.rgb, fogA), texel.a);");
         } else {
-            append_line(fs_buf, &fs_len, "    texel = mix(texel, vFog.rgb, vFog.a);");
+            append_line(fs_buf, &fs_len, "    texel = mix(texel, vFog.rgb, fogA);");
         }
     }
 
@@ -744,7 +774,8 @@ static void gfx_opengl_upload_texture(const uint8_t* rgba32_buf, uint32_t width,
     }
 #endif
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba32_buf);
-	if (gen_mipmaps || current_filter_mode == FILTER_THREE_POINT) {
+	/* Trilinear option (playtest 2026-10-03): force mips for TRILINEAR too. */
+	if (gen_mipmaps || current_filter_mode == FILTER_THREE_POINT || current_filter_mode == FILTER_TRILINEAR) {
 		glGenerateMipmap(GL_TEXTURE_2D);
 	}
 }
@@ -764,32 +795,48 @@ static uint32_t gfx_cm_to_opengl(uint32_t val) {
 }
 
 static void gfx_opengl_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt, bool mipmaps) {
-    const GLint min_filters[3][3] = {
+    const GLint min_filters[4][3] = {
         // MIPMAP_DISABLED   MIPMAP_NEAREST               MIPMAP_LINEAR
         {  GL_NEAREST,       GL_NEAREST_MIPMAP_NEAREST,   GL_NEAREST_MIPMAP_LINEAR  }, // FILTER_NONE
         {  GL_LINEAR,        GL_LINEAR_MIPMAP_NEAREST,    GL_LINEAR_MIPMAP_LINEAR   }, // FILTER_BILINEAR
         {  GL_NEAREST,       GL_LINEAR_MIPMAP_NEAREST,    GL_LINEAR_MIPMAP_LINEAR   }, // FILTER_THREE_POINT
+        {  GL_LINEAR,        GL_LINEAR_MIPMAP_LINEAR,     GL_LINEAR_MIPMAP_LINEAR   }, // FILTER_TRILINEAR (Trilinear option, playtest 2026-10-03)
     };
 
     // B1: the shader does 3-point on magnification; for minification let the
     // hardware do trilinear mips. THREE_POINT force-generates mips at upload
     // (see gfx_opengl_upload_texture) so it can always sample them here -- this
     // is what kills the grazing-angle shimmer (Depot roof, docs/BRIEF-B2).
-    if (current_filter_mode == FILTER_THREE_POINT) {
+    /* Trilinear option (playtest 2026-10-03): TRILINEAR force-generates mips
+     * at upload too, so it can always sample them here. */
+    if (current_filter_mode == FILTER_THREE_POINT || current_filter_mode == FILTER_TRILINEAR) {
         mipmaps = true;
     }
     mipmaps = mipmaps && (current_mipmap_filter_mode != MIPMAP_DISABLED);
     const int mip_idx = mipmaps ? current_mipmap_filter_mode : 0;
     const GLint min_filter = linear_filter ? min_filters[current_filter_mode][mip_idx] : GL_NEAREST;
-    const GLint max_filter = linear_filter && (current_filter_mode == FILTER_LINEAR) ? GL_LINEAR : GL_NEAREST;
+    /* Trilinear option (playtest 2026-10-03): TRILINEAR magnifies LINEAR too. */
+    const GLint max_filter = linear_filter && (current_filter_mode == FILTER_LINEAR || current_filter_mode == FILTER_TRILINEAR) ? GL_LINEAR : GL_NEAREST;
 
     glActiveTexture(GL_TEXTURE0 + tile);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, max_filter);
 
+#ifdef PORT
+    /* D446: anisotropy is per-texture-object state. It was only ever SET
+     * (when mipmapped), never reset, so a GL texture id freed by
+     * gfx_texture_cache_delete_range and reused for a non-mipmapped texture
+     * (HUD / watch text glyphs) kept the previous owner's 4x -- llvmpipe then
+     * filters that glyph differently (+-1..2 per channel). Which id a texture
+     * inherits follows the unordered_map iteration order, i.e. the texture
+     * ADDRESSES, so the frame changed with the binary's data layout. Always
+     * write it: the level when mipmapped, 1 (off) otherwise. */
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, mipmaps ? (float)current_anisotropy_level : 1.0f);
+#else
     if (mipmaps) {
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, current_anisotropy_level);
     }
+#endif
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gfx_cm_to_opengl(cms));
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gfx_cm_to_opengl(cmt));
@@ -939,10 +986,19 @@ static bool gfx_opengl_supports_shaders(void) {
     return GLAD_GL_EXT_gpu_shader4;
 }
 
+/* D482: GL_RENDERER as read at init, for video.c's low-end default check.
+ * A copy, never the driver's pointer; "" when the driver gave nothing. */
+static char gl_renderer_str[256] = "";
+
+extern "C" const char *gfx_opengl_renderer_string(void) {
+    return gl_renderer_str;
+}
+
 static void gfx_opengl_log_info(void) {
     const char *version = (const char *)glGetString(GL_VERSION);
     const char *vendor = (const char *)glGetString(GL_VENDOR);
     const char *renderer = (const char *)glGetString(GL_RENDERER);
+    snprintf(gl_renderer_str, sizeof(gl_renderer_str), "%s", renderer ? renderer : "");
     const char *glsl_version = (const char *)glGetString(GL_SHADING_LANGUAGE_VERSION);
     sysLogPrintf(LOG_NOTE, "GL: version: %s", version ? version : "unknown");
     sysLogPrintf(LOG_NOTE, "GL: vendor: %s", vendor ? vendor : "unknown");
@@ -1021,6 +1077,11 @@ static void gfx_opengl_init(void) {
 
     gfx_opengl_init_extensions();
 
+    {   /* D482: always capture GL_RENDERER (log_info below is --debug-gl only). */
+        const char *renderer = (const char *)glGetString(GL_RENDERER);
+        snprintf(gl_renderer_str, sizeof(gl_renderer_str), "%s", renderer ? renderer : "");
+    }
+
     if (sysArgCheck("--debug-gl")) {
         gfx_opengl_enable_debug();
         // dump version info as early as possible
@@ -1071,6 +1132,22 @@ static void gfx_opengl_init(void) {
         snprintf(gl_glsl_version_str, sizeof(gl_glsl_version_str), "%d core", gl_glsl_version);
     }
     sysLogPrintf(LOG_NOTE, "GL: using GLSL version %s", gl_glsl_version_str);
+
+    /* D540: the RDP interpolates shade colour affinely in screen space; the
+     * GPU default is perspective-correct, which squeezed the sky's horizon
+     * fade into a thin band. noperspective needs desktop GLSL 1.30+ (not
+     * GLSL ES). GE_SHADEPERSP=1 restores perspective-correct shade (A/B).
+     * Fog (D543): per-vertex RSP fog by default, as the N64. Its old
+     * light/dark cycling at the player's feet came from GPU near-clipping of
+     * behind-camera corners; gfx_sp_tri1 now near-clips on the CPU like the
+     * RSP. GE_FOGPIXEL=1 = the D540 exact per-pixel fog (A/B). */
+    {
+        const char *sp = getenv("GE_SHADEPERSP"), *fp = getenv("GE_FOGPIXEL");
+        gfx_rdp_affine = (!gl_es && gl_glsl_version >= 130 && !(sp && sp[0] == '1')) ? 1 : 0;
+        gfx_fog_vertex = (fp && fp[0] == '1') ? 0 : 1;   /* D543: per-vertex RSP fog by default */
+    }
+    sysLogPrintf(LOG_NOTE, "GL: shade %s, fog %s", gfx_rdp_affine ? "affine (RDP)" : "perspective",
+                 gfx_fog_vertex ? "per-vertex" : "per-pixel");
 
     glGenBuffers(1, &opengl_vbo);
     glBindBuffer(GL_ARRAY_BUFFER, opengl_vbo);

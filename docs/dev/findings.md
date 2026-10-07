@@ -391,13 +391,13 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D59–D68 | intro render: blood-RLE clobber, DMA validate, OSMesgQueue, HEADS/BODIES sentinels, romCopy width, image_entry, Globalimagetable BE→LE | resolved |
 | D69 · D78–D84 | stage load (`load_bg_file`): bg/stan offline sidecar (`d69_emit.py`) + StandTile/bg_room_data ABI | resolved |
 | D70–D74 | intro-logo pixels: C-array bswap, UV path, sinf/cosf `DVAL()`, texture-import truncation | resolved |
-| D75 | front-end 3D model transforms (D77 audio split out below — resolved, unrelated cause) | **PARTIAL (M-197 fixed the logo texture blobs; v0.4.0 campaign 2026-09-28: Nintendo + legal pages confirmed clean, but the Rareware logo still shows a minor texture-filtering artifact -- re-opened as a cosmetic known issue, README-disclosed): the D50 sidecar converter dropped the models' embedded texture blobs (`PnintendologoZ`/`PgoldeneyelogoZ`/`PlegalpageZ`) — `d43_emit.py` now raw-copies + round-trip-validates them; NTSC sidecars regenerated. Remaining: pal/jpn regen on ROM-holding machines.** Historical trail — M-32 triage (see §F "D75 ADDENDUM"): (a) D73-scope-gap RULED OUT (gu tree fully endian-clean). Splits in two: Bug 1 = logo/photo transform = the parked D114/D116 fast3d viewport mirror (not game code). Bug 2 = absent animated models = category (b). M-32b runtime probe (`GE_D75=1`): `render_pos`/`dynAllocate`-arena hypothesis RULED OUT (render_pos valid + fresh each frame), model instances valid (nMtx 21/1), zero fast3d DL warnings — failure is downstream in `drawjointlist`/`dotube` vtx/node-DL resolution or an off-screen `basemtx`. Needs a drawjointlist-level probe. M-33 (upright captures, D168 fixed): "Bug 1 = D114/D116 mirror" retracted; **gun-barrel Bond RENDERS fine** (walk + fire, upright) — the "absent" reports were the flipped capture; **Nintendo logo genuinely broken** (renders as 2 white blobs, shifted left — a real `logoinst` transform/geometry bug, not a flip); cast roll not re-captured. See §F "D75 Bug 2 — M-33 UPDATE". **v0.2.0-pre playtest (user):** Nintendo logo still broken; Rareware logo nearly right but its texture filtering looks off; MISSION COMPLETE / mode-select screens have no 3D models at all, so the earlier "absent mode-select model" framing was inaccurate.** |
+| D75 | front-end 3D model transforms (D77 audio split out below — resolved, unrelated cause) | **FIXED 2026-10-02 (branch fix/fidelity-gaps; by-eye check owed): the Rareware logo's "texture-filtering artifact" was the RAREWARE text strip scrambled by a missing RDP odd-row TMEM swap, not filtering; see `### D75 round 2`.** Earlier: PARTIAL (M-197 fixed the logo texture blobs; v0.4.0 campaign 2026-09-28: Nintendo + legal pages confirmed clean, but the Rareware logo still shows a minor texture-filtering artifact -- re-opened as a cosmetic known issue, README-disclosed): the D50 sidecar converter dropped the models' embedded texture blobs (`PnintendologoZ`/`PgoldeneyelogoZ`/`PlegalpageZ`) — `d43_emit.py` now raw-copies + round-trip-validates them; NTSC sidecars regenerated. Remaining: pal/jpn regen on ROM-holding machines.** Historical trail — M-32 triage (see §F "D75 ADDENDUM"): (a) D73-scope-gap RULED OUT (gu tree fully endian-clean). Splits in two: Bug 1 = logo/photo transform = the parked D114/D116 fast3d viewport mirror (not game code). Bug 2 = absent animated models = category (b). M-32b runtime probe (`GE_D75=1`): `render_pos`/`dynAllocate`-arena hypothesis RULED OUT (render_pos valid + fresh each frame), model instances valid (nMtx 21/1), zero fast3d DL warnings — failure is downstream in `drawjointlist`/`dotube` vtx/node-DL resolution or an off-screen `basemtx`. Needs a drawjointlist-level probe. M-33 (upright captures, D168 fixed): "Bug 1 = D114/D116 mirror" retracted; **gun-barrel Bond RENDERS fine** (walk + fire, upright) — the "absent" reports were the flipped capture; **Nintendo logo genuinely broken** (renders as 2 white blobs, shifted left — a real `logoinst` transform/geometry bug, not a flip); cast roll not re-captured. See §F "D75 Bug 2 — M-33 UPDATE". **v0.2.0-pre playtest (user):** Nintendo logo still broken; Rareware logo nearly right but its texture filtering looks off; MISSION COMPLETE / mode-select screens have no 3D models at all, so the earlier "absent mode-select model" framing was inaccurate.** |
 | D76 · D164 | **Legal screen only draws line 1 — root-caused (M-31)**: linker-adjacency assumption broken by mingw. — full `## D164` entry at file tail | **FIXED** — this row and the `## D164` entry below were stale; the proposed one-line `#ifdef PORT` fix was actually committed `8dfc578f4` (2026-08-31), well before this correction (2026-09-18). Docs simply never caught up to the merge. |
 | D159 | front-end wallet-Bond photo "interlaced"/combed (RC1 / D149) — `texSwapAltRowBytes` odd-row 8-byte pre-swap (N64 RDP odd-line TMEM XOR compensation) not reversed by fast3d | FIXED (`#ifdef PORT` no-op the swap in `image.c`) |
 | D161 | Depot (`-level_30`) ceiling = bright-blue speckle + radial rays (B2). A CI8 tile drawn with `gsDPSetTextureLUT(G_TT_NONE)` was decoded against the stale `rdp.palette` → garbage. Fix: `#ifdef`-free narrow route CI→I when `palette_fmt == G_TT_NONE` in `gfx_pc.cpp import_texture()`. | FIXED (`port/fast3d/gfx_pc.cpp`) |
 | D165 · D166 | **Input-layer polish (M-31, port-only)**: cursor P-controller + hipfire C-pulse. — full `## D165` / `## D166` entries at file tail | FIXED |
 | D180 · D181 | **Native-PC input pass (QoL run)**: click-to-lock capture + ScreenShakeIntensity hook. — full `## D180` / `## D181` entries at file tail | FIXED (2026-09-26 bookkeeping: shipped; user reports it feels good in v0.4.0 play). Earlier: LANDED, config-gated, feel-checks owed |
-| D186 | **`Video.FpsCap` throttles the sim, not just presentation (M-39 diag, M-42 clamp).** The frame-pacing `sysSleep`+busy-wait in `sync_framerate_with_timer` (`port/fast3d/gfx_sdl2.cpp`) runs inline on the scheduler thread (`osSpTaskStartGo`→`gfx_run`→`swap_buffers_begin`), so a low cap blocks VI-retrace delivery and drags every game thread down to the cap rate (no N64 analogue — RSP/RDP are separate silicon). **Landed:** `0 < FpsCap < 30` → treated as `0` (uncapped) + warning, at both `videoInit` (normalises a bad `ge007.ini` for the next `configSave`) and `gfx_sdl_set_target_fps` (covers the F10-overlay live path); caps ≥ 30 unchanged. Verified: default `FpsCap=0` framediff 3/3 golden-identical; `FpsCap=10` now runs at the uncapped rate; `FpsCap=60` still paces. **Owed:** move pacing off the scheduler thread so any cap only drops presented frames. See §F "D186" + porting-notes.md §E. | OPEN (2026-09-26, user direction: target an "original" framerate/timing mode, with 60 fps + options on top; pacing must stop throttling the sim). Earlier: CLAMP LANDED (`port/fast3d/gfx_sdl2.cpp`, `port/src/video.c`); real fix owed |
+| D186 | **`Video.FpsCap` throttles the sim, not just presentation (M-39 diag, M-42 clamp).** The frame-pacing `sysSleep`+busy-wait in `sync_framerate_with_timer` (`port/fast3d/gfx_sdl2.cpp`) runs inline on the scheduler thread (`osSpTaskStartGo`→`gfx_run`→`swap_buffers_begin`), so a low cap blocks VI-retrace delivery and drags every game thread down to the cap rate (no N64 analogue — RSP/RDP are separate silicon). **Landed:** `0 < FpsCap < 30` → treated as `0` (uncapped) + warning, at both `videoInit` (normalises a bad `ge007.ini` for the next `configSave`) and `gfx_sdl_set_target_fps` (covers the F10-overlay live path); caps ≥ 30 unchanged. Verified: default `FpsCap=0` framediff 3/3 golden-identical; `FpsCap=10` now runs at the uncapped rate; `FpsCap=60` still paces. **Owed:** move pacing off the scheduler thread so any cap only drops presented frames. See §F "D186" + porting-notes.md §E. | **CLOSED (2026-09-28 bookkeeping: the user-visible symptom is guarded — caps below 30 are forced to uncapped at load and on set, the menus expose only 30/60, and v0.4.0 holds 60 fps. Moving frame pacing off the scheduler thread and an "original timing" mode are roadmap feature work, not an open bug).** Earlier: OPEN (2026-09-26, user direction: target an "original" framerate/timing mode, with 60 fps + options on top; pacing must stop throttling the sim). Earlier: CLAMP LANDED (`port/fast3d/gfx_sdl2.cpp`, `port/src/video.c`); real fix owed |
 | D187 | **HUD ammo-type/weapon icon vanished at `-O2` (M-46 root-cause, M-47 fix + verify).** — full `## D187` entry at file tail | FIXED (`src/game/gunfire.c`, `#ifdef AVOID_UB`); PR #19 |
 | D188 | **Linux `-O2` boot crash: `_Printf` passes `&args` of a by-value `va_list` param (M-48).** — full `## D188` entry at file tail | FIXED (`src/libultrare/libc/xprintf.c`, `src/sprintf.c`, `#ifdef PORT`); PR #22 |
 | D189 | **Linux `-fstack-protector` aborts on the decomp's latent stack-buffer overruns (M-48) — FIXED.** — full `## D189` entry at file tail | FIXED (`CMakeLists.txt`, `src/game/stan.c` `#ifdef PORT`); PR #23 |
@@ -415,7 +415,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D221 | **SELECT FILE mouse hit-box offset — compiler stack-layout dependency, not coordinate mismatch (M-87 QA / M-91 fix).** — full `## D221` entry at file tail | **FIXED (M-91)** — explicit `{min,max}` `coord2d` pairs under `#ifdef PORT`; human mouse-playtest confirmed. Distinct from D192 (mode-0 clamp range, still open). |
 | D222 | **High `Video.FovScale` breaks culling — NPCs and some world objects stop rendering near the screen edges (M-87, user QA).** — full `## D222` entry at file tail | **FIXED, awaiting visual verification (M-121).** Root cause traced one step further than the original write-up… |
 | D223 | **QoL ask: mouse-wheel weapon cycling should be directional like a normal PC shooter — wheel up = next weapon, wheel down = previous — instead of both directions…** — full `## D223` entry at file tail | **FIXED (M-105, `port/src/input.c`) —… |
-| D224 | **QoL gap (M-87, from a PD-PC-port survey): the N64 Rumble Pak is fully dropped instead of modernized.** — full `## D224` entry at file tail | **LANDED via D401 (2026-09-27, re-promoted from DEPRIORITIZED).** Rumble Pak now drives real SDL gamepad haptics (`SDL_GameControllerRumble`) via the port-layer `inputRumble*` API + `CONT_CARD_ON`/`PFS_ERR_DEVICE` gating; single global `Input.RumbleScale` (0..1) config + one `Rumble strength` slider row. Real-pad playtest **done 2026-09-28 (Steam Deck: rumble works and is validated; user: include in v0.4.0)**. Gamepad-only —… |
+| D224 | **QoL gap (M-87, from a PD-PC-port survey): the N64 Rumble Pak is fully dropped instead of modernized.** — full `## D224` entry at file tail | **CLOSED (2026-09-28 bookkeeping: rumble landed via D401 and shipped in v0.4.0).** Earlier: **LANDED via D401 (2026-09-27, re-promoted from DEPRIORITIZED).** Rumble Pak now drives real SDL gamepad haptics (`SDL_GameControllerRumble`) via the port-layer `inputRumble*` API + `CONT_CARD_ON`/`PFS_ERR_DEVICE` gating; single global `Input.RumbleScale` (0..1) config + one `Rumble strength` slider row. Real-pad playtest **done 2026-09-28 (Steam Deck: rumble works and is validated; user: include in v0.4.0)**. Gamepad-only —… |
 | D225 | **Dev-tooling QoL (M-87, user ask): a debug-build/env toggle that unlocks all missions + all cheats, for testing.** — full `## D225` entry at file tail | **FIXED (2026-09-18)** — `GE_DEBUG_UNLOCKALL=1` short-circuits `fileGetIsCheatUnlocked()` (`src/game/file2.c`, `#ifdef PORT`, cached getenv) to always return TRUE; default off, no save mutation. Build-verified; headless boot with `GE_STARTMENU=7` (mission select) crash-free. |
 | D226 | **QoL ask: player-adjustable HUD scale for the ammo counter, bottom-left pickup/item status text, and top-of-screen dialogue/subtitle text.** — full `## D226` entry at file tail | **FIXED (2026-09-24)**: Game.HudScale 75–150% (user-verified, capped at 150) via fast3d G_HUDSCALE_EXT rect scaling about per-element anchors; dialogue/bottom messages width-capped. |
 | D227 | **Sky renders as two independently-moving halves — "two sky processes" (M-93 QA; root cause M-100b: unit error, `unk20`/`unk24` are S10.5 not texels).** — full `## D227` entries (M-94→M-100b) at file tail | **FIXED (M-100b, PR #43)** — also fixed "scrolls too fast" (M-96) + over-tiling; human play-test confirmed. Full history in the sections. |
@@ -424,31 +424,31 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D231 | **QoL batch: mute-on-focus-loss + screenshot-hotkey productization (M-105, roadmap Tier 3, port-only).** `Audio.MuteOnFocusLoss` (drop mixed blocks while the window is unfocused; pause-on-focus-loss deferred because of the D204-family AI feedback loop) plus `Video.ScreenshotKey`/`Video.ScreenshotDir` (scancode-based key, timestamped `screenshots/` PPMs). Implemented M-105 as PR #56 (`port/src/audio.c`, `port/src/video.c`, `port/include/audio.h`), never merged. | **CLOSED — PARKED/DEPRIORITIZED (user, 2026-09-25).** PR #56 closed and the `feat/qol-mute-screenshot` branch was deleted from GitHub. The code is in no release branch; it's kept locally only (local branch `feat/qol-mute-screenshot`, commit `3f6e8d98`, plus a patch in the gitignored `docs/dev/notes/parked/`). If it's revived: rebase onto the current release branch and playtest alt-tab mid-level plus the custom screenshot key/dir. |
 | D233 | **All levels (intermittent): indoor level geometry invisible near doors — you can see through walls/floors into rooms you can't see into, while world objects…** — full `## D233` entry at file tail | **FIXED (port/fast3d/gfx_pc.cpp, `gfx_sp_tri1`) —… |
 | D234 | **Dam: guard towers along the dam structure invisible except the first one (M-106, user QA report).** — full `## D234` entry at file tail | **VISUALLY VERIFIED FIXED (M-108) —… |
-| D244 | **Self-hosted CI runner (`corpyvt6agent01`) link failure: `undefined reference to 'objectiveGetStatus_WEAK'` (2026-09-12, first-ever build attempt on the…** — full `## D244` entry at file tail | **OPEN, not yet fixed.** Next… |
+| D244 | **Self-hosted CI runner link failure: `undefined reference to 'objectiveGetStatus_WEAK'` (2026-09-12, first-ever build attempt on the…** — full `## D244` entry at file tail | **OPEN, not yet fixed.** Next… |
 | D228 | **AK47 white missing-texture patches after D217's texpool fix — separate failure mode (M-97, `-level_34` FACILITY).** — full `## D228` entries at file tail | **FIXED (`port/fast3d/gfx_pc.cpp`, `palette_to_rgba32`)** — byte-order bug in the G_TT_IA16 branch; user-verified live. Fix write-up: second `## D228` section. |
 | D204 | **PC audio ran ~2 % below real time permanently (AI feedback loop's 3 ms setpoint vs PC jitter).** — full `## D204` entry at file tail | FIXED (`port/src/audio.c`, `port/src/libultra.c`, `port/include/audio.h`) — measured; a by-ear pass on a real playthrough still owed |
 | D203 | **Steam Deck (SteamOS, x86_64 Linux) v0.1.0 release bundle: Facility (`-level_34`) crashes "after loading in as James Bond" (user bug report).** — full `## D203` entry at file tail | CLOSED — root cause + fix in D253. |
 | D201 | **`src/libultra/audio/bnkf.c` bank/instrument/sound/wavetable relocation offsets were `s32`, truncating the real 64-bit base pointer.** — full `## D201` entry at file tail | FIXED (`src/libultra/audio/bnkf.c`) — part of the Phase-3 mixer landing, not yet build/runtime-verified in isolation |
 | D202 | **Silenced PPK "slap" + broader real-time mixer corruption (M-52→M-67).** — full `## D202` entry at file tail | FIXED (2026-09-26, user by-ear: silenced PPK sounds good, no slap or lingering loop; M-66b expiry + later audio fixes). Earlier: OPEN — by-ear check owed (2026-09-26): fire the silenced PPK a lot, listen for a slap/crackle or a lingering loop. Earlier: ROOT CAUSE ESTABLISHED (M-66); Disposition C implemented + measured (M-66b) — stuck loop is sound 203, a faithful N64 quirk; PC-side expiration fades it. M-67 static analysis exhausted. Full trail in the section. |
 | D206 | **PC played every SFX one bank slot too high — pointer-width layout shift in `struct ALInstrumentAlt_s` (M-76).** Root cause of D205 (3)/(4) + D202's "slap". — full `## D206` entry at file tail | **FIXED (M-76, `src/snd.c:1001`, `#ifdef PORT`)** — ABI/layout-only (D3x class); user by-ear A/B vs N64 = PASS (M-77c) → D202 closed. |
-| D207 | **Alarm klaxon starves combat SFX and doesn't recover after it stops (surfaced by D206, M-77).** — full `## D207` entry at file tail | MONITORING — user 2026-09-26: "fixed possibly"; M-201 live captures showed no drops (see D241). Earlier: MONITORING (M-77c: user reports the alarm is acceptable in play after D206; no fix shipped) — voice-starvation hypothesis did NOT hold up (M-77b); designed pass reverted. |
+| D207 | **Alarm klaxon starves combat SFX and doesn't recover after it stops (surfaced by D206, M-77).** — full `## D207` entry at file tail | **CLOSED (2026-09-28 bookkeeping: no drops in the M-201 live captures; sibling D241 closed as the D207 family in the v0.4.0 campaign sign-off. Re-open with a capture if drop-outs recur).** Earlier: MONITORING — user 2026-09-26: "fixed possibly"; M-201 live captures showed no drops (see D241). Earlier: MONITORING (M-77c: user reports the alarm is acceptable in play after D206; no fix shipped) — voice-starvation hypothesis did NOT hold up (M-77b); designed pass reverted. |
 | D208 | **Player weapon-fire sound goes permanently silent mid-firefight (all other SFX unaffected) — `struct` field `bondview.h:200 s32 field_A48` is used as a second…** — full `## D208` entry at file tail | FIXED + user playtest-verified (M-78d) — Bunker firefight: player gunshots persist through the whole engagement and survive the klaxon stopping. Committed 7601b9db (PR #29, merged). |
 | D209 | **Every AI character in the game is locked to a *walk* animation regardless of the speed the ailist commands — `act_ubytes.padding[45]`, a raw-byte alias into…** — full `## D209` entry at file tail | **FIXED + user-playtest-verified (M-81).** `chraction.c:3665`, `#ifdef PORT` → `get_sound_at_range(self, self->act_gopos.unk59, ...)`; the N64 line kept verbatim under `#else`.… |
 | D210 | **`chrToPatrol()` leaves `act_patrol.lastvisible60` uninitialised on PC — a raw-byte union alias (`act_init.padding[0x13]`) that shifts when `act_patrol` widens…** — full `## D210` entry at file tail | **FIXED (`chraction.c:3872`, `#ifdef PORT` → `self->act_patrol.lastvisible60 = -1;`, N64 line under `#else`).… |
 | D205 | **PC plays wrong/extra SFX for gameplay events (gunfire slap layer, explosion→scream, armour pickup, melee→Klobb idx 106) — user A/B vs N64 (M-71→M-78).** — full `## D205` entry at file tail | CLOSED (M-78) — root cause was D206; all four symptoms resolved + user-confirmed by ear. |
 | D152+ | **D152 addendum (M-31):** — full `## D152+` entry at file tail | FIXED (`src/snd.c`, `port/src/libultra.c`, `#ifdef PORT`) — fade-out repro playtest-gated, not headless-verified |
-| RC3 · D167 | **Non-power-of-two texture wrap period (`docs/dev/TEXTURE-GLITCH-ANALYSIS.md` §6 RC3 — "textures repeat oddly", residual Depot-ceiling noise after D161).** The N64 RDP masks the texel coordinate of a wrapping render tile at `1<<mask`, and GE sets `mask = texDimensionToMask(dim) = ceil(log2(dim))` (`src/game/tex.c:361`), so a non-PoT tile (Depot's 65×65 / 96×48 / 56×56 room surfaces) repeats at the **next power of two**, not at its image size the way GL `GL_REPEAT` does → the pattern is squashed/stretched and the seam lands in the wrong place. fast3d never stored `masks`/`maskt` at all (`gfx_dp_set_tile` dropped them) and wrapped purely at the uploaded image dimension. **Fix (`port/fast3d/gfx_pc.cpp`, behind the existing `Video.WrapFix` knob, default OFF):** store `masks`/`maskt` on the tile; in the hoisted per-texunit pre-wrap block in `gfx_sp_tri1` (D74 block — already lifted out of the vertex loop, indexed by texunit `t` not vertex `i`), when the tile is WRAP (no CLAMP/MIRROR bit) and `1<<mask != tex_width`, fold the UV at the N64 period `1<<mask` and clamp the `[dim, 1<<mask)` overflow band (which is a TMEM smear on console, no real texels) to the last texel so it reads as an edge streak instead of a bogus early image restart. `GE_WRAPFIX=0/1` env override added (env wins over the ini, matching `Debug.FrameDump`). **Per-level captures (`-level_09`/`-30`/`-34`/`-20`, WrapFix OFF vs ON, `GE_PCDUMP` 6-frame windows):** no crashes, 6/6 frames each; on settled/comparable frames Silo is ~pixel-identical (phash 0–11), Facility 180–260 pixel-identical, Depot shows small localized texel changes on ceiling/wall cells (dmean 5–9, no structural break); the large per-run deltas are all the D117 intro-camera-pan nondeterminism, not the fix. Default kept **OFF** — no regression, but a headless structural diff can't confirm the Depot ceiling actually looks *better*; needs a human eyeball with `Video.WrapFix=1`. Default-off is byte-identical to golden (all new behaviour is inside `if (g_wrap_fix)`). D74's dead in-vertex-loop wrap block was already reworked/hoisted at M-30; this only adds the mask-period trigger. Confidence: **medium** (mechanism correct; overflow-band handling is an approximation, not exact TMEM-smear emulation; visual win unconfirmed). porting-notes.md §D. | KNOB ADDED, default OFF (`port/fast3d/gfx_pc.cpp`). Needs user visual check on Depot. |
+| RC3 · D167 | **Non-power-of-two texture wrap period (`docs/dev/TEXTURE-GLITCH-ANALYSIS.md` §6 RC3 — "textures repeat oddly", residual Depot-ceiling noise after D161).** The N64 RDP masks the texel coordinate of a wrapping render tile at `1<<mask`, and GE sets `mask = texDimensionToMask(dim) = ceil(log2(dim))` (`src/game/tex.c:361`), so a non-PoT tile (Depot's 65×65 / 96×48 / 56×56 room surfaces) repeats at the **next power of two**, not at its image size the way GL `GL_REPEAT` does → the pattern is squashed/stretched and the seam lands in the wrong place. fast3d never stored `masks`/`maskt` at all (`gfx_dp_set_tile` dropped them) and wrapped purely at the uploaded image dimension. **Fix (`port/fast3d/gfx_pc.cpp`, behind the existing `Video.WrapFix` knob, default OFF):** store `masks`/`maskt` on the tile; in the hoisted per-texunit pre-wrap block in `gfx_sp_tri1` (D74 block — already lifted out of the vertex loop, indexed by texunit `t` not vertex `i`), when the tile is WRAP (no CLAMP/MIRROR bit) and `1<<mask != tex_width`, fold the UV at the N64 period `1<<mask` and clamp the `[dim, 1<<mask)` overflow band (which is a TMEM smear on console, no real texels) to the last texel so it reads as an edge streak instead of a bogus early image restart. `GE_WRAPFIX=0/1` env override added (env wins over the ini, matching `Debug.FrameDump`). **Per-level captures (`-level_09`/`-30`/`-34`/`-20`, WrapFix OFF vs ON, `GE_PCDUMP` 6-frame windows):** no crashes, 6/6 frames each; on settled/comparable frames Silo is ~pixel-identical (phash 0–11), Facility 180–260 pixel-identical, Depot shows small localized texel changes on ceiling/wall cells (dmean 5–9, no structural break); the large per-run deltas are all the D117 intro-camera-pan nondeterminism, not the fix. Default kept **OFF** — no regression, but a headless structural diff can't confirm the Depot ceiling actually looks *better*; needs a human eyeball with `Video.WrapFix=1`. Default-off is byte-identical to golden (all new behaviour is inside `if (g_wrap_fix)`). D74's dead in-vertex-loop wrap block was already reworked/hoisted at M-30; this only adds the mask-period trigger. Confidence: **medium** (mechanism correct; overflow-band handling is an approximation, not exact TMEM-smear emulation; visual win unconfirmed). porting-notes.md §D. | KNOB ADDED, default OFF (`port/fast3d/gfx_pc.cpp`). Needs user visual check on Depot. **Maintainer check 2026-10-02:** Depot building ceilings with the default WrapFix=0 match 1964 by eye; default stays OFF, item closed. |
 | D168 | **`GE_PCDUMP` / F12 PPM captures were vertically flipped — the entire source of the bogus D114/D116 "HUD/text X-mirror" (M-33, developer-confirmed).** — full `## D168` entry at file tail | FIXED (`port/fast3d/gfx_opengl.cpp`); D114 / D116 reclassified as capture-orientation artifacts (below). |
 | D169 | **Front-end mouse pointer can't reach the outer cells of the mission/level-select grid — only an inner ~3×3 selectable (M-33, developer bug report).** — full `## D169` entry at file tail | **FIXED (M-33, `port/src/input.c`, port-only, no `#ifdef PORT`).** The `menuMode` pointer branch now derives its clamp bounds from the live virtual screen —… |
 | D178 | **Pre-mission briefing screen: objectives blank / missing, briefing pages blank (also the D143 "briefing text blank" side effect) — FIXED (M-36).** — full `## D178` entry at file tail | **FIXED (M-36)** — high confidence |
 | D175 | **In-game stutter / brief hang during normal play** — full `## D175` entry at file tail | CLOSED (v0.4.0 campaign sign-off 2026-09-28, user: no stutter over the full campaign -- fixed). Earlier: OPEN (user, 2026-09-26: still happens occasionally; keep). Earlier: OPEN — observed, not investigated. **Steam Deck (Linux, 2026-09-27/28): occasional frame-timing hitches at low CPU/GPU (~15–30 %) — a frame-pacing/present profile, not a throughput bottleneck (see entry).** |
-| D176 | **Surface exterior renders wrong (`-level_36`), two independent defects.** (a) black sky = RDPHALF no-op, root-caused M-37; scroll-speed FIXED (perspective-correct tc in `skyPortRenderPoly`). (b) cliff/rock walls = grey diagonal static — NOT a decode bug (D183: 0/166 loads strided); re-scope from ROM ground truth of the wall texnum (M-37 inconclusive, leaning tiling-density). — full `## D176(a)` entries at file tail; see also GRAPHICS-BACKLOG.md D176 | **(a) scroll-speed FIXED** (fidelity pass; HIGH confidence on root cause, MODERATE on N64 parity); M-93 playtest + M-98 Defect-2 starburst screenshot in the sections. **(b) open.** |
-| D177 | **Ladders non-functional — progression blocker (user QA) — FIXED (M-36): `count`/`rooms` land in the high half of a widened pointer.** — full `## D177` entry at file tail | **FIXED (M-36)** — high confidence; interactive climb test owed |
+| D176 | **Surface exterior renders wrong (`-level_36`), two independent defects.** (a) black sky = RDPHALF no-op, root-caused M-37; scroll-speed FIXED (perspective-correct tc in `skyPortRenderPoly`). (b) cliff/rock walls = grey diagonal static — NOT a decode bug (D183: 0/166 loads strided); re-scope from ROM ground truth of the wall texnum (M-37 inconclusive, leaning tiling-density). — full `## D176(a)` entries at file tail; see also GRAPHICS-BACKLOG.md D176 | FIXED (2026-09-29 bookkeeping: (a) sky via D227, human play-test confirmed; (b) Surface perimeter tree/rock wall via D236, closed M-198; GRAPHICS-BACKLOG row closed 2026-09-28). Earlier: **(a) scroll-speed FIXED** (fidelity pass; HIGH confidence on root cause, MODERATE on N64 parity); M-93 playtest + M-98 Defect-2 starburst screenshot in the sections. **(b) open.** |
+| D177 | **Ladders non-functional — progression blocker (user QA) — FIXED (M-36): `count`/`rooms` land in the high half of a widened pointer.** — full `## D177` entry at file tail | **FIXED (M-36)** — high confidence; interactive climb test owed Owed climb test considered cleared by the 2026-09-28 v0.4.0 campaign sign-off (ROADMAP §3 bookkeeping, 2026-10-01); reopen if seen. |
 | D172 | **Bullet-impact / blood / spark particles render magenta or cyan instead of dark red (M-82, ROOT CAUSE FOUND + FIXED).** — full `## D172` entry at file tail | **FIXED (`port/fast3d/gfx_pc.cpp` `gfx_lod_tile_offset`)… |
 | D174 | **"No blood effect" (user QA report).** — full `## D174` entry at file tail | CLOSED — faithful (2026-09-26, user side-by-side on 1964: blood matches N64). Earlier: Blood renders (user, 2026-09-26); OPEN only for an N64-accuracy comparison on 1964. Earlier: OPEN — observed; first step = BUNKER1 firefight with regenerated sidecars |
 | D183 | **M-36 Family A ("texture line/pitch shear") is DISPROVEN for the Surface repro (`-level_36`).** The importers' pitch assumption is real but never fires there; the Surface cliff "grey static" is not a shear. Full evidence + what the walls actually are: §F "D183" below. A defensive, provably-no-op de-stride landed in `import_texture()` anyway (covers the `gfx_dp_load_tile` case the `SUPPORT_CHECK`s assert against), plus `GE_DTEX` STRIDED marker + `GE_TEXRAW` raw-source dump. | CLOSED (2026-09-26, user-approved: disproven hypothesis; the Surface sky issue it served was fixed under D176). Earlier: Hypothesis DISPROVEN + diagnostics shipped; D176(b)/D182(2) still OPEN |
-| D173 | **Third-person Bond model spawns too high** — full `## D173` entry at file tail | **MOSTLY FIXED as a side effect of D243 (2026-09-18, user-confirmed).** User: "9/10 times he's in the right place now, if he's off it's only by a small amount, no more floating in midair or glitching out spinning like before." The M-160/M-165 shared-mechanism hypothesis (D243's animation-state/position desync class) holds for this bug too, confirmed by outcome even though the exact code path was never separately traced for D173 specifically. Small positional-offset residual remains, not investigated further — no more full floating/spin. |
-| D179 | **Packaged build crashes after the logos — the D43/D69 model + bg sidecars are ROM-derived and absent from any build that has no ROM (M-34, alpha-release QA).** — full `## D179` entry at file tail | Diagnosed, not fixed — release packaging gap + latent `romdata.c` fallback |
+| D173 | **Third-person Bond model spawns too high** — full `## D173` entry at file tail | PARTIAL (2026-09-29 bookkeeping: mostly fixed as a side effect of D243, user-confirmed; a small ~1-in-10 offset residual remains, tracked in docs/ROADMAP.md §2). Earlier: **MOSTLY FIXED as a side effect of D243 (2026-09-18, user-confirmed).** User: "9/10 times he's in the right place now, if he's off it's only by a small amount, no more floating in midair or glitching out spinning like before." The M-160/M-165 shared-mechanism hypothesis (D243's animation-state/position desync class) holds for this bug too, confirmed by outcome even though the exact code path was never separately traced for D173 specifically. Small positional-offset residual remains, not investigated further — no more full floating/spin. |
+| D179 | **Packaged build crashes after the logos — the D43/D69 model + bg sidecars are ROM-derived and absent from any build that has no ROM (M-34, alpha-release QA).** — full `## D179` entry at file tail | Diagnosed, not fixed — release packaging gap + latent `romdata.c` fallback. **Fallback tail hardened (2026-09-30, `chore/romdata-valloc`):** on Windows a failed fixed-address `VirtualAlloc` now logs `GetLastError` + a `VirtualQuery` of whatever occupies `0x10000000` and aborts boot cleanly instead of limping into the heap copy and a later AV; success path unchanged; POSIX `mmap` fallback untouched (still degrades) |
 | D180 | **Native-PC input pass (M-XX QoL run, `qol/native-pc-input-menu`, port-only).** — full `## D180` entry at file tail | FIXED (2026-09-26 bookkeeping: shipped; user reports it feels good in v0.4.0 play). Earlier: LANDED, port-only, no `#ifdef PORT`.… |
 | D181 | **`Game.ScreenShakeIntensity` — first route-(b) `src/` gameplay-cosmetic hook (M-XX QoL run).** — full `## D181` entry at file tail | FIXED (2026-09-26 bookkeeping: shipped; user reports it feels good in v0.4.0 play). Earlier: **Menu row pulled (v0.2.1, user testing).** The hook is correct on its own narrow terms —… |
 | D184 | **F10 port-layer options overlay — the approach-(C) surface from `OPTIONS-MENU-PLAN.md` (M-37).** — full `## D184` entry at file tail | FIXED (2026-09-26 bookkeeping: shipped; user reports it feels good in v0.4.0 play). Earlier: **LANDED, port-only, no `#ifdef PORT` in `src/`.** Build links 241/241.… |
@@ -459,7 +459,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D215 | **1P weapon viewmodel never drew in-level — `gunRenderFirstPersonGunModels` builds its `ModelRenderData` from a reinterpret across separately-declared adjacent…** — full `## D215` entry at file tail | **FIXED (`src/game/gunfire.c`, `#ifdef PORT`).** Build clean.… |
 | D216 | **`Game.SkipIntro` — boot straight to the file-select menu (M-83, port + one `#ifdef PORT` game-code line, PD parity, Phase 4 quick win).** — full `## D216` entry at file tail | FIXED (2026-09-26 bookkeeping: shipped; user reports it feels good in v0.4.0 play). Earlier: **LANDED + VERIFIED this session.** Build clean.… |
 | D217 | **1P weapon viewmodel + 3P Bond model textures garbled — wrong/stale palette on model-DL CI textures (M-84).** Two defects: ① texpool arena misalignment (the green), ② CI texture-cache collision. — full `## D217` entries (M-86→M-97) at file tail | **FIXED + merged** (PR #47 + PR #49); white residual split out as D228. |
-| D218 | **Wide FOV exposes the per-level draw-distance / fog boundary — "blue artifacting" down long peripheral sightlines (M-84, user QA on the D211 FOV slider).** — full `## D218` entry at file tail | FIXED (2026-09-26 reclassified: the proposed fix shipped as Video.DrawDistance + DrawDistanceAutoFov, default 150). Earlier: **Logged (M-84), fix proposed + parked.** Plan… |
+| D218 | **Wide FOV exposes the per-level draw-distance / fog boundary — "blue artifacting" down long peripheral sightlines (M-84, user QA on the D211 FOV slider).** — full `## D218` entry at file tail | FIXED (2026-09-26 reclassified; 2026-09-29 default corrected: the proposed fix shipped as Video.DrawDistance + DrawDistanceAutoFov, default 250 — `port/src/video.c:68`). The broader LOD/detail-distance ask is a separate feature in docs/ROADMAP.md §5. Earlier: FIXED (2026-09-26 reclassified: the proposed fix shipped as Video.DrawDistance + DrawDistanceAutoFov, default 150). Earlier: **Logged (M-84), fix proposed + parked.** Plan… |
 | D219 | **PPK explosions render purple on Dam (M-87, user QA, "not 3D but noting").** — full `## D219` entry at file tail | **RESOLVED (M-115, 2026-09-12)** for the original PPK-purple symptom. **The adjacent bullet-spark-rainbow investigation logged under this label (M-157/M-158) is also FIXED (2026-09-18 session)** — `glass2.c`'s `bullet_spark_render` read the spark's RGBA colour via a hardcoded raw byte offset instead of the named `s_bullet_spark` struct fields, landing in the wrong memory on 64-bit PC; fixed by reading the named fields. User live-confirmed. D252's duplicate "lingering particle residue" report closes as the same bug (M-188). |
 
 **M-111 (2026-09-12, live session, 6 build/relaunch cycles): G_LIGHTING lead RULED OUT; texture-cache-collision lead RULED OUT; ROOT CAUSE FOUND — R/B channel swap in the decoded fire particle texture data itself.** Live-captured 4 rounds against a real user playtest (not scripted) with the user confirming explosions were still blue/purple in every capture:
@@ -478,7 +478,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D86 · D87 | **modelInitRwData truncated ptr · attract-demo BE `ramromfilestructure`.** — see §H (D86, D87) | resolved |
 | D88.1–D88.3 · D88.5–D88.6 | `Usetup*Z` header + sub-table width/endian conversion (`d88_emit.py`) | resolved |
 | D88.4 | **`propDefs` polymorphic record stream not byteswapped → `setupDoor` crash.** — see §H (D88.4) + `## D132` | resolved (`d88_propdefs.py`); layout audit M-20 → **D132** |
-| D132 | D88 propDefs layout audit (M-20): converter cursor confirmed vs real PC struct layout for all types the 21 levels emit. DOOR/OBJECT-prefix/VEHICHLE/AIRCRAFT/TANK/AUTOGUN/AMMO/TINTED_GLASS/objective sub-records all MATCH. **Divergence found:** types 14 LINK / 19 SWITCH / 38 LOCK_DOOR / 44 SAFE_ITEM — each has `s32 IndexN` fields sharing a union with a pointer (`LinkRecord.first`/`Index1`), so on PC the field sits in an 8-byte, 8-aligned union slot, but the converter emits it at N64 tight-4-byte-word offsets → `pdef->Index1` reads `Index2`'s value, `Index2` reads 0 → switch-doors / dual-weapons / locked-doors / safes silently fail their validity guard (non-crash; guard failure also prevents the under-sized-record `->next` overflow). | proposed fix (not applied) — see below |
+| D132 | D88 propDefs layout audit (M-20): converter cursor confirmed vs real PC struct layout for all types the 21 levels emit. DOOR/OBJECT-prefix/VEHICHLE/AIRCRAFT/TANK/AUTOGUN/AMMO/TINTED_GLASS/objective sub-records all MATCH. **Divergence found:** types 14 LINK / 19 SWITCH / 38 LOCK_DOOR / 44 SAFE_ITEM — each has `s32 IndexN` fields sharing a union with a pointer (`LinkRecord.first`/`Index1`), so on PC the field sits in an 8-byte, 8-aligned union slot, but the converter emits it at N64 tight-4-byte-word offsets → `pdef->Index1` reads `Index2`'s value, `Index2` reads 0 → switch-doors / dual-weapons / locked-doors / safes silently fail their validity guard (non-crash; guard failure also prevents the under-sized-record `->next` overflow). | **CLOSED (2026-09-28 bookkeeping: fix applied — `tools_pc/d88_propdefs.py` carries the D132 union-slot layouts for types 14/19/38/44; post-fix verification recorded in the `## D132` entry).** Earlier: proposed fix (not applied) — see below |
 | D157 | **Campaign never unlocks the next level (M-30, user bug — "complete Dam on Agent, Facility stays locked, no save").** — full `## D157` entry at file tail | FIXED (`src/bondtypes.h`, `#ifdef PORT` —… |
 | D160 | **Dam level-end cutscene (Bond off the dam / bungee) never plays — cuts straight to the MISSION COMPLETE report (M-30/M-31, user bug D148).** — full `## D160` entry at file tail | FIXED (user, 2026-09-26: the Dam ending cutscene plays since v0.3.0). Earlier: DIAGNOSTIC SHIPPED, not root-caused (`c95713f5`, `#ifdef PORT` + `GE_D160=1`)… |
 | D161 | **Depot (`-level_30`) ceiling renders as bright-blue speckle + radial "light-ray" streaks converging to a point instead of a dark corrugated roof (M-30/M-31…** — full `## D161` entry at file tail | FIXED (`port/fast3d/gfx_pc.cpp` `import_texture`, `port/fast3d/gfx_opengl.cpp` diag). porting-notes.md §D. |
@@ -487,18 +487,18 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D103–D107 | BUNKER1 viewport height, depth-buffer clear (`G_CLEAR_DEPTH_EXT`), portal near-plane, LOD mip tile | resolved |
 | D108–D112 | skeletal models: `d43_emit.py put_f32` byte-reversal bug | resolved |
 | D113–D116 | portal BFS ok · matrix chain ok · player raw-offset audit + `gunfire.c` THROW* · HUD text X-mirror | **D114/D116 CLOSED — NOT A BUG (M-33, see D168): the "X-mirror" was an upside-down `GE_PCDUMP` capture misread as mirrored. PPM writer fixed; the game renders correctly on hardware.** |
-| D117 | **Frame nondeterminism root-caused; `GE_DETERM` attempted, not achieved.** — see §H (D117 M-8 root cause + M-52 addenda) | OPEN (mode attempted, not achieved) |
+| D117 | **Frame nondeterminism root-caused; `GE_DETERM` attempted, not achieved.** — see §H (D117 M-8 root cause + M-52 addenda) | **CLOSED (2026-09-28 bookkeeping: won't-fix research item — the golden gate compares settled frames and no longer needs determinism; `GE_DETERM` left as-is).** Earlier: OPEN (mode attempted, not achieved) |
 | D118 | **SDL input layer; M-24 mouse-look rework (mode-aware map, real INI); D118b/c FIXED.** — see §H (D118 + M-24 entries) | resolved (D118a residual) |
-| D150 | watch OBJECTIVES / BRIEF page crash: `strcat(buf, langGet(id))` with `langGet` → NULL (unloaded bank) → NULL deref; `str.c` str* builtins elide a plain param NULL check, so guard via asm-laundered `GE_IS_NULL` | FIXED (`src/str.c` `#ifdef PORT`); interactive re-verify pending |
+| D150 | watch OBJECTIVES / BRIEF page crash: `strcat(buf, langGet(id))` with `langGet` → NULL (unloaded bank) → NULL deref; `str.c` str* builtins elide a plain param NULL check, so guard via asm-laundered `GE_IS_NULL` | FIXED (`src/str.c` `#ifdef PORT`); interactive re-verify pending Owed re-verify considered cleared by the 2026-09-28 v0.4.0 campaign sign-off (ROADMAP §3 bookkeeping, 2026-10-01); reopen if seen. |
 | D260–D265 | v0.2.1 hotfix batch: D260 wheel direction swap (fixed) · D261 watch-menu nav auto-repeat (fixed, feel-check owed) · D262 watch item-preview model missing → root-caused to D264 (fixed at Gfx level, visual check pending) · D263 Facility Ourumov/Trevelyan beat — **resolved: not a bug**, proximity/LOS-triggered as on N64; full chain incl. execution shot verified firing on PC (teleport probe + user playtest) · D264 watch preview renderdata.flags zeroed by cross-global template read on PC (ABI/layout class; fixed) · D236/D265 Surface 1 tree "wall": IA16 importer dimensions transposed (fixed); decode attempt reverted after raw-byte proof that byte-pair is the authored image; root cause = `import_texture_ia4` decoding RDP I2:A2 as I3:A1, inverting the tree strip's alpha ramp → opaque repeating silhouettes; IA4 I3:A1→I2:A2 decode fix applied and user re-tested — **still a wall; reverted, parked** with evidence + suspect list in D265 | CLOSED (2026-09-26 bookkeeping: v0.2.1 hotfix batch shipped; D265 is a D236 sub-pass, closed M-198). Earlier: partial — see rows |
 | D266–D269 | D236/D265 wall, second pass: **the wall is CI8 32×32, not IA** (D269) — band-gated probe finds two draw classes per room stream (OPA oml=0xc4112078 + XLU oml=0xc41049d8), both BILERP/TEXTLOD/2-cycle/**FOG-on**; cards are soft gradient blobs, stripe period ≈ one card per visible room. D266: re-applied the reverted I2:A2 IA4 decode + replaced the hardcoded 0.19 edge quantize with AC-aware handling (census shows zero IA4 draws at boot). D267: IA8 dump infra — the three IA8 images are noise/mast sprites, not the wall. D268: force-alpha A/B proves the blend pipeline works. Ranked suspects now: fog range/application (D218 family) > TEXTLOD/mip sampling > draw density/culling > palette | CLOSED (2026-09-26 bookkeeping: sub-pass of D236, which closed in M-198). Earlier: OPEN (the wall itself) — probes live in tree (`GE_D266`/`GE_D266W`/`GE_D267`/`GE_D268_FORCEA`); the D266 decode + D271 portal-culling fixes **landed** (`532092c7`, M-139 R2 extraction) |
 | D270 | **Backfilled (M-132) — this label was never given its own row; only code comments and the HANDOFF archive documented it.** — full `## D270` entry at file tail | CLOSED (2026-09-26 bookkeeping: sub-pass of D236, which closed in M-198). Earlier: dead-ended into D271/D272; infrastructure kept in tree |
-| D271 | **D236 wall, third pass — suspect #3 (draw density/culling) CONFIRMED as a real over-draw; the D106 guard was the cause (M-129).** — full `## D271` entry at file tail | FIXED-but-insufficient (`src/game/bg.c` `#ifdef PORT`) — **landed** `532092c7` (M-139 R2 extraction, probes stripped); wall still open, see D236 |
+| D271 | **D236 wall, third pass — suspect #3 (draw density/culling) CONFIRMED as a real over-draw; the D106 guard was the cause (M-129).** — full `## D271` entry at file tail | CLOSED (2026-09-29 bookkeeping: superseded — the Surface 1 tree wall was fixed by D236, closed M-198; D271's portal-culling change stays landed). Earlier: FIXED-but-insufficient (`src/game/bg.c` `#ifdef PORT`) — **landed** `532092c7` (M-139 R2 extraction, probes stripped); wall still open, see D236 |
 | D276 | **D236 wall, eighth pass — the true painter of the visible weave is a fully-opaque IA8 blocky-noise texture, not either of D269's named CI8 classes (M-134).** — full `## D276` entry at file tail | CLOSED (2026-09-26 bookkeeping: sub-pass of D236, which closed in M-198). Earlier: REFRAMED — `oml=0xc81049d8`/`fmt=3` is the primary suspect now, not D269's CI8 pair; `0x0c184b50` unattributed; wall still open, see D236 |
 | D279 | **Backfilled — this label was consumed by an undocumented partial session (2026-09-14 ~23:00) that left artifacts in `scratch/` (`d279_run.log`…** — full `## D279` entry at file tail | CLOSED (2026-09-26 bookkeeping: sub-pass of D236, which closed in M-198). Earlier: undocumented — artifacts only |
 | D281 | **`Game.AllUnlocked` (D257) still breaks audio, and can also break right-mouse aim, when enabled before any save has ever been written (v0.2.1 user testing…** — full `## D281` entry at file tail | FIXED (2026-09-23, port/src/libultra.c): the AllUnlocked patch now reproduces the game's fresh-slot result (folder saves with DEFAULT_OPTIONS + one free slot) instead of five folder-1 slots with options 0 (no aim sight). Verified by fresh-eep SAVELOG; audio half **confirmed 2026-09-28 (campaign, user: good)**. v0.4.0 decision (user-delegated, 2026-09-28): keep the shipped mitigation + README disclosure; the zero-saves root cause (sndHandleEvent/aim interaction) is v0.5.0. |
 | D282 | **QoL ask (v0.2.1 user testing, 2026-09-15): front-end menu navigation (main menu, file select, mission-select map) currently requires the RIGHT analog stick —…** — full `## D282` entry at file tail | FIXED (`port/src/input.c`, `#ifdef` not needed — port-layer-only file), feel unconfirmed. |
-| D283 | **Steam Deck first-run preset (D-unnumbered in `port/src/video.c`/`main.c`, `videoApplySteamOSDefaults()`) did not apply for a user who added the game via Steam…** — full `## D283` entry at file tail | OPEN — mechanism understood, root cause (Desktop-vs-Game-Mode `STEAMOS` env var difference) unverified on real hardware; user-facing workaround documented in README/release notes. |
+| D283 | **Steam Deck first-run preset (D-unnumbered in `port/src/video.c`/`main.c`, `videoApplySteamOSDefaults()`) did not apply for a user who added the game via Steam…** — full `## D283` entry at file tail | FIXED (2026-09-30, port-only) — hardware (DMI) detection + `STEAMOS`, applied after `configLoad()` once per ini (`Video.DeckPresetApplied`) while the display keys are untouched; `GE_FAKE_DECK`-verified on Windows, real-Deck check owed. (Was OPEN: first-run-only preset skipped by a Desktop Mode launch.) |
 | D280 | **D236 wall, ninth pass — fog math VERIFIED N64-faithful; the IA8 noise class VISUALLY confirmed as the weave's painter (M-135).** No quick win for trees. — full `## D280` entry at file tail | CLOSED (2026-09-26 bookkeeping: sub-pass of D236, which closed in M-198). Earlier: REFRAMED again — no fix; next steps in detail section, see D236 |
 | D275 | **D236 wall, eighth pass — probe upgrades (`GE_D270PIX` list, `GE_D270KEEPOML` counter) (M-133).** — full `## D275` entry at file tail | CLOSED (2026-09-26 bookkeeping: sub-pass of D236, which closed in M-198). Earlier: done — probes live, uncommitted; see D276 for what they found |
 | D274 | **D236 wall, seventh pass — probe identity (`seq`) unreliable; per-slot address stamp. Content-vs-decode question was a bug in our own offline analysis (M-132).** — full `## D274` entry at file tail | CLOSED (2026-09-26 bookkeeping: sub-pass of D236, which closed in M-198). Earlier: `d267_slot_addr` fix live (always-on); content/decode question CLOSED; mip-presence CLOSED; wall still open, see D236/D276 |
@@ -522,10 +522,10 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D140 | **Pause-menu crash (M-23 open → M-27 fixed).** — full `## D140` entry at file tail | FIXED (`src/game/bondview.h`, `src/game/bondview2.c`; `#ifdef PORT`). Exposed the next watch-render crash → **D141**. `-level_09`/`-level_20` unregressed (3/3). porting-notes.md §A. |
 | D118d | **Watch-menu list over-scrolls with keyboard (M-27, user bug report).** `game_options_inventory_navigation` / `sub_GAME_7F0A611C` (`options.c`) have a "slam the stick" fast-scroll: a raw *level* check `joyGetStickY(PLAYER_1) < -0x46` / `>= 0x47` that steps `watch_inventory_cursor_pos` by 1 **every frame** it's held. An N64 stick rarely sustains past ~0x46 on-axis so a human taps it; keyboard W/S (and SDL pads pegged at 0x80) sit there every frame → one keypress skips several items (breaks item selection needed to finish the game). Fix: `#ifdef PORT` macro `GE_WATCH_STICK_FAST{UP,DOWN}` → `0` for the port — stick list-nav then goes only through the latched single-step path (`watch_stick_y_pressed_*`, one step per press, existing game mechanism) and the -0x1e..-0x45 smooth-scroll band; D-pad/C-buttons keep edge-repeat. N64 `#else` = verbatim. | FIXED (`src/game/options.c`, `#ifdef PORT`). Build green, `-level_09` unregressed. **Feel to be confirmed in playtest** (probe couldn't reach the INVENTORY watch page headlessly). D118 input family. Latent sibling: `front.c` menu nav uses `joyGetStick*InRange` level checks the same way. |
 | D141 | **Watch-menu item-model crash (M-27), exposed by D140.** — full `## D141` entry at file tail | FIXED (`src/game/gunfire.c`, `#ifdef PORT`). Watch page now renders (weapon page verified — mirrored text D114/D116, dark weapon model D75, both parked cosmetic). `-level_09`/`-level_20` unregressed. |
-| D150 | **Watch objective/briefing page crash (M-28).** — full `## D150` entry at file tail | FIXED (`src/str.c`, `#ifdef PORT`). Build green (`ntsc-final`); `-level_09` 600+ frames @ 91.67% unregressed. Watch-page repro is interactive — user to re-verify. porting-notes.md §C. |
+| D150 | **Watch objective/briefing page crash (M-28).** — full `## D150` entry at file tail | FIXED (`src/str.c`, `#ifdef PORT`). Build green (`ntsc-final`); `-level_09` 600+ frames @ 91.67% unregressed. Watch-page repro is interactive — user to re-verify. porting-notes.md §C. Owed re-verify considered cleared by the 2026-09-28 v0.4.0 campaign sign-off (ROADMAP §3 bookkeeping, 2026-10-01); reopen if seen. |
 | D152 | **Mission-failed / objective-failed → permanent black screen (M-28, user bug report — LIVE process inspected, not yet fixed).** — full `## D152` entry at file tail | FIXED (user, 2026-09-26: no black screen after mission/objective failure). Earlier: MITIGATED (`port/src/libultra.c`, M-28, `#ifdef PORT`/port-only).… |
 | D152+ | **D152 addendum — static audit + narrow fix (M-31).** — full `## D152+` entry at file tail | FIXED (`src/snd.c`, `port/src/libultra.c`, `#ifdef PORT`). porting-notes.md §D4. |
-| D154 | **`bg.c` room-geometry ray/hit-test GBI parser port (M-28, WRITTEN / UNVERIFIED / UNCOMMITTED).** — full `## D154` entry at file tail | **M-30 re-audit + fixes (still playtest-gated for final verify).** Cross-checked the ported G_TRI1 + all 12 G_TRI4 nibble recoveries twice against the N64 `#else` and the raw BE-word bit derivation —… |
+| D154 | **`bg.c` room-geometry ray/hit-test GBI parser port (M-28, WRITTEN / UNVERIFIED / UNCOMMITTED).** — full `## D154` entry at file tail | **CLOSED (2026-09-28 bookkeeping: playtest gate satisfied — full v0.4.0 campaign played with no background-hit/raycast anomalies; ABI re-audited again under D313).** Earlier: **M-30 re-audit + fixes (still playtest-gated for final verify).** Cross-checked the ported G_TRI1 + all 12 G_TRI4 nibble recoveries twice against the N64 `#else` and the raw BE-word bit derivation —… |
 | D156 | **Facility outro-cutscene "hang" — the actual fix (M-29, user bug report, 2nd occurrence after D155).** — full `## D156` entry at file tail | FIXED (user, 2026-09-26: no outro hang seen). Earlier: GUARDED (`src/game/model.c`, `#ifdef PORT`)… |
 | D155 | **Facility outro-cutscene end → "hang" = unclamped `deltaFrames` spiral (M-29, user bug report).** — full `## D155` entry at file tail | FIXED (`src/game/frametiming.c`, `#ifdef PORT` —… |
 | D153 | **`-level_09` frame ~900–1400 `0xc0000005` = D117/D134 load flakiness, NOT a bug (M-28).** — full `## D153` entry at file tail | NOT A BUG — closed. Run anchors on a quiet machine. |
@@ -552,7 +552,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D246 | **Tiny pixel strips at the left and right edges of the screen, "like overscan" — look like raw pixels, not 3D graphics (M-116, user QA report).** — full `## D246` entry at file tail | **FIXED (2026-09-18 session, port-only, `Video.SafeAreaCrop`).** Measured precisely (exactly 1.0 logical unit missing on both edges, every resolution); underlying clip-precision root cause not isolated, but `gfx_adjust_viewport_or_scissor` now trims a fixed 1-unit margin from both edges — same toggle/mechanism as D247. Live user playtest confirmed clean edges. |
 | D247 | **Black bars top and bottom of screen — possible aspect-ratio defect (M-116, user QA report).** — full `## D247` entry at file tail | **FIXED (2026-09-18 session, port-only, `Video.SafeAreaCrop`).** Root cause: faithful, unmodified N64 TV-safe-area letterboxing that real CRT overscan used to hide; this port showed the full VI frame. Per user request, given a real fix (not left as "correct original behaviour"): `gfx_adjust_viewport_or_scissor` now remaps against the active gameplay viewport bounds so it fills the window edge-to-edge. New `Video.SafeAreaCrop` toggle (default on). Live user playtest confirmed clean edges. |
 | D248 | **Port runs a stable 30 FPS instead of 60 FPS game-wide (M-117, user asked to verify FPS after the D209 timing-keystone fixes).** — full `## D248` entry at file tail | **FIXED, root-caused to a genuine pointer-width ABI bug in `src/sched.c` (compiled for the PC build, not excluded).** `osScAddClient()` (`src/sched.c:187-199`) stashes a per-client "present every retrace vs.… |
-| D249 | **LOD/culling breaks down on large open levels (Streets, Egyptian named specifically) at *default* FOV — far-away geometry has visible culling issues (M-119…** — full `## D249` entry at file tail | OPEN — M-142 static review ruled out the unscaled-far-clip and LOD-multiplier suspects (both already correct); CLOSED (v0.4.0 campaign sign-off 2026-09-28, user: no distant-geometry drop-out seen on Streets/Egyptian over the full campaign -- fixed); narrowed to the portal/room-visibility BFS, needs a live screenshot+location, not more code reading.… |
+| D249 | **LOD/culling breaks down on large open levels (Streets, Egyptian named specifically) at *default* FOV — far-away geometry has visible culling issues (M-119…** — full `## D249` entry at file tail | **CLOSED (2026-09-28 bookkeeping: the v0.4.0 campaign sign-off already recorded below closed it — no distant-geometry drop-out on Streets/Egyptian over the full campaign; lead status corrected).** Earlier: OPEN — M-142 static review ruled out the unscaled-far-clip and LOD-multiplier suspects (both already correct); CLOSED (v0.4.0 campaign sign-off 2026-09-28, user: no distant-geometry drop-out seen on Streets/Egyptian over the full campaign -- fixed); narrowed to the portal/room-visibility BFS, needs a live screenshot+location, not more code reading.… |
 | D250 | **FPS is inconsistent/low on many levels after 60 Hz shipped (M-119, user QA; D248 follow-on).** — full `## D250` entry at file tail | FIXED — per-call `getenv()` cost was the bottleneck; rock-steady 60-61 fps after, user re-tested 1440p/4K clean. |
 | D251 | ****F10 options overlay QoL pass:** — full `## D251` entry at file tail | **FIXED (port-only, `port/src/optionsoverlay.c`).** (a) The panel now computes how many rows fit the *actual* current 2D height (`maxVisibleRows()` from `viGetY()`) and scrolls… The last open symptom — the bottom row deterministically duplicating the selected item (v0.2.0-pre playtest) — is resolved by D304's `overlayUpdateScroll()` minimal-scroll rewrite; user-confirmed no longer occurring (2026-09-18). |
 | D252 | **Particle effects cycle through a rainbow palette (M-124, user playtest of the v0.2.0-pre candidate).** — full `## D252` entry at file tail | **FIXED (M-201, 2026-09-26, user-verified): port-side D68 shim `gimgSyncCompiledGlobalDLs` only synced the compiled explosion DLs on the first stage; every later stage kept the title stage's freed texture pointers. Earlier history: PARTIALLY FIXED — a real, distinct manifestation was found and fixed, but the bug family is not fully closed, and is intermittent on BOTH platforms, not Deck-specific (corrected 2026-09-18).** `explosionRenderPart()`'s 4-vs-5-vertex overrun (`src/game/explosion.c`) is fixed and stays in. Initial testing suggested "fixed on Windows, recurs on Deck," but further user testing found it also recurs intermittently on Windows (same Jungle repro, not always reproducing) and is level-dependent (same repro method doesn't trigger it on every level) — not a clean platform split. Repro method (`Game.AllUnlocked` + cheats for an immediate grenade launcher) is flagged as a possible, unconfirmed factor. The unconfirmed secondary lead from this session (stale TMEM-slot `src_fmt` CI8 reroute, `port/fast3d/gfx_pc.cpp` ~line 1250) remains the best-named candidate for the residual. Not re-investigated further this session. |
@@ -566,7 +566,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D260 | **v0.2.1 (user request): mouse-wheel weapon-select direction swapped.** — full `## D260` entry at file tail | FIXED — build green; one-line branch swap, trivially reviewable. |
 | D261 | **v0.2.1 (user request: "fix watch menu sensitivity for wasd/controller buttons"): holding W/S (or a fully-pressed stick axis) on the watch inventory page…** — full `## D261` entry at file tail | FIXED — feel-check received; W/S sensitivity follow-up logged above. |
 | D262 | **v0.2.1 (user report): "3D models missing on watch menu screen item select" — the selected-item 3D preview does not appear on the watch inventory page.** — full `## D262` entry at file tail | FIXED (primary cause, D264) — pixel-level confirmation pending user run. |
-| D264 | **D262's root cause (ABI/layout class, cf. D140/D52): the watch item preview's `ModelRenderData` template is read across two adjacent globals that no longer sit…** — full `## D264` entry at file tail | FIXED — build green, probes removed; visual confirmation pending. |
+| D264 | **D262's root cause (ABI/layout class, cf. D140/D52): the watch item preview's `ModelRenderData` template is read across two adjacent globals that no longer sit…** — full `## D264` entry at file tail | FIXED — build green, probes removed; visual confirmation pending. Covered by the 2026-09-28 v0.4.0 campaign sign-off (ROADMAP §3 bookkeeping, 2026-10-01). |
 | D263 | **v0.2.1 (user report): Facility — "Ourumov not shooting Trevelyan"; the scripted opening beat never triggers. RESOLVED: not a port bug — the beat is…** — full `## D263` entry at file tail | RESOLVED (not a bug), refined (v0.2.1 further user testing, 2026-09-15). The D318 re-report (2026-09-18) turned out to be a **different** failure mode (derailment race → softlock, see D318 RESOLVED) — D263's proximity-trigger mechanism map stands. |
 | D265 | **D236 investigation (port-layer, `port/fast3d/gfx_pc.cpp`): the tree cards are IA8/IA4, not IA16 — and `import_texture_ia4` decoded the RDP's I2:A2 texel as…** — full `## D265` entry at file tail | CLOSED (2026-09-26 bookkeeping: sub-pass of D236, which closed in M-198). Earlier: PARKED — reverted to baseline; evidence + suspect list above. |
 | D258 | **PAL/JP asset conversion is broken at the source-data level — `scripts/filelist.e.csv` and `filelist.j.csv` carry naming defects, so `gen_romassets.py e/j` (and…** — full `## D258` entry at file tail | DEFERRED (user call 2026-09-28: v0.4.0 ships NTSC-only, README-disclosed; the verified repair path is post-v0.4 backlog). Earlier: OPEN — repair path verified, not applied (out of v0.2.0 scope). |
@@ -580,7 +580,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D291 | **Dam: texture glitches when the truck drives past (M-141, Steam Deck user playtest).** — full `## D291` entry at file tail | CLOSED — duplicate of D306, faithful (M-201, 2026-09-26: user-captured, Dam intro camera 5 only). Earlier: OPEN — observed, not investigated. Needs a live repro with the truck's exact position/timing and, ideally, a screenshot. |
 | D292 | **Death animations are glitched — Bond is often sunk halfway into the floor (M-141, Steam Deck user playtest).** — full `## D292` entry at file tail | **MOSTLY FIXED as a side effect of D243 (2026-09-18, user-confirmed alongside D173) — same fix, same outcome: right 9/10 times, small residual offset only when off, no more full sinking/glitching.** See D173 for the user's exact confirmation wording; not separately re-tested, reported together. |
 | D293 | **QoL ask: no discoverable way to quit the game from the UI (M-141, Steam Deck user playtest — "couldn't see a way to exit the game. Maybe build this into the…** — full `## D293` entry at file tail | FIXED (M-141) — "Quit to desktop" row added to the F10 overlay; build-verified Win+Linux, not yet live-confirmed.… |
-| D294 | **Statue: ground geometry near the large CCCP/hammer-and-sickle monument briefly renders solid black over a wide area, then self-recovers 10-30 seconds later…** — full `## D294` entry at file tail | **FIXED, user playtest confirmed (2026-09-25: not reproduced)** — root cause: room-model POOL exhaustion (authored `-ma220`=220 KB < ~250 KB monument-plaza demand at FovScale 130 + max DD/Lod); `memaAlloc` NULL → silent skip → undrawn room shows the night-sky clear colour. Stochastic (wall-clock seed → load order). Fix: `portRoomPoolScale()` (video.c, identity at N64-faithful settings) applied in `bossMainloop`; verified headless (faithful→exact authored size; user settings→0 failures; `GE_ROOMPOOL=0.25`→exhaustion on demand). Playtest: main patch gone; residual corner flicker traced to full-level residency (487 KB = 2.2× authored) starving the 2× pool; the 3×/linear fix REGRESSED the renderer on the menu-driven path (D156 NaN anim state, not a bank overflow) → reverted to sqrt + 2.0 cap (ma=450560). Residual open; probes in place for next capture. High-DD horizon edge on night levels = setting-inherent, documented only.… |
+| D294 | **Statue: ground geometry near the large CCCP/hammer-and-sickle monument briefly renders solid black over a wide area, then self-recovers 10-30 seconds later…** — full `## D294` entry at file tail | PARTIAL -> fix landed pending by-eye check (2026-10-03: spawn check clean, 0 `D104 SKIP`/load FAIL on Statue/Streets/Jungle at default and max FOV/draw/LOD; 2026-09-30: pool cap 2.0 -> 2.5, DD/Lod terms powf 0.66, quarter-step round-up; ma 450560 -> 563200 at max settings; see D294 entry tail). Prior: PARTIAL (2026-09-29 bookkeeping: main symptom FIXED — room-model pool; user playtests 2026-09-22/25 no longer reproduce the black ground; the residual corner flicker at max FOV reported 2026-09-22 was never re-checked, tracked in docs/ROADMAP.md §2). Earlier: **FIXED, user playtest confirmed (2026-09-25: not reproduced)** — root cause: room-model POOL exhaustion (authored `-ma220`=220 KB < ~250 KB monument-plaza demand at FovScale 130 + max DD/Lod); `memaAlloc` NULL → silent skip → undrawn room shows the night-sky clear colour. Stochastic (wall-clock seed → load order). Fix: `portRoomPoolScale()` (video.c, identity at N64-faithful settings) applied in `bossMainloop`; verified headless (faithful→exact authored size; user settings→0 failures; `GE_ROOMPOOL=0.25`→exhaustion on demand). Playtest: main patch gone; residual corner flicker traced to full-level residency (487 KB = 2.2× authored) starving the 2× pool; the 3×/linear fix REGRESSED the renderer on the menu-driven path (D156 NaN anim state, not a bank overflow) → reverted to sqrt + 2.0 cap (ma=450560). Residual open; probes in place for next capture. High-DD horizon edge on night levels = setting-inherent, documented only.… |
 | D295 | **Campaign-halting crash at the end of Control Center on 00 Agent difficulty, then a crash on every subsequent relaunch/resume (GitHub #87, user campaign playtest).** — full `## D295` entry at file tail | FIXED (M-149) — M-148 root-caused + reproduced on HEAD; fix landed: port-side JPN-cache seed (`port/src/main.c`) + `#ifdef PORT` buffer widen in `front.c` (D8 class). Verified: previously-crashing input now clean, 21/21 sweep PASS. Companion save-wipe regression → D297. History — M-148 fully root-caused + **reproduced on current HEAD**: `difficultytext[4]` (`front.c:2616`) overflow — `strcpy("00 Agent")`/`strcat("\n")` spills onto `textpos.p[0]` (y, ≥0x80 in normal geometries) → high-bit byte → `langGetJpnCharPixels` NULL deref (`language.c:320`, `g_JpnCacheCacheItems` NULL outside JPN mode — likewise unallocated on N64 non-JP builds, crash potential is decomp-native). The user's save is a *valid pre-D284* save (all 5 slot CRCs bit-exact under the old PRNG); post-fix builds wipe it at validation, which is why the unmodified artifact no longer triggers it — NOT a fix. No OOB exists (M-147 guess retracted: 007 difficulty has no stored times). Fix options flagged for sign-off (port-side JPN-cache init preferred; `difficultytext` enlarge = D8 class). Side finding: v0.3.0 silently wipes all pre-fix saves on first launch (D284 side effect — own D entry owed). Separate still-open issue found: unconditional `[EVTQ-DROP]` audio-pool-exhaustion logging, `src/libultra/audio/event.c:92`.… |
 | D296 | **Control Center, 00 Agent: noticeable stutter, user's own read is "maybe from the drone guns" (M-146, same D295 investigation session).** — full `## D296` entry at file tail | CLOSED (2026-09-26, user-approved: stutter seen only under gdb (debug.ps1); D302, fixed two days later, removed a per-triangle uncached getenv costing ~15 fps; reopen if seen on a normal build). Earlier: OPEN — single live report, un-triaged; observed only under a gdb-attached debug-harness launch (`tools_pc/debug.ps1`), not the packaged release artifact — user flagged that harness overhead has caused false stutter before. Needs a plain-exe / real-release repro check before any perf tracing.… |
 | D297 | **v0.3.0 silently wipes ALL pre-fix player saves on first launch (D284 side effect; found during D295/M-148).** — full `## D297` entry at file tail | FIXED (M-150) — migration shim landed: `port/src/legacycrc.c` (isolated, deliberately-wrong pre-D284 PRNG, reviewer-verified bit-exact against `0de99b4d^`) + eeprom-shim read-path hook in `libultra.c` (block 4 only; persists pristine+migrated bytes before the read-time-only AllUnlocked patch). Verified: user's #87 artifact → `D297-migrated 5`, all slots OK, idempotent on relaunch; native post-fix save untouched; corrupt slot left to the game's own wipe path; fresh eep untouched; 21/21 sweep PASS. Block-0 header needed no migration (factory seal, verified). |
@@ -633,8 +633,8 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D345 | **Front-end crosshair snaps away from the pointer on screen/page changes (file select → mode select `setCursorPOSforMode(0)`, front.c:2516; every `MENU_PC_OPTIONS` page hop), and the options screen's keyboard navigation was missing/mis-modelled (2026-09-27).** — full `## D345` entry at file tail | Port-only, user-verified (parts a–g): (a) `input.c` re-assert window on menu change; (b) `cursorToItem` skips its snap while the pointer is live; (d) W/S emit stick in menus under NaturalPitch; (e/f) F10-style discrete row stepping + arrow left/right value adjust replace raw drift (first pass shipped broken, fixed); (g) screen-placed cursor parks in the left gutter, off the row text. Game-side one-liner deferred: physical-controller pass was good, no Rule-2 sign-off sought. |
 | D346 | **PC-settings wording pass: option labels/values aligned to Nightdive/Turok + PD-port conventions (title-case On/Off, "Frame rate cap", "Anti-aliasing"/"None", units in values not labels, self-explanatory auto-FOV toggles); VIEW section merged into VIDEO (2026-09-27).** — full `## D346` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
 | D347 | **F10 overlay controller: left/right did nothing (only A/Y adjusted values) and no input had hold-to-repeat (2026-09-27).** — full `## D347` entry at file tail | FIXED (port-only, `optionsoverlay.c`): D-pad left/right + stick-X wired into value adjust (A/X/B/Y kept); 18/4-frame hold-to-repeat on adjust and up/down nav, matching the options screen's D345(e)/(f) cadence. User validated physical-controller pass. |
-| D348 | **File-select "PC Options" label: no settings icon exists in the game art (mainfolderimages = copy/del/select-arrow/X/check/dot only) -- a mini slider glyph is drawn instead (2026-09-27).** — full `## D348` entry at file tail | SUPERSEDED by D398 (glyph replaced with the IMG_DOT texture; no new art). PCDUMP pixel-verified when shipped (135 knob px vs 9 paper). |
-| D349 | **GE watch settings are not normally saved to the Bond file: erase is the only caller of the settings serializer, and stage start reloads the file's old values.** — full `## D349` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
+| D348 | **File-select "PC Options" label: no settings icon exists in the game art (mainfolderimages = copy/del/select-arrow/X/check/dot only) -- a mini slider glyph is drawn instead (2026-09-27).** — full `## D348` entry at file tail | **CLOSED (2026-09-28 bookkeeping: superseded by D398).** Earlier: SUPERSEDED by D398 (glyph replaced with the IMG_DOT texture; no new art). PCDUMP pixel-verified when shipped (135 knob px vs 9 paper). |
+| D349 | **GE watch settings ARE saved to the Bond file when the watch closes: close/abort routes through `deleteCurrentSelectedFolder` → `fileClearSavefileForFolder` (the same path as Erase), which serializes live settings; stage start reloads them. The original "session-only" static audit was wrong (2026-10-04 runtime correction, run 2).** — full `## D349` entry at file tail | **SUPERSEDED (2026-10-04, P2b correction):** session-only claim false — watch close persists per Bond file (`run_p2b2.log`, options `0x3A→0x17A`); no-write control run matches the live-vs-saved memcmp gate. Earlier 2026-09-28 CLOSED bookkeeping superseded. |
 | D350 | **Watch-backed PC options: shared front/F10 Bond-file rows, explicit chooser, game-thread F10 bridge and field-scoped PC-only persistence.** — full `## D350` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
 | D351 | **Existing D346 value/unit rows had positional initializers shifted into `hidePtr`: %/x rows hidden or formatted without units.** — full `## D351` entry at file tail | FIXED (port-only): designated row initializers restore unit, deadzone divisor and hide-if-auto fields; build clean, headless smoke clean. Manual settings visual check owed. |
 | D352 | **D350 review of 1303c0eb: stage transitions silently drop queued F10 setting changes (queue drained before the `stageActive` check); the UI thread's chooser state is unsynchronized; rapid slider drags push one RSP command per detent and re-persist the same value each frame; persist failures are silent (2026-09-27).** — full `## D352` entry at file tail | FIXED (port-only, `port/src/watchsettings.c`): hold-not-drop at stage transitions, spinlock on chooser state + front-screen guard, per-field coalesced queue commits, warning logs on all no-op paths, `PersistField` made static. NTSC build clean, headless menu smoke clean. |
@@ -651,9 +651,9 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D364 | **Settings UI feedback: replace P legend; F10 slider click band misses drawn bar; input defaults visually off-centre (2026-09-27).** — full `## D364` entry at file tail | FIXED (user mostly accepted; D365 follows up on annotation size and click targets). |
 | D365 | **F10 annotation hierarchy and visible mouse change targets (2026-09-27).** — full `## D365` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
 | D366 | **Input calibration label: call 50 the default, not original (2026-09-27).** — full `## D366` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
-| D367 | **F10 full-width control boxes misaligned with their contents (2026-09-27).** — full `## D367` entry at file tail | SUPERSEDED by D368 after user playtest: per-value boxes remained confusing. |
-| D368 | **Simplify F10 click targets: setting name selects, the rest changes (2026-09-27).** — full `## D368` entry at file tail | INPUT RULE KEPT; tinted strips user-rejected, removed in D369. |
-| D369 | **Remove F10 row boxes/strips entirely (2026-09-27).** — full `## D369` entry at file tail | FIXED (awaiting live acceptance): no row backgrounds, control rectangles or hover paint; selected setting distinguished by brighter text, slider tracks remain. Input rule from D368 unchanged. |
+| D367 | **F10 full-width control boxes misaligned with their contents (2026-09-27).** — full `## D367` entry at file tail | **CLOSED (2026-09-28 bookkeeping: superseded by D368).** Earlier: SUPERSEDED by D368 after user playtest: per-value boxes remained confusing. |
+| D368 | **Simplify F10 click targets: setting name selects, the rest changes (2026-09-27).** — full `## D368` entry at file tail | **CLOSED (2026-09-28 bookkeeping: superseded by D369 (input rule kept)).** Earlier: INPUT RULE KEPT; tinted strips user-rejected, removed in D369. |
+| D369 | **Remove F10 row boxes/strips entirely (2026-09-27).** — full `## D369` entry at file tail | FIXED (awaiting live acceptance): no row backgrounds, control rectangles or hover paint; selected setting distinguished by brighter text, slider tracks remain. Input rule from D368 unchanged. Accepted in use: the maintainer used the F10 overlay extensively on 2026-10-01 (D469/D470/D472 testing) with no complaint about row styling. |
 | D370 | **F10 distance/volume drags hurt frame rate (2026-09-27).** — full `## D370` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. (user: fixed.) |
 | D371 | **GEPD key-layout preset + reload/crouch bindings, v0.4.0 modern options wave M3 (2026-09-27).** full `## D371` entry at file tail | FIXED (headless-verified; awaiting user live accept): `Input.Layout` (0=FPS, 1=GEPD) + `Input.CrouchMode` (hold/toggle) in F10 INPUT; GEPD preset acts as per-key effective default under `[Input.Bind]` overrides; new IA_RELOAD/IA_CROUCH emit B (unbound by default). MODERN section dropped per D356 Turok-standard rule (rows land in functional INPUT). Boot/ini-round-trip/F10-page verified; in-game feel-check owed. |
 | D372 | **Low-end perf preset (v0.4.0 modern options wave M5, 2026-09-27).** full `## D372` entry at file tail | FIXED (headless-verified; awaiting user live accept): one-row `Video.LowEndMode` in F10 VIDEO; ON writes FpsCap 30 + MSAA x1 (restart), OFF restores compiled defaults (60/2). Registered key persists through orderly exit. |
@@ -661,17 +661,17 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D374 | **GEPD becomes the default key layout; preset layering fix (v0.4.0 M3 playtest feedback, 2026-09-27).** full `## D374` entry at file tail | FIXED (headless + user live-tested): GEPD playtest found Ctrl fired the gun (stale persisted [Input.Bind] Fire=Left Ctrl masked the preset) and the FPS default made no sense for a mouse FPS. D374: GEPD is now Input.Layout=0 (the default; N64 layout = 1); only EXPLICIT per-key overrides beat the preset. One-off ini flip: pre-D374 `Layout = 1` (ex-GEPD) is now 0. |
 | D375 | **Crouch wired to the wrong pad bit: B is not the crouch input (v0.4.0 M3 playtest, 2026-09-27).** full `## D375` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
 | D376 | **Crouch follow-up + modern-options spot check (2026-09-27).** full `## D376` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
-| D377 | **GEPD independent crouch (2026-09-27).** full `## D377` entry at file tail | FIXED (scripted stance verified; user says live crouch was good; pad/hold-vs-toggle specifics owed): Ctrl/B/Y now drive game stance from the port with no aim requirement. |
-| D378 | **GEPD use/reload separation (2026-09-27).** full `## D378` entry at file tail | FIXED (headless edges tested; user says E/R seemed good; targeted door/partial-mag cases owed): R reload only, E interaction only in gameplay, menu/watch/tank retains B. |
-| D379 | **Crosshair colour: authored texture is red (2026-09-27).** full `## D379` entry at file tail | FIXED (cyan frame capture; live yellow/blue recheck owed): nonwhite tints use alpha silhouette instead of multiplying red RGB; default unchanged. |
+| D377 | **GEPD independent crouch (2026-09-27).** full `## D377` entry at file tail | **FIXED (2026-09-28 bookkeeping: residual live-check notes waived by the user; shipped in v0.4.0, no reports).** Earlier: FIXED (scripted stance verified; user says live crouch was good; pad/hold-vs-toggle specifics owed): Ctrl/B/Y now drive game stance from the port with no aim requirement. |
+| D378 | **GEPD use/reload separation (2026-09-27).** full `## D378` entry at file tail | **FIXED (2026-09-28 bookkeeping: residual live-check notes waived by the user; shipped in v0.4.0, no reports).** Earlier: FIXED (headless edges tested; user says E/R seemed good; targeted door/partial-mag cases owed): R reload only, E interaction only in gameplay, menu/watch/tank retains B. |
+| D379 | **Crosshair colour: authored texture is red (2026-09-27).** full `## D379` entry at file tail | **FIXED (2026-09-28 bookkeeping: residual live-check notes waived by the user; shipped in v0.4.0, no reports).** Earlier: FIXED (cyan frame capture; live yellow/blue recheck owed): nonwhite tints use alpha silhouette instead of multiplying red RGB; default unchanged. |
 | D380 | **One PC keyboard layout; PD-style rebind design (2026-09-27).** full `## D380` entry at file tail | FIXED (follow-up D383): one PC layout and migration remain; keyboard capture UI is implemented separately, with live acceptance owed. |
 | D381 | **RULE-2-SIGNOFF: opt-in RGB, size and Beta crosshair (2026-09-27).** full `## D381` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
 | D382 | **Crosshair menu placement and slider hitches (2026-09-27).** full `## D382` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
-| D383 | **PD-style keyboard rebinding in both options UIs (2026-09-27).** full `## D383` entry at file tail | **PARTIAL (2026-09-28).** Keyboard/mouse rebinding shipped + accepted in v0.4.0; pad-rebinding UI is the v0.5.0 controller-options wave (CONTROLLER-INPUT-PLAN). |
+| D383 | **PD-style keyboard rebinding in both options UIs (2026-09-27).** full `## D383` entry at file tail | **CLOSED (2026-09-28 bookkeeping: keyboard/mouse rebinding shipped + accepted in v0.4.0; pad rebinding is tracked by the v0.5.0 controller wave (D394, PR #109)).** Earlier: **PARTIAL (2026-09-28).** Keyboard/mouse rebinding shipped + accepted in v0.4.0; pad-rebinding UI is the v0.5.0 controller-options wave (CONTROLLER-INPUT-PLAN). |
 | D384 | **Front PC Options key-bind navigation feedback + two-slot UI (2026-09-27).** full `## D384` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
 | D385 | **Real mouse 1–5 action rebinding in the two-slot editor (2026-09-27).** full `## D385` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
 | D386 | **Correct Aim default from SDL middle (Mouse 2) to right (Mouse 3) (2026-09-27).** full `## D386` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
-| D387 | **M7 AllUnlocked's read-time fake unlocks leak into saved EEPROM (2026-09-27).** full `## D387` entry at file tail | OPEN (isolated user-data-copy save/untoggle repro; no fix): a profile-settings save persists fake cheats/0x3FF times; OFF does not undo them. Rotating writes and cheat-award suppression make simple write masking unsafe. **v0.4.0 (2026-09-28): shipped as a loudly-documented EXPERIMENTAL / irreversible option** (row = "All unlocked (EXPERIMENTAL)", ON shows "ON - UNSAFE", README backs it up); safe architecture deferred to v0.5.0. **User-confirmed 2026-09-28: the warning is sufficient -- ship.** |
+| D387 | **M7 AllUnlocked's read-time fake unlocks leak into saved EEPROM (2026-09-27).** full `## D387` entry (fix section `### D387 Fix` at file tail) | FIXED 2026-09-30 (port-only per-slot raw/seen merge on EEPROM write, `libultra.c` `geD387MergeSlotWrite`; isolated ON-vs-OFF byte-identity matrix passed). Not repaired: fakes already persisted by older builds. Limitation: cheats earned while ON are not persisted. Live accept owed. |
 | D388 | **Nest functional binding/HUD menus and remove redundant M5 toggle (2026-09-27).** full `## D388` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
 | D389 | **F10 footer clipping and ambiguous submenu links (2026-09-27).** full `## D389` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
 | D390 | **F10 pinned Back selection did not visibly change (2026-09-27).** full `## D390` entry at file tail | **CLOSED (2026-09-28).** Shipped in v0.4.0; accepted in the user's final review / campaign playtest. |
@@ -683,16 +683,162 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D396 | **F10 pad B/A used as slider decrement/increment, not back/select** — B/Y fed Left and A/X fed Right on every row. | RESOLVED (v0.4.0 campaign sign-off 2026-09-28, user: F10 B/A/slider behaviour confirmed on the physical pad). B backs one F10 page, closes at root; A/X accept/toggle on edge but never shift a slider; D-pad/stick left/right still adjust. |
 | D397 | **SELECT FILE background + intro gun-barrel show an interlaced/comb look** — D182(2) family, but present on FIRST display, not only after re-entry (2026-09-27). Full `## D397` entry at file tail. | **RESOLVED (2026-09-28):** root cause = **H2** (confirmed by a 3-scale PCDUMP test — the comb period is fixed at ≈3 *native* rows across 640/1024/1280, i.e. window-period = 3×scale: the `(<<2)-1` 0.75-native-pixel row-strips rely on RDP floor-based scanline stepping that `gfx_draw_rectangle`'s continuous-float rasterization did not replicate). **Fix (port-layer, surgical):** `gfx_draw_rectangle` now floors the top edge to its scanline and the bottom edge to the last covered scanline (the RDP scanline range `[top,bot+1]`) before rasterizing — a no-op for whole-pixel rects, so only sub-pixel strips change; §D15 in `docs/porting-notes.md` documents the mechanism. H1 (ENV_ALPHA 5-bit CC scaling) REFUTED by a byte-identical PD-port cross-check (the darkening it predicted is faithful, not a bug). `GE_D397SH`/`D397SHM` probes removed. Verified by playtest: gun-barrel + file-select gradient render clean, comb gone. |
 | D398 | **PC Options label: D348's procedural slider glyph replaced with an existing mainfolderimages texture (2026-09-27).** Full `## D398` entry at file tail. | SUPERSEDED by D400 (icon removed, text-only label; purple-hover bug moot; the D400 `textMeasure` arg-swap bug was found and fixed there). |
-| D399 | **File-select bottom row (SELECT FILE text + Copy/Erase + PC Options dot/label) shifted 15px left as a block (user sign-off 2026-09-27).** Full `## D399` entry at file tail. | LANDED (port-only, D343 class): `selectpos.f[0]` 110→95 (new `#ifdef PORT` in front.c), Copy 200/222→185/207, Erase 282/304→267/289 (D343 PORT block), `LABEL_X` 358→343 (`frontoptions.c`); hit bounds recompute from the shifted positions. Clean build, PCDUMP frame 195 no overlaps; by-eye check **done 2026-09-28 (user: good) -- RESOLVED**. |
-| D400 | **File-select "PC Options" label: icon removed, text-only; fixed a swapped textMeasure() arg bug and a 7px vertical misalignment vs Copy/Erase (user sign-off 2026-09-27).** Full `## D400` entry at file tail. | LANDED (port-only, `frontoptions.c`): D398's dot icon dropped on user instruction ("most straightforward design"); label now a plain `textRender` word, GAP 28 after Erase. Two measurement bugs fixed: (1) `textMeasure(textheight, textwidth)` args passed swapped -> label 35px above the bar, hot band transposed; (2) bare-label height measures 0 (vs 14 for newline-terminated Copy/Erase) -> 7px lower tops; fixed by restoring the `kLabelNL` height measure. PCDUMP frame 195: tops aligned 279.8 vs 279.3, 31px clearance from Erase; by-eye check **done 2026-09-28 (user: good) -- RESOLVED**. |
+| D399 | **File-select bottom row (SELECT FILE text + Copy/Erase + PC Options dot/label) shifted 15px left as a block (user sign-off 2026-09-27).** Full `## D399` entry at file tail. | **CLOSED (2026-09-28 bookkeeping: landed with user sign-off, shipped in v0.4.0).** Earlier: LANDED (port-only, D343 class): `selectpos.f[0]` 110→95 (new `#ifdef PORT` in front.c), Copy 200/222→185/207, Erase 282/304→267/289 (D343 PORT block), `LABEL_X` 358→343 (`frontoptions.c`); hit bounds recompute from the shifted positions. Clean build, PCDUMP frame 195 no overlaps; by-eye check **done 2026-09-28 (user: good) -- RESOLVED**. |
+| D400 | **File-select "PC Options" label: icon removed, text-only; fixed a swapped textMeasure() arg bug and a 7px vertical misalignment vs Copy/Erase (user sign-off 2026-09-27).** Full `## D400` entry at file tail. | **CLOSED (2026-09-28 bookkeeping: landed with user sign-off, shipped in v0.4.0).** Earlier: LANDED (port-only, `frontoptions.c`): D398's dot icon dropped on user instruction ("most straightforward design"); label now a plain `textRender` word, GAP 28 after Erase. Two measurement bugs fixed: (1) `textMeasure(textheight, textwidth)` args passed swapped -> label 35px above the bar, hot band transposed; (2) bare-label height measures 0 (vs 14 for newline-terminated Copy/Erase) -> 7px lower tops; fixed by restoring the `kLabelNL` height measure. PCDUMP frame 195: tops aligned 279.8 vs 279.3, 31px clearance from Erase; by-eye check **done 2026-09-28 (user: good) -- RESOLVED**. |
 | D401 | **Rumble Pak → real gamepad haptics (re-promotes D224/M-87): `CONT_CARD_ON` gate + `osPfs*`/`osMotor*` shims rewired to `SDL_GameControllerRumble`, single global `Rumble strength` slider on `Input.RumbleScale` (2026-09-27/28).** Full `## D401` entry at file tail. | **CLOSED (2026-09-28).** Rumble shipped in v0.4.0 (D401); Steam Deck real-pad validation: works, user confirmed for release. |
 | D402 | **First clean Linux (glibc / SteamOS) build of `release/v0.4.0` broke in two port-layer include-resolution spots MinGW tolerated (`bondconstants.h` first-include cycle; `video.c` `_SHIFTL`); fixed in `port/shim/` only, no `src/` edits, no rule-2 (2026-09-27).** Full `## D402` entry at file tail. | RESOLVED (Linux/Ubuntu-24.04 build → glibc-2.41-compatible binary for the Steam Deck): three `port/shim/` fixes — `PR/ucode.h` + `bondconstants.h` defer `pc_protos.h`/`bondtypes.h` during `bondconstants.h`'s own `ultra64.h` pass (breaks the `bondconstants.h`→`ultra64.h`→`pc_protos.h`→`bondtypes.h`→`bondconstants.h` re-entry); `PR/gbi.h` defines `_SHIFTL`/`_SHIFTR` when absent (the `gbi.h` macros in `video.c` lost their `mbi.h` definitions on Linux). Builds + links clean on Ubuntu-24.04; bundled `libSDL2` with `rpath=$ORIGIN`; pushed to the Deck. Shim files uncommitted at log time. |
 | D403 | **Deck v0.4.0-pre test: Nintendo logo + copyright/legal page render broken, broader graphics "not reflecting new updates" — stale 0.3.0-era sidecars seeded into the bundle (2026-09-27).** Full `## D403` entry at file tail. | RESOLVED (2026-09-27, user-confirmed on the Deck: a stale-sidecar **test artifact**, never a code regression): the Deck bundle was seeded with `pcmodels`/`pccg` sidecars from the `0.3.0-local` install (data dated 2026-09-15), which predate the D75/M-197 embedded-blob raw-pixel fix (commit `425237f9`, 2026-09-21) and the D303 muzzle-vertex converter fix (2026-09-26) → the `P*` front-end logo/legal textures come out broken while the in-exe fast3d fixes (D397 gun-barrel/file-select) render correctly. Disambiguation performed (2026-09-27): `data/pcmodels-ntsc-final` + `data/pccg-ntsc-final` regenerated from the Python-source converter (`prepare-assets.py` + the current `d43/d69/d88_emit.py`, `ALL CHECKS PASSED`) on the NTSC ROM and pushed to the Deck (sha256-verified), preserving the user's `ge007.eep`/`ge007.ini`. **RESOLVED (user-confirmed on the Deck, 2026-09-27): the front-end logo / copyright / legal page now render correctly — confirming this was the stale-sidecar test artifact, not a code regression.** |
 | D404 | **"Aim style: Centred (PC)" (`Input.AimMode=1`, D333/D337) has no effect when aiming with a gamepad; the row's own doc comment over-promises ("applies to every aim input … pad trigger") but the centred path is mouse-only (Steam Deck, 2026-09-27).** Full `## D404` entry at file tail. | RESOLVED (2026-09-28, port-layer only): the toggle now genuinely works on a pad. First logged as a communication bug and closed by relabel ("Aim style (mouse)"), then reopened on user challenge the same day: the pad path emits stick *deflection* into the game's crosshair integrator, so the pad was actually always in the **N64** model (a flick travels the crosshair; edge-scroll + spring-back only made a hold *feel* direct), and the "stick has no crosshair to travel" rationale was wrong. Fix: new `padDirectCompute()` in `input.c` (the pad twin of `hipDirectCompute`'s CENTRED branch -- same dead/watch/pause/cutscene gates, minus the mouse-grab gate; revised same day to the N64 path's verbatim quadratic curve -- `sign(v)\u00b7clamp(defl/70,\u00b11)\u00b2 \u00b7 (fov/60) \u00b7 3.5 deg/poll` (bondview2.c canNaturalTurn/canNaturalPitch), full-stick parity with the N64 path, pending retest on the refreshed build); the natural-pitch pad branch routes CENTRED through it and keeps N64's classic deflection behaviour (also the default, so no pad default changes). Labels reverted to device-neutral ("Aim style" / "Aim range"). **Steam Deck (2026-09-27/28): "centered aim is broken on deck too" -- fixed for real; the first-pass linear gain was measured as a dramatic sensitivity loss (2026-09-28) and replaced with the N64 path's verbatim quadratic curve (fov/60 base, 3.5 deg/poll top rate); retest on the refreshed build: user "good". RESOLVED.** |
 | D405 | **fast3d/OpenGL: MSAA above the driver max black-screens; two `glBindFramebuffer` calls pass an index where a GL name is required** (PR #106, italoarruda, 2026-09-25; label rebased from the PR's D323, which collides with our D323 LOD finding) — full `## D405` entry at file tail | **CLOSED (2026-09-28).** Merged from PR #106 (code file only; security-reviewed clean - port-layer GL state fixes, no external input, no allocations). `resolve_msaa_color_buffer` clamps `msaa_level` to `GL_MAX_SAMPLES`; the resolve/copy paths bind `current_framebuffer ? framebuffers[i].fbo : 0` (the default framebuffer is GL name 0). Both Windows (opengl32) and Linux use this backend. Post-merge sweep 21/21 PASS + MSAA=16 boot check render-verified; link ritual clean. |
 | D406 | **front-end PC Options screen: long sections (INPUT, 17 visible rows) run off the bottom of the 440x330 paper, and rows past the silent 14-row page cap (Crouch mode, Reset to defaults, Bindings…) are unreachable from the front screen** (user report 2026-09-28, v0.4.0 pre-push review) — full `## D406` entry at file tail | RESOLVED (2026-09-28, port-layer only, Steam Deck-validated): in-section pagination in `frontoptions.c` (11 rows/page; the vertical stepper crosses page boundaries both ways; dim 'Page p/N' marker + bottom hint on every page; slider bars start past long labels; F10 overlay untouched). D406b/c/d same-cycle refinements (label/track overlap, hint visibility/wording, hint position). |
+| D541 | **One A press advanced two menu screens on the Steam Deck (Desktop Mode) — cause unconfirmed (Steam desktop layout A=Enter or a pad reseat)** — Deck playtest; full `## D541` entry at file tail | PARTIAL 2026-10-05 (mitigation landed, port-only: 70 ms menu release hold-off in `input.c` + overlay accept; one back per 150 ms) — mitigation, cause unconfirmed; Deck re-test owed |
+| D542 | **Stray polygons left of Bond's gun, frequent on foggy levels (Streets, Surface 2)** — D540-build playtest; full `## D542` entry at file tail | OPEN 2026-10-05 (triage: GE_SHADEPERSP / GE_FOGVERTEX / rc1 A/B, then 1964) |
+| D543 | **Surface 2: lit area following Bond brighter than 1964** — full `## D543` entry at file tail | FIXED 2026-10-06 (CPU RSP-style near clip in gfx_sp_tri1 + per-vertex fog default; build-verified, by-eye vs 1964 at next playtest) |
+| D544 | **OS cursor flickers with F10 open on the main menu** — show/hide requests race (inputSuspendForOverlay vs the D519 front-end pointer); full `## D544` entry at file tail | FIXED 2026-10-05 (port-only, input.c; build-verified, maintainer mouse check owed) |
+| D545 | **Player rockets can pass through the ground when fired near Bond's feet** — `gunInitProjectileFromPlayer` passes a single `s32` as a 20-entry room out-array (N64 overflow absorbed by `pad_a`; D490 / porting-notes §D24 class); full `## D545` entry at file tail | FIXED 2026-10-06 (AVOID_UB array, gun.c; maintainer Archives preset A/B: 1 drop in ~60 at wide view, residual = room-pool hypothesis, hardening backlogged) |
+| D546 | **PC settings standardization: round defaults, vertical-degree FOV, "Gameplay view area" wording** — draw/LOD 2.0x, deadzone 25 %, mouse sens max 4x, FOV 30–90° in 5° steps (60 = N64, PD "Vert FOV" model), one-time ini migration; full `## D546` entry at file tail | FIXED 2026-10-05 (port-only; build + maintainer check owed; golden re-base batched with D543) |
+| D547 | **Game.AllUnlocked applies live (no restart)** — F10 row seeds/clears the RAM unlock flags it owns; full `## D547` entry at file tail | FIXED 2026-10-05 (port-only, main.c/optionsoverlay.c; build-verified, maintainer mission-select check owed) |
+| D548 | **Walls near rocket fire/explosions banded black/white/yellow/blue (Aztec dark corridor; also seen on Deck)** — D540 `noperspective` combiner inputs extrapolated past 1.0 by GPU near-clipping, then the CC wrap emulation wrapped them; full `## D548` entry at file tail | FIXED 2026-10-06 (gfx_opengl.cpp input clamp; root fix = D543 CPU near clip; maintainer Aztec re-check owed) |
+| D549 | **Thrown grenade/knife/object: `s32 sp94` receives a 12-byte `coord3d` from `bullet_path_from_screen_center`** — D24 class (N64 overflow hit a dead slot, PC can hit live locals); full `## D549` entry at file tail | FIXED 2026-10-06 (AVOID_UB coord3d, gun.c x3; build-verified) |
+| D550 | **Static title bar (no more per-second "NN fps" refresh) + project mark as favicon / window / taskbar icon** — original generated crosshair art (no game content); full `## D550` entry at file tail | FIXED 2026-10-17 (port + tooling only, video.c/gfx_sdl2.cpp/make_icon.py; ninja-command-verified + full build 249/249; maintainer live window/taskbar check owed) |
+| D551 | **Opt-in update check (`Game.CheckUpdates`, default off): one HTTPS GET per launch to GitHub `/releases/latest`; `GE007_VERSION` added** — full `## D551` entry at file tail | ADDED 2026-10-06 (port layer only; live-verified Windows/Linux/Deck + F10 UI capture; security review fixes applied) |
+| D552 | **Dam ending cutscene: the first camera shot no longer swivels up onto Bond — the D243 M-190 port-only look-at filter re-seed snapped it onto him** — full `## D552` entry at file tail | FIXED 2026-10-06 (port-only addition removed; code path back to the decomp; maintainer-verified live) |
+| D553 | **Surface 2: the haze around Bond brightened/darkened as he moved — near-plane-clipped vertices lerped fog from a behind-the-eye corner that flips 0/255** — full `## D553` entry at file tail | FIXED 2026-10-06 (fast3d: fog recomputed on clip-created vertices by default, as the RSP; `GE_NEARCLIPFOG=lerp` = old A/B) |
+| D554 | **F10 settings menu: wording/casing pass + two-line tips** — display text only, config keys unchanged; tips wrap instead of ".." — full `## D554` entry at file tail | DONE 2026-10-06 (port/src/optionsoverlay.c; maintainer by-eye check owed) |
+| D555 | **Crosshair mouse pointer over the F10 / PC Options overlay** — the game's own crosshair sprite is drawn at the mouse, last in the overlay display list (OS cursor hidden; reworked 2026-10-06 from an SDL colour cursor); opt-out `Input.CrosshairCursor` — full `## D555` entry at file tail | DONE 2026-10-06 (port/src/input.c, optionsoverlay.c, tools_pc/make_icon.py; maintainer by-eye check owed) |
+| D556 | **F10 feedback pass (tips trimmed, conditional-row order, wording fixes) + mouse scrollbar** — standard PC settings lose their tips, Controller page keeps Control style first (Profile chooser now sits above the first profile row, not row 1), No hit flash / Skip intro tips corrected, thin draggable scrollbar on overflowing pages — full `## D556` entry at file tail | DONE 2026-10-06 (port/src/optionsoverlay.c; build only, by-eye check owed) |
+| D557 | **New/blank profiles start with Look ahead OFF on PC (Rule-2 sign-off, maintainer 2026-10-06)** — full `## D557` entry at file tail | FIXED 2026-10-06 (`src/game/file2.h` DEFAULT_OPTIONS under `#ifdef PORT`; existing saves untouched; win gate 21/21) |
+| D558 | **F10 overlay tips cut off in a level (not on the front end)** — full `## D558` entry at file tail | FIXED 2026-10-06 (`optionsoverlay.c` `textRenderWide`; verified by in-level capture) |
+| D559 | **Look ahead off for untouched existing folders (maintainer-approved, port layer only)** — full `## D559` entry at file tail | FIXED 2026-10-06 (`watchsettings.c` `migrateUntouchedLookAhead`) |
+| D560 | **F10 copy pass 3 (maintainer line review)** — full `## D560` entry at file tail | FIXED 2026-10-06 (`optionsoverlay.c` tips/labels/value names; display text only) |
+| D561 | **F10: "Menu pointer" row removed (front-end-only legacy option; confused players)** — full `## D561` entry at file tail | FIXED 2026-10-06 (row/tip/names removed; `Input.MenuPointerMode` ini key, Direct default and the legacy code path kept for one release) |
+| D562 | **F10 crosshair pointer hidden while a pad/keyboard drives the menu** — full `## D562` entry at file tail | FIXED 2026-10-06 (`drawCrosshairPointer` draws only while `s_mouseActive`) |
+| D563 | **F10 root hub: Left/Right no longer open pages; held nav inputs latched on open/page change** — full `## D563` entry at file tail | FIXED 2026-10-06 |
+| D564 | **F10: game's own "Look up/down" row removed (dead for mouse and centred pad, stacked with Invert look); value pinned to factory; tip polish** — full `## D564` entry at file tail | FIXED 2026-10-06 (port only; Mouse / Controller "Invert look" are the inversion controls) |
+| D565 | **AI awareness followed two player render settings: Fog distance below 100 (shortened clip) and FOV (gameplay fog cull scaled by the rendered FOV)** — full `## D565` entry at file tail | FIXED 2026-10-06 (maintainer decision: Fog distance floor 100 in `video.c` + overlay; `propobj.c portSub7F054C58Gameplay` rescaled to the game's own FOV, PORT-only D466 helper; identity at defaults; build-verified) |
+| D566 | **Steam Deck Game Mode showed the on-screen keyboard at every launch (SDL text input left on)** — full `## D566` entry at file tail | FIXED 2026-10-06 (port only: `gfx_sdl2.cpp` SDL_ENABLE_SCREEN_KEYBOARD=0 + SDL_StopTextInput; build-verified Win/Linux; Deck Game Mode check owed) |
+| D567 | **Front-end PC Options with a pad pulled the game's crosshair to the top-left (overlay synced the cursor to the untouched OS mouse)** — full `## D567` entry at file tail | FIXED 2026-10-06 (port only: sync gated on `optionsOverlayMouseActive()`; build-verified Win/Linux; Deck pad check owed) |
+| D568 | **F10 dropdown popup drawn empty and misplaced for a long list on a mid-page row (negative top)** — full `## D568` entry at file tail | FIXED 2026-10-06 (port only: `ddGeom` keeps the popup on screen; 1280x800 before/after capture) |
+| D569 | **Crosshair color follows the PD port: Original or Custom RGB, left/right stepper, 0-255 sliders** — full `## D569` entry at file tail | CHANGED 2026-10-06 (maintainer request; old presets migrate to Custom RGB) |
+| D570 | **Scaled crosshair (Crosshair size != 100%) showed a faint copy of the top bar's tip under the bottom bar (WRAP tile flags)** — full `## D570` entry at file tail | FIXED 2026-10-06 (port only: CLAMP when scaled in `gunDrawSight` + F10 pointer; 100% unchanged, Dam gate PASS) |
+| D571 | **Project icon restyled to the in-game sight red as pixel art (exe, window, favicon)** — full `## D571` entry at file tail | CHANGED 2026-10-06 (maintainer request; make_icon.py; social preview unchanged) |
+| D572 | **Linux tarball glibc floor lowered from 2.38 to 2.31: CI builds in the Steam Runtime sniper container with SDL2 2.30.0 from source** — full `## D572` entry at file tail | CHANGED 2026-10-07 (maintainer request; packaging only; X220 glibc 2.36 fresh install PASS) |
+| D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | **CLOSED (2026-09-28 bookkeeping: tank board/exit accepted by the user; shipped in v0.4.0).** Earlier: PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
+| D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed). |
+| D415 | **Shooting a light fixture does not "kill" its flickering light (Bunker, Caverns): the fixture takes the hit but the flicker keeps going (community report, issue #87 comment by the reporter, 2026-09-28, 00 Agent playthrough of v0.4.0).** — full `## D415` entry at file tail | FIXED (2026-09-29 bookkeeping: root-caused and fixed as D430 + D431, user-verified vs GEPD/1964 on Caverns 2026-09-29; #119). Earlier: ROOT-CAUSED as D430 (see there); fix in tree, live check owed. |
+| D416 | **2-player split-screen crashes (issue #99, v0.3.0 `4827bc8`, fault addr 0xa43a0ed4, PC 0x14009e758): MP setup files `Ump_setup*Z` were never converted N64→PC** — full `## D416` entry at file tail | RESOLVED in-harness (converter + D417 + D418 fix the 2P crash and split-screen flicker; 18/18 2P/3P/4P x 6-stage load runs clean; live pad play still owed). Also D417, D418.
+| D417 | **`enum PROP` unsigned on GCC: `prop >= 0` passed for `getPropForHeldItem()`'s -1 (fist) -> `modelLoad(-1)` null deref in any 2P+ stage (player.c `sub_GAME_7F09B398`)** — full `## D417` entry at file tail | RESOLVED (src/bondconstants.h `PROP__PORT_SIGNED = -1`, D3/D142 precedent; Rule-2 review done 2026-10-06: compiler-ABI class, no behaviour change). |
+| D418 | **Split-screen: fast3d safe-area crop stretched the last-set (half-height) viewport over the whole window, so each player's view filled the screen and the last-drawn (shuffled) player won -> alternating full-screen flicker** — full `## D418` entry at file tail | RESOLVED (`gfx_set_split_screen`, port-only). |
+| D419 | **Split-screen input shared between players / P1 lost solo controls: poll thread used g_CurrentPlayer for per-slot aim/stance/style/use** — full `## D419` entry at file tail | RESOLVED (per-slot `slotPlayer()`, port-only; no current-player swaps from the poll thread; live-tested OK). |
+| D420 | **MP score / stats screen shows an odd big number (issue #99)** — `char rankbuffer[4]` overrun ("Rank: 1st") clobbered the adjacent `scores[]` (D8 class); widened under `#ifdef PORT` — full `## D420` entry at file tail | FIXED 2026-10-01 (`mp/virtual-seats`); 2P/3P/4P watch-menu runs show 0s. |
+| D421 | **Gadget cycling (pad B / gadget key) disabled in 2+ player matches** — full `## D421` entry at file tail | CLOSED 2026-10-01: moot, no MP inventory holds a gadget (mp_weapon.c); hook reviewed + reverted. |
+| D422 | **P2+ have no centred-aim mode in split-screen (single-slot aim state)** — full `## D422` entry at file tail | FIXED in tree (commit `ac92e0ab`: per-slot aim state `s_aimSt[4]`, `aimModeGet()` returns the configured mode for every slot); live split-screen verification of centred aim on slot 1+ still owed (needs a non-slot-0 aim device). |
+| D423 | **Unidentified black arrowhead in P2's split-screen view (stage 38)** — full `## D423` entry at file tail | CLOSED 2026-10-01: faithful (level shadow at a doorway top), maintainer-confirmed live. |
+| D424 | **`WeaponStats.RecoilSpeed`/`b44[]` byte order: no grenade-launcher recoil, shortened recoil on every gun (issue #118).** — full `## D424` entry at file tail | FIXED in tree (`WS_B44`, port-guarded); user-verified vs GEPD/1964 2026-09-29. |
+| D425 | **Tank run-over death sound loops: `(chrflags << 7) >= 0` is always true on unsigned GCC enum (issue #115).** — full `## D425` entry at file tail | FIXED (2026-09-29 bookkeeping: use-site `(s32)` cast; user-verified vs GEPD/1964 2026-09-29, #115). Earlier: FIXED in tree (use-site `(s32)` cast); live check owed. |
+| D426 | **Tank cannot be steered with the mouse out of aim mode (issue #116).** — full `## D426` entry at file tail | RESOLVED (user 2026-09-29: tank controls now match GEPD/1964; see D429). |
+| D427 | **Automatic fire cadence is frame-counted, ~2-3x faster than N64 at 60 fps (issue #114).** — full `## D427` entry at file tail | FIXED in tree (modulus scaled by ticks/frame; measured 6 ticks/shot at 30 and 60 cap); user-verified vs GEPD/1964 2026-09-29 (AK47 mag empties in ~3 s, Klobb normal). |
+| D428 | **No gun turn-sway with direct mouse look (issue #117).** — full `## D428` entry at file tail | FIXED in tree (2nd pass: exact inverse of the game's yaw integration, clamp fov/60); user-confirmed feels right 2026-09-29. |
+| D429 | **Tank full pass: aim-mode (RMB) mouse behaviour and tank sticking forward/back (follow-up to D426).** — full `## D429` entry at file tail | CLOSED faithful (user 2026-09-29: the "sticking" was drive inertia; the original also drops driving input while the mouse aims; PC now matches GEPD/1964). |
+| D430 | **Shot light fixtures do not go dark: `lightfixture.c` `extract_vertex_indices_from_triangle` is an unported N64 GBI parser (issue #119 / D415).** — full `## D430` entry at file tail | FIXED in tree (D154-style words.w0/.w1 decode); user-verified vs GEPD/1964 on Caverns 2026-09-29. |
+| D431 | **Light fixtures never reached `lightFixtureBreak` on PC: bullet-hit texnum is stubbed to -1 (D154), so `check_if_imageID_is_light` is always false (issue #119; user: Cavern lights do not take damage).** — full `## D431` entry at file tail | FIXED in tree (fixture table records the image id; bg.c hit code looks it up; free-slot guard); user-verified vs GEPD/1964 2026-09-29. |
+| D432 | **Gunshot sounds "off" after D427: sound-trigger gate (`SoundTriggerRate`) is per-tick on PC but frame-granular on the N64 (user: Cavern, Mac-10 run).** — full `## D432` entry at file tail | FIXED in tree (gate offset rounded to odd at 1 tick/frame); measured shot/sound cadence identical to N64 rules; residual audible difference vs 1964 tracked as D433. |
+| D433 | **Slight audible difference in automatic-gun shot sound vs GEPD/1964 after cadence was matched (user by-ear, Caverns).** — full `## D433` entry at file tail | OPEN (not a timing issue; audio layer suspected). |
+| D434 | **Raw `((u8*)&g_Textures[n])[0] & 0xf` hit-type reads are wrong on PC; latent OOB once D431 returned real texture ids (found by sub-agent review).** — full `## D434` entry at file tail | FIXED (`.hitTexture` at 3 sites, port-guarded); live check owed. |
+| D440 | **"Original N64" / "Port defaults" one-press presets in the F10 overlay and front-end PC Options (+ `-n64preset`/`-portpreset`).** — full `## D440` entry at file tail | FIXED (port-only; headless-verified; user live accept owed). Follow-up: preset stretches 4:3 in non-4:3 windows (no pillarbox mode). |
+| D441 | **64-bit pointer-width sweep (part 1): 17 files widened `(u32)`/`(s32)` pointer casts to `uintptr_t` under `#ifdef PORT` (ABI/layout exception; ROADMAP §2 "Latent 64-bit ABI hazards").** — full `## D441` entry at file tail | PARTIAL (census + `GE_HIGHARENA_BASE` tier-1 build + 35 sites fixed + CI ratchet, 2026-10-03; **tier-1 all-level sweep 21/21 PASS, 0 crashes, 2026-10-05**; the above-4-GiB tier still owed). |
+| D442 | **`Game.AllUnlocked` reworked into a pure RAM/query-time override: #ifdef PORT hooks in `fileGetIsCheatUnlocked` and `fileIsStageUnlockedAtDifficulty` (every stage reports COMPLETED); the EEPROM patch and the D387 merge are removed (RULE-2-SIGNOFF, maintainer opt-in feature).** Full `## D442` entry at file tail | FIXED; verified 2026-10-03 headless (mission select all 20 / only real progress when OFF, full cheat menu, eep byte-identical). |
+| D443 | **D357 settings-display cleanup (mouse ×, whole-% deadzone and volume steps, FOV in horizontal degrees, MSAA 16×) plus a "Restart game" action (orderly D344 quit, then relaunch).** Full `## D443` entry at file tail | FIXED (port-only; reset probes pass; both-UI visual check and one Restart click owed; Linux relaunch path not compiled). |
+| D454 | **Knife slash crashed on Windows: `var_a0_2` in `gunTickHandState` was `u32`, truncating the exe-data address of `D_80034CA4/E0C` (PE image base 0x140000000) before `gunSample1PTransform` (ABI/layout exception, §A1).** Full `## D454` entry at file tail | FIXED (verified by maintainer live: knife slash no longer crashes). |
+| D461 | **Item-slot allocation overran into the next stage-bank block: `alloc_additional_item_slots` used the N64 0x14 stride for a 32-byte `InvItem` (the code comment tags it D458b); `bondinvReinitInv` wrote `p_itemcur[i].type = -1` at the C stride, scribbling 0xffffffff into the first prop model file (TT33 root Child) and crashing 2P respawn / pickups later (ABI/layout, section A1).** Full `## D461` entry at file tail | FIXED (maintainer-verified: ~10 min of 2P on Caves, Bunker and Complex, no crash). |
+| D462 | **`vtxstore.c` sized its two record tables with the N64 stride 0x14 for a 24-byte `struct unk_09B7A0_struct_parent` on PC (`Vertex* unk00` widened); both are indexed at the C stride, so each overran its block (up to ~2 KB at 500 entries) into the next stage-bank allocation. Same shape as D461; found by the local-Qwen literal-stride allocation audit (ABI/layout, section A1).** Full `## D462` entry at file tail | FIXED (build + solo `-level_09` and 4P `GE_STARTMP=4` smoke runs exit clean; no crash; by-eye owed in solo). |
+| D444 | **Front-end PC Options: clickable Previous/Next page controls; hover no longer overrides the wheel/page selection; stale All-unlocked comments refreshed.** — full `## D444` entry at file tail | FIXED (build-verified; human mouse test owed) |
+| D455 | **Binary-first census of exe-static addresses truncated to 32 bits (D454 class) (2026-09-30).** — full `## D455` entry at file tail | FIXED/CLEAN (no further REAL site beyond D454) |
+| D447 | **Pillarbox output mode (`Video.AspectMode` = Original) for the Original N64 preset; crop overscan no longer cancels Wide/Cinema.** — full `## D447` entry at file tail | FIXED (build + 3 captures verified; Wide/Cinema, 16:9 Ratio, mouse and 1964 comparison owed to a human) |
+| D445 | **Crouched-rifle firing animation (`crouched_rifle_firing_animation_groupA`) never resolved on PC -> SIGSEGV in modelConstrainOrWrapAnimFrame when an MP player crouch-fires a rifle (2026-09-28).** — full `## D445` entry at file tail | FIXED — layout only (§D5 linker adjacency, D164 class): `crouched_rifle_firing_animation_group1` has no zero terminator and on N64 falls through into `...groupA` (source-order .data); GCC places groupA first, so groupA[0] kept the raw anim offset 0xB84. `#ifdef PORT` one array {right, left, terminator} + `groupA` alias (chr.c/chr.h); N64 resolution restored. |
+| D446 | **Couch 2P watch-menu text (the MP pause page) differs by +-1-2 per channel between builds whose only difference is data layout (2026-09-29).** — full `## D446` entry at file tail | FIXED — port-only (fast3d): `GL_TEXTURE_MAX_ANISOTROPY` is per-texture-object state that `gfx_opengl_set_sampler_parameters` set only when mipmapped and never reset; a GL texture id freed by `gfx_texture_cache_delete_range` (unordered_map order = texture address order) and reused for a non-mipmapped glyph kept 4x. Now always written (level or 1). Render-only; sim never affected. |
+| D448 | **Split-screen pad seats: `pads[]` indexed by seat and keyed by SDL instance id; seats compact outside a match and stay reserved during one (an unplug no longer shifts other players or flips keyboard/mouse-as-P1 routing; a rescan no longer reopens attached pads).** — full `## D448` entry at file tail | PARTIAL (committed 918ac5f9 on `feat/mp-splitscreen-99`, build + 2P smoke OK; plug/unplug behaviour not exercised at runtime). |
+| D456 | **Font-pointer / text-string-pointer slots retyped from `s32` to real pointers (ABI/layout exception; front.c, options.c, language.c, bondview*, mpmenu.c, propobj.c:3909 alias replaced by named field).** `frontPrintText`/`display_aligned_white_text_to_screen` font params, `copy_1st/2ndfonttable`, `setFontTables`, ~26 options.c locals, `g_LangBanks[]` + `langGet` result, `player.ptr_text_*_mp_award`. front.c 186->2, options.c 139->0 int-conversion warnings. FIXED (static + 1 launch; not gameplay-verified). |
+| D457 | **64-bit ABI retypes part 2: image-bank rebase, bg setup pointers, player matrix pointers, model/animation/vtx slots (ABI/layout exception, A1). (a)+(b) landed; (c)+(d) REBASED onto release 2026-10-01 (branch fix/d457cd-rebase), headless-verified, awaiting lead merge; the old "black menu" hold was not reproducible (D459).** globalbank_rdram_offset->uintptr_t; BG_SEG_TO_PTR + ptr_bg_data/gptr_stan/ptr_bgdata_offsets; player.field_5C/60/64/68/10E0/10E4; Model.unk34/38/64/68, loadAnimationFrame, PROMOTE, vtxstore_allocate. Census 545->435. REBASED (pending merge). |
+| D453 | **memp allocator API made 64-bit clean (D441 step 0; ABI/layout exception, §A1).** `mempCheckMemflagTokens` took the arena start as `s32`, `mempSetBankStarts` carried it in an `s32 mempStart`, and `mempAllocPackedBytesInBank` returned a pointer as `u32`; all truncate/sign-extend an arena at or above 0x80000000. Widened to `uintptr_t`/`void*` under `#ifdef PORT` (N64 arm unchanged). mema.c NOT changed (structural, see entry). | 2026-09-30 | fix/abi-memp-widen | [H] for memp, mema deferred |
+| D451 | **Automatic-fire gate at unsteady frame rates (D427 follow-up) and D173 residual.** — full `## D451` entry at file tail | FIXED (**RULE-2-SIGNOFF**, maintainer 2026-09-30: covered by the D427 grant; tick-crossing gate, `gunfire.c` `d427Gate`); headless A/B at FpsCap 45 measured; maintainer hold-fire test at 60/30 fps showed no perceptible difference (expected: identical at steady rates). D173 not the same class (see entry). |
+| D463 | **fast3d divided by zero (0xc0000094) importing a texture for a zero-area TextureRectangle on a tile with `line = 0`: the outlined-text path drew a zeroed font glyph (`w=h=0`, `pixeldata=NULL`), found by the scripted 3P/4P stability sweep (crash rate roughly 2 in 14 on the Library stage; section D).** Full `## D463` entry at file tail | FIXED (port-layer guard in `import_texture`; 8 repeats of the crashing config + the 18-run sweep + solo `-level_09` + menu boot all rc=0 with no crash; the guard fired in 3 of 8 repeats). |
+| D464 | **`GE_MEMPREDZONE=1`: 64-byte red-zone checker for the `memp` bump allocator (all banks), side table + checks at level unload / every 60 frames / orderly quit; re-introducing the D462 `0x14` stride is detected (falsifier PASS); 21 solo levels + menu clean (0 hits); MP matrix not run (GE_STARTMP lives only on feat/mp-splitscreen-99).** Full `## D464` entry at file tail | TOOL LANDED (local, `feat/memp-redzone`); MP sweep owed. |
+| D465 | **#127 Dam/Caverns/Complex water slid side to side: the water animation controller patched its PRIM LOD fraction into a static DL by raw u32 index 8 (N64 `Gfx[4].w0`), which on the 16-byte PC `Gfx` is `Gfx[2].w0`, tile 0's SetTileSize T offset (class B)** — full `## D465` entry at file tail | FIXED 2026-10-01 (`fix/d465-water-primlod`, local); rate measured = N64; maintainer by-eye on Dam: still 'slightly faster' than 1964 (see entry). |
+| D466 | **#125 Xenia's boss fight on Jungle triggers early: `Video.DrawDistance` (default 250%) leaked into GAMEPLAY visibility (AI "on screen" / "seen" / target-in-sight / out-of-view spawn all read state computed from the extended far clip)** - full `## D466` entry at file tail | FIXED 2026-10-01 (`fix/d466-drawdist-gameplay`, local); RULE-2-SIGNOFF (port-feature leak fix; design-review approval); verified headless (room sets, on-screen counts), player-facing shot/autoaim/use/photo tests follow the render (maintainer decision); MAINTAINER-VERIFIED 2026-10-01: Jungle/Xenia at DD 400 correct, Statue spot check fine |
+| D467 | **#130 Golden Gun empty click with each shot: code audit finds the path faithful (2026-10-01)**: the dry-fire click only plays when the trigger is still held ~14 ticks after the shot; no simultaneous play at 60 fps. Open: by-ear/input-length check. | CLOSED: faithful by code + log (audited 2026-10-01; by-ear check of held-trigger behaviour vs 1964 is maintainer-owned) |
+| D468 | **AI view clamp: under ultrawide (> 16:9) or `Video.FovScale` > 100 the AI's on-screen tests used the wider rendered frustum; they now keep the cartridge-widest view (its own Ratio 16:9 mode at the game's FOV), as a centred sub-box of the screen; `Game.AIWideView=1` opts out** — full `## D468` entry at file tail | FIXED 2026-10-01 (`feat/d468-ai-view-clamp`, local); RULE-2-SIGNOFF (policy approved by the maintainer 2026-10-01); verified headless (clamp on/off switching + falsifier). |
+| D469 | **Gamepad presets + per-seat controller rebinding (ROADMAP 5a; supersedes outside PR #109): data-driven pad action table, `Input.PadPreset` (Jinx 1.1 default / Custom), `Input.Pad[N].<Action>`, Input -> Controller page in F10 and front-end PC Options** — full `## D469` entry at file tail | FIXED 2026-10-01 (merged into `release/v0.4.1`, local); preset 0 == old mapping proven (20,971,520 cases); live pad test owed (maintainer); Jinx 1.2/1.3 undefined (gap) |
+| D470 | **Audio master volume + output-device selection (ROADMAP 5a):** `Audio.MasterVolume` (0..100, scratch-copy gain on the final mix, default 100 = byte-identical) and `Audio.Device` (name, default system device; live reopen on the audio-producer thread, fallback on missing/removed device). | FIXED (live listening test owed) |
+| D471 | **Controller-family button names (no glyphs) in the PC menus + player-index LEDs: PlayStation/Nintendo pads see their own button names in the F10/front-end help lines and the pad-binding column; Xbox/Steam Deck/unknown keep the old text exactly** — full `## D471` entry at file tail | FIXED 2026-10-01 (local); headless captures for Xbox/PS/Nintendo; live PS/Nintendo pad check owed |
+| D472 | **F10 overlay polish: multi-pad ownership (audit G1-G3), widescreen pillarbox (D335b), red EXPERIMENTAL rows, unknown-ini-key warning.** — full `## D472` entry at file tail | FIXED 2026-10-01 (merged; port-only, no src/game). Headless-verified pillarbox/red rows/warning at 1280x720; multi-pad ownership by code reading only, live check owed. |
+| D473 | **Uncached `getenv("GE_D75V")` on every G_VTX: the probe's `d75v_lo == -1` meant both "not read yet" and "disabled", so with the env unset `gfx_sp_vertex` re-ran getenv on every vertex batch (~55-59% of render-thread CPU by sampling; D302/D250 class)** — full `## D473` entry at file tail | FIXED 2026-10-01 (local); Statue display-list CPU about -55% in steady windows |
+| D474 | **fast3d micro-optimisations: unchanged `set_tile`/`set_tile_size` no longer dirty the textures (each dirty = cache lookup + `gfx_flush()` batch break); per-triangle/per-vertex debug hooks (D75D/ZF/D303) behind one cached gate** — full `## D474` entry at file tail | FIXED 2026-10-01 (local); output-identical by construction; measured gain on the dev machine within noise |
+| D475 | **Statue/Cradle hitches diagnosed: low-CPU ~33 ms frames are the game's own frame limiter skipping a retrace (`boss.c` tick-interval check) after a 13-16 ms gfx task; CPU-side bursts are CI-palette re-imports (D217 keys CI textures on palette content), not first-sight loads. Room-texture pre-warm was built but gives ~no gain (kept on unmerged branch `perf/prewarm`, default off)** — full `## D475` entry at file tail | OPEN (diagnosed 2026-10-01): next levers = palette-as-texture/LRU for CI re-imports; frame-limiter interplay needs a design look |
+| D476 | **CI4 textures keyed on their own 16-entry palette bank instead of the whole 256-entry table (D217 hash): unrelated TLUT loads no longer re-import unchanged CI4 textures** — full `## D476` entry at file tail | FIXED 2026-10-02 (local); Statue sweep CI4 cache misses 189 -> 36 |
+| D477 | **CI8 palette re-imports measured and ruled out as a CPU-side hitch cause: decode+upload averages ~0.008 ms/frame (worst frame 0.44 ms); the cache already holds the animated palettes (1314 misses, 10 re-misses); one CI8 texture is drawn with several palettes per frame, so an in-place update path would thrash** — full `## D477` entry at file tail | MEASURED 2026-10-02 (local); premise of the D475/D476 follow-up refuted on the dev box; GPU/driver-side cost unmeasured |
+| D478 | **D441 read-side census re-run (319 warnings, 129 outside the `chr.c` D34 initialisers) triaged against the current tree: no live 32-bit truncation of a non-arena pointer found; one real port bug fixed (`libultra.c` crash-log `snprintf` passed a pointer as its size bound)** — full `## D478` entry at file tail | FIXED 2026-10-02 (local; snprintf bound); census triage recorded, Stage B items listed |
+| D479 | **Split-screen `GE_STARTMP` harness hid the ammo counter: it skipped the file-select screen's `selected_folder_num = -1`, so the stage load applied a blank folder-1 record (options 0: ammo, sight, auto-aim off); harness now sets -1 like a real MP launch** — full `## D479` entry at file tail | FIXED 2026-10-02 (local); harness-only, 2P frame shows the counter in both halves |
+| D480 | **Shader pre-warm: every created shader pair `(shader_id0, shader_id1)` is remembered in `$S/ge007.shaders` and compiled at the first frame of the next session, so a first-seen combiner no longer compiles mid-play (the one in-play stutter in the 2026-10-02 play capture: 7 compiles = 18.7 ms in one frame)** — full `## D480` entry at file tail | FIXED 2026-10-02 (local, `perf/shader-prewarm`); output-identical (menu frame exact), 0 in-play compiles on the warm run |
+| D481 | **Low-end ~45/30 fps (#92): the port ran fast3d inline on the N64 scheduler thread, so a VI retrace arriving mid-render reached the game late and `boss.c`'s half-frame tick gate skipped the next one (33 ms frames whenever renders take ~8+ ms); gfx tasks now run on a render worker that posts SP/DP done like the hardware** — full `## D481` entry at file tail | FIXED 2026-10-02 (local, `perf/render-worker`); X220 (HD 3000) 44-46 -> 60.0 fps, `GE_RENDERINLINE=1` falsifier restores 45.9 |
+| D482 | **Lighter first-launch defaults on Atom/Celeron-class GPUs (#92 follow-up): after D481 the remaining gap to the PD port is workload, not code (fast3d is as cheap per batch/triangle as PD's); on Intel HD 400-605 / UHD 600-605 / Bay Trail-class and software renderers, DrawDistance/LodDistance 250 -> 100 and MSAA 2 -> 1, only where still at the port default, once per ini** — full `## D482` entry at file tail | FIXED 2026-10-02 (local, `perf/lowend-defaults`); X220 forced-path: Cradle batches 482 -> 146, render CPU 8.2 -> 5.2 ms, GPU 12.7 -> 10.6 ms |
+| D483 | **#136: the PC crouch key stood Bond up when he switched to the sniper rifle; the N64 keeps the stance (the weapon's DISABLE_CROUCH flag blocks both crouch-down and crouch-up)** — full `## D483` entry at file tail | FIXED 2026-10-02 (local, `fix/d483-sniper`); scripted crouch -> switch -> release keeps SQUAT |
+| D484 | **#136: `portScaleFovY`'s 20-degree floor raised the game's own zoom FOVs, capping sniper/camera magnification at 20 degrees instead of the N64's 7 (about a third of the zoom)** — full `## D484` entry at file tail | FIXED 2026-10-02 (local, `fix/d483-sniper`, maintainer-approved 2026-10-02); full zoom renders at 7 degrees, normal views pixel-identical |
+| D485 | **#136: sniper/camera zoom stepped once per game frame with no tick scaling, so at the port's 1 tick/frame it zoomed 2x faster in real time than the N64 at 2 ticks/frame; steps now scale to base^(ticks/2) (RULE-2, maintainer-approved)** — full `## D485` entry at file tail | FIXED 2026-10-02 (local, `fix/d483-sniper`); 15 -> 7 takes 16 frames at 60 fps (was 8) = the N64 at 30 fps |
+| D486 | **#126: explosions dropped in heavy firefights (turrets on Cradle/Egypt/Aztec): the 6-slot explosion buffer filled with the player's own bullet-impact puffs** — full `## D486` entry at file tail | FIXED (a)(c)(d); drops + (b) faithful, closed. Maintainer turret-fight feel check owed |
+| D487 | **PAL: the in-level ammo counter was not drawn (only a small dot where the "7 / 93" counter should be)** — full `## D487` entry | FIXED; maintainer PAL play check 2026-10-02: "PAL seems fine" |
+| D488 | **PAL build reported the Brazilian MPAL TV type instead of PAL (`osTvType`)** — full `## D488` entry at file tail | FIXED |
+| D489 | **FPS dropped sharply while adjusting F10 watch sliders (music/FX) with a pad or arrow keys: every step was a full EEPROM persist on the game thread** — full `## D489` entry at file tail | FIXED 2026-10-02 (port-only UI layer, `fix/d489-pad-slider-commit`, merged into `release/v0.4.1` 2026-10-03); maintainer pad check passed 2026-10-03 |
+| D490 | **Dam first-tower guard walked a small circle: `sub_GAME_7F03ECC0` overflowed `s32 rem[4]` on flat bboxes (glass/windows), corrupting the collision polygon; `rem[8]` under `AVOID_UB` (UB/stack-layout class, porting-notes D24)** — full `## D490` entry at file tail | FIXED 2026-10-02 (`fix/d490-glass-hull`, merged into `release/v0.4.1` 2026-10-03); maintainer by-eye Dam check passed 2026-10-02 |
+| D491 | **Struct reads across separately-declared adjacent globals (the D5/D215 class), found by the D24 overflow audit: `bg.c` `sub_GAME_7F0BA2D4` (portal bbox seeds, so every portal's Y/Z max stayed FLT_MAX and props joined extra rooms in `chrpropUpdateRoomList`) and both `gunfire.c` casing `rot` reads (y/z from `g_ZeroTriggerState`); `#ifdef PORT` reads the named globals** — full `## D491` entry at file tail | FIXED 2026-10-03 (`fix/d491-adjacent-global-reads`, local); builds clean, 900-frame `-level_09` smoke clean; no by-eye effect expected beyond room-membership-driven behaviour |
+| D492 | **Emulator `.eep` saves are not drop-in compatible: the port stores the save checksum words and `options` little-endian, so an unconverted 1964 save fails `fileValidateSaves` and all five slots are wiped on first boot** — full `## D492` entry at file tail | CLOSED (converter shipped 2026-10-04: `tools_pc/eep_convert.py`, both directions + `verify`; output byte-identical to the in-game-proven converted save, round-trip clean; README "Using an emulator save" section added; on-disk format unchanged; review fixes 2026-10-04: conversion only re-stamps regions valid in the source, refuses (writes nothing) when nothing validates, bundled as `tools/eep_convert.py`, in-game import planned pre-1.0 (ROADMAP §5a)) |
+| D493 | **Pad rumble kept going after quitting the game: the clean exit never runs `inputDestroy`, so `portAtExit` now calls `inputRumbleStopAll()`; same commit fixes D493b, a 1-unit live-pixel strip at the pillarbox edges in Original mode** — full `## D493` entry at file tail (D493b is a sub-section) | FIXED 2026-10-03, maintainer-verified in play (DualSense; Original-mode edges incl. ultrawide) |
+| D494 | **Sniper rifle: the PC crouch key now crouches/stands freely with a disable-crouch weapon (GEPD parity), never injecting C-down for it; supersedes D483's stance freeze** — full `## D494` entry at file tail | FIXED 2026-10-03, maintainer-verified in play |
+| D495 | **Tank: with the default pad preset X changed the tank weapon and Y left it, because in-tank faces fell back to the fixed menu faces; `PadMapCtx.tank` routes Next/Prev weapon to N64 A and aim/fire to R/Z** — full `## D495` entry at file tail | FIXED 2026-10-03, maintainer-verified in play |
+| D496 | **3P/4P split-screen: weapon-pickup messages garbled and oversized — `generate_language_specific_text_for_weapon` strcat'd onto an uninitialised stack buffer with 3+ players; `finalstring[0] = '\0'` under `AVOID_UB` (porting-notes D24 class)** — full `## D496` entry at file tail | FIXED 2026-10-03 (condensed 3+P text is faithful, maintainer-confirmed) |
+| D497 | **PC Options paging now matches the game's dossiers: PREVIOUS tab/B turn back a page or leave, NEXT folder tab while a later page exists; D444's bottom-row page links removed** — full `## D497` entry at file tail | FIXED 2026-10-03, maintainer-verified in play |
+| D498 | **Xbox 1.2 Christmas / 1.3 Frost / 1.4 Elektra gamepad presets: `Input.PadPreset` gains 1/2/4 (stick roles per D394, buttons unchanged); Jinx and Custom keep `Input.NaturalPitch`** — full `## D498` entry at file tail | FIXED 2026-10-03, maintainer-verified with a pad |
+| D499 | **Trilinear texture filter option: `Video.TextureFilter = 3`, every texture gets generated mips at upload and samples `GL_LINEAR_MIPMAP_LINEAR`** — full `## D499` entry at file tail | FIXED 2026-10-03, maintainer-checked (no visible difference; kept) |
+| D500 | **Aztec shuttle area: polygons "fell apart"; the per-frame vtx pool (`dyn.c`, no bounds check, Aztec `-mvtx40`) could overrun into the half the render worker draws; moved to 2x384 KB at DRAM +0x700000 with a budget log** — full `## D500` entry at file tail | FIXED 2026-10-03, maintainer-verified at the Aztec spot |
+| D501 | **Ultrawide 16:9 pillarbox for cutscenes and the watch: built, then reverted (original framing, not breakage)** — full `## D501` entry at file tail | CLOSED (reverted 31ade91f) |
+| D502 | **PC Options pad navigation: highlight on enter/back/page, back lands on the origin section, crosshair snap moved left; Trilinear listed after Bilinear** — full `## D502` entry at file tail | FIXED 2026-10-03, maintainer-verified with a pad |
+| D503 | **Surface: near-full-fog silhouettes on 32-bit output (fog snap applied); the remaining Surface dish is the widescreen frustum, 4:3 matches N64** — full `## D503` entry at file tail | FIX LANDED (by-eye pass owed) |
+| D504 | **F10 / PC Options menu: PD-style dialog look and PD's six groups (Video, Audio, Mouse, Controller, Game, Key Bindings); checkbox / wedge slider / dropdown widgets; Display mode (Modern / Original N64 / Custom) replaces the two preset rows** — full `## D504` entry at file tail | FIXED (port-only; by-eye pass vs the PD port owed) |
+| D505 | **Menu wording pass: 27 maintainer-approved text edits across both PC options UIs** — Text only; D504 follow-up; full `## D505` entry at file tail | FIXED (port-only; by-eye pass owed) |
+| D506 | **Menu slider values standardized: real units everywhere, no `n/100` or `n/255` scales** — Display only; D505 follow-up; full `## D506` entry at file tail | FIXED (port-only; by-eye pass owed) |
+| D507 | **Menu: one-line description of the focused option in both PC options UIs** — Port-only; D505/D506 follow-up; full `## D507` entry at file tail | FIXED (by-eye pass owed) |
+| D508 | **Forced aspect ratios: Aspect ratio gains 16:9 and 21:9** — Port-only; D447 extension; full `## D508` entry at file tail | FIXED (by-eye pass owed) |
+| D509 | **Held frames after an aspect-ratio change: one mis-projected frame (gun/hand glitch) removed** — Port-only; D508 follow-up; full `## D509` entry at file tail | FIXED (by-eye pass owed) |
+| D510 | **F10 overlay + FPS counter the same on-screen size on the front end and in a level** — Port-only; D504 follow-up; full `## D510` entry at file tail | FIXED (live check owed) |
+| D511 | **Four PD-parity settings: Fullscreen mode, Center window, Crosshair opacity, Crosshair color by health** — Port-only; ROADMAP PD Extended Options parity; full `## D511` entry at file tail | DONE headless (live checks owed) |
+| D512 | **Game.HudScale also scales the F10 overlay and FPS counter** — Port-only; D226/D510 follow-up; full `## D512` entry at file tail | DONE headless (live check owed) |
+| D513 | **Input.ControlScheme: Modern / OG controls (#139, T7)** — Port-only; D498/D166/D194 follow-up; full `## D513` entry at file tail | DONE headless (pad pass owed) |
+| D514 | **Emulator saves load directly: `ge007.eep` in 1964/Project64 format is converted on first launch** — Port-only; D492/D297 follow-up; full `## D514` entry at file tail | DONE headless (by-eye mission select owed) |
+| D515 | **Empty arch tag from a fresh build dir: the re-exec env drops `PROCESSOR_ARCHITECTURE`, CMake caches an empty processor, and the binary is named `ge007..exe`** — Build infra; D513 follow-up; full `## D515` entry at file tail | FIXED (headless-verified) |
+| D516 | **Control style Original shows the game's own N64 styles (1.1-2.4, per seat, saved to the Bond file) instead of the D498 presets** — Port-only; D513/D498 follow-up; full `## D516` entry at file tail | FIXED (live pass 2026-10-04 incl. split-screen 2P; adjust-perf follow-up = D517) |
+| D517 | **Holding left/right on a Bond settings row dropped the fps: every hold-repeat step committed (D489 staged sliders only)** — Port-only; D489 scope gap, found in the D516 live pass; full `## D517` entry at file tail | FIXED (live pass 2026-10-04) |
+| D518 | **Pad layout preset was one global value: setting another player's preset changed the main player's mapping too** — Port-only; D498 follow-up, maintainer report; full `## D518` entry at file tail | FIXED (live pass 2026-10-04 incl. split-screen 2P) |
+| D519 | **One PC options UI: the file-select "PC Options" entry opens the F10 overlay; the MENU_PC_OPTIONS screen is deleted** — Port-only (the one front.c entry call is kept); Bond-file rows + watch chooser re-keyed to file select; 4 probes retired, `GE_FILESELECT_OVERLAY` added; full `## D519` entry at the end of this file. | FIXED (headless-verified 2026-10-04; by-eye pass owed) |
+| D520 | **F10 overlay slider wedge, slider marker and dropdown arrow antialiased (they stepped in whole canvas pixels that grow with the window)** — Port-only; D504 follow-up, P4k investigation; full `## D520` entry at file tail | FIXED (headless before/after capture; by-eye owed) |
+| D521 | **A fixed-frame golden window that overlaps the intro flyby is platform-nondeterministic (cross-platform goldens); verify.sh's linux pixel-gate skip is driver-conditional** — Port-only (docs + verify.sh probe); D117 class, P7; full `## D521` entry at the end of this file | PARTIAL (rule recorded 2026-10-04; the two residual bands CLOSED 2026-10-05 by D525's box re-round — save state, not a renderer; cross-platform parity stays informational, the gate is per platform) |
+| D522 | **The golden window's frame-900 stem is not settled gameplay on several levels — the win golden gate is not green (5/21 REGRESSION honest sequential, 7/21 concurrent)** — Golden gate; D117 follow-up; full `## D522` entry at file tail | FIXED 2026-10-05 (recipe-side re-base: per-level windows settled on every level; win gate 21/21 PASS honest sequential; no tol limit raised) |
+| D523 | **The golden recipe does not pin save state: `verify.sh` pins the ini but never touches `data/ge007.eep`, and the goldens were captured with a save present** — Golden gate; D514/D522 follow-up; full `## D523` entry at file tail | SUPERSEDED by D529 (2026-10-05) — the frame depends on the save's *content*, not its presence (the presence claim was only ever measured on Archives); the gate now installs the canonical in-tree save `tools_pc/golden/ge007.eep` |
+| D524 | **The golden tooling was destructive and drift-prone: `verify.sh`'s per-level ini/save pin snapshotted the previous level's game-written file (a sweep overwrites the user's own `data/ge007.ini`), and `capture_p7.sh` hardcoded the pre-D522 windows while deleting the save it captures with** — Golden tooling (U5 review of `tools_pc/**`); D522/D523 follow-up; full `## D524` entry at file tail | FIXED 2026-10-05 (both pins idempotent — first call snapshots the user's files, every level re-pins from that snapshot; `capture_p7.sh` reads the recipe out of `verify.sh` and requires the save present) |
+| D525 | **The whole `<level>/linux/` golden set was stale, not just on the six re-based levels — re-rounding it closes D521's two residual render bands** — Golden gate (P7b, box); D521/D522/D523 follow-up; full `## D525` entry at file tail | FIXED 2026-10-05 (21-level box re-round, 63 frames, save pinned present; structural parity 21/21, Archives/Streets bands attributed to save state, not a renderer) |
+| D526 | **P13 Dam-ending grate / edge-railing transparency is faithful N64 behaviour (port == 1964/GEPD); the per-triangle census probe is retained as a generic draw-state diagnostic** — P13 Dam ending (B1 lead); full `## D526` entry at file tail | CLOSED — faithful, confirmed on 1964/GEPD (2026-10-05): the show-through is in both (port == N64), so no port bug, no fix (D306/D291 class); the per-triangle census probe (GE_D526/GE_D526BOX/GE_D526MAX) is retained as a generic diagnostic |
+| D527 | **`GE_PCDUMP` written `first:last` (a colon where the dash belongs) silently dumps EVERY frame** — harness trap (`port/src/video.c`); full `## D527` entry at file tail | OPEN (harness documentation; a log-or-fail-closed fix is owed in the port layer) |
+| D528 | **`GE_STARTMENU` skips the EEPROM read, so front-end-only sessions never import the emulator save** — harness trap; D514 follow-up; full `## D528` entry at file tail | OPEN (harness documentation; the D514 imported-save test must run from a normal boot; a log-or-import fix is owed in the port layer) |
+| D529 | **The golden gate depends on the save file's CONTENT — the D523 "presence, not which save" claim is refuted; the gate must pin a canonical save** — Golden gate; D523 follow-up (D525/D524); full `## D529` entry at file tail | FIXED 2026-10-05 (canonical save in-tree at `tools_pc/golden/ge007.eep`; `verify.sh` installs it like the ini pin; all 21 win sets re-captured under it — three consecutive clean 21/21 sweeps are the valid green record; the no-arg `verify.sh` path now exits 1; the box linux re-round under it landed as D530) |
+| D530 | **The box (X220) linux golden re-round landed — first cross-machine test of the four D117 flaky levels** — Golden gate (P7, box); D529 never-do 3/6 follow-up; full `## D530` entry at file tail | AMENDED BY D531 (2026-10-05) — the "canonical eep" provenance claim was wrong: the re-round ran under the box-LOCAL save (the `capture_p7.sh` per-level re-pin bug); the D531 re-capture under the true canonical eep supersedes this set |
+| D531 | **`capture_p7.sh`'s D529 adaptation was incomplete — the per-level re-pin restored the local save, so the 2026-10-05 box re-round ran under the box-local save; fixed + re-captured under the canonical eep** — Golden gate (P7, box); D529/D530 follow-up, P12 U5 review finding; full `## D531` entry at file tail | FIXED 2026-10-05 (loop re-pins the canonical save per level + `cd "$ROOT"`; fresh 21/21 box re-capture committed — 47/63 frames differ from the box-local-save set; pixel-gated box verify owed for a window with the box's WSLg GPU display active — today's session is on the software fallback, black read-backs) |
+| D532 | **The three P12 U5 should-fixes applied — the gate's ini pin now fails closed, the seed is hard-pinned (stray `GE_RSEED` warns), and `audiodebug.ps1`'s dead A/B switches are gone** — golden gate + tooling; D531/U5 follow-up; full `## D532` entry at file tail | FIXED 2026-10-05 (tooling-only: `pin_ini_640x480` fails closed like `pin_eep`; `GOLDEN_SEED` literal + warning, capture `eval` unaffected; `-AB`/`-Old`/`-OldMode` removed with a note) |
+| D533 | **The probe-doc drift that would have failed CI, plus three tracked-file accuracy/hygiene fixes (release-sweep spot-check)** — release gate (P12 U2/U6/U7 spot-checks); full `## D533` entry at file tail | FIXED 2026-10-05 (`GE-ENV-PROBES.md` missing the `GE_D526` family → `gen_env_probes.py --check` rc 1 = a CI-failing step; `build-pc.sh` local MSYS2 root in two messages; `docs/fidelity.md` og line; release-notes gate paragraph quoted a pre-D531 spread) |
+| D534 | **Pre-release review of the 2026-10-05 local batch — Ctrl-C in the golden gate could leave the user's save replaced, plus doc accuracy fixes** — release gate; full `## D534` entry at file tail | FIXED 2026-10-05 (`verify.sh`/`capture_p7.sh` INT/TERM trap; release-notes linux-gate wording; dead `security-and-fidelity-status.md` links; future-dated `2026-10-07` labels normalised; D526 probe dangling-else; verify.sh usage range) |
+| D540 | **Fog rework (Deck playtest): ground fog chunked (D503 snap) and cycled light/dark at Bond's feet (behind-camera vertex fog), sky horizon fade squeezed (perspective shade), fog tied to Draw distance** — full `## D540` entry at file tail | FIXED 2026-10-05 (port: exact per-pixel fog, snap off, noperspective shade, new `Video.FogDistance` default 1.0x = N64 (far clip = min(Fog, Draw) x authored), Draw/Fog distance live; maintainer A/B vs 1964 OK; goldens re-based win/linux/deck); Deck re-check owed |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | OPEN (cosmetic, not root-caused past the handoff site). v0.4.0 decision: SkipIntro stays EXPERIMENTAL / not recommended for regular users — F10 row relabelled "Skip intro (EXPERIMENTAL)". |
+| D450 | **Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).** — full `## D450` entry at file tail | FIXED — port-only: the render thread's `gfx_sdl_handle_events` drains the same SDL queue as video.c's host pump but had no case for `SDL_CONTROLLERDEVICEADDED/REMOVED`, so it usually swallowed them and `inputRescanPads` never ran. Both pumps now post a request; the rescan runs at the top of `inputUpdate`, on the thread that reads the pads. |
+| D436 | **Persistent (hipfire) crosshair, opt-in: `Video.CrosshairPersistent` / F10 > Gameplay > HUD > "Crosshair when not aiming" draws the native sight at `crosshair_angle` outside aim mode (2026-09-29).** — full `## D436` entry at file tail | FIXED (shipped 2026-09-29; rule-2 sign-off: user direction; presentation-only masked condition in `gunDrawSight` + `port/src/video.c`). Default off byte-identical; aim mode unchanged; netplay SH identical mixed off/on. |
 
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
@@ -5900,7 +6046,7 @@ probe scripts left.
 prints `ALL CHECKS PASSED`, and `-level_09` / `-level_20` then segfault before
 frame 1 (`EXCEPTION: 0xc0000005`, faulting return address is an ASCII
 model-name string). The pre-migration working sidecar
-(`C:/Users/james/Source/Repos/007/data/pccg-ntsc-final/pccg.bin`, 3604378 B,
+(`<repos>/007/data/pccg-ntsc-final/pccg.bin`, 3604378 B,
 2421-B manifest) drops into this tree and `-level_09` runs crash-free.
 
 **Isolation done (M-38).**
@@ -10478,7 +10624,7 @@ crash class C2 (Facility `-level_34`, Runway `-level_35`): `import_texture_i8` A
 
 **`bg.c` room-geometry ray/hit-test GBI parser port (M-28, WRITTEN / UNVERIFIED / UNCOMMITTED).** `bgTestRayIntersectionInRoom` (`bg.c:3331`, called by `bgTestBulletHitBackground` on every shot that resolves against background geometry) is the D135 sibling flagged since M-23: raw `((u8*)gdl)[k]` / `((u32*)gdl)[i]` byte/word indexing into what is now the 16-byte PC `Gfx` room DL (D85 `bgWidenRoomGdl` + `texLoadFromGdl`) → desync → OOB `vtxbase[idx]` / walk-off AV the first time you shoot a wall or floor. Ported `#ifdef PORT` (N64 verbatim under `#else`): `vtxoff`/`vtxbase`/`op` via the `.dma` view (matches the already-ported `bgBuildRoomVtxBounds`); G_TRI1 indices from `(w1>>16/8/0)&0xff /10`; the 12 G_TRI4 nibble extractions from `(u32)gdl->words.w0/.w1` (each mapped from the N64 byte/halfword layout — table in the code comment, cross-checked twice); both `texturenum` recoveries → `-1` (the KSEG0 `*(u16*)(w1-8)` deref is invalid for the port's converted GDLs, same as D135; texnum only picks the impact decal/sound, parked D77). Builds clean. **Verification blocked** — a no-input `GE_PCDUMP` capture never fires a bullet so it never calls this function; needs a real firefight into a wall on an idle machine (this session's box was thrashed → D153/driver crash on every run).
 
-**Status (from §F table):** **M-30 re-audit + fixes (still playtest-gated for final verify).** Cross-checked the ported G_TRI1 + all 12 G_TRI4 nibble recoveries twice against the N64 `#else` and the raw BE-word bit derivation — **G_TRI1 and G_TRI4 are correct**. **Two bugs fixed:** (1) `vtxoff` — the port read `gdl->dma.par & 0xf`, but the PC `Gdma_le` shim (`port/shim/PR/gbi.h`) maps `.par` to bits 0-23 of word0 (the packed *length*, always 16-aligned) not the N64 byte-1 params field at bits 16-23, so vtxoff was silently forced to 0 (breaks any G_VTX batch with `v0 != 0`, i.e. multi-batch rooms → wrong `vtxbase[idx]` → OOB). Now `((u32)gdl->words.w0 >> 16) & 0xf`. (2) **Sibling ported** — `bgTestBulletHitBackground` tail (`bg.c:~3841`, the post-hit G_SETTILE back-scan for `tileformat`/`tilesize`) was itself an unported raw `((u8*)gdl)[0]`/`[1]` + 64-bit `words.w0 << 11 >> 30` parser over the same widened DL; wrapped `#ifdef PORT` (opcode from bits 24-31, byte1 from bits 16-23, `(u32)`-forced 32-bit width for the tilesize shift). **Diagnostic:** `GE_D154=1` → `osSyncPrintf` of the parsed cmd/vtx-index stream (call header + per-TRI1/TRI4 `idx`) for the first 64 invocations, for the user/integrator to eyeball. Build green (`ntsc-final`, 242/242). Runtime unverifiable in a worktree (no `data/`); still needs a firefight-into-wall on an idle machine + `-level_09` framediff. Confidence: HIGH on the mechanical correctness (bit-for-bit vs N64), MEDIUM that nothing else in the walk still bites. porting-notes.md §B (D135 corollary).
+**Status (2026-09-28 bookkeeping):** **CLOSED** — playtest gate satisfied — full v0.4.0 campaign played with no background-hit/raycast anomalies; ABI re-audited again under D313. Previous: **Status (from §F table):** **M-30 re-audit + fixes (still playtest-gated for final verify).** Cross-checked the ported G_TRI1 + all 12 G_TRI4 nibble recoveries twice against the N64 `#else` and the raw BE-word bit derivation — **G_TRI1 and G_TRI4 are correct**. **Two bugs fixed:** (1) `vtxoff` — the port read `gdl->dma.par & 0xf`, but the PC `Gdma_le` shim (`port/shim/PR/gbi.h`) maps `.par` to bits 0-23 of word0 (the packed *length*, always 16-aligned) not the N64 byte-1 params field at bits 16-23, so vtxoff was silently forced to 0 (breaks any G_VTX batch with `v0 != 0`, i.e. multi-batch rooms → wrong `vtxbase[idx]` → OOB). Now `((u32)gdl->words.w0 >> 16) & 0xf`. (2) **Sibling ported** — `bgTestBulletHitBackground` tail (`bg.c:~3841`, the post-hit G_SETTILE back-scan for `tileformat`/`tilesize`) was itself an unported raw `((u8*)gdl)[0]`/`[1]` + 64-bit `words.w0 << 11 >> 30` parser over the same widened DL; wrapped `#ifdef PORT` (opcode from bits 24-31, byte1 from bits 16-23, `(u32)`-forced 32-bit width for the tilesize shift). **Diagnostic:** `GE_D154=1` → `osSyncPrintf` of the parsed cmd/vtx-index stream (call header + per-TRI1/TRI4 `idx`) for the first 64 invocations, for the user/integrator to eyeball. Build green (`ntsc-final`, 242/242). Runtime unverifiable in a worktree (no `data/`); still needs a firefight-into-wall on an idle machine + `-level_09` framediff. Confidence: HIGH on the mechanical correctness (bit-for-bit vs N64), MEDIUM that nothing else in the walk still bites. porting-notes.md §B (D135 corollary).
 
 ## D156 — Facility outro-cutscene "hang" — the actual fix (M-29, user bug report, 2nd occurrence after D155).
 
@@ -10606,11 +10752,23 @@ This entry is long and multi-pass (M-87 through M-176, spanning several sessions
 
 D243 (cutscene shake/duplication, its own CONSOLIDATED NEXT STEPS block appears earlier in this file) and D292 (death sinking) are cross-referenced as the same general "third-person world model transform" family, though this session's D173 work found its specific root cause (a likely asset-decode issue in one named clip) rather than a shared code-level mechanism — don't assume D243/D292 share this exact cause without separately verifying each.
 
+### D173 residual, 2026-10-02 probe pass (branch fix/fidelity-gaps; temporary `GE_D173P` probe in `chrTick`, removed)
+
+Probe: the intro puppet (`model == g_CurrentPlayer->bodyModel`) logged `prop->pos`, tickamount, `actiontype`, anim index and frame after the position update, every tick, on `-level_33` (Dam) to frame 1000. 16 free-seed boots (8 at `Video.FpsCap` 60 = 1 tick/frame, 8 at 30 = 2 ticks/frame) plus 9 boots with `GE_RSEED` pinned (6 at 60, 3 at 30).
+
+1. **No float, no per-tick drift.** `pos.y` is 2.48-2.59 (grounded) for the whole stand phase, identical across all boots and both tick rates; x/z constant. The D173 bulk (324 units) is gone. The phase 61 (`extending_left_hand`) to 106 transition is deterministic (T=102 at 60 fps, 104 at 30, in puppet ticks).
+2. **The residual is the idle-to-walk transition time.** The 106 (`ACT_STAND`) to 99 (walk) switch lands at T = 364..382 across free-seed boots at both rates. `chrlvTickStand` (`chraction.c` ~5133) draws `sleep = rand%5+14` per run and decrements `wallcount` (initialised `rand%120+180`, `chraction.c:508`) by it, so the transition depends on the PRNG state and on how many stand-ticks ran. With the seed pinned it is no longer random but still tick-structure dependent: 60 fps with no 2-tick frames gives T=374 (3 of 3 boots identical, bit-identical positions); one 2-tick burst gives 370-372; all-2-tick (30 fps) gives 368-370. Bond then walks (about 2 units/tick root motion), so the position at a fixed time differs by up to ~40 units mid-walk (x 20177..20195 at T=400) and converges to within ~4 units by T=460 (x 20158.5-20160.5, z 16905-16909). That matches the size and character of the reported "off by a small amount".
+3. **One deterministic one-frame transient:** the very first puppet tick reports `pos.y = -45.71` (-44.72 at 30 fps) before settling to 2.48 on the next tick, in every boot. Not the user's 1-in-10, and one frame; mechanism not traced (first `chrUpdateAnim` root-motion read at animation frame 95.0 before the first full tick).
+
+Interpretation (bucket): the variance is PRNG- and tick-count-driven AI idle timing, the D13/D329 class (1 tick/frame reaches states the N64's 2-3 ticks/frame did not), and the N64 is equally random from its own seed and frame-time jitter. No port defect, ABI/layout misread or stale-animation attach was found on the intro-puppet path, and nothing here justifies a game-logic change: **no Rule-2 sign-off is requested.** The user's residual may also live elsewhere (a cutscene body model: Cradle/Dam end, Cuba credits), which this intro-only probe cannot reach; the maintainer noting WHERE it appears is the next step.
+
+**Status:** residual not reproduced as a defect on the level-start puppet; explained there as faithful tick/PRNG-dependent idle timing. Confidence: medium that this accounts for "placed slightly differently"; low that it is the user's exact 1-in-10 case. Probe removed; tree clean.
+
 ## D179 — Packaged build crashes after the logos — the D43/D69 model + bg sidecars are ROM-derived and absent from any build that has no ROM (M-34, alpha-release QA).
 
 **Packaged build crashes after the logos — the D43/D69 model + bg sidecars are ROM-derived and absent from any build that has no ROM (M-34, alpha-release QA).** The first `goldeneye-pc-port-*-win64.zip` from CI (bundle-win.sh) shows the Rare/Nintendo logos (compiled-in `assets/rarewarelogo.c`) then AVs at `0x6b157a88`/`0x70157a88` — symbolised: `modelPromoteNodeOffsetsToPointers` (`model.c`) ← `load_object_fill_header` (`objecthandler_2.c`) ← first prop/item model load. Root cause is **not** a code regression: the port loads PC-layout model geometry from `data/pcmodels-<region>/{pcmodels.bin,manifest.csv}` and stage bg/stan from `data/pccg-<region>/{pccg.bin,manifest.csv}`, both produced offline by `tools_pc/d43_emit.py` / `d69_emit.py` from the ROM (see `port/src/pcmodels.c` / `pccg.c`; `pcmodelsReserveSize` logs *"pcmodels.bin not found — model loads will fail"* and returns 0). CI has no ROM so it never runs the emit scripts, and the two `data/` dirs are (correctly) gitignored ROM-derived game data — **cannot be committed or shipped** (converted Nintendo/Rare geometry, DLs, collision, stan nav; = distributing assets). A local build with those dirs present runs clean (verified M-34: 1741 frames, `romdataInit ... mapped at 0x10000000`, `pcmodels: 512 sidecars`, `pccg: 73 sidecars`, no crash — so `0x10000000` is *not* the problem here). The `docs/building.md` sidecar-gen step was also missing entirely. **Fix = release-side, backlogged** (`docs/BACKLOG.md` → "Alpha release"): bundle the emit scripts + their committed inputs as a pure-stdlib-Python asset-prep tool the user runs once against their own ROM (~5 MB output, no MIPS toolchain). Secondary/latent: the fixed-address `VirtualAlloc((LPVOID)0x10000000)` in `romdata.c` has no working fallback (`"using heap copy — direct ROM reads will fail"` then limps into the same crash) — didn't bite M-34 but will on a machine where something occupies `0x10000000`; harden separately (reserve earliest in `main`, or retry low bases and derive all segment math from the base obtained).
 
-**Status (from §F table):** Diagnosed, not fixed — release packaging gap + latent `romdata.c` fallback
+**Status (from §F table):** Diagnosed, not fixed — release packaging gap + latent `romdata.c` fallback. **Fallback tail hardened (2026-09-30, `chore/romdata-valloc`):** on Windows a failed fixed-address `VirtualAlloc` now logs `GetLastError` + a `VirtualQuery` of whatever occupies `0x10000000` and aborts boot cleanly instead of limping into the heap copy and a later AV; success path unchanged; POSIX `mmap` fallback untouched (still degrades)
 
 ## D180 — Native-PC input pass (M-XX QoL run, `qol/native-pc-input-menu`, port-only).
 
@@ -10791,7 +10949,7 @@ silence check owed. See `## D401` (file tail) for the full record.
 
 **QoL gap (M-87, from a PD-PC-port survey): the N64 Rumble Pak is fully dropped instead of modernized.** GE genuinely has a rumble subsystem (`src/motor.c`, `src/joy.c`) but the port's `osMotorInit/Start/Stop` (`port/src/libultra.c:1220-1223`) are all hard stubs — "no accessories on the PC," `osMotorStart`/`osMotorStop` return `-1` unconditionally, `osPfsFindFile`-family returns `PFS_ERR_NOPACK`. So every in-game rumble event (weapon recoil, explosions, etc.) computes and calls into a dead path. **PD's PC port wires the equivalent straight through to real gamepad rumble:** `inputRumbleSupported(idx)` checks `SDL_GameControllerHasRumble`/`SDL_JoystickIsHaptic` (with a Windows fallback: some pads report no haptics but rumble anyway), `inputRumble(idx, strength, time)` calls `SDL_GameControllerRumble()` scaled by a per-pad `RumbleScale` config value (options-menu slider, `Input.PadN.RumbleScale`), and `osPfsFindFile` reports a "Rumble Pak" present exactly when a real pad supports rumble (`libultra.c` — same "pretend the N64 accessory is there" pattern GE's port already uses for `osMemSize`/Expansion Pak, just applied to a real capability instead of faked). Cross-ref `QOL-INVENTORY.md` (folded into the existing "per-pad tuning" row).
 
-**Status (from §F table):** **DEPRIORITIZED (M-87, user call).** Gamepad-only — irrelevant to mouse/keyboard, which is the primary target for this next release; no keyboard/mouse play is affected by NOT doing this. Root cause + fix still valid whenever gamepad support becomes a priority (no `src/` game-logic touch: GE's `motor.c`/`joy.c` call sites already exist and already call the `osMotor*` shims; the fix is entirely in `port/src/libultra.c` + `input.c` — add `inputRumbleSupported`/`inputRumble` per the PD shape, wire `osMotorStart`/`osMotorStop` to them, add `Input.PadN.RumbleScale` config). **M-87 PD-legacy-survey addendum (`docs/dev/notes/PD-LEGACY-SURVEY.md` candidate 1, high confidence) — the D224 fix as originally stated is NOT sufficient by itself.** Two more upstream blockers sit before the stubbed `osMotorInit/Start/Stop` ever gets reached: (1) `port/src/libultra.c:1096-1098` sets `g_contStatus[i].status = 0` for every pad — `CONT_CARD_ON` is never set, and `src/joy.c:184` gates the *entire* rumble-pak init path on that bit, so `joyRumblePakInit()` never even calls `osPfsInit`. (2) `src/joy.c:186-190` only attempts `osMotorInit` if `osPfsInit`'s return is `PFS_ERR_ID_FATAL` or `PFS_ERR_DEVICE` — but the port's stub (`libultra.c:1214`) returns `PFS_ERR_NOPACK`, so motor init is never attempted even once (1) is fixed. PD's exact trick (`libultra.c:213-227,349-351`): set `CONT_CARD_ON` for connected pads, and make `osPfsInitPak()` return `PFS_ERR_DEVICE` specifically when the pad supports rumble. **Whenever D224 gets implemented, both of these must land alongside the `SDL_GameControllerRumble` wiring** or the game's state machine parks at `RUMBLEPAKINITSTATE_NOT_READY` forever and nothing audibly changes despite looking wired up correctly.
+**Status (2026-09-28 bookkeeping):** **CLOSED** — rumble landed via D401 and shipped in v0.4.0. Previous: **Status (from §F table):** **DEPRIORITIZED (M-87, user call).** Gamepad-only — irrelevant to mouse/keyboard, which is the primary target for this next release; no keyboard/mouse play is affected by NOT doing this. Root cause + fix still valid whenever gamepad support becomes a priority (no `src/` game-logic touch: GE's `motor.c`/`joy.c` call sites already exist and already call the `osMotor*` shims; the fix is entirely in `port/src/libultra.c` + `input.c` — add `inputRumbleSupported`/`inputRumble` per the PD shape, wire `osMotorStart`/`osMotorStop` to them, add `Input.PadN.RumbleScale` config). **M-87 PD-legacy-survey addendum (`docs/dev/notes/PD-LEGACY-SURVEY.md` candidate 1, high confidence) — the D224 fix as originally stated is NOT sufficient by itself.** Two more upstream blockers sit before the stubbed `osMotorInit/Start/Stop` ever gets reached: (1) `port/src/libultra.c:1096-1098` sets `g_contStatus[i].status = 0` for every pad — `CONT_CARD_ON` is never set, and `src/joy.c:184` gates the *entire* rumble-pak init path on that bit, so `joyRumblePakInit()` never even calls `osPfsInit`. (2) `src/joy.c:186-190` only attempts `osMotorInit` if `osPfsInit`'s return is `PFS_ERR_ID_FATAL` or `PFS_ERR_DEVICE` — but the port's stub (`libultra.c:1214`) returns `PFS_ERR_NOPACK`, so motor init is never attempted even once (1) is fixed. PD's exact trick (`libultra.c:213-227,349-351`): set `CONT_CARD_ON` for connected pads, and make `osPfsInitPak()` return `PFS_ERR_DEVICE` specifically when the pad supports rumble. **Whenever D224 gets implemented, both of these must land alongside the `SDL_GameControllerRumble` wiring** or the game's state machine parks at `RUMBLEPAKINITSTATE_NOT_READY` forever and nothing audibly changes despite looking wired up correctly.
 
 ## D225 — Dev-tooling QoL (M-87, user ask): a debug-build/env toggle that unlocks all missions + all cheats, for testing.
 
@@ -11121,7 +11279,7 @@ User played live with `GE_D236ORDER=1` set, walked toward Surface1's tree line, 
 4. **The port's `use_alpha` gate ACCEPTS `0x0c184b50` — pass 18's prime suspect is refuted by static decode.** Against this repo's gbi.h blender layout (`include/PR/gbi.h:720-723`: `GBL_c2` puts c2-modifier at bits 16-17, c2-secondary-colour at bits 20-21 of other_mode_l): the gate (`gfx_pc.cpp` ~line 2386) requires bits 16-17 == `G_BL_1MA`(0) and bits 20-21 == `G_BL_CLR_MEM`(1); the word has byte2=`0x18` → bits 16-17=0 ✓, bits 20-21=1 ✓ → `use_alpha=true`. Full decode: ALPHACOMPARE=NONE, no CVG_X_ALPHA/ALPHA_CVG_SEL, FORCE_BL set, c1=(IN, A=0), c2=(IN, A_IN over MEM, 1MA) = standard src-over alpha blend with A from the combiner (`texSelect` mode-4 2-cycle sets `G_CC_TRILERP`/`G_CC_MODULATEIA2` for IA → A = texel.a × shade.a). No port-side opaque-draw gate explains the wall.
 5. **Implication / reframed picture:** with the tree class alpha-blended correctly in the port, the consistent story across D276 (visible weave painted by the `0xc81049d8` room-bg noise class), D280 (tree cards in front yet not visibly winning) and pass 15 (tree-class vertex alpha capped ≤36/255 ≈ 14%, bimodal 25/255) is that the tree cards blend at ~10% opacity over the opaque noise wall — nearly invisible, exactly "the wall shows through". The remaining open questions are (a) whether that low alpha is ROM-faithful (doshadow's `cn[3] = envcolour.a × D_800363F0/255`, `D_800363F0` set per-chr from shade alpha at `chr.c:3319`, init 0x50; dogfnegx uses template `D_800363E0`) or a port-fed wrong input, and (b) whether the discrete billboards (`dogfnegx`) actually instantiate on PC at all — its gate inputs (`renderdata->flags & 2`, `rwdata->Gunfire.visible`) are unverified.
 
-**Next steps (fresh session):** (a) ROM-holding session: run new `tools_pc/scan_op12.py` (added this pass; counts op-12/op-13 nodes per model file, dumps GunfireRecord Offset/Size/Image) to identify which models own Surface 1's tree billboards/shadows and cross-ref against pass 17's D236SH live-record data (32×32 fmt=0 shadow texture); (b) runtime: `GE_D236ALPHA` + `GE_D236RM` on `-level_36`, correlate the tree class's per-vertex alpha with `D_800363F0`/envcolour.a, and compare against N64 reference footage (faint vs solid sprites decides faithful-faint vs port bug); (c) verify `dogfnegx`'s gate inputs on PC (`renderdata->flags & 2`, `rwdata->Gunfire.visible`) — if billboards never fire, the discrete sprites are missing entirely (rule-2 bucket (a)/(b) question); (d) on conclusion remove TEMP probes: `GE_D236RM/ORDER/ALPHA/ZFIX/BT` in `gfx_pc.cpp`, `GE_D236BT` + D236SH dump in `model.c:doshadow`, `port_d236bt_dump()`, `tools_pc/scan_op1{2,3}.py`. Scratch tools: `scratch/d236/{lutdump.c,lutbuild.bat,lutvals.txt,scan_bg_rm.py,rmvals.txt,rmdump.c,rmbuild.bat,rmnames.txt}`.
+**Next steps (fresh session):** (a) ROM-holding session: run new `tools_pc/scan_op12.py` (added this pass; counts op-12/op-13 nodes per model file, dumps GunfireRecord Offset/Size/Image) to identify which models own Surface 1's tree billboards/shadows and cross-ref against pass 17's D236SH live-record data (32×32 fmt=0 shadow texture); (b) runtime: `GE_D236ALPHA` + `GE_D236RM` on `-level_36`, correlate the tree class's per-vertex alpha with `D_800363F0`/envcolour.a, and compare against N64 reference footage (faint vs solid sprites decides faithful-faint vs port bug); (c) verify `dogfnegx`'s gate inputs on PC (`renderdata->flags & 2`, `rwdata->Gunfire.visible`) — if billboards never fire, the discrete sprites are missing entirely (rule-2 bucket (a)/(b) question); (d) on conclusion remove TEMP probes: `GE_D236RM/ORDER/ALPHA/ZFIX/BT` in `gfx_pc.cpp`, `GE_D236BT` + D236SH dump in `model.c:doshadow`, `port_d236bt_dump()`, `tools_pc/scan_op1{2,3}.py`. (Probes stripped `0503d335`; the two scan tools removed 2026-09-30, strip pass.) Scratch tools: `scratch/d236/{lutdump.c,lutbuild.bat,lutvals.txt,scan_bg_rm.py,rmvals.txt,rmdump.c,rmbuild.bat,rmnames.txt}`.
 
 **Pass 20 (2026-09-22, ROM-holding session) — pass-19 step (a) executed: full 512-file `scan_op12.py` run; the `dogfnegx`=trees identification is REFUTED by the asset data.**
 
@@ -11668,9 +11826,11 @@ Archived capture: `ge007_d243_live.log`.
 
 D173 (level-start floating), D292 (death sinking), and the Cradle spin (also under D148) are cross-referenced as the same "third-person world model transform/lifecycle" family (M-145, and the M-160/M-164/M-165 addendum on D173/D292's own entries). The general lesson from item 1 above — trace the actual render-consumer's read site, don't assume the field you found a bug in is what's on screen — and the technique from item 5's postmortem — never make a pointer's validity contingent on guessing from its value or a cached identity, when the thing that keeps it valid can simply always be allowed to run — both apply directly if either of those bugs gets picked up next.
 
-## D244 — Self-hosted CI runner (`corpyvt6agent01`) link failure: `undefined reference to 'objectiveGetStatus_WEAK'` (2026-09-12, first-ever build attempt on the…
+**2026-10-01: diagnostics stripped (ROADMAP §7 scaffolding strip, batch 3, branch `chore/strip-d243-probes`).** D243 is FIXED (M-189/M-190); the investigation scaffolding is removed, behaviour unchanged. Removed: `GE_D243M` and its plumbing (`d243mEnabled`/`d243mProbeActive`/`d243mGetFrameCounter`, `D243M:` CREATE/REMOVE/tick/draw/f488write/firinganim lines in `bondview2.c`; chrdraw census in both `drawjointlist` variants of `objecthandler.c`; animrestart in `chraction.c`; playanim in `chrai.c`; setanim_caller/setanimspeed/setanimplayspeed/tickstart/postadv/biganim and the clamp log lines in `model.c`; prebefore/onscreen in `chr.c`), `GE_D243X2` (prop->pos save/restore) and `GE_D243X4` (render_pos freeze) in `chr.c`, `GE_D243CAM` (3 sites) and `GE_D243SWIRL` in `bondview2.c`, and the `GE_D243` menu-transition trace + `d243MenuName` in `front.c`. (`GE_D243X3` was already gone.) Kept (the shipped fix and its supports): the `sizeof(Model)` buffer-layout fix in `bondview2.c` (M-189); the unconditional `field_488.pos` write + teleport-epoch filter re-seed (M-190: `d243NotifyTeleport`/`d243GetTeleportEpoch`, the call in `chrai.c` `AI_TRYTeleportingChrToPad`); `gameScriptedCameraActive()` and its two users (`model.c` clamps, `port/src/input.c` mouse-look gate); the M-183/M-185 playspeed/endframe clamps in `model.c` (Rule-2 retention sign-off, M-192) minus their log lines. Left alone: `GE_DEBUGMENU` in `src/boss.c` (a debug-menu enabler whose comment cites D243; not a D243 probe).
 
-**Self-hosted CI runner (`corpyvt6agent01`) link failure: `undefined reference to 'objectiveGetStatus_WEAK'` (2026-09-12, first-ever build attempt on the reinstalled box, run `34707798707`).** `src/game/objective_status.c:162` uses `#pragma weak objectiveGetStatus_WEAK = get_status_of_objective` (a decomp ground-truth alias, referenced 2-arg from `chrai.c:2538` — comment calls it "horrible hack to get ai matching"). The box's `g++`/`ld` reported as `x86_64-w64-mingw32/16.1.0`; a minimal local repro of the identical `#pragma weak` cross-TU function alias **links cleanly** on this session's own machine (`mingw-w64-x86_64-gcc 16.2.0-3`, `binutils 2.47-3`). Not a game-logic bug (the alias is unmodified decomp code, ground truth) and not a CMakeLists/link-flag issue (no `--gc-sections`/LTO in play) — the leading, unverified explanation is the self-hosted box's MSYS2 packages predate a PE/COFF weak-external fix or behavior change versus current MSYS2, consistent with rollout step 2's earlier finding that the box's mingw64 package set was stale/incomplete at initial setup.
+## D244 — Self-hosted CI runner link failure: `undefined reference to 'objectiveGetStatus_WEAK'` (2026-09-12, first-ever build attempt on the…
+
+**Self-hosted CI runner link failure: `undefined reference to 'objectiveGetStatus_WEAK'` (2026-09-12, first-ever build attempt on the reinstalled box, run `34707798707`).** `src/game/objective_status.c:162` uses `#pragma weak objectiveGetStatus_WEAK = get_status_of_objective` (a decomp ground-truth alias, referenced 2-arg from `chrai.c:2538` — comment calls it "horrible hack to get ai matching"). The box's `g++`/`ld` reported as `x86_64-w64-mingw32/16.1.0`; a minimal local repro of the identical `#pragma weak` cross-TU function alias **links cleanly** on this session's own machine (`mingw-w64-x86_64-gcc 16.2.0-3`, `binutils 2.47-3`). Not a game-logic bug (the alias is unmodified decomp code, ground truth) and not a CMakeLists/link-flag issue (no `--gc-sections`/LTO in play) — the leading, unverified explanation is the self-hosted box's MSYS2 packages predate a PE/COFF weak-external fix or behavior change versus current MSYS2, consistent with rollout step 2's earlier finding that the box's mingw64 package set was stale/incomplete at initial setup.
 
 **Status (from §F table):** **OPEN, not yet fixed.** Next: on the box, `pacman -Syu` (or at minimum `pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils`) to bring the toolchain current, then re-dispatch `selfhosted.yml`. If updating doesn't clear it, the fallback is a narrow `#ifdef PORT` replacement of the alias with an explicit thin wrapper function in `objective_status.c` (ABI-preserving, no logic change) — but try the toolchain update first since the local repro suggests this is a version/environment gap, not a fundamental PE/COFF limitation.
 
@@ -11697,7 +11857,7 @@ User vs 1964: PC water jittered with player movement, "reset" even standing stil
 1. **Texture geometry (the resets + speed).** The IsWater image is a 32x32 CI8 texture (mask 5 = 32-texel period) loaded with its mip chain (1400 B) and drawn through an RGBA16 tile (the D229 case). fast3d imported it CI8 as **32x43** (mip rows included) while the triangle path normalised UVs with the RGBA16 reading, **width 16** (line bytes / 2) and height 43 (`GE_D229` probe: `texw=16 texh=43`). So S ran at 2x frequency and T repeated every 43 rows, not 32; the port's per-fan S/T fold (multiples of 64 texels) is not a multiple of 43, so every fold step jumped the pattern. Fix (`gfx_pc.cpp`, D229 case only): import only the `line_size * (1<<maskt)` base level, and in the tri path use CI8 geometry (width = line bytes, height = mask period). Headless still-camera A/B (300 frames): old 71 jump spikes, new 0 and a steady per-frame change.
 2. **s16 vertex quantisation (the jitter).** The N64 draws sky/water as CPU-built RDP triangles with 32-bit S/T; the port routed them through `Vtx` (s16 `tc` needing a 2^k shift, k=4 for water = half-texel steps; s16 `ob` scaled by a fan-wide `wScale` ≈ 7, ~8 px position steps near the camera). New port-only `G_FLOATVTX_EXT` (0x47, `port/include/floatvtx.h`, loader `gfx_sp_vertex_float` in `gfx_pc.cpp`) passes clip-space positions and folded S/T as floats; `skyPortRenderPoly` (`sky.c`, `#ifdef PORT`) uses it for every sky/water fan, so no tile shift or wScale.
 
-Ruled out on the way: the animation phases advance by `g_ClockTimer` (rate-independent); `PRIM_LOD_FRAC` and per-tile `uls/ult` offsets are handled by fast3d; `WrapFix` pre-wrap is off by default. A/B switches kept: `GE_D245_OLDVTX=1`, `GE_D245_OLDTEX=1`. Golden gate 3/3; Windows + Linux builds clean.
+Ruled out on the way: the animation phases advance by `g_ClockTimer` (rate-independent); `PRIM_LOD_FRAC` and per-tile `uls/ult` offsets are handled by fast3d; `WrapFix` pre-wrap is off by default. A/B switches kept: `GE_D245_OLDVTX=1`, `GE_D245_OLDTEX=1`. Golden gate 3/3; Windows + Linux builds clean. **2026-09-30: removed** (ROADMAP §7 strip pass, branch `chore/strip-temp-probes`). Both A/B switches and the pre-fix s16 sky vertex path they selected (plus its `GE_D227V` probe) are gone; the float path is unconditional.
 
 **Follow-up (2026-09-27): coloured dashes.** User playtest found rows of yellow/green/magenta dashes on Frigate's water, looking down near the horizon. The base-level crop in fix 1 had never run: its test used `loaded_texture.line_size_bytes`, which for a LoadBlock is the whole 1400-byte block, so the upload stayed 32x43 while the tri path normalised V by 32. The mip-chain rows (32-42) were sampled as garbage texels. Crop test now uses the tile's line size (the importer's row width): the dumped import is a clean 32x32 tile (indices 0-23). User-verified, golden gate 3/3.
 
@@ -11727,7 +11887,7 @@ Superseded history below (the original OPEN investigation, root cause not found 
 
 **LOD/culling breaks down on large open levels (Streets, Egyptian named specifically) at *default* FOV — far-away geometry has visible culling issues (M-119, user QA report).** Distinct from **D222** (which is specifically high `Video.FovScale` breaking *near-screen-edge* culling on NPCs/objects — not implicated here, default FOV) and from **D218** (the fog/far-clip *tint* boundary at wide FOV — also not the same symptom). This report is at the stock FOV, on the game's two biggest/most-open outdoor-scale levels, affecting *far* geometry specifically — points at either (a) a portal/room-visibility BFS cutting off too aggressively at range on large multi-room layouts (same neighbourhood as D233/D234's near-camera portal-cull bugs — worth checking whether D233's `gfx_sp_tri1` w<0 trivial-reject fix, which only guarded *behind-camera* vertices, has a sibling far-plane/depth-range case), or (b) GE's own N64 LOD/detail-swap system (mip-tile / simple-model substitution at distance — see D218's still-open question of "does GE have a separate geometry/object LOD-swap distinct from `Visibility.FarFog`") not being ported faithfully, popping or dropping geometry instead of swapping detail level. **Second, separate ask bundled in the same report:** the user would like LOD **improved** in general (presumably distance-based detail transitions look rougher/more abrupt on PC than remembered) but explicitly wants this **gated behind a toggle** so the original N64-accurate LOD behaviour stays selectable ("in case you want old school graphics") — i.e. this is a QoL feature request layered on top of a correctness bug, not one fix.
 
-**Status (from §F table):** OPEN — static review this session ruled out two of the three suspects; the remaining one needs a live repro, not more code reading. **Level IDs confirmed:** Streets = `-level_29` (not `-level_20` as originally guessed — that number was Egyptian's neighbourhood; Egyptian itself is `-level_32`, `verify.sh`'s alias `egypt`). Attempted a headless `GE_PCDUMP` long-sightline capture (same technique as D245's scripted-turn probe) on both — **abandoned as a bad test**: Streets spawns directly behind a barricade/wall (no open sightline at all from the reachable start), and Statue's (`-level_22`) relevant open vista is well past the spawn point, behind navigation this session has no reliable scripted way to reach (unlike D245's in-place camera turn, walking through a level's actual layout via blind `GE_INPUTSCRIPT` button-mashing risks getting stuck on geometry/AI and wouldn't reliably land at the right spot even if it didn't). **This one genuinely needs a live human capture** (screenshot + exact location) before further diagnosis — logged here rather than burning more session time on scripted navigation guesses.
+**Status (2026-09-28 bookkeeping):** **CLOSED** — the v0.4.0 campaign sign-off already recorded below closed it — no distant-geometry drop-out on Streets/Egyptian over the full campaign; lead status corrected. Previous: **Status (from §F table):** OPEN — static review this session ruled out two of the three suspects; the remaining one needs a live repro, not more code reading. **Level IDs confirmed:** Streets = `-level_29` (not `-level_20` as originally guessed — that number was Egyptian's neighbourhood; Egyptian itself is `-level_32`, `verify.sh`'s alias `egypt`). Attempted a headless `GE_PCDUMP` long-sightline capture (same technique as D245's scripted-turn probe) on both — **abandoned as a bad test**: Streets spawns directly behind a barricade/wall (no open sightline at all from the reachable start), and Statue's (`-level_22`) relevant open vista is well past the spawn point, behind navigation this session has no reliable scripted way to reach (unlike D245's in-place camera turn, walking through a level's actual layout via blind `GE_INPUTSCRIPT` button-mashing risks getting stuck on geometry/AI and wouldn't reliably land at the right spot even if it didn't). **This one genuinely needs a live human capture** (screenshot + exact location) before further diagnosis — logged here rather than burning more session time on scripted navigation guesses.
 
 **Two of the three original suspects ruled out by source review (no live access needed for this part):** (1) **Not an unscaled far-clip plane.** Checked whether `Video.DrawDistance`'s fog-distance scaling (D218) forgot to extend the actual projection matrix's far-clip plane by the same factor, which would hard-cull geometry the fog says should still be visible — it doesn't: `fogLoadCurrentEnvironment` (`bgfog.c:311-345`) computes one `scaledFarFog` value and feeds it to *both* `viSetZRange`'s far argument (which becomes `g_ViBackData->zfar`, the actual `guPerspectiveF` far plane in `fr.c:736`) *and* the fog-blend-distance math (`g_CurFogDetails.scaled_far_fog_dist`) a few lines later — they can't drift apart. (2) **Not the LOD-distance multiplier.** `portLodDistanceMultiplier()` (`port/src/video.c:196`) is a plain `100.0f/pct` scale with `pct` clamped to `[25,400]`, applied to `modelUpdateDistanceRelations`'s per-model LOD-swap distance (`model.c:1962`) — at the port's own default (`cfgLodDistance=150`), this makes `distance` *smaller* (multiplier ≈0.667), which per the function's own documented sense keeps *more* detail visible farther out, not less. Both mechanisms are self-consistent, already more generous than stock N64, and not a plausible source of "geometry drops/pops" at default settings. **Remaining live suspect, unconfirmed:** GE's own screen-space portal/room-visibility BFS (`bgDetermineVisibleRooms`/`bgQueuePortalTraversal`/`bgRectIntersect`, `bg.c`) — a decomp-verbatim system, not distance-based per se but screen-space-rect-based (a portal's *projected* bounding box vs. the parent room's, `bgRectIntersect` at `bg.c:1812`). Its **near-camera** degenerate case (a portal straddling z=0 producing huge/NaN screen coords) was already found and fixed as D106/revised-by-D271 (`bg.c:1724-1751`, `#ifdef PORT` guard) — but there is no equivalent guard, and no evidence of one being needed, for the opposite **far-camera** case: a portal at long range legitimately projects to a small (but numerically fine, non-degenerate) screen rect, and if that rect fails `bgRectIntersect` against the parent/screen box, the room is correctly culled per N64's own algorithm. That could be either (a) a genuine mismatch this port introduces somewhere in the projection chain that N64 didn't have, or (b) N64's own always-present behavior that's simply more visible on PC's sharp, high-res display than it ever was through a blurry N64-era CRT/composite signal — the same "reveal, not regression" pattern several other findings in this project have hit (cf. D227's tc-overflow, invisible until a related fix made textures correct). **Cannot distinguish (a) from (b), or find a concrete bug to fix, without a screenshot + exact in-level location from a live playthrough** — do not touch `bg.c`'s portal BFS without that evidence; it's large, sensitive, decomp-verbatim game logic (AGENTS.md non-negotiable #2), not a narrow ABI-class case like D106/D271's near-plane guard was.
 
@@ -11811,6 +11971,25 @@ Superseded history below (the original OPEN investigation, root cause not found 
 
 **Status (from §F table):** DEFERRED (user call 2026-09-28: v0.4.0 ships NTSC-only, README-disclosed; the verified repair path is post-v0.4 backlog). Superseded: OPEN — repair path verified, not applied (out of v0.2.0 scope).
 
+**2026-10-02: FIXED for both regions, verified against real PAL and JP ROMs** (maintainer-supplied PAL dump `167c3c43...` and the JP dump `2a5dade3...`, both = the decomp's `.sha1`). Every repaired row was byte-compared with the real ROM, not inferred.
+- **JP** (`filelist.j.csv`): the one font row renamed `fontZurichBold` -> `fontBankGothic_fontchartable` (its 8716 bytes at 3044276 equal the US BankGothic chartable).
+- **PAL** (`filelist.e.csv`) had more than the 31 labels found statically: (a) **47** truncated model basenames (`Pbridge_console` x6, `Pchrgrenadelauncher`, ...) renamed to the table symbols, each 47/47 byte-identical to the US file of that name; (b) **96 missing rows** reconstructed: the whole pre-bg block (jfont/efont, animation tables, Globalimagetable, Rareware logo, the usedby7F008DE4 blob, fonts, sfx/instrument banks, music.sbk + all 63 music tracks) located at constant shifts (-77968 / -39872) with byte checks, the region-specific `jfont_chardata` by the gap, and the 14 PAL-specific **ramrom** demos by walking the block with each header's `filesize` field (offset 0x80, padded to 16), which lands exactly on the font block and matches every stage id; (c) the `ob__ob_end.seg` terminator row (16 bytes at 9402416, identical to US); (d) two **swapped label pairs** at shared offsets: `bg_len`/`bg_lip` and `bg_rit`/`bg_oat` (the non-empty file proven by bytes). No N64-build file reads `filelist.e/j.csv` (only `.u`), so these are port-tooling data fixes.
+- The emitters (`d43/d69/d88_emit.py`) always read `filelist.u.csv`: now the region's own list. `port/src/romdata.c` knew only PAL vs "else NTSC": JP now expects country 'J' and `ge007.jpn-final.z64`/`baserom.j.z64`. `gen_romassets.py e|j` -> `port/src/romassets_e.s` (1773 symbols: US's 1685 + the 44 PAL-only `L*P` text banks with end markers) / `romassets_j.s` (1685).
+- PAL also failed to link: port code referenced debug-menu globals that exist only with `LEFTOVERDEBUG` (US/JP, not PAL): the D243 `GE_DEBUGMENU` branch in `src/boss.c` and the `All unlocked` debug-flag seeding in `port/src/main.c`; both now `#if defined(LEFTOVERDEBUG)` (US/JP compile unchanged; D442's query-time hooks cover All unlocked on every region).
+- **Verified (Windows, from the repo root with region-suffixed sidecars):** all six emitter runs "ALL CHECKS PASSED"; `BUILD_DIR=build-jpn ./build-pc.sh jpn-final` and `build-pal ... pal-final` link with 0 errors; both boot through legal / Nintendo / Rareware / gun barrel and play Dam (`-level_33`) with no crash; NTSC-U `verify.sh dam` still PASS.
+- **Open:** PAL ammo counter missing (D487); PAL legal-screen bottom line partly cut (compare with 1964); full-level/menu/audio/save runtime passes for both; packaging (per-region exe names, CI matrix, drop-in converter region gate).
+**Status:** FIXED (asset conversion + build + boot, PAL and JP).
+
+## D487 — PAL: the in-level ammo counter is not drawn (only a small dot where "7 | 93" should be)
+
+Found by the D258 PAL bring-up (2026-10-02): `-level_33` Dam on the PAL build (`build-pal`) shows the gun and gameplay normally, but the HUD ammo counter at bottom right renders as a single small yellow dot; the JP and NTSC-U builds draw "7 | 93" in the same capture. PAL takes EU-only HUD/text paths (`VERSION_EU` / `LANG_EU`) that have never run on PC, so a port-side ABI or font-table issue on an EU-only path was the first suspect.
+**Root cause (2026-10-02, maintainer pointed at TCRF: "the European version renders at 320x269@50Hz with no borders"; the whole PAL bottom was cut, not just the HUD):** `port/src/libultra.c` `osViSetMode` recovers the CFB height from `yScale` assuming the NTSC encoding `bufy * 0x800 / 480` (`src/fr.c` non-EU `video_related_8`). The EU build compiles a different `video_related_8` (`fr.c` ~478, `#ifdef VERSION_EU`) that encodes `bufy * 0x800 / (0x220 + (bufy == 330 ? 28 : 0))`, i.e. against 544 (572) lines. A temp log showed the PAL mode arriving with `yScale 0x400` (= 272 lines in the EU encoding) decoded as 240, so fast3d's native viewport was 32 lines short and the bottom ~12% of every PAL frame (HUD ammo counter, legal-screen last line) fell off. The `OS_VI_BIT_PAL` test in `osViSetMode` never fired: the EU game runs with `osTvType = MPAL` (see below) and its modes don't carry that bit.
+**Fix (port-only, `#ifdef VERSION_EU`):** decode with the EU rule (smallest height whose EU encoding reproduces `yScale`; fallback 272 = `fr.h` `SCREEN_HEIGHT_272`), keyed on the build. `video.c` `GE_NATIVE_H` for PAL (pre-VI seed only) corrected 400 -> 538 with the TCRF facts. NTSC-U/JP code unchanged.
+**Verified:** PAL Dam frame 1500 shows the full "7 | 93" ammo counter; the PAL legal screen shows its last line ("Used by permission of EMI Unart Catalog Inc."); NTSC-U `verify.sh dam` PASS; JP build/run unchanged.
+**Open question (resolved by D488, 2026-10-02):** the port set `osTvType = OS_TV_MPAL` for EU (libultra.c, comment says "PAL consoles report MPAL"). A real PAL N64 reports `OS_TV_PAL` (0). GE's `sched.c:287` and `init.c:237` test only for MPAL (else NTSC LAN1), so on real PAL hardware those take the NTSC branch while the port takes MPAL; the EU `video_related_8` then installs its own PAL-table modes (`osViModeTable[16]/[20]`), so the visible effect may be nil. Needs a 1964 PAL comparison before changing (it would also move the port's 50 Hz tick selection, which keys on MPAL||PAL).
+**Status:** FIXED; maintainer PAL play check 2026-10-02: "PAL seems fine".
+
+
 ## D279 — Backfilled — this label was consumed by an undocumented partial session (2026-09-14 ~23:00) that left artifacts in `scratch/` (`d279_run.log`…
 
 **Backfilled — this label was consumed by an undocumented partial session (2026-09-14 ~23:00) that left artifacts in `scratch/` (`d279_run.log`, `d279_imgmap_run.log`, `d279_g110.png`, `d279_g220*.png`, `d279_gray_1500.png`) but no written conclusion; the logs carry no D279-tagged lines, so its exact probe/finding cannot be reconstructed from the tree.** Next available label after it: D280.
@@ -11835,7 +12014,18 @@ Superseded history below (the original OPEN investigation, root cause not found 
 
 **Steam Deck first-run preset (D-unnumbered in `port/src/video.c`/`main.c`, `videoApplySteamOSDefaults()`) did not apply for a user who added the game via Steam in Desktop Mode and switched to Game Mode afterward — resolution stayed at some non-native value instead of the Deck's native 1280×800 (v0.2.1 user testing, 2026-09-15).** Root mechanism, confirmed by code inspection: the preset only applies when `getenv("STEAMOS")` is truthy AND no `ge007.ini` exists yet (`main.c:126-129`, before `configLoad()`); once any ini exists, it always wins over the preset on every future launch (by design, so user F10 changes persist). **Leading hypothesis (not verified on real hardware in this environment):** SteamOS's Desktop Mode (a normal Plasma/X11 session) likely does not export the same `STEAMOS` env var that the Game Mode/gamescope session does, so a Desktop Mode test-launch (a natural step when adding a non-Steam game via its file browser) creates `ge007.ini` with ordinary Linux defaults *before* the user ever reaches Game Mode — permanently skipping the preset for that install, since the ini already exists on the first real Game Mode launch. This exact caveat was already known internally (`docs/HANDOFF.md`: "a Deck that already has an ini needs `-fresh` or F10 to pick the preset up") but was never surfaced in user-facing docs (README/release notes) — same class of gap as the stale D230 release-notes reference. **Workaround (lighter than `-fresh`, which also wipes the save):** F10 → Resolution → 1280×800 manually; takes seconds, no data lost.
 
-**Status (from §F table):** OPEN — mechanism understood, root cause (Desktop-vs-Game-Mode `STEAMOS` env var difference) unverified on real hardware; user-facing workaround documented in README/release notes.
+**Status (from §F table, before the fix):** OPEN — mechanism understood, root cause (Desktop-vs-Game-Mode `STEAMOS` env var difference) unverified on real hardware; user-facing workaround documented in README/release notes.
+
+**2026-09-30 fix (port-only; `port/src/video.c`, `port/src/main.c`, `port/include/video.h`):** the preset no longer depends on `STEAMOS` or on the ini being absent.
+- **Detection by hardware:** `videoDetectSteamDeck()` reads `/sys/class/dmi/id/{board_vendor,sys_vendor,product_name}` (`#if defined(__linux__)`): vendor `Valve` + product `Jupiter` (LCD) or `Galileo` (OLED). `STEAMOS` stays as an extra signal. `GE_FAKE_DECK=1` forces the Deck path on any host, `=0` forces it off (docs/dev/GE-ENV-PROBES.md).
+- **Runs after `configLoad()`** (`videoApplySteamDeckPreset()`, replacing the pre-load `videoApplySteamOSDefaults()`), so an ini created by an earlier Desktop Mode launch is seen and handled.
+- **Once per ini, without clobbering choices:** new key `Video.DeckPresetApplied` (0/1, default 0). On a detected Deck with the flag 0: if `Video.Fullscreen=0` and `Window.Maximized=0` (the generic windowed state — `Window.Width/Height` can't be used as an "untouched" test, `videoSaveWindowState` rewrites them from the live window on every clean exit) it sets fullscreen + 1280x800; otherwise it leaves the display alone. Either way the flag becomes 1 and the ini is saved, so later F10 choices always win. A Desktop Mode user who deliberately ran windowed gets fullscreen once and can switch back in F10 (it then sticks).
+- **Preset narrowed to display keys.** The old preset also wrote VSync 1 / MSAA 2 / draw+LOD 250; those are the generic defaults now, so writing them again on an existing ini could only clobber a user's choice. Dropped.
+- Non-Deck hosts: behaviour unchanged except the new key is added to the ini once (the normal "newly-registered keys" rewrite).
+
+**Verified (Windows, `GE_FAKE_DECK`, throwaway data dir, `GE_QUITFRAME=60`):** (1) windowed 960x540 ini, no env → no Deck log, `DeckPresetApplied = 0`; (2) same ini + `GE_FAKE_DECK=1` → `applying Deck preset (fullscreen, 1280x800)`, ini `Fullscreen = 1`, `Width = 1280`, `Height = 800`, `DeckPresetApplied = 1`; (3) then `Fullscreen = 0` hand-set + `GE_FAKE_DECK=1` → `preset already considered`, stays windowed; (4) ini with `Fullscreen = 1`, 960x540, no flag + `GE_FAKE_DECK=1` → `display already user-set ... preset skipped`, size kept, flag set. Windows build clean; the `__linux__` DMI path syntax-checked with WSL Ubuntu-24.04 gcc (`-fsyntax-only`, `video.c` + `main.c`, no new warnings). **Not verified:** a real Linux build/run and real Deck hardware (DMI strings, Desktop→Game Mode flow). Human check on a Deck: delete `Video.DeckPresetApplied` from an existing windowed ini (or start from a Desktop-Mode-created one), launch in Game Mode, expect fullscreen and the `video: Steam Deck (DMI Valve Jupiter/Galileo)` log line. README "Steam Deck" section still describes the old first-run-only behaviour (lead to update).
+
+**Status:** FIXED (port-only; `GE_FAKE_DECK`-verified on Windows; real-Deck check owed).
 
 ## D287 — User-confirmed real, non-self-recovering freeze on Windows (M-141, 2026-09-15/16) after ~15-20 minutes with no input, triggered by clicking back into the…
 
@@ -11874,7 +12064,7 @@ Superseded history below (the original OPEN investigation, root cause not found 
 
 **Status (from §F table):** OPEN — visually confirmed and precisely bounded (frames ~562-741 of a bare `-level_20` boot); M-152 narrowed to two live candidates (fast3d backface-cull NaN leak, or the D106/D271 portal-BFS family) via static review; two M-155 probe runs (ungated, then frame-gated) were both inconclusive — the `any_behind_camera=1` case's bbox math is a false lead, and the `any_behind_camera=0` subset found no match for the target color. Root cause still not identified; a live human repro is now the more promising next step over further headless probing. Promoted from the long-parked `GRAPHICS-BACKLOG.md` D171 entry with real evidence.
 
-**v0.4.0 re-check (2026-09-23, native Windows, current `release/v0.4.0` build): does NOT reproduce.** Bare `-level_20` at 640x480 with a defaults ini, `GE_PCDUMP` 400–1200 every 25 frames, then 500–950 every 5 (91 frames covering the whole rocket pan and the cut to first person). A pixel scan for the reported flat `RGB(83,62,44)` ±6 finds only frames 825–840, and those are Bond's own head fading out as the camera pushes into first person (normal GE behaviour, eyeballed). No stray triangle anywhere in the window. **D271 A/B:** temporarily restoring the pre-D271 portal-bounds limit (1e5 instead of 1e38, `bg.c`) gives the identical result, so the D271 portal-culling fix is not what removed it. The M-155 probe runs (2026-09-16) had already missed the colour, so it has not reproduced headlessly since it was written up. Either it was fixed incidentally before 09-16 (not identified), or it is intermittent, which fits the user's "randomly". **Next:** the playtest brief item (play Silo normally, F12 if seen). If it isn't seen, close as not reproducible.
+**v0.4.0 re-check (2026-09-23, native Windows, current `release/v0.4.0` build): does NOT reproduce.** Bare `-level_20` at 640x480 with a defaults ini, `GE_PCDUMP` 400–1200 every 25 frames, then 500–950 every 5 (91 frames covering the whole rocket pan and the cut to first person). A pixel scan for the reported flat `RGB(83,62,44)` ±6 finds only frames 825–840, and those are Bond's own head fading out as the camera pushes into first person (normal GE behaviour, eyeballed). No stray triangle anywhere in the window. **D271 A/B:** temporarily restoring the pre-D271 portal-bounds limit (1e5 instead of 1e38, `bg.c`) gives the identical result, so the D271 portal-culling fix is not what removed it. The M-155 probe runs (2026-09-16) had already missed the colour, so it has not reproduced headlessly since it was written up. Either it was fixed incidentally before 09-16 (not identified), or it is intermittent, which fits the user's "randomly". **Next:** the playtest brief item (play Silo normally, F12 if seen). If it isn't seen, close as not reproducible. The `GE_D288` probe was**removed 2026-09-30** (ROADMAP §7 strip pass, branch `chore/strip-temp-probes`).
 
 **2026-09-25 playtest (user, Windows, one ~46-min session Silo → Caverns, `GE_D322=1 GE_D204=1`, build `7baf4900`):** user reports the Silo intro clean. Closed; the specific fixing commit was never isolated.
 
@@ -11905,6 +12095,8 @@ Superseded history below (the original OPEN investigation, root cause not found 
 **2026-09-25 (M-200 session): headless walk attempted, truck not reached; AI mapped.** The truck is the Dam `Vehicle` record (setup index 321, `UsetupdamZ.c:1152`). Its AI list id `0x040a` = `ai_9` (`:2028`, debug-logs "brrm brrm"): `vehicle_start_path(0x07)` + `vehicle_speed(0x0002, 0x7800)`, then sleeps. So it drives patrol path 7 as soon as its AI ticks, and nothing else gates it in script. The "set off by walking" behaviour from the 2026-09-23 note is therefore prop activation (its room coming into play), not an AI trigger. Headless: `GE_INPUTSCRIPT` stick-up is *look* in the default control style; forward is `CUP` pulses (6 polls each, max 64 entries ⇒ ~6 s of walking). A straight walk from spawn drifts onto the ramp by the wall and draws guard fire (`GE_D320R="850:cheat=inv"` keeps Bond alive); no truck in view by frame 3300. Reaching it headless needs a steered route (turn + walk) or a teleport action in the harness; not worth it before a user sighting says which surface glitches. The intro wheel depth-fight (D306/D308, real per `GE_ZF`) remains the only captured truck-area rendering defect. D291 may be that same effect seen in motion.
 
 **Status:** OPEN; still needs the playtest item (Dam: watch the truck pass, F12 screenshot if glitched, note whether it's the wheels, i.e. D306).
+
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — CLOSED — duplicate of D306, faithful (M-201, 2026-09-26: user-captured, Dam intro camera 5 only). Earlier: OPEN — observed, not investigated. Needs a live repro with the truck's exact position/timing and, ideally, a screenshot.
 
 
 **2026-09-26 (M-201): merged into D306.** Captured by the user: intro-only (Dam level intro/attract, truck over the walkway camera), wheels drawing through the body; reproduces at FovScale 100. Tracked under D306 from here.
@@ -11946,6 +12138,12 @@ Superseded history below (the original OPEN investigation, root cause not found 
 **Status:** **FIXED (main symptom, user-confirmed); residual corner flicker OPEN** (2026-09-22). The 2× build is the shipped state. To close the residual: capture-bat run at max FOV with fast movement → if `FAIL alloc` recurs, the fix must cover whole-level residency (487 KB) **without** the 3× regression — options: scale only when the level's room-set total is known to exceed pool (bg data has per-room sizes at load), or a smaller targeted bump (e.g. 2.5×); any change needs BOTH a direct-boot AND a menu-driven verification.
 
 **2026-09-25 playtest (user, Windows, one ~46-min session Silo → Caverns, `GE_D322=1 GE_D204=1`, build `7baf4900`):** walking past the CCCP monument did not reproduce the black ground. Confirmed fixed.
+
+**2026-09-30 (fix/d294-room-pool-cap): cap raised 2.0 -> 2.5, residual corner flicker fix landed (port-only, awaiting by-eye check).** The 3x 'regression' above was D336 (uninitialised head-anim placeholder fields), not pool size, so the cap is revisitable. `portRoomPoolScale()` (`port/src/video.c`): final cap 2.0 -> 2.5 (and the `GE_ROOMPOOL` clamp 2.0 -> 2.5); DD/Lod terms changed from `sqrtf` to `powf(x,0.66)` (4^0.66 = 2.497) because with sqrt the max-DD term is exactly 2.0 and a raised cap alone changes nothing; result is rounded UP to a quarter step because `boss.c` truncates `(s64)(scale*4)` (raw 2.497 truncated to 2.25 -> ma=506880, only 4% over Statue's 487 KB set). Statue at FovScale 150 / DD 400 now gets `ma` = 2.5 x 225280 = 563200 (was 450560), i.e. 1.16x the full 27-room set (measured sum of `D104 LOAD used` over 27 rooms = 498752). Worst case `-ma350` row = 875 KB, well inside the STAGE bank (~3.8 MB free per D336; `boss.c` still clamps to bank-left minus 128 KB). Identity at N64-faithful settings unchanged. Headless check (max FOV, DD 400, scripted walk, `GE_D294`/`GE_D104`): no `FAIL alloc` before or after -- the scripted walk cannot reproduce the fast-strafe churn, so the exhaustion counter is NOT falsified either way; maintainer to check Statue corners at max FOV by eye. No `src/game` change.
+
+**Maintainer check 2026-10-02:** max FOV + max draw distance, fast strafe past the Statue plaza/park corners: no flicker. VERIFIED, closed.
+
+**Spawn check 2026-10-03 (headless, `GE_D104=1`, 900 frames, 640x480):** Statue (22), Streets (29), Jungle (23), each at default and at max (`FovScale 150`, `DrawDistance 400`, `LodDistance 400`): 0 `D104 SKIP`, 0 `D104 LOAD ... FAIL`; at max, Statue's spawn draws 8 rooms (3 at default), all loaded. So the 2.5x pool has headroom at spawn; the by-eye monument check (walk to the CCCP monument at max FOV) is still the maintainer's.
 
 ## D211 — PC FOV slider — `Video.FovScale` (M-83 QoL wave, port-only, `WIDESCREEN-FOV-PLAN.md` Phase 4).
 
@@ -12064,7 +12262,7 @@ This is a **perfect, smooth white-hot → yellow → orange → deep-red → fad
 - **Fix:** learn which compiled `G_SETTIMG` slots are IMAGESEG references on the first sync (marker still present), store them in `s_imgslot[][]`, and re-copy those slots on every call. Semantics now match N64 (fresh pointers per stage). Port-only; no game code touched.
 - **Verified:** user playtest, boot → title → Facility → past the lockers, grenades/mines/tanks all correct ("yeah that fixed it"). `D252SYNC` (TEMP, `GE_D252POOL`) logged `32 texture slots re-synced, 32 changed` at the Facility load, i.e. all 32 were stale before the fix. Golden gate 3/3.
 - **Scope:** covers every D252-family report that goes through these 17 global DLs (explosion parts, smoke, debris; `globalDL_0x000` too). The M-124/M-157 bullet-impact spark sightings are likely the same stale-pointer effect but were not separately re-tested.
-- **TEMP probes to remove when the release settles:** `GE_D252POOL` (`image.c`, `initmttex.c`, `D252SYNC` in `gimgfixup.c`); `GE_D157` F12 burst (`gfx_pc.cpp`, `video.c`); `GE_D320R explode=/cheat=`.
+- **TEMP probes to remove when the release settles:** `GE_D252POOL` (`image.c`, `initmttex.c`, `D252SYNC` in `gimgfixup.c`); `GE_D157` F12 burst (`gfx_pc.cpp`, `video.c`); `GE_D320R explode=/cheat=`. **2026-09-30: removed** (ROADMAP §7 strip pass, branch `chore/strip-temp-probes`). All three, incl. the whole D157/D157T/D157I/D157TB family.
 
 **Status: FIXED (M-201, user-verified 2026-09-26).**
 
@@ -12160,6 +12358,8 @@ This is a **perfect, smooth white-hot → yellow → orange → deep-red → fad
 
 **Status:** OPEN — single live report, un-triaged, un-reproduced outside the debug harness. **Do not start perf-tracing `port/fast3d/` or AI code over this until step (a)/(b) above rule out harness overhead** — that's the cheap, disqualifying check and it hasn't been run yet.
 
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — CLOSED (2026-09-26, user-approved: stutter seen only under gdb (debug.ps1); D302, fixed two days later, removed a per-triangle uncached getenv costing ~15 fps; reopen if seen on a normal build). Earlier: OPEN — single live report, un-triaged; observed only und…
+
 ## D297 - v0.3.0 silently wipes ALL pre-fix player saves on first launch (D284 side effect; release-blocker, found during D295/M-148).
 
 **What:** every save written by a v0.2.x build fails `fileValidateSaves` CRC on any post-D284 build and is reset to factory (`BAD -> RESET (progress wiped)`, confirmed live via `GE_SAVELOG=1` on the user's #87 artifact — all five slots). Players upgrading to v0.3.0 lose their entire campaign with no warning.
@@ -12189,6 +12389,8 @@ This is a **perfect, smooth white-hot → yellow → orange → deep-red → fad
 **Next (only if it reproduces in a release-targeted build):** first re-check the launch path (debug vs release config, `data/ge007.ini` state, any env vars left set — e.g. a stray debug render flag), then ask for the last build where the HUD was confirmed working → `git bisect` with a 30-second in-level check; static-trace the HUD draw conditions (crosshair show/hide flag at `bondview.h:558` is the cheapest single suspect).
 
 **Status:** **OPEN — parked per user instruction: suspected debug-launch artifact; do not raise until seen in a regular release-targeted build. Not yet investigated.**
+
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — CLOSED (2026-09-26, user: HUD is fine now). Earlier: s — regression reported 2026-09-16 during v0.3.0 work (build ce8427cf); user says "don't fix, just for context"; not yet investigated — full `## D298` entry at file tail
 
 ## D299 — Game.SkipIntro crashed selecting any save slot except one (found + fixed this session, 2026-09-17)
 
@@ -12344,6 +12546,8 @@ Adversarial pre-ship review of the whole v0.3.0 window (147 commits since v0.2.2
 
 **Status:** OPEN — investigated (pipeline + data ruled out), GE_D303 capture probe in-tree, blocked on a live firing repro.
 
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — FIXED (M-201, 2026-09-26): d43_emit sized op-22 star-flash vertex arrays as count, not count*4 arms; regenerated sidecars render a clean star. Earlier: OPEN — CONFIRMED PORT BUG (2026-09-26, user vs 1964: M16/AR33 muzzle flash shoots up and draws much higher o…
+
 **M-191 (2026-09-18, user QA on the v0.3.0 pre-release build): REOPENING the "main fireball" thread — the fresh report matches exactly the condition M-188 said to watch for.** User describes smoke/explosion effects as now looking correct overall, EXCEPT a "weird rainbow confetti looking sprite" that still draws overlaid on top of otherwise-correct smoke/explosion particles, sometimes. M-188 explicitly closed only the "lingering particle residue" manifestation (which turned out to be `s_bullet_spark`/D219, unrelated code) and left this exact scenario — a rainbow artifact riding on the actual explosion/smoke effect itself — open, with the instruction "re-open only if a fireball (not residue/embers) rainbow report comes in again." This report fits that description, not the residue/embers one. **Not yet investigated further this session** — the last concrete lead (before M-188's tangent into D219) was: trace forward from `import_texture_rgba16`'s `upload_texture()` call (`gfx_pc.cpp:718`) through the GL texture object and the `G_CC_INTERFERENCE` (TEXEL0=smoke IA × TEXEL1=fire RGBA16) combiner, since the source ROM data itself was already proven correct by hand-decoding all 14 fire-stage textures (M-156, see above) — the bug is downstream of decode, in upload/cache/combiner. A live `GE_PCDUMP` + `GE_D252=1` capture during an actual reproduction (shoot something that smokes/explodes) is still the next concrete step, unchanged from M-156's own "next, concrete" recommendation.
 
 **Status: REOPENED (was incorrectly treated as fully covered by the D219 closure) — OPEN, root cause still unconfirmed for this specific manifestation.**
@@ -12406,7 +12610,7 @@ Adversarial pre-ship review of the whole v0.3.0 window (147 commits since v0.2.2
 
 **User report (2026-09-18):** crash on Cavern, early in the level, on the local v0.3.0 pre-release build this session deployed to the Deck (`~/Downloads/goldeneye-pc-port-0.3.0-deck-playtest/`). User's own hypothesis: likely related to `Game.AllUnlocked` (the F10 "unlock everything" toggle, D257), which had been previously enabled on that session/save.
 
-**Fetched `ge007.crash.log` via SSH from the Deck (192.168.69.18) and symbolized it against the exact deployed binary** (confirmed identical build via matching ELF BuildID `d6ec0681d2e82a656c7a099f66264d6bfa4480b7` between the Deck's copy and this session's local `build-linux/ge007.x86_64` — the SHA256 differs only because `bundle`-style `patchelf --set-rpath` modifies the file after linking, not because the code differs):
+**Fetched `ge007.crash.log` via SSH from the Deck and symbolized it against the exact deployed binary** (confirmed identical build via matching ELF BuildID `d6ec0681d2e82a656c7a099f66264d6bfa4480b7` between the Deck's copy and this session's local `build-linux/ge007.x86_64` — the SHA256 differs only because `bundle`-style `patchelf --set-rpath` modifies the file after linking, not because the code differs):
 
 ```
 SIGNAL: 11  FAULT ADDR: 0x62
@@ -12449,6 +12653,8 @@ do {
 
 **Status:** PARTIAL — real fix landed and confirmed (Windows), residual known and deferred past v0.3.0 by explicit user decision, not by default/oversight.
 
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — FIXED (defensive guard) — `sndHandleEvent`'s preempt-scan (`src/snd.c`) dereferenced its list-walk pointer before ever checking it for NULL (a do-while always runs its body once); D285's `osSetIntMask` lock only prevents another thread from emptying the list m…
+
 **Correction, same day: the residual is NOT Deck/Linux-specific — it's intermittent on Windows too.** User follow-up testing: "The rainbow explosion particles is still intermittent on PC sometimes, I can reproduce on Jungle for example but it does not always occur." Repro method: `Game.AllUnlocked` + cheats to get the grenade launcher immediately, rather than earning it through normal play. **Also reports the same repro method does NOT reproduce the bug on every level** — i.e. it's both run-to-run intermittent on a single level AND level-dependent, not just platform-dependent as the previous paragraph assumed. This walks back the "Windows-fixed/Deck-residual" framing from the paragraph above — the correct framing is: **the `explosionRenderPart` 4-vs-5-vertex fix is real and eliminated one genuine, deterministic contributing bug, but the rainbow symptom itself was never fully platform-isolated to begin with, and a second, still-unidentified mechanism can fire intermittently on any platform.** The user notes `Game.AllUnlocked`+cheat-immediate-grenade-launcher as the repro method used, flagged as a possible (not confirmed) contributing factor — matches this session's own prior TMEM-slot-reuse lead's inherent timing-dependence (a scene reached quickly via cheats, before the game's own normal object/texture allocation order would occur, could plausibly produce a different TMEM allocation pattern than reaching the same scene through normal play). Not confirmed causal; logged as a correlation worth checking in a future live-capture session, same as the AllUnlocked/D305 correlation was.
 
 **Status, corrected:** PARTIAL — `explosionRenderPart` fix is real, verified, and stays in. The rainbow symptom is intermittent and not cleanly platform-isolated (seen on both Windows and Steam Deck); the secondary mechanism remains unidentified. Public docs (release notes, README) should describe this as "still occasionally intermittent, on any platform," not "fixed on Windows, only recurs on Deck."
@@ -12460,6 +12666,8 @@ do {
 **Investigation (2026-07-19, with D308):** see §D308's investigation block — the two were worked together. The `GE_ZF` flicker probe confirms **real, persistent depth-fighting in the Dam intro's lower-left screen region** (the truck area) — cells there accrue oscillation counts to ~1000 over a 40 s unattended run, i.e. near-equal depths genuinely alternating frame-to-frame, not tessellation noise. The "transparent-looking areas" are consistent with the wheel geometry losing the depth test against coincident surfaces in alternating frames.
 
 **Status:** OPEN — confirmed as real z-fighting by probe; port-vs-faithful question open (see D308).
+
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — CLOSED — faithful, confirmed on 1964 (M-201): all PC-specific leads refuted (FOV, depth precision, depth state, near plane, wheel transforms); it is the authored truck geometry seen from intro camera 5 under the truck. Absorbs D291. Earlier GE_ZF "real fightin…
 
 **2026-09-26 (v0.4.0, M-201): D291 is this same bug; FOV ruled out.** User captured the D291 "Dam truck" glitch with F12: it happens only on the Dam level intro (also the attract demo), in the shot where the truck drives over the low walkway camera (~frames 280–440 from `-level_33` boot). Wheels and tyre treads draw through the mudguards/body. It reproduces at **FovScale 100** (user re-test, `scratch/d291_shots/fov100_full.png`) as well as at 150 + native widescreen (`shot_000..003.png`), so the port's wider cutscene FOV is not what exposes it. Headless A/B at default vs user settings: `scratch/d291_AB.png` (runs not frame-locked; `GE_ZF` hit its 600-line cap in both). Occlusion-state path checked in passing: fast3d honours `G_ZBUFFER`/`G_ZS_PRIM`/`Z_CMP`/`Z_UPD` per triangle (`gfx_pc.cpp` depth_mode), so no obvious state gap. **Still gated on an N64/emulator reference of this exact shot** (porting-notes D12): if the N64 shows clean wheels there, the fight is PC-specific and the next suspect is the vehicle model's per-part transforms at extreme close range; if it shows the same, close as faithful.
 
@@ -12492,6 +12700,8 @@ do {
 
 **Status:** OPEN (investigated — no port-side bug found; awaiting repro detail).
 
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — FIXED (M-201, 2026-09-26, user-verified): renamed duplicate member `CCTVRecord.pad`→`lookpad` made setupCctv read the MOUNT pad as the look-at pad; prop.c reads lookpad on PC. Earlier: OPEN — CONFIRMED PORT BUG (2026-09-26, user vs 1964: ALL Bunker 1 security…
+
 **M-201 (2026-09-26, v0.4.0): ROOT CAUSE FOUND + FIXED — a renamed duplicate struct member re-pointed `setupCctv`'s look-at pad to the mount pad. User-verified.**
 
 - **Confirmed port bug first:** user side-by-side with 1964: every Bunker 1 camera faces backwards on PC, correct on N64.
@@ -12518,6 +12728,8 @@ do {
 - **Fix posture if confirmed PC-only:** no game-code lever exists (depth values are the game's); a port-side mitigation would be a precision change (e.g. 32-bit float depth) which would *reduce* fighting but diverge from N64 behavior — needs a rule-2-style decision, not a silent fix.
 
 **Status:** OPEN — real z-fighting confirmed by probe; port-vs-faithful blocked on an N64 reference of the same spot.
+
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — CLOSED — faithful (2026-09-26, user: Statue ground z-fighting reproduces on 1964 GEPD bundle). Earlier: OPEN (user, 2026-09-26: possibly faithful; validate Statue ground z-fighting on 1964 vs port). Earlier: OPEN — investigated: PC depth precision == N64 (24-b…
 
 ## D309 — Complete non-self-recovering freeze (Windows) returning from Caverns to the intro screen — boss thread spins forever in `ai()` on `m_RunToBondPersistent` via a phantom `GotoNext(lblZero)` (user report + live GDB diagnosis, 2026-09-18).
 
@@ -12566,7 +12778,7 @@ This confirms the M-160/M-164/M-165 hypothesis (`## D173`'s own consolidated-nex
 1. *Change:* `src/game/chrai.c`, `chraiitemsize()`, `case AI_PRINT:` — replace the NUL-scan with `return 1;` (the record's true on-disk size), under `#ifdef PORT`; the `#else` arm is byte-identical to the original decomp.
 2. *Proof of divergence:* mechanism verified live (gdb symbol + per-tick probe lines above, exact offsets/sizes/landing bytes). Intended-behavior references: (a) the list source itself — PRINT sits between two real commands and is a no-op by construction; (b) user's direct N64 experience — guards do not stand frozen in Caverns on real hardware (same standard as M-144's user comparison that settled D243). Honest caveat recorded at request time: the ROM *code* would mis-skip on N64 too if reached — this is a latent original defect, and the fix restores the list author's intent rather than provable N64 behavior.
 3. *Why not `port/`:* no N64 hardware dependency to shim — the sizer function's own logic operating on game data is the defect; nothing upstream (ABI/layout §A1 suspects, port-layer) is involved. *Why not the ABI exception:* nothing pointer-width-driven; the 32-bit original has identical code and data.
-4. *Same-engine precedent:* Perfect Dark removed `PRINT` from the AI language entirely and **reassigned slot 0xAD** to a real command (`aiChrCopyProperties`, `pd_port/src/game/chraicommands.c:8159`) — Rare themselves retired this broken record class in the next title on the same engine.
+4. *Same-engine precedent (CORRECTED 2026-10-05, 3g review):* the original text here claimed Perfect Dark removed `PRINT` and reassigned slot 0xAD to `aiChrCopyProperties`; that was wrong (`aiChrCopyProperties` is PD `@cmd 0173`, and PD's 16-bit opcodes are numbered independently of GE's). PD **kept** PRINT (`CMD_PRINT 0x00b5`) with the same NUL-scan sizer (`chraiGetCommandLength`, `pd_port/src/game/chrai.c:796`), and its global lists carry the strings inline (`pd_port/src/game/gailists.c`, e.g. `dprint 'd','y','e','n','g',0` = GE's commented-out `PRINT("dyeng")`). So Rare fixed the *data* in the next title, not the sizer. The v2 split still follows the real encoding: `chraidata.c` is in the byte-matching N64 link (`ld/game.data.ld.inc`), so the cartridge's global lists genuinely hold 1-byte PRINTs (the `PRINT(STRING)` macro drops its argument), while all 398 level-list PRINTs in the US setups carry cmd + string + NUL (static scan through the real `chraiitemsize`, 21 setups, 0 mismatches). An equivalent data-side alternative (PD style: emit the two strings in `chraidata.c` under `#ifdef PORT` via `debug_log` chars, drop `d310ItemSize` and the per-label-jump list lookup) is noted as a possible post-release cleanup, not needed for correctness.
 
 **Grant (2026-09-18, in-thread):** "I want to proceed with your implementation plan here to fix this bug." (User's reply to the full §7 write-up; asked only whether a fresh session was needed — answered no, granted in this session.)
 
@@ -12576,7 +12788,7 @@ This confirms the M-160/M-164/M-165 hypothesis (`## D173`'s own consolidated-nex
 
 **Scope note (§7 drift check):** v1's sign-off scope ("exactly one AI list affected") was wrong in one respect — PRINT records also exist in level-local lists, but with a different shape (embedded string), where the original NUL-scan is already correct. v2's *behavioral* change is still confined to global-list PRINTs: `m_RunToBondPersistent`'s two records. Local-list behavior is byte-identical to the original decomp — Trevelyan reverts to his pre-fix (working) pathing. Drift disclosed to user in-thread when the regression was reported; same sign-off intent (fix global PRINT sizing, no other behavior change).
 
-**Cross-refs:** D309 (this fix neutralizes its spin mechanism — the teardown-ordering open question in D309's "why PC and not N64" remains, but reaching that state is now harmless); GE_D309 probes (`chrai.c` `ai()`/`chraiGoToLabel`, `chraction.c` `chrGoToBond`) remain as diagnostic tools.
+**Cross-refs:** D309 (this fix neutralizes its spin mechanism — the teardown-ordering open question in D309's "why PC and not N64" remains, but reaching that state is now harmless); GE_D309 probes (`chrai.c` `ai()`/`chraiGoToLabel`, `chraction.c` `chrGoToBond`) remain as diagnostic tools. **2026-09-30: removed** (ROADMAP §7 strip pass, branch `chore/strip-temp-probes`).
 
 **Perf gauge (2026-09-19, release review — M-192 item 6):** v2's up-front `chraiGetAIListID()` call in `chraiGoToLabel` (added so the sizer knows global-vs-local) runs on EVERY label jump; originally that lookup ran only in the rare EndList-not-found branch. Cost per call: ≤ (level-local lists + ~20-entry `g_GlobalAILists`) pointer comparisons ≈ tens of ns. Worst case for a heavy level (Train/Archives, ~50 active guards each executing 1–2 goto-family records per tick): ~1000 calls/tick × ~40 comparisons ≈ 40 µs/tick — under 0.3% of a 16.7 ms frame, and two orders of magnitude below the D250 `getenv` anti-pattern (which was per-TRIANGLE, tens of thousands of calls per frame). **No change warranted; re-measure only if an AI-heavy level shows a regression.**
 
@@ -12601,9 +12813,13 @@ This confirms the M-160/M-164/M-165 hypothesis (`## D173`'s own consolidated-nex
 
 **Status:** GUARDED (freeze class neutralized; upstream poison source OPEN — M-194 probe armed). **RULE-2-SIGNOFF (2026-09-19, release review — M-192 item 2):** user approved retention as the stability-maximizing option; classified as a defensive guard against non-finite state in the same class as the accepted D156 guards — it fires only on poison values that indicate an already-broken state and snaps to a valid frame rather than altering any legitimate animation. Previously disclosed in-thread as a D156-guard extension following the already-accepted D156 precedent in this same file; revert is still two small blocks. Cross-refs: D156 (original guard + Facility outro hang), D309/D310 (ruled out for this freeze — no AI involvement).
 
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — FIXED — root cause D336 (`bheadAdjustAnimation` read never-written placeholder fields); the `#ifdef PORT` guard is retained as a safety net. 2026-09-25 user playtest incl. ~2 min of Caverns combat: 0 D311 ANOMALY / D156 lines in a ~46-min session.
+
 **2026-09-24 — likely root cause found in D336.** D311's own static pass named `bheadAdjustAnimation` as the one path where a corrupted value reaches `model->speed`. D336 showed that path computing Bond's head-bob start frame from a never-written alias field (`field_5C0` = N64 `model.animframe1`), i.e. uninitialised player-struct bytes, whose garbage depends on memory layout (room-pool size, previous level). That matches D311's intermittent `oldspeed=-1.75e18`-at-transition signature. After the D336 fix: headless Caverns (`-level_39`, user settings incl. the 2× room pool `ma=512000`, scripted movement/turning, ~80 s) gave **0 D156 guards, 0 D311 anomaly lines, no crash**. **Close after one live Caverns combat session (~2 min) stays D156/D311-silent.**
 
 **2026-09-25 playtest (user, Windows, one ~46-min session Silo → Caverns, `GE_D322=1 GE_D204=1`, build `7baf4900`):** Caverns combat ~2 min, plus Silo onwards: zero `D311: … ANOMALY` lines (the probe logs via `osSyncPrintf` into the same log, and D318W lines from the same path prove it is live). Combined with D336 (upstream poison source) this closes D311. Guard stays (Rule-2 sign-off 2026-09-19).
+
+**2026-10-06 (3f behaviour audit, maintainer asked to revisit "AI hacks"):** keep as-is. The guard acts only on frame values that are non-finite or beyond +/-1e6, which no legitimate animation reaches, so it cannot alter a real animation; it stops a hang that already-corrupt state would cause. The corruption source is fixed (D336, ABI), so on a healthy run it never fires; cost is two compares per anim tick. Not an AI/behaviour workaround.
 
 ## D312 — Throwable items (mines, grenades, etc.) can clip through walls in certain spots (user report, v0.3.0 pre-release playtest, 2026-09-18) — FIXED: `bgBuildRoomVtxBounds` mis-reads the G_VTX vertex count on PC (Gfx_le `dma.par` bit-layout shift), collapsing whole batches of wall geometry out of the collision query (diagnosed + fixed, 2026-09-18).
 
@@ -12642,6 +12858,8 @@ This confirms the M-160/M-164/M-165 hypothesis (`## D173`'s own consolidated-nex
 
 **Status:** OPEN — reported only. Explicitly not for v0.3.0; queued for v0.3.1. Cross-refs: D312 (possible common wall class), D172 (impact-effect path, fixed).
 
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — FIXED — same root cause as D312, merged diagnosis; same one-line fix. Doors/windows use the separate working `bgTestHitOnObj` path, hence the "surface-dependent" appearance.
+
 ## D314 — F10 menu items flicker randomly/intermittently (reported on the main-menu context, user report, v0.3.0 playtest build, 2026-09-18).
 
 **Reported:** "F10 menu glitches on main menu, the menu items flicker randomly/intermittently." **Repro detail (user, 2026-09-18):** it happens when F10 opens the settings menu while on the **file-select / level-select screen**, and also when the settings menu is open in-game and the user is then **returned to file-select/level-select** (i.e. the overlay outlives a context switch). The playtest build is the current-tip exe (includes D310/D311 fixes). So this is specifically an overlay-vs-mission-select-screen interaction, not the plain title screen.
@@ -12666,6 +12884,8 @@ This confirms the M-160/M-164/M-165 hypothesis (`## D173`'s own consolidated-nex
 
 **Status:** OPEN, likely fixed (D287 + wheel race), pending the user check above.
 
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — FIXED (user playtest 2026-09-26) — M-200 wheel-queue race fix + D287 window-thread cursor calls. Earlier: confirmed still present post-D316 fix (2026-09-18). Diagnostic probe (`GE_D314=1`) landed in `optionsOverlayHandleInput()` if revisited.
+
 
 **2026-09-26 (v0.4.0, M-201): user-confirmed.** F10 on file-select/mission-select with mouse move/click/wheel, and in-level → abort with F10 open: no flicker. Closed by the M-200 wheel-queue fix plus D287 (cursor/relative-mode calls moved to the window thread).
 
@@ -12684,6 +12904,8 @@ This confirms the M-160/M-164/M-165 hypothesis (`## D173`'s own consolidated-nex
 
 **Status:** OPEN — disclosed as a known issue, deferred to v0.3.1. Lower urgency than D314/D316/D317.
 
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — CLOSED (2026-09-26, user: menu scaling looks fine; likely resolved by the v0.4.0 widescreen/HUD-scale work D334/D335/D226). Earlier: OPEN — disclosed as a known issue, deferred to v0.3.1 (bigger design question, not a mechanical fix).
+
 ## D316 — Mouse-clicking some menu items glitches and lands on the item below instead (user report, v0.3.0 playtest build, 2026-09-18).
 
 **Reported:** "On some menu items when you try to click with mouse, it glitches and forces you onto the item below." **Repro detail (user, 2026-09-18):** possible on any item, but specifically noticed on the **crop overscan bars** setting; not currently reproducible on demand — intermittent.
@@ -12699,7 +12921,7 @@ Verified: build clean (`build-pc`, MSYS2 MINGW64/ninja); `tools_pc/verify.sh bun
 
 ## D317 — Crash when toggling Game.AllUnlocked back and forth in-game (user report, v0.3.0 playtest build, 2026-09-18) — no dump left behind.
 
-**Reported:** "Toggling unlock all back and forth in game causes a crash." Reproduced by the user on the current-tip playtest exe (the one at `C:\Users\james\Desktop\ge007-v0.3.0-playtest`, includes D310/D311 fixes). **Repro detail (user, 2026-09-18):** level = **Runway**. **No crash dump or log was left in that folder** — hard exit, so Windows Event Viewer is the only system-side artifact to check.
+**Reported:** "Toggling unlock all back and forth in game causes a crash." Reproduced by the user on the current-tip playtest exe (the Desktop `ge007-v0.3.0-playtest` folder, includes D310/D311 fixes). **Repro detail (user, 2026-09-18):** level = **Runway**. **No crash dump or log was left in that folder** — hard exit, so Windows Event Viewer is the only system-side artifact to check.
 
 **Closed as a symptom of D316, not a real crash.** Evidence:
 - No WER report exists for the playtest exe; every `ge007` AppCrash in Windows Error Reporting traces to this repo's own `build-pc` dev runs, none after 12:00 that day, while the playtest session was ~13:15 — a real crash would have logged one.
@@ -12850,6 +13072,8 @@ Verified: build clean (MSYS2 MINGW64/ninja); `tools_pc/verify.sh bunker1` — PA
 
 ## D322 — Long-session audio degradation: full campaign on v0.3.0, audio progressively worsens (Silo → Caverns/Cradle: OST inaudible, SFX "come and go"); restart restores it (issue #87, user report, 2026-09-20)
 
+**Status (2026-09-30): CLOSED.** The 8-voice SFX cap is the decomp constant (`src/music.c:76`), so it is faithful and ACCEPTED by the maintainer. The #87 long-session decay was not reproduced in the maintainer's 2026-09-29 playtest ("our bugs are fixed for the most part with audio"). Reopen only with a repro.
+
 ### Report (verbatim, issue #87 comment, v0.3.0 build)
 
 > I just did a full run on 00 agent including Aztec and Egyptian in one shot :) It definitely felt better overall but the audio really started to struggle in the final levels again, but i made it through to the end. Interestingly, exiting the game and starting it back up again let the audio go back to normal. Feels like something about long gaming sessions throws off the audio after a while. [...] i think Silo was the first instance i noticed some audio sync issues popping up (possibly from me spamming the KF7). But it wasn't until the end around caverns / cradle that it became very noticeable (like to the point you couldn't hear the background OST and the audio felt like it came and went)
@@ -12907,6 +13131,20 @@ Full campaign (or at minimum Silo → Caverns/Cradle) with **`GE_D322=1 GE_D204=
 
 **Status:** **FIXED, user-confirmed live (2026-09-21)** — "the images and legal page and Nintendo logo are good now." Tooling fix + ntsc-final sidecars regenerated; headless-verified before the live check. Remaining: `pal-final`/`jpn-final` sidecar regeneration on machines holding those ROMs (`python tools_pc/d43_emit.py <region>` — the fix is in the tool, so any future regen is correct), and D75's last unverified scope: cast-roll models (status unknown since M-33; recheck with `GE_PCDUMP="1400-2200:25"`).
 
+### D75 round 2 (2026-10-02): the Rareware logo "texture-filtering artifact" is the RAREWARE text strip, scrambled by a missing RDP odd-row TMEM swap
+
+**Symptom.** Maintainer reference (1964/GEPD, face-on logo): the RAREWARE lettering under the R is clean gold glyphs. Port: the same strip is interleaved/combed garbage (alternate texel rows horizontally shifted by 2 texels), identical at `Video.TextureFilter` 0, 1 and 2 (so not a filtering/clamp/wrap issue; the seam/half-texel suspects in the triage were wrong). The R, border and panel (different textures, `D_02004FE8`/`D_02005FF0`) are fine. Colour/brightness differences vs 1964 are emulator/plugin differences and were ruled out of scope by the maintainer.
+
+**Root cause.** `DL_RAREWARETEXT` (`assets/rarewarelogo.c:1153`) draws the four text pieces (`imgRAre_0x0020`, `img_raRE_0x0AE0`, `imgWAre_0x15A0`, `imgwaRE_0x2060`; each 32x32 RGBA16 plus mip chain, 2744 B) with `gsDPLoadBlock(7, 0, 0, 1371, 0)`, i.e. **dxt = 0**. On the RDP, LoadBlock only swaps odd rows' 32-bit halves on the way into TMEM when its dxt row counter advances; TMEM reads always swap odd rows (address bit 2). With dxt = 0 the load-side swap never happens, so the sampled image is the memory image with the two 32-bit halves of every 8-byte group swapped on odd rows. Rare's asset data is pre-swapped for exactly that. Decoding `imgRAre` offline both ways (scratch script, not kept): linear = garbled, odd-row 32-bit-pair swapped = clean lettering. fast3d ignored `dxt` (`gfx_dp_load_block`) and uploaded the memory image linearly. The same dxt = 0 loads are used by `tex.c` for the whole runtime texture pipeline (measured: ~580 imports in `-level_09`/`-level_33` boots, mostly CI8), but there the compensating pre-swap (`texSwapAltRowBytes`) is no-op'd by D159, so those images are already linear and must NOT be swapped again.
+
+**Fix (port-only, `port/fast3d/gfx_pc.cpp`, commit a2e812c3).** `gfx_dp_load_block` records `dxt == 0` on the `LoadedTexture` (`gfx_dp_load_tile` clears it); `import_texture` emulates the read swap (swap the two 4-byte halves of each 8-byte group on odd tile rows, after destride) only when the load was dxt = 0, the format is not 32b, the tile line is a whole number of qwords with more than one row, **and the source is a compiled-in exe-image C array** (`gfx_tex_source_is_c_array`, the D71 distinction: raw 0x70xxxxxx/cart sources are the D159-linearised runtime pipeline). The swap flag is folded into the texture-cache key (`palette_hash ^= 0xD75D75D7`). No game code touched.
+
+**Verification.** A temporary `GE_D75SW` log (removed): the first, ungated version fired ~260-330 times per level (the tex.c textures) and was caught and gated before commit; with the gate, over a full 3700-frame boot through the cast roll the swap fires exactly 4 times (the 4 text imports, `size=2048 line=64`), and in `-level_09` and `-level_33` (300 frames) 0 times, so non-logo output is unchanged by construction. Before/after captures at 1280x960, frame 950, filters 1 and 2: lettering garbled -> clean, crisp RAREWARE.
+
+**Cast roll (checked).** `GE_PCDUMP="0-3600:60"` over the whole intro. At the real 60 fps the D70 frame numbers are about 2x later: legal ~60-240, Nintendo ~300-720, Rare ~780-1000, gun barrel ~1000-1700, GoldenEye title ~1800-1900, cast roll ~1980-3600. Every cast card from "Starring 007 James Bond" through "Guest Star Mayday" renders a textured, lit, posed character model with its caption, placed left/centre and fading in/out. Seen at contact-sheet resolution only (1/4 scale); fine detail (head/body seams, hats) was not inspected. Verdict: renders, no gross placement/texture failure; maintainer by-eye pass owed for detail.
+
+**Status:** FIXED (port-only), headless-verified; by-eye confirmation owed. Confidence high that the strip defect is this swap (controlled before/after plus the offline decode agree) and that nothing outside the logo changed (0 swaps in two levels and the rest of the intro).
+
 **2026-09-25 capture (user, Windows, ~46 min, Silo → Caverns, `GE_D322=1 GE_D204=1`, build `7baf4900`; log `scratch/d322_session.log`).** User: "sound gets glitchy… gunshots from your gun and other sounds start to drop out as things stack up"; "audio did get garbled" (times not noted). No crash.
 
 - **Pools: no leak.** SFX voices (`sfx`) fall back to 0–2 in quiet stretches; physical voices never exhausted (min free 4/24, `lame` always 0); event queue max 28/64. The voice-pool-exhaustion/counter-drift hypothesis (ranked #1 above) is **refuted** for this session length.
@@ -12934,6 +13172,8 @@ The same device at the same moment drains at exactly real time through DirectSou
 
 **Fix:** `audioInit()` sets `SDL_HINT_AUDIODRIVER = "directsound,wasapi"` on Windows before `SDL_InitSubSystem(SDL_INIT_AUDIO)` (the only audio init in the port); `SDL_AUDIODRIVER` in the environment still overrides it (normal-priority hint). The init log line now names the driver. **Verified:** golden gate 3/3; Bunker 1 60 s with `GE_D204=1`: driver `directsound`, rt 0.997–0.999, q 240–624, one drop during the level load (pre-existing) and none after. **Owed:** a long play session on the maintainer's machine (the bursts came every ~5 min), expect `drop=` flat after the load. Then re-assess the firefight SFX drop-outs; D207's measurements found no sounds actually dropped by the 8-voice cap, so they were most likely this same block loss.
 
+**Maintainer check 2026-10-02:** RAREWARE text clean in a live boot; the cast roll (all 9 cards, Bond to Mayday) renders correctly by eye, so D75 has no remaining scope (after refreshing the stale `build-pc/data` sidecars, which had shown the pre-M-197 Nintendo logo). VERIFIED.
+
 ## D323 — G_TL_LOD bindings of explicit-LOD textures: PC samples driver mips from LOD0; N64 samples the authored mip chain (static census, 2026-09-21)
 
 **Context.** D107 established that GE's room DLs emit `G_TL_LOD` and that the port folds every LOD draw to tile 0 (driver-generated GL mips from the finest level). D236 then found + fixed the one case where that folding was *visibly* wrong for a type-1 (DETAIL) binding of an RGBA5551 cut-out. This entry closes the loop on the rest of the surface: how often do LOD-on draw classes bind textures that actually carry **authored** mip levels, and does the N64 hardware behavior differ from the port's?
@@ -12951,6 +13191,8 @@ The same device at the same moment drains at exactly real time through DirectSou
 **Assessment.** Real N64-vs-PC divergence, pervasive but low-visibility: no reported artifact, and the one high-visibility subset (cut-outs) is already covered by D236. A full fix means uploading GL mip chains from the explicit LOD images for TEXTLOD-on bindings (tex.c + fast3d texture-cache plumbing), which would invalidate golden baselines across all 15 levels for a change nobody has seen to be wrong — not worth doing speculatively.
 
 **Status:** OPEN / parked (GRAPHICS-BACKLOG). If a playtest ever flags mushy distant detail in one of the 15 levels above (Statue and Aztec are the heaviest), the fix path is: in fast3d's texture upload, when the binding class has TEXTLOD on and `tex->maxlod > 1`, feed `glTexImage2D` levels 0..N-1 from the decoded explicit images instead of `glGenerateMipmap`. Audit tool: `tools_pc/bg_lod_audit.py` (also documents the GE OMH field-write encoding, which no other tool captures).
+
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — CLOSED — parked as a fidelity enhancement, not a bug (2026-09-26, user-approved: no reported artifact). Earlier: OPEN / parked — mechanism confirmed in code; census (`tools_pc/bg_lod_audit.py`) shows 15 levels with explicit-LOD textures bound under TEXTLOD-on…
 
 ## D324 — GE's <stdlib.h> stub declares nothing, so TUs that include it get NO CRT prototypes: implicit `int f()` declarations silently corrupt non-int returns (atof garbage in every float ini parse; D38 class)
 
@@ -13450,7 +13692,7 @@ Logs: `scratch/d318b_{fac,ctrl}_clk{1,2}.log`. Summariser: `scratch/d318b_summ.p
 
 **Fix applied (2026-09-23, RULE-2-SIGNOFF: user approved option (c)).** `src/game/model.c` `modelSetAnimFrame2WithChrStuff`, `#ifdef PORT`: when the per-frame loop did not run, progress was requested, and `vb == va`, re-derive `frameb = constrain(va±1)` against the CURRENT endframe (as `modelSetAnimFrame` does); applied only if that next frame is unclamped. Genuine holds, anim ends and looping wraps are untouched. Env: `GE_D329=0` disables (A/B), `GE_D329LOG=1` logs triggers (cached getenv). **Verified (WSL, lockstep):** clk=1 with watchdog off (`GE_D318W=0`): Facility ai_19 and Control ai_9 no longer pin (frame 19→19.5→20…, 0.5/tick = the N64 clk=2 trajectory; aim→fire→re-aim cycle ≈192 ticks vs ≈195 at clk=2/3); authored holds intact. Trigger census: clk=1 Facility, 9 triggers, all on the repro guard, one per attack update; **clk=2: 0 triggers** over ~5300 ticks (Facility) and ~3600 (Control), so the fix is inert in the N64 regime. **Windows-native validation (2026-09-23):** Facility forced repro, native exe, `GE_D318B_CLK=1`, watchdog off: 48 post-update fire episodes, **0 pinned**, 23 D329 triggers. Bunker 1 golden (640x480 pinned, direct launch): REGRESSION with the fix ON (worst dmean 113.6) and equally with it OFF (`GE_D329=0`, 126.4), so it predates this fix (stale golden; re-baseline already owed). **Interactive playtest (2026-09-23, user, native Windows, shipping config + GE_D329LOG):** Ourumov reacts with N64-matching timing (user-confirmed on screen). Log: 4 D329 triggers (four guards, same tick, stale-pin state, released at 0.5/tick), 3 watchdog detections that cleared on their own, 0 watchdog rescues, no crash (`scratch/d329_playtest.log`).
 
-**Status:** FIXED + playtest-verified (2026-09-23). Next: demote the D318 watchdog to detect-and-log post-release (M-192 item 7), then remove the TEMP probes (d318bprobe, d320repro). Watchdog stays shipped on `release/v0.4.0`; plan to demote it to detect-and-log after playtests. Cross-ref: D318, D320, D321, M-199, D155, D186/D193.
+**Status:** FIXED + playtest-verified (2026-09-23). Next: demote the D318 watchdog to detect-and-log post-release (M-192 item 7), then remove the TEMP probes (d318bprobe, d320repro). **2026-09-30: done** (strip pass, `chore/strip-temp-probes`): `d318watchdog.c` is now detect-and-log only (no `sub_GAME_7F025560` re-seed); `d318bprobe.c` (incl. `GE_D318B_CLK`) and `d320repro.c` + the `lv.c` hook deleted. Watchdog stays shipped on `release/v0.4.0`; plan to demote it to detect-and-log after playtests. Cross-ref: D318, D320, D321, M-199, D155, D186/D193.
 
 ## D330 — #103 (v0.3.0, Win 11): Auto-Aim / Look Ahead "won't stay on" in the in-game watch options (2026-09-23)
 
@@ -13837,6 +14079,12 @@ to the user (proportions/knob offsets are one-constant tweaks if it looks off).
 **Save hazards to cover in implementation:** `fileSaveSettingsForFolder` serializes *all* live options, including `OPTION_CONTROLTYPE`. Since the port forces Honey/Solitaire in `input.c`, keep the original stored control-type bits. Serialize into a temporary copy, merge **only the PC-UI-edited field/bit(s)** into the actual slot pointer returned by `fileGetSaveForFoldernum` (folder number is not a `saves[]` slot index), then call `fileWriteSave`. This also keeps unrelated watch-only edits session-only when a PC-UI value is later changed. Toggle/enum edits commit on change; slider drags commit on release. GE's folder loader would change front-end Music/FX volume live; D350's chooser reads the saved fields directly instead, avoiding this side effect. Erase (`fileClearSavefileForFolder`) serializes *current live* settings into the wiped save: editing B, then erasing A may put B's live watch settings into wiped A. The same edge exists on N64 after changing watch settings; acknowledge it in tests, do not change game logic. D350's front-end chooser avoids loading B into live state, so editing B there does not itself trigger this edge.
 
 **Defaults:** `BLANKSAVEDATA` (`src/bondconstants.h:2151`) starts `music_vol`/`sfx_vol` at 0xFF and `options` at `DEFAULT_OPTIONS` (`src/game/file2.h:23`: auto-aim, sight, look-ahead, ammo on). No code change or runtime verification in this finding.
+
+**Correction (2026-10-04, P2b runtime investigation — supersedes the session-only claim):** The premise "erase is the only caller of the settings serializer" is false. **Closing (or aborting) the in-game watch also reaches it:** watch close → `deleteCurrentSelectedFolder` (`src/game/file.c:82`) → `fileClearSavefileForFolder` (`src/game/file2.c:1386`) → `fileSaveSettingsForFolder`. **Runtime proof (run 2, `run_p2b2.log`, pre-run eep `scratch/eep_before_run2.bin`):** with the live mission save in slot 4, opening the watch, changing Screen Full→Wide and closing it logged `fileOverwriteSaveSlotWithNewSave: DoReset slot = 4` + `fileWriteSave slot=4 bitflags=08` with options `0x17A` (base `0x3A` | SCREENWIDE `0x040` | CONTROLTYPE `0x100`); the previously-active slot was reset to `bitflags=80`. Watch settings therefore **persist per Bond file on watch close**, and stage start's `fileLoadSettingsForFolder` (`file2.c:1334-1383`) does apply screen size/ratio from the save — the "re-pick after every mission" consequence above (and §5(a)'s persistence argument in `docs/dev/notes/WATCH-SCREEN-RATIO-DESIGN.md`) is void. Control run (run 1): a plain open/close with no edits wrote nothing — the write is gated by a live-vs-saved `memcmp` early-out (`file2.c:1405`), so unchanged settings produce no save traffic.
+
+**Test artifact (run 3, `run_p2b3.log`):** an apparent "persistence failure" was an artifact of the test harness, not a bug. `-level_XX` hardcodes `fileSetCurrentFolder(FOLDER1)=0`, and the test eep's FOLDER1 slot held only the blank placeholder save (slots 1–3 = other folders' progress; slot 4 free). Run 3 loaded slot 4's options (`0x17A`) correctly at stage start, and closing the watch produced no write because live == saved (the same `memcmp` gate) — consistent with a successful load. One residual unexplained observation: an early frame read showed the watch displaying FULL despite the persisted Wide — possibly the native-widescreen display bypass (`bondview2.c:8150-8159`) or frame timing. Flagged as a by-eye check only; not chased further (run budget). In normal front-end play (one real save per folder) the round-trip is clean by code reading.
+
+**Net effect:** D350's PC-only persistence bridge is now a superset of console behaviour rather than a workaround for a session-only gap, and the approved divergence "edits made directly in GE's watch stay session-only (faithful to N64)" no longer describes either platform. Decision on the ROADMAP PD-parity item: **(c) keep Screen size/Ratio on the in-game watch only** — no PC menu rows; the README notes that they combine with the PC Aspect ratio setting.
 
 ## D350 — Watch-backed PC settings: shared rows, explicit chooser and per-file save (2026-09-27)
 
@@ -14873,7 +15121,7 @@ both menus' labels and sizing is still owed.
 
 ## D383 — PD-style keyboard rebind capture in both options UIs (2026-09-27)
 
-**Status: PARTIAL (built and isolated automated checks; live keyboard-menu
+**Status (2026-09-28 bookkeeping):** **CLOSED** — keyboard/mouse rebinding shipped + accepted in v0.4.0; pad rebinding is tracked by the v0.5.0 controller wave (D394, PR #109). Previous: **Status: PARTIAL (built and isolated automated checks; live keyboard-menu
 acceptance and the release golden gate owed).** User explicitly requested
 PD-style keyboard rebinding after the D380 single-PC-layout migration.
 PD analogue: `../pd_port/port/src/optionsmenu.c:1694–1885` offers a per-action
@@ -15044,7 +15292,8 @@ not edited for the probe. Live RMB/MMB test and release gate remain open.
 
 ## D387 — M7 AllUnlocked read-time patches leak into persistent saves (2026-09-27)
 
-**Status: OPEN; M7 cannot be signed off as a preservation-only playtest.**
+**Superseded by D442 (2026-09-30): the save patch and this merge machinery were removed entirely; AllUnlocked is now a pure RAM/query-time override.**
+**Status: FIXED 2026-09-30 for saves made from now on (see "D387 Fix" at the end of this file); fakes persisted by earlier builds are not repaired. Original diagnosis follows unchanged.**
 User offered `data/` for investigation. Original `data/ge007.ini` and
 `data/ge007.eep` were **read only**, checksums unchanged after all runs.
 Private isolated test folders live under
@@ -15137,6 +15386,62 @@ Reconstructed stub — the original full entry was lost when `findings.md` was t
 
 **Status: PARTIAL (port 1.1 gameplay button roles user-tested; exact gadget-category parity and other selectable presets outstanding; RB HD toggle unavailable)**: user supplied the Xbox 1.1–1.4 control table; B is gadgets, stick clicks crouch, LB aim, RB HD toggle (not weapon cycling).
 
+**Reference table restored (maintainer, 2026-10-03, from StrategyWiki's GoldenEye 007 controls page, "Xbox One/Xbox Series X|S" section).** The four Xbox styles share every button; only the sticks and D-pad differ.
+
+| Xbox control | All four styles |
+|---|---|
+| RT | Fire |
+| LT, LB | Crosshair aim |
+| A | Action |
+| X | Reload |
+| B | Cycle gadgets |
+| Y | Cycle weapons |
+| L / R stick click | Crouch |
+| RB | Toggle updated graphics (no port equivalent) |
+| Start | Menu / pause |
+| Back (View) | View scores (the port uses Back for the F10 overlay) |
+
+Stick cells on the source read "while aiming / up-down axis / left-right axis". The D-pad copies the left stick in every style.
+
+| Style | Left stick (aiming / up-down / left-right) | Right stick (aiming / up-down / left-right) |
+|---|---|---|
+| 1.1 Jinx | crosshair / move / strafe | strafe / look / turn |
+| 1.2 Christmas | crosshair / move / turn | strafe / look / strafe |
+| 1.3 Frost | crosshair / look / strafe | strafe / move / turn |
+| 1.4 Elektra | crosshair / look / turn | strafe / move / strafe |
+
+**Mapping onto the port (input.c stick block, 2026-10-03):** `naturalPitchMode` on (SOLITARE) = left stick to C-buttons (move/strafe), right stick to the N64 stick (look/turn) = **1.1 Jinx** (today's default). `naturalPitchMode` off (HONEY) = left stick to the N64 stick (move/turn), right stick to C-buttons (look/strafe) = **1.2 Christmas**. **1.3 Frost** = HONEY with the sticks swapped; **1.4 Elektra** = SOLITARE with the sticks swapped (neither exists yet). Divergence in all styles: on Xbox the LEFT stick moves the crosshair while aiming and the right stick strafes; the port aims with whichever stick feeds the N64 stick (the right stick under Jinx). The D-pad currently sends N64 D-pad bits, not a left-stick copy.
+
+**Original N64 control styles (historic reference; same StrategyWiki page, "Nintendo 64" section, maintainer 2026-10-03).** Stick cells read "while aiming / up-down axis"; the stick's left-right axis always turns. Enum: `CONTROLLER_CONFIG_*` (`src/bondconstants.h`); names `front.c` ~732; watch control-screen labels `options.c` ~149.
+
+Single controller:
+
+| N64 control | 1.1 Honey | 1.2 Solitaire | 1.3 Kissy | 1.4 Goodnight |
+|---|---|---|---|---|
+| Control stick | crosshair / move (left-right turns) | crosshair / look (left-right turns) | crosshair / move | crosshair / look |
+| Z | Fire | Fire | Aim | Aim |
+| B | Reload / action | Reload / action | Reload / action | Reload / action |
+| A | Change weapon | Change weapon | Fire | Fire |
+| L or R | Aim | Aim | Change weapon | Change weapon |
+| C left/right | Strafe | Strafe | Strafe | Strafe |
+| C up/down | Look up/down | Move forward/back | Look up/down | Move forward/back |
+| D-pad | Same as C | Same as C | Same as C | Same as C |
+| Start | Pause | Pause | Pause | Pause |
+
+Two controllers (one player holds both):
+
+| N64 control | 2.1 Plenty | 2.2 Galore | 2.3 Domino | 2.4 Goodhead |
+|---|---|---|---|---|
+| Controller 1 stick | crosshair / move | crosshair / look | crosshair / move | crosshair / look |
+| Controller 1 Z | Fire | Fire | Aim | Aim |
+| Controller 2 stick | strafe / look | strafe / move | strafe / look | strafe / move |
+| Controller 2 Z | Aim | Aim | Fire | Fire |
+| B | Reload / action | Reload / action | Reload / action | Reload / action |
+| A | Change weapon | Change weapon | Change weapon | Change weapon |
+| Start | Pause | Pause | Pause | Pause |
+
+How the Xbox styles relate: 1.1 Jinx is Solitaire's movement split onto two sticks (left = C-buttons move/strafe, right = N64 stick look/turn), which is why the port drives Jinx through `CONTROLLER_CONFIG_SOLITARE` (D194/D238); 1.2 Christmas is Honey split the same way (left = N64 stick move/turn, right = C look/strafe). 1.3/1.4 swap the sticks of 1.2/1.1. Xbox drops the Kissy/Goodnight button layouts and the 2.x two-pad styles.
+
 ## D395 — Controller trapped in keyboard/mouse-only binding capture (2026-09-27).
 
 Reconstructed stub — the original full entry was lost when `findings.md` was truncated to its section table (recovery, 2026-09-28); this entry is rebuilt from the section-table row and the `findings-index.csv` one-liner. Original root-cause detail is not recoverable.
@@ -15179,6 +15484,8 @@ I logged all of this as **D397** (`docs/dev/findings.md`, index CSV, and the D18
 
 **Status:** OPEN, re-scoped. New user observation; no code change this session (diagnosis below; a blind fix is not safe without the ground-truth capture that is blocked here).
 
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — RESOLVED (2026-09-28): root cause = H2 (confirmed by a 3-scale PCDUMP test — the comb period is fixed at ≈3 *native* rows across 640/1024/1280, i.e. window-period = 3×scale: the `(<<2)-1` 0.75-native-pixel row-strips rely on RDP floor-based scanline stepping t…
+
 **User report:** the SELECT FILE background image (the 007 gun-barrel / Bond-silhouette backdrop behind the file boxes) and the intro gun-barrel both have a "weird interlaced glitchy look" — a horizontal comb / line-scramble. This extends the long-standing D182(2) "comb / interlacing" symptom and adds a **second, independent instance** (the intro gun-barrel) that D182 never covered. Critically, the intro gun-barrel is a **first-time render** (not a back-out / re-entry), so the interlace is present on first display, not only after a round-trip. That refutes D182's "only after re-entry / stale tile descriptor" hypothesis for this symptom: it is a *persistent* defect on these large 1:1 grayscale front-end images.
 
 **What was ruled out this session (static read, no live run):**
@@ -15196,7 +15503,7 @@ I logged all of this as **D397** (`docs/dev/findings.md`, index CSV, and the D18
 
 **Status (2026-09-28, per `scratch/d397_fs/HANDOFF-D397.md`) — OPEN, re-scoped; no fix landed.** An in-tree CI→I import-routing block in `gfx_pc.cpp` `import_texture` was tried and is **ineffective** (the D116 stale-tile-metadata hypothesis is REFUTED: D161 already routes `fmt==CI && palette==G_TT_NONE` to `import_texture_i8`; the GE_TEXI logs show `palfmt=0` on all 299 rows) — the block was removed 2026-09-28. Established: the data path is 100% clean (299 row strips upload byte-exact vs `scratch/d397_fs/gunbarrel.pgm`); the artifact is static; MSAA, mips, RAND_NOISE, 5-bit quant and texture-cache aliasing are ruled out. Leading hypotheses: **H1** — the file-select custom-CC LERP (`gDPSetCombineLERP(TEXEL0, PRIMITIVE, ENV_ALPHA, ...)`) uses ENV_ALPHA 0x14 as the mix factor; the port feeds it as `20/255 ≈ 0.078` (`G_CCMUX_ENV_ALPHA` input, `gfx_pc.cpp`), so a black texel renders ≈0.92×prim ≈ the measured 27/28/17 black-region census — the N64 RDP 5-bit coefficient scaling (check `rsp/graphics/gmain.s` and the PD port's CC engine for the same combine id) is the root-cause question; **H2** — the 6-of-9-row comb is a second, separate row-strip-geometry defect (non-integer quad y + NEAREST, or the 256-tri vertex-ring wrap between the two tris of a row); **H3** — part of the darkened look is authentic N64 (G_TC_FILT 4-bit intensity dither, unimplemented here). A `GE_D397SH` env-gated shader-formula probe (in `gfx_opengl.cpp`, ~30 lines) stays in-tree until the root cause lands, then is removed. Next steps per the handoff: Q1 correlate which of the 20 compiled shaders is the gun-barrel row-strip one, Q4 settle the LERP-factor scaling against gmain.s/PD, Q5 native 640×480 FBO capture to re-measure the comb period.
 
-**Status (2026-09-27b, static read against the local `pd_port` checkout) — H1 REFUTED, H2 promoted to leading cause.** Cross-checked `G_CCMUX_ENV_ALPHA` handling against `C:\Users\james\Source\Repos\pd_port\port\fast3d\gfx_pc.cpp`: byte-identical formula (`tmp.r=tmp.g=tmp.b=rdp.env_color.a`, then `/255.0f` at the vertex-color pack site) — no special-cased coarser scaling in either port. There is no "5-bit RDP coefficient" quirk in the real color combiner; PRIM/ENV alpha are genuine 8-bit `gDPSetEnvColor` fields and the combiner's A/B/C/D math is full 8-bit on real hardware (the 5-bit-precision idea conflated the CC with an unrelated hardware unit). **H1 is very likely not the (or not the only) cause; the uniform darkening it predicts may simply be faithful/authored** — do not correct it without an N64/1964-GEPD reference frame.
+**Status (2026-09-27b, static read against the local `pd_port` checkout) — H1 REFUTED, H2 promoted to leading cause.** Cross-checked `G_CCMUX_ENV_ALPHA` handling against `<repos>\pd_port\port\fast3d\gfx_pc.cpp`: byte-identical formula (`tmp.r=tmp.g=tmp.b=rdp.env_color.a`, then `/255.0f` at the vertex-color pack site) — no special-cased coarser scaling in either port. There is no "5-bit RDP coefficient" quirk in the real color combiner; PRIM/ENV alpha are genuine 8-bit `gDPSetEnvColor` fields and the combiner's A/B/C/D math is full 8-bit on real hardware (the 5-bit-precision idea conflated the CC with an unrelated hardware unit). **H1 is very likely not the (or not the only) cause; the uniform darkening it predicts may simply be faithful/authored** — do not correct it without an N64/1964-GEPD reference frame.
 
 Found a concrete geometric mechanism for **H2**, promoted to leading cause: `titleRenderFolderMenuBackgroundLines` (`src/game/title2.c:24`) emits `lry - uly == 3` (U10.2 units) per row — a **0.75-native-pixel-tall** rect, not 1.0 — via the universal N64 `((y+1)<<2)-1` idiom. That idiom is only exact on real hardware because the RDP's scan converter *floors* the fixed-point Y to an integer scanline before testing coverage. `gfx_draw_rectangle` (`gfx_pc.cpp:3443`) does not replicate that: it maps the U10.2 corners straight to continuous NDC floats and rasterizes with the GPU's ordinary continuous coverage rules. A sub-1-native-pixel-tall rect stacked 299 times (each offset exactly 1.0 native px from the last) does not reliably rasterize as "the one scanline the idiom intended" under continuous rasterization — which of the two neighbouring device rows a given source row's fractional edges land in drifts as the stack accumulates, worsened by any non-integer native→window scale (`gfx_adjust_viewport_or_scissor`'s `ratioY`). This is a rasterization property of the geometry, not stale state, so it naturally explains the first-render (non-re-entry) trigger that refuted D182's hypothesis for this instance. Full mechanism + tell for future occurrences: `docs/porting-notes.md` §D15. **Not yet done: a live capture to confirm the comb period tracks `ratioY`** (predicted: comb period should change if the window/render resolution changes, at fixed native resolution) — this is the concrete falsifiable test before attempting a fix. No code changed this pass (diagnosis only).
 
@@ -15513,9 +15820,11 @@ included; D281 keeps the shipped mitigation + disclosure, zero-saves root cause 
 
 **Verification:** NTSC build + link clean; zero `TANKDBG` strings in the release binary (re-verified after probe strip, 2026-09-28); 40 s front-end boot steady ~60 fps with zero errors. **Live sign-off (user, 2026-09-28):** first tank drive — board + exit work, no double-trigger against the tank prop, and the in-tank aim feel is good at `TankAimScale = 100` ("felt fine, glad to have the setting").
 
-**Status:** RESOLVED (2026-09-28) — board-ordering fix + board-animation lockout + menu-accept B gate + tank aim routing + `Input.TankAimScale`, all port-only (`src/game` zero-diff), user-signed off on a live tank drive; probes stripped, release binary verified clean.
+**Status (2026-09-28 bookkeeping):** **CLOSED** — tank board/exit accepted by the user; shipped in v0.4.0. Previous: **Status:** RESOLVED (2026-09-28) — board-ordering fix + board-animation lockout + menu-accept B gate + tank aim routing + `Input.TankAimScale`, all port-only (`src/game` zero-diff), user-signed off on a live tank drive; probes stripped, release binary verified clean.
 
 ## D408 — `Game.SkipIntro` skips the post-mission failure dossier: failed/aborted missions return straight to the menus with no REPORT screen (user report 2026-09-28, during v0.4.0 wrap-up playtest)
+
+**Status (2026-09-30): FIXED (boot-only gate).** The SkipIntro block in `src/game/lv.c` (`#ifdef PORT`, port feature code) ran on every title-stage load, including the return from a mission, and its `menu_update = MENU_FILE_SELECT` overwrote the `MENU_MISSION_FAILED` route. It is now gated on `is_first_time_on_main_menu`. Verified: build, plus one boot with `SkipIntro=1` that logs `booting to file-select` exactly once. **Owed (maintainer):** fail or abort a mission with SkipIntro on and check the dossier shows. The hook also re-set `maybe_is_in_menu` on every return, so D216's audio-break half may be fixed too; listen for it.
 
 **Symptom:** with `Game.SkipIntro = 1`, entering a solo mission and then either aborting (watch menu Z+A) or dying (KIA) returns the player straight to the front-end menus — the post-mission failure dossier is never shown. On a normal boot that screen is `MENU_MISSION_FAILED` (`front.c` `constructor_menu0C_missionfailed`: "REPORT / Mission status: KILLED IN ACTION" or "ABORTED", with the objective list and next/prev tabs to the mission-complete report). Initial suspicion was the user's save or `Game.AllUnlocked` (D257/D387); **user confirmed 2026-09-28 that it is a SkipIntro quirk** — save state and AllUnlocked are not involved.
 
@@ -15524,3 +15833,2580 @@ included; D281 keeps the shipped mitigation + disclosure, zero-saves root cause 
 **v0.4.0 decision (user, 09-28):** `Game.SkipIntro` stays **EXPERIMENTAL — not recommended for regular users yet**, alongside its older unrooted audio-break report (D216 status note). The F10 row is relabelled "Skip intro (EXPERIMENTAL)" (`port/src/optionsoverlay.c`, mirroring the D387 AllUnlocked labelling precedent); the config var, default (off), and `lv.c` hook are unchanged.
 
 **Status:** OPEN — cosmetic (no crash, no data loss; the mission still records as failed/aborted and the menus are fully functional). Root-causing needs a side-by-side of front-end state (`current_menu`, `g_CurrentStageToLoad`, `mission_failed_or_aborted`, `g_isBondKIA`) on the fail return with SkipIntro off vs on — candidate for v0.5.0 alongside the D216 audio half.
+
+**Maintainer check 2026-10-02:** SkipIntro on, aborted mission shows the failure screen; no menu music glitch on return. VERIFIED, closed.
+
+
+## D415 — Shooting a light fixture does not "kill" its flickering light (Bunker, Caverns) (community report, 2026-09-28)
+
+**Report (issue #87, comment from the issue's reporter, 2026-09-28, after an
+00 Agent playthrough of v0.4.0):** "shooting the lights fixtures in bunker and
+caverns does not actually 'kill' the flicker light." Reported as one of "a few
+little things"; the reporter asked whether it is already known before filing
+separate tickets. It was not: no prior finding or backlog row covers it.
+
+**Not yet established:** whether the N64 original (1964/GEPD) kills the
+flicker on those specific fixtures, i.e. whether this is a port bug at all;
+which fixtures (flickering vs. static lights) and levels are affected; whether
+the fixture's texture/vertex darkening happens and only the flicker persists,
+or nothing changes.
+
+**Starting points (unverified leads, not a diagnosis):** the break path is
+`lightFixtureBreak()` (`src/game/lightfixture.c:407`) →
+`darken_triangle_in_room()` / `darken_vertex_in_room()`, which edit room vertex
+colours located via `lightFindVertexBaseForTri()` (`:176`, the same cast #107
+touches; s32-safe on Windows/Linux because the DRAM arena is pinned at
+0x70000000). The flicker itself may be driven by a separate per-frame
+room/vertex light animation that rewrites the colours after the darkening; if
+so, check whether the fixture table's per-room state (`light_fixture_table`,
+`redarken_lights_in_room()`) is honoured on PC. Also rule out fast3d vertex
+caching of room geometry, which would hide a vertex-colour edit.
+
+**Next:** confirm the N64 behaviour on 1964 (Bunker 1 and Caverns, shoot a
+flickering fixture), then repro on PC.
+
+**Status:** OPEN (logged, not investigated). Now tracked as GitHub issue #119; the reporter's statement that the N64 stops the flicker is accepted as the baseline (a 1964 check is a bonus, not a gate).
+
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — FIXED (2026-09-29 bookkeeping: root-caused and fixed as D430 + D431, user-verified vs GEPD/1964 on Caverns 2026-09-29; #119). Earlier: ROOT-CAUSED as D430 (see there); fix in tree, live check owed.
+
+
+## D416 — Local split-screen multiplayer crash: MP setup files never converted (issue #99)
+
+**Report:** issue #99, 2P split screen, v0.3.0 `4827bc8`, fault addr `0xa43a0ed4`, crash PC `0x14009e758`.
+
+**Symbolised (2026-09-29, `dist/goldeneye-pc-port-0.3.0-win64` exe, addr2line):** `load_proptype` (prop.c) called from `proplvreset2` (prop.c) — the propDefs record walk over `g_CurrentSetup`, i.e. the setup-file load, not menu code.
+
+**Root cause:** `prop.c` loads `"U" + "mp_" + <stage>` (`Ump_setup*Z`) whenever `getPlayerCount() >= 2`. `tools_pc/d88_emit.py` (and `d88_propdefs.py`, `d88_propdef_scan.py`, `d125_check.py`) only matched `Usetup*Z`, so the 13 MP setups in `file_resource_table.inc.c` came out of pccg as raw big-endian N64 data and the walk read garbage. (Not the D190 class: D190 is closed as `-level_45` being MP-only with no solo setup.)
+
+**Fix (tools only, no game code):** single predicate `is_setup_name()` = (`Usetup`|`Ump_setup`) + `Z`, used for the name list, the `--regen` row-drop, and the analysis tools. `convert_usetup()`'s full-tiling assertion is the gate that MP files share the solo format.
+
+**Verified:** `d88_emit.py ntsc-final --regen` → `converted: 34/34`, ALL CHECKS PASSED; `d125_check.py` MATCH on all 13 MP + 21 solo files; pccg manifest 73→86 rows with all 73 pre-existing rows byte-identical. PAL/JP not run (NTSC ROM only).
+
+**Follow-up (2026-09-29):** in-game 2P now runs (see D417, D418). Also added: `Input.MPMode` (Auto/PadsOnly/KbmP1) + slot->pad shift so one pad or kbm+pad can be P1/P2 and the game's `joyGetControllerCount() >= 2` MP gate opens; `GE_MPVIRT` / `GE_STARTMP` harness flags (this machine has 0 SDL gamepads). Input layer is still single-player shaped (see memory: mp-input-layer-direction). Separately, PC input hooks are pad-0-only and `input.c` re-asserts control type on the current player (can rewrite another player's control style in MP) — port-layer work planned for v0.5.0.
+
+**Status:** RESOLVED in-harness (see header row).
+
+
+## D417 — `enum PROP` unsigned: fist held-prop lookup (-1) passes `>= 0` and crashes 2P+ (issue #99)
+
+**Crash (gdb, 2026-09-29):** `modelLoad(modelid=-1)` <- `something_with_generating_object(propid=-1, itemid=ITEM_FIST)` <- `sub_GAME_7F09B398` (player.c) <- `gunTickHandState` <- `bondviewProcessInput`. Fault: `PitemZ_entries[-1].header->RootNode`, header NULL.
+
+**Root cause:** `getPropForHeldItem()` returns -1 for items with no held model (fist, taser). `sub_GAME_7F09B398` guards with `if (prop >= 0)`; `PROP` is an all-non-negative enum, so GCC gives it an unsigned type and -1 passes. Solo never runs this path (only other players' visible weapons need it). Same class as porting-notes D3 / D142.
+
+**Fix:** `PROP__PORT_SIGNED = -1` sentinel under `#ifdef PORT` at the head of `enum PROP` (`src/bondconstants.h`), following the `SP_LEVEL__PORT_SIGNED` precedent. `PROP_ALARM1` stays 0, sizeof unchanged, no stored value changes. Also corrects `drop_inventory` (`propid >= 0`). **This is a `src/game`-header edit: Rule-2 review owed.**
+
+**Rule-2 review (2026-10-06, 3f behaviour audit):** not a behavioural change. IDO gives `enum PROP` a signed int type, so the decomp's `prop >= 0` test rejected -1 on the N64; GCC's unsigned choice for an all-non-negative enum is compiler-ABI drift (porting-notes §D3, D142, `SP_LEVEL__PORT_SIGNED` precedent). The unused sentinel restores IDO's signedness: no value, size or logic change, N64 semantics exact. Closed as ABI class; no sign-off needed.
+
+**Status:** RESOLVED.
+
+## D418 — Split-screen alternating full-screen views: safe-area crop remapped sub-rect viewports (issue #99)
+
+**Symptom (user, live):** in 2P the view flickers between both players constantly. GE_MPDUMP (temp) frame capture: each frame is ONE player's view filling the whole window, alternating in shuffled draw order (`get_nth_player_from_shuffled`) — no split visible.
+
+**Root cause:** `gfx_adjust_viewport_or_scissor` (fast3d) maps the last-set SP viewport's Y range onto the whole window when `Video.SafeAreaCrop` is on (default; designed for the solo 220-line viewport). In 2P each player's viewport is 109 lines, so each was stretched to full height and the last drawn covered the other.
+
+**Fix (port only):** `gfx_set_split_screen()` turns the crop (Y and X margin) off while a 2+ player stage runs; `videoSyncSplitScreen()` (video.c) sets it from `getPlayerCount()` + stage != title, called before every `gfx_run` — **including the scheduler's direct call in `libultra.c`**, which bypasses `videoSubmitCommands` (my first attempt hooked only that and had no effect: worth remembering, see porting-notes). Verified by frame capture: two stable stacked views over 4 consecutive frames, original N64 letterbox, viewports y=119/230 h=109; solo golden gate 3/3.
+
+**Status:** RESOLVED (harness); live pad play + HUD/widescreen (plan 2c, D334/D335 in MP) still owed.
+
+**2026-09-30 note (merge of release/v0.4.1, D447 interaction):** D447 gated the crop cache so only viewports >= 90% of the canvas height define the crop band (Wide/Cinema and split halves keep their own letterbox) and added an output rect (Original aspect = centred 4:3/16:9 rect, `gfx_current_game_window_viewport` = that rect). The two compose without overlap: in a 2+ player stage D418's `g_split_screen` still bypasses the crop entirely (`safeTop/safeHeight = SCREEN_HEIGHT`, no X margin), so the N64 split layout maps 1:1 onto the canvas; D447's seed/gating only touches the cached band, which is unused while split. The canvas itself is then placed in the window or, in Original mode, inside the pillarboxed output rect by `gfx_start_frame`. Merge conflict was textual only (adjacent globals in gfx_pc.cpp).
+
+## D419 — Split-screen input shared between players / P1 lost solo controls (issue #99)
+
+**Symptom (user, live):** in a 2P match one player's input drove both views, and P1 keyboard/mouse or pad did not behave like solo (no mouse look, no SOLITARE layout, no crouch/use/reload).
+
+**Root cause:** the slot plumbing (`contSnapshotFromKeyboard` polls 0..3, player N reads controller N) was already per-slot, but `inputComputePad` ran on the scheduler thread and read/wrote `g_CurrentPlayer` — whichever player the game thread last selected — for aim, stance, style and use/reload. The D416 stopgap disabled those paths in a match, which removed them from P1 too.
+
+**Fix (port only, `port/src/input.c`):** `slotPlayer()` resolves the player that owns the slot being polled (`s_slot`, set by a thin `inputComputePad` wrapper); all player-struct access goes through it. In a 2+ player stage the poll thread NEVER calls a game entry point that acts on `g_CurrentPlayer`, and never re-points the current-player globals: control style is written straight onto the slot's player (mirror of `cur_player_set_control_type`), the crouch weapon check reads `p->hands[GUNRIGHT].weaponnum`, use/reload go out as the native B button, gadget cycling is solo-only. Crouch state is per slot; slots 1+ get pad A/X = B, stick click = crouch; slots 1+ use the N64 aim integrator (centred aim state is single-slot); `portMouseAimPdGetTurn` applies to player 0 only; unused slots return neutral.
+
+**Lesson (first attempt hung the game):** the first version wrapped those calls in a save/swap/restore of `g_CurrentPlayer`/`player_num`/`g_playerPerm`. The poll thread is a real thread, not the game thread, and the style check ran the swap every poll. When the game thread did its own `set_cur_player` inside the window, the restore left it on the wrong player and `bondinvCycleForward` (bondinv.c:523) looped forever (circular list walked against another player's list head; kernel heartbeat dump showed mainThread spinning there after a respawn). Never swap the current-player globals from the poll thread. See porting-notes.
+
+**Status:** RESOLVED (user live-tested M&K P1 + pad P2 and the kill/respawn sequence, 2026-09-29). Open: P2+ centred aim; gadget cycling in matches; MP score screen shows an odd big number (not investigated).
+
+## D420 — MP score / stats screen shows an odd big number (issue #99)
+
+**FIXED 2026-10-01 (`mp/virtual-seats`): a D8-class stack overrun, not a scoring bug.** Reproduced headlessly (2P, stage 38, `GE_STARTMP=2 GE_MPVIRT=1 GE_INPUTSCRIPT="400:START"`, frame 450): the watch menu's Scores page showed `1932599354` / `116` at 0 kills. A temp probe in `display_text_for_playerdata_on_MP_menu` showed `get_points_for_mp_player(0/1)` = 0 / 0 while the passed `points` were the garbage values. `1932599354` = 0x7331203A = bytes `": 1s"` and `116` = `'t'`: the tail of **"Rank: 1st"**. `mp_watch_menu_display` (mpmenu.c) declares `char rankbuffer[4]` (decomp size) but `write_playerrank_to_buffer` writes "Rank: 1st" (10 bytes incl. NUL) into it, and `sprintf` writes "P<n> KILLS"/"P<n> LOSSES"; GCC places `scores[4]` right after it, so the rank text overwrote `scores[0..1]` after they were filled. On N64 the IDO frame layout absorbs the overrun (the menu shows 0). **Fix:** `rankbuffer[64]` under `#ifdef PORT` (D8 policy: pure local stack scratch, zero ABI role, same as D295's `difficultytext`); the N64 build keeps `[4]`. Not a Rule-2 change (removes a PC-only clobber). **Verified:** the same 2P frame shows 0 / 0; 2P/3P (Library)/4P watch-menu runs with pause, unpause, exit-cancel and exit-confirm show 0s in every layout, all rc=0, `GE_MEMPREDZONE` 0 hits. Not checked: the post-match awards screen (the `GE_STARTMP` harness relaunches a match instead of returning to the menus), and the maintainer's original live report (assumed to be this page). The `u16 *text` sprintf slot in `display_text_for_playerdata_on_MP_menu` (8 bytes on PC) still overruns for a score of 8+ chars (only possible far beyond any point limit); left as is.
+
+**Symptom (user, live, 2026-09-29):** in a 2P match the player score / position display shows "a big number"; at match start both players show 1st place. Still present after a kill + respawn.
+
+**Read so far (code only, no capture):** `write_playerrank_to_buffer` / `get_points_for_mp_player` (mpmenu.c ~903/826) rank by kills-minus-suicides with ties sharing the better rank, so 0-0 at start = both 1st is N64-faithful. A big number could be the stats screen's `shortest_inning` (init `S32_MAX` = 2147483647 in lv.c:548, only lowered on a death), but it persisted after a kill/respawn, so that is NOT confirmed. Nothing 64-bit-suspect found in the rank/points path (`kill_counts` is a plain `int[4]`); `display_text_for_playerdata_on_MP_menu` does `sprintf(&text, "%d", …)` into a `u16 *` local (8 bytes on x64, 4 on N64) and `char rankbuffer[4]` holds "1st" exactly — both worth a second look if a capture shows garbage.
+
+**Next:** get the exact screen (pause/watch menu vs end-of-match) via `GE_PCDUMP` or a screenshot; identify which field prints the number; check against the 1964/N64 reference before deciding whether it is a port bug.
+
+**2026-09-30 code-only pass (no fix, hypothesis unconfirmed):** the in-match number is drawn by `display_text_for_playerdata_on_MP_menu` (mpmenu.c:760) from `get_points_for_mp_player` (mpmenu.c:826) = kill_counts[] (s32, player.h:19) minus suicides + `killed_gg_owner_count*(n-2)`; all are zeroed per player in initBondDATA.c:267-269, so no uninitialised read found and the struct fields are plain s32/int (no 32->64 widening). Candidates not ruled out: (1) mpmenu.c:771 `u16 *text; sprintf(&text, "%d", points)` uses a pointer-sized local as a char buffer (4 bytes on N64, 8 on PC; a value with >7 chars overruns it and the neighbouring locals) -- any large/negative score would print big and could corrupt adjacent stack; (2) `s32 q/h2 = (s32)langGet(...)` then `(char*)q` (mpmenu.c:1408-1410, 1478-1480) truncates string pointers on 64-bit (works only while strings sit below 4 GB; the label prints correctly, so probably benign here). Next step: dump `scores[]` at mpmenu.c:1240 with GE_PCDUMP at the moment the number shows.
+
+## D421 — Gadget cycling disabled in 2+ player matches
+
+**CLOSED 2026-10-01: moot, no fix needed.** The pad-B cycle only selects items `ITEM_BOMBCASE..ITEM_WATCHMAGNETATTRACT` (mission gadgets). No MP weapon set (`src/game/mp_weapon.c`; every `INLINE_S_MP_WEAPON_SET` entry tallied) contains one: MP 'devices' are the timed/proximity/remote mines, which sit below `ITEM_BOMBCASE` and already cycle natively. So a match inventory never holds a gadget, and B would select nothing even with a working hook. A design review (Sonnet subagent, read-only, delegated by the maintainer) had approved a game-thread drain hook (`inputGadgetDrain()` inside `if (canCycleWeapons)` in `MoveBond`'s input step, bondview2.c ~6325, per-seat `SDL_atomic_t` one-shot, gated on alive/watch/lock/stop/game-over). It was implemented and built, then reverted unmerged once the empty gadget range was found. The early return in `inputCycleGadget()` stays. If a mode ever puts gadgets into an MP inventory, that design is the one to use. Side note from the review: solo's `inputCycleGadget()` also runs on the poll thread and mutates `hands[]` while the game thread may read it. No hang is possible in solo (`g_CurrentPlayer` never changes), but it is a latent data race; low priority.
+
+`inputCycleGadget()` (port/src/input.c) acts on `g_CurrentPlayer` via game entry points with no player argument; calling it from the poll thread raced the game tick (D419 hang), so it now returns immediately in a match. Solo unchanged. Restoring it needs a game-thread hook (src/game edit, Rule-2 sign-off) or a native-button equivalent. Native N64 weapon cycling (C-buttons / pad Y) still works.
+
+## D422 — No centred aim for P2+ in split-screen
+
+**Update (2026-09-30, verified by code reading):** fixed by `ac92e0ab` (an ancestor of `mp/virtual-seats`): `s_aimSt[4]` with the `AIMS` slot accessor, a stateless `padDirectCompute` on `slotPlayer()`, and `aimModeGet()` no longer forces `AIMMODE_N64` for slots > 0. Slot 0 stays byte-for-byte (`AIMS` falls back to slot 0). This entry was left saying 'parked'. Untested live on slots 1+.
+
+Centred aim (`aimModeGet()==AIMMODE_CENTRED`, `padDirectCompute`, `s_gepdCross*`) keeps single-slot static state, so `aimModeGet()` returns `AIMMODE_N64` for slots > 0 (port/src/input.c). P1 keeps its full aim set. Making the state per slot is mechanical but touches the aim accumulators; parked as low priority.
+
+## D423 — Unidentified black arrowhead in P2's split-screen view
+
+**CLOSED 2026-10-01: faithful, not a bug.** The maintainer played a live 4P Temple match (mouse/keyboard P1 + Xbox pad P2, split-screen build) and confirmed the black triangle is the level's own shadow/shading at the top of a doorway. The session exited cleanly (window closed, rc=0, no crash log).
+
+**2026-10-01:** seen again headlessly in ONE frame of a 4P run on stage 38 (`GE_STARTMP=4 GE_MPVIRT=3`, scripted seats): P4's quadrant at frame 920, a flat, untextured near-black (RGB ~10-13) right-pointing triangle with sharp edges at a wall/ceiling edge; it looks in-world, not HUD. (An earlier note here also claimed P2 at frame 380; that was a thumbnail misread, and the full-res crop shows nothing.) So it is real rendered pixels and not 2P-only, but it has not been shown to be a port bug: it could be legitimate geometry, e.g. part of another player's model or a level object, until checked against 1964 or traced.
+
+Seen in a `GE_PCDUMP` frame (2P, stage 38, frame 500) as a black right-pointing triangle at the left of the lower (P2) view, and again in live play (user: "not sure what it is"). Not identified: could be an in-world object/marker or a HUD/radar element drawn with a bad texture. Next: capture several frames, `GE_DTEX`/DL dump around that screen position, check whether it also appears in P1's view or in solo MP-stage loads.
+
+## D424 — `WeaponStats.RecoilSpeed`/`b44[]` byte order: no recoil animation on the grenade launcher, shortened recoil on every gun (issue #118)
+
+**Root cause:** `b44[4]` aliases the four bytes of the big-endian `RecoilSpeed` word (`gun.h`). Byte 0 is the MSB on N64 but the LSB on little-endian PC, so `gunfire.c` read rise/fall/retrigger/offset reversed. Grenade launcher `0x081000FF` (8,16,0,-1) read as (-1,0,16,8): `field_890 >= sp1A4+sp1A0` was true at once, so the recoil phase never ran. KF7/Klobb 4+12 -> 6+0 ticks, PP7 4+8 -> 0+3.
+**Fix (port, `#ifdef PORT`, use-site, semantics-preserving):** `WS_B44(ws,i)` accessor in `gun.h` reads `b44[3-i]`; all `gunfire.c` reads switched. **Rule-2 note:** endianness rather than pointer widening, so it needs sign-off as an ABI-class exception.
+**Rule-2:** user sign-off 2026-09-29 ("if justified and accurate"). Accuracy check: a standalone gcc test of the real union layout with the GL (`0x081000FF`) and KF7 (`0x040C0006`) words gives (-1,0,16,8)/(6,0,12,4) through the old read and exactly the N64 (8,16,0,-1)/(4,12,0,6) through `WS_B44`.
+**Status:** FIXED; user-verified vs GEPD/1964 2026-09-29 (GL kick, PP7 recoil).
+
+## D425 — Tank run-over death sound loops: `(chrflags << 7) >= 0` sign-bit latch is always true on GCC (issue #115)
+
+`CHRFLAG` contains `0x80000000`, so GCC makes the enum unsigned; `bondview2.c` tank-crush latch (`CHRFLAG_01000000` << 7 = sign bit) never blocked, so `CRUSHED_YELL_SFX`/`TANK_CRUSH_MAN_SFX` retrigger every tick while an ACT_DIE chr sits in the tank bounds. **Fix:** `(s32)chrflags << 7` (use-site cast; a `-1` sentinel would risk widening the enum to 64-bit). Cross-tag porting-notes D3. **Status:** FIXED; user-verified 2026-09-29 (Runway run-over plays the crush yell once).
+
+## D426 — Tank cannot be steered with the mouse out of aim mode (issue #116)
+
+Tank hull turns from stick X (`analogTurn`, `bondview2.c` ~5166); port hipfire mouse used `hipDirectCompute` (direct `vv_theta` write, ignored/overwritten in tank). **Fix (`port/src/input.c`):** in tank, hipfire mouse X emits stick turn (x `Input.TankAimScale`), mouse Y dropped (stick Y is drive). Pad CENTRED direct path in tank not audited. **Status:** FIXED; user-verified 2026-09-29 (non-aim tank mouse turning good; aim behaviour matches the original, D429).
+
+## D427 — Automatic fire cadence is frame-counted, ~2-3x faster than N64 at 60 fps (issue #114)
+
+`gunfire.c` `field_88C += 1` per rendered frame gates `field_88C % AutomaticFiringRate`; N64 renders 2-3 ticks/frame, PC 60 fps gives 1 (D13 class; D240 lineage). Faithful decomp, platform-dependent -> **needs rule-2 sign-off** before any `src/game` edit. `FpsCap 30` roughly halves the gap (untested). **Fix (rule-2, user go-ahead 2026-09-29; `gunfire.c`, `#ifdef PORT`):** the automatic-fire gate `88C % AutomaticFiringRate` now uses `rate * (g_ClockTimer >= 2 ? 1 : 2)`, so it spans the same number of TICKS as a console 2-tick frame. Only that gate changes. **Rejected first attempt:** slowing `field_88C` itself (advance per 2 ticks) made the counter sit on the same value for two frames, so every `88C == 0` / `%` gate fired twice (measured `1 5 1 5` tick gaps = no slowdown, and it would have double-fired pistols). **Measured** (`-level_09`, AK47 via `GE_STARTWEAPON=8`, held fire, one shot per line of a temporary probe, since removed): before = 3 ticks/shot at 60 fps; after = 6 ticks/shot at FpsCap 60 and FpsCap 30 alike (N64 at 2 ticks/frame = 6). Semi-autos are recoil-time (tick-scaled) bound and unchanged.
+**Status:** FIXED; user-verified vs GEPD/1964 2026-09-29 (AK47 empties in ~3 s, Klobb normal). **Known limit (sub-agent review, 2026-09-29):** `field_88C` is never rescaled, so at mixed 1/2/3 ticks-per-frame pacing (unstable ~40-55 fps) the modulus flips 2x<->1x and can produce an early extra shot or jittery cadence; steady 60 (or 30) fps is exact. No stall and no same-frame double fire. Headless measurement was steady-state only.
+
+## D428 — No gun turn-sway with direct mouse look (issue #117)
+
+Gun turn lag = `weapon_theta_displacement = -1.75*speedtheta` (`gun.c` `gunSetBondWeaponSway`). Direct-look paths (D238 hipDirectCompute, centred, PD aim) write the camera and leave `speedtheta`~0. Writing `speedtheta` would also move the camera; needs a display-only route or design decision. **Fix (rule-2, user go-ahead; `#ifdef PORT`):** `hipDirectCompute` records the yaw degrees it applied; hipfire feeds them to an atomic accumulator (`swayFeedTheta`, `port/src/input.c`); `bondview2.c` adds `portGunSwayTheta(g_GlobalTimerDelta)` to the `speedtheta` value passed to `gunSetBondWeaponSway` (player 0 only). The speed uses the game's own convention for deriving speed from an angle change (`bondview2.c` speedverta: delta / (2*dt), clamp +/-0.7). Camera untouched; vertical sway already worked (the game derives `speedverta` from the real `vv_verta` change). Aim mode not fed (sway-free while aiming). Pad centred-direct path not fed. Verified the hook fires (`GE_INPUTLOG` `gunsway` lines, ~0.13 speed at 8 px/poll); amount is by-feel, tune the 2*dt divisor if needed.
+**Status:** FIXED; user-confirmed feels right 2026-09-29 (second pass, see below; the formula in the Fix paragraph above is the superseded first pass). **Split-screen note:** the accumulator is global and drained only by player 0; revisit when #99 (mouse on a non-zero slot) merges.
+
+## D429 — Tank full pass: aim-mode (RMB) mouse behaviour and tank sticking forward/back (user playtest 2026-09-29, follow-up to D426)
+
+After D426, non-aim mouse turning in the tank is good. Still open: (1) right-mouse aim in the tank is "wonky"; (2) the tank can seemingly get stuck driving forward or backward. Candidates (unverified): the aim-held legacy velocity-stick path (`input.c` `tankAimStick`) feeding stick Y while the game treats stick Y as drive/turret pitch depending on `insightaimmode`; digital C-up/C-down (W/S) interplay in aim mode; latched button state across the aim toggle. Needs a dedicated pass against GEPD/1964 tank behaviour, then the input layer/QoL.
+**Status:** CLOSED faithful (user 2026-09-29: tank controls now match GEPD/1964; the "sticking" was drive inertia and the original also drops driving input while the mouse aims).
+
+## D430 — Shot light fixtures do not darken: `extract_vertex_indices_from_triangle` reads the N64 8-byte Gfx layout from the 16-byte PC Gfx (issue #119, the D415 report)
+
+**Root cause (code reading; D154/D135/D312 class, porting-notes B):** `lightFixtureBreak` -> `darken_triangle_in_room` / `extract_vertex_coords_from_triangle` all get their three vertex indices from `extract_vertex_indices_from_triangle` (`lightfixture.c`). Every case reads the display-list command as raw N64 storage -- `gfx->tri.tri.v[k]` for G_TRI1, `((u32*)gfx)[1]`, `((u8*)gfx)[7]`, `((u16*)gfx)[3]` ... for the four G_TRI4 triangles. The room DL on PC is the widened 16-byte Gfx (D85), where the two N64 words live in the low dwords of `words.w0`/`words.w1`, so all reads returned garbage (effectively index 0). A shot fixture therefore darkened vertex 0 of its vertex batch instead of its own vertices (and the glass-shard positions and "neighbouring triangle" search used the same wrong vertices). The sibling parser in `bg.c` (bullet hit test) was fixed for this in D154; `lightfixture.c` was missed.
+**Fix (`#ifdef PORT`, no logic change):** decode from `words.w0`/`w1` with exactly D154's nibble mapping (case 0 = G_TRI1 bytes 5-7 / 10; cases 1-4 = G_TRI4 s2 0..3). The original N64 behaviour of ignoring the G_VTX v0 offset is kept. Each of the 15 index expressions was checked against the original raw-byte access. **No headless proof** (needs a shot at a fixture); verification is the Bunker/Caverns playtest.
+**Note:** this explains "shooting the fixture does not kill the light". I found no flicker mechanism in the game code (the light system only darkens vertex colours >>2 and spawns glass), so if a flicker persists after this fix it is a separate effect.
+**Status:** FIXED; user-verified vs GEPD/1964 (Caverns) 2026-09-29.
+
+## D431 — Shot light fixtures never break on PC: the bullet-hit path returns texnum -1, so `check_if_imageID_is_light` is never true (issue #119, user-confirmed on Caverns)
+
+`chrprop.c` calls `lightFixtureBreak()` only when `check_if_imageID_is_light(bghit.texturenum)`. On the N64 `bg.c`'s room hit-test recovers `texnum` by dereferencing 8 bytes before the SETTIMG texture data in KSEG0; on PC that is invalid for the converted room GDLs, so D154 stubbed it to `-1` (both sites, G_TRI1 and G_TRI4 loops). Result: `lightFixtureBreak` is never called for any shot (the `GE_D430` probe logged zero `break` lines during a Caverns session where the user shot lights). D430 (index parser) was a second, independent bug behind it.
+**Fix (`#ifdef PORT`, no logic change):** `tex.c` already knows the image id when it opens a fixture entry; it now stores it in the entry's unused `RESERVED` slot (`lightFixtureSetTexnum`); the two `bg.c` sites return `lightFixtureTexnumForGfx(gdl, roomnum)` (same room/DL-range test `lightFixtureBreak` uses) instead of -1. Non-light textures still return -1 (impact-sound flavour unchanged, D77 parked).
+**Consequence found by sub-agent review (D434):** real image ids for light hits now flow into the `g_Textures[]` consumers in `chrprop.c`/`propobj.c`, which read a raw byte 0 as the hit type (wrong on PC) -- fixed in D434.
+**Status:** FIXED; user-verified vs GEPD/1964 (Caverns) 2026-09-29.
+
+## D432 — Gunshot sound cadence drifted from the shots after D427 (user: sounds "off", Caverns, Mac-10-class gun)
+
+`gunfire.c` re-triggers the shot sound when `field_A4C < g_GlobalTimer`, with `field_A4C = SoundTriggerRate + g_GlobalTimer`. The gate is evaluated once per gun-tick call (per rendered frame; each frame carries `g_ClockTimer` ticks of `g_GlobalTimer`). On the N64 (2 ticks/frame) it is only evaluated every second tick, so the next sound lands on the first frame boundary after rate+1 ticks (AK47 rate 4 -> 6). At 1 tick/frame the port opened it after exactly rate+1 (5). D427 moved the shots to 6 ticks, so shots (6) and sounds (5) drifted. **Fix:** at `g_ClockTimer < 2` add `| 1` to the rate (rate 4 -> 5, 3 -> 3, 5 -> 5, 11 -> 11), which opens the gate on the same even boundary the console used; unchanged at >= 2 ticks/frame.
+**Status:** FIXED; cadence measured identical to the N64 rules (AK47 6/6, Klobb 6/12, weapon 9 4/6; zero SKIPs). Residual slight audible difference tracked as D433.
+
+## D428 second pass (2026-09-29)
+
+**Split-screen update (2026-09-30):** the sway accumulator is now one per player (`s_swayThetaMdeg[4]`, `ac92e0ab`). The game-side drain in `bondview2.c` is still gated to player 0 (`get_cur_playernum() == 0`), which is correct today: `swayFeedTheta` is only called from the slot-0 mouse block, so slots > 0 are never fed. Widening the gate is only needed if a non-zero slot ever gets a mouse (a `src/game` edit inside the D428 Rule-2 block; ask for sign-off then).
+
+Probe (`GE_D428`) showed the hook firing with the input clamped at 0.7 on most fast turns. The game's natural stick turn sets `speedtheta = (stick/70)^2 * fov/60` with NO ramp (max ~1.0) and integrates `vv_theta += speedtheta*dt*3.5`, so the exact inverse for a mouse turn is `deg / (3.5*dt)` clamped to `fov/60`. The first pass used the vertical axis' `delta/(2*dt)` clamped to 0.7: too weak at full speed, too strong at slow speed. Switched; user reports a slight difference turning fast, which this addresses.
+
+## D433 — Automatic-gun shot sound still audibly differs slightly from GEPD/1964 (user by-ear, Caverns, 2026-09-29)
+
+**Measured (headless, `-level_09`, held fire, temporary shot + `GE_D207S` probes, since removed):** after D427/D432 the shot and sound-start cadence match the console's rules exactly -- AK47 shots 6 ticks / sounds 6 ticks, offset 0 on every shot; Klobb shots 6 / sounds 12 (SoundTriggerRate 11, same gate as N64); weapon 9 shots 4 / sounds 6; zero SKIPs. So the residual difference is NOT fire/sound cadence.
+**Suspects (unverified):** (1) the port's RSP-audio HLE (`port/src/mixer.c`): resampler interpolation, envelope/`aEnvMixer` handling, reverb; (2) how a superseded shot sound is stopped (`sndDeactivate` -> release envelope) versus the emulator's plugin; (3) the reference itself -- 1964's audio plugin is also HLE and is not a ground-truth for timbre. **Next:** ask for a description (pitch / tail cut / loudness / reverb / overlap, which gun) or a capture of both; then compare mixer resampling and release handling to libaudio's N64 behaviour.
+**Status:** OPEN.
+
+### D433 -- code audit 2026-10-01 (branch `audit/d433-fire-sound`, headless, `GE_D433LOG` TEMP probe in `gunfire.c`)
+**Result: the game-side shot-sound path is faithful; the residual is in the audio layer (by-ear/capture item), not in `src/game` logic.**
+- AK47 held fire, `-level_09`, 60 fps: SHOT and FIRESND land on the same tick every 6 ticks (`gt` 556, 562, 568, ...; field_890 6/12/18, field_88C 5/11/17), mag 30 -> 0 without skips. Matches the D427/D451 rules.
+- Sound plumbing (`gunTickHandState` FIRE block): each sound-trigger first `sndDeactivate`s the previous shot sound (`audioHandle` / `field_A48` pair), then plays sound 109 into whichever handle is NULL. `GE_AUDIOTRACE` shows the expected alternation: `sndDeactivate(4db0)` -> play 109 into slot 7009be30 -> `sndDeactivate(4e80)` -> play into 7009be28, every slot `(was 0)` when written, i.e. the handle-clear contract of the N64 libaudio holds and the D208 `field_A48` layout fix is in effect. Order is FIFO at delay 0. Besides the shot (109) each tick pair also starts one bullet-impact sound (ids 29-40, hit-type table), same as N64.
+- Nothing tick-vs-frame-sensitive remains on this path except the already-fixed D432 `|1` offset and the D427/D451 gate; `sndDeactivate` posts an event at delay 0, so how soon the release envelope starts is decided by the audio thread (port mixer), not by game code.
+- **Remaining suspects (not settled by code):** (1) mixer release-envelope length / when a deactivate event is consumed relative to the next play event within one audio frame (a superseded 6-tick shot is cut by the release, the N64's cut-off shape is a function of its audio-frame size); (2) reverb/resampler HLE. Only a capture comparison (PCM of both) or a by-ear A/B with a wav dump settles it; this cannot be established from the log.
+**Status:** OPEN (audio layer, by-ear). Confidence that game logic is faithful: high; that the delta is mixer-side: medium.
+
+## D434 — Raw `((u8*)&g_Textures[n])[0] & 0xf` hit-type reads are wrong on PC (found by sub-agent review of D431; latent OOB in `g_HitTypeSounds[13]`)
+
+Under PORT `struct image_entry` puts `dataoffset:24` in bits 0-23 (D67), so byte 0 is the LOW byte of the data offset. On the N64 (big-endian) byte 0 is the MSB of word 0, the hit type. `chrprop.c` (impact_sounds ~1154, the explosion skip test ~1187) and `propobj.c` (~9685) used the raw byte, so on PC they indexed `g_HitTypeSounds[]` with an arbitrary nibble 0..15 (table has 13 entries; 13-15 read past it) and mis-tested the 5/6 spark skip. Harmless while `bghit.texturenum` was always -1 (D154); D431 now returns real ids for light fixtures, activating the path. (The Caverns playtest passed, so the light images' nibbles were presumably in range: luck, not design.) The comment in `image.h` claiming the N64 does the same was wrong and is corrected.
+**Fix (`#ifdef PORT`, layout-driven, semantics-preserving):** use the `.hitTexture` bitfield at the three sites, as `chr.c` already does. **General rule (for porting-notes):** un-stubbing a `-1` sentinel (D154/D135/D431) re-activates every dormant consumer of the value -- grep all readers and check each for raw-layout reads and table-bounds assumptions first.
+**Status:** FIXED; built. Live check owed (shoot light fixtures across levels; impact sound/sparks on lights).
+
+## D440 — "Original N64" preset + "Port defaults" inverse (ROADMAP §5a, 2026-09-30)
+
+**What:** two one-press action rows, "Original N64 preset" and "Port defaults preset", at the end of the GRAPHICS section (before its Reset row). They are rows in the shared `optionsoverlay.c` row table, so they appear in BOTH the F10 overlay and the front-end PC Options screen (`frontoptions.c` renders the same table; GRAPHICS now paginates to a second page there, the D406 paging). Activation reuses the D356 reset-row contract (edge-triggered arm -> "Confirm" -> apply within 3 s; held-repeat never fires it). The value column shows "Active" while every preset key already holds that preset's value. **An action, not a mode:** it writes the existing config keys (live-applied through `videoRequestLiveConfigForKey`, persisted on overlay close / clean exit like any F10 edit); no new ini key, so existing inis behave exactly as before unless a preset is pressed. D372's `Video.LowEndMode` flag no longer exists in tree (only the tree probe's "no M5" check references it), so there was no preset plumbing to reuse; the new generic hook is `configSetValue`/`configGetValue` (`port/src/config.c`, clamped like a file load).
+**CLI route:** `-n64preset` / `-portpreset` apply the preset once at the top of `videoInit` (after `configLoad`, before any value reaches fast3d) and persist via the atexit save. Not added to `--help` (the help text lives outside this change's file partition). An "ini route" is just the keys below.
+
+**Key audit** (every registered key; table lives in `port/src/video.c` `kVideoPresets`):
+
+| Key | Port default | N64 value | In preset |
+|---|---|---|---|
+| Video.TextureFilter | 1 bilinear | 2 (3-point) | yes |
+| Video.Anisotropy | 4 | 1 (RDP has none) | yes |
+| Video.NativeWidescreen | 1 | 0 (4:3 projection) | yes |
+| Video.WidescreenAuto | 1 | 0 (stock vertical FOV) | yes |
+| Video.SafeAreaCrop | 1 | 0 (see below) | yes |
+| Video.DrawDistance / LodDistance | 250 / 250 | 100 / 100 | yes |
+| Video.DrawDistanceAutoFov / LodDistanceAutoFov | 0 / 0 | 0 / 0 | yes (identity guard) |
+| Video.FovScale, Game.HudScale | 100, 100 | 100, 100 | yes (identity) |
+| Game.ScreenShakeIntensity, Game.NoHitFlash | 1.0, 0 | 1.0, 0 | yes (identity) |
+| Video.CrosshairHide/Color/Size/Style | 0/0/100/0 | same | yes (identity) |
+| Input.AimMode | 0 (N64) | 0 | yes (identity) |
+| Input.AimRange | 0 (PC) | 1 (N64 limits, D338) | yes |
+| Culling | — | — | no key: frustum planes / fog-LOD scale (D222) and the room pool (D294 `portRoomPoolScale`) derive from FOV, widescreen, draw and LOD distance and are identity at the values above |
+| Video.MSAA, VSync, FpsCap | 2, 1, 60 | n/a | **no** — performance/pacing; FpsCap 30 throttles the sim (D186), not faithful |
+| Video.Fullscreen, Window.* | — | n/a | **no** — display choice |
+| Video.FixMipTextures, DetailBaseTile, WrapFix | 1, 1, 0 | — | **no** — accuracy fixes that move output toward N64 |
+| Video.CrosshairRed/Green/Blue, DisplayFPS | — | — | no (only used with Custom colour / overlay) |
+| Game.SkipIntro, Game.AllUnlocked | 0, 0 | 0, 0 | **no** — progression/convenience, not presentation (AllUnlocked has save implications, D387) |
+| Input.* feel (sensitivities, deadzones, smoothing, mouse model AimAbsolute/MouseDirectLook/NaturalPitch, CrouchMode), Input.Bind.*, Bond.* (per-save), Audio.*, Debug.* | — | — | **no** — spec: bindings/volumes untouched; mouse modes have no N64 counterpart |
+
+**Overscan — which is faithful:** `SafeAreaCrop=0`. The N64 VI scans out the whole 640x480 framebuffer including GE's black safe-area border; a CRT's overscan hid part of it but by a set-dependent amount, and emulators/1964 show the full frame. The crop (`gfx_pc.cpp` `gfx_adjust_viewport_or_scissor`) is a port-side remap that stretches the inset gameplay viewport to the window (and trims the D246 1-unit side margin), so 0 = the signal the console output.
+**4:3 limitation:** the preset gives a 4:3 *projection*; in a non-4:3 window it is stretched to the window (as the N64 image is on a 16:9 TV set to stretch). A pillarboxed gameplay mode does not exist in fast3d today — follow-up for the ROADMAP (lead).
+
+**Verification (Windows, NTSC, 960x540 window, `-level_09`):**
+- Port-default ini, `GE_PCDUMP=880-880` vs same with `-n64preset`: log `video: applied Original N64 preset (8 value(s) changed)`; the N64 frame shows the black safe-area bars + D246 side margin, the 4:3 projection stretched (narrower horizontal FOV than the Hor+ port frame) and 3-point-filtered textures.
+- ini round-trip: after the `-n64preset` run the ini differs from the port-default ini in exactly the 8 keys (TextureFilter 2, WidescreenAuto 0, NativeWidescreen 0, DrawDistance 100, LodDistance 100, Anisotropy 1, SafeAreaCrop 0, AimRange 1); a following `-portpreset` run loaded those values (8 changed) and wrote an ini byte-identical to the original.
+- UI dispatch: `GE_PRESETPROBE=1 GE_OPTIONSOVERLAY=4` drives both rows through the real arm -> confirm path: PASS (value "Confirm" when armed, "Active" after, other preset inactive).
+- `GE_OPTIONTREEPROBE` reports FAIL both with and without this change (baseline build from the same commit) — pre-existing, not caused by the new rows (GRAPHICS is not in its page list).
+**Not verified:** live mouse/pad press in either UI, draw-distance effect on an open level (DrawDistance is read at fog load, so it applies from the next level load), PAL/JP, Linux build.
+
+**Status:** FIXED (port-only; headless-verified; user live accept owed).
+
+## D441 — 64-bit pointer-width sweep, part 1 (ABI/layout exception, 2026-09-30)
+
+**Why:** harmless today because the arena sits low (`0x10000000`) and the PE image base is `0x140000000` with a 4 GiB-aligned `g_pc_animdata_base` (D34), but each `(u32)ptr`/`(s32)ptr` cast truncates a host pointer and would fault once the heap or arena is above 4 GB (macOS/ARM64 or ASLR; #88/#95/#101). Same class as porting-notes §A1 / D255; permitted by the AGENTS.md ABI/layout exception.
+
+**What (recovered from an agent worktree after a rate-limit crash, then reviewed hunk by hunk):** 17 files, +337 lines, every hunk `#ifdef PORT ... (uintptr_t) ... #else <original, byte-identical> #endif`: `bg.c` (`bgBuildRoomVtxBounds`, `bgTestRayIntersectionInRoom` x2, `bgRoomCalcBB` x2), `bondhead.c`, `bondview2.c` (anim table bases, `mp_respawn_handler` intro-record walk, `hudmsgBottomRender` blackbox call), `bondview_r.c` (intro-record walk), `chraction.c` (animation table bases), `explosion.c`, `front.c` (`load_walletbond`), `image.c`, `image_bank.c`, `initBondDATAdefaults.c`, `initactorpropstuff.c`, `prop.c` (`proplvreset2` setup-file rebase, 20 sites), `ramromreplay.c`, `stan.c` (`stanDetermineEOF` with `intptr_t delta`), `title.c`, `libultra/audio/cseq.c`, `music.c`.
+
+**Review notes (checked, not just trusted):**
+- `(s32)&ANIM_DATA_x + (uintptr_t)&ptr_animation_table->data`: the `(s32)` is intentional. D34 defines `ANIM_DATA_x` as an lvalue at a 4 GiB-aligned base + offset, so its low 32 bits ARE the segment offset. Only the base was widened; the offset is non-negative so the sign extension is harmless.
+- `bondview2.c` `draw_blackbox_to_screen(arg0, &view_left, ...)`: the prototype takes `s32 *` and the four locals are `s32`, so passing the real pointers replaces a truncating int-to-pointer conversion.
+- `explosion.c`: `g_FlyingParticlesBuffer + i` on a `struct FlyingParticles *` is the same scaled pointer arithmetic as the original (`(struct FlyingParticles *)(u32)ptr + i`).
+- `front.c`: keeps the original low-24-bit trick on `srecord->Primary`; semantics unchanged (not independently verified beyond that).
+- `prop.c`, `stan.c`, `bg.c`: rebase arithmetic on the RAM copy (`local_stage`, `newBase`, `ptr_bgdata_room_fileposition_list`) now done in `uintptr_t`. The `bg.c` sites `bgRoomCalcBB` and `lightFindVertexBaseForTri`-adjacent code overlap outside PR #107; this landed version is ours, so #107 will conflict and needs a rebase or closure.
+
+**Verified:** clean build; pointer-to-int-cast warning sites in the 17 files 279 -> 185 (94 removed); `-level_09` and `-level_20` short runs (`GE_QUITFRAME=420`, `GE_PCDUMP` frame 400) exit 0, no crash lines, frames render correctly (Bunker intro camera; Silo guards + intro caption). No frame diff was run (the intro camera is non-deterministic, D117).
+
+**NOT done (owed):** the full ~396-site census with per-site provenance classification (H real hazard / R ROM-address 32-bit / I integer-only / ?), the audit table `docs/dev/ABI-PTRCAST-AUDIT.md` (the agent that started it died before writing it), the `GE_HIGHARENA` high-address test mode, and review of #107/#108 (still the #108 range-check concern in ROADMAP §2). 185 pointer-cast warning sites remain in the touched files; many are intentional (`(s32)&ANIM_DATA_*` offsets, D34). Nothing was tested with an arena above 4 GB.
+
+**Status:** PARTIAL (part 1 landed; census and high-arena test build done 2026-10-03; full-game tier-1 sweep and the above-4-GiB tier owed).
+
+**2026-10-03: complete census + high-arena test build (batches 1-5).** Lead-planned, the mechanical edits applied by the local Qwen worker one prompt at a time, each lead-verified (diff, rebuild, runs).
+- **Census:** one machine-readable list replacing parts 1/2: 424 compiler sites (`-Wpointer-to-int-cast` 276, `-Wint-conversion` 102, `-Wint-to-pointer-cast` 46; prior tags carried forward for 385) plus 460 raw grep hits for the classes no compiler flags (sizeof copies, raw-offset aliases, address conversions, bit-31 tests, negated indexes, stride allocs, s32 sentinels, raw struct I/O). Local artefacts: `scratch/d441/` (sites_tagged.csv, invisible_hits.csv).
+- **High-arena test build:** `GE_HIGHARENA_BASE=0x90000000 ./build-pc.sh` (CMake option, env fallback) overrides `PORT_DRAM_V1_BASE`; `dram_syms.s` became a preprocessed `dram_syms.S`, so the three link-time symbols follow it. Default build unchanged (`nm`: 0x70000000 / 0x70050000 / 0x707ffd30). With bit 31 set, every `s32`-held arena pointer read back as a pointer sign-extends to 0xffffffff9xxxxxxx and faults, so the crash order is the work list.
+- **Fixed (35 sites, all `(T *)(uintptr_t)(u32)(EXPR)` under `#ifdef PORT`, `#else` byte-identical; identical values at the default arena, correct for any arena below 4 GiB):** batch 1, animation tables (`initanitable.c` x3, `chr.c` x3, `chraction.c`, `chrai.c`, `propobj.c`, `bondview2.c`, `initactorpropstuff.c`); batch 2, model-GDL copy `sub_GAME_7F0762E0` (`objecthandler_2.c` x6), `mema.c` allocator return, `rsp.c` RDP output buffer x2; batch 3, implicit conversions (`chr_b.c` `s32 opcode` passed as `ModelNode *` (gdb-confirmed: `Switches[4]`=0x9022ad42 arrived as 0xffffffff9022ad42), `front.c` x2, `title.c`, `bondview2.c` `start_stan` x3, `image_bank.c` `texSetBitstring`, `mema.c` `memaRealloc`); batch 4, `chraction.c` `pathid` (an `s32` that carries a `PathRecord *`), `chrprop.c` hit `unk44`; batch 5, `bondview2.c` held weapon `helddst` and camera buffer `resolution`, `mpmenu.c` rank strings x2. Every `-Wint-to-pointer-cast` row is now fixed or ruled out (u32 sources, ROM offsets, literals, audio params, dead code).
+- **Port-layer fix found by the test build:** `gfx_tex_source_is_c_array()` (`gfx_pc.cpp`) bounded the DRAM range with a `0x90000000` literal; with the arena there the range was empty, every DRAM texture was bswapped as a C array, and the legal screen drew with mirrored texel pairs (no crash). Now the two mapped views from `portaddr.h`. Porting-notes §A-buf cross-tag.
+- **Ratchet:** `tools_pc/abi_ratchet.py` + `abi_baseline.json` + a windows-build CI step fail if any file's count of the three warnings rises; re-baselined 424 -> 389 after the batches.
+- **Verified:** each batch: default build, `-level_09` 900 frames rc=0; `GE_PCDUMP` menu frames 60-480 identical between the default and tier-1 builds (pixel-exact). After batch 5 the tier-1 build runs `-level_09` to `GE_QUITFRAME`, and seeded runs (`GE_RSEED=0x0123456789abcdef`, `GE_INPUTSCRIPT=20:START`) give pixel-exact identical level frames (unseeded level runs differ run-to-run, so an unseeded frame diff is not evidence).
+- **Owed:** the tier-1 sweep over every level (seeded frame compare); the above-4-GiB tier, which needs the `u32` storage itself widened (or `portHostToN64` under the macOS port_addr model), not zero-extension; the remaining `-Wint-conversion` and `-Wpointer-to-int-cast` rows (most are truncating stores that are harmless below 4 GiB).
+
+### D387 Fix (2026-09-30)
+
+**The mechanism stays in the game, not in the file.** `geEepromRW` (port/src/libultra.c) still hands the game the AllUnlocked view at the block-4 read, but now remembers per slot the RAW bytes (`s_d387Raw`, what is on disk) and the SEEN bytes (`s_d387Seen`, what the game got). On every whole-slot write (`block = 4 + 12*slot`, 96 bytes) `geD387MergeSlotWrite` persists, for each cheat byte and each 10-bit completion time, the RAW value when the game left the field equal to what it saw, and the game's value when it changed it (a new record, a folder reset or delete). All other bytes come from the write. The game CRC is regenerated over the merged slot (the same `fileGenerateCRC` call the patch uses). The merge keys off "a patched read happened this process" (`s_d387Valid`), not the live flag, because the game keeps the patched view in RAM after the option is toggled off; a read with the option off clears it.
+
+**Slot relocation (found by the test, fixed):** the game moves saves between slots (a folder's first completion relocates its data to a lower slot; copy-folder duplicates one). Comparing a write to the shadow of its own slot index dropped an earned cheat when slot 4's data was written to slot 0. The merge now picks the source shadow the write differs from least (own slot wins ties) and logs `eeprom: D387 slot N write descends from slot M's view`. A delete or reset differs from every view about equally, and every changed field is persisted as written anyway, so the choice does not matter there.
+
+**Verification** (isolated dirs under the scratchpad, never the real `data/`; seed = a copy of `data/ge007 copy.eep`, where slot 4 is folder 0 with two real times and one earned cheat; a scratch-only probe, never committed, drove the game's own save APIs from the front-end tick):
+
+| Scenario | Result |
+|---|---|
+| settings write (`GE_WSPROBE_FRONT`), ON vs OFF | EEPROM byte-identical (before the fix, ON persisted `ffff0f` cheats and 0x3FF fills) |
+| genuine record via `fileUnlockStageInFolderAtDifficulty` (level 3, diff 0, 300 s) with the slot 4 to 0 relocation, ON vs OFF | byte-identical after the relocation fix (before it, ON lost the earned cheat `040000`) |
+| delete folder 0, ON vs OFF | byte-identical |
+| copy folder 0, ON vs OFF | not comparable: with ON every folder reads as completed (synthetic 0x3FF), so `fileCopyFolderToFirstFree` finds no empty folder and writes nothing. This is AllUnlocked's own behaviour, not a save leak. |
+| ON result, then OFF restart | all five slots validate `OK`, the EEPROM is unchanged by the restart, no 0x3FF fakes |
+| fresh (no EEPROM) settings write, ON vs OFF | no fakes either way. ON leaves the four untouched slots zero-filled, the normal state of a new file; an OFF boot then normalises them to the same bytes as a plain OFF run. |
+
+**Known limitations:** (1) a cheat earned while ON is not persisted: its bit is already set in the synthetic view, so a write cannot show it changed. It is re-earned while OFF. (2) A first completion at or above 1023 s (the synthetic 0x3FF value) is not seen as a change. (3) If the game ever writes the destination slot after the source slot of a relocation, the source view would already be gone (the observed order is destination first). (4) Copy-folder is a no-op while ON. (5) Toggling the option takes effect at the next launch either way (the save is patched at read time), so the row now reads "ON (restart)". (6) Fakes persisted by earlier builds have no provenance and are not repaired: back up `data/ge007.eep` before first use; if a save already contains them, the only clean reset is the in-game file delete for that folder.
+
+**Prior art:** the D387 agent that died in the 2026-09-30 rate-limit crash left a 302-line staged design in its worktree (`d387-agent-staged-WIP.patch` in the notes archive) that additionally replays the game's completion and cheat-award rules to persist cheats earned while ON, and normalises invalid slots. It was never built or tested. If limitation (1) matters, start there; this fix deliberately stays smaller and testable.
+
+**Status:** FIXED (port-only; matrix passed); user live accept owed (play a mission ON, then OFF).
+
+
+**2026-10-01: #107 folded in.** The two sites from outside PR #107 (italoarruda), both confirmed by the census as REAL hazards for an arena at or above 2 GiB, are fixed with the PR's own `uintptr_t` arithmetic under `#ifdef PORT` (`#else` arms unchanged): `lightfixture.c` `lightFindVertexBaseForTri` (segment-14 vertex base `(s32)vertices + offset` re-cast to `Vtx*`) and `bg.c` `bgRoomCalcBB` (loop bound `(Vtx*)((s32)vertices + usize)` compared with a full-width pointer; above 2 GiB the loop never runs and the room keeps an inverted bounding box). Identical values with today's low arena; `-level_09` load smoke clean (rc=0, 0 red-zone hits). Read-side census (part 2, 403 `-Wint-conversion`/`-Wint-to-pointer-cast` warnings) is in the local note `docs/dev/notes/ABI-CENSUS-D441-PART2.md`; its model.c rows predate D457(c)(d) and need a re-run. **Also 2026-10-01:** `options.c` `draw_watch_controller` second-controller opaque path passed `(s32)(&table2)` (a stack address) into a `WatchContButtonPositions *`, the missed sibling of the D290 fix 60 lines above (census TOP-10 item 8); now `&table2` under `#ifdef PORT`. Read-side census re-run after D457(c)(d): 403 -> 320 warnings (model.c 65 -> 12, bondview2.c 27 -> 14; chr.c 190 = 31 distinct D34 initialiser lines). Same pass: `boss.c` main loop sent the stack-local `localGfxDoneMsg` address to `rspGfxTaskStart` through the `s32 rspReplyMsg` every frame (census TOP-10 item 8); now `(OSMesg)&localGfxDoneMsg` under `#ifdef PORT` (menu + `-level_09` smoke clean).
+
+**2026-10-05: tier-1 all-level sweep (P6, maintainer time slot).** The tier-1 build (`-DPORT_DRAM_V1_BASE=0x90000000`) ran against the default build on all 21 solo levels, including the Cuba ending cutscene. Gate = the tools_pc/golden recipe per level (seed `0x0123456789abcdef`, `20:START` intro skip, `GE_PCDUMP 900-1500:300`; Cuba = no input, `300-900:300`), ini pinned 640x480, then `tools_pc/framediff.py` with the per-level run-to-run limits verify.sh uses (1 % tol-2; Jungle/Surface 2 3 %; Cuba structural only). Driver: `scratch/d441/sweep2.py` (worktree), levels in parallel in isolated instance dirs (copied `data/`, pinned ini, `MasterVolume = 0`); ~5 min wall at 4-way. **Result: 21/21 PASS, 0 crashes; worst over-tol 2.38 % (Jungle) and 1.38 % (Surface 2), both under their 3 % limit; every 1 %-limit level <= 0.24 % (worst Silo 0.238 %, Egypt 0.173 %) = residual self-noise.** No fix batch was needed, so the abi ratchet stays at 389.
+
+**Measurement caveats (for future sweeps, all measured 2026-10-05):** (1) the 60-480 window the P6 prompt suggested is invalid — D117 intro-camera nondeterminism gives ~74 % px divergence between two seeded same-build runs there; the seeded golden window (900-1500) is the gate (self-noise in the golden window is well under the per-level limits; e.g. dam build-vs-build 0.01-0.04 % at tol 2). (2) The 60 Hz vsync-on pace is part of the recipe: uncap the frame rate (VSync=0/FpsCap=0) and the wall-clock 100 ms timers' tick alignment shifts, self-noise ~5 % px (tol 0). (3) `GE_DETERM=1` is NOT usable for this gate when uncapped: its pacemaker branch still services wall-clock timers, so self-noise is 33-35 % px at 900-1500 — D117 follow-up: virtualise the timers in determinism mode before trusting it for frame gates. Status: tier-1 sweep owed item CLOSED; remaining owed = the above-4-GiB tier (u32 slots widened / `portHostToN64`), `mema.c` widening (D453), `initanitable.c` heap slots, the remaining `-Wint-conversion`/`-Wpointer-to-int-cast` rows.
+## D442 — Game.AllUnlocked reworked to a pure RAM override; save patch + D387 merge removed (2026-09-30)
+
+**Status: RULE-2-SIGNOFF** (maintainer-granted opt-in port feature, edit confined to `#ifdef PORT` in `src/game/file2.c`). Maintainer, 2026-09-30: "All unlock - want that to allow for all levels/cheats to be unlocked, don't really care how we do it if debug/overrides are better than what we currently have" and, on the proposed hook design, "new plan sounds great". Runtime-verified (falsifier passed, first hook); second hook build-verified only, maintainer to check level select by eye.
+
+**Change.** `fileGetIsCheatUnlocked` (`src/game/file2.c`, the D225 `#ifdef PORT` block) now also returns TRUE when `portAllUnlocked` is nonzero. Mission-select cheat gating (file.c) and the cheat menu (front.c `frontCheckIfCheatIsUnlocked`) both route through it, so no save byte is read or written for the option. Levels and 007 mode stay on the game's own debug flags seeded in `port/src/main.c`. In `port/src/libultra.c` removed `geEepromPatchAllCheats`, `geSaveGet/SetTime`, the `ge_save_slot` mirror, and the D387 `s_d387Raw/Seen/Valid` + `geD387MergeSlotWrite` machinery; `geEepromRW` now passes raw bytes both ways (D297 legacy-CRC migration kept). Fixes D387 (leak), the cheats-earned-while-ON limitation, and D259/D281 (the fresh-save zero-slot handling lived only in the patch; the game's own BLANKSAVEDATA reset now runs as on a stock build).
+
+**Verification.** AllUnlocked=1, `GE_WSPROBE_FRONT=600 GE_QUITFRAME=780`, slot 0 with real data: the eep diff is only the slot checksum (bytes 32-39) and music_vol (byte 42, the probed change); cheat bytes and all completion-time bytes identical. Log shows `all-unlocked: RAM unlock flags seeded`. Not verified by eye: cheat menu population.
+
+**Second hook (added same day, maintainer-approved).** Maintainer, 2026-09-30: "Decision - yes this is a requirement for the feature to be feature complete. Imagine the normal cheat menu / all unlocked which lets you select any level obviously." `fileIsStageUnlockedAtDifficulty` (`file2.c`, top of function, `#ifdef PORT`) returns STAGESTATUS_COMPLETED for every in-range level/difficulty when `portAllUnlocked` is set (query only; save untouched). Reason: the removed patch's 0x3FF times made every stage COMPLETED, and the debug flags only give UNLOCKED, while several gates compare against COMPLETED: `front.c:3182-3200` (level select with an SP cheat active), `front.c:5015` (extra MP characters), `cheat.c:1415` (level-unlock cheat counting), and via `file2.c:1003-1028` the Magnum / Laser / Golden Gun cheat rows (`front.c:1134-1140`). Callers checked: front.c 3164, 3189, 4226, 5015; cheat.c 1415; file2.c `fileGetHighestStageUnlockedForFolder`, the Cradle/Aztec/Egypt completed helpers and their AnyFolder variants. No gate bypasses the hook for these purposes; the direct `fileGetSaveStageCompletedForDifficulty` users (`fileGetHighestStageAndDifficultyCompleted`, `fileIs007ModeUnlocked` file2.c ~1486) are not needed (007 mode comes from `get_debug_007_unlock_flag`, front.c:3182).
+Side effects beyond unlocks (read from code): `fileGetHighestStageUnlockedForFolder` now returns Egypt; the AnyFolder helpers (`front.c:8056,8074,8197,8203`) now report Cradle/Egypt completed, so the intro cinematic may pick the Cougar Magnum, Oddjob and Baron Samedi as if the campaign were finished. The mission best-time text is unaffected (it reads the raw time getter, which shows blank for 0). No save write.
+
+**Stale references** (not touched, outside allowed files): `port/src/optionsoverlay.c:97-103` comment, `port/src/watchsettings.c:216,546` comments still cite the removed patch. Fakes already persisted by earlier builds are not repaired.
+
+**Confidence:** high on the removal and the eep-diff result; medium on the UI outcome until eyeballed.
+
+
+**Verified 2026-10-03 (headless frame dumps, `scratch/pinrun_au.sh`):** ON: mission select shows all 20 levels; the real menu path ticks every difficulty; the cheat menu lists all 23 cheats (Magnum, Laser, Golden Gun included). OFF: mission select shows only the save's real progress (Dam). `data/ge007.eep` byte-identical before and after every run. `GE_STARTMENU=8`/`=21` direct boots are not a valid check (they skip folder/page setup: an empty cheat page, a mission-header difficulty page).
+
+## D443 — D357 settings-display cleanup + "Restart game" action (2026-09-30)
+
+**Scope (port-only, no `src/game` change, no config storage/default change):** the shared row table in `port/src/optionsoverlay.c` drives BOTH the F10 overlay and the front-end PC Options screen (`frontoptions.c` reads the same `rows[]`), so every change below lands in both UIs once.
+
+- **Mouse sensitivity:** `Input.MouseSensitivity` shown as `%.1fx` (raw/100, 100 = 1.0x), UI range 10-300 step 10. Removed from `calibratedDefault()` (the Wave A "50/100" piecewise display) so the bar is linear and the number is a real unit. Ini values above 300 still load and display (e.g. 5.0x); the UI clamps on the next edit.
+- **Stick deadzone:** already split L/R (`Input.PadDeadzoneL/R`, raw 0-30000). Done by display/step only: step 300 raw + `dispDiv=300` `%` = exactly 1 display-% per step; NO new key / migration (principle 3 not triggered). Default 7000 shows 23% (off the 300-grid by 100 raw, invisible). Also removed from `calibratedDefault()`. `Input.PadTriggerPct`, `MouseYScale`, `PadLookSens*` keep the calibrated display (out of scope).
+- **Volumes:** `Bond.Music`/`Bond.FX` step 128 -> 328 (1 display-%).
+- **FOV in degrees (`portFovHorizDegrees`, `port/src/video.c`):** vfov = 60 (`FOV_Y_F`) x [sqrt(aspect/(4/3)) only when WidescreenAuto && !NativeWidescreen] x FovScale/100, clamped 20..160 (mirrors `portScaleFovY`, the `src/fr.c` guPerspectiveF chokepoint). Projection aspect = window aspect under native widescreen (`portNativeAspect`, matches bondview2.c `faspect` for a full-screen viewport), else 4:3. `hfov = 2*atan(tan(vfov/2)*aspect)`, shown as `N deg`, i.e. HORIZONTAL FOV at the CURRENT window aspect (100% = 75 deg at 4:3, ~91.5 deg at 16:9). Convention/ambiguity: the value is aspect-dependent (it changes when the window is resized while the stored % does not); with native widescreen OFF and auto FOV ON the game projects at 4:3 with a boosted vfov, and we show that projection's hfov, not the stretched on-screen angle. Label changed "FOV scale" -> "Field of view". Storage steps are 1% (0.7-1.3 deg), so a keyboard step walks the stored % until the rounded degree changes (1-2 deg per press; not every whole degree is reachable); drag rounds to 1%. Vertical/aim-zoom rewrites of fovy are not reflected (menu shows the hip-fire value).
+- **MSAA 16x:** `kMsaaSeq` + `Video.MSAA` range 1-16 + `gfx_msaa_level` snap in `video.c`. `gfx_opengl.cpp` already clamps to `GL_MAX_SAMPLES`; no SDL multisample attribute is set (FBO-based MSAA), so nothing else clamped at 8. Default remains 2 (C initialiser).
+- **Texture filter / frame-rate cap:** no change (sign-off §0; 30/60 toggle stays, sim is 60 Hz).
+- **Restart game:** new `__RestartGame` action row after `__QuitToDesktop` (label "Restart game (for restart options)"). It saves config, calls `videoRequestRestart()` -> the same D344 orderly quit (render thread parks, host `exit(0)`); `main.c`'s `portAtExit` (after `videoSaveWindowState()` + `configSave()`) then calls `sysRelaunchSelf()` (`port/src/system.c`): Windows `CreateProcessA` with `GetModuleFileNameA` + the original `GetCommandLineA()` (cwd inherited); POSIX `fork`+`execv` of `/proc/self/exe` with the saved argv (`_POSIX_C_SOURCE` raised to 200112L for fork/readlink). Relaunching only after the config write avoids the new instance reading a half-written ini. Not click-tested (would spawn a second window).
+
+**Verified:** build green (ninja); `GE_WSPROBE_RESET=1` front boot: 8 sections all `failures=0`; `-level_33`: 8 stage sections all `failures=0`, saved bytes OK. `GE_OPTIONTREEPROBE` reports FAIL both as flagged pre-existing on the base commit; not compared to a base run here (launch budget) -- the Gameplay page stays under its 14-row cap (Restart adds one row). Linux compile of the POSIX branch of `sysRelaunchSelf` NOT done (no Linux toolchain in this shell).
+
+**Owed (human):** eyeball both UIs (values: `1.0x`, `23%`, `75 deg`, `16x`; Restart row fits its width); click Restart once (Windows) and confirm the window relaunches with the saved settings and no BSOD/hang; confirm 16x on the target GPU.
+
+**Confidence:** medium-high for display/step/MSAA/reset-table (probe-verified); medium for FOV convention (formula derived from code, not measured on screen) and for Restart (code-reviewed only).
+
+## D444 — Front PC Options paging controls + hover/scroll fight (2026-09-30)
+
+**Scope:** port-only, `port/src/frontoptions.c` (the front-end screen has its own page model: `ROWS_PER_PAGE`=11, wheel/Up/Down step the highlight and turn the page at the ends). F10 (`optionsoverlay.c`) is NOT affected: it already has "no hover-to-highlight" (its hover code only hit-tests clicks) and scrolls its own window.
+
+- **Bug:** every non-A-held frame the highlight `s_hl` was recomputed from the pointer position, so after the wheel/keys moved the selection any small mouse nudge re-selected the row under the pointer and discarded it.
+- **Hover rule now:** `s_hl` is persistent. The pointer (cursor_h/v_pos differing from the previous frame, excluding our own keyboard/wheel snap in `cursorToItemRaw`) re-selects ONLY when it lands on a different row than the last hovered row (`s_lastHover`; reset on level changes). Hover never changes `s_pageno`. A click (A press) acts on the row actually under the pointer (`s_hoverHit`), not a stale wheel selection.
+- **Paging controls:** on the bottom hint row of a multi-page section, "Previous page" (left, hidden on page 1) and "Next page" (right, hidden on the last page), highlight box on hover, click via `pageCtlAt()`. Up/Down still page at the ends (the old text hint "Up: previous page / Down: next page" is replaced by the buttons). Controller: unchanged nav (D-pad down/up crosses pages); the buttons are mouse-only. Named "Previous page" to avoid confusion with the game's bottom-left Previous (back) tab.
+- **Comments:** stale D257/D259/D281/D387 text in `optionsoverlay.c` (kAllUnlocked) and `watchsettings.c` (two places) updated to D442 (pure query-time override; the boot-time BLANKSAVEDATA patch is gone, so a fresh eeprom now reaches the blank-file-1 fallback).
+
+**Verified:** build green. No probe exercises mouse hover/clicks, so no game launch; a human must test with a mouse.
+
+**Owed (human):** in a >11-row section (Input, Graphics): click Next/Previous; wheel down then nudge the mouse slightly (selection and page must stay); move onto another row (selects it); click a row after wheeling (acts on the clicked row); confirm the new hint row layout and that controls hide at first/last page.
+
+**Confidence:** medium (logic reviewed, not exercised live; the pointer-motion detection assumes cursor_h/v_pos is delta-driven and only changes on real motion or our snap).
+
+
+## D447 - Pillarbox output mode for the Original N64 preset (port-only)
+
+Design: `docs/dev/notes/PILLARBOX-DESIGN.md` (local). Maintainer decisions 2026-09-30: exact 4:3 (full 320x240 frame); 16:9 while the game's watch-menu Ratio is 16:9; Crop overscan must never remove the player's Wide/Cinema bars; F10 full-window deferred.
+
+**Done (steps 1-5, 7 partly).**
+- `port/fast3d/gfx_pc.cpp`: `gfx_set_output_aspect()` / `gfx_get_output_rect()` (declared in `gfx_api.h`). `gfx_start_frame` computes a centred, even-sized rect for the target aspect; `gfx_current_dimensions` and `gfx_current_game_window_viewport` both become the rect, so `different_size` stays false and the inherited PD offset path in `gfx_adjust_viewport_or_scissor` places every viewport/scissor/rect inside it (also per-player viewports: nothing is hard-coded to one viewport). Bars are the frame clear. Aspect 0 = bit-identical path. Also: mode-0 `aspect_scale` uses `gfx_current_dimensions.aspect_ratio`; autoresize fullscreen FBs and `gfx_copy_framebuffer` use window size / rect offsets. MSAA FB stays window-sized (same-size branch).
+- `port/src/video.c`: `Video.AspectMode` (0 Window, 1 Original), read every frame in `videoStartFrame`; target = `get_screen_ratio()==SCREEN_RATIO_16_9 ? 16:9 : 4:3` (read only, no `src/game` edit). Preset row (N64 = 1, port = 0). GE_PCDUMP / screenshots now capture the whole window (bars included).
+- `port/src/optionsoverlay.c`: "Aspect" row (Window/Original) and `kResetDefaults` entry (0). Front PC Options reuses the overlay row table, so it gets the row and pages automatically.
+- Crop gating: the safe-area cache only adopts SP viewports >= 90% of the canvas height. Wide/Cinema (and split-screen half viewports) no longer define the crop band, so their letterbox survives `SafeAreaCrop=1`. If no full viewport has been seen yet, a centred 220-line band is seeded. Port-only.
+- Mouse: `input.c` front-end pointer maps across the output rect (`videoGetOutputRectFrac`); the F10 overlay mouse already inverts through `gfx_get_ui_screen_rect`, which includes the rect offset. F10 stays drawn inside the rect (step 6 deferred).
+
+**Measured (1280x720 window, `-level_09`, AspectMode=1, SafeAreaCrop=0, NativeWidescreen=0, MSAA 2):** columns 160..1119, i.e. 160/160 px side bars (expected 160). Top/bottom 30/30 px = the game's own 10/240 overscan fill at 720 px. 800x800 window, MSAA 1: full width, 125/125 px top/bottom = 100 letterbox + 25 game fill. Base smoke (AspectMode=0, frame 300, self-quit) OK.
+
+**Not done / owed:** runtime check of Wide/Cinema crop gating and of Ratio 16:9 (code path only); mouse mapping not exercised; golden bunker1 at Window mode not run (identical by construction); MSAA 4/8/16, fullscreen toggle, PAL, Linux CI and the MP branch not run; step 6 (F10 full window) deferred by decision. Known cosmetic: with crop off, D246's 1-unit dark-blue edge line is visible at the rect's left/right edges. Human: compare against 1964.
+
+Confidence: high for the rect and letterbox geometry (measured), medium for crop gating and Ratio 16:9 (unverified at runtime).
+
+## D445 — crouched-rifle firing animation never resolved on PC (linker adjacency) -> MP crash (2026-09-28)
+
+**Symptom.** SIGSEGV in `modelConstrainOrWrapAnimFrame` from `playerTick`
+(bondview2.c ~11021) with `anim = 0xb84`, when a multiplayer player
+crouch-fires a rifle (found by the 5PLUS bot runs: Complex, 4 seats, M16,
+frame 5030; present in the 0.9.x friend bundles). Found on
+`exp/5plus-multiplayer` as "D341" (renamed D420 in PR #120, then D445 on merge: D341 and D420 are already used here).
+
+**Root cause (layout, porting-notes §D5 "linker adjacency", D164 class).**
+`firing_animation_groups[1][5]` points at `crouched_rifle_firing_animation_groupA`
+(chr.c). The tables hold anim *offsets*; `initWeaponAnimGroups` ->
+`initResolveAnimGroupTable` rebases each table up to its zero terminator.
+`crouched_rifle_firing_animation_group1` has ONE entry and **no terminator**:
+on N64 .data is laid out in source order, so resolving group1 walks on into
+groupA (resolving it too, len 2). GCC placed groupA *below* group1, so
+groupA[0] kept the raw offset `PTR_ANIM_fire_kneel_left_leg` (0xB84) and
+`modelSetAnimation` received it as a `ModelAnimation*`. Side effect before
+the fix: crouching rifle guards saw len 1 instead of the N64's 2.
+
+**Not covered upstream:** upstream D392 (chraction.c firing-table fields)
+and D336 (bondhead.c) are different sites; chr.c/chr.h were unchanged on
+09278407.
+
+**Fix (8595a06e, `#ifdef PORT`, `#else` = decomp):** chr.c one array
+`{kneel_right_leg, kneel_left_leg, terminator}` (exactly the N64 layout);
+chr.h `#define crouched_rifle_firing_animation_groupA
+(&crouched_rifle_firing_animation_group1[1])`. Resolution and len are the
+N64's; no logic change. Upstream candidate (a real port bug).
+
+**Verified (programmer, 5plus + main):** repro (4 seats, bots, Complex,
+pinned seed, 18 078 frames x3) no crash, SH identical across runs; 8 seats
+remote mines no crash; every firing/struck anim table in chr.c scanned --
+this was the only unterminated one; gdb scan of all 24
+`firing_animation_groups` entries at run time: 1 bad pointer before, 0 after
+(also 0 on the main-line cherry-pick); P1 gate (1 324 recordings, frame
+dumps) unchanged; netplay 2P/4P identical.
+
+## D446 — couch 2P watch-menu text differs between builds that only differ in data layout: stale per-texture anisotropy (2026-09-29)
+
+**Status:** FIXED, port-only (`port/fast3d/gfx_opengl.cpp`, `#ifdef PORT`). Render-only; the sim was never involved (state hashes identical throughout).
+
+**Symptom.** The couch 2P script (MULTIPLAYER-DEV §6), frame 2400 (the MP pause/watch menu, "PLAY / RANK: 1ST / SCORES") is not byte-identical between two builds that differ only in data layout:
+- 8b080caa vs 8b080caa + an unused 3 KB array in `expinput.c`;
+- the controller-pages merge;
+- R1's front.c/front.h array widening (programmer 1's bisect).
+
+About 55-922 pixels differ, a few glyphs only, each by +-1-2 (mostly green). Every build is deterministic against itself. A 4 KB array at the end of `expinput.c` did not reproduce it, and neither did the pre-sync base with R1: only some layouts trigger it.
+
+**Method (probes in fast3d, removed).** A (6c8915d7) vs B (A + the 3 KB array), frames 2398-2401:
+1. Every texture import (format, size, content hash): **identical** sequences in A and B.
+2. Every `gfx_flush` batch (VBO hash, depth mode, blend, viewport, scissor, combine mode, other modes, and for both texture slots the GL texture id, filter, clamp, content hash): **identical except the GL texture ids.** The same content is bound under different ids in A and B.
+3. So the difference lives in GL texture-object state.
+
+**Root cause.**
+- `gfx_opengl_set_sampler_parameters` (`gfx_opengl.cpp`, the `if (mipmaps) glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, current_anisotropy_level);` line) sets anisotropy only for mipmapped samplers and never resets it. Anisotropy is per-texture-object state; `Video.Anisotropy` defaults to 4.
+- GL ids are recycled: `gfx_texture_cache_delete_range` (`gfx_pc.cpp`) pushes freed ids onto `free_texture_ids` while walking the `std::unordered_map` in hash-bucket order. The key hash is the texture **address**, so the recycling order depends on where textures live.
+- A glyph texture (bilinear, no mipmaps) that inherits an id last used by a mipmapped world texture keeps `MAX_ANISOTROPY = 4`. llvmpipe then filters it slightly differently: the +-1-2 values.
+- A layout shift changes which glyph inherits which id, hence which frames differ.
+- Nothing in `src/game` is involved: no uninitialised read, no out-of-bounds read, no stale texture content (all ruled out by the probes and the earlier UBSan run).
+
+**Fix.** Always write the anisotropy when sampler parameters are set: the level when mipmapped, 1.0 (off) otherwise, so a recycled id carries nothing over. This is identity for any texture whose id never had a mipmapped owner, which is why the base frames are unchanged.
+
+**Verified (headless, silent, llvmpipe, scratch HOME, mp-sandbox data; 6c8915d7 base):**
+
+| Check | Result |
+|---|---|
+| Couch 2P frames 2300-2500 (step 10), fix vs fix + 3 KB array (the reproducing variant) | **0 of 21 frames differ** (before the fix: frames 2300-2420 differed) |
+| Couch 2P frames 2300-2500, base vs fix | 0 of 21 differ |
+| Solo `-level_09` frame 1800, base vs fix | byte-identical |
+| Couch 4P frame 2400, base vs fix | byte-identical |
+| Netplay 2P (local relay, 60 s) | SH identical over 2 671 ticks |
+
+**Residual risk (not fixed, noted).** Other per-object state can still follow a recycled id:
+- mip levels 1..n of a previous owner, if a texture uploaded without mipmaps is later sampled with a mipmapped min filter;
+- the free-id order is still address-dependent.
+
+The general fix would reset the whole object on reuse, or sort the ids that `delete_range` frees. Neither is needed for this symptom. **Confidence: [H]** for the cause and the fix (A/B reproduced, fixed, bisected to the one GL parameter).
+
+## D448 — Split-screen pad seats keyed by SDL instance id (issue #99, D416 lineage, 2026-09-30)
+
+**Status: PARTIAL.** Committed as `918ac5f9` on `feat/mp-splitscreen-99` (the commit message calls it "DNEW-mp-1"; this is its label). It was recovered from a crashed session's uncommitted worktree (archive `2026-09-30-recovery/mp-uncommitted-input-bg.patch`). Its TEMP-VPADSEAT probe was removed before commit.
+
+**What:** `port/src/input.c` `pads[]` is indexed by *seat*, not by SDL device index, and each seat remembers its SDL joystick instance id. Outside a match, seats compact (the first attached pad is seat 0, and so on). During a match they stay reserved, so unplugging one pad no longer shifts the other players' seats or flips the Auto → keyboard/mouse-as-P1 routing. A rescan keeps pads that are still attached open instead of closing and reopening them. Port-only.
+
+**Verified:** build, plus a 2P smoke (`GE_STARTMP=2 GE_MPVIRT=1`, 1280x720) in Window and Original aspect modes after merging `release/v0.4.1`. **Owed (maintainer, live):** plug/unplug pads mid-match (the seats must not shift), and check the keyboard/mouse-as-P1 routing is unchanged after an unplug. Related: outside PR #122 (hot-plug reopen, dolent) overlaps this area. Review it against this design before merging it.
+
+## D454 — knife slash crash: keyframe pointer held in `u32` (ABI/layout exception, 2026-09-30)
+
+**Symptom.** Windows: equipping the knife and slashing crashed at once (EXCEPTION 0xc0000005, fault `0x40169764`, `Rcx=0x40169720`). Found by the read-side 64-bit census (`ABI-CENSUS-READSIDE.md`), confirmed by the maintainer.
+
+**Cause.** `gunTickHandState` (`src/game/gunfire.c`) picks the keyframe table with `var_a0_2 = D_80034CA4;` (or `D_80034E0C`) and passes it to `gunSample1PTransform(Weapon1PTransformKeyframe *, ...)`. `var_a0_2` was declared `u32`, and the tables are `u32[]` in the exe's `.data`, which on Windows sits above 4 GiB (image base `0x140000000`, ASLR off, CMakeLists.txt ~305). The store truncated the address. Linux is unaffected (image base 0x20000000). Class: §A1 (pointer-width misread from 32→64 widening).
+
+**Trap.** The declaration exists once per region arm (US, JP, EU). The first fix (`75559906`) patched only the EU arm and the US build still crashed with the identical fault; the disassembly showed `mov ecx,ecx` before the call. All three arms are now patched (`8ba7dbb7`). Lesson: a decomp-style function can repeat a local per region `#if` arm; grep the declaration in every arm and check the disassembly (`mov reg32,reg32` before a pointer argument).
+
+**Fix.** `#ifdef PORT` declares `Weapon1PTransformKeyframe *var_a0_2` and casts the two table assignments; the `#else` arm is the original. No logic change.
+
+**Verified.** Maintainer: knife slash no longer crashes (Windows, this build). Disassembly: no `mov ecx,ecx` before any `gunSample1PTransform` call. **Confidence: [H].**
+
+## D456 - font/text pointer slots held in s32 (ABI/layout exception, 2026-09-30)
+
+**Source.** Read-side census (ABI-CENSUS-READSIDE.md): 286 of 618 -Wint-conversion warnings were two slot kinds, font pointers (`struct font *` / `struct fontchar *`) and `langGet()` strings, parked in `s32`. Implicit ptr->int narrowing has no cast, so a cast census never sees it. Pointers come from arena memory; any arena >= 2 GiB sign-extends to wild pointers, >= 4 GiB truncates.
+
+**Change (all `#ifdef PORT`, `#else` = original; no logic change).**
+- front.c: `frontPrintText`, `display_aligned_white_text_to_screen` (+ forward decl) font params -> `struct fontchar *` / `struct font *`; `constructor_menu16_nocontrollers` `text` -> `char *`; `frontGetPlayersFavoriteWeaponInHand` returns `u16 *` (was `int`, also in `port/include/pc_protos.h`: the unprototyped `int` decl made mpmenu.c:1596 truncate the pointer).
+- bondview.c/.h, bondview_internal.h, bondview2.c: `copy_1stfonttable`/`copy_2ndfonttable`, `setFontTables` params.
+- options.c: 26 locals in 9 functions (pFontFile/pFontChars/*2, text locals, sp78/sp7C in draw_current_hand_item_and_ammo). NOTE the `spNN` names are per-function: `sp4C` is text in draw_abort_cancel_confirm but a colour in draw_text_mission_status, and sp50/sp4C are coordinates in draw_text_q_watch_v201_beta; retype by use, not by name.
+- language.c: `g_LangBanks` -> `u32 *[45]`; `langGet` result built as `(u8 *)textbank_ptr + off` (was a `u32` accumulator, truncating >= 4 GiB). bondview.h: `player.ptr_text_first/second_mp_award` -> `char *` (live struct, never serialised; adds 4 bytes of pointer width, sizeof is taken from the type in player.c).
+- mpmenu.c: `h2` (only receives langGet) -> `char *`; cast at the favourite-weapon assignment.
+- propobj.c:3909: `!((s32)obj->model & 0x400)` -> `!(prop->chr->chrflags & CHRFLAG_HIDDEN)`. Prop type is VIEWER/CHR there and `obj`/`chr` share a union slot (bondtypes.h:2342-2344), so identical behaviour today (two layout shifts cancelled), now by name.
+
+**Left (not a type/cast swap, or out of scope).** mpmenu.c `q` (dual-use: team colour, then `langGet` string; needs a separate local); front.c `ptr_menu_videobuffer` and `modelSetAnimation(animation_table_ptrs1)`; language.c:364/375 `romCopy` p2 (ROM address, tag R); `sp70 = bondinvGetTextbyInvIndex` and the options.c:34 `OS_PHYSICAL_TO_K0` macro warning; JP/EU `dword_CODE_bss_jp...` font arrays (not built on ntsc-final).
+
+**Verified.** Falsifier held: front.c 186->2 (census predicted ~172 from the two params), options.c 139->0. Full ntsc-final build clean. Disassembly: font params read as QWORD stack slots, no `mov r32,r32` before pointer args; `langGet` adds at 64-bit. One default-boot launch (GE_PCDUMP 200-1400:200, GE_QUITFRAME=1450) ran rc=0, no crash log; frame 200 (legal screen, display_aligned_white_text_to_screen + textRender) renders all text correctly. No baseline-build frame diff was taken (budget); menu/watch/MP text paths not exercised at runtime. Confidence: [H] types/ABI, [M] runtime.
+
+## D453 — memp allocator API 64-bit clean (D441 step 0, ABI/layout exception, cross-tag §A1)
+
+**Scope.** `src/memp.c`, `src/memp.h` only. AGENTS.md rule-2 narrow exception (pointer-width; no logic or control-flow change). Every edit is under `#ifdef PORT`; the N64 arm is byte-identical.
+
+**Sites.**
+- `mempCheckMemflagTokens(s32 poolAreaStart, s32 poolAreaSize)` -> `(uintptr_t poolAreaStart, s32 poolAreaSize)`; the pool-0 `start`/`end` are now assigned through explicit `(u8 *)` casts. (memp.h prototype matches.)
+- `mempSetBankStarts`: `s32 mempStart` -> `uintptr_t` (was a sign-extending round trip of the `u8*` pool start); the per-bank `start`/`end` assignments cast `(u8 *)`.
+- `mempAllocPackedBytesInBank` returned the allocation as `u32` (truncates the pointer); now returns `void *`. It has no callers in the tree today.
+- Left `s32` on purpose: `poolAreaSize`, `bankstarts[]`, `mempLen`, `poolSizes` (sizes, not addresses).
+
+**Falsifier (written before the run).** The change altered behaviour if, on the spawn run, the startup log differs beyond version/config lines, OR a `-level_09` frame-400 `GE_PCDUMP` differs structurally (different geometry/textures/lighting, not just the intro-camera phase), OR the build gains a warning in memp.c.
+
+**Evidence.** `-Wpointer-to-int-cast -Wint-to-pointer-cast -Wint-conversion` over memp.c: 6 real warnings (lines 46, 47, 133, 137, 139, 290) -> 0 (5 header-only warnings unchanged). Build clean, no new warnings. `-level_09`, GE_QUITFRAME=420, before vs after: startup logs identical (modulo hash/config/timing lines); frame-400 dump same scene/textures/lighting but the intro camera is at a slightly different phase (3072x1728, dmean 12.1 - wall-clock camera motion, not a memp effect; no noise-floor rerun was in budget). **Confidence [M-H] on no behaviour change** (types only; all pool values < 2 GiB here so the value path is identical by construction).
+
+**Left, not fixed.**
+- mema.c: `memaspace.addr` is `s32`, `g_MemaHeapStart` is `s32`, `memaReset` stores `(uintptr_t)heapaddr` into it, `memaAlloc` returns `(void *)` of an `s32`/`u32` addr (mema.c:317, 572), and `end1/end2.addr = 0xffffffff` plus `curr->addr == -1` sentinels. Widening needs `memaspace` layout + sentinel changes, which is more than a type/cast edit. Fine for an arena < 2 GiB; wrong above. Needs its own step (and a decision on the sentinels).
+- boss.c:268 `(u32)tlbmanageGetTlbAllocatedBlock() - (u32)start` and `start` type: size diff stays correct only if both ends share the same 4 GiB window; boss.c was out of scope. memp.c callers that store `mempAllocBytesInBank` results into `s32` (bg.c `ptr_bg_data`, bondview_r.c `resolution`) are other census rows.
+
+
+## D455 — census: exe-static addresses narrowed to 32 bits (D454 class) (ABI/layout exception, 2026-09-30)
+
+**Question.** D454 (knife slash) was an exe-`.data` address (Windows image base `0x140000000`) held in a `u32`. Are there other sites?
+
+**Method (binary-first).** `objdump -d -M intel` of the built exe, then a forward data-flow scan (`scratch` script, not committed): from every `lea/mov r64,[rip+...]` address load (incl. `.refptr.<sym>`), follow the register and its `mov r64,r64` copies for N instructions (following unconditional `jmp`, dropping the register on any overwrite or call), and flag (a) `mov r32,r32` same-register zero-extend, (b) `mov r32b,r32a` narrowing copy, (c) `mov DWORD PTR [..],r32` store. N=14 and N=60.
+
+**Falsifier (done before fixing).** Run on the PRE-fix binary (release/v0.4.1 @ 48908d18 has no D454 fix): the scan re-detects D454 as 4 hits in `gunTickHandState` (`.refptr.D_80034CA4` / `D_80034E0C`, all joining at `mov ecx,ecx` before `call gunSample1PTransform`; the load precedes a `jmp` join, so the scan has to follow jumps; a naive adjacent-instruction scan misses it). Whole-exe hit counts: 29 (N=14) / 39 (N=60). Rebuilt with the two D454 commits cherry-picked (temp branch, dropped): 25 / 35, 0 in `gunTickHandState`. The remaining hits were triaged one by one.
+
+**Triage of the remaining hits.** None is a REAL exe-static narrowing.
+- OFFSET/ROM (benign): `_*SegmentEnd/RomStart/Start` are `.set` absolute constants in `port/src/romassets_u.s` (ROM addresses, not exe addresses): image_bank.c:251, initanitable.c:281, textrelated.c:123/146, music.c:686/709, romdata.c:268/275/372. `(s32)&ANIM_DATA_*` (title.c, initactorpropstuff.c) are D34 offsets.
+- VALUE loads misflagged by the scan (register reloaded via a path the scan does not model, or a float/int value read from the global): bg.c:3232, bondview2.c:6512, chrprop.c:511, front.c:3424 (2 hits), image.c:2375, options.c:2049/4140, player.c:632, propobj.c:5376, spectrum.c:725, frontoptions.c:867, libultra.c:1457, fr.c:458, chr.c D_80030988/D_80030994, gfx_run_dl.
+- Comparison-only narrowing (both sides truncated identically): chraction.c:2320/2324, zlib.c:312-441. Benign.
+- Already guarded under `PORT`: bg.c:4238/4392, bondview2.c:10449, initplayergaitobject.c:16, model.c:1538 (in the `#else` arm), ramromreplay.c:225, initactorpropstuff.c ANIM_PTR, title.c:568.
+- Not in the PC build: tlb_manage.c:134 (excluded; not in CMakeLists.txt).
+- UNSURE (not exe-static, stack address): indy_comms.c:35 `(u32)&size`; dead on PC (`indy_ready`).
+- Sites in the four files owned by another agent (front.c, options.c, propobj.c, language.c): only the value-load false positives above; no real site found. `language.c` produced no hit.
+
+**Limits.** Flow-limited (N instructions, no full CFG, no loads through memory: an address stored to a 64-bit slot then re-read as `u32` later is not seen); heap/stack pointers truncation is out of scope (heap is mapped low). Link-time narrowing in static initialisers cannot occur (the linker rejects a truncated reloc). **No code change**: the only real site was D454. **Confidence: [M]** that no other straight-line narrowing remains; the scan is a filter, not a proof.
+
+## D451 -- D427 follow-up: the auto-fire gate still counted frames, so an unsteady clock (1<->2 ticks/frame) gave the wrong cadence; D173 is not the same class
+
+**Mechanism (code reading + measurement).** `gunTickHandState` (`gunfire.c` ~2902) does `field_890 += g_ClockTimer` (tick accumulator) and `field_88C += 1` (frame counter) each call; both reset together on state entry. The automatic-fire gate was `88C % AutomaticFiringRate` (N64: one shot per `rate` frames, i.e. 2-3x`rate` ticks at 20-30 fps; the port at 1 tick/frame fired 2-3x too fast = D427). The D427 fix multiplied the modulus by `(g_ClockTimer >= 2 ? 1 : 2)` using the CURRENT frame's clock. That is exact only at a steady 1 or 2 ticks/frame; at mixed pacing the modulus flips between `rate` and `2*rate` frames against a counter that is not rescaled (the D427 "known limit").
+**Measured before (AK47 `GE_STARTWEAPON=8`, `-level_09`, `GE_INPUTSCRIPT=1000:ZHOLD`, `Video.FpsCap=45`, clock mix 1:307 / 2:153 frames):** 79 shots, every gap = 8 ticks (N64 rule at 2 ticks/frame = 6); i.e. the flip produces a systematic slow-down vs the console cadence, not just jitter.
+**Fix (`#ifdef PORT`, `d427Gate`):** fire when a multiple of `P = 2*rate` ticks of `field_890` was crossed this call (`t1/P != (t1-clk)/P`), plus the existing `88C == 0` first-frame fire. Stateless, exact on average at any pacing; identical to the D427 result at steady 60 (P=6 ticks) and steady 30.
+**Measured after (same run):** 90 shots, gaps 5/6/7 ticks (mean ~6 = 2*rate, quantised by the 1-2 tick frames). Residual +-1 tick jitter is inherent to frame quantisation. The probe log tick sum counts only gate-evaluated calls, so the 5-gaps are partly measurement alignment; the mean is the signal.
+**Rule-2 bucket:** (c) game-logic, but the same gate the existing D427 sign-off covers. Quoted wording (D427 entry): "Fix (rule-2, user go-ahead 2026-09-29; `gunfire.c`, `#ifdef PORT`): the automatic-fire gate `88C % AutomaticFiringRate` now uses `rate * (g_ClockTimer >= 2 ? 1 : 2)` ... Only that gate changes." This edit replaces that one expression, same purpose, same gate, N64 branch byte-identical. Maintainer to confirm that wording extends to the tick-based formulation; if not, revert the `gunfire.c` commit.
+**Grant (RULE-2-SIGNOFF).** Requested as "accept under the existing D427 sign-off, or treat as a new request"; scope = replace the one expression in the automatic-fire gate (same gate, same intent, identical result at steady 60/30 fps, N64 arm untouched). Maintainer reply 2026-09-30: "Proceed with option 1" (accept under the existing D427 sign-off). Resulting diff: `9d8b31b5` (`d427Gate`, `#ifdef PORT`). Still scoped to this one gate; a different behaviour in `gunfire.c` needs its own request.
+**D173 (code analysis only):** NOT the same timing class as far as the evidence shows. Its measured defect is a constant ~324-329 unit rendered-root offset independent of animation and frame rate on the intro puppet (M-172/M-173), with an asset/transform hypothesis; its bulk was fixed by D243's `sizeof(Model)` layout fix and the user reports a ~1/10 small residual offset. No per-tick accumulator feeding a single floor/threshold was found on that path. Whether the residual shares the D13 class (`chrUpdateAnim` -> `modelTickAnim` -> one `modelSetAnimFrame2WithChrStuff` per frame, D329) is untested; the test is a `GE_D318B_CLK=1` vs `=2` A/B of the puppet's rendered offset. Low confidence on that negative.
+**Confidence:** mechanism high; fix behaviour medium-high (one 45 fps run, headless); D173 negative low.
+**By-eye test (maintainer):** AK47/Uzi held fire with `FpsCap` 60, 45 (or any unsteady load) and 30; empties the magazine in about the same wall time as 1964/GEPD at every setting; no stutter-bursts.
+**Probes left in tree:** none (env-gated `GE_D427`/`GE_D427_OLD` probes stripped).
+
+## D450 — a replugged controller is never reopened: the render thread's event pump swallows the hot-plug events (2026-09-29)
+
+**Status:** FIXED, port-only. User report (GameSir-G7 Pro): "disconnecting the controller, then reconnecting it did not seem to be picked up". The play log had only the startup `input: rescanned pads` line.
+
+**Root cause.** Two threads drain the one SDL event queue:
+- `port/src/video.c` `videoPumpEvents`: `case SDL_CONTROLLERDEVICEADDED / REMOVED: inputRescanPads();`.
+- `port/fast3d/gfx_sdl2.cpp` `gfx_sdl_handle_events` (called from `gfx_run` on the render / scheduler thread every frame): **no case for them**. Whatever it dequeues is dropped.
+
+Whichever loop runs `SDL_PollEvent` first gets the event, and the render loop usually wins (the same race WI-1 documented for ESC). So the pads were never rescanned and `pads[]` kept the closed controller's handle. Headless repro with a virtual pad (attach, detach, re-attach): one rescan at startup, none at the detach, and at the re-attach the process aborted with `malloc(): unaligned tcache chunk detected` (stale handle). A second latent problem: `inputRescanPads` ran on the host thread while the scheduler thread reads `pads[]` in `inputComputePad`; closing pads under a reader is a race.
+
+**Fix.**
+- `gfx_sdl2.cpp`: new `case SDL_CONTROLLERDEVICEADDED / REMOVED: inputRequestRescan();`.
+- `video.c`: the case now calls `inputRequestRescan()` instead of `inputRescanPads()`.
+- `input.c`: `inputRequestRescan()` sets an atomic; `inputUpdate()` consumes it first thing and runs `inputRescanPads()` there, i.e. on the thread that is about to read the pads (the scheduler thread, or the game thread under tick input).
+
+**Verified** (on the netplay line, headless, virtual pads through a test seam): attach -> detach -> attach -> detach -> attach with no tick input: 5 rescans (startup + one per event), no crash, against 1 rescan then a heap-corruption abort before the fix; with tick input the pad's buttons are seen before, after the first and after the second re-attach; solo `-level_09` frame 1800 byte-identical to the base. Real-pad retest by the user (GameSir-G7 Pro, 2026-09-29): passed.
+
+
+## D461 — `p_itemcur` allocated with the N64 stride; overran into the first prop model file (ABI/layout exception, 2026-09-30)
+
+**Symptom.** 2P (split-screen branch) on Caves: a crash at the first or second respawn, or on a body-armor pickup, in `modelUpdateRelationsQuick` / `modelInitRwData`. The fault address `0xffffffff7022cb4c` repeated across runs: the TT33 pistol model's root Child slot had its high half overwritten with 0xffffffff.
+
+**Cause.** `inititemslots.c` allocated `equipmaxitems * 0x14` bytes; `InvItem` is 32 bytes on PC (verified by a compile-time `_Static_assert`). `bondinvReinitInv` (`bondinv.c`) indexes `p_itemcur[i]` at the C stride and sets `.type = -1`, so the block was overrun by about 12 bytes per item (roughly 360-420 bytes at equipmaxitems 30-35) into the next MEMPOOL_STAGE allocation, which is the first prop model file loaded (TT33 on Caves). Solo levels run the same code, so this was likely corrupting something there too, silently. Not a converter or PROMOTE bug (all 340 P* models in `pcmodels.bin` were walked clean).
+
+**Fix.** `#ifdef PORT` allocates `equipmaxitems * sizeof(InvItem)`; the `#else` arm is the original. Commit `0ebda7e8`. No logic change.
+
+**Process.** The agent that found the corrupted node (analysis, D416-D448 branch) could not find the writer; a local Qwen read-only census of stage-bank allocations named `p_itemcur`, and the lead verified the 0x14 literal, `sizeof(InvItem) == 32`, and the write loop before applying. **Lesson (generalisable):** an allocation that multiplies a count by an N64 literal stride for a struct that grew on PC is invisible to a pointer-cast warning census; grep every `* 0x..` stride next to `mempAlloc*` and compare with `sizeof`.
+
+**Verified.** Maintainer: no crash in about 10 minutes of 2P on Caves, Bunker and Complex (respawns including rocket-launcher kills, body-armor pickups). **Confidence: [H].** Still worth auditing: the other `mempAlloc*` sites with literal strides.
+
+
+## D462 — `vtxstore` tables allocated with the N64 stride (ABI/layout exception, 2026-09-30)
+
+**Cause.** `vtxstore.c` set `tmp = 0x14` and allocated `count * tmp` for two tables of `struct unk_09B7A0_struct_parent` (`Vertex* unk00; s32 unk04; s32 unk08; s16 unk0C, unk0E, unk10, unk12`). On PC the pointer widens it to 24 bytes (0x20 once D457(d) turns `unk04` into a pointer; that part is NOT merged). The init loop indexes the tables at the C stride (`...[i].unk0E = -1`), so each block was overrun by about 4 bytes per entry (about 2 KB at the 500-entry table size) into the next MEMPOOL_STAGE allocation. Silent corruption, the same class as D461. The Vertex arrays (`* 0x10`) are fine (Vertex is pinned to 16 bytes).
+
+**Fix.** `#ifdef PORT` uses `sizeof(struct unk_09B7A0_struct_parent)`; the `#else` arm is the original. Commit `fix/abi-vtxstore-alloc`. No logic change. D457(d) (unmerged, `fix/abi-bg-model-slots`) contained the same sizeof change plus the `unk04` pointer retype; this lands only the allocation part.
+
+**Found by.** The local-Qwen read-only audit of every `mempAlloc*` size expression (top suspects #1 and #2); the lead verified the literal at `vtxstore.c`, the C-stride indexing, and the D457(d) diff.
+
+**Verified.** Build clean; solo `-level_09` to frame 420 and a 4-player `GE_STARTMP=4 GE_MPVIRT=3` run to frame 500 both exit rc=0 with no crash log. **Confidence: [H]** on the overrun, [M] on any visible effect (none expected). Remaining audit suspects: `size_item_buffer` weapon model buffers (`initBondDATA.c`), `model.c` rwdata word count vs converted data, `image_bank.c` +0x1000 slack: all UNKNOWN, need a converted-size check.
+
+**Residual (pre-existing):** `inputRumble` can run on the game thread while a rescan runs on the scheduler thread in non-tick mode: one poll of exposure instead of an arbitrary host-thread moment.
+
+
+## D463 — zero-line tile texrect divided by zero in the texture importers (fast3d, 2026-10-01)
+
+**Symptom.** The scripted split-screen sweep (`GE_STARTMP`, `GE_MPVIRT`, per-slot `GE_INPUTSCRIPT_P1..P3`) crashed once in 18 runs (3P, stage_id 48, Library) with `EXCEPTION 0xc0000094` = integer divide by zero (the sweep report's 'stack-buffer-overrun/fastfail' label was wrong; fastfail is 0xc0000409). A repro with `GE_D116=1` gave 2 crashes in 14 runs (3P and 4P, stage index 4), so it is not player-count specific.
+
+**Cause.** Crash PC = `import_texture_i8` (`gfx_pc.cpp`, `height = size_bytes / rdp.texture_tile[tile].line_size_bytes`) with `line_size_bytes == 0`, reached via `gfx_dp_texture_rectangle` -> `gfx_draw_rectangle` -> `gfx_sp_tri1` -> `import_texture`. In both crashes the log shows, immediately before the fault, `[D116] O-glyph ... idx=0 w=0 loadw=0 h=0 pd=0000000000000000` (a zeroed font record drawn by `textRenderGlyphOutlined`, `src/game/textrelated.c`) followed by a zero-area `[D116/f3d]` texrect on a tile with `line_bytes=0`. `gDPLoadTextureBlock` with width 0 expands to `gsDPTile(line=0)` plus a zero-area `gSPTextureRectangle`; the N64 RDP rasterises nothing for it, so the decomp's output is faithful and fast3d must tolerate it. All the importers share the unguarded division (rgba16, ia8, i8, ci8, ...). **Not established:** which text produces the zeroed glyph (the outlined-text path reads `chars[*text - 0x21]`, so a character below 0x21 or an unpopulated font slot is the suspect). Rare because it depends on the string being drawn.
+
+**Fix (port-layer, `port/fast3d/gfx_pc.cpp`, commit `81b57504`).** At the top of `import_texture`, if the tile's `line_size_bytes == 0`: log one capped line (`D463: texrect on zero-line tile -- import skipped`, at most 8 per run) and return without importing (no cache entry, no upload). The downstream triangle path already treats a zero line size as 1, and the degenerate draw rasterises no fragments. Nonzero line sizes take the original path unchanged. No game-logic change.
+
+**Verified (local Qwen driver, lead re-read the logs).** After the fix: 8 repeats of the crashing 3P/stage-4 configuration, the full 18-run 2P/3P/4P matrix, solo `-level_09` and a menu boot all exit rc=0 with no crash log; the guard fired in 3 of the 8 repeats (so the condition recurs and is now harmless). 3P renders three viewports with an empty fourth quadrant (as on the N64) and 4P a clean 2x2. **Confidence: [H]** for the crash and the guard; [M] on the upstream glyph cause.
+
+**Generalisable.** Any importer that divides by a tile field must tolerate 0; the game emits zero-sized loads legitimately. `0xc0000094` is a divide by zero, `0xc0000005` an access violation, `0xc0000409` a fastfail.
+
+
+
+## D464 — GE_MEMPREDZONE: red-zone checker for the bump allocator (diagnostic tool, 2026-10-01)
+
+**Falsifier (written before any run).** Re-introduce the D462 bug in a throwaway, uncommitted edit (`tmp = 0x14;` in `src/game/vtxstore.c` instead of `sizeof(struct unk_09B7A0_struct_parent)`), build, run `GE_MEMPREDZONE=1 GE_QUITFRAME=300 ./data/ge007.x86_64.exe -level_09`. Expected: at least one `MEMPREDZONE: HIT` whose `caller=` resolves (addr2line) to `vtxstore.c`'s allocation of the two parent tables, with `size` = count*0x14. If no hit names vtxstore, the checker is not trustworthy.
+
+**What was built.** `src/memp.c` under `#ifdef PORT`, gated by `GE_ENVFLAG("GE_MEMPREDZONE")` (cached; one branch per allocation when unset, the original allocator body is kept verbatim as `mempAllocBytesInBankRaw`). When set, every allocation with room is padded by a 64-byte trailer (pattern `0xA5 + 13*i`), recorded in an 8192-entry side table (block, size, trailer, id, caller = `__builtin_return_address(0)` of `mempAllocBytesInBank` / `mempAllocPackedBytesInBank`, bank). Alignment is unchanged (pos advances 64 more). `mempRedzoneCheck(why)` logs one `[ERROR] MEMPREDZONE: HIT id= bank= size= block= rz_first_off= changed=n/64 caller=<raw addr>` per damaged entry and one `[INFO]` summary per check. Check points: `mempResetBank`, `mempNullNextEntryInBank` (level unload; the bank's entries are dropped afterwards), `videoEndFrame` every 60th frame, and the orderly-quit path (`videoHostExitIfRequested`, render parked). Resolve a caller with `addr2line -f -C -i -e build-pc/ge007.x86_64.exe 0x<addr>` (PE image base 0x140000000 is already in the logged address). Covers all banks (the bank is derived from the block address). No `src/game` edit.
+
+**Bump-pointer users audited.** `mempAddEntryOfSizeToBank` (callers: `fileIndexLoadToBank`, `fileSetSize` in ob.c) shrinks the *last* allocation, and `fileIndexLoadToBank` allocates the whole remaining bank (`mempGetBankSizeLeft`) then shrinks. A trailer cannot fit on the whole-bank allocation, so that block is left unpadded (`untracked(no room)` in the summary) and gains its trailer when the shrink leaves room; `mempAddEntryOfSizeToBank` re-places the trailer for tracked blocks (`newsize + 64` accounting). Nothing else computes sizes from pointer differences or reads `prevpos` (grep: only memp.c). `bg.c:612` only logs pool pointers. No bank had to be excluded.
+
+**Falsifier result: PASS.** With `tmp = 0x14` temporarily restored in `vtxstore.c` (uncommitted; reverted, `git diff -- src` empty afterwards), `GE_MEMPREDZONE=1 GE_QUITFRAME=300 -level_09` reported `HIT id=21 bank=4 size=400 ... caller=0x1400d7c85` and `HIT id=23 size=800 ... caller=0x1400d7cbc`; addr2line resolved both to `sub_GAME_7F09B820`, `src/game/vtxstore.c:117` and `:119` (the two table allocations). So the checker catches the D462 class on a normal solo load. (Hit trailer damage was only 6/64 bytes: the overrun writes -1/0 into a few fields, so a pattern-equal byte can hide, but any real overrun beyond the first stride row hits.)
+
+**Sweep (build with the D462 fix restored, flag set, 37 launches).** All 21 solo levels (`-level_XX`, 420 frames; names/numbers from `kSoloLevels`): rc=0, no `ge007.crash.log`, **0 red-zone hits**, tracked blocks 126 (Cuba) to 788 (Jungle), 19..59 untracked-no-room. Menu boot (900 frames): rc=0, 0 hits. **The MP matrix did not exercise multiplayer:** `GE_STARTMP`/`GE_MPVIRT` exist only on `feat/mp-splitscreen-99` (`src/game/lv.c`), not on `release/v0.4.1`, so those 15 runs were menu boots (identical 84-tracked-block logs). The split-screen branch is too far behind (pre-D453, conflicts in memp.h) to cherry-pick onto; the launch cap (40) was already nearly spent. **Owed:** rebuild the checker onto the split-screen branch and run the 2P/3P/4P matrix there (the D461 victim was an MP-only `equipmaxitems`-sized path, and MP stage allocations differ).
+
+**Verdict.** On the solo levels and the front end, no remaining allocation overrun is visible at the 64-byte granularity, including after D461/D462. Not covered: overruns landing in a block's *interior* neighbour that never reaches the trailer (stride error smaller than the trailer is caught; one far beyond 64 bytes skips the trailer and corrupts the next block's data, but still damages the next block's own trailer only if it reaches it), writes into the unpadded whole-bank allocations, blocks beyond the 8192-entry table (none reached it), under-runs (no leading zone). **Confidence: [H]** that the tool detects the D462 class; [M] that solo levels are clean (420 frames only, load-time allocations; runtime allocations after frame 420 not covered).
+
+## D465 — #127: Dam/Caverns water slides side to side (16-byte Gfx raw-index write, class B)
+
+**Symptom (#127, outside report):** in Dam and Caverns the water texture moved side to side very fast.
+
+**Root cause (code, [H]):** `sub_GAME_7F092E50` (`unk_092E50.c`, the water animation controller, once per frame from `lv.c:1357`) scrolls tiles 0/1 of two static display lists through the LE shim's `.loadtile.sl/.tl` (correct on PC), then writes the shimmer value `sin(t)*127+128` into the PRIM LOD fraction with `((u32 *)MipMap2C_Something_Setup)[8]` (and the same for `..Something2..`). u32 index 8 is N64 `Gfx[4].w0` (the `gsDPSetPrimColor`; its low byte is the LOD fraction). On PC, where `Gfx` is 16 bytes, index 8 is `Gfx[2].w0`: tile 0's `SetTileSize`, whose low byte is part of the T origin. So every tick the T scroll was overwritten by the shimmer sine (period 157 ticks ≈ 2.6 s, amplitude up to 255 quarter-texels ≈ 64 texels): the water swung back and forth, and the cross-fade never animated. The lists are used by BG water textures (`tex.c`: texnum 1508 Caverns → `MipMap2C_Something_Setup`; texnum 1511 Dam/Complex → `MipMap2C_Something2_Setup`). Sky water (Frigate sea, `sky.c` → `sub_GAME_7F09343C(gdl, 0)`) emits its own commands and was never affected.
+
+**Fix:** `#ifdef PORT`, write the same masked value into `MipMap2C_*[4].words.w0` (the N64 word sits in the low dword of `w0`; the second list still reads the first list's word, as the original does). The `#else` arm is unchanged. Porting-notes class B (16-byte PC `Gfx`); the layout/ABI exception, no Rule-2.
+
+**Rate check (TEMP probe, removed):** after the fix, a headless Dam run measured the sim at 59.84 ticks/s and the S scroll at 14.97 quarter-texels/s, against an N64 expectation of 0.25 × 59.94 = 14.99. That's one controller call per frame, and the port clock is exactly 60 ticks/s (`osGetCount` 46.5525/µs ÷ 775875). fast3d applies the tile origin as `S/32 >> shift − uls/4`, which is the RDP's formula. So on the PC side the water speed matches N64 to within about 0.1%.
+
+**Maintainer by-eye (Dam, vs 1964/GEPD, fixed build):** "it does still seem SLIGHTLY faster on PC vs 1964". Not explained by code: candidates are 1964 running below full speed, frame-rate smoothness (60 vs ~20 fps rendering), and filtering. Objective check: time ten shimmer brightness cycles (expect 26.2 s, i.e. 157 ticks each) on both.
+
+
+## D466 — #125: extended draw distance leaked into gameplay visibility (Xenia's boss fight triggers early)
+
+**Credit:** MST246's investigation in #125 (developer handoff with a locally tested correction: the extended draw-distance setting also extends the room admission gameplay uses, so Xenia's original on-screen condition fires early) was used to remediate this; credited in the issue close-out.
+
+**RULE-2-SIGNOFF (port-feature leak fix; approval delegated by the maintainer to a design review, 2026-10-01).** Touches `src/game` behaviour only to undo a port feature's leak into gameplay: every edit is `#ifdef PORT`, every `#else` arm is the original code, and every hook is a no-op at a draw-distance multiplier of 1 (unless `GE_D466_FORCE=1`).
+
+**Problem.** `Video.DrawDistance` (default 250%) scales the level's authored `FarFog` into `viSetZRange` (`bgfog.c`, D218). That one value fed both rendering and gameplay: (1) room admission (`bgIsRoomOnScreen`, `sub_GAME_7F0B5528` reject rooms beyond `zfar`), so more rooms became `room_rendered`; (2) the fog tests (`fogPositionIsVisibleThroughFog`, `g_ScaledFarFogIntensity`, and the D222/D218 `/ multiplier` hooks in `sub_GAME_7F054C58`). Guards 2.5x farther away were therefore "on screen" / "seen" to AI scripts, `chrCheckTargetInSight` and spawn-out-of-view picks, which the N64 never did. Measured on Jungle (static camera, DD 250): 8 chrs ONSCREEN, 3 gameplay-on-screen; the 3 equals the DD 100 count.
+
+**Design.**
+1. `bgfog.c fogLoadCurrentEnvironment` stores the authored far (unscaled `Visibility.FarFog`) and an authored copy of the two scaled fog intensities (same math, same `bgGetLevelVisibilityScale` division, from the unscaled far). Stored, never derived from `zfar`/the multiplier, so a live F10 DrawDistance change cannot desync them. `fogLoadLevelEnvironment` resets them (fogless levels: far 10000, intensity FLT_MAX).
+2. `bg.c bgDetermineVisibleRooms` is now a wrapper over the original body (`bgDetermineVisibleRoomsImpl`). When active it runs the body once with a port flag that pins the two zrange far reads (`bgIsRoomOnScreen`, `sub_GAME_7F0B5528`) to the authored far (a static read; `viSetZRange` is never called), snapshots `room_rendered` and `room_neighbor_to_rendered` for all rooms into global port arrays, restores `D_80044858` (the 1-in-10 room-load stagger), then runs the normal extended body that rendering uses. Authored first, extended second: pass 2 resets all draw-list state. Pass 1 loads nothing (room loading is in `bgRenderRoom*`). The snapshot is global like the N64 state (it runs per player view under split-screen).
+3. `port/src/drawdistgameplay.c`: `portRoomGameplayVisible/Neighbor`, `portPropGameplayOnScreen`, `portPropSetGameplayOnScreen`. The prop's gameplay verdict is stored as bit `0x80` of `prop->flags` (a u8 whose 0x40/0x80 are unused; checked by grep), set together with `PROPFLAG_ONSCREEN` when a prop is drawn only thanks to the extended range. `PROPFLAG_ONSCREEN` itself is untouched: it is also the render gate (`chrprop.c:222`, `render_pos` allocation).
+4. `propobj.c posIsOnScreen` computes, in addition to its (extended) result, the authored verdict: authored room set AND `portFogPositionVisibleGameplay` (authored intensity) AND `portSub7F054C58Gameplay` (no `/ multiplier`, i.e. multiplier treated as 1). It is a subset of the extended result by construction. The setters of `PROPFLAG_ONSCREEN` record it: `chr.c` (chr, hat), `propobj.c` (objects; embedded objects inherit the parent; held weapons inherit the chr).
+5. `CHRFLAG_HAS_BEEN_ON_SCREEN` (set in `chr.c` with ONSCREEN) is set only when the gameplay verdict passes. Verified gameplay-only: its sole readers are `chrai.c` AI_IFIveNotBeenSeen and `chraction.c chrSpawnAtChr`; no render code reads it. The patrol/gopos "last visible" timestamps (`lastvisible60`, `unk9c`) set in the same block follow the gameplay verdict too.
+
+**Reader triage** (RENDER = left on the extended state; GAMEPLAY = routed to the authored helpers):
+
+| Site | Class | Change |
+|---|---|---|
+| chrai.c AI_IFImOnScreen | GAMEPLAY | `portPropGameplayOnScreen` |
+| chrai.c AI_IFMyRoomIsOnScreen | GAMEPLAY | `portRoomGameplayVisible` |
+| chrai.c AI_IFIveNotBeenSeen; chraction.c `chrSpawnAtChr` (HAS_BEEN_ON_SCREEN) | GAMEPLAY | flag now set from the gameplay verdict (chr.c) |
+| chraction.c chrCheckTargetInSight (`vec2rd < fogGetScaledFarFogIntensitySquared`) | GAMEPLAY (prime Xenia suspect) | `portFogScaledFarFogIntensitySquaredGameplay` |
+| chraction.c 2988 spawn out-of-view room loop, 9839 pad-room check, 10733 `chrIsPosOffScreen` (room + fog) | GAMEPLAY | `portRoomGameplayVisible` / `portFogPositionVisibleGameplay` |
+| chraction.c 3927 goto-pad setup, 9318 / 9465 patrol and gopos magic-mode checks (ONSCREEN) | GAMEPLAY | `portPropGameplayOnScreen` |
+| chr.c 3737 chr shot test, 4204 `chrGetOnscreenRenderBounds` (autoaim); propobj.c 1309/1390/1396 object shot tests, 1437 chr line test, 4717 blood-stain gate, 9501/9596 shot gates, 9818 activatable-object candidate, 11186 `objGetOnscreenRenderBounds` (autoaim, photo objective); objective_status.c 520 | PLAYER-FACING (follows render; maintainer decision 2026-10-01) | none: original code. What the player can see they can shoot, autoaim at, use and photograph. |
+| chr.c headSwitchVisible block: `lastvisible60` / `unk9c` timestamps | GAMEPLAY | follow the authored verdict |
+| chrprop.c 545/577 (per-room prop draw loops over `getROOMID_isRendered`) | RENDER (differs from the starting classification: these decide which props are drawn in each room's pass) | none |
+| chrprop.c 222 render list; propobj.c 7187, 9045, 6378 render fns; bondview2.c 10811; loadobjectmodel.c 596; explosion.c 291/1898/2251; chrobjFogVisRangeRelated; fogGetPropDistColor | RENDER | none |
+| propobj.c 8417 `obj->flags & PROPFLAG_ONSCREEN` | not a reader: `obj->flags` (u32 definition flags) bit 2, not the runtime prop flag | none |
+| prop.c 233-467 | not readers: `arg1` is the object definition (`flags` u32), setup time | none |
+| propobj.c slot recycling 11417/11527, projectile collision tick 8156, door check 14033 | AMBIGUOUS, left on the extended state (conservative): slot recycling avoids popping a visible object; the projectile tick and the door check only matter beyond the authored fog distance / within 200 units of the player | none; listed here |
+
+**Maintainer decision (2026-10-01): player-facing interactions follow the render.** The first implementation also routed the player's own shot/autoaim/use/photo tests to the authored distance, which would make a guard visible at DD 250 unhittable (bullets pass through). The maintainer chose 'player follows render': only AI awareness (AI on-screen checks, sight range, spawn-out-of-view, has-been-seen, last-visible timestamps, AI locomotion mode checks) uses the authored distance; the player-facing readers in the table above run the original code. Policy for the wider question (FOV / ultrawide): `docs/dev/notes/GAMEPLAY-VISIBILITY-POLICY.md` (local).
+
+**Known remaining difference (decided conservatively).** `chr.c` uses `headSwitchVisible` (extended) for the animation path: `chrUpdateAnim` vs `modelTickAnim` for ACT_STAND/ANIM, and the WAYMODE_MAGIC patrol position update (`getsuboffset`/`chrDetectRooms`). A chr in the extension band therefore animates like a visible chr instead of taking the N64's off-screen path. Switching it to the authored verdict would draw those chrs with a stale pose, so it is left; the lasting state difference (a magic-mode path position) is small and needs a player at long range. The maintainer can ask for it to be routed too.
+
+**Out of scope (separate leak, untouched).** Field-of-view / widescreen frustum leakage: `c_lodscalez` grows with `FovScale` (D222) and `camIsPosInScreen` sees a wider frustum in widescreen. Gameplay visibility still reads the widened frustum. Also: with `Video.DrawDistanceAutoFov` the multiplier is `FovScale * 4`; the authored verdict treats the multiplier as 1, so it carries D222's FOV growth of `c_lodscalez`.
+
+**Verification (headless, Jungle `-level_37`, 640x480, ntsc-final; probe `GE_D466LOG=1`).**
+- DD 100 with `GE_D466_FORCE=1`, 700 frames, moving input (`GE_INPUTSCRIPT=100:SUP;400:SNONE`) and static input (`0:SNONE`): authored set == extended set (hash) on every logged frame (0 differing of 701 and of 700); chrOn == chrGp every frame.
+- DD 250, moving input (701 frames): authored set is a subset of the extended set on every frame (0 violations); 527 frames have extended != authored; 175 frames have ONSCREEN chrs != gameplay chrs.
+- DD 250 vs DD 100, static input (700 frames): authored(250) room-set hash == extended(100) on 694 of 700 frames; the other 6 are a 2-frame phase shift of the same hash sequence around the camera move at frames ~531-537 (run-to-run timing jitter; the sequence a41811e0 -> 03d252aa -> a6181506 is identical in both runs). At frame 650: DD 100 has 5 rooms / 3 chrs on screen; DD 250 has ext=10, auth=5 rooms, chrOn=8, chrGp=3, seen=4 (same `seen` as DD 100).
+- Leak demonstration: with the split disabled (`GE_D466_OFF=1`, 700 frames) the log reports `active=0`, i.e. every gameplay reader sees the extended state; with the fix the extended-only chrs (5 at frame 650) are invisible to gameplay.
+- Per-frame whole-state hash identical across DD 100 / 250: NOT achievable. The chr-state hash differs even between two DD 100 runs (timing nondeterminism; frame 2 already differs), so the comparison fell back to the room-set / on-screen-count comparisons above, as the brief allowed.
+- Smoke: Jungle x7 solo and 2P split-screen (`GE_STARTMP=2 GE_MPVIRT=1`, DD 250, 400 frames, two logged views per frame) all exit rc=0 with no `ge007.crash.log`. Solo `-level_09` was NOT run (the 8-launch budget went to the Jungle A/B and the 2P run); the Jungle solo runs cover the same solo path.
+- Not verifiable here: that the Xenia fight now triggers where the N64 triggers it (maintainer by-eye on Jungle at DD 250 vs 100, optionally vs 1964). The N64 build of the touched files was not compiled; the `#else` arms are the original text.
+
+**Maintainer verification (2026-10-01, release `de8b97e3`, menu launch, `Video.DrawDistance = 400`, the reporter's setting):** Jungle played through the Xenia section, which tested fine (no early trigger), plus a Statue spot check (long sightlines), also fine. Clean exit; the `GE_D466LOG=300` log shows the split active throughout (e.g. 15 rooms drawn vs 7 AI-visible).
+
+**Probes left (env-gated, cached, registered in `docs/dev/GE-ENV-PROBES.md`):** `GE_D466LOG`, `GE_D466_FORCE`, `GE_D466_OFF`.
+
+**Confidence:** high that the listed readers are the gameplay consumers of the extended distance and that the authored sets equal what DD 100 computes (room hash match 694/700, the 6 others explained by phase); medium that nothing else gameplay-relevant keys off `headSwitchVisible` (see the known remaining difference); not confirmed against the actual Xenia fight.
+
+
+**2026-10-01 follow-up: locomotion follows the render (maintainer decision "A").** Design review of the residual found that D466 had also routed the game's **locomotion level-of-detail** checks to the authored distance: `chraction.c` 3935 (goto-pad setup), 9334 / 9485 (gopos / patrol leave WAYMODE_MAGIC when on screen) and the `lastvisible60` / `act_gopos.unk9c` timestamps (their only readers are the magic-mode entry checks, `chraction.c:9310` and the patrol twin). With those authored but `chrTick`'s movement branches on the extended (render) flag, a guard visible only in the extended band would drop into magic mode after the timer and then run the N64's one-frame "visible magic" transition branch every tick (position snapped to the model offset, no walk animation): sliding/frozen far guards, a state the N64 never produced. These readers are presentation (how an unseen character is moved cheaply), not awareness, so they are reverted to the original code (render flag). Awareness stays authored: AI on-screen commands (`chrai.c`), sight range (`chrCheckTargetInSight`), spawn-out-of-view / pad room checks, `CHRFLAG_HAS_BEEN_ON_SCREEN`. Cost: a far guard the player can see walks its route like a visible guard (the N64's behaviour when the player stands closer) instead of the magic approximation. Jungle DD 250 headless after the change: still 8 drawn vs 3 AI-visible at frame 600-800, `seen` unchanged, rc=0.
+## D457 - 64-bit ABI retypes part 2 (ABI/layout exception, 2026-09-30)
+
+**Branches.** `fix/abi-bg-model-slots` = 4 commits (a)-(d) + this entry; `fix/abi-bg-slots-ab` = (a)+(b) only (the safe subset). No merge, no push. Census driver: `gcc -fsyntax-only -Wint-conversion -Wint-to-pointer-cast -Wpointer-to-int-cast` over compile_commands.json with the build's flags, unique file:line:col count.
+
+**Falsifier (written first).** Per family the warning count of the touched files must fall by about the census figure, AND `-level_09` must still reach frame 420 rc=0, AND (added after the fact) the default-boot menu must still render.
+
+**(a) `globalbank_rdram_offset` (1bdd0aec).** `s32` -> `uintptr_t` holding `(uintptr_t)pGlobalimagetable - 0x02000000` (the N64 `+0xFE000000` wrap trick is only valid mod 2^32; adding the 0x02000000-based GIMG_OFF gives `table+off`). gunfire.c `imageoffset/_r/_l` u32 -> uintptr_t (3 locals); the `texLoadFromDisplayList` args get `(Gfx *)`. image_bank.c 36->3, gunfire.c 8->2. The 3 left in image_bank.c are ROM-symbol `(u32)&_Globalimagetable*` (tag R) and the texSetBitstring bitstream slot.
+
+**(b) bg.c (48e4cfa7).** `BG_SEG_TO_PTR` PORT arm: `(uintptr_t)base + (intptr_t)(s32)((u32)(uintptr_t)off + 0xF1000000u)` (same mod-2^32 delta, signed, added to the full-width base). New `bg_addr_t` typedef (`u8 *` PORT / `s32` N64) for `ptr_bg_data`, `gptr_stan`, `ptr_bgdata_offsets` and the 4 cast sites. bg.c 31->14 (census ~20). Left: `(s32)BG_SEG_TO_PTR(...)` vs `(s32)offset_portal` compare (both sides truncated identically: benign), `s_bound_info.next` mask (tag I), bg.c:376/2785/5267/5309.
+
+**(c) player matrices (70e06230).** `field_5C/60` -> `Mtx *`, `field_64/68` -> `Mtxf *`, `field_10E0` -> `Mtx *`, `field_10E4` -> `LookAt *`; accessors `get/set_BONDdata_field_10E0`, `sub_GAME_7F078464/474` retyped; propobj.c:7214 `!= NULL`. Warnings 486->463 (bondview2 32->17, bg 14->11, explosion 2->0, glass2 1->0, glass 3->2). struct player 15080->15112 bytes (+32); members after `field_5C` shift +20..+32 (field_6C 116->136). Raw `+0xNN` player aliases exist only in `#else` arms (bondview2.c:3377, gunfire THROWMTX), so none affected.
+
+**(d) model/anim/vtx (70f37aba).** `Model.unk34/38/64/68` -> `u8 *`; `loadAnimationFrame` -> `u8 *` (dest at `uintptr_t`); `PROMOTE` -> `(uintptr_t)var + intptr_t diff`, `modelPromoteNodeOffsetsToPointers`/`sub_GAME_7F075A90` base param `uintptr_t`; `vtxstore_allocate` -> `void *` (+ `arg2`, record `unk04` -> `void *`). Warnings 463->435 (model.c 37->15). struct Model 232->248: unk34@88(8), unk38 92->96, endframe 96->104, anim2 120->128, unk64 140->152, unk68 144->160, unk6c 148->168, tail 224->244; struct player 15112->15176 (4 inline Models). Also FOUND: `vtxstore.c` allocated `n * 0x14` for a record that is 0x18 bytes on x86-64 (0x20 after the unk04 widening) -> heap overrun; now `sizeof`. Left: `sub_GAME_7F0762E0` (objecthandler_2.c, int arithmetic on gdl/filedata: not a type swap), `animation_table_ptrs1/2[]` (dense s32 tables filled with `(s32)&ANIM_DATA_x` offsets, D32/D33/D34: needs a design decision, census slot 8), `romCopy((void*)source)` ROM addresses (R).
+
+**Verification.** Disassembly (HEAD): `loadAnimationFrame`, `bgLevelRender`, `get/set_BONDdata_field_10E0` have no `mov r32,r32` on pointers; the zero-extends in `modelPromoteNodeOffsetsToPointers`/`sub_GAME_7F075A90` are the u32 `vma` param only. `-level_09`, GE_QUITFRAME=420, at (d): rc=0, no crash log, guard + elevator shaft render (frame 400 viewed). Startup log identical to base modulo version.
+
+**REGRESSION FOUND, (c)+(d) HELD.** Default boot to file-select (`GE_QUITFRAME=900`, `GE_PCDUMP`): base build (446f6ae7, D456) renders the SELECT FILE screen; (b) 48e4cfa7 renders it; (c) 70e06230 and (d) 70f37aba render an ALL-BLACK frame (extrema 0/0 at frames 700..1000), log identical, rc=0, no crash. Falsifier 3 FAILED. Bisect: a,b fine; c black; d black. Experiment on (d): allocating the player block as `sizeof(struct player)-64` (the same 15120-byte block (c) has) made the frames non-black. So the menu render is sensitive to the MEMPOOL_STAGE layout (player block sits right below `g_GfxBuffers[0]`, D98) and my struct growth (+32, +64, vtxstore table growth) flips it; results are NOT monotonic in block size, so it is not simply "block too small". Candidate mechanisms (none tested): an address-equality test in fast3d (`rdp.color_image_address == rdp.z_buf_address` skips FILL rects, gfx_pc.cpp:3547), an `s32`-held buffer address (`ptr_menu_videobuffer`, `z_buffer`, `resolution`, census slot 14) or an `ALIGN64_V1/V2` alignment assumption in the menu. This is a latent bug exposed by a layout shift, not a bug in the retypes; the retyped slots are correct by static reading.
+
+**Next step (owner).** Find which menu allocation/address breaks (probe: log `ptr_menu_videobuffer`, `z_buffer`, `ptr_logo_and_walletbond_DL`, g_GfxBuffers and the SETCIMG/SETZIMG addresses at the menu frame in a good and a bad build; retyping census slot 14 `ptr_menu_videobuffer`/`z_buffer`/`resolution` may itself be the fix). Until then land only `fix/abi-bg-slots-ab`.
+
+**Confidence.** (a),(b): high on the code, medium-high at runtime (level_09 frame 420 ok at (d), which contains them; menu ok at (b)). (c),(d): high on the retypes, LOW that they are landable until the menu regression is explained. Launch count exceeded the brief (6 vs 2) and builds (9 vs 8) to bisect the black menu.
+
+**2026-10-01 rebase (fix/d457cd-rebase = release/v0.4.1 + (c) + (d) + docs).** Cherry-picked 70e06230, 70f37aba, c8fa365d onto release 92eccd1d. (c) applied clean. (d) conflicted in one hunk, `src/game/vtxstore.c` `sub_GAME_7F09B820`: release's D462 already sizes both tables with `sizeof(struct unk_09B7A0_struct_parent)` under `#ifdef PORT` (same bug as (d)'s "table record sizeof"); kept D462's code and comment, dropped (d)'s duplicate comment hunk. The rest of (d) is unchanged: `unk04` -> `void *` owner tag (record stays 24 bytes: 8+8+4+2+2, so D462's sizeof is still right), `vtxstore_allocate` -> `void *`, Model.unk34/38/64/68 -> `u8 *`, loadAnimationFrame, PROMOTE. The findings.md conflict was two adjacent appended entries (D450.. and D457); both kept.
+
+**Verification (headless, Windows, GE_MEMPREDZONE=1, pinned 640x480 ini, MouseEnabled=0).** Build ntsc-final OK. Menu: 3 boots at GE_QUITFRAME=400 (frame 380 dump) rc=0; frame 380 is still the Nintendo-logo intro (mean luma 4.1, not the menu), so one extra run with SkipIntro=1, QUITFRAME=900, dump 880 shows the SELECT FILE menu fully rendered (mean luma 58.2, 89% non-dark pixels, viewed). Solo -level_09/20/37/41 at QUITFRAME=600: rc=0, no ge007.crash.log, 0 MEMPREDZONE hits. 2P split-screen (GE_STARTMP=2 GE_MPVIRT=1 GE_STARTWEAPON=8, ZHOLD 300/ZREL 500, QUITFRAME=900): rc=0, no crash, 0 hits (D416 split=1 players=2 stage=38). The black-menu hold is not reproduced (consistent with D459).
+
+**Confidence.** High on the retypes and the merge; medium-high at runtime (headless, no by-eye walk-through).
+
+## D468 — AI view clamp: ultrawide / raised FOV must not widen what the AI considers "on screen"
+
+**RULE-2-SIGNOFF (port-feature leak fix; gameplay-visibility policy approved by the maintainer 2026-10-01, local note `docs/dev/notes/GAMEPLAY-VISIBILITY-POLICY.md`).** Builds on D466: same gameplay/render split, same helpers; every hook `#ifdef PORT`, `#else` arms untouched; identity at a 16:9 or narrower window with `Video.FovScale` 100 (the defaults).
+
+**Policy.** Gameplay (AI awareness) may see what an N64 player could have seen in some configuration the cartridge supports. The cartridge's widest view is its own watch option Ratio 16:9 (`bondview2.c` sets the player aspect to `viewport w/h × 0.75 × 16/9`; the frustum planes behind every on-screen test derive from it), at the game's own FOV (the N64 never widens it; aim zoom only narrows). Our native widescreen (D334) is that code path at the window aspect, so a 16:9 window is already faithful. Wider windows and FovScale > 100 widen the rendered frustum beyond any cartridge mode; before D468 the AI saw that wider view too. Player-facing tests (shooting, autoaim, use, photo) follow the render, as decided for D466.
+
+**Design.** Perspective is linear in screen space, so the faithful frustum is exactly a centred sub-rectangle of the player's screen: `fx = tanH_faithful / tanH`, `fy = tanV_faithful / tanV`, with `tanV = tan(c_perspfovy/2)`, `tanV_faithful = tan((c_perspfovy / k)/2)` (`k = portFovYScaleFactor()`, the factor `portScaleFovY` applied: FovScale and the legacy non-native vertical boost), horizontal = vertical × aspect, faithful aspect = `min(c_perspaspect, w/h × 0.75 × 16/9)`. `portD468UpdateClamp()` computes this once per player view at the top of `bgDetermineVisibleRooms`; when either fraction < 1 the D466 split turns on (even at draw distance 100), the authored room pass shrinks `g_CurrentPlayer->screensize` to the faithful box (pass 2 rebuilds it from the viewport), and the `posIsOnScreen` gameplay verdict additionally requires `camIsPosInScreenBox(pos, margin, faithful box)`. Option `Game.AIWideView` (F10 Gameplay, "AI sees the wider view", default 0) disables the clamp (the PD-port model).
+
+**Verification (headless, Jungle `-level_37`, DD 100, fixed input, `GE_D466LOG=100`).** 1280×720 FOV 100: `active=0` (identity). 1680×720 (21:9): `active=1`. 1280×720 FovScale 130: `active=1`. On this path nothing sat in the side bands, so the counts matched (expected). Falsifier `GE_D468_SCALE=0.3` (narrows the faithful box): authored rooms 5/7, 3/4, 2/4 vs extended; gameplay chrs 0 of 1 on screen; subset held every frame. All runs rc=0, no crash. Not verified: by-eye AI behaviour on an ultrawide monitor (the maintainer's call); split-screen with ultrawide.
+
+**Probes:** `GE_D468_SCALE` (dev falsifier, registered), plus D466's `GE_D466LOG`/`_FORCE`/`_OFF`.
+
+## D467 -- #130: Golden Gun "plays the empty click with each shot" (code audit, 2026-10-01; AUDITED, faithful by code)
+
+**Report (outside, #130):** the Golden Gun plays the out-of-ammo sound together with the fire sound; in the original it does not play immediately after.
+**Code path.** The click is `sndPlaySfx(EMPTY_GUN_FIRE_SFX)` at `gunfire.c` in `gunTickHandState`, only on the FIRE-state `else` arm: ammo type != 0, magazine == 0, `field_88C == 0` (first FIRE frame) -> `GUN_ANIM_STATE_DRY_FIRE`. The Golden Gun has WEAPONSTATBITFLAG_CLICKY (0x10; runtime bits `0x170f99`), so the IDLE arm turns a held trigger into TRIGGER_PRESS even with an empty magazine (and that also pre-empts the reload check in the same IDLE block). Sequence for a 1-round magazine: FIRE (mag 1->0, shot sound 117) -> next call `88C > 0` -> RECOIL1 -> IDLE after the recoil -> if the trigger is STILL down: TRIGGER_PRESS -> FIRE -> DRY_FIRE + click. The shot's own frame never reaches the DRY_FIRE arm.
+**Measured (headless `-level_09`, `GE_STARTWEAPON=19`, `GE_D433LOG` TEMP probe, 60 fps, clk=1 every frame):** tap (4-frame hold): SHOT+FIRESND, no click. Held 9 frames: SHOT gt=872, DRYCLICK gt=886 (14 ticks later, when the recoil ended with the trigger still down). Sustained hold: SHOT, then DRYCLICK every 21 ticks (DRY_FIRE exit). Never a click on the shot tick.
+**Why this is the N64 behaviour:** every transition on the path is tick-based (`field_890` accumulates `g_ClockTimer`) or one-shot per state entry (`88C == 0`), so at 2-3 ticks/frame the console gets the same order and the same ~14-tick spacing. `g_ClockTimer` is 0 only when controls are locked or paused, as on N64. `field_A48` stays an 8-byte handle (D208), no layout tear.
+**Conclusion:** no port bug found; the click-after-shot happens only when the trigger is held ~0.23 s or longer after the shot (a long click/hold, or a held mouse button), exactly as on the console. If a reporter hears it on every ordinary tap, the suspects are input-side (how long the port holds `triggerOn` for a mouse/pad tap) not game logic; that is a by-ear/input measurement the maintainer owns (ROADMAP row #130). Not settled here: the audible spacing relative to the shot tail, and 1964's behaviour for a held trigger.
+**Bucket:** faithful (no `src/game` change, no Rule-2 request needed).
+**Probes left on the branch (TEMP, `GE_D433LOG`, cached getenv):** `D433P` macro + SHOT/FIRESND/DRYCLICK/STATS hooks in `src/game/gunfire.c`. Strip before merge.
+**Confidence:** high for the code path and the log; medium for "the reporter's trigger-hold explains it" (unmeasured).
+
+**Maintainer check 2026-10-02:** taps never click; a held trigger dry-clicks until release, same as the other guns and the N64. #130 closes (the report predated the D427/D432 fire-rate fixes). CLOSED faithful.
+
+## D469
+
+**Status: DONE (port-only; live pad test owed).** Branch `feat/pad-presets-rebind` (cut from `release/v0.4.1`). No `src/game` edits.
+
+**What.** The hard-wired pad block in `port/src/input.c` (triggers, face buttons, shoulders, stick clicks, Start, D-pad) is now a pure function `padMapPure()` over a per-seat action table. Actions (Jinx 1.1 defaults): `Fire=righttrigger`, `Aim=lefttrigger,leftshoulder`, `Use=a`, `Reload=x`, `Crouch=leftstick,rightstick`, `NextWeapon=y`, `PrevWeapon=none` (new; same A+Z backward idiom as the mouse wheel), `Gadget=b`, `Start=start`. Sticks/look, D-pad, Back (opens F10), Southpaw, trigger threshold and the menu accept/cancel (A,X -> native A; B,Y -> native B outside a playable stage) are NOT rebindable (lockout guard). Start is forced back to `start` if a Custom table unbinds it.
+
+**Config keys.** `Input.PadPreset` 0 = Jinx 1.1 (default), 1/2 = Jinx 1.2/1.3 (reserved; resolve to 1.1; the UI offers only 0 and 3), 3 = Custom. Seat 0: `Input.Pad.<Action>`; seats 1..3: `Input.Pad2/3/4.<Action>` (`Fire Aim Use Reload Crouch NextWeapon PrevWeapon Gadget Start`). Value = up to two SDL names, comma separated (`a,x`; `none` = empty slot; positional, `none,x` keeps slot 2). Names: `a b x y leftshoulder rightshoulder leftstick rightstick start dpup dpdown dpleft dpright lefttrigger righttrigger`. A non-Custom preset ignores the strings. Seat = `pads[]` index (D448), not the controller slot: with keyboard/mouse as P1 the pad on seat 0 drives slot 1 (`padSeatForSlot`). Gating: analog trigger sources of Fire/Aim act in any state; every digital source acts only while a stage is playable (so LB aim does not fire in menus, exactly as before).
+
+**Threading.** The poll thread (`inputComputePad`) hashes preset (+ all Custom strings) per call; on change it rebuilds the table into the spare of two buffers and publishes via `SDL_AtomicSetPtr`. No strtok; `g_CurrentPlayer` untouched (D419); getenv cached.
+
+**UI.** Input -> `Controller...` page (shared row table, so both F10 and front-end PC Options get it): Layout preset (Jinx 1.1 / Custom), Controller seat (Pad 1-4, Custom only), one row per action with Primary/Secondary slots (D-pad left/right switches slot), Reset. Capture: A/X/Enter/click starts a modal; nothing binds until all buttons are released (arming); then the first pressed source binds. Cancel: Esc, tap B or tap Back (pad 0 or the edited pad). Clear: Delete, hold Back 0.6 s, or Y on the row (no modal). Hold B 0.6 s binds B itself. The modal flag blocks F10/Back/Start closing mid-capture; input is swallowed until buttons release afterwards.
+
+**Equivalence evidence (preset 0 == old mapping).** `GE_PADMAPTEST=1` runs `padMapPure(preset-0 table)` against `padMapLegacy()`, a verbatim transcription of the pre-D469 block (release/v0.4.1 `input.c`, trigger/face section) over every raw source combination (2^15) x previous A/B/X/Y (16) x ctx {facePlayable, slotNative, southpaw} (8) x incoming masks {0, G, R, G|R, 0xFFFF} (5): `20971520 cases compared, 0 mismatches` (button mask, crouch, gadget edge). It also logs the per-source table (e.g. `a menu -> 8000`, `y playable -> 8000`, `b playable -> gadget=1`, `leftshoulder playable -> 0010`, `leftshoulder menu -> 0000`, `righttrigger -> 2000`, `leftstick playable -> crouch=1`), and checks: Custom `Fire=a` moves fire to A and frees RT; seat 1 stays independent; seat 2 `Use=y`; seat 3 Start guard; preset 0 ignores `Input.Pad.*`; the binding API round trip (set/clear slot positions). Run on a menu boot and on `-level_09` (1500 frames): PASS both. One non-equivalence, outside preset-0 gameplay: the overlay path now also records A/X press state for slot 0 (padActPrev), previously only B/Y, which only matters for pads-own-P1 slot 0 after closing F10 with A/X held.
+
+**Verification run.** build ntsc-final clean (4 cycles incl. one syntax fix); launches: menu boot + GE_PADMAPTEST (rc=0, no crash log), overlay `GE_OPTIONSOVERLAY_SECTION=__HdrController` with `PadPreset=3` + `GE_PCDUMP` frame (page renders: preset, seat, 9 action rows, reset), `-level_09` 1500 frames rc=0. `GE_OPTIONTREEPROBE` reports FAIL but the older `build-pc/ge007.base.exe` fails identically (row-cap check; pre-existing, not from D469). ini/eep backed up and restored around every run.
+
+**Not done / gaps.** (1) Jinx 1.2 / 1.3 (and 1.4): D394 is only a reconstructed stub that does not record those tables, so presets 1/2 are reserved slots that behave as 1.1 and are hidden from the selector; supply the Xbox control table to fill them (a data-only change). (2) Per-seat preset (preset is global; only Custom strings are per seat). (3) Two actions bound to the same source both fire (no conflict warning). (4) `start` is not abbreviated in the value column. (5) Pad capture reads pad `seat` only; editing seat N needs that pad connected to bind with it (Esc/B cancel from pad 0 or keyboard always work).
+
+**Maintainer live-pad checklist.** (a) Fresh ini, no edits: Jinx 1.1 plays exactly as before (RT fire, LT/LB aim, A use, X reload, B gadget, Y next weapon, stick clicks crouch, Start pause; menus A/X accept, B/Y cancel). (b) F10 (Back) -> Input -> Controller...: Layout preset right -> Custom; seat/action rows appear. (c) Select Fire, press A: "Press button..." (the A press does not bind itself); press LB -> Primary: LB; fire with LB in a level, RT no longer fires. (d) Capture then tap B: cancelled, row unchanged, page does not close. Capture then hold B ~1 s: binds B. (e) Capture then tap Back: cancel; hold Back ~1 s: slot cleared. Esc and Delete work too. (f) Y on a row clears the slot without a modal. Start unbound -> still pauses (guard). (g) Reset to defaults restores Jinx 1.1 strings on all seats. (h) Controller-only: do (b)-(f) without touching the keyboard; never trapped. (i) 2P split-screen with two pads: set seat Pad 2 to a different Fire; confirm P1 and P2 differ; Pad 2 Y/B in menus still accept/cancel. With keyboard/mouse as P1 (one pad, MPMode Auto) the single pad uses the seat 0 table. (j) Unplug/replug a pad mid-match: bindings stay with the seat. (k) PrevWeapon (unbound by default): bind it and confirm it steps weapons backwards (untested live; reuses the wheel-back A+Z idiom). (l) Front-end PC Options -> Input -> Controller: same page; A starts capture, hold Back clears. (m) Quit and relaunch: the ini keeps `PadPreset` and the `Input.Pad*.` strings.
+
+**Credit.** The two-names-per-action SDL string format, the menu lockout guard idea and release-before-capture arming follow outside PR #109 (italoarruda); the commits carry a `Co-authored-by: italoarruda` trailer.
+
+**Confidence.** High: preset 0 byte-equivalence (exhaustive over the mapping function), build, boot/level/overlay smoke, page render. Medium: pad-driven capture timing and the front-end page behaviour (no physical pad here). Low: PrevWeapon feel.
+
+
+**Maintainer live test (2026-10-01, release `eeec4bd8`, two Xbox Series X pads, menu launch):** (a) plays as before: needs more testing; (b) Custom bind (Fire to LB): works; (c) B tap cancel / hold B binds B: worked; (d) Back tap cancel / hold Back clear, Y clear: worked; (e) controller-only, never trapped: no issues so far (more paces wanted); (f) 2P per-seat tables: good; (g) unplug/replug mid-match keeps bindings, both pads with Custom bindings: good; (h) relaunch persistence: tested fine (Custom bindings survive a relaunch). The log shows Custom binds per seat (`Input.Pad.Fire seat 1 = righttrigger`, `seat 2 = a`), 15 Custom table rebuilds, seat detach/reattach, a 2P stage, and a clean `Restart game` quit (D443 Restart row exercised live, no BSOD). No crash log.
+## D470 -- Audio master volume + output-device selection (ROADMAP 5a)
+
+**Keys.** `Audio.MasterVolume` (int 0..100, default 100) and `Audio.Device` (string, default empty = system default device). Both in `port/src/audio.c`; rows "Master volume" / "Output device" at the top of the AUDIO section (shared by the F10 overlay and front-end PC Options; whole %).
+
+**Gain.** Applied in `audioSetNextBuffer` to a static scratch copy of the mixed block (`s*gain/100`, gain <= 100 so no clip is possible), after the game's own Music/FX volumes. At 100 the original buffer pointer is queued untouched (byte-identical). Live: the int is read per block.
+
+**Device.** SDL audio here is queue-based (`SDL_QueueAudio`), all queue/size calls happen on the audio-producer thread. UI/hot-plug only set atomics (`s_devReopenReq`, `s_devRemovedId`); the close/reopen runs at the top of `audioSetNextBuffer` on that same thread, so no queue call races the close (a few ms of queued audio is dropped on a switch). Named device that fails to open -> `LOG_WARNING` + default device. `SDL_AUDIODEVICEREMOVED` (pumped in video.c) -> warning, close, reopen default, config name cleared. Startup logs every enumerated output (`audioInit: output device N: "..."`). Default config makes the same `SDL_OpenAudioDevice(NULL, ...)` call as before.
+
+**Probe.** `GE_AUDIOGAINLOG=1`: once per second, max |sample| of the final queued buffer (`D470 gain: master=N peak=P`).
+
+**Verification (Windows, -level_09, GE_QUITFRAME=600, 640x480, MouseEnabled=0, driver directsound).** a) defaults: opens default device, rc=0, peaks 2717/8158/7459/11225/... b) `MasterVolume=50` + `Device=Speakers (Focusrite USB Audio)`: log "opened audio device by name", rc=0, peaks 1358/4576/4242/5218/... (first window exactly half of a; later windows ~0.5-0.56, timing-dependent mixes). c) `Device=NoSuchDevice`: `WARN audioInit: audio device "NoSuchDevice" unavailable (No such device.); falling back to the default device`, then default opened. In run c the process did NOT self-quit at GE_QUITFRAME (ran to the 120 s `timeout`, rc=124, ~7000 frames, no crash; no "quit requested" line); runs a and b quit normally with identical settings otherwise, so it is probably a harness/quit-path flake unrelated to audio, but it was not re-run (launch budget) -- confidence medium on that point. No crash log in any run.
+
+**Maintainer listening checklist.** (1) Master 100 sounds identical to before. (2) Slider 0/25/50/100 in F10 and in front-end PC Options changes loudness live, music+FX together; 0 is silent. (3) Output device row cycles Default + devices both directions; audio moves to the chosen device immediately, no crash, brief gap only. (4) Restart: chosen device and volume persist. (5) Unplug the active USB device mid-game: game keeps running and audio resumes on the default device. (6) Edit the ini to a bogus device name: game starts on default. (7) "Reset to defaults" in AUDIO restores 100 and Default (does not touch Music/FX per-file volumes beyond their existing reset).
+
+
+**Lead re-check (2026-10-01):** run c (`Audio.Device = NoSuchDevice`, `-level_09`, `GE_QUITFRAME=600`) repeated once on the same build: fallback warning, default device opened, `quit requested (GE_QUITFRAME)` and a clean exit (rc=0, no crash log). The agent's earlier non-quitting run c did not reproduce; not an audio-path issue.
+
+## D471 — Controller-family button names (no glyphs) + player-index LEDs
+
+**Why.** The pad-menu audit (local note `docs/dev/notes/PAD-MENU-AUDIT.md`) found the PC menus fully pad-operable, but every prompt named buttons in Xbox terms. The maintainer wanted names only, no glyph art (GoldenEye has no glyph UI). For reference, the Perfect Dark PC port does not rename buttons at all (fixed `JOY1_A`… names, `pd_port/port/src/input.c:151`) and queries the controller type only for rumble. It does set the pad's player-index LED, which we adopt.
+
+**Design (port-only).** `port/src/input.c`: `padFamily[seat]` (0 Xbox default incl. Steam Deck/unknown/virtual, 1 PlayStation PS3/PS4/PS5, 2 Nintendo Switch Pro/Joy-Cons), from `SDL_GameControllerGetType` once when a pad is seated (guarded `SDL_VERSION_ATLEAST(2,0,12)`, PS5 at 2.0.14, Joy-Con enums at 2.24), moved with the pad on seat compaction, cleared on detach. Helpers: `inputPadFamily(seat)` (`GE_PADFAMILY=xbox|ps|nintendo` dev override, cached), `inputPadHelpFmt` / `inputPadHelpFmtFam` (expand `{A}{B}{X}{Y}{BACK}{START}` templates with the menu pad's (seat 0) names), `inputPadSourceFamilyName(seat, src)` (binding-column names, NULL = keep the existing Xbox text). Nintendo face letters stay A/B/X/Y (SDL's default `GAMECONTROLLER_USE_BUTTON_LABELS=1` reports buttons by printed label); only L/R/ZL/ZR/−/+ differ. Help templates: F10 overlay footer (`optionsoverlay.c`) and the front-end PC Options capture/help lines (`frontoptions.c`); a footer line that would overflow the card first compacts `LEFT/RIGHT` → `L/R`, then falls back to the Xbox letters. Player LEDs: `SDL_GameControllerSetPlayerIndex(pad, seat + (KbmP1 ? 1 : 0))` re-applied on every pad scan, `-1` before close.
+
+**Verification (headless, `GE_OPTIONSOVERLAY=1` on the Controller page, Custom preset, frame 200).** Default: help and binding column identical to before. `GE_PADFAMILY=ps`: R2/L2/Cross/Square/L3/Triangle/Circle/Options in the column; footer "CROSS BIND  L/R SLOT  TRIANGLE CLEAR" / "CIRCLE/ESC BACK   F10 CLOSE", inside the card. `GE_PADFAMILY=nintendo`: ZR/ZL/Plus, A/B/X/Y unchanged. All rc=0, no crash. Not verified: a real PlayStation or Nintendo pad, and the LEDs (maintainer, if hardware is available). Front-end page text not captured (the same helper as the overlay).
+
+**Also from the audit, not done here:** F10 overlay ownership under 2+ pads (G1–G3: navigation reads pad 0 only).
+
+
+## D472 -- F10 overlay polish: pad ownership, pillarbox, experimental colour, unknown-key warning
+
+**Ownership (PAD-MENU-AUDIT G1-G3).** `input.c`: `padSelectPrev` is now per pad; `s_ovOwner` records the pad whose Back opened F10 (reset to -1 whenever the overlay is closed); `inputOverlayOwnerPad()` returns the opener while attached, else the lowest attached pad (keyboard-opened, or the owner detached), else 0. Only the owner's Back closes it from the poll path (non-owner Back is edge-tracked and ignored while open). The overlay tick still runs from slot 0's poll, but every `inputPadButton(0, ..)`/`inputPadAxis(0, ..)` in `optionsoverlay.c` (nav, A/X, B, Start, Y-clear, D469 capture fallbacks) now reads the owner. A non-zero owner's own slot is returned neutral while open (as pad 0 always was). `inputPadHelpFmt` uses the owner's family while the overlay is open (front-end page still seat 0). Solo single pad: owner is always pad 0 = unchanged. D343 respected (`frontOptionsBlocksOverlay`). No `g_CurrentPlayer` access (D419).
+
+**Pillarbox (D335b).** The dim stays full-window; card + text are wrapped in `PORT_HUD_ASPECT(CENTER)` ... `NONE` (hudaspect.h, no emission at <= 4:3, so 4:3 is byte-identical). Mouse: `optionsoverlay.c` maps the window fraction through the same centred region (`vis = (4/3)/portNativeAspect()`, as the D335 front-end pointer) before the logical x, so hover/click/slider-drag/close-box hit-test the drawn layout.
+
+**Red experimental rows.** Rows whose label contains "EXPERIMENTAL" draw label (and ON value) in red ink (selected brighter). F10 only; the front-end PC Options page has its own draw and was left alone.
+
+**Unknown ini keys.** `config.c` counts keys that `applyKV` rejects during `configLoad` (`configUnknownKeyCount/First`); the F10 root page shows an amber "N UNKNOWN INI KEY(S) - SEE LOG" in the title line. Non-blocking, no behaviour change. Legacy migrated keys (e.g. old `Input.AimStyle`) also count, once, until the ini self-cleans on exit.
+
+**Verified (Windows, 1280x720, MouseEnabled=0, `GE_OPTIONSOVERLAY=1`, GE_PCDUMP frame 250, rc=0, no crash log):** root page pillarboxed with the warning (`scratch/f472/root.png`); Gameplay page with red Skip intro / All unlocked rows (`scratch/f472/gp250.png`). **Not verifiable headless:** multi-pad ownership. Maintainer live checks: with 2 pads, P2 Back opens F10, P2 navigates/adjusts/B-backs/Start-closes while P1 Back/Start does nothing; detach the owner mid-menu, the lowest remaining pad takes over; keyboard F10 + pad 1 still drives; solo single-pad unchanged; pillarboxed mouse hover/click lands on the drawn row at 16:9 and 21:9; PS pad in seat 2 shows PS names in the help line when it owns the overlay.
+
+## D473 — Uncached `getenv("GE_D75V")` per G_VTX (low-end perf, #92 / D339)
+
+**Found by** the 2026-10-01 CPU profile (in-process all-thread sampler `GE_PERFSAMP`, branch `perf/profile-hotspots`, local note `docs/dev/notes/PERF-HOTSPOTS.md`): ~55-59% of render-thread samples landed in `getenv` called from `gfx_sp_vertex`. The D75 vertex probe (`port/fast3d/gfx_pc.cpp`, `GE_D75V="lo-hi"`) cached its range in `d75v_lo`, but used `-1` both as "uncached" and as "disabled", so with the env unset (always, for players) the `if (d75v_lo < 0)` re-ran `getenv` on every G_VTX (170-520 per frame). Same class as D302/D250 (porting-notes D302); the registry wrongly described it as a cached check.
+
+**Fix:** a separate `d75v_init` flag; the probe's behaviour when set is unchanged, so output is identical. **Measured** (`GE_PERFSTAT`, Statue `-level_22`, maintainer settings 1600x900 MSAA 8x DD 400, same scripted sweep, RTX 5090): steady windows with matching triangle counts, display-list time 0.99 -> 0.46 ms and 1.31 -> 0.55 ms per frame; total `run` 5.6 -> 1.8-2.0 ms. Profile context: whole-process CPU is only ~1.5-2 ms/frame on this machine after the fix, so on the N3060 / HD 400 (#92) the remaining bottleneck is probably GPU/driver-side; next step there is a `GE_PERFSTAT` run on that hardware (gpu= vs run= vs interval=). Further CPU proposals (texture-bind lookups, redundant state changes, debug hooks per triangle, combiner lookup) are ranked in the local note.
+
+## D474 — fast3d micro-optimisations from the 2026-10-01 profile (low-end, #92)
+
+**Changes (`port/fast3d/gfx_pc.cpp`, output-identical by construction):** (1) `gfx_dp_set_tile` compares the post-normalisation tile fields with the stored ones and only sets `rdp.textures_changed[]` when something differs; `gfx_dp_set_tile_size` returns early when uls/ult/lrs/lrt are unchanged. A dirty flag costs a texture-cache lookup and forces `gfx_flush()` (a batch break, i.e. an extra draw call) on the next textured triangle. Texture/TLUT loads and G_TEXTURE still dirty the textures through their own paths, so a real change is never missed. Narrow stored fields compare conservatively (out-of-range args count as changed). (2) A single cached `tri_dbg()` gate (non-empty `GE_D75D`, `GE_ZF` or `GE_D303`, the same semantics as each hook's own lazy init) now guards the per-triangle emit/reject hooks and the per-G_VTX note, which previously each cost a call plus a frame-counter read even when disabled.
+
+**Measured** (`GE_PERFSTAT`, Statue, the same sweep and settings as D473): display-list time in comparable windows 0.46 -> 0.42 and 0.55 -> 0.54 ms (one window 1.57 -> 0.80), batches 255 -> 254. On this machine the gain is within run-to-run noise: redundant tile setters rarely broke batches in this scene. Kept because it is free and the batch/lookup savings scale with weaker CPUs and per-draw driver cost. Frame 1350 dump checked by eye: normal textured rendering.
+
+## D475 -- low-CPU spikes explained; texture pre-warm (Video.TexturePrewarm) built, little to gain
+
+**Game thread (GE_GTPERF).** On Statue (-level_22, 1550-frame view sweep) no scheduler message ever took more than 3 ms of game-thread work. The ~33 ms low-CPU frames (render CPU 1-2 ms) are retraces skipped by the game's own frame limiter (`boss.c` `mainTickElapsed < MAIN_LOOP_TICK_INTERVAL`): every gap line reads "1 skipped by tick-interval, 0 by pendingGfx" and the previous gfx task had run ~13-16 ms (includes the vsync/present wait). A frame that finishes a little late misses the tick threshold and the next DL is built one retrace later. Not a loading/AI/audio cost.
+
+**Texture bursts (GE_PWMISS).** After frame 150, 894 of 1002 cache misses were repeats of an already-imported address: the same CI8 texture and the same palette address with a different palette *content hash* (51 distinct hashes for one texture within ~8 frames from frame 587). D217 keys CI textures on palette content, so a palette the game rewrites in place (lighting/effect tint) re-decodes and re-uploads the texture every change. Only ~108 misses per 1000 frames were true first-sight. That is the real source of the 60-130-import bursts.
+
+**Pre-warm (built, default OFF).** `gfx_prewarm_walk()` (port/fast3d/gfx_pc.cpp) is a reduced DL interpreter run on the game thread from `bgRoomCalcBB` (one `#ifdef PORT` hook in src/game/bg.c, while the room is transiently loaded); it executes only texture-state commands and records import jobs (snapshot of tile/loaded-texture/palette state, deduped); the render thread replays them via `import_texture` at the start of the next `gfx_run`. Statue: 27 rooms, 756 jobs (638 dup), +378 cache entries, walk 0.8 ms, replay 49 ms at level load. In-game misses 1419 (off) vs 1271 (on) over 1500 frames; spikes >20 ms 6 vs 6, >33 ms 4 vs 3, i.e. no real gain. Not verified output-identical (no frame diff run; Cradle not run), so `Video.TexturePrewarm` defaults to 0.
+
+**Next lever.** Stop keying/decoding per palette content: upload CI index + palette as textures and look up in the shader (or cache by palette with a small LRU), so a palette change costs a 1 KB update instead of a full re-import.
+
+**Lead note (2026-10-01):** the pre-warm code is NOT merged (no measurable gain, never frame-diffed); it stays on branch `perf/prewarm` (`d625dc7e`) with probes `GE_GTPERF` / `GE_PWMISS` for future work. Two real levers remain: (1) CI palette re-import churn (upload index + palette separately and look up in the shader, or cache per palette with an LRU); (2) the frame-limiter skip: a gfx task that finishes slightly late makes `mainTickElapsed < MAIN_LOOP_TICK_INTERVAL` drop the next retrace, a timing interplay between the port's wall-clock `osGetCount` and the VI pacing (porting-notes D13 class); needs a design look before any change (game-loop pacing is game logic, so Rule-2 applies if `boss.c` behaviour changes).
+
+**Frame-limiter design look (2026-10-02, lead):** `boss.c` builds a frame on a VI retrace only if >= 387,937 counts (~8.3 ms) passed since the previous frame's start (`copy_of_osgetcount_value_1`, set in `updateFrameCounters`). A clock-beat cause (free-running 60.000 Hz port VI vs monitor vsync) was tested and refuted: a static `-level_09` view for 3700 frames with `GE_GTPERF=3` logged 9 skips, all in the first 314 frames (load/intro), none in the remaining ~57 s. So the skip only follows a long previous gfx task, i.e. it is a consequence of the CPU bursts (CI palette re-imports on Statue), not an independent pacing bug. Decision: no pacing change and no Rule-2 item; fixing the palette churn should remove most of these skips.
+
+## D476 — CI4 texture cache keyed on its own palette bank (palette re-import churn, D475 follow-up)
+
+**Cause:** D217 keys CI textures on an FNV hash of the whole 256-entry TLUT table (`rdp.palette`). A CI4 texture decodes only its 16-entry bank (`rdp.palette + palette_index * 16`, `import_texture_ci4`), so a TLUT load into any other part of the table changed the key and forced a re-decode and re-upload of an unchanged CI4 texture.
+**Fix (`port/fast3d/gfx_pc.cpp`, port-only, output-identical):** for `siz == G_IM_SIZ_4b` the key's palette hash covers only that bank's 32 bytes; CI8 (reads all 256 entries) keeps the whole-table hash. Two keys can only match when the decoded texels would be identical.
+**Measured** (`GE_PWMISS` probe build, Statue sweep at the maintainer's settings, misses after frame 150): CI4 189 -> 36; total 1472 -> 1101 (the CI8 count also moved, which is run-to-run variation; its keys are unchanged).
+**Not fixed here:** the bulk is CI8 textures in the arena (e.g. `0x701a2920`) whose palettes the game animates (70-155 distinct palettes over the sweep, only 48 eviction re-misses in total), so no cache can absorb them. That needs a GPU palette lookup (index texture + palette texture, with filtering done in the shader) or an in-place `glTexSubImage2D` update path; see ROADMAP §4.
+
+
+## D477 — CI8 palette re-imports measured: not a CPU-side hitch cause (D475/D476 follow-up premise refuted)
+
+**Question:** D475/D476 named CI8 textures with game-animated palettes as the main remaining source of the Statue/Cradle hitches and proposed a GPU palette lookup or an in-place `glTexSubImage2D` update path.
+**Probe:** `GE_CI8PROF=1` on branch `probe/ci8-churn` (TEMP, never merge): per-CI8-bind counters in `import_texture` (binds, misses, distinct palette hashes, re-misses of an already-seen palette, same-frame binds with a different palette) and timers around the miss path (decode vs `upload_texture`), plus the worst CI8 frame per 300-frame window.
+**Run:** Statue `-level_22`, maintainer's ini (1600x900, MSAA 8x, `TextureFilter = 2`, DD 400, FOV 135, vsync), `GE_INPUTSCRIPT="200:SLEFT;1000:SNONE;1050:SRIGHT;1800:SNONE;1850:SUP;2100:SLEFT;2400:SNONE"`, `GE_QUITFRAME=2420`, with `GE_PERFSTAT=1`; RTX 5090 dev box; rc=0, ini/eep restored. One run.
+**Results:**
+- CI8 miss path costs ~0.008 ms/frame on average in the busiest window (frames 300-900, ~1.9 misses/frame); the worst single frame spent 0.44 ms on CI8 imports. Non-CI8 misses are smaller still. CPU-side, this cannot make a gfx task ~15 ms late.
+- The cache absorbs the animation: 1314 CI8 misses over 153 textures, only 10 re-misses of a palette already seen (the top texture `0x701a2920`, 32x48: 137 misses, 134 palettes, 3 re-misses). Misses fall to 0 after ~frame 1800.
+- The same CI8 texture is bound with different palettes within one frame in most frames (`0x70155ac0`: 1902 of 2400 frames; `0x701a2920`: 8166 same-frame palette switches). An in-place single-texture update path would therefore re-upload every frame; **do not build it**.
+- Spikes: 3 frames > 33 ms in 2420 (frames 3, 459, 762), each with render-thread `dl`/`run` 0.2-0.6 ms; none coincides with the worst CI8 frame (577).
+**Not measured:** driver-deferred work (first-draw allocation of a new texture, `glGenerateMipmap` forced by the three-point filter on every upload) shows up neither in these CPU timers nor in the averaged GPU timer. The D475 association between the bursts and palette re-imports was temporal, not a measured cost.
+**Conclusion:** GPU palette lookup / in-place update are not justified by this data. Next step if the hitches still matter: a per-frame timeline (game-thread build + limiter decision, render-thread misses/new textures/shader compiles, per-frame GPU timestamps, swap time) over >=5 runs, PresentMon for what reaches the screen, and a disable-falsifier per suspect. Low-end hardware may weigh these costs differently (a `GE_PERFSTAT` run there is still owed, ROADMAP §4).
+
+## D478 — D441 census re-run triaged; crash-log `snprintf` size bound fixed
+
+**Census:** `scratch/d441p2/run.py` (`-fsyntax-only -Wint-conversion -Wint-to-pointer-cast` over every compiled `.c`) on `release/v0.4.1` after strip batch 4: **319** warnings (320 on the previous run). 190 are the intentional `(s32)&ANIM_DATA_*` offset initialisers in `chr.c` (D34). The other 129 were read site by site (triage list in the local `scratch/d441p2/triage-2026-10-02.txt`).
+**Rule used:** on the current layout a 32-bit truncation only breaks if the pointer is outside the DRAM arena (the 0x70000000 window): the exe image (ImageBase 0x140000000), the C heap, or a stack above 2 GiB. An arena pointer survives a `(s32)` round trip today (positive, below 2 GiB) and only becomes a hazard when Stage B moves the arena (`GE_HIGHARENA` flavour). A K0-mirror (0x80000000+) value held in an `s32` would sign-extend; none found on a live path.
+**Fixed (port code, no game-code change):** `port/src/libultra.c` romCopy-bad-destination crash log passed `win + sizeof(win) - (wp - win)` (a pointer) as `snprintf`'s size, so the bound was meaningless; now `sizeof(win) - (size_t)(wp - win)`. Latent only (32 x `" %p"` fits in the 1200-byte buffer, and the path runs just before a FATAL).
+**Not live today, by class:**
+- *Arena pointers in `s32`/`u32` slots* (Stage B list): `stan.c` `stan_prefix.stanfile`, `bondview2.c` start-pad `stan`, `title.c` `dword_CODE_bss_8006958C`/`_80069588`/`barrelDisplayListPtr`, `initmenus.c` `ptr_menu_videobuffer`, `viewport.c` `z_buffer`, `rsp.c` RDP output buffer, `cleanup_objects.c` propDefs, `objecthandler_2.c` file arithmetic, `chr_b.c` head opcode, `initactorpropstuff.c`/`initanitable.c` animation table (the planned slot model), `mema.c` (planned `s32`+sentinel widening), `mpmenu.c` `q` = `langGet` result (bank in the arena; the neighbouring `h2` already has a PORT pointer type, `q` could follow), `audi.c` audio output buffer (`alHeapAlloc` on the music heap, `mempAlloc`ed).
+- *Stack buffers through `s32`*: `image.c` texLoad's `compbuffer[4000]` reaches `texSetBitstring(s32)` and `rzipGetSomething()` (returns `s32`). Safe because game-thread stacks are forced low on purpose (`portAllocLowStack`, `MAP_32BIT` on Linux; the Windows exe has no `DYNAMIC_BASE`/`HIGH_ENTROPY_VA`, so its stacks are allocated low). **Hazard for macOS/ARM (no `MAP_32BIT`) and for any build that turns ASLR on** — belongs to the #95 `port_addr` / Stage B work.
+- *Exe pointer truncated but never dereferenced on PC*: `fr.c` `cfb = cfb_16[0]` (exe bss) -> `sched.c` `osViSwapBuffer` (shim ignores it) and `CheckDisplayErrorBuffer` -> `crashRenderFrame` (stubbed in `n64stubs.c`).
+- *Consistent truncation of both sides of a compare*: `blood_decrypt.c` `bloodImgTranspose` (`t1`, `var_t2`, `rowend` vs `(u32)var_v1`); breaks only if a buffer straddles a 4 GiB boundary.
+- *Integers in mistyped pointer slots / prototypes* (no address involved): `bg.c` room-list `.next` flags, `stan.c` locus `rooms = 1`, `propobj.c` `save_img_index_to_obj_ani_slot(screen, m->time)`, `chraction.c` `set_actor_on_path(self, pathid)`, `audi.c` `osScAddClient(..., 1)`, `gunfire.c` fog args, `chrai.c` `ok = hatCreateForChr(...)` (truthiness).
+- *Already full-width, warning only*: `lightfixture.c:218` (`gfx->dma.addr` is `uintptr_t`; the real hazard at the next line was fixed by #107).
+- *N64-only or debug paths*: `init.c` boot decompression, `ramrom.c`/`ramromreplay.c`, `indy_*`, `othermodemicrocode.c`, `lv.c` `bgDebugRemoved7F0B9DE4`, `music.c`/`language.c`/`image.c` ROM offsets passed to `romCopy` (ROM addresses, not host pointers).
+**Verified:** build clean; the `snprintf` warning is gone. No runtime path change outside the FATAL branch, so no frame diff.
+
+## D479 — `GE_STARTMP` harness: ammo counter missing (skipped file-select side effect)
+
+**Symptom:** in headless split-screen runs launched with `GE_STARTMP` the ammo counter never showed (seen 2026-10-01 with both players firing AK47s); the maintainer sees it in every menu-launched match.
+**Probe** (`GE_AMMOPROBE`, TEMP, branch `probe/ammo-startmp`, never merge): in the harness match both players had `gunammooff = 0x1` (`GUNAMMOREASON_OPTION`) and `cur_player_get_ammo_onscreen_setting() == 0`. The stage load's `fileLoadSettingsForFolder(selected_folder_num)` (`options.c` -> `file.c` -> `file2.c`) ran with folder 0 and found a record with `options = 0x0000`; the solo `-level_26` shortcut, by contrast, found the real file 1 (`options = 0x013a`, ammo bit set) in a different `saves[]` slot.
+**Cause:** porting-notes D10 class. A real MP launch passes the file-select screen, whose setup sets `selected_folder_num = -1` (`front.c`), so `fileGetSaveForFoldernum(-1)` returns NULL and no Bond file's options are applied in MP (the defaults stay: ammo on). The harness skipped that screen and kept the boot default `FOLDER1`. The record it then matched is very likely an all-zero `saves[]` entry (the MP harness also skips the legal screen's `fileValidateSaves()`, the only EEPROM -> `saves[]` load, see D299 and porting-notes D10); not separately verified.
+**Fix (`src/game/lv.c`, inside the `#ifdef PORT` `GE_STARTMP` harness block only):** set `selected_folder_num = -1` before `init_mp_options_for_scenario`. No game-logic or menu-path change.
+**Verified:** `GE_STARTMP=2 GE_MPVIRT=1 GE_STARTWEAPON=8`, pinned 1280x720 ini, frame 600: both halves draw "30 | 370" with the ammo icon; rc=0; ini and eep unchanged.
+**Note:** other harness-only differences may remain because `saves[]` is unvalidated in `GE_STARTMP` runs (anything that reads save data during an MP match, e.g. unlock checks). Not observed so far.
+
+## D480 — Shader pre-warm (`$S/ge007.shaders`)
+
+**Symptom:** the ROADMAP §4 Statue/Cradle hitch row. The 2026-10-02 play capture (`GE_HITCHTL`, ~2 min; the maintainer felt no hitching, only the FPS counter dipping to 58/59 as a level starts) had one in-play stutter cluster, and it was shader compiles: frame 1076 spent 18.7 of its 19.2 ms display-list time compiling 7 GL programs, frame 1083 16.1 ms on 3.
+**Cause:** `gfx_lookup_or_create_shader_program` (`port/fast3d/gfx_pc.cpp`) compiles a program the first time a combiner pair is drawn. The pool lives for the session (level changes don't clear it; only a texture-filter change does, via `reset_texture_state`), so the cost comes back every session. The GLSL from `gfx_opengl_create_and_load_new_shader` is a pure function of `(shader_id0, shader_id1)` and the GL version, so ahead-of-time compiling is exact. The draw path already passes the clamp-folded `id1` that `lookup_shader` keys on, so recording inside that function captures the right pairs.
+**Fix (port layer only, `gfx_pc.cpp`):** each newly created pair is appended to `$S/ge007.shaders` (text: header `ge007-shaders v1`, then `%016llx %08x` per line; cap 1024; appended as created, so a crash loses nothing). At the top of `gfx_run` (render thread, GL context current; after the startup `videoApplyTexFilter` clear), a pending flag compiles every listed pair the pool misses, unloads it, and clears `rendering_state.shader_program` so the next draw rebinds as usual. `reset_texture_state` re-arms the flag. Logs `SHADERWARM: compiled N of M in X ms`. A missing, foreign or corrupt header rewrites the file; malformed lines are skipped; an unreadable/unwritable `$S` is skipped silently. `GE_NOSHADERWARM=1` disables reading and writing (falsifier).
+**Not changed — the level-start frame:** the 59 ms first frame of a level (316 new GL textures, `gpu_ms` 58.99, CPU texture code 0.29 ms) is the D235 stage-change texture-cache clear (needed for correctness) re-uploading and mip-generating (`glGenerateMipmap` under three-point filtering) every visible texture. The previous screen is static, so it only lengthens the load by ~0.06 s. No output-identical cheap fix: spreading uploads draws missing textures, skipping mipmaps changes filtering, and the dry-run pre-warm (`perf/prewarm`) measured ~no gain. Left as is.
+**Trade-offs:** the batch moves to frame 1 of a session: 22-28 pairs on Dam took 5.5-6.5 ms with the driver's disk cache warm, 56 ms once cold; the per-compile range in the capture is 2.5-11.5 ms, so the full-game list (unknown until it fills; capped at 1024) costs at most a few seconds once, at boot. After an F10 texture-filter change the pool is cleared and re-warmed in one stall on the next frame instead of a few compiles at a time as combiners reappear (expected; not a new hitch class). The driver's own disk cache already cuts repeat-session compiles to ~0.4 ms each (no-prewarm second run: 10 compiles, 3.6 ms total), so the gain is largest on the first session after a new exe or driver.
+**Verified 2026-10-02** (pinned 1280x720, ini/eep backed up and restored, `ge007.shaders` deleted between runs): build clean. **Output:** held mission-select menu (`GE_STARTMENU=7`, frame 300): base vs base dmean 0.000, base vs pre-warmed 0.000. Dam frame 400 differs by camera position only, and base vs base varies just as much (0.56 and 9.5; D449 bimodal intro), with one pre-warmed run at 1.13 from a base run, so no rendering change. **Effect** (temporary merge with `probe/hitch-timeline`, Dam 1500 frames): fresh list = 8 in-play compiles in 6 frames (39 ms); warm = 0 in-play compiles (`SHADERWARM: compiled 27 of 27 in 6.2 ms`); `GE_NOSHADERWARM=1` = 10 in-play compiles. **Robustness:** corrupt header (rewritten), truncated/garbage lines (skipped), read-only file (pre-warms, appends fail silently), read-only + corrupt (silent, no warm): all rc=0, no crash log. **Smoke:** 60 s `-level_09` with `GE_MEMPREDZONE=1`: rc=0, 0 hits, no crash log.
+**Owed (maintainer):** by eye, play a level you've already visited and watch the FPS counter in the first minute; one F10 texture-filter change (expect a single short stall).
+
+## D481 — Render worker: the scheduler thread no longer blocks on fast3d (#92 low-end frame rate)
+
+**Symptom:** #92: ~30 fps on a Celeron N3060 / Intel HD 400 where the Perfect Dark port holds 60. Reproduced on a Lenovo X220 (i7-2640M, Intel HD 3000, Mesa 23.0.3, Fedora 37): GE 44-49 fps on Dam/Statue/Cradle at EVERY setting (MSAA 1-8, anisotropy 1-16, draw distance 100-400, 640x480, vsync and FpsCap on/off), while PD built from the same toolchain held 59.4-60.0 fps on Defection/Investigation/Villa with as much or more work per frame (13-16 ms vs GE's 9-13 ms render thread; GE game thread < 0.5 ms/message; GPU 4-14 ms).
+**Probe** (`probe/hitch-timeline`, `GE_HITCHTL`, X220, Dam 1200 frames): 312 frames were 33 ms; 97% failed `boss.c`'s tick gate (`mainTickElapsed < MAIN_LOOP_TICK_INTERVAL`, about half a frame since the previous frame START); `skip_pend` ~0. Not render cost, not pending-gfx.
+**Cause (port architecture):** `osSpTaskStartGo` (`port/src/libultra.c`) ran the whole software RSP + GL present inline on the scheduler thread (`__scMain`). That thread also forwards each VI retrace to the game (`__scHandleRetrace`). A retrace arriving mid-render waited for the render to finish, so the game frame started late; the next retrace then came less than half a frame after that start and the tick gate skipped it. On the N64 the RSP/RDP are separate processors and the scheduler is never blocked; the PD port has no scheduler thread. With 1-3 ms renders (fast PCs) the delay stays under half a frame, which is why it was invisible on the dev box; at 8-12 ms (HD 3000) about one frame in four is lost, and slower machines fall to 30. D186's note in `gfx_sdl2.cpp` ("the pacing wait runs inline on the scheduler thread ... until pacing is moved off that thread") was the same mechanism seen from the FpsCap side. See porting-notes D20.
+**Fix (port layer only; no game code):** gfx tasks go to a render worker thread (one-slot mailbox, mutex + condvar) that runs the unchanged frame body (`videoStartFrame`, `videoSyncSplitScreen`, `gfx_run`, `videoEndFrame`) and then posts `OS_EVENT_SP` + `OS_EVENT_DP` via `portPostEventForce`, exactly as the inline path did; `osSpTaskStartGo` returns at once. Audio tasks stay inline (no-op). The worker gets the same low stack as the game threads (`portAllocLowStack`).
+- **Ordering:** the game submits frame N+1 only after frame N's done has round-tripped (worker -> interruptQ -> `__scTaskComplete` -> client DONE -> `boss.c`), so the slot is always empty at hand-off (a broken invariant is logged as an error; never seen). `__scExec` sets `curRSPTask` after `osSpTaskStartGo` returns and before the scheduler can read the done event, since it is the queue's only consumer. The VI framebuffer is a single constant in this port, so `__scTaskReady` is unaffected. Yield: `osSpTaskYielded` returns 0, so a yield-flagged gfx task completes normally when the worker posts SP done.
+- **New overlap and its lock:** `optionsOverlayHandleInput` (scheduler thread, controller poll) and `optionsOverlayEmit` (render) both rebuild the overlay's visible-row state; they shared a thread before, now they share an `SDL_SpinLock`. The SDL event pump was already drained from two threads (host + render, D450), so a different render thread changes nothing there.
+- **Quit (D344):** a running frame parks at its boundary as before. An idle worker that sees a quit request stops taking frames and never touches GL again. The host only waits while the renderer is inside a frame, so idle is already a safe exit point; adding a park + `glFinish` there would put a GL call where the host may be exiting.
+- **Fallbacks:** `GE_DETERM` keeps the inline path (its retrace synthesis in `osRecvMesg` is call-sequenced on synchronous task execution); `GE_RENDERINLINE=1` restores the inline path as a falsifier.
+**Verified 2026-10-02:** X220, 25 s runs, `GE_PERFSTAT`: Dam/Statue/Cradle at defaults 45.9/45.0/43.8 -> **60.0/60.0/60.0 fps**; at the maintainer's settings (MSAA 8, aniso 16, DD 400) also 60.0; 0 frames > 33 ms in all six runs. `GE_RENDERINLINE=1` reproduces 45.9 (Dam) and 43.8 (Cradle). Sim rate (`GE_D193`) 60-61 ticks per wall second. Windows (dev box): build clean; held mission-select menu frame, worker vs inline, dmean 0.000; Dam frame 400 differs by intro-camera timing only (same variance as base vs base); sim 60-61 ticks/s on both paths; `-level_09` with `GE_MEMPREDZONE=1` rc=0, 0 hits; 2P `GE_STARTMP` frame correct (both halves, HUD, ammo); `GE_DETERM` takes the inline path and runs; 10 launch/quit cycles at different frames and a quit during the briefing -> level load all exit cleanly, no crash log.
+**Maintainer-verified 2026-10-02** (dev box, 120 Hz, ~9.5 min): play felt good with high performance, including rocket fights at turbo speed; F10 overlay with mouse and pad fine; real quit via the overlay's Quit to desktop parked and exited cleanly. Window close button not separately exercised. Not yet measured on N3060-class hardware; deciding CPU vs GPU margin there is the follow-up if that class still drops.
+
+## D482 — Lighter first-launch defaults on Atom/Celeron-class GPUs (#92 follow-up to D481)
+
+**Why:** D481 removed the scheduler stall; an Intel HD 3000 (Lenovo X220) now holds 60 at the port defaults. The #92 reporter's Celeron N3060 / Intel HD 400 is roughly half the X220's single-thread speed and GPU clock. Measured on the X220 against the Perfect Dark port built from the same toolchain (local PD build with a draw-batch counter, never committed): GE's fast3d costs no more per unit than PD's (GE ~31-44 us/batch and ~3.1 us/triangle at PD-like settings; PD ~40-68 us/batch, ~4.8 us/triangle). The gap is workload and defaults: PD ships the authored draw distance, no MSAA and a 640x480 window; our `DrawDistance`/`LodDistance` 250 send 2.5-3x the draw batches (Cradle 482 vs 146) and MSAA 2x adds ~25-30% GPU time. Anisotropy 4x measured no cost. Scaled to the N3060, Cradle's render CPU at our defaults (~8.2 ms on the X220) is ~17 ms, at the 16.7 ms budget; at the authored distance ~10 ms.
+**Change (port layer):** `gfx_opengl.cpp` captures `GL_RENDERER` into a static buffer at init (`gfx_opengl_renderer_string()`; "" if the driver returns NULL; note `gfx_opengl_log_info()` only runs under `--debug-gl`, so the capture is separate). `video.c` `videoApplyLowEndDefaults()` runs in `videoInit` right after `gfx_init`, once per ini (`Video.LowEndConsidered`, written on every machine). On a low-end renderer it lowers `DrawDistance` 250 -> 100, `LodDistance` 250 -> 100 and `MSAA` 2 -> 1 (also `gfx_msaa_level`, which `videoInit` derived before `gfx_init`; the game framebuffer gets its storage per frame, so no restart), each only if still at the port default. Players raise them in F10; the D440 "Port defaults" preset restores 250/250. Not touched: window size (auto-fit stays; its GPU cost is similar to MSAA's and a small window is a visible UX change), anisotropy, FpsCap, texture filter.
+**Classifier (`videoIsLowEndRenderer`, pure):** Mesa tags `(BYT)` `(BSW)` `(CHV)` `(APL)` `(GLK)`, older Mesa names Bay Trail / Braswell / Cherryview / Apollo Lake / Gemini Lake, software/virtual renderers (llvmpipe, softpipe, SVGA3D, Microsoft Basic Render, GDI Generic); otherwise the maximal digit run after `HD Graphics` (also inside `UHD Graphics`) must be one of 400, 405, 500, 505, 600, 605 (so 4000/5000/5500/6000 and 520/620 do not match). A numberless `Intel(R) HD Graphics` counts as low-end ON PURPOSE: Bay Trail and Celeron/Pentium parts report it, no Core-series part does, and a miss costs one reversible lightening. Do not tighten without measurements. `GE_FAKE_LOWEND=1/0` forces the decision (testing).
+**Ordering (do not move):** this cannot sit next to `videoApplySteamDeckPreset` in `main.c`: the Deck preset runs before any GL context exists, and this needs `GL_RENDERER`. The two touch disjoint keys (Deck: window/fullscreen; this: DD/LOD/MSAA), so `GE_FAKE_DECK=1` + `GE_FAKE_LOWEND=1` compose.
+**Verified 2026-10-02:** classifier compiled standalone against 21 real renderer strings, 0 mismatches (low-end: HD 400/405, Mesa HD 400 (BSW), numberless HD Graphics, UHD 600/605, Mesa HD 500 (APL 2), Mesa UHD 605 (GLK 3), Bay Trail, llvmpipe; not: HD 3000/4000/4600/5000/6000/520, UHD 620, Iris Xe, RTX 5090, Radeon, ""). Windows (RTX 5090): "not low-end", held menu frame identical to the D481 build (dmean 0.000), `-level_09` with `GE_MEMPREDZONE=1` rc=0, 0 hits. X220 (real string "Mesa Intel(R) HD Graphics 3000 (SNB GT2)"): fresh ini not low-end with the flag written; forced on: 100/100/1 written; second launch no re-apply; a pre-set DrawDistance=300 kept; flag already set: no change; forced on then user raises DD to 300: stays 300 on relaunch; forced off: not low-end, flag written. Evidence, forced path vs defaults (1224x918, 20 s, `GE_PERFSTAT`): Dam batches 105 -> 99, GPU 13.1 -> 9.6 ms; Statue batches 292 -> 171, render CPU 6.4 -> 5.1 ms, GPU 12.8 -> 8.0 ms; Cradle batches 482 -> 146, triangles 4562 -> 1650, render CPU 8.2 -> 5.2 ms, GPU 12.7 -> 10.6 ms; 60 fps in both (GPU-timer values are rough with vsync; relative only). Not verified: a real N3060.
+
+## D483 — #136: switching to the sniper rifle stood a crouched Bond up (PC crouch key)
+
+**Report (#136, outside):** "crouching with sniper rifle is not possible".
+**Original code:** the sniper rifle's stats carry `WEAPONSTATBITFLAG_DISABLE_CROUCH` (`assets/obseg/gun/gunWeaponStats.inc.c`). `bondview2.c` (both control paths, ~5177-5209 and ~5448-5468) then turns aim-mode C-up/C-down (or stick Y) into zoom and leaves `crouchDown`/`crouchUp` false. So on the N64 you cannot change stance while holding the sniper; you keep the stance you had when you switched to it. The report is therefore partly faithful.
+**Port divergence:** the PC crouch key (`port/src/input.c`, the free-crouch block) treated a disable-crouch weapon like "crouch not allowed" and called `inputDropCrouch()`, which stood a port-crouched Bond up as soon as he switched to the sniper.
+**Fix (port layer):** while a disable-crouch weapon is out, the free-crouch block does nothing: no new crouch, no stand-up, and no injected C-down (which zooms out with this weapon). Switching back resumes the normal rules. `GE_INPUTLOG` logs `free crouch frozen (weapon N disables crouch, crouchpos=, key=)` once per entry.
+**Verified 2026-10-02 (Dam, `GE_STARTWEAPON=17`, scripted CHOLD / weapon switches / CREL, `GE_INPUTLOG`):** crouch key held with the sniper out while standing: frozen, no crouch (`crouchpos=2`); switched to another weapon: crouch applied; switched back to the sniper: frozen while crouched (`crouchpos=0`, SQUAT); key released: no stand-up. Matches the N64 rules above.
+**Superseded 2026-10-03 by D494** (GEPD lets the crouch key work with the sniper; the freeze is gone).
+
+## D484 — #136: the port's FOV floor capped sniper/camera zoom at 20 degrees
+
+**Report (#136, outside):** "zoom rate is too low when using sniper rifle".
+**Original code:** the sniper and camera zoom is a FOV in degrees, `sniper_zoom` 60 -> 7 (`gun.c` `camera_sniper_zoom_in/out`), fed to the projection through `g_ViBackData->fovy`.
+**Port divergence:** `portScaleFovY` (`port/src/video.c`), applied to every in-level projection at `fr.c:735` since the widescreen-FOV work (`643785c2`), clamped the result to [20, 160] degrees even at default settings. The full sniper zoom therefore rendered at 20 degrees instead of 7: about a third of the N64's magnification. The same floor affected any game FOV below 20 (camera gadget, watch zoom).
+**Fix (port layer):** the floor is now min(20, the game's own fovy): it still guards the port's widening (FovScale / widescreen boost) but never narrows the game's view less than the game asked for. The 160-degree ceiling is unchanged.
+**Verified 2026-10-02:** scripted aim + C-up with the sniper on Dam: the full-zoom frame now matches a probe build with no floor (dmean 7.8, aim-timing variance) instead of the 20-degree frame (dmean 18.2); the gun model drops out of view at full zoom as on the N64; held mission-select menu frame pixel-identical (dmean 0.000), since normal FOVs never reach the floor. Mouse-aim sensitivity while zoomed now scales with the real zoom (input.c uses the same function).
+**Related (fixed separately as D485):** the zoom *speed*. `camera_sniper_zoom_in/out` step once per game frame with no tick scaling; measured at `clk=1` (one tick per frame) on the port, so the full 60 -> 7 range takes ~22 frames = ~0.4 s at 60 fps against ~0.75-1.1 s on an N64 running 20-30 fps. Only the sniper and camera use this per-frame stepping; every other zoom (weapon aim zoom, watch zoom) advances by elapsed ticks (`zoomintime += speedgraphframes`, `bondview2.c` ~3151) and is already frame-rate independent. Same class as D13/D329.
+
+## D485 — #136: sniper/camera zoom speed follows game ticks (RULE-2)
+
+**RULE-2-SIGNOFF:** maintainer, 2026-10-02: "I approve the rule 2 change to match the N64 real time speed and be more accurate here."
+**Divergence (class D13/D329):** `camera_sniper_zoom_in/out` (`src/game/gun.c`) multiply or divide the zoom FOV by `1 + rate*0.1` once per game frame, with no `g_ClockTimer` scaling. The N64 ran these frames at ~2 ticks each (30 fps; 3 at 20 fps); the port runs 1 tick per frame at 60 fps. Measured on the port before the fix: 15 -> 7 degrees in 8 frames, every call at `clk=1`; the full 60 -> 7 range ~22 frames (~0.4 s) against ~0.75 s on an N64 at 30 fps. Only the sniper and the camera gadget use this per-frame step; all other zooms advance by elapsed ticks (`zoomintime += speedgraphframes`, `bondview2.c`) and were already frame-rate independent.
+**Fix (`#ifdef PORT`; the N64 build expands to the original expression):** the four call sites use `GUN_ZOOM_STEP(zoom)`. On PORT it is `sqrt(1 + rate*0.1)` multiplied once per tick in this frame, i.e. `base^(ticks/2)`: an N64-style frame of 2 ticks gets exactly the original factor, a 1-tick port frame gets its square root, and `g_ClockTimer == 0` (paused/locked) gives no step. Same "N64 frame = 2 ticks" convention as the D427 fire-gate sign-off. Behaviour at other port frame rates follows automatically (a 30 fps port frame has 2 ticks).
+**Verified 2026-10-02 (Dam, `GE_STARTWEAPON=17`, scripted aim + C-up, temporary `SNIPERZOOM` log, removed before commit):** 15 -> 7 in 16 frames (947 -> 962) at `clk=1`, exactly twice the pre-fix 8 frames, i.e. the N64's real-time speed at 30 fps. Build clean; `-level_09` with `GE_MEMPREDZONE=1` rc=0, 0 hits, no crash log.
+**Owed (maintainer):** feel check against 1964 GEPD (zoom level per D484 and speed per D485).
+
+## D486 — Explosions dropped in heavy firefights (#126; turrets on Cradle/Egypt/Aztec): the 6-slot explosion buffer fills with the player's own bullet-impact puffs
+
+**Report:** a remote mine in Control's mainframe room did nothing (#126, outside); the maintainer then reproduced missing or "bad" turret explosions on Cradle, Egypt and Aztec during heavy fire. One 1964 mine attempt did not reproduce.
+**Mechanism (code + maintainer play log, temp `GE_D486` probe, since removed):** `explosionCreate` (`explosion.c` ~265) takes a free slot in `g_ExplosionBuffer[EXPLOSION_BUFFER_LEN = 6]` or silently does nothing (no visual, sound or damage). Nothing evicts a slot; `g_NumExplosionEntries` is only the screen-shake counter. Every player bullet that hits the background spawns a type-1 impact puff through the same call (`chrprop.c` ~1202, `chraiDefaultWeaponFireHandler`, player-only; NPC and autogun hits use the separate `explosionCreateBulletImpact` pool). A puff holds its slot exactly 46 ticks (duration 30 + 16 x flareanimspeed, tick-counted). Aztec log: 389 explosions created, 170 `NO FREE SLOT` (164 puffs, 3 x type 16, 3 x type 13, 1 turret type 8 at the moment slots 0-5 were all puffs aged 16-36, the player firing a puff every 4 ticks). No stuck slot, no `chrpropAllocate` failure, no missing stan (the first suspect, ruled out on Cradle).
+**Faithfulness:** the buffer size, puff spawning, lifetime and no-eviction are all decomp code, so the N64 drops explosions the same way. One PC/N64 difference in *incidence*: the D427/D451 auto-fire gate matches the N64 at 2 ticks/frame (a shot per 4 ticks for rate-2 weapons = 11.5 puffs wanted vs 6 slots); when the N64 itself slowed to 3 ticks/frame in a firefight it fired every 6 ticks (7.7 puffs wanted), so it dropped fewer. Not a port bug by itself; the remaining question is a 1964 A/B.
+**Related observations (same path):**
+- (a) **Explosion parts spawn per frame** (`explosionTick`, `propagationrate*age/duration + 1` per call) into a 40-part pool while parts age per tick. Simulation for type 8 (dur 120): 77 parts and pool full by age 47 at 1 tick/frame, vs 58 / age 74 at 2 and 52 / never at 3. PC fireballs are ~1.3-1.5x denser and saturate early. D13 class; a fix is game logic (Rule-2).
+- (b) **Stale parts on slot reuse:** parts are freed only in `explosionRenderPropExplosion`, and `explosionCreate` initialises only `parts[0]`, so an explosion that was offscreen for part of its life leaves up to 40 stale parts that the slot's next explosion inherits (seen: puffs starting with 22-40 parts). Same code on the N64; a plausible source of "bad looking" explosions.
+- (c) **Autogun fire is per frame** (`propobj.c` ~6347 `autogun->unkAC++`, shot on even values): 2-3x the N64's shots, tracers (`unkAC & 3`), second-muzzle shots (`unkAC & 7`), sparks and impact sounds at 60 fps. Damage per second already matches (`unkD4 += 0.16 * g_GlobalTimerDelta` per shot) and autogun hits use no explosion slots. D13 class; a fix needs Rule-2.
+- (d) Screen-shake decay (`g_NumExplosionEntries--` per call) runs per frame, so shake is 2-3x shorter in real time. D13 class, cosmetic.
+- (e) `g_Textures[besttexture]` with `besttexture == -1` (`chrprop.c` ~1195, stan-hit case) reads before the array on both platforms; what it reads differs, so whether a puff spawns there is undefined. Low confidence it matters.
+**1964 A/B (maintainer, 2026-10-02):** 1964/GEPD shows the exact same dropped explosions under heavy fire. The slot-buffer drop is **faithful** and stays; (b) stale parts is the same N64 code and stays.
+**RULE-2-SIGNOFF (maintainer 2026-10-02, "Continue with your verified code fixes", replying to the request to tick-scale the turret fire rate, explosion-part spawning and shake decay):** scope = (a), (c), (d) only.
+**Fix (`#ifdef PORT`, N64 branches byte-identical):** new `port/include/porttick.h` `portN64FrameStep()` (true on every call at >= 2 ticks/frame, every second tick below; stateless, from `g_GlobalTimer` crossing an even boundary). (c) `propobj.c` autogun fire block: `unkAC` (shot, tracer, second-muzzle cadence) advances only on a step; the per-shot damage charge uses a 2-tick frame's delta (`2.0f`) below 2 ticks/frame so damage per second is unchanged. (a) `explosion.c` `explosionTick`: no parts spawned on a non-step call (`sp9C = 0`); everything else in the block (room list, damage, gas-barrel rise) untouched. (d) `explosionScreenShake`: `g_NumSmokeEntries--` / `g_NumExplosionEntries--` only on a step; magnitude and sign logic untouched.
+**Verified (headless, Cradle `-level_41`, turrets force-destroyed by a temp probe, since removed):** type-8 parts at age 40/60/100 = 17/27/40 at FpsCap 60 AND FpsCap 30 (before: pool full at age 47 at 60 fps; now 73 vs 74); shake 5 -> 0 over 9 vs 10 ticks. Autogun cadence not exercised headlessly (no turret tracks the player at spawn): by construction it is one `unkAC` step per 2 ticks = the N64's 2-ticks/frame rate. Clean build; Cradle smoke run exit 0.
+**Status:** FIXED (a)(c)(d); drops + (b) faithful, closed. **Owed (maintainer):** a turret fight (Cradle/Aztec) at 60 fps: fire rate, tracer density and sound should feel like 1964, damage taken unchanged; explosion fireballs a little less dense; shake length like 1964.
+
+**D486 note 2026-10-02:** the maintainer confirmed the dropped explosions happen the same way in 1964/GEPD (faithful). The 60 fps turret-fight feel check of the fix is still owed.
+**D433/D451 maintainer decision 2026-10-02:** auto-fire timing and the residual gunshot-sound difference accepted as good for now; no further work planned (reopen on a concrete report).
+
+## D488 — PAL build reported the Brazilian MPAL TV type instead of PAL (`osTvType`)
+
+`port/src/libultra.c` hard-codes `osTvType` (no hardware to read). Since the first scaffolding commit (`cd6cc158`, 2026-08-17) the PAL build set `OS_TV_MPAL` (2), with the comment "PAL consoles report MPAL" -- an inference from GE's shared code, which only ever tests for MPAL (`sched.c:287`, `init.c:237`, `fr.c` non-EU: MPAL LAN1 mode, else NTSC LAN1). Not copied from the PD reference, which hard-codes `OS_TV_NTSC` for every build and whose own game code tests `OS_TV_PAL` separately. A European N64 reports `OS_TV_PAL` (0); MPAL is Brazil's 60 Hz PAL-M console. So on real PAL hardware GE starts the scheduler in NTSC LAN1 and the EU `video_related_8` (`fr.c`, `#ifdef VERSION_EU`) then installs the PAL-table modes; the port took the Brazil-only MPAL branches instead. Never noticed because the PAL build was first compiled on 2026-10-02 (D258).
+**Fix (port-only, maintainer go-ahead 2026-10-02):** `osTvType = OS_TV_PAL` for `REFRESH_PAL`, comment corrected; the port's 50 Hz tick now keys on `OS_TV_PAL` only (MPAL is 60 Hz; no build sets it). Not game logic (the value a console reports), so no Rule-2.
+**Verified (headless):** PAL Dam frames 900/1200/1500 identical to the pre-change build (3/3); the boot sequence (legal, Nintendo, Rareware, gun barrel) identical to the post-D487 capture on every shared frame, timing unchanged; front-end mode select and mission select render, mode select identical to NTSC-U (the stamp running off the bottom is the shared 440x325 menu layout). US/JP unaffected (the change is under `REFRESH_PAL`).
+**Maintainer PAL play check 2026-10-02:** "PAL seems fine" (no issues seen).
+**Status:** FIXED.
+
+## D489 — FPS drops sharply while adjusting the F10 music volume with a controller (maintainer, 2026-10-02)
+
+Seen during the 2026-10-02 PAL play session: holding/stepping the F10 overlay's music volume row with a pad made the frame rate "tank extremely". Possibly a general regression (not PAL-specific); not yet reproduced or investigated. Suspects to check first: per-step work on the music path while the value repeats (volume applied every repeat tick, a config save or audio re-init per step), the D470 master/music gain path, or the pad repeat rate in the overlay.
+**Root cause (static, 2026-10-02):** every D-pad/stick/arrow step on a watch-setting slider (music, FX) went through `rowSet` -> `rowSetCommit(..., commit=1)` (`port/src/optionsoverlay.c`), so each held-repeat detent (every 4 frames after an 18-frame delay) was a full persist on the game thread: `fileGamePakProbe` + `fileWriteSave` -> three `joyDisablePoll`/`joyEnablePoll` handshakes (each blocks until `joyPoll` services it, `src/joy.c:745-817`) plus a 2 KB `ge007.eep` rewrite (`geEepromStore`) and a log line. A mouse drag stages with commit=0 and saves once on release, so only pad/keyboard stepping stalled. Not PAL-specific; the same path is on `main` (v0.4.0) and in the front PC Options screen (`frontoptions.c`, game thread).
+**Fix (port-only, UI layer):** watch-slider steps in `rowAdjust` stage (commit=0) and record the field in `s_adjWatchField`; `optionsAdjustCommitPending()` saves once when left/right is released (F10 input loop, front options screen), when another watch slider is stepped, and when F10 closes. Toggle rows and non-watch sliders are unchanged.
+**Status:** FIXED; merged into `release/v0.4.1` 2026-10-03. Maintainer pad check passed 2026-10-03 (held left/right on F10 music volume; FPS held).
+
+## D490 — Dam: the first-tower guard walks a small circle instead of patrolling around the tower (maintainer, 2026-10-02)
+
+Spotted in the first in-level 1964-vs-port A/B harness run (`tools_pc/abpad`): on 1964/GEPD the guard circles the outside of the first guard tower; on the port he walks a tight circle. Same at a 30 fps cap, so not the tick-rate class (D486).
+**Diagnosis (temporary probes in `chrlvTickPatrol`/`chrlvTravelTick`/`sub_GAME_7F03ECC0`, removed):** the guard is chr 44 on patrol path 5. He reaches pad 26, then never reaches pad 25 (step 9): every straight-line test to it fails for `CDTYPE_PATHBLOCKER` only, so the travel code cycles its side-step modes around the pad forever. The blocker is the tower window (`PROPDEF_GLASS`, `PROP_WINDOW`, bound pad 92, prop at (16906, 445, 19472)). Its floor-plane collision polygon had a phantom vertex at (prop centre x, pane z), adding an edge across the walkway. Setup data ruled out first: Dam's patrol paths, 205 waypoints, 367 pads and 95 bound pads match the ROM byte-for-byte after the D88 conversion.
+**Root cause:** `sub_GAME_7F03ECC0` (`src/game/chrprop.c`) builds an object's collision polygon from the 8 projected corners of its bbox. Its filter loop stores every corner that is not one of the four extremes into `s32 rem[4]`. The window's bbox is flat (z = [0, 0]), so the extremes coincide (minxi = maxzi = 2, maxxi = minzi = 4) and the loop writes 6 entries. On the PC, `rem[4..5]` (the indices 6 and 7) overwrote `pts[0][0]` (a tiny double, logged 0.0000 instead of -85.04); that corrupted corner became the phantom vertex. On the N64 the same overflow lands in the decomp's `f64 pad[1]` stack slot and is harmless, so N64 behaviour is the uncorrupted hull. Any object with a zero-thickness bbox (glass, windows) on any level got a wrong polygon on the port.
+**Fix:** under `AVOID_UB` (defined in the PC build), `s32 rem[8]`; `rem[4]` kept under `#else`. The loops still read only `rem[0..3]`, so the result equals the N64's. No logic change (UB/stack-layout class). Implemented by the local Qwen worker from a lead brief; diff checked by the lead.
+**Verified (headless, probe build):** `pts[0]` = (-85.04, 113.85), polygon = the pane line only; every collision class clear to pad 25; chr 44 walks steps 8 -> 14 -> 0 (the whole loop) instead of sticking at 9. Maintainer by-eye check in Dam owed.
+**Status:** FIXED; merged into `release/v0.4.1` 2026-10-03. Maintainer by-eye check in Dam passed 2026-10-02. The broader audit for other D24-class overflows is still open (ROADMAP).
+
+## D491 — Struct reads across adjacent scalar globals: portal bbox seeds (bg.c) and casing rotation (gunfire.c) (D24 audit, 2026-10-03)
+
+Found by the porting-notes D24 audit (a `-Warray-bounds=2 -Wstringop-overflow=4` recompile of `src/`, plus `-fanalyzer` on `src/game`, which gave up on the large decomp functions and found nothing useful). Same class as porting-notes D5 and D215: the decomp reads a whole struct starting at one of several separately-declared globals, relying on N64 source-order layout.
+**Evidence (`nm` on the built exe):** mingw lays the trios out in **reverse** order. `D_80044918..D_80044904` sit at `...d9f0..da04` (4-byte steps down), so `*(coord3d *)&D_80044904` read `D_80044904` then 8 bytes of `D_8004489C`; `*(coord3d *)&D_80044910` read `{D_80044910, D_8004490C, D_80044908}` = `{-FLT_MAX, FLT_MAX, FLT_MAX}`. `D_80035EA4` (gun.c, bss) is followed by `g_ZeroTriggerState`, not `D_80035EA8/AC`.
+**Effect:** (1) `sub_GAME_7F0BA2D4` (`bg.c`, called from `chrpropUpdateRoomList` with a cap of 7 rooms) grows a portal's bbox from `portal_min`/`portal_max` seeds; with the Y/Z max seeded at +FLT_MAX it never shrinks, so `bgIsBboxOverlapping` passes whenever X overlaps and props/chrs are added to neighbouring rooms they do not touch (more per-room work; room-based checks see them in the wrong rooms). (2) Ejected casings (`gunfire.c` two sites) started from a rotation whose y/z were trigger-state bytes instead of 0.
+**Fix:** `#ifdef PORT` reads the six/three named globals as `f32` (`*(f32 *)&D_...`); `#else` keeps the original cast. `gunfire.c` gains `extern` declarations for `D_80035EA8`/`D_80035EAC` under `#ifdef PORT`. Layout only (D5 class), no logic change.
+**Audit results, rest (no fix needed):** `chrprop.c` `sub_GAME_7F03ECC0` writes up to 8 points into `rect4f.points[4]`: the obj/door storage is `collision_data.polygon[8]`, and the tank's spill past `TankRecord.rect` hits the same s32 fields on N64 and PC (writer and the only reader, `bondview2.c:2674`, agree). `gunfire.c` `ModelHeader` locals passed as `Model *` to `modelInit`: field offsets match `Model` on PC (probe: obj 16, render_pos 24, datas 32, scale 40, attachedto 48, attachedto_objinst 56; local is 64 B), so writes stay in bounds. `ALSoundState` warnings in `gunfire.c`: `gunGetFreeSfxState` returns a pointer-slot address typed as `ALSoundState *`; `link.next` is at offset 0, so the read is the slot itself (works at 64-bit). `snd.c` `sndCountAllocList`: already documented. `os.h` `OS_K0_TO_PHYSICAL`: constant-address false positive. A scan for the D490 append shape (`a[v] = ...; v++` into a fixed local) found only bounded or already-fixed sites (`stan.c` `tileStack[64]`, `bg.c` `addToByteSetMaxSize15`, `textrelated.c` `curword[32]` bounded by ROM word lengths).
+**Status:** FIXED (local, `fix/d491-adjacent-global-reads`); builds clean; 900-frame `-level_09` smoke clean.
+
+## D492 — Emulator `.eep` saves are not drop-in compatible: stored checksum/options words are host-endian (investigated 2026-10-03)
+
+**Symptom (measured, isolated stage `scratch/eepinv/stage/`, repo `data/` untouched):** 1964 GEPD's `save/GOLDENEYE-usa.eep` (a full clear) copied verbatim as `data/ge007.eep` → `GE_SAVELOG`: `fileValidateSaves slot 0: bitflags=08 stored_crc=3bd4c57e,9014a5f6 calc_crc=7ec5d43b,f6a51490 -> BAD -> RESET (progress wiped)`, the same for slots 1-4; the wipe is written back to disk.
+**Cause:** the save is byte-identical in layout (2048 B; block 0 `smallSave`, five 96-byte `save_data` slots from block 4, `src/game/file.h`), but `geEepromRW` (`port/src/libultra.c`) copies the structs raw, so the multi-byte fields are stored in host order: per slot `chksum1`/`chksum2` (s32 @0/@4) and `options` (u16 @12), plus block 0's checksum pair. Every other field is a byte or the byte-addressed `times[]` bitfield. `fileGenerateCRC` (`src/game/crc.c`) hashes raw bytes, so the CRC value is endian-independent; validation fails only because the stored words are read in host order (`calc_crc` above is exactly the big-endian reading of the stored words).
+**Trap:** `options` lies inside the slot CRC range `[8..96)`, so a plain word swap still fails. Conversion per slot = swap `options`, then recompute `chksum1/2` over `[8..96)` and store them little-endian; block 0 = plain swap of its checksum pair (no multi-byte field in its CRC range). 58 of 2048 bytes change.
+**Verified (headless A/B):** converted save → all five slots `-> OK`, `wsfront` reads its music byte, mission select shows all 20 levels; blank control → only Dam. `AllUnlocked = 0` in the stage ini (checked). The investigation's Python CRC replica (`scratch/eepinv/eepinv_analyze.py`, from `fileGenerateCRC` + `src/random.s`) matches the binary on both files.
+**Decision (maintainer, 2026-10-03):** converter tool (`tools_pc/eep_convert.py`, both directions, `--verify`) + a README "Using an emulator save" section; the on-disk format stays as is (no save-path or game-code change). Queued after the D441 census. Seed: `scratch/eepinv/convert.py`.
+**Class:** §A1-adjacent (serialized multi-byte fields are host-endian in this port; raw-byte CRCs hide it until the stored words are compared). Cross-ref D297 (validation-failure wipe class).
+**Status:** CLOSED 2026-10-04 — `tools_pc/eep_convert.py` shipped (`n64-to-pc`, `pc-to-n64`, `verify [--as n64|pc]` with auto-detect, faithful `fileGenerateCRC` replica from the seed). Verified against the investigation files: converted output byte-identical to the in-game-proven `1964_converted.eep`, round-trip byte-identical, wrong-size/missing input exits 2. README "Using an emulator save" section added. Review fixes 2026-10-04: conversion only re-stamps regions valid in the source; refuses (writes nothing) when nothing validates; bundled as `tools/eep_convert.py`; in-game import planned pre-1.0 (ROADMAP §5a).
+
+## D493 — Pad rumble kept going after quitting the game (2026-10-03)
+
+**Report:** maintainer, DualSense, quitting mid-firefight left the pad rumbling.
+**Cause:** `SDL_GameControllerRumble` runs on the pad for its duration; the pad-close path (`inputDestroy`) never runs because the host loop exits via `exit(0)` from the clean-exit path (only the atexit handler in `main.c` then runs).
+**Fix (port only, commit 44728eb1):** `inputRumbleStopAll()` (`port/src/input.c`, declared in `port/include/input.h`) sends a zero rumble to every open pad and sets `s_rumbleStopped`, which makes `inputRumble` a no-op afterwards (the game thread is still running during atexit); called first in `main.c` `portAtExit`.
+**Verified:** build only.
+**Owed:** none.
+**Status:** FIXED, maintainer-verified 2026-10-03.
+
+**D493b — Original N64 pillarbox showed live pixels in a 1-unit strip at the left/right edges (maintainer playtest of D447).**
+**Cause:** the Original preset sets `Video.SafeAreaCrop = 0`, which also turns off D246's 1-unit horizontal trim, so D246's gap (unexplained; see D246) showed scene/background pixels. D447 had listed it as a known cosmetic.
+**Fix (port only, same commit 44728eb1):** `gfx_dp_set_scissor` (`port/fast3d/gfx_pc.cpp`) clamps the RDP scissor to logical x [1, 319] when the crop is off and not split-screen; those columns show the frame clear (black). Geometry is not rescaled; crop-on (the default) is unchanged by construction.
+**Verified:** headless `-level_09`, 1280x720, AspectMode=1, SafeAreaCrop=0, MSAA 1: output columns 160-162 and 1117-1119 (1 unit at 3x) are black, run exited cleanly.
+**Owed:** none (maintainer-verified 2026-10-03).
+**Status:** FIXED.
+**Maintainer play check 2026-10-03:** rumble stops on quit (DualSense); Original-mode edges clean, also at ultrawide.
+
+## D494 — Sniper rifle: the PC crouch key now crouches/stands freely with a disable-crouch weapon (2026-10-03)
+
+#136 follow-up; supersedes D483's freeze.
+**Report:** maintainer, controller and keyboard, hold and toggle crouch; 1964 GEPD lets Bond crouch and stand freely with the sniper.
+**Cause:** D483 froze the port's free-crouch stance while a `WEAPONSTATBITFLAG_DISABLE_CROUCH` weapon is out, matching the N64 pad (`bondview2.c` turns aim-mode C-up/down into zoom for that weapon). GEPD's crouch key (the mouse injector, the reference for this preset) writes the stance directly and ignores the flag.
+**Fix (port only, commit 0f24f407):** the free-crouch block (`port/src/input.c`) now crouches/stands for every weapon; for a disable-crouch weapon it never injects C-down (that would zoom out) and the "keep native C-down crouch" release exception does not apply. The N64 pad rules are untouched.
+**Verified:** build only.
+**Owed:** none.
+**Status:** FIXED, maintainer-verified 2026-10-03.
+**Maintainer play check 2026-10-03:** crouch and stand with the sniper fixed.
+
+## D495 — Tank: pad Next/Prev weapon changed the tank weapon / left the tank instead of following the bindings (2026-10-03)
+
+**Report:** maintainer: with the default pad preset, X changed the tank weapon and Y left the tank; on foot Y changes weapon.
+**Cause:** in the tank `inputCanUseGameplayActions` is false, so `padMapPure` (`port/src/input.c`) used the fixed menu faces (A/X -> N64 A = change weapon, B/Y -> N64 B = exit).
+**Fix (port only, commit a69cc144):** `PadMapCtx.tank`; while seated in the tank (slot 0, stage running, not paused, outside the watch) the pad's Next/Prev weapon bindings send N64 A, digital aim/fire bindings send R/Z, and the raw face buttons send nothing else; exit stays on the bound Use action via the existing D407 locked-B path. Preset 0 outside the tank is unchanged (GE_PADMAPTEST contexts leave `tank = 0`).
+**Verified:** build only.
+**Owed:** none.
+**Status:** FIXED, maintainer-verified 2026-10-03.
+**Maintainer play check 2026-10-03:** works, "feels good now".
+
+## D496 — 3P/4P split-screen: weapon-pickup messages garbled and oversized (2026-10-03)
+
+**Report:** maintainer, 3-player team game on Basement, natural weapon pickups.
+**Cause:** `generate_language_specific_text_for_weapon` (`src/game/propobj.c`, US/EU path) writes `finalstring` only when fewer than 3 players, then strcat's onto it; the caller's buffer (`display_text_for_weapon_in_lower_left_corner`, `char acStack100[100]`) is an uninitialised stack array, so stack leftovers were drawn. Ammo pickups clear their buffer first and were fine. The N64 build has the same code; its stack contents happened to hide it.
+**Fix (commit ba8c3942):** `finalstring[0] = '\0'` at the top of the function under `#ifdef AVOID_UB` (D490 / porting-notes D24 pattern), no other change. The same commit adds an optional third field to the GE_STARTMP harness (`src/game/lv.c`): "<players>,<mpStage>,<scenario>", e.g. 3,5,7 = Basement 2v1.
+**Class:** porting-notes D24 (UB the N64 stack layout absorbed).
+**Verified:** build only.
+**Owed:** none.
+**Status:** FIXED 2026-10-03 (uninitialised buffer); the condensed 3+P text itself is faithful.
+**Maintainer play check 2026-10-03:** the condensed pickup text with 3+ players is the game's own: `prepare_ammo_type_collection_text` and this function drop "Picked up" when `getPlayerCount() >= 3`, so short 3P text is faithful (maintainer: fine). The uninitialised-buffer fix stands on its own.
+
+## D497 — PC Options paging did not match the game's dossiers (2026-10-03)
+
+**Report:** maintainer: only "previous" was a folder tab, and a redundant "Previous page / Next page" line sat under the rows (e.g. Graphics).
+**Fix (port only, commit 31153ab3):** `frontoptions.c`, as the briefing screen (`front.c` `interface_menu0A_briefing`): the folder's PREVIOUS tab and B turn back a page, or leave the section/screen from its first page (`goPrevious`); a NEXT folder tab (`frontAddNextTabText` / `frontCheckCursorOnNextTab`) shows while a later page exists; D444's bottom-row links and `pageCtlAt` were removed. Up/Down still page.
+**Verified:** build only.
+**Owed:** none.
+**Status:** FIXED, maintainer-verified 2026-10-03.
+**Maintainer play check 2026-10-03:** PREVIOUS/NEXT tabs and B correct. Pad highlight/back-navigation issues found in the same check: D502.
+
+## D498 — Xbox 1.2 Christmas / 1.3 Frost / 1.4 Elektra gamepad presets (2026-10-03)
+
+ROADMAP 5a "Gamepad rebinding + modern controller presets"; reference table in `## D394`.
+**Change (port only; commits e94621b5 by Qwen, merge fb8ed152, follow-up c12fc99e):** `Input.PadPreset` 0 = 1.1 Jinx, 1 = 1.2 Christmas, 2 = 1.3 Frost, 3 = Custom (unchanged value), 4 = 1.4 Elektra; menu order Jinx, Christmas, Frost, Elektra, Custom (`inputPadPresetStep`, `port/src/input.c`). Buttons are identical for all non-Custom presets. `stickSolitare()`: Christmas/Frost force HONEY, Elektra forces SOLITARE; Jinx and Custom keep `Input.NaturalPitch` (c12fc99e fixed the first version, which forced SOLITARE for Jinx too and broke the NaturalPitch=0 escape hatch). `stickSwap()`: Frost and Elektra swap the physical sticks in-stage (never in menus).
+**Known limits:** the forced style applies to mouse and keyboard too (one control style per player), so a mouse user on Christmas/Frost gets the legacy D166 pitch pulses; after a swap the deadzone/sensitivity settings follow the function (look settings apply to whichever stick looks), not the physical stick; the Xbox "left stick aims the crosshair" behaviour and the D-pad-copies-left-stick behaviour are not reproduced (see D394).
+**Verified:** build only.
+**Owed:** none.
+**Status:** FIXED, maintainer-verified 2026-10-03.
+**Maintainer pad check 2026-10-03:** 1.2 Christmas, 1.3 Frost and 1.4 Elektra work as described.
+
+## D499 — Trilinear texture filter option (2026-10-03)
+
+**Report:** maintainer playtest request ("add trilinear in addition to bilinear").
+**Change (port only; commit d796b3dc by Qwen, merge 02786004):** `Video.TextureFilter = 3` "Trilinear" (F10 / PC Options Texture filter row). fast3d `FILTER_TRILINEAR` (`port/fast3d/gfx_opengl.cpp`, `port/fast3d/gfx_rendering_api.h`): every texture gets `glGenerateMipmap` at upload and is sampled `GL_LINEAR_MIPMAP_LINEAR` (min) / `GL_LINEAR` (mag). Bilinear (1) keeps mips only where the game supplies LOD tiles; 3-Point (2) unchanged.
+**Note:** 3-Point already uses generated mips for minification (B1 shimmer fix), which is softer at distance than GLideN64/1964 (no generated mips).
+**Verified:** build only.
+**Owed:** none.
+**Status:** FIXED 2026-10-03 (kept; imperceptible on the dev machine).
+**Maintainer play check 2026-10-03:** no visible difference on the dev machine (2644x875, aniso 16x: most textures are magnified, and Bilinear already blends between game-supplied mips). Kept; listed after Bilinear for A/B (D502 commit: menu order 0, 1, 3, 2).
+
+## D500 — Aztec, by the shuttle (4 turrets + glass): polygons "fell apart" before the glass was shot (2026-10-03)
+
+**Report:** maintainer playtest (D486 turret check, 60 fps): random triangles across the area in front of the glass between two turrets; recovered when walking on, and after the glass was shot.
+**Cause (code-established, not confirmed live):** `src/game/dyn.c`'s per-frame "vtx" pool (`dynAllocateVertices`, `dynAllocateMatrix`, `dynAllocateLights`, `dynAllocate`) is a bump allocator with no bounds check, sized per level by `src/boss.c` `memallocstringtable` `-mvtx` (Aztec and Streets 40 KB per half, most levels 50, MP maps 100). The port's wider FOV / draw distance / LOD (porting-notes D18) puts more models and matrices in view than that budget assumed, so a busy frame can run past its half into the other half, which the D481 render worker may still be drawing. Code map: Qwen Q4 (glass shards, autogun beams, bullet sparks and model matrices all draw from this pool; spot-checked).
+**Fix (`#ifdef PORT`, commit f7868308; N64 branch unchanged):** `g_VtxBuffers` point at a fixed pool of two 384 KB halves at `PORT_DRAM_V1_BASE + 0x700000` (free emulated DRAM above the D95 mempool end, below `animations_frame_buffer` at +0x7FFD30), so addresses stay 0x70xxxxxx and survive every s32 path. A first version placed it in the executable's .bss (above 4 GB); rejected before commit for that reason. The stage-bank allocation is no longer made. `dynSwapBuffers` logs once per level `D500: vtx pool: frame used N bytes, N64 budget B` when a frame exceeds the N64 budget, and `D500: vtx pool OVERRUN` past the port pool.
+**Class:** porting-notes D18; cross-ref D95 (gfx pool scaled for 16-byte Gfx).
+**Verified:** build; `-level_09` intro renders (Bond model) and exits cleanly. Maintainer sessions afterwards (Aztec, Cradle, ultrawide): no `D500` line logged, no crash.
+**Owed:** none.
+**Status:** FIXED, maintainer-verified 2026-10-03.
+**Maintainer check 2026-10-03:** the Aztec shuttle spot (glass intact) no longer breaks up.
+
+## D501 — Ultrawide: 16:9 pillarbox for cutscenes and the watch, REVERTED (2026-10-03)
+
+**Report:** at > 16:9, cutscenes show past their framing (guards at the edges) and the watch raise/lower shows the end of Bond's arm model for a frame or two.
+**Analysis (Qwen Q5, lead-verified):** native widescreen projects at the window aspect (`bondview2.c` ~8157 `portNativeAspect`, `fr.c:735`); scripted cameras and the watch zoom were authored for 4:3/16:9; the watch face has its own fixed-aspect projection (`bondview2.c` ~8671/8673).
+**Change, then revert:** commit 6f1f49bd pillarboxed > 16:9 windows to 16:9 during scripted cameras and the watch (`Video.UltrawideCinematic`); reverted in 31ade91f. Maintainer: the switching is clunky; these are the original game's framing shown at 21:9, not breakage. A toggle can come later if wanted.
+**Related:** ultrawide performance checked by the maintainer (Aztec, Cradle, 21:9 and wider): good; `GE_PERFSTAT` showed steady 60 fps at 2644x875, FOV 150.
+**Status:** CLOSED (reverted).
+
+## D502 — PC Options pad navigation: no highlight on entering, wrong section on leaving (2026-10-03)
+
+**Report:** maintainer (pad): entering a section highlights nothing; leaving can land on another section (leave Input, land on Graphics); the snapped crosshair overlaps the row text.
+**Cause (`port/src/frontoptions.c`):** `goBack` snapped the cursor to the origin section but left `s_hl` at the row index of the sub-page (row 1 inside Input -> section 1, Graphics); the snap also updates the "previous cursor", so hover never corrected it. Entering set `s_hl = -1` for every input device.
+**Fix (port only, commit fa0adbf2):** `navHighlight(k)`: pad/keyboard (pointer not live) get item k highlighted on enter, back and page turn; with a live mouse the pointer still owns the selection. Back lands on the origin section/row. Crosshair snap x 44 -> 32, `ROW_HIT_X0` 40 -> 24. Same commit: the Texture filter row cycles Nearest, Bilinear, Trilinear, 3-Point (stored 0, 1, 3, 2) (D499).
+**Verified:** build only.
+**Owed:** none.
+**Status:** FIXED, maintainer-verified 2026-10-03.
+**Maintainer pad check 2026-10-03:** first item highlighted on entering, back lands on the origin section, crosshair clear of the text.
+
+## D503 — Surface: far satellite dish shows as a faint silhouette with straight vertical edges (2026-10-03)
+
+**Report:** maintainer, Surface start area: the dish (and the edge of the tree band) looks cut off in the distance, at every Draw/LOD distance setting; 1964 GEPD at the same spot shows nothing there (`docs/img/surface radar visibility.png`, untracked).
+**Measured (port capture, `build-pc/ppm/shot_000.ppm`):** dish pixels (93-95, 93-95, 124-127); Surface fog colour (96, 96, 128) (`bgfog.c:138`); sky/haze around (96-100, 96-98, 128-131). The dish is about 97% fogged.
+**Mechanism:** Surface fog is `gSPFogPosition(996, 1000)` with near 2 / far 2500, a ramp from about 417 to 2456 units; the dish sits near its end. fast3d's vertex fog is the standard `z/w * fm + fo` (same as the PD port), and the Draw/LOD multipliers are exactly 1.0 at 100 (`video.c` `portDrawDistanceMultiplier` / `portLodDistanceMultiplier`; 100 is the slider minimum). The N64's 16-bit framebuffer (5 bits per channel) plus the full-fog clamp make a 2-5 level difference vanish; the port's 32-bit output keeps it, so the nearly fogged dish and the straight edge of GE's room-rect scissor (`propobj.c:7510` `getPropCombinedRoomsBBox2D` -> `bgScissorCurrentPlayerViewF`) become visible. Raised Draw/LOD distance makes more such objects visible. D491 (props filed under fewer, correct rooms) is not the cause. Same "reveal, not regression" pattern as D227/D249.
+**Options (ROADMAP §5c row):** snap fog at or above ~97% to full (port-only, global by-eye pass); an N64 16-bit colour/dither output mode for the Original preset.
+**Follow-up 2026-10-04 (verdict: both, confidence med-high):** the 247 snap (F) helps the left/right objects, but the dish still showed. At 4:3 with N64 FOV the maintainer reports the view matches 1964, so the remaining dish is (C): the widescreen/FOV frustum, not fog (the D218 / D18-class widening; `camIsPosInScreen`/`c_lodscalez` FOV terms not yet audited by code). The 247 cutoff was never derived from measured vertex fog; no probe was run since the 4:3 test settled it. The Draw/LOD multipliers are exactly 1.0 at the 100% minimum (`video.c`).
+**Related change (maintainer request):** the Draw distance / LOD distance slider ceiling is raised 400% to 800% (`video.c` registered max + `portDrawDistanceMultiplier` clamp 6.0 to 8.0 + LOD clamp 800; `optionsoverlay.c` `uiMax=800`, UI normalization `(pct-100)/7`, so the 250% default now shows 21/100). The old note warns about far-field z-fighting beyond about 4x; by-eye check at high values owed.
+**2026-10-04 (decision owed):** the residual is tracked under the ROADMAP §3 D222 row ("FOV-scale edge culling"), not D218 (closed). Maintainer decision owed: expected widescreen behaviour (the Original N64 / 4:3 view is the faithful one) vs fixing the FOV terms. The 800% ceiling makes near-full-fog objects more visible (opt-in).
+**Status:** FIX LANDED 2026-10-04 (`gfx_pc.cpp` vertex fog: `fog >= 247` snaps to 255, port-only); dish residual reclassified as (C), tracked under D218; by-eye pass across levels owed before the known-issue row is deleted.
+
+## D504: F10 overlay restyled to the PD settings menu; both PC options UIs regrouped to PD's six groups
+
+Port-only (`port/src/optionsoverlay.c`, `frontoptions.c` grouping fallout, `optionsoverlay.h`). Folds in DMENU-1..7 (worktree notes) and requirements R1-R8 of the menu-parity plan. Cross-ref D440 (preset key table, now behind the Display mode row), D356 (resets), D469 (Select player / Controller), D472 (owner pad), D502 (pad nav).
+
+**Grouping (R7/R8).** Hub order Video, Audio, Mouse, Controller, Game, Key Bindings, then a separator and Restart game / Quit to desktop. Controller opens Select player (Player 1-4), which opens that seat's Controller page. The Input sub-hub, the Display mode / Graphics / HUD pages and the Movement / Actions sub-pages are gone; Key Bindings is one flat list. Field of view moved from Graphics to Game (PD keeps Vert FOV there); the HUD rows, crosshair rows and Crouch mode sit on Game. Mouse gained rows for the existing ini keys `Input.MenuPointerMode`, `Input.MouseSmoothing`, `Input.MouseRawInput` (reset defaults added). One reset row per dialog (6); each covers exactly its dialog's keys (`GE_WSPROBE_RESET` 6/6 front, 6/6 stage). The hub / tab order is `kRootOrder`; rows stay physically contiguous per header, so the front end walks the same table (`optionsRootHeader`).
+
+**Display mode (T4-lite).** `__DisplayMode` row: value derived Modern / Original N64 / Custom from `videoPresetIsActive`. F10: a dropdown (all three shown, current marked; picking Custom is a no-op); left/right on either UI steps Modern <-> Original N64 and applies at once (the first arm -> confirm version hid the other modes; maintainer feedback). Persists across restart (maintainer-verified). No new ini key. `GE_PRESETPROBE` walks Modern -> N64 -> edit a bundled key -> Custom -> dropdown pick Modern. Backspace also goes back one page (QoL).
+
+**Look (R1/R2/R4/R5).** PD's green palette (`g_MenuColours[]`, menu.c:110), content-sized centred box, gradient title bar 2 units wider each side with two shimmer streaks, shadowed yellow title, flat ~78 % body (PD 50 %, raised twice for legibility, maintainer), 1 px borders, light dim. No CONTROLS footer: a two-line hint under the box, shown only while the last input was pad/keyboard (or a bind capture is waiting), with D471 per-family button names. Labels are mixed case in Zurich Bold (the only mixed-case face; Bank Gothic is caps-only) drawn at 78 % through the HUD span scale (`drawBody`), hub rows normal size. Focus: text pulses toward white (40-tick period) with PD's `#004400` outline; no focus line (`focusRule` deleted). Values stay in the unfocused colour. Mouse hover gets the same cue without moving the selection (the D304 feedback loop stays closed). Scroll eases toward the target row; rows only draw while fully inside the body (the scissor does not clip these 2D rects).
+
+**Widgets (R3).** On/Off rows are PD checkboxes; numeric rows are a PD wedge slider with a triangle marker and the value text right of it; enum, anti-aliasing, resolution, frame cap and output device rows are dropdowns (popup under the row, or above when short of room; up to 9 items then scrolls). Enter/A/click opens; up/down/wheel/hover pick; Enter/A/click confirm; Esc/B/right-click/outside-click/closing the menu cancel; left/right on a closed row still steps. Named two-way toggles (Reverse/Upright, Hold/Toggle, All unlocked) keep value text. Front end: no widgets (R8), grouping only.
+
+**Deviations / gaps.** `Game.HudScale` is not applied to this menu (PD's menus do not scale either; applying it would need an inverse in the mouse map). Background blur is a logged gap (needs new renderer work), so on bright frozen frames the 50 % body is less legible than PD's. Hover over a row while a pad is also active follows the last input source. No PD reference capture was produced headless.
+
+**Verified (headless, `GE_QUITFRAME`):** build rc=0, no new warnings in touched files; `GE_OPTIONTREEPROBE` PASS (updated: 6 roots + 3 hub rows, scroll-window hit test instead of a no-scroll row cap, Back last on every page); `GE_PRESETPROBE` PASS; `GE_WSPROBE_RESET` 6/6 front and 6/6 stage, other-file isolation intact; `gen_env_probes.py --check` clean (new `GE_OPTIONSOVERLAY_DROPDOWN`, `GE_FOOTERPROBE` tombstoned). **Owed (maintainer):** live look-and-feel pass vs the PD port; dropdown / checkbox / slider with mouse, keyboard and pad in F10 (in a level and on the front end); the regrouped front-end pages; Display mode round trip across a restart.
+
+## D505: menu wording pass (text only)
+
+Port-only (`port/src/optionsoverlay.c`, `frontoptions.c`, one release-notes sentence). Follows D504. A wording table of every user-visible string in both PC options UIs was reviewed by the maintainer; all 27 proposed edits were applied, nothing else (no layout, key, order or behaviour change).
+
+**Renamed (old -> new).** Aspect -> Aspect ratio (value Window -> Fill window); Mouse horizontal / vertical sensitivity -> Horizontal / Vertical sensitivity; Invert look (mouse) and (controller) -> Invert look; Mouse smoothing -> Smoothing; Deadzone (left/right stick) -> Left/Right stick deadzone; X/Y axis look sensitivity (controller) -> Horizontal / Vertical look sensitivity; Look smoothing (controller) -> Look smoothing; Fire key / Aim key -> Fire / Aim; AI sees the wider view -> Guards see the wider view (release notes quote updated). Values: "ON (restart)" -> "On (restart)" (the front end's green cue now also matches "On ("); capture prompts "Press button..." / "Key/mouse..." -> "Press a button..." / "Press a key..."; resolution n/a -> "(n/a)"; the front-end "[ENTER]" and "for restart options" value texts removed. Tags: front end "(per profile)" -> "(profile)" (matches F10). Hint lines: front-end and F10 key/pad hints share one phrasing ("Keys and mouse only", no colons, "Esc"/"Del", `{BACK}` token).
+
+**Deliberately not changed (maintainer decisions owed, in the table's flag rows):** Layout preset is NOT renamed "Control style" (the game's own term; T7 / #139); the Use / Action / Use-back naming of the A/B binds; the abstract `n/100` and `n/255` value formats; "No hit flash" polarity; Widescreen auto FOV naming. EXPERIMENTAL labels keep the capitals (red ink matches the literal).
+
+**Verified (headless, `GE_QUITFRAME` on every run):** `./build-pc.sh ntsc-final` rc=0, no new warnings in touched files; `GE_OPTIONTREEPROBE` PASS; `GE_PRESETPROBE` PASS; `GE_WSPROBE_RESET` 6/6 sections verified, 0 failures, other-file isolation intact; `GE_FRONTOPTS_WIDTHS` widest label "Guards see the wider view" (175) shows with its value unclipped; contact sheet of every F10 dialog and front-end page showed no clipping or overlap. No config key changed, so the written ini is unchanged by construction (byte compare vs 23004d20 not run). **Owed (maintainer):** by-eye read of the new wording in both UIs.
+
+## D506: slider values standardized (display only)
+
+Port-only (`port/src/optionsoverlay.c`; both UIs share `valueText`). Maintainer asked for matching values across rows and no odd defaults (e.g. `41/200`). The calibrated "50/100 at the default" mapping (`calibratedDefault`) is retired (now returns "none"); every slider is a linear bar in a real unit. Storage, ini keys, ranges and defaults are unchanged.
+
+**Now shown as:** multipliers (raw 100 = 1.0x) for Horizontal / Vertical sensitivity and Horizontal / Vertical look sensitivity (vertical mouse and both pad look rows gained linear bars; mouse vertical uses UI range 10..300 like the horizontal row); `%` for Trigger threshold (raw is already a percent, default 23%), Look smoothing (raw 0-10 -> 0..100%), deadzones, volumes, vibration, shake, smoothing, crosshair size, HUD scale and the crosshair R/G/B channels (percent of full); `x` for Draw / LOD distance (ini 100..800 -> 1.0x..8.0x, default 2.5x), anisotropy. Field of view stays in degrees (it is a real unit and depends on the window aspect). The unused `dispMax` row field was removed.
+
+**Verified (headless):** build rc=0; `GE_OPTIONTREEPROBE` PASS; `GE_WSPROBE_RESET` 6/6 sections 0 failures; F10 Mouse / Controller / Video / Game dumps show the new values (`scratch/vals_sheet.png`). **Owed (maintainer):** drag each changed slider with mouse and pad, both UIs; the vertical-mouse and pad-look bars now start at ~35-57% instead of the middle.
+
+## D507: option descriptions under the menus
+
+Port-only (`optionsoverlay.c`, `optionsoverlay.h`, `frontoptions.c`). Maintainer ask: hints that explain the less obvious options (e.g. "Guards see the wider view"). `kRowHelp[]` maps a row key to a one-line description (45 rows; self-explanatory rows have none); `optionsRowHelp(i)` returns it. F10: drawn centred as the first line under the box for the focused row from any input source (mouse included); the two key-hint lines move down one line while it shows. `OV_HINT_H` 26 -> 53 reserves three lines (the safe-area crop eats the bottom margin, so 41 pushed the key hints off screen); a 240-line canvas loses about two rows of page height (Game and Video already scrolled). Front end: the description replaces the bottom hint line while a row is highlighted (page bottom has room for one line of about 44 characters; bind-capture hints still win during capture). Texts are written to stay within that width.
+
+**Verified (headless):** build rc=0; `GE_OPTIONTREEPROBE` PASS; `GE_PRESETPROBE` PASS; `GE_WSPROBE_RESET` 6/6; F10 Game page dump shows description + both key hints; front-end Game page with "No hit flash" highlighted shows its description (scripted DOWN steps). **Owed (maintainer):** read all descriptions for accuracy (Look ahead, Skip intro, Aim style are my reading of the code, not the watch's wording); front-end line position at your window size; F10 row count on short windows.
+
+## D508: forced aspect ratios
+
+Port-only (`port/src/video.c`, `optionsoverlay.c`). `Video.AspectMode` (D447) had Fill window (0) and Original (1). Maintainer ask: let players force other shapes. The D447 output-rect path already letter/pillarboxes to any target aspect (`gfx_set_output_aspect`) and sets `gfx_current_dimensions.aspect_ratio` to it, so Native widescreen projects the world at the forced aspect with no fast3d change. New values 2..3 = 16:9, 21:9 (7:3). 4:3 (same as Original unless the watch Ratio is 16:9) and Cinema 2.35:1 (near-identical to 21:9) were dropped as redundant after the first by-eye pass; ini range widened to 0..3, default and the Original N64 preset (1) unchanged. Any non-Fill, non-Original value counts as "Custom" in the Display mode row (it is a bundled key). The overlay and mouse mapping follow the output rect as before. A window narrower than the target letterboxes, wider pillarboxes.
+
+**Verified (headless):** build rc=0; `-level_09` frame 400 at 1280x720 for modes 3, 4, 5: 16:9 fills the window, 21:9 and 2.35:1 letterbox with the expected bar sizes (`scratch/asp_sheet.png`); F10 Video dump shows "21:9" with Display mode "Custom"; tree / preset / reset probes pass. **Owed (maintainer):** by-eye in a level and the front end for each ratio, HUD/crosshair/menu placement at 21:9 and 2.35:1 (the HUD uses the same Hor+ path as a real ultrawide window), mouse aim at the letterbox edges, fullscreen on a 16:9 panel.
+
+## D509: one wrong frame on every aspect-ratio change (Bond's gun/hand glitched)
+
+Port-only (`port/fast3d/gfx_pc.cpp`). Maintainer saw the first-person gun/hand glitch ("reset") for a moment when changing Aspect ratio with F10 open in Surface 1. Measured with a temporary cycling probe on `-level_36` (since removed): every output-aspect change gave one extra frame that differed across the whole scene from the next one. Cause: `gfx_set_output_aspect` takes effect at the render worker's next frame start (D481), but the game thread has already built the next one or two display lists with the previous projection (`portNativeAspect()` reads the render side's last aspect), so those frames were drawn mis-projected into the new rect; the viewmodel is the most visible part. Fix: after a change `gfx_run` drops the next 2 frames (the same path a minimised window uses), so the previous image is held and the first frame shown is already correct. Only changes of `Video.AspectMode` trigger it; steady state and every other setting are unchanged. Not covered: window resize, fullscreen toggle and Native widescreen toggles have the same one-frame mismatch in principle (not reported).
+
+**Verified (headless):** on the cycling probe, per-change frame diffs went from a big jump plus a second smaller one (frames N, N+2) to one jump; tree / preset / reset probes pass; 60 s `-level_09` smoke rc=0. A gun-pose reset not caused by the projection mismatch could not be reproduced headless. **Owed (maintainer):** switch Original / 16:9 / 21:9 repeatedly in Surface 1 holding a gun with F10 open; confirm no gun flash. Also: `Input.PadTriggerPct` default 23 -> 25 (maintainer: rounder), in the same commit; an ini that already stores 23 keeps it until reset.
+
+**Residual (maintainer, after the fix):** the glitch still happens rarely, mostly Fill window to Original or a forced ratio, best reproduced on Surface 1 holding a gun with F10 open for a while. Logged as a ROADMAP known issue; deliberately not investigated further (cosmetic, one-off). If revisited: capture many frames across repeated changes and compare the viewmodel only; the viewmodel (D215) may cache a per-aspect value on the game thread that the 2-frame hold does not cover.
+
+## D510: the F10 overlay rendered ~27 % smaller on the front end than in a level
+
+**Symptom (maintainer):** at the same window size the overlay box and text were a different size on the main menu / File Select than in Bond's view. The FPS counter (same display list) too.
+
+**Diagnosis (logged, 640x480 and 1280x720):** hypotheses (a) and (b) were both true, (c) was not. (b) `viGetX() x viGetY()` is 440x330 on the front end and 320x240 in a level (`front.c` `viSetXY(440, 330)`; `osViSetMode` resizes fast3d's SCREEN_WIDTH to match). The overlay laid out in those raw units (a fixed 196-unit hub card), so it covered 196/440 = 45 % of the window on the front end versus 196/320 = 61 % in a level (294 px vs 392 px at 640 wide). (a) The safe-area crop rect (`gfx_get_ui_screen_rect`) follows the last game viewport, so the overlay was also stretched by the in-level "Full" viewport inset and the 1-unit D246 edge trim (logged rect was the full window at 640x480 in both, but it is viewport-dependent).
+
+**Fix (port-only):** the overlay is PC chrome. `optionsoverlay.c` now lays out on a canonical 320-wide canvas (`ovW()`/`ovH()`, height kept at the real aspect) and calls `gfx_set_overlay_scale(viGetX()/320)`; fast3d scales the overlay DL's rectangles/texrects by that factor about the origin (after the D226 HUD span scale) and, while the overlay DL runs (`g_overlay_window_space`), bypasses the safe-area crop and the D493b edge trim. `gfx_get_ui_screen_rect` returns the window-space rect, so the mouse mapping (now on the canonical canvas) follows. The overlay-closed frame is untouched (flag only set around the overlay DL; no overlay DL, no change).
+
+**Verified (headless):** front end vs level overlay shots at 640x480 and 1280x720 identical in box size and position; also with native widescreen and with `SafeAreaCrop=0`; FPS counter identical size and top-right offset at 1280x720; tree / preset / reset probes PASS; 60 s `-level_09` smoke rc=0. **Owed (maintainer):** live check at the usual window size and fullscreen, on the front end and in a level; mouse hover/click rows in both; split-screen (2P) with the overlay open (safe-area crop is already off there). Not done: `Game.HudScale` on the menu (S4).
+
+## D511: four small PD-parity settings (S3)
+
+All port-only; no `src/game` edit (the crosshair alpha goes through the existing `portCrosshairApplyTintCombine` hook, so `gunfire.c` is untouched). Each new key defaults to today's behaviour, has a shared row (so both UIs show it), a per-dialog reset entry and a one-line description, and is NOT in the Display mode bundles (the preset probe confirms editing them does not flip Display mode).
+
+- **`Video.FullscreenMode`** (0 borderless, default; 1 exclusive): dropdown shown only while Fullscreen is on. Applied on the host thread via a new `videoRequestFullscreenMode` (window request kind 4) that calls the backend's existing `set_fullscreen_exclusive` (re-enters fullscreen if already on); at startup it feeds `fullscreen_is_exclusive`. Survives a restart through the ini.
+- **Center window**: action row `__CenterWindow`, shown only while Fullscreen is off, no ini key. `videoRequestCenterWindow` (kind 3) reads the current window size and moves it with `get_centered_positions` + `set_dimensions`; logs old and new position. Maximized: SDL ignores the move.
+- **`Video.CrosshairAlpha`** 0-100 % (default 100): scales the env-colour alpha byte (0x6E at the call site) after the sprite DL is built. At 100 the command is untouched.
+- **`Video.CrosshairHealthColor`** (default off): PD's `sightGetCrosshairHealthColor` ramp (green variant; MIT), ratio = `bondhealth + bondarmour` of `g_CurrentPlayer` (both 0..1, clamped to 0..2; read in `input.c` `portCrosshairHealthRatio`). Red below 0.2, red to yellow to 0.6, yellow to green at 1.0, green to cyan with armour above. Precedence (as PD): when on it replaces Crosshair color's colour; the alpha-mask combiner is used whenever either is non-default.
+
+**Verified (headless):** build rc=0; `-level_09` with `GE_STARTWEAPON=13` and a scripted aim hold (`400:RHOLD`), frame 700: default red crosshair, opacity 40 visibly faded, health colour on shows green at full health (log: ratio 1.000 -> tint 0,255,0); clean-ini run writes only the new lines (`CrosshairAlpha = 100`, `CrosshairHealthColor = 0`, `FullscreenMode = 0`); tree / preset / reset probes PASS; 60 s `-level_09` smoke rc=0. **Not verified headless:** real window state for fullscreen mode and Center window (a game window would be disruptive here). **Owed (maintainer):** exclusive fullscreen enter/leave and surviving a restart (Windows, Deck if convenient); Center window incl. on a second monitor; crosshair opacity and health colour by eye while taking damage. **Docs:** the ROADMAP "PD Extended Options parity" row was not edited here (it is an uncommitted change in the main checkout); move these four items from "Small, port-only" to done when committing it.
+
+## D512: Game.HudScale applies to the F10 overlay (S4)
+
+**PD reference:** pd_port has no HUD/menu scale to follow (the only scale hit is the debug menu, `src/game/debug1.c`), so this is GE-native: the whole dialog scales (box, text, hint line, FPS counter), not only the text.
+
+**Change (port-only, `optionsoverlay.c`):** D510's canonical canvas now also divides by the HUD scale: `ovW()/ovH()` shrink by 100/hud and `ovScale()` (the fast3d overlay scale) grows by hud/100. The box stays centred, always fully on screen, and a larger scale just shows fewer rows (the existing scroll). Mouse hit-testing, dropdown popups and the FPS corner already derive from `ovW/ovH`, so they follow. The text clip size passed to `textRender` is now the canonical size. Changing the slider re-lays out on the next frame (layout is recomputed every emit). 100 % is the D510 mapping exactly.
+
+**Not done:** the front-end PC Options page (`frontoptions.c`) is hand-laid on the file-select paper art in the game's own 440x330 display list; scaling only its contents would misalign with the art, so it is left at 100 %. Say if you want it (it would need the paper drawn at the same scale).
+
+**Verified (headless):** 100 %: overlay-open front-end and `-level_09` dumps match the release build apart from the animated title-bar shimmer (the release build differs from itself in the same rows); level box widths at 640x480 are 295 / 392 / 588 px at 75 / 100 / 150 % (expected 294 / 392 / 588), at 1280x720 588 / 784 / 1176, all inside the window; contact sheet shows the 150 % hub scrolling with the box on screen. Tree / preset / reset probes PASS; clean ini byte-identical to the release build's; 60 s `-level_09` smoke rc=0. Pointer mapping is correct by construction (same helpers) but was not exercised headless. **Owed (maintainer):** by-eye pass at 75 / 100 / 150 in a level and on the front end with mouse and pad; the front-end PC Options page decision above.
+
+## D513: Input.ControlScheme -- Modern / OG controls (#139, ROADMAP "Control scheme selectable")
+
+**Design:** `docs/dev/notes/T7-CONTROL-SCHEME-DESIGN.md` (local note; PD review: PD adds an "Ext" fifth entry `CONTROLMODE_PC` to the game's own style list, kept per player in `extcontrols`, forced from the ini at load; GE cannot add a watch entry port-only, so the same idea is a port-side switch). Maintainer answers 2026-10-04: D498 style pins stay in Modern, presets are layout + stick swap only in OG; Display mode does not select OG; no 1.3/1.4 button permutation (OG passes buttons through as N64 buttons, faithful: those styles exist to move fire to A / aim to Z); 2.x: see the correction below; global key for v1, per seat later with Select Player; row at the top of the Controller page via the shared table.
+
+**Change (port-only; `port/src/input.c`, `port/src/optionsoverlay.c`):** new `Input.ControlScheme` (0 Modern, default; 1 OG controls). `styleIsSolitare()` replaces the four `stickSolitare()` call sites (keyboard forward/back, mouse hipfire pitch, pad sticks, and the per-poll re-assert): Modern returns `stickSolitare()` unchanged; OG reads the slot's live `cur_player_control_type_0` (SOLITARE 1.2 and GOODNIGHT 1.4 use the natural-look roles, everything else the 1.1 roles for the first pad) and the re-assert block no longer writes the style, so the watch/save/MP-setup selection stands. OG logs each slot's style change once (`input: original control style, slot N style S (...)`, plus a dual-controller note for 2.x). `Input.NaturalPitch` is unchanged and still only matters in Modern. Row "Control scheme" (Modern / OG controls) at the top of the Controller page, reset entry, help line, not in the Display mode bundles. Test-only env `GE_TESTSTYLE` (GE-ENV-PROBES.md).
+
+**Verified (headless, scripted slot 0, `-level_09`, seeded):** Modern: the written ini differs from the release build's only by `ControlScheme = 0`, and the 368-line `GE_INPUTLOG` stream (60 non-zero stick polls) is identical to release/v0.4.1. OG: with `GE_TESTSTYLE` 0 / 1 / 2 / 3 each style is logged once and survives to the end of the 366-poll run unchanged; style 4 logs the dual-controller note once (wording corrected below). At stage start the game loads the style from the Bond file (this eep copy held 1.2, written back by earlier builds: log shows 1.1 at init, then 1.2 from the save, then the test style); the port does not touch it. Tree / preset / reset probes PASS; 60 s `-level_09` smoke rc=0. **Not verified headless:** the scripted source bypasses the keyboard and pad mapping branches, so the role mappings themselves in OG (1.1 vs 1.2 sticks, 1.3/1.4 buttons) and a write-then-reload save round trip were not exercised. **Owed (maintainer):** pad pass in Modern and OG with watch-selected 1.1 / 1.2 / 1.3 / 1.4: movement, look, aim, fire, menu nav; split-screen 2P with different styles; mouse unaffected.
+
+**README:** Controls section documents the scheme and that saves from earlier builds may hold 1.2 (OG players pick their style on the watch once).
+
+**ROADMAP row text (not edited here):** "Control scheme selectable: Modern / OG controls | done (D513, pad pass owed) | #139, D513, D498, D166 | `Input.ControlScheme` (Modern default / OG controls) at the top of the Controller page; OG leaves the game's own style (watch / save / MP setup) alone; presets set layout and stick swap only in OG; 2.x runs faithfully (second stick from controller idx+playerCount, not mapped); global in v1, per seat with the Select Player work. Pad pass owed in both modes."
+
+**Naming follow-up (maintainer, 2026-10-04):** the displayed row is "Control style" with values "Ext" (was Modern) and "N64" (was OG controls), matching PD's "Control Style" / "Ext" and the port's other N64/PC wording. The ini key and values (`Input.ControlScheme` 0/1) are unchanged. README updated.
+**Second naming pass (maintainer, 2026-10-04):** the second value is "Original" (not N64), in line with the aspect-ratio and Display mode wording; the log line reads `input: original control style, slot N style S (...)`. Values shown: Ext / Original.
+
+**Correction on 2.x (maintainer review, 2026-10-04):** the earlier claim "2.x acts as 1.1" was wrong. In Original mode the port does not write the style, so the game really runs the 2.x style, and `bondview2.c:4997-5003` reads the second stick from controller `playernum + playerCount` (faithful N64 dual-controller). The port only maps the first pad, with 1.1 roles, so with one pad the second stick is idle, as on an N64. Kept as is. The log line now reads `...; dual-controller style: second stick read from controller <idx + getPlayerCount()>` (once per change); README says a second pad assigned to that slot should provide the 2.x second stick (untested), otherwise use a 1.x style. `GE_TESTSTYLE` is marked scaffolding to strip before the release.
+
+**Build note for filing (fresh worktree, empty arch tag):** the first build in the new worktree `gh-fullhist-wt-t7` (from `git worktree add ../gh-fullhist-wt-t7 -b feat/control-scheme release/v0.4.1`, then `build-pc/data` copied in) was `./build-pc.sh ntsc-final` from a Git Bash agent shell (`MSYSTEM=MINGW64`, `PROCESSOR_ARCHITECTURE=AMD64` in that shell, PATH prefixed `/c/msys64/mingw64/bin:/c/msys64/usr/bin`). It went through the PowerShell re-exec path ("native TMP unusable"). The cmake log (`build-pc/ge007-native-reexec-cmake.log`) printed `-- Target arch:  (64bit=FALSE)`, `-- Target platform: -windows`, `-- Output binary: ge007.`, and the link produced `build-pc/ge007..exe` (a normal 64-bit exe; compile defs still had `-DPLATFORM_64BIT=1`). The cause is in the cache: `build-pc/CMakeFiles/4.4.2/CMakeSystem.cmake` in the new dir has `set(CMAKE_HOST_SYSTEM_PROCESSOR "")` and `set(CMAKE_SYSTEM_PROCESSOR "")`, while the main repo's older `build-pc` has `"AMD64"` for both (same cmake 4.4.2, same generator Ninja, same `CMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe`). `cmake/TargetArch.cmake` takes `CMAKE_SYSTEM_PROCESSOR` when not cross-compiling (`CMAKE_CROSSCOMPILING` was FALSE), so an empty processor gives an empty `TARGET_ARCH` and `BIN_NAME` `ge007.` + `.exe`. Not verified: why the processor was empty; my hypothesis is that the stripped environment of the `.ps1` re-exec (see AGENTS.md build notes, which restore PATHEXT and ComSpec) lacks `PROCESSOR_ARCHITECTURE`, so cmake sees no host processor. It only bites a fresh build directory (the value is cached in `CMakeSystem.cmake`), which is why older build dirs are fine. Workaround used: copy `ge007..exe` to `ge007.x86_64.exe`.
+
+## D514: emulator saves load directly — `ge007.eep` in 1964/Project64 format is converted on first launch (ROADMAP §5a, S8)
+
+**Change (port-only; new `port/src/eepimport.c`, one call in `port/src/libultra.c` `geEepromLoad`, README):** copying an emulator `.eep` in as `data/ge007.eep` now just works. Before the game's first EEPROM read, `geEepImportEmulatorSave()` checks each region (block 0 + the five slots) and converts in place only regions that validate in emulator format AND not in port format; a region invalid in both is left alone for the game's own wipe path; port-valid regions are untouched. If anything converts: the original bytes go to `ge007.eep.emulator.bak` first (never overwriting an existing backup — `.bak2`, `.bak3`, …), then the converted file is written, and one line is logged: `eep: imported emulator save (N regions converted, backup <path>)`. Nothing converted -> no write, no log.
+
+**Rules mirror `tools_pc/eep_convert.py` exactly** (D492): per slot, byte-swap `options` (u16 @12; it lies INSIDE the CRC range [8..96), so a plain word swap would still fail) then re-stamp `chksum1/2` over [8..96) stored little-endian — via the game's own `fileGenerateCRC`, not a C replica; block 0 (no multi-byte field in its CRC range) is a plain byte-swap of its checksum pair. Validation reads the stored words big- or little-endian and compares against `fileGenerateCRC` of the raw bytes (the CRC value is endian-independent). No CMakeLists change (`SRC_PORT` is `GLOB_RECURSE`, as for D297's `legacycrc.c`). Export to an emulator stays with `eep_convert.py`; README "Using an emulator save" now says "copy it in".
+
+**Verified (headless, `GE_QUITFRAME=2500` boots, `data/ge007.eep` swapped per case):**
+1. `./build-pc.sh ntsc-final` rc=0, no new warnings in touched files; `geEepImportEmulatorSave` defined exactly once (nm on the exe), statics folded away.
+2. `scratch/eepinv/1964_orig.eep` (md5 `c9d7da5a…`) -> after boot, `ge007.eep` md5 `3ca7cf84…` = byte-identical to the in-game-proven `1964_converted.eep`; `ge007.eep.emulator.bak` byte-identical to `1964_orig.eep`; log line "6 regions converted" present, before `eeprom: loaded`.
+3. `1964_converted.eep` (a port save) -> byte-unchanged (`3ca7cf84…`), no backup created, no log line.
+4. `1964_orig.eep` with one byte flipped inside slot 3's CRC region (offset 370) -> "5 regions converted"; `GE_SAVELOG=1` shows slots 0-2/4 `-> OK` and slot 3 `stored_crc=51aea8db,50d2558b calc_crc=840fcfe9,c77fd429 -> BAD -> RESET (progress wiped)` — i.e. the importer left it as-is and the game's own wipe path took over (the wiped slot re-stamps to `d4ca8847,a793c0eb`, exactly the converted original's value, so the final file again equals `1964_converted.eep`); second validation pass all five OK. Backup byte-identical to the corrupted input.
+5. Second boot after case 2 -> no change (`3ca7cf84…`), no log line, no `.bak2`.
+6. `python tools_pc/eep_convert.py verify --as pc` on case 2's result: all six regions OK.
+
+**Owed (maintainer):** by-eye mission select after importing a real 1964 save (all levels shown as in the emulator).
+
+**ROADMAP row text (not edited here — applies in the main checkout):** "Emulator saves load directly in the game (no tool for import) | verify (D514, by-eye mission select owed) | D492; `port/src/eepimport.c` called from `geEepromLoad`; D297 `legacycrc.c` same pattern | Copying a 1964/Project64 `.eep` in as `data/ge007.eep` works: on first launch each region (block 0 + 5 slots) that validates in emulator format and not port format is converted in place (same rules as `eep_convert.py`, CRCs from the game's own `fileGenerateCRC`); regions invalid in both are left to the game's wipe; port saves untouched. Original backed up to `ge007.eep.emulator.bak` (never overwritten). On-disk format stays port format. Export stays with `eep_convert.py`."
+
+## D515: empty arch tag from a fresh build dir (`ge007..exe`) — the re-exec env drops `PROCESSOR_ARCHITECTURE` (build infra; D513 follow-up)
+
+**Symptom.** The first build in a fresh worktree configured through
+`build-pc.sh`'s PowerShell re-exec cached `CMAKE_HOST_SYSTEM_PROCESSOR ""`
+and `CMAKE_SYSTEM_PROCESSOR ""` in `build-*/CMakeFiles/<ver>/CMakeSystem.cmake`.
+`cmake/TargetArch.cmake` takes `CMAKE_SYSTEM_PROCESSOR` when not
+cross-compiling, so `TARGET_ARCH` came out empty: configure printed
+`Target arch:  (64bit=FALSE)` / `Output binary: ge007.` and the link produced
+`ge007..exe`. The binary was a **correct 64-bit build** — `PLATFORM_64BIT`
+comes from `port/include/platform.h`'s own `__x86_64__`, not the CMake value
+(only `tools_pc/d88_layoutprobe.c` reads the CMake side) — so only the name
+and tag were wrong. Found during T7 (D513 build note); existing build dirs
+were immune because the value was cached from an earlier good configure.
+
+**Root cause.** The stripped re-exec env (the msys→native conversion that
+also dropped PATHEXT/ComSpec, AGENTS.md 2026-09-30 notes) can drop
+`PROCESSOR_ARCHITECTURE`, which CMake reads to fill
+`CMAKE_HOST_SYSTEM_PROCESSOR`. Same bug class, one more missing var.
+
+**Fix (`fix/build-arch-tag`).**
+1. `build-pc.sh` re-exec `.ps1`: next to the PATHEXT/ComSpec restore, restore
+   `PROCESSOR_ARCHITECTURE` from the machine environment
+   (`[Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITECTURE','Machine')`,
+   fallback `'AMD64'`); `SystemRoot` and `windir` the same way (fallback
+   `C:\Windows`). One diag line logging all four vars goes to
+   `build-*/ge007-native-reexec-diag.log` (kept permanently; cheap, useful).
+2. Belt and braces in `cmake/TargetArch.cmake`: when not cross-compiling and
+   `CMAKE_SYSTEM_PROCESSOR` is empty, ask the compiler
+   (`${CMAKE_C_COMPILER} -dumpmachine`, same regex as the cross-compile
+   branch); if that is empty too, `message(FATAL_ERROR)` naming this bug
+   instead of silently producing `ge007.`. The non-empty path is unchanged.
+
+**Verified (Git Bash agent shell).** Note on reproduction: this harness's
+msys→native conversion passes the full env through (71 vars intact; a plain
+forced re-exec kept `PROCESSOR_ARCHITECTURE`), so the stripped-env case was
+simulated with `env -u PROCESSOR_ARCHITECTURE` — the same mechanism D513 hit.
+1. Before the fix, fresh dir + forced re-exec (`TMP='C:\Windows\'`) +
+   stripped env: reproduced `ge007..exe`, diag showed
+   `PROCESSOR_ARCHITECTURE=[]`, `CMakeSystem.cmake` empty/empty.
+2. After the fix, same command: diag shows `PROCESSOR_ARCHITECTURE=[AMD64]`
+   (restored), `Target arch: x86_64 (64bit=TRUE)`, `ge007.x86_64.exe`,
+   `CMakeSystem.cmake` AMD64/AMD64.
+3. After the fix, direct path (normal TMP), fresh dir: same as 2.
+4. TargetArch fallback on its own: MSYS2 cmake + gcc + Ninja, stripped env,
+   fresh dir → `CMakeSystem.cmake` still empty/empty but
+   `Target arch: x86_64 (64bit=TRUE)` via `-dumpmachine`.
+5. Incremental rerun in 2's dir: one-time relink (cache normalisation), then
+   `ninja: no work to do`, rc=0.
+
+**Owed / notes.** `../gh-fullhist-wt-t7/build-pc` still holds the empty cached
+value and a `ge007..exe` — it needs one reconfigure (or a fresh build dir);
+left untouched by this fix. A build dir configured before the fix is fine to
+keep: the next `./build-pc.sh` run reconfigures in place and picks up x86_64.
+
+## D516: Control style Original offers the game's own styles, not the D498 presets (port-only; D513/D498 follow-up)
+
+**Problem (maintainer live pass 2026-10-04).** With Control style = Original the Controller page still listed the D498 port presets ("1.1 Jinx", "1.2 Christmas", ...). They reuse the N64 numbering but are port layouts, so in Original they read as "modern", and the game's real styles could only be picked on the watch.
+
+**Change (port-only: `optionsoverlay.c`, `watchsettings.c/.h`, `input.c`, README).**
+1. New `Row.schemeOnly` (1 = Ext only, 2 = Original only; resolved to a pointer at init, checked in both the F10 visibility builder and `optionsRowIsShown`, so the front-end PC Options screen follows). `Input.PadPreset` and the Custom pad-bind rows are Ext-only; Ext keeps exactly today's rows.
+2. New row "Controller style" (`Bond.Control`, Original only; 1.1 Honey, 1.2 Solitaire, 1.3 Kissy, 1.4 Goodnight, 2.1 Plenty, 2.2 Galore, 2.3 Domino, 2.4 Goodhead, the names in front.c's `MP_controller_configuration_table`). It is a new watch field `WATCH_SETTING_CONTROL` (3-bit value in `save->options` bits 8-10, `OPTION_CONTROLTYPE`), so it uses the same queue -> game-thread apply -> `watchSettingsPersistField` path as the other Bond rows. Seat = the Controller page's player (`watchSettingsSetControlSeat`, set where `s_padSeat` changes). Solo applies via `cur_player_set_control_type` (the watch's own setter) and persists to the Bond file; split-screen writes the seat's player struct directly (D416 mirror, no `g_CurrentPlayer` swap) and does not persist (file2.c forces 1.1 for 2+ players, as on the N64). No new ini key.
+3. **Front end / no live player for the seat: the row reads "(in a mission)"** and does not respond (`watchSettingsRead` returns -1 from the game-thread snapshot; the style lives on the live player, and the front end has none). Seats beyond the player count are the same.
+4. Button layout in Original: `padPresetEff()` returns 0 unless the stored preset is Custom, so the stored 1.2/1.3/1.4 preset no longer permutes sticks (`stickSwap`, `stickSolitare` fallback). Custom binds still apply but are hidden (edited in Ext only). The table build itself is unchanged: only `padPreset == 3` ever changed buttons, so "preset 0 mapping" is just the non-custom default table.
+5. Per-dialog "Reset to defaults" skips `Bond.Control` (the save's style is not a port setting); `GE_WSPROBE_RESET` skips it too.
+
+**Verified (headless, `-level_09`, `GE_QUITFRAME`).** Build rc=0, no warnings in touched files. Ext: `GE_OPTIONTREEPROBE` PASS, `GE_PRESETPROBE` PASS, `GE_WSPROBE_RESET` 6/6 sections, saved bytes OK; no ini key added (written ini unchanged); `padPresetEff()` is `padPreset` whenever `ControlScheme` is 0. Original: tree probe + preset probe PASS; `GE_D516=<n>` (TEMP hook, queues the row through the real watch path) took the live style 1 -> 2 and 2 -> 7, `d516: post live=N read=N saved=N`, the D513 "original control style" log line followed (7 logs the dual-controller note), `watchsettings: persisted field 8 in Bond file 1`; rows: "Layout preset" and pad binds hidden, "Controller style" shown (Ext: the reverse). Front end, Original: screenshot shows "Controller style  (in a mission)", no crash. 60 s `-level_09` smoke rc=0.
+
+**Live pass (maintainer, 2026-10-04).** F10 in a mission: set Control style to Original and cycled "Controller style" with left/right on the pad -- works, "mostly fine". Two same-day follow-ups landed on `feat/original-styles`: (a) opening the popup while the row is n/a (front end, no live player -> selection -1) overflowed the overlay display list and froze it ("DL overflow", "unknown GBI opcode") -- the popup now refuses to open while the row is unavailable; (b) the Controller page plus the open 8-item popup needed ~8.5k commands against the 8192-command buffer (`DL overflow (8546)` right after the dropdown opened, then freeze) -- buffer raised to 16384. Adjusting the style in-game dropped the fps while held -- a separate pre-existing bug, **D517**. **Split-screen 2P live pass (maintainer, 2026-10-04):** different styles per seat run correctly in a mission ("all good"). Still owed: the 2.x second-pad pass (a real second controller feeding the second stick).
+
+**Merged 2026-10-04:** `feat/original-styles` (D516 + D517 + D518) merged into `release/v0.4.1` @ 91595597; the branch was deleted. The temporary `GE_D516`/`GE_D516_SEAT` probe in `watchsettings.c` is stripped before the release (ROADMAP scaffolding row).
+
+## D517: Holding left/right on a Bond settings row dropped the fps -- every hold-repeat step committed (D489 staged sliders only)
+
+**Problem (maintainer live pass 2026-10-04, during the D516 test).** In a mission, adjusting "Controller style" (or any other Bond row: the Look/AutoAim/AimControl/Sight/LookAhead/Ammo toggles) with left/right on the pad dropped the frame rate for as long as the direction was held.
+
+**Root cause.** D489 made *sliders* stage their steps and commit once on release (`s_adjWatchField` + `optionsAdjustCommitPending()`), because "each commit is three joyDisablePoll/joyEnablePoll handshakes plus an EEPROM file rewrite on the game thread". The other value kinds -- ROW_TOGGLE, ROW_ENUM (incl. the new `Bond.Control`), ROW_MSAA, ROW_FPSCAP -- still called `rowSet()` (commit = 1) on EVERY step. Each commit queues through to the game thread's `watchSettingsPersistField()` -> `fileWriteSave()`. Hold-repeat fires every 4 frames, so a held direction kept the game thread persisting: reproduced headlessly with a pad physically held -- `GE_PERFSTAT` showed 60 fps baseline vs 40-50 fps while cycling, and the log shows the style walking 1->0->7->...->3 with `watchsettings: persisted field 8 in Bond file 1` 57 times over a 900-frame run. (The overlay's own render cost is not the cause: `dl=` stays ~0.3 ms with the heaviest page open.)
+
+**Fix (port-only, `optionsoverlay.c`).** New `rowSetStepWatch()`: a stepped row that has a watch field now stages exactly like a slider (commit = 0; switching the pending field commits the previous one first), and the existing `optionsAdjustCommitPending()` -- which already runs every frame while left/right is not held in BOTH UIs (F10 `overlayHandleInputLocked`, frontoptions release path) and on F10 close -- saves once on release. Non-watch rows fall through to a plain commit, so ini rows are byte-for-byte unchanged. The dropdown popup confirm (`ddConfirm`) still commits immediately: one deliberate pick, not a hold.
+
+**Verified.** Build rc=0, no warnings in touched files. Headless: `GE_OPTIONTREEPROBE` PASS + `GE_PRESETPROBE` PASS (front), `GE_WSPROBE_RESET` stage 6/6 sections + saved bytes OK; `GE_PERFSTAT` baseline still 60 fps with the overlay closed. **Live pass (maintainer, 2026-10-04):** confirmed fixed -- "those things are fixed".
+
+## D518: The pad layout preset was one global value -- setting another player's preset changed the main player's mapping too
+
+**Problem (maintainer report 2026-10-04, during the D516/D517 stress test).** In single player, opening Select player -> Player 2 and changing that seat's "Layout preset" also changed P1's live mapping -- "I don't want it to affect at all".
+
+**Root cause.** `Input.PadPreset` was a single global int in input.c; the per-seat Controller pages (D469 Select player, `s_padSeat`) all edited the same value, and `padTabGet()` built every seat's table from it. The custom binds were already per seat (`Input.Pad[N].<Action>`); only the preset was shared.
+
+**Fix (port-only).** input.c: `padPreset[MAX_PADS]`; ini keeps `Input.PadPreset` as **seat 1's** key (existing inis keep their P1 value) and adds `Input.PadPreset2/3/4` (default Jinx). All the preset-derived helpers (`padPresetCustom`, `padPresetEff`, `stickSolitare`, `stickSwap`, `styleIsSolitare`) take a seat; every call site is inside `inputComputePadSlot(int idx, ...)` and passes its own slot. The table signature hashes all four presets (custom bind strings included when any seat is Custom). New accessor `inputPadPresetPtr(seat)`. optionsoverlay.c: new `padSetSeat()` re-points the "Layout preset" row's `ptr` and the Custom-only bind rows' `showPtr` at the selected seat's value; all three seat-change sites (F10 link open, front-end `optionsRowLinkOpened`, ROW_PADSEAT step) go through it. GE_PADMAPTEST now drives the per-seat array (all seats Custom in the custom phase).
+
+**Verified.** Build rc=0. Headless: `GE_PADMAPTEST` PASS (seat-independence checks c1-c11), `GE_OPTIONTREEPROBE` + `GE_PRESETPROBE` PASS, and a temporary `Input.PadPreset2 = 4` in the ini produced exactly `pad table rebuilt (presets 0/4/0/0)` (ini restored byte-identical after). **Live pass (maintainer, 2026-10-04):** single player, P2 preset changed -- P1's page and mapping untouched, bind rows follow the per-seat Custom state; "good". **Split-screen 2P live pass:** each seat ran its own preset in a mission ("all good").
+
+## D519: One PC options UI -- the file-select "PC Options" entry opens the F10 overlay; the MENU_PC_OPTIONS screen is gone (port-only)
+
+**Why (maintainer idea 2026-10-04).** Two PC options UIs (D343 front-end screen, D504-D512 F10 overlay) meant two navigation implementations, two probe sets, and the `frontOptionsBlocksOverlay` gate.
+
+**Change.** `port/src/frontoptions.c` is now only the file-select entry label: a click (A/Z/Start) calls `optionsOverlayToggle()`; file select stays underneath and its idle timer is held (`g_MenuTimer = 0`, already in the hook) while the overlay is open. Gaps found by the P4 design pass: (1) Bond-file rows ("Controller style", profile chooser) were shown only on the old screen -- `optionsRowIsShown` and the chooser's left/right now key on `current_menu == MENU_FILE_SELECT`; they use the same data path as before (`watchsettings.c` `frontFolder()`: chosen file > `selected_folder_num` > first valid). (2) The watch chooser was keyed to `MENU_PC_OPTIONS`; re-keyed likewise.
+
+**Deleted.** The screen's init/update/interface/draw, paging, hover/pad/keyboard navigation (about 800 lines), the `MENU_PC_OPTIONS` enum value, its four `front.c` dispatch/draw sites and their `#ifdef PORT` blocks, `frontOptionsBlocksOverlay()` and its gates in `video.c` (F10) and `input.c` (pad Select), and the `input.c` keyboard/wheel branch for that screen. **Kept in `src/game`:** the single `#ifdef PORT` call to `optionsFileSelectLabel()` in `constructor_menu05_fileselect` (it is the entry itself; the D343 Rule-2 sign-off covers it) and the D399 `copypos` shift. `pcOptionsKeyboardPad` in `input.c` is now only used by the self-tests.
+
+**Probes.** Retired `GE_FRONTOPTIONS_SECTION`, `GE_FRONTNAVLOG`, `GE_FRONTOPTS_WIDTHS`, `GE_FRONTOPTIONS_AUTO`; added `GE_FILESELECT_OVERLAY=<n>` (open; n > 1 closes after n frames) because nothing else opens the overlay from file select headlessly.
+
+**Verified (headless, 4 build cycles).** Build rc=0. Front end with the overlay open: `GE_OPTIONTREEPROBE` PASS, `GE_PRESETPROBE` PASS, `GE_WSPROBE_RESET` front path all sections failures=0. Frame captures of file select with the overlay open (tree over the folders) and after the close (plain file select, no drop to title). In a level (`-level_09`, 60 s, `GE_QUITFRAME=3600`): tree + preset PASS, stage reset probe failures=0, saved bytes OK, exit 0. **Owed (maintainer, by eye):** mouse, keyboard and pad on the file-select overlay, the profile chooser and Controller style rows with a real profile, and the overlay footer text overlapping the Copy/Erase bar.
+
+**Follow-ups 2026-10-04 (P4j; maintainer by-eye pass found 4 faults + 1 request).** (1) *Profile chooser missing:* it was never an overlay row -- the old screen drew a virtual "Profile" row at the top of every page (not in the row table), so the re-key in D519 had nothing to show. Now `__BondFile` (ROW_BOND_FILE) is a real table row that `overlayUpdateVisible` injects as the first row of every page that holds profile-backed rows (Audio, Controller, Game), on file select only; left/right/accept step the chosen file. Verified headless (`GE_OVNAV` log: chooser visible at row 1 of Audio; Game capture shows "Profile 1" first). (2) *Pad double-press:* the overlay's edge state (`prev*`) was zeroed while closed, so the A (or click/Enter) that opened it counted as a fresh press on the first handled frame; now the first frame after any open adopts the held buttons as "previous" (`s_seedPrev`). Code-verified only (no headless pad). (3) *Crosshair pointer froze:* the overlay branch in `input.c` returned before the front-end pointer block; now, on a front-end screen with the mouse enabled, `overlayFrontEndCrosshair()` maps the OS mouse to the game's cursor with an exact (non-inset) window-to-canvas map, so the drawn crosshair is where the overlay hit-tests, and the OS cursor is hidden (one pointer). Not verified headless (needs a real mouse). (4) *Hint overlapped Copy/Erase:* the hint lines now sit in a box-body panel under the card (drawn with the card, before any text: a fill after text turned the glyphs into blocks) and are fitted to the box width. The bar is still faintly visible through the translucent panel (a darker underlay would fix it). (5) *Resume where you left off:* `optionsOverlayToggle` records section / focused row / scroll / pad seat on close and restores them on open when the row is still shown, else the top of its section, else the root; backing out to the root remembers the root. Verified headless with `GE_OVNAV`. New harness token hook `GE_OVNAV` (O toggle, D/U, A open, B back, P log; one token per 20 file-select frames). Side note: one reset-probe run on a real two-file eep logged `Bond.LookAhead = 0, want 1` for the Game section (failures=1); two reruns passed -- looks state/timing dependent, not touched by this change, left open.
+
+
+## D520: F10 overlay slider wedge, marker and dropdown arrow antialiased (port-only; D504 follow-up)
+
+**Problem (maintainer by-eye pass 2026-10-04).** The overlay's sliders and dropdown arrows looked more aliased than the PD port's menus. **Cause (P4k investigation, local note `OVERLAY-AA-INVESTIGATION.md`):** the overlay lays out on a 320-wide canvas scaled to the window (`ovScale`), and `drawWedge` / the dropdown tick built their diagonals from integer-pixel fill rects (2-px columns, whole-pixel heights), so every stair step is `ovScale` screen pixels (4 px at 1280, 8 px at 2560). PD draws the same shapes as triangles (`menugfx.c:861-906`) that MSAA smooths. Text was not the issue (bilinear-magnified glyphs: soft, not jagged).
+
+**Fix (`port/src/optionsoverlay.c`).** `drawWedge`: the solid body as runs of equal whole height plus one coverage-alpha top pixel per 1-px column; the marker and the dropdown arrow via `drawTriDownAA` (per-pixel area coverage from 4 sub-rows). Render state is set once per shape (`aaBegin`) and each piece is 2 commands (`aaPiece`, pieces under alpha 6 skipped), so the display-list size stays about where it was (D516 overflow history; `OV_BUF_CMDS` 16384). Applies in every Display mode (maintainer: the overlay is port UI, not part of the N64 picture).
+
+**Verified.** Build rc=0, no warnings; `GE_OPTIONSOVERLAY=1 GE_OPTIONSOVERLAY_SECTION=__HdrAudio GE_PCDUMP=300-300` before/after: the ramps go from ~7 visible steps to a smooth ramp, markers/arrows softened; no DL overflow logged. **Owed:** maintainer by-eye at their window size.
+
+
+## D521: A fixed-frame golden window that overlaps the intro flyby is platform-nondeterministic (P7, cross-platform goldens)
+
+**Problem (P7, 2026-10-04, Linux golden baselines).** The golden recipe was run verbatim on a real-GL Linux box (Mesa 23.0.3 / Intel HD 3000, X, 640x480 ini pin, `GE_INPUTSCRIPT="20:START"`, `GE_PCDUMP="900-1500:300"`, `GE_QUITFRAME=1502`) for all 21 levels and compared against `tools_pc/golden/<level>/win/`. At the settled stems (1200/1500; Cuba 600/900) the cross-platform delta is 1.142-6.958% of pixels over tol 2 -- worst non-outlier dam 1500 6.958%, worst grid-cell dmean 14.315 (surface1 1200), phash <= 3 -- but Dam's frame 900 measures 92.863% over tol 2 with phash 83, a completely different scene. The same-machine spread is what makes that number meaningful: repeat Linux runs of the same recipe differ by 0.115% (1200) and 0.219% (1500) at those stems (cap_1 vs cap_3, exact tol 2) but by 72.460% at 900, i.e. the 900 disagreement is the flyby still moving, not a renderer.
+
+**Cause (D117 class, no new nondeterminism).** The intro flyby is wall-clock paced, and the capture harness steps *sim* frames, not wall-clock frames: `GE_PCDUMP` and `GE_QUITFRAME` both key off `frames` (`port/src/video.c:1406`, `++frames` in `videoEndFrame()`), which advances once per `portRenderGfxTask()` (`port/src/libultra.c:1256`), i.e. once per retrace actually consumed by `__scMain`. Retrace messages are dropped at the posting site when the game's queue is nearly full (`port/src/libultra.c:753`), so a box that cannot hold 60 fps stretches wall time *without* advancing `frames` (per-frame render times in cap_dam.log: frame 900 13009 us, 1200 15121 us, 1500 11808 us). On this box the flyby was still running at frame 900 -- it settles between frame ~830 and ~1130 run to run -- while the Windows golden run had it settled before 900. The scripted START press is not the difference: the pulse's six `GE_INPUTLOG` lines precede "frame 5 rendered" on both platforms, and `GE_INPUTSCRIPT_MS=1` variants (150/300/600 ms) change nothing.
+
+**Rule (this is a documentation finding, not a code fix).** A cross-platform golden comparison is only meaningful at stems that are settled gameplay on *every* platform in the set. Either move the window past the slowest platform's flyby settle point, or report in-flyby stems as a scene offset and never gate on them. `GE_DETERM=1` is the right tool for Linux-vs-Linux regression runs only: it makes retrace generation call-sequenced (det_a vs det_b, exact tol 2: 4.654/5.562/5.331% at 900/1200/1500) but changes the frame -> sim mapping, so its 14.6-16.2% against the win/ goldens (det_a vs dam/win: 15.788/14.594/16.171%) is expected and must never be used for cross-platform comparison.
+
+**Port-layer change (same sweep).** `tools_pc/verify.sh`'s linux pixcount/framediff skip (N6 / M-48, "GE_PCDUMP reads black") is a property of the GL *driver*, not of the platform. It is now driver-conditional: a `glxinfo -B` renderer probe sets `LINUX_SOFTWARE_GL`, and only llvmpipe/softpipe/swrast/dynrecomp skip the pixel gate; a real driver (Mesa iGPU/dGPU, NVIDIA) runs the same gate as Windows. `glxinfo` missing or unrecognised keeps the old conservative skip, so an unknown box behaves exactly as before. **Known limitation:** the probe whitelists by *blacklist* (`llvmpipe|softpipe|swrast|dynrecomp`), so a future software driver outside that list would enable the pixel gate and false-FAIL; the probe is not rewritten here.
+
+**Verified (P7 sweep, 21 levels, one pass).** Structural framediff (cell means / coverage / phash) linux-vs-win: rc=0 on 19/21 levels; rc=1 on Dam (frame 900, the flyby) and Streets (frame 1200). Exact `--tol 2` over-tol2 %: 1.142-6.618% on the 17 levels with no outlier stem (bunker2 1.142-1.144%, facility 1.396-1.842%, surface1 1.494-2.779%, bunker1 1.710-2.341%, train 1.573-2.160%, control 2.125-2.688%; highest non-outlier surface2 5.592-6.170%, jungle 5.858-6.618%). Outliers, each classified: **Archives** 19.956-24.554% at all three stems, but the 16x12 grid map is confined to grid rows 0-2 (cell means up to 50.8; row 3 is 2.5-4.6, rows 4-11 <= 3.1) and the per-pixel histogram is a constant ~18-22 delta (counts at d=18,19,20,21,22) -- systematic, a candidate real rendering difference (sky/fog band), needs a same-sim-state capture pair before it is called a renderer bug. **Cuba** 10.705-26.350% with 16x12 cell means <= 11.1 and per-pixel deltas clustered at d 3-6 across the whole frame -- the dither/quantization noise floor, structural-clean. **Jungle** 5.858-6.618% (worst cell dmean 14.8-26.7). **Streets** 1200: 9.564% with a diagonal band of 16x12 cell means 16.0-148.4 across rows 0-4, cols 0-6 (a region delta, not noise); Streets 900/1500 are clean (4.738/5.040%) and show a separate residue in the lower-right cells (row 9 col 10: 20.9 at 900, 33.0 at 1500). **Dam** 900: 92.863% over tol 2, phash 83 -- the flyby offset.
+
+**Open (docs/ROADMAP.md §4).** The Archives top-band and the Streets-1200 band, as the two candidates for a genuine cross-platform rendering difference; both need a same-sim-state capture pair (identical scripted input and a settled camera on both boxes) before either can be called a renderer bug.
+## D522: The golden window's frame-900 stem is not settled gameplay on several levels — the win golden gate is not green (golden gate; D117 follow-up)
+
+**FIXED 2026-10-05 — recipe-side re-base only (no game-code change, no tol limit raised).** The measurements below are kept as the record of why. `tools_pc/verify.sh`'s `golden_dump_for` now carries per-level windows: `900-1500:300` on the 14 levels where 900 is settled, `1000-1400:200` on Surface 2 / Streets / Depot / Cradle / Frigate, `1500-1700:100` on Dam. Chosen by measuring run-to-run agreement: at 900 those levels fail the per-pixel limit and Dam's 900 is still flyby; at the new stems three independent runs agree within tol 2 (frigate + the four: 1000/1200/1400 all 0.000% max-pair; Dam's 1200 agreed on two runs then diverged 5.761% on a third, so it moved to 1500-1700 — 1500/1700 0.000%, 1600 keeps ~40 moving pixels at 0.013%, inside the 1% limit). Full 21-level sweep after the re-base: **21/21 PASS** (`scratch/verify-rebase2.log`).
+
+**Problem (2026-10-05 golden-gate pass, this tree).** A full 21-level sweep run with the recipe exactly as `tools_pc/golden/README.md` states it does not pass against the tracked `tools_pc/golden/<level>/win/` set. Honest sequential pass (one run at a time, `scratch/sweep-par.sh 1`, live `data/ge007.eep` present): **5/21 REGRESSION** — dam 6.542 % @900 (worst_cell 12.11), surface2 3.752 % @900 (limit 3.0), streets 1.001 % @1200, depot 1.267 % @900, cradle 1.754 % @900, all against a 1.0 % per-pixel limit; 16/21 PASS. The concurrent pass (`JOBS=7`, 21 levels in 1:56 wall) failed **7/21**: the same five plus runway 1.668 % @900 and frigate 4.484 % @900, both of which pass cleanly when run alone (worst_cell 0.616 / 0.109). Both numbers are recorded, not averaged; the difference is pacing (see below).
+
+**Cause (D117 wall-clock pacing, not a render bug).** `GE_INPUTSCRIPT="20:START"` skips the intro flyby, but the flyby's own length is wall-clock paced: the scripted pad advances in real time, so which camera beat frame 900 lands on moves with the run's pacing. dam's 900 stem measured 1.598 / 2.689 / 3.424 / 6.542 / 7.240 % across five runs of the same recipe — the spread is the flyby beat, not noise. The unstable stem itself moves between passes: streets failed at 1500 in the concurrent pass and at 1200 in the sequential one. `tools_pc/golden/README.md`'s claim that "frames 900/1200/1500 are settled gameplay on every level" is contradicted.
+
+**Also measured (D117 follow-up not closed).** `GE_DETERM=1` does not make the window reproducible: repeats differ 4.654 / 5.562 / 5.331 % with `GE_DETERM=1` against 0.115 / 0.219 % plain at the same stems — the switch makes the spread worse, not deterministic.
+
+**Never do:** raise the tol limits to fit. That hides exactly the D117 class this gate exists to catch.
+
+**Fix owed (recipe-side only; no game-code change):** either (a) move the capture window to stems settled on every level (1200–1800:300 is the measured candidate) and re-capture the 63 `win/` PNGs plus the box's linux set, or (b) keep the set and state the gate honestly (structural green + per-pixel marginal at 900) in `golden/README.md`, the ROADMAP row and the known-issues table. Driver: `scratch/sweep-par.sh` (gitignored; mirrors `verify.sh`'s ini pin, `GE_*` recipe, framediff flags and per-level limits, one cwd per level so runs can overlap — parallel verdicts are diagnosis only, the honest numbers come from the `JOBS=1` pass).
+
+## D523: The golden recipe does not pin save state — `verify.sh` pins the ini but never touches `data/ge007.eep` (golden gate; D514/D522 follow-up) — **SUPERSEDED by D529 (2026-10-05): the frame depends on the save's CONTENT, not its presence; the gate now installs the canonical in-tree save**
+
+**FIXED 2026-10-05 — `verify.sh` now pins the save file** (back up + require `data/ge007.eep`, mirroring the ini pin; it exits 2 with a message when a clone has none, rather than silently measuring a different scene), and `tools_pc/golden/README.md` states the pin. The measurements below are the record of why the gap mattered.
+
+**Problem.** The goldens were captured with a save file present, and nothing in the recipe records that. `tools_pc/verify.sh` backs up and pins `data/ge007.ini` (`pin_ini_640x480` / `restore_ini` / the EXIT trap) but has no analogue for `data/ge007.eep`, and `tools_pc/golden/README.md`'s recipe list never mentions it. The game's save file changes the rendered scene, so the recipe reproduces the goldens only on a machine that happens to hold a matching save — and a fresh clone of this repo ships no `.eep` at all.
+
+**Measured on this tree (2026-10-05, two honest sequential 21-level passes, same build, same ini pin).** With the live `data/ge007.eep` present: 5/21 REGRESSION. With no `.eep` at all: **19/21 REGRESSION** — Archives 21.557 % @900 (worst_cell 31.64), Silo 40.9 and Dam 116.6 worst_cell (framediff-level misses, not even per-pixel-comparable), and every remaining level 1.2–5.5 % against a 1.0 % limit. Only Bunker 2 (0.001) and Cuba (structural tier only) survive. So the save state, not the renderer, is what separates a passing gate run from a failing one.
+
+**Box-side corroboration (P7, D521).** Archives cell means 0.0 → 27–31 from `.eep` presence alone, and dam's 900 phash 3 → 83: same cause, opposite direction, because the box's save differs from the win capture's. The box changed no golden and no `verify.sh` for it — correct, since the fix belongs to the recipe, not to either artifact.
+
+**Fix owed (port tooling + docs only).** Pin the save file the way the ini is pinned: back up `data/ge007.eep`, install the capture-time save (or explicitly none) for golden runs, restore on exit, and state in `golden/README.md` which save state the set carries. `data/` already holds candidate capture-time saves (`ge007 - Copy.eep`, `ge007 copy.eep`, `d295_repo_eep_prior.bak`), all with different sha256 from the live one; which one the set was captured with is not recorded and has to be identified before pinning.
+
+**Measured refinement (2026-10-05, same build, Archives as the discriminating level).** The variable that matters is **save-file presence, not which save**: Archives measures 0.175625 worst_cell with the live `ge007.eep`, with `ge007 - Copy.eep`, with `ge007 copy.eep`, and with `d295_repo_eep_prior.bak` (four different sha256s, all identical verdicts), and 21.557 % / worst_cell 31.64 with no `.eep` at all. So pinning "a save present" reproduces the set on Archives from any of these; pinning nothing does not. Dam cannot discriminate — its 900 stem spread (D522) dominates the save delta (measured 3.03 / 12.11 / 17.37 / 116.6 / 132.96 worst_cell across runs of the same recipe). Until that is done, no sweep verdict from a fresh clone is comparable to the committed goldens.
+
+## D524: The golden tooling was destructive and drift-prone — `verify.sh`'s per-level ini/save pin snapshotted the previous level's game-written file, and `capture_p7.sh` hardcoded the pre-D522 windows while deleting the save it captures with (golden tooling; D522/D523 follow-up)
+
+**FIXED 2026-10-05 — tooling only (no game-code change, no golden touched by this finding).** Two sites, both found in the U5 code review of `tools_pc/**` (paths / quoting / subprocess / destructive behaviour) that the v0.4.1 release audit owed.
+
+**(1) `verify.sh` sweep overwrote the maintainer's own settings.** `pin_ini_640x480` and `pin_eep` are called once per level inside the sweep loop, and the game rewrites `data/ge007.ini` (and writes `data/ge007.eep`) after every run. So from level 2 onward the "backup" is the *previous level's game-written* ini, and the EXIT trap restores that: after one 21-level sweep the user's personal settings (`FovScale`, `DrawDistance`, MSAA, sound…) are replaced on disk by compiled-in defaults, with no way back, and the save restore hands back the second-to-last level's written save rather than the pre-sweep one. It also leaked one `mktemp -d` directory per level. Fix: both pins are idempotent — the FIRST call snapshots the user's ini/save, later calls only re-pin — and `pin_eep` re-installs that snapshot before every level, so each run starts from the same save state (D523 says presence, not which save, is what the frame depends on; the runs write the save, so re-installing is what makes the sweep reproducible).
+
+**(2) `tools_pc/capture_p7.sh` carried the pre-D522 recipe and cleared the save.** It hardcoded `GE_PCDUMP="900-1500:300"` / `GE_QUITFRAME=1502` (stale on the six levels D522 re-based) and ran `rm -f data/ge007.eep` before every run — the D523 gap, and the reason the 2026-10-04 linux set had to be re-captured at all. It now reads the windows, scripts and seed out of `tools_pc/verify.sh` (`golden_dump_for` / `golden_script_for` / `GOLDEN_SEED`) so the capture tool and the gate cannot drift, computes `GE_QUITFRAME = last requested frame + 2`, and refuses to run without `data/ge007.eep` present.
+
+**Never do:** keep the per-level backup semantics. A sweep that leaves the user's ini rewritten is a silent data-loss bug in a tool the maintainer runs against their own `data/` directory; "restore what the last run left" is never the intent.
+
+## D525: The whole `<level>/linux/` golden set was stale, not only on the six re-based levels — re-rounding it closes D521's two residual render bands (golden gate; D521/D522/D523 follow-up)
+
+**FIXED 2026-10-05 — recipe/asset side only (box re-round + merge; no game-code change, no tol limit raised).** The 13-frame order owed to the box was the wrong size. D523's evidence says save-file *presence* moves ~every level (Archives 21.557 % with no `.eep`, 0.175625 worst_cell with any of four saves), and P7's 2026-10-04 round ran with `data/ge007.eep` cleared while the win set carries a save present — so the entire 21-level linux set was stale, not just the six levels D522 moved. The box re-captured all 21 levels (63 frames, 21/21 rc=0, frames=3, 25-29 s each, ~10 min wall) at the windows `verify.sh` now carries, with the save pinned present, on the same real-GL box (Mesa 23.0.3 / Intel HD 3000, X on vt2, `DISPLAY=:0`, 640x480 ini pin, `GE_RSEED` pinned, per-level `GE_INPUTSCRIPT`). The base branch already carried 50 linux PNGs (the five re-based levels kept only their 1200 stem, Dam had none); after the re-round the set is 63, one frame per recipe stem on every level.
+
+**Cross-platform measurement after the re-round (framediff linux-vs-win at the recipe stems, tol 2).** Structural tier: **21/21 PASS** — worst 16x12 cell mean 4.43 (streets), phash <= 6 on 20 levels, the one structural signal at the limit being **cradle phash 40** (threshold 40; cell means 1.17, so it is a perceptual-hash tie, not a region delta). Exact tier, % of pixels over tol 2: **0.348-3.983 %** on the 20 non-Cuba levels (facility 0.348-0.477, surface2 0.408-0.488, surface1 0.835-0.931, train 0.782-0.825, bunker1 0.951-1.063, statue 0.605-1.105, bunker2 1.142-1.143, depot 1.098-1.155, control 1.298-1.332, runway 1.340-1.396, caverns 1.462-1.473, silo 2.352-2.363, egypt 2.874-2.951, dam 2.964-3.443, frigate 1.282-3.181, cradle 3.063-3.337, jungle 3.127-3.851, aztec 3.704-3.830, archives 3.590-3.859, streets 3.616-3.983); Cuba 23.657-36.338 % is the recipe's structural-tier-only level (cutscene animation timing, `golden_tolpct_for cuba` = empty). The same spread measured 1.142-6.958 % on the stale set, so the re-round roughly halves the worst cross-platform deviation.
+
+**D521's two open items are closed by this measurement, and neither is a renderer bug.** **Archives** measured 19.956-24.554 % with cell means up to 50.8 confined to grid rows 0-2 on the stale pair; it now measures 3.590-3.859 % with worst cell mean 2.31 and phash 1 — the band was the save-state difference D523 names, not a sky/fog rendering difference. **Streets** frame 1200 measured 9.564 % with a diagonal band of cell means 16.0-148.4; it now measures 3.616-3.983 % with worst cell mean 4.43 and phash 0. **Dam** frame 900's 92.863 % / phash 83 is the flyby offset (D521/D522) and is not in the set any more: Dam sits at 1500-1700, where the cross-platform delta is 2.964-3.443 %.
+
+**Box-side caveat (this is why the box's own sweep is not a pixel gate).** `verify.sh`'s D521 renderer probe fails closed on this box: `glxinfo -B` exits 255 with "Error: unable to open display :0" from a non-login ssh shell even though the game's SDL GL context and `glReadPixels` readback work (the captured PNGs are 128-355 KB, not black). `LINUX_SOFTWARE_GL` therefore stays 1 and the box's sweep reports "pixcount/framediff skipped, crash-detect only". The cross-platform numbers above are computed on Windows against the merged linux PNGs, which is the only honest place to compute them from this box. **Never claim the linux pixel gate ran on this box** — the claim that holds is that the linux captures are structurally clean against the win set and that the linux *crash* gate ran on the box.
+
+**Never do:** call the cross-platform spread a parity gate. The per-pixel limit (1 % / 3 % on jungle+surface2) is calibrated per platform against that platform's own run-to-run noise; 0.348-3.983 % across platforms is informational, and the gate each platform ships is its own captures against its own goldens.
+
+## D526: P13 Dam-ending grate / edge-railing transparency is faithful N64 behaviour (port == 1964/GEPD); the per-triangle census probe is retained as a generic draw-state diagnostic
+
+**CLOSED as faithful 2026-10-05 (no port bug; no fix).** The P13 "Dam-ending grate show-through" (2nd POSENDS camera: the area under the grate Bond stands on shows through — the 2D edge-railing/grate texture's between-anchors region) was triaged as a suspected B1 port bug (the grate quad's texture stage taking an alpha/blend path it shouldn't — D195/D268 class). To bucket it, a per-triangle draw-state census probe was built (this D526) and smoke-tested. The 1964/GEPD reference of the same 2nd-POSENDS shot then showed **the port and the N64 look the same** — the show-through is in *both*. So it is the original game's 2D grate/railing texture rendering, reproduced faithfully: a known issue that **closes in the D306/D291 class** (a "bug" that 1964 shows is intended behaviour). There is nothing to fix in `port/fast3d/`.
+
+**Probe (retained as a generic tool):** `d526_note_emit()` in `port/fast3d/gfx_pc.cpp`, folded into the D474 `tri_dbg()` gate (zero player cost when off). Env: `GE_D526="lo-hi"` (sim-frame window), `GE_D526BOX="x0 y0 x1 y1"` (NDC region, y-up; default whole screen), `GE_D526MAX=N` (cumulative per-triangle line cap, 400; the per-frame `D526F:` signature aggregate is uncapped). Emits to stderr: per-triangle NDC bbox, z/w, `gm`, `oml`, `omh`, combine mode, first-tile tmem/fmt/siz, prim + vertex alpha, use_alpha/modulate/invisible/2-cycle, plus a per-frame `D526F:` signature map. It is the only per-triangle *draw-state* census (D474/D75D/ZF/D303 are specialized) and is the right tool for the alpha/texture bug class (D195/D266/D268/D273).
+
+**Static audit (no code change):** `palette_to_rgba32` (`gfx_pc.cpp:1044`) matches the game's ground truth — `texChannelsToPixels` (`src/game/image.c:1836`) packs RGBA5551 as `R<<11|G<<6|B<<1|A` (alpha = bit 0) and IA16 as intensity-hi/alpha-lo (the D228-fixed decode), so a global palette bit-flip is ruled out; blend state is stock and D268-verified. Consistent with the faithful result (the port's alpha/texture path is correct).
+
+**Never do:** ship a `port/fast3d/` "fix" for the Dam-ending grate show-through — 1964/GEPD confirms it is faithful N64 behaviour (D306/D291 class). Do not drop the census probe without a finding that uses it; it is a maintained diagnostic.
+
+## D527: `GE_PCDUMP` written `first:last` (a colon where the dash belongs) silently dumps EVERY frame (harness trap)
+
+**OPEN (harness documentation; no code change yet).** `port/src/video.c:1357` parses `GE_PCDUMP` with `sscanf("%d-%d:%d")`. If the lo/hi pair is written `first:last` (a colon where the dash belongs), the `%d-%d` part fails to match, the fallback sets `hi=0x7fffffff` and `step=1`, and the dump writes **every** frame from `first` onward at ~921 KB each — a first launch in the 2026-10-05 session ate ~1.5 GB before it was noticed (the run went to ~1500 fps until the window was closed). The failure mode is silent: no error line, the dump just runs.
+
+Fix owed (port-layer only): log a NOTE when the `sscanf` does not consume all three fields (e.g. "GE_PCDUMP 'x:y' is not 'first-last:step' — dumping every frame"), or fail closed (ignore the value) — either way the operator must see which window is active.
+
+**Never do:** write `GE_PCDUMP` as `lo:hi` — use `first-last:step` (a dash between lo and hi, a colon before the step).
+
+## D528: `GE_STARTMENU` skips the EEPROM read, so front-end-only sessions never import the emulator save (harness trap)
+
+**OPEN (harness documentation).** A `GE_STARTMENU` session (front end up with no level load) never reaches the EEPROM read — no `eeprom:` log line; the front end reports `watchsettings: no valid Bond save in any folder` even with `data/ge007.eep` present. Consequence: the D514 imported-save test **cannot** be driven from a `GE_STARTMENU` boot; it must run from a **normal boot**. There it reproduces exactly: `eep: imported emulator save (6 regions converted, backup data\\ge007.eep.emulator.bak)` and `data/ge007.eep` md5 `3ca7cf84…` = the in-game-proven converted save (2026-10-05 session).
+
+Decision owed: document it (a NOTE log line when `GE_STARTMENU` is active: "EEPROM import skipped") or make the front end perform the import — port-layer only; the N64 front end has no EEPROM at all, so this is pure port scaffolding.
+
+**Never do:** drive the D514 imported-save test from a `GE_STARTMENU` boot — it must run from a normal boot, or the EEPROM import is skipped and the test cannot see the converted save.
+
+---
+
+## D529: The golden gate depends on the save file's CONTENT — the D523 "presence, not which save" claim is refuted; the gate must pin a canonical save (golden gate; refines D523; follow-up to D525/D524)
+
+**2026-10-05 (pre-push session).** The D523 pin installed *whichever* local save existed ("presence, not which save — Archives measures worst_cell 0.175625 on each of the four candidate saves and 21.557% with none"). That claim had only ever been measured **on Archives**. The 2026-10-05 sweep refutes it: the local `data/ge007.eep` had been rewritten by the live Dam-ending playtest sessions (md5 `a41d7ab…`, mtime 2026-10-05 07:27), and the honest sequential sweep under it produced **6/21 REGRESSION** on a *byte-identical binary* (the 2026-10-04 run had been 21/21).
+
+**The A/B (facility, window 900-1500:300):**
+
+| save (2 KB each) | facility worst_cell |
+|---|---|
+| `ge007 copy.eep` (2026-09-02, the pre-live-sessions save) | **0.0–0.25 — PASS** |
+| `ge007 - Copy.eep` (2026-09-16) | 0.0–0.25 — PASS |
+| `build-pc/ge007.eep` (2026-09-28) | 0.25 (f2) / 0.25 (f3) — PASS |
+| `../007/data/ge007.eep` (2026-09-15) | 0.25–0.5 — PASS |
+| `gamefaqs_dexdrive_2001.eep` (external) | **177.47 (f2) / 177.22 (f3) — REGRESSION** |
+| `data/ge007.eep` local (a41d7ab, the 2026-10-05 sessions) | **177.47 (f2) / 177.22 (f3) — REGRESSION** |
+
+Two distinct classes in the 6-failure sweep, proven apart by the A/B:
+1. **Save-content dependent (facility, streets, jungle, cradle):** same failure signature (177.2–177.5 at the 1200/1500 stems — a *different scene* in-window, not a jitter class) only on the two saves with that content (the 2001 dexdrive save and the 10-05 local save share it; 2001-vintage saves apparently hold state that routes facility's intro differently). The other four candidates pass. **This is what D529 fixes: the gate installs ONE canonical save, so "which save" can never vary.**
+2. **D117 wall-clock flyby (dam@1500 4.9%, frigate@1000 3.2–8.3%, streets@1000 2.5–25.7%):** fails *identically on every save* — the window's first stem is inside the real-time-paced intro flyby, so the content at a given sim frame varies with machine load (D117, long-known, previously masked because the Oct-4 goldens happened to be captured the same way).
+
+**Resolution (FIXED 2026-10-05, same session):**
+- **Canonical save in-tree: `tools_pc/golden/ge007.eep`** (2 KB, = `ge007 copy.eep`, the stable pre-live-sessions save the Oct-4 gate was green on). In-tree = a fresh clone or CI can run the gate with zero external state, and the D523 "fresh clone has no save → exit 2" failure branch is gone for good.
+- **`verify.sh` installs it like the ini pin** (snapshot the local `data/ge007.eep` if any → install the canonical → restore-or-remove on exit). The local playtest save is never the gate's input.
+- **All 21 win golden sets re-captured under the canonical save** (`scratch/golden-recapture-win-v050.sh`; 21/21 rc=0). The first four flaky levels (dam/frigate/streets/jungle — the D117 flyby stems) were re-captured again **clean** (no concurrent processes) after the first interleaved capture.
+- **Green protocol held (final, clean):** the first "double-green" pair ran `verify.sh` **with no arguments — which at the time only printed the usage and exited 0** (a no-op, not a sweep — that pair does not count) and was also interleaved with the in-flight re-capture. The valid record is **three consecutive clean full sweeps (`verify.sh sweep`) all 21/21 PASS** after the clean 4-level re-capture (`scratch/verify-v050-flaky3-run{1,2,3}.log`). **`verify.sh` with no arguments must never be cited as a green run.** CODE-PATCHED the same day (independent-reviewer follow-up): the no-arg path now prints the usage and **exits 1** with an explicit "never cite a no-arg run as a gate result" error — the failure class is closed in code, not just doc.
+- **Linux side:** the box set was re-rounded 2026-10-05 under a *cleared* eep (D525) — a cleared eep is a *specific content state* (empty save), not the canonical one. The box re-round under `tools_pc/golden/ge007.eep` is owed in parallel on the release branch (off the critical path; the box pixel probe fails closed there anyway — D244 — so it is a second-surface check, not a gate).
+
+**Why this is not a renderer drift:** the binary is byte-identical to the 2026-10-04 21/21 run; the only variable that changed is `data/ge007.eep`, and the A/B is save-keyed (same binary, four passing saves, one failing save). No renderer code changed.
+
+**Never do:** (1) run the golden gate against a local playtest save — it is exactly this class of drift; always the in-tree canonical eep. (2) claim "the frame depends on save *presence*" again — it depends on *content*; the D523 claim survives only as the (superseded) measurement on Archives. (3) treat the linux 63-frame set as valid under the canonical eep before the box re-round lands — it is the D525 cleared-eep round, and **no linux number may be cited (e.g. in the README pass) until that re-round lands**. (4) cite `verify.sh` with **no arguments** as a green run — a sweep is `verify.sh sweep` (the no-arg path now exits 1, closing the trap in code). (5) run a re-capture concurrently with a sweep (contention moves the D117 flyby stems). (6) treat **same-session** sweeps as proof the four D117 flaky levels (dam/frigate/streets/jungle) are stable across wall-clock: the first-stem content is time-dependent and the pin was fixed to "now" — the cross-machine test is the box re-round; **if those four go red there, the fix is to exclude or widen the first-stem cell for those levels, NOT to re-capture again** (an independent reviewer's 2026-10-05 verification flagged this; same-session worst_cell swings were streets 8.38→4.41, jungle 1.42→3.87). (7) trust a `capture_p7.sh` round's provenance claim without checking WHICH save state the loop actually installed — the D524-era per-level re-pin restored the local save and silently overwrote D529's pre-loop canonical install (D531); the linux set is only "canonical" if the loop line says `cp "$CANON_EEP"`.
+
+## D531: `capture_p7.sh`'s D529 adaptation was incomplete — the per-level re-pin restored the local save, so the 2026-10-05 box re-round ran under the box-local save (not the canonical one); fixed + re-captured (golden gate; D529/D530 follow-up; P12 U5 review finding)
+
+**Blocker found in the 2026-10-05 P12 U5 review (local session).** `tools_pc/capture_p7.sh`'s per-level loop had `cp "$EEP_ORIG" "$EEP"` (introduced by D524 to make the tool non-destructive): it restored the pre-capture **local** save — or a 0-byte eep when `data/ge007.eep` did not exist — before every level. D529's adaptation (`8fbf8aa0`) installed the canonical save (`cp "$CANON_EEP" "$EEP"`) **once, before the loop** and added the canonical-missing guard, but left the D524-era re-pin line in place — so from level 1 the canonical install was silently overwritten and every capture ran under the local save state. The header comment ("the pinned save, restored before every level") asserted what the code did not do.
+
+**Impact — D530's provenance claim is wrong:** the 2026-10-05 box re-round (`~/p7-reround.log`, "P7 re-round DONE") ran under the box-local save (`sha256 d9f306…`, 2 KB — distinct from the in-tree canonical `65247b…`), not the canonical eep. D530's / the golden README's / the commit message's "63 PNGs under the canonical eep" did not hold, and D530's first-stem table (measured in that re-round's report against the old D525 goldens — its numbers do check out against the report) is not canonical-save evidence. **The win set is unaffected** — `verify.sh`'s `pin_eep` re-installs the canonical save on every call (that code was right); the bug was capture-side only.
+
+**Fix (this batch, tooling only):** the loop now runs `cp "$CANON_EEP" "$EEP"` per level (`EEP_ORIG` is kept for the exit-restore only), and the script now `cd "$ROOT"` — the loop's dump/golden paths are root-relative (`ppm/`, `tools_pc/golden/`), contradicting the header's "can be invoked from anywhere" claim.
+
+**Re-capture (this batch):** a fresh 21-level box re-round under the canonical eep (21/21 rc=0, 63 frames), committed into `tools_pc/golden/<level>/linux/` replacing the D530 box-local-save set: **47/63 frames differ** from it (save content demonstrably moves the frames — D529's drift class), 16 byte-identical (save-independent scenes). **Note on the box's pixel capability:** the 10-05 re-round's p7_report diff table (1–26% over on real content) proves its WSLg GPU display was active then; today the box reads back **black even with `DISPLAY=:0`** (`glxinfo -B` under `:0` reports no usable renderer — the WSLg GPU display is session-state-dependent, and today's session is on the software fallback), so today's `verify.sh` runs (D530's crash-detect sweep and this batch's `~/p7-verify-pixel.log`) are legitimately crash-detect-only. The pixel-gated cross-machine verify is owed for a window in which the box's GPU display is up again.
+
+**Pixel-gated cross-machine gate (the real D117 datum):** `verify.sh sweep` on the box against the new canonical goldens — **2026-10-05 attempt (log `~/p7-verify-pixel.log`): 21/21 PASS, 0 FAIL, crash-detect only** (the run's renderer probe correctly failed closed on today's software-fallback session, so it adds stability, not, pixel data); the pixel verdict — including the four flaky levels' first stems — is owed for a window in which the box's WSLg GPU display is active. If the four flaky levels (dam/frigate/streets/jungle) go red there, the never-do 6 decision stands: exclude or widen the first-stem cell, do NOT re-capture.
+
+**U5 review notes from the same pass (non-blockers):** the three should-fixes below were applied 2026-10-05 as D532 (gate hardening: fail-closed ini pin, hard-pinned seed, dead A/B switches removed).
+
+## D532: the three P12 U5 should-fixes applied — the golden gate's ini pin now fails closed, the seed is hard-pinned (a stray `GE_RSEED` warns instead of re-seeding), and `audiodebug.ps1`'s dead A/B switches are gone (golden gate + tooling; D531/U5 follow-up)
+
+**2026-10-05 (local session).** Three tooling-only fixes, no game logic:
+
+1. **`verify.sh` `pin_ini_640x480` failed OPEN** — the three call sites (`single`/`sweep`/`parity`) were `pin_ini_640x480 2>/dev/null || true`, so a failed ini write (missing `data/`, read-only tree, failed snapshot) ran the gate under an **unpinned ini** — the frame depends on a defaults-only 640x480 ini exactly like the save pin (D529), so that was a spurious-verdict source, not a skipped nicety. The pin now fails closed (snapshot and write both `error + exit 2`, matching `pin_eep`'s style) and the call sites are plain.
+2. **`GOLDEN_SEED` hard-pinned** — it was `"${GE_RSEED:-0x0123456789abcdef}"`, so a stray `GE_RSEED` in the environment silently re-seeded the documented-as-pinned gate (frames shift → spurious verdicts). It is now the literal, with a warning when a differing env var is present (verified: `GE_RSEED=0xdead` warns, the pinned value is silent). `capture_p7.sh`'s `eval grep -m1 '^GOLDEN_SEED='` still picks up the same line, so capture and gate stay consistent.
+3. **`audiodebug.ps1` dead switches removed** — `-AB`/`-Old` were documented no-ops (`GE_D204_OLD` no longer exists in the game); the switches, the A/B block, and the `-OldMode` plumbing are gone, with a one-line removal note (D532).
+
+PS parse: 0 errors; `bash -n` clean; the warning path verified. **Owed (unchanged):** the pixel-gated box verify in a WSLg GPU-display window (D531).
+
+## D530: The box (X220) linux golden re-round landed — first cross-machine test of the four D117 flaky levels (golden gate; D529 never-do 3/6 follow-up) — **AMENDED BY D531 (2026-10-05): the 10-05 re-round ran under the box-LOCAL save, not the canonical one (the capture_p7.sh bug); the true canonical re-capture is D531**
+
+**2026-10-05 (local session).** The box re-round D529 owed (never-do 3: the linux set was the D525 *cleared*-eep round and no linux number could be cited until it was re-rounded under `tools_pc/golden/ge007.eep`) ran on X220 on 2026-10-05 (tree `442eb2ff`, worktree `~/gh-fullhist-wt-p7`, log `~/p7-reround.log` hit `P7 re-round DONE` 12:53 EDT). **21/21 levels rc=0** (the box self-gate is crash-detect only — the pixel probe fails closed on the box, D244). This session pulled the 63 PNGs (21 levels × 3 frames) and committed them into `tools_pc/golden/<level>/linux/`, replacing the D525 set: 51/63 differ from the D525 round; the 12/63 that are byte-identical are save-independent scenes — including **frigate's first stem (001000)**, a direct D117 stability signal. **AMENDED BY D531: that re-round ran under the box-local save (the `capture_p7.sh` bug), so the "canonical eep" provenance claim — and the first-stem table below, as canonical-save evidence — does not hold; the D531 re-capture supersedes this set.**
+
+The `fail` rows in the box report are the expected cross-eep diffs against the *old* in-tree set, not regressions: structural tier is all `ok` (phash ≤ 3, cradle@40 the documented exception; Cuba 26.4% inside its documented 23.7–36.3% structural-only range).
+
+**D117 flaky-four first-stem check (D529 never-do 6 — the first cross-machine test):**
+
+| level (first stem) | worst_cell | phash |
+|---|---|---|
+| dam@1500 | 1.70375 | 0 |
+| frigate@1000 | — (byte-identical to the D525 round) | 0 |
+| streets@1000 | 1.775625 | 0 |
+| jungle@900 | 5.115625 | 3 |
+
+All four sit in the stable-levels' range (e.g. silo 0.41–0.84% over, worst_cell 0.41–0.42 is the quietest; archives 1.51–2.31 is noisier). **None went red → the never-do 6 decision closes with NO recipe change** (no first-stem cell excluded or widened on the linux side).
+
+**Unblocked (D529 never-do 3):** the README/index v0.5.0 line "re-based on both platforms (21 levels, 63 frames each)" now stands on a canonical-eep linux set (D531's re-capture; the D530 set it first pointed at was the box-local-save round — see D531). **Fresh box sweep (crash-detect):** with the new goldens staged on the box, `verify.sh sweep` (2026-10-05) is **21/21 PASS** — but that run was crash-detect only (GE_PCDUMP reads black on the box's llvmpipe/WSLg, the D244 note), so it is a stability re-check, not a pixel datum. **AMENDED BY D531:** the "black frames" were **not** simply the no-DISPLAY llvmpipe path — the box's WSLg display is session-state-dependent: its 10-05 session was GPU-backed (the re-round's p7_report pixel table proves real frames), while today's reads back black even with `DISPLAY=:0` (software fallback; `glxinfo -B` reports no usable renderer). D531's pixel-gated attempt (21/21 crash-detect, `~/p7-verify-pixel.log`) is valid as a stability re-check; the pixel datum is owed for a GPU-display window.
+
+## D533: release-sweep spot-check — the probe-doc drift that would have failed CI, plus three tracked-file accuracy/hygiene fixes (release gate; P12 U2/U6/U7 spot-checks)
+
+**What was checked (P12 U2/U6/U7 spot-checks, read-only until a defect was found):**
+the EEP import path (`eepimport.c`: fixed-size `save_data[96]` + `smallSave[32]`
+copies, the 6-region backup rotation bounded at `.bak99`), the seat model
+(`MAX_PADS = 4` with `seat < 0 || seat >= MAX_PADS` guards, per-seat arrays
+`padPreset`/`padActPrev`/`padSelectPrev` all `[MAX_PADS]`), the ini/config
+buffers (`configRegisterString`'s `bufSize-1` `strncpy`, `padStr[MAX_PADS][PA_COUNT][32]`
+filled by `snprintf` with `sizeof`), the build's region-macro set against the
+N64 Makefile's `LCDEFS` (exact match for ntsc/pal/jpn-final), and the published
+docs' claims against the findings index.
+
+**The CI-blocking one:** `tools_pc/gen_env_probes.py --check` returned **rc 1** —
+three probe vars in `port/fast3d/gfx_pc.cpp` (`GE_D526`, `GE_D526BOX`,
+`GE_D526MAX`, the D526 box-tolerance family) had no row in
+`docs/dev/GE-ENV-PROBES.md`. The self-hosted workflow runs that check as a hard
+step ("Check generated dev indexes are current"), so the pushed branch would
+have carried a red CI step. Fixed by documenting the family (it was already
+listed in the `docs/porting-notes.md` §F10 probe table — the drift is between
+the two generated-doc sources, not a missing record).
+
+**`build-pc.sh` carried a local machine path.** Two messages named the
+maintainer's alternate MSYS2 root (`D:\<games>\msys64` form — the tree here was
+built for a different drive letter than the one it runs from). AGENTS rule 1
+forbids local absolute paths in tracked files; both sites now say `C:\msys64`,
+which is what the surrounding "add `C:\msys64\mingw64\bin` to your PATH" advice
+already says. No behaviour change (the strings are diagnostics only; the toolchain
+discovery itself is path-derived via `_ge_find_mingw_bin()`).
+
+**`docs/fidelity.md` og description.** It read "…the one `#ifdef PORT` fix…" —
+misleading: `src/` carries 736 `#ifdef PORT` gates (the §A1 class), and the
+finding's claim is that exactly **one** of them is a game-logic-adjacent change.
+The description now reads "one game-logic-adjacent change", and the trim keeps it
+under the 160-char og limit (158). The body's precise claim is unchanged.
+
+**The release notes quoted a stale measurement.** The Reference-frame-gate
+paragraph carried the D525 cross-platform spread (0.348–3.983 %, worst cell mean
+4.43, phash ≤6 except cradle 40) — measured before D531 re-captured all 21 linux
+sets under the canonical save (47/63 frames moved). Recomputed from the
+**committed** pairs (`framediff.py` win-vs-linux at the stems, tol 2): exact
+**0.380–5.120 %** on the 20 non-Cuba levels (silo's 900 stem is the outlier —
+cell mean 34.3, phash 10; streets 3.223–4.566), structural **21/21 clean**, max
+phash 40 (cradle, at the threshold); Cuba 1.357–12.663 % is the structural-tier-only
+level. The notes now carry the recomputed band and name the two gate pins a
+reader would otherwise have to look up (canonical save content — D529; hard-pinned
+seed — D532). The D525 figures stay in the ROADMAP row as the historical record
+for closing the two residual bands; the row now also carries the recomputed band.
+
+**Not changed (judgement calls left alone):** the `eepimport.c` `.bak99`
+overwrite-on-rotation nit (cosmetic, 99-deep rotation is unreachable in practice),
+the `docs/ROADMAP.md` "Known issues" heading anchor (valid), and the site pages'
+own staleness (presentation layer, per AGENTS).
+
+## D534: pre-release review of the 2026-10-05 local batch — Ctrl-C in the golden gate could leave the user's save replaced, plus doc accuracy fixes (release gate)
+
+**Scope:** a read-only review of the 23 local commits of 2026-10-05
+(`8fbf8aa0^..0b0f610c`) before the v0.5.0 cut; defects fixed in one batch.
+
+**The real one — an interrupted gate run could clobber `data/ge007.eep`.**
+`verify.sh` armed `trap 'restore_ini; restore_eep; kill_ours' EXIT INT TERM`
+(`capture_p7.sh` the same shape). Bash runs an INT/TERM trap and then
+*continues* the script: the restore put the user's save back and deleted the
+snapshot, but `EEP_PIN_BAK` stayed set, so the next level's `pin_eep` skipped
+the snapshot and installed the canonical save, and the final EXIT restore
+copied from a deleted file — the user's own save was left replaced on disk.
+Fix: restore on `EXIT` only, `INT`/`TERM` just `exit 130`/`143` (which fires
+EXIT once); `restore_eep`/`restore_ini` now clear their snapshot state, so
+they are idempotent. Tooling-only; the recipe is unchanged.
+
+**Doc accuracy:** the release notes said "each platform's gate is green"
+while the same paragraph said the linux pixel gate did not run — now "Windows
+green; linux crash gate green, pixel verdict owed". `docs/security-and-fidelity-status.md`
+was split into `security.md` + `fidelity.md` but still linked from `README.md`,
+`.github/SECURITY.md` and the AGENTS.md site-page list (dead on publish) —
+repointed. Fifty-odd `2026-10-07` dates (session labels "07a…07k" that leaked
+in as calendar dates; every commit is dated 2026-10-05) normalised to
+2026-10-05; lettered labels became "2026-10-05 (session 07x)".
+
+**Nits:** the D526 census probe had a dangling `else` (bound to the inner
+`if`, so with no `GE_D526BOX` the off-screen filter never ran) — braced;
+`verify.sh`'s usage print (`sed -n '2,32p'`) cut the `--json`/`--against`
+lines — now `2,34p`; an unbalanced bold in the ROADMAP Golden-baselines row.
+
+## D540: Fog rework from the Deck playtest — ground fog "chunked" and cycled light/dark around Bond, sky horizon fade squeezed, fog tied to Draw distance; new Fog distance slider, Draw/Fog distance apply live (2026-10-05)
+
+**Reports (v0.5.0-rc, maintainer, Deck + Windows A/B against 1964/GEPD on
+Surface 2):** ground fog "blocky — updates one piece of the ground at a time /
+chunks away" as Bond walks; the ground around Bond's feet cycled bright/dark
+as he moved or turned; the sky's clouds stayed bright down to the horizon
+where 1964 fades them into fog; no way to set fog independently ("fog, draw
+and LOD distance all seem independent"); Draw distance only applied on the
+next level load.
+
+**Causes (port renderer, `port/fast3d/`):**
+1. *Chunking* — the D503 full-fog snap (fog >= 247/255 -> full). Its hard 97%
+   edge followed the per-vertex fog's triangle-shaped iso-lines and swept
+   across the ground tile by tile. Maintainer A/B with the snap disabled:
+   smooth. (The rc1 per-vertex form of the snap was worse.)
+2. *Light/dark cycling at Bond's feet* — per-vertex fog for triangle corners
+   behind the camera. The old code forced `winv = +32767` for `w < 0`
+   (sign flip -> no-fog/full-fog jumps); even with the RSP's honest
+   negative-w divide (full fog), that corner's value is blended into the
+   visible ground after GPU near-clipping, so the area at the player's feet
+   changed with whichever corners sat behind the camera.
+3. *Sky horizon fade* — the RDP interpolates shade colour affinely in screen
+   space; the GPU default is perspective-correct. On a sky triangle running
+   from overhead to the horizon that kept the bright cloud colour almost to
+   the horizon and squeezed the authored fade into a thin band.
+4. *Fog vs Draw distance* — D218 scaled the far clip and kept the authored
+   per-mille fog positions, so fog moved out with Draw distance (2.5x
+   default): fogged levels were not N64 at the defaults. Both were computed
+   only at level load (`fogLoadCurrentEnvironment`).
+
+**Fixes:**
+- Fog is exact per pixel: the vertex sends `z*fog_mul + w*fog_offset`
+  (fog x w, linear in clip space, clips correctly) and the fragment shader
+  divides by `gl_FragCoord.w`. Same fog function, colour and positions as the
+  RSP; corners behind the camera no longer contribute. Differs from the N64
+  only in the in-between shading of large triangles (the N64 is per-vertex).
+- D503 snap off by default (`GE_FOGSNAP=1` restores it).
+- Shade colour (`vInputN`) is `noperspective` (desktop GLSL >= 1.30; GLSL ES
+  keeps perspective) — RDP-style screen-affine Gouraud; textures stay
+  perspective-correct.
+- `Video.FogDistance` (new, 50..800 %, default 100 = N64; F10 Graphics
+  "Fog distance", both display presets 100): `bgfog.c` (`#ifdef PORT`, the
+  D218 site) now scales the level's far clip/fog by
+  `min(FogDistance, DrawDistance)` instead of DrawDistance alone, and keeps
+  the game's own per-mille fog positions and intensity math unchanged (the
+  D218 mechanism, driven by fog). At Fog 1.0x that is the authored far: exact
+  N64 fog at any Draw distance (Cradle: Draw 2.5x vs 1.0x 0.05% px, the
+  distant truss a ghost as on 1964). Draw distance still scales prop draw
+  distance (`propobj.c`), the room pool and the D466 split within that clip.
+  **Rejected first cut (same evening):** keep the far clip at Draw x and
+  convert the per-mille fog positions to distances and back. Two defects:
+  (1) the game reads the two fractions as LINEAR distance for culling but as
+  DEPTH-BUFFER per-mille for the prop/chr fade (`sp20`/`sp1C` ->
+  `fogGetPropDistColor`), and feeding both the linear rescale faded props and
+  characters out (Train attract: no crates, no Bond); (2) with the clip far
+  out, the fog sits within a few per-mille of 1000, so the s32 rounding
+  pulled the fog visibly in (Cradle truss fogged out), and the NDC conversion
+  assumed `viSetZRange`'s first argument (`BlendMultiplier`) is the
+  projection near plane -- Fog 2.0x fogged the walkway at Bond's feet. Lesson:
+  extend the clip only as far as the fog needs and leave the game's fog math
+  alone.
+- Live apply: `fogSetRenderFogColor` re-runs `fogLoadCurrentEnvironment` on
+  the game thread when either multiplier changed (pointer reset per level).
+- A/B switches (registered): `GE_FOGVERTEX=1` (per-vertex RSP fog),
+  `GE_SHADEPERSP=1` (perspective shade), `GE_FOGSNAP=1`.
+
+**Verified:** maintainer side-by-side vs 1964/GEPD on Surface 2 at Bond's
+start and while moving: ground fog smooth, no cycling at Bond's feet, horizon
+fade matches; "everything else looks solid". Maintainer 1964 stills of the
+Frigate and Cradle starts: Frigate's sea is dark navy (the new build; the old
+goldens' teal was the 2.5x fog), Cradle's distant truss is a faint ghost
+(matched by the final clip design above). Runway/Surface 1/Dam/Jungle
+headless captures inspected during the per-pixel step. Goldens re-based on
+all three platforms the same evening (win 21/21 confirming pass; linux on the
+X220; first `deck` set, see tools_pc/golden/README.md). **Owed:** maintainer
+re-check on the Deck (fog walk on Surface 2; Fog/Draw sliders live). A remaining "slight scale or rotation" in
+the sky clouds vs 1964 was attributed by the maintainer to 1964's non-4:3
+window aspect; re-check only against a correct-aspect reference (simple64 /
+ParaLLEl-RDP) before opening a row.
+
+## D541: one A press advanced two menu screens on the Steam Deck (Desktop Mode) — two OR'd input sources for one press (Deck playtest, 2026-10-05)
+
+**Report:** v0.5.0-rc on the Deck, launched in Desktop Mode — A "clicks forward
+too fast" on file select, level select and the F10 / PC Options overlay
+(maintainer: a double trigger from single quick presses).
+
+**Cause: UNCONFIRMED.** The maintainer had switched Steam to controller
+(gamepad) mode in Desktop Mode, which should disable the desktop key mapping
+below, so that mapping is only one candidate; the other is a Steam virtual-pad
+re-enumeration (`inputOpenPads` reseat) mid-press (not read). Tracer
+(per-source A edges + pad add/remove) deferred by the maintainer. Candidate 1: outside a
+Steam-launched game, Steam applies its Desktop Configuration to the Deck's
+controls (A types Enter, B types Escape) while SDL also reads the raw pad. The
+menu accept is an OR of pad A/X, Enter and the left mouse button
+(`input.c` front-end mapping; overlay `accept`), so the two sources of one
+press, a few ms out of step, gave a 1→0→1 level = two edges. In the overlay
+Escape (key event → `s_backPending`) and the pad-B edge are separate back
+paths, so one B could back out two pages. Ruled out (Sonnet triage, high
+confidence): the `joyPoll` (scheduler thread) / `joyConsumeSamples` (game
+thread) ring in `src/joy.c` — a clean edge lands in exactly one consume
+window; the full-ring overwrite path can only drop a press, not repeat one.
+
+**Fix (port-only, menus only):** a ~70 ms release hold-off on menu A/B/Start
+in `inputComputePad` (applied before the GE_INPUTSCRIPT harness) and on the
+overlay's `accept`; one back action per 150 ms across Esc and pad B. Press
+edges are untouched, gameplay is unaffected. Covers candidate 1 and any
+multi-source press; may not cover a reseat. **Owed:** Deck re-test in Desktop
+Mode (and Game Mode) — one press = one screen; B backs out one page.
+
+## D542: stray polygons drawn to the left of Bond's gun, frequent on foggy levels (Streets, Surface 2) — OPEN (Deck/Windows playtest of the D540 build, 2026-10-05)
+
+**Report:** with the D540 fog build, polygons "randomly draw to the left of
+Bond's gun", very often, especially on foggy levels (Streets, Surface 2).
+
+**Not yet triaged.** Candidates: (a) a D540 regression in near-camera geometry
+(the viewmodel and nearby room triangles: `noperspective` shade, or the
+per-pixel fog's `fog * w` path); (b) the pre-existing Streets "1-frame polygon
+explosion near the body armour / grenade launcher" from the same playtest (its
+1964 check is still owed), now seen more often. **First step (cheap A/B, no
+code):** same spot with `GE_SHADEPERSP=1`, then `GE_FOGVERTEX=1`, then the rc1
+binary (Deck: `rc1-backup/ge007.x86_64`); whichever makes it vanish names the
+layer. A 1964 look at the same spot settles faithful vs port.
+
+## D543: Surface 2 — the lit area that follows Bond looks brighter than on 1964 — OPEN (2026-10-05)
+
+**Report:** after D540, the ground around Bond on Surface 2 reads as a bright
+light following him; 1964/GEPD shows it dimmer. Maintainer wants the
+accurate result, not a tuned one.
+
+**Leading hypothesis:** D540's exact per-pixel fog leaves the near ground
+unfogged, while the N64 (and 1964) shade per vertex and the RSP near-clips in
+clip space, so the near-plane edge of a big ground triangle inherits fog lerped
+from a corner behind the camera — a haze at the player's feet. D540 dropped
+per-vertex fog on the GPU because GPU clipping of noperspective/RSP values
+made that area cycle light/dark. **Accurate fix to evaluate:** RSP-style
+near-plane clipping in fast3d (clip fogged triangles against the near plane on
+the CPU, lerping per-vertex fog in clip space like the RSP), then per-vertex
+fog screen-affine — N64 behaviour without the cycling; compare against 1964
+at Bond's start on Surface 2. Second hypothesis to rule out: GE's own near-fog
+record (`Visibility.Nfd` / `g_NearFogValuesP`, bgfog.c). `GE_FOGVERTEX=1`
+shows the per-vertex look today (with the cycling).
+
+**Implementation (2026-10-06):** CPU near-plane clip added in `gfx_sp_tri1` (`port/fast3d/gfx_pc.cpp`, D543 comment block before the emit loop): after the reject/cull gates, triangles are Sutherland-Hodgman clipped against z+w>eps in clip space (3 or 4 verts, fanned to 1-2 triangles), new vertices lerp x/y/z/w/u/v/colour/fog_n linearly (stack storage, not `rsp.loaded_vertices`); fully-behind triangles are dropped. Skipped for rects, `G_NO_CLIPPING_EXT`, `GE_NEARCLIP=0`. `GE_NEARCLIPFOG=recompute` re-derives the per-vertex fog byte from the new z/w instead of lerping it. Not built or run by the implementer; maintainer A/B owed on Surface 2 at Bond's start vs 1964 (default / `GE_FOGVERTEX=1` / `GE_NEARCLIPFOG=recompute` / `GE_NEARCLIP=0`). Confidence it compiles: high (read-checked); correct: medium until A/B.
+
+
+**Decision (2026-10-06, lead, from code + maintainer feedback; no further
+A/B by maintainer choice):** per-vertex RSP fog is the default again, on top
+of the CPU near clip, with the clip-created vertex fog **lerped** (not
+recomputed). Reasoning: the maintainer's report is "1964 is dimmer around
+Bond"; the D540 per-pixel fog is zero at the feet (bright), and the recompute
+rule gives zero at the near plane too (bright), while the RSP model (per-vertex
+fog, behind-camera corner = full fog via the honest negative-w divide, lerped
+into the near-plane vertex) leaves a haze at the feet -- the dimmer look. The
+D540 reason for dropping per-vertex fog (light/dark cycling) was GPU
+near-clipping of behind-camera corners, which the CPU clip removes. The fog
+varying now shares the shade qualifier (`noperspective`): the RDP interpolates
+fog screen-affine like shade. Switches: `GE_FOGPIXEL=1` = D540 per-pixel fog
+(replaces `GE_FOGVERTEX`, tombstoned), `GE_NEARCLIP=0`, `GE_NEARCLIPFOG=recompute`.
+Build-verified; by-eye check rides on the golden re-base contact sheets and
+the next playtest (Surface 2 at the start vs 1964). Fogged-level goldens
+change (re-base batched with D546).
+## D544: OS mouse cursor flickers with the F10 overlay open on the main menu — FIXED 2026-10-05 (maintainer report, same day)
+
+**Report:** "sometimes the mouse cursor flickers when the F10 menu is open on
+the main menu".
+
+**Cause (code read, not yet run):** two requests race every overlay tick.
+`inputSuspendForOverlay()` (`port/src/input.c` ~3155, called from
+`overlayHandleInputLocked`, `optionsoverlay.c` ~2300) always calls
+`mouseRequestCursor(1)` (show the OS cursor); on the front end the D519 path
+(`input.c` ~2174: `overlayFrontEndCrosshair(); mouseRequestCursor(0);`)
+hides it because the game crosshair is the pointer there. Whichever request is
+applied last on the event thread (`inputApplyMouseRequests`) wins, so the
+cursor toggles. In a level only the show request runs (no flicker).
+
+**Proposed fix (port-only, ~3 lines):** in `inputSuspendForOverlay`, skip
+`mouseRequestCursor(1)` when the D519 front-end pointer is active
+(`mouseEnabled && current_menu != GE_MENU_RUN_STAGE && current_menu !=
+GE_MENU_INVALID`), so only one owner sets the cursor per context. Verify:
+F10 on the main menu with a mouse -- one pointer (the crosshair), no flicker;
+F10 in a level -- OS cursor visible as before.
+
+**Fix (2026-10-05/06, revised after the maintainer check):** the first cut
+(skip the show request while the D519 pointer is active) stopped the flicker,
+but the maintainer wants the pointer drawn OVER the overlay for mouse users.
+Final: `inputSuspendForOverlay` always shows the OS cursor, and the D519
+front-end path no longer hides it (the game crosshair keeps tracking the
+mouse underneath the box); one owner, so no race. Same pass, F10 mouse QoL
+(`optionsoverlay.c`): right-click = Esc/back (closes a dropdown, then one
+page, then the overlay; replaces the old right-click "cycle value back";
+blocked until release after a binding capture so a bound right-click does
+not also back out), and the tip line follows the hovered row while the mouse
+is in use. Maintainer check owed. Mouse scrollbar: backlog (post-release QoL).
+
+## D545: player rockets can pass through the ground when fired near Bond's feet — FIXED 2026-10-05 (maintainer report; 3e triage)
+
+**Report:** with the (dual) rocket launcher on Aztec and most maps, aiming down
+near Bond's feet while running sometimes sends the rocket through the ground
+or a solid object.
+
+**Cause (static, high confidence it is a real defect):**
+`gunInitProjectileFromPlayer` (`src/game/gun.c`) declares `s32 sp54;` and
+passes `&sp54` to `bgFindRoomsAlongSegment(..., &sp54, &sp50, 0x14)`, which
+writes up to 0x14 traversed room numbers there. On the N64 the 19 extra slots
+landed in the decomp's `u8 pad_a[0x4c]` (exactly 19 more `s32`); GCC lays the
+frame out differently, so on PC the writes can hit live locals (`pos`, `tile`,
+`usedfallback`) -- a spawn position/tile corrupted to just under the floor
+gives a rocket that never meets the ground. Only the player launch path does
+this; NPC rockets and the per-tick flight (`handles_projectile_motion`, full
+`roomNums[]` buffers) are clean. Same class as D490 (porting-notes §D24).
+
+**Fix:** `s32 sp54[0x14]` under `#ifdef AVOID_UB` (array passed directly);
+the `#else` arm keeps the original. No reads change. Build-verified.
+**Verify (maintainer):** Aztec, dual rocket launchers, aim at Bond's feet
+while running; if it still happens, the same shot on 1964/GEPD decides
+faithful vs port.
+
+**Residual suspects from the triage (not proven to fire):** (a) the
+`bgBuildRoomVtxBounds` safety-net `continue` (bg.c) leaves a skipped batch
+with impossible bounds = a silent collision hole (worth a counter if the
+report persists); (b) projectile room lists only grow via portal crossings,
+so a stale `unkCC` skips world tests (faithful logic). Object/chr collision
+(`projectileTestObjectCollisionRecursive`) was not traced.
+
+**Maintainer re-test (2026-10-06):** near Bond mostly fixed; some rockets
+(akimbo) still pass through **walls and floor** (not doors), e.g. Archives.
+Second static triage: no ABI/UB defect in the object/door path (door-only
+suspect `sub_GAME_7F041400` `bestedge > 0` set aside, since it isn't doors). Leading
+hypothesis, port-caused: the room pool starves (D294 documents mema starving
+on PC when Draw/LOD/FOV widen the resident room set; D294's pool bump only
+partly covers 2.0x), and `bgBuildRoomVtxBounds`'s `memaAlloc` failing leaves
+`vtx_batch_bounds` NULL, so `bgTestBulletHitBackground` returns no hit for
+EVERY wall/floor of a room that still renders. Test (no diagnostics, by
+maintainer choice): same Archives shots under Modern vs the Original N64
+preset (level restarted). If confirmed, the proposed fix allocates the bounds table
+from port memory instead of the room pool (a few KB per room, freed with the
+room; no game-logic change). Status stays PARTIAL until that test.
+
+**Preset A/B result (maintainer, 2026-10-06, Archives, akimbo rockets):** fine
+under Modern, Original N64 and custom high FOV; one rocket dropped in the whole
+session (roughly 1 in 60), most likely under Modern or high FOV. D545 fixed the
+main case. The single residual is consistent with the wide-view room-pool
+hypothesis but not proven; the port-memory bounds table stays a proposed
+hardening (backlog), not a release item.
+
+## D546: PC settings standardization -- round defaults, vertical FOV, view-area wording — FIXED 2026-10-05 (maintainer-approved table)
+
+**Ask:** N64 value = 1.0x (Original N64 preset); PC defaults on round steps
+that every slider lands on; wording that reads as a setting, not a warning.
+
+**Changes (port-only):**
+- `Video.DrawDistance` / `Video.LodDistance` default 250 -> **200** (2.0x):
+  initializers, `kVideoPresets` port column, reset table; D482 low-end lowering
+  now keys on 200. Fog stays 1.0x.
+- Stick deadzones 7000 (23 %, off the 300 step) -> **7500 (25 %)**
+  (`STICK_DEADZONE`, reset table).
+- Mouse horizontal/vertical sensitivity UI max 3x -> **4x**; controller look
+  stays 2x (PD port: stick scale 0..2.0x; PD mouse 0..30 at default 2.5).
+- **FOV:** shown as **vertical degrees, 30..90 in 5° steps, 60 = N64** in the
+  middle (PD's "Vert FOV" model: vertical degrees, default 60, range 15..170).
+  Horizontal degrees (D443/D357) moved with the window aspect (N64 = 75° at
+  4:3, 91.5° at 16:9) and never landed round. Storage stays
+  `Video.FovScale` % but is now a float so each step (100/12 %) is exact;
+  old integer inis load unchanged and snap to the next mark on the first step.
+- `Game.AIWideView` (D468) row relabelled **"Gameplay view area"**, values
+  **Original / Extended**, tip "Screen area game logic counts as in view"
+  (the old "Guard AI uses full wide view" read as a vision cheat; the setting
+  picks which screen area on-screen gameplay tests use). Ini key unchanged.
+- **Migration:** one-time, untouched values only (`Video.DefaultsRev`,
+  `Input.DefaultsRev`, D482 "considered" pattern): draw/LOD 250 -> 200,
+  deadzones 7000 -> 7500. Runs before D482.
+
+**Goldens:** captures use the defaults, so draw/LOD 2.0x changes frames; the
+re-base is batched with D543 (one round after the fog design is final).
+
+## D547: Game.AllUnlocked applies live — FIXED 2026-10-05 (maintainer ask)
+
+The file2.c query-time hooks (D442) already read `portAllUnlocked` live; only
+the two RAM flags `debug_enable_all_levels_flag` / `debug_007_unlock_flag`
+were boot-seeded. `portAllUnlockedApply()` (`port/src/main.c`) now runs at
+boot and from `rowSetCommit` (F10 change and section reset): On sets each flag
+that is clear and remembers it; Off clears only flags it set, so GE_UNLOCK_ALL
+/ debug-menu unlocks survive. Row values are plain Off/On ("(restart)"
+dropped). LEFTOVERDEBUG builds only, as before. Maintainer check owed: on at
+file select -> mission select shows all levels + 007; off -> back to the save's
+progress (screens refresh on re-entry).
+
+## D548: walls near rocket fire banded black/white/yellow/blue in dark areas (Aztec; also seen on the Deck) — FIXED 2026-10-06 (maintainer screenshots, A/B)
+
+**Report:** in Aztec's dark corridor, walls beside Bond near rocket fire and
+explosions turned into posterised white/yellow/blue/black bands following the
+texture detail. `GE_SHADEPERSP=1` (perspective shade) did not reproduce it.
+
+**Cause:** D540 made every combiner input varying (`vInputN`) `noperspective`.
+When the GPU clips a big near-camera triangle, those screen-affine values can
+be extrapolated past 1.0; the GLideN64-style CC wrap emulation
+(`WRAP(texel, -1.01, 1.01)` / `(-0.51, 1.51)`, gfx_opengl.cpp) then wrapped the
+out-of-range result, per channel -> the bands.
+
+**Fix:** the fragment shader clamps each combiner input to 0..1 into a local
+(`cInputN`) before the combine. N64 shade/prim/env are 8-bit, so this only
+removes values the hardware cannot produce. Root fix: D543's CPU near-plane
+clip (no GPU near-clipping of affine attributes). Maintainer Aztec re-check owed.
+
+## D549: thrown grenade / knife / object -- `s32 sp94` receives a 12-byte coord3d — FIXED 2026-10-06 (D545 follow-up triage)
+
+`generate_player_thrown_grenade`, `generate_player_thrown_knife` and
+`generate_player_thrown_object` (`src/game/gun.c`) declare `s32 sp94` and pass
+`&sp94` to `bullet_path_from_screen_center(coord3d *, ...)`, which writes x/y/z.
+On the N64 (sp94 at 0x94) the extra 8 bytes ended at `spA0_a` on a slot that is
+dead at that point (the mine path's `if (wor == NULL)` after the call proves
+`wor` was not hit there); with GCC's layout they can hit live locals. Fix:
+`struct coord3d sp94` under `#ifdef AVOID_UB`, original under `#else`; nothing
+else reads sp94. Same class as D545 / D490 (porting-notes §D24). Possibly
+related to older "thrown items through walls" reports; not demonstrated.
+
+## D550: static title bar (no per-second "NN fps" refresh) + project mark as favicon / window / taskbar icon — FIXED 2026-10-06 (v0.5.0 finalize, maintainer request 2026-10-06)
+
+Two small surface items, both port/tooling-only (zero `src/game` diff, no
+goldens):
+
+**1. Static title bar.** `videoPumpEvents` (`port/src/video.c`) refreshed the
+window title to `"GoldenEye 007 - NN fps"` about once a second (the
+`wmAPI->set_window_title` block). Removed; the title is now set once at
+window creation. The live-FPS readout is still available on the F10 overlay.
+
+**2. Project mark in place of the game-still favicon.** The favicon / link
+card / window icon used in-engine stills (shot-28.jpg et al.) — derivative
+game content in every browser tab and the taskbar. Replaced with an ORIGINAL
+generated mark: a generic version of the game's *default aim crosshair*
+(circle + N/S/E/W lines crossing its edge), GE red `#c62828` on near-black
+`#050607` with a faint glow — a generic functional shape, no logo art,
+wordmark or screenshot (tree-hygiene rule 4). One generator,
+`tools_pc/make_icon.py` (Pillow, deterministic; `--check` for CI staleness),
+emits:
+- `docs/img/icon/ge007-icon.png` (512, site favicon + README icon),
+- `cmake/icon/ge007.ico` (16–256 multi-size, PNG-compressed entries; 16/24/32
+  use a chunkier stroke variant so the mark survives tiny sizes),
+- `port/fast3d/ge007_icon.h` (32×32 RGBA, plain R,G,B,A per pixel).
+
+Wiring: `cmake/icon/ge007.rc` (static; the exe icon) via `target_sources` in
+the CMakeLists WIN32 branch; `gfx_sdl2.cpp` builds an `SDL_Surface` against
+explicit `0x00ff00ff`-style masks (portable, no endianness assumption) and
+`SDL_SetWindowIcon`s it after the GL context; `docs/_layouts/default.html`
+favicon + apple-touch-icon; `README.md` gets the mark above the badges. The
+jekyll-seo `og:image` link-preview card keeps `shot-28.jpg` (a still is fine
+there — it is a published page asset, not a tab/favicon) and
+`scratch/build_preview.mjs` was restored to the original image constant.
+
+**Implementation bugs found only at build verification (both mine):**
+(a) the first `make_icon.py` emitted the C array with *flat* cells per row
+(no per-row braces): all 1024 `{r,g,b,a}` cells then sit at the TOP level of
+the `[32][32][4]` initializer — 1024 > first dim 32 → "too many
+initializers". Both gcc AND clang reject it, correctly: it is genuinely
+ill-formed C, not a toolchain bug (braced/nested forms of the same data
+compile cleanly in both). (b) `gfx_sdl2.cpp` packed the channels unshifted
+(`p[1] & 0x0000ff00` is always 0); masked only by (a) never having compiled.
+
+**Verification-trap note:** in the mixed msys/native agent shell, `g++ ...
+| head` reports the PIPE's rc (always 0), so earlier "compiles fine" claims
+were false while the TU actually failed. Verified properly: `ninja -t
+commands` exact command via cmd.exe with a sane `PATH`/`TMP` (rc 0, only the
+pre-existing `gfx_pre_swap_hook` warning) + full `./build-pc.sh ntsc-final`
+(249/249 link). Window/taskbar icon + static title owed a maintainer live
+check.
+
+**Mark re-proportioned 2026-10-06 (maintainer: "right direction, not accurate
+to the in-game crosshair").** Measured off an in-game capture of the default
+reticle: the four bars do NOT meet in the centre (open gap ~0.24x the ring's
+outer radius) and reach ~1.43x the outer radius (the first cut crossed the
+centre and reached ~1.27x). `make_icon.py` now draws eight bar segments from
+the gap to the reach (512 master: ring r 150, reach 214, gap 36, stroke 24;
+small variant: r 140, reach 200, gap 46, stroke 40 so the centre stays open at
+16 px). All three outputs regenerated (deterministic re-run identical). The
+`.github/social-preview.html` card's CSS reticle (same old proportions) was
+replaced with an inline SVG at the new proportions and the PNG re-rendered.
+Still a generic geometric reticle (circle + four bars), no game art copied.
+Full `./build-pc.sh ntsc-final` rc 0 with the regenerated header.
+
+**Re-drawn 2026-10-06 (gold).** The colour is now site gold `#e8a13a` (was
+GE red `#c62828`), glow included; the proportions were re-measured from the
+game's own default crosshair sprite (thin ring about 0.11x the ring radius,
+bars about 0.09x the radius, reach about 1.45x the radius, open centre gap
+about 0.30x the radius). There is a chunkier small-size variant (16/24/32 px
+.ico slots + the 32 px window icon). The `.github/social-preview.html`
+card's reticle stays red on purpose — the gold disappears on its manila
+background. **Centring fix (same day):** shapes are now drawn symmetric about the exact centre (the line between the two middle supersample pixels; even bar widths, inclusive boxes `[c-r, c+r-1]`), which removes a half-pixel right/down shift at 48/24/16 px; `make_icon.py` (and `--check`) now fail if any emitted size is not pixel-exact left-right and top-bottom symmetric.
+
+
+## D551: opt-in update check (`Game.CheckUpdates`, default off) -- ADDED 2026-10-06 (v0.5.0 finalize)
+
+**What.** `port/src/updatecheck.c` (+ `updatecheck.h`). `updateCheckStart()` is
+the only network entry point; its first line is `if (!cfgCheckUpdates) return;`,
+so with the ini value 0 there is no thread, no DNS and no library load. It is
+called once from `main.c` right after `configLoad()`. When on: one detached
+thread makes a single HTTPS GET to `api.github.com/repos/<repo>/releases/latest`
+(5 s timeouts, fixed User-Agent, nothing else sent), parses `tag_name`, and
+compares it with the new `GE007_VERSION` (CMake `set(GE007_VERSION "0.5.0")`,
+bump on every release; `versioninfo.h.in`). Failure is silent (one log line).
+`/releases/latest` excludes drafts and pre-releases on purpose (maintainer
+decision).
+
+**Windows.** No link-time winhttp dependency: `winhttp.dll` is `LoadLibraryW`'d
+inside the opt-in path, nine functions resolved with `GetProcAddress`,
+`FreeLibrary` at the end, so the exe's import table never lists it. Linux runs
+`curl` via `popen` (URL single-quoted); no curl = no result.
+
+**UI.** Game page toggle "Check for updates" (+ reset-table entry, tip text) and
+an action row "Update available: open page" shown only once a newer tag is
+known (`SDL_OpenURL` on the releases page). CI: the tag-only `release` job now
+fails if the tag differs from `v` + `GE007_VERSION`.
+
+**Status.** Port layer only, no game logic touched. Build-verified; exe
+imports no winhttp (objdump). **Live-verified 2026-10-06 (Windows, isolated
+work dir, orderly GE_QUITFRAME quit):** Off -> no update-check activity;
+On -> real HTTPS GET, `update check: up to date (latest v0.4.0, running
+v0.5.0)`; On with a temporary GE007_VERSION 0.3.0 build -> `v0.4.0 is
+available (running v0.3.0)`. **Linux + Steam Deck (2026-10-06, system
+curl):** off -> no activity, on -> "up to date". **UI:** scripted F10 run
+(GE_OVNAV) on the 0.3.0 build: the "Check for updates" toggle and the
+"Update available: open page" row render at the bottom of the Game page
+within the column widths, and the row appears live while the page is open
+(visibility is rebuilt every emit). **Security review (2026-10-06):**
+SHIP-WITH-FIXES, fixes applied: winhttp.dll loaded with
+`LOAD_LIBRARY_SEARCH_SYSTEM32` (no DLL planting from the exe folder);
+curl run as `curl -q --proto =https` (ignores ~/.curlrc, HTTPS only);
+tag restricted to `[0-9A-Za-z._-]` before it reaches the log;
+`snprintf` instead of a 32-byte `memcpy`; help text says the change
+applies from the next launch; security docs name the curl process, the
+System32 load, and that GitHub sees the request and the IP. Confirmed
+fine: gate ordering (configLoad before updateCheckStart), constant URLs
+(no injection), TLS validation left at system defaults, bounded parsing,
+SDL_OpenURL with a constant URL, CI tag check uses the env var quoted.
+Owed: nothing beyond pressing the row once in a live session (opens the
+browser).
+
+## D552: Dam ending cutscene — first camera shot no longer swivelled up onto Bond (D243 M-190 re-seed removed) — FIXED 2026-10-06
+
+**Report (maintainer playtest 2026-10-06, vs 1964/GEPD):** in the Dam ending
+(the run to the dam edge / bungee), the first camera shot should swivel up
+onto Bond, ending pointed at his front right; on the port it started
+already aimed.
+
+**Cause.** A port-only addition from D243 (M-190, 2026-09-18) in the
+player-chr tick (`src/game/bondview2.c`, `#ifdef PORT`): on every
+shot-change teleport during `CAMERAMODE_POSEND` it re-seeded the look-at
+filter (`field_3B8` accumulator and `field_3C4/3C8/3CC`) to Bond's new
+position, so the camera snapped onto him. The decomp's own leaky integrator
+(`bondviewUpdatePlayerCollisionPositionFields`) instead converges over about
+20 ticks from the stale pre-teleport position — that convergence is the
+swivel (D243 M-143 logged the same sweep, pos2.y -22832 -> +691, and read it
+as shake). D243's actual shake cause was the `sizeof(Model)` buffer overlap
+(M-189), fixed independently, so neither M-170's freeze nor M-190's re-seed
+was still needed.
+
+**Fix.** Removed the re-seed block, its teleport-epoch locals, the epoch
+counter (`d243NotifyTeleport` / `d243GetTeleportEpoch`) and the notify call in
+`src/game/chrai.c` (`AI_TRYTeleportingChrToPad`) — all `#ifdef PORT`
+additions. The path is now the decomp, unmodified (the unconditional
+`field_488.pos` write is original code). No Rule-2 sign-off needed: this
+removes a port deviation. **Verified:** build rc 0; maintainer replayed the
+Dam ending live — swivel present, no shake.
+
+## D553: Surface 2 haze around Bond popping dark/bright as he moves — near-clip fog now recomputed (RSP behaviour) — FIXED 2026-10-06
+
+**Report (maintainer playtest 2026-10-06):** after D543 the lit area around
+Bond on Surface 2 was dimmer (good) but changed with his position: dark,
+step forward bright, step again dark. 1964 (HLE) shows a similar pulse;
+the maintainer then compared against hardware-level emulation
+(RetroArch Mupen64Plus-Next, cxd4 LLE RSP + angrylion LLE RDP): there the
+light around Bond is static, apart from the game's own small shading
+artefacts. So the pulse is a port deviation.
+
+**Cause.** D543's CPU near-plane clip (`port/fast3d/gfx_pc.cpp`) gave each
+clip-created vertex a fog value LERPED from its two parents. One parent is
+behind the eye; `gfx_sp_vertex` computes its fog as `z * (1/w) * mul + off`,
+which jumps between the 0 and 255 clamps as that corner's w crosses 0. The
+near-edge fog therefore depended on where a big ground triangle's corners
+fell relative to Bond, and flipped as he walked. The RSP's clipper runs
+new vertices through its vertex-finish code (gmain.s clip routine ends in
+the same finish call), i.e. fog is recomputed from the new vertex's own
+clip-space position; at the near plane that is a constant.
+
+**Fix.** The existing `GE_NEARCLIPFOG=recompute` path is now the default
+(`GE_NEARCLIPFOG=lerp` keeps the old behaviour for A/B). Port layer only.
+**Measured:** a scripted Surface 2 walk (`GE_INPUTSCRIPT="20:START;1400:UP"`,
+`GE_RSEED` pinned) gives the same ground brightness in both modes (mean 86.8
+vs 86.5 of 255; D543's "brighter feet" concern for recompute does not show),
+step-to-step change <2/255 in both — that path does not trigger the pulse,
+so the by-eye check where the maintainer saw it is the real test. Goldens:
+see the D553 note in tools_pc/golden/README.md if any set moved.
+
+
+## D554: F10 settings menu wording/casing pass + two-line tips — DONE 2026-10-06
+
+**What.** Display text only in `port/src/optionsoverlay.c` (config keys, the
+kRowHelp lookup keys and every value array's order/count are untouched; values
+are stored as indices, never as display text). No `src/game` change.
+
+**Style rules.** American spelling. Page titles and hub entries Title Case
+(hub actions now "Quit to Desktop", "Restart Game"); row labels and value
+names sentence case ("3-point"); parenthesised tags lower case ("(per
+profile)", "(no profile)", "(restart)"); tips sentence case, no trailing
+period, plain third-person English, never repeating the label; control hints
+are `Key: Action` pairs, three spaces between pairs, `/` between alternative
+keys with no spaces ("A/Enter: Select", "B/Esc/F10: Close"); slashes inside
+labels have no spaces ("Pause/start"). "Original" = the stock N64 behaviour
+wherever a player picks it; "N64" only names hardware; "PC" is never a value;
+"Extended" is the opposite of Original. "deg" kept for FOV (the font has no
+degree sign).
+
+**Maintainer decisions applied.** Aim style / Aim range values are now
+Original / Centered and Original / Extended. The "(EXPERIMENTAL)" tag is
+removed from Skip intro and All unlocked, with the red-ink path
+(`strstr(label,"EXPERIMENTAL")`, `PD_EXP_*`) deleted so nothing depends on the
+tag. "Controller style" is now "Original layout". Binding action names: the
+pad row "Use / action" is renamed to match the keyboard's "Use/back". "Ext"
+is now "Extended" (Control scheme), "Velocity (legacy)" is "Velocity (old)",
+"(in a mission)" is "Not in a mission" (the value shows when no live player
+exists), the ini warning reads "n unknown settings in the ini, see the log".
+All 44 changed tips follow the plan's table; a tip was added for
+`Video.CrosshairHide`.
+
+**Code facts confirmed.** Esc closes the hub: `optionsOverlayBack()` sets
+`s_backPending`, and the update loop calls `optionsOverlayToggle()` when no
+page is open (so the hub hint is "B/Esc/F10: Close"). "Show crosshair"
+(`Video.CrosshairHide`, portCrosshairHide) is a port-level override:
+`gunDrawSight` returns early when it is set, regardless of "Sight on screen"
+(`Bond.Sight`, the game's own per-profile sight-visible reason). The tip says
+exactly that.
+
+**Wrap.** Tips no longer go through a 64-byte buffer with ".." chopping.
+`tipWrap()` measures with the overlay's own `bodyWidth()` against
+`cardW - 8`; if too wide it splits at the last space that fits and the second
+centred line is drawn in the hint panel. The panel was already sized for it
+(`hintLines*12+2`; 2 tip + 2 key-hint lines = 50 <= `OV_HINT_H` 53), so no
+layout constant changed; the key hints move down by the actual tip line count.
+A line 2 that still overflows is chopped with ".." (cannot happen for current
+tips). `tipSelfCheck()` runs once on the first emit that has fonts and logs
+a warning by key for any tip needing more than 2 lines at HUD 150 (budget
+189), plus one summary line.
+
+**Review fixes (same day, from the lead's HUD 150 screenshots).**
+(1) Control hints clipped at HUD 150. Every hint line is now a `{full, compact}`
+pair (`kHint[]`); the compact form is used only when the full one exceeds the
+card budget (189 at HUD 150), then the Xbox letters as a last resort. Compact
+forms: "A: Select   L/R: Change", "B: Back   F10: Close", "A: Bind   L/R: Slot
+  Y: Clear", "Keys/mouse only   L/R: Slot", "Enter: Bind   B: Back", "Press a
+button   Hold B: Bind B", "Tap B: Cancel   Hold BACK: Clear", "Press key or
+mouse 1-5", "B: Cancel   Del: Clear"; the hub lines already fit. The one-time
+check now also logs any hint whose full form (Xbox names) exceeds 296 or whose
+compact form exceeds 189.
+(2) Game page tip showed only "Reverse makes pushing up look" at HUD 150.
+Root cause was not the page: `drawBody` passed `textRender` the raw canvas
+width/height as its clip limits, but `textRender` clips in unscaled glyph space
+while the string is drawn through the 78% span scale about its own origin.
+A line that starts right of centre and is wide enough (here a 187-unit
+one-line tip, which `tipWrap` correctly kept on one line) ran past 213 in
+unscaled space and lost its tail. `drawBody` now maps the limits back into
+unscaled space (`x + (ovW - x) * 100 / 78`, same for y). This affects every
+overlay string, none for the worse.
+
+**Owed.** By-eye contact sheet of every page at HUD 100 and 150. Not done:
+the slider-bar shrink at HUD 150 (labels still ellipsise there).
+
+## D555: crosshair mouse pointer over the F10 / PC Options overlay (maintainer ask)
+
+**Ask.** The red in-game crosshair should be on top of the F10 / PC Options box
+on the main menu, i.e. the mouse pointer there should be the crosshair. Until
+now (D519) the game's own crosshair tracked the mouse UNDER the overlay and the
+OS arrow was shown on top (D544).
+
+**Fix (port layer only; no src/game change).** One mechanism: while the overlay
+is open and the OS cursor is shown, the OS cursor image is a colour cursor
+shaped like the project crosshair, hotspot at the centre. The OS composites
+the cursor above the game frame, so it is always over the overlay box.
+- Art: `tools_pc/make_icon.py` `_cursor()` / `make_cursor_header()` emit
+  `port/fast3d/ge007_cursor.h` (32x32 and 48x48 RGBA, transparent background,
+  same proportions as `_crosshair`, red #c62828 with a 1px dark outline;
+  row-braced arrays like `ge007_icon.h`; deterministic, run twice = same bytes).
+- `port/src/input.c`: `crosshairCursorBuild()` packs the pixels against explicit
+  masks, shifting each channel into its lane before masking (the D550 bug), picks
+  48 px when the drawable is >= 1.5x the window size (high DPI), else 32.
+  `crosshairCursorApply()` does SDL_SetCursor(crosshair) / SDL_SetCursor(
+  SDL_GetDefaultCursor()). Both run from `inputApplyMouseRequests()`, the
+  host/event thread (videoPumpEvents), next to the SDL_ShowCursor application
+  (D287) -- never the game thread. Condition: `Input.CrosshairCursor` on, the
+  applied cursor state is "shown", and `optionsOverlayIsOpen()`; otherwise the
+  default arrow is restored (overlay closed, focus lost). The cursor object is
+  built lazily once and kept for the process lifetime.
+- The game's under-overlay crosshair (D519, `overlayFrontEndCrosshair`) is
+  unchanged. It tracks the same window position, so outside the box it sits
+  directly beneath the pointer and the pointer covers it; whether it visibly
+  doubles (slight lag halo) needs a by-eye check. If so, the follow-up is to
+  skip `overlayFrontEndCrosshair()` while the custom cursor is active.
+- Setting: `Input.CrosshairCursor` (default 1), F10 Mouse page row "Crosshair
+  pointer" (toggle), tip "Shows the red crosshair as the mouse pointer in this
+  menu", in the reset-defaults table.
+
+**Verification.** Build only (ntsc-final rc=0); visual check owed to the
+maintainer.
+
+**Reworked 2026-10-06 (maintainer feedback: the front-end crosshair showed
+underneath as a duplicate, and the SDL cursor was neither the game's graphic nor
+its size).** The custom SDL colour cursor is REMOVED (`crosshairCursorBuild/Apply`,
+`port/fast3d/ge007_cursor.h`, `make_icon.py` `_cursor`/`make_cursor_header`; the
+other make_icon outputs are unchanged). New mechanism, port layer only:
+- `optionsoverlay.c` `drawCrosshairPointer()` runs last in `overlayEmitLocked()`
+  (after the card, outside the centred-aspect block) and draws the game's own
+  sprite `crosshairimage` (image_bank.c; 32x32, loaded from the user's ROM
+  at runtime -- nothing baked into the tree) with the same
+  `texSelect` + `display_image_at_position` as `frontDrawCursor` (white, alpha
+  220), at the OS mouse position mapped through `gfx_get_ui_screen_rect`.
+- Position/size, FRONT END: the first cut parked `cursor_h_pos/cursor_v_pos` at
+  -1000, but the game's own front-end tick clamps the cursor back into bounds
+  before `frontDrawCursor`, so a copy appeared at the clamp corner (found in a
+  headless capture). Park removed. Now D519's `overlayFrontEndCrosshair()` keeps
+  the game cursor tracking the mouse (option on or off) and
+  `drawCrosshairPointer()` draws the pointer exactly over it: `input.c`
+  `inputFrontEndCursorUiFrac()` is the inverse of D519's window->canvas mapping
+  (x = (cursor_h_pos - screenleft)/screenwidth, then the D335 pillarbox
+  x*vis + (1-vis)/2 when native widescreen; y likewise), giving fractions of the
+  UI screen rect; canvas px = frac * (W,H); half-extent = (image->width/2)/viGetX()
+  * W * vis and (image->height/2)/viGetY() * H, i.e. frontDrawCursor's size. The
+  sprite lands on the one underneath, so one crosshair is visible.
+- IN LEVEL (no front-end cursor): position from `SDL_GetMouseState` through
+  `gfx_get_ui_screen_rect`; half-extent `16/ovScale()` x `(4/3)/portNativeAspect()`
+  (gunDrawSight's 16.0 and widescreen x fix). It does NOT follow the Video.Crosshair
+  colour/size/opacity options (UI pointer: plain sprite, front-end opacity).
+- OS cursor: `inputApplyMouseRequests()` (host thread) hides it while the option is
+  on and the overlay is open; restores on close / option off.
+- Option off: previous behaviour (OS arrow over the overlay, D519 crosshair under it).
+- Also: `Game.NoHitFlash` tip is now "Hides the white flash when you take damage".
+Headless captures (1280x720, front end, overlay open; frame 1100): AspectMode=1, AspectMode=1 + NativeWidescreen=1 (the front end stays 4:3 pillarboxed), AspectMode=0 (stretched, the pointer stretches with the game, as its own cursor does): exactly one crosshair each. Live mouse feel owed to the maintainer.
+
+## D556: F10 feedback pass (tips trimmed, conditional-row order, wording fixes) + mouse scrollbar
+
+Port layer only (`port/src/optionsoverlay.c`); no game-code edits. Maintainer playtest feedback on the D554/D555 menu.
+
+- **Tips.** A tip is kept only where the setting is port/GE specific or not obvious. Removed (no tip): `Video.FullscreenMode`, `__CenterWindow`, `Video.CrosshairAlpha`, `Video.MSAA`, `Video.VSync`, `Video.FpsCap`, `Video.TextureFilter`, `Video.Anisotropy`, `Game.ScreenShakeIntensity`, `Audio.MasterVolume`, `Input.MouseSensitivity`, `Input.MouseYScale`, `Input.MouseInvertY`, `Input.MouseSmoothing`, `Input.MouseRawInput`, `Input.PadLookInvertY`, `Input.PadDeadzoneL/R`, `Input.PadLookSensX/Y`, `Input.PadLookSmooth`, `Input.PadTriggerPct`, `Input.RumbleScale`, `Bond.AimControl`, `Bond.Ammo`, `Input.CrouchMode`, `__UpdateOpen`. An absent tip leaves its tip area empty (see the hint-panel fix below). Rewritten: AspectMode, WidescreenAuto, SafeAreaCrop, CrosshairCursor, Look up/down, NoHitFlash, SkipIntro, CheckUpdates. Anti-aliasing's "higher costs speed" tip is gone with the rest of the standard settings.
+- **Conditional-row order.** Rule: a row whose visibility depends on another row sits directly below it. Audited every page: Fullscreen -> Fullscreen mode / Center window, Aim style -> Aim range, Crosshair color -> Red/Green/Blue, Layout preset -> pad binds, Check for updates -> update link were already right. One violation: on file select the D519 profile chooser was injected as row 1 of any page with profile-backed rows, so choosing Original put "Profile" above "Control style" on the Controller page. It is now injected directly above the first profile-backed row (Controller: Control style, Profile, Original layout; Game page unchanged). Grouping moves (display order only): Widescreen auto FOV now follows Native widescreen; Mouse Smoothing/Raw input sit with the other mouse-feel rows, before Aim style.
+- **Look up/down "Reverse/Upright"** is GoldenEye's own N64 wording (`assets/obseg/text/LoptionsE.c` OPTION_STR_1B/1C, used by `src/game/options.c`), so it is kept; the tip says Reverse inverts like Invert look. PD's port has no such string.
+- **No hit flash.** Code: `currentPlayerSetFadeColour` in `src/game/bondview2.c` (`portNoHitFlash`, D232) zeroes any non-black fade. The two non-black fades are the damage envelope in bondviewPlayerTickDamageAndHealth (WHITE 0xFF, alpha scaled by health) and the red (150,0,0) overlay after the death blood. The old "red flash" tip was wrong for the common case; the tip now says "damage flash and the red tint on death".
+- **Skip intro.** D408 (post-mission failure screen skipped) is FIXED (boot-only gate in `src/game/lv.c`); the claim is removed. The option only boots to file select.
+- **Mouse scrollbar.** `overlayScrollbar()` computes a 3-unit track in the card's right margin (x = right-7..right-4; value text ends at right-10, so no overlap at HUD 100/150) over the body rows, only while the page overflows (same test as the "^ v" marker); thumb size = visible/total rows, position from the eased `s_scrollF`. Drawn after the row fills in the dim/bright green palette. Input (in `overlayHandleInputLocked`, before the row-click path, using the same ox/oy mapping): press on the thumb drags it, press on the track pages up/down by one window; both go through `overlayScrollTo()`, which sets `s_scroll` and pulls `s_sel` into the window (as the wheel moves the selection, since `overlayUpdateScroll` would otherwise snap back). A scrollbar press never reaches the row click.
+
+- **Hint-panel regression fix (lead review).** First cut drew the control-hint lines only while `!s_mouseActive`, and the OS cursor merely resting over the window sets `s_mouseActive`, so hints vanished per page depending on pointer position (and would flicker in play). Now the control hints are always drawn on every page, and a section page reserves a fixed two-line tip area (`tipArea` = 24 units) above them so a row without a tip leaves it empty and the hints never move (2 + 2 lines = 50 <= OV_HINT_H 53); the hub has no tips and reserves none. Compact-hint fallback unchanged.
+- **Crouch mode default -> Toggle** (maintainer approved): `crouchMode` initial value 1 in `port/src/input.c` (the configRegisterInt default) and the F10 reset table entry `Input.CrouchMode` = 1 in `optionsoverlay.c`. Existing ini values are kept; no DefaultsRev migration.
+- **Look ahead OFF for new profiles: NOT done.** New files are built from the `BLANKSAVEDATA` macro (`DEFAULT_OPTIONS`) at nine sites inside `src/game/file2.c` (fileResetSave, fileBuildWriteNewSave, fileDeleteSaveForFolder, fileClearSavefileForFolder, ...), mostly called from within that same file, so there is no port-side creation hook (a linker wrap would miss the intra-file calls, and detecting "new" by save contents would risk flipping existing profiles). It needs either a `#ifdef PORT` edit of `DEFAULT_OPTIONS` (Option B, src/game, needs rule-2 sign-off) or an agreed new hook; left for the maintainer.
+
+**Verification.** Build only (ntsc-final rc=0); no game launch. By-eye check owed (tips, Controller page order, scrollbar and hint panel at HUD 100 and 150).
+
+## D557: new/blank profiles start with Look ahead OFF on PC — RULE-2 SIGN-OFF (maintainer, 2026-10-06) — FIXED 2026-10-06
+
+**Decision.** Defaults review against the Perfect Dark PC port
+(`docs/dev/notes/DEFAULTS-VS-PD.md`, local): Look ahead (per-profile
+`OPTION_LOOKAHEAD`) is the one N64 default that is clearly hostile on PC —
+its pitch auto-centring on slopes fights mouse and right-stick look; PD's
+port keeps the equivalent on only under `PLATFORM_N64`. Maintainer approved
+turning it OFF for new profiles, with the explicit Rule-2 sign-off this
+`src/game` edit needs (it is a deliberate PC default, not an ABI/layout
+fix).
+
+**Why src/game.** New profiles are built from `BLANKSAVEDATA`
+(`src/bondconstants.h`, using `DEFAULT_OPTIONS`) at nine sites inside
+`src/game/file2.c` (new save, erase/clear, copy-to-blank, ...); there is no
+port-side "profile created" hook, and inferring "new" from save contents
+risks flipping existing profiles. So the change is one macro:
+`src/game/file2.h` `DEFAULT_OPTIONS` drops `OPTION_LOOKAHEAD` under
+`#ifdef PORT` (`#else` keeps the original for the byte-matching N64 build).
+The port's F10 "Reset to defaults" mirror (`kBlankSave`,
+`port/src/watchsettings.c`) is built from the same macro, so it follows.
+
+**Scope.** Existing profiles keep their stored option bits — no migration.
+Only profiles initialised from `BLANKSAVEDATA` afterwards (new/erased/cleared)
+start with Look ahead off; players can still turn it on per profile. Same
+batch: `Input.CrouchMode` default -> Toggle (D556; ini default, new installs
+and Reset to defaults only). **Verified:** build rc 0; Windows gate sweep
+21/21 PASS (the canonical golden save's profiles keep their bits).
+
+
+## D558: F10 overlay tips cut off in a level, fine on the front end — FIXED 2026-10-06
+
+**Symptom.** At 1280x720, AspectMode=1, in a level, long Game-page tips ("Hides the
+white flash when you take dama", "Reverse inverts up and down, like Invert lo") were
+cut off; the front end showed every tip whole.
+
+**Root cause (not the aspect/HUD geometry).** Card geometry is identical in both
+contexts (the overlay lays out on its own canvas: `ovW()` x `ovH()`, card/tip budget
+from the same `overlayLayout()`; tip wrap, centring and clip all use it).
+The cut is in the game's `textRenderGlyph` (`src/game/textrelated.c:241`): it drops any
+glyph whose UNSCALED x is `> viGetX()` (or y `> viGetY()`) -- the game's 2D canvas, 320x240
+in a level, 440x330 on the front end. `drawBody` draws through the 78% span scale about
+the string start, so the x the game tests is the start plus the unscaled advance (drawn
+width / 0.78): a tip starting at x=46 died at 320 (214 drawn units in), on the front end
+the 440 limit hid it. Right-aligned values and, at HUD 75 (ovW 427), more text were exposed
+to the same limit.
+
+**Fix (port layer only).** `port/src/optionsoverlay.c` `textRenderWide()` widens the
+canvas the game tests (`viSetXY`, restored right after) for the duration of each
+`textRender` call, to the overlay's unscaled layout extent (`ovW()*100/OV_TEXT_PCT`).
+`tipSelfCheck` already used the narrowest reachable budget (HUD 150 -> card 197, av 189);
+unchanged, still 0 over 2 lines.
+
+**Test hooks.** `GE_OPTIONSOVERLAY_ATFRAME=<n>` re-applies the GE_OPTIONSOVERLAY /
+_SECTION request at emit n (survives level load; read once, cached);
+`GE_OPTIONSOVERLAY_SELECT=<row key>` selects a row on the opened page.
+
+**Verified** by in-level captures (`-level_09`, GE_INPUTSCRIPT="20:START", ATFRAME=200):
+before: NoHitFlash and Bond.Look tips clipped at the same screen x; after: whole and
+centred at HudScale 100 (AspectMode 1 and 0) and wrapped to two centred lines at HudScale 150.
+
+## D559: Look ahead off for untouched existing folders — FIXED 2026-10-06 (maintainer-approved, port layer only)
+
+D557 only changes folders initialised from now on. `port/src/watchsettings.c`
+`migrateUntouchedLookAhead()` handles existing ones with no further `src/game` edit:
+when a stage is starting (first game-thread tick with `stageActive()`, before the stage
+load's `fileLoadSettingsForFolder` re-reads the save; also applied live if the load already
+ran) and `selected_folder_num` is a valid save with options EXACTLY the old factory default
+`AUTOAIM|SIGHTONSCREEN|LOOKAHEAD|DISPLAYAMMO` (0x3a, control-type bits 0), `flag_007 == 0`,
+no unlocked cheats and every `times[]` byte zero (no stage completed at any difficulty),
+it clears `OPTION_LOOKAHEAD` and persists with `fileWriteSave` (same path as the F10
+per-profile rows), logging one INFO line. Folders with any progress or any other option bit
+are never touched. Once per stage activation. **Verified** with a temporary forced-state
+hook (removed): untouched folder fires and logs; with progress it does not.
+
+## D560: F10 copy pass 3 (maintainer line review)
+
+Display text only (`port/src/optionsoverlay.c`); config keys, value-array order and count unchanged.
+Every tip is now a complete sentence ending in a period. Changes: Display mode tip "Modern, original or custom graphics presets."; Aspect ratio tip shown only while Fill window is selected (`optionsRowHelp` checks the value; Fill window = `videoOutputAspect()` 0, the output rect is the whole window); tips removed for Native widescreen, Crop overscan, Draw/Fog/LOD distance and Look up/down; Explosion shake tip restored ("Sets how strongly explosions shake the screen.", it scales `viShake()` in `src/fr.c` via `portScreenShakeScale`); Control style, Layout presets (both the Extended `Input.PadPreset` row and the Original `Bond.Control` row now carry the label "Layout presets"), Auto-aim, Gameplay view area (D468), No hit flash, Skip intro ("Skips the intro and opens the file select screen." -- `lv.c` boots to MENU_FILE_SELECT, D408), Check for updates reworded.
+Southpaw: swaps only the fire and aim TRIGGER actions (`input.c` `padMapPure`, `c->southpaw` G<->R swap), not the sticks (the stick swap belongs to the 1.3 Frost / 1.4 Elektra presets, D498); tip "Swaps the fire and aim triggers."
+Look up/down values renamed Inverted/Normal (index 0 = the game's "Reverse", 1 = "Upright"); mapping from the game's own option strings and the options-screen preview (`options.c` ~3103: value 1 shows up for D-pad up). Note a fresh profile (value 0) therefore reads "Inverted"; compare against 1964 if in doubt.
+Two tips were shortened to keep `tipSelfCheck` at 0 over 2 lines at HUD 150 (Control style: "Choose the port's modern controls or the original game's."; Gameplay view area: "...widescreen and any field of view."; layout presets drops "port"). Menu pointer row kept; analysis in the session report (Input.MenuPointerMode, D165, default Direct).
+**Verified** by in-level captures (`-level_09`, 1280x720, AspectMode 0/1, HudScale 100): all whole, centred, punctuated; Gameplay view area wraps to two lines at HUD 100.
+
+## D561: F10 "Menu pointer" row removed — FIXED 2026-10-06 (maintainer request)
+
+`Input.MenuPointerMode` (Direct = 1:1 mouse position, default; Velocity (old) =
+D165's mouse-as-analog-stick nudge) only affects the GAME'S front-end menu
+cursor: it is read solely under `menuMode` (`port/src/input.c`, "not in a
+stage"), never in gameplay, never by the F10 overlay (which handles the mouse
+itself), never on pad/Deck paths. Maintainer: an option only a legacy user would
+want "will only confuse and cast doubt". Removed the F10 row, its tip and its
+value names (`port/src/optionsoverlay.c`); kept the ini key (default Direct, and
+its Reset-to-defaults entry) and the Velocity code path so a hand-set ini still
+works for this release. Follow-up (next release): delete the Velocity path and
+`Input.MenuPointerSpeed`. Verified: build rc 0; in-level Mouse page capture at
+1280x720 shows the row gone; tip/hint checks 0 over.
+
+## D562: F10 crosshair pointer hidden while a pad/keyboard drives the menu
+
+Maintainer: the pointer "just hovers over and blocks UI elements" when a controller drives the menu.
+`drawCrosshairPointer()` (`port/src/optionsoverlay.c`) now returns early unless `s_mouseActive`
+(the existing overlay state: set by mouse move/click, cleared by pad/D-pad/stick/keyboard nav,
+accept, wheel and on open), so the pointer reappears on the next mouse movement. No second tracker.
+The OS cursor stays hidden while the crosshair pointer mode is on (`inputApplyMouseRequests`
+hides it whenever `cfgCrosshairCursor && optionsOverlayIsOpen()`), so no arrow appears.
+Front end: the game's own D519 cursor (`overlayFrontEndCrosshair`, `input.c`) is left as is: it sits
+UNDER the overlay card (the card does not let it block rows) and is clamped by the game each tick, so
+there is no clean port-side park (the -1000 attempt is not repeated). Build rc 0.
+
+## D563: F10 root hub: Left/Right no longer open pages; held nav inputs latched
+
+Maintainer: holding the stick/D-pad/arrow on the root menu could enter a page (e.g. PC Options) and
+keep acting inside it. (a) On the root hub (`s_section < 0`) header/link and action rows now activate
+only on A / Enter (or a click); Left/Right/stick/D-pad/arrows do nothing there. Pages keep Left/Right
+value changes. (b) Held-input latch: `s_latchArm` is set when the overlay opens (closed-state branch
+of `overlayHandleInputLocked`, covers F10 and the front-end PC Options entry) and on every page
+enter/back (`overlayOpenHeader`, `overlayBackOne`); the next poll snapshots held up/down/left/right/
+accept/back and each stays masked (`s_latchMask`) until released once, so auto-repeat cannot fire
+from a latched input. Verified by code reading + build rc 0 only: the overlay reads SDL pad/keyboard
+state directly, which GE_INPUTSCRIPT does not drive, so a headless held-input repro is not possible; maintainer
+to check front end (file select -> PC Options) and in-level F10 by hand.
+
+## D564: F10 "Look up/down" removed; game value pinned to factory; tip polish — FIXED 2026-10-06 (maintainer decision)
+
+**Report:** maintainer: changing Look up/down (in-level F10 and front end) had
+no visible effect. **Trace (code, file:line in the D562/D563 session report):**
+the row wrote the game's `OPTION_INVERTLOOK` (`set_cur_player_look_vertical_inverted`),
+read only at `src/game/bondview2.c:4938` (`invertPitch`) on the game's own
+stick/C-button pitch path. The port's mouse look (D300 `hipDirectCompute`,
+aim models) and centred-aim pad look (`padDirectCompute`) write `vv_verta`
+directly and never consult it; only pad look in the N64 aim style passes
+through it, where it stacks with Controller "Invert look". Perfect Dark's port
+instead routes mouse and pad through its single "Reverse Pitch" option; GE's
+port already has per-device Invert look rows (the usual PC model), so the
+maintainer chose removal.
+
+**Fix (port only):** removed the `Bond.Look` row and its value names
+(`port/src/optionsoverlay.c`); `port/src/watchsettings.c` pins the game's
+value to its factory default 0 each stage tick (blank profiles load 0:
+`DEFAULT_OPTIONS` has no `OPTION_INVERTLOOK`, `src/game/file2.c:1357`), so
+every default profile behaves exactly as before and a value saved by an older
+build or set in the in-game watch menu cannot silently flip pad pitch. Mouse /
+Controller "Invert look" are the only inversion controls. Same pass, tip
+polish: All unlocked "Unlocks all levels, 007 mode and every cheat.", Show
+crosshair, FOV and Aim style tips rewritten as plain sentences. Verified: both
+TUs compile (link was blocked by a running game; full build + re-cut follow).
+
+
+## D565: AI awareness followed two player render settings (Fog distance < 100, FOV) — FIXED 2026-10-06 (maintainer decision)
+
+**Found by** the v0.4.0..v0.5.0 AI regression review (interpreter, movement/timing,
+visibility/combat; three read-only reviewers, lead re-checked every flag in code).
+No regression at the shipped settings (Draw 2.0x, Fog 1.0x, FovScale 100, native
+widescreen). Two leaks of render-only settings into AI awareness (the D466/D468
+class) at non-default settings:
+
+1. **`Video.FogDistance` below 100.** `bgfog.c fogLoadCurrentEnvironment` sets the
+   far clip to `FarFog x min(Fog, Draw)` (D540), so Fog < 1.0 shortens it below the
+   authored distance. AI on-screen checks require the render `PROPFLAG_ONSCREEN`
+   (`port/src/drawdistgameplay.c portPropGameplayOnScreen`), so guards beyond the
+   shortened clip stopped counting as on screen; at Draw 1.0x `portD466Active()` is
+   off and the sight range (`fogGetScaledFarFogIntensitySquared`) shrank as well.
+   Guards would notice Bond, and on-screen triggers fire, later than on the N64.
+   **Fix (maintainer: block it):** the setting's floor is now 100
+   (`port/src/video.c` registration, so an ini value of 50/75 clamps to 100 on
+   load; `port/src/optionsoverlay.c` slider `uiMin` 100). 100-800 keeps the D540
+   extension, which D466 already keeps off gameplay.
+2. **FOV other than the game's (`Video.FovScale` != 100, or the stretch-era
+   `WidescreenAuto` boost with native widescreen off).** The D466 gameplay fog cull
+   `src/game/propobj.c portSub7F054C58Gameplay` scales by `c_lodscalez`, which is
+   tan(fovy/2)-proportional and built from the rendered fovy (D222 `frCullFovY`), so
+   a wider FOV dropped far fogged positions out of the AI on-screen verdict sooner
+   (narrower: later). **Fix:** inside that `#ifdef PORT` D466 helper, rescale
+   `scalez` by tan(own/2)/tan(eff/2) with `own = c_perspfovy / portFovYScaleFactor()`
+   (the D468 recovery of the game's own fovy; the game's zoom FOVs are kept).
+   Identity when the factor is 1 (the defaults). Port-feature leak fix in an
+   existing PORT-only helper (D466 sign-off class); maintainer asked for the fix
+   2026-10-06.
+
+Checked and left (no AI harm): the D466 verdict reuses the extended pass's room
+screen bbox (`posIsOnScreen`), but at Fog 1.0x the clip is the authored far, so the
+passes match; D491 (portal bbox seeds) and D431 (light-fixture texnum in ray
+scoring) restore N64 data reads; D417, D468 and the M-183/M-185 clamp removal are
+signed off and play-covered. Also corrected: a watchdog `pin signature detected ...
+confirmation window` line that clears on its own is the normal post-D329 pattern
+(the 2026-09-23 D329 sign-off log had three); only `anim pin CONFIRMED` / `pin still
+held` indicates a regression. The maintainer's 2026-10-06 Deck Facility run logged
+four self-clearing detections and no confirmation.
+
+**Verify:** build; defaults are bit-identical (both changes are no-ops at Fog 100 /
+factor 1), so the golden gate is unaffected. By eye (optional): FovScale 150 on a
+fogged level (Surface 1, Dam), guards at fog range react as at FovScale 100.
+
+## D566: Steam Deck Game Mode showed the on-screen keyboard at every launch — FIXED 2026-10-06 (port only)
+
+**Report (maintainer, Deck, Game Mode, 2026-10-06):** the Steam virtual keyboard
+popped up every time the game started. **Cause:** SDL2 starts with text input
+enabled and the port never turned it off (it reads keys only as `SDL_KEYDOWN`;
+nothing in `port/` consumes `SDL_TEXTINPUT`/`SDL_TEXTEDITING`). With text input
+active, Steam's Game Mode treats the window as wanting its keyboard. Observed with
+the Deck's system SDL (`sdl2-compat` on SDL3; the Steam shortcut pointed at the
+exe, so the bundled SDL2 2.32 next to it was not loaded); not checked whether the
+release tarball's `$ORIGIN` SDL2 shows it too, and the fix covers both.
+**Fix (`port/fast3d/gfx_sdl2.cpp`):** set the `SDL_ENABLE_SCREEN_KEYBOARD` hint to
+`0` before `SDL_Init` (literal name; ignored where unknown) and call
+`SDL_StopTextInput()` right after `SDL_ShowWindow`. No game code touched.
+**Verify:** builds on Windows and Linux (X220); deployed to the Deck play folder
+2026-10-06 21:00; maintainer Game Mode launch owed (expect no keyboard).
+
+## D567: Front-end PC Options with a pad pulled the game's crosshair to the top-left corner — FIXED 2026-10-06 (port only)
+
+**Report (maintainer, Deck, 2026-10-06):** opening *PC Options* from the main
+menu with a controller moved the front end's own crosshair cursor to the top
+left. **Cause:** while the F10 overlay is open over the front end,
+`port/src/input.c` called `overlayFrontEndCrosshair()` every frame (D519/D555:
+the game cursor tracks the OS mouse so the overlay pointer sits exactly on it).
+With a pad the OS pointer is never moved and reads 0,0, so the game cursor was
+clamped to the top-left corner of the screen box. **Fix:** the sync runs only
+while the mouse is the active input in the overlay (`s_mouseActive`, which
+starts at 0 on open and becomes 1 on a mouse move or click; new accessor
+`optionsOverlayMouseActive()`). With a pad the cursor stays where it was; mouse
+users get the same tracking as before. **Verify:** builds on Windows and Linux
+(X220); deployed to the Deck play folder 2026-10-06 21:03; maintainer pad check
+owed (open PC Options from file select with the pad, the crosshair stays put).
+
+## D568: F10 dropdown popup drawn empty and misplaced for a long list on a mid-page row — FIXED 2026-10-06 (port only)
+
+**Report (maintainer, Deck, 2026-10-06):** the Crosshair color dropdown opened
+as an empty box with its items drawn too high. **Cause:** `optionsoverlay.c
+ddGeom` opens the popup below the row, or above it when there is no room below;
+with a 9-item list on a row in the middle of a scrolled page neither fits, and
+the upward top went negative. The labels then drew above the screen while the
+fill (negative top) ran from the row down past the bottom edge. Reproduced on
+Windows at 1280x800 (Game page scrolled to Crosshair style, Custom colour), so
+not Deck-specific. **Fix:** if the top is still off screen, the popup is placed
+flush with the bottom margin (it always fits: at most 9 rows). Applies to every
+dropdown. Verified by a 1280x800 in-level capture before/after.
+
+## D569: Crosshair color follows the PD port: Original or Custom RGB, left/right stepper — CHANGED 2026-10-06 (maintainer request)
+
+The row was a 9-entry dropdown of named presets (Green, Red, Blue, Yellow, Cyan,
+Magenta, White) plus Custom, with the Custom R/G/B sliders shown as percentages
+and moving one unit per press. The PD port has no presets: a colour page with
+0-255 sliders. GE keeps **Original** (the authored red sprite, drawn untouched,
+which no tint reproduces) and **Custom** (stored 8, the existing silhouette tint
+path). The row is now a left/right (or A) stepper with no popup; Red/Green/Blue
+show 0-255 and step by 5; the existing value swatch is the live preview; new tip.
+**Migration (`video.c videoInit`):** an ini holding a former preset 1..7 becomes
+Custom with that preset's RGB, so no saved colour changes (checked: 3 -> 8 with
+64/64/255). Display-mode presets and resets still use 0 (Original).
+## D436 — persistent (hipfire) crosshair, opt-in: the native sight drawn outside aim mode (2026-09-29)
+
+**Status:** SHIPPED (offered from the netplay line): port-only logic + one presentation-only `#ifdef PORT` condition in `src/game/gunfire.c` `gunDrawSight` (rule-2 sign-off: user direction 2026-09-29, "constant on screen crosshair that could be enabled or disabled"; same class and same function as upstream's D373/D381 hide/colour/size/style hooks). Default off = N64.
+
+**Spec:** `docs/dev/RESEARCH-FREE-AIM.md` option A'. The N64 sets `GUNSIGHTREASON_NOTAIMING` every tick from `moveData.aiming` (`bondview2.c:5753`) and `gunDrawSight` draws only when `gunsightmode == 0`. Every shot, hipfire included, leaves from the screen point `crosshair_angle`, recomputed every tick in both modes (auto-aim pull, stick lag), so the native sprite drawn there in hipfire shows the true aim point. `gunsightmode` has no reader but `gunDrawSight` (draw-only state).
+
+**Implementation:**
+- `port/src/video.c`: `Video.CrosshairPersistent` (0/1) next to the other crosshair options; `portCrosshairPersistent()`.
+- `src/game/gunfire.c` `gunDrawSight`: under `#ifdef PORT` the visibility test becomes `(gunsightmode & ~(persistent ? NOTAIMING : 0)) == 0 && !mpmenuon`. Every other reason still hides the sprite: `GUNSIGHTREASON_1` (the "Sight on screen" option in solo, the lobby-agreed `sight` flag in MP/netplay), `NOCONTROL` (cutscenes), `DAMAGE` (the damage/death sequence) and the MP menu. In aim mode nothing changes (one sprite, the game's own). Non-PORT builds keep the original condition byte-identical. 
+- `port/src/optionsoverlay.c`: HUD row "Crosshair when not aiming" (Off/On) after "Show crosshair", plus its reset default (0). The front-end PC Options screen picks the row up through `optionsRowCount()`.
+
+**Netplay / fairness:** render-only and per machine (nothing is written; `texSelect` + a texrect, the same variance upstream's "Show crosshair" off already introduces). A hipfire sight that visibly slides onto auto-aim targets is extra information in a match; today it follows the lobby's agreed per-player `sight` flag (a player whose sight is off sees nothing either way). Whether the lobby should pin the persistent mode too is a **user decision** (RESEARCH-FREE-AIM decision 3).
+
+**Verification** (headless, silent, llvmpipe, mp-sandbox data, `GE_FIXEDSTEP=1 GE_TICKINPUT=1 GE_RSEED=12345`; sandboxes `build-pc/xh-*`):
+
+| Check | Result |
+|---|---|
+| F10 > Gameplay > HUD auto-opened (`GE_OPTIONSOVERLAY=3 GE_OPTIONSOVERLAY_SECTION=__HdrHUD`), frame 240 | row renders between "Show crosshair" and "Crosshair colour", value Off; page self-check count 12 <= 14 |
+| Solo `-level_09` hipfire, option ON, frame 1800 (unseeded first pass) | the red sight at the centre of the view, ammo/gun unchanged (PNG viewed) |
+| Solo `-level_09` hipfire, option OFF, frame 1800 | no sight (PNG viewed) |
+| Solo `-level_09`, option OFF, frames 600/1200/1800, new binary vs the pre-change binary (ad7b63d9) | **BYTE-IDENTICAL** all three; frame 1800 md5 `1561622c8eed` = the golden in CONTROLLER-PAGES-RESULTS |
+| Solo `-level_09` hipfire, OFF vs ON, frames 600/1200/1800 | 2 561 px differ, bbox x 391-475 y 278-373 on the 869x652 canvas (the sprite at the view centre); nothing else |
+| Solo `-level_09`, R held from frame 700 (aim mode), OFF vs ON, frames 1200/1800 | **identical** (one sprite, the game's own; no double draw) |
+| Sanity: OFF hipfire vs OFF aim mode, frame 1800 | the same 2 561 px / bbox as the row above: the persistent sprite is pixel-for-pixel the aim-mode sprite |
+| Netplay 2P loopback (Temple, MULTIPLAYER-DEV script), both peers OFF | SH identical on 4 615 common ticks, 0 DESYNC |
+| Both peers ON | SH identical on 4 616 ticks, 0 DESYNC |
+| **Mixed: A OFF, B ON** | SH identical on 4 610 common ticks, 0 DESYNC (render-only confirmed) |
+
+**Not verified:** a real play session (feel, the sight over the watch while paused: the N64 draws its own aim-mode sight the same way, so it is fidelity-consistent), split-screen and the own-view transform (the D13 texrect signature should match the same sprite; check on the next couch/own-view pass).
+
+**Confidence: [H]** for correctness and neutrality (measured); [M] for the user-facing wording of the row.
+
+**v0.5.0 integration (2026-10-06, maintainer request "roll the always on crosshair option in"):**
+merged as dolent's original commit (#123, true merge, so the PR shows Merged).
+The review conditions from 2026-10-01 are met as follows: D436 is free in this
+tree (no relabel needed); both display-mode presets (Modern / Original N64) set
+`Video.CrosshairPersistent` 0 (`port/src/video.c` preset table), so Original N64
+stays N64; the row got a tip; the `gunDrawSight` condition is presentation only
+(draw test, no gameplay reader of `gunsightmode`) and is signed off by the
+maintainer with this request (Rule 2). Placement: Game page, right after "Show
+crosshair". **Owed (maintainer, by eye):** hipfire on/off, sniper zoom, and
+split-screen 2P with the option on.
+**Relabel (2026-10-06, maintainer):** the row reads "Crosshair always on" (was
+"Crosshair when not aiming"); off by default (code default, reset table and both
+display-mode presets all 0); new tip. The ini key `Video.CrosshairPersistent` is
+unchanged.
+
+## D570: Scaled crosshair showed a faint speck under the bottom bar — FIXED 2026-10-06 (port only)
+
+**Report (maintainer, Deck, 2026-10-06):** a tiny line just under the bottom of
+the crosshair, with Custom and default colour. **Cause:** only at a Crosshair
+size other than 100% (the maintainer's ini: 105). The sight's render tile uses
+the image table's WRAP flags; a scaled `gSPTextureRectangle` puts the last pixel
+row/column between the last texel and the next, so the filter blended in the
+opposite edge (the top bar's tip): a 2-px faint copy ~6 px under the bottom bar.
+The N64 never scales the sight, so 100% is clean (checked). Reproduced on
+Windows (Custom green, 105%: rows 460-461), so not Deck-specific. **Fix:**
+`gunfire.c gunDrawSight` (`#ifdef PORT`, presentation only) passes a copy of the
+image-table entry with CLAMP flags to `texSelect` when the scale is not 1.0; at
+100% the original call is unchanged (Dam gate PASS). The F10 crosshair pointer
+(`optionsoverlay.c`, always non-integer scale) gets the same clamp.
+**Verified:** 105% Custom green capture clean below the bar; Dam gate PASS.
+
+## D571: Project icon restyled: in-game sight red, pixel-art grid — CHANGED 2026-10-06 (maintainer request)
+
+The D550 mark (gold, smooth vector ring) is redrawn by `tools_pc/make_icon.py`
+as pixel art in the in-game sight's red (core RGB 200,40,48; a lighter 225,120,130
+tip texel on each bar like the sprite's anti-aliasing) on #050607: hand-tuned
+16/24/32 grids (1-px ring, 2-px bars, open centre), larger sizes scaled with
+NEAREST (48 = 24 grid x2, 64..512 = 32 grid). Original procedural art (no ROM or
+capture data). Outputs regenerated: exe `.ico`, `docs/favicon.ico` (byte copy),
+`docs/img/icon/ge007-icon.png`, `port/fast3d/ge007_icon.h` (now written with LF).
+`--check` passes; two runs byte-identical. The social preview card is unchanged
+(maintainer decision).
+
+## D572: Linux tarball glibc floor 2.38 -> 2.31 (Steam Runtime sniper build) — CHANGED 2026-10-07 (maintainer request)
+
+The `linux-build` CI job built on `ubuntu-24.04`, so the game and its bundled
+SDL linked GCC's C23 `__isoc23_strtol`/`__isoc23_sscanf` redirects
+(`GLIBC_2.38`): the release tarball refused to start on Ubuntu 22.04, Debian 12,
+Fedora 38 and older (seen on the X220, Fedora 37 / glibc 2.36). The job now runs
+in the Steam Runtime 3 "sniper" SDK container (Debian 11, glibc 2.31), pinned by
+version + digest, with the SDK's gcc-14 (same compiler as before). Two SDK
+gaps: its `libSDL2-2.0.so.0` is sdl2-compat (aborts with "Failed loading SDL3
+library" unless SDL3 is shipped too), so SDL2 2.30.0 — the version the 24.04
+build bundled and every Linux/Deck test ran — is built from the hash-pinned
+upstream tarball (X11, Wayland+libdecor, PipeWire, Pulse, ALSA, udev, HIDAPI,
+D-Bus/IBus all compiled in, dynamically loaded); and Debian 11's security archive
+no longer serves `python3-pip`, so pip comes from a hash-pinned `get-pip.py`
+(PyInstaller 6.22.3 supports the SDK's Python 3.9). Result: game `GLIBC_2.29`,
+SDL `GLIBC_2.4`, `ge007-convert` built against 2.31. Verified: the container
+build run by hand on the X220 (podman) — fresh install there (ROM only ->
+converter -> boot -> clean quit, exit 0). No source changes; packaging only.

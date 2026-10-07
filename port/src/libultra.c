@@ -59,6 +59,7 @@
 
 /* fast3d (C++): the software RSP entry point. */
 extern void gfx_run(Gfx *commands);
+extern void videoSyncSplitScreen(void); /* D416 */
 
 /* ------------------------------------------------------------------------ */
 /* Globals the game expects to exist (normally set by osInitialize).        */
@@ -67,11 +68,15 @@ extern void gfx_run(Gfx *commands);
 u64 osClockRate = 6250000;          /* RSP counter rate (Hz) — see PD port */
 u32 osMemSize   = 16 * 1024 * 1024; /* pretend 16MB RDRAM (+expansion)     */
 /* TV type (normally set from console hardware in os/initialize.c, excluded).
- * The game reads it to pick PAL/NTSC behaviour (e.g. schedulerInitThread
- * checks osTvType == OS_TV_MPAL). Set to match the emulated region: PAL
- * consoles report MPAL, NTSC consoles report NTSC. */
+ * Set to what the matching console reports: a European (PAL) N64 reports
+ * OS_TV_PAL (0); OS_TV_MPAL (2) is Brazil's 60 Hz PAL-M console. GE's shared
+ * code only tests for MPAL (sched.c / init.c / fr.c: MPAL LAN1 mode, else
+ * NTSC LAN1), so on a real PAL console those take the NTSC branch and the
+ * EU build's own video_related_8 (fr.c, #ifdef VERSION_EU) then installs
+ * the PAL modes. D488: this used to be MPAL (a scaffolding-era inference
+ * from those checks), which sent the port down the Brazil-only branches. */
 #ifdef REFRESH_PAL
-u32 osTvType    = OS_TV_MPAL;       /* EU: PAL  (0=PAL 1=NTSC 2=MPAL)      */
+u32 osTvType    = OS_TV_PAL;        /* EU: PAL  (0=PAL 1=NTSC 2=MPAL)      */
 #else
 u32 osTvType    = OS_TV_NTSC;       /* US/JP: NTSC                         */
 #endif
@@ -328,7 +333,7 @@ void portKernelInit(void)
     g_lastFrameUs = sysGetMicroseconds();
     g_lastHeartbeatUs = g_lastFrameUs;
 
-    if (osTvType == OS_TV_MPAL || osTvType == OS_TV_PAL) {
+    if (osTvType == OS_TV_PAL) {    /* D488: MPAL (PAL-M) is a 60 Hz system */
         g_tickIntervalUs = 1000000 / 50; /* PAL: 50 frames/s -> 20ms */
         g_determQuantum = 931050;
     } else {
@@ -581,38 +586,9 @@ void osEnqueueMesg(OSMesgQueue *mq, OSMesg msg)
     pthread_mutex_unlock(&pq->lock);
 }
 
-/* TEMP D62: full message-flow trace (env GE_D62=1 -> d62mesg.log). */
-static FILE *s_d62log = NULL;
-static int s_d62opened = 0;
-static pthread_mutex_t s_d62lock = PTHREAD_MUTEX_INITIALIZER;
-static void d62log(const char *op, OSMesgQueue *mq, OSMesg msg)
-{
-    if (!s_d62opened) {
-        s_d62opened = 1;
-        if (getenv("GE_D62"))
-            s_d62log = fopen("d62mesg.log", "w");
-    }
-    if (s_d62log) {
-        pthread_mutex_lock(&s_d62lock);
-        fprintf(s_d62log, "%s mq=%p msg=%p valid=%d/%d first=%d\n",
-                op, (void *)mq, (void *)msg, mq->validCount,
-                mq->msgCount, mq->first);
-        fflush(s_d62log);
-        pthread_mutex_unlock(&s_d62lock);
-    }
-}
-
-
 s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
 {
     PortQueue *pq = portQueueGet(mq);
-    d62log("SEND", mq, msg); /* TEMP D62 */
-    /* TEMP D51: watch sends to the 32-slot queues (sched cmdQ + client Qs) */
-    if (getenv("GE_D51") && mq->msgCount == 32 && !(g_viRetraceMQ && mq == g_viRetraceMQ)) {
-        void *ra = __builtin_return_address(0);
-        sysLogPrintf(LOG_NOTE, "D51 send32 mq=%p from %p msg=%p valid=%d/%d",
-                     (void *)mq, ra, (void *)msg, mq->validCount, mq->msgCount);
-    }
     pthread_mutex_lock(&pq->lock);
     while (mq->validCount >= mq->msgCount) {
         if (flag != OS_MESG_BLOCK) {
@@ -628,24 +604,11 @@ s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
     return 0;
 }
 
-/* TEMP D60: gfxFrameMsgQ receive watch (env GE_D60=1). The main loop only
- * acts on msg type 1 (retrace) / 4 (RSP done); anything else means the
- * message object's .type field was clobbered. */
 extern OSMesgQueue gfxFrameMsgQ; /* src/init.c */
-static void d60logRecv(OSMesgQueue *mq, OSMesg m) {
-    if (mq != &gfxFrameMsgQ || !getenv("GE_D60")) return;
-    static uint64_t n = 0;
-    const u16 type = *(const u16 *)m; /* OSScMsg.type */
-    if (n < 20 || (n % 300) == 0 || (type != 1 && type != 4))
-        sysLogPrintf(LOG_NOTE, "D60 recv #%llu mq=%p msg=%p type=%u",
-                     (unsigned long long)n, (void *)mq, (void *)m, type);
-    ++n;
-}
 
 s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
 {
     PortQueue *pq = portQueueGet(mq);
-    d62log("RECV", mq, 0); /* TEMP D62 */
     pthread_mutex_lock(&pq->lock);
     while (mq->validCount == 0) {
         if (flag != OS_MESG_BLOCK) {
@@ -704,7 +667,6 @@ s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
     mq->first = (mq->first + 1) % mq->msgCount;
     --mq->validCount;
     if (msg) *msg = m;
-    d60logRecv(mq, m); /* TEMP D60 */
     pthread_cond_signal(&pq->cond);
     pthread_mutex_unlock(&pq->lock);
     /* gfxFrameMsgQ is consumed only by boss.c's game thread. Apply queued
@@ -782,8 +744,6 @@ void osViSetEvent(OSMesgQueue *mq, OSMesg msg, u32 retraceCount)
     g_viRetraceMsg = msg;
 }
 
-/* TEMP D51: instrument the retrace pacemaker */
-static uint64_t g_viPostCount = 0;
 static void portPostVIEvent(void)
 {
     if (g_viRetraceMQ) {
@@ -791,17 +751,9 @@ static void portPostVIEvent(void)
          * end of a synchronous fast3d frame. A retrace posted into a backlog
          * is stale anyway -- sched has not drained the previous one yet. */
         if (g_viRetraceMQ->validCount >= g_viRetraceMQ->msgCount - 2) return;
-        s32 r = osSendMesg(g_viRetraceMQ, g_viRetraceMsg, OS_MESG_NOBLOCK);
-        if (++g_viPostCount % 60 == 1 || r != 0) {
-            sysLogPrintf(r != 0 ? LOG_ERROR : LOG_NOTE,
-                         "D51 vi post #%llu mq=%p msg=%d valid=%d/%d ret=%d",
-                         (unsigned long long)g_viPostCount, (void *)g_viRetraceMQ,
-                         (int)g_viRetraceMsg, g_viRetraceMQ->validCount,
-                         g_viRetraceMQ->msgCount, r);
-        }
+        osSendMesg(g_viRetraceMQ, g_viRetraceMsg, OS_MESG_NOBLOCK);
     }
 }
-/* END TEMP D51 */
 
 void osViSetMode(OSViMode *vm)
 {
@@ -817,7 +769,29 @@ void osViSetMode(OSViMode *vm)
      * every frame into a half-height band. */
     u32 w = vm->comRegs.width;
     s32 h = (s32)(((vm->fldRegs[0].yScale & 0xFFF) * 480u) / 0x800u);
+#ifdef VERSION_EU
+    /* D487: the EU build's video_related_8 (src/fr.c, #ifdef VERSION_EU)
+     * encodes yScale = bufy * 0x800 / (0x220 + (bufy == 330 ? 28 : 0)),
+     * i.e. against 544 (572) lines, not 480. Inverting with 480 gave a CFB
+     * ~12% too short (269 -> 237), so fast3d cropped the bottom of every
+     * PAL frame (HUD ammo counter reduced to a dot). Recover bufy exactly:
+     * the smallest height whose EU encoding reproduces this yScale. Keyed on
+     * the build, not the OS_VI_BIT_PAL ctrl bit: the modes reaching here
+     * (the scheduler's LAN1 start mode and the EU video_related_8 modes) do
+     * not reliably carry that bit (observed: yScale 0x400 = 272 without it). */
+    {
+        u32 ys = vm->fldRegs[0].yScale & 0xFFF;
+        s32 cand;
+        for (cand = 1; cand <= 576; cand++) {
+            u32 den = 0x220u + (cand == 330 ? 28u : 0u);
+            if (((u32)cand * 0x800u) / den == ys) { h = cand; break; }
+        }
+        if (cand > 576) h = 0;
+    }
+    if (h <= 0 || h > 576) h = 272; /* fallback: the EU CFB height (fr.h SCREEN_HEIGHT_272) */
+#else
     if (h <= 0 || h > 480) h = pal ? 272 : 240; /* fallback: LAN1 CFB height */
+#endif
     if (w > 640) w = 640;
     videoUpdateNativeResolution((s32)w, h);
 }
@@ -881,37 +855,12 @@ void osAiSetConvert(u32 convert) { (void)convert; }
  * completion; osPiStartDma() below replicates that, because the game blocks
  * in romReceiveMesg()/osRecvMesg() after every romCopy().
  */
-/* TEMP D60: identify sidecar model reads (env GE_D60=1). srcPA-base is the
- * manifest offset; cross-reference data/pcmodels-<region>/manifest.csv for
- * the file name. */
-extern uintptr_t pcmodelsSidecarBase(void);
-extern uint32_t  pcmodelsTotalSize(void);
-/* D69: same diagnostic for the bg/stan sidecar image. */
-extern uintptr_t pccgSidecarBase(void);
-extern uint32_t  pccgTotalSize(void);
-static void d60logSidecarRead(u32 srcPA, void *dstVA, u32 size) {
-    if (!getenv("GE_D60")) return;
-    uintptr_t base = pcmodelsSidecarBase();
-    if (base && srcPA >= base && srcPA < base + pcmodelsTotalSize()) {
-        sysLogPrintf(LOG_NOTE, "D60 sidecar read off=%llu size=0x%X dst=%p",
-                     (unsigned long long)(srcPA - base), size, dstVA);
-        return;
-    }
-    uintptr_t cgBase = pccgSidecarBase();
-    if (cgBase && srcPA >= cgBase && srcPA < cgBase + pccgTotalSize())
-        sysLogPrintf(LOG_NOTE, "D69 pccg sidecar read off=%llu size=0x%X dst=%p",
-                     (unsigned long long)(srcPA - cgBase), size, dstVA);
-}
-
-/* TEMP D60/D61: a ROM-read DMA target must land in the game DRAM views
+/* A ROM-read DMA target must land in the game DRAM views
  * (V1/V2) or the current thread's stack (texLoad's compbuffer). Anything
  * else is unmapped host memory on PC. */
-static FILE *s_d61log = NULL;
-static int s_d61opened = 0;
-
 static int dramHostAddrValid(uintptr_t addr, u32 size)
 {
-    static const uintptr_t bases[2] = { 0x70000000UL, 0x80000000UL };
+    static const uintptr_t bases[2] = { PORT_DRAM_V1_BASE, PORT_DRAM_K0_BASE };   /* portaddr.h */
     for (int i = 0; i < 2; i++) {
         if (addr >= bases[i] && addr + size <= bases[i] + 0x00800000UL)
             return 1;
@@ -944,7 +893,6 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
     if (size == 0)
         return;
     if (direction == OS_READ) {
-        d60logSidecarRead(srcPA, dstVA, size); /* TEMP D60 */
         if (!romdataCartAddrValid(srcPA, size)) {
             sysLogPrintf(LOG_WARNING,
                          "osPiStartDma: ROM read out of range "
@@ -952,22 +900,8 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
                          srcPA, size);
             return;
         }
-        /* TEMP D60: validate the DMA target too. The N64 PI happily DMAs to
-         * any KSEG address; on PC an unmapped target is a wild memcpy.
-         * Log the whole call chain (romCopy <- doRomCopy <- osPiStartDma) so
-         * the game-side caller can be symbolicated offline. */
-        /* TEMP D61: log every ROM read (dst/src/size). The last line before
-         * a crash identifies the culprit; dst symbolizes offline via nm. */
-        if (!s_d61opened && getenv("GE_D61")) {
-            s_d61log = fopen("d61dma.log", "w");
-            s_d61opened = 1;
-        }
-        if (s_d61log) {
-            static int d61count = 0;
-            fprintf(s_d61log, "D61 %06d dst=%p src=0x%08X size=0x%X\n",
-                    ++d61count, dstVA, srcPA, size);
-            fflush(s_d61log);
-        }
+        /* Validate the DMA target too. The N64 PI happily DMAs to any KSEG
+         * address; on PC an unmapped target is a wild memcpy. */
         if (!dramHostAddrValid((uintptr_t)dstVA, size)) {
             /* No __builtin_return_address here: the caller's frame chain is
              * not always walkable (it faulted). Log the raw stack window
@@ -977,7 +911,8 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
             char win[1200] = "";
             char *wp = win;
             for (int i = 0; i < 32; i++) {
-                wp += snprintf(wp, win + sizeof(win) - (wp - win),
+                /* D478: the bound is the bytes left, not a pointer. */
+                wp += snprintf(wp, sizeof(win) - (size_t)(wp - win),
                                " %p", (void *)sp[i]);
             }
 #if defined(PLATFORM_WINDOWS)
@@ -1173,6 +1108,10 @@ static void geEepromLoad(void)
     if (s_eepromLoaded) return;
     s_eepromLoaded = 1;
     const char *path = sysResolvePath(GE_EEP_PATH);
+    /* D514: before the game's first EEPROM read, convert an emulator-format
+     * save in place (port/src/eepimport.c). Runs before fopen so the load
+     * below sees the converted bytes; no-op for a port-format save. */
+    geEepImportEmulatorSave(path);
     FILE *fp = fopen(path, "rb");
     if (fp) {
         fread(s_eeprom, 1, GE_EEP_SIZE, fp);
@@ -1196,175 +1135,14 @@ static void geEepromStore(void)
     }
 }
 
-/* D257: Game.AllUnlocked -- mirror of src/game/file.h save_data (96 bytes;
- * keep in sync). Two things are patched in at read time:
- *  - the progression-gated cheat-unlock bits (front.c
- *    frontCheckIfCheatIsUnlocked) test per-LEVEL bits in
- *    unlocked_cheats_1/2/3 that normal play sets when each level is
- *    completed, so a fresh save has an empty cheat menu;
- *  - every stage/difficulty completion time. When ANY single-player cheat
- *    is active, g_AppendCheatSinglePlayer makes the mission-select screen
- *    (front.c get_highest_unlocked_difficulty_for_level) only accept levels
- *    whose status is STAGESTATUS_COMPLETED (3), not merely UNLOCKED (1) --
- *    so AllUnlocked must read as a fully-completed campaign or enabling a
- *    cheat locks every level. Existing (nonzero) player times are kept;
- *    only empty slots get the max time (0x3FF). */
-typedef struct ge_save_slot {
-    s32 chksum1;
-    s32 chksum2;
-    u8  completion_bitflags;
-    u8  flag_007;
-    u8  music_vol;
-    u8  sfx_vol;
-    u16 options;
-    u8  unlocked_cheats_1;
-    u8  unlocked_cheats_2;
-    u8  unlocked_cheats_3;
-    u8  padding;
-    u8  times[76];   /* (SP_LEVEL_MAX-1)*4: 19 levels x 4 difficulties */
-} ge_save_slot;   /* sizeof == 96 == save_data (file.h) -- enforced below */
-
-/* If this ever fires, the mirror drifted from save_data and the AllUnlocked
- * cheat patch silently no-ops (the block-read size check stops matching). */
-typedef char ge_save_slot_size_check[(sizeof(ge_save_slot) == 96) ? 1 : -1];
-
-/* Game-side CRC (src/game/crc.c) over [completion_bitflags, next slot),
- * stored in the slot's own chksum1/2 -- exactly what fileValidateSaves
- * re-checks after the block read. */
-extern void fileGenerateCRC(u8 *addressA, u8 *addressB, void *retval);
-
 extern int geLegacyCrcMaybeMigrateSlots(u8 *slots5); /* port/src/legacycrc.c (D297) */
+extern int geEepImportEmulatorSave(const char *path); /* port/src/eepimport.c (D514) */
 
-extern s32 portAllUnlocked;   /* port/src/video.c */
-
-/* Bit math mirrors fileGetSaveStageDifficultyTime / fileSetDifficultyStageTime
- * (src/game/file2.c): 10-bit time fields, offset = (difficulty*20+level)*10,
- * difficulties 0..2 (agent/secret/00) only -- 007 times are virtual. */
-static u32 geSaveGetTime(const u8 *t, s32 difficulty, s32 level)
-{
-    s32 offset = (difficulty * 20 + level) * 10;
-    s32 index  = offset >> 3;
-    switch (7 - (offset & 7)) {
-    case 7: return ((u32)(t[index] & 0xFF) << 2) | ((u32)(t[index + 1] & 0xc0) >> 6);
-    case 5: return ((u32)(t[index] & 0x3f) << 4) | ((u32)(t[index + 1] & 0xf0) >> 4);
-    case 3: return ((u32)(t[index] & 0x0f) << 6) | ((u32)(t[index + 1] & 0xfc) >> 2);
-    case 1: return ((u32)(t[index] & 0x03) << 8) | (u32)(t[index + 1] & 0xFF);
-    default: return 0;
-    }
-}
-
-static void geSaveSetTime(u8 *t, s32 difficulty, s32 level, u32 newtime)
-{
-    s32 offset = (difficulty * 20 + level) * 10;
-    s32 index  = offset >> 3;
-    switch (7 - (offset & 7)) {
-    case 7:
-        t[index]     = (u8)((t[index] & 0x00) | ((newtime >> 2) & 0xFF));
-        t[index + 1] = (u8)((t[index + 1] & 0x3F) | ((newtime << 6) & 0xC0));
-        break;
-    case 5:
-        t[index]     = (u8)((t[index] & 0xC0) | ((newtime >> 4) & 0x3F));
-        t[index + 1] = (u8)((t[index + 1] & 0x0F) | ((newtime << 4) & 0xF0));
-        break;
-    case 3:
-        t[index]     = (u8)((t[index] & 0xF0) | ((newtime >> 6) & 0x0F));
-        t[index + 1] = (u8)((t[index + 1] & 0x03) | ((newtime << 2) & 0xFC));
-        break;
-    case 1:
-        t[index]     = (u8)((t[index] & 0xFC) | ((newtime >> 8) & 0x03));
-        t[index + 1] = (u8)(newtime & 0xFF);
-        break;
-    }
-}
-
-static void geEepromPatchAllCheats(u8 *buf)
-{
-    /* buf holds the five save slots read from block 4. The sixth local slot
-     * is only a CRC end-boundary for the last one (fileGenerateCRC reads
-     * [A, B), so its contents are irrelevant). */
-    static ge_save_slot slots[6];
-    memcpy(slots, buf, sizeof(ge_save_slot) * 5);
-    memset(&slots[5], 0, sizeof(ge_save_slot));
-
-    int changed = 0;
-
-    /* D259 + D281: a fresh ge007.eep is zero-filled, so every slot reads as
-     * all-zero. Without this patch such a slot fails fileValidateSaves' CRC
-     * and becomes a free BLANKSAVEDATA slot (fileResetSave), after which
-     * fileBuildWriteNewSave fills the first free slot for each folder with
-     * no save, in folder order. This patch gives every slot a valid CRC
-     * below, so an all-zero slot would instead SURVIVE as-is: five slots all
-     * claiming folder 1 with volume 0 (D259: silence) and options 0 (D281:
-     * sight-on-screen, auto-aim, look-ahead and ammo display all off, which
-     * reads as "RMB aim broken"). D259 seeded only the volumes. Reproduce
-     * the game's full result instead: all-zero slots take the folders that
-     * no real slot holds, in order, built exactly as fileBuildWriteNewSave
-     * builds them (BLANKSAVEDATA + folder + not-free + bond); any left over
-     * become free BLANKSAVEDATA slots. Real saves keep their bytes. */
-    {
-        extern void fileSetSaveFoldernum(void *save, u32 folder);
-        extern void fileSetSaveFlagDoReset(void *save, s32 enable);
-        extern void fileSetSelectedBond(void *save, s32 bond);
-        static const ge_save_slot blank = {
-            0, 0, 0x80 /* SAVEFLAGS_SET(0,0,BOND_BROSNAN,1): free */, 0x00,
-            0xFF, 0xFF, 0x3A /* DEFAULT_OPTIONS */, 0, 0, 0, 0, {0}
-        };
-        int allzero[5], present[4] = {0, 0, 0, 0};
-        for (int i = 0; i < 5; i++) {
-            const u8 *raw = (const u8 *)&slots[i];
-            allzero[i] = 1;
-            for (int b = 0; b < (int)sizeof(ge_save_slot); b++)
-                if (raw[b]) { allzero[i] = 0; break; }
-            if (!allzero[i] && !(slots[i].completion_bitflags & 0x80 /* DORESET */)) {
-                int f = slots[i].completion_bitflags & 0x7;   /* SAVEFLAG_FOLDER */
-                if (f < 4) present[f] = 1;                    /* MAX_FOLDER_COUNT */
-            }
-        }
-        int folder = 0;
-        for (int i = 0; i < 5; i++) {
-            if (!allzero[i]) continue;
-            slots[i] = blank;
-            while (folder < 4 && present[folder]) folder++;
-            if (folder < 4) {
-                fileSetSaveFoldernum(&slots[i], (u32)folder);
-                fileSetSaveFlagDoReset(&slots[i], 0);
-                fileSetSelectedBond(&slots[i], folder);
-                present[folder] = 1;
-            }
-            changed = 1;
-        }
-    }
-
-    for (int i = 0; i < 5; i++) {
-        /* Cheat ids are level ids 0..19 (CHEAT_INPUT_BUFFER_SIZE == 20):
-         * bits 0-7 in _1, 8-15 in _2, 16-19 in the low nibble of _3. */
-        if (slots[i].unlocked_cheats_1 != 0xFF ||
-            slots[i].unlocked_cheats_2 != 0xFF ||
-            (slots[i].unlocked_cheats_3 & 0x0F) != 0x0F) {
-            slots[i].unlocked_cheats_1 = 0xFF;
-            slots[i].unlocked_cheats_2 = 0xFF;
-            slots[i].unlocked_cheats_3 |= 0x0F;
-            changed = 1;
-        }
-        /* Fully-completed campaign: fill empty completion times with the
-         * max (0x3FF). Needed so mission select still works while any cheat
-         * is active (see header comment); player records are preserved. */
-        for (s32 diff = 0; diff < 3; diff++) {
-            for (s32 lvl = 0; lvl < 20; lvl++) {
-                if (geSaveGetTime(slots[i].times, diff, lvl) == 0) {
-                    geSaveSetTime(slots[i].times, diff, lvl, 0x3FF);
-                    changed = 1;
-                }
-            }
-        }
-    }
-    if (!changed) return;
-
-    for (int i = 0; i < 5; i++)
-        fileGenerateCRC(&slots[i].completion_bitflags, (u8 *)&slots[i + 1],
-                        &slots[i]);
-    memcpy(buf, slots, sizeof(ge_save_slot) * 5);
-}
+/* D442: Game.AllUnlocked is a pure RAM/query-time override (file2.c
+ * fileGetIsCheatUnlocked + the debug flags seeded in main.c). The EEPROM
+ * bytes the game reads and writes are always the raw disk bytes -- the old
+ * read-time save patch (D257/D259/D281) and its write-time merge (D387) are
+ * gone. */
 
 static s32 geEepromRW(u8 block, u8 *buf, int nbytes, int write)
 {
@@ -1379,11 +1157,9 @@ static s32 geEepromRW(u8 block, u8 *buf, int nbytes, int write)
         /* D297: one-time migration of pre-D284 slot CRCs (port/src/legacycrc.c).
          * This IS the read fileValidateSaves performs (block 4, five slots), so
          * the re-stamped checksums are exactly what the game validates — no
-         * ordering hazard. Runs BEFORE geEepromPatchAllCheats so that only
-         * pristine+migrated bytes are ever persisted; AllUnlocked patches stay
-         * read-time-only as before. Block-0 smallSave is deliberately untouched
-         * (factory seal, see D297). */
-        if (block == 4 && nbytes == (int)(sizeof(ge_save_slot) * 5)) {
+         * ordering hazard. Only pristine+migrated bytes are ever persisted.
+         * Block-0 smallSave is deliberately untouched (factory seal, D297). */
+        if (block == 4 && nbytes == (int)(96 * 5) /* 5 x save_data, file.h */) {
             int migrated = geLegacyCrcMaybeMigrateSlots(buf);
             if (migrated) {
                 memcpy(s_eeprom + off, buf, nbytes);
@@ -1392,11 +1168,6 @@ static s32 geEepromRW(u8 block, u8 *buf, int nbytes, int write)
                              "eeprom: D297-migrated %d pre-D284 save slot(s) to current CRC",
                              migrated);
             }
-        }
-        /* fileValidateSaves' block read: five save slots from block 4. */
-        if (portAllUnlocked && block == 4 &&
-            nbytes == (int)(sizeof(ge_save_slot) * 5)) {
-            geEepromPatchAllCheats(buf);
         }
     }
     return 0;
@@ -1476,6 +1247,109 @@ s32 osMotorStop(OSPfs *pfs)
 
 void osSpTaskLoad(OSTask *t) { (void)t; /* nothing to load on the host */ }
 
+static void portRenderGfxTask(Gfx *dl)
+{
+    uint64_t t0 = sysGetMicroseconds();
+    videoStartFrame();
+    videoSyncSplitScreen();
+    gfx_run(dl);
+    videoEndFrame();
+    g_lastFrameUs = sysGetMicroseconds();
+    if (++g_framesRendered <= 5 || (g_framesRendered % 300) == 0)
+        sysLogPrintf(LOG_NOTE, "frame %d rendered in %llu us",
+                     g_framesRendered,
+                     (unsigned long long)(sysGetMicroseconds() - t0));
+}
+
+/* D481: render worker. The N64 RSP/RDP run beside the CPU; the scheduler
+ * starts a task and learns it finished from the SP/DP interrupts. The port
+ * used to run fast3d inline here, on the scheduler thread, so a VI retrace
+ * arriving mid-render was forwarded to the game only after the render: the
+ * game frame started late, the next retrace came < half a frame after it, and
+ * boss.c's tick gate skipped it (a 33 ms frame). Invisible with 1-3 ms
+ * renders, ~1 frame in 4 on an Intel HD 3000 (8-12 ms renders). Gfx tasks now
+ * go to this worker; it posts SP/DP done exactly as the inline path did.
+ * One-slot mailbox: the game submits frame N+1 only after frame N's done event
+ * has round-tripped (worker -> interruptQ -> __scTaskComplete -> client DONE
+ * -> boss.c), so the slot is always empty at hand-off. GE_DETERM keeps the
+ * inline path (its retrace synthesis is call-sequenced, see osRecvMesg), and
+ * GE_RENDERINLINE=1 restores it as a falsifier. */
+static pthread_mutex_t s_rwLock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t s_rwCond = PTHREAD_COND_INITIALIZER;
+static Gfx *s_rwTask = NULL;   /* submitted display list; NULL = worker idle */
+static int s_rwMode = 0;       /* 0 = undecided, 1 = worker, -1 = inline */
+
+static void *portRenderWorker(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        pthread_mutex_lock(&s_rwLock);
+        while (s_rwTask == NULL) {
+            /* Quit while idle: stop taking frames and never touch GL again.
+             * The host only waits for the renderer while it is inside a frame
+             * (video.c videoHostExitIfRequested), so an idle worker is already
+             * a safe exit point; a frame that is running parks itself at its
+             * boundary as before (D344). */
+            if (videoQuitRequested()) {
+                pthread_mutex_unlock(&s_rwLock);
+                for (;;) sysSleep(100000);
+            }
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_nsec += 100 * 1000 * 1000;
+            if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+            pthread_cond_timedwait(&s_rwCond, &s_rwLock, &ts);
+        }
+        Gfx *dl = s_rwTask;
+        pthread_mutex_unlock(&s_rwLock);
+
+        portRenderGfxTask(dl);
+
+        pthread_mutex_lock(&s_rwLock);
+        s_rwTask = NULL;
+        pthread_cond_broadcast(&s_rwCond);
+        pthread_mutex_unlock(&s_rwLock);
+        portPostEventForce(OS_EVENT_SP);   /* D134: must not be dropped */
+        portPostEventForce(OS_EVENT_DP);   /* gfx task is its own DP task */
+    }
+    return NULL;
+}
+
+static int portRenderWorkerOn(void)
+{
+    if (s_rwMode == 0) {
+        s_rwMode = -1;
+        if (g_determEnabled) {
+            sysLogPrintf(LOG_NOTE, "D481: GE_DETERM -> gfx tasks run inline");
+        } else if (getenv("GE_RENDERINLINE") != NULL) {
+            sysLogPrintf(LOG_NOTE, "D481: GE_RENDERINLINE -> gfx tasks run inline");
+        } else {
+            pthread_attr_t attr;
+            pthread_t th;
+            pthread_attr_init(&attr);
+#if !defined(_WIN32)
+            /* Same low stack as the game threads (see portAllocLowStack). */
+            void *lowStack = portAllocLowStack(PORT_THREAD_STACK);
+            if (lowStack)
+                pthread_attr_setstack(&attr, lowStack, PORT_THREAD_STACK);
+            else
+                pthread_attr_setstacksize(&attr, PORT_THREAD_STACK);
+#else
+            pthread_attr_setstacksize(&attr, PORT_THREAD_STACK);
+#endif
+            if (pthread_create(&th, &attr, portRenderWorker, NULL) == 0) {
+                pthread_detach(th);
+                s_rwMode = 1;
+                sysLogPrintf(LOG_NOTE, "D481: render worker started");
+            } else {
+                sysLogPrintf(LOG_ERROR, "D481: render worker failed to start; gfx tasks run inline");
+            }
+            pthread_attr_destroy(&attr);
+        }
+    }
+    return s_rwMode == 1;
+}
+
 void osSpTaskStartGo(OSTask *t)
 {
     if (g_determTraceEnabled && !g_determTaskEverRun) {
@@ -1488,17 +1362,23 @@ void osSpTaskStartGo(OSTask *t)
         /* Phase 3: execute the audio ucode against t->t.data_ptr (an Acmd
          * list). For now the task simply completes; libaudio's amMain still
          * runs its per-frame bookkeeping. */
+    } else if (portRenderWorkerOn()) {
+        /* D481: hand the display list to the render worker; it posts the
+         * SP/DP done events when the frame is presented. */
+        pthread_mutex_lock(&s_rwLock);
+        if (s_rwTask != NULL) {
+            sysLogPrintf(LOG_ERROR, "D481: gfx task submitted while the previous one is still rendering (invariant broken); waiting");
+            while (s_rwTask != NULL) {
+                pthread_cond_wait(&s_rwCond, &s_rwLock);
+            }
+        }
+        s_rwTask = (Gfx *)t->t.data_ptr;
+        pthread_cond_broadcast(&s_rwCond);
+        pthread_mutex_unlock(&s_rwLock);
+        return;
     } else {
-        /* Graphics task: run the software RSP on the display list. */
-        uint64_t t0 = sysGetMicroseconds();
-        videoStartFrame();
-        gfx_run((Gfx *)t->t.data_ptr);
-        videoEndFrame();
-        g_lastFrameUs = sysGetMicroseconds();
-        if (++g_framesRendered <= 5 || (g_framesRendered % 300) == 0)
-            sysLogPrintf(LOG_NOTE, "frame %d rendered in %llu us",
-                         g_framesRendered,
-                         (unsigned long long)(sysGetMicroseconds() - t0));
+        /* Graphics task: run the software RSP on the display list inline. */
+        portRenderGfxTask((Gfx *)t->t.data_ptr);
     }
 
     portPostEventForce(OS_EVENT_SP);   /* D134: must not be dropped */

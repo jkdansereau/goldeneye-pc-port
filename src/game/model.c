@@ -124,15 +124,6 @@ Model *modelmgrInstantiateModel(ModelFileHeader *header)
 
     if (model != NULL) 
     {
-#ifdef PORT /* TEMP D51 */
-        if (getenv("GE_D51")) {
-            static FILE *f = NULL;
-            if (!f) { f = fopen("d52rw.log", "a"); setvbuf(f, NULL, _IONBF, 0); }
-            fprintf(f, "INST model=%p header=%p numRecords=%d rwdata=%p rwdatalen=%d lvreset=%d\n",
-                    (void *)model, (void *)header, header->numRecords,
-                    (void *)rwdata, rwdatalen, g_ModelIsLvResetting);
-        }
-#endif
         modelInit(model, header, rwdata);
         ((struct ModelSlot *)model)->unk02 = rwdatalen;
     }
@@ -226,32 +217,10 @@ Model *modelmgrInstantiateModelWithAnim(ModelFileHeader *modelFileHeader)
             }
         }
 #endif
-#ifdef PORT /* TEMP D56: log slot-scan outcome incl. failure */
-        if (getenv("GE_D56")) {
-            fprintf(stderr, "[D56] animInstantiate header=%p numRecords=%d maxslots=%d newModel=%p\n",
-                    (void *)modelFileHeader, modelFileHeader->numRecords,
-                    g_MaxAnimModelSlots, (void *)newModel);
-            if (newModel == NULL) {
-                for (i2 = 0; i2 < g_MaxAnimModelSlots; i2++)
-                    fprintf(stderr, "[D56]   slot%d unk08=%d unk10=%p unk02=%d\n", i2,
-                            g_AnimModelSlots[i2].unk08, g_AnimModelSlots[i2].unk10,
-                            g_AnimModelSlots[i2].unk02);
-            }
-        }
-#endif
     }
 
     if (newModel != NULL) 
     {
-#ifdef PORT /* TEMP D51 */
-        if (getenv("GE_D51")) {
-            static FILE *f = NULL;
-            if (!f) { f = fopen("d52rw.log", "a"); setvbuf(f, NULL, _IONBF, 0); }
-            fprintf(f, "INSTA model=%p header=%p numRecords=%d rwdatas=%p rwdatalen=%d lvreset=%d\n",
-                    (void *)newModel, (void *)modelFileHeader, modelFileHeader->numRecords,
-                    (void *)rwdatas, rwdatalen, g_ModelIsLvResetting);
-        }
-#endif
         animInit(newModel, modelFileHeader, rwdatas);
         newModel->rwdatalen = rwdatalen;
     }
@@ -543,15 +512,6 @@ union ModelRwData* modelGetNodeRwData(Model *Objinst, ModelNode *root)
     }
 
 #ifdef PORT
-    /* TEMP D51: trace rwdata pool addressing */
-    if (GE_ENVFLAG("GE_D51")) {
-        static FILE *f = NULL;
-        if (!f) { f = fopen("d52rw.log", "a"); setvbuf(f, NULL, _IONBF, 0); }
-        fprintf(f, "GND obj=%p datas=%p idx=%d rwdatalen=%d op=%d data=%p res=%p\n",
-                (void *)Objinst, (void *)data, index, Objinst->rwdatalen,
-                root->Opcode & 0xff, (void *)data,
-                (void *)&data[index]);
-    }
     return (union ModelRwData *)&data[index];
 #else
     return &data[index];
@@ -828,14 +788,6 @@ void setsubroty(Model *model, f32 angle)
 
 void modelSetScale(Model *objinst, f32 scale)
 {
-#ifdef PORT /* TEMP D56: identify the crashing caller */
-    static int d56count = 0;
-    if (getenv("GE_D56")) {
-        fprintf(stderr, "[D56] modelSetScale #%d objinst=%p scale=%.4f ret=%p\n",
-                d56count++, (void *)objinst, scale,
-                __builtin_return_address(0));
-    }
-#endif
     objinst->scale = scale;
 }
 
@@ -2876,24 +2828,6 @@ void modelSetAnimationWithMerge(Model *model, ModelAnimation *modelAnimation, s3
 
 
 void modelSetAnimation(Model *model, ModelAnimation *modelAnimation, s32 flip, f32 startframe, f32 speed, f32 merge) {
-#ifdef PORT
-    /* D173 M-175: identify the actual caller that sets the intro puppet's
-     * first animation (M-174's firing_animation_groups probe got zero hits,
-     * ruling that path out -- rather than keep guessing which function it
-     * is, catch it at the one place all callers funnel through and resolve
-     * the caller with addr2line against the built exe afterward. Filters
-     * on g_CurrentPlayer->bodyModel specifically so normal chr/guard
-     * animation-sets (which fire constantly) don't spam the log. */
-    extern int d243mProbeActive(void);
-    extern int d243mGetFrameCounter(void);
-    extern struct player *g_CurrentPlayer;
-    if (d243mProbeActive() && g_CurrentPlayer && (model == g_CurrentPlayer->bodyModel))
-    {
-        osSyncPrintf("D243M: setanim_caller frame=%d model=%p startframe=%.1f speed=%.2f merge=%.1f retaddr=%p\n",
-                     d243mGetFrameCounter(), (void *) model, (double) startframe,
-                     (double) speed, (double) merge, __builtin_return_address(0));
-    }
-#endif
     modelCopyAnimForMerge(model, merge);
     modelSetAnimation2(model, modelAnimation, flip, startframe, speed, merge);
 }
@@ -2981,19 +2915,6 @@ void modelSetAnimSpeed(Model *model, f32 anim_speed, f32 startframe) {
                      (double)model->oldspeed, (double)model->newspeed,
                      (double)model->timespeed, (void *)model);
     }
-    /* D243 M-180: log all modelSetAnimSpeed calls during scripted camera modes
-     * to identify if unusual speed values are being set during cutscenes.
-     * Env-gated on GE_D243M (already cached elsewhere). */
-    extern int d243mProbeActive(void);
-    extern int d243mGetFrameCounter(void);
-    if (d243mProbeActive() && model != NULL) {
-        osSyncPrintf("D243M: setanimspeed frame=%d model=%p speed=%.3f startframe=%.1f "
-                     "timespeed=%.1f oldspeed=%.3f newspeed=%.3f elapsespeed=%.1f\n",
-                     d243mGetFrameCounter(), (void *) model, (double) anim_speed,
-                     (double) startframe, (double) model->timespeed,
-                     (double) model->speed, (double) model->newspeed,
-                     (double) model->elapsespeed);
-    }
 #endif
 
     if (startframe > 0.0f) {
@@ -3037,20 +2958,6 @@ void sub_GAME_7F06FE90(Model *model, f32 arg1, f32 arg2)
 }
 
 void modelSetAnimPlaySpeed(Model *model, f32 animation_rate, f32 startframe) {
-#ifdef PORT
-    /* D243 M-181: log all modelSetAnimPlaySpeed calls during scripted camera
-     * modes to identify if unusual playspeed values are being set during
-     * cutscenes. Env-gated on GE_D243M (already cached elsewhere). */
-    extern int d243mProbeActive(void);
-    extern int d243mGetFrameCounter(void);
-    if (d243mProbeActive() && model != NULL) {
-        osSyncPrintf("D243M: setanimplayspeed frame=%d model=%p rate=%.3f startframe=%.1f "
-                     "unkb0=%.1f playspeed=%.3f animrate=%.3f\n",
-                     d243mGetFrameCounter(), (void *) model, (double) animation_rate,
-                     (double) startframe, (double) model->unkb0,
-                     (double) model->playspeed, (double) model->animrate);
-    }
-#endif
     if (startframe > 0.0f) {
         model->unkb0 = startframe;
         model->animrate = animation_rate;
@@ -3627,28 +3534,6 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
     f32 frame2;
     f32 animlast;
 
-#ifdef PORT
-    /* D243 M-182: log playspeed at the start of every tick during scripted
-     * camera modes to identify when and how it changes. Env-gated on
-     * GE_D243M (already cached elsewhere). */
-    extern int d243mProbeActive(void);
-    extern int d243mGetFrameCounter(void);
-    if (d243mProbeActive() && model != NULL)
-    {
-        /* D243 M-187: numticks added -- this is the D193 multi-tick
-         * catch-up burst size for this call; >1 here at the moment of a
-         * scripted restart is the leading PC-specific candidate for why
-         * unkb0/unkb4 could be stale in a way N64's single-tick-per-frame
-         * execution would never produce (see findings.md D243). */
-        osSyncPrintf("D243M: tickstart frame=%d model=%p numticks=%d playspeed=%.3f animrate=%.3f "
-                     "unkb0=%.1f unkb4=%.1f unkac=%.3f endframe=%.1f\n",
-                     d243mGetFrameCounter(), (void *) model, (int) numticks,
-                     (double) model->playspeed, (double) model->animrate,
-                     (double) model->unkb0, (double) model->unkb4,
-                     (double) model->unkac, (double) model->endframe);
-    }
-#endif
-
     frame = model->animframe1;
     frame2 = model->animframe2;
 
@@ -3727,84 +3612,7 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
 
             speed = model->speed;
 
-#ifdef PORT
-            /* D243 M-183: clamp playspeed to a sane range during scripted
-             * camera modes when it exceeds a threshold. M-186 correction:
-             * this is NOT a D100/D140 struct-punning/pointer-widening issue
-             * -- Model is accessed everywhere by named field, no raw-offset
-             * alias exists here. The actual mechanism (still not fully root-
-             * caused, see findings.md D243): modelSetAnimation2 (line ~2720,
-             * unmodified decomp) never resets unkb0/unkb4/unkac/animrate on
-             * a scripted animation restart; a restart landing while unkb0 is
-             * stale-nonzero divides by it using a mismatched unkac/animrate
-             * pair from the previous animation, producing huge playspeed
-             * spikes (~388-410, vs. a legitimate max of ~2.0).
-             * M-187: was mistakenly gated on d243mProbeActive() (requires
-             * GE_D243M=1), so it never fired for a real player -- only during
-             * a diagnostic capture. Fixed to gate on the camera-mode test
-             * alone (gameScriptedCameraActive()) so it's actually active by
-             * default. Logging stays separately gated on d243mProbeActive().
-             * M-189 (2026-09-18) found and fixed the ACTUAL root cause (a
-             * stale hardcoded 32-bit sizeof(Model) literal in bondview2.c's
-             * model-carving buffer, user-verified live): this clamp no longer
-             * fires in practice. It is retained as defense-in-depth against
-             * any future out-of-range playspeed reaching a scripted camera.
-             * RULE-2-SIGNOFF (2026-09-19, release review): ungated
-             * behavior-modifying guard in src/game, approved for retention
-             * by the user as the stability-maximizing option for v0.3.0;
-             * candidate for removal post-release once all cutscenes are
-             * re-verified clean without it (findings.md D243 / M-192).
-             * Threshold: 10.0 is way above any legitimate playspeed (normal
-             * is ~1.0, max observed in gameplay is ~2.0). */
-            extern int d243mProbeActive(void);
-            extern int gameScriptedCameraActive(void);
-            if (gameScriptedCameraActive() && playspeed > 10.0f)
-            {
-                if (d243mProbeActive())
-                {
-                    osSyncPrintf("D243M: clamp playspeed %.3f → 1.0\n", (double) playspeed);
-                }
-                playspeed = 1.0f;
-            }
-#endif
-
             frame += playspeed * speed;
-
-#ifdef PORT
-            /* M-184: log frame progression after advancement */
-            extern int d243mProbeActive(void);
-            if (d243mProbeActive() && model != NULL)
-            {
-                osSyncPrintf("D243M: postadv frame=%.2f endframe=%.1f\n",
-                             (double) frame, (double) endframe);
-            }
-#endif
-
-#ifdef PORT
-            /* D243 M-179: log large per-tick animation advancements to identify
-             * whether rapid cutscene anim advancement is due to playspeed, speed,
-             * or numticks. Fires when a single tick advances >5 frames (normal
-             * is ~0.5-3). Env-gated on GE_D243M (already cached elsewhere). */
-            {
-                extern int d243mProbeActive(void);
-                extern int d243mGetFrameCounter(void);
-                if (d243mProbeActive())
-                {
-                    f32 advancement = playspeed * speed;
-                    if (advancement > 5.0f)
-                    {
-                        osSyncPrintf("D243M: biganim frame=%d model=%p adv=%.2f "
-                                     "playspeed=%.2f speed=%.2f numticks=%d "
-                                     "unkb0=%.1f unk88=%.1f timespeed=%.1f\n",
-                                     d243mGetFrameCounter(), (void *) model,
-                                     (double) advancement, (double) playspeed,
-                                     (double) speed, numticks,
-                                     (double) model->unkb0, (double) model->unk88,
-                                     (double) model->timespeed);
-                    }
-                }
-            }
-#endif
 
             if (model->anim2 != NULL) 
             {
@@ -3834,37 +3642,6 @@ void modelTickAnim(struct Model *model, s32 numticks, s32 update_chrstuff)
             {
                 animlast = model->anim->unk04 - 1;
                 endframe = model->endframe;
-
-#ifdef PORT
-            /* D243 M-185: clamp corrupted endframe values during scripted
-             * camera modes, producing huge negative values like
-             * -604462909807314587353088.0 that cause the animation to loop
-             * indefinitely or behave unexpectedly. Clamp to a reasonable
-             * range (0-1000) to prevent this.
-             * M-186 correction: NOT a D100/D140 struct-punning/pointer-
-             * widening issue -- see the M-183 comment above for the
-             * corrected mechanism and for M-189's actual root-cause fix
-             * (stale 32-bit sizeof(Model) literal in bondview2.c); with that
-             * fix in place this clamp no longer fires in practice and is
-             * retained as defense-in-depth. RULE-2-SIGNOFF (2026-09-19,
-             * release review): approved for retention by the user for
-             * v0.3.0; candidate for removal post-release (findings.md D243 /
-             * M-192).
-             * M-187: was mistakenly gated on d243mProbeActive() (requires
-             * GE_D243M=1), so it never fired for a real player. Fixed to
-             * gate on the camera-mode test alone (gameScriptedCameraActive()).
-             * Logging stays separately gated on d243mProbeActive(). */
-            extern int d243mProbeActive(void);
-            extern int gameScriptedCameraActive(void);
-            if (gameScriptedCameraActive() && (endframe < 0.0f || endframe > 1000.0f))
-            {
-                if (d243mProbeActive())
-                {
-                    osSyncPrintf("D243M: clamp endframe %.1f → 100.0\n", (double) endframe);
-                }
-                endframe = 100.0f;
-            }
-#endif
 
                 if (endframe);
 
@@ -4683,13 +4460,6 @@ void modelRenderNodeGundl(ModelRenderData* renderdata, ModelNode* arg1)
                 modelApplyRenderModeType2(renderdata);
             }
 
-#if defined(PORT)
-        /* TEMP D63: log Primary/Secondary before emit (env GE_D63=1) */
-        if (GE_ENVFLAG("GE_D63") && ((renderdata->flags & 1) && rodata->Primary))
-            osSyncPrintf("D63 modelRenderNodeGundl Primary=%p Secondary=%p BaseAddr=%p ModelType=%d\n",
-                         (void *)rodata->Primary, (void *)rodata->Secondary,
-                         (void *)rodata->BaseAddr, (int)rodata->ModelType);
-#endif
             gSPDisplayList(renderdata->gdl++, rodata->Primary);
 
             if ((rodata->ModelType == 3) && rodata->Secondary)
@@ -6204,8 +5974,23 @@ u32 *sub_GAME_7F07549C(void *arg0, f32 *arg1, f32 *arg2, ModelNode **nodeptr)
  * Address 7F0754BC.
  * Copy animation from ROM to RAM
 */
+#ifdef PORT
+u8 *loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
+#else
 s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
+#endif
 {
+#ifdef PORT
+    /* D457: the result is a frame-buffer address (host pointer), and the copy
+     * destination is computed at pointer width (was s32 ret / u32 dest). */
+    u8 *ret;
+    s32 source;
+    s32 frameSize;
+    uintptr_t dest;
+    u32 size;
+
+    ret = NULL;
+#else
     s32 ret;
     s32 source;
     s32 frameSize;
@@ -6213,18 +5998,28 @@ s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
     u32 size;
 
     ret = 0;
+#endif
     frameSize = anim->unk0E >> 3; // divide by 8
 
     if (anim->address & 0x80000000) // If animation's address is in RAM
     {
         // Load that frame from RAM
+#ifdef PORT
+        ret = (u8 *)(uintptr_t)(u32)(anim->address + (frame * frameSize));
+#else
         ret = anim->address + (frame * frameSize);
+#endif
     }
     else if (D_80036414 != NULL) // should never be NULL after initAnimationsBuffer is called
     {
         // Get dest from this D_80036414 which points to an array. Align to 16 bytes.
+#ifdef PORT
+        dest = ((uintptr_t) (D_80036414->animBufferPtr2 + 15) >> 4) * 16;
+        ret = (u8 *)dest;
+#else
         dest = ((u32) (D_80036414->animBufferPtr2 + 15) >> 4) * 16;
         ret = dest;
+#endif
 
         // Get source of this animation in ROM with the offset of the frame we'll load
         source = anim->address + (frame * frameSize);
@@ -6246,7 +6041,11 @@ s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
 
         // Set this to point to the end of the copied frame
         // This allows to copy another frame after this one
+#ifdef PORT
+        D_80036414->animBufferPtr2 = (char *)(dest + size);
+#else
         D_80036414->animBufferPtr2 = dest + size;
+#endif
     }
     return ret;
 }
@@ -6266,9 +6065,19 @@ void modelResetAnimationsScratchBuffer(void)
 }
 
 
+#ifdef PORT
+/* D457: rebase at pointer width. The N64 form wraps the sum at 32 bits
+ * (`(u32)var + diff`), which truncates any file base at or above 4 GiB.
+ * `diff` is now an intptr_t (fileramaddr - vma) and `var` is read at full
+ * width (model slots hold the raw vma zero-extended). */
+#define PROMOTE(var) \
+    if (var) \
+        var = (void *)((uintptr_t)var + diff)
+#else
 #define PROMOTE(var) \
     if (var) \
         var = (void *)((u32)var + diff)
+#endif
 
 #ifdef PORT
 /* PC port (D43/D45): Vertex.LinkedTo is a raw vma (u32), not a pointer —
@@ -6278,9 +6087,15 @@ void modelResetAnimationsScratchBuffer(void)
         var = (u32)((u32)var + diff)
 #endif
 
+#ifdef PORT
+void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, uintptr_t fileramaddr)
+{
+    intptr_t diff = (intptr_t)(fileramaddr - (uintptr_t)vma);
+#else
 void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr)
 {
     s32 diff = fileramaddr - vma;
+#endif
     s32 i;
 
     while (node)
@@ -6482,8 +6297,13 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
 /**
  * Address 7F075A90.
 */
+#ifdef PORT
+void sub_GAME_7F075A90(ModelFileHeader *header, s32 vma, uintptr_t addr) {
+    intptr_t diff = (intptr_t)(addr - (uintptr_t)(u32)vma);
+#else
 void sub_GAME_7F075A90(ModelFileHeader *header, s32 vma, u32 addr) {
     s32 diff = addr - vma;
+#endif
     s32 i;
 
     for(i = 0;i < header->numSwitches;i++)
@@ -6639,13 +6459,6 @@ void modelInitRwData(Model *model, ModelNode *startnode)
 
     while (node)
     {
-#if defined(PORT) /* TEMP D86: trace node walk to catch the bad pointer before deref */
-        if (getenv("GE_D86")) {
-            fprintf(stderr, "[D86] modelInitRwData model=%p header=%p node=%p\n",
-                    (void *)model, (void *)(model ? model->obj : NULL), (void *)node);
-            fflush(stderr);
-        }
-#endif
         u32 type = node->Opcode & 0xFF;
 
         switch (type)

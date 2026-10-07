@@ -18,7 +18,7 @@ investigation artifacts.
 | `d43_emit.py` | Offline N64→PC model-file converter → RZ sidecar + `manifest.csv` (D50 / Plan B). Regen after any model-format change. |
 | `d43_convert.py` | Reference single-file model converter + full-512 layout/pointer validator (D43). |
 | `d69_emit.py` | Offline converter for stage `bg/*.seg` + `Tbg_*_stanZ` → concatenated sidecar (D69/D78–D82). |
-| `d88_emit.py` | Offline converter for per-level `Usetup*Z` stage-setup files → appended to the `pccg.bin` sidecar (D88). |
+| `d88_emit.py` | Offline converter for per-level `Usetup*Z` (solo, 21) and `Ump_setup*Z` (multiplayer, 13; D416) stage-setup files → appended to the `pccg.bin` sidecar (D88). |
 | `d88_propdefs.py` | The `propDefs` polymorphic-record stream N64→PC converter used by `d88_emit.py` (D88.4). |
 | `d69_emit.py` / `d88_emit.py` / `d43_emit.py` | Run all three (+ `d88_propdefs`) to rebuild `data/` sidecars from the ROM. |
 
@@ -32,7 +32,7 @@ investigation artifacts.
 | `pixcount.py` | Count non-black pixels in a PPM dump — "did the scene render anything" as a number. |
 | `level_sweep.sh` | Bare `-level_XX` boot of all 21 solo levels → PASS / NO-FRAMES / CRASH. Predates `verify.sh sweep`; kept as the battle-tested full-21-level runner until `verify.sh sweep` has done an equivalent soak. |
 | `playtest.sh` | Launch a level for `docs/dev/LEVEL-PLAYTEST.md` human validation (WS6). |
-| `audiodebug.ps1` | Audio counterpart to `debug.ps1` (that one is for crashes; this one is for audio behaviour). Drives the `GE_D204` health monitor + `GE_AUDIOTRACE`/`GE_AUDIODUMP` and prints a pass/fail verdict: real-time ratio, queue starvation, dropped blocks, oversized blocks, plus a soundIndex histogram. `-AB` runs the same binary twice (with and without `GE_D204_OLD`) and prints a before/after table — how D204 was measured. `-Play` for an instrumented interactive playtest (the D202 workflow), `-Soak` for a 5-min stability run, `-SyncData` to mirror `./data` first. |
+| `audiodebug.ps1` | Audio counterpart to `debug.ps1` (that one is for crashes; this one is for audio behaviour). Drives the `GE_D204` health monitor + `GE_AUDIOTRACE`/`GE_AUDIODUMP` and prints a pass/fail verdict: real-time ratio, queue starvation, dropped blocks, oversized blocks, plus a soundIndex histogram. `-Play` for an instrumented interactive playtest (the D202 workflow), `-Soak` for a 5-min stability run, `-SyncData` to mirror `./data` first. |
 | `debug.ps1` / `repro_gdb.sh` / `attach_animgen.sh` | Launch (or attach to) the game under gdb so a crash always leaves a backtrace. |
 | `bundle-win.sh` / `bundle-linux.sh` | Package a built tree as a distributable archive (exe + licenses + `prepare-assets/`). |
 | `romverify.c` | One-shot `.z64` integrity check against the repo's ground truths. |
@@ -40,6 +40,7 @@ investigation artifacts.
 | `disasm.py` | Minimal MIPS disassembler for the BE ROM (RAM-addr → file offset). |
 | `ppm2bmp.py` | PPM → 24-bit BMP, no deps — eyeball `GE_PCDUMP` frames without PIL. |
 | `gen_findings_index.py` | Regenerate `docs/dev/findings-index.csv` (grep-before-you-read aid for the 200 KB finding log). `--check` in CI-style use. |
+| `docs_budget.py` | Context cost (approx tokens) of the docs every agent session loads, against per-file and tier-1 budgets; exits 1 when over. `--toc FILE` prints a heading TOC, `--json` for scripting. |
 | `gen_env_probes.py` | Drift check for `docs/dev/GE-ENV-PROBES.md` — re-greps live `getenv("GE_*")` sites, reports NEW/GONE. |
 
 ## Living — compiler-verified layout probes (kept: re-run when structs change)

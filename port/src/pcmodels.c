@@ -136,7 +136,10 @@ int pcmodelsLoadSidecars(uintptr_t cartBase, uint32_t romSize)
     if (!f)
         return 0;
     s_base = cartBase + romSize;
-    ok = fsRead(f, (void *)s_base, (int32_t)s_total) == (int32_t)s_total;
+    /* The region was reserved from the size seen at sizing time; refuse a
+     * file whose size has since changed. */
+    ok = (uint32_t)fsSize(f) == s_total &&
+         fsRead(f, (void *)s_base, (int32_t)s_total) == (int32_t)s_total;
     fsClose(f);
     if (!ok) {
         sysLogPrintf(LOG_ERROR, "pcmodels: short read of %s", s_binPath);

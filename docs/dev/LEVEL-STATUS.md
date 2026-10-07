@@ -1,5 +1,7 @@
 # LEVEL-STATUS — level load+render sweep (WS4) — 20 solo missions + ending sequence
 
+> **Historical record — do not act on status claims in this file.** The per-level sweep below predates the 2026-09-28 full-campaign sign-off; its open items (re-playthrough gate, M-49 completability, Cuba crash) are resolved. Current open work and status: [`docs/ROADMAP.md`](../ROADMAP.md) (2026-09-29).
+
 **Counting note:** the campaign is **20 playable missions** (`SP_LEVEL_MAX //
 20` in `bondconstants.h`; `mission_folder_setup_entries` in `front.c` has
 exactly 20 entries). The sweep's 21st boot target, "Cuba" (`-level_54`,
@@ -73,7 +75,7 @@ cause. Only remaining crash:
   900. This is the **known D129 residual**: the bare `-level_54` boot
   reaches the cast/credits scroll referencing a text bank the real
   front-end flow would have loaded. Not a real-flow blocker; Cuba loads +
-  renders 300+ frames fine. Parked with D76 (`docs/dev/GRAPHICS-BACKLOG.md`).
+  renders 300+ frames fine. Parked with D76 (since fixed as D164).
 
 | Level | # | Status | Crash site | Class |
 |---|---|---|---|---|

@@ -1,0 +1,202 @@
+{
+  "assets/animationtable_data.h": {
+    "-Wint-conversion": 25
+  },
+  "port/shim/PR/os.h": {
+    "-Wint-conversion": 3,
+    "-Wint-to-pointer-cast": 2,
+    "-Wpointer-to-int-cast": 1
+  },
+  "port/src/romdata.c": {
+    "-Wpointer-to-int-cast": 7
+  },
+  "src/audi.c": {
+    "-Wint-conversion": 1,
+    "-Wint-to-pointer-cast": 1,
+    "-Wpointer-to-int-cast": 4
+  },
+  "src/boss.c": {
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/debugmenu.c": {
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/fr.c": {
+    "-Wint-conversion": 2
+  },
+  "src/game/bg.c": {
+    "-Wint-conversion": 3,
+    "-Wpointer-to-int-cast": 6
+  },
+  "src/game/blood_decrypt.c": {
+    "-Wint-conversion": 2,
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/game/bondview2.c": {
+    "-Wint-conversion": 1,
+    "-Wint-to-pointer-cast": 2,
+    "-Wpointer-to-int-cast": 8
+  },
+  "src/game/bondview_r.c": {
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/game/chr.c": {
+    "-Wint-conversion": 1
+  },
+  "src/game/chr_b.c": {
+    "-Wint-conversion": 1
+  },
+  "src/game/chraction.c": {
+    "-Wpointer-to-int-cast": 118
+  },
+  "src/game/chrai.c": {
+    "-Wint-conversion": 2
+  },
+  "src/game/cleanup_objects.c": {
+    "-Wint-conversion": 1,
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/game/glass.c": {
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/game/gunfire.c": {
+    "-Wint-conversion": 2
+  },
+  "src/game/image.c": {
+    "-Wint-conversion": 3,
+    "-Wpointer-to-int-cast": 3
+  },
+  "src/game/image_bank.c": {
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/game/indy_commands.c": {
+    "-Wint-conversion": 2,
+    "-Wpointer-to-int-cast": 4
+  },
+  "src/game/indy_comms.c": {
+    "-Wint-conversion": 1,
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/game/initBondDATAdefaults.c": {
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/game/initactorpropstuff.c": {
+    "-Wint-conversion": 1,
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/game/initanitable.c": {
+    "-Wpointer-to-int-cast": 6
+  },
+  "src/game/initmenus.c": {
+    "-Wint-conversion": 1
+  },
+  "src/game/initunk_0009E0.c": {
+    "-Wint-conversion": 1
+  },
+  "src/game/language.c": {
+    "-Wint-conversion": 2,
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/game/lightfixture.c": {
+    "-Wint-conversion": 1,
+    "-Wpointer-to-int-cast": 5
+  },
+  "src/game/lv.c": {
+    "-Wint-conversion": 2,
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/game/model.c": {
+    "-Wint-conversion": 9,
+    "-Wint-to-pointer-cast": 3,
+    "-Wpointer-to-int-cast": 3
+  },
+  "src/game/mpmenu.c": {
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/game/objecthandler_2.c": {
+    "-Wint-to-pointer-cast": 1,
+    "-Wpointer-to-int-cast": 18
+  },
+  "src/game/othermodemicrocode.c": {
+    "-Wint-conversion": 1
+  },
+  "src/game/prop.c": {
+    "-Wint-conversion": 2,
+    "-Wpointer-to-int-cast": 21
+  },
+  "src/game/propobj.c": {
+    "-Wint-conversion": 1,
+    "-Wpointer-to-int-cast": 9
+  },
+  "src/game/ramromreplay.c": {
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/game/ramromreplay.h": {
+    "-Wint-conversion": 1
+  },
+  "src/game/rsp.c": {
+    "-Wint-conversion": 1,
+    "-Wint-to-pointer-cast": 1,
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/game/stan.c": {
+    "-Wint-conversion": 3,
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/game/tex.c": {
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/game/textrelated.c": {
+    "-Wpointer-to-int-cast": 4
+  },
+  "src/game/title.c": {
+    "-Wint-conversion": 6,
+    "-Wint-to-pointer-cast": 2,
+    "-Wpointer-to-int-cast": 7
+  },
+  "src/game/viewport.c": {
+    "-Wint-conversion": 1
+  },
+  "src/game/vtxstore.c": {
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/init.c": {
+    "-Wint-conversion": 6,
+    "-Wint-to-pointer-cast": 3,
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/libultra/audio/heapinit.c": {
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/libultra/audio/load.c": {
+    "-Wpointer-to-int-cast": 7
+  },
+  "src/libultra/audio/resample.c": {
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/libultra/audio/save.c": {
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/libultrare/audio/env.c": {
+    "-Wint-to-pointer-cast": 2
+  },
+  "src/libultrare/libc/xprintf.c": {
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/macro.h": {
+    "-Wpointer-to-int-cast": 1
+  },
+  "src/music.c": {
+    "-Wint-to-pointer-cast": 5,
+    "-Wpointer-to-int-cast": 6
+  },
+  "src/ramrom.c": {
+    "-Wint-conversion": 2
+  },
+  "src/sched.c": {
+    "-Wpointer-to-int-cast": 2
+  },
+  "src/snd.c": {
+    "-Wpointer-to-int-cast": 1
+  }
+}

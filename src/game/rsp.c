@@ -247,8 +247,16 @@ void rspGfxTaskStart(Gfx *firstGdl, Gfx *gdl, s32 arg2, OSMesg rspReplyMsg)
     // task->ucode_data_size = SP_UCODE_DATA_SIZE, set in bss constructor
     // task->dram_stack = &g_gfxDramStack, set in bss constructor
     // task->dram_stack_size = SP_DRAM_STACK_SIZE8, set in bss constructor
+#ifdef PORT
+    task->t.output_buff = (u64 *)(uintptr_t)(u32)(g_gfxRdpOutputBufferStart);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     task->t.output_buff = (u64 *)g_gfxRdpOutputBufferStart;
+#endif
+#ifdef PORT
+    task->t.output_buff_size = (u64 *)(uintptr_t)(u32)(g_gfxRdpOutputBufferEnd);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     task->t.output_buff_size = (u64 *)g_gfxRdpOutputBufferEnd;
+#endif
     task->t.data_ptr = (u64 *) firstGdl;
     task->t.data_size = (s32) ((gdl - firstGdl) * sizeof (Gfx)); // u64 pointers, generates sra	t3,t2,0x3
     task->t.yield_data_ptr = (u64 *)&g_gfxYieldBuf;

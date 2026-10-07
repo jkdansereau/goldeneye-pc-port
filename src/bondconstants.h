@@ -1865,9 +1865,6 @@ typedef enum MENU
     MENU_SWITCH_SCREENS,
     MENU_DISPLAY_CAST,
     MENU_SPECTRUM_EMU,
-#ifdef PORT
-    MENU_PC_OPTIONS,   /* D343: PC options screen (port/src/frontoptions.c) */
-#endif
     MENU_MAX
 } MENU;
 
@@ -3126,6 +3123,14 @@ enum CCRMLUT
     //Canonical name and style "ai_destroyobj 2 : (def->obj == PROP_ELVIS_SAUCER)\n"
     typedef enum PROP
     {
+#ifdef PORT
+        /* D417 (porting-notes D3): getPropForHeldItem() returns -1 for items with
+         * no held model (fist), and player.c tests `prop >= 0`. With all-non-negative
+         * enumerators GCC makes this enum unsigned so -1 passed the test and
+         * modelLoad(-1) crashed in 2P. Never-used negative sentinel forces it signed;
+         * PROP_ALARM1 stays 0, sizeof stays 4, no stored value changes. */
+        PROP__PORT_SIGNED = -1,
+#endif
         PROP_ALARM1,              /* Beta Alarm / Default Multi Weapon                                  */
         PROP_ALARM2,              /* Alarm                                                              */
         PROP_EXPLOSIONBIT,        /* White Pyramid (Explosion Bit)                                      */

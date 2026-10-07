@@ -997,6 +997,9 @@ s32 texLoadFromGdl(Gfx *src, s32 srcsize, Gfx *dst, void *texpool)
                     if (check_if_imageID_is_light(texnum))
                     {
                         lightFixtureEntryBegin(out);
+#ifdef PORT
+                        lightFixtureSetTexnum(texnum);   /* D431 */
+#endif
                         lightPending = TRUE;
                     }
                 }

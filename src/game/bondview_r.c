@@ -189,7 +189,11 @@ void bondviewLoadSetupIntroSection(void)
                         startpadcount++;
                     }
 
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroSpawn));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroSpawn));
+#endif
                 }
                 break;
 
@@ -226,7 +230,11 @@ void bondviewLoadSetupIntroSection(void)
                         }
                     }
 
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroItem));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroItem));
+#endif
                 }
                 break;
 
@@ -237,7 +245,11 @@ void bondviewLoadSetupIntroSection(void)
                         give_cur_player_ammo(((struct SetupIntroAmmo*)intro_record)->ammo_type, ((struct SetupIntroAmmo*)intro_record)->ammo_amount);
                     }
 
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroAmmo));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroAmmo));
+#endif
                 }
                 break;
 
@@ -256,7 +268,11 @@ void bondviewLoadSetupIntroSection(void)
                     intro_swirl->unk14.fval = intro_swirl->unk14.ival / M_U16_MAX_VALUE_F;
                     intro_swirl->unk18.fval = intro_swirl->unk18.ival / M_U16_MAX_VALUE_F;
 
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroSwirl));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroSwirl));
+#endif
                 }
                 break;
 
@@ -264,7 +280,11 @@ void bondviewLoadSetupIntroSection(void)
                 {
                     g_IntroAnimationIndex = ((struct SetupIntroAnim*)intro_record)->intro_anim;
 
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroAnim));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroAnim));
+#endif
                 }
                 break;
 
@@ -272,7 +292,11 @@ void bondviewLoadSetupIntroSection(void)
                 {
                     g_CurrentPlayer->bondtype = ((struct SetupIntroCuff*)intro_record)->bondtype;
 
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroCuff));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroCuff));
+#endif
                 }
                 break;
 
@@ -311,7 +335,11 @@ void bondviewLoadSetupIntroSection(void)
                         }
                     }
 
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroCamera));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroCamera));
+#endif
                 }
                 break;
 
@@ -333,7 +361,11 @@ void bondviewLoadSetupIntroSection(void)
 
                     if (watch_time_0);
 
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroWatch));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroWatch));
+#endif
                 }
                 break;
 
@@ -342,7 +374,11 @@ void bondviewLoadSetupIntroSection(void)
                     intro_credits = (struct SetupIntroCredits*)intro_record;
 
                     // hack: bad address math
+#ifdef PORT
+                    credits = (CreditsEntry*)((uintptr_t)g_ptrStageSetupFile + (s32)intro_credits->unk04);
+#else
                     credits = (CreditsEntry*)((s32)g_ptrStageSetupFile + (s32)intro_credits->unk04);
+#endif
                     credits_pointer = credits;
 
                     // what is the point of this?
@@ -351,7 +387,11 @@ void bondviewLoadSetupIntroSection(void)
                         credits++;
                     }
 
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroCredits));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroCredits));
+#endif
                 }
                 break;
 
@@ -360,7 +400,11 @@ void bondviewLoadSetupIntroSection(void)
                     #ifdef DEBUG
                         ossyncprintf("unknown bondstart type %d!\n",intro_record->type);
                     #endif
+#ifdef PORT
+                    intro_record = (struct SetupIntroEmpty*)((uintptr_t)intro_record + sizeof(struct SetupIntroEmpty));
+#else
                     intro_record = (struct SetupIntroEmpty*)((s32)intro_record + sizeof(struct SetupIntroEmpty));
+#endif
                 }
                 break;
 
@@ -380,9 +424,11 @@ void bondviewLoadSetupIntroSection(void)
             extern char *getenv(const char *name);
             extern int atoi(const char *s);
             const char *ic = getenv("GE_INTROCAM");
-            if (ic || getenv("GE_D306C")) osSyncPrintf("D306: intro camera index %d of %d%s\n", (int)rand_camera_index,
-                         (int)g_SetupIntroCameraCount, ic ? " (GE_INTROCAM override)" : "");
-            if (ic) rand_camera_index = (s32)((u32)atoi(ic) % (u32)g_SetupIntroCameraCount);
+            if (ic) {
+                osSyncPrintf("D306: intro camera index %d of %d\n", (int)rand_camera_index,
+                             (int)g_SetupIntroCameraCount);
+                rand_camera_index = (s32)((u32)atoi(ic) % (u32)g_SetupIntroCameraCount);
+            }
         }
 #endif
         while (rand_camera_index > 0)
@@ -399,8 +445,7 @@ void bondviewLoadSetupIntroSection(void)
     bondinvAddInvItem(ITEM_FIST);
 #ifdef PORT
     /* TEMP D303 (M-201): test-only start weapon, GE_STARTWEAPON=<ITEM_IDS>,
-     * so headless repros can hold a specific gun (pair with GE_D320R
-     * cheat=3 for ammo). Inert unset. */
+     * so headless repros can hold a specific gun. Inert unset. */
     {
         extern char *getenv(const char *name);
         extern int atoi(const char *s);

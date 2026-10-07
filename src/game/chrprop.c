@@ -434,10 +434,6 @@ void chrpropDetach(PropRecord* prop) {
 Gfx *chrpropRender(Gfx * gdl, PropRecord *prop, s32 withalpha)
 {
     u8 type;
-#if defined(PORT)
-    Gfx *gdl_in = gdl;
-    int probe = GE_ENVFLAG("GE_D96");
-#endif
 
     type = prop->type;
 
@@ -462,18 +458,6 @@ Gfx *chrpropRender(Gfx * gdl, PropRecord *prop, s32 withalpha)
         gdl = bondviewRenderProp(prop, gdl, withalpha);
     }
 
-#if defined(PORT)
-    if (probe) {
-        long long d = (long long)((char*)gdl - (char*)gdl_in);
-        if (d > 0x4000 || d < 0) {
-            osSyncPrintf("D96 chrpropRender RUNAWAY prop=%p type=%d alpha=%d flags=%08x chr=%p obj=%p model=%p delta=0x%llx gdl %p->%p\n",
-                         (void*)prop, (int)type, (int)withalpha, (unsigned)prop->flags,
-                         (void*)prop->chr, (void*)prop->obj,
-                         (void*)(prop->chr ? prop->chr->model : NULL),
-                         (unsigned long long)d, (void*)gdl_in, (void*)gdl);
-        }
-    }
-#endif
 
     return gdl;
 }
@@ -506,15 +490,6 @@ Gfx *chrpropsRenderPass(Gfx *gdl, s32 roomid, s32 renderpass)
         }
     }
 
-#if defined(PORT)
-    if (GE_ENVFLAG("GE_D96")) {
-        s32 n = (s32)((PropRecord **)g_LastOnScreenProp - g_OnScreenPropList);
-        osSyncPrintf("D96 chrpropsRenderPass room=%d pass=%d gdl=%p list=[%p..%p) n=%d cap=%d\n",
-                     (int)roomid, (int)renderpass, (void*)gdl,
-                     (void*)g_OnScreenPropList, (void*)g_LastOnScreenProp, (int)n,
-                     (int)ONSCREEN_PROP_LIST_LEN);
-    }
-#endif
 
     if ((renderpass == 0) || (renderpass == 2))
     {
@@ -1151,7 +1126,13 @@ void chraiDefaultWeaponFireHandler(s32 hand)
             }
             else
             {
+#ifdef PORT
+                /* D434: byte 0 of the PORT image_entry is the low byte of dataoffset, not the
+                 * hit type (N64: byte 0 = MSB = hit type). Use the bitfield (cf. chr.c). */
+                impact_sounds = g_HitTypeSounds[g_Textures[bghit.texturenum].hitTexture];
+#else
                 impact_sounds = g_HitTypeSounds[((u8 *) (&g_Textures[bghit.texturenum]))[0] & 0xf];
+#endif
             }
 
             if (createSpark)
@@ -1184,7 +1165,12 @@ void chraiDefaultWeaponFireHandler(s32 hand)
             {
                 recall_joy2_hits_edit_flag(shotdata.weapon, finalpos, besttexture);
 
+#ifdef PORT
+                /* D434: see the impact_sounds read above (raw byte 0 != hit type on PC). */
+                if ((g_Textures[besttexture].hitTexture != 5) && (g_Textures[besttexture].hitTexture != 6))
+#else
                 if (((0xf & ((u8 *) g_Textures)[besttexture * 8]) != 5) && ((((u8 *) g_Textures)[besttexture * 8] & 0xf) != 6))
+#endif
                 {
                     rooms[0] = bestroom;
                     rooms[1] = 255;
@@ -1321,7 +1307,11 @@ void chrpropAddBulletHit(struct ShotData *shotdata, PropRecord *prop, f32 dist, 
             shotdata->hits[i].node = node;
             shotdata->hits[i].hit = *hitthing;
             shotdata->hits[i].room = room;
+#ifdef PORT
+            shotdata->hits[i].unk44 = (struct ModelNode *)(uintptr_t)(u32)(unk44);  /* D441: zero-extend s32-held DRAM ptr */
+#else
             shotdata->hits[i].unk44 = unk44;
+#endif
             shotdata->hits[i].model = model;
             shotdata->hits[i].countsAsPenetration = countsAsPenetration;
             break;
@@ -3517,7 +3507,12 @@ void sub_GAME_7F03ECC0(f32 x1, f32 x2, f32 y1, f32 y2, f32 z1, f32 z2, Mtxf *m, 
     s32 maxxi = 0;
     s32 minzi;
     s32 maxzi = 0;
+#ifdef AVOID_UB
+    s32 rem[8]; /* D490: filterloop writes up to 6 when extremes coincide (flat bbox);
+                 on N64 the overflow landed in `pad`, on PC it corrupted pts[0] */
+#else
     s32 rem[4];
+#endif
     s32 cnt;
     f64 x1d = x1;
     f64 x2d = x2;

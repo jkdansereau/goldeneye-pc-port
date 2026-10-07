@@ -12,7 +12,11 @@
 // unsure if these structs are defined as something else, elsewhere
 struct unk_09B7A0_struct_parent {
     Vertex* unk00;
+#ifdef PORT
+    void *unk04; /* D457: owner tag (model->obj), was s32 */
+#else
     s32 unk04;
+#endif
     s32 unk08;
     s16 unk0C;
     s16 unk0E;
@@ -105,7 +109,14 @@ void sub_GAME_7F09B820(void)
         }
     }
 
+#ifdef PORT
+    /* D462: struct unk_09B7A0_struct_parent is 24 bytes on x86-64 (Vertex* unk00 widened) but the
+     * N64 stride 0x14 was used to size both tables, which are indexed at the C stride below
+     * (heap overrun of ~4 bytes per entry, up to 500 entries). ABI/layout fix, section A1. */
+    tmp = sizeof(struct unk_09B7A0_struct_parent);
+#else
     tmp = 0x14;
+#endif
     dword_CODE_bss_8007A0E8 = mempAllocBytesInBank(dword_CODE_bss_8007A0D4 * tmp, MEMPOOL_STAGE);
     dword_CODE_bss_8007A0E0 = mempAllocBytesInBank(dword_CODE_bss_8007A0D0 * 0x10, MEMPOOL_STAGE);
     dword_CODE_bss_8007A0EC = mempAllocBytesInBank(dword_CODE_bss_8007A0DC * tmp, MEMPOOL_STAGE);
@@ -305,7 +316,11 @@ void sub_GAME_7F09BBBC(void)
 * PD name: vtxstore_allocate
 * Description: Allocation for batches within the storage space
 */
+#ifdef PORT
+void *vtxstore_allocate(s32 arg0, s32 type, void *arg2, s32 arg3)
+#else
 s32 vtxstore_allocate(s32 arg0, s32 type, s32 arg2, s32 arg3) 
+#endif
 {
     s16* var_t3;
     s16 temp_t2;
@@ -329,7 +344,11 @@ s32 vtxstore_allocate(s32 arg0, s32 type, s32 arg2, s32 arg3)
             var_a2 = ((s16 *)&dword_CODE_bss_8007A0DC)[1];
             break;
         default:
+#ifdef PORT
+            return NULL;
+#else
             return 0;
+#endif
     }
 
     var_v1_2 = 0;
@@ -350,7 +369,11 @@ s32 vtxstore_allocate(s32 arg0, s32 type, s32 arg2, s32 arg3)
     if (var_a2 < var_v0) {
         sub_GAME_7F09B7A8();
         sub_GAME_7F09B7E4();
+#ifdef PORT
+        return NULL;
+#else
         return 0;
+#endif
     }
     // FAKE
     if (var_v0) {}
@@ -383,9 +406,15 @@ s32 vtxstore_allocate(s32 arg0, s32 type, s32 arg2, s32 arg3)
         } else {
             *var_t3 -= temp_t2;
         }
+#ifdef PORT
+        return (void *)var_t0[var_a1].unk00;
+    }
+    return NULL;
+#else
         return (s32)var_t0[var_a1].unk00;
     }
     return 0;
+#endif
 }
 
 

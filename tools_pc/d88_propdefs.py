@@ -409,7 +409,7 @@ if __name__ == "__main__":
             b = r[2].rsplit("/", 1)[-1]
             b = b[:-4] if b.endswith(".bin") else b
             fl[b] = (int(r[0]), int(r[1]))
-    names = sorted(n for n in fl if n.startswith("Usetup") and n.endswith("Z"))
+    names = sorted(n for n in fl if (n.startswith("Usetup") or n.startswith("Ump_setup")) and n.endswith("Z"))
     fails = 0
     for nm in names:
         a, s = fl[nm]

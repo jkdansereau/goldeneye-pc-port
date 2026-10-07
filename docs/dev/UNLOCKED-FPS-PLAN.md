@@ -83,40 +83,124 @@ Two useful existing properties:
 
 ### Phase 0 — Baseline & ground truth (port-only)
 
-Goal: know exactly what the default preset does before touching anything.
+**RESOLVED (2026-09-12, commit 8f2f9e1d, D248).** The ~30 fps default was
+confirmed a **port artifact**, not original N64/GE behavior: `sched.c`'s
+`__scHandleRetrace` read a per-client "every retrace vs. every other
+retrace" flag via a hardcoded `*((s32*)client + 2)` byte offset (`sched.c`
+~line 350) that only lands on the right field when `OSScClient` is 8 bytes
+(32-bit pointers, true on N64). On this 64-bit port the struct is 16 bytes,
+so the read landed inside the gfx client's own `msgQ` pointer (always
+non-NULL), silently collapsing the gfx client onto the audio client's 30Hz
+path even though the VI-retrace pacemaker itself always ticked at a correct
+60Hz. Fix (`#ifdef PORT`, `sched.c` ~line 348): index the struct
+(`client[1].next`) instead of the hand-rolled offset, so it scales with
+pointer width. Verified live via the `Video.DisplayFPS` overlay: rock-stable
+30 FPS pre-fix, 60 FPS post-fix, same build/scene. Same bug class as
+D122/D126/D132/D209 (pointer-width struct growth), just in the scheduler.
 
-- [ ] Measure actual sim rate and present rate of the current default build
-      (speedgraph + a `video.c` counter; add a periodic log line
-      `sim=..Hz render=..Hz`). Confirm NTSC vs PAL build.
-- [ ] Find why the default is ~30 rather than the console's 60 Hz. Candidates:
-      - tick-thread 4 ms chunked-sleep drift under host load;
-      - `__scTaskReady` double-buffer check (`sched.c`) stalling a task every
-        other retrace;
-      - `__scHandleRetrace`'s client flag read `*((s32*)client + 2)` is
-        **out-of-bounds of `OSScClient`** (struct is only `next`+`msgQ`; the
-        decomp even says "im wrong size"). For `gfxClient[0]` it happens to
-        read `gfxClient[1].next` (zero) — but this is layout luck, worth a
-        documented finding either way.
-- [ ] Record a Dxxx finding with the measured rates and root cause.
-- [ ] **Decision gate:** if 30 fps turns out to be a port artifact rather than
-      original behavior, document it and decide with data whether the default
-      preset keeps the current pace (test continuity) or is fixed. Default
-      assumption: keep current behavior as the "original" preset either way;
-      a fix becomes its own item.
+**Decision-gate answer:** the default preset is now the console's real
+60Hz(NTSC)/50Hz(PAL) rate — decision #1 above ("default preset = the
+original pace") is satisfied by this fix, not by preserving the halved
+30fps. All prior playtest/determinism baselines predate this fix and should
+be treated as pre-D248.
+
+- [x] Find why the default was ~30 rather than the console's 60 Hz — root
+      cause above; §F **D248**.
+- [x] Record a Dxxx finding with the measured rates and root cause — D248.
+- [ ] Measure actual sim rate and present rate with a dedicated periodic log
+      line (`sim=..Hz render=..Hz`) rather than the one-off `DisplayFPS`
+      overlay reading used to verify D248. Not yet built — still open if a
+      standing measurement (vs. a spot-check) is wanted before Phase 1/2
+      work lands.
+- [x] **Decision gate** — resolved above.
 
 ### Phase 1 — PD-style pacing hardening (port-only)
 
 Makes the default preset stable and drift-free; no game-code changes.
 
-- [ ] Replace the free-running tick grid in `portTickThread` with a
-      wall-clock accumulator + remainder carry (PD `frametimeCalculate` math):
-      post ticks when real time says they're due, carry the remainder, bounded
-      catch-up after hitches (D155 philosophy). No drift under load, no burst
-      of back-to-back ticks.
-- [ ] `video.c`: proper frame limiter for fractional caps (spin+sleep hybrid),
-      triple-buffered swap chain, and the PD safety rule (vsync off + no cap →
-      force a max cap so "unlocked" can't spin).
-- [ ] Config: keep `Video.VSync` / `Video.FpsCap`; add whatever Phase 2 needs.
+**Audit (2026-09-12, post-D248):** more of this than the plan assumed
+already exists. Verified by reading the code directly (not just the
+delegate's first pass, which mis-read one of these — see below):
+
+- [x] **Accumulator + remainder carry, tick thread.** `portTickThread`
+      (`port/src/libultra.c` ~294-313) already schedules off `g_nextTickUs +=
+      g_tickIntervalUs` — the *scheduled* time, not `now` — so it doesn't
+      drift under load. It resyncs to `now + interval` only when a tick is
+      already overdue (`g_nextTickUs <= now`), which is a bounded-catch-up
+      behavior, not a naive reset. This already matches the PD
+      `frametimeCalculate` accumulator pattern.
+- [x] **Accumulator + remainder carry, present-side limiter.**
+      `sync_framerate_with_timer` (`port/fast3d/gfx_sdl2.cpp` ~403-428) uses
+      the same shape: `next = previous_time + interval` (schedule-based, not
+      wall-clock-based), a sleep-then-busy-wait hybrid to hit the deadline
+      precisely, and only snaps `previous_time` to the real wake time `t`
+      when the overshoot exceeds ~1ms (`t - next < 10000` in its 100ns units)
+      — i.e. it already carries the remainder in the normal case and only
+      gives it up after a real hitch. (An earlier audit pass mis-read this as
+      "no remainder carry, resets every frame" — it does not; re-verified by
+      reading `gfx_sdl2.cpp:403-428` directly.)
+- [ ] **Triple-buffered swap chain.** Not present — presentation uses a
+      standard SDL/GL double-buffer swap (`SDL_GL_SwapWindow`,
+      `gfx_sdl_swap_buffers_begin`, `gfx_sdl2.cpp` ~436-444). Not started.
+- [ ] **PD safety rule (vsync off + no cap → force a max cap).** Not present.
+      The only existing floor/ceiling logic is the D186 guard in
+      `gfx_sdl_set_target_fps` / `video.c` (~289-292, ~464-467), which goes
+      the *other* direction — it refuses caps below 30 (because pacing still
+      runs inline on the sim thread, see Phase 2 note below) — there is no
+      "vsync off AND cap==0" case that forces a ceiling. Not started.
+- [x] Config: `Video.VSync` / `Video.FpsCap` already registered
+      (`video.c:106-107`) and live-reapplied (`video.c` ~340-349).
+
+**Net:** the hard part of Phase 1 (drift-free accumulator scheduling) is
+already done, on both the sim-tick and present-side clocks. What's left is
+narrow: a safety-cap rule and, if wanted, triple buffering — plus whatever
+Phase 2 needs on top.
+
+**Phase 2 first slice, scoped (2026-09-12).** The real gap for a 120fps
+*presentation* preset isn't pacing math — it's that `gfx_run()`
+(`gfx_pc.cpp:3179-3232`) composites straight into the default framebuffer
+(fb 0) once per sim tick and then calls `gfx_wapi->swap_buffers_begin()`
+once; there's no mechanism to show that same completed frame again on an
+extra vsync between sim ticks. The existing `GfxRenderingAPI` already has
+everything needed to do this **without any new GL primitives or a second
+thread/context**:
+- `copy_framebuffer(fb_dst, fb_src, left, top, flip_y, use_back)`
+  (`gfx_opengl.cpp:1270`) already blits the real window backbuffer
+  (`fb_src == 0` + `use_back = true` reads `GL_BACK`, confirmed
+  `gfx_opengl.cpp:1309-1311`) into an arbitrary allocated FBO/texture, and
+  can blit back the other way (`fb_dst == 0` writes straight into the real
+  default framebuffer, `gfx_opengl.cpp:1214`'s `fb_id == 0 -> bind 0`
+  convention).
+- `gfx_pc.cpp` already keeps a couple of always-allocated internal
+  framebuffers this same way (`game_framebuffer`,
+  `game_framebuffer_msaa_resolved`, created at `gfx_pc.cpp:3069-3070`) — a
+  new "last presented frame" capture FBO is the same pattern, one more
+  entry.
+- The tick clock (`portTickThread`) runs on its own pthread, independent of
+  the render/sim thread that calls `gfx_run`/`swap_buffers_begin` — so
+  spending extra wall-clock time *inside* `swap_buffers_begin` presenting a
+  duplicate frame does not touch the tick schedule at all; it only changes
+  how much idle time the render thread burns before the next tick message
+  is waiting for it. Sim rate stays exactly invariant by construction, per
+  decision #3.
+
+**Smallest concrete slice:** capture the just-finished frame into a new
+internal FBO right before the real `swap_buffers_begin()` call
+(`gfx_pc.cpp:3230-3231`, via `gfx_rapi->copy_framebuffer(captureFb, 0, -1,
+-1, false, true)`); when an experimental `Video.PresentRate` config knob
+requests double-rate (2x — e.g. 120 from a 60Hz NTSC sim, 100 from 50Hz
+PAL), have `gfx_sdl_swap_buffers_begin` (`gfx_sdl2.cpp`) do the normal swap,
+then — using the same schedule-accumulator shape as
+`sync_framerate_with_timer` — sleep to the halfway point of the tick
+interval, blit the capture FBO back into fb 0
+(`gfx_rapi->copy_framebuffer(0, captureFb, -1, -1, false, false)`), and
+`SDL_GL_SwapWindow` again. Default (`Video.PresentRate = 0`) must take none
+of these code paths, so the default preset stays byte-identical to today.
+Restrict the first slice to exactly {0 = off, 2 = double}; don't generalize
+to arbitrary/uncapped multipliers yet — that needs the vsync-off safety cap
+from the Phase 1 list above first. No options-menu UI in this slice
+(config-file-only); that's a fast follow once the mechanism is playtest-
+verified not to tear/stutter.
 
 ### Phase 2 — Experimental presentation rates (port-only)
 

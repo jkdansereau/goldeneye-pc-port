@@ -1,6 +1,6 @@
 # D176(a) Sky — consolidated research notes (read-only)
 
-Companion to `GRAPHICS-BACKLOG.md` D176(a) and findings.md M-37/M-47.
+Companion to the (since retired) `GRAPHICS-BACKLOG.md` D176(a) and findings.md M-37/M-47.
 Purpose: make the next implementation session mechanical. No code changed by
 this doc.
 

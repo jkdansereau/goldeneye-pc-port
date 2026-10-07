@@ -3,46 +3,69 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/png" href="{{ '/img/attract-bunker1.png' | relative_url }}">
+  <!-- Paint the browser chrome (scrollbars, form controls, new-tab cards)
+       dark before CSS loads, so the page never flashes white on mobile. -->
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#050607">
+  <!-- Indexing is NOT restricted: this only asks Google/Bing to show the
+       large image preview in search cards, which is what makes the
+       in-engine stills legible in a coverage roundup. -->
+  <meta name="robots" content="max-image-preview:large">
+  <!-- Favicon: the project's own crosshair mark (tools_pc/make_icon.py),
+       not a game still -- original art, no derivative-work exposure. -->
+  <!-- favicon.ico is a byte copy of cmake/icon/ge007.ico (the exe icon, with
+       the hand-tuned 16/24/32 px variants); a browser-downscaled 512 px PNG
+       washes out at tab size. Re-copy it after running make_icon.py. -->
+  <link rel="icon" href="{{ '/favicon.ico' | relative_url }}" sizes="16x16 24x24 32x32 48x48 64x64 128x128 256x256">
+  <link rel="apple-touch-icon" sizes="512x512" href="{{ '/img/icon/ge007-icon.png' | relative_url }}">
+  <!-- Entity disambiguation: the maintainer behind every page. -->
+  <link rel="me" href="https://github.com/jkdansereau">
   {%- seo -%}
   {%- include head-custom.html -%}
 </head>
 <body>
-  <header class="site-masthead">
-    <div class="masthead-inner">
-      <a class="masthead-title" href="{{ '/' | relative_url }}">{{ site.title }}</a>
-      <div class="masthead-tagline">{{ site.description }}</div>
-      <nav class="masthead-nav">
-        <a href="{{ '/' | relative_url }}">Home</a><span class="nav-sep">·</span>
-        <a href="{{ '/internals' | relative_url }}">Internals</a><span class="nav-sep">·</span>
-        <a href="{{ '/porting-notes' | relative_url }}">Porting notes</a><span class="nav-sep">·</span>
-        <a href="{{ '/building' | relative_url }}">Building</a><span class="nav-sep">·</span>
-        <a href="{{ '/dev-process' | relative_url }}">Dev process</a><span class="nav-sep">·</span>
-        <a href="{{ '/dev/agentic-development' | relative_url }}">Two-agent study</a>
-      </nav>
-    </div>
-  </header>
+  <div class="frame">
 
-  <main class="doc-content">
-    {{ content }}
-  </main>
+    <!-- The masthead IS the page's h1: every page gets exactly one h1
+         (the brand), and the page's own heading starts at h2. A <div>
+         here left the document with no h1 at all, which is what search
+         and screen readers key on. Presentation only -- the CSS class
+         carries the look. -->
+    <header class="banner">
+      <h1 class="t">{{ site.title }}</h1>
+      <p class="tag">{{ site.description }}</p>
+    </header>
 
-  <footer class="site-footer">
-    <div class="footer-inner">
-      <p class="footer-stamp">
-        Last updated 2026-09-28 — v0.4.0
-        <span class="nav-sep">·</span>
-        <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a>
-        <span class="nav-sep">·</span>
-        <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>
-      </p>
-      <p class="footer-legal">
-        Non-commercial fan preservation/research project. No ROM or game assets
-        are distributed; you supply a ROM you already own. Not affiliated with
-        or endorsed by Nintendo, Rare, Microsoft, MGM, Danjaq, or EON
-        Productions.
-      </p>
-    </div>
-  </footer>
+    <nav class="sitenav" aria-label="Site navigation">
+      <a href="{{ '/' | relative_url }}">home</a><span class="sep">/</span>
+      <a href="{{ '/documentation' | relative_url }}">documentation</a><span class="sep">/</span>
+      <a href="{{ '/building' | relative_url }}">building</a>
+    </nav>
+    <div class="rule g"></div>
+
+    <!-- flat_title: this page's masthead IS its title, so the layout opts
+         out of the amber first-h2 "page-title" look (no double header).
+         Jekyll + the preview builder both honour this conditional. -->
+    <main class="doc-content{% if page.flat_title %} flat-title{% endif %}">
+      {{ content }}
+    </main>
+
+    <div class="rule g"></div>
+
+    <footer class="site-footer">
+      <div class="footer-stamp">
+        <a href="https://github.com/jkdansereau">maintained by jkdansereau</a>
+        &nbsp;&middot;&nbsp; last updated: 2026-10-07 &middot; v0.5.0
+        &nbsp;&middot;&nbsp; <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a>
+        &nbsp;&middot;&nbsp; <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">releases</a>
+      </div>
+      <div class="footer-legal">
+        Non-commercial fan preservation / research project. No ROM or game assets are
+        distributed; you supply a ROM you already own. Not affiliated with or endorsed
+        by Nintendo, Rare, Microsoft, MGM, Danjaq, or EON Productions.
+      </div>
+    </footer>
+
+  </div>
 </body>
 </html>

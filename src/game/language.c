@@ -23,7 +23,11 @@ static void langFixupLoadedBank(char *name, void *p)
 
 // bss
 //CODE.bss:8008C640
+#ifdef PORT
+u32 *g_LangBanks[45];
+#else
 s32 g_LangBanks[45];
+#endif
 
 
 //CODE.bss:8008C6F4
@@ -419,7 +423,7 @@ u8 * langGet(s32 slotID)
 #endif
     u32 * textbank_ptr = g_LangBanks[slotID >> 10]; /* get the text file bank ID index the text ptr table */
 #ifdef PORT
-    /* D129 cont.: g_LangBanks[] is s32 and only populated for banks the
+    /* D129 cont.: g_LangBanks[] holds pointer-width entries (u32* under PORT) and is only populated for banks the
      * current flow has loaded.  A bare `-level_XX` boot that reaches the
      * cast/credits text path (Cuba, bondviewRenderCredits, D76) hits a bank
      * slot that was never filled -> stale/garbage non-NULL value -> fault on
@@ -429,24 +433,15 @@ u8 * langGet(s32 slotID)
         return NULL;
     }
 #endif
-#ifdef PORT
-    /* TEMP D65: log NULL-bank derefs (cast screen langGet crash). */
-    if (GE_ENVFLAG("GE_D63")) {
-        static int d65first = 1;
-        if (d65first) {
-            d65first = 0;
-            for (int b = 0; b < 45; b++)
-                if (g_LangBanks[b])
-                    osSyncPrintf("D65 bank %d = %p\n", b, (void *)g_LangBanks[b]);
-        }
-        if (!textbank_ptr)
-            osSyncPrintf("D65 langGet slotID=0x%08x bank=%d ptr=NULL\n", (unsigned)slotID, slotID >> 10);
-    }
-#endif
     u32 textslot_offset = textbank_ptr[slotID & 0x03FF]; /* load the textbank ptr table then get the slot's offset */
 
+#ifdef PORT
+    /* D456: rebuild the result at pointer width; a u32 here truncates any arena address >= 4 GiB. */
+    u8 *output_slot = (u8 *)textbank_ptr + textslot_offset;
+#else
     u32 output_slot = textslot_offset; /* add the text slot offset to the base ptr to get the ptr to text file's slot */
     output_slot += (u32)textbank_ptr;
+#endif
     #ifdef DEBUG
     return (textslot_offset != 0) ? (u8 *)output_slot : "Sorry, string not loaded.";
     #endif

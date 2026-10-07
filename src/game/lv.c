@@ -2,6 +2,7 @@
 #include <math.h>
 #ifdef PORT
 #include <stdlib.h>
+#include <string.h>   /* D416 GE_STARTMP harness: strchr */
 #endif
 #include <os_extension.h>
 #include <PR/libaudio.h>
@@ -396,6 +397,45 @@ void lvlStageLoad(s32 stage)
          * Not compiled without PORT; no effect unless the env var is set. */
         {
             const char *sm = getenv("GE_STARTMENU");
+            /* D416 harness: GE_STARTMP="<players>[,<mpStageIdx>[,<scenario>]]" starts a local
+             * multiplayer match with the menu's own default options (what
+             * MP options -> START does), so split-screen can be tested with no
+             * one at the menu. Needs GE_MPVIRT=<n-1> for the controller count. */
+            const char *smp = getenv("GE_STARTMP");
+            if (smp && *smp) {
+                extern s32 MP_stage_selected;
+                extern struct mp_stage_setup multi_stage_setups[];
+                extern void init_mp_options_for_scenario(s32 numplayers);
+                extern s32 selected_num_players;
+                extern s32 selected_folder_num;
+                s32 np = (s32)strtol(smp, NULL, 0);
+                const char *comma = strchr(smp, ',');
+                if (np < 2) np = 2;
+                if (np > 4) np = 4;
+                gamemode = GAMEMODE_MULTI;
+                /* D479: the file-select screen a real MP launch passes through
+                 * sets selected_folder_num = -1 (front.c), so the stage load's
+                 * fileLoadSettingsForFolder applies no Bond file's options.
+                 * Without this the harness applied a blank folder-1 record
+                 * (options 0: ammo counter, sight and auto-aim off). */
+                selected_folder_num = -1;
+                init_mp_options_for_scenario(np);
+                if (comma) MP_stage_selected = (s32)strtol(comma + 1, NULL, 0);
+                /* optional third field: scenario (MPSCENARIOS, e.g. 7 = 2v1) */
+                if (comma && strchr(comma + 1, ',')) {
+                    extern void reset_mp_options_for_scenario(MPSCENARIOS scenarioid);
+                    extern s32 scenario;
+                    reset_mp_options_for_scenario((MPSCENARIOS)strtol(strchr(comma + 1, ',') + 1, NULL, 0));
+                    osSyncPrintf("GE_STARTMP: scenario=%d\n", scenario);
+                }
+                selected_stage = multi_stage_setups[MP_stage_selected].stage_id;
+                briefingpage = -1;
+                prev_keypresses = TRUE;
+                maybe_is_in_menu = TRUE;
+                menu_update = MENU_RUN_STAGE;
+                osSyncPrintf("GE_STARTMP: players=%d mpstage=%d stage_id=%d\n",
+                             np, MP_stage_selected, selected_stage);
+            } else
             if (sm && *sm) {
                 s32 want = (s32)strtol(sm, NULL, 0);
                 const char *pg = getenv("GE_STARTMENU_PAGE");
@@ -433,7 +473,12 @@ void lvlStageLoad(s32 stage)
                  * so saves[] matches what the legal screen would have
                  * produced. */
                 extern s32 portSkipIntro;
-                if (portSkipIntro) {
+                /* D408: boot only. This block runs on EVERY title-stage load,
+                 * including the return from a mission; forcing file-select
+                 * there overwrote menu_update and skipped the post-mission
+                 * failure dossier. is_first_time_on_main_menu is TRUE only
+                 * until the first pass through here (cleared below). */
+                if (portSkipIntro && is_first_time_on_main_menu) {
                     extern void fileValidateSaves(void);
                     fileValidateSaves();
                     is_first_time_on_main_menu = FALSE;
@@ -1052,13 +1097,7 @@ void lvlManageMpGame(void)
 #ifdef PORT
     {
         extern void d318WatchdogTick(void);
-        extern void d318TimelineTick(void);
-        extern void d320ReproTick(void);
-        extern void d318bProbeTick(void);
-        d318WatchdogTick(); /* D318 permanent port-side deadlock recovery (findings D318) */
-        d318TimelineTick(); /* D318T env-gated diagnostic timeline (GE_D318T=1) */
-        d320ReproTick();    /* D320R env-gated forced-repro harness (GE_D320R, TEMP) */
-        d318bProbeTick();   /* D318B env-gated attack-state boundary probe (GE_D318B, TEMP) */
+        d318WatchdogTick(); /* D318/D320 pin detector, log-only since D329 (findings D318) */
     }
 #endif
     if ((g_CurrentStageToLoad != LEVELID_TITLE) && (D_80048394 == 0) && (g_ClockTimer > 0))

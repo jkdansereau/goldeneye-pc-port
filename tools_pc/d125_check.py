@@ -21,7 +21,7 @@ for r in csv.reader(open("scripts/filelist.u.csv")):
 
 man = {}
 for r in csv.reader(open(f"data/pccg-{REGION}/manifest.csv")):
-    if r and r[0].startswith("Usetup"):
+    if r and (r[0].startswith("Usetup") or r[0].startswith("Ump_setup")):
         man[r[0]] = (int(r[1]), int(r[2]))
 sidebin = open(f"data/pccg-{REGION}/pccg.bin", "rb").read()
 

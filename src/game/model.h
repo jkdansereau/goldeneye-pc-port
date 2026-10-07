@@ -108,10 +108,19 @@ void sub_GAME_7F074514(s32 param_1,struct Model *param_2,struct ModelNode *param
 void sub_GAME_7F074524(Gfx *param_1,struct Model *param_2, struct ModelNode *param_3);
 void sub_GAME_7F074534(ModelRenderData* data, Model* model, ModelNode* node);
 void subdraw(ModelRenderData *arg0, struct Model *);
+#ifdef PORT
+u8 *loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused);
+#else
 s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused);
+#endif
 void modelResetAnimationsScratchBuffer(void);
+#ifdef PORT
+void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, uintptr_t fileramaddr);
+void sub_GAME_7F075A90(ModelFileHeader *header, s32 vma, uintptr_t addr);
+#else
 void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr);
 void sub_GAME_7F075A90(ModelFileHeader *header, s32 vma, u32 addr);
+#endif
 s32 modelCalculateRwDataIndexes(ModelNode *basenode);
 void modelCalculateRwDataLen(struct ModelFileHeader *objheader);
 void modelInitRwData(Model *model, ModelNode *startnode);

@@ -75,7 +75,7 @@ jobs:
       #     self-hosted per the 2026-09-12 standing preference.
       windows_selfhosted: ${{ steps.runner.outputs.selfhosted }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -120,7 +120,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -171,40 +171,71 @@ jobs:
   # here is a "does it compile + link" signal only, not a runtime claim.
   # Not a required check yet; flip it to required once it is reliably green.
   #
-  # Toolchain: ubuntu-24.04 + gcc-14. The port is developed on MinGW GCC 16;
-  # pinning a recent GCC here keeps the first bring-up focused on real
-  # portability gaps rather than a decade of accumulated old-GCC pedantry.
-  # (A "does it build on the GCC a typical distro ships" pass can come later.)
+  # Toolchain: Steam Runtime 3 "sniper" SDK container (Debian 11 base,
+  # glibc 2.31) + its gcc-14. Building against the old glibc is what sets the
+  # tarball's floor: the ubuntu-24.04 build needed glibc 2.38 (C23
+  # __isoc23_* symbols), so it refused to start on Ubuntu 22.04 / Debian 12.
+  # The image is pinned by version AND digest.
+  # SDL2 is built from source (2.30.0, the version the 24.04 build bundled
+  # and every Linux/Deck test used): the SDK's own libSDL2 is sdl2-compat,
+  # which needs SDL3 at runtime. pip is bootstrapped from a hash-pinned
+  # get-pip.py: Debian 11's security archive no longer serves python3-pip.
   linux-build:
     runs-on: ubuntu-24.04
+    container:
+      image: registry.gitlab.steamos.cloud/steamrt/sniper/sdk:3.0.20260805.254768@sha256:1c33c507bc75d012e77df5727f93b0d5b8c3f7c8d4142ba5f7a16882cc92e014
+    # A container job's default `run` shell is sh, not bash (the packaging
+    # step's ${GITHUB_SHA::7} is a bashism).
+    defaults:
+      run:
+        shell: bash
     env:
       CC: gcc-14
       CXX: g++-14
       # CMakeLists.txt opt-in enables CMAKE_{C,CXX}_COMPILER_LAUNCHER=ccache
       # when ccache is on PATH (b4de1c68, speed-ups plan Step 5). Game
       # sources are frozen (1:1 with the decomp), so after the first run only
-      # touched port/ files miss cache -- near-total hit rate.
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      # touched port/ files miss cache -- near-total hit rate. CCACHE_DIR is
+      # set in a step: in a container job ${{ github.workspace }} is the
+      # host path, not the container's.
       CCACHE_MAXSIZE: 500M
+      SDL2_VERSION: 2.30.0
+      SDL2_SHA256: 36e2e41557e0fa4a1519315c0f5958a87ccb27e25c51776beb6f1239526447b0
+      GET_PIP_SHA256: 95c0ae79ccf9ac1e47e4187f49081d6ae1f45997afd4549e14f37337cbcfd766
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential gcc-14 g++-14 cmake python3 \
-            python3-pip libsdl2-dev zlib1g-dev libgl1-mesa-dev ccache patchelf
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+          apt-get update
+          apt-get install -y patchelf
+          curl -fsSL -o /tmp/get-pip.py https://bootstrap.pypa.io/pip/3.9/get-pip.py
+          echo "$GET_PIP_SHA256  /tmp/get-pip.py" | sha256sum -c
+          python3 /tmp/get-pip.py --quiet
+
+      - name: Build SDL2 ${{ env.SDL2_VERSION }} from source
+        run: |
+          curl -fsSL -o /tmp/sdl2.tar.gz \
+            "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
+          echo "$SDL2_SHA256  /tmp/sdl2.tar.gz" | sha256sum -c
+          tar xzf /tmp/sdl2.tar.gz -C /tmp
+          cmake -S "/tmp/SDL2-$SDL2_VERSION" -B /tmp/sdl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local -DSDL_STATIC=OFF -DSDL_TEST=OFF
+          cmake --build /tmp/sdl-build -j"$(nproc)"
+          cmake --install /tmp/sdl-build
+          ldconfig
 
       - name: Restore ccache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-linux-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
+          path: .ccache
+          key: ccache-linux-sniper-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
           restore-keys: |
-            ccache-linux-${{ hashFiles('CMakeLists.txt') }}-
-            ccache-linux-
+            ccache-linux-sniper-${{ hashFiles('CMakeLists.txt') }}-
+            ccache-linux-sniper-
 
       - name: Regenerate ROM-asset symbol file (US)
         run: python3 scripts/gen_romassets.py u
@@ -216,8 +247,8 @@ jobs:
       # tools_pc/dist/prepare-assets/ where bundle-linux.sh picks it up.
       - name: Freeze asset converter (PyInstaller)
         run: |
-          python3 -c "import PyInstaller" 2>/dev/null \
-            || python3 -m pip install --quiet --break-system-packages pyinstaller
+          python3 -c "import PyInstaller, sys; sys.exit(PyInstaller.__version__ != '6.22.3')" 2>/dev/null \
+            || python3 -m pip install --quiet pyinstaller==6.22.3
           python3 -m PyInstaller --onefile --noconfirm --clean \
             --name ge007-convert \
             --distpath tools_pc/dist/prepare-assets \
@@ -254,7 +285,7 @@ jobs:
           tools_pc/bundle-linux.sh "$V"
 
       - name: Upload bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: goldeneye-pc-port-linux-x86_64
           path: |
@@ -288,7 +319,7 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 500M
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -300,7 +331,7 @@ jobs:
       # wrapper every job needs. Packages themselves are hand-maintained on
       # the box; the dependency check below (not this step) verifies they're
       # present.
-      - uses: msys2/setup-msys2@v2
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
         with:
           msystem: MINGW64
           release: ${{ needs.changes.outputs.windows_selfhosted != 'true' }}
@@ -316,7 +347,7 @@ jobs:
         run: tools_pc/check-selfhosted-deps.sh
 
       - name: Restore ccache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-windows-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
@@ -335,9 +366,9 @@ jobs:
         run: |
           # MSYS2's mingw python ships without pip and has ensurepip
           # disabled — install pip from pacman, then PyInstaller.
-          python -c "import PyInstaller" 2>/dev/null || {
-            pacman -S --noconfirm mingw-w64-x86_64-python-pip
-            python -m pip install --quiet --break-system-packages pyinstaller
+          python -c "import PyInstaller, sys; sys.exit(PyInstaller.__version__ != '6.22.3')" 2>/dev/null || {
+            pacman -S --noconfirm --needed mingw-w64-x86_64-python-pip
+            python -m pip install --quiet --break-system-packages pyinstaller==6.22.3
           }
           python -m PyInstaller --onefile --noconfirm --clean \
             --name ge007-convert \
@@ -348,6 +379,12 @@ jobs:
 
       - name: Build (ntsc-final)
         run: ./build-pc.sh ntsc-final
+
+      # D441 ratchet: fail if the per-file count of 64-bit pointer/int ABI
+      # warnings rises relative to tools_pc/abi_baseline.json. Re-baseline
+      # locally with `python tools_pc/abi_ratchet.py build-pc --update`.
+      - name: ABI warning ratchet (D441)
+        run: python tools_pc/abi_ratchet.py build-pc
 
       - name: ccache stats
         run: ccache -s
@@ -366,7 +403,7 @@ jobs:
           tools_pc/bundle-win.sh "$V"
 
       - name: Upload bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: goldeneye-pc-port-win64
           path: |
@@ -382,27 +419,52 @@ jobs:
 
   # Tags only. Attach the packaged Windows + Linux bundles to a DRAFT
   # pre-release so a human can do the ROM smoke-test on each platform before
-  # publishing. This job — and only this job — gets contents: write.
+  # publishing. This job — and only this job — gets contents: write, and it
+  # is also the only job that attests build provenance (id-token: write +
+  # attestations: write; attest-build-provenance needs both).
   release:
     if: github.ref_type == 'tag'
     needs: [ changes, validate, windows-build, linux-build ]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/download-artifact@v7
+      # The pushed tag must match the version baked into the exe (the update
+      # check compares against it); bump GE007_VERSION in CMakeLists.txt first.
+      - name: Check tag matches GE007_VERSION
+        run: |
+          ver=$(sed -n 's/^set(GE007_VERSION "\([^"]*\)").*/\1/p' CMakeLists.txt)
+          if [ -z "$ver" ] || [ "${GITHUB_REF_NAME}" != "v${ver}" ]; then
+            echo "tag ${GITHUB_REF_NAME} != v${ver} (CMakeLists.txt GE007_VERSION)"; exit 1
+          fi
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: goldeneye-pc-port-win64
           path: dist
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: goldeneye-pc-port-linux-x86_64
           path: dist
+
+      # SLSA build provenance for the release artifacts (in-toto, signed by
+      # GitHub's OIDC key for this repo's workflow at the tagged commit).
+      # Anyone can check a downloaded file:
+      #   gh attestation verify <file> --repo jkdansereau/goldeneye-pc-port
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: |
+            dist/*.zip
+            dist/*.zip.sha256
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
 
       - name: Create or update draft pre-release
         env:

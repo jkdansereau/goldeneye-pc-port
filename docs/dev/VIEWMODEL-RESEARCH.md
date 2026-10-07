@@ -8,7 +8,7 @@
 > `#ifdef PORT` in `src/game/gunfire.c`. See findings.md D215. This doc is kept
 > for the ruled-out analysis only.
 
-Companion to `GRAPHICS-BACKLOG.md` ("1P weapon viewmodel") and findings D115
+Companion to the (since retired) `GRAPHICS-BACKLOG.md` ("1P weapon viewmodel") and findings D115
 item #5 / AUDIT-M6 #5. Goal: narrow the five audit suspects to a ranked,
 probe-ready list. No code changed by this doc.
 

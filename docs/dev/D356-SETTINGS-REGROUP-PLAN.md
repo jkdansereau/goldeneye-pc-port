@@ -5,7 +5,7 @@ this session; verification in `docs/dev/findings.md` D356 (GE_WSPROBE_RESET
 front + in-stage probes, regressions, build). Supersedes the "BOND FILE"
 section introduced in D353. Baselines: Turok PC port options (Nightdive, list
 provided by the maintainer), the PD port's `port/src/optionsmenu.c`
-(`C:\Users\james\Source\Repos\pd_port`), and plan §6 of
+(`<repos>\pd_port`), and plan §6 of
 `docs/dev/OPTIONS-MENU-PLAN.md` (the original "align with Turok" note).
 
 ## 1. Goal

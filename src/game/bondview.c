@@ -492,9 +492,17 @@ s32 status_bar_text_buffer_index = 0;
 s32 display_statusbar = 0;
 #ifdef BUGFIX_R0
 //D:800368A0
+#ifdef PORT
+struct font *copy_1stfonttable = NULL;
+#else
 s32 copy_1stfonttable = 0;
+#endif
 //D:800368A4
+#ifdef PORT
+struct fontchar *copy_2ndfonttable = NULL;
+#else
 s32 copy_2ndfonttable = 0;
+#endif
 #endif
 //D:800368A8
 s32 upper_text_buffer_index = 0;
@@ -808,11 +816,19 @@ Mtx *currentPlayerGetProjectionMatrix(void) {
     return g_CurrentPlayer->projmatrix;
 }
 
+#ifdef PORT
+void set_BONDdata_field_10E0(Mtx *arg0) {
+#else
 void set_BONDdata_field_10E0(s32 arg0) {
+#endif
     g_CurrentPlayer->field_10E0 = arg0;
 }
 
+#ifdef PORT
+Mtx *get_BONDdata_field_10E0(void) {
+#else
 s32 get_BONDdata_field_10E0(void) {
+#endif
     return g_CurrentPlayer->field_10E0;
 }
 
@@ -858,11 +874,19 @@ Mtxf *currentPlayerGetMatrix10EC(void) {
     return g_CurrentPlayer->field_10EC;
 }
 
+#ifdef PORT
+void sub_GAME_7F078464(LookAt *arg0) {
+#else
 void sub_GAME_7F078464(s32 arg0) {
+#endif
     g_CurrentPlayer->field_10E4 = arg0;
 }
 
+#ifdef PORT
+LookAt *sub_GAME_7F078474(void)
+#else
 s32 sub_GAME_7F078474(void)
+#endif
 {
     return g_CurrentPlayer->field_10E4;
 }

@@ -51,7 +51,7 @@ toolchain is involved in extraction or in the PC build.** (The IDO toolchain is
 only needed to build the N64 ROM itself, and its proprietary SGI binaries are
 not distributed here; see [`SetupGuide.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/SetupGuide.md) "Recompile IDO".)
 On Windows this is easiest under WSL or a Linux VM. Full details and
-alternatives (Docker) are in [`SetupGuide.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/SetupGuide.md).
+alternatives (Docker) are in `SetupGuide.md`.
 
 ---
 
@@ -93,6 +93,15 @@ cmake -S . -B build-pc -DROMID=ntsc-final
 cmake --build build-pc -j
 ```
 
+On Windows, `build-pc.sh` also locates the MSYS2 MinGW64 toolchain itself
+(so it works from Git Bash or a non-login shell too, even with another
+`cmake` earlier on PATH) and, if native child processes would get an
+unwritable `TMP`, re-runs the configure+build under PowerShell with a
+writable one. If MSYS2 is not installed at `C:\msys64`, set
+`GE_MSYS2_ROOT` (e.g. `GE_MSYS2_ROOT='C:\tools\msys64'` for a custom
+install location). Re-exec logs:
+`build-pc/ge007-native-reexec-*.log`.
+
 For PAL/JP you must first generate that region's ROM-asset symbol file
 (the US one is committed):
 
@@ -128,11 +137,15 @@ to d69's output):
 ```sh
 python3 tools_pc/d43_emit.py ntsc-final          # -> data/pcmodels-ntsc-final/{pcmodels.bin,manifest.csv}  (~1.3 MB)
 python3 tools_pc/d69_emit.py ntsc-final          # -> data/pccg-ntsc-final/{pccg.bin,manifest.csv}          (bg + stan)
-python3 tools_pc/d88_emit.py ntsc-final --regen  #    appends the 21 per-level Usetup*Z stage-setup files -> ~3.6 MB
+python3 tools_pc/d88_emit.py ntsc-final --regen  #    appends the 21 solo Usetup*Z + 13 multiplayer Ump_setup*Z stage-setup files -> ~3.6 MB
 ```
 
-**PAL / JP note:** sidecar generation for these regions is currently broken at
-the source-data level (finding D258); use an NTSC-U ROM until issue #85 lands.
+**PAL / JP note:** both regions convert, build and boot from source (finding
+D258, fixed 2026-10-02; D487/D488 fixed the PAL frame height and TV type).
+Run the three emit passes with `pal-final` or `jpn-final`, and build into a
+separate directory, for example `BUILD_DIR=build-pal ./build-pc.sh pal-final`.
+Release packages are still NTSC-U only until per-region packaging lands
+(issue #85).
 
 These are **pure-stdlib Python 3** (no MIPS toolchain, independent of the
 step-2 asset extraction) and read only the ROM plus files already committed to

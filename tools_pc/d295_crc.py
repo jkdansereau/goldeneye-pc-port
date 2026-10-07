@@ -52,7 +52,9 @@ def file_generate_crc(data: bytes, buggy: bool):
     return c1 & 0xFFFFFFFF, c2 & 0xFFFFFFFF
 
 def main():
-    src = sys.argv[1] if len(sys.argv) > 1 else r"C:\Users\james\Downloads\ge-issue87-artifacts\ge007.eep"
+    if len(sys.argv) < 2:
+        sys.exit("usage: d295_crc.py <ge007.eep> [out.eep]")
+    src = sys.argv[1]
     dst = sys.argv[2] if len(sys.argv) > 2 else None
     eep = bytearray(open(src, "rb").read())
     assert len(eep) == 2048, len(eep)

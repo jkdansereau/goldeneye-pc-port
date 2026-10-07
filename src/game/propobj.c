@@ -6,6 +6,9 @@
 
   ---------------------------------------------------------------------*/
 
+#ifdef PORT
+#include "porttick.h" /* D486 */
+#endif
 #include <ultra64.h>
 #include <math.h>
 #ifdef PORT
@@ -56,6 +59,10 @@
 #include "tex.h"
 #include "textrelated.h"
 #include "vtxstore.h"
+#ifdef PORT
+#include "envflag.h"   /* cached getenv for per-tick probes (D302) */
+#include "drawdistgameplay.h"
+#endif
 
 
 #if defined(VERSION_JP) || defined(VERSION_EU)
@@ -3639,6 +3646,10 @@ void sub_GAME_7F0442DC(PropRecord* prop)
     {
         mtx = modelFindNodeMtx(model->attachedto, model->attachedto_objinst, 0);
         prop->flags |= PROPFLAG_ONSCREEN;
+#ifdef PORT
+        /* D466: an embedded object is visible exactly when its parent is. */
+        portPropSetGameplayOnScreen(prop, prop->parent ? portPropGameplayOnScreen(prop->parent) : 1);
+#endif
         model->render_pos = (RenderPosView*)dynAllocate(model->obj->numMatrices << 6);
 
         matrix_4x4_multiply_homogeneous(mtx, &obj->embedment->matrix, (Mtxf*)model->render_pos);
@@ -3903,7 +3914,12 @@ s32 sub_GAME_7F0448A8(struct PropRecord *argProp)
             if ((prop->type == PROP_TYPE_VIEWER) || (prop->type == PROP_TYPE_CHR))
             {
                 temp_v0_2 = prop->obj;
+#ifdef PORT
+                /* D456: prop->obj and prop->chr share a union slot; for VIEWER/CHR props it is a ChrRecord. N64 read ObjectRecord.model @0x14 == ChrRecord.chrflags @0x14; read the named field. */
+                if ((prop->chr == NULL) || !(prop->chr->chrflags & CHRFLAG_HIDDEN))
+#else
                 if ((temp_v0_2 == NULL) || !((s32) temp_v0_2->model & 0x400))
+#endif
                 {
                     chrpropGetCollisionBounds(prop, &radius, &height, &arbitratyNumber);
 
@@ -5725,7 +5741,11 @@ s32 objTick(struct PropRecord *prop)
 #endif
 				temp_s0_6 = render_pad2F4->model;
 
+#ifdef PORT
+				if (temp_s0_6->anim == (ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs2[1])) /* D32/D33 */  /* D441: zero-extend s32-held DRAM ptr */
+#else
 				if (temp_s0_6->anim == (ModelAnimation *)animation_table_ptrs2[1]) /* D32/D33 */
+#endif
 				{
 					modelSetAnimTranslationScale(temp_s0_6, 10.438f);
 					setsubroty(render_pad2F4->model, M_PI_F);
@@ -5868,6 +5888,9 @@ s32 objTick(struct PropRecord *prop)
 		}
 	}
 
+#ifdef PORT
+	portD466SetLastPosVerdict(1); /* D466: forced-visible branches below are also gameplay-visible */
+#endif
 	if ((obj->type == PROPDEF_TANK) && (get_ptr_for_players_tank() == prop))
 	{
 		var_v1_5 = 1;
@@ -5889,6 +5912,9 @@ s32 objTick(struct PropRecord *prop)
 		}
 
 		prop->flags |= PROPFLAG_ONSCREEN;
+#ifdef PORT
+		portPropSetGameplayOnScreen(prop, portD466LastPosVerdict()); /* D466 */
+#endif
 		mtxs = dynAllocate(model->obj->numMatrices << 6);
 		model->render_pos = (RenderPosView *) mtxs;
 
@@ -6319,6 +6345,11 @@ s32 objTick(struct PropRecord *prop)
 
 			if ((autogun->is_active != 0) && (!(obj->flags & PROPFLAG_IS_DRONE_GUN)))
 			{
+#ifdef PORT
+				/* D486 (RULE-2): the shot counter advanced per frame; step it at the N64's 2-ticks-per-frame pace */
+				if (portN64FrameStep())
+				{
+#endif
 				autogun->unkAC = autogun->unkAC + 1;
 				sp13C = (autogun->unkAC & 1) == 0;
 
@@ -6326,6 +6357,9 @@ s32 objTick(struct PropRecord *prop)
 				{
 					sp138 = (autogun->unkAC & 1) == 1;
 				}
+#ifdef PORT
+				}
+#endif
 
 				if (autogun->unkC0 < g_GlobalTimer)
 				{
@@ -6420,7 +6454,12 @@ s32 objTick(struct PropRecord *prop)
 						if ((temp_f20_4 <= (((beam_xdiff * beam_xdiff) + (beam_ydiff * beam_ydiff)) + (beam_collisionTile * beam_collisionTile))) && (bondviewGetIfCurrentPlayerDamageShowTime() == 0))
 						{
 							temp_f0_35 = sqrtf(temp_f20_4);
+#ifdef PORT
+							/* D486: one shot now spans a 2-tick N64 frame below 2 ticks/frame, so charge that frame's delta (damage per second unchanged) */
+							var_f2_7 = (0.16f * (g_ClockTimer >= 2 ? OBJECT_INTERACTION_TIMER_DELTA : 2.0f)) * g_AutogunPendingDamageTick;
+#else
 							var_f2_7 = (0.16f * OBJECT_INTERACTION_TIMER_DELTA) * g_AutogunPendingDamageTick;
+#endif
 							if (temp_f0_35 > 200.0f)
 							{
 								var_f2_7 *= 200.0f / temp_f0_35;
@@ -7203,7 +7242,11 @@ void sub_GAME_7F04AC20(PropRecord *prop, ModelRenderData *mrData, s32 arg2)
 
         if (destroyed)
         {
+#ifdef PORT
+            destroyed = (get_BONDdata_field_10E0() != NULL);
+#else
             destroyed = get_BONDdata_field_10E0();
+#endif
             destroyed = destroyed != 0;
         }
 
@@ -9682,7 +9725,12 @@ void objHit(ShotData *shotdata, BulletHit *hit)
             }
             else
             {
+#ifdef PORT
+                /* D434: raw byte 0 of the PORT image_entry is dataoffset's low byte, not the hit type. */
+                impact_sounds = g_HitTypeSounds[g_Textures[texturenum].hitTexture];
+#else
                 impact_sounds = g_HitTypeSounds[((u8 *)&g_Textures[texturenum])[0] & 0x0f];
+#endif
             }
 
             thing2_index = randomGetNext() % impact_sounds->thing2_len;
@@ -10391,6 +10439,14 @@ void generate_language_specific_text_for_weapon(u8 *finalstring, ITEM_IDS itemty
     u32 morethan2players;
 
     morethan2players = FALSE;
+
+#ifdef AVOID_UB
+    /* D496: with 3+ players the non-JP path below never writes finalstring
+     * before strcat'ing onto it, and the caller's buffer is an uninitialised
+     * stack array, so leftover stack bytes were drawn as the pickup message
+     * (garbled, oversized weapon-pickup text in 3P/4P split-screen). */
+    finalstring[0] = '\0';
+#endif
 
     if (j_text_trigger != 0)
     {
@@ -12181,6 +12237,9 @@ void chrRenderHeldWeapon(void *renderContext, GUNHAND hand, Gfx **gdl)
 
                 chrModel = chr->model;
                 prop->flags |= PROPFLAG_ONSCREEN;
+#ifdef PORT
+                portPropSetGameplayOnScreen(prop, portPropGameplayOnScreen(chr->prop)); /* D466: held weapon follows its chr */
+#endif
 
                 renderData.basemtx = modelFindNodeMtx(chrModel, heldModel->attachedto_objinst, 0);
 
@@ -12777,7 +12836,7 @@ s32 sub_GAME_7F053894(coord3d *pos, f32 low, f32 high)
      * Log the hit pos, nearest player pos, distance and resulting vol so a
      * "loud impact that N64 plays silent" can be told apart as wrong-HIT vs
      * wrong-DISTANCE. Remove with probe set. */
-    if (getenv("GE_AUDIOTRACE")) {
+    if (GE_ENVFLAG("GE_AUDIOTRACE")) {
         geTracePrintf("audiotrace.log",
             "[DISTVOL] pos=(%.0f,%.0f,%.0f) player=(%.0f,%.0f,%.0f) dist=%.1f vol=%d\n",
             (double)pos->x, (double)pos->y, (double)pos->z,
@@ -12864,7 +12923,7 @@ void sub_GAME_7F053A3C(DoorRecord* arg0)
 void doorSndProbe(const char *where, DoorRecord *door, void *pendingState)
 {
     static FILE *fd = NULL;
-    if (!getenv("GE_AUDIOTRACE"))
+    if (!GE_ENVFLAG("GE_AUDIOTRACE"))
         return;
     if (!fd) {
         fd = fopen("audiotrace.log", "a");
@@ -13578,6 +13637,60 @@ bool sub_GAME_7F054C58(coord3d *coord, f32 arg1)
 }
 
 
+#ifdef PORT
+/* D466: sub_GAME_7F054C58 at the authored draw distance -- i.e. WITHOUT the
+ * D222/D218 `/ portDrawDistanceMultiplier()` division (multiplier treated as
+ * 1), which exists only to widen the RENDER range. */
+static bool portSub7F054C58Gameplay(coord3d *coord, f32 arg1)
+{
+    bool result = TRUE;
+    coord3d *ptr = (coord3d*)fogGetNearFogValuesP();
+    coord3d tmp;
+    f32 sp20;
+
+    if (ptr != NULL)
+    {
+        coord3d *campos = bondviewGetCurrentPlayersPosition();
+        Mtxf *mtx = camGetWorldToScreenMtxf();
+
+        tmp.x = coord->x - campos->x;
+        tmp.y = coord->y - campos->y;
+        tmp.z = coord->z - campos->z;
+
+        sp20 = tmp.f[0] * mtx->m[0][0] + tmp.f[1] * mtx->m[0][1] + tmp.f[2] * mtx->m[0][2];
+
+        if (sp20 > ptr->z)
+        {
+            f32 scalez = getPlayer_c_lodscalez();
+            /* D565: c_lodscalez is tan(fovy/2)-proportional and is built from
+             * the RENDERED fovy (D222 frCullFovY: FovScale / stretch-era
+             * widescreen boost), so a wider player FOV made far fogged
+             * positions drop out of AI awareness sooner. Rescale to the
+             * game's own fovy (zoom kept); identity at the defaults. */
+            {
+                extern f32 portFovYScaleFactor(void);
+                f32 k = portFovYScaleFactor();
+                if (k != 1.0f && g_CurrentPlayer->c_perspfovy > 0.0f) {
+                    f32 eff = g_CurrentPlayer->c_perspfovy;
+                    f32 own = eff / k;
+                    scalez *= (sinf(mDegToHalfRad(own)) / cosf(mDegToHalfRad(own)))
+                            / (sinf(mDegToHalfRad(eff)) / cosf(mDegToHalfRad(eff)));
+                }
+            }
+            sp20 = ((sp20 - ptr->z) * 100 / arg1 + ptr->z) * scalez;
+
+            if (sp20 >= ptr->y)
+            {
+                result = FALSE;
+            }
+        }
+    }
+
+    return result;
+}
+#endif
+
+
 /**
  * Address: 7F054D6C
  */
@@ -13630,6 +13743,39 @@ bool posIsOnScreen(PropRecord *prop, coord3d *pos, f32 arg2, bool arg3)
         roomnum = *rooms;
         result = FALSE;
     }
+
+#ifdef PORT
+    /* D466 (#125): record whether this position would ALSO be "on screen" at
+     * the level's authored draw distance (authored room set + authored fog,
+     * multiplier treated as 1). `result` (extended) keeps deciding what is
+     * drawn; callers that set gameplay state (chr.c, below) read the verdict.
+     * Gameplay-visible is always a subset of result. */
+    {
+        int gameplayVisible = 1;
+        if (portD466Active()) {
+            gameplayVisible = 0;
+            if (result) {
+                s32 *rp;
+                for (rp = room_ids; *rp >= 0; rp++) {
+                    if (portRoomGameplayVisible(*rp)) {
+                        gameplayVisible = portFogPositionVisibleGameplay(pos->f, arg2)
+                            && (!arg3 || portSub7F054C58Gameplay(pos, arg2));
+                        /* D468: AI awareness stays inside the cartridge-widest
+                         * view (16:9 at the game's FOV) under ultrawide or a
+                         * raised FovScale: a centred sub-box of the screen. */
+                        if (gameplayVisible && portD468ClampActive()) {
+                            bbox2d faithful = g_CurrentPlayer->screensize;
+                            portD468ShrinkBox(&faithful.min.x);
+                            gameplayVisible = camIsPosInScreenBox(pos, arg2, &faithful);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        portD466SetLastPosVerdict(gameplayVisible);
+    }
+#endif
 
     return result;
 }
@@ -14475,25 +14621,6 @@ Gfx *countdownTimerRender(Gfx *DL)
 
 void handle_alarm_gas_timer_calldamage(void)
 {
-#ifdef PORT
-    /* D207 diag probe (temporary): force + trace the alarm klaxon to
-     * root-cause "alarm SFX starves all other audio and never recovers".
-     * GE_FORCEALARM pins alarm_timer so alarmIsActive() stays true. Remove
-     * once root-caused. */
-    if (getenv("GE_FORCEALARM")) {
-        static int fa_frames;
-        ++fa_frames;
-        if (fa_frames == 120 || fa_frames == 900) alarmActivate();
-        if (fa_frames > 120 && fa_frames < 600) alarm_timer = 1;  /* sustain on ~2..10s */
-        if (fa_frames == 600) alarmDeactivate();                  /* explicit off at 10s */
-        if (fa_frames > 900) alarm_timer = 1;                     /* sustain on again */
-        geTracePrintf("audiotrace.log",
-            "[D207] f=%d active=%d ptr_alarm_sfx=%p playstate=%d locked=%d\n",
-            fa_frames, (int)alarmIsActive(), (void *)ptr_alarm_sfx,
-            ptr_alarm_sfx ? (int)sndGetPlayingState(ptr_alarm_sfx) : -1,
-            (int)lvlGetControlsLockedFlag());
-    }
-#endif
     if (alarmIsActive() != 0)
     {
         if ((ptr_alarm_sfx == 0) && (lvlGetControlsLockedFlag() == 0))

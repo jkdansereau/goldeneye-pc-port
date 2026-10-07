@@ -314,7 +314,11 @@ void *memaAlloc(u32 amount) {
         best->addr = 0;
     }
 
+#ifdef PORT
+    return (void*)(uintptr_t)(u32)(addr);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     return (void*)addr;
+#endif
 }
 
 // Find the memaspace of the given address and reduce its size by the given
@@ -569,7 +573,11 @@ s32 memaRealloc(s32 addr, u32 oldsize, u32 newsize)
 
     if ((oldsize > newsize))
     {
+#ifdef PORT
+        memaFree((void *)(uintptr_t)(u32)(addr + newsize), oldsize - newsize);  /* D441: zero-extend s32-held DRAM ptr */
+#else
         memaFree(addr + newsize, oldsize - newsize);
+#endif
     }
     
 	return 1;

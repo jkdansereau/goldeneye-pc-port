@@ -1,4 +1,7 @@
 #include "chrai.h"
+#ifdef PORT
+#include "drawdistgameplay.h"
+#endif
 #include "bg.h"
 #include "bgfog.h"
 #include "bondinv.h"
@@ -35,6 +38,7 @@
 #include <ultra64.h>
 #ifdef PORT
 #include <stdlib.h>
+#include "envflag.h"
 #endif
 
 // hack? used to match as called with 2 args, but decompiled code takes 1
@@ -796,26 +800,6 @@ s32 chraiGoToLabel(AIRecord *AIList, s32 Offset, u8 LabelNum)
         }
         else if (AIList[Offset].cmd == AI_EndList)
         {
-#ifdef PORT
-            /* D309 (diagnosis only, GE_D309=1): label scan ran off the end of
-             * the list -- the decomp's own comment says the restart-PC-to-0
-             * return "causes infinite loop outside of debug". This is the
-             * spin signature; logging it catches any AI list (not just
-             * m_RunToBondPersistent) whose mis-sized skip produced a phantom
-             * GotoNext to a nonexistent label. */
-            {
-                static int s_d309g = -1;
-                static int s_d309gn = 0;
-
-                if (s_d309g < 0) { s_d309g = getenv("GE_D309") != NULL; }
-                if (s_d309g && s_d309gn < 400)
-                {
-                    osSyncPrintf("D309: LABEL-NOT-FOUND list=%p off=%d label=%d\n",
-                                 (void *)AIList, (int)Offset, (int)LabelNum);
-                    s_d309gn++;
-                }
-            }
-#endif
             // restart ai list PC if next label not found - causes infinite loop outside of debug
             listID = chraiGetAIListID(AIList, &isGlobalAIList);
 #ifdef DEBUG
@@ -1146,44 +1130,6 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                         endframe = -1;
                     }
 
-#ifdef PORT
-                    /* D243 M-170: which chr does a scripted guard_play_animation
-                     * actually land on during the Dam abseil (anim_id 0xb100)?
-                     * M-145 (static-only) claimed this targets an empty,
-                     * model-less "false GUARD" driver chr -- but that theory's
-                     * own stated binding rule (ailist ID >= 0x1000) doesn't
-                     * apply to ai_17's registered ID (0x412), and the user's
-                     * live memory of the real N64 cutscene has Bond visibly
-                     * jumping/falling with the camera tracking him, which is
-                     * hard to reconcile with "no model to animate." One-shot
-                     * empirical check: log ChrEntityp's chrnum + whether it
-                     * has a model + whether it IS the visible player chr,
-                     * every time this specific anim_id fires. Env-gated
-                     * (GE_D243M, already cached elsewhere), essentially free
-                     * when unset. Diagnosis only. */
-                    if (getenv("GE_D243M") != NULL)
-                    {
-                        /* M-170 correction: the first version of this probe
-                         * filtered on anim_id==0xb100 and got ZERO hits
-                         * across a full Dam-abseil capture that otherwise
-                         * clearly exercised ai_17 (3 successful teleports,
-                         * GE_D243X3/X4's epoch counter went 0->3). Rather
-                         * than guess why, log every AI_PlayAnimation call
-                         * unfiltered so the next capture shows what anim_id
-                         * values (if any) actually arrive at this case
-                         * during the cutscene -- confirms/refutes whether
-                         * the filter itself was wrong (byte-order, wrong
-                         * literal) or the case is never reached at all for
-                         * this cutscene's actor. */
-                        osSyncPrintf("D243M: playanim anim=0x%x chr=%p chrnum=%d model=%p "
-                                     "isPlayerChr=%d\n",
-                                     (unsigned) anim_id, (void *) ChrEntityp,
-                                     ChrEntityp ? (int) ChrEntityp->chrnum : -1,
-                                     ChrEntityp ? (void *) ChrEntityp->model : NULL,
-                                     (int) (ChrEntityp && g_CurrentPlayer && g_CurrentPlayer->prop
-                                            && (void *) ChrEntityp == (void *) g_CurrentPlayer->prop->chr));
-                    }
-#endif
                     if (ChrEntityp)
                     {
                         check_if_able_to_then_perform_animation(ChrEntityp, anim_id, startframe, endframe, ai->BITFIELD, ai->INTERPOL_TIME60);
@@ -1192,7 +1138,11 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     {
                         zero = 0; // debug value maybe?
                         /* D32/D33: table holds s32 offsets; cast at use site. */
+#ifdef PORT
+                        modelSetAnimation(AircraftEntityp->model, (ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs2[anim_id]), zero, startframe, 0.5f, (s32)ai->INTERPOL_TIME60);  /* D441: zero-extend s32-held DRAM ptr */
+#else
                         modelSetAnimation(AircraftEntityp->model, (ModelAnimation *)animation_table_ptrs2[anim_id], zero, startframe, 0.5f, (s32)ai->INTERPOL_TIME60);
+#endif
                         if (endframe >= 0)
                         {
                             modelSetAnimEndFrame(AircraftEntityp->model, endframe);
@@ -1932,7 +1882,11 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 case AI_IFImOnScreen:
                 {
                     AiIFImOnScreenRecord *ai = AiListp + Offset;
+#ifdef PORT
+                    if (portPropGameplayOnScreen(ChrEntityp->prop)) /* D466: authored-distance on-screen */
+#else
                     if ((ChrEntityp->prop->flags & PROPFLAG_ONSCREEN))
+#endif
                     {
                         Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
@@ -1946,7 +1900,11 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 {
                     AiIFMyRoomIsOnScreenRecord *ai = AiListp + Offset;
 
+#ifdef PORT
+                    if (portRoomGameplayVisible(getTileRoom(ChrEntityp->prop->stan))) /* D466: authored-distance room set */
+#else
                     if (getROOMID_isRendered(getTileRoom(ChrEntityp->prop->stan))) // embedded func to match, must be s32 not u8
+#endif
                     {
                         Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }
@@ -3410,30 +3368,6 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
 
                     /* D310: size the PRINT per list origin (see d310ItemSize). */
                     (void)chraiGetAIListID(AiListp, &d310global);
-                    /* D309 (diagnosis only, GE_D309=1): log each step on a
-                     * PRINT record with the size actually used and the
-                     * command byte we land on. A repeating line (same
-                     * chr/list/off) means ai() re-executes the same path every
-                     * tick without advancing -- the standing-still signature;
-                     * landcmd==0x00 (AI_GotoNext) is the D309 spin variant.
-                     * Capped so a stuck loop can't flood stderr. */
-                    {
-                        static int s_d309p = -1;
-                        static int s_d309pn = 0;
-
-                        if (s_d309p < 0) { s_d309p = getenv("GE_D309") != NULL; }
-                        if (s_d309p && s_d309pn < 400)
-                        {
-                            s32 sz = d310ItemSize(AiListp, Offset, d310global);
-
-                            osSyncPrintf("D309: PRINT chr=%d list=%p off=%d size=%d landcmd=0x%02x global=%d\n",
-                                         ChrEntityp ? (int)ChrEntityp->chrnum : -1,
-                                         (void *)AiListp, (int)Offset, (int)sz,
-                                         (int)(AiListp[Offset + sz].cmd & 0xff),
-                                         (int)d310global);
-                            s_d309pn++;
-                        }
-                    }
 #endif
     #ifdef ENABLE_LOG
                     AIRecord *ai = AiListp + Offset;
@@ -4243,20 +4177,6 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                             chr->chrflags   = chr->chrflags | CHRFLAG_INIT;
                             setsubroty(chr->model, FacingDirection);
                             setsuboffset(chr->model, &pos);
-#ifdef PORT
-                            /* D243 M-169: signal the real shot-change moment
-                             * to the X3/X4 render-pos freeze experiments --
-                             * see the d243NotifyTeleport() definition
-                             * (bondview2.c) for the full rationale. This is
-                             * the exact decomp call (setsuboffset, line
-                             * above, unmodified) that a legitimate cutscene
-                             * teleport already performs; the notify is a
-                             * side-channel observer only, no logic change. */
-                            {
-                                extern void d243NotifyTeleport(void);
-                                d243NotifyTeleport();
-                            }
-#endif
                             chrDetectRooms(chr);
                             if (chr->prop == g_CurrentPlayer->prop)
                             {

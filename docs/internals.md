@@ -3,14 +3,14 @@ title: Internals
 description: Architecture behind the PC port; the software RSP-emulation approach, GoldenEye-vs-Perfect-Dark engine differences, and the phased development plan.
 ---
 
-## GoldenEye 007 PC Port: architecture & plan
+## Architecture & plan
 
 > This began as the pre-implementation research note and is kept as the
 > architecture reference. Sections 1–9 describe the design; section 10 lists
 > external references. The phased plan in section 8 is largely done through
 > Phase 2; for current status see the
 > [README](https://github.com/jkdansereau/goldeneye-pc-port#status) and
-> [`dev/LEVEL-STATUS.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/LEVEL-STATUS.md);
+> [`ROADMAP.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/ROADMAP.md);
 > for the blow-by-blow finding log see
 > [`dev/findings.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/findings.md).
 
@@ -382,6 +382,51 @@ sync/flush) is shared.
     rumble/mempak.
   This is simpler than a full Memory Pak/PFS emulation.
 
+* **F10 settings overlay: mouse and scrolling** (`port/src/optionsoverlay.c`,
+  `port/src/input.c`; D544, D314, D304):
+  * *Cursor.* `inputSuspendForOverlay()` (`input.c`) drops relative-mouse
+    grab and calls `mouseRequestCursor(1)`. With `Input.CrosshairCursor` on
+    (default, D555) `inputApplyMouseRequests()` (host thread) then hides the OS
+    cursor while the overlay is open and `drawCrosshairPointer()` in
+    `optionsoverlay.c` draws the game's own `crosshairimage` sprite at the mouse,
+    last in the overlay DL, at the game's on-screen size; the front end's own
+    crosshair keeps tracking the mouse (D519) and the pointer is drawn exactly
+    over it (`inputFrontEndCursorUiFrac()`), so only one shows; in a level it
+    follows the OS mouse. With the option off the OS arrow shows over the box. One owner of the cursor state (no show/hide race).
+  * *Hover vs selection.* `overlayHandleInputLocked()` maps the pointer to a
+    visible row with `overlayRowAtY()` (follows the eased scroll position, so
+    a click lands on the row it visually covers). Hover sets `s_hover` only
+    while `s_mouseActive` (mouse moved or clicked); it is a focus cue, never
+    the selection. The tip line (`helpVis` in the emit path) follows the
+    hovered row while the mouse is in use, else the selected row. The
+    wheel clears `s_mouseActive`.
+  * *Clicks.* Left-click on a row selects it; headers, links and Back act on
+    the whole row, otherwise only a click in the control span to the right of
+    the name changes the setting (toggle/cycle, open a dropdown, start a
+    binding capture, or set + drag a slider). With a dropdown open
+    (`s_ddRow >= 0`) it owns the pointer: hover picks, click confirms, click
+    outside or right-click cancels. Right-click elsewhere = Esc/back (closes a
+    dropdown first, then one page, then the overlay). `s_rmbBlock` holds that
+    off until release after a binding capture, so a right-click just bound
+    does not also back out.
+  * *Scrolling.* Long pages scroll as a window
+    over the visible-row list (`s_visIdx`/`s_visN`, first displayed entry
+    `s_scroll`, section header pinned). `overlayUpdateScroll()` moves the
+    window only when the selection leaves it (D304). The wheel arrives on the
+    host thread: `optionsOverlayScroll()` only queues notches in
+    `s_wheelPending` (SDL atomic, D314) and `overlayApplyWheel()` applies them
+    on the scheduler thread. The drawn position `s_scrollF` eases toward
+    `s_scroll` each emit (snaps on page change via `s_scrollSnap`).
+  * *Scrollbar (D556).* A page that overflows (same test as the "^ v" title
+    marker) draws a thin track + thumb in the card's right margin
+    (`overlayScrollbar()`: x = right-7..right-4, clear of the value text that
+    ends at right-10); thumb size = visible/total rows, position from
+    `s_scrollF`. Mouse: a press on the thumb drags it, a press on the track
+    pages up/down; both call `overlayScrollTo()`, which sets `s_scroll` and
+    moves `s_sel` into the window (like the wheel; otherwise
+    `overlayUpdateScroll()` would snap back). A scrollbar press never reaches
+    the row-click path.
+
 ---
 
 ## 8. Recommended plan
@@ -411,7 +456,7 @@ sync/flush) is shared.
 * Bring in the PD `fast3d` (gfx_pc / gfx_opengl / gfx_cc / gfx_sdl2).
 * Verify the custom CC/RM modes against `gmain.s`; add a `G_SETTEX` decode
   path only if it turns out to be used (see §5; it appears unused).
-* Port `pdsched.c` (GE variant) to drive the software RSP.
+* Port `pdsched.c` (GE variant) to drive the software RSP. *(Done differently: GE compiles its real `src/sched.c` and shims its hardware leaf calls in `port/src/libultra.c`, which runs the software RSP inline — see the CMakeLists.txt `SRC_ENGINE` comment.)*
 * Goal: render the title screen / first level.
 
 ### Phase 3: Audio + input

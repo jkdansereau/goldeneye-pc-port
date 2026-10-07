@@ -12,8 +12,8 @@ part-time direction. The goal, the setup, the timeline, and an honest read on
 what did and didn't work.*
 
 > *Snapshot as of the v0.3.0 milestone (20 Sep 2026; findings through D321).
-> v0.4.0 (28 Sep) extended the timeline with the options/input work -- the
-> README's Background section carries the final project numbers.*
+> v0.4.0 (28 Sep) extended the timeline with the options/input work — the
+> README's "How it was made" section carries the final project numbers.*
 
 ## Contents
 
@@ -50,7 +50,7 @@ and forth** through shared written artifacts, directed by one human.
 
 | | |
 |---|---|
-| Local agent | `unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL` on a single **NVIDIA RTX 5090**, driven mainly through the **[pi](https://pi.dev/)** coding agent. Unsloth Desktop (Unsloth's local model runtime, which can drive agents such as Claude Code) was also trialed but not used significantly. |
+| Local agent | `unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL` on a single **NVIDIA RTX 5090**, driven mainly through the **[pi](https://github.com/earendil-works/pi)** coding agent. Unsloth Desktop (Unsloth's local model runtime, which can drive agents such as Claude Code) was also trialed but not used significantly. |
 | Hosted agent | **Claude**, via **Claude Code**, on a Claude Pro subscription; mostly **Sonnet 5**, with **Opus 5** used as an escalation tier for the hardest problems and whenever there was subscription budget to spend on it |
 | Human | one person: direction, work partitioning, integration, and every build / playtest / frame-capture the agents could not run |
 | Base | fork of the [GoldenEye 007 decompilation](https://github.com/n64decomp/007) (years of prior work by Larry Ficken ("kholdfuzion") and contributors) |
@@ -59,58 +59,32 @@ and forth** through shared written artifacts, directed by one human.
 The port is the GoldenEye-specific porting work **on top of** those two
 existing bodies of work; it is not a from-scratch reimplementation of either.
 
-In practice the models formed a **three-tier escalation**: the local model
-handled well-scoped work, Sonnet 5 took what it stalled on, and Opus 5 was
-reserved for the bugs that needed the most reasoning held at once; the same
-"escalate when stuck" move applied at every level.
+In practice the models formed a **three-tier escalation** — the local model
+handled well-scoped work, Sonnet 5 took what it stalled on, and Opus 5 the
+rest; the same "escalate when stuck" move applied at every level.
 
 ## Timeline
 
 All dates from this repository's own commit history (August–September 2026).
 
-```mermaid
-gantt
-    dateFormat YYYY-MM-DD
-    axisFormat %b %d
-    title GoldenEye 007 PC port; from fork to v0.3.0
-    section Local model - Qwen 3.8 via pi
-    Fork + PC-port scaffolding            :m1, 2026-08-16, 1d
-    Full compile + link (~230 TUs)        :m2, 2026-08-20, 1d
-    Boot to window (ROM map + SDL2)       :m3, 2026-08-20, 1d
-    OS shims, threads, fast3d integration :2026-08-21, 2d
-    First rendered frames                 :m4, 2026-08-22, 1d
-    Offline asset-conversion pipeline     :2026-08-22, 2d
-    Entire intro renders (logos to cast)  :m5, 2026-08-24, 1d
-    section Both agents - handoff workflow
-    Claude joins                          :milestone, 2026-08-27, 0d
-    Stage load; Bunker 1 renders + firefight :2026-08-27, 2d
-    21 solo levels load + render + no-crash  :m6, 2026-08-29, 1d
-    SDL input layer (kbd/mouse/gamepad)   :2026-08-29, 1d
-    Front-end flow (menu to briefing to start) :m7, 2026-08-30, 1d
-    File-backed EEPROM saves              :2026-08-31, 1d
-    section Month one - front end to v0.3.0
-    Audio mixer (music + SFX)              :2026-09-02, 7d
-    Steam Deck hardening + F10 overlay QoL :2026-09-14, 3d
-    Final fix sweep (D309-D321) + release review :2026-09-18, 3d
-    v0.3.0 released (full campaign playtested) :milestone, 2026-09-20, 0d
+```text
+# phase timeline (from the port's own commit dates)
+Aug 16  day 0   fork + PC-port scaffolding
+Aug 20  day 4   full compile + link (~230 TUs); boot to window
+Aug 22  day 6   first rendered frames; offline asset-conversion pipeline
+Aug 24  day 8   entire intro renders (logos -> gun-barrel -> cast)
+Aug 27  day 11  Claude joins (handoff workflow begins)
+Aug 29  day 13  21 solo levels load + render + unattended no-crash; SDL input layer
+Aug 30  day 14  front-end flow (menu -> briefing -> start)
+Aug 31  day 14  file-backed EEPROM saves
+Sep 02        audio mixer (music + SFX)
+Sep 14        Steam Deck hardening + F10 overlay QoL
+Sep 18        final fix sweep (D309-D321) + release review
+Sep 20  day 35  v0.3.0 released: full campaign at Agent difficulty, audio
+                complete, bundles for Windows, Linux and Steam Deck
 ```
 
-- **Day 0** (16 Aug): repository forked, PC-port scaffolding added.
-- **Day 4** (20 Aug): the entire ~230-TU game + libultra set compiles and
-  links as a host binary.
-- **Day 6** (22 Aug): first real frames render.
-- **Day 8** (24 Aug): the whole intro sequence renders; logos, gun-barrel,
-  cast roll.
-- **Day 11** (27 Aug): second agent joins.
-- **Day 13** (29 Aug): **all 21 solo missions load, render, and survive an
-  unattended play window without crashing.**
-- **Day 14** (30–31 Aug): front end playable end to end (menu → mission
-  select → difficulty → briefing → start); file-backed saves.
-- **Day 35** (20 Sep): **v0.3.0 released** — the full campaign playtested
-  end to end at Agent difficulty, audio complete, bundles for Windows,
-  Linux and Steam Deck.
-
-So roughly **two weeks**, one person part-time, to take a decompilation from
+Roughly **two weeks**, one person part-time, took the decompilation from
 "builds an N64 ROM" to "boots on desktop, renders every solo level, playable
 through the front end into the early game". The rest of month one (29 Aug –
 20 Sep) took it from there to a public release: the 21-level sweep to
@@ -134,12 +108,15 @@ issues documented rather than outstanding.
 
 ### Commit velocity
 
-```mermaid
-xychart-beta
-    title "Commits per week (week start)"
-    x-axis ["8/16", "8/23", "8/30", "9/6", "9/13", "9/20"]
-    y-axis "commits" 0 --> 250
-    bar [20, 109, 203, 141, 220, 6]
+```text
+# commits per week (week start)
+8/16  ## 20
+8/23  ########### 109
+8/30  #################### 203
+9/6   ############## 141
+9/13  ###################### 220
+9/20  # 6   (release day only)
+      (each # ~ 10 commits)
 ```
 
 Weekly totals (the final week is release day only). The step up from the
@@ -150,10 +127,11 @@ at once.
 
 ### Who did what
 
-```mermaid
-pie showData title "Commits by agent (raw count, snapshot through early September)"
-    "Claude" : 161
-    "Local model (Qwen 3.8 / pi)" : 62
+```text
+# commits by agent (raw count, snapshot through early September)
+Claude                    ################  161   (72%)
+Local model (Qwen 3.8/pi) ######            62   (28%)
+                          (each # ~ 10 commits)
 ```
 
 (Phase A, the first 26 commits, to 24 Aug, was entirely the local model,
@@ -184,10 +162,11 @@ chain in relatively few, large commits, and the local model kept contributing
 raw commits; the foundation is a heavier third of the project than its commit
 share suggests; the developer's estimate is roughly:
 
-```mermaid
-pie showData title "Agent effort, milestone-weighted"
-    "Claude" : 60
-    "Local model (Qwen 3.8 / pi)" : 40
+```text
+# agent effort, milestone-weighted
+Claude                    ############  60%
+Local model (Qwen 3.8/pi) ########      40%
+                          (each # ~ 5%)
 ```
 
 The local model's ~40% is front-loaded and foundational (the build, the boot
@@ -201,21 +180,19 @@ result worth taking away.
 
 This is the part worth paying attention to.
 
-```mermaid
-flowchart TD
-    H["Human: direction, integration,<br/>build + playtest verification"]
-    C["Claude / Claude Code<br/>frontier, hosted"]
-    Q["Qwen 3.8 via pi<br/>open-weight, local RTX 5090"]
-    D[(Shared artifacts:<br/>HANDOFF.md · findings.md · porting-notes.md)]
+```text
+# the handoff workflow
 
-    H -->|scopes task, budget, files| C
-    H -->|scopes task, budget, files| Q
-    C <-->|reads / appends| D
-    Q <-->|reads / appends| D
-    C -.->|usage limit reached| Q
-    Q -.->|hard structural bug| C
-    C -->|patch + write-up| H
-    Q -->|patch + write-up| H
+    HUMAN
+    direction, integration, build + playtest verification
+      | scopes task, budget, files    | scopes task, budget, files
+      v                               v
+  CLAUDE (hosted)             QWEN 3.8 / pi (local, RTX 5090)
+      | patch + write-up                | patch + write-up
+      +--------------+   +--------------+
+                     v   v
+      SHARED ARTIFACTS (both agents read + append)
+      HANDOFF.md  .  findings.md  .  porting-notes.md
 ```
 
 Both agents worked against the **same three written artifacts**, which is what
@@ -255,8 +232,7 @@ Honest notes, for anyone weighing whether this transfers.
 
 - The **local model carried the groundwork phase**; build system, boot
   chain, OS shims, and the offline-converter architecture. None of it was
-  rewritten later. A 27B open model on one consumer GPU was genuinely productive
-  on this.
+  rewritten later.
 - **The written-artifact discipline made agent output compound.** An agent
   starting cold late in the project was more effective than one early on,
   because the accumulated notes were good. This is also what made the two
@@ -283,8 +259,49 @@ Honest notes, for anyone weighing whether this transfers.
   to Opus 5. Each tier earned its place on the problems the tier below it
   couldn't close.
 
-**Still outstanding** (the v0.3.0 known-issues list): cosmetic rendering
-defects (particle colours, Surface 1 billboard trees, front-end logos, water
-seam), stretched-not-native widescreen, PAL/JP support, a controller
-rebinding UI, and macOS/ARM builds. See the README's Status section and
-[`GRAPHICS-BACKLOG.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/GRAPHICS-BACKLOG.md).
+**Still outstanding:** see
+[`docs/ROADMAP.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/ROADMAP.md),
+the single tracker for open work.
+
+## Since the two-agent phase
+
+The two-agent setup above is the **initial phase**, snapshotted at v0.3.0
+(the project has since shipped v0.4.x and is heading to v0.5.0; the model
+and harness record below is current through that point).
+
+Since then the emphasis has shifted from "the two models that built it" to
+**testing a lot of new models and harnesses**, to find what's fastest and
+cheapest per task. The long-time local workhorse stayed **Unsloth's Qwen 3.8 27B**;
+in the final week that broadened into a menu, and the **current standard is
+NInfer + Strata**. On the hosted side, the Claude orchestrator stepped up from
+**Sonnet 5 / Opus 5** to the **5.5 tier** (Sonnet 5.5 / Opus 5.5, out in the
+last few weeks), which has driven the most recent work. The local menu:
+
+- **Qwen 3.8 27B** ([Unsloth](https://huggingface.co/unsloth/Qwen3.8-27B-GGUF),
+  `UD-Q4_K_XL`) — the primary local workhorse for most of the port's life, doing
+  nearly all of the local groundwork on its own. A larger-context
+  [`ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF`](https://huggingface.co/ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF)
+  (`IQ3_S`) was also briefly trialed for bigger-context workloads, then shelved
+  (little use since v0.2.0).
+- **NInfer (Windows)**
+  ([natpate/ninfer-windows](https://github.com/natpate/ninfer-windows), v0.9.0,
+  CUDA 13.1 — a standalone Windows port of the NInfer engine, with MTP /
+  DFlash2 speculative decoding) — ran **Qwen 3.8 27B** in base, NVFP4 and
+  NVFP4-full artifacts; trialed in the final week, now half of the standard
+  and the fast day-to-day local driver.
+- **Qwen 3.8 Flash-Next** via
+  [Strata](https://github.com/Niko1221/Strata) (Niko1221's MIT-licensed
+  C++/CUDA/HIP engine) — a 125B mixture-of-experts model that normally needs a
+  server, run **locally on a single gaming GPU** (IQ1_M, 1-bit) for the
+  biggest-context coding passes. The other half of the standard.
+- **[claude-code-delegate-local](https://github.com/fegone/claude-code-delegate-local)**
+  — an MCP server that let the Claude Code orchestrator and the local models
+  talk, delegating Claude's subagents to the local engines. A nice tool, but
+  **mostly deprecated now**: hand-offs between agents are done by hand for now,
+  pending a better parallel-agent handoff system that drops the MCP overhead.
+- **GPT-6 (Sol)** via [OpenRouter](https://openrouter.ai) — a frontier hosted
+  model, **trialed** to see how it held up (not the hardest-work tool).
+
+The practical effect: the project stopped depending on any one model or its
+usage limits. The local GPU is now the default path for high-volume work, with
+hosted frontier models reserved for the problems the local models can't close.

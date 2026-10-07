@@ -17,6 +17,8 @@ extern "C" {
 
 /* Load the config file (no-op if it doesn't exist yet). */
 void configLoad(void);
+int  configUnknownKeyCount(void);          /* D472: unknown ini keys in the last load */
+const char *configUnknownKeyFirst(void);   /* D472: first such dotted key */
 /* Save the current values back to the config file. */
 void configSave(void);
 
@@ -28,6 +30,11 @@ void configRegisterUInt(const char *key, unsigned int *value, unsigned int min, 
 void configRegisterFloat(const char *key, float *value, float min, float max);
 /* Register a string option (buf must live for the program's lifetime). */
 void configRegisterString(const char *key, char *value, int bufSize);
+
+/* Set / read a registered int/uint/float option by dotted key (clamped like
+ * a file load). Return 1 if the key exists. Used by the settings presets. */
+int configSetValue(const char *key, double v);
+int configGetValue(const char *key, double *out);
 
 /* [Debug] knobs, env-var-or-ini. GE_PCDUMP / GE_INPUTLOG override the ini. */
 const char *configGetFrameDump(void);   /* "lo-hi[:step]" or NULL if unset */

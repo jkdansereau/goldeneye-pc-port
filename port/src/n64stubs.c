@@ -103,7 +103,7 @@ u8 (*tlbmanageGetTlbAllocatedBlock(void))[TLB_BLOCK_SIZE]
      * area; the extra goes to MEMPOOL_STAGE (boss.c:218 gives STAGE
      * everything that isn't the fixed PERMANENT bank). Stays well clear of
      * animations_frame_buffer. */
-    return (u8 (*)[TLB_BLOCK_SIZE])0x70700000;
+    return (u8 (*)[TLB_BLOCK_SIZE])(PORT_DRAM_V1_BASE + 0x700000UL);   /* portaddr.h */
 }
 
 /* --- K&R libc helpers (IDO provided these; MinGW's libc does not) -------- */

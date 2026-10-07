@@ -32,6 +32,25 @@ keep the port faithful to the original game.
    clean configure + build for `ntsc-final` and a crash-free run of one level
    (`./build-pc/ge007.x86_64 -level_09`).
 
+5. **No game data, ever.** Never commit, upload or attach a ROM or anything
+   extracted from one (textures, audio, models, level data, in-game text,
+   the generated `data/pcmodels-*` / `data/pccg-*` folders) in a pull
+   request or an issue. A small cropped screenshot of a glitch is fine.
+
+## Bug reports
+
+Open an [issue](https://github.com/jkdansereau/goldeneye-pc-port/issues/new/choose)
+with:
+
+- `ge007.crash.log` if the game crashed (in the folder you launched from),
+- the output of `ge007.x86_64 --version` (or the release version you
+  downloaded), your OS, and your GPU and driver version,
+- your ROM's SHA-1 (Windows: `certutil -hashfile <rom> SHA1`, Linux:
+  `sha1sum <rom>`),
+- what you did, what happened, and what you expected.
+
+**Never attach the ROM itself.**
+
 ## Style
 
 - C/C++ formatting follows `.clang-format` and `.editorconfig` in the repo

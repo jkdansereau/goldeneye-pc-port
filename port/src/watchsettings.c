@@ -8,6 +8,7 @@
 #include "file.h"
 #include "file2.h"
 #include "front.h"
+#include "language.h"   /* j_text_trigger */
 #include "options.h"
 #include "player.h"
 #include "system.h"
@@ -27,6 +28,7 @@ extern u16 get_mTrack2Vol(void);
 extern void fileBuildWriteNewSave(u32 folder);
 extern void set_cur_player_look_vertical_inverted(u32 value);
 extern void cur_player_set_aim_control(u32 value);
+extern void cur_player_set_lookahead(u32 value);
 extern void cur_player_set_sight_onscreen_control(u32 value);
 extern void cur_player_set_ammo_onscreen_setting(u32 value);
 
@@ -50,15 +52,31 @@ static int wsStageWasActive = 0;
 
 static const char *const keys[WATCH_SETTING_COUNT] = {
     "Bond.Music", "Bond.FX", "Bond.Look", "Bond.AutoAim",
-    "Bond.AimControl", "Bond.Sight", "Bond.LookAhead", "Bond.Ammo"
+    "Bond.AimControl", "Bond.Sight", "Bond.LookAhead", "Bond.Ammo", "Bond.Control"
 };
 static const u16 bits[WATCH_SETTING_COUNT] = {
     0, 0, OPTION_INVERTLOOK, OPTION_AUTOAIM, OPTION_AIMCONTROL,
-    OPTION_SIGHTONSCREEN, OPTION_LOOKAHEAD, OPTION_DISPLAYAMMO
+    OPTION_SIGHTONSCREEN, OPTION_LOOKAHEAD, OPTION_DISPLAYAMMO, OPTION_CONTROLTYPE
 };
 
-/* Explicit chooser is separate from selected_folder_num (which frontoptions
- * assigns FOLDER1 merely to draw its dossier background). -1 means none
+/* D516: WATCH_SETTING_CONTROL is a 3-bit value (options bits 8-10), not a
+ * flag. The seat it addresses is chosen by the F10 Controller page. It is
+ * stage-only: the style lives on the live player (the front end has none). */
+static SDL_atomic_t controlSeat;
+void watchSettingsSetControlSeat(int seat)
+{
+    SDL_AtomicSet(&controlSeat, seat < 0 ? 0 : (seat > 3 ? 3 : seat));
+}
+/* The seat's live player, or NULL. Solo: g_CurrentPlayer (seat 0 only).
+ * Split-screen: player N owns seat N (D416). Reads only; never swaps
+ * g_CurrentPlayer (the poll thread is not the game thread). */
+static struct player *controlPlayer(int seat)
+{
+    if (getPlayerCount() > 1) return (seat >= 0 && seat < 4 && seat < getPlayerCount()) ? g_playerPointers[seat] : NULL;
+    return seat == 0 ? g_CurrentPlayer : NULL;
+}
+
+/* Explicit chooser is separate from selected_folder_num (the folder file select is viewing). -1 means none
  * (unresolved; frontFolder() lazily defaults it). D352: guarded by uiLock;
  * D354: also read/written by F10 front-end contexts (input thread), which
  * is why the lock exists. */
@@ -69,7 +87,7 @@ static SDL_SpinLock uiLock;
 
 /* Bounded producer (F10 controller poll) -> consumer (game thread) queues.
  * Snapshot is also guarded; F10 input/render never call GE save routines. */
-struct Command { int folder, field, value, commit; };
+struct Command { int folder, field, value, commit, seat; };   /* seat: D516, WATCH_SETTING_CONTROL only */
 #define CMD_CAP 128
 static struct Command cmds[CMD_CAP];
 static int head, count;
@@ -194,6 +212,7 @@ int watchSettingsBlankValue(enum WatchSettingField field)
     if ((unsigned)field >= WATCH_SETTING_COUNT) return 0;
     if (field == WATCH_SETTING_MUSIC) return ((int)kBlankSave.music_vol << 7) | (kBlankSave.music_vol >> 1);
     if (field == WATCH_SETTING_FX)    return ((int)kBlankSave.sfx_vol << 7) | (kBlankSave.sfx_vol >> 1);
+    if (field == WATCH_SETTING_CONTROL) return (kBlankSave.options & OPTION_CONTROLTYPE) >> 8;
     return (kBlankSave.options & bits[field]) ? 1 : 0;
 }
 
@@ -212,10 +231,10 @@ static int stageActive(void)
  * player is viewing (selected_folder_num, set by file select) > the first
  * valid folder. The first two are pure reads of stable menu state, safe from
  * the F10 input thread (D350 gate: no GE writes from it; only chosen is
- * written, under uiLock). A fresh PC eeprom is booted with a BLANKSAVEDATA
- * slot per folder (libultra.c D259/D281 patch), so a default almost always
- * resolves; the game-thread fallback in watchSettingsGameTick builds one if
- * it does not. */
+ * written, under uiLock). D442 removed the boot-time BLANKSAVEDATA slot patch:
+ * a fresh PC eeprom now has no valid slot until the player creates a profile,
+ * so the default resolves only once one exists; the game-thread fallback in
+ * watchSettingsGameTick builds a blank file 1 when none does. */
 static int frontFolder(void)
 {
     SDL_AtomicLock(&uiLock);
@@ -234,7 +253,7 @@ static int frontFolder(void)
 int watchSettingsAvailable(void)
 {
     if (!stageActive()) {
-        /* Front end: MENU_PC_OPTIONS, or F10 over file select / title.
+        /* Front end: F10 over file select / title.
          * D354: F10 front contexts were mis-routed through the stage path
          * (and returned "unavailable"), disabling every Bond row. */
         return validSave(frontFolder()) != NULL;
@@ -250,12 +269,21 @@ static int savedValue(const save_data *save, enum WatchSettingField field)
 {
     if (field == WATCH_SETTING_MUSIC) return ((int)save->music_vol << 7) | (save->music_vol >> 1);
     if (field == WATCH_SETTING_FX) return ((int)save->sfx_vol << 7) | (save->sfx_vol >> 1);
+    if (field == WATCH_SETTING_CONTROL) return (save->options & OPTION_CONTROLTYPE) >> 8;
     return (save->options & bits[field]) ? 1 : 0;
 }
 
 int watchSettingsRead(enum WatchSettingField field)
 {
     if ((unsigned)field >= WATCH_SETTING_COUNT) return 0;
+    if (field == WATCH_SETTING_CONTROL) {   /* D516: snapshot only; -1 = no live player */
+        int v = -1;
+        SDL_AtomicLock(&lock);
+        if (stageActive() && snapFolder >= FOLDER1 && snapFolder < MAX_FOLDER_COUNT)
+            v = snapshot[field];
+        SDL_AtomicUnlock(&lock);
+        return v;
+    }
     if (!stageActive()) {
         int f = frontFolder(), stagedVal = -1;
         SDL_AtomicLock(&uiLock);
@@ -285,6 +313,9 @@ static int watchSettingsPersistField(int folder, enum WatchSettingField field)
         sysLogPrintf(LOG_WARNING, "watchsettings: persist field %d skipped: no current player", field);
         return 0;
     }
+    /* D516: the style is saved to the Bond file in solo only (file2.c
+     * fileLoadSettingsForFolder forces 1.1 for 2+ players, as on the N64). */
+    if (field == WATCH_SETTING_CONTROL && getPlayerCount() != 1) return 1;
     save_data *save = validSave(folder);
     if (!save) {
         sysLogPrintf(LOG_WARNING, "watchsettings: persist field %d in Bond file %d: no valid save (CRC?)", field, folder + 1);
@@ -318,6 +349,7 @@ static int watchSettingsPersistField(int folder, enum WatchSettingField field)
  * (which also applies the chosen file's audio volume to the front end). */
 static void saveFrontField(int folder, enum WatchSettingField field, int value)
 {
+    if (field == WATCH_SETTING_CONTROL) return;   /* D516: stage only */
     save_data *save = validSave(folder);
     if (!save) {
         sysLogPrintf(LOG_WARNING, "watchsettings: save field %d in Bond file %d: no valid save (CRC?)", field, folder + 1);
@@ -347,6 +379,7 @@ static void saveFrontField(int folder, enum WatchSettingField field, int value)
 void watchSettingsSet(enum WatchSettingField field, int value, int commit)
 {
     if ((unsigned)field >= WATCH_SETTING_COUNT || !watchSettingsAvailable()) return;
+    if (field == WATCH_SETTING_CONTROL && !stageActive()) return;   /* D516: no live player */
     if (!stageActive()) {
         int f = frontFolder();
         SDL_AtomicLock(&uiLock);
@@ -392,7 +425,7 @@ void watchSettingsSet(enum WatchSettingField field, int value, int commit)
      * setters fire once per frame instead of once per detent. */
     for (int i = 0; i < count; i++) {
         struct Command *c = &cmds[(head + i) % CMD_CAP];
-        if (c->field == (int)field) {
+        if (c->field == (int)field && (field != WATCH_SETTING_CONTROL || c->seat == SDL_AtomicGet(&controlSeat))) {
             c->value = value;
             c->commit |= commit;
             snapshot[field] = value;
@@ -400,7 +433,7 @@ void watchSettingsSet(enum WatchSettingField field, int value, int commit)
             return;
         }
     }
-    struct Command cmd = { snapFolder, field, value, commit };
+    struct Command cmd = { snapFolder, field, value, commit, SDL_AtomicGet(&controlSeat) };
     if (count < CMD_CAP) {
         cmds[(head + count++) % CMD_CAP] = cmd;
         snapshot[field] = value; /* immediate UI feedback for held adjustments */
@@ -441,8 +474,33 @@ static int liveValue(enum WatchSettingField field)
     case WATCH_SETTING_SIGHT: return cur_player_get_sight_onscreen_control();
     case WATCH_SETTING_LOOKAHEAD: return cur_player_get_lookahead();
     case WATCH_SETTING_AMMO: return cur_player_get_ammo_onscreen_setting();
+    case WATCH_SETTING_CONTROL: {   /* D516: -1 when the seat has no live player */
+        struct player *p = controlPlayer(SDL_AtomicGet(&controlSeat));
+        return p ? (int)p->cur_player_control_type_0 : -1;
+    }
     default: return 0;
     }
+}
+
+static void applyControl(int seat, int value)
+{
+    /* D516: same fields cur_player_set_control_type (options.c) writes. Solo
+     * uses the setter itself (the watch's own path); split-screen writes the
+     * seat's player struct directly (no g_CurrentPlayer swap, D416). */
+    if (value < 0) value = 0;
+    if (value > 7) value = 7;
+    if (getPlayerCount() == 1) {
+        if (seat == 0) cur_player_set_control_type(value);
+        return;
+    }
+    struct player *p = controlPlayer(seat);
+    if (!p) return;
+    p->cur_player_control_type_0 = value;
+    p->cur_player_control_type_1 = value;
+    p->cur_player_control_type_2 = (float)value;
+    p->neg_vspacing_for_control_type_entry = -((j_text_trigger ? 14 : 10) * value);
+    p->has_set_control_type_data = TRUE;
+    sysLogPrintf(LOG_INFO, "watchsettings: seat %d control style %d", seat, value);
 }
 
 static void applyValue(enum WatchSettingField field, int value)
@@ -474,6 +532,32 @@ static void applyValue(enum WatchSettingField field, int value)
     default: break;
     }
 }
+
+/* D559 (maintainer-approved, port layer only): D557 turned Look ahead off in
+ * DEFAULT_OPTIONS, but folders created before it hold the OLD factory options.
+ * When a folder is started to play (the stage becomes active; the stage load's
+ * fileLoadSettingsForFolder then reads the saved options), clear OPTION_LOOKAHEAD
+ * iff the folder is untouched: no stage time at any difficulty (times[] all
+ * zero), no 007 flag, no unlocked cheats, and options EXACTLY the old factory
+ * default with control-type bits 0. Any progress or any other option bit
+ * (including a deliberately-set Look ahead on a played folder) is never touched.
+ * Persists through fileWriteSave, as saveFrontField does. Game thread only.
+ * Returns 1 when it changed the save. */
+#define OLD_FACTORY_OPTIONS (OPTION_AUTOAIM | OPTION_SIGHTONSCREEN | OPTION_LOOKAHEAD | OPTION_DISPLAYAMMO)
+static int migrateUntouchedLookAhead(int folder)
+{
+    save_data *save = validSave(folder);
+    if (!save || save->options != OLD_FACTORY_OPTIONS) return 0;
+    if (save->flag_007 || save->unlocked_cheats_1 || save->unlocked_cheats_2 || save->unlocked_cheats_3) return 0;
+    for (size_t i = 0; i < sizeof(save->times); i++)
+        if (save->times[i]) return 0;
+    if (!fileGamePakProbe()) return 0;
+    save->options = (u16)(save->options & ~OPTION_LOOKAHEAD);
+    fileWriteSave(save);
+    sysLogPrintf(LOG_INFO, "watchsettings: Bond file %d is untouched and has the old factory options; Look ahead set off (D559)", folder + 1);
+    return 1;
+}
+static int wsLookAheadChecked = 0;   /* once per stage activation */
 
 void watchSettingsGameTick(void)
 {
@@ -509,7 +593,9 @@ void watchSettingsGameTick(void)
     {
         static int wsResetProbePhase = 0;
         static int wsProbeFrontTicks = 0, wsProbeStageTicks = 0;
-        if (getenv("GE_WSPROBE_RESET")) {
+        static int wsResetProbeOn = -1;   /* cached: this runs every tick (D250/D302 class) */
+        if (wsResetProbeOn < 0) wsResetProbeOn = getenv("GE_WSPROBE_RESET") != NULL;
+        if (wsResetProbeOn) {
             if (!stageActive()) {
                 if (wsResetProbePhase == 0 && ++wsProbeFrontTicks == 120) {
                     optionsResetProbePrepare();
@@ -537,13 +623,27 @@ void watchSettingsGameTick(void)
      * during a level/menu transition. Each command's folder is re-checked
      * against selected_folder_num at apply time, so a stale cross-file edit
      * is still dropped, never misapplied. */
+    /* D564: the game's own "Look up/down" option is not exposed (the port's
+     * Mouse / Controller "Invert look" rows are the inversion controls). Pin it
+     * to its factory value (0, as a blank profile has it) so a value saved by an
+     * older build or set via the in-game watch menu cannot silently flip the
+     * pad stick on the game's pitch path. RAM only; one int compare per tick. */
+    if (stageActive() && g_CurrentPlayer && get_cur_player_look_vertical_inverted() != 0)
+        set_cur_player_look_vertical_inverted(0);
+
     if (!stageActive() || !g_CurrentPlayer) {
         wsStageWasActive = 0;
+        if (!stageActive()) wsLookAheadChecked = 0;
+        else if (!wsLookAheadChecked) {   /* D559: stage starting, before the stage load reads the save */
+            wsLookAheadChecked = 1;
+            if (migrateUntouchedLookAhead(selected_folder_num) && getPlayerCount() == 1)
+                cur_player_set_lookahead(0);   /* harmless if the stage load re-reads the save after this */
+        }
         /* D354: one-shot fallback -- if not a single folder holds a valid
-         * save (wiped/corrupt eeprom), build the game's own blank save for
+         * save (wiped/corrupt/fresh eeprom), build the game's own blank save for
          * file 1 (game thread, so the EEPROM write is on the owning thread)
-         * and default to it. A fresh PC eeprom never reaches this: boot
-         * patches in a BLANKSAVEDATA slot per folder (libultra.c D259/D281).
+         * and default to it. (D442 removed the old boot-time BLANKSAVEDATA
+         * patch, so a fresh eeprom does reach this.)
          * frontFolder() re-checks, so an explicit chooser pick is respected. */
         if (!stageActive() && frontFolder() < FOLDER1) {
             static int wsAutoInitTried = 0;
@@ -592,6 +692,11 @@ void watchSettingsGameTick(void)
      * init_watch re-applies the saved music value to the X track; resync the
      * BGM (track 1) to the same live value once per activation so the player's
      * music setting survives level starts, not just live F10 edits. */
+    if (!wsLookAheadChecked) {   /* D559: no tick saw the stage before its load: fix the live setting too */
+        wsLookAheadChecked = 1;
+        if (migrateUntouchedLookAhead(selected_folder_num) && getPlayerCount() == 1)
+            cur_player_set_lookahead(0);
+    }
     if (!wsStageWasActive && musicTrack1GetVolume() != get_mTrack2Vol())
         musicTrack1ApplySeqpVol(get_mTrack2Vol());
     wsStageWasActive = 1;
@@ -608,6 +713,11 @@ void watchSettingsGameTick(void)
         if (c->folder != selected_folder_num ||
             (unsigned)c->field >= WATCH_SETTING_COUNT ||
             !validSave(c->folder)) continue;
+        if (c->field == WATCH_SETTING_CONTROL) {
+            applyControl(c->seat, c->value);
+            if (c->commit && c->seat == 0) watchSettingsPersistField(c->folder, WATCH_SETTING_CONTROL);
+            continue;
+        }
         applyValue((enum WatchSettingField)c->field, c->value);
         if (c->commit) watchSettingsPersistField(c->folder, (enum WatchSettingField)c->field);
     }

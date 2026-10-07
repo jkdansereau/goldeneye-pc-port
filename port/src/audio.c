@@ -23,6 +23,21 @@
 
 static SDL_AudioDeviceID dev = 0;
 
+/* D470: port-level master volume (0..100, 100 = bit-identical passthrough)
+ * and output-device selection (empty = SDL's default device, the old
+ * behaviour). Both are plain config-backed values read where they are used. */
+static int  masterVolume = 100;
+static char deviceName[256] = "";
+
+/* D470: a UI/hot-plug request to re-open the device. Set from any thread,
+ * consumed (and dev closed/reopened) only on the audio-producer thread at the
+ * top of audioSetNextBuffer(), the sole thread that queues to / drains `dev`,
+ * so no queue call can race the close. */
+static SDL_atomic_t s_devReopenReq;
+
+/* D470: SDL_AUDIODEVICEREMOVED (video.c's event pump) -> fall back to default. */
+static SDL_atomic_t s_devRemovedId;
+
 /* src/audi.c: g_FrameSize + EXTRA_SAMPLES + 0x10, the exact sample count
  * info->data is allocated for (audi.c:388). Zero until amCreateAudioManager
  * has run. Used by the D204/F4 oversize guard below. */
@@ -72,18 +87,67 @@ static u32  lastBufferBytes = 0;
 static u32  dropCount = 0;
 static u32  oversizeCount = 0;
 
-/* D204 diag (temporary): GE_D204_OLD=1 restores the pre-fix behaviour --
- * osAiGetLength() reports the whole SDL queue depth and queueLimit goes back
- * to 8192 -- so before/after can be measured in ONE binary, without
- * build-to-build variance. Remove once D204 is closed. */
-static int d204OldMode(void)
+/* D470: open the configured device by name (NULL name = system default).
+ * A named device that cannot be opened logs a warning and falls back to the
+ * default, so a missing/removed interface never leaves the game silent. */
+static SDL_AudioDeviceID audioOpenConfigured(const char *name, SDL_AudioSpec *have)
 {
-    static int cached = -1;
-    if (cached < 0) {
-        cached = getenv("GE_D204_OLD") ? 1 : 0;
-        if (cached) queueLimit = 8192;
+    SDL_AudioSpec want = {0};
+    want.freq     = 22050; /* GE's OUTPUT_RATE (src/audi.c) */
+    want.format   = AUDIO_S16SYS;
+    want.channels = 2;
+    want.samples  = (u16)bufferSize;
+    SDL_AudioDeviceID d = 0;
+    if (name && name[0]) {
+        d = SDL_OpenAudioDevice(name, 0, &want, have, 0);
+        if (d) {
+            sysLogPrintf(LOG_INFO, "audioInit: opened audio device by name: \"%s\"", name);
+        } else {
+            sysLogPrintf(LOG_WARNING,
+                "audioInit: audio device \"%s\" unavailable (%s); falling back to the default device",
+                name, SDL_GetError());
+        }
     }
-    return cached;
+    if (!d) d = SDL_OpenAudioDevice(NULL, 0, &want, have, 0);
+    return d;
+}
+
+/* D470: enumeration for the options UI. Names are copied (SDL's pointers are
+ * only valid until the next enumeration). */
+#define AUDIO_MAXDEV 16
+static char s_devNames[AUDIO_MAXDEV][128];
+static int  s_devCount = 0;
+
+int audioDeviceRefresh(void)
+{
+    s_devCount = 0;
+    if (!SDL_WasInit(SDL_INIT_AUDIO)) return 0;
+    int n = SDL_GetNumAudioDevices(0);
+    for (int i = 0; i < n && s_devCount < AUDIO_MAXDEV; i++) {
+        const char *nm = SDL_GetAudioDeviceName(i, 0);
+        if (!nm) continue;
+        snprintf(s_devNames[s_devCount], sizeof(s_devNames[0]), "%s", nm);
+        s_devCount++;
+    }
+    return s_devCount;
+}
+
+const char *audioDeviceName(int i)
+{
+    return (i >= 0 && i < s_devCount) ? s_devNames[i] : NULL;
+}
+
+const char *audioDeviceCurrentName(void) { return deviceName; }
+
+void audioDeviceRequest(const char *name)
+{
+    snprintf(deviceName, sizeof(deviceName), "%s", name ? name : "");
+    SDL_AtomicSet(&s_devReopenReq, 1);
+}
+
+void audioNotifyDeviceRemoved(u32 which)
+{
+    SDL_AtomicSet(&s_devRemovedId, (int)which);
 }
 
 int audioInit(void)
@@ -104,13 +168,13 @@ int audioInit(void)
         sysLogPrintf(LOG_ERROR, "audioInit: SDL_InitSubSystem: %s", SDL_GetError());
         return -1;
     }
-    SDL_AudioSpec want = {0};
-    want.freq     = 22050; /* GE's OUTPUT_RATE (src/audi.c) */
-    want.format   = AUDIO_S16SYS;
-    want.channels = 2;
-    want.samples  = (u16)bufferSize;
+    {   /* D470: list the outputs so a name can be copied into Audio.Device */
+        int nd = audioDeviceRefresh();
+        for (int k = 0; k < nd; k++)
+            sysLogPrintf(LOG_INFO, "audioInit: output device %d: \"%s\"", k, audioDeviceName(k));
+    }
     SDL_AudioSpec have;
-    dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    dev = audioOpenConfigured(deviceName, &have);
     if (!dev) {
         sysLogPrintf(LOG_ERROR, "audioInit: SDL_OpenAudioDevice: %s", SDL_GetError());
         return -1;
@@ -159,10 +223,6 @@ u32 audioGetAiLengthBytes(void)
 {
     u32 queued = dev ? SDL_GetQueuedAudioSize(dev) : 0;
 
-    if (d204OldMode()) {
-        return queued; /* pre-fix behaviour, for A/B measurement only */
-    }
-
     /* D204/F5 -- shift the regulator's setpoint off zero. THIS is the part
      * that measurably changes behaviour.
      *
@@ -194,16 +254,41 @@ u32 audioGetAiLengthBytes(void)
     return queued;
 }
 
+/* D470: runs on the producer thread only (see s_devReopenReq). The queued
+ * audio of the old device is dropped (a few tens of ms at most). */
+static void audioServiceDeviceRequests(void)
+{
+    int removed = SDL_AtomicSet(&s_devRemovedId, 0);
+    if (removed && dev && (SDL_AudioDeviceID)removed == dev) {
+        sysLogPrintf(LOG_WARNING,
+            "audio: output device removed (id %d); falling back to the default device", removed);
+        SDL_CloseAudioDevice(dev);
+        dev = 0;
+        deviceName[0] = 0;   /* the configured device is gone: default until re-picked */
+        SDL_AtomicSet(&s_devReopenReq, 1);
+    }
+    if (SDL_AtomicSet(&s_devReopenReq, 0)) {
+        if (dev) { SDL_CloseAudioDevice(dev); dev = 0; }
+        SDL_AudioSpec have;
+        dev = audioOpenConfigured(deviceName, &have);
+        if (dev) {
+            SDL_PauseAudioDevice(dev, 0);
+            sysLogPrintf(LOG_INFO, "audio: device (re)opened at %d Hz", have.freq);
+        } else {
+            sysLogPrintf(LOG_ERROR, "audio: device reopen failed: %s", SDL_GetError());
+        }
+    }
+}
+
 void audioSetNextBuffer(const s16 *buf, u32 len)
 {
+    audioServiceDeviceRequests();
     if (!s_audioDumpChecked) {
         s_audioDumpChecked = 1;
         if (getenv("GE_AUDIODUMP")) {
             s_audioDumpFile = fopen("audiodump.raw", "wb");
         }
     }
-    (void)d204OldMode(); /* D204 diag: ensure the queueLimit override applies */
-
     /* D204 audio-health monitor: GE_D204=1 prints one line every 5 s of wall
      * clock with everything needed to see the pipeline degrade in real time:
      *
@@ -225,7 +310,7 @@ void audioSetNextBuffer(const s16 *buf, u32 len)
      * unbuffered per-opcode log slows the process enough to starve the audio
      * thread on its own (that artifact is what M-63 measured as "13 % of
      * real time"; see docs/dev/findings.md D204). Remove once D204 closes. */
-    if (getenv("GE_D204")) {
+    if (GE_ENVFLAG("GE_D204")) {
         static u64 startUs = 0, nextReportUs = 0, produced = 0;
         static u32 maxLen = 0;
         u64 now = sysGetMicroseconds();
@@ -276,7 +361,7 @@ void audioSetNextBuffer(const s16 *buf, u32 len)
      * peak/RMS reading of *this* buffer into the SAME file/lock
      * (geTracePrintf) so the two can be correlated by line order without
      * per-line timestamps. Remove once D77 closes. */
-    if (buf && len && getenv("GE_AUDIOTRACE")) {
+    if (buf && len && GE_ENVFLAG("GE_AUDIOTRACE")) {
         static u64 lastReportUs = 0;
         u64 now = sysGetMicroseconds();
         if (now - lastReportUs >= 1000000ull) {
@@ -324,6 +409,38 @@ void audioSetNextBuffer(const s16 *buf, u32 len)
         }
     }
 
+    /* D470: master volume. Applied to a scratch copy (the game's buffer is
+     * never modified) AFTER the game's own music/FX volumes, so it only scales
+     * the final mix. gain <= 100 means |s*gain/100| <= |s|: no clipping is
+     * possible. 100 (default) passes `buf` through untouched, byte-identical. */
+    {
+        static s16 gainBuf[8192 * 2];
+        int mv = masterVolume;
+        if (mv < 0) mv = 0;
+        if (mv < 100 && buf && len && len <= sizeof(gainBuf)) {
+            u32 n = len / 2u;
+            for (u32 i = 0; i < n; i++) gainBuf[i] = (s16)(((s32)buf[i] * mv) / 100);
+            buf = gainBuf;
+        }
+    }
+
+    /* D470 diag: GE_AUDIOGAINLOG=1 -> peak |sample| of the final (post-gain)
+     * buffer, max over each 1 s window. Cached env flag, cheap. */
+    if (buf && len && GE_ENVFLAG("GE_AUDIOGAINLOG")) {
+        static u64 winStart = 0; static s32 winPeak = 0;
+        u64 now = sysGetMicroseconds();
+        const s16 *sp = buf;
+        for (u32 i = 0; i < len / 2u; i++) {
+            s32 v = sp[i]; if (v < 0) v = -v;
+            if (v > winPeak) winPeak = v;
+        }
+        if (!winStart) winStart = now;
+        if (now - winStart >= 1000000ull) {
+            sysLogPrintf(LOG_NOTE, "D470 gain: master=%d peak=%d", masterVolume, (int)winPeak);
+            winStart = now; winPeak = 0;
+        }
+    }
+
     if (dev && buf && len) {
         if (audioGetSamplesBuffered() < queueLimit) {
             SDL_QueueAudio(dev, buf, len);
@@ -342,4 +459,6 @@ PD_CONSTRUCTOR static void audioConfigInit(void)
 {
     configRegisterInt("Audio.BufferSize", &bufferSize, 0, 1 * 1024 * 1024);
     configRegisterInt("Audio.QueueLimit", &queueLimit, 0, 1 * 1024 * 1024);
+    configRegisterInt("Audio.MasterVolume", &masterVolume, 0, 100);   /* D470 */
+    configRegisterString("Audio.Device", deviceName, sizeof(deviceName)); /* D470 */
 }

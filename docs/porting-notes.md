@@ -19,14 +19,14 @@ good that you are looking at one of these.
 
 ## Contents
 
-- [A. Pointer-width struct growth (32→64); the dominant class](#a-pointer-width-struct-growth-3264--the-dominant-class)
+- [A. Pointer-width struct growth (32→64); the dominant class](#a-pointer-width-struct-growth-3264-the-dominant-class)
 - [B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64](#b-16-byte-pc-gfx--vtx-vs-8-byte-n64)
 - [C. Big-endian rodata / ROM data read on little-endian PC](#c-big-endian-rodata--rom-data-read-on-little-endian-pc)
 - [C2. Port-layer / SDL shims](#c2-port-layer--sdl-shims)
 - [D. N64 hardware idioms fast3d does not emulate](#d-n64-hardware-idioms-fast3d-does-not-emulate)
-- [D2. The HUD/model "X-mirror"; RESOLVED](#d2-the-hudmodel-x-mirror-d114d116--resolved-it-was-an-upside-down-capture)
+- [D2. The HUD/model "X-mirror"; RESOLVED](#d2-the-hudmodel-x-mirror-d114d116-resolved-it-was-an-upside-down-capture)
 - [D3. GCC/mingw makes an all-non-negative `enum` UNSIGNED](#d3-gccmingw-makes-an-all-non-negative-enum-unsigned)
-- [D4. N64 "interrupts off" must be a real lock on PC](#d4-n64-interrupts-off-is-not-free-on-pc--it-must-be-a-real-lock)
+- [D4. N64 "interrupts off" must be a real lock on PC](#d4-n64-interrupts-off-is-not-free-on-pc-it-must-be-a-real-lock)
 - [D5. Loop bounds that assume linker adjacency of two globals](#d5-loop-bounds-that-assume-linker-adjacency-of-two-file-scope-globals)
 - [D12. Collapsing an LOD binding to tile 0 breaks a DETAIL binding](#d12-collapse-an-lod-binding-to-tile-0-is-wrong-for-a-two-texture-detail-binding-d236)
 - [D13. Per-render accumulation is not associative (1 vs 2–3 ticks/frame)](#d13-per-render-accumulation-is-not-associative-the-ports-1-tickframe-can-reach-states-the-n64s-23-ticksframe-never-did-d329)
@@ -290,6 +290,12 @@ The offline model converter sizes each record's trailing arrays from its count f
 
 When a PC-larger asset gets a bigger reservation inside a shared scratch buffer (D45: the wallet model 0xA000 -> 0x17000 in `ptr_logo_and_walletbond_DL`), grep for every other user of that buffer that computes a fixed offset (`base + 4096*10`). Those still point into the old boundary and silently overwrite the enlarged asset; the corruption only shows when the asset is not reloaded.
 
+**A1 cross-tag (D441, 2026-09-30):** the 32→64 widening of `(u32)`/`(s32)` *pointer casts* (rebase arithmetic on RAM copies, segment/anim-table bases) is the same class. Pattern: `#ifdef PORT` `(uintptr_t)` arm + untouched `#else`. Exception: `(s32)&ANIM_DATA_x` is an intentional offset (D34: 4 GiB-aligned base, low 32 bits = segment offset) — widen only the *base* it is added to, never the offset. Census of the remaining ~185 sites in the touched files is still owed (D441).
+
+**A1 cross-tag (D457, 2026-09-30): a pure pointer-width retype can change behaviour by shifting the allocation layout.** Widening `struct player` (+32 B) / `struct Model` (+16 B, inline x4 in player) flipped the default-boot file-select menu to an all-black frame (no crash, identical log) while `-level_09` was fine; allocating the player block at its old size restored it. The menu depends on the MEMPOOL_STAGE layout (player block precedes `g_GfxBuffers[0]`, D98) through something address-sensitive. After any struct widening, run the default-boot menu with a `GE_PCDUMP` frame (not only a level) and check the frame extrema, not just rc. Also: a hardcoded record stride (`vtxstore.c` `n * 0x14` for a record that is 0x18 bytes on x86-64) is a silent overrun that widening makes worse; grep literals near allocs of retyped structs.
+
+**A1 cross-tag (D441, 2026-10-03): the read side, `s32` back to a pointer, sign-extends.** An arena pointer stored in an `s32` (a local, a global, a field, a function parameter named like an id: `pathid`, `opcode`, `resolution`, `helddst`) truncates harmlessly below 4 GiB, but `(T *)s32` and the implicit `s32` -> `T *` conversion (a `-Wint-conversion` "makes pointer from integer", no cast to grep for) sign-extend bit 31. Invisible while the arena sits below 0x80000000; the tier-1 test build (`GE_HIGHARENA_BASE=0x90000000`) turns each one into a 0xffffffff9xxxxxxx fault, in crash order. Fix: `(T *)(uintptr_t)(u32)(EXPR)` under `#ifdef PORT`. Also grep the port layer for address-range **upper bounds**, not only base literals: fast3d's DRAM-vs-C-array texture test ended at a `0x90000000` literal, so with the arena moved there every DRAM texture was bswapped (mirrored texel pairs, no crash). Ranges must come from `portaddr.h` (base + `PORT_DRAM_SIZE`). And pin `GE_RSEED` + `GE_INPUTSCRIPT` before diffing level frames between builds: unseeded runs differ every frame.
+
 ## B. 16-byte PC `Gfx` / `Vtx` vs 8-byte N64
 
 Any buffer reservation, `memcpy` size, slot stride, or pool budget
@@ -310,6 +316,9 @@ expressed in N64 `Gfx`/`Vtx` units is **half-size** on PC.
   `(word >> (8*(3-i))) & 0xff`). `gdl++` (advances by `sizeof(Gfx)`) is already
   correct. Watch `(s32)ptr` truncation in vtx-base math and `x | 0x80000000`
   KSEG0 folds (identity on PC; just drop the OR, and guard segmented w1).
+  Also raw-index **writes** into static DLs: D465 (`unk_092E50.c` water
+  controller patched `((u32*)dl)[8]`, meaning N64 `Gfx[4].w0`, which hit
+  `Gfx[2]` on PC; use `dl[n].words.w0` instead).
   Instances: `bgTestHitOnObj` (`propobj.c`, FIXED); `bgTestRayIntersectionInRoom`
   + `bgTestBulletHitBackground` tail (`bg.c`, D154; ported M-28, re-audited +
   bug-fixed M-30, playtest-gated).
@@ -633,6 +642,7 @@ through a converter or a runtime bswap fixup reads scrambled.
 
 - **A texture re-declared in another format must be normalised with the geometry it was IMPORTED with (D245).** GE's sky water loads a CI8 image and draws it through an RGBA16 tile; fast3d imports it as CI8 (D229) but its triangle path computed the UV divisor from the RGBA16 tile (half the width) and the whole mip-chain height (43 rows, not the 32-row mask period). Anything that changes the importer's format/extent must change the tri-path `tex_width/tex_height` with it, and wrap must equal the N64 mask period.
 - **CPU-built RDP triangles need float vertices, not `Vtx` (D245).** Where GE builds RDP edge/texture coefficients on the CPU (sky/water), 32-bit S/T and positions are normal; squeezing them through s16 `tc`/`ob` costs visible precision on horizon-scale geometry. Use `G_FLOATVTX_EXT` (`port/include/floatvtx.h`).
+- **A first-run-only preset is skipped forever by any earlier launch that created the ini, and window keys are not an "untouched" signal (D283).** Seeding values *before* `configLoad()` only works when no `ge007.ini` exists; one launch in a different environment (SteamOS Desktop Mode has no `STEAMOS`) writes a plain ini and the preset never runs. Apply presets *after* the load, record a one-shot flag key, and gate on keys the user must change deliberately (`Video.Fullscreen`, `Window.Maximized`) — `Window.Width/Height` are rewritten from the live window on every clean exit (`videoSaveWindowState`), so "still at default" never holds for them.
 
 ## D. N64 hardware idioms fast3d does not emulate
 
@@ -1013,7 +1023,10 @@ for (s = SP_LEVEL_EGYPT; s >= SP_LEVEL_DAM /* == 0 */; s--)   // never ends
 
 - Symptom: a silent hang (kernel-heartbeat stall, no crash log) inside a
   loop over an enum range; the counter holds a huge value in gdb.
-- Instances: **D142**; `LEVEL_SOLO_SEQUENCE` in
+- Instances: **D417** (`enum PROP`: `getPropForHeldItem()` returns -1 for the
+  fist and callers test `prop >= 0` -> unsigned enum lets -1 through ->
+  `modelLoad(-1)` crash in any 2P+ stage; sentinel `PROP__PORT_SIGNED`);
+  **D142**; `LEVEL_SOLO_SEQUENCE` in
   `fileGetHighestStageDifficultyCompletedForFolder` froze the SELECT FILE
   screen. `DIFFICULTY` was already safe (`DIFFICULTY_MULTI = -1`).
 - Fix: add a never-used negative sentinel enumerator under `#ifdef PORT`
@@ -1098,6 +1111,13 @@ past it (walk off the end).
   links 0x60 bytes *before* `legalpage_text_array` → only line 1 renders
   (== the D76 "disclaimer half-drawn" bug; it was never an image-table
   issue). Fix: `#ifdef PORT` uses `array + ARRAY_COUNT(array)`.
+- Instance: **D491**; the same assumption in struct reads, not loop bounds:
+  `*(coord3d *)&D_80044904` (bg.c portal bbox seeds) and
+  `*(coord3d *)&D_80035EA4` (gunfire.c casing rot) read three separately
+  declared scalars as one struct. mingw emits such runs in **reverse** order,
+  so the read picks up a different neighbour. `-Warray-bounds` flags these
+  ("partly outside array bounds of 's32[1]'"); confirm with `nm -n` on the
+  exe. Fix: `#ifdef PORT` reads each named global.
 - Grep for `= &` / `(TYPE *)&` on the RHS of a loop-terminator compare, and
   any `for`/`while`/`do` whose end pointer is the address of a *different*
   symbol than the one being iterated.
@@ -1201,6 +1221,11 @@ and turns every such overrun into a fatal `*** stack smashing detected ***`
   the identical overflow is cosmetic (the JPN-cache pointer is valid memory in
   any language); the crash severity is a PC artifact of that global being NULL
   outside Japanese mode.
+- Instance (D420): `mpmenu.c` `mp_watch_menu_display` `char rankbuffer[4]`
+  receives "Rank: 1st" / "P<n> KILLS"; GCC puts `scores[4]` next to it, so
+  the MP Scores page printed the rank text's bytes as numbers (1932599354 =
+  ": 1s"). Tell: a displayed number whose hex is printable ASCII from a
+  neighbouring string. Widened to `[64]` under `#ifdef PORT`.
 - Fix policy: **`-fno-stack-protector` globally** (`CMakeLists.txt`) so Linux
   matches the N64 and MinGW builds; the code is byte-matched to the ROM and
   cannot be "fixed" per site without diverging. Where a case is cleanly
@@ -1250,6 +1275,14 @@ non-flag ones (data loads, one-time validation, subsystem init) explicitly.
 Grepping the skipped `init_*`/`update_*` functions for calls with no
 matching state flag is the concrete check.
 
+Second instance (D479): the `GE_STARTMP` split-screen harness skipped the
+file-select screen, whose init sets `selected_folder_num = -1` for an MP
+launch. The harness left the boot default `FOLDER1`, so every stage load ran
+`fileLoadSettingsForFolder(0)` against an unvalidated (all-zero) `saves[]`
+record: options 0, i.e. ammo counter, sight and auto-aim off in harness
+matches only. A real menu launch never applies a Bond file in MP. Symptom
+looked like a HUD bug; the tell was that it never reproduced from the menu.
+
 ## D11. A chr's own per-tick animation-position logic can silently overwrite an AI script's scripted position in the same frame (D243)
 
 `chrTick` (`src/game/chr.c:2442`) always runs one of three `chr->actiontype`-
@@ -1294,6 +1327,7 @@ GE on N64 renders gameplay at ~20–30 fps, so `g_ClockTimer` (= `speedgraphfram
 - **Tell:** a state that holds forever at 60 fps, is frame-exact (integer frame, `fa == fb`), and has a per-tick step < 1.0 unit.
 - **Repro correctly:** force the granularity with `GE_D318B_CLK=N` (TEMP probe, lockstep N ticks/frame) and A/B N=1 vs N=2. Wall-clock runs on a slow host (WSLg renders ~5 fps → mixed clk 1–6) and `GE_DETERM=1` (advances per VI-retrace request, also mixed clk) both give uncalibrated results.
 - **Where else to look:** any `for/while (numticks)` accumulator followed by a single threshold/floor consumer; D193 (AI locomotion rate) and D243 (cutscene `numticks` bursts) touched the same axis from the other side.
+- **Frame-counter gates (D427/D451):** a gate that reads the current `g_ClockTimer` to rescale a frame counter (`88C % (rate*(clk>=2?1:2))`) is only exact at steady pacing. Prefer the tick accumulator already kept beside the counter (`field_890`) and test for a threshold *crossing* (`t/P != (t-clk)/P`): stateless and exact on average at any pacing.
 
 ## D15. A texture-rectangle idiom that is sub-1-native-pixel tall relies on the RDP's floor-based fixed-point scanline stepping — now replicated in `gfx_draw_rectangle` (D397, RESOLVED 2026-09-28)
 
@@ -1346,6 +1380,71 @@ darkening from a nonzero `ENV_ALPHA` LERP factor is very likely faithful
 (possibly authored/original-dev-intentional tinting), not a bug — do not
 "fix" it without an N64/1964-GEPD reference screenshot proving otherwise.
 
+## D16. Split-screen: port-side "one full-screen viewport" assumptions break 2P+ (D418)
+
+Two traps from the #99 split-screen bring-up:
+
+- **Safe-area crop (`gfx_adjust_viewport_or_scissor`) caches the LAST SP
+  viewport's Y range and stretches it over the whole window.** Right for the
+  solo 220-line viewport, wrong for 2P+ (each player's viewport is a sub-rect):
+  every player's view filled the window and the last-drawn (order is shuffled
+  per frame, `get_nth_player_from_shuffled`) covered the rest -> alternating
+  full-screen flicker. Fix = `gfx_set_split_screen()`. Any new port feature that
+  assumes "the viewport is the screen" needs the same 2P+ gate.
+- **Per-frame port hooks must sit on the path frames really take.** The
+  scheduler calls `gfx_run` directly (`port/src/libultra.c`), NOT through
+  `videoSubmitCommands`; a hook placed only in the latter silently never ran.
+  Log once on the first state change when adding such a hook.
+
+Debug recipe that found it: capture consecutive frames after the stage starts
+(GE_PCDUMP range, or the harness `GE_STARTMP=<players>[,<stageIdx>]` +
+`GE_MPVIRT=<players-1>` to start a match with no one at the menu) and look at
+them — the symptom was obvious in one montage.
+
+## D17. Un-stubbing a `-1` sentinel re-activates every dormant consumer of the value (D431/D434)
+
+A port stub that forces a value to `-1` (D154 `texnum`, D135) can hide latent layout bugs in its other readers. When restoring a real value, grep ALL readers of the field first and check each for raw-layout reads and table-bounds assumptions. Instance: D431 made light-fixture hits return real image ids, which reached `chrprop.c`/`propobj.c` reading `((u8*)&g_Textures[n])[0] & 0xf` as a hit type -- on PC byte 0 is the low byte of `dataoffset` (LE bitfield layout, D67), so it indexed `g_HitTypeSounds[13]` with 0..15. Use the `.hitTexture`/`.hitSound` bitfields (as `chr.c` does).
+
+## D18. A port feature that widens a shared range (draw distance, FOV) leaks into gameplay through every reader of the state it widened (D466)
+
+`Video.DrawDistance` scaled the one far-clip value that both the renderer and gameplay read, so `room_rendered`, `PROPFLAG_ONSCREEN`, `CHRFLAG_HAS_BEEN_ON_SCREEN` and the fog intensities all grew with it, and AI scripts ("on screen", "seen", target-in-sight, spawn out of view) fired earlier than on N64. Rule: when adding a "see farther / wider" option, grep every reader of the state it feeds and split render from gameplay; the render consumer keeps the extended value, the gameplay readers get a stored copy computed at the authored value.
+
+- **Tell:** `PROPFLAG_ONSCREEN`-style flags are dual-use (render gate AND AI input), so never gate the flag itself; store a separate verdict bit.
+- **Techniques that worked:** run the original traversal twice with a port flag that pins the single far read (a static read, never `viSetZRange`) and snapshot the result; keep the "gameplay verdict" in an unused bit of a u8 flag byte (`prop->flags & 0x80`) written by every setter of the dual-use flag; store the authored fog values at load time instead of recomputing from the live multiplier.
+- **Triage trap:** check whether a `PROPFLAG_*` hit is on `prop->flags` (runtime u8) or on `obj->flags` / pdef flags (u32 definition bits) before treating it as a reader (`propobj.c:8417`, `prop.c` 233-467 are the latter).
+- **Remaining class member:** FOV/widescreen widening of `camIsPosInScreen` and `c_lodscalez` (D222).
+- **Fixed-size per-frame budgets are readers too (D500):** the dyn.c vtx pool (`-mvtx`, as low as 40 KB) is bump-allocated with no bounds check and sized for what the N64 could see; widened views overran it (Aztec triangles). Look for unchecked per-frame pools sized by per-level tokens when a widening feature shows corruption only in busy scenes.
+- **A pixel ratio is not a fog factor (D503):** "~97% fogged" was a pixel-colour ratio; derive any fog snap cutoff from measured vertex fog, not from it. And before blaming fog for a far object, do the cheap 4:3 + N64-FOV test: if it vanishes, the cause is the widened frustum, not fog.
+- **Reveal, not regression (D503):** the N64's 16-bit framebuffer hid 2-5 level differences (near-full fog against haze); 32-bit output shows them, plus the room-scissor edges of nearly fogged objects. Measure pixel values against the fog colour before blaming draw distance.
+
+## D19. A "click after the shot" report needs the trigger-hold duration, not just the state machine (D433/D467)
+State-machine audits of a gun's fire/dry-fire path (GE: `gunTickHandState`, CLICKY weapons) are tick-driven and match the console at any tick/frame ratio; an extra click/sound that appears "with the shot" is usually the trigger still being down when the recoil state ends (about 14 ticks for the Golden Gun). Measure with `GE_STARTWEAPON` + `GE_INPUTSCRIPT` holds of 4/9/16 frames and a `state/mag/88C/890/clk` log at the sound-play sites before suspecting the audio layer; and remember `GE_QUITFRAME` counts frames from boot, the level's `g_GlobalTimer` starts ~270 later.
+
+## D20. Running an RCP task inline on the scheduler thread delays retrace delivery (D481)
+The N64 scheduler (`src/sched.c` `__scMain`) both starts RSP/RDP tasks and forwards each VI retrace to the game. On hardware the task runs on separate processors, so the scheduler is never busy. If the port executes the task synchronously inside `osSpTaskStartGo`, any retrace that arrives during it reaches the game late, and `boss.c`'s half-frame tick gate then skips the following retrace (33 ms frames). Tell: frame rate stuck below 60 at every graphics setting, moderate render and GPU times, and the lost frames failing the tick check (`skip_tick`), not the pending-gfx check. It only shows when the task takes a large fraction of a frame (slow hardware), so a fast dev box never sees it. Run hardware-side work off the scheduler thread and signal completion with the same events the hardware would.
+
+## D21. `gDPLoadBlock` with dxt = 0 depends on the RDP's odd-row TMEM read swap; static assets need it emulated, the tex.c pipeline must not get it (D75)
+
+The RDP swaps the two 32-bit halves of every 8-byte group on odd TMEM rows when *reading*, and compensates on *load* only when LoadBlock's dxt counter advances. A `gsDPLoadBlock(..., dxt = 0)` of a multi-row image therefore samples as "memory with odd rows pair-swapped". Rare's compiled-in assets that load this way (the Rareware logo's RAREWARE text, `DL_RAREWARETEXT`) are pre-swapped in the data and look scrambled ("interleaved/combed", identical at every texture-filter setting) if fast3d uploads them linearly. `tex.c` uses dxt = 0 for the whole runtime texture pipeline too, but there `texSwapAltRowBytes` was the matching pre-swap and D159 no-ops it, so those images are already linear. fast3d (`import_texture`) therefore swaps only dxt = 0 loads whose source is a compiled-in C array (`gfx_tex_source_is_c_array`). Generalisable tells: a texture that looks identically garbled at filter 0/1/2, interlaced along ROWS with a 2-texel horizontal shift, drawn from `assets/*.c`; decode the C array offline both ways before suspecting filtering/clamp. Counting how often a new texture-path branch fires on a level boot (a temporary env-gated log) caught a ~300-per-level over-reach before it shipped.
+
+## D22. Per-frame counters: gate them with `portN64FrameStep()` (D486)
+
+Decomp code that advances a counter once per *call* (per rendered frame) instead of by `g_ClockTimer` runs 2-3x faster in real time at the port's 1 tick/frame (and every frame when uncapped, `clk == 0`). D486 found three on the explosion/turret path: autogun shot counter (`unkAC++`), explosion part spawning, explosion/smoke shake decay. `port/include/porttick.h` `portN64FrameStep()` is the shared Rule-2 gate: true on every call at >= 2 ticks/frame (N64-identical), every second tick below, so the counter keeps the N64's 2-ticks-per-frame pace (the D427/D451 reference). If the gated counter also scales a per-event quantity by `g_GlobalTimerDelta` (autogun damage per shot), charge the full 2-tick frame on gated calls or the rate halves. Verify by A/B at `Video.FpsCap` 60 vs 30: the two must match. Any such gate is game logic and needs Rule-2 sign-off.
+
+## D23. Region bring-up: tooling and port code silently assume NTSC-U (D258)
+
+PAL/JP had never been built. What broke was all port-side: (1) asset emitters hard-coded `scripts/filelist.u.csv` (so on a PAL/JP ROM they would use US offsets with no error); (2) `romdata.c` treated "not PAL" as NTSC-U (rejecting a JP ROM's country byte); (3) port code referenced globals that exist only under a region-specific define (`LEFTOVERDEBUG` is US/JP-only), which surfaces as a PAL-only link error; (4) the decomp's PAL/JP filelists were incomplete and mislabelled. With a real ROM, prove every filelist row by bytes (same-name US file comparison, constant-shift search, header-walk for variable files) instead of trusting labels. Whenever port code touches a symbol inside a `#if` region block, check all three `REGION_DEFS` sets.
+
+## D24. Decomp out-of-bounds writes that the N64 stack layout absorbed (D490)
+
+Some decomp functions write past a local array in edge cases. On the N64, IDO's stack layout put a padding local (often a `pad[]` the decomp keeps for matching) right after the array, so the overflow was harmless. GCC lays the stack out differently, so the same write corrupts a live neighbour. D490: `sub_GAME_7F03ECC0` writes up to 6 entries into `s32 rem[4]` when an object's bbox is flat, overwriting `pts[0]` and giving every glass pane a phantom collision vertex (guards circled pads they could not reach). Tells: a bug that only appears for degenerate inputs (flat or zero-size boxes, coincident points); a value that is exactly 0 or a tiny denormal where a real number belongs; a `pad[]` local next to a fixed-size array in the decomp. Fix pattern: enlarge the array under `#ifdef AVOID_UB`, keep the original under `#else`, change no reads, so the result matches the N64's uncorrupted path.
+
+Also the read side: D496 (`generate_language_specific_text_for_weapon` strcat'd onto an uninitialised caller stack buffer for 3+ players; init under `AVOID_UB`).
+
+## D25. Cross-platform goldens: a fixed frame stem is only comparable at settled gameplay (D521)
+
+`GE_PCDUMP`/`GE_QUITFRAME` step the port's *sim* frame counter (`port/src/video.c:1406` `++frames`, one per `portRenderGfxTask()` at `port/src/libultra.c:1256`), and retrace messages are dropped at the posting site when the game's queue is nearly full (`port/src/libultra.c:753`), so a slow box stretches wall time without advancing `frames` -- frame stems are comparable, wall time is not. What is NOT comparable is any stem inside the intro flyby, whose settle point is wall-clock paced (D117): on a ~54 fps Linux box the flyby was still running at frame 900 (settles ~830-1130 run to run) while the Windows golden at 900 was settled, which reads as a 92.9% "different scene" delta if reported bare. Tells: over-tol2 % >30% at one stem and 1-7% at the next; phash Hamming in the 80s; a dense dump whose consecutive diffs sit at 80-95% and drop to 1-5% once settled. Never compare across platforms with `GE_DETERM=1` (call-sequenced retraces: stable run to run, different frame -> sim mapping). Before calling a residual band a renderer bug, classify it: a constant ~20 delta confined to a screen band (Archives' top 3 grid rows, all three stems) is systematic and needs a same-sim-state capture pair; a uniform d 3-6 over the whole frame with cell means <= 11 (Cuba) is the dither/quantization noise floor. **RESOLVED 2026-10-05 (D525):** both residual bands were *save state*, not renderer — the pair that closed them was a re-round of the whole linux set with `data/ge007.eep` pinned present (Archives 19.956-24.554% -> 3.590-3.859%, worst cell 50.8 -> 2.31; Streets 1200's 16.0-148.4 cell-mean band -> 3.616-3.983%, worst cell 4.43). The diagnostic tell that separates the two: re-capture one side with the save present and the band collapses to the noise floor, while a renderer defect survives identical sim state.
+
 ## E. Process / method notes
 
 - **Never `exit()` while another thread may be inside the GL driver (D344).**
@@ -1360,6 +1459,11 @@ darkening from a nonzero `ENV_ALPHA` LERP factor is very likely faithful
   `[Input] MouseEnabled = 0` in the pinned test ini. Script "frames" were
   about one per rendered frame on the file select screen; calibrate with a
   log, not by assumption.
+- **Per-slot headless scripts: `GE_INPUTSCRIPT_P1..P3` drive seats 2-4.**
+  Same entry syntax as `GE_INPUTSCRIPT` (slot 0); "frame" counts that
+  controller's reads. Mouse tokens and CHOLD/CREL are ignored on slots 1-3
+  (one warning per script). Recipe for a scripted 4P split-screen run:
+  `GE_STARTMP=4,<stage> GE_MPVIRT=3 GE_INPUTSCRIPT_P1=... GE_INPUTSCRIPT_P2=... GE_INPUTSCRIPT_P3=... GE_QUITFRAME=...`.
 - **`textMeasure` height is 0 without a trailing newline (D343).** It only
   counts completed lines. Measure `"text\n"` when you need a height (front.c's
   folder text does this); the width is unaffected.
@@ -1743,3 +1847,40 @@ darkening from a nonzero `ENV_ALPHA` LERP factor is very likely faithful
   `propobj.c:~2393`) — those 4 rely on div-by-zero yielding NaN/inf without
   trapping on both MIPS and x86-64 SSE, matching retail behavior; do not
   "fix" them.
+
+- **x64 Windows backtraces: unwind with the PE's .pdata, never walk RBP.**
+  `-fno-omit-frame-pointer` on MinGW-w64 GCC does not give an RBP chain:
+  most prologues set `RBP = RSP + N` (Win64 allows an offset frame
+  pointer), so `[RBP]` is not the saved RBP and a manual walk dies at
+  frame 1. `RtlLookupFunctionEntry` + `RtlVirtualUnwind` from the
+  exception CONTEXT is reliable and needs no dbghelp/symbols (crash.c,
+  2026-09-30). Print `va = preferred ImageBase + RVA` per frame so
+  `addr2line -e ge007.x86_64.exe` resolves it even if the image was
+  relocated. Test with `GE_CRASHTEST=<N>`.
+- **Crossing msys -> native: pass files, not quoted strings; get paths from
+  bash's own `pwd -W`.** The msys argv conversion re-escapes embedded `"`
+  as `\"`, which `cmd.exe` does not understand, so an inline
+  `cmd //c "... \"C:\path\" ..."` silently never runs (build-pc.sh's TMP
+  probe was dead this way). And with Git Bash plus MSYS2 `usr/bin` on one
+  PATH, `/tmp`, `mktemp` and `cygpath` can belong to different runtimes
+  (different Windows dirs). Never trust `command -v cmake` for the MSYS2
+  toolchain either: a pip-installed cmake can shadow it (2026-09-30).
+
+### Poll-thread input must never re-point `g_CurrentPlayer` (D419)
+
+`inputComputePad` runs on the scheduler thread (`joyPoll`), a real pthread, not the game thread. Any save/swap/restore of `g_CurrentPlayer`/`player_num`/`g_playerPerm` from there races the game tick's own `set_cur_player`: the restore can leave the game thread on the wrong player and it then spins in list walks that compare against `g_CurrentPlayer->...` (seen: `bondinvCycleForward` infinite loop after a split-screen respawn). Resolve the owning player explicitly (`g_playerPointers[slot]`) and touch its fields directly; for game functions that take no player argument, present a native button bit instead of calling them.
+
+**A1 cross-tag (D492, 2026-10-03): serialized multi-byte fields are host-endian in this port.** Structs copied raw to a file (the EEPROM save via `geEepromRW`) store s32/u16 fields little-endian, while N64 images are big-endian. A raw-byte CRC over the region gives the same value on both, which hides the difference until the stored checksum words themselves are compared. Tell: data that is intact but fails validation, with `calc_crc` equal to the big-endian reading of the stored word. Any field inside the CRC range must be swapped *before* recomputing the checksum.
+
+**A1 cross-tag (D455, 2026-09-30):** an exe-static address (array/global/function in `.data`/`.rodata`/`.text`) held in a `u32`/`s32` truncates on Windows (image base `0x140000000`; Linux 0x20000000 hides it). Binary tell: `mov r64,[rip+.refptr.X]` ... `mov r32,r32` before the pointer is used or passed. The address load may precede a `jmp` join, so an adjacent-instruction scan misses it; follow jumps. A census of the whole exe found only the D454 site; `_*Segment*` linker symbols are ROM constants (`.set` in `romassets_u.s`), not exe addresses, and are benign in `(u32)` casts.
+
+**`GE_MEMPREDZONE=1` (D464): catch allocator overruns deterministically.** Set it before any run to pad every `mempAlloc*` block with a 64-byte pattern trailer and check at level unload, every 60 frames and on orderly quit. A hit prints `MEMPREDZONE: HIT ... caller=0x<addr>`; resolve with `addr2line -f -C -i -e build-pc/ge007.x86_64.exe 0x<addr>` to the allocation site, then compare its size expression with `sizeof` of how the buffer is indexed (an N64 literal stride vs a widened struct is the D461/D462 class). Zero hits is only "no overrun reached the trailer"; whole-bank allocations are unpadded until shrunk. Unset = one cached branch per allocation.
+
+**Data-driven input mapping: factor the pure core, keep the old code as a test oracle (D469).** To refactor a hard-wired input block into a table without changing default behaviour, move the decision into a pure function over (raw source bits, bindings, previous-state, incoming mask) and keep a verbatim transcription of the old block next to it, used only by an env-gated boot self-test (`GE_PADMAPTEST`) that compares them exhaustively over the (small) input space. 2^15 source combinations x prev x ctx x incoming masks is ~21M cheap calls, ~1 s, and gives a byte-identity proof no live pad is needed for. Watch the side inputs the old code mutated implicitly (here the incoming `button` mask: the southpaw swap acted on keyboard fire too, so the pure function takes it as a parameter). Table edits arrive from other threads: the poll thread must rebuild into a spare buffer keyed by a cheap config signature and publish by atomic pointer, never parse (no `strtok`) or re-point shared state in place.
+
+**Audio device/gain changes belong on the producer thread (D470).** The SDL audio path is a queue (`SDL_QueueAudio`), fed and sized only from `audioSetNextBuffer`/`audioGetAiLengthBytes`. To change the device live, have UI/event threads only set atomics and do the close/reopen at the top of `audioSetNextBuffer`; never close `dev` from the UI thread. Apply master gain to a scratch copy (never the game's buffer) and pass the original pointer through at 100 so the default stays byte-identical. `SDL_AUDIODEVICEREMOVED.which` is the opened device id for output devices.
+
+**Overlay/menu input must name its owner pad; never hard-code seat 0 (D472).** When several pads can open a shared UI, keep a per-pad edge array (one shared `prev` flag masks edges and double-toggles), record the opener, and resolve the effective owner (opener -> lowest attached -> 0) at read time so a detach cannot strand the UI. Port-layer 2D that must pillarbox under native widescreen: wrap it in `PORT_HUD_ASPECT(CENTER)` and map the mouse through `vis = (4/3)/portNativeAspect()`.
+
+### The options row table has two UIs; new row kinds need a front-end answer (menu PD alignment)
+`port/src/optionsoverlay.c`'s `rows[]` is consumed by the F10 overlay and by `frontoptions.c` through the `optionsRow*` accessors. A row kind that only one UI understands (separator, Back, hub-only actions) must be hidden from the other in `optionsRowIsShown()`, and should be a `ROW_ACTION` with a key prefix so the section-reset and reset-probe loops (which skip `ROW_ACTION`) stay correct. Moving a row between sections silently changes what that section's "Reset to defaults" resets: re-run `GE_WSPROBE_RESET` after any regroup.

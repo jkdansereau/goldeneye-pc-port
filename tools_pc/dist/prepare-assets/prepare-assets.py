@@ -51,7 +51,7 @@ ROM_SHA1 = {
 }
 
 # (script, args, produces) — run in order. d88 has no output of its own: it
-# appends the 21 per-level stage-setup files to the pccg dir d69 just made,
+# appends the 21 solo + 13 multiplayer stage-setup files to the pccg dir d69 just made,
 # and --regen makes that idempotent.
 EMIT_STEPS = (
     ("d43_emit.py", (),          "pcmodels-{region}/pcmodels.bin"),

@@ -75,8 +75,10 @@ unsigned char *g_pc_animdata_base = NULL;
  * data/ takes precedence. */
 static const char *romFileCandidates(void)
 {
-#if GE007_IS_PAL
+#if defined(VERSION_EU)
     return "ge007.pal-final.z64|baserom.e.z64";
+#elif defined(VERSION_JP)
+    return "ge007.jpn-final.z64|baserom.j.z64";
 #else
     return "ge007.ntsc-final.z64|baserom.u.z64";
 #endif
@@ -85,8 +87,10 @@ static const char *romFileCandidates(void)
 static int romHeaderValid(const u8 *h, char *err, size_t errsz)
 {
     static const u8 magic[4] = { 0x80, 0x37, 0x12, 0x40 };
-#if GE007_IS_PAL
+#if defined(VERSION_EU)
     const char country = 'P';
+#elif defined(VERSION_JP)
+    const char country = 'J';
 #else
     const char country = 'E';
 #endif
@@ -359,8 +363,9 @@ int romdataInit(void)
         u32 cgTotal = pccgReserveSize(img);
 
         /* Map at the cart address so absolute asset symbols are live. On
-         * failure both paths fall through to the heap copy below (degraded:
-         * anything that dereferences a cart address directly, rather than via
+         * failure Windows aborts boot with a diagnosis (D179 tail); POSIX
+         * still falls through to the heap copy below (degraded: anything
+         * that dereferences a cart address directly, rather than via
          * romdataGetRom()/the PI shims, will read wrong memory). */
         {
             u32 maplen = romSize + sideTotal + cgTotal;
@@ -369,11 +374,39 @@ int romdataInit(void)
                                     MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
             if (at == (void *)(uintptr_t)CART_BASE)
                 return romdataFinishCartMap(tok, img, sideTotal, cgTotal);
-            if (at)
-                VirtualFree(at, 0, MEM_RELEASE);
-            sysLogPrintf(LOG_WARNING, "romdataInit: could not reserve 0x%08X; "
-                         "using heap copy — direct ROM reads will fail",
-                         CART_BASE);
+            /* D179 tail: the fixed-address map failed. Say exactly why (Win32
+             * error + what already occupies the range) and stop here: the
+             * heap-copy fallback cannot run the game (absolute asset symbols
+             * dereference CART_BASE directly), so continuing only turned
+             * this into an unexplained AV later, in model loading. */
+            {
+                const DWORD gle = GetLastError();
+                MEMORY_BASIC_INFORMATION mbi;
+                if (at)
+                    VirtualFree(at, 0, MEM_RELEASE);
+                sysLogPrintf(LOG_ERROR, "romdataInit: VirtualAlloc(0x%08X, %u "
+                             "bytes) %s (GetLastError=%lu)", CART_BASE, maplen,
+                             at ? "returned a different address" : "failed",
+                             (unsigned long)gle);
+                if (VirtualQuery((LPCVOID)(uintptr_t)CART_BASE, &mbi, sizeof(mbi))) {
+                    sysLogPrintf(LOG_ERROR, "romdataInit: 0x%08X is %s "
+                                 "(allocation base %p, region %p+0x%llx, type 0x%lx)",
+                                 CART_BASE,
+                                 mbi.State == MEM_FREE ? "free (range too small?)" :
+                                 mbi.State == MEM_RESERVE ? "reserved by another allocation" :
+                                 "committed by another allocation",
+                                 mbi.AllocationBase, mbi.BaseAddress,
+                                 (unsigned long long)mbi.RegionSize,
+                                 (unsigned long)mbi.Type);
+                }
+                sysLogPrintf(LOG_ERROR, "romdataInit: the game needs the ROM "
+                             "mapped at 0x%08X and cannot run from a heap copy; "
+                             "aborting boot (something in this process, often "
+                             "an injected overlay/hook DLL, occupies that "
+                             "address)", CART_BASE);
+                free(img);
+                return -1;
+            }
 #else
             /* POSIX: anonymous fixed-address mmap. MAP_FIXED_NOREPLACE (Linux
              * 4.17+) fails instead of clobbering an existing mapping; where it

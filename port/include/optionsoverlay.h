@@ -35,11 +35,16 @@ extern "C" {
 
 /* Toggle open/closed. On the closing edge the config is saved. */
 void optionsOverlayToggle(void);
+void optionsOverlayTestStep(char c);   /* GE_OVNAV harness (frontoptions.c) */
 /* ESC: back to categories, or close from the category list (host-thread request). */
 void optionsOverlayBack(void);
 
 /* 1 while the overlay is on screen. */
 int optionsOverlayIsOpen(void);
+
+/* D567: 1 once the mouse moved or clicked since the overlay opened or the
+ * last pad/keyboard navigation (the pointer is then the active input). */
+int optionsOverlayMouseActive(void);
 
 /* Called from inputComputePad(0) while open: reads SDL keyboard edges and
  * drives the cursor / value adjustments. */
@@ -67,11 +72,23 @@ int         optionsRowCount(void);
 int         optionsRowIsHeader(int i);
 int         optionsRowHeaderParent(int i); /* -1 for root sections */
 int         optionsRowChildHeader(int i);  /* -1 unless this row opens a nested section */
+int         optionsRootHeader(int k);      /* k-th top-level page in PD hub / tab order, rows[] header index; -1 past the end */
+int         optionsRowIsBindingsPage(int hdr);   /* Key Bindings page (front help line) */
+int         optionsRowIsPadPage(int hdr);        /* a seat's Controller page (front help line) */
+int         optionsRowSectionMixedScope(int hdr); /* page mixes per-file and global rows ("(per profile)" tags) */
+void        optionsRowTitle(int i, char *out, int n); /* header title, seat-aware ("PLAYER 2 CONTROLLER") */
+void        optionsRowLinkOpened(int i);   /* call before opening link row i's child: a Select-player row sets the seat */
+int         optionsRowSeat(int i);         /* 0-3 for a "Player N" row, else -1 */
+int         optionsPadSeat(void);          /* seat the Controller / Key bindings pages edit (0-based) */
 int         optionsRowIsShown(int i);
 const char *optionsRowLabel(int i);
+/* D507: one-line plain-language description of row i, or NULL. Shown under the
+ * F10 box and on the front-end options page for the focused row. */
+const char *optionsRowHelp(int i);
 int         optionsRowIsSlider(int i);
 int         optionsRowIsBind(int i);
 void        optionsRowBeginBind(int i);
+int         optionsRowIsPadBind(int i);   /* D469: gamepad-capture row (pad A may start it) */
 int         optionsRowIsBondChooser(int i); /* D353: the Bond-file chooser row
                                               (front options screen only) */
 /* D356: 1 when this row's value lives in the selected save file (content
@@ -85,6 +102,7 @@ void        optionsRowSetFraction(int i, double f);
 void        optionsRowCommit(int i); /* slider release; watch rows persist once */
 void        optionsRowValueText(int i, char *out, int n);
 void        optionsRowAdjust(int i, int dir);
+void        optionsAdjustCommitPending(void); /* D489: save a stepped watch slider on release */
 
 /* D356: per-section "Reset to defaults" rows (ROW_ACTION, keys
  * "__Reset*"). Activation is edge-triggered and two-step (arm -> confirm

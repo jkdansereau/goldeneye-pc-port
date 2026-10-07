@@ -87,6 +87,10 @@ extern u32 D_80035CC0;
 extern u32 D_80035D00;
 extern u32 D_80035D04[];
 extern u32 D_80035EA4;
+#ifdef PORT
+extern u32 D_80035EA8;
+extern u32 D_80035EAC;
+#endif
 extern u32 watchControllerButtonBases[];
 extern GunModelFileRecord gitem_structs[];
 extern struct gun_trigger_state g_ZeroTriggerState;
@@ -2717,6 +2721,24 @@ void sub_GAME_7F0649D8(enum GUNHAND hand)
 /**
  * Address: 7F064B28
  */
+#ifdef PORT
+/* D451 (D427 follow-up): automatic-fire gate measured in TICKS, not frames.
+ * The D427 fix scaled the modulus by (g_ClockTimer >= 2 ? 1 : 2) and kept the
+ * frame counter field_88C, so at an unsteady frame rate (clock flipping 1<->2)
+ * the window flips between rate and 2*rate frames and shots fire early/jittery.
+ * field_890 is the tick accumulator (+= g_ClockTimer per call, reset together
+ * with field_88C), so "a multiple of P ticks was crossed this call" is stateless
+ * and exact on average at any pacing: P = 2 ticks * rate = what the console's
+ * 2-tick frames gave. First frame (88C == 0) still fires, as before. */
+static int d427Gate(struct hand *h, s32 rate)
+{
+    s32 P = rate * 2;
+    s32 t1 = (s32) h->field_890;
+    s32 t0 = t1 - g_ClockTimer;
+    return (h->field_88C == 0) || (P > 0 && (t1 / P) != (t0 / P));
+}
+#endif
+
 void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
 {
 #if defined(VERSION_US)
@@ -2762,7 +2784,11 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
     struct PropRecord *temp_v0_8;
     Weapon1PTransformKeyframe *sp74;
     f32 temp_f0_2;
+#ifdef PORT
+    Weapon1PTransformKeyframe *var_a0_2; /* D454: see EU arm */
+#else
     u32 var_a0_2;
+#endif
     f32 temp_v1_9;
     struct hand *temp_v1_5;
     f32 un_f32_num = 0.0f;
@@ -2818,7 +2844,11 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
     Weapon1PTransformKeyframe *sp74;
     struct PropRecord *temp_v0_8;
     f32 temp_f0_2;
+#ifdef PORT
+    Weapon1PTransformKeyframe *var_a0_2; /* D454: see EU arm */
+#else
     u32 var_a0_2;
+#endif
     f32 temp_v1_9;
     struct hand *temp_v1_5;
     f32 un_f32_num = 0.0f;
@@ -2873,7 +2903,14 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
     Weapon1PTransformKeyframe *sp74;
     struct PropRecord *temp_v0_8;
     f32 temp_f0_2;
+#ifdef PORT
+    /* D454: was u32, which truncates the exe-data address of D_80034CA4/E0C
+     * (PE image base 0x140000000) before gunSample1PTransform; knife slash
+     * crashed on Windows. Pointer-width ABI fix only. */
+    Weapon1PTransformKeyframe *var_a0_2;
+#else
     u32 var_a0_2;
+#endif
     f32 temp_v1_9;
     struct hand *temp_v1_5;
     f32 un_f32_num = 0.0f;
@@ -3222,7 +3259,20 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                         && (currentPlayerGetIsAiming() == 0)
                         && (((s32) handptr->volley % 3) != 0)))
                 {
+                    #ifdef PORT
+                    /* D427 (#114): field_88C counts RENDERED frames and the
+                     * automatic-fire cadence is 88C % AutomaticFiringRate. The N64
+                     * renders ~2 ticks per frame; the port at 60 fps gives 1, so
+                     * every automatic gun fired 2-3x faster in wall time. Scale the
+                     * modulus so it spans the same number of TICKS the console's
+                     * 2-tick frames did (identical to N64 at >= 2 ticks/frame).
+                     * Only this gate changes: 88C itself and every other 88C==0
+                     * "first frame" gate stay per-frame, and animation time
+                     * (field_890) stays tick-scaled. */
+                    if (d427Gate(handptr, bondwalkItemGetAutomaticFiringRate(var_s1)))
+#else
                     if (((s32) handptr->field_88C % bondwalkItemGetAutomaticFiringRate(var_s1)) == 0)
+#endif
                     {
                         if ((getPlayerCount() == 1) || ((checkGamePaused() == 0) && (g_CurrentPlayer->mpmenuon == 0)))
                         {
@@ -3302,7 +3352,19 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                     if ((g_CurrentPlayer->hands[1 - hand].field_A50 != g_GlobalTimer)
                         && (handptr->field_A4C < g_GlobalTimer))
                     {
+#ifdef PORT
+                        /* D432 (#114 follow-up): this gate compares against g_GlobalTimer
+                         * every gun tick. On the N64 (2 ticks/frame) it is only evaluated
+                         * every second tick, so the next sound lands on the first frame
+                         * boundary after rate+1 ticks: rate 4 -> 6, rate 3 -> 4. At 1
+                         * tick/frame the port let it fire after exactly rate+1 (5 for the
+                         * AK47), which, once D427 moved the shots to 6 ticks, made shot
+                         * and sound drift apart ("off"). Round the offset to odd (rate|1)
+                         * so the gate opens on the same even boundary the console used. */
+                        handptr->field_A4C = ((s32) bondwalkItemGetSoundTriggerRate(var_s1) | ((g_ClockTimer >= 2) ? 0 : 1)) + g_GlobalTimer;
+#else
                         handptr->field_A4C = bondwalkItemGetSoundTriggerRate(var_s1) + g_GlobalTimer;
+#endif
                         sp1B4 = 1;
                     }
                 }
@@ -3326,23 +3388,6 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                             sndDeactivate((struct ALSoundState *) handptr->field_A48);
                         }
 
-#ifdef PORT
-                        /* TEMP D207/D241 (M-201): classify every shot-sound
-                         * attempt: into handle 1, handle 2, or SKIPPED because
-                         * both per-hand handles are still held (the stop above
-                         * is async). GE_D207S=1; one line per attempt. */
-                        if (bondwalkItemGetSound(var_s1) != 0)
-                        {
-                            extern char *getenv(const char *name);
-                            static int d207s = -1;
-                            if (d207s < 0) d207s = getenv("GE_D207S") != NULL;
-                            if (d207s)
-                                osSyncPrintf("D207S t=%d hand=%d item=%d rate=%d -> %s\n", (int)g_GlobalTimer, (int)hand,
-                                             (int)var_s1, (int)bondwalkItemGetSoundTriggerRate(var_s1),
-                                             handptr->audioHandle == NULL ? "H1"
-                                             : (struct ALSoundState *)handptr->field_A48 == 0 ? "H2" : "SKIP");
-                        }
-#endif
                         if (bondwalkItemGetSound(var_s1) != 0)
                         {
                             if (handptr->audioHandle == NULL)
@@ -3412,21 +3457,21 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
             weapon_stats = get_ptr_item_statistics(var_s1);
 
 #if defined(VERSION_US)
-            sp1A4 = weapon_stats->b44[0];
-            sp1A0 = weapon_stats->b44[1];
+            sp1A4 = WS_B44(weapon_stats, 0);
+            sp1A0 = WS_B44(weapon_stats, 1);
 #endif
 #if defined(VERSION_JP)
-            sp1A4 = weapon_stats->b44[0];
-            sp1A0 = weapon_stats->b44[1];
-            stat_2 = weapon_stats->b44[2];
-            stat_3 = weapon_stats->b44[3];
+            sp1A4 = WS_B44(weapon_stats, 0);
+            sp1A0 = WS_B44(weapon_stats, 1);
+            stat_2 = WS_B44(weapon_stats, 2);
+            stat_3 = WS_B44(weapon_stats, 3);
             stat_4 = weapon_stats->SingleFiringRate;
 #endif
 #if defined(VERSION_EU)
-            sp1A4 = ((s32)weapon_stats->b44[0] * 50) / 60;
-            sp1A0 = ((s32)weapon_stats->b44[1] * 50) / 60;
-            stat_2 = ((s32)weapon_stats->b44[2] * 50) / 60;
-            stat_3 = ((s32)weapon_stats->b44[3] * 50) / 60;
+            sp1A4 = ((s32)WS_B44(weapon_stats, 0) * 50) / 60;
+            sp1A0 = ((s32)WS_B44(weapon_stats, 1) * 50) / 60;
+            stat_2 = ((s32)WS_B44(weapon_stats, 2) * 50) / 60;
+            stat_3 = ((s32)WS_B44(weapon_stats, 3) * 50) / 60;
             stat_4 = weapon_stats->SingleFiringRate * 50 / 60;
 #endif
 
@@ -3456,19 +3501,19 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                 && (handptr->weapon_hold_time != 0)
 
 #if defined(VERSION_US)
-                && (handptr->field_890 >= weapon_stats->b44[2])
+                && (handptr->field_890 >= WS_B44(weapon_stats, 2))
 #endif
 #if defined(VERSION_JP) ||  defined(VERSION_EU)
                 && (handptr->field_890 >= stat_2)
 #endif
 
-                && (weapon_stats->b44[3] >= 0)
+                && (WS_B44(weapon_stats, 3) >= 0)
 
 #if defined(VERSION_US)
                 // HACK: registers are swapped
                 // addu a1, v1, a0
-                && (handptr->field_890 + weapon_stats->b44[3] < (0,sp1A4) + sp1A0)
-                && (handptr->field_890 + weapon_stats->b44[3] >= (s32)weapon_stats->b44[2])
+                && (handptr->field_890 + WS_B44(weapon_stats, 3) < (0,sp1A4) + sp1A0)
+                && (handptr->field_890 + WS_B44(weapon_stats, 3) >= (s32)WS_B44(weapon_stats, 2))
 #endif
 #if defined(VERSION_JP) ||  defined(VERSION_EU)
                 && (handptr->field_890 + stat_3 < sp1A4 + sp1A0)
@@ -3480,7 +3525,7 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
                 handptr->field_890 = 0;
                 handptr->field_88C = 0;
 #if defined(VERSION_US)
-                handptr->field_8A8 = weapon_stats->b44[3];
+                handptr->field_8A8 = WS_B44(weapon_stats, 3);
 #endif
 #if defined(VERSION_JP) ||  defined(VERSION_EU)
                 handptr->field_8A8 = stat_3;
@@ -4112,11 +4157,19 @@ void gunTickHandState(enum GUNHAND hand, s32 triggerOn)
             || (handptr->weapon_action_state == GUN_ANIM_STATE_KNIFE_SLASH1_STRIKE)
             || (handptr->weapon_action_state == GUN_ANIM_STATE_KNIFE_SLASH1_RECOVER))
         {
+#ifdef PORT
+            var_a0_2 = (Weapon1PTransformKeyframe *) D_80034CA4;
+#else
             var_a0_2 = D_80034CA4;
+#endif
         }
         else
         {
+#ifdef PORT
+            var_a0_2 = (Weapon1PTransformKeyframe *) D_80034E0C;
+#else
             var_a0_2 = D_80034E0C;
+#endif
         }
 
         if (gunSample1PTransform(var_a0_2, sp88, &handptr->field_8EC, hand) != 0)
@@ -5297,7 +5350,16 @@ void sub_GAME_7F068508(GUNHAND handnum, f32 floor_y_pos)
         return;
     }
  
+#ifdef PORT
+    /* D491: N64 reads rot across the adjacent globals D_80035EA4/A8/AC (gun.c,
+     * all zero); mingw lays them out in reverse, so y/z came from
+     * g_ZeroTriggerState. Read the named globals. Layout only (porting-notes D5). */
+    rot.x = *(f32 *) &D_80035EA4;
+    rot.y = *(f32 *) &D_80035EA8;
+    rot.z = *(f32 *) &D_80035EAC;
+#else
     rot = *((coord3d *) (&D_80035EA4));
+#endif
     casing->floor_y_pos = floor_y_pos;
  
     if (((((weaponid == ITEM_WPPK) || (weaponid == ITEM_WPPKSIL)) || (weaponid == ITEM_TT33)) || (weaponid == ITEM_SILVERWPPK)) || (weaponid == ITEM_GOLDWPPK))
@@ -5614,7 +5676,16 @@ void sub_GAME_7F068508(GUNHAND handnum, f32 floor_y_pos)
         return;
     }
  
+#ifdef PORT
+    /* D491: N64 reads rot across the adjacent globals D_80035EA4/A8/AC (gun.c,
+     * all zero); mingw lays them out in reverse, so y/z came from
+     * g_ZeroTriggerState. Read the named globals. Layout only (porting-notes D5). */
+    rot.x = *(f32 *) &D_80035EA4;
+    rot.y = *(f32 *) &D_80035EA8;
+    rot.z = *(f32 *) &D_80035EAC;
+#else
     rot = *((coord3d *) (&D_80035EA4));
+#endif
     casing->floor_y_pos = floor_y_pos;
  
     if (((((weaponid == ITEM_WPPK) || (weaponid == ITEM_WPPKSIL)) || (weaponid == ITEM_TT33)) || (weaponid == ITEM_SILVERWPPK)) || (weaponid == ITEM_GOLDWPPK))
@@ -6208,9 +6279,17 @@ Gfx *generate_ammo_total_microcode(Gfx *gdl)
     s32 rightx;
     s32 reserveammo;
     s32 magammo;
+#ifdef PORT
+    uintptr_t imageoffset_r;
+#else
     u32 imageoffset_r;
+#endif
     s32 textwidth_r;
+#ifdef PORT
+    uintptr_t imageoffset_l;
+#else
     u32 imageoffset_l;
+#endif
     s32 textwidth_l;
 
     if (g_CurrentPlayer->gunammooff == 0)
@@ -6399,7 +6478,11 @@ Gfx *gunDrawWatchAmmoDisplay(Gfx *gdl)
     s32 ammotype;
     s32 reserveammo;
     s32 magammo;
+#ifdef PORT
+    uintptr_t imageoffset;
+#else
     u32 imageoffset;
+#endif
     s32 textwidth;
     s32 pad;
 
@@ -6518,7 +6601,19 @@ void gunDrawSight(s32 *gdl) {
     f32 xypos[2];
     f32 halfedxy[2];
 
+#ifdef PORT
+    /* D436: opt-in persistent sight. With Video.CrosshairPersistent the
+     * NOTAIMING reason is ignored so the sprite is also drawn in hipfire, at
+     * the same crosshair_angle the shots use. Every other reason (Sight
+     * option / MP sight policy, cutscene, damage) and the MP menu still hide
+     * it. Default off = the N64 test. */
+    extern int portCrosshairPersistent(void);
+    s32 sightmode = g_CurrentPlayer->gunsightmode
+        & ~(portCrosshairPersistent() ? GUNSIGHTREASON_NOTAIMING : 0);
+    if ((sightmode == 0) && (g_CurrentPlayer->mpmenuon == FALSE)) {
+#else
     if ((g_CurrentPlayer->gunsightmode == 0) && (g_CurrentPlayer->mpmenuon == FALSE)) {
+#endif
 #ifdef PORT
         if (portCrosshairHide)
             return;
@@ -6526,7 +6621,18 @@ void gunDrawSight(s32 *gdl) {
         sightimage = portCrosshairStyle() && betacrosshairimage
             ? betacrosshairimage : crosshairimage;
         sp54 = *(Gfx **)gdl;
-        texSelect(&sp54, sightimage, 4, 0, 0);
+        if (portCrosshairScale() != 1.0f) {
+            /* D570: a scaled sprite's edge pixels sample past the last texel row/
+             * column; with the sight's WRAP tile flags the filter then blended
+             * in the opposite edge (a faint copy of the top bar's tip under the
+             * bottom bar). Clamp only when scaled: 100% keeps the original list. */
+            struct sImageTableEntry clamped = *sightimage;
+            clamped.flagsS = G_TX_NOMIRROR | G_TX_CLAMP;
+            clamped.flagsT = G_TX_NOMIRROR | G_TX_CLAMP;
+            texSelect(&sp54, &clamped, 4, 0, 0);
+        } else {
+            texSelect(&sp54, sightimage, 4, 0, 0);
+        }
 #else
         sp54 = *gdl;
         texSelect(&sp54, crosshairimage, 4, 0, 0);

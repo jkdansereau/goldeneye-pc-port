@@ -19,5 +19,12 @@ struct s_darkened_light {
 void lightFixtureEntryEnd(Gfx *param_1);
 bool check_if_imageID_is_light(s32 imageID);
 void lightFixtureEntryBegin(Gfx *DL);
+#ifdef PORT
+/* D431 (#119): image id of a fixture's texture (stored in the otherwise-unused
+ * RESERVED slot) and the lookup the bullet-hit code uses in place of the KSEG0
+ * texnum recovery that is invalid for the port's converted room GDLs. */
+void lightFixtureSetTexnum(s32 texnum);
+s32 lightFixtureTexnumForGfx(Gfx *gfx, s32 room_index);
+#endif
 
 #endif

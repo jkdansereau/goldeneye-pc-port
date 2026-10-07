@@ -256,15 +256,27 @@ void expand_ani_table_entries(s32** arg0)
     while (*var_v0 != 0) {
         if (*var_v0 != 1) {
             *var_v0 = (s32)((s32)*var_v0 + (s32)(&ptr_animation_table->data));
+#ifdef PORT
+            ((struct anim_entry *)(uintptr_t)(u32)(*var_v0))->unk08 += (s32)&ptr_animation_table->data;  /* D441: zero-extend s32-held DRAM ptr */
+#else
             ((struct anim_entry *)*var_v0)->unk08 += (s32)&ptr_animation_table->data;
+#endif
+#ifdef PORT
+            ((struct anim_entry *)(uintptr_t)(u32)(*var_v0))->unk10 += (s32)&ptr_animation_table->data;  /* D441: zero-extend s32-held DRAM ptr */
+#else
             ((struct anim_entry *)*var_v0)->unk10 += (s32)&ptr_animation_table->data;
+#endif
         }
         var_v0++;
     }
 
     for (var_v0 = (s32 *)arg0; *var_v0 != 0; var_v0++) {
         if (*var_v0 != 1) {
+#ifdef PORT
+            *(s32 *)(uintptr_t)(u32)(*var_v0) += (s32)&_animation_entriesSegmentRomStart;  /* D441: zero-extend s32-held DRAM ptr */
+#else
             *(s32 *)*var_v0 += (s32)&_animation_entriesSegmentRomStart;
+#endif
         }
     }
 }

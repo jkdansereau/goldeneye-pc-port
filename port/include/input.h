@@ -21,6 +21,8 @@ extern "C" {
 /* Initialize SDL input. Returns 0 on success. */
 int  inputInit(void);
 void inputDestroy(void);
+/* D493: stop all pad rumble and block new rumble (clean exit). */
+void inputRumbleStopAll(void);
 
 /* Poll once per frame; updates the connected-controller state that
  * osContStartReadData / osContRead will return. */
@@ -57,11 +59,14 @@ int  inputReleaseCapture(void);
 /* F10 options overlay: force the OS cursor free + visible while the overlay
  * owns the mouse. Safe to call every poll. */
 void inputSuspendForOverlay(void);
+int  inputFrontEndCursorUiFrac(double *fx, double *fy, double *xscale);   /* D555 */
+int  inputCrosshairCursorOn(void);   /* D555: Input.CrosshairCursor (overlay draws the game crosshair as the pointer) */
 
 /* Raw gamepad state for controller idx (the F10 options overlay's gamepad
  * navigation). Unaffected by the overlay's pad-swallow, which happens at our
  * logic layer, not SDL's. No pad open -> 0. */
 int   inputPadButton(int idx, SDL_GameControllerButton b);
+int   inputOverlayOwnerPad(void);   /* D472: pad driving the F10 overlay */
 short inputPadAxis(int idx, SDL_GameControllerAxis a);
 
 /* Queue a mouse-wheel weapon-cycle input (one short A-button press). Sign is
@@ -80,6 +85,25 @@ const char *inputBindingSlot(const char *key, int slot);
 int inputBindingSetSlot(const char *key, int slot, int code);
 int inputBindingResetKey(const char *key);
 
+/* D469: gamepad action table, presets and per-seat rebinding.
+ * D518: the preset is per seat -- Input.PadPreset (seat 1; pre-D518 global
+ * key) plus Input.PadPreset2/3/4. 0 = Jinx 1.1 (default), 3 = Custom
+ * (Input.Pad[N].<Action>).
+ * Seat = pads[] index. Sources are indices into the SDL-name table
+ * (inputPadSourceName); -1 = none. */
+int  inputPadActionCount(void);
+const char *inputPadActionLabel(int act);
+int  inputPadActionForKey(const char *key);        /* "Input.Pad.Fire" -> action, else -1 */
+int  inputPadSourceCount(void);
+const char *inputPadSourceName(int src);
+int  inputPadSeatPresent(int seat);
+unsigned inputPadHeldSources(int seat);            /* bit i = source i held */
+int  inputPadPresetStep(int cur, int dir);
+int *inputPadPresetPtr(int seat);                 /* D518: per-seat preset value */
+void inputPadBindingText(int seat, int act, int slot, char *out, int n);
+int  inputPadBindingSet(int seat, int act, int slot, int src);   /* src < 0 clears */
+int  inputPadBindingReset(int act);                /* all seats; returns seats changed */
+
 /* D345(b): 1 while the 1:1 menu pointer owns cursor_h/v_pos (in a menu,
  * abs pointer available, mouse used within the re-assert window). Port
  * screens that teleport the crosshair should skip their snap when set. */
@@ -87,6 +111,11 @@ int  inputMenuPointerLive(void);
 
 /* Re-enumerate gamepads after a hotplug (SDL_CONTROLLERDEVICEADDED/REMOVED). */
 void inputRescanPads(void);
+int  inputPadFamily(int seat);                               /* D471: 0 Xbox, 1 PS, 2 Nintendo */
+void inputPadHelpFmt(char *out, size_t n, const char *tmpl); /* D471: {A}{B}{X}{Y}{BACK}{START} */
+void inputPadHelpFmtFam(char *out, size_t n, const char *tmpl, int fam);
+const char *inputPadSourceFamilyName(int seat, const char *src);   /* D471: NULL = keep Xbox text */
+void inputRequestRescan(void);   /* D450: from either SDL event pump; consumed by inputUpdate() */
 
 /* D401: Rumble Pak -> real gamepad haptics. The osMotor* shims in
  * libultra.c (game's src/joy.c rumble state machine) route here.

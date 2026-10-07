@@ -36,6 +36,7 @@
 #ifdef PORT
 #include <stdio.h>
 #include <stdlib.h>
+#include "drawdistgameplay.h"
 /* GE_D193A=1 — per-second locomotion telemetry for one/all scripted chrs
  * (D193: "AI travels slower than N64" — the frame clock was ruled out in
  * M-80, so measure the anim-root-motion path directly). For each ticked
@@ -884,6 +885,25 @@ struct anim_group_info *ptr_doubles_firing_animation_groups[] = {
     &ptr_doubles_firing_animation_group1
 };
 
+#ifdef PORT
+/* D445 (ABI/layout, porting-notes §D5 linker adjacency): on the N64,
+ * crouched_rifle_firing_animation_group1 has NO terminator and the linker
+ * places crouched_rifle_firing_animation_groupA right after it, so the one
+ * resolver pass over group1 (initResolveAnimGroupTable, via
+ * ptr_crouched_rifle_firing_animation_groups) walks into groupA and turns its
+ * anim offset into a pointer too; the table len is 2. GCC does not keep the
+ * two arrays adjacent (x86-64: groupA BELOW group1), so groupA[0] kept the raw
+ * offset 0xB84 (PTR_ANIM_fire_kneel_left_leg) and playerTick handed it to
+ * modelSetAnimation as a ModelAnimation* (SIGSEGV, crouched rifle fire), and
+ * crouching rifle guards saw len 1 instead of 2. One array restores the N64
+ * layout; groupA is its second entry (chr.h). Same data, same order. */
+struct weapon_firing_animation_table crouched_rifle_firing_animation_group1[] = {
+    { PTR_ANIM_fire_kneel_right_leg, 27.0, 0, 0, 0, -1.0, 35.0, 75.0, -1.0, -1.0, 31.0, 75.0, 0.87266463, -0.69813174, 0.90757126, -0.69813174, 1.5, 1.5 },
+    /* = crouched_rifle_firing_animation_groupA[0] */
+    { PTR_ANIM_fire_kneel_left_leg, 24.0, 0, 0, 0, -1.0, 46.0, 98.0, -1.0, -1.0, 41.0, 98.0, 0.87266463, -0.52359879, 1.134464, -0.69813174, 1.6, 1.6 },
+    {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
+};
+#else
 struct weapon_firing_animation_table crouched_rifle_firing_animation_group1[] = {
     { PTR_ANIM_fire_kneel_right_leg, 27.0, 0, 0, 0, -1.0, 35.0, 75.0, -1.0, -1.0, 31.0, 75.0, 0.87266463, -0.69813174, 0.90757126, -0.69813174, 1.5, 1.5 },
 };
@@ -892,6 +912,7 @@ struct weapon_firing_animation_table crouched_rifle_firing_animation_groupA[] = 
     { PTR_ANIM_fire_kneel_left_leg, 24.0, 0, 0, 0, -1.0, 46.0, 98.0, -1.0, -1.0, 41.0, 98.0, 0.87266463, -0.52359879, 1.134464, -0.69813174, 1.6, 1.6 },
     {0, 0.0, 0, 0, 0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}
 };
+#endif
 
 struct anim_group_info ptr_crouched_rifle_firing_animation_group1 = { &crouched_rifle_firing_animation_group1, -1 };
 
@@ -2445,13 +2466,11 @@ s32 chrTick(PropRecord *prop)
     ChrRecord *chr;
     Model *model;
     s32 headSwitchVisible;
+#ifdef PORT
+    s32 gpVisible = 0; /* D466: headSwitchVisible at the authored draw distance */
+#endif
     s32 headVisible;
     s32 tickamount;
-#ifdef PORT
-    int d243x2Active = 0;      /* D243 M-162/M-163, see the CHRFLAG_HIDDEN else block below */
-    coord3d d243x2SavedPos = {0};
-    coord3d d243x2CycledPos = {0};
-#endif
 
     renderdata = D_8002CC6C;
     chr = prop->chr;
@@ -2461,41 +2480,29 @@ s32 chrTick(PropRecord *prop)
 
 #ifdef PORT
     d193aSample(chr, model);
-
-    /* D173 M-173: does a normal (non-player-puppet) chr's prop->pos, read
-     * BEFORE this tick's position-update dispatch runs, differ from what
-     * the existing D243M: onscreen probe logs AFTER it (chr.c:~2705, at
-     * after_position_update:)? For the player's own third-person puppet,
-     * M-172 (findings.md D173) measured a fixed ~328-unit gap between
-     * prop->pos and the rendered root that holds across levels and
-     * animations. This applies the exact same before/after comparison to
-     * EVERY ticked chr (not just the player), gated on the existing
-     * d243mProbeActive() (fires during INTRO/SWIRL/POSEND, silent in normal
-     * FPS play) -- if ordinary guards show the same before/after gap, the
-     * compensation a normal chr's render is missing is universal (a
-     * port-layer/render-path gap); if guards show ~zero gap, the puppet's
-     * animation/model selection itself is what differs. Diagnosis only. */
-    {
-        extern int d243mProbeActive(void);
-        extern int d243mGetFrameCounter(void);
-        if (d243mProbeActive())
-        {
-            osSyncPrintf("D243M: prebefore frame=%d chr=%p pos=%.1f,%.1f,%.1f\n",
-                         d243mGetFrameCounter(), (void *) chr,
-                         (double) prop->pos.f[0], (double) prop->pos.f[1], (double) prop->pos.f[2]);
-        }
-    }
 #endif
 
     if ((!(chr->chrflags & CHRFLAG_HIDDEN)) || (chr->chrflags & CHRFLAG_00040000))
     {
         if (D_8002C904)
         {
+#ifdef PORT
+            if (((ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[g_AnimationTablePointerCountRelated])) != ((ModelAnimation *)1))  /* D441: zero-extend s32-held DRAM ptr */
+#else
             if (((ModelAnimation *)animation_table_ptrs1[g_AnimationTablePointerCountRelated]) != ((ModelAnimation *)1))
+#endif
             {
+#ifdef PORT
+                if (objecthandlerGetModelAnim(model) != ((ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[g_AnimationTablePointerCountRelated])))  /* D441: zero-extend s32-held DRAM ptr */
+#else
                 if (objecthandlerGetModelAnim(model) != ((ModelAnimation *)animation_table_ptrs1[g_AnimationTablePointerCountRelated]))
+#endif
                 {
+#ifdef PORT
+                    modelSetAnimation(model, (ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[g_AnimationTablePointerCountRelated]), 0, 0.0f, 0.5f, 0.0f);  /* D441: zero-extend s32-held DRAM ptr */
+#else
                     modelSetAnimation(model, (ModelAnimation *)animation_table_ptrs1[g_AnimationTablePointerCountRelated], 0, 0.0f, 0.5f, 0.0f);
+#endif
                 }
             }
         }
@@ -2548,53 +2555,18 @@ s32 chrTick(PropRecord *prop)
     if (chr->chrflags & CHRFLAG_HIDDEN)
     {
         headSwitchVisible = 0;
+#ifdef PORT
+        gpVisible = 0;
+#endif
     }
     else
     {
-#ifdef PORT
-        /* D243 M-162/M-163: corrected decisive experiment. M-161 restored
-         * prop->pos AFTER this chrTick() call returned -- but render_pos/
-         * field_488.pos are computed INSIDE this same call (subcalcmatrices,
-         * further down this function), from whatever prop->pos is at THAT
-         * point, so M-161 never actually prevented the stale value from
-         * being rendered -- its "no change" result was inconclusive, not a
-         * real falsification (see docs/dev/findings.md D243 M-162).
-         *
-         * Save pos right here, before the position-update dispatch below
-         * runs (chr.c:2541-2617, the ACT_PATROL/ACT_ANIM/ACT_STAND/else
-         * chain M-160 traced the overwrite to), and restore it at
-         * after_position_update -- before anything later in this tick
-         * (including the render-matrix computation) can see the cycled
-         * value.
-         *
-         * M-162 (Z-only) confirmed the mechanism -- Z stopped cycling and
-         * went smooth -- but the visible glitch was UNCHANGED, because this
-         * capture's chr (actiontype=3, different from M-160's capture) turned
-         * out to cycle Y instead of Z, and Y was left untouched. M-163: the
-         * whole vector, to see if suppressing every axis finally stops the
-         * visible shake. This DOES also freeze whatever legitimate motion
-         * exists on any axis (e.g. a real descent) -- acceptable for a
-         * decisive test, not for a fix.
-         *
-         * Gated on GE_D243X2 + the existing d243mProbeActive() cutscene-mode
-         * gate (POSEND/INTRO/SWIRL/FADESWIRL) -- g_CameraMode was verified
-         * POSEND for the entire abseil capture (GE_D243M data), so this is
-         * scoped correctly without needing a new g_CameraMode extern here.
-         *
-         * THIS IS A TEST, NOT A FIX. If it confirms the cycling stops: the
-         * real root cause is still open -- this is decomp-faithful game
-         * code, so find WHY it emits cycling values on PC before touching
-         * anything for real (rule #2's diagnosis-before-fix discipline).
-         * Revert this block once the experiment reports. */
-        extern int d243mProbeActive(void);
-        static int s_d243x2 = -1;
-        if (s_d243x2 < 0) { s_d243x2 = getenv("GE_D243X2") != NULL; }
-        d243x2Active = s_d243x2 && d243mProbeActive();
-        d243x2SavedPos = prop->pos;
-#endif
         if (((prop->type == PROP_TYPE_VIEWER) && (g_playerPointers[getPlayerPointerIndex(prop)]->cameramode == 1)) || (chr->chrflags & CHRFLAG_CULL_USING_HITBOX))
         {
             headSwitchVisible = 1;
+#ifdef PORT
+            gpVisible = 1;
+#endif
 
             if (((chr->actiontype == ACT_ANIM) && (chr->act_anim.unk02c == 0)) && (chr->act_anim.noTranslate != 0))
             {
@@ -2613,6 +2585,9 @@ s32 chrTick(PropRecord *prop)
             if (((chr->actiontype == ACT_PATROL) && (chr->act_patrol.waydata.mode == WAYMODE_MAGIC)) || ((chr->actiontype == ACT_GOPOS) && (chr->act_gopos.waydata.mode == WAYMODE_MAGIC)))
             {
                 headSwitchVisible = posIsOnScreen(prop, &prop->pos, getinstsize(model), 1);
+#ifdef PORT
+                gpVisible = portD466LastPosVerdict(); /* D466 */
+#endif
 
                 if (headSwitchVisible)
                 {
@@ -2631,6 +2606,9 @@ s32 chrTick(PropRecord *prop)
             {
                 chrUpdateAnim(chr, tickamount);
                 headSwitchVisible = posIsOnScreen(prop, &prop->pos, getinstsize(model), 1);
+#ifdef PORT
+                gpVisible = portD466LastPosVerdict(); /* D466 */
+#endif
 
                 if (headSwitchVisible)
                 {
@@ -2648,6 +2626,9 @@ s32 chrTick(PropRecord *prop)
         else if ((chr->actiontype == ACT_ANIM) && (chr->act_anim.unk02c == 0))
         {
             headSwitchVisible = posIsOnScreen(prop, &prop->pos, getinstsize(model), 1);
+#ifdef PORT
+            gpVisible = portD466LastPosVerdict(); /* D466 */
+#endif
 
             if (headSwitchVisible && (chr->act_anim.noTranslate == 0))
             {
@@ -2661,6 +2642,9 @@ s32 chrTick(PropRecord *prop)
         else if (chr->actiontype == ACT_STAND)
         {
             headSwitchVisible = posIsOnScreen(prop, &prop->pos, getinstsize(model), 1);
+#ifdef PORT
+            gpVisible = portD466LastPosVerdict(); /* D466 */
+#endif
 
             if (headSwitchVisible || (chr->chrflags & CHRFLAG_INIT))
             {
@@ -2683,60 +2667,13 @@ s32 chrTick(PropRecord *prop)
             }
 
             headSwitchVisible = posIsOnScreen(prop, &prop->pos, getinstsize(model), 1);
+#ifdef PORT
+            gpVisible = portD466LastPosVerdict(); /* D466 */
+#endif
         }
     }
 
 after_position_update:
-#ifdef PORT
-    /* D243 M-163: apply the save/restore decided above, BEFORE anything else
-     * in this tick (including the D243M: onscreen log right below, so it
-     * reports what will actually be used downstream -- and before the
-     * render-matrix computation further down this function) can see the
-     * cycled position. Whole vector this pass (M-162 was Z-only; see the
-     * comment at the save site for why). */
-    {
-        d243x2CycledPos = prop->pos;
-        if (d243x2Active) { prop->pos = d243x2SavedPos; }
-    }
-
-    /* D243 M-159/M-160: does render_pos only refresh on ticks that pass the
-     * on-screen visibility gate? Log the gate's result + the live prop
-     * position every chrTick call while a scripted cutscene camera is
-     * active (reuses bondview2.c's GE_D243M accessors -- gate already folds
-     * in POSEND/INTRO/SWIRL/FADESWIRL, so this is silent during FPS play).
-     * If the freeze/teleport boundaries line up with headSwitchVisible
-     * flipping 0->1, this confirms the mechanism named in findings.md D243
-     * M-159. M-162/M-163: actiontype= and anim= (current attached animation
-     * pointer) added -- M-160 flagged "which of chrTick's branches fires"
-     * as the open next step toward the actual root cause once the
-     * suppression experiment reports; x2active=/x2raw= show whether the
-     * suppression ran this tick and what raw position it overrode, so a
-     * positive result can be read straight from this log instead of by eye.
-     * Diagnosis only; zero behaviour change when GE_D243M/GE_D243X2 unset. */
-    {
-        extern int d243mProbeActive(void);
-        extern int d243mGetFrameCounter(void);
-        if (d243mProbeActive())
-        {
-            /* M-166: aidx=/animframe= reuse the GE_D193A reverse-resolve
-             * technique (d193aAnimIndex, chr.c:67) + model->animframe1 (the
-             * actual current playback phase, bondtypes.h:1578) -- named per
-             * M-165/M-166's open question: is the visible chr's animation
-             * IDENTITY deterministic but its PHASE inherited from whatever
-             * gameplay preceded the cutscene (not guaranteed identical
-             * cross-platform)? A live capture with this field can now
-             * answer that directly instead of needing another round-trip. */
-            osSyncPrintf("D243M: onscreen frame=%d chr=%p vis=%d pos=%.1f,%.1f,%.1f "
-                         "actiontype=%d anim=%p aidx=%d animframe=%.2f x2active=%d x2raw=%.1f,%.1f,%.1f\n",
-                         d243mGetFrameCounter(), (void *) chr, (int) headSwitchVisible,
-                         (double) prop->pos.f[0], (double) prop->pos.f[1], (double) prop->pos.f[2],
-                         (int) chr->actiontype, (void *) model->anim,
-                         d193aAnimIndex((void *) model->anim), (double) model->animframe1,
-                         (int) d243x2Active,
-                         (double) d243x2CycledPos.f[0], (double) d243x2CycledPos.f[1], (double) d243x2CycledPos.f[2]);
-        }
-    }
-#endif
     if (((chr->actiontype != ACT_STAND) || (model->anim2 != NULL)) || (prop->type == PROP_TYPE_VIEWER))
     {
         chr->hidden |= CHRHIDDEN_BACKGROUND_AI;
@@ -2755,7 +2692,18 @@ after_position_update:
         if (get_debug_chrnum_flag()) {}
 
         prop->flags |= PROPFLAG_ONSCREEN;
+#ifdef PORT
+        /* D466 (#125): ONSCREEN stays the (extended) render gate; the
+         * gameplay-only "has been seen" flag and the gameplay on-screen bit
+         * follow the authored-draw-distance verdict. Identity at mult 1. */
+        portPropSetGameplayOnScreen(prop, gpVisible);
+        if (gpVisible)
+        {
+            chr->chrflags |= CHRFLAG_HAS_BEEN_ON_SCREEN;
+        }
+#else
         chr->chrflags |= CHRFLAG_HAS_BEEN_ON_SCREEN;
+#endif
 
 #ifdef BUGFIX_R1
     if (cheatIsActive(12))
@@ -2800,86 +2748,6 @@ after_position_update:
 
         subcalcmatrices(&renderdata, model);
 
-#ifdef PORT
-        /* D243 M-168 (rewritten after two live crashes -- see findings.md
-         * D243 M-168 for the full postmortem): same technique as M-167
-         * (field_488.pos freeze), aimed at the actual draw-path consumer of
-         * the cycling skeleton state -- render_pos itself. M-167 only froze
-         * the camera's copy (field_488.pos) and fixed the shake, but the
-         * user still saw Bond's own rendered body glitch/duplicate --
-         * expected, since the draw call reads render_pos directly
-         * (objecthandler.c's drawjointlist, via gSPSegment), a path M-167
-         * never touched.
-         *
-         * The first two attempts tried to SKIP this subcalcmatrices() call
-         * entirely once a model "looked already validated" -- both crashed,
-         * because a model POINTER can be reused by the allocator for a
-         * genuinely new logical model instance (a new CREATE at the same
-         * freed address), and there is no way to tell "is this the same
-         * instance" from the pointer value or from render_pos's own content
-         * (M-154 already learned the render_pos sentinel-guessing lesson
-         * once; this is the same trap from a different angle). Skipping the
-         * call left a brand-new instance's render_pos at its fresh,
-         * uninitialized -1 tombstone, and sub_GAME_7F06C768() (model.c:459,
-         * called moments later at chr.c:2822 to compute zDepth) dereferenced
-         * it and crashed at fault address -1.
-         *
-         * This version NEVER skips the call -- subcalcmatrices() always
-         * runs above, unconditionally, so render_pos is always left valid.
-         * The freeze is purely a CONTENTS overwrite on top of that
-         * guaranteed-valid buffer: cache the buffer for a couple of ticks
-         * after the gate first engages (letting the pose settle from
-         * whatever it was mid-transition), then hold it steady by copying
-         * the cached contents back over each subsequent tick's freshly
-         * (and validly) computed buffer. Gated on GE_D243X4 +
-         * d243mProbeActive(); the active/inactive edge resets the warm-up
-         * counter so a later, different model under the same gate re-warms
-         * instead of inheriting a stale snapshot. Capped at 128 matrices
-         * (generous; GE character models are well under this). THIS IS A
-         * TEST, NOT A FIX -- revert once it reports. */
-        {
-            extern int d243mProbeActive(void);
-            extern u32 d243GetTeleportEpoch(void);
-            static int s_d243x4 = -1;
-            static int s_d243x4WasActive = 0;
-            static int s_d243x4WarmTicks = 0;
-            static RenderPosView s_d243x4Snap[128];
-            static s16 s_d243x4Count = 0;
-            static u32 s_d243x4LastEpoch = 0;
-            if (s_d243x4 < 0) { s_d243x4 = getenv("GE_D243X4") != NULL; }
-            {
-                int active = s_d243x4 && d243mProbeActive();
-                u32 epoch = d243GetTeleportEpoch();
-                if (active && !s_d243x4WasActive) { s_d243x4WarmTicks = 0; s_d243x4LastEpoch = epoch; }
-                /* M-169: a legitimate shot-change teleport fired since the
-                 * last snapshot -- re-warm so the freeze re-baselines to the
-                 * post-teleport pose instead of holding the pre-teleport
-                 * one (which produced the "camera looks the wrong way for
-                 * later shots" incompleteness noted in the M-168 postmortem). */
-                if (active && (epoch != s_d243x4LastEpoch)) { s_d243x4WarmTicks = 0; s_d243x4LastEpoch = epoch; }
-                s_d243x4WasActive = active;
-                if (active && (model->render_pos != NULL) && (model->obj != NULL))
-                {
-                    s16 n = model->obj->numMatrices;
-                    if (n > 0 && n <= 128)
-                    {
-                        s32 i;
-                        if (s_d243x4WarmTicks < 2)
-                        {
-                            for (i = 0; i < n; i++) { s_d243x4Snap[i] = model->render_pos[i]; }
-                            s_d243x4Count = n;
-                            s_d243x4WarmTicks++;
-                        }
-                        else if (n == s_d243x4Count)
-                        {
-                            for (i = 0; i < n; i++) { model->render_pos[i] = s_d243x4Snap[i]; }
-                        }
-                    }
-                }
-            }
-        }
-#endif
-
         g_ModelJointPositionedFunc = NULL;
         modelSetDistanceScale(1.0f);
 
@@ -2901,6 +2769,9 @@ after_position_update:
             hatmodel = hatobj->model;
 
             chr->handle_positiondata_hat->flags |= PROPFLAG_ONSCREEN;
+#ifdef PORT
+            portPropSetGameplayOnScreen(chr->handle_positiondata_hat, gpVisible); /* D466 */
+#endif
 
             renderdata.basemtx = modelFindNodeMtx(model, hatmodel->attachedto_objinst, 0);
             renderdata.mtxlist = dynAllocate(hatmodel->obj->numMatrices * (sizeof(Mtxf)));

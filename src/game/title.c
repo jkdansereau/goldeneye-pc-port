@@ -28,6 +28,7 @@
 
 #ifdef PORT
 #include <stdlib.h>
+#include "envflag.h"
 #endif
 
 
@@ -221,7 +222,11 @@ Gfx *sub_GAME_7F007F30(Gfx *gdl, s32 count, Mtxf *matrix)
 
             if (gunbarrelTimer == BOND_EYE_ANIM_START)
             {
+#ifdef PORT
+                modelSetAnimation(chrModelInstance, (struct ModelAnimation *) ((s32) &ANIM_DATA_bond_eye_fire + (uintptr_t) &ptr_animation_table->data), 0, 2.0f, 0.910000026f, 16.0f);
+#else
                 modelSetAnimation(chrModelInstance, (struct ModelAnimation *) ((s32) &ANIM_DATA_bond_eye_fire + (s32) &ptr_animation_table->data), 0, 2.0f, 0.910000026f, 16.0f);
+#endif
             }
 
             if (gunbarrelTimer == BOND_EYE_ANIM_SPEEDUP)
@@ -487,7 +492,11 @@ void initializeGunBarrelIntro(u8 *gfxBuffer, s32 bufferSize)
     bufferSize -= 0x200;
     gfxBuffer += 0x200;
     
+#ifdef PORT
+    createGunbarrelRenderHole((struct s_display_list_something *)(uintptr_t)(u32)(barrelDisplayListPtr), 0x1E);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     createGunbarrelRenderHole(barrelDisplayListPtr, 0x1E);
+#endif
     
     gunbarrelgfxListPointer = (Gfx*)gfxBuffer;
 #ifdef PORT
@@ -559,7 +568,11 @@ void initializeGunBarrelIntro(u8 *gfxBuffer, s32 bufferSize)
     modelSetAnimPlaySpeed(chrModelInstance, S_7F008E80_ANIM_SPEED, 0.0f);
 #undef S_7F008E80_ANIM_SPEED
     
+#ifdef PORT
+    animation = (struct ModelAnimation*)((uintptr_t)ptr_animation_table + (s32)&ANIM_DATA_bond_eye_walk);
+#else
     animation = (struct ModelAnimation*)((s32)ptr_animation_table + (s32)&ANIM_DATA_bond_eye_walk);
+#endif
     startframe = animation->unk04 - 0x44;
     while (startframe < 0)
     {
@@ -623,14 +636,6 @@ void clearChrGunModelInstances(void)
  * Address: 0x7F009254
 */
 Gfx *renderGunbarrelEyeIntroSequence (Gfx *gdl) {
-#ifdef PORT
-    if (getenv("GE_D63")) {
-        static int n = 0;
-        if ((++n % 200) == 1)
-            osSyncPrintf("D63 gb-render call #%d mode=%d slot=%08x\n",
-                         n, (int)gunbarrel_mode, *(const u32 *)0x7012EC38);
-    }
-#endif
     D_8002A7D0 = (1 - D_8002A7D0);
     switch (gunbarrel_mode - 2)
     {

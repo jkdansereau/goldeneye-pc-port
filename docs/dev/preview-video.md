@@ -31,7 +31,7 @@ passes together fit in ~55 s.
 
 ## Source material
 
-`C:\Users\james\Videos\NVIDIA\Build-pc\new\` — ShadowPlay recordings
+`<videos>\NVIDIA\Build-pc\new\` — ShadowPlay recordings
 (3072x1728 @ 60 fps, h264), no usable audio track (cut with `-an`). The four
 sessions and their tags are hardcoded in `SESSIONS` at the top of the script;
 add a new session there (tag, filename suffix, duration) to use it.

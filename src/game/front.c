@@ -958,7 +958,8 @@ Gfx *constructor_menu13_mpscenario(Gfx *DL);
 Gfx *constructor_menu14_mpteams(Gfx *DL);
 Gfx *constructor_menu15_cheat(Gfx *DL);
 #ifdef PORT
-#include "frontoptions.h"   /* D343: MENU_PC_OPTIONS lives in port/src/frontoptions.c */
+#include "frontoptions.h"   /* optionsFileSelectLabel: file-select "PC Options" entry */
+#include "envflag.h"
 #endif
 Gfx *constructor_menu16_nocontrollers(Gfx *DL);
 Gfx *constructor_menu17_switchscreens(Gfx *DL);
@@ -967,14 +968,22 @@ Gfx *constructor_menu19_spectrum(Gfx *DL);
 void disable_all_switches(Model *arg0);
 void set_item_visibility_in_objinstance(Model* objinstance, s32 item, s32 mode);
 void set_cursor_to_stage_solo(LEVEL_SOLO_SEQUENCE level);
+#ifdef PORT
+Gfx *display_aligned_white_text_to_screen(Gfx *dl, s32 arg1, s32 arg2, s32 halign, s32 valign, u8 *arg5, struct fontchar *arg6, struct font *arg7);
+#else
 Gfx *display_aligned_white_text_to_screen(Gfx *dl, s32 arg1, s32 arg2, s32 halign, s32 valign, u8 *arg5, s32 arg6, s32 arg7);
+#endif
 void setCursorPOSforMode(int mode);
 void set_cursor_pos_difficulty(int difficulty);
 
 // end forward declarations.
 
 
+#ifdef PORT
+Gfx *frontPrintText(Gfx *gdl, s32 *x, s32 *y, s8 *text, struct fontchar *second_font_table, struct font *first_font_table, s32 arg6, s32 view_x, s32 view_y, s32 arg9, s32 arga)
+#else
 Gfx *frontPrintText(Gfx *gdl, s32 *x, s32 *y, s8 *text, s32 second_font_table, s32 first_font_table, s32 arg6, s32 view_x, s32 view_y, s32 arg9, s32 arga)
+#endif
 {
     if (j_text_trigger != 0)
     {
@@ -1145,7 +1154,11 @@ s32 frontCheckIfCheatIsUnlocked(s32 cheat)
 }
 
 
+#ifdef PORT
+u16 *frontGetPlayersFavoriteWeaponInHand(int player,int hand) {
+#else
 int frontGetPlayersFavoriteWeaponInHand(int player,int hand) {
+#endif
     return get_ptr_long_watch_text_for_item(array_favweapon[player][hand]);
 }
 
@@ -1412,39 +1425,17 @@ u32 frontCheckCursorOnNextTab(void)
 //********************************************************************************************************
 //LEGAL SCREEN
 //********************************************************************************************************
-#ifdef PORT
-/* TEMP D63: log each intro-menu init that reuses ptr_logo_and_walletbond_DL,
- * with the word at base+0x200 (the gun-barrel sub-DL slot) before/after. */
-static void d63MenuProbe(const char *menu)
-{
-    if (!getenv("GE_D63") || !ptr_logo_and_walletbond_DL) return;
-    u32 before = *(u32 *)(ptr_logo_and_walletbond_DL + 0x200);
-    osSyncPrintf("D63 menu init %s: base=%p word@+0x200 before=%08x\n", menu, (void *)ptr_logo_and_walletbond_DL, before);
-}
-static void d63MenuProbeAfter(const char *menu)
-{
-    if (!getenv("GE_D63") || !ptr_logo_and_walletbond_DL) return;
-    u32 after = *(u32 *)(ptr_logo_and_walletbond_DL + 0x200);
-    osSyncPrintf("D63 menu init %s: word@+0x200 after=%08x\n", menu, after);
-}
-#endif
 
 void init_menu00_legalscreen(void)
 {
     s32 padding;
     struct coord3d pos;
 
-#ifdef PORT
-    d63MenuProbe("legalscreen");
-#endif
     musicTrack1Stop();
     maybe_is_in_menu = TRUE;
     g_MenuTimer = 0;
     pos = legalpage_pos;
     load_object_fill_header(PitemZ_entries[PROP_LEGALPAGE].header, PitemZ_entries[PROP_LEGALPAGE].filename, ptr_logo_and_walletbond_DL, 0x3c000, 0);
-#ifdef PORT
-    d63MenuProbeAfter("legalscreen");
-#endif
     modelCalculateRwDataLen(PitemZ_entries[PROP_LEGALPAGE].header);
 
     logoinst = modelmgrInstantiateModel(PitemZ_entries[PROP_LEGALPAGE].header);
@@ -1513,7 +1504,11 @@ void interface_menu00_legalscreen(void)
 /**
  * Render a string of standard text on the legal screen e.g. "TWYCROSS BOARD OF GAME CLASSIFICATION"
  */
+#ifdef PORT
+Gfx *display_aligned_white_text_to_screen(Gfx *dl, s32 arg1, s32 arg2, s32 halign, s32 valign, u8 *text, struct fontchar *arg6, struct font *arg7)
+#else
 Gfx *display_aligned_white_text_to_screen(Gfx *dl, s32 arg1, s32 arg2, s32 halign, s32 valign, u8 *text, s32 arg6, s32 arg7)
+#endif
 {
     s32 sp4C;
     s32 sp48;
@@ -1652,13 +1647,7 @@ void init_menu01_nintendo(void)
 
     g_MenuTimer = 0;
     pos = nintendologo_pos;
-#ifdef PORT
-    d63MenuProbe("nintendologo");
-#endif
     load_object_fill_header(PitemZ_entries[PROP_NINTENDOLOGO].header, PitemZ_entries[PROP_NINTENDOLOGO].filename, ptr_logo_and_walletbond_DL, 0x3c000, 0);
-#ifdef PORT
-    d63MenuProbeAfter("nintendologo");
-#endif
     modelCalculateRwDataLen(PitemZ_entries[PROP_NINTENDOLOGO].header);
     logoinst = modelmgrInstantiateModel(PitemZ_entries[PROP_NINTENDOLOGO].header);
     modelSetScale(logoinst, 1.0f);
@@ -1839,13 +1828,7 @@ Gfx *constructor_menu01_nintendo(Gfx *DL)
 */
 void init_menu02_rarelogo(void)
 {
-#ifdef PORT
-    d63MenuProbe("rarelogo");
-#endif
     setupRarewareLogoData(ptr_logo_and_walletbond_DL, 0x78000);
-#ifdef PORT
-    d63MenuProbeAfter("rarelogo");
-#endif
     sndPlaySfx(g_musicSfxBufferPtr, RARELOGO_SFX, 0);
 }
 
@@ -1891,9 +1874,6 @@ Gfx * constructor_menu02_rareware(Gfx * DL) {
 //GUNBARREL
 //********************************************************************************************************
 void init_menu03_gunbarrel(void) {
-#ifdef PORT
-    d63MenuProbe("gunbarrel");
-#endif
     initializeGunBarrelIntro(ptr_logo_and_walletbond_DL, 0x78000);
     musicTrack1Play(M_INTRO);
     maybe_is_in_menu = TRUE;
@@ -1938,13 +1918,7 @@ void init_menu04_goldeneyelogo(void)
 
     g_MenuTimer = 0;
     pos = goldeneyelogo_pos;
-#ifdef PORT
-    d63MenuProbe("goldeneyelogo");
-#endif
     load_object_fill_header(PitemZ_entries[PROP_GOLDENEYELOGO].header, PitemZ_entries[PROP_GOLDENEYELOGO].filename, ptr_logo_and_walletbond_DL, 0x3c000, 0);
-#ifdef PORT
-    d63MenuProbeAfter("goldeneyelogo");
-#endif
     modelCalculateRwDataLen(PitemZ_entries[PROP_GOLDENEYELOGO].header);
     logoinst = modelmgrInstantiateModel(PitemZ_entries[PROP_GOLDENEYELOGO].header);
     #ifdef DEBUG
@@ -2179,7 +2153,11 @@ void load_walletbond(void)
             b = (struct ModelNode *)mnode;
             srecord = b->Data;
 
+#ifdef PORT
+            arg0 = (Gfx_le *)((uintptr_t)srecord->BaseAddr + ((u32)(uintptr_t)srecord->Primary & 0xffffff));
+#else
             arg0 = (s32)srecord->BaseAddr + ((s32)srecord->Primary & 0xffffff);
+#endif
             bgApplyDynamicCCRMLUT(arg0, NULL, CCRMLUT_WALLETBOND);
         }
     }
@@ -2810,7 +2788,7 @@ Gfx *constructor_menu05_fileselect(Gfx *DL)
 
 #ifdef PORT
         /* D343: "PC Options" at the right end of this bar; a click enters
-         * MENU_PC_OPTIONS. All logic lives in port/src/frontoptions.c. */
+         * the F10 overlay over file select. Logic: port/src/frontoptions.c. */
         DL = optionsFileSelectLabel(DL);
 #endif
 
@@ -6675,20 +6653,7 @@ void load_briefing_text_for_stage(void)
      * and the objective/briefing text renders blank (D143).  Decode in
      * place, mirroring langFixupLoadedBank() in language.c. */
     if (ptrbriefingdata) {
-        if (getenv("GE_D178")) {
-            const u16 *w = (const u16 *)ptrbriefingdata;
-            fprintf(stderr, "D178 %s raw brief=%04x,%04x,%04x,%04x obj0=%04x/%04x obj3=%04x/%04x seldiff=%d\n",
-                    (const char *)mission_folder_setup_entries[briefingpage].briefing_name_ptr,
-                    w[0], w[1], w[2], w[3], w[4], w[5], w[10], w[11],
-                    (int)selected_difficulty);
-        }
         romdataFixupBriefing((u8 *)ptrbriefingdata);
-        if (getenv("GE_D178")) {
-            const u16 *w = (const u16 *)ptrbriefingdata;
-            fprintf(stderr, "D178 %s fix brief=%04x,%04x,%04x,%04x obj0=%04x/%04x obj3=%04x/%04x\n",
-                    (const char *)mission_folder_setup_entries[briefingpage].briefing_name_ptr,
-                    w[0], w[1], w[2], w[3], w[4], w[5], w[10], w[11]);
-        }
     }
 #endif
 
@@ -7485,7 +7450,11 @@ Gfx *constructor_menu0D_missioncomplete(Gfx *DL)
     x = 0x37;
     y = 0xDC;
     DL = frontPrintText(DL, &x, &y, text, ptrFontZurichBoldChars, ptrFontZurichBold, 0xFF, viGetX(), viGetY(), 0, 0);
+#ifdef PORT
+    strcpy(stagename, (char *)frontGetPlayersFavoriteWeaponInHand(0, 0));
+#else
     strcpy(stagename, frontGetPlayersFavoriteWeaponInHand(0, 0));
+#endif
     if ((array_favweapon[0][0] > 0) && (array_favweapon[0][1] == array_favweapon[0][0]))
     {
         temp = strlen(stagename)-1;
@@ -7827,7 +7796,11 @@ Gfx *constructor_menu16_nocontrollers(Gfx *DL)
     s32 x2;
     s32 x;
     s32 y;
+#ifdef PORT
+    char *text;
+#else
     s32 text;
+#endif
     s32 conConnected = joyGetConnectedControllers();
     s32 numContCon = 0;
 
@@ -7936,15 +7909,6 @@ void init_menu18_displaycast(void)
     randomly_selected_intro_animation = randomGetNext() % ((u32) intro_animation_count);
     body = intro_char_table[intro_character_index].body;
     head = intro_char_table[intro_character_index].head;
-#ifdef PORT
-    /* TEMP D64: dump the live cast-table entry (suspected .data clobber). */
-    if (getenv("GE_D63")) {
-        const u32 *e = (const u32 *)&intro_char_table[intro_character_index];
-        osSyncPrintf("D64 cast-table idx=%d body=%d head=%08x raw=[%08x %08x %08x %08x %08x]\n",
-                     (int)intro_character_index, (int)body, (unsigned)head,
-                     e[0], e[1], e[2], e[3], e[4]);
-    }
-#endif
     cameraPreset = intro_animation_table[randomly_selected_intro_animation].camera_preset;
     
     if (body == BODY_Special_Operations_Uniform)
@@ -8011,15 +7975,6 @@ void init_menu18_displaycast(void)
     bufferRemaining -= allocSize;
     bufferPtr += allocSize;
 
-#ifdef PORT
-    /* TEMP D64: dump head/body/index state right before the wild access. */
-    if (getenv("GE_D63")) {
-        extern u32 num_male_heads, num_female_heads;
-        osSyncPrintf("D64 pre-citem idx=%d body=%d head=%08x nmh=%u nfh=%u\n",
-                     (int)intro_character_index, (int)body, (unsigned)head,
-                     num_male_heads, num_female_heads);
-    }
-#endif
     if (head >= 0)
     {
         headHeader = c_item_entries[head].header;
@@ -8098,7 +8053,11 @@ void init_menu18_displaycast(void)
 #else
     modelSetAnimPlaySpeed(cast_model, 0.5f, 0);
 #endif
+#ifdef PORT
+    modelSetAnimation(cast_model, (ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[intro_animation_table[randomly_selected_intro_animation].animID]), flip, intro_animation_table[randomly_selected_intro_animation].startframeoffset, intro_animation_table[randomly_selected_intro_animation].playback_speed, 0.0f);  /* D441: zero-extend s32-held DRAM ptr */
+#else
     modelSetAnimation(cast_model, animation_table_ptrs1[intro_animation_table[randomly_selected_intro_animation].animID], flip, intro_animation_table[randomly_selected_intro_animation].startframeoffset, intro_animation_table[randomly_selected_intro_animation].playback_speed, 0.0f);
+#endif
 
     g_MenuTimer = 0;
     cast_camera_dist_start = ((((f32) ((u32) randomGetNext())) * (1.0f / U32_MAX)) * 80.0f) + 70.0f;
@@ -8205,27 +8164,14 @@ void interface_menu18_displaycast(void)
         }
 
         f = intro_character_index;
-#ifdef PORT
-        /* TEMP D65: trace the cast-end decision. */
-        if (getenv("GE_D63"))
-            osSyncPrintf("D65 cast-end f=%d body=%d\n", (int)f, (int)intro_char_table[f].body);
-#endif
         if (intro_char_table[f].body < 0)
         {
             intro_character_index = 0;
             f = 0;
-#ifdef PORT
-            if (getenv("GE_D63"))
-                osSyncPrintf("D65 cast-end RESET idx=0\n");
-#endif
         }
 
         if (intro_character_index > 0)
         {
-#ifdef PORT
-            if (getenv("GE_D63"))
-                osSyncPrintf("D65 cast-end frontChangeMenu idx=%d\n", (int)intro_character_index);
-#endif
             frontChangeMenu(MENU_DISPLAY_CAST, 1);
         }
         else if (full_actor_intro != 0)
@@ -8488,18 +8434,6 @@ Gfx *constructor_menu18_displaycast(Gfx *DL)
  
     DL = microcode_constructor(DL);
  
-#ifdef PORT
-    /* TEMP D65: dump index state at the crashing langGet. */
-    if (getenv("GE_D63")) {
-        int i65 = (int)intro_character_index;
-        osSyncPrintf("D65 ctor idx=%d full=%d\n", i65, (int)full_actor_intro);
-        if (i65 >= 0 && i65 <= 40) {
-            const u32 *e = (const u32 *)&intro_char_table[i65];
-            osSyncPrintf("D65 ctor raw=[%08x %08x %08x %08x %08x]\n",
-                         e[0], e[1], e[2], e[3], e[4]);
-        }
-    }
-#endif
     if (full_actor_intro == FALSE)
     {
         text = langGet( (u16)intro_char_table[intro_character_index].text1);
@@ -8657,80 +8591,9 @@ MENU get_currentmenu(void)
 }
 
 
-#ifdef PORT
-/* D243: fast3d's D146 catch-all ("unknown GBI opcode ... ending DL") fires a
- * freed/uninitialized-memory-pattern read burst ~1600-3900 frames *after*
- * bossReturnTitleStage()/the Dam abseil cutscene's camera_switch calls, not
- * during them (M-109 re-analysis) -- i.e. tens of seconds into whatever
- * front-end screen(s) the mission-complete -> briefing/file-select chain
- * passes through. This probe does not hook bossReturnTitleStage() directly
- * (out of this investigation's file scope, boss.c) -- instead it logs every
- * MENU_* state transition this state machine (menu_init(), called once per
- * front-end tick from lv.c) makes, tagged with a local frame counter, so a
- * GE_D146 burst's frame number can be cross-referenced against whichever
- * MENU_* was active at that point. NOTE: this counter is local to front.c's
- * per-tick calls (menu_init() runs once per LEVELID_TITLE tick) -- it is not
- * necessarily numerically identical to port/src/libultra.c's internal
- * g_framesRendered (that counter is `static`, no accessor exists, and it is
- * out of this investigation's file scope to add one) -- cross-reference by
- * elapsed count/offset from bossReturnTitleStage's own GE_D160 trace line,
- * not by assuming exact frame-number equality between the two logs. */
-static int g_d243FrameCounter = 0;
-
-static const char *d243MenuName(MENU m)
-{
-    switch (m) {
-        case MENU_INVALID:             return "MENU_INVALID";
-        case MENU_LEGAL_SCREEN:        return "MENU_LEGAL_SCREEN";
-        case MENU_SWITCH_SCREENS:      return "MENU_SWITCH_SCREENS";
-        case MENU_NINTENDO_LOGO:       return "MENU_NINTENDO_LOGO";
-        case MENU_RAREWARE_LOGO:       return "MENU_RAREWARE_LOGO";
-        case MENU_EYE_INTRO:           return "MENU_EYE_INTRO";
-        case MENU_GOLDENEYE_LOGO:      return "MENU_GOLDENEYE_LOGO";
-        case MENU_FILE_SELECT:         return "MENU_FILE_SELECT";
-        case MENU_MODE_SELECT:         return "MENU_MODE_SELECT";
-        case MENU_MISSION_SELECT:      return "MENU_MISSION_SELECT";
-        case MENU_DIFFICULTY:          return "MENU_DIFFICULTY";
-        case MENU_007_OPTIONS:         return "MENU_007_OPTIONS";
-        case MENU_BRIEFING:            return "MENU_BRIEFING";
-        case MENU_RUN_STAGE:           return "MENU_RUN_STAGE";
-        case MENU_MISSION_FAILED:      return "MENU_MISSION_FAILED";
-        case MENU_MISSION_COMPLETE:    return "MENU_MISSION_COMPLETE";
-        case MENU_MP_OPTIONS:          return "MENU_MP_OPTIONS";
-        case MENU_MP_SCENARIO_SELECT:  return "MENU_MP_SCENARIO_SELECT";
-        case MENU_MP_CHAR_SELECT:      return "MENU_MP_CHAR_SELECT";
-        case MENU_MP_TEAMS:            return "MENU_MP_TEAMS";
-        case MENU_MP_HANDICAP:         return "MENU_MP_HANDICAP";
-        case MENU_MP_CONTROL_STYLE:    return "MENU_MP_CONTROL_STYLE";
-        case MENU_MP_STAGE_SELECT:     return "MENU_MP_STAGE_SELECT";
-        case MENU_CHEAT:               return "MENU_CHEAT";
-        case MENU_NO_CONTROLLERS:      return "MENU_NO_CONTROLLERS";
-        case MENU_DISPLAY_CAST:        return "MENU_DISPLAY_CAST";
-        case MENU_SPECTRUM_EMU:        return "MENU_SPECTRUM_EMU";
-#ifdef PORT
-        case MENU_PC_OPTIONS:          return "MENU_PC_OPTIONS";
-#endif
-        default:                       return "MENU_<unknown>";
-    }
-}
-#endif
-
-
 void menu_init(void)
 {
     s32 var_v0;
-
-#ifdef PORT
-    /* D243: one call per front-end tick (see g_d243FrameCounter comment
-     * above for how this correlates against the D146/GE_D160 logs).
-     * D250: menu_init() runs ~once per frame during front-end states --
-     * cache the getenv() rather than re-checking it every call. */
-    static int s_d243 = -1;
-    if (s_d243 < 0) s_d243 = getenv("GE_D243") != NULL;
-    if (s_d243) {
-        g_d243FrameCounter++;
-    }
-#endif
 
     if (current_menu == MENU_SWITCH_SCREENS)
     {
@@ -8761,7 +8624,11 @@ void menu_init(void)
     {
         if (viGetFrameBuf2() == (cfb_16[1]))
         {
+#ifdef PORT
+            viSetFrameBuf2((u8 *)(uintptr_t)(u32)(ptr_menu_videobuffer));  /* D441: zero-extend s32-held DRAM ptr */
+#else
             viSetFrameBuf2(ptr_menu_videobuffer);
+#endif
         }
 
         viSetAspect(MENU_INIT_ASPECT_440);
@@ -8815,21 +8682,12 @@ void menu_init(void)
             case MENU_NO_CONTROLLERS:         update_menu16_nocontrollers();        break;
             case MENU_DISPLAY_CAST:           update_menu18_displaycast();          break;
             case MENU_SPECTRUM_EMU:           update_menu19_spectrum();             break;
-#ifdef PORT
-            case MENU_PC_OPTIONS:             frontOptionsMenuUpdate();             break;
-#endif
         }
 
         if (menu_update > MENU_INVALID)
         {
             current_menu = MENU_SWITCH_SCREENS;
             reset_menutimer();
-#ifdef PORT
-            if (s_d243) {
-                fprintf(stderr, "D243: frame=%d -> MENU_SWITCH_SCREENS (pending=%s)\n",
-                        g_d243FrameCounter, d243MenuName(menu_update));
-            }
-#endif
         }
     }
 
@@ -8837,13 +8695,6 @@ void menu_init(void)
     {
         current_menu = maybe_prev_menu;
         maybe_prev_menu = MENU_INVALID;
-
-#ifdef PORT
-        if (s_d243) {
-            fprintf(stderr, "D243: frame=%d -> %s\n",
-                    g_d243FrameCounter, d243MenuName(current_menu));
-        }
-#endif
 
         switch(current_menu) {
             case MENU_LEGAL_SCREEN:           init_menu00_legalscreen();            break;
@@ -8871,9 +8722,6 @@ void menu_init(void)
             case MENU_NO_CONTROLLERS:         init_menu16_nocontroller();           break;
             case MENU_DISPLAY_CAST:           init_menu18_displaycast();            break;
             case MENU_SPECTRUM_EMU:           init_menu19_spectrum();               break;
-#ifdef PORT
-            case MENU_PC_OPTIONS:             frontOptionsMenuInit();               break;
-#endif
         }
     }
 
@@ -8903,9 +8751,6 @@ void menu_init(void)
         case MENU_NO_CONTROLLERS:         interface_menu16_nocontrollers();         break;
         case MENU_DISPLAY_CAST:           interface_menu18_displaycast();           break;
         case MENU_SPECTRUM_EMU:           interface_menu19_spectrum();              break;
-#ifdef PORT
-        case MENU_PC_OPTIONS:             frontOptionsMenuInterface();              break;
-#endif
         case MENU_RUN_STAGE:
             if (interface_menu0B_runstage())
             {
@@ -9025,11 +8870,6 @@ Gfx * menu_jump_constructor_handler(Gfx *DL)
             break;
         case MENU_SPECTRUM_EMU:
             DL = constructor_menu19_spectrum(DL);
-#ifdef PORT
-            break;
-        case MENU_PC_OPTIONS:
-            DL = frontOptionsMenuDraw(DL);
-#endif
     }
 
 #ifdef PORT

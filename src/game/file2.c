@@ -404,6 +404,16 @@ bool fileGetIsCheatUnlocked(save_data *save, s32 cheat)
         if (s_unlockAll < 0) s_unlockAll = getenv("GE_DEBUG_UNLOCKALL") != NULL;
         if (s_unlockAll) return TRUE;
     }
+    /* D442 (RULE-2-SIGNOFF, maintainer opt-in port feature): the
+     * Game.AllUnlocked setting is a pure query-time override -- the save is
+     * never read or mutated for it, so nothing leaks into ge007.eep (D387)
+     * and cheats earned while it is on persist normally. portAllUnlocked is
+     * defined in port/src/video.c; levels/007 mode come from the game's own
+     * debug flags seeded in port/src/main.c. */
+    {
+        extern s32 portAllUnlocked;
+        if (portAllUnlocked) return TRUE;
+    }
     /* D301 (github #87): callers (front.c mode-select cheat rows, file.c
      * briefing cheat check) pass fileGetSaveForFoldernum(selected_folder_num)
      * straight through with no NULL check. On real N64 that lookup can
@@ -681,6 +691,22 @@ STAGESTATUS fileIsStageUnlockedAtDifficulty(s32 foldernum, LEVEL_SOLO_SEQUENCE l
 {
     save_data* save;
     s32 i;
+
+#ifdef PORT
+    /* D442 (RULE-2-SIGNOFF, maintainer opt-in port feature): Game.AllUnlocked
+     * reports every stage/difficulty as COMPLETED, query-time only -- the save
+     * is never read or mutated for it. Needed because g_AppendCheatSinglePlayer
+     * mission-select (front.c) accepts only COMPLETED, and the MP-character,
+     * Magnum/Laser/Golden Gun and cheat.c level-unlock checks compare against
+     * COMPLETED. Same bounds as the real path below. */
+    {
+        extern s32 portAllUnlocked;
+        if (portAllUnlocked &&
+            (levelid >= SP_LEVEL_DAM && levelid < SP_LEVEL_MAX) &&
+            (difficulty >= DIFFICULTY_AGENT && difficulty < DIFFICULTY_MAX))
+            return STAGESTATUS_COMPLETED;
+    }
+#endif
 
     if (( fileIsFolderValid(foldernum)) &&
         (levelid >= SP_LEVEL_DAM && levelid < SP_LEVEL_MAX) &&

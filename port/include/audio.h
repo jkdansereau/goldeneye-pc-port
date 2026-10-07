@@ -31,6 +31,16 @@ u32  audioGetAiLengthBytes(void);
 /* Queue the next block of mixed samples (len is in bytes). */
 void audioSetNextBuffer(const s16 *buf, u32 len);
 
+/* D470: output-device selection. audioDeviceRefresh() re-enumerates and
+ * returns the count; audioDeviceName(i) is valid until the next refresh.
+ * audioDeviceRequest("") = system default. The switch itself is applied on
+ * the audio thread. audioNotifyDeviceRemoved() is for SDL_AUDIODEVICEREMOVED. */
+int         audioDeviceRefresh(void);
+const char *audioDeviceName(int i);
+const char *audioDeviceCurrentName(void);
+void        audioDeviceRequest(const char *name);
+void        audioNotifyDeviceRemoved(u32 which);
+
 #ifdef __cplusplus
 }
 #endif

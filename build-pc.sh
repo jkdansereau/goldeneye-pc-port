@@ -41,10 +41,68 @@ BUILD_DIR="${BUILD_DIR:-build-pc}"
 # ninja) passes env vars through intact.
 # GE_PC_BUILD_VIA_NATIVE=1 prevents a re-exec loop.
 # ---------------------------------------------------------------------------
+# Locate the MSYS2 MinGW64 toolchain dir (cmake.exe + gcc.exe, inside an
+# MSYS2 install). Whatever `cmake`/`gcc` happen to be first on PATH is not
+# trustworthy: Git Bash's /mingw64 has no toolchain, and a pip-installed
+# cmake in a Python Scripts dir can shadow the MSYS2 one. GE_MSYS2_ROOT
+# (e.g. C:\msys64) overrides the search.
+_ge_find_mingw_bin() {
+    local c root
+    root="${GE_MSYS2_ROOT:-}"
+    [ -n "${root}" ] && root="$(cygpath -u "${root}" 2>/dev/null || echo "${root}")"
+    for c in \
+        ${root:+"${root}/mingw64/bin"} \
+        "$(dirname "$(command -v gcc 2>/dev/null || echo /nonexistent/gcc)")" \
+        "$(dirname "$(command -v cmake 2>/dev/null || echo /nonexistent/cmake)")" \
+        "/mingw64/bin" \
+        "/c/msys64/mingw64/bin"; do
+        if [ -f "${c}/cmake.exe" ] && [ -f "${c}/gcc.exe" ] && [ -f "${c}/../../usr/bin/msys-2.0.dll" ]; then
+            (cd "${c}" && pwd)
+            return 0
+        fi
+    done
+    return 1
+}
+
 if [ -n "${MSYSTEM:-}" ] && [ -z "${GE_PC_BUILD_VIA_NATIVE:-}" ]; then
-    _probe="$(mktemp -d "${TMPDIR:-/tmp}/gebuildprobe.XXXXXX")"
-    _probe_win="$(cygpath -w "${_probe}" 2>/dev/null || echo 'C:\\msys64\\tmp')"
-    /c/Windows/system32/cmd.exe //c "if exist \"%TMP%\" (echo ok > \"${_probe_win}/ok.txt\") else (echo bad > \"${_probe_win}/bad.txt\")" >/dev/null 2>&1 || true
+    _mingw_bin="$(_ge_find_mingw_bin)" || {
+        echo "ERROR: could not find the MSYS2 MinGW64 toolchain (mingw64/bin with cmake.exe + gcc.exe)." >&2
+        echo "Install it (see docs/building.md) or point GE_MSYS2_ROOT at the MSYS2 root, e.g. GE_MSYS2_ROOT='C:\msys64'." >&2
+        exit 1
+    }
+    # Failure mode 3 (AGENTS.md): the toolchain's DLL dir must be on PATH,
+    # and ahead of any other cmake/gcc. Only mingw64/bin — NOT usr/bin:
+    # from a Git Bash shell that would swap in MSYS2's cygpath/mktemp,
+    # whose /tmp is a different Windows dir than this bash's /tmp.
+    export PATH="${_mingw_bin}:${PATH}"
+    # Every path that crosses to a native process lives in the build dir and
+    # is converted with bash's own `pwd -W` — never /tmp + cygpath, which
+    # silently disagree when two msys runtimes are on PATH (Git Bash + MSYS2:
+    # the .ps1 was written to one /tmp and powershell was pointed at the
+    # other; the TMP probe likewise always read "unusable").
+    mkdir -p "${BUILD_DIR}"
+    _bd_win="$(cd "${BUILD_DIR}" && pwd -W)"
+    _bd_win="${_bd_win//\//\\}"
+    _probe="${BUILD_DIR}/.ge007-tmpprobe"
+    rm -rf "${_probe}"; mkdir -p "${_probe}"
+    # The probe is a .cmd FILE: an inline `cmd //c "... \"path\" ..."` never
+    # worked — the msys argv conversion re-escapes embedded quotes as \"
+    # (which cmd does not understand), so neither ok.txt nor bad.txt was
+    # ever written and every build took the re-exec. It also tests that TMP
+    # is WRITABLE, not merely that it exists (the failure mode is TMP =
+    # C:\Windows\, which exists). %~dp0 = the probe's own dir: no paths
+    # cross the boundary. CRLF: cmd's goto/label scan is unreliable on LF.
+    sed 's/$/\r/' > "${_probe}/probe.cmd" <<'CMD'
+@echo off
+if "%TMP%"=="" goto bad
+(echo x> "%TMP%\ge007-tmpprobe.tmp") 2>nul || goto bad
+del "%TMP%\ge007-tmpprobe.tmp" 2>nul
+echo ok> "%~dp0ok.txt"
+exit /b 0
+:bad
+echo bad> "%~dp0bad.txt"
+CMD
+    /c/Windows/system32/cmd.exe //c "${_bd_win}\\.ge007-tmpprobe\\probe.cmd" >/dev/null 2>&1 || true
     if [ ! -s "${_probe}/ok.txt" ]; then
         command -v powershell >/dev/null 2>&1 || {
             echo "ERROR: native TMP is unusable from this shell and powershell.exe was not found for the fallback." >&2
@@ -54,25 +112,30 @@ if [ -n "${MSYSTEM:-}" ] && [ -z "${GE_PC_BUILD_VIA_NATIVE:-}" ]; then
         }
         echo "==> native TMP unusable from this shell; re-running cmake+build via PowerShell"
         export GE_PC_BUILD_VIA_NATIVE=1
-        _here="$(pwd -W 2>/dev/null || cygpath -w "$(pwd)")"
-        # Resolve the Windows-side toolchain paths from what msys found (no
-        # hardcoded install dir: C:\msys64 on this box, D:\M\msys64
-        # elsewhere). usr/bin first: mingw gcc.exe needs msys-2.0.dll from
-        # there.
-        _cmake_root="$(dirname "$(command -v cmake)")"          # .../mingw64/bin
-        _msys_root="$(cd "${_cmake_root}/../.." && pwd -W 2>/dev/null || cygpath -w "$(cd "${_cmake_root}/../.." && pwd)")"  # msys install root (.. twice: bin -> mingw64 -> root)
-        _bin_w="$(cygpath -w "${_cmake_root}")"
-        _usrbin_w="$(cygpath -w "${_msys_root}/usr/bin")"
+        _here="$(pwd -W)"
+        # Windows-side toolchain paths: from the validated MSYS2 mingw64/bin
+        # found above (NOT blindly from `command -v cmake`, which in a Git
+        # Bash / agent shell resolves to e.g. a pip-installed cmake and fed
+        # the .ps1 a bin dir with no MSYS2 toolchain — the "re-exec fails
+        # in-script, works by hand with explicit paths" bug). usr/bin first
+        # on the .ps1's PATH: mingw tools may need msys-2.0.dll from there.
+        _msys_root="$(cd "${_mingw_bin}/../.." && pwd -W)"      # msys install root (bin -> mingw64 -> root)
+        _bin_w="$(cd "${_mingw_bin}" && pwd -W)"
+        _bin_w="${_bin_w//\//\\}"
+        _usrbin_w="${_msys_root//\//\\}\\usr\\bin"
         # The PowerShell script is written to a .ps1 FILE, not passed via
         # -Command: the msys->native argv conversion mangles $-bearing
         # strings (a '\$LASTEXITCODE' check arrived as an empty token and a
         # failed cmake would have exited 0 silently). A file write is
         # conversion-free; only plain path/word arguments cross the boundary.
-        _ps1="$(mktemp "${TMPDIR:-/tmp}/ge007-rerun.XXXXXX.ps1")"
+        _ps1="${BUILD_DIR}/ge007-native-reexec.ps1"
+        _ps1_win="${_bd_win}\\ge007-native-reexec.ps1"
         cat > "${_ps1}" <<'PS1'
 param([string]$UsrBin, [string]$Bin, [string]$MsysRoot, [string]$Here, [string]$BuildDir, [string]$RomId)
 # Self-logging: a headless shell loses this process's console output, so
 # every fact that matters goes to diag/log files in the build dir.
+# Resolve BuildDir against the repo root, not the inherited cwd.
+Set-Location $Here
 $diag = Join-Path $BuildDir "ge007-native-reexec-diag.log"
 $cmakeLog = Join-Path $BuildDir "ge007-native-reexec-cmake.log"
 $buildLog = Join-Path $BuildDir "ge007-native-reexec-build.log"
@@ -81,6 +144,30 @@ $buildLog = Join-Path $BuildDir "ge007-native-reexec-build.log"
 # msys bin dirs plus the usual system dirs. (usr/bin first: mingw gcc/cmake
 # need msys-2.0.dll from there.)
 $env:PATH = "$UsrBin;$Bin;C:\Windows\System32;C:\Windows;C:\Windows\System32\Wbem"
+# A PowerShell launched from an MSYS2 bash (the agent-shell case: MSYS2's
+# usr/bin first on PATH, so `env bash` is MSYS2's bash) inherits a stripped
+# ~13-var env with PATHEXT=".CPL" and no ComSpec. With that PATHEXT,
+# `& cmake.exe` silently does NOTHING: no process, no output, $LASTEXITCODE
+# stays $null (the rc=2 "did not execute" regression). Restore them.
+$env:PATHEXT = '.COM;.EXE;.BAT;.CMD'
+if (-not $env:ComSpec) { $env:ComSpec = 'C:\Windows\System32\cmd.exe' }
+# D515: same class of bug as PATHEXT/ComSpec above — a stripped re-exec env
+# can also drop PROCESSOR_ARCHITECTURE, which CMake reads to fill
+# CMAKE_HOST_SYSTEM_PROCESSOR; empty value -> empty TARGET_ARCH -> "ge007..".
+# Restore it from the machine environment (fallback 'AMD64'), and restore
+# SystemRoot/windir the same way (standard Windows vars native tools expect).
+if (-not $env:PROCESSOR_ARCHITECTURE) {
+    $env:PROCESSOR_ARCHITECTURE = [Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITECTURE', 'Machine')
+    if (-not $env:PROCESSOR_ARCHITECTURE) { $env:PROCESSOR_ARCHITECTURE = 'AMD64' }
+}
+if (-not $env:SystemRoot) {
+    $env:SystemRoot = [Environment]::GetEnvironmentVariable('SystemRoot', 'Machine')
+    if (-not $env:SystemRoot) { $env:SystemRoot = 'C:\Windows' }
+}
+if (-not $env:windir) {
+    $env:windir = [Environment]::GetEnvironmentVariable('windir', 'Machine')
+    if (-not $env:windir) { $env:windir = 'C:\Windows' }
+}
 # Writable temp for the native toolchain. [System.IO.Path]::GetTempPath()
 # CANNOT be used here: it honours the inherited (broken) TMP/TEMP env vars
 # and returned C:\Windows\. Pick the first writable candidate instead.
@@ -99,8 +186,15 @@ if ($null -eq $tmpdir) { "no writable temp dir found" | Out-File $diag -Encoding
 $env:TMP = $tmpdir
 $env:TEMP = $tmpdir
 "start UsrBin=[$UsrBin] Bin=[$Bin] MsysRoot=[$MsysRoot] Here=[$Here] BuildDir=[$BuildDir] RomId=[$RomId] tmp=[$tmpdir]" | Out-File $diag -Encoding ascii
+# D515 diag: the stripped re-exec env can also drop PROCESSOR_ARCHITECTURE,
+# which CMake reads to fill CMAKE_HOST_SYSTEM_PROCESSOR (empty value ->
+# empty TARGET_ARCH -> "ge007.."). One line, cheap, useful next time.
+"env PROCESSOR_ARCHITECTURE=[$env:PROCESSOR_ARCHITECTURE] PROCESSOR_ARCHITEW6432=[$env:PROCESSOR_ARCHITEW6432] SystemRoot=[$env:SystemRoot] windir=[$env:windir]" | Out-File $diag -Append -Encoding ascii
 $exe = "$Bin\cmake.exe"
 "exe=[$exe] exists=[$(Test-Path -LiteralPath $exe)]" | Out-File $diag -Append -Encoding ascii
+# A missing exe makes `& $exe` throw (caught below) and leaves LASTEXITCODE
+# null, which used to surface only as an opaque "did not execute".
+if (-not (Test-Path -LiteralPath $exe)) { Write-Host "cmake.exe not found at [$exe] (diag: $diag)"; exit 5 }
 Set-Location $Here
 "cwd=[$([System.IO.Directory]::GetCurrentDirectory())]" | Out-File $diag -Append -Encoding ascii
 try {
@@ -128,7 +222,7 @@ if ($LASTEXITCODE -ne 0) { Write-Host "build failed (rc=$LASTEXITCODE; log: $bui
 "done" | Out-File $diag -Append -Encoding ascii
 Write-Host "cmake + build ok (native re-exec, TMP=$($env:TMP))"
 PS1
-        _ps1_win="$(cygpath -w "${_ps1}")"
+        rm -rf "${_probe}"
         rc=0
         # NOTE: do NOT launch powershell via `env -i` (tried 2026-09-28): a
         # native child started with a scrubbed msys env cannot launch

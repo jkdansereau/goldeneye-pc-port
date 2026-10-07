@@ -23,7 +23,7 @@
   extern void abort(void);
   extern void exit(int status);
 #else
-  #define _POSIX_C_SOURCE 199309L
+  #define _POSIX_C_SOURCE 200112L
   #include <unistd.h>
   #include <time.h>
   #include <sys/stat.h>
@@ -120,6 +120,48 @@ void sysSetArgs(int argc, char **argv)
 {
     g_argc = argc;
     g_argv = argv;
+}
+
+/* D443: relaunch this executable with the original argv (same cwd -- a child
+ * inherits it). Called ONLY from the atexit handler, i.e. after the D344
+ * orderly quit has parked the render thread and the config/eeprom are saved.
+ * Returns 0 on success. */
+int sysRelaunchSelf(void)
+{
+#ifdef _WIN32
+    char exe[MAX_PATH * 2];
+    DWORD n = GetModuleFileNameA(NULL, exe, (DWORD)sizeof(exe));
+    if (n == 0 || n >= sizeof(exe)) return -1;
+    /* GetCommandLineA is the exact original (already-quoted) command line. */
+    const char *cl = GetCommandLineA();
+    if (!cl) return -1;
+    char *cmd = _strdup(cl);
+    if (!cmd) return -1;
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof(si));
+    memset(&pi, 0, sizeof(pi));
+    si.cb = sizeof(si);
+    BOOL ok = CreateProcessA(exe, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
+    free(cmd);
+    if (!ok) return -1;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return 0;
+#else
+    if (!g_argv || g_argc <= 0) return -1;
+    char exe[4096];
+    ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    const char *path = g_argv[0];
+    if (n > 0) { exe[n] = 0; path = exe; }
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execv(path, g_argv);
+        _exit(127);
+    }
+    return 0;
+#endif
 }
 
 int sysArgCheck(const char *arg)

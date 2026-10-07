@@ -11,9 +11,6 @@
 #include <PR/ultratypes.h>
 #include <PR/gbi.h>
 #include "gimgfixup.h"
-extern char *getenv(const char *name); /* D324: no CRT proto via GE stdlib.h */
-#include "envflag.h"
-extern void osSyncPrintf(const char *fmt, ...);
 
 #define GIMG_REGION_SIZE 0x13F8u
 
@@ -112,7 +109,6 @@ static int s_imgslot_learned = 0;
 void gimgSyncCompiledGlobalDLs(u8 *base)
 {
     int i;
-    int nslots = 0, nchanged = 0; /* D252 TEMP verify counters */
     u8 *end = base + GIMG_REGION_SIZE;
 
     for (i = 0; i < N_DLS; i++)
@@ -147,9 +143,6 @@ void gimgSyncCompiledGlobalDLs(u8 *base)
             }
             if (s_imgslot[i][j])
             {
-                nslots++;
-                if ((u32)dst[j].words.w1 != *(u32 *)(p + 4))
-                    nchanged++;
                 dst[j].words.w1 = *(u32 *)(p + 4);
             }
             p += 8;
@@ -157,8 +150,4 @@ void gimgSyncCompiledGlobalDLs(u8 *base)
         }
     }
     s_imgslot_learned = 1;
-    /* D252 TEMP: before the fix, every stage after the first left
-     * `nchanged` explosion texture pointers stale. */
-    if (GE_ENVFLAG("GE_D252POOL"))
-        osSyncPrintf("D252SYNC: %d texture slots re-synced, %d changed\n", nslots, nchanged);
 }

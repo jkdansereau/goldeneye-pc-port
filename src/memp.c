@@ -37,14 +37,24 @@ void mempInit(void)
 
 const char *tokenFind(s32 arg0, const char *arg1);
 long int strtol(const char *str, char **endptr, int base);
+#ifdef PORT
+/* D453: arena start is a host pointer; carry it in uintptr_t, not s32. */
+void mempCheckMemflagTokens(uintptr_t poolAreaStart, s32 poolAreaSize)
+#else
 void mempCheckMemflagTokens(s32 poolAreaStart, s32 poolAreaSize)
+#endif
 {
     s_mempMVALS poolSizes;
 
     //set pool 0 to what boss wants (room_model_buffer)
     //pool 0 = TotalPoolArea
+#ifdef PORT
+    g_mempPools[MEMPOOL_TOTAL].start = (u8 *)poolAreaStart;
+    g_mempPools[MEMPOOL_TOTAL].end = (u8 *)(poolAreaStart + poolAreaSize);
+#else
     g_mempPools[MEMPOOL_TOTAL].start = poolAreaStart;
     g_mempPools[MEMPOOL_TOTAL].end = poolAreaStart + poolAreaSize;
+#endif
 
     poolSizes = sdefaultmvals;
 
@@ -91,7 +101,11 @@ void mempSetBankStarts(s32 poolSizes[MEMPOOL_COUNT+1])
     s32 bankstarts[MEMPOOL_COUNT] = {0};
     s32 mempLen;
     s32 mempRequested;
+#ifdef PORT
+    uintptr_t mempStart; /* D453 */
+#else
     s32 mempStart;
+#endif
 
     //set MF, ML, ME first
     i = 0;
@@ -130,13 +144,23 @@ void mempSetBankStarts(s32 poolSizes[MEMPOOL_COUNT+1])
     // {0,0,0,0,poolAreaSize - 303104, poolAreaSize - 303104, poolAreaSize}
 
 
+#ifdef PORT
+    mempStart = (uintptr_t)g_mempPools[MEMPOOL_TOTAL].start;
+#else
     mempStart = g_mempPools[MEMPOOL_TOTAL].start;
+#endif
     //for each bank 1-7, add new start position
     for (i = MEMPOOL_TOTAL; i < MEMPOOL_COUNT - 1; i++)
     {
+#ifdef PORT
+        g_mempPools[i + 1].start = (u8 *)(bankstarts[i] + mempStart);
+        g_mempPools[i + 1].pos   = 0;
+        g_mempPools[i + 1].end   = (u8 *)(bankstarts[i + 1] + mempStart);
+#else
         g_mempPools[i + 1].start = bankstarts[i] + mempStart;
         g_mempPools[i + 1].pos   = 0;
         g_mempPools[i + 1].end   = bankstarts[i + 1] + mempStart;
+#endif
     }
     /*
                            rel-start              size
@@ -151,7 +175,11 @@ void mempSetBankStarts(s32 poolSizes[MEMPOOL_COUNT+1])
 }
 
 
+#ifdef PORT
+static void *mempAllocBytesInBankRaw(u32 bytes, u8 poolnum)
+#else
 void *mempAllocBytesInBank(u32 bytes, u8 poolnum)
+#endif
 {
     /*
      * Retain this address expression. Using
@@ -196,7 +224,11 @@ void *mempAllocBytesInBank(u32 bytes, u8 poolnum)
 
             needmemallocation = TRUE;
 
+#ifdef PORT
+            return mempAllocBytesInBankRaw(bytes, MEMPOOL_PERMANENT);
+#else
             return mempAllocBytesInBank(bytes, MEMPOOL_PERMANENT);
+#endif
         }
 
         nulled_mempLoopAllMemBanks();
@@ -213,6 +245,159 @@ void *mempAllocBytesInBank(u32 bytes, u8 poolnum)
 }
 
 
+#ifdef PORT
+/* D464: GE_MEMPREDZONE=1 -- red-zone checker for the bump allocator.
+ * Every allocation that has room is padded with MEMP_RZ_SIZE trailing
+ * pattern bytes and recorded in a side table; mempRedzoneCheck() reports
+ * blocks whose trailer was scribbled (an overrun: N64-sized allocation
+ * indexed at the larger PC stride, the D461/D462 class). The returned
+ * pointer, 16-byte alignment and pool bookkeeping are otherwise unchanged
+ * (pos just advances RZ more, a multiple of 16). With the flag unset, the
+ * only cost is one cached branch per allocation. Game-thread design; the
+ * periodic check from the video hook can race a resize and report a
+ * transient false positive, so confirm a hit by re-running. */
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include "envflag.h"
+#include "system.h"
+
+#define MEMP_RZ_SIZE   64
+#define MEMP_RZ_MAX    8192
+
+typedef struct MempRzEntry {
+    u8 *block;
+    u8 *rz;
+    u32 size;
+    u32 id;
+    void *caller;
+    u8 bank;
+    u8 reported;
+} MempRzEntry;
+
+static MempRzEntry s_rz[MEMP_RZ_MAX];
+static u32 s_rzCount;
+static u32 s_rzNextId;
+static u32 s_rzNoRoom;   /* allocations that had no room for a red zone */
+static int s_rzFullSaid;
+
+static u8 mempRzPat(u32 i) { return (u8)(0xA5u + i * 13u); }
+
+static void mempRzFill(u8 *rz)
+{
+    u32 i;
+    for (i = 0; i < MEMP_RZ_SIZE; i++) rz[i] = mempRzPat(i);
+}
+
+static int mempRzBankOf(u8 *p)
+{
+    int i;
+    for (i = MEMPOOL_MF; i < MEMPOOL_COUNT; i++) {
+        if (g_mempPools[i].start != g_mempPools[i].end &&
+            p >= g_mempPools[i].start && p < g_mempPools[i].end) return i;
+    }
+    return -1;
+}
+
+static void mempRzRecord(u8 *block, u32 size, void *caller)
+{
+    MempRzEntry *e;
+    u32 id = s_rzNextId++;
+    if (s_rzCount >= MEMP_RZ_MAX) {
+        if (!s_rzFullSaid) {
+            s_rzFullSaid = 1;
+            sysLogPrintf(LOG_WARNING, "MEMPREDZONE: side table full (%d); later allocations are padded but not tracked", MEMP_RZ_MAX);
+        }
+        return;
+    }
+    e = &s_rz[s_rzCount];
+    e->block = block; e->rz = block + size; e->size = size; e->id = id;
+    e->caller = caller; e->bank = (u8)mempRzBankOf(block); e->reported = 0;
+    s_rzCount++;
+}
+
+static int mempRzFindLast(u8 *block)
+{
+    int i;
+    for (i = (int)s_rzCount - 1; i >= 0; i--) {
+        if (s_rz[i].block == block) return i;
+    }
+    return -1;
+}
+
+static void mempRzDropBank(u8 bank)
+{
+    u32 i, j = 0;
+    for (i = 0; i < s_rzCount; i++) {
+        if (s_rz[i].bank != bank) s_rz[j++] = s_rz[i];
+    }
+    s_rzCount = j;
+}
+
+void mempRedzoneCheck(const char *why)
+{
+    u32 i, k, nbad = 0;
+    if (!GE_ENVFLAG("GE_MEMPREDZONE")) return;
+    for (i = 0; i < s_rzCount; i++) {
+        MempRzEntry *e = &s_rz[i];
+        u32 first = 0xFFFFFFFFu, changed = 0;
+        if (e->reported) continue;
+        for (k = 0; k < MEMP_RZ_SIZE; k++) {
+            if (e->rz[k] != mempRzPat(k)) {
+                if (first == 0xFFFFFFFFu) first = k;
+                changed++;
+            }
+        }
+        if (changed) {
+            e->reported = 1;
+            nbad++;
+            sysLogPrintf(LOG_ERROR,
+                "MEMPREDZONE: HIT id=%u bank=%u size=%u block=%p rz_first_off=%u changed=%u/%d caller=%p (%s)",
+                e->id, (unsigned)e->bank, e->size, (void *)e->block, first, changed, MEMP_RZ_SIZE, e->caller,
+                why ? why : "?");
+        }
+    }
+    sysLogPrintf(LOG_INFO, "MEMPREDZONE: check '%s': %u tracked, %u new hit(s), %u untracked(no room)",
+                 why ? why : "?", s_rzCount, nbad, s_rzNoRoom);
+}
+
+static void *mempAllocImpl(u32 bytes, u8 poolnum, void *caller)
+{
+    MemoryPool *pool = &g_mempPools[poolnum];
+    u8 *p;
+
+    if (!GE_ENVFLAG("GE_MEMPREDZONE")) {
+        return mempAllocBytesInBankRaw(bytes, poolnum);
+    }
+    if (pool->pos != NULL && pool->pos <= pool->end &&
+        pool->pos + bytes + MEMP_RZ_SIZE <= pool->end) {
+        p = (u8 *)mempAllocBytesInBankRaw(bytes + MEMP_RZ_SIZE, poolnum);
+        mempRzFill(p + bytes);
+        mempRzRecord(p, bytes, caller);
+        return p;
+    }
+    s_rzNoRoom++;
+    return mempAllocBytesInBankRaw(bytes, poolnum);
+}
+
+static void mempRzResized(u8 *block, u32 newsize, int idx)
+{
+    mempRzFill(block + newsize);
+    if (idx >= 0) {
+        s_rz[idx].size = newsize;
+        s_rz[idx].rz = block + newsize;
+        s_rz[idx].reported = 0;
+    } else {
+        mempRzRecord(block, newsize, __builtin_return_address(0));
+    }
+}
+
+__attribute__((noinline)) void *mempAllocBytesInBank(u32 bytes, u8 poolnum)
+{
+    return mempAllocImpl(bytes, poolnum, __builtin_return_address(0));
+}
+#endif
+
 /**
  * Resize the most recent allocation in a pool without moving it.
  */
@@ -221,6 +406,10 @@ MEMP_ADD_ENTRY_RESULT mempAddEntryOfSizeToBank(void *allocation, s32 newsize, u8
     MemoryPool *pool;
     s32 origsize;
     s32 growsize;
+#ifdef PORT
+    int rzIdx = -1;
+    int rzNew = 0;
+#endif
 
     if (needmemallocation && allocation == g_mempPools[MEMPOOL_PERMANENT].prevpos)
     {
@@ -241,11 +430,27 @@ MEMP_ADD_ENTRY_RESULT mempAddEntryOfSizeToBank(void *allocation, s32 newsize, u8
     }
 
     origsize = pool->pos - pool->prevpos;
+#ifdef PORT
+    /* D464: a tracked block carries a trailer; keep it around the new size.
+     * An untracked block (whole-bank allocation, shrunk right after the
+     * load) gains one when the shrink leaves room for it. */
+    if (GE_ENVFLAG("GE_MEMPREDZONE")) {
+        rzIdx = mempRzFindLast((u8 *)allocation);
+        if (rzIdx >= 0 || (origsize >= newsize + MEMP_RZ_SIZE)) {
+            rzNew = 1;
+        }
+    }
+    growsize = newsize + (rzNew ? MEMP_RZ_SIZE : 0) - origsize;
+#else
     growsize = newsize - origsize;
+#endif
 
     if (growsize <= 0)
     {
         pool->pos += growsize;
+#ifdef PORT
+        if (rzNew) mempRzResized((u8 *)allocation, newsize, rzIdx);
+#endif
         return MEMP_ADD_ENTRY_SUCCESS;
     }
 
@@ -262,6 +467,9 @@ MEMP_ADD_ENTRY_RESULT mempAddEntryOfSizeToBank(void *allocation, s32 newsize, u8
     }
 
     pool->pos += growsize;
+#ifdef PORT
+    if (rzNew) mempRzResized((u8 *)allocation, newsize, rzIdx);
+#endif
     return MEMP_ADD_ENTRY_SUCCESS;
 }
 
@@ -286,16 +494,30 @@ s32 mempGetBankSizeLeft(u8 bank) {
 }
 
 // Last three bits contains the bank, the rest contains the size.
+#ifdef PORT
+__attribute__((noinline)) void *mempAllocPackedBytesInBank(u32 sizeandbank) { /* D453: was u32 */
+    return mempAllocImpl((sizeandbank >> 3), (sizeandbank & 7), __builtin_return_address(0));
+}
+#else
 u32 mempAllocPackedBytesInBank(u32 sizeandbank) {
     return mempAllocBytesInBank((sizeandbank >> 3), (sizeandbank & 7));
 }
+#endif
 
 void mempResetBank(u8 bank) {
+#ifdef PORT
+    mempRedzoneCheck("mempResetBank");
+    mempRzDropBank(bank);
+#endif
     g_mempPools[bank].prevpos = 0;
     g_mempPools[bank].pos = g_mempPools[bank].start;
 }
 
 void mempNullNextEntryInBank(u8 bank) {
+#ifdef PORT
+    mempRedzoneCheck("mempNullNextEntryInBank");
+    mempRzDropBank(bank);
+#endif
     nulled_mempLoopAllMemBanks();
     if (g_mempPools[bank].pos != 0) {
         g_mempPools[bank].pos = 0;

@@ -27,7 +27,12 @@ NAME="goldeneye-pc-port-${VERSION}-win64"
 OUT="dist/${NAME}"
 MINGW="${MINGW_PREFIX:-/mingw64}"
 
-EXE="$(ls build-pc/ge007*.exe 2>/dev/null | head -n1 || true)"
+# Prefer the real build output; a local build-pc/ can also hold renamed A/B or
+# probe copies (ge007.abpad.exe, ...) that sort first (CI's fresh tree has one).
+EXE=""
+for cand in build-pc/ge007.x86_64.exe build-pc/ge007*.exe; do
+  if [ -f "$cand" ]; then EXE="$cand"; break; fi
+done
 [ -n "$EXE" ] || { echo "error: no build-pc/ge007*.exe found — run ./build-pc.sh first" >&2; exit 1; }
 
 echo "==> Bundling $EXE  ->  $NAME"
@@ -84,6 +89,10 @@ cp LICENSE "$OUT/licenses/LICENSE-port-MIT.txt"
 for l in SDL2 zlib gcc-libs libwinpthread mingw-w64; do
   [ -d "$MINGW/share/licenses/$l" ] && cp -r "$MINGW/share/licenses/$l" "$OUT/licenses/$l"
 done
+
+# --- save converter (D492): emulator .eep <-> port .eep, stdlib-only -----
+mkdir -p "$OUT/tools"
+cp tools_pc/eep_convert.py "$OUT/tools/"
 
 # --- asset-prep tool -------------------------------------------------
 # The port needs two ROM-derived directories (data/pcmodels-<region>/ and

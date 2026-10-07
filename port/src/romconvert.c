@@ -72,14 +72,63 @@ static int rcSidecarsPresent(const char *region)
 }
 
 #if defined(PLATFORM_WINDOWS)
+/* Append raw text to cmd; returns 0 if it does not fit. */
+static int rcAppendRaw(char *cmd, size_t cap, size_t *n, const char *s)
+{
+    size_t l = strlen(s);
+    if (*n + l + 1 > cap)
+        return 0;
+    memcpy(cmd + *n, s, l + 1);
+    *n += l;
+    return 1;
+}
+
+/* Append arg quoted per the CommandLineToArgvW rules: backslashes directly
+ * before a quote are doubled, embedded quotes are escaped, and trailing
+ * backslashes are doubled before the closing quote. */
+static int rcQuoteArg(char *cmd, size_t cap, size_t *n, const char *arg)
+{
+    size_t i = *n, bs = 0;
+    if (i + 1 >= cap)
+        return 0;
+    cmd[i++] = '"';
+    for (; *arg; arg++) {
+        if (*arg == '\\') {
+            bs++;
+            if (i + 1 >= cap) return 0;
+            cmd[i++] = '\\';
+            continue;
+        }
+        if (*arg == '"') {
+            if (i + bs + 2 >= cap) return 0;
+            while (bs--) cmd[i++] = '\\';   /* double the run */
+            cmd[i++] = '\\';
+            cmd[i++] = '"';
+        } else {
+            if (i + 1 >= cap) return 0;
+            cmd[i++] = *arg;
+        }
+        bs = 0;
+    }
+    if (i + bs + 2 > cap) return 0;
+    while (bs--) cmd[i++] = '\\';
+    cmd[i++] = '"';
+    cmd[i] = 0;
+    *n = i;
+    return 1;
+}
+
 /* Spawn `exePath --rom "<rom>" --out "<exedir>"` and wait for it.
  * Returns the exit code, or -1 if it could not be started. */
 static int rcRunConverter(const char *exePath, const char *rom, const char *out)
 {
     char cmd[4096];
-    int n = snprintf(cmd, sizeof(cmd), "\"%s\" --rom \"%s\" --out \"%s\"",
-                     exePath, rom, out);
-    if (n < 0 || (size_t)n >= sizeof(cmd))
+    size_t n = 0;
+    if (!rcQuoteArg(cmd, sizeof(cmd), &n, exePath) ||
+        !rcAppendRaw(cmd, sizeof(cmd), &n, " --rom ") ||
+        !rcQuoteArg(cmd, sizeof(cmd), &n, rom) ||
+        !rcAppendRaw(cmd, sizeof(cmd), &n, " --out ") ||
+        !rcQuoteArg(cmd, sizeof(cmd), &n, out))
         return -1;   /* paths too long to build a command line */
 
     int wlen = MultiByteToWideChar(CP_UTF8, 0, cmd, -1, NULL, 0);

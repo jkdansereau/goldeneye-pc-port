@@ -20,7 +20,15 @@
 #define OPTION_CONTROLTYPE   0x0700
 #define OPTION_SCREENCINEMA  0x0800
 
+#ifdef PORT
+/* D557 (Rule-2 sign-off: maintainer 2026-10-06): new/blank profiles start with
+ * Look ahead OFF on PC -- its pitch auto-centring fights mouse and right-stick
+ * look (PD's PC port likewise keeps it on only for N64). Existing saves keep
+ * their stored option bits; only BLANKSAVEDATA-initialised profiles change. */
+#define DEFAULT_OPTIONS (OPTION_AUTOAIM | OPTION_SIGHTONSCREEN | OPTION_DISPLAYAMMO)
+#else
 #define DEFAULT_OPTIONS (OPTION_AUTOAIM | OPTION_SIGHTONSCREEN | OPTION_LOOKAHEAD | OPTION_DISPLAYAMMO)
+#endif
 
 extern ChrRecord *g_CurModelChr;
 

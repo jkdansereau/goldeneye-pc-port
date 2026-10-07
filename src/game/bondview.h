@@ -369,11 +369,20 @@ struct player
    * Used as parameter to gbi macro.
    * Offset 0x005c.
    */
+#ifdef PORT
+  /* D457: host matrix pointers (dynAllocateMatrix), were s32. */
+  Mtx *field_5C;
+
+  /* 0x0060 */ Mtx *field_60;
+  /* 0x0064 */ Mtxf *field_64;
+  /* 0x0068 */ Mtxf *field_68;
+#else
   s32 field_5C;
 
   /* 0x0060 */ s32 field_60;
   /* 0x0064 */ s32 field_64;
   /* 0x0068 */ s32 field_68;
+#endif
 
   /**
    * Collision / clipping related.
@@ -1211,8 +1220,13 @@ struct player
   Mtxf* viewtoworldmtxf;
   Mtx* projmatrix;
   Mtxf* projmatrixf;
+#ifdef PORT
+  Mtx *field_10E0; // ptr (D457: was s32)
+  LookAt *field_10E4; // ptr (D457: was s32)
+#else
   s32 field_10E0; // ptr
   s32 field_10E4; // ptr
+#endif
   Mtxf* field_10E8;
   Mtxf* field_10EC;
   f32 c_scalelod60; // canonical name
@@ -2360,8 +2374,13 @@ struct player
   s16 registeredroom;
   f32 field_2A08;
   f32 field_2A0C;
+#ifdef PORT
+  char *ptr_text_first_mp_award;
+  char *ptr_text_second_mp_award;
+#else
   s32 ptr_text_first_mp_award;
   s32 ptr_text_second_mp_award;
+#endif
   coord3d field_2A18[2];
   s32 field_2A30;
   s32 field_2A34;
@@ -2699,9 +2718,17 @@ extern s32 status_bar_text_buffer_index;
 //D:8003689C
 extern s32 display_statusbar;
 //D:800368A0
+#ifdef PORT
+extern struct font *copy_1stfonttable;
+#else
 extern s32 copy_1stfonttable;
+#endif
 //D:800368A4
+#ifdef PORT
+extern struct fontchar *copy_2ndfonttable;
+#else
 extern s32 copy_2ndfonttable;
+#endif
 //D:800368A8
 extern s32 upper_text_buffer_index;
 //D:800368AC
@@ -2818,7 +2845,11 @@ void jp_hudmsgBottomShow(char *string);
 // VERSION_US
 #define HUDMESSAGEBOTTOM hudmsgBottomShow
 void hudmsgBottomShow(char *string);
+#ifdef PORT
+void setFontTables(struct fontchar *arg0, struct font *arg1);
+#else
 void setFontTables(s32 arg0, s32 arg1);
+#endif
 #endif
 
 Gfx * bondviewRenderDebugBondView(Gfx *arg0);
@@ -2865,8 +2896,13 @@ f32 bondviewGetPlayerYawRadians(void);
 Mtxf *camGetWorldToScreenMtxf(void);
 void transformAndNormalizeByLength2Dto3D(struct coord2d *in, coord3d *out, f32 value);
 void bondviewTransformManyPosToViewMatrix(RenderPosView *arg0, s32 arg1);
+#ifdef PORT
+LookAt *sub_GAME_7F078474(void);
+Mtx *get_BONDdata_field_10E0(void);
+#else
 s32 sub_GAME_7F078474(void);
 s32 get_BONDdata_field_10E0(void);
+#endif
 Mtx *currentPlayerGetProjectionMatrix(void);
 Gfx *bondviewRenderProp(PropRecord *arg0, Gfx *arg1, s32 arg2);
 f32 getPlayer_c_lodscalez(void);

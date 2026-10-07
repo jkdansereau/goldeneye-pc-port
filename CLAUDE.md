@@ -16,6 +16,8 @@ Context is scarce. Load by tier; do not blind-read whole files.
   `docs/HANDOFF.md` (current state + next task + environment — a rolling
   local working file; may be absent in a fresh clone, in which case read
   the README "Status" section instead) — read fully;
+  `docs/ROADMAP.md` (the single tracker of open work — read the section
+  relevant to the task);
   `docs/porting-notes.md` (recurring bug classes) — skim the section
   headers, read the classes relevant to the task.
 - **Tier 2 — on demand only, do NOT read start-to-finish:**
@@ -41,6 +43,12 @@ Having a concrete "next step" from the handoff is NOT license to skip this.
 2. Skim the README "Status" section for where the project stands.
 3. If you may dispatch a subagent this session, read `docs/dev-process.md`
    NOW — not at dispatch time.
+4. Tree hygiene applies to anything you commit — see AGENTS.md §Tree hygiene &
+   release gate: no local absolute paths or usernames in tracked files (use
+   `<repo>`/`<repos>`/`<games>`/`<videos>`/`<python>`/`<temp>`), no contributor
+   emails in prose (name + PR number), every vendored third-party license
+   declared in `NOTICE`, no bulk ROM-derived captures in the tree (capture
+   dirs are gitignored), and one batched commit per session — not one per fix.
 
 ## Dispatch preflight — EVERY Agent/Task spawn, no exceptions
 
@@ -74,7 +82,7 @@ Full template: `docs/dev-process.md` -> "Investigation-brief template".
 ## Local Qwen dispatch (cost-free, data-local worker)
 
 A local Qwen3.8-27B is wired in via the `delegate-local` MCP server (see
-`C:\Users\james\Source\Repos\20260902-qwen38claudepair`). Use it as a
+`<repos>\20260902-qwen38claudepair`). Use it as a
 *subagent whose compute runs on-machine* for scoped, checkable work — the lead
 still owns judgment, planning, and the verification gate.
 
@@ -91,7 +99,7 @@ still owns judgment, planning, and the verification gate.
   proxy (`litellm/run.ps1`) + Unsloth Studio both up.
 - **Corrected 2026-09-04:** the "worker's shell is `cmd.exe`, no grep/cat"
   claim that used to live here was WRONG — verified directly against the
-  harness's own `_run_bash` (`C:\Users\james\tools\claude-code-delegate-local`):
+  harness's own `_run_bash` (the local `claude-code-delegate-local` harness dir):
   `grep`, `sed`, `cat`, `ls`, `head`, pipes, and `grep -rn` all work fine
   (Git-for-Windows/MSYS2 toolchain on PATH). The stale claim, baked into 4 of
   5 local agent `.md` files, caused a real dispatch (a multi-file

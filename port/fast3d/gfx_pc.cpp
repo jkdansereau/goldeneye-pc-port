@@ -9,10 +9,10 @@
 #include <cstdio>
 
 #include <map>
-#include <set>
 #include <unordered_map>
 #include <vector>
 #include <list>
+#include <set>
 #include <stack>
 #include <string>
 #include <iostream>
@@ -27,6 +27,8 @@
 #include "gbiex.h" /* GE's G_TRI4 + PD extension opcodes (see header) */
 
 #include "platform.h"
+#include "portaddr.h"   /* Stage B: arena windows */
+#include "envflag.h"
 
 #include "gfx_pc.h"
 #include "gfx_cc.h"
@@ -79,12 +81,19 @@ struct NormalColor {
     };
 };
 
+/* D540: set by the GL backend at init. gfx_rdp_affine: RDP-style
+ * screen-affine shade colour. gfx_fog_vertex: 1 = per-vertex RSP fog
+ * (default, D543), 0 = the D540 exact per-pixel fog (GE_FOGPIXEL=1). */
+int gfx_rdp_affine = 0;
+int gfx_fog_vertex = 0;
+
 struct LoadedVertex {
     float x, y, z, w;
     float u, v;
     struct RGBA color;
     uint8_t fog;
     uint8_t clip_rej;
+    float fog_n;   /* D540: fog sent to the GPU (0..255): the RSP value (default), or fog * w (GE_FOGPIXEL) */
 };
 
 static struct {
@@ -160,6 +169,13 @@ struct LoadedTexture {
      * a CI8 index stream apart from real RGBA16 pixels when a later tile
      * re-declares the same TMEM in another format -- see import_texture. */
     uint8_t src_fmt = 0xFF;
+    /* D75: set by gfx_dp_load_block when the load used dxt == 0. The RDP's
+     * LoadBlock only swaps odd rows on the way INTO TMEM when its dxt counter
+     * advances; TMEM reads always swap odd rows (addr ^ 4). With dxt == 0 the
+     * load-side swap never happens, so the sampled image is the memory image
+     * with the two 32-bit halves of every 8-byte group swapped on odd rows.
+     * Rare relies on this for the Rareware logo's text mip textures. */
+    bool dxt0 = false;
 };
 
 static struct RDP {
@@ -263,6 +279,52 @@ extern "C" void gfx_set_safe_area_crop(int on) {
     g_safe_area_crop_enabled = !!on;
 }
 
+/* D416: the crop above stretches the LAST set viewport's Y range over the
+ * whole window. Correct for one full-screen viewport; in split-screen every
+ * player's (half/quarter) viewport got stretched to fill the window, so the
+ * last-drawn player covered the others (and the shuffled draw order made the
+ * winner alternate frame to frame). While a 2+ player stage is running the
+ * N64's own split layout is used unmodified. */
+static bool g_split_screen = false;
+/* D510: set while the port-layer overlay DL (F10 panel / FPS counter) runs.
+ * That is PC chrome, not game content: it maps the logical canvas onto the
+ * whole window, bypassing the safe-area crop (which follows the game's last
+ * viewport and so differed between the front end and a level). */
+static bool g_overlay_window_space = false;
+extern "C" void gfx_set_split_screen(int on) {
+    g_split_screen = !!on;
+}
+
+/* D447: output rect (Video.AspectMode = Original). 0 = fill the window (the
+ * historical behaviour, bit-identical). >0 = letter/pillarbox the frame to
+ * exactly this aspect, centred; set once per frame by the port layer before
+ * gfx_start_frame. g_output_rect is top-left-origin window pixels. */
+static float g_output_aspect = 0.0f;
+static struct XYWidthHeight g_output_rect = { 0, 0, 0, 0 };
+
+/* D509: the render worker applies a new output aspect at the start of its next
+ * frame, but the game thread has already built the next one or two display lists
+ * with the old projection (portNativeAspect reads the render side's last
+ * aspect). Drawn into the new rect those frames are mis-projected for one or two
+ * frames (visible as a flash, worst on the gun/hand model). Hold the previous
+ * image for the frames that could carry the old aspect: gfx_run drops them through
+ * the same path a minimised window uses. */
+static int g_aspect_settle = 0;
+#define ASPECT_SETTLE_FRAMES 2
+
+extern "C" void gfx_set_output_aspect(float aspect) {
+    const float a = aspect > 0.1f ? aspect : 0.0f;
+    if (a != g_output_aspect) g_aspect_settle = ASPECT_SETTLE_FRAMES;
+    g_output_aspect = a;
+}
+
+extern "C" void gfx_get_output_rect(int32_t *outX, int32_t *outY, int32_t *outW, int32_t *outH) {
+    *outX = g_output_rect.x;
+    *outY = g_output_rect.y;
+    *outW = (int32_t)g_output_rect.width;
+    *outH = (int32_t)g_output_rect.height;
+}
+
 uint32_t gfx_msaa_level = 1;
 
 static bool dropped_frame;
@@ -303,12 +365,95 @@ static void gfx_flush(void) {
     }
 }
 
+/* D480: shader pre-warm. A combiner seen for the first time compiles its GL
+ * program mid-frame (2.5-11.5 ms each on the dev box; up to ~19 ms frames in
+ * play). The generated GLSL is a pure function of (shader_id0, shader_id1) and
+ * the GL version, so every pair ever created is remembered in $S/ge007.shaders
+ * and compiled at the top of the first gfx_run (and again after a filter change
+ * clears the pool). Output-identical; GE_NOSHADERWARM=1 turns it off. */
+#define SHADERWARM_HEADER "ge007-shaders v1"
+#define SHADERWARM_MAX 1024
+static bool s_shader_warm_pending = true;
+static int s_shader_list_state = 0; /* 0 = not opened, 1 = writable, -1 = disabled */
+static std::string s_shader_list_path;
+static std::set<std::pair<uint64_t, uint32_t>> s_shader_list_known;
+
+static bool gfx_shader_list_open(void) {
+    if (s_shader_list_state == 0) {
+        s_shader_list_state = -1;
+        if (GE_ENVFLAG("GE_NOSHADERWARM")) {
+            return false;
+        }
+        s_shader_list_path = sysResolvePath("$S/ge007.shaders");
+        bool header_ok = false;
+        if (FILE* f = fopen(s_shader_list_path.c_str(), "r")) {
+            char line[64];
+            if (fgets(line, sizeof line, f) && !strncmp(line, SHADERWARM_HEADER, strlen(SHADERWARM_HEADER))) {
+                header_ok = true;
+                unsigned long long id0;
+                unsigned int id1;
+                while (s_shader_list_known.size() < SHADERWARM_MAX && fgets(line, sizeof line, f)) {
+                    if (sscanf(line, "%llx %x", &id0, &id1) == 2) {
+                        s_shader_list_known.insert(std::make_pair((uint64_t)id0, (uint32_t)id1));
+                    }
+                }
+            }
+            fclose(f);
+        }
+        if (!header_ok) {
+            /* missing, foreign or corrupt: start a fresh list */
+            FILE* f = fopen(s_shader_list_path.c_str(), "w");
+            if (f == NULL) {
+                return false;
+            }
+            fprintf(f, "%s\n", SHADERWARM_HEADER);
+            fclose(f);
+        }
+        s_shader_list_state = 1;
+    }
+    return s_shader_list_state == 1;
+}
+
+static void gfx_shader_list_record(uint64_t shader_id0, uint32_t shader_id1) {
+    if (!gfx_shader_list_open() || s_shader_list_known.size() >= SHADERWARM_MAX) {
+        return;
+    }
+    if (!s_shader_list_known.insert(std::make_pair(shader_id0, shader_id1)).second) {
+        return;
+    }
+    if (FILE* f = fopen(s_shader_list_path.c_str(), "a")) {
+        fprintf(f, "%016llx %08x\n", (unsigned long long)shader_id0, (unsigned int)shader_id1);
+        fclose(f);
+    }
+}
+
+static void gfx_shader_prewarm(void) {
+    s_shader_warm_pending = false;
+    if (!gfx_shader_list_open() || s_shader_list_known.empty()) {
+        return;
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    int compiled = 0;
+    gfx_rapi->unload_shader(rendering_state.shader_program);
+    rendering_state.shader_program = nullptr;
+    for (const auto& id : s_shader_list_known) {
+        if (gfx_rapi->lookup_shader(id.first, id.second) == NULL) {
+            struct ShaderProgram* prg = gfx_rapi->create_and_load_new_shader(id.first, id.second);
+            gfx_rapi->unload_shader(prg);
+            compiled++;
+        }
+    }
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    sysLogPrintf(LOG_NOTE, "SHADERWARM: compiled %d of %d in %.1f ms", compiled, (int)s_shader_list_known.size(), ms);
+}
+
 static struct ShaderProgram* gfx_lookup_or_create_shader_program(uint64_t shader_id0, uint32_t shader_id1) {
     struct ShaderProgram* prg = gfx_rapi->lookup_shader(shader_id0, shader_id1);
     if (prg == NULL) {
         gfx_rapi->unload_shader(rendering_state.shader_program);
         prg = gfx_rapi->create_and_load_new_shader(shader_id0, shader_id1);
         rendering_state.shader_program = prg;
+        gfx_shader_list_record(shader_id0, shader_id1);
     }
     return prg;
 }
@@ -689,7 +834,11 @@ void gfx_texture_cache_delete_range(const uint8_t* start, const uint8_t* end) {
 static bool gfx_tex_source_is_c_array(const uint8_t* addr) {
     const uintptr_t a = (uintptr_t)addr;
     if (a >= 0x10000000u && a < 0x20000000u) return false; // cart map + sidecar
-    if (a >= 0x70000000u && a < 0x90000000u) return false; // V1 dram + KSEG0 mirror
+    // V1 dram + KSEG0 mirror: the two mapped views (port/src/dram.c). D441:
+    // was `a >= V1 && a < 0x90000000`, which went empty with the arena at
+    // 0x90000000 and bswapped every DRAM texture (mirrored texel pairs).
+    if (a >= PORT_DRAM_V1_BASE && a < PORT_DRAM_V1_BASE + PORT_DRAM_SIZE) return false;
+    if (a >= PORT_DRAM_K0_BASE && a < PORT_DRAM_K0_BASE + PORT_DRAM_SIZE) return false;
     return true; // exe image: C-compiled array
 }
 
@@ -709,13 +858,6 @@ static const uint8_t* gfx_tex_normalize_source(const uint8_t* addr, uint32_t ext
     uint32_t* dst = (uint32_t*)buf.data();
     for (uint32_t i = 0; i < n / 4; i++)
         dst[i] = PD_BE32(src[i]);
-    {
-        static int ge_d71log = -1;
-        if (ge_d71log < 0) ge_d71log = getenv("GE_D71LOG") != NULL;
-        if (ge_d71log)
-            fprintf(stderr, "[D71] normalized C-array texture source %p (%u bytes)\n",
-                    (const void*)addr, extent);
-    }
     return s_c_array_tex_norms.emplace(addr, std::move(buf)).first->second.data();
 }
 
@@ -744,32 +886,6 @@ static void import_texture_rgba16(int tile, const LoadedTexture& loaded_texture,
 
     const uint32_t width = rdp.texture_tile[tile].line_size_bytes / 2;
     const uint32_t height = size_bytes / rdp.texture_tile[tile].line_size_bytes;
-
-#ifdef PORT
-    /* D252 diag (temporary): compare the line_size_bytes-derived width/height
-     * against the SETTILESIZE-derived rdp.texture_tile[tile].width/height, and
-     * dump the raw texel data once per distinct (addr,size) pair so a fire
-     * tile can be checked against the source bytes by hand. Remove once
-     * D252 is resolved. */
-    static int s_d252 = -1;
-    if (s_d252 < 0) s_d252 = getenv("GE_D252") != NULL;
-    if (s_d252) {
-        static std::set<std::pair<const void*, uint32_t>> s_d252_seen;
-        if (s_d252_seen.emplace((const void*)addr, size_bytes).second) {
-            const auto& t = rdp.texture_tile[tile];
-            fprintf(stderr,
-                "[D252] tile=%d addr=%p size_bytes=%u line_size_bytes=%u "
-                "computed(w=%u h=%u) settilesize(w=%u h=%u) uls=%u ult=%u lrs=%u lrt=%u "
-                "masks=%u maskt=%u tmem=%u\n",
-                tile, (const void*)addr, size_bytes, line_size_bytes, width, height,
-                t.width, t.height, t.uls, t.ult, t.lrs, t.lrt, t.masks, t.maskt, t.tmem);
-            char rawpath[256];
-            snprintf(rawpath, sizeof(rawpath), "scratch/d252_raw_%p_%u.bin", (const void*)addr, size_bytes);
-            FILE* rf = fopen(rawpath, "wb");
-            if (rf) { fwrite(addr, 1, size_bytes, rf); fclose(rf); }
-        }
-    }
-#endif
 
 	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
     // DumpTexture(loaded_texture.otr_path, rgba32_buf, width, height);
@@ -1046,6 +1162,28 @@ static void import_texture(int i, int tile, bool importReplacement) {
     const uint32_t tex_flags = loaded_texture.tex_flags;
     const uint8_t palette_index = rdp.texture_tile[tile].palette;
 
+    /* D463: a SETTILE with line=0 makes every importer divide by zero
+     * (height = size_bytes / line_size_bytes -- 0xc0000094 integer-divide on
+     * Windows x64; the crash PC was import_texture_i8). The game emits this
+     * legitimately: textrelated.c's outlined-text path renders ANY byte
+     * < 0x21 through chars[*text - 0x21], a zeroed fontchar (w=h=0,
+     * pixeldata=NULL), and gDPLoadTextureBlock(width=0) then expands to
+     * gsDPTile(line=0) + a zero-area gSPTextureRectangle. The N64 RDP draws
+     * nothing for a zero-area rect, so the decomp is correct -- fast3d must
+     * tolerate it. Skip the import entirely (no cache entry, no upload);
+     * the degenerate draw rasterizes no fragments, so whatever stays bound
+     * on this unit is never sampled. Nonzero line sizes take the exact
+     * original path below. */
+    if (rdp.texture_tile[tile].line_size_bytes == 0) {
+        static int d463_warned = 0;
+        if (d463_warned < 8)
+            sysLogPrintf(LOG_NOTE, "D463: texrect on zero-line tile -- import skipped "
+                                   "(tile=%d fmt=%u siz=%u tmem=%u)",
+                         tile, fmt, siz, rdp.texture_tile[tile].tmem);
+        d463_warned++;
+        return;
+    }
+
     // D74: only fall back when the tmem slot was never written by a load
     // command. The old `rdp.tex_lod && tile >= first+detail` branch also
     // overwrote valid gDPLoadBlock data with line*tile.height, which (a) dropped
@@ -1099,11 +1237,35 @@ static void import_texture(int i, int tile, bool importReplacement) {
 
     TextureCacheKey key;
     if (fmt == G_IM_FMT_CI) {
+        /* D476: a CI4 texture decodes only its 16-entry bank
+         * (rdp.palette + palette_index * 16, see import_texture_ci4), so key it
+         * on that bank's content. The whole-table D217 hash made unrelated
+         * TLUT loads elsewhere in the table re-import unchanged CI4 textures.
+         * CI8 reads all 256 entries and keeps the whole-table hash. */
+        uint32_t ph = rdp.palette_hash;
+        if (siz == G_IM_SIZ_4b) {
+            ph = 2166136261u;
+            const uint8_t* pb = (const uint8_t*)(rdp.palette + (palette_index & 15) * 16);
+            for (uint32_t k = 0; k < 16 * sizeof(uint16_t); ++k) {
+                ph ^= pb[k];
+                ph *= 16777619u;
+            }
+        }
         key = { orig_addr, { rdp.palette_addrs[0], rdp.palette_addrs[1] }, fmt, siz, palette_index,
-                loaded_texture.size_bytes, rdp.palette_hash }; // D217: key on palette content
+                loaded_texture.size_bytes, ph }; // D217/D476: key on (used) palette content
     } else {
         key = { orig_addr, {}, fmt, siz, palette_index, loaded_texture.size_bytes, 0u };
     }
+    /* D75: a dxt==0 load samples with swapped odd rows -> distinct image.
+     * Only compiled-in (exe-image) assets: the runtime texture pipeline
+     * (tex.c/image.c, 0x70xxxxxx) loads dxt==0 too, but D159 no-ops its
+     * compensating pre-swap, so those are already linear. */
+    const bool d75_swap = loaded_texture.dxt0 && siz != G_IM_SIZ_32b &&
+                          gfx_tex_source_is_c_array(orig_addr) &&
+                          rdp.texture_tile[tile].line_size_bytes != 0 &&
+                          (rdp.texture_tile[tile].line_size_bytes & 7) == 0 &&
+                          loaded_texture.size_bytes > rdp.texture_tile[tile].line_size_bytes;
+    if (d75_swap) key.palette_hash ^= 0xD75D75D7u;
 
     /* Intro blood (M-201): textures the game regenerates IN PLACE in the
      * per-frame dynamic pool (dynAllocate, [g_VtxBuffers[0], g_VtxBuffers[2]))
@@ -1111,19 +1273,17 @@ static void import_texture(int i, int tile, bool importReplacement) {
      * die_blood_image_routine -- reuse the same addresses frame after frame,
      * so an address-only key returns a stale GL texture from an earlier frame.
      * Key those on a content hash (FNV-1a) instead; static textures keep the
-     * free address key. GE_DYNTEXHASH_OFF=1 disables for A/B. */
+     * free address key. */
     {
-        static int dynhash_off = -1;
-        if (dynhash_off < 0) dynhash_off = getenv("GE_DYNTEXHASH_OFF") != NULL;
         /* Game code often reaches this memory through OS_K0_TO_PHYSICAL,
          * which fast3d resolves into the byte-identical KSEG0 mirror at
          * 0x80000000 (port/src/dram.c V2) -- normalise to the V1 view the
          * dyn pool pointers use before the range test. */
         const uint8_t* v1addr = orig_addr;
-        if ((uintptr_t)v1addr >= 0x80000000UL && (uintptr_t)v1addr < 0x80800000UL) {
-            v1addr -= 0x10000000UL;
+        if ((uintptr_t)v1addr >= PORT_DRAM_K0_BASE && (uintptr_t)v1addr < PORT_DRAM_K0_BASE + PORT_DRAM_SIZE) {
+            v1addr -= (PORT_DRAM_K0_BASE - PORT_DRAM_V1_BASE);
         }
-        if (!dynhash_off && g_VtxBuffers[0] && v1addr >= g_VtxBuffers[0] && v1addr < g_VtxBuffers[2]) {
+        if (g_VtxBuffers[0] && v1addr >= g_VtxBuffers[0] && v1addr < g_VtxBuffers[2]) {
             uint32_t h = 2166136261u;
             const uint32_t n = loaded_texture.size_bytes;
             for (uint32_t b = 0; b < n; b++) {
@@ -1175,6 +1335,26 @@ static void import_texture(int i, int tile, bool importReplacement) {
         }
     }
 
+    /* D75: emulate the RDP's odd-row TMEM read swap for dxt==0 loads (see
+     * LoadedTexture::dxt0). Done after destride so rows are contiguous. */
+    std::vector<uint8_t> d75_buf;
+    if (d75_swap) {
+        const uint32_t ln = rdp.texture_tile[tile].line_size_bytes;
+        const uint32_t rows = loaded_texture.size_bytes / ln;
+        d75_buf.assign(loaded_texture.addr, loaded_texture.addr + (size_t)rows * ln +
+                       (loaded_texture.size_bytes - rows * ln));
+        for (uint32_t r = 1; r < rows; r += 2) {
+            uint8_t* row = &d75_buf[(size_t)r * ln];
+            for (uint32_t b = 0; b + 8 <= ln; b += 8) {
+                uint8_t t4[4];
+                memcpy(t4, row + b, 4);
+                memcpy(row + b, row + b + 4, 4);
+                memcpy(row + b + 4, t4, 4);
+            }
+        }
+        loaded_texture.addr = d75_buf.data();
+    }
+
     /* GE_DTEX: dump the load parameters for the first N textures of a frame so
      * RC2 (mip-chain contamination -> over-tall upload) can be told apart from a
      * decode/row-swap bug. tile_h = base-tile height from SETTILESIZE; if the
@@ -1208,36 +1388,6 @@ static void import_texture(int i, int tile, bool importReplacement) {
                  loaded_texture.line_size_bytes) ? "  <-- STRIDED (pitch shear?)" : "");
         }
     }
-
-#ifdef PORT
-    /* D157-I (M-158): import census for the D219/D252 rainbow-spark repro.
-     * Logs every small-texture (<= 16 KiB) import inside the known-bad frame
-     * window of the Bunker1 -level_09 repro, deduped per source address (first
-     * 3 hits each). Paired with the D157T vertex probe: the census names the
-     * exact source addresses bound during the spark frames (the smoke/flare/
-     * scattered family should appear in lockstep with the scripted shots),
-     * which the vertex lines can then be grepped by. Remove once root-caused.
-     * D250: cached getenv, inert unless GE_D157 is set. */
-    static int ge_d157i = -1;
-    if (ge_d157i < 0) ge_d157i = getenv("GE_D157") != NULL;
-    if (ge_d157i) {
-        extern uint32_t num_dls;
-        /* 2026-09-18: dropped the old num_dls in [90,240] gate here too (see
-         * the matching D157T comment) -- per-address dedup below already
-         * bounds this to 3 lines per distinct texture for the whole session. */
-        if (loaded_texture.size_bytes <= 16384) {
-            static std::map<const void*, int> d157i_seen;
-            int& n = d157i_seen[(const void*)orig_addr];
-            if (++n <= 3) {
-                sysLogPrintf(LOG_NOTE,
-                    "D157I: frame=%u hit#%d addr=%p fmt=%u siz=%u size=%u line=%u tile=%u tmem=%u",
-                    num_dls, n, (const void*)orig_addr, fmt, siz,
-                    loaded_texture.size_bytes, loaded_texture.line_size_bytes,
-                    tile, rdp.texture_tile[tile].tmem);
-            }
-        }
-    }
-#endif
 
     static int ge_texdump = -1;
     if (ge_texdump < 0) ge_texdump = getenv("GE_TEXDUMP") != NULL;
@@ -1298,7 +1448,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
             snprintf(nm2, sizeof nm2, "texdump/a%05d_%ux%u.bin", tdc - 1, tw, th);
             FILE* bf2 = fopen(nm2, "wb");
             if (bf2) { fwrite(loaded_texture.addr, 1, loaded_texture.size_bytes, bf2); fclose(bf2); }
-            extern uint32_t num_dls; // same counter the D157I probe uses
+            extern uint32_t num_dls;
             sysLogPrintf(LOG_NOTE,
                 "GE_TEXA[%d] dls=%u addr=%p fmt=%u siz=%u size=%u min=%u max=%u nonzero=%u/%u file=%s",
                 tdc - 1, num_dls, (void*)orig_addr, fmt, siz,
@@ -1372,15 +1522,13 @@ static void import_texture(int i, int tile, bool importReplacement) {
              * carries the whole mip chain (32x32 base + mips = 1400 B), which
              * made a 32x43 image whose GL REPEAT period (43 rows) differs from
              * the N64's mask period (32). See the tri-path counterpart. */
-            static int d245_oldtex = -1;
-            if (d245_oldtex < 0) d245_oldtex = getenv("GE_D245_OLDTEX") != NULL;
             const uint8_t maskt = rdp.texture_tile[tile].maskt;
             /* Crop by the TILE line size (the importer's row width): for a
              * LoadBlock, loaded_texture.line_size_bytes is the whole block, so
              * testing against it never cropped (M-201 follow-up: the mip rows
              * then showed as coloured dashes on Frigate's water). */
             const uint32_t d245_row = rdp.texture_tile[tile].line_size_bytes;
-            if (!d245_oldtex && fmt == G_IM_FMT_RGBA && siz == G_IM_SIZ_16b && maskt > 0 && maskt < 12 &&
+            if (fmt == G_IM_FMT_RGBA && siz == G_IM_SIZ_16b && maskt > 0 && maskt < 12 &&
                 d245_row > 0 && loaded_texture.size_bytes > d245_row * (1u << maskt)) {
                 LoadedTexture lt = loaded_texture;
                 lt.size_bytes = d245_row * (1u << maskt);
@@ -1741,6 +1889,22 @@ static void d303_note_emit(uint32_t f, struct LoadedVertex* const* v_arr) {
         v_arr[0]->color.r, v_arr[0]->color.g, v_arr[0]->color.b);
 }
 
+/* D474 (low-end perf): one cached gate for the per-triangle / per-vertex debug
+ * hooks (D75D, ZF, D303). All three are off for players; without this every
+ * triangle paid several calls + frame-counter reads just to return. Same
+ * enable semantics as each hook's own lazy init (non-empty env value). */
+static int s_tri_dbg = -1;
+static inline bool tri_dbg(void) {
+    if (s_tri_dbg < 0) {
+        const char* a = getenv("GE_D75D");
+        const char* b = getenv("GE_ZF");
+        const char* c = getenv("GE_D303");
+        const char* d = getenv("GE_D526");
+        s_tri_dbg = ((a && *a) || (b && *b) || (c && *c) || (d && *d)) ? 1 : 0;
+    }
+    return s_tri_dbg != 0;
+}
+
 static void d75d_note_tri(uint32_t f, uint32_t maxidx) {
     d75d_init();
     if (d75d_lo < 0 || f < (uint32_t)d75d_lo || f > (uint32_t)d75d_hi) return;
@@ -1822,11 +1986,124 @@ static void d75d_note_emit_z(uint32_t f, struct LoadedVertex* const* v_arr, int 
     d75d_env[0]=rdp.env_color.r; d75d_env[1]=rdp.env_color.g; d75d_env[2]=rdp.env_color.b; d75d_env[3]=rdp.env_color.a;
 }
 
-/* D252 TEMP (2026-09-26): F12 with GE_D157 set opens a full-detail D157T
- * burst (every small-texture vertex, no sampling) for ~90 frames, so a live
- * sighting is captured even after the continuous cap has dropped to 1-in-50.
- * Armed from videoEndFrame's screenshot path via gfxD157Burst(). */
-static volatile uint32_t s_d157BurstUntil = 0;
+/* D526 (docs/dev/findings.md §D526): per-triangle draw-state census
+ * probe, text-only. Retained as a generic transparency/texture triage
+ * tool (the D195/D266/D268/D273 bug class; the P13 Dam-ending grate it
+ * targeted, D526, was confirmed faithful N64 behaviour on 1964/GEPD,
+ * so no fix was needed). GE_D526="lo-hi" = sim-frame range (the same
+ * dash syntax as GE_D75D); optional GE_D526BOX="x0 y0 x1 y1" targets
+ * an NDC region (same syntax as GE_ZFBOX; default = on-screen);
+ * GE_D526MAX caps per-triangle lines (default 400). For every emitted
+ * triangle in range whose NDC bbox intersects the region, one line:
+ * frame, NDC bbox, z/w, geometry_mode, other_mode_l/h, combine word,
+ * sampled tile 0 (and 1 in 2-cycle) tmem/fmt/siz, first_tile_index,
+ * prim alpha, vertex alpha min/max, use_alpha/modulate/invisible.
+ * Plus one per-frame line aggregating the in-region tris by
+ * (comb, oml, omh, alpha) signature, so a suspect surface's signature
+ * stands out without enumerating every tri. Zero cost unless
+ * GE_D75D/GE_ZF/GE_D303/GE_D526 is set (folded into the D474 tri_dbg
+ * gate). */
+static int d526_on = -1;
+static int d526_lo = -1, d526_hi = 0x7FFFFFFF, d526_max = 400;
+static uint32_t d526_lines = 0;
+static float d526_box[4] = { -1.05f, -1.05f, 1.05f, 1.05f };
+static int d526_box_on = 0;
+#define D526_SIGS 32
+static struct { uint64_t comb; uint32_t oml, omh; int alpha; uint32_t cnt; } d526_sigs[D526_SIGS];
+static int d526_nsigs = 0;
+static uint32_t d526_sig_frame = 0, d526_sig_total = 0;
+
+static void d526_flush_sigs(uint32_t f) {
+    if (d526_nsigs == 0) { d526_sig_frame = f; return; }
+    fprintf(stderr, "D526F: f=%u inbox=%u sigs: ", f, d526_sig_total);
+    for (int i = 0; i < d526_nsigs; i++)
+        fprintf(stderr, "(comb=0x%016llx oml=0x%08x omh=0x%08x a=%d)x%u ",
+                (unsigned long long)d526_sigs[i].comb, d526_sigs[i].oml,
+                d526_sigs[i].omh, d526_sigs[i].alpha, d526_sigs[i].cnt);
+    fprintf(stderr, "\n");
+    d526_nsigs = 0; d526_sig_total = 0;
+    d526_sig_frame = f;
+}
+static void d526_atexit(void) { d526_flush_sigs(0xFFFFFFFFu); }
+static void d526_init(void) {
+    if (d526_on >= 0) return;
+    d526_on = 0;
+    const char* e = getenv("GE_D526");
+    if (e && *e) {
+        d526_on = 1;
+        d526_lo = atoi(e);
+        const char* dash = strchr(e, '-');
+        if (dash) d526_hi = atoi(dash + 1);
+    }
+    if (d526_on) {
+        const char* m = getenv("GE_D526MAX");
+        if (m && *m) d526_max = atoi(m);
+        const char* b = getenv("GE_D526BOX");
+        if (b && *b && sscanf(b, "%f %f %f %f",
+                              &d526_box[0], &d526_box[1], &d526_box[2], &d526_box[3]) == 4)
+            d526_box_on = 1;
+        atexit(d526_atexit);
+    }
+}
+static void d526_note_emit(uint32_t f, struct LoadedVertex* const* v_arr, int use_alpha, int use_modulate) {
+    d526_init();
+    if (!d526_on) return;
+    if (f < (uint32_t)d526_lo || f > (uint32_t)d526_hi) return;
+    if (f != d526_sig_frame) d526_flush_sigs(f);
+    float mnx = 1e9f, mxx = -1e9f, mny = 1e9f, mxy = -1e9f;
+    float zsum = 0.f, wsum = 0.f; int vmin = 255, vmax = -1, ok = 0;
+    for (int i = 0; i < 3; i++) {
+        float w = v_arr[i]->w;
+        if (w <= 0.f) continue;
+        float nx = v_arr[i]->x / w, ny = v_arr[i]->y / w;
+        if (nx < mnx) mnx = nx; if (nx > mxx) mxx = nx;
+        if (ny < mny) mny = ny; if (ny > mxy) mxy = ny;
+        zsum += v_arr[i]->z / w; wsum += w;
+        int a = v_arr[i]->color.a;
+        if (a < vmin) vmin = a; if (a > vmax) vmax = a;
+        ok = 1;
+    }
+    if (!ok) return;
+    if (d526_box_on) {
+        if (mxx < d526_box[0] || mnx > d526_box[2] || mxy < d526_box[1] || mny > d526_box[3]) return;
+    } else if (mxx < -1.05f || mnx > 1.05f || mxy < -1.05f || mny > 1.05f) return; // off-screen
+    d526_sig_total++;
+    int found = 0;
+    for (int i = 0; i < d526_nsigs; i++) {
+        if (d526_sigs[i].comb == rdp.combine_mode && d526_sigs[i].oml == rdp.other_mode_l &&
+            d526_sigs[i].omh == rdp.other_mode_h && d526_sigs[i].alpha == use_alpha) {
+            d526_sigs[i].cnt++; found = 1; break;
+        }
+    }
+    if (!found && d526_nsigs < D526_SIGS) {
+        d526_sigs[d526_nsigs].comb = rdp.combine_mode;
+        d526_sigs[d526_nsigs].oml = rdp.other_mode_l;
+        d526_sigs[d526_nsigs].omh = rdp.other_mode_h;
+        d526_sigs[d526_nsigs].alpha = use_alpha;
+        d526_sigs[d526_nsigs].cnt = 1;
+        d526_nsigs++;
+    }
+    if (d526_lines++ >= (uint32_t)d526_max) return;
+    const uint32_t fi = rdp.first_tile_index;
+    const uint32_t t0 = fi + gfx_lod_tile_offset(0);
+    const uint32_t omh = rdp.other_mode_h;
+    const int two = ((omh & (3U << G_MDSFT_CYCLETYPE)) == G_CYC_2CYCLE);
+    const uint32_t t1 = two ? fi + gfx_lod_tile_offset(1) : t0;
+    const int inv = (rdp.other_mode_l & (3u << 24)) == ((uint32_t)G_BL_0 << 24) &&
+                    (rdp.other_mode_l & (3u << 20)) == ((uint32_t)G_BL_CLR_MEM << 20);
+    fprintf(stderr,
+        "D526: f=%u ndc=(%.3f,%.3f)-(%.3f,%.3f) zw=%.4f gm=0x%08x oml=0x%08x omh=0x%08x comb=0x%016llx fi=%u "
+        "tile0[tmem=%u fmt=%u siz=%u]",
+        f, mnx, mny, mxx, mxy, (wsum > 0.f ? zsum / wsum : -1.f),
+        rsp.geometry_mode, rdp.other_mode_l, omh,
+        (unsigned long long)rdp.combine_mode, fi,
+        rdp.texture_tile[t0].tmem, rdp.texture_tile[t0].fmt, rdp.texture_tile[t0].siz);
+    if (two)
+        fprintf(stderr, " tile1[tmem=%u fmt=%u siz=%u]",
+                rdp.texture_tile[t1].tmem, rdp.texture_tile[t1].fmt, rdp.texture_tile[t1].siz);
+    fprintf(stderr, " pa=%u va=[%d,%d] alpha=%d mod=%d inv=%d 2cyc=%d\n",
+            rdp.prim_color.a, vmin, vmax, use_alpha, use_modulate, inv, two);
+}
 
 static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* vertices) {
     const size_t d75_di0 = dest_index; /* D75 probe: loop below mutates dest_index */
@@ -1957,102 +2234,6 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
             d->color.b = vcn->b;
         }
 
-#ifdef PORT
-        /* D157 diag (temporary, session 2026-09-16/17): does bullet_spark_render
-         * (glass2.c) actually draw with G_LIGHTING on? The M-110 mechanism
-         * (this vertex's v.cn[]/n.n[] union reinterpretation above) was
-         * already ruled out for explosion.c's particles (5000/5000 samples
-         * measured LIGHTING=off, see the D219 comment a few hundred lines
-         * below) -- don't assume it holds for glass2.c's bullet sparks
-         * without measuring. Key on the ORIGINAL authored bytes
-         * (v->v.cn[], readable regardless of which branch fired above,
-         * since n.n[]/cn[] are the same union storage) matching one of
-         * glass2.c's g_BulletSparkColors[] entries exactly. */
-        static int ge_d157 = -1;
-        if (ge_d157 < 0) ge_d157 = getenv("GE_D157") != NULL;
-        if (ge_d157) {
-            static const uint8_t known[][4] = {
-                {0xFF,0xFF,0xFF,0xFF}, {0xFF,0xFF,0xC8,0xFF}, {0xFF,0x00,0x00,0xFF},
-            };
-            /* 2026-09-26: this match was uncapped and white (255,255,255,255)
-             * hits every HUD/text/effect vertex -> ~200k lines in 18 s, 4-6 fps
-             * in live play. Now: first 500 hits, then only inside an F12 burst. */
-            extern uint32_t num_dls;
-            static int d157m_n = 0;
-            const bool d157m_on = d157m_n < 500 || num_dls <= s_d157BurstUntil;
-            if (d157m_on) for (const auto& k : known) {
-                if (v->v.cn[0] == k[0] && v->v.cn[1] == k[1] && v->v.cn[2] == k[2] && v->v.cn[3] == k[3]) {
-                    d157m_n++;
-                    sysLogPrintf(LOG_NOTE,
-                        "D157: bulletspark-color-match cn=(%d,%d,%d,%d) geometry_mode=%08x LIGHTING=%s -> shaded=(%d,%d,%d)",
-                        v->v.cn[0], v->v.cn[1], v->v.cn[2], v->v.cn[3], rsp.geometry_mode,
-                        (rsp.geometry_mode & G_LIGHTING) ? "ON" : "off",
-                        (int)d->color.r, (int)d->color.g, (int)d->color.b);
-                    break;
-                }
-            }
-
-            /* D157-B (M-158): the exact-color-match key above NEVER caught the
-             * pale-yellow (255,255,200) door-spark vertices in the Bunker1
-             * rainbow repro (only 2 white hits, both LIGHTING=off), so per
-             * D219 M-157's revised next step this sibling block keys on
-             * TEXTURE IDENTITY instead: any vertex whose render tile (tile 0)
-             * holds a small loaded texture (size <= 16 KiB -- the spark
-             * family is IA 64x64, promoted 8b->16b by texSelect) inside the
-             * known-bad frame window of that repro (shots at frames 60-350,
-             * visible rainbow frames 108-220). Logs the full RGBA path per
-             * vertex: authored cn, shaded result, LIGHTING, geometry_mode,
-             * combine_mode (texSelect sets G_CC_MODULATEIA for these -- a
-             * different value here is a combiner-state leak), and the tile's
-             * source identity (addr/fmt/siz/size = the TextureCacheKey for
-             * non-CI textures, so cache-collision reasoning works offline).
-             * Frame window + size key are repro-specific; widen if re-running
-             * elsewhere. Remove once D219/D252 is root-caused. */
-            {
-                extern uint32_t num_dls;
-                /* 2026-09-18: dropped the old num_dls in [90,240] gate -- that
-                 * window only fit the original short GE_INPUTSCRIPT repro; a
-                 * real interactive session runs for thousands of frames before
-                 * the player actually triggers the bug, so the gate silently
-                 * discarded 100% of useful data in live play. The existing
-                 * per-run hit caps below already bound log growth without it. */
-                {
-                    const uint32_t tile0 = rdp.first_tile_index;
-                    LoadedTexture& lt0 = rdp.loaded_texture[rdp.texture_tile[tile0].tmem];
-                    if (lt0.addr && lt0.size_bytes <= 16384) {
-                        static int d157b_n = 0;
-                        d157b_n++;
-                        /* Raised from 400/1-in-200 (sized for a ~250-frame
-                         * scripted repro) to a much larger continuous window
-                         * so a real, minutes-long play session doesn't drop
-                         * to sparse 1-in-200 sampling before the player
-                         * actually triggers the bug. */
-                        static int d157burst_n = 0;
-                        const bool burst = num_dls <= s_d157BurstUntil && d157burst_n < 60000;
-                        if (burst) d157burst_n++;
-                        /* 2026-09-26: continuous logging cut to a 2000-line baseline;
-                         * the 20000 + 1-in-50 tail was a big share of the
-                         * live-play slowdown. Full detail now comes from F12. */
-                        if (burst || d157b_n <= 2000) {
-                            sysLogPrintf(LOG_NOTE,
-                                "D157T%s: frame=%u cn=(%d,%d,%d,%d) shaded=(%d,%d,%d) LIGHTING=%s geom=%08x combine=%llx | "
-                                "tile0=%u tmem=%u fmt=%u siz=%u addr=%p size=%u line=%u | uv=(%d,%d)",
-                                burst ? "B" : "", num_dls,
-                                v->v.cn[0], v->v.cn[1], v->v.cn[2], v->v.cn[3],
-                                (int)d->color.r, (int)d->color.g, (int)d->color.b,
-                                (rsp.geometry_mode & G_LIGHTING) ? "ON" : "off", rsp.geometry_mode,
-                                (unsigned long long)rdp.combine_mode,
-                                tile0, rdp.texture_tile[tile0].tmem,
-                                rdp.texture_tile[tile0].fmt, rdp.texture_tile[tile0].siz,
-                                (const void*)lt0.addr, lt0.size_bytes, lt0.line_size_bytes,
-                                (int)U, (int)V);
-                        }
-                    }
-                }
-            }
-        }
-#endif
-
         d->u = U;
         d->v = V;
 
@@ -2087,14 +2268,27 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
             }
 
             float winv = 1.0f / w;
-            if (winv < 0.0f) {
+            /* D540: the RSP divides by a negative w as-is: a vertex behind
+             * the camera gets z/w at/beyond the far end of the range (full
+             * fog), continuously. The old override (winv < 0 -> +32767)
+             * flipped the sign, so a corner crossing behind the player
+             * jumped no-fog <-> full-fog and big ground triangles popped
+             * one at a time (Deck playtest). */
+            if (!gfx_fog_vertex && winv < 0.0f) {
                 winv = std::numeric_limits<int16_t>::max();
             }
 
             float fog_z = z * winv * rsp.fog_mul + rsp.fog_offset;
             d->fog = clampf(fog_z, 0.f, 255.f);
+            /* D543 default: the per-vertex RSP value (as the N64; D543's CPU
+             * near clip lerps it for clip-created vertices like the RSP).
+             * GE_FOGPIXEL=1 (D540): the GPU gets fog * w (z*mul + w*off,
+             * linear in clip space) and the shader divides by w -- exact
+             * per-pixel fog. The D503 full-fog snap is opt-in (GE_FOGSNAP=1). */
+            d->fog_n = gfx_fog_vertex ? d->fog : d->z * rsp.fog_mul + d->w * rsp.fog_offset;
         } else {
             d->fog = rdp.fog_color.a;
+            d->fog_n = gfx_fog_vertex ? d->fog : d->fog * d->w;
         }
 
         d->color.a = vcn->a; // can be required for SHADE_ALPHA even if fog is enabled
@@ -2113,7 +2307,12 @@ static void gfx_sp_vertex(size_t n_vertices, size_t dest_index, const Vtx* verti
      * Remove once D75 is root-caused. */
     {
         static int d75v_lo = -1, d75v_hi = 0;
-        if (d75v_lo < 0) {
+        /* D473: a separate init flag. d75v_lo == -1 also means "disabled", so
+         * the old `if (d75v_lo < 0)` re-ran getenv on EVERY G_VTX when the env
+         * was unset -- ~55% of render-thread CPU (D302/D250 class). */
+        static bool d75v_init = false;
+        if (!d75v_init) {
+            d75v_init = true;
             const char* v = getenv("GE_D75V");
             d75v_lo = 1; d75v_hi = 0x7fffffff;
             if (!v || sscanf(v, "%d-%d", &d75v_lo, &d75v_hi) != 2)
@@ -2224,7 +2423,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
     if (vtx1_idx < MAX_VERTICES && vtx2_idx < MAX_VERTICES && vtx3_idx < MAX_VERTICES) {
         uint32_t d75d_mx = vtx1_idx > vtx2_idx ? (vtx1_idx > vtx3_idx ? vtx1_idx : vtx3_idx)
                                                : (vtx2_idx > vtx3_idx ? vtx2_idx : vtx3_idx);
-        d75d_note_tri(videoGetFrameCount(), d75d_mx);
+        if (tri_dbg()) d75d_note_tri(videoGetFrameCount(), d75d_mx);
     }
     struct LoadedVertex* v1 = &rsp.loaded_vertices[vtx1_idx];
     struct LoadedVertex* v2 = &rsp.loaded_vertices[vtx2_idx];
@@ -2253,51 +2452,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         bool any_behind_camera = (v1->w < 0) || (v2->w < 0) || (v3->w < 0);
         if (!any_behind_camera && (v1->clip_rej & v2->clip_rej & v3->clip_rej)) {
             // The whole triangle lies outside the visible area
-            d75d_note_rej(videoGetFrameCount(), 0);
+            if (tri_dbg()) d75d_note_rej(videoGetFrameCount(), 0);
             return;
-        }
-
-        /* D288 diag (M-152, frame-gated M-155, any_behind-restricted
-         * M-155-follow-up): the silo intro's screen-filling stray triangle
-         * (bounded to level_20 frames ~562-741) isn't explained by this
-         * function's existing D233/D106 guards on static review -- log any
-         * triangle whose clip-space NDC bbox covers an unreasonable chunk
-         * of the screen, together with each vertex's w and the render-mode
-         * word (oml), to catch it at draw time. M-155: the first ungated
-         * run fired 116k times in ~1500-2000 frames -- bbox_frac >0.15
-         * alone is a common occurrence for ordinary near-camera geometry,
-         * not a distinguishing signature. Gated to the reported frame
-         * window (num_dls, the pattern the since-removed GE_D236RM
-         * probe also used) and the
-         * threshold raised well above the ~0.15 "normal" baseline M-155
-         * established, so a hit here is actually rare. M-155 follow-up:
-         * for any_behind_camera==1 triangles the x/w perspective divide is
-         * meaningless (w near zero or negative -> arbitrarily large
-         * "bbox_frac" for perfectly ordinary geometry), which is exactly
-         * why the code above defers those to GL's own clipper -- so the
-         * probe now skips them entirely; a hit here has comfortably
-         * positive w's and is a genuine large-NDC-bbox triangle. oml is
-         * logged so the culprit's material/model can be identified against
-         * the level's asset tables (the flat RGB(83,62,44) color grep
-         * found nothing in the .c sources -- binary model blobs). Remove
-         * once D288 is root-caused. */
-        static int ge_d288 = -1;
-        if (ge_d288 < 0) ge_d288 = getenv("GE_D288") != NULL;
-        if (ge_d288 && !any_behind_camera) {
-            extern uint32_t num_dls;
-            if (num_dls >= 550 && num_dls <= 755) {
-                float minx = std::fmin(std::fmin(v1->x / v1->w, v2->x / v2->w), v3->x / v3->w);
-                float maxx = std::fmax(std::fmax(v1->x / v1->w, v2->x / v2->w), v3->x / v3->w);
-                float miny = std::fmin(std::fmin(v1->y / v1->w, v2->y / v2->w), v3->y / v3->w);
-                float maxy = std::fmax(std::fmax(v1->y / v1->w, v2->y / v2->w), v3->y / v3->w);
-                float bbox_frac = (maxx - minx) * (maxy - miny) / 4.0f; // NDC quad is [-1,1]^2
-                if (!std::isfinite(bbox_frac) || bbox_frac > 0.5f) {
-                    fprintf(stderr, "D288: dl=%u tri w=(%.6f,%.6f,%.6f) bbox_frac=%.3f oml=0x%08x color=(%d,%d,%d)\n",
-                            num_dls, v1->w, v2->w, v3->w, bbox_frac,
-                            (unsigned)rdp.other_mode_l,
-                            v1->color.r, v1->color.g, v1->color.b);
-                }
-            }
         }
     }
 
@@ -2322,19 +2478,19 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         switch (rsp.geometry_mode & G_CULL_BOTH) {
             case G_CULL_FRONT:
                 if (cross <= 0) {
-                    d75d_note_rej(videoGetFrameCount(), 1);
+                    if (tri_dbg()) d75d_note_rej(videoGetFrameCount(), 1);
                     return;
                 }
                 break;
             case G_CULL_BACK:
                 if (cross >= 0) {
-                    d75d_note_rej(videoGetFrameCount(), 1);
+                    if (tri_dbg()) d75d_note_rej(videoGetFrameCount(), 1);
                     return;
                 }
                 break;
             case G_CULL_BOTH:
                 // Why is this even an option?
-                d75d_note_rej(videoGetFrameCount(), 1);
+                if (tri_dbg()) d75d_note_rej(videoGetFrameCount(), 1);
                 return;
         }
     }
@@ -2483,10 +2639,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
              * (32, not 32/2 = 16, which doubled the S frequency) and height =
              * the mask period (32, not 1400/32 = 43 rows of mip chain). */
             {
-                static int d245_oldtex2 = -1;
-                if (d245_oldtex2 < 0) d245_oldtex2 = getenv("GE_D245_OLDTEX") != NULL;
                 const auto& ltx = rdp.loaded_texture[rdp.texture_tile[tile].tmem];
-                if (!d245_oldtex2 && rdp.texture_tile[tile].fmt == G_IM_FMT_RGBA &&
+                if (rdp.texture_tile[tile].fmt == G_IM_FMT_RGBA &&
                     rdp.texture_tile[tile].siz == G_IM_SIZ_16b && ltx.src_fmt == G_IM_FMT_CI) {
                     const uint8_t mkt = rdp.texture_tile[tile].maskt;
                     tex_width[i] = rdp.texture_tile[tile].line_size_bytes;
@@ -2712,52 +2866,113 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
 
     struct GfxClipParameters clip_parameters = gfx_rapi->get_clip_parameters();
 
-    d75d_note_emit(videoGetFrameCount(), v_arr); // survived all rejection gates -> reaches GL
-    d303_note_emit(videoGetFrameCount(), v_arr); // TEMP D303
-    zf_note_emit(videoGetFrameCount(), v_arr);   // TEMP D306/D308
-    /* TEMP D306 (M-201): depth-state census of emitted triangles in a frame
-     * window, GE_D306C="f0 f1". One line per tri: depth flags as sent to GL,
-     * geometry_mode, other_mode_l, tile-0 texture, NDC centroid, z/w range and
-     * min w (<=0 = crosses the eye plane). Cap 60000. */
-    {
-        static int d306c = -1; static uint32_t d306f0 = 0, d306f1 = 0, d306n = 0; static float d306wmax = 1e30f;
-        if (d306c < 0) {
-            const char* e = getenv("GE_D306C");
-            d306c = (e && sscanf(e, "%u %u %f", &d306f0, &d306f1, &d306wmax) >= 2) ? 1 : 0;
+    if (tri_dbg()) {   /* D474: one cached gate for the debug hooks */
+        d75d_note_emit(videoGetFrameCount(), v_arr); // survived all rejection gates -> reaches GL
+        d303_note_emit(videoGetFrameCount(), v_arr); // TEMP D303
+        zf_note_emit(videoGetFrameCount(), v_arr);   // TEMP D306/D308
+        d526_note_emit(videoGetFrameCount(), v_arr, use_alpha ? 1 : 0, use_modulate ? 1 : 0); // D526 census
+        d75d_note_emit_z(videoGetFrameCount(), v_arr, (used_textures[0] || used_textures[1]) ? 1 : 0, comb->used_textures[0] ? 1 : 0);
+    }
+    /* D543: RSP-style near-plane clipping on the CPU. The GPU clips the
+     * triangle itself against the near plane, but it interpolates the
+     * noperspective shade colour and the fog value in screen space (D548
+     * bands, D540 light/dark cycling, D543 bright lit area at Bond's feet),
+     * so a big ground triangle that crosses the camera plane extrapolates
+     * them. The RSP instead clips in clip space and lerps every vertex
+     * attribute linearly there (t = dA / (dA - dB)); do the same, so GL
+     * receives only fully-in-front triangles and never clips. Skipped for
+     * rects, G_NO_CLIPPING_EXT, and GE_NEARCLIP=0 (A/B). Fog on a vertex
+     * the clip creates is re-derived from its own z/w (as gfx_sp_vertex
+     * does), like the RSP, whose clipper runs new vertices through the same
+     * vertex-finish code: at the near plane that is a constant, so the haze
+     * at the player's feet stays static (D553; maintainer compared against
+     * LLE mupen64plus, cxd4 + angrylion). GE_NEARCLIPFOG=lerp restores the
+     * old interpolation from the parents (whose behind-the-eye corner flips
+     * between 0 and 255 fog as w crosses 0 -> the dark/bright popping) for
+     * A/B. The new vertices live on the stack: rsp.loaded_vertices is
+     * game-visible. */
+    static int nearclip_on = -1, nearclip_fog_recompute = -1;
+    if (nearclip_on < 0) {
+        const char* e = getenv("GE_NEARCLIP");
+        nearclip_on = !(e && e[0] == '0');
+        const char* f = getenv("GE_NEARCLIPFOG");
+        nearclip_fog_recompute = (f && strcmp(f, "lerp") == 0) ? 0 : 1;   /* D553: recompute by default */
+    }
+    struct LoadedVertex* emit_v[6] = { v1, v2, v3, NULL, NULL, NULL };
+    int n_out_tris = 1;
+    struct LoadedVertex nc_vtx[2];
+    if (nearclip_on && !is_rect && (rsp.extra_geometry_mode & G_NO_CLIPPING_EXT) == 0) {
+        const float NEAR_EPS = 1e-4f;
+        float d[3];
+        int n_in = 0;
+        for (int i = 0; i < 3; i++) {
+            d[i] = v_arr[i]->z + v_arr[i]->w - NEAR_EPS;
+            if (d[i] > 0.0f) n_in++;
         }
-        const uint32_t fc = videoGetFrameCount();
-        if (d306c && fc >= d306f0 && fc <= d306f1 && d306n < 60000) {
-            float cx = 0, cy = 0, zmin = 1e9f, zmax = -1e9f, wmin = 1e9f;
+        if (n_in == 0) {
+            return; // entirely behind the near plane
+        }
+        if (n_in < 3) {
+            struct LoadedVertex* poly[4];
+            int n_poly = 0, n_new = 0;
             for (int i = 0; i < 3; i++) {
-                const float w = v_arr[i]->w;
-                if (w < wmin) wmin = w;
-                if (w > 0.f) {
-                    const float zn = v_arr[i]->z / w;
-                    cx += v_arr[i]->x / w; cy += v_arr[i]->y / w;
-                    if (zn < zmin) zmin = zn;
-                    if (zn > zmax) zmax = zn;
+                int j = (i + 1) % 3;
+                struct LoadedVertex* a = v_arr[i];
+                struct LoadedVertex* b = v_arr[j];
+                if (d[i] > 0.0f) poly[n_poly++] = a;
+                if ((d[i] > 0.0f) != (d[j] > 0.0f)) {
+                    float t = d[i] / (d[i] - d[j]);
+                    struct LoadedVertex* o = &nc_vtx[n_new++];
+                    o->x = a->x + (b->x - a->x) * t;
+                    o->y = a->y + (b->y - a->y) * t;
+                    o->z = a->z + (b->z - a->z) * t;
+                    o->w = a->w + (b->w - a->w) * t;
+                    o->u = a->u + (b->u - a->u) * t;
+                    o->v = a->v + (b->v - a->v) * t;
+                    o->color.r = (uint8_t)clampf(floorf(a->color.r + (b->color.r - a->color.r) * t + 0.5f), 0.f, 255.f);
+                    o->color.g = (uint8_t)clampf(floorf(a->color.g + (b->color.g - a->color.g) * t + 0.5f), 0.f, 255.f);
+                    o->color.b = (uint8_t)clampf(floorf(a->color.b + (b->color.b - a->color.b) * t + 0.5f), 0.f, 255.f);
+                    o->color.a = (uint8_t)clampf(floorf(a->color.a + (b->color.a - a->color.a) * t + 0.5f), 0.f, 255.f);
+                    o->clip_rej = 0;
+                    o->fog_n = a->fog_n + (b->fog_n - a->fog_n) * t;
+                    if (nearclip_fog_recompute) {
+                        if (rsp.geometry_mode & G_FOG) {
+                            float fw = o->w;
+                            if (fabsf(fw) < 0.001f) fw = 0.001f;
+                            float winv = 1.0f / fw;
+                            if (!gfx_fog_vertex && winv < 0.0f) winv = std::numeric_limits<int16_t>::max();
+                            o->fog = clampf(o->z * winv * rsp.fog_mul + rsp.fog_offset, 0.f, 255.f);
+                        } else {
+                            o->fog = a->fog;
+                        }
+                    } else {
+                        o->fog = (uint8_t)clampf(floorf(a->fog + ((float)b->fog - (float)a->fog) * t + 0.5f), 0.f, 255.f);
+                    }
+                    if (gfx_fog_vertex) o->fog_n = o->fog; // as gfx_sp_vertex
+                    poly[n_poly++] = o;
                 }
             }
-            cx /= 3.f; cy /= 3.f;
-            if (wmin > d306wmax) goto d306c_skip; /* optional 3rd arg: near geometry only */
-            {
-            const void* t0 = rendering_state.textures[0] ? (const void*)rendering_state.textures[0]->first.texture_addr : nullptr;
-            d306n++;
-            fprintf(stderr, "D306C f=%u dm=%02x geom=%08x oml=%08x tex0=%p c=(%.3f,%.3f) z=[%.5f,%.5f] wmin=%.2f\n",
-                    fc, rendering_state.depth_mode, rsp.geometry_mode, rdp.other_mode_l, t0, cx, cy, zmin, zmax, wmin);
+            // n_poly is 3 or 4 here (one or two vertices inside)
+            emit_v[0] = poly[0]; emit_v[1] = poly[1]; emit_v[2] = poly[2];
+            if (n_poly == 4) {
+                emit_v[3] = poly[0]; emit_v[4] = poly[2]; emit_v[5] = poly[3];
+                n_out_tris = 2;
             }
         }
-        d306c_skip:;
     }
-    d75d_note_emit_z(videoGetFrameCount(), v_arr, (used_textures[0] || used_textures[1]) ? 1 : 0, comb->used_textures[0] ? 1 : 0);
-    for (int i = 0; i < 3; i++) {
-        float z = v_arr[i]->z, w = v_arr[i]->w;
+    const int n_emit_verts = n_out_tris * 3;
+    if (buf_vbo_num_tris + n_out_tris > MAX_BUFFERED) {
+        gfx_flush(); // buf_vbo holds MAX_BUFFERED triangles; make room for 1-2
+    }
+    for (int i = 0; i < n_emit_verts; i++) {
+        struct LoadedVertex* vi = emit_v[i];
+        float z = vi->z, w = vi->w;
         if (clip_parameters.z_is_from_0_to_1) {
             z = (z + w) / 2.0f;
         }
 
-        buf_vbo[buf_vbo_len++] = v_arr[i]->x;
-        buf_vbo[buf_vbo_len++] = clip_parameters.invert_y ? -v_arr[i]->y : v_arr[i]->y;
+        buf_vbo[buf_vbo_len++] = vi->x;
+        buf_vbo[buf_vbo_len++] = clip_parameters.invert_y ? -vi->y : vi->y;
         buf_vbo[buf_vbo_len++] = z;
         buf_vbo[buf_vbo_len++] = w;
 
@@ -2769,8 +2984,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             // TODO: fix this; for now just ignore smaller mips
             const uint32_t tile = gfx_lod_tile_offset(t);
 
-            float u = v_arr[i]->u / 32.0f;
-            float v = v_arr[i]->v / 32.0f;
+            float u = vi->u / 32.0f;
+            float v = vi->v / 32.0f;
 
             int shifts = rdp.texture_tile[rdp.first_tile_index + tile].shifts;
             int shiftt = rdp.texture_tile[rdp.first_tile_index + tile].shiftt;
@@ -2832,23 +3047,6 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             buf_vbo[buf_vbo_len++] = u / tex_width[t];
             buf_vbo[buf_vbo_len++] = v / tex_height[t];
 
-#ifdef PORT
-            {
-                static int ge_d116 = -1;
-                if (ge_d116 < 0) ge_d116 = getenv("GE_D116") ? 1 : 0;
-                if (ge_d116 && is_rect && t == 0 && tex_width[t] > 0 && tex_width[t] <= 32) {
-                    fprintf(stderr,
-                        "[D116/vbo] rect vtx%d  x=%.4f y=%.4f  u=%.4f v=%.4f  "
-                        "(raw v->u=%.1f  texw=%.0f texw2=%u  tile.uls=%d lrs=%d cms=%d)\n",
-                        i, v_arr[i]->x, v_arr[i]->y, u / tex_width[t], v / tex_height[t],
-                        (double)v_arr[i]->u, (double)tex_width[t], (unsigned)tex_width2[i],
-                        (int)rdp.texture_tile[rdp.first_tile_index + tile].uls,
-                        (int)rdp.texture_tile[rdp.first_tile_index + tile].lrs,
-                        (int)rdp.texture_tile[rdp.first_tile_index + tile].cms);
-                }
-            }
-#endif
-
             bool clampS = tm & (1 << 2 * t);
             bool clampT = tm & (1 << (2 * t + 1));
 
@@ -2864,7 +3062,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
             buf_vbo[buf_vbo_len++] = rdp.fog_color.r / 255.0f;
             buf_vbo[buf_vbo_len++] = rdp.fog_color.g / 255.0f;
             buf_vbo[buf_vbo_len++] = rdp.fog_color.b / 255.0f;
-            buf_vbo[buf_vbo_len++] = v_arr[i]->fog / 255.0f; // fog factor
+            buf_vbo[buf_vbo_len++] = vi->fog_n / 255.0f; // D540: see LoadedVertex.fog_n
         }
 
         if (use_grayscale) {
@@ -2885,10 +3083,10 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
                         color = &rdp.prim_color;
                         break;
                     case G_CCMUX_SHADE:
-                        color = &v_arr[i]->color;
+                        color = &vi->color;
                         break;
                     case G_CCMUX_SHADE_ALPHA:
-                        tmp.r = tmp.g = tmp.b = v_arr[i]->color.a;
+                        tmp.r = tmp.g = tmp.b = vi->color.a;
                         color = &tmp;
                         break;
                     case G_CCMUX_ENVIRONMENT:
@@ -2941,7 +3139,8 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         }
     }
 
-    if (++buf_vbo_num_tris == MAX_BUFFERED) {
+    buf_vbo_num_tris += n_out_tris;
+    if (buf_vbo_num_tris >= MAX_BUFFERED) {
         gfx_flush();
     }
 }
@@ -2989,7 +3188,7 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
 static inline void gfx_update_aspect_mode(void) {
     const uint32_t side = rsp.aspect_mode & G_ASPECT_CENTER_EXT;
 
-    rsp.aspect_scale = rsp.aspect_mode ? gfx_current_native_aspect : gfx_current_window_dimensions.aspect_ratio;
+    rsp.aspect_scale = rsp.aspect_mode ? gfx_current_native_aspect : gfx_current_dimensions.aspect_ratio; /* D447: == window aspect unless the output rect is active */
 
     if (side == G_ASPECT_LEFT_EXT) {
         rsp.aspect_ofs = 1.f - gfx_current_dimensions.aspect_ratio / gfx_current_native_aspect;
@@ -3014,14 +3213,15 @@ static void gfx_sp_extra_geometry_mode(uint32_t clear, uint32_t set) {
     gfx_update_aspect_mode();
 }
 
-static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_aspect = false) {
+static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_aspect = false, bool window_space = false) {
+    window_space = window_space || g_overlay_window_space;   /* D510 */
     // HACK: assume all target framebuffers have the same aspect
     // Use floor/ceil to ensure scissor fully contains the logical region
     // and prevents sub-pixel gaps at viewport edges
     // g_gpSafeTop already plays the exact role SCREEN_HEIGHT plays below
     // (both are the bottom-up Y value of the mapped region's TOP edge) --
     // this reduces to the untouched original formula when crop is off.
-    const bool crop = g_safe_area_crop_enabled && g_gpSafeHeight > 0.0f;
+    const bool crop = g_safe_area_crop_enabled && !g_split_screen && !window_space && g_gpSafeHeight > 0.0f;
     const float safeTop = crop ? g_gpSafeTop : (float)SCREEN_HEIGHT;
     const float safeHeight = crop ? g_gpSafeHeight : (float)SCREEN_HEIGHT;
     const float ratioY = gfx_current_dimensions.height / safeHeight;
@@ -3039,8 +3239,8 @@ static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_as
     // TV-overscan margin) and fold it into the same toggle: trim the same
     // fixed 1-unit margin from both edges rather than trying to force
     // content to reach a boundary it may never actually be drawn to.
-    const float safeLeft = g_safe_area_crop_enabled ? 1.0f : 0.0f;
-    const float safeWidth = g_safe_area_crop_enabled ? (float)SCREEN_WIDTH - 2.0f : (float)SCREEN_WIDTH;
+    const float safeLeft = (g_safe_area_crop_enabled && !g_split_screen && !window_space) ? 1.0f : 0.0f;
+    const float safeWidth = (g_safe_area_crop_enabled && !g_split_screen && !window_space) ? (float)SCREEN_WIDTH - 2.0f : (float)SCREEN_WIDTH;
     const float ratioX = gfx_current_dimensions.width / safeWidth;
 
     float x1 = (area->x - safeLeft) * ratioX;
@@ -3085,7 +3285,7 @@ static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_as
  * and gfx_current_game_window_viewport's documented convention. */
 extern "C" void gfx_get_ui_screen_rect(int32_t *outX, int32_t *outY, int32_t *outW, int32_t *outH) {
     struct XYWidthHeight area = { 0, (int16_t)SCREEN_HEIGHT, (uint32_t)SCREEN_WIDTH, (uint32_t)SCREEN_HEIGHT };
-    gfx_adjust_viewport_or_scissor(&area, false);
+    gfx_adjust_viewport_or_scissor(&area, false, true);   /* D510: the overlay is window-space */
     *outX = area.x;
     *outY = area.y;
     *outW = (int32_t)area.width;
@@ -3107,9 +3307,19 @@ static void gfx_calc_and_set_viewport(const Vp_t* viewport) {
     /* Cache the raw (pre window-scale) viewport bounds for the safe-area
      * crop above -- guard against a degenerate/zero-height viewport so a
      * later divide can't ever see one. */
-    if (height > 1.0f) {
+    if (height >= 0.9f * (float)SCREEN_HEIGHT) {
         g_gpSafeTop = y;
         g_gpSafeHeight = height;
+    } else if (height > 1.0f && g_gpSafeHeight <= 0.0f) {
+        /* D447: Wide/Cinema (and split-screen) viewports are the player's own
+         * letterbox, never the overscan margin: don't let them define the crop
+         * band, or the crop would stretch them to fill the window. If no full
+         * viewport has been seen yet, seed the standard centred 220-line band
+         * (VIEWPORT_HEIGHT_DEFAULT_NTSC) around this viewport's centre. */
+        const float centre = y - height * 0.5f;
+        const float bandH = 220.0f * (float)SCREEN_HEIGHT / 240.0f;
+        g_gpSafeTop = centre + bandH * 0.5f;
+        g_gpSafeHeight = bandH;
     }
 
     gfx_adjust_viewport_or_scissor(&rdp.viewport);
@@ -3157,7 +3367,7 @@ static void gfx_sp_moveword(uint8_t index, uint16_t offset, uintptr_t data) {
         case G_MW_SEGMENT:
             // GE registers segment bases as OS_K0_TO_PHYSICAL(ptr); store the
             // live host pointer so seg_addr() resolves seg+offset correctly.
-            segmentPointers[(offset >> 2) & 0xff] = (data < 0x800000) ? (data + 0x80000000) : data;
+            segmentPointers[(offset >> 2) & 0xff] = (data < PORT_DRAM_SIZE) ? (data + PORT_DRAM_K0_BASE) : data;
             break;
     }
 }
@@ -3178,6 +3388,25 @@ static void gfx_dp_set_scissor(uint32_t mode, uint32_t ulx, uint32_t uly, uint32
     float y = lry / 4.0f;
     float width = (lrx - ulx) / 4.0f;
     float height = (lry - uly) / 4.0f;
+
+    // D493b: with the overscan crop off (the Original N64 preset turns it
+    // off) D246's 1-unit trim is off too, and its gap at the left/right
+    // edges showed live scene/background pixels. Keep the geometry unscaled
+    // and scissor those two logical columns out instead, so they show the
+    // frame clear (black) like the rest of the overscan border.
+    if (!g_safe_area_crop_enabled && !g_split_screen && !g_overlay_window_space) {
+        const float edge = 1.0f;
+        if (x < edge) {
+            width -= edge - x;
+            x = edge;
+        }
+        if (x + width > (float)SCREEN_WIDTH - edge) {
+            width = (float)SCREEN_WIDTH - edge - x;
+        }
+        if (width < 0.0f) {
+            width = 0.0f;
+        }
+    }
 
     rdp.scissor.x = x;
     rdp.scissor.y = y;
@@ -3219,29 +3448,44 @@ static void gfx_dp_set_tile(uint8_t fmt, uint32_t siz, uint32_t line, uint32_t t
         siz = G_IM_SIZ_8b;
     }
 
-    rdp.texture_tile[tile].palette = palette; // palette should set upper 4 bits of color index in 4b mode
-    rdp.texture_tile[tile].fmt = fmt;
-    rdp.texture_tile[tile].siz = siz;
-    rdp.texture_tile[tile].cms = cms;
-    rdp.texture_tile[tile].cmt = cmt;
-    rdp.texture_tile[tile].masks = masks; /* RC3 */
-    rdp.texture_tile[tile].maskt = maskt; /* RC3 */
-    rdp.texture_tile[tile].shifts = shifts;
-    rdp.texture_tile[tile].shiftt = shiftt;
-    rdp.texture_tile[tile].line_size_bytes = line * 8;
-    rdp.texture_tile[tile].tmem = tmem;
+    /* D474 (low-end perf): a set_tile that changes nothing must not mark the
+     * textures dirty -- that forces a texture-cache lookup AND a gfx_flush()
+     * (batch break / extra draw call) on the next triangle. Loads, TLUTs and
+     * G_TEXTURE still dirty the textures through their own paths. */
+    auto& tt = rdp.texture_tile[tile];
+    const bool same = tt.palette == palette && tt.fmt == fmt && tt.siz == siz &&
+                      tt.cms == cms && tt.cmt == cmt && tt.masks == masks && tt.maskt == maskt &&
+                      tt.shifts == shifts && tt.shiftt == shiftt &&
+                      tt.line_size_bytes == line * 8 && tt.tmem == tmem;
+    tt.palette = palette; // palette should set upper 4 bits of color index in 4b mode
+    tt.fmt = fmt;
+    tt.siz = siz;
+    tt.cms = cms;
+    tt.cmt = cmt;
+    tt.masks = masks; /* RC3 */
+    tt.maskt = maskt; /* RC3 */
+    tt.shifts = shifts;
+    tt.shiftt = shiftt;
+    tt.line_size_bytes = line * 8;
+    tt.tmem = tmem;
 
-    rdp.textures_changed[0] = true;
-    rdp.textures_changed[1] = true;
+    if (!same) {
+        rdp.textures_changed[0] = true;
+        rdp.textures_changed[1] = true;
+    }
 }
 
 static void gfx_dp_set_tile_size(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
-    rdp.texture_tile[tile].uls = uls;
-    rdp.texture_tile[tile].ult = ult;
-    rdp.texture_tile[tile].lrs = lrs;
-    rdp.texture_tile[tile].lrt = lrt;
-    rdp.texture_tile[tile].width = (lrs - uls + 4) / 4;
-    rdp.texture_tile[tile].height = (lrt - ult + 4) / 4;
+    auto& tt = rdp.texture_tile[tile];
+    if (tt.uls == uls && tt.ult == ult && tt.lrs == lrs && tt.lrt == lrt) {
+        return;   /* D474: unchanged tile size -- no re-import, no batch break */
+    }
+    tt.uls = uls;
+    tt.ult = ult;
+    tt.lrs = lrs;
+    tt.lrt = lrt;
+    tt.width = (lrs - uls + 4) / 4;
+    tt.height = (lrt - ult + 4) / 4;
     rdp.textures_changed[0] = true;
     rdp.textures_changed[1] = true;
 }
@@ -3324,6 +3568,7 @@ static void gfx_dp_load_block(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t
     loaded_texture.raw_tex_metadata = rdp.texture_to_load.raw_tex_metadata;
     loaded_texture.addr = rdp.texture_to_load.addr;
     loaded_texture.src_fmt = rdp.texture_to_load.fmt; /* D229 */
+    loaded_texture.dxt0 = (dxt == 0);                 /* D75 */
 
     rdp.textures_changed[0] = rdp.textures_changed[1] = true;
 }
@@ -3365,6 +3610,7 @@ static void gfx_dp_load_tile(uint8_t tile, uint32_t uls, uint32_t ult, uint32_t 
     loaded_texture.raw_tex_metadata = rdp.texture_to_load.raw_tex_metadata;
     loaded_texture.addr = rdp.texture_to_load.addr + start_offset_bytes;
     loaded_texture.src_fmt = rdp.texture_to_load.fmt; /* D229 */
+    loaded_texture.dxt0 = false;                      /* D75 */
 
     rdp.texture_tile[tile].uls = uls;
     rdp.texture_tile[tile].ult = ult;
@@ -3545,7 +3791,31 @@ static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lr
 static float s_hud_scale = 1.0f;
 static int32_t s_hud_ax = 0, s_hud_ay = 0;   /* anchor, 10.2 fixed (px*4) */
 
+/* D510: uniform scale about the origin for the port overlay DL, which lays
+ * itself out on a canonical 320-wide canvas whatever the game's current VI
+ * canvas is (440x330 on the front end). Applied after the HUD span scale. */
+static float s_overlay_scale = 1.0f;
+extern "C" void gfx_set_overlay_scale(float s) {
+    s_overlay_scale = (s > 0.0f) ? s : 1.0f;
+}
+
 static inline void gfx_hud_scale_rect(int32_t& ulx, int32_t& uly, int32_t& lrx, int32_t& lry) {
+    if (s_overlay_scale != 1.0f && g_overlay_window_space) {
+        const bool hud = (s_hud_scale != 1.0f);
+        if (hud) {
+            ulx = s_hud_ax + (int32_t)lroundf((float)(ulx - s_hud_ax) * s_hud_scale);
+            lrx = s_hud_ax + (int32_t)lroundf((float)(lrx - s_hud_ax) * s_hud_scale);
+            uly = s_hud_ay + (int32_t)lroundf((float)(uly - s_hud_ay) * s_hud_scale);
+            lry = s_hud_ay + (int32_t)lroundf((float)(lry - s_hud_ay) * s_hud_scale);
+        }
+        ulx = (int32_t)lroundf((float)ulx * s_overlay_scale);
+        lrx = (int32_t)lroundf((float)lrx * s_overlay_scale);
+        uly = (int32_t)lroundf((float)uly * s_overlay_scale);
+        lry = (int32_t)lroundf((float)lry * s_overlay_scale);
+        if (ulx < 0) ulx = 0;
+        if (uly < 0) uly = 0;
+        return;
+    }
     if (s_hud_scale == 1.0f) {
         return;
     }
@@ -3562,10 +3832,11 @@ static inline void gfx_hud_scale_rect(int32_t& ulx, int32_t& uly, int32_t& lrx, 
 
 static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry, uint8_t tile, int16_t uls,
                                      int16_t ult, int16_t dsdx, int16_t dtdy, bool flip) {
-    if (s_hud_scale != 1.0f) {   /* D226 */
+    const float ov = (g_overlay_window_space && s_overlay_scale != 1.0f) ? s_overlay_scale : 1.0f;   /* D510 */
+    if (s_hud_scale != 1.0f || ov != 1.0f) {   /* D226 */
         gfx_hud_scale_rect(ulx, uly, lrx, lry);
-        dsdx = (int16_t)lroundf((float)dsdx / s_hud_scale);
-        dtdy = (int16_t)lroundf((float)dtdy / s_hud_scale);
+        dsdx = (int16_t)lroundf((float)dsdx / (s_hud_scale * ov));
+        dtdy = (int16_t)lroundf((float)dtdy / (s_hud_scale * ov));
     }
     uint64_t saved_combine_mode = rdp.combine_mode;
     if ((rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE)) == G_CYC_COPY) {
@@ -3609,21 +3880,6 @@ static void gfx_dp_texture_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int3
         ll->v = ult;
         ur->u = uls;
         ur->v = lrt;
-    }
-
-    {
-        static int ge_d116 = -1;
-        if (ge_d116 < 0) ge_d116 = getenv("GE_D116") ? 1 : 0;
-        if (ge_d116) {
-            const auto& tt = rdp.texture_tile[tile];
-            fprintf(stderr,
-                "[D116/f3d] tile=%d flip=%d ul(%d,%d) lr(%d,%d) uls=%d ult=%d dsdx=%d dtdy=%d "
-                "-> lrs=%.2f lrt=%.2f ul.u=%.2f lr.u=%.2f | TILE siz=%d fmt=%d line_bytes=%d "
-                "uls=%d lrs=%d width=%d height=%d cms=%d\n",
-                tile, (int)flip, ulx, uly, lrx, lry, (int)uls, (int)ult, (int)dsdx, (int)dtdy,
-                lrs, lrt, ul->u, lr->u,
-                tt.siz, tt.fmt, tt.line_size_bytes, tt.uls, tt.lrs, tt.width, tt.height, tt.cms);
-        }
     }
 
     uint8_t saved_tile = rdp.first_tile_index;
@@ -3795,6 +4051,7 @@ static void gfx_sp_vertex_float(size_t n_vertices, size_t dest_index, const Port
         d->z = z;
         d->w = w;
         d->fog = rdp.fog_color.a;
+        d->fog_n = gfx_fog_vertex ? d->fog : d->fog * w;
     }
 }
 
@@ -3831,8 +4088,8 @@ static inline void *seg_addr(uintptr_t w1) {
     // GE passes OS_K0_TO_PHYSICAL(ptr) == ptr - 0x80000000 for RAM that lives
     // in the reserved N64-DRAM region (port/src/dram.c); map it back. The
     // region is 8 MB, so any offset below 0x800000 came from there.
-    if (w1 < 0x800000) {
-        return (void *)(w1 + 0x80000000);
+    if (w1 < PORT_DRAM_SIZE) {
+        return (void *)(w1 + PORT_DRAM_K0_BASE);
     }
     // D131: a GBI DL built by game code can reference a COMPILED symbol via
     // osVirtualToPhysical() (a u32-returning shim), which truncates the
@@ -3847,7 +4104,7 @@ static inline void *seg_addr(uintptr_t w1) {
     {
         static const uintptr_t mod_hi =
             ((uintptr_t)(void *)&segmentPointers[0]) & 0xffffffff00000000ULL;
-        if (mod_hi && w1 >= 0x40000000 && w1 < 0x70000000) {
+        if (mod_hi && w1 >= 0x40000000 && w1 < PORT_DRAM_V1_BASE) {   /* below the arena (portaddr.h) */
             return (void *)(mod_hi | w1);
         }
     }
@@ -3892,7 +4149,7 @@ static void gfx_run_dl(Gfx* cmd) {
                 break;
             case G_VTX:
                 gfx_sp_vertex(C0(0, 16) / sizeof(Vtx), C0(16, 4), (const Vtx*)seg_addr(cmd->words.w1));
-                d75d_note_vtx(videoGetFrameCount(), C0(0, 16) / sizeof(Vtx), C0(16, 4));
+                if (tri_dbg()) d75d_note_vtx(videoGetFrameCount(), C0(0, 16) / sizeof(Vtx), C0(16, 4));
                 break;
             case G_DL: {
                 if (C0(16, 1) == 0) {
@@ -4243,8 +4500,37 @@ extern "C" void gfx_start_frame(void) {
 
     gfx_current_dimensions = gfx_current_window_dimensions;
 
+    gfx_current_game_window_viewport.x = 0;
+    gfx_current_game_window_viewport.y = 0;
     gfx_current_game_window_viewport.width = gfx_current_dimensions.width;
     gfx_current_game_window_viewport.height = gfx_current_dimensions.height;
+    g_output_rect = { 0, 0, gfx_current_window_dimensions.width, gfx_current_window_dimensions.height };
+
+    if (g_output_aspect > 0.0f) {
+        /* D447: pillar/letterbox to the exact target aspect, centred, even
+         * sizes. dims == game viewport size, so different_size stays false and
+         * gfx_adjust_viewport_or_scissor's existing offset path places every
+         * canvas rect inside the rect. */
+        const uint32_t ww = gfx_current_window_dimensions.width;
+        const uint32_t wh = gfx_current_window_dimensions.height;
+        uint32_t rw = ww, rh = wh;
+        if ((float)ww / (float)wh > g_output_aspect) {
+            rw = (uint32_t)std::lround((float)wh * g_output_aspect);
+        } else {
+            rh = (uint32_t)std::lround((float)ww / g_output_aspect);
+        }
+        rw &= ~1u;
+        rh &= ~1u;
+        if (rw < 2) rw = 2;
+        if (rh < 2) rh = 2;
+        if (rw > ww) rw = ww;
+        if (rh > wh) rh = wh;
+        g_output_rect = { (int16_t)((ww - rw) / 2), (int16_t)((wh - rh) / 2), rw, rh };
+        gfx_current_dimensions.width = rw;
+        gfx_current_dimensions.height = rh;
+        gfx_current_dimensions.aspect_ratio = g_output_aspect;
+        gfx_current_game_window_viewport = g_output_rect;
+    }
 
     if (gfx_current_dimensions.height != gfx_prev_dimensions.height) {
         for (auto& fb : framebuffers) {
@@ -4256,8 +4542,8 @@ extern "C" void gfx_start_frame(void) {
                     gfx_adjust_width_height_for_scale(width, height);
                 } else {
                     // assume this is a fullscreen fb
-                    width = gfx_current_dimensions.width;
-                    height = gfx_current_dimensions.height;
+                    width = gfx_current_window_dimensions.width;
+                    height = gfx_current_window_dimensions.height;
                 }
                 if (width != fb.second.applied_width || height != fb.second.applied_height) {
                     gfx_rapi->update_framebuffer_parameters(fb.first, width, height, 1, true, true, true, true);
@@ -4300,16 +4586,6 @@ extern "C" void gfx_start_frame(void) {
 
 uint32_t num_dls = 0;
 
-/* D252 TEMP: see s_d157BurstUntil. No-op unless GE_D157 is set. */
-extern "C" void gfxD157Burst(void) {
-    static int on = -1;
-    if (on < 0) on = getenv("GE_D157") != NULL;
-    if (!on) return;
-    s_d157BurstUntil = num_dls + 90;
-    sysLogPrintf(LOG_NOTE, "D157 burst: F12 at frame=%u, full logging to frame=%u",
-                 num_dls, (uint32_t)s_d157BurstUntil);
-}
-
 /* F10 port-layer options overlay (port/src/optionsoverlay.c). Returns a
  * self-contained 2D display list to draw on top of the game's frame, or NULL
  * when the overlay is closed -- in which case nothing is appended and the
@@ -4328,6 +4604,8 @@ static int gfx_perfstat_on(void) {
 static double s_perf_dl = 0, s_perf_run = 0, s_perf_present = 0, s_perf_interval = 0;
 static double s_perf_pre = 0, s_perf_post = 0, s_perf_swap = 0;
 static uint64_t s_perf_frames = 0, s_perf_last_start = 0;
+static double s_perf_maxiv = 0, s_perf_maxiv_dl = 0, s_perf_maxiv_run = 0;
+static uint64_t s_perf_maxiv_frame = 0, s_perf_over20 = 0, s_perf_over33 = 0;
 
 extern "C" void gfx_run(Gfx* commands) {
     s_hud_scale = 1.0f;   /* D226: never carry a HUD scale across frames */
@@ -4341,7 +4619,16 @@ extern "C" void gfx_run(Gfx* commands) {
         dropped_frame = true;
         return;
     }
+    if (g_aspect_settle > 0) {   /* D509: hold the old image, see gfx_set_output_aspect */
+        --g_aspect_settle;
+        dropped_frame = true;
+        return;
+    }
     dropped_frame = false;
+
+    if (s_shader_warm_pending) {
+        gfx_shader_prewarm();   /* D480 */
+    }
 
     gfx_rapi->update_framebuffer_parameters(0, gfx_current_window_dimensions.width,
                                             gfx_current_window_dimensions.height, 1, false, true, true,
@@ -4358,7 +4645,10 @@ extern "C" void gfx_run(Gfx* commands) {
     {
         Gfx* overlay = optionsOverlayEmit();
         if (overlay != nullptr) {
+            g_overlay_window_space = true;   /* D510 */
             gfx_run_dl(overlay);
+            g_overlay_window_space = false;
+            s_overlay_scale = 1.0f;
         }
     }
     gfx_flush();
@@ -4395,7 +4685,20 @@ extern "C" void gfx_run(Gfx* commands) {
         const uint64_t t2 = gfx_perf_now_ns();
         s_perf_dl += (double)(perf_t1 - perf_tpre) / f;
         s_perf_run += (double)(t2 - perf_t0) / f;
-        if (s_perf_last_start) s_perf_interval += (double)(perf_t0 - s_perf_last_start) / f;
+        if (s_perf_last_start) {
+            const double iv = (double)(perf_t0 - s_perf_last_start) / f;
+            s_perf_interval += iv;
+            /* Spike stats (hitches hide in 300-frame averages): the worst
+             * frame's interval and its own dl/run, plus counts over 20/33 ms. */
+            if (iv > s_perf_maxiv) {
+                s_perf_maxiv = iv;
+                s_perf_maxiv_dl = (double)(perf_t1 - perf_tpre) / f;
+                s_perf_maxiv_run = (double)(t2 - perf_t0) / f;
+                s_perf_maxiv_frame = s_perf_frames + 1;
+            }
+            if (iv > 20.0) s_perf_over20++;
+            if (iv > 33.4) s_perf_over33++;
+        }
         s_perf_last_start = perf_t0;
     }
 }
@@ -4417,6 +4720,11 @@ extern "C" void gfx_end_frame(void) {
                     (unsigned long long)s_perf_frames, s_perf_dl / n, s_perf_run / n, s_perf_present / n,
                     s_perf_interval / n, s_perf_interval > 0 ? 1000.0 * n / s_perf_interval : 0.0,
                     (double)s_perf_tris / n, (double)s_perf_batches / n);
+            fprintf(stderr, "PERFSTAT spikes: max=%.2fms at frame %llu (dl=%.2f run=%.2f) >20ms=%llu >33ms=%llu\n",
+                    s_perf_maxiv, (unsigned long long)s_perf_maxiv_frame, s_perf_maxiv_dl, s_perf_maxiv_run,
+                    (unsigned long long)s_perf_over20, (unsigned long long)s_perf_over33);
+            s_perf_maxiv = s_perf_maxiv_dl = s_perf_maxiv_run = 0;
+            s_perf_maxiv_frame = s_perf_over20 = s_perf_over33 = 0;
             s_perf_dl = s_perf_run = s_perf_present = s_perf_interval = 0;
             s_perf_tris = s_perf_batches = 0;
         }
@@ -4434,6 +4742,7 @@ extern "C" void reset_texture_state() {
         rendering_state.shader_program = nullptr;
     }
     gfx_rapi->clear_shaders();
+    s_shader_warm_pending = true;   /* D480: re-warm on the next frame */
     color_combiner_pool.clear();
     prev_combiner = color_combiner_pool.end();
 }
@@ -4513,8 +4822,11 @@ extern "C" void gfx_copy_framebuffer(int fb_dst, int fb_src, int left, int top, 
             // upscale the position
             left = left * gfx_current_dimensions.width / gfx_current_native_viewport.width;
             top = top * gfx_current_dimensions.height / gfx_current_native_viewport.height;
+            // D447: offset into the output rect (0,0 when the rect fills the window)
+            left += gfx_current_game_window_viewport.x;
+            top += gfx_current_game_window_viewport.y;
             // flip Y
-            top = gfx_current_dimensions.height - top - 1;
+            top = gfx_current_window_dimensions.height - top - 1;
         }
         if (use_back && gfx_msaa_level > 1) {
             // read from the framebuffer we've been rendering to

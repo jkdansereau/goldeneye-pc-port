@@ -11,7 +11,7 @@
 #     goldeneye-pc-port-<VERSION>-linux-x86_64.tar.gz  + .tar.gz.sha256
 #
 # The bundle contains ONLY: the engine executable, its SDL2 library, a README,
-# license texts, and the prepare-assets/ tool. It contains NO ROM and NO game
+# license texts, the prepare-assets/ tool and tools/eep_convert.py. It contains NO ROM and NO game
 # assets. SDL2 is bundled (copied next to the exe, whose rpath is set to
 # $ORIGIN) so the tarball runs as-is on any distro — including a sideloaded
 # Steam Deck — with nothing installed; zlib and libGL are expected from the
@@ -70,11 +70,13 @@ if command -v ldd >/dev/null 2>&1; then
 fi
 
 # --- docs + licenses --------------------------------------------------
-DEPS_BLOCK=$'## 1a. Runtime libraries\n\nSDL2 is bundled in this folder and found automatically (the executable\npoints at its own directory first). zlib and OpenGL come from your system —\npreinstalled on every desktop distro and on SteamOS / Steam Deck.\n\n**Steam Deck:** sideload this folder (USB or a file manager), do steps 2–4\nbelow, then add `@EXE@` to Games → *Add Game* as a non-Steam game.\n'
+DEPS_BLOCK=$'## Linux and Steam Deck\n\nSDL2 is bundled in this folder and found automatically (the executable\npoints at its own directory first). zlib and OpenGL come from your system —\npreinstalled on every desktop distro and on SteamOS / Steam Deck.\n\n**Steam Deck:** copy this folder over (USB or a file manager) or download it\non the Deck, do steps 2 and 3 below, then add `@EXE@` to Games → *Add Game*\nas a non-Steam game. The first launch applies Deck-friendly display settings\n(native 1280×800 fullscreen).\n'
+# The sed pass below runs before the awk block insert, so expand @EXE@ here.
+DEPS_BLOCK="${DEPS_BLOCK//@EXE@/$EXE_NAME}"
 # @DECK@: the in-game settings (F10 overlay) controller-mapping guide — only
 # meaningful where Steam input mapping exists (Deck / Linux); Windows bundles
 # substitute it with nothing.
-DECK_BLOCK=$'## 4a. Steam Deck — in-game settings (options overlay)\n\nThe options overlay is fully gamepad-driven: it opens with **Select**, the\nD-pad or left stick (up/down) moves between options, **A** steps the selected\noption forward, **B** steps it back, and **Start** (or Select again) closes.\nToggles flip, resolution / MSAA / filtering cycle, sliders step in\nincrements. With a keyboard attached the same overlay is `F10` + arrows/Enter.\n\n'
+DECK_BLOCK=$'## Steam Deck: in-game settings (options overlay)\n\nThe options overlay is fully gamepad-driven: it opens with **Select**, the\nD-pad or left stick (up/down) moves between options, **A** steps the selected\noption forward, **B** steps it back, and **Start** (or Select again) closes.\nToggles flip, resolution / MSAA / filtering cycle, sliders step in\nincrements. With a keyboard attached the same overlay is `F10` + arrows/Enter.\n\n'
 sed -e "s|@VERSION@|${VERSION}|g" \
     -e "s|@PLATFORM@|Linux x86-64|g" \
     -e "s|@EXE@|${EXE_NAME}|g" \
@@ -93,6 +95,10 @@ cp LICENSE "$OUT/licenses/LICENSE-port-MIT.txt"
 # it exists (Debian/Ubuntu), skip silently elsewhere.
 SDL2_LIC="$(dpkg -L libsdl2-2.0-0 2>/dev/null | grep -m1 '/copyright$' || true)"
 [ -n "$SDL2_LIC" ] && [ -f "$SDL2_LIC" ] && cp "$SDL2_LIC" "$OUT/licenses/SDL2.txt"
+
+# --- save converter (D492): emulator .eep <-> port .eep, stdlib-only -----
+mkdir -p "$OUT/tools"
+cp tools_pc/eep_convert.py "$OUT/tools/"
 
 # --- asset-prep tool (identical assembly to bundle-win.sh) -----------
 PREP="$OUT/prepare-assets"

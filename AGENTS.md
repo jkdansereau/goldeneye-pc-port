@@ -5,8 +5,36 @@
 - `n64decomp/007`: WIP decompilation of GoldenEye 007 (N64), byte-matches US/EU/JP ROMs.
 - Active work: **PC port** modelled on the Perfect Dark PC port (same Rare "Indy" engine family).
 - **Reference docs:** `docs/internals.md` — architecture, GE-specific RSP deltas, phased plan (§1–§10). `docs/dev/findings.md` — the `Dxx` finding log (§F + §H). **Look up findings via `docs/dev/findings-index.csv` (label, one-liner, status; regenerate with `tools_pc/gen_findings_index.py`), then read only the specific `## Dxx` entry (multi-pass labels like D202/D176(a) have large sections — grep within the section or read with offset/limit, don't slurp it whole). Never linear-read.** `docs/porting-notes.md` — the recurring N64→PC bug classes (dense; skim the headers, read what's relevant).
-- **Current status:** the README "Status" section, and `docs/dev/LEVEL-STATUS.md` for the per-level sweep. Current task + environment: `docs/HANDOFF.md` (a rolling local working file — may be absent in a fresh clone; fall back to the README "Status" section).
+- **Open work / known issues:** `docs/ROADMAP.md` — the single tracker; add new items there, never start a new backlog/roadmap file.
+- **Current status:** the README "Status" section (`docs/dev/LEVEL-STATUS.md` is a historical per-level sweep record). Current task + environment: `docs/HANDOFF.md` (a rolling local working file — may be absent in a fresh clone; fall back to the README "Status" section).
 - **Dispatching subagents?** `docs/dev-process.md` — task budgets/deadlines, file partitioning, pre-flight, the standard brief template. Every investigation subagent reads `docs/porting-notes.md` first and appends to it.
+
+## Public site pages (`docs/`) — presentation layer, not a source of truth
+
+The repo's homepage and sub-pages are published by GitHub Pages; the local
+preview is `node scratch/build_preview.mjs site` → `scratch/_site/` (served
+with `node scratch/serve_preview.mjs 8777`). The site is a **presentation
+layer over the reference docs, kept in a separate area, and allowed to go
+stale** — never let it poison a work item:
+
+- **Pure site pages** — `docs/index.md`, `documentation.md`,
+  `the-software-rsp.md`, `the-asset-pipeline.md`, `framerate-and-pacing.md`,
+  `input-and-aim.md`, `saves.md`, `security.md`, `fidelity.md` —
+  summarise the ROADMAP / README / finding log / release notes. **Do not
+  consult them as work information, cross-check against them, or treat a
+  mismatch with `docs/ROADMAP.md` or the finding log as a bug** (that is
+  the expected, independent-staleness case). Update them only when the task
+  says so, and source every fact from the ROADMAP / README / finding log —
+  never the other way round. The footer "last updated" date in
+  `docs/_layouts/default.html` is the same class of site-only detail.
+- **Shared files** — `docs/internals.md`, `porting-notes.md`,
+  `building.md`, `dev-process.md`, `dev/agentic-development.md` are
+  authoritative working docs that the site publishes verbatim; edit them
+  normally as part of dev work and the site picks up the change for free.
+
+Keep the split intact: no working notes migrate into pure site pages, and
+never edit a shared doc merely to make the site read better — if the site is
+stale, fix the site page (or the fact upstream, as its own task).
 
 ## Non-negotiables
 
@@ -16,6 +44,47 @@
 4. **`src/libultrare/Makefile.libultrare` is ground truth** for original-vs-Rare libultra files (finding B3). The PC build compiles: `libultra/audio`, `libultrare/audio` (drvrNew/env/reverb), `libultra/gu`, and `libultrare/io/vitbl.c` only. All other `io/` + `os/` files are excluded and shimmed in `port/src/libultra.c`.
 5. **`rsp/graphics/gmain.s` is the RSP ground truth** — the authoritative reference for which GBI commands GE emits (modified fast3d, 1545 lines). We do not run it on PC; `port/fast3d/` replaces it. Use it to validate the software RSP's command decoding and the custom CC/RM modes.
 
+## Tree hygiene & release gate
+
+Standing rules for anything that lands in the tracked tree or in a push. These
+exist because the repo is public, MIT-licensed, forked, and its history is
+mostly agent-authored.
+
+1. **No local machine paths.** Tracked files carry no local absolute paths and
+   no usernames. Use the placeholder convention: `<repo>` = this working
+   directory, `<repos>` = the local source-repos root, `<games>` / `<videos>` =
+   local media roots, `<python>` = the local CPython install, `<temp>` = a
+   writable native temp dir (legend at the top of
+   `docs/dev/HANDOFF-ARCHIVE.md`). Tools must not default to a machine-specific
+   path — take the path as an argument and error if it is missing.
+2. **No contributor emails in prose.** Credit people by name plus the PR/issue
+   that carries the change ("co-authored with X (#123)"), never an inline
+   `<email>` trailer inside findings text or docs. Commit-trailer emails must
+   be noreply forms, never a contributor's real address.
+3. **Every vendored third-party component is declared in `NOTICE`** with its
+   license and holder — the "Third-party code vendored into the port layer" and
+   "Vendored build tooling" lists. GPL sources must ship their license text
+   in-tree (`tools/gzipsrc/COPYING`). MIT covers only our original work; never
+   relicense inherited code and never re-license the repo (forks depend on the
+   MIT `LICENSE` staying put).
+4. **Screenshots are game content.** A framebuffer capture is a derivative work
+   of Nintendo/MGM art regardless of which engine drew it. Keep repo imagery
+   documentary and small (bug shots, previews — downscaled), and never commit
+   bulk ROM-derived captures: capture output dirs are gitignored
+   (`tools_pc/sweep-captures/cap-*/`, `tools_pc/sweep-captures/**/*.ppm`); the
+   only bulk imagery in the tree is `tools_pc/golden/**/*.png`
+   (63 frames × 3 platforms, 189 total, nested per level at
+   `tools_pc/golden/<level>/{win,linux,deck}/`; the `deck` set added
+   2026-10-05 with maintainer approval), which exists because `verify.sh`
+   consumes it. Downloads ship no game content at all.
+5. **Batch, don't spam.** Accumulate approved doc/tree fixes across a session
+   into ONE commit; no per-item branches.
+6. **Release gate.** Before pushing a release: the PII scrub and legal/copyright
+   review reports (gitignored, `docs/dev/notes/`) must be run and clean, and the
+   README Legal section must name every rights holder the game's trademarks
+   implicate. Rewriting pushed history (squash) needs explicit maintainer
+   consent, and any such report states the remote + branch it applies to.
+
 ## Critical files
 
 | File | Role |
@@ -23,7 +92,7 @@
 | `docs/internals.md` | Architecture + RSP deltas + phased plan (§1–§10). Reference, not a linear read. |
 | `docs/dev/findings.md` | The `Dxx` finding log (§F/§H); lookups via `docs/dev/findings-index.csv`. |
 | `CMakeLists.txt` | PC build (parallel to the N64 Makefile). Source list + `REGION_DEFS` live here. |
-| `port/src/` | Shims: `libultra.c` (OS API), `gesched.c` (scheduler), `n64stubs.c` (boot/TLB/FPU/rmon), `random.c` (PRNG ported verbatim from `random.s`), `ucode.c` (microcode segment markers), `main.c`, `video.c`, … |
+| `port/src/` | Shims: `libultra.c` (OS API; also shims the scheduler's hardware leaf calls and runs the software RSP inline — the game's real `src/sched.c` is compiled), `n64stubs.c` (boot/TLB/FPU/rmon), `random.c` (PRNG ported verbatim from `random.s`), `ucode.c` (microcode segment markers), `main.c`, `video.c`, … |
 | `port/fast3d/` | Software RSP (adapted from the PD port). The main Phase 2 work. |
 | `rsp/graphics/gmain.s` | GE's RSP ucode — ground truth for GBI/CC/RM. |
 | `reference/mouse-injector/README.md` | **Stub only** — the vendored GEPD-Edition Mouse Injector source (GPLv2) was removed from the public repo 2026-09-19 (license hygiene: GPL code + prebuilt binary in an MIT project; it was never compiled here). The stub records provenance + how to re-vendor locally (gitignored). The ported mouse-aim model lives in `port/src/input.c` (D194 lineage); design record: `docs/dev/GEPD-INPUT-PLAN.md`. |
@@ -44,8 +113,9 @@ Needs CMake + SDL2 + zlib + OpenGL, and must run from the MSYS2 MINGW64 shell
 1. **`Cannot create temporary file in C:\Windows\: Permission denied`** at the
    link step. The PE toolchain (ninja → cmd → gcc/ld) needs a writable
    TMP/TEMP; the msys→native env conversion drops it in non-login shells
-   (agent harnesses; the `C:/msys64` tree here was built for `D:/M/msys64`,
-   so its conversion is unreliable). `build-pc.sh` now **self-heals**: it
+   (agent harnesses; the `C:/msys64` tree here was built for a relocated MSYS2
+   root — `<msys>` in the placeholder legend — so its path conversion is
+   unreliable). `build-pc.sh` now **self-heals**: it
    probes a native child's TMP (via a file — piped `cmd.exe` stdout is
    unreliable under msys console emulation) and, if broken, re-runs
    cmake+build under PowerShell with `TMP`/`TEMP` set natively (the
@@ -67,20 +137,45 @@ Needs CMake + SDL2 + zlib + OpenGL, and must run from the MSYS2 MINGW64 shell
    In `.ps1`, `-DROMID=$Var` is a literal (bare tokens don't expand) — it
    must be `"-DROMID=$Var"`. Launch powershell plainly — `env -i` before it
    breaks the nested cmake launch (verified 2026-09-28).
-   **OPEN (next session):** the guard still fails *inside* `build-pc.sh`
-   (cmake "did not execute": the `.ps1` runs, but `$LASTEXITCODE` stays
-   empty) while the *identical* standalone invocation succeeds (cmake runs
-   and the build completes — that is how the D401 builds were made). First
-   test: diff the heredoc-generated `.ps1` against a hand-extracted copy
-   (suspect: heredoc line-ending/whitespace corruption).
-   **Working workaround:** extract the heredoc `.ps1` and run
-   `powershell -NoProfile -ExecutionPolicy Bypass -File <ps1> "C:\msys64\usr\bin" "C:\msys64\mingw64\bin" C:/msys64 <repo-win-path> build-pc <romid>`.
-   Re-confirmed 2026-09-28: in-script re-exec fails again (cmake configure
-   dies inside the ps1; re-exec logs left stale) while the identical
-   standalone invocation reconfigured and built cleanly (extract with
-   `awk "/<<'PS1'\$/{f=1;next} /^PS1\$/{f=0} f" build-pc.sh > /tmp/ps1`
-   — mind the leading whitespace, and `export PATH` to include mingw/bin
-   first, failure mode 3).
+   **FIXED 2026-09-30 (`fix/build-pc-tmp-reexec`):** the heredoc `.ps1`
+   was byte-identical to a hand-extracted copy — not line endings. Three
+   real bugs: (a) the TMP probe's inline `cmd //c "... \"path\" ..."` never
+   ran (msys re-escapes embedded quotes as `\"`, which cmd rejects), so
+   *every* build took the re-exec, and it only tested that TMP existed;
+   (b) the `.ps1`'s toolchain dirs were derived from `command -v cmake`,
+   which in Git Bash/agent shells is a pip cmake (no MSYS2 toolchain) —
+   the hand-run worked because it passed explicit `C:\msys64\...` paths;
+   (c) `/tmp` + `cygpath` disagree when Git Bash and MSYS2 `usr/bin` are
+   both on PATH, so the `.ps1` could be written to one `/tmp` and
+   powershell pointed at the other (it then exits 0 having done nothing).
+   Now: the MSYS2 `mingw64/bin` is located and validated (override:
+   `GE_MSYS2_ROOT`) and prepended to PATH; the probe is a `.cmd` file that
+   tests TMP *writability*; all native-facing files live in the build dir
+   with paths from bash's own `pwd -W`. Verified from an agent Git Bash
+   shell: fresh + incremental builds, both on the direct path and with a
+   forced unwritable TMP (`TMP=C:\Windows\`) through the re-exec.
+   **FIXED 2026-09-30 (`fix/build-pc-reexec-noop`): the re-exec exited rc=2
+   with the diag log ending `cmake ran LASTEXITCODE=[]`.** From a shell with
+   MSYS2 `usr/bin` first on PATH, powershell inherits a stripped ~13-var env
+   with `PATHEXT=.CPL` and no ComSpec/TMP/TEMP, so `& cmake.exe` silently
+   launches nothing. The `.ps1` now restores PATHEXT and ComSpec. In that
+   shell the re-exec itself is legitimately needed (no TMP), so the probe
+   is correct. Verified: MSYS2-PATH shell, forced `TMP=C:\Windows\`, and a
+   no-change incremental run all exit 0 with a fresh exe.
+   **FIXED 2026-10-04 (`fix/build-arch-tag`, D515):** a FRESH build dir
+   configured through the re-exec cached `CMAKE_HOST_SYSTEM_PROCESSOR ""` /
+   `CMAKE_SYSTEM_PROCESSOR ""` (the stripped env also drops
+   `PROCESSOR_ARCHITECTURE`, which CMake reads for the host processor — same
+   class as PATHEXT/ComSpec), so `cmake/TargetArch.cmake` produced an empty
+   arch tag: `Target arch:  (64bit=FALSE)`, binary named `ge007..exe`
+   (a correct 64-bit build; only the name was wrong — found during T7, D513).
+   The `.ps1` now restores `PROCESSOR_ARCHITECTURE` from the machine
+   environment (fallback `AMD64`; `SystemRoot`/`windir` likewise) and logs
+   the four vars to the diag log; `cmake/TargetArch.cmake` falls back to
+   `${CMAKE_C_COMPILER} -dumpmachine` when `CMAKE_SYSTEM_PROCESSOR` is empty
+   and FATAL_ERRORs instead of emitting an untagged binary. Existing build
+   dirs are unaffected (value already cached); a dir configured before the
+   fix picks up x86_64 on its next in-place reconfigure.
 2. **`cannot open output file ge007.x86_64.exe: Permission denied`.** A
    **running** `ge007.x86_64.exe` locks the output file (Windows rule; you
    can't relink over a live PE). Check with `Get-Process | Where-Object {
@@ -94,25 +189,14 @@ Needs CMake + SDL2 + zlib + OpenGL, and must run from the MSYS2 MINGW64 shell
 
 ## Verification ritual (after any build-affecting change)
 
-1. **Undefined symbols.** Every symbol referenced by the compiled set (see `CMakeLists.txt`: `SRC_GAME`, `SRC_ENGINE`, `SRC_LIBAUDIO`, `SRC_LIBULTRARE_AUDIO`, `SRC_LIBULTRARE_DATA`, `SRC_GU`, `SRC_PORT*`) must be defined exactly once in the compiled set or in `port/`. Symbols that live in EXCLUDED files (`libultra/io/*`, `libultrare/io/*` except `vitbl.c`, `libultra/os/*`, `libultrare/os/*`, `sched.c`, `rmon.c`, `vi.c`, `src/*.s`) must be provided by `port/src/libultra.c`, `gesched.c`, `n64stubs.c`, `random.c`, or `ucode.c`.
+1. **Undefined symbols.** Every symbol referenced by the compiled set (see `CMakeLists.txt`: `SRC_GAME`, `SRC_ENGINE`, `SRC_LIBAUDIO`, `SRC_LIBULTRARE_AUDIO`, `SRC_LIBULTRARE_DATA`, `SRC_GU`, `SRC_PORT*`) must be defined exactly once in the compiled set or in `port/`. Symbols that live in EXCLUDED files (`libultra/io/*`, `libultrare/io/*` except `vitbl.c`, `libultra/os/*`, `libultrare/os/*`, `sched.c`, `rmon.c`, `vi.c`, `src/*.s`) must be provided by `port/src/libultra.c`, `n64stubs.c`, `random.c`, or `ucode.c`.
 2. **Duplicates.** No symbol defined twice across the compiled set (watch `sp_*` stacks, `rmon*`, `os*` shims, segment markers).
 3. **Syntax.** Every touched file must parse; `./build-pc.sh` is the final word.
 
 Run `/linkcheck` for this sweep. Record new findings in `docs/dev/findings.md` §F/§H style (next `Dxx` label after the last used) and add the label to the §F index.
 
-## Phase status (summary — see README + `docs/dev/findings.md` for detail)
+## Phase status
 
-- **Phase 0–1.5:** done. Build system, boot chain, OS-shim layer, fast3d
-  integration, first frames, full intro rendering.
-- **Phase 2 (rendering):** in progress. All 20 solo missions (plus the
-  ending-credits sequence, `-level_54`) load + render + survive an
-  unattended window; front end (menu → mission select → briefing →
-  start) is functional; file-backed EEPROM saves work. Cosmetic defects are
-  parked in `docs/dev/GRAPHICS-BACKLOG.md`.
-- **Phase 3 (audio + input):** input layer done (`port/src/input.c`); polish
-  bugs open (D118* mouse-look residuals; interactive feel-checks owed). Audio
-  mixer done (libaudio → SDL software mixer, D198–D201); D204 tempo drift
-  fixed + measured; D202 stuck door loop root-caused with a port-side
-  expiration (M-66b) awaiting by-ear verification.
-- **Phase 4 (saves + polish):** file-backed EEPROM done; widescreen, config,
-  rebinding UI outstanding.
+Do not keep a status summary here — it goes stale. Open work, known issues
+and decisions owed: **`docs/ROADMAP.md`** (the single tracker). Current
+release state: the README "Status" section.

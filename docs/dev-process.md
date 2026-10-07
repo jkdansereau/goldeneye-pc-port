@@ -185,6 +185,13 @@ justifies. Rules:
   spend a cycle rebasing it**; re-derive only whatever part of its content
   is still true as a fresh, small PR against current `main`. Merging stale
   content back over newer information is a regression, not a save.
+- **Commit/tree hygiene is a standing rule, not a per-session judgment** —
+  see AGENTS.md §Tree hygiene & release gate. In short: no local absolute
+  paths or usernames in tracked files (use the placeholder convention), no
+  contributor emails in prose (name + PR number), every vendored third-party
+  license declared in `NOTICE`, no bulk ROM-derived captures in the tree
+  (capture output dirs are gitignored — keep them on disk, untracked), and
+  one batched commit per session rather than one per approved fix.
 
 ## 7. The rule-2 sign-off procedure (genuine `src/game` behavior changes)
 

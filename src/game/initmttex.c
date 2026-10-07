@@ -22,7 +22,7 @@ void set_mt_tex_alloc(void)
      * e.g. rainbow Frigate water) -- see GE_D85TEX's pool-full line. */
     {
         extern s32 g_StageNum;
-        if (getenv("GE_D85TEX") || getenv("GE_D252POOL"))
+        if (getenv("GE_D85TEX"))
             osSyncPrintf("D85TEX stage=%d texpool bytes=%d (-mt token %s) range=[%p..%p)\n", (int)g_StageNum,
                          (int)bytes, tokenFind(1, "-mt") ? "present" : "ABSENT",
                          (void *)ptr_texture_alloc_start.start, (void *)ptr_texture_alloc_start.end);

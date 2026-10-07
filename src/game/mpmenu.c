@@ -1060,8 +1060,21 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
     s32 textheight;
     s32 m;
     s32 h1;
+#ifdef PORT
+    char *h2;
+#else
     s32 h2;
+#endif
+#ifdef PORT
+    // D420 (D8 class): the decomp's [4] receives "Rank: 1st" (10 bytes incl.
+    // NUL) and "P<n> KILLS"/"P<n> LOSSES"; GCC places scores[] right after
+    // it, so the rank text overwrote the Scores page values ("1932599354" =
+    // ": 1s", "116" = 't'). Pure local stack scratch, zero ABI role; N64
+    // build keeps the decomp size.
+    char rankbuffer[64];
+#else
     char rankbuffer[4];
+#endif
     s32 two_player_x_offset;
     char *text;
     s32 scores[4];
@@ -1406,8 +1419,16 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
             q = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1C_P)); /* P */
  
             // Must remain a comma expression for matching
+#ifdef PORT
+            h2 = (char *) langGet(getStringID(LMPMENU, MPMENU_STR_1D_KILLS)), /* KILLS */
+#else
             h2 = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1D_KILLS)), /* KILLS */
+#endif
+#ifdef PORT
+                sprintf(rankbuffer, ascii_pnum_KILLS, (char *)(uintptr_t)(u32)(q), curplayernum + 1, (char *) h2); /* -> "P<n> KILLS" */ /* D441: zero-extend s32-held DRAM ptr */
+#else
                 sprintf(rankbuffer, ascii_pnum_KILLS, (char *) q, curplayernum + 1, (char *) h2); /* -> "P<n> KILLS" */
+#endif
  
             textMeasure(&textheight, &textwidth, rankbuffer, ptrFontBankGothicChars, ptrFontBankGothic, 0);
             x = ((viGetViewLeft() + two_player_x_offset) - (textwidth >> 1)) + 80;
@@ -1476,8 +1497,16 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
             q = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1C_P)); /* P */
  
             // Must remain a comma expression for matching.
+#ifdef PORT
+            h2 = (char *) langGet(getStringID(LMPMENU, MPMENU_STR_1E_LOSSES)), /* LOSSES */
+#else
             h2 = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1E_LOSSES)), /* LOSSES */
+#endif
+#ifdef PORT
+                sprintf(rankbuffer, ascii_pnum_LOSSES, (char *)(uintptr_t)(u32)(q), curplayernum + 1, (char *) h2); /* -> "P<n> LOSSES" */ /* D441: zero-extend s32-held DRAM ptr */
+#else
                 sprintf(rankbuffer, ascii_pnum_LOSSES, (char *) q, curplayernum + 1, (char *) h2); /* -> "P<n> LOSSES" */
+#endif
  
             textMeasure(&textheight, &textwidth, rankbuffer, ptrFontBankGothicChars, ptrFontBankGothic, 0);
             x = ((viGetViewLeft() + two_player_x_offset) - (textwidth >> 1)) + 80;
@@ -1593,7 +1622,7 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
             y = (viGetViewTop() - (fav_textheight >> 1)) + (37 + MPMENU_YOFF);
             viewleft = viGetX(); h1 = viGetY();
             gdl = textRender(gdl, &x, &y, text, ptrFontBankGothicChars, ptrFontBankGothic, 0x00ff00b0, viewleft, h1, 0, 0);
-            text = frontGetPlayersFavoriteWeaponInHand(curplayernum, 0);
+            text = (char *) frontGetPlayersFavoriteWeaponInHand(curplayernum, 0);
             textMeasure(&fav_textheight, &fav_textwidth, text, ptrFontBankGothicChars, ptrFontBankGothic, 0);
             x = ((viGetViewLeft() + fav_x_offset) - (fav_textwidth >> 1)) + 80;
             x2 = viGetViewTop();

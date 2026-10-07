@@ -2,6 +2,7 @@
 #ifdef PORT
 #include <stdlib.h>
 #include "audiotrace.h"
+#include "envflag.h"
 #endif
 #include <music.h>
 #include "music_0D2720.h"
@@ -74,7 +75,7 @@ void set_missionstate(MISSION_STATE_ID arg0)
     s32 old_mission_state = mission_state;
 
 #ifdef PORT
-    if (getenv("GE_AUDIOTRACE") && old_mission_state != (s32)arg0)
+    if (GE_ENVFLAG("GE_AUDIOTRACE") && old_mission_state != (s32)arg0)
         geTracePrintf("audiotrace.log", "[MISSIONSTATE] %d -> %d\n", (int)old_mission_state, (int)arg0);
 #endif
 
