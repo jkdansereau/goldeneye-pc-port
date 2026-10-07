@@ -715,6 +715,9 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D562 | **F10 crosshair pointer hidden while a pad/keyboard drives the menu** — full `## D562` entry at file tail | FIXED 2026-10-06 (`drawCrosshairPointer` draws only while `s_mouseActive`) |
 | D563 | **F10 root hub: Left/Right no longer open pages; held nav inputs latched on open/page change** — full `## D563` entry at file tail | FIXED 2026-10-06 |
 | D564 | **F10: game's own "Look up/down" row removed (dead for mouse and centred pad, stacked with Invert look); value pinned to factory; tip polish** — full `## D564` entry at file tail | FIXED 2026-10-06 (port only; Mouse / Controller "Invert look" are the inversion controls) |
+| D565 | **AI awareness followed two player render settings: Fog distance below 100 (shortened clip) and FOV (gameplay fog cull scaled by the rendered FOV)** — full `## D565` entry at file tail | FIXED 2026-10-06 (maintainer decision: Fog distance floor 100 in `video.c` + overlay; `propobj.c portSub7F054C58Gameplay` rescaled to the game's own FOV, PORT-only D466 helper; identity at defaults; build-verified) |
+| D566 | **Steam Deck Game Mode showed the on-screen keyboard at every launch (SDL text input left on)** — full `## D566` entry at file tail | FIXED 2026-10-06 (port only: `gfx_sdl2.cpp` SDL_ENABLE_SCREEN_KEYBOARD=0 + SDL_StopTextInput; build-verified Win/Linux; Deck Game Mode check owed) |
+| D567 | **Front-end PC Options with a pad pulled the game's crosshair to the top-left (overlay synced the cursor to the untouched OS mouse)** — full `## D567` entry at file tail | FIXED 2026-10-06 (port only: sync gated on `optionsOverlayMouseActive()`; build-verified Win/Linux; Deck pad check owed) |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | **CLOSED (2026-09-28 bookkeeping: tank board/exit accepted by the user; shipped in v0.4.0).** Earlier: PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed). |
 | D415 | **Shooting a light fixture does not "kill" its flickering light (Bunker, Caverns): the fixture takes the hit but the flicker keeps going (community report, issue #87 comment by the reporter, 2026-09-28, 00 Agent playthrough of v0.4.0).** — full `## D415` entry at file tail | FIXED (2026-09-29 bookkeeping: root-caused and fixed as D430 + D431, user-verified vs GEPD/1964 on Caverns 2026-09-29; #119). Earlier: ROOT-CAUSED as D430 (see there); fix in tree, live check owed. |
@@ -18205,3 +18208,80 @@ polish: All unlocked "Unlocks all levels, 007 mode and every cheat.", Show
 crosshair, FOV and Aim style tips rewritten as plain sentences. Verified: both
 TUs compile (link was blocked by a running game; full build + re-cut follow).
 
+
+## D565: AI awareness followed two player render settings (Fog distance < 100, FOV) — FIXED 2026-10-06 (maintainer decision)
+
+**Found by** the v0.4.0..v0.5.0 AI regression review (interpreter, movement/timing,
+visibility/combat; three read-only reviewers, lead re-checked every flag in code).
+No regression at the shipped settings (Draw 2.0x, Fog 1.0x, FovScale 100, native
+widescreen). Two leaks of render-only settings into AI awareness (the D466/D468
+class) at non-default settings:
+
+1. **`Video.FogDistance` below 100.** `bgfog.c fogLoadCurrentEnvironment` sets the
+   far clip to `FarFog x min(Fog, Draw)` (D540), so Fog < 1.0 shortens it below the
+   authored distance. AI on-screen checks require the render `PROPFLAG_ONSCREEN`
+   (`port/src/drawdistgameplay.c portPropGameplayOnScreen`), so guards beyond the
+   shortened clip stopped counting as on screen; at Draw 1.0x `portD466Active()` is
+   off and the sight range (`fogGetScaledFarFogIntensitySquared`) shrank as well.
+   Guards would notice Bond, and on-screen triggers fire, later than on the N64.
+   **Fix (maintainer: block it):** the setting's floor is now 100
+   (`port/src/video.c` registration, so an ini value of 50/75 clamps to 100 on
+   load; `port/src/optionsoverlay.c` slider `uiMin` 100). 100-800 keeps the D540
+   extension, which D466 already keeps off gameplay.
+2. **FOV other than the game's (`Video.FovScale` != 100, or the stretch-era
+   `WidescreenAuto` boost with native widescreen off).** The D466 gameplay fog cull
+   `src/game/propobj.c portSub7F054C58Gameplay` scales by `c_lodscalez`, which is
+   tan(fovy/2)-proportional and built from the rendered fovy (D222 `frCullFovY`), so
+   a wider FOV dropped far fogged positions out of the AI on-screen verdict sooner
+   (narrower: later). **Fix:** inside that `#ifdef PORT` D466 helper, rescale
+   `scalez` by tan(own/2)/tan(eff/2) with `own = c_perspfovy / portFovYScaleFactor()`
+   (the D468 recovery of the game's own fovy; the game's zoom FOVs are kept).
+   Identity when the factor is 1 (the defaults). Port-feature leak fix in an
+   existing PORT-only helper (D466 sign-off class); maintainer asked for the fix
+   2026-10-06.
+
+Checked and left (no AI harm): the D466 verdict reuses the extended pass's room
+screen bbox (`posIsOnScreen`), but at Fog 1.0x the clip is the authored far, so the
+passes match; D491 (portal bbox seeds) and D431 (light-fixture texnum in ray
+scoring) restore N64 data reads; D417, D468 and the M-183/M-185 clamp removal are
+signed off and play-covered. Also corrected: a watchdog `pin signature detected ...
+confirmation window` line that clears on its own is the normal post-D329 pattern
+(the 2026-09-23 D329 sign-off log had three); only `anim pin CONFIRMED` / `pin still
+held` indicates a regression. The maintainer's 2026-10-06 Deck Facility run logged
+four self-clearing detections and no confirmation.
+
+**Verify:** build; defaults are bit-identical (both changes are no-ops at Fog 100 /
+factor 1), so the golden gate is unaffected. By eye (optional): FovScale 150 on a
+fogged level (Surface 1, Dam), guards at fog range react as at FovScale 100.
+
+## D566: Steam Deck Game Mode showed the on-screen keyboard at every launch — FIXED 2026-10-06 (port only)
+
+**Report (maintainer, Deck, Game Mode, 2026-10-06):** the Steam virtual keyboard
+popped up every time the game started. **Cause:** SDL2 starts with text input
+enabled and the port never turned it off (it reads keys only as `SDL_KEYDOWN`;
+nothing in `port/` consumes `SDL_TEXTINPUT`/`SDL_TEXTEDITING`). With text input
+active, Steam's Game Mode treats the window as wanting its keyboard. Observed with
+the Deck's system SDL (`sdl2-compat` on SDL3; the Steam shortcut pointed at the
+exe, so the bundled SDL2 2.32 next to it was not loaded); not checked whether the
+release tarball's `$ORIGIN` SDL2 shows it too, and the fix covers both.
+**Fix (`port/fast3d/gfx_sdl2.cpp`):** set the `SDL_ENABLE_SCREEN_KEYBOARD` hint to
+`0` before `SDL_Init` (literal name; ignored where unknown) and call
+`SDL_StopTextInput()` right after `SDL_ShowWindow`. No game code touched.
+**Verify:** builds on Windows and Linux (X220); deployed to the Deck play folder
+2026-10-06 21:00; maintainer Game Mode launch owed (expect no keyboard).
+
+## D567: Front-end PC Options with a pad pulled the game's crosshair to the top-left corner — FIXED 2026-10-06 (port only)
+
+**Report (maintainer, Deck, 2026-10-06):** opening *PC Options* from the main
+menu with a controller moved the front end's own crosshair cursor to the top
+left. **Cause:** while the F10 overlay is open over the front end,
+`port/src/input.c` called `overlayFrontEndCrosshair()` every frame (D519/D555:
+the game cursor tracks the OS mouse so the overlay pointer sits exactly on it).
+With a pad the OS pointer is never moved and reads 0,0, so the game cursor was
+clamped to the top-left corner of the screen box. **Fix:** the sync runs only
+while the mouse is the active input in the overlay (`s_mouseActive`, which
+starts at 0 on open and becomes 1 on a mouse move or click; new accessor
+`optionsOverlayMouseActive()`). With a pad the cursor stays where it was; mouse
+users get the same tracking as before. **Verify:** builds on Windows and Linux
+(X220); deployed to the Deck play folder 2026-10-06 21:03; maintainer pad check
+owed (open PC Options from file select with the pad, the crosshair stays put).

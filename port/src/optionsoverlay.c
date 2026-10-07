@@ -265,7 +265,7 @@ static struct Row rows[] = {
     { .key="Video.DrawDistance", .label="Draw distance", .kind=ROW_SLIDER, .step=25, .uiMin=100, .uiMax=800 },
     /* D540: fog start/end as a multiple of the level's own (N64) fog;
      * capped at the draw distance. 0.5x..8.0x, 1.0x default. */
-    { .key="Video.FogDistance", .label="Fog distance", .kind=ROW_SLIDER, .step=25, .uiMin=50, .uiMax=800 },
+    { .key="Video.FogDistance", .label="Fog distance", .kind=ROW_SLIDER, .step=25, .uiMin=100, .uiMax=800 }   /* D565: no < 100 */,
     { .key="Video.LodDistance", .label="LOD distance", .kind=ROW_SLIDER, .step=25, .uiMin=100, .uiMax=800 },
     SEP(V5),
     /* D181 re-exposed (PD "Explosion shake"): named for what it scales (explosions only). */
@@ -2288,6 +2288,8 @@ void optionsOverlayBack(void)
     /* Called from SDL's host event pump; navigation is scheduler-owned. */
     if (s_open) SDL_AtomicSet(&s_backPending, 1);
 }
+
+int optionsOverlayMouseActive(void) { return s_mouseActive; }   /* D567 */
 
 int optionsOverlayIsOpen(void)
 {

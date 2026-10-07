@@ -307,6 +307,9 @@ D561,FIXED,"F10: ""Menu pointer"" row removed (front-end-only legacy option; con
 D562,FIXED,F10 crosshair pointer hidden while a pad/keyboard drives the menu —,FIXED 2026-10-06 (drawCrosshairPointer draws only while s_mouseActive)
 D563,FIXED,F10 root hub: Left/Right no longer open pages; held nav inputs latched on open/page change —,FIXED 2026-10-06
 D564,FIXED,"F10: game's own ""Look up/down"" row removed (dead for mouse and centred pad, stacked with Invert look); value pinned to factory; tip polish —","FIXED 2026-10-06 (port only; Mouse / Controller ""Invert look"" are the inversion controls)"
+D565,FIXED,AI awareness followed two player render settings:,FIXED 2026-10-06 (maintainer decision:
+D566,FIXED,Steam Deck Game Mode showed the on-screen keyboard at every launch (SDL text input left on) —,FIXED 2026-10-06 (port only:
+D567,FIXED,Front-end PC Options with a pad pulled the game's crosshair to the top-left (overlay synced the cursor to the untouched OS mouse) —,FIXED 2026-10-06 (port only:
 D407,CLOSED,Tanks cannot be boarded/exited on PC —,CLOSED (2026-09-28 bookkeeping:
 D408,FIXED,Game.SkipIntro skips the post-mission failure dossier:,FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed).
 D415,FIXED,"Shooting a light fixture does not ""kill"" its flickering light (Bunker, Caverns):",FIXED (2026-09-29 bookkeeping:

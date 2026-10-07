@@ -42,6 +42,10 @@ void optionsOverlayBack(void);
 /* 1 while the overlay is on screen. */
 int optionsOverlayIsOpen(void);
 
+/* D567: 1 once the mouse moved or clicked since the overlay opened or the
+ * last pad/keyboard navigation (the pointer is then the active input). */
+int optionsOverlayMouseActive(void);
+
 /* Called from inputComputePad(0) while open: reads SDL keyboard edges and
  * drives the cursor / value adjustments. */
 void optionsOverlayHandleInput(void);

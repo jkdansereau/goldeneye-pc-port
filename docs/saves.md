@@ -17,8 +17,9 @@ A few details:
 - The **PFS / Memory-Pak and motor (Rumble Pak) code** is only for accessory
   detection and is stubbed to report "no accessory," so the game proceeds
   without a Memory Pak.
-- **Emulator saves can be imported** — copy a `GOLDENEYE-usa.eep` in as
-  `data/ge007.eep` (see the README's *Using an emulator save*).
+- **Emulator saves load directly** — an emulator-format `ge007.eep` placed
+  in `data/` is converted on first launch, so a Project64, mupen or 1964
+  save continues in the port (see the README's *Using an emulator save*).
 - The save's **checksum is part of the file format**. The PRNG/CRC the save
   depends on is kept byte-stable, because changing it would silently
   invalidate existing saves — a porting-notes finding (D9).

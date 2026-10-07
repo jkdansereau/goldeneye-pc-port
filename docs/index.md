@@ -9,7 +9,7 @@ description: >-
 # and the WebPage JSON-LD dates). Keep these equal to the last real content
 # change of THIS page, not to the last release.
 date: '2026-10-05'
-modified_time: '2026-10-05'
+modified_time: '2026-10-06'
 locale: en_US
 # The masthead is this page's title, so its first content h2 must NOT get the
 # amber page-title look (double header). See the .flat-title rule in
@@ -32,26 +32,29 @@ Rare "Indy" engine family, one hardware generation apart.
 
 <div class="cblock">
 
-### v0.5.0 (2026-10-05) — the campaign and split-screen both run end to end.
+### v0.5.0 (2026-10-06) — split-screen multiplayer, one options menu, closer to the N64.
 
-- **Single-player campaign complete.** All 20 missions plus the
-  ending-credits sequence, completable end to end at a steady 60 fps.
-- **2–4 player split-screen multiplayer.** Supported on every multiplayer
-  map; playtested on Windows, Linux and Steam Deck.
-- **One real options system.** A single menu, laid out like the Perfect
-  Dark port's — plain-English wording, real-unit sliders, a one-line
-  description per option — with the game's own **N64 control styles as a
-  per-seat preset**.
-- **Emulator save files load directly.** Copy a 1964 / Project64 save into
-  `data/` and it is converted on first launch.
-- **A scalable HUD overlay**, fullscreen and window-centring controls, and
-  antialiased overlay controls.
-- **A fidelity round checked frame-by-frame against the N64 game** (fog,
-  aspect-ratio letterboxing, the Watch menu's own settings), with the
-  reference-frame gate re-based on both platforms (21 levels, 63 frames
-  each).
-- The small stuff: a menu wording, units and help-text pass, and
-  standardised menu spelling.
+- **2–4 player split-screen multiplayer** on every multiplayer map, each
+  player with their own pad, controls and aim settings.
+- **One options menu** for every setting, laid out like the Perfect Dark
+  port's, with the game's own crosshair as the mouse pointer. Pick the game's
+  own N64 control styles (1.1–2.4) per player, or the Xbox release's presets
+  with per-player pad rebinding; PlayStation and Nintendo pads show their own
+  button names.
+- **Closer to the N64:** fog and haze (Surface 2's ground fog, the sky at the
+  horizon), automatic-weapon fire rate, sniper and camera zoom, Dam and
+  Caverns water, the Jungle boss fight's timing, guard visibility in
+  widescreen, and the Dam ending camera.
+- **Fewer crashes and glitches:** a multiplayer crash with the crouched rifle,
+  rockets passing through the ground, and broken geometry around Aztec's
+  shuttle.
+- **A steady 60 fps on low-end GPUs** (tested on an Intel HD 3000 laptop),
+  with lighter first-launch defaults on Atom/Celeron-class graphics.
+- **Emulator saves load directly:** copy a 1964 or Project64 save in as
+  `data/ge007.eep` and it is converted on first launch.
+- Also: more audio, video and control settings (master volume, audio device,
+  trilinear filtering, draw distance up to 800%, PC-friendly crouch and
+  look-ahead defaults), and controllers are picked up again when replugged.
 
 </div>
 
@@ -72,7 +75,7 @@ single tracker for what comes next.
 <li><strong>NTSC-U ROMs only in the release packages.</strong> PAL and JP ROMs convert, build and run from source, but release packages ship the US (NTSC-U) ROM. On the roadmap.</li>
 <li><strong>Changing the aspect ratio in a level can briefly glitch the gun/hand model</strong> (cosmetic, one-off). Change the ratio from the front-end PC Options, or accept it (D509).</li>
 <li><strong>No macOS or ARM builds yet.</strong> Today the release ships Windows, Linux and Steam Deck (keyboard, mouse and controller-button rebinding are all supported, defaults in the <a href="https://github.com/jkdansereau/goldeneye-pc-port#controls">README's Controls section</a>); macOS and ARM are on the roadmap.</li>
-<li><strong>Saves from builds before v0.4.1 can hold fake unlocks from <code>All unlocked</code></strong> — <code>All unlocked</code> has not written your save since v0.4.1, but saves made while it was on in builds before v0.4.1 can hold fake unlocks and are not repaired; back up <code>data/ge007.eep</code> if you used it on an older build (D442, D387).</li>
+<li><strong>Saves from v0.4.0 and earlier can hold fake unlocks from <code>All unlocked</code></strong> — <code>All unlocked</code> has not written your save since v0.5.0, but saves made while it was on in v0.4.0 and earlier can hold fake unlocks and are not repaired; back up <code>data/ge007.eep</code> if you used it on an older build (D442, D387).</li>
 <li><strong>The first frame of a level takes a little longer</strong> while its textures upload — a brief FPS-counter dip; nothing to fix (D475, D480).</li>
 <li><strong>In widescreen, far objects almost fully in fog can still show a faint distant building edge</strong> (4:3 matches the N64). Cosmetic (D503).</li>
 </ul>
@@ -85,7 +88,7 @@ single tracker for what comes next.
 <p class="warn"><strong>Warning:</strong> always use the latest release — earlier builds are kept in the release history for reference only; they lack the features and fixes of newer versions, so don't install an older release.</p>
 
 <ul>
-<li><strong>2026-10-05 — v0.5.0</strong>: what it adds is the Status list above. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0">Release notes</a>.</li>
+<li><strong>2026-10-06 — v0.5.0</strong>: what it adds is the Status list above. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0">Release notes</a>.</li>
 <li><strong>2026-09-28 — v0.4.0</strong>: native widescreen, a complete aim system for mouse and controller, in-game key rebinding, crosshair customization, rumble-pak haptics, a rebuilt options overlay, and a broad fidelity-fix pass. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.4.0">Release notes</a>.</li>
 <li><strong>2026-09-20 — v0.3.0</strong>: the first release with the complete campaign playable end to end at 60 fps on Windows, Linux, and Steam Deck. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.3.0">Release notes</a>.</li>
 <li><strong>2026-09-04 → 2026-09-16 — v0.1.0 – v0.2.2</strong>: the alpha and beta cycle — build chain, software RSP, first rendered frames, front end, and per-level stabilization across the campaign.</li>
@@ -234,7 +237,7 @@ architecture, the N64→PC bug catalogue, and how the project is developed.
   "description": "A native PC build of GoldenEye 007 (Rare, 1997, Nintendo 64), compiled from the n64decomp/007 decompilation with the N64's RSP emulated in software. Ships no ROM and no game assets; you supply your own.",
   "softwareVersion": "0.5.0",
   "datePublished": "2026-10-05",
-  "dateModified": "2026-10-05",
+  "dateModified": "2026-10-06",
   "operatingSystem": ["Windows", "Linux", "Steam Deck"],
   "downloadUrl": "https://github.com/jkdansereau/goldeneye-pc-port/releases",
   "distributionType": "Software-Offline",

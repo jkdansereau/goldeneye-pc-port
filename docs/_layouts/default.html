@@ -13,7 +13,10 @@
   <meta name="robots" content="max-image-preview:large">
   <!-- Favicon: the project's own crosshair mark (tools_pc/make_icon.py),
        not a game still -- original art, no derivative-work exposure. -->
-  <link rel="icon" type="image/png" href="{{ '/img/icon/ge007-icon.png' | relative_url }}">
+  <!-- favicon.ico is a byte copy of cmake/icon/ge007.ico (the exe icon, with
+       the hand-tuned 16/24/32 px variants); a browser-downscaled 512 px PNG
+       washes out at tab size. Re-copy it after running make_icon.py. -->
+  <link rel="icon" href="{{ '/favicon.ico' | relative_url }}" sizes="16x16 24x24 32x32 48x48 64x64 128x128 256x256">
   <link rel="apple-touch-icon" sizes="512x512" href="{{ '/img/icon/ge007-icon.png' | relative_url }}">
   <!-- Entity disambiguation: the maintainer behind every page. -->
   <link rel="me" href="https://github.com/jkdansereau">
@@ -52,7 +55,7 @@
     <footer class="site-footer">
       <div class="footer-stamp">
         <a href="https://github.com/jkdansereau">maintained by jkdansereau</a>
-        &nbsp;&middot;&nbsp; last updated: 2026-10-05 &middot; v0.5.0
+        &nbsp;&middot;&nbsp; last updated: 2026-10-06 &middot; v0.5.0
         &nbsp;&middot;&nbsp; <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a>
         &nbsp;&middot;&nbsp; <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">releases</a>
       </div>

@@ -2194,7 +2194,11 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
             if (closeNow) optionsOverlayToggle();
         }
         optionsOverlayHandleInput();
-        if (mouseEnabled && current_menu != GE_MENU_RUN_STAGE && current_menu != GE_MENU_INVALID) {
+        /* D567: only while the mouse is the active input -- with a pad (Deck) the
+         * untouched OS pointer sits at 0,0 and dragged the front end's own
+         * crosshair to the top-left corner; it now stays where it was. */
+        if (mouseEnabled && current_menu != GE_MENU_RUN_STAGE && current_menu != GE_MENU_INVALID &&
+            optionsOverlayMouseActive()) {
             overlayFrontEndCrosshair();   /* D519: the game cursor tracks the mouse (D555: the overlay pointer is drawn exactly over it) */
             /* D544: the OS cursor stays visible (inputSuspendForOverlay) -- the crosshair
              * draws under the overlay box, so it alone could not point at F10 rows. */

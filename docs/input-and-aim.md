@@ -22,5 +22,11 @@ PlayStation/Nintendo button names. **Everything is rebindable** — keyboard,
 mouse and each controller — in the F10 options overlay. Split-screen needs one
 controller per extra player.
 
+**Control style** offers **Ext** (this port's scheme) or **Original**, the
+game's own N64 styles 1.1–2.4, chosen per seat. New profiles start with
+**Look ahead** off (it fights mouse look) and **Crouch** on Toggle; the
+game's own Look up/down row was removed in favour of **Invert look** on the
+Mouse and Controller pages.
+
 *More: [internals](internals.md) §7 (input & saves); the aim model's
 provenance is the D194 lineage in `port/src/input.c`.*

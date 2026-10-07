@@ -13662,6 +13662,21 @@ static bool portSub7F054C58Gameplay(coord3d *coord, f32 arg1)
         if (sp20 > ptr->z)
         {
             f32 scalez = getPlayer_c_lodscalez();
+            /* D565: c_lodscalez is tan(fovy/2)-proportional and is built from
+             * the RENDERED fovy (D222 frCullFovY: FovScale / stretch-era
+             * widescreen boost), so a wider player FOV made far fogged
+             * positions drop out of AI awareness sooner. Rescale to the
+             * game's own fovy (zoom kept); identity at the defaults. */
+            {
+                extern f32 portFovYScaleFactor(void);
+                f32 k = portFovYScaleFactor();
+                if (k != 1.0f && g_CurrentPlayer->c_perspfovy > 0.0f) {
+                    f32 eff = g_CurrentPlayer->c_perspfovy;
+                    f32 own = eff / k;
+                    scalez *= (sinf(mDegToHalfRad(own)) / cosf(mDegToHalfRad(own)))
+                            / (sinf(mDegToHalfRad(eff)) / cosf(mDegToHalfRad(eff)));
+                }
+            }
             sp20 = ((sp20 - ptr->z) * 100 / arg1 + ptr->z) * scalez;
 
             if (sp20 >= ptr->y)

@@ -101,6 +101,11 @@ static void gfx_sdl_init(const struct GfxWindowInitSettings *set) {
     }
 #endif
 
+    // D566: the port never takes text input, so never ask for an on-screen
+    // keyboard (Steam Deck Game Mode popped one at every launch). Literal
+    // hint name: older SDL2 headers lack the macro; unknown hints are ignored.
+    SDL_SetHint("SDL_ENABLE_SCREEN_KEYBOARD", "0");
+
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         sysFatalError("Could not init SDL:\n%s", SDL_GetError());
     }
@@ -256,6 +261,10 @@ static void gfx_sdl_init(const struct GfxWindowInitSettings *set) {
     }
 
     SDL_ShowWindow(wnd);
+    // D566: SDL2 starts with text input enabled; with it on, Steam's Game Mode
+    // treats the window as wanting its virtual keyboard. Keys still arrive as
+    // SDL_KEYDOWN (bindings, menus), which is all the port reads.
+    SDL_StopTextInput();
 
     qpc_freq = SDL_GetPerformanceFrequency();
 }

@@ -1,7 +1,5 @@
 # GoldenEye 007 PC Port
 
-<p align="center"><img src="docs/img/icon/ge007-icon.png" width="96" alt="project mark: a generic version of the game's default aim cross -- a circle with N/S/E/W lines crossing its edge (original generated art, see tools_pc/make_icon.py -- no game content)"></p>
-
 [![CI](https://github.com/jkdansereau/goldeneye-pc-port/actions/workflows/ci.yml/badge.svg)](https://github.com/jkdansereau/goldeneye-pc-port/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/jkdansereau/goldeneye-pc-port?include_prereleases&label=download)](https://github.com/jkdansereau/goldeneye-pc-port/releases)
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20Steam%20Deck-blue)
@@ -50,23 +48,30 @@ project is as much a study of that process as it is a port. See
 
 ## News
 
-- **2026-10-05** — **v0.5.0**: one real options system: a
-  single menu (laid out like the Perfect Dark port's) covering every setting,
-  the game's own N64 control styles as a per-seat preset, and your emulator
-  saves loading directly; a scalable HUD overlay; fullscreen, window-centring
-  and crosshair settings; and a fidelity round checked frame-by-frame against
-  the N64 game (fog, aspect-ratio letterboxing, the Watch menu's own
-  settings). The reference-frame gate was re-based on both platforms (21
-  levels, 63 frames each). Plus the small stuff: a menu wording, units and
-  help-text pass, standardised menu spelling, and antialiased overlay
-  controls.
-  [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0).
-- **v0.4.1**: 2–4 player split-screen multiplayer, controller presets and
-  rebinding, PlayStation/Nintendo button names, master volume and audio
-  device selection, a steady 60 fps on low-end GPUs, and fidelity fixes
-  checked against the N64 game (AI visibility at long draw distances, sniper
-  zoom, turret pacing, Dam/Caverns water, weapons).
-  [Release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases).
+- **2026-10-06** — **v0.5.0** ([release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0)), the first release
+  since v0.4.0; it includes the v0.4.1 work, which was never published on
+  its own:
+  - **2–4 player split-screen multiplayer** on every multiplayer map, each
+    player with their own pad, controls and aim settings.
+  - **One options menu** for every setting, laid out like the Perfect Dark
+    port's, with the game's own crosshair as the mouse pointer. Pick the
+    game's own N64 control styles (1.1–2.4) per player, or the Xbox release's
+    presets with per-player pad rebinding; PlayStation and Nintendo pads show
+    their own button names.
+  - **Closer to the N64:** fog and haze (Surface 2's ground fog, the sky at
+    the horizon), automatic-weapon fire rate, sniper and camera zoom, Dam and
+    Caverns water, the Jungle boss fight's timing, guard visibility in
+    widescreen, and the Dam ending camera.
+  - **Fewer crashes and glitches:** a multiplayer crash with the crouched
+    rifle, rockets passing through the ground, and broken geometry around
+    Aztec's shuttle.
+  - **A steady 60 fps on low-end GPUs** (tested on an Intel HD 3000 laptop),
+    with lighter first-launch defaults on Atom/Celeron-class graphics.
+  - **Emulator saves load directly:** copy a 1964 or Project64 save in as
+    `data/ge007.eep` and it is converted on first launch.
+  - Also: more audio, video and control settings (master volume, audio device,
+    trilinear filtering, draw distance up to 800%, PC-friendly crouch and
+    look-ahead defaults), and controllers are picked up again when replugged.
 - **2026-09-28** — **v0.4.0**: native widescreen, a complete aim system for
   mouse and controller, in-game key rebinding, crosshair customization,
   rumble-pak haptics, a rebuilt options overlay, and a broad fidelity-fix
@@ -136,7 +141,7 @@ resolution is wrong, set it under F10 → *Video → Resolution*.
 | Aim mode            | Right mouse / `LShift`   | Left trigger / LB |
 | Use / interact      | `E`                       | A             |
 | Reload              | `R`                       | X             |
-| Crouch              | `LCtrl`                   | Left or right stick click |
+| Crouch (toggles)    | `LCtrl`                   | Left or right stick click |
 | Cycle owned gadgets | Watch inventory          | B             |
 | Next weapon         | Mouse wheel down / `Q`   | Y             |
 | Previous weapon     | Mouse wheel up           | —             |
@@ -184,9 +189,11 @@ changes this). A controller unplugged mid-match keeps its player when
 plugged back in.
 
 **Options overlay with a controller** (also how it works on the Deck):
-**Select** opens it, the D-pad or left stick moves between options, **A**
-steps the selected option forward, **B** steps it back, and **Start** (or
-Select again) closes. With a keyboard, use `F10` and the arrow keys/Enter.
+**Select** opens it, the D-pad or left stick moves between rows and
+left/right adjusts the selected value, **A** opens a page or toggles a row,
+**B** goes back one page (and closes from the top), and **Start** (or Select
+again) closes. With a keyboard, use `F10`, the arrow keys, Enter and
+Backspace.
 
 ## Features
 
@@ -217,29 +224,33 @@ Select again) closes. With a keyboard, use `F10` and the arrow keys/Enter.
 - **Full audio:** in-level music and sound effects, with music, FX and master
   volume and a choice of output device.
 - **An in-game options overlay** (F10 / pad Select) for all of the above,
-  saved automatically.
+  saved automatically; the game's crosshair is the mouse pointer, and
+  each page has a *Reset to defaults* row.
 - **Faithful N64 progression by default.** Opt-in extras: *Skip intro* and
   *All unlocked* (every level, 007 mode and the full cheat menu, without
   touching your save), and *Check for updates* (off
   by default; one request to GitHub per launch when on, see Security).
-- **Saves in a plain file** next to the game, so backing up is a file copy.
+- **Saves in a plain file** next to the game, so backing up is a file copy;
+  1964 and Project64 saves load directly ([details](#using-an-emulator-save)).
 
 ## Status
 
 **Fully playable, with a small set of known caveats.** All 20 solo missions
-and the end-of-campaign credits load, render and run crash-free; the full
-campaign was playtested end to end at Agent difficulty on Windows, Linux and
-real Steam Deck hardware for v0.4.0. Split-screen multiplayer was played live
-in 2P on every MP map and in 4P on Temple.
-<!-- MAINTAINER: after the v0.5.0 play session, add what it covered here. -->
+and the end-of-campaign credits load, render and run crash-free. v0.5.0 was
+played on Windows and Steam Deck (campaign spot-checks, 2–4 player
+split-screen and controller-only sessions), and every level's reference
+frames were compared pixel by pixel on Windows, Linux and Steam Deck. The
+full campaign was last played end to end, at Agent difficulty on all three
+platforms, for v0.4.0. Split-screen was played live in 2P on every
+multiplayer map and in 4P on Temple.
 
 **Known issues:** see the **[known-issues table](docs/ROADMAP.md#known-issues)**
 (what you'll notice, impact, workarounds). The short version: NTSC-U ROMs
 only in the release packages, and no macOS/ARM builds yet.
 
-> ***All unlocked* never changes your save** since v0.4.1: it unlocks every
+> ***All unlocked* never changes your save** since v0.5.0: it unlocks every
 > level and cheat in memory only, and switching it off shows your real
-> progress. Builds before v0.4.1 could write fake unlocks into the save, and
+> progress. v0.4.0 and earlier could write fake unlocks into the save, and
 > those are not repaired; if you used it on an older build, keep a backup of
 > `data/ge007.eep`.
 
@@ -257,7 +268,7 @@ carries a GitHub build-provenance attestation you can check with
 
 **Options overlay:** press **F10** (pad: **Select**) in game or in the menus.
 Changes are saved automatically. Most settings live in `ge007.ini`; the
-ones that come from the game's own watch menu (look up/down, auto-aim, aim
+ones that come from the game's own watch menu (auto-aim, aim
 control, sight, look ahead, ammo on screen, screen size, screen ratio, music
 and FX volume) are part of your save, as on the N64. Screen size (Full / Wide /
 Cinema) and screen ratio (Normal / 16:9) combine with the PC **Aspect ratio**
@@ -294,7 +305,7 @@ MSAA = 2
 TextureFilter = 1
 NativeWidescreen = 1
 FovScale = 100
-DrawDistance = 250
+DrawDistance = 200
 
 [Audio]
 MasterVolume = 100
@@ -412,11 +423,12 @@ The port was built by two coding agents, directed by one person part-time.
 A local open-weight model (`unsloth/Qwen3.8-27B-GGUF` on one RTX 5090, via the
 [pi](https://github.com/earendil-works/pi) agent) did the groundwork: build, boot chain,
 software-RSP integration, asset pipeline, first frames. **Claude Code**
-(Sonnet 5, Opus 5 for the hardest bugs) joined for the collaborative phase:
+(Sonnet 5 and Opus 5, now 5.5; Opus for the hardest bugs) joined for the collaborative phase:
 the 21-level sweep, the ABI finding catalog, SDL input, front end. The two
-handed work back and forth through shared written notes. Up to v0.4.0: 43
-days (16 Aug – 28 Sep), 1005 commits, 286 findings root-caused and logged
-(`D1`–`D408`).
+handed work back and forth through shared written notes. Up to v0.5.0: 51
+days (16 Aug – 6 Oct), 1,537 commits (the public history squashes the
+v0.4.1–v0.5.0 work into 17), and 419 findings root-caused and logged
+(`D1`–`D564`).
 
 The full write-up (timeline, handoff mechanism, effort breakdown, an honest
 "what worked / what didn't"): [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md).
@@ -685,4 +697,4 @@ is covered by [`NOTICE`](NOTICE), not by that license.
 
 ---
 
-*Last updated 2026-10-05 — v0.5.0 · <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a> · <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>*
+*Last updated 2026-10-06 — v0.5.0 · <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a> · <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>*

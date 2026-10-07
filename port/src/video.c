@@ -547,7 +547,10 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.NativeWidescreen", &cfgNativeWidescreen, 0, 1);   /* D334 */
     configRegisterInt("Game.HudScale", &cfgHudScale, 75, 150);   /* D226: capped at 150 (user: little benefit above) */
     configRegisterInt("Video.DrawDistance", &cfgDrawDistance, 100, 800);
-    configRegisterInt("Video.FogDistance", &cfgFogDistance, 50, 800);   /* D540 */
+    /* D565: floor 100 -- below the authored fog the shortened far clip also
+     * shrinks what AI awareness counts as on screen / in sight (D466 keeps
+     * gameplay on the authored distance only for extensions). */
+    configRegisterInt("Video.FogDistance", &cfgFogDistance, 100, 800);   /* D540 */
     configRegisterInt("Video.DrawDistanceAutoFov", &cfgDrawDistanceAutoFov, 0, 1);
     configRegisterInt("Video.LodDistance", &cfgLodDistance, 25, 800);
     configRegisterInt("Video.LodDistanceAutoFov", &cfgLodDistanceAutoFov, 0, 1);
