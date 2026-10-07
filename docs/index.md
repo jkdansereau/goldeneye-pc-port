@@ -130,15 +130,15 @@ how faithfully it tracks the N64 game, on [Fidelity status](fidelity.md).
 <div class="viewer" id="viewer">
   <div class="vbar">
     <span class="dots"><i></i><i></i><i></i></span>
-    <span class="lbl">viewer &mdash; in-engine captures, 3072&times;1728</span>
-    <span class="idx" id="vIdx">1 / 12</span>
+    <span class="lbl">viewer &mdash; in-engine captures, 3840&times;2160</span>
+    <span class="idx" id="vIdx">1 / 14</span>
   </div>
   <div class="vstage">
-    <img id="vImg" src="img/shots/shot-01.jpg" alt="GoldenEye 007 PC port — Dam (v0.4.0 intro attract), in-engine capture">
+    <img id="vImg" src="img/shots/feature-splitscreen.jpg" alt="GoldenEye 007 PC port — 3-player split-screen multiplayer, in-engine capture">
     <button class="vbtn prev" id="vPrev" aria-label="previous capture">&#8249;</button>
     <button class="vbtn next" id="vNext" aria-label="next capture">&#8250;</button>
   </div>
-  <div class="vcap"><span id="vCap">Dam &mdash; v0.4.0 intro attract</span></div>
+  <div class="vcap"><span id="vCap">3-player split-screen &mdash; v0.5.0</span></div>
 </div>
 
 ## Play it, or take it apart
@@ -191,18 +191,20 @@ architecture, the N64→PC bug catalogue, and how the project is developed.
   // console-viewer carousel: one media slot, cycle the captures. Vanilla JS.
   (function () {
     var slides = [
-      { src:"img/shots/shot-01.jpg", cap:"Dam — v0.4.0 intro attract" },
-      { src:"img/shots/shot-03.jpg", cap:"Runway — v0.4.0 intro attract" },
-      { src:"img/shots/shot-04.jpg", cap:"Surface — v0.4.0 intro attract" },
-      { src:"img/shots/shot-09.jpg", cap:"Frigate — v0.4.0 intro attract" },
-      { src:"img/shots/shot-11.jpg", cap:"Surface 2 — v0.4.0 intro attract" },
-      { src:"img/shots/shot-16.jpg", cap:"Statue — v0.4.0 intro attract" },
-      { src:"img/shots/shot-20.jpg", cap:"Archives — v0.4.0 intro attract" },
-      { src:"img/shots/shot-21.jpg", cap:"Cradle — v0.4.0 intro attract" },
-      { src:"img/shots/shot-24.jpg", cap:"Aztec — v0.4.0 intro attract" },
-      { src:"img/shots/shot-27.jpg", cap:"Control — v0.4.0 intro attract" },
-      { src:"img/shots/shot-28.jpg", cap:"Streets — v0.4.0 intro attract" },
-      { src:"img/shots/shot-29.jpg", cap:"Jungle — v0.4.0 intro attract" }
+      { src:"img/shots/feature-splitscreen.jpg", cap:"3-player split-screen — v0.5.0" },
+      { src:"img/shots/feature-options.jpg", cap:"PC options menu, custom crosshair colour — v0.5.0" },
+      { src:"img/shots/shot-01.jpg", cap:"Dam — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-03.jpg", cap:"Runway — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-04.jpg", cap:"Surface — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-09.jpg", cap:"Frigate — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-11.jpg", cap:"Surface 2 — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-16.jpg", cap:"Statue — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-20.jpg", cap:"Archives — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-21.jpg", cap:"Cradle — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-24.jpg", cap:"Aztec — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-27.jpg", cap:"Control — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-28.jpg", cap:"Streets — v0.5.0 intro attract, 4K" },
+      { src:"img/shots/shot-29.jpg", cap:"Jungle — v0.5.0 intro attract, 4K" }
     ];
     var img = document.getElementById("vImg"),
         cap = document.getElementById("vCap"),

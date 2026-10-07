@@ -36,10 +36,10 @@ project is as much a study of that process as it is a port. See
 [How it was made](#how-it-was-made).
 
 <p align="center">
-  <img src="docs/img/shots/shot-28.jpg" width="23%" alt="Streets, rendered by the port">
+  <img src="docs/img/shots/feature-splitscreen.jpg" width="23%" alt="3-player split-screen multiplayer in the port">
+  <img src="docs/img/shots/feature-options.jpg" width="23%" alt="The PC options menu: custom crosshair colour sliders">
   <img src="docs/img/shots/shot-01.jpg" width="23%" alt="Dam, rendered by the port">
-  <img src="docs/img/shots/shot-03.jpg" width="23%" alt="Runway, rendered by the port">
-  <img src="docs/img/shots/shot-24.jpg" width="23%" alt="Aztec, rendered by the port">
+  <img src="docs/img/shots/shot-21.jpg" width="23%" alt="Cradle, rendered by the port">
   <br><em>All in-engine, running in the port ·
   <a href="docs/index.md">12 level stills in the project index</a></em>
 </p>
