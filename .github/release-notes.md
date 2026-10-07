@@ -34,9 +34,10 @@ staged as v0.4.1, which was never published on its own.
 - **Fixes you can see:** the Dam ending camera swivels onto Bond as on the N64,
   and rockets no longer pass
   through the ground.
-- **New settings:** fullscreen mode, center window, crosshair opacity and
-  crosshair colour by health, a scalable HUD overlay, and an optional update
-  check (off by default).
+- **New settings:** an optional crosshair when not aiming, a custom
+  crosshair colour (0-255 RGB, like the Perfect Dark port), fullscreen mode,
+  center window, crosshair opacity and crosshair colour by health, a scalable
+  HUD overlay, and an optional update check (off by default).
 
 Played on Windows and Steam Deck: campaign spot-checks, 2-4 player split-screen
 and controller-only sessions.
@@ -188,6 +189,10 @@ Menu and settings work:
 - Crosshair mouse pointer and scrollbar (D555, D556); long tips no longer cut
   off inside a level (D558). New defaults: Crouch Toggle, Look ahead off (D556,
   D557); same for untouched empty save folders (D559).
+- Crosshair when not aiming, opt-in (D436, #123 by dolent). Crosshair colour is
+  Original or Custom RGB with 0-255 sliders, as in the Perfect Dark port; a
+  saved named preset carries over as Custom (D569). Long dropdowns stay on
+  screen (D568).
 - F10 overlay mouse behaviour (D544). Static title bar and new icon (D550).
 - Overlay slider wedges, markers and dropdown arrows used to step in whole
   canvas pixels and grew visibly at large window sizes; now smooth (D520).
@@ -268,7 +273,7 @@ a cross-platform pixel-parity claim.
 
 ## Thanks
 
-Outside contributions merged for this release: dolent (PRs #120–#122), MST246
+Outside contributions merged for this release: dolent (PRs #120–#123), MST246
 (#125 draw-distance investigation), italoarruda (#109 gamepad-preset ideas),
 TenebrusoM (DexDrive / the D514 save-format sample), plus reporter credits on
 the issue numbers named above.

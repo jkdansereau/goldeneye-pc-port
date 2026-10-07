@@ -219,8 +219,8 @@ Backspace.
   button names.
 - **Rebindable controls** for keyboard, mouse and each controller.
 - **HUD and crosshair options:** HUD scale (also scales the in-game options
-  menu), an optional customizable crosshair with adjustable opacity and a
-  health-based color, and a no-hit-flash option.
+  menu), an optional crosshair when not aiming, a custom RGB crosshair color
+  with adjustable opacity and a health-based color, and a no-hit-flash option.
 - **Full audio:** in-level music and sound effects, with music, FX and master
   volume and a choice of output device.
 - **An in-game options overlay** (F10 / pad Select) for all of the above,
@@ -604,7 +604,7 @@ This port is a thin layer on a large amount of other people's work.
 
 **Contributors**
 
-- **dolent** (#120, #121, #122), **italoarruda** (#107, #109),
+- **dolent** (#120, #121, #122, #123), **italoarruda** (#107, #109),
   **JosephAHK** (#133), and **MST246** (the #125 investigation), plus
   everyone who filed issues.
 
