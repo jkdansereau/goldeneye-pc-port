@@ -184,6 +184,11 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: registry.gitlab.steamos.cloud/steamrt/sniper/sdk:3.0.20260805.254768@sha256:1c33c507bc75d012e77df5727f93b0d5b8c3f7c8d4142ba5f7a16882cc92e014
+    # A container job's default `run` shell is sh, not bash (the packaging
+    # step's ${GITHUB_SHA::7} is a bashism).
+    defaults:
+      run:
+        shell: bash
     env:
       CC: gcc-14
       CXX: g++-14
