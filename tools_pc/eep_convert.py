@@ -233,7 +233,8 @@ def main():
     if not any(ok for _, ok in done):
         # Nothing validates as the claimed source: wrong direction, an
         # already-converted file, or not a GoldenEye save. Write nothing.
-        print(f"error: {a.INFILE} does not validate as {"an" if src_label == "n64" else "a"} {src_label} save; "
+        article = "an" if src_label == "n64" else "a"   # no nested quotes: Python < 3.12
+        print(f"error: {a.INFILE} does not validate as {article} {src_label} save; "
               f"nothing written. Run 'eep_convert.py verify {a.INFILE}' to "
               f"see which format it is.", file=sys.stderr)
         sys.exit(1)
