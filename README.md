@@ -48,7 +48,7 @@ project is as much a study of that process as it is a port. See
 
 ## News
 
-- **2026-10-06** — **v0.5.0** ([release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0)), the first release
+- **2026-10-07** — **v0.5.0** ([release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0)), the first release
   since v0.4.0; it includes the v0.4.1 work, which was never published on
   its own:
   - **2–4 player split-screen multiplayer** on every multiplayer map, each
@@ -92,8 +92,9 @@ project is as much a study of that process as it is a port. See
 download carries its own runtime libraries and the one-time asset tool (no
 Python, no emulator).
 
-**Linux / Steam Deck:** 64-bit x86 Linux. SDL2 is bundled, so the tarball
-runs as-is; it sideloads onto a Steam Deck with nothing installed.
+**Linux / Steam Deck:** 64-bit x86 Linux with glibc 2.38 or newer (Ubuntu
+24.04+, Fedora 39+, Debian 13+, current SteamOS or Arch). SDL2 is bundled, so
+the tarball runs as-is; it sideloads onto a Steam Deck with nothing installed.
 
 **Both:** a GPU with OpenGL 3.0 drivers (practically any PC GPU from the last
 fifteen years; keep the driver up to date). A 2011 laptop with Intel HD
@@ -697,4 +698,4 @@ is covered by [`NOTICE`](NOTICE), not by that license.
 
 ---
 
-*Last updated 2026-10-06 — v0.5.0 · <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a> · <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>*
+*Last updated 2026-10-07 — v0.5.0 · <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a> · <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>*

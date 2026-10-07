@@ -9,7 +9,7 @@ description: >-
 # and the WebPage JSON-LD dates). Keep these equal to the last real content
 # change of THIS page, not to the last release.
 date: '2026-10-05'
-modified_time: '2026-10-06'
+modified_time: '2026-10-07'
 locale: en_US
 # The masthead is this page's title, so its first content h2 must NOT get the
 # amber page-title look (double header). See the .flat-title rule in
@@ -32,7 +32,7 @@ Rare "Indy" engine family, one hardware generation apart.
 
 <div class="cblock">
 
-### v0.5.0 (2026-10-06) — split-screen multiplayer, one options menu, closer to the N64.
+### v0.5.0 (2026-10-07) — split-screen multiplayer, one options menu, closer to the N64.
 
 - **2–4 player split-screen multiplayer** on every multiplayer map, each
   player with their own pad, controls and aim settings.
@@ -88,7 +88,7 @@ single tracker for what comes next.
 <p class="warn"><strong>Warning:</strong> always use the latest release — earlier builds are kept in the release history for reference only; they lack the features and fixes of newer versions, so don't install an older release.</p>
 
 <ul>
-<li><strong>2026-10-06 — v0.5.0</strong>: what it adds is the Status list above. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0">Release notes</a>.</li>
+<li><strong>2026-10-07 — v0.5.0</strong>: what it adds is the Status list above. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0">Release notes</a>.</li>
 <li><strong>2026-09-28 — v0.4.0</strong>: native widescreen, a complete aim system for mouse and controller, in-game key rebinding, crosshair customization, rumble-pak haptics, a rebuilt options overlay, and a broad fidelity-fix pass. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.4.0">Release notes</a>.</li>
 <li><strong>2026-09-20 — v0.3.0</strong>: the first release with the complete campaign playable end to end at 60 fps on Windows, Linux, and Steam Deck. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.3.0">Release notes</a>.</li>
 <li><strong>2026-09-04 → 2026-09-16 — v0.1.0 – v0.2.2</strong>: the alpha and beta cycle — build chain, software RSP, first rendered frames, front end, and per-level stabilization across the campaign.</li>
@@ -237,7 +237,7 @@ architecture, the N64→PC bug catalogue, and how the project is developed.
   "description": "A native PC build of GoldenEye 007 (Rare, 1997, Nintendo 64), compiled from the n64decomp/007 decompilation with the N64's RSP emulated in software. Ships no ROM and no game assets; you supply your own.",
   "softwareVersion": "0.5.0",
   "datePublished": "2026-10-05",
-  "dateModified": "2026-10-06",
+  "dateModified": "2026-10-07",
   "operatingSystem": ["Windows", "Linux", "Steam Deck"],
   "downloadUrl": "https://github.com/jkdansereau/goldeneye-pc-port/releases",
   "distributionType": "Software-Offline",

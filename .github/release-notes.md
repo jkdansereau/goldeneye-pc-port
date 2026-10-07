@@ -157,6 +157,7 @@ Full steps, controls and troubleshooting are in the bundled `README.md`.
 | Issue | Impact | Workaround |
 |---|---|---|
 | PAL and JP ROMs aren't supported in release packages | NTSC-U only | Use an NTSC-U ROM. Both regions convert, build and boot from source; packaging is still open |
+| The Linux tarball needs glibc 2.38 or newer | Won't start on older distros (Ubuntu 22.04, Debian 12, Fedora 38 and earlier) | Use a newer distro, or build from source |
 | Changing aspect ratio inside a level can briefly glitch the gun/hand model, rarely | Cosmetic, one-off | Change the ratio from the front-end PC Options, or accept it |
 | No macOS or ARM builds | Platform | — |
 | Saves from v0.4.0 and earlier can hold fake unlocks from `All unlocked` | Save data | Not repaired automatically. Since v0.5.0 the option never writes the save; keep a backup of `data/ge007.eep` from before you used it |
