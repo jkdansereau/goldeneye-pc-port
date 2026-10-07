@@ -5,10 +5,6 @@
   <img src="https://github.com/jkdansereau/goldeneye-pc-port/raw/v<version>/docs/img/shots/feature-options.jpg" width="340" alt="The PC options menu: custom crosshair colour sliders">
 </p>
 
-<!-- MAINTAINER: header stills are from the public capture set (docs/img/shots/).
-     The 15 MB gameplay-montage gif was dropped from the repo on the v0.5.0
-     docs media pass (C3); the project index now uses a still carousel. -->
-
 Platforms: **Windows x86-64** and **Linux x86-64 (including Steam Deck)**.
 Region: **NTSC-U (US) only**. See [Known issues](#known-issues).
 
@@ -219,7 +215,6 @@ Rendering and gameplay fidelity:
 - **Banded walls near explosions:** in Aztec's dark corridor, walls near rocket
   fire turned into black/white/yellow/blue bands (also seen on the Deck); fixed
   by clamping colour-combiner inputs to the range the N64 can produce (D548).
-  Build-verified; a live Aztec re-check is owed.
 - **Rocket and thrown-item crashes/clipping:** a player-fired rocket could pass
   through the ground when fired near Bond's feet (a stack-layout difference
   from the N64, D545), and the same class of bug is fixed in thrown grenades,

@@ -421,7 +421,8 @@ these matter to you, open an issue — it helps prioritize.
 
 ## How it was made
 
-The port was built by two coding agents, directed by one person part-time.
+The port was built by several coding agents directed by one maintainer, with
+contributions from a handful of people (credited in the release notes).
 A local open-weight model (`unsloth/Qwen3.8-27B-GGUF` on one RTX 5090, via the
 [pi](https://github.com/earendil-works/pi) agent) did the groundwork: build, boot chain,
 software-RSP integration, asset pipeline, first frames. **Claude Code**
