@@ -18356,4 +18356,7 @@ stays N64; the row got a tip; the `gunDrawSight` condition is presentation only
 maintainer with this request (Rule 2). Placement: Game page, right after "Show
 crosshair". **Owed (maintainer, by eye):** hipfire on/off, sniper zoom, and
 split-screen 2P with the option on.
-
+**Relabel (2026-10-06, maintainer):** the row reads "Crosshair always on" (was
+"Crosshair when not aiming"); off by default (code default, reset table and both
+display-mode presets all 0); new tip. The ini key `Video.CrosshairPersistent` is
+unchanged.

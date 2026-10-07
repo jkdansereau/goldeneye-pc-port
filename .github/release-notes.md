@@ -34,7 +34,7 @@ staged as v0.4.1, which was never published on its own.
 - **Fixes you can see:** the Dam ending camera swivels onto Bond as on the N64,
   and rockets no longer pass
   through the ground.
-- **New settings:** an optional crosshair when not aiming, a custom
+- **New settings:** an optional always-on crosshair, a custom
   crosshair colour (0-255 RGB, like the Perfect Dark port), fullscreen mode,
   center window, crosshair opacity and crosshair colour by health, a scalable
   HUD overlay, and an optional update check (off by default).
@@ -189,7 +189,7 @@ Menu and settings work:
 - Crosshair mouse pointer and scrollbar (D555, D556); long tips no longer cut
   off inside a level (D558). New defaults: Crouch Toggle, Look ahead off (D556,
   D557); same for untouched empty save folders (D559).
-- Crosshair when not aiming, opt-in (D436, #123 by dolent). Crosshair colour is
+- Crosshair always on, opt-in, off by default (D436, #123 by dolent). Crosshair colour is
   Original or Custom RGB with 0-255 sliders, as in the Perfect Dark port; a
   saved named preset carries over as Custom (D569). Long dropdowns stay on
   screen (D568).

@@ -219,7 +219,7 @@ Backspace.
   button names.
 - **Rebindable controls** for keyboard, mouse and each controller.
 - **HUD and crosshair options:** HUD scale (also scales the in-game options
-  menu), an optional crosshair when not aiming, a custom RGB crosshair color
+  menu), an optional always-on crosshair, a custom RGB crosshair color
   with adjustable opacity and a health-based color, and a no-hit-flash option.
 - **Full audio:** in-level music and sound effects, with music, FX and master
   volume and a choice of output device.
