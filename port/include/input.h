@@ -88,6 +88,10 @@ int  inputMenuPointerLive(void);
 /* Re-enumerate gamepads after a hotplug (SDL_CONTROLLERDEVICEADDED/REMOVED). */
 void inputRescanPads(void);
 
+/* D413: the N64 control style (0 = 1.1 Honey .. 3 = 1.4 Goodnight) the PC
+ * bindings are tuned for; the online lobby's default for this player. */
+int inputPreferredControlStyle(void);
+
 /* D401: Rumble Pak -> real gamepad haptics. The osMotor* shims in
  * libultra.c (game's src/joy.c rumble state machine) route here.
  * idx is the N64 controller channel (0..3; out-of-range is a no-op).

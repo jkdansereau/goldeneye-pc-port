@@ -51,6 +51,7 @@ extern MENU current_menu;
 #include "file.h"   /* save_data (D356 reset probe: second-file isolation) */
 #include "optionsoverlay.h"
 #include "watchsettings.h"
+#include "netui.h"   /* D414: netuiRequestOpen (the ONLINE root entry) */
 #include "../fast3d/gfx_api.h"
 
 /* file2.c; same extern as watchsettings.c (not in a header). */
@@ -392,6 +393,9 @@ static struct Row rows[] = {
     { .key="Video.FpsCap", .label="Frame rate cap", .kind=ROW_FPSCAP },
     { .key="Video.DisplayFPS", .label="Show FPS", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     { .key="__ResetVideo", .label="Reset to defaults", .kind=ROW_ACTION },
+    /* D414: a root entry that is not a section -- it hands over to the F9
+     * online-play overlay (netui.c); see optionsRowIsOnlineEntry. No rows. */
+    { .key="__HdrOnline", .label="ONLINE MULTIPLAYER", .kind=ROW_HEADER },
     /* D356: the D353 BOND FILE header + "Edit file" chooser row are retired --
      * the front options screen's top save-file row (frontoptions.c, D356) is
      * the single file control; F10 always targets the active file. */
@@ -769,6 +773,17 @@ static void overlayUpdateScroll(void)
 
 static void overlayOpenHeader(int hdr)
 {
+    if (optionsRowIsOnlineEntry(hdr)) {
+        /* D414: one options UI at a time (D343) -- close, then open F9's. */
+        if (s_open) {
+            s_open = 0;
+            optionsResetClear();
+            configSave();
+            sysLogPrintf(LOG_INFO, "optionsoverlay: closed for online play");
+        }
+        netuiRequestOpen();
+        return;
+    }
     s_section = hdr;
     s_sel = 1;
     s_scroll = 0;
@@ -889,14 +904,17 @@ static void overlayInit(void)
         int oldSection = s_section, oldSel = s_sel, oldScroll = s_scroll;
         int bad = 0;
         static const char *const roots[] = {
-            "__HdrInput", "__HdrGameplay", "__HdrGraphics", "__HdrAudio", "__HdrVideo"
+            "__HdrInput", "__HdrGameplay", "__HdrGraphics", "__HdrAudio", "__HdrVideo",
+            "__HdrOnline"   /* D414: opens the F9 overlay, never walked here */
         };
         s_section = -1; s_sel = 0; s_scroll = 0;
         overlayUpdateVisible();
         bad += overlayHitCheck();
-        if (s_visN != 5) bad++;
-        for (int p = 0; p < 5 && p < s_visN; p++)
+        if (s_visN != 6) bad++;
+        for (int p = 0; p < 6 && p < s_visN; p++)
             if (strcmp(rows[s_visIdx[p]].key, roots[p])) bad++;
+        if (!optionsRowIsOnlineEntry(rowIndexByKey("__HdrOnline")) ||
+            optionsRowIsOnlineEntry(rowIndexByKey("__HdrVideo"))) bad++;
         static const struct { const char *page, *childA, *childB; int maxRows; } pages[] = {
             { "__HdrInput", "__OpenBindings", NULL, 14 },
             { "__HdrBindings", "__OpenMoveKeys", "__OpenActionKeys", 14 },
@@ -940,7 +958,7 @@ static void overlayInit(void)
         s_section = oldSection; s_sel = oldSel; s_scroll = oldScroll;
         overlayUpdateVisible();
         sysLogPrintf(bad ? LOG_ERROR : LOG_INFO,
-                     "GE_OPTIONTREEPROBE: %s (5 roots, nested links/back, two bind pages, HUD, row caps, no M5)",
+                     "GE_OPTIONTREEPROBE: %s (6 roots incl. online, nested links/back, two bind pages, HUD, row caps, no M5)",
                      bad ? "FAIL" : "PASS");
     }
 
@@ -2330,6 +2348,12 @@ int optionsRowIsBondChooser(int i)
 {
     struct Row *r = rowAt(i);
     return r && r->kind == ROW_BOND_FILE;
+}
+
+int optionsRowIsOnlineEntry(int i)
+{
+    struct Row *r = rowAt(i);
+    return r && r->kind == ROW_HEADER && !strcmp(r->key, "__HdrOnline");
 }
 
 /* D356: content rows carry the literal per-file flag from the table; header

@@ -32,6 +32,7 @@
 #include "input.h"
 #include "mixer.h"
 #include "crash.h"
+#include "netgame.h"
 #include "thread_config.h"
 #include "game/language.h" /* D295/M-148: JPN glyph-cache types + j_text_trigger */
 
@@ -71,7 +72,14 @@ static void portPrintHelp(const char *argv0)
            "                    (removes ge007.eep save and ge007.ini; the\n"
            "                    ini is re-written with defaults on exit)\n"
            "  -level_XX         boot straight into a solo level (per-level\n"
-           "                    memory pools are auto-injected)\n\n"
+           "                    memory pools are auto-injected)\n"
+           "\nonline multiplayer (F9 in game opens the Online menu):\n"
+           "  --net-host [PORT] host a game others join directly (LAN or a\n"
+           "                    forwarded UDP port; default 27007)\n"
+           "  --net-join ADDR   join a directly hosted game (host[:port])\n"
+           "  --net-server ADDR matchmaking server to use (host[:port])\n"
+           "  --net-quick       connect to the server and quick-match\n"
+           "  --net-name NAME   player name shown online\n\n"
            "config: ge007.ini in the data dir (written on first run).\n\n"
            "solo levels (-level_XX):\n", argv0 ? argv0 : "ge007");
     for (size_t i = 0; i < sizeof(kSoloLevels) / sizeof(kSoloLevels[0]); ++i) {
@@ -199,6 +207,9 @@ int main(int argc, char **argv)
     audioInit();
     mixerInit();
     inputInit();
+    /* D413: online multiplayer. Registers nothing on the network and opens
+     * no socket unless the player opens Online (F9) or passes --net-*. */
+    netgameInit();
 
     /* 4. Run the game. mainproc() runs as the N64 mainThread (a real OS
      *    thread with its own stack); it creates the rmon/idle/scheduler/

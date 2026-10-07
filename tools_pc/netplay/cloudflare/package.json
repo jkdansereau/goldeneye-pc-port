@@ -1,0 +1,19 @@
+{
+  "name": "ge007-online",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GoldenEye 007 PC port online service: lobby directory, matchmaking and live status page (Cloudflare Worker + Durable Object).",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:integration": "node test/integration.mjs",
+    "test:online": "node test/online.mjs",
+    "mock": "node test/mock-server.js",
+    "demo": "node test/demo.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.148.0"
+  }
+}

@@ -156,7 +156,16 @@ const char *sysGetTokenString(void)
         size_t n = 0;
         buf[0] = '\0';
         for (int i = 1; i < g_argc && g_argv[i]; ++i) {
-            size_t len = strlen(g_argv[i]);
+            size_t len;
+            /* D413: port-only netplay switches (--net-host 27007, --net-join
+             * addr, ...) are not cartridge tokens; keep them and their value
+             * out of the game's small token buffer. */
+            if (strncmp(g_argv[i], "--net-", 6) == 0) {
+                if (i + 1 < g_argc && g_argv[i + 1] && g_argv[i + 1][0] != '-')
+                    ++i;
+                continue;
+            }
+            len = strlen(g_argv[i]);
             if (n + len + 2 >= sizeof(buf))
                 break;
             if (n)

@@ -74,6 +74,9 @@ int         optionsRowIsBind(int i);
 void        optionsRowBeginBind(int i);
 int         optionsRowIsBondChooser(int i); /* D353: the Bond-file chooser row
                                               (front options screen only) */
+/* D414: the ONLINE MULTIPLAYER root entry -- opens the F9 online overlay
+ * (netuiRequestOpen) instead of a section; both surfaces intercept it. */
+int         optionsRowIsOnlineEntry(int i);
 /* D356: 1 when this row's value lives in the selected save file (content
  * rows); on a header, when its section contains such rows -- the front page
  * uses the header form for its "(File N)" title annotation. */

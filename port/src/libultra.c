@@ -51,6 +51,7 @@
 #include "fs.h"
 #include "romdata.h"
 #include "watchsettings.h"
+#include "netgame.h"   /* D413 */
 #include "crash.h"
 
 #if defined(PLATFORM_WINDOWS)
@@ -122,10 +123,62 @@ static int g_determPreTaskTicksGranted = 0;
 static int g_determTraceEnabled = 0;
 static u32 g_determTraceSeq = 0;
 
+/* D413 netplay: frame-locked clock for the GAME thread during an online
+ * match (docs/dev/NETPLAY-PLAN.md H1). Pull model: whenever the game thread
+ * reads the count and the last released 1/60 s quantum has already been
+ * consumed by updateFrameCounters() (copy_of_osgetcount_value_1 caught up),
+ * release exactly one more. Every waitForNextFrame() therefore computes
+ * deltaFrames == 1 on every peer, whatever the wall clock did; WHEN frames
+ * run is paced by the netplay playback hook, not by this clock. Other
+ * threads (scheduler, audio) keep the wall clock. Unlike GE_DETERM (D117)
+ * this is only ever enabled from a stage load, so the boot-time chicken-and-
+ * egg problems D117 hit never arise. s_gameOffset keeps the game thread's
+ * wall clock continuous after a match (0 until the first match ends). */
+static volatile int s_netClockOn = 0;
+static u32 s_netClockV = 0;
+static u32 s_gameOffset = 0;
+static pthread_t s_gameThread;
+static volatile int s_gameThreadKnown = 0;
+extern u32 copy_of_osgetcount_value_1;   /* src/game/frametiming.c */
+
+static u32 portWallCount(void)
+{
+    return (u32)(((uint64_t)sysGetMicroseconds() * 465525ull) / 10000ull);
+}
+
+static int portOnGameThread(void)
+{
+    return s_gameThreadKnown && pthread_equal(pthread_self(), s_gameThread);
+}
+
+void portNetClockEnable(void)
+{
+    /* Called on the game thread (netgameOnStageLoad). */
+    s_netClockV = copy_of_osgetcount_value_1;
+    s_netClockOn = 1;
+}
+
+void portNetClockDisable(void)
+{
+    if (!s_netClockOn) return;
+    s_netClockOn = 0;
+    /* Continue the game thread's clock from the virtual value. */
+    s_gameOffset = s_netClockV - portWallCount();
+}
+
 u32 osGetCount(void)
 {
     if (g_determEnabled) {
         return g_determTicks;
+    }
+    if ((s_netClockOn || s_gameOffset) && portOnGameThread()) {
+        if (s_netClockOn) {
+            if ((u32)(s_netClockV - copy_of_osgetcount_value_1) < g_determQuantum / 2) {
+                s_netClockV += g_determQuantum;
+            }
+            return s_netClockV;
+        }
+        return portWallCount() + s_gameOffset;
     }
     /* The N64 RSP core counter advances at ~OS_CPU_COUNTER (~46.5 MHz), NOT
      * microseconds. GE's pacing assumes this rate: waitForNextFrame() in
@@ -374,6 +427,12 @@ static void *portThreadWrapper(void *arg)
 #else
     pt->tid = (unsigned long)pthread_self();
 #endif
+
+    /* D413: remember the game thread (bossMainloop) for the netplay clock. */
+    if (pt->id == 3 /* MAIN_THREAD_ID */) {
+        s_gameThread = pthread_self();
+        s_gameThreadKnown = 1;
+    }
 
     /* The N64 idle thread is an infinite no-yield loop (idleproc). On the
      * host it would just burn a core and nothing depends on it running, so
@@ -642,6 +701,23 @@ static void d60logRecv(OSMesgQueue *mq, OSMesg m) {
     ++n;
 }
 
+/* D414: the netplay waiting screen. While the game thread is parked in a
+ * lockstep wait (netgame.c) no display list arrives, so nothing is drawn:
+ * the last frame would sit frozen for as long as the wait lasts (up to two
+ * minutes at the start barrier), and the heartbeat above would report a
+ * hang. The scheduler thread owns the GL context and has nothing else to
+ * render then, so it presents a frame of its own -- an empty game display
+ * list under netui's overlay, which draws the waiting screen. */
+extern Gfx *netuiWaitFrameDl(void);   /* netui.c: an empty game DL */
+
+static void portNetWaitFrame(void)
+{
+    videoStartFrame();
+    gfx_run(netuiWaitFrameDl());
+    videoEndFrame();
+    g_lastFrameUs = sysGetMicroseconds();
+}
+
 s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
 {
     PortQueue *pq = portQueueGet(mq);
@@ -709,8 +785,17 @@ s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
     pthread_mutex_unlock(&pq->lock);
     /* gfxFrameMsgQ is consumed only by boss.c's game thread. Apply queued
      * F10 watch edits there, after releasing the OS queue lock; the SDL
-     * input/scheduler and render threads never touch GE watch/save state. */
-    if (mq == &gfxFrameMsgQ) watchSettingsGameTick();
+     * input/scheduler and render threads never touch GE watch/save state.
+     * D413: the netplay match starter runs at the same point. */
+    if (mq == &gfxFrameMsgQ) {
+        watchSettingsGameTick();
+        netgameGameTick();
+    }
+    /* D414: __scMain (the retrace queue's sole consumer) presents the
+     * netplay waiting screen while the game thread is parked. */
+    if (g_viRetraceMQ && mq == g_viRetraceMQ && netgameWantWaitFrame()) {
+        portNetWaitFrame();
+    }
     return 0;
 }
 
@@ -1088,6 +1173,15 @@ static u8 g_contConnected = 0x1; /* controller 0 connected */
  * OSContPad / OSContStatus arrays joy.c reads via osContGetReadData(). */
 static void contSnapshotFromKeyboard(void)
 {
+    /* D413: during an online match the game reads its controllers through
+     * joy.c's playback hook (port/src/netgame.c), and input.c is sampled by
+     * netgame on the game thread once per frame. The regular SI path must not
+     * consume mouse deltas or write game state meanwhile: hand it neutral
+     * pads (controller status is left as is). */
+    if (netgameOwnsInput()) {
+        memset(g_contPad, 0, sizeof(g_contPad));
+        return;
+    }
     inputUpdate();
 
     const s32 mask = inputConnectedMask();

@@ -259,6 +259,44 @@ static float g_gpSafeTop = 0.0f;
 static float g_gpSafeHeight = -1.0f;
 static bool g_safe_area_crop_enabled = true;
 
+/* D413 online multiplayer presentation (port/src/netgame.c). Every peer runs
+ * and interprets ALL players' views (lvlRender interleaves simulation with
+ * each player's render pass, so the DL must be built identically), but each
+ * PC shows only its own player: the local viewport S (logical 320x240 space,
+ * top-left origin) is mapped onto T, the largest rect of the same display
+ * aspect that fits the render target, centred. While active:
+ *   - gfx_adjust_viewport_or_scissor() maps every viewport / scissor / 2D
+ *     rect canvas through S->T instead of canvas->window (HUD aspect modes
+ *     and the safe-area crop are neutral -- the quadrant is self-contained);
+ *   - every scissor is intersected with T;
+ *   - triangles whose logical viewport, and rectangles whose logical bounds,
+ *     miss S are skipped (other players' views cost no GL work).
+ * Switched off before the port overlays (F10, online UI) are drawn. Inactive
+ * outside matches: the frame is byte-identical to before. */
+#include <mutex>
+static std::mutex s_np_mx;
+static struct { int enable; float x, y, w, h; } s_np_req;
+static struct {
+    bool active;
+    float sx, sy, sw, sh;     /* S, logical, top-left origin */
+    float tx, ty, tw, th;     /* T, render-target pixels, top-left origin */
+} s_np;
+/* Logical (pre-mapping) bounds of the current SP viewport, for culling. */
+static float s_np_vp_x = 0.0f, s_np_vp_top = 0.0f, s_np_vp_w = 0.0f, s_np_vp_h = 0.0f;
+
+extern "C" void gfx_netplay_set_view(int enable, float x, float y, float w, float h) {
+    std::lock_guard<std::mutex> lk(s_np_mx);
+    s_np_req.enable = enable;
+    s_np_req.x = x;
+    s_np_req.y = y;
+    s_np_req.w = w;
+    s_np_req.h = h;
+}
+
+static inline bool gfx_np_overlaps_s(float x0, float y0, float x1, float y1) {
+    return x1 > s_np.sx && x0 < s_np.sx + s_np.sw && y1 > s_np.sy && y0 < s_np.sy + s_np.sh;
+}
+
 extern "C" void gfx_set_safe_area_crop(int on) {
     g_safe_area_crop_enabled = !!on;
 }
@@ -2219,6 +2257,10 @@ static inline int gfx_lod_tile_offset(const int i) {
 }
 
 static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bool is_rect) {
+    if (s_np.active && !is_rect &&
+        !gfx_np_overlaps_s(s_np_vp_x, s_np_vp_top, s_np_vp_x + s_np_vp_w, s_np_vp_top + s_np_vp_h)) {
+        return;   /* D413: another player's view -- not presented on this PC */
+    }
     /* D75D: only real model triangles (all indices < MAX_VERTICES); the
      * fullscreen-quad helpers use indices MAX_VERTICES+0..3 and would skew maxtri. */
     if (vtx1_idx < MAX_VERTICES && vtx2_idx < MAX_VERTICES && vtx3_idx < MAX_VERTICES) {
@@ -2989,6 +3031,13 @@ static void gfx_sp_geometry_mode(uint32_t clear, uint32_t set) {
 static inline void gfx_update_aspect_mode(void) {
     const uint32_t side = rsp.aspect_mode & G_ASPECT_CENTER_EXT;
 
+    if (s_np.active) {
+        /* D413: the presented quadrant is self-contained; no HUD anchoring. */
+        rsp.aspect_scale = gfx_current_dimensions.aspect_ratio;
+        rsp.aspect_ofs = 0.f;
+        return;
+    }
+
     rsp.aspect_scale = rsp.aspect_mode ? gfx_current_native_aspect : gfx_current_window_dimensions.aspect_ratio;
 
     if (side == G_ASPECT_LEFT_EXT) {
@@ -3014,7 +3063,37 @@ static void gfx_sp_extra_geometry_mode(uint32_t clear, uint32_t set) {
     gfx_update_aspect_mode();
 }
 
+/* D413: render-target pixel rect (top-down) -> final GL rect, with the same
+ * game-window offset the normal path below applies. */
+static void gfx_np_px_to_final(XYWidthHeight* area, float x1, float ytop, float x2, float ybot) {
+    const float H = (float)gfx_current_dimensions.height;
+    area->x = (int16_t)std::floor(x1);
+    area->y = (int16_t)std::floor(H - ybot);   /* GL bottom-up */
+    area->width = (uint32_t)(std::ceil(x2) - area->x);
+    area->height = (uint32_t)(std::ceil(H - ytop) - area->y);
+    if (!game_renders_to_framebuffer ||
+        (gfx_msaa_level > 1 && gfx_current_dimensions.width == gfx_current_game_window_viewport.width &&
+            gfx_current_dimensions.height == gfx_current_game_window_viewport.height)) {
+        area->x += gfx_current_game_window_viewport.x;
+        area->y += gfx_current_window_dimensions.height -
+                    (gfx_current_game_window_viewport.y + gfx_current_game_window_viewport.height);
+    }
+}
+
 static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_aspect = false) {
+    if (s_np.active) {
+        /* D413: logical S -> render-target T (see s_np). area->y is the
+         * BOTTOM edge in top-down logical units, like the path below. */
+        const float kx = s_np.tw / s_np.sw;
+        const float ky = s_np.th / s_np.sh;
+        const float x1 = s_np.tx + ((float)area->x - s_np.sx) * kx;
+        const float x2 = s_np.tx + ((float)area->x + (float)area->width - s_np.sx) * kx;
+        const float ybot = s_np.ty + ((float)area->y - s_np.sy) * ky;
+        const float ytop = s_np.ty + ((float)area->y - (float)area->height - s_np.sy) * ky;
+        (void)preserve_aspect;
+        gfx_np_px_to_final(area, x1, ytop, x2, ybot);
+        return;
+    }
     // HACK: assume all target framebuffers have the same aspect
     // Use floor/ceil to ensure scissor fully contains the logical region
     // and prevents sub-pixel gaps at viewport edges
@@ -3092,6 +3171,77 @@ extern "C" void gfx_get_ui_screen_rect(int32_t *outX, int32_t *outY, int32_t *ou
     *outH = (int32_t)area.height;
 }
 
+/* D413: T in final (GL, offset-applied) coordinates. */
+static void gfx_np_target_rect(XYWidthHeight* t) {
+    gfx_np_px_to_final(t, s_np.tx, s_np.ty, s_np.tx + s_np.tw, s_np.ty + s_np.th);
+}
+
+static void gfx_np_clip_scissor(XYWidthHeight* sc) {
+    XYWidthHeight t;
+    int32_t x0, y0, x1, y1;
+    if (!s_np.active) {
+        return;
+    }
+    gfx_np_target_rect(&t);
+    x0 = std::max<int32_t>(sc->x, t.x);
+    y0 = std::max<int32_t>(sc->y, t.y);
+    x1 = std::min<int32_t>((int32_t)sc->x + (int32_t)sc->width, (int32_t)t.x + (int32_t)t.width);
+    y1 = std::min<int32_t>((int32_t)sc->y + (int32_t)sc->height, (int32_t)t.y + (int32_t)t.height);
+    sc->x = (int16_t)x0;
+    sc->y = (int16_t)y0;
+    sc->width = (uint32_t)(x1 > x0 ? x1 - x0 : 0);
+    sc->height = (uint32_t)(y1 > y0 ? y1 - y0 : 0);
+}
+
+static void gfx_np_begin_frame(void) {
+    int enable;
+    float x, y, w, h;
+    {
+        std::lock_guard<std::mutex> lk(s_np_mx);
+        enable = s_np_req.enable;
+        x = s_np_req.x;
+        y = s_np_req.y;
+        w = s_np_req.w;
+        h = s_np_req.h;
+    }
+    s_np.active = false;
+    if (enable && w >= 8.0f && h >= 8.0f && gfx_current_dimensions.width > 0 && gfx_current_dimensions.height > 0) {
+        const float W = (float)gfx_current_dimensions.width;
+        const float H = (float)gfx_current_dimensions.height;
+        /* Display aspect of S: the logical canvas is shown at 4:3. */
+        const float pixelAspect = (4.0f / 3.0f) / ((float)SCREEN_WIDTH / (float)SCREEN_HEIGHT);
+        const float a = (w / h) * pixelAspect;
+        s_np.sx = x;
+        s_np.sy = y;
+        s_np.sw = w;
+        s_np.sh = h;
+        if (W / H > a) {
+            s_np.th = H;
+            s_np.tw = H * a;
+            s_np.tx = (W - s_np.tw) * 0.5f;
+            s_np.ty = 0.0f;
+        } else {
+            s_np.tw = W;
+            s_np.th = W / a;
+            s_np.tx = 0.0f;
+            s_np.ty = (H - s_np.th) * 0.5f;
+        }
+        s_np.active = true;
+        /* Draws before the DL's first gDPSetScissor stay inside T too. */
+        gfx_np_target_rect(&rdp.scissor);
+        rdp.viewport_or_scissor_changed = true;
+    }
+    gfx_update_aspect_mode();
+}
+
+static void gfx_np_end_frame(void) {
+    if (s_np.active) {
+        s_np.active = false;
+        gfx_update_aspect_mode();
+        rdp.viewport_or_scissor_changed = true;
+    }
+}
+
 static void gfx_calc_and_set_viewport(const Vp_t* viewport) {
     // 2 bits fraction
     float width = 2.0f * viewport->vscale[0] / 4.0f;
@@ -3104,10 +3254,19 @@ static void gfx_calc_and_set_viewport(const Vp_t* viewport) {
     rdp.viewport.width = width;
     rdp.viewport.height = height;
 
+    /* D413: logical bounds of this viewport (top-left origin) for culling
+     * other players' views in netplay presentation. */
+    s_np_vp_x = x;
+    s_np_vp_top = y - height;
+    s_np_vp_w = width;
+    s_np_vp_h = height;
+
     /* Cache the raw (pre window-scale) viewport bounds for the safe-area
      * crop above -- guard against a degenerate/zero-height viewport so a
-     * later divide can't ever see one. */
-    if (height > 1.0f) {
+     * later divide can't ever see one. D413: not from netplay frames (the
+     * crop is unused there, and a split-screen quadrant would otherwise
+     * leak into the overlays drawn after the game's DL). */
+    if (height > 1.0f && !s_np.active) {
         g_gpSafeTop = y;
         g_gpSafeHeight = height;
     }
@@ -3185,6 +3344,7 @@ static void gfx_dp_set_scissor(uint32_t mode, uint32_t ulx, uint32_t uly, uint32
     rdp.scissor.height = height;
 
     gfx_adjust_viewport_or_scissor(&rdp.scissor, rsp.aspect_mode != 0);
+    gfx_np_clip_scissor(&rdp.scissor);   /* D413: never draw outside T */
 
     rdp.viewport_or_scissor_changed = true;
 }
@@ -3441,6 +3601,9 @@ static void gfx_dp_set_subpixel_offset(int16_t x, int16_t y) {
 }
 
 static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
+    if (s_np.active && !gfx_np_overlaps_s(ulx / 4.0f, uly / 4.0f, lrx / 4.0f, lry / 4.0f)) {
+        return;   /* D413: outside the presented view */
+    }
     uint32_t saved_other_mode_h = rdp.other_mode_h;
     uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
 
@@ -4315,6 +4478,8 @@ extern "C" void gfxD157Burst(void) {
  * when the overlay is closed -- in which case nothing is appended and the
  * frame is byte-identical to before (golden dumps unaffected). */
 extern "C" Gfx* optionsOverlayEmit(void);
+/* D413 online-play overlay (port/src/netui.c); same contract as above. */
+extern "C" Gfx* netuiEmit(void);
 
 static uint64_t gfx_perf_now_ns(void) {
     return (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -4354,9 +4519,15 @@ extern "C" void gfx_run(Gfx* commands) {
     rendering_state.viewport = {};
     rendering_state.scissor = {};
     const uint64_t perf_tpre = perf_t0 ? gfx_perf_now_ns() : 0;
+    gfx_np_begin_frame();   /* D413: no-op unless an online match is presenting */
     gfx_run_dl(commands);
+    gfx_np_end_frame();
     {
         Gfx* overlay = optionsOverlayEmit();
+        if (overlay != nullptr) {
+            gfx_run_dl(overlay);
+        }
+        overlay = netuiEmit();
         if (overlay != nullptr) {
             gfx_run_dl(overlay);
         }
