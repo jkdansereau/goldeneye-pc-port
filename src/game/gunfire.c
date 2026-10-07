@@ -6621,7 +6621,18 @@ void gunDrawSight(s32 *gdl) {
         sightimage = portCrosshairStyle() && betacrosshairimage
             ? betacrosshairimage : crosshairimage;
         sp54 = *(Gfx **)gdl;
-        texSelect(&sp54, sightimage, 4, 0, 0);
+        if (portCrosshairScale() != 1.0f) {
+            /* D570: a scaled sprite's edge pixels sample past the last texel row/
+             * column; with the sight's WRAP tile flags the filter then blended
+             * in the opposite edge (a faint copy of the top bar's tip under the
+             * bottom bar). Clamp only when scaled: 100% keeps the original list. */
+            struct sImageTableEntry clamped = *sightimage;
+            clamped.flagsS = G_TX_NOMIRROR | G_TX_CLAMP;
+            clamped.flagsT = G_TX_NOMIRROR | G_TX_CLAMP;
+            texSelect(&sp54, &clamped, 4, 0, 0);
+        } else {
+            texSelect(&sp54, sightimage, 4, 0, 0);
+        }
 #else
         sp54 = *gdl;
         texSelect(&sp54, crosshairimage, 4, 0, 0);

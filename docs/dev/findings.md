@@ -720,6 +720,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D567 | **Front-end PC Options with a pad pulled the game's crosshair to the top-left (overlay synced the cursor to the untouched OS mouse)** — full `## D567` entry at file tail | FIXED 2026-10-06 (port only: sync gated on `optionsOverlayMouseActive()`; build-verified Win/Linux; Deck pad check owed) |
 | D568 | **F10 dropdown popup drawn empty and misplaced for a long list on a mid-page row (negative top)** — full `## D568` entry at file tail | FIXED 2026-10-06 (port only: `ddGeom` keeps the popup on screen; 1280x800 before/after capture) |
 | D569 | **Crosshair color follows the PD port: Original or Custom RGB, left/right stepper, 0-255 sliders** — full `## D569` entry at file tail | CHANGED 2026-10-06 (maintainer request; old presets migrate to Custom RGB) |
+| D570 | **Scaled crosshair (Crosshair size != 100%) showed a faint copy of the top bar's tip under the bottom bar (WRAP tile flags)** — full `## D570` entry at file tail | FIXED 2026-10-06 (port only: CLAMP when scaled in `gunDrawSight` + F10 pointer; 100% unchanged, Dam gate PASS) |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | **CLOSED (2026-09-28 bookkeeping: tank board/exit accepted by the user; shipped in v0.4.0).** Earlier: PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed). |
 | D415 | **Shooting a light fixture does not "kill" its flickering light (Bunker, Caverns): the fixture takes the hit but the flicker keeps going (community report, issue #87 comment by the reporter, 2026-09-28, 00 Agent playthrough of v0.4.0).** — full `## D415` entry at file tail | FIXED (2026-09-29 bookkeeping: root-caused and fixed as D430 + D431, user-verified vs GEPD/1964 on Caverns 2026-09-29; #119). Earlier: ROOT-CAUSED as D430 (see there); fix in tree, live check owed. |
@@ -18360,3 +18361,19 @@ split-screen 2P with the option on.
 "Crosshair when not aiming"); off by default (code default, reset table and both
 display-mode presets all 0); new tip. The ini key `Video.CrosshairPersistent` is
 unchanged.
+
+## D570: Scaled crosshair showed a faint speck under the bottom bar — FIXED 2026-10-06 (port only)
+
+**Report (maintainer, Deck, 2026-10-06):** a tiny line just under the bottom of
+the crosshair, with Custom and default colour. **Cause:** only at a Crosshair
+size other than 100% (the maintainer's ini: 105). The sight's render tile uses
+the image table's WRAP flags; a scaled `gSPTextureRectangle` puts the last pixel
+row/column between the last texel and the next, so the filter blended in the
+opposite edge (the top bar's tip): a 2-px faint copy ~6 px under the bottom bar.
+The N64 never scales the sight, so 100% is clean (checked). Reproduced on
+Windows (Custom green, 105%: rows 460-461), so not Deck-specific. **Fix:**
+`gunfire.c gunDrawSight` (`#ifdef PORT`, presentation only) passes a copy of the
+image-table entry with CLAMP flags to `texSelect` when the scale is not 1.0; at
+100% the original call is unchanged (Dam gate PASS). The F10 crosshair pointer
+(`optionsoverlay.c`, always non-integer scale) gets the same clamp.
+**Verified:** 105% Custom green capture clean below the bar; Dam gate PASS.

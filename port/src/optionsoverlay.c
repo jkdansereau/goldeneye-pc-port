@@ -3323,7 +3323,12 @@ static Gfx *drawCrosshairPointer(Gfx *gdl, s32 W, s32 H)
     if (px < 0.0) px = 0.0; else if (px > W) px = W;
     if (py < 0.0) py = 0.0; else if (py > H) py = H;
     f32 xypos[2] = { (f32)(s32)(px + 0.5), (f32)(s32)(py + 0.5) };
-    texSelect(&gdl, crosshairimage, 4, 0, 0);
+    {   /* D570: drawn at non-integer scales; clamp so the edge never wraps */
+        struct sImageTableEntry clamped = *crosshairimage;
+        clamped.flagsS = G_TX_NOMIRROR | G_TX_CLAMP;
+        clamped.flagsT = G_TX_NOMIRROR | G_TX_CLAMP;
+        texSelect(&gdl, &clamped, 4, 0, 0);
+    }
     display_image_at_position(&gdl, xypos, halfedxy, 32, 32, 0, 0, 1, 255, 255, 255, 220,
                               (crosshairimage->level > 0), 0);
     return gdl;
