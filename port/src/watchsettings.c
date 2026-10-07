@@ -13,6 +13,7 @@
 #include "system.h"
 #include "watchsettings.h"
 #include "optionsoverlay.h"   /* D356 GE_WSPROBE_RESET probe hooks */
+#include "netgame.h"          /* D409 */
 
 extern s32 g_StageNum; /* boss.c: direct -level_XX starts with MENU_INVALID */
 extern save_data *fileGetSaveForFoldernum(u32 folder);
@@ -482,6 +483,12 @@ void watchSettingsGameTick(void)
      * lock through fileWriteSave/joyDisablePoll: joyPoll must stay runnable. */
     struct Command frontBatch[CMD_CAP];
     int nf;
+
+    /* D409: during an online match these settings (control style, aim,
+     * sight, look...) are global game options shared by every player and
+     * part of the lockstep state -- a mid-match edit on one peer would
+     * desync it. Keep them queued until the match is over. */
+    if (netgameSimPinned()) return;
     SDL_AtomicLock(&lock);
     nf = frontCount;
     memcpy(frontBatch, frontCmds, (size_t)nf * sizeof(frontBatch[0]));

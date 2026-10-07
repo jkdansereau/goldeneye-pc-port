@@ -693,6 +693,10 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D406 | **front-end PC Options screen: long sections (INPUT, 17 visible rows) run off the bottom of the 440x330 paper, and rows past the silent 14-row page cap (Crouch mode, Reset to defaults, Bindings…) are unreachable from the front screen** (user report 2026-09-28, v0.4.0 pre-push review) — full `## D406` entry at file tail | RESOLVED (2026-09-28, port-layer only, Steam Deck-validated): in-section pagination in `frontoptions.c` (11 rows/page; the vertical stepper crosses page boundaries both ways; dim 'Page p/N' marker + bottom hint on every page; slider bars start past long labels; F10 overlay untouched). D406b/c/d same-cycle refinements (label/track overlap, hint visibility/wording, hint position). |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | OPEN (cosmetic, not root-caused past the handoff site). v0.4.0 decision: SkipIntro stays EXPERIMENTAL / not recommended for regular users — F10 row relabelled "Skip intro (EXPERIMENTAL)". |
+| D409 | **Online multiplayer (netplay): every player on their own PC with their own full-window view; deterministic lockstep over a host-authoritative input relay, LAN / direct / matchmaking-server play, F9 lobby UI, full N64 MP feature set (user request 2026-10-07).** Full `## D409` entry at file tail; design `docs/dev/NETPLAY-PLAN.md`, guide `docs/netplay.md`. | LANDED in the tree (port-layer: `port/net/` core lib, `port/src/netgame.c` + `netui.c`, hooks in `input.c` / `libultra.c` / `video.c` / `watchsettings.c` / fast3d, `tools_pc/netplay/` server + selftest; plus ONE `#ifdef PORT` seam in `src/boss.c`, flagged for maintainer rule-2 review, not self-approved). Core + server verified (MSVC /W4 clean, selftest all green, live UDP); game glue MSVC-type-checked, fast3d presentation unit-tested 23/23. MinGW build, `/linkcheck` and in-game verification OWED (no toolchain / ROM in the authoring environment). |
+| D410 | **Online service: "Online" entries in the game's menus, a waiting-for-players screen, and one free central matchmaking service on Cloudflare (Worker + Durable Object) with a live public status page; player-hosted games connect peer to peer through STUN + UDP hole punching (user request 2026-10-07).** Full `## D410` entry at file tail; service `tools_pc/netplay/cloudflare/README.md`, guide `docs/netplay.md`. | LANDED in the tree (port-layer + `tools_pc/`, no `src/` edits). Core, service and the game's network runtime verified end to end on one PC (selftest, 23 JS unit tests, directory and online e2e tests incl. simultaneous quick match); game side MSVC-type-checked. Fixed on the way: D409 netui returned a past-the-end display-list pointer (first draw would have run garbage); a JOIN arriving by two paths made a phantom player; online lobbies showed a meaningless local code; two simultaneous quick matches never met. DEPLOYED 2026-10-07 to https://ge007-online.leighabbott.workers.dev (the CMake default) and verified live: the C client over WebSocket and HTTPS polling, and host + join by code with real Cloudflare STUN. OWED: MinGW build + `/linkcheck`, in-game run, real-router NAT test. |
+| D411 | **Random matchmaking (Quick Match) made robust, "like most random matchmaking games" (user request 2026-10-07): searchers are matched with whoever else is searching; a game nobody can reach is skipped quietly and reported to the service (deprioritised, then dropped); after three unreachable games the searcher hosts; quick games use standard rules with a random stage and wait 12 / 8 / 3 s for more players (2 / 3 / full); a searching screen with players online / searching. Found on the way: an unsigned time delta made the host's STUN answer look ancient, so a host could re-ask STUN every tick and never register (intermittent).** Full `## D411` entry at file tail. | LANDED + DEPLOYED (service version `fb17f5ec`, protocol v2). Verified: selftest, 26 JS unit tests, directory integration, online e2e x4 incl. an unreachable quick game (12 s every run, was 1/6 passing before the time-delta fix), and a live quick match with real STUN (matched in 0.2 s). OWED: in-game run (searching screens, quick lobby UI). |
+| D412 | **Quick Match preferences for every GoldenEye MP variation (mode with team sizes, map, weapons, length, players; each 'Any'; protocol v3) and a hardened online stack (user request 2026-10-07): service anti-reflection, signed lobby tokens, results only for observed matches, per-address and edge rate limits, HTTPS only; game side: peer input floats sanitised (a crafted packet could hang every player via the game's angle-wrap loop). Fuzzing (new netfuzz + ASan, JS fuzz test) found a pre-existing host hang at the ordinary end of every match (matchAssemble never exited once all slots finished).** Full `## D412` entry at file tail. | LANDED + DEPLOYED (service `41987cb0`, protocol v3). Verified: selftest (also under ASan), JS 42/42, integration, online e2e 4/4 incl. preference scenarios, ASan fuzzing 6 seeds (no errors), live probe + live preference quick match. OWED: in-game runs (settings page, filter, team quick lobby, real match end returning to the lobby); ship the v3 game build (v2 builds are refused). |
 
 
 Phase 2 replaced the Phase-1 demo loop with the real `mainproc()` on real OS
@@ -15524,3 +15528,267 @@ included; D281 keeps the shipped mitigation + disclosure, zero-saves root cause 
 **v0.4.0 decision (user, 09-28):** `Game.SkipIntro` stays **EXPERIMENTAL — not recommended for regular users yet**, alongside its older unrooted audio-break report (D216 status note). The F10 row is relabelled "Skip intro (EXPERIMENTAL)" (`port/src/optionsoverlay.c`, mirroring the D387 AllUnlocked labelling precedent); the config var, default (off), and `lv.c` hook are unchanged.
 
 **Status:** OPEN — cosmetic (no crash, no data loss; the mission still records as failed/aborted and the menus are fully functional). Root-causing needs a side-by-side of front-end state (`current_menu`, `g_CurrentStageToLoad`, `mission_failed_or_aborted`, `g_isBondKIA`) on the fail return with SkipIntro off vs on — candidate for v0.5.0 alongside the D216 audio half.
+
+## D409 — Online multiplayer (netplay): own-PC, own-view 4-player GoldenEye MP over deterministic lockstep, with matchmaking (2026-10-07)
+
+**Request (user, 2026-10-07):** "Study codebase, and thoroughly plan and develop an online matchmaking mode for multiplayer (not split screen) full multiplayer ability."
+
+**Design:** `docs/dev/NETPLAY-PLAN.md` (approach, evidence, architecture, hazard register H1–H19, input record, presentation, protocol, server, UI, verification plan, roadmap, risks). Player guide `docs/netplay.md`; server operations `tools_pc/netplay/README.md`; generalisable lessons `docs/porting-notes.md` §F.
+
+**Approach in one paragraph.** Every peer runs the complete, unmodified N64 multiplayer simulation for all players; only controller input travels (lockstep, the N64-emulator-netplay model — the only model compatible with non-negotiable #2, since the game just sees four controllers). Determinism evidence: GE's own RAMROM demo replay (`ramromreplay.c`) reproduces a stage from seeds + MP globals + save options + per-frame tick counts + controller samples; netplay reproduces exactly those at the port boundary (§2 of the plan). Star topology with a host-authoritative input relay: clients send input records for frame f+D, the host broadcasts frame bundles, everyone simulates only from bundles. The host never simulates, so the same `net_host` runs inside a player's game (LAN / direct hosting, own client over loopback) and inside the standalone `ge007-netserver` (lobbies, list, 6-letter codes, quick match, relay).
+
+**What landed (all port-layer except the one seam below):**
+
+- `port/net/` → static lib `ge007net` with its own clean include path (the game's `-I` list shadows libc with N64 stubs, D324 class): `net_plat` (QPC time + 1 ms timer period, CSPRNG, threads/mutex), `net_sock` (non-blocking UDP, `SIO_UDP_CONNRESET` off, transport vtable, `netLocalIPv4`), `net_wire` (bounds-checked LE codec), `net_proto` (packets/messages, `NetInputRec` codec with flag-gated float groups), `net_gamedata` (MP rule tables mirroring `front.c`: scenarios, stages + player caps, lengths, weapon sets, handicaps, control styles, 64 characters; normalisation + validation), `net_session` (handshake, keepalive, RTT, reliable ordered channel), `net_host` (sessions, lobbies, matchmaking, lockstep relay, disconnect cut-over, desync compare), `net_client` (connection, lobby replica, lockstep consumer, timesync), `net_runtime` (the game's 1 kHz net thread; DNS off the game thread; LAN discovery).
+- `tools_pc/netplay/`: `ge007-netserver`, `netplay_selftest` (simulated lossy network + toy lockstep game + real-UDP and live-server modes), standalone CMake (any compiler).
+- `port/src/netgame.c` — game glue: match start through the front end's own `MENU_RUN_STAGE` route (only from a settled interactive menu, held up to 15 s through a menu switch, declined from a stage); at the stage-load seam the deterministic state (seeds, MP setup via the MP menus' own globals/setters + `init_mp_options_for_scenario`, frame counters, `g_playerPlayerData` + teams, RAM-only folder-100 save with the agreed option bits via `set_selected_foldernum_and_copy_demo_eeprom`, cheats off, difficulty Agent), joy playback hook, frame-locked clock; the playback function (GO barrier, local sample to f+D, timesync, bundle wait, state hash every 30 frames, one sample for all players, `inputNetApply` per player, presentation rect); clean restore of the user's own setup at match end.
+- `port/src/netui.c` — the F9 overlay (Online / LAN / Settings / Connecting / Server browser / Lobby / Match screens, text rows, mouse, gamepad, chat, closed-panel HUD line + toasts, window-title status, Shift+F9 leave).
+- Hooks: `input.c` (capture of every direct game write into the record, `inputNetApply`, PD-aim turn per current player, control-type override suppressed in matches, F9 swallow of controller 0, `inputPreferredControlStyle`), `libultra.c` (game-thread-only virtual `osGetCount`, `netgameGameTick` per frame, neutral SI pads while netplay owns input), `video.c` (H4–H8/H12 pins, F9/text/mouse/wheel event hooks, title status), `watchsettings.c` (drain deferred in a match, H11), `system.c` (`--net-*` value skipping), `main.c` (init + help), fast3d `gfx_pc.cpp` (present only the local viewport: S→T remap in `gfx_adjust_viewport_or_scissor`, scissor ∩ T, other views' draws skipped, overlays after the remap; the safe-area crop is not fed from netplay frames), top-level `CMakeLists.txt` (`add_subdirectory(port/net)`, link `ge007net`).
+
+**The one `src/` edit — flagged for maintainer review under non-negotiable #2 (NOT self-approved).** `src/boss.c`, top of the per-stage `while (!done)` body, `#ifdef PORT`: `netgameOnStageLoad((int)g_StageNum);` — before the stage's first PRNG draw and `lvlStageLoad`, in the same loop and pattern as the D294 / D235 port hooks. Offline it returns at once (no match phase). Online it writes only state the game's own RAMROM replay path writes, through the game's own setters; no game control flow changes and the N64 build is untouched. The author's classification is a port seam (bucket b), but because it deliberately sets game globals at stage start, the maintainer should confirm that reading or record a `RULE-2-SIGNOFF` per `docs/dev-process.md` §7. There is no port-only alternative at this exact point: `bossMainloop` calls the stage-start functions directly.
+
+**Pins while a match runs (`netgameSimPinned()`; user settings return afterwards):** N64 projection (`portNativeAspect` 0) and unscaled FOV, draw distance and LOD distance at the port defaults (250 %), room pool by the D294 formula at those distances (env override ignored), crosshair style 0 / hide 0, hit flash on, watch-settings drain deferred. Cosmetic knobs untouched.
+
+**Verification done (2026-10-07):**
+- `port/net` + tools: MSVC `/W4`, zero warnings; `netplay_selftest` ALL TESTS PASSED — codecs (round-trip, truncation, sanitisation, normalisation, validation); 2P LAN; 4P internet with 3 % loss + duplication + 20–90 ms; 3P bad link (12 % loss, 60–200 ms); desync injection detected on every client; a vanished client cut over to neutral input at the same frame everywhere; leader abort ends at the same frame and a rematch works; listing hides private lobbies; create / join by code (case-insensitive) / quick match / leader-only start / ready rule / 2v2 validation / quick-lobby autostart; build mismatch refused; local-address helper; 240 frames over real UDP. Live: a real `ge007-netserver` + `--live-server` quick-matched two clients to 300 frames.
+- Game glue: `netui.c` compiles clean at MSVC `/W4` against stub SDL headers; `netgame.c` and `video.c` type-check with the real game headers (method: porting-notes F8). `input.c` / `libultra.c` could not be (GCC-only constructs); reviewed by reading.
+- fast3d presentation: the new functions extracted verbatim into a harness, 23/23 checks — full-canvas pillarbox, 4P quadrant fill, the other quadrant's scissor clipped to nothing and culled, 2P letterbox, game-window offsets, 8K int16 headroom, inactive/degenerate requests.
+
+**Owed (needs the MinGW/SDL2 toolchain and a ROM — neither available when this was written):** `./build-pc.sh ntsc-final` + `/linkcheck`; with netplay never opened, a single-frame `GE_PCDUMP` vs the golden (the "byte-identical when unused" claim) and the 60 s `-level_09` run; then two instances on one PC (`--net-host` / `--net-join 127.0.0.1`), a 10-minute match on every MP stage with zero desync reports, a LAN pair, and a server match (plan §10).
+
+**Known limitations (v1):** 2-player views are GE's wide strips, presented letterboxed (full height is a rule-2 candidate in `bondview2.c`); rumble is off online; no mid-match join, spectators or rollback; no NAT traversal for player-hosted games (server lobbies need none); matches require identical builds (so no Windows-to-Linux matches); the six save options are lobby-wide (the N64 loads one save for MP too); no *Online* entry in the F10 / front-end menus yet (F9 only); while the game waits for a peer the picture freezes (the window title shows the status).
+
+**Status:** LANDED in the tree, in-game verification OWED; `src/boss.c` seam awaiting maintainer rule-2 confirmation.
+
+**Later (D410):** review found `netuiEmit` returned the past-the-end pointer of its display list (`return endDl(gdl)`), so fast3d would have run whatever followed in the buffer the first time the F9 panel or its HUD line drew -- fixed in D410 (it returns the list's start, as `optionsOverlayEmit` does). D410 also adds NAT traversal for player-hosted games found through the online service.
+
+
+## D410 — Online service: menu entries, waiting-for-players screen, free Cloudflare matchmaking + live status page, peer-to-peer play via STUN + hole punching (2026-10-07)
+
+**Request (user, 2026-10-07):** "Create the online entry in the menus, and waiting for players, then build the server connector for free to host somewhere, cloudflare? Everyone can use the same central service then. Web interface if accessed will show current sessions playing, number of players, etc"
+
+**Design decision: Cloudflare finds games; players' PCs play them.** Workers cannot receive UDP, and relaying 60 Hz lockstep through a Durable Object would exhaust the free tier within ~2–3 match-hours a day (incoming WebSocket messages are billed 20:1). So the central service is a *directory and rendezvous*: it lists games, hands out 6-character codes, quick-matches, and introduces a joiner to a host (both sides' public + LAN addresses). The match runs directly between the players' PCs over the D409 protocol, with the host being a player's own game. Each side learns its public address from Cloudflare's free STUN server (`stun.cloudflare.com:3478`, from the game's own UDP sockets, so the mapping is the one game traffic uses); when the service reports a joiner, the host sends `NP_PUNCH` packets at the joiner's addresses (10 Hz for 6 s) while the joiner sends JOIN to every host address (`netClientConnectMulti`) -- first answer wins. `ge007-netserver` (D409) stays as the fallback that works behind any NAT.
+
+**What landed (port-layer + tools; no `src/` edits):**
+
+- **Service** `tools_pc/netplay/cloudflare/` (Worker + one global SQLite-backed Durable Object, free plan): `src/directory.js` (the directory as plain JS: lobbies, codes, quick match, introductions, per-IP rate limits, TTL, anonymised private results), `src/protocol.js` (binary protocol, mirror of `net_dirproto.c`), `src/index.js` (WebSocket hibernation with ping/pong auto-response, lobby state carried in the host socket's attachment so it survives hibernation, results + daily counters in SQLite, `/api/v1/ws`, `/api/v1/poll` HTTPS fallback, `/api/live` push, `/api/stats`), `public/` (status page: live sessions, players, recent results; light/dark/mobile; DOM via `textContent` only; strict CSP). README with deploy steps and the free-tier budget.
+- **`port/net`:** `net_stun` (RFC 5389 Binding, XOR-MAPPED-ADDRESS), `net_dirproto` (codec), `net_http` (WinHTTP with the WebSocket API loaded at run time; libcurl on Linux under `GE007_HAVE_CURL`), `net_dir` (directory client thread: connects only while needed, WebSocket with back-off, falls back to HTTPS polling after 3 failures, re-registers a hosted lobby after reconnects), `net_runtime` (STUN per socket with DNS cached and never resolved mid-match, punch table, online host registration every 0.5 s on change, join / quick-match state machine, quick-lobby merge, configurable STUN server), `net_host` (direct-lobby info + snapshot for the service, `NM_MATCH_WAIT` start-barrier status), `net_client` (multi-address join, wait status). Protocol v2 (`NP_PUNCH`, `NM_MATCH_WAIT`).
+- **Game side:** `netgame.c` (`[Net] Service` / `Stun`, `--net-service`, `--net-online-host` / `--net-online-join CODE` / `--net-online-quick`; wait-state tracking; the host reports each finished match -- kills / deaths counted exactly as `mpmenu.c`'s results screen does, from `player_data.kill_counts` snapshotted every frame); `libultra.c` (`__scMain`'s retrace receive presents a waiting frame while the game thread is parked: empty game DL + netui overlay, ~30 fps, also keeps the stall heartbeat quiet); `netui.c` (ONLINE section with player / game counts, browse page, host public / private, join by code, OWN SERVER page for ge007-netserver, online settings, waiting screen naming who is late); menus: `Online` label under `PC Options` on file select, `ONLINE MULTIPLAYER` root entry in the PC Options screen and the F10 panel (`optionsRowIsOnlineEntry`, both surfaces hand over to `netuiRequestOpen`); file-select idle timer held while online play is active; CMake cache option `GE007_ONLINE_SERVICE_URL` -> `versioninfo.h`.
+
+**Bugs found and fixed during this work:**
+
+1. **D409 netui returned a past-the-end display-list pointer.** `drawPanel` / `drawHud` returned `endDl(gdl)` and `netuiEmit` passed that to fast3d, which would have executed whatever followed in the static buffer the first time the panel or HUD line drew. Never caught because the game could not be built or run where D409 was written. Now one list is built from `s_buf` (waiting screen, then panel or HUD) and its start is returned (porting-notes F9).
+2. **Phantom player from one JOIN arriving by two paths.** A joiner sends JOIN to every published host address; on one LAN, or behind a router that loops the public address back, two arrive from different source addresses and the host made two sessions (two lobby slots for one player, until the unused one timed out). Reproduced in the selftest's simulated network (new two-way alternate-route support) before the fix: `handleJoin` ignores a JOIN whose nonce + name match an existing session (first path wins).
+3. **Online lobbies showed a meaningless code.** `lobbyCreate` gives every lobby a locally generated code, which the UI showed (as "the code to share") before the service's arrived. `netHostSetDirectInfo(code="")` now clears it until the service assigns one (`NULL` = unchanged).
+4. **Two players pressing Quick Match together never met:** both were told "nobody here, host one". Now a quick-match host still alone re-asks every 8 s (silently) and `NDP_QUICK` carries its own lobby id; the service offers it only *older* quick lobbies, so the newer host moves into the older lobby and never both ways at once (no swap cycle). Verified by the e2e test racing two processes.
+
+**Verification (2026-10-07):**
+- C selftest (MSVC /W4 clean): ALL TESTS PASSED, incl. STUN (RFC 5769 vector -> 192.0.2.1:32853), directory codec + JS-encoded vectors, multi-address join, both-addresses-live join (exactly one player), start-barrier status.
+- JS: 23/23 unit tests (protocol incl. C-encoded vectors; directory incl. quick-merge ordering).
+- `test/integration.mjs`: the C directory client (`netdir_test`) against the mock service, WebSocket and polling, host + join + list + results: PASSED.
+- `test/online.mjs`: two `netonline_test` processes = two copies of the game's network runtime, against the mock service and a local STUN server: host + join by code (WebSocket; polling; private), STUN address published first, unknown code -> clear failure, quick match, simultaneous quick match merged into one game, results on the status data, private game anonymised, no lobbies left behind: PASSED.
+- Status page rendered in a browser with demo data: light, dark, 375 px wide (no horizontal scroll).
+- Game side: `netui.c` compiles clean at MSVC /W4 (stub SDL); `netgame.c` type-checks with the real game headers; `frontoptions.c` / `optionsoverlay.c` show no diagnostics on any changed line (the remaining ones are SDL names the stub lacks, in untouched code); `libultra.c` reviewed only (pthreads).
+
+**Deployed (2026-10-07, at the user's request, from their Cloudflare account):** `https://ge007-online.leighabbott.workers.dev` (wrangler 4.148.0, version `7bcfec8d`), now the `GE007_ONLINE_SERVICE_URL` CMake default. The Durable Object is declared with the declarative `exports` field Cloudflare recommends for new Workers since 2026-07 (it replaces the tagged `migrations` array; the two cannot be mixed, and a Worker deployed with `exports` cannot go back). Verified live: `/api/stats`, the status page with its CSP headers, 404 for unknown paths; `netdir_test` list / quick / unknown code over WebSocket (WinHTTP) and HTTPS polling; two `netonline_test` runtimes hosting and joining a private game by code with `stun.cloudflare.com` (`--no-report`, so the public page stayed clean) -- both learned public addresses, the service introduced them, they connected directly (over the LAN address, being one PC).
+
+**Owed:** `./build-pc.sh` + `/linkcheck` (MinGW/SDL2; not available where this was written); an in-game run: the menu entries (the file-select `Online` label's position is unverified), the waiting screen, a real match through the service; NAT traversal between two real home networks; the libcurl path compiled on Linux. Golden `GE_PCDUMP` frames of the file-select screen change by design (the new label); `GE_OPTIONTREEPROBE` now expects 6 roots.
+
+**Known limitations:** routers that cannot be hole-punched (symmetric NAT, some CGNAT / mobile networks) cannot join each other's games -- the fix would be a relay (Cloudflare TURN is free to 1,000 GB/month, then $0.05/GB; not built); IPv4 only; HTTPS polling (the fallback when proxies block WebSockets) costs ~1,800 service requests per hosted hour; builds from non-git trees share the build id `unknown|...` (D409's desync detector is the backstop).
+
+**Status:** LANDED in the tree and DEPLOYED; in-game verification OWED.
+
+
+## D411 — Random matchmaking: Quick Match pairs whoever is searching, survives unreachable games, standard rules, fill window, searching UX (2026-10-07)
+
+**Request (user, 2026-10-07):** "We also need the matchmaking to work, just by finding random people who connect to online at the same time. Like most random matchmaking games do."
+
+**Before (D410):** Quick Match already joined an open quick game or hosted one, merged two simultaneous hosts, and auto-started 5 s after two players were ready. Gaps against ordinary matchmaking: a game the searcher could not reach (strict routers) ended the search with an error; matches started too soon for a third player to make it; the host of a random game could change its rules; no "searching" state.
+
+**What changed:**
+
+- **Service (`directory.js`):**
+  - `quick()` prefers games nobody failed to reach, then the fullest, then the oldest.
+  - `NDP_QUICK` carries `excludeId`, the game the searcher just failed to reach. The service records the failure once per address in `lobby.fails`.
+  - One failure sends a game to the back of the line. Two different addresses (`UNREACHABLE_AFTER`) stop it being offered at all.
+  - A lone host whose own game is unreachable may move into any game, even a newer one. That cannot cycle, because unreachable games are never offered.
+  - A lone host's optional merge never targets a game with any recorded failure.
+  - The record clears when someone gets in.
+  - `counts()` adds `searching`: players waiting in fresh open quick games. It is sent in WELCOME / LISTED and on the status page.
+  - Rate limit for quick requests raised from 20 to 60 per minute per IP.
+  - Protocol v2.
+- **Runtime (`net_runtime.c`):**
+  - **New `OJ_CONNECT` phase.** A quick match watches its connection. A failure is a step, not an error: up to 3 games are tried, each re-ask naming the failed one, then the searcher hosts (`quickHostOwn`). The runtime stays "busy" throughout, so the UI never flashes an error or the home page.
+  - **Timeouts.** Quick-join tries are 16 (8 s) instead of 30, and the lone-host re-ask runs every 5 s instead of 8.
+  - **No merge while someone is joining.** A lone host does not merge while it is still punching towards an announced joiner (`punchActive`).
+- **Host (`net_host.c`):** quick lobbies get standard rules plus a random stage, at creation and when a direct lobby becomes quick. `NM_SETTINGS_SET` is ignored for quick lobbies. The autostart countdown is 12 s with 2 players, 8 s with 3 and 3 s when full.
+- **UI (`netui.c`):**
+  - Quick Match shows "N searching".
+  - The searching screen shows elapsed time, players online / searching, and STOP SEARCHING.
+  - The quick lobby is titled QUICK MATCH and shows "Searching for players... m:ss (N online)" or "Match starts in N". Its rules are read-only and it has no START.
+  - The HUD line and window title show searching.
+  - Client errors are not shown while matchmaking retries.
+- **Harness:** `netonline_test --no-report` keeps live tests off the public page. A FAILED connection is final only when the runtime is no longer busy.
+
+**Bug found on the way (generalisable, porting-notes F14):** `stunOnPacket` stamps `doneUs = netTimeUs()` inside the host's packet pump, which runs after the tick's `now` was taken. The refresh check `now - R.stunH.doneUs > STUN_REFRESH_US` is unsigned, so it wrapped to "ages ago":
+
+1. STUN restarted at once, every tick.
+2. `startUs` was renewed each time.
+3. The first registration, which waits up to 2.5 s for a pending STUN, never ran.
+
+Whether it hit depended on whether the answer was handled in the same microsecond as `now`. That made it intermittent: 1 of 6 focused repro rounds passed, and verbose logging hid it. It was located with service-side message logging (no HOST ever arrived) and a temporary runtime trace (`startUs == now`, `tries == 1` at every sample). The fix is `since(now, then)`, which clamps to 0. It is applied to both STUN "done" checks (the client one made every quick retry re-ask STUN needlessly) and to the merge timer.
+
+**Verification (2026-10-07):**
+- C selftest ALL PASSED (QUICK `excludeId` round trip, JS-encoded WELCOME / LISTED with `searching`).
+- JS 26/26, including:
+  - an unreachable game deprioritised, then dropped, with its host moved into a newer reachable game;
+  - no merge into a failed game;
+  - the `searching` count.
+- Directory integration test PASSED.
+- `online.mjs` 4 of 4 runs, about 35 s each, with a new scenario (a scripted quick game whose addresses go nowhere):
+  - the searcher skips it quietly and hosts after one try;
+  - the next searcher is sent to that reachable game, not the older dead one;
+  - 12 s every run.
+- Redeployed to `https://ge007-online.leighabbott.workers.dev` (version `fb17f5ec`). Checked live:
+  - v2 list / poll / unknown code;
+  - a live quick match with `stun.cloudflare.com`: the first searcher was hosting within 0.3 s, and the second was matched into it 0.2 s after asking.
+- `netui.c` /W4 clean.
+
+**Owed:** an in-game run of the searching screen and quick lobby. Real-router NAT, as for D410.
+
+## D412 — Quick Match preferences for every multiplayer variation, a hardened online stack, and fuzzing that found a host hang at every match end (2026-10-07)
+
+**Request (user, 2026-10-07):** "Continue making all variations possible, and make it extremely hardened."
+
+### Variations (directory protocol v3)
+
+- **Quick Match Settings** (netui `PG_QPREFS`; from the Online home page). Every field can be "Any". The fields are:
+  - mode: all 8 scenarios, including 2 vs 2, 3 vs 1 and 2 vs 1;
+  - map: the 11 maps;
+  - weapons: the 14 sets;
+  - length: the 8 lengths;
+  - players: 2–4.
+
+  Settings are saved in the config: `Net.QuickMode/QuickStage/QuickWeapons/QuickLength/QuickPlayers`, where 255 means any. A field the chosen mode fixes is shown as fixed, not offered. The home page shows the current choice ("Golden Gun, Facility, 2 searching").
+- **GoldenEye's own rules applied to preferences.** These are `ndpNormalizePrefs` in C and `normalizePrefs` in JS; a parity test checks them against each other on 64 C-generated vectors.
+  - Team modes fix the size (2 vs 2 and 3 vs 1 are 4, 2 vs 1 is 3) and drop a map too small for it.
+  - A small map caps the size: Bunker, Archives and Caverns hold 3, Egyptian 2.
+  - YOLT fixes the length (last one standing); the Golden Gun fixes the weapons.
+  - Flag Tag lengths stop at 20 minutes.
+  - "Last one standing" picks YOLT when no mode was chosen.
+- **Matching.** The service offers a searcher only quick games whose rules agree with every preference that is not "Any". Games are ordered by reachability, then same continent (new), then fullest, then oldest.
+- **Hosting when nothing fits.** A searcher who finds nothing hosts a game with its preferences as the rules (`ndpPrefsToRules` → `netHostSetQuickRules`). "Any" becomes Normal, a random map, default weapons and 10 minutes. So the next compatible searcher lands in that game.
+- **Lobby record.** The service record now carries weapons and length (HOST / LISTED v3).
+- **Browse** has a mode filter (SHOW).
+- **Quick team games keep the host's balanced teams.** `NM_PLAYER_SET` team changes are ignored there, so random players cannot stack a side.
+- **Rematch** auto-readies quick lobbies.
+- **Status page** shows weapons, length and "N searching for a quick match".
+
+### Hardening
+
+**Service (Worker + Durable Object):**
+
+- **Anti-reflection (`netaddr.js` `cleanCands`).** Without it, the directory would make game clients send UDP to any address someone published.
+  - A public candidate address must be the requester's own IPv4 address.
+  - An IPv6 requester may publish at most one public address, since it cannot be checked.
+  - Private addresses: at most 2. Loopback only from loopback.
+  - Ports below 1024 and reserved, multicast and link-local ranges are dropped.
+- **Per-address identity** `ipKey` (an IPv4 address, or an IPv6 /64). Caps per address: 4 lobbies, 8 game sockets, 4 status-page viewers. Totals: 4000 game sockets and 1000 viewers.
+- **Signed lobby tokens.** A token is HMAC-SHA256 over the lobby id and code, with the secret kept in the DO's SQLite and compared in constant time. After a restart, a lobby id and code are re-adopted only with a valid token, so nobody can squat a code.
+- **Results only for matches the service saw.** The lobby must have gone WAITING → PLAYING → WAITING. Each match reports once, within 120 s of its end. Names come from the roster and stats are clamped to 0..999.
+- **Request limits:**
+  - wrong lobby codes: 10 per 10 min;
+  - join requests sent to one game: 20 per minute;
+  - malformed messages close the session after 20;
+  - HELLO only once;
+  - per-socket token bucket: 10 messages/s, burst 40;
+  - HTTP poll batches: 16 messages.
+- **Bounded state.** The status-page snapshot holds at most 200 games. The attachment size is guarded. Rate buckets are capped at 50 000, pruned at most once a second, after which new addresses wait (`fuzz.test.js` covers an IPv6 flood).
+- **Edge rate limits** (Workers rate-limit bindings `RL_CONNECT` / `RL_API`): 30 connects and 150 API calls per minute per address, checked before the Durable Object.
+- **HTTPS only.** The game API refuses plain http with 403 (localhost excepted for `wrangler dev`). The page sends HSTS, alongside the existing CSP and nosniff headers.
+- **Crash containment.** Every handler runs under try/catch and closes the socket with 1011, so a bad message cannot take the DO down.
+
+**Game side (port/net):**
+
+- **Remote hang fixed (critical).** `netDecInputRec` passed peer floats straight into game state. bondview2.c's `while (vv_theta >= 360.0f) vv_theta -= 360.0f;` never ends for infinity or 1e30, so one crafted packet would freeze every player's game. Now:
+  - non-finite values become 0, tested by exponent bits so a `-ffast-math` build cannot drop the check;
+  - magnitudes are clamped far beyond real input: look ±3600 per frame, crosshair ±8 (the screen edge is ±5.16), gun pose ±16, PD turn ±4.
+
+  Every PC, the sender included, plays the host's re-encoding of what it decoded, and the clamp is idempotent (tested), so it cannot desync. Real input never reaches the limits, so fidelity is unchanged. porting-notes F15.
+- **Client-side address and URL checks.**
+  - The service URL must be `https://`; plain `http://` is allowed only to this machine.
+  - Addresses from the service are filtered before any packet is sent (`ndpCandSendable`: no this-network, multicast, link-local or broadcast addresses; port 1024 or above). A join with no usable address fails cleanly.
+  - String building is truncation-safe (`appendPart` never trusts `vsnprintf`'s return value).
+
+### Bug found by fuzzing — the host hung at the end of every match (critical; latent since D409)
+
+`matchAssemble` (net_host.c) loops `for (;;)` until either an active slot lacks input or the ring would overwrite unacked frames.
+
+The ordinary end of a match looks like this: each PC leaves the stage after the results screen (`ngEndMatch` → `netClientMatchFinished`) and sends MATCH_END. The host marks each slot disconnected but keeps its session. Once the last one arrives, no slot is active and nobody acks, so neither exit fires. On its next tick the host's net thread spun forever, assembling empty bundles with `m->next` wrapping through 2^32. That froze the host's lobby and its own client, and every joiner then timed out.
+
+No test covered "everyone finishes normally"; the existing ones covered aborts and disconnects. The fuzzer hit it in its first minute, as a phase that never finished.
+
+- **Fix:** stop when no slot is active at the next frame (slots never become active again).
+- **New selftest `match ends normally`:** 3 players, everyone finishes, then a round where one quits instead. It reproduced the hang before the fix and passes after.
+- porting-notes F16.
+
+### Fuzzing (new)
+
+- **`tools_pc/netplay/netfuzz.c`,** plus a CMake option `NETPLAY_SANITIZE` (ASan, and UBSan where available). `netRandomTestSeed` (net_plat) makes the stack's own nonces and ids repeatable, so a failure replays. It covers:
+  - **decoders:** every game-protocol, directory-protocol and STUN decoder, on random input and on mutated valid encodings, with invariants including re-encode idempotence;
+  - **preference invariants:**
+    - normalisation is idempotent;
+    - a searcher's own game matches its preferences;
+    - that game is a legal setup at full size and with 2 players;
+    - labels never overrun;
+  - **evil host vs a real client:** the client is driven like the game;
+  - **evil joiner vs a real host:** direct, online-quick or server mode, with two real players playing matches, plus on-path tampering and replay, and garbage from strangers.
+- **ASan run.** MSVC `/fsanitize=address`, first confirmed live with a deliberate heap overflow. 6 seeds × 150 iterations covered:
+  - 360 000 decoder inputs;
+  - 90 000 preference sets;
+  - 900 evil-host episodes (about 2 000 matches taken by the victim);
+  - 900 evil-joiner episodes (about 2.6 M frames played by the legit players under attack).
+
+  Result: no memory errors and no violations.
+- **`cloudflare/test/fuzz.test.js`:**
+  - **decoders:** 25 000 inputs. A decoder may only return a message or throw `ProtoError`; batch framing is covered too.
+  - **directory:** 4 runs of 15 000 steps each, with 40 interleaved sessions sending garbage, mutated requests and well-formed requests aimed at real lobbies, plus session churn and clock jumps. Every reply must decode. Checked each run: the code index, lobby bounds, per-address caps, pending joins, published addresses, the snapshot, and the rate-bucket bound.
+  - **flood:** the address-flood bound.
+  - **rules:** preference and address rules on arbitrary input.
+
+### Verification (2026-10-07)
+
+- C selftest ALL PASSED, under ASan too: hostile floats, preferences, match ends normally.
+- JS 42/42.
+- Directory integration PASSED.
+- Online e2e 4/4, about 47 s each. New scenarios:
+  - Golden Gun and Normal-only searchers each host their own game, and the next searchers sort into the right one;
+  - 2 vs 1 hosts for exactly 3 and drops Egyptian;
+  - results for matches nobody played are refused end to end.
+- Deployed to `https://ge007-online.leighabbott.workers.dev`: versions `3e8e2ea3`, then `e14b75e8` (HTTPS rule), then `41987cb0` (HSTS). Checked live:
+  - a v2 client is turned away;
+  - v3 welcome and list work;
+  - a lobby offering someone else's address is refused ("No usable address to publish");
+  - an unknown code gets NOT_FOUND;
+  - the plain-http API returns 403;
+  - a live quick match with real STUN and preferences: a Golden Gun game on Facility was hosting 0.8 s after asking, and the second Golden Gun searcher was matched 0.3 s later;
+  - the page was left clean (`--no-report`).
+- `netui.c` /W4 clean; `netgame.c` syntax-clean (MSVC).
+
+### Owed
+
+- **In-game runs** (the game cannot be built on this machine): the Quick Match Settings page, the browse filter, quick team lobbies, and above all a real match end — the host and players should return to the lobby after the results screen (the F16 fix).
+- **The game build must ship with this service.** The service now turns away v2 builds ("This game version is not compatible").
+- **Real-router NAT,** as for D410 / D411.
+
+**Files:**
+- port/net: `net_proto.c`, `net_host.c`, `net_dirproto.c/.h`, `net_dir.c/.h`, `net_runtime.c/.h`, `net_plat.c/.h`.
+- port/src: `netui.c`, `netgame.c/.h`.
+- tools_pc/netplay: `netfuzz.c` (new), `netplay_selftest.c`, `netonline_test.c`, `netdir_test.c`, `CMakeLists.txt`.
+- cloudflare:
+  - `src/` — `directory.js`, `index.js`, `protocol.js`, `gamedata.js`, `netaddr.js` (new), `sha256.js` (new);
+  - `public/` — `app.js`, `index.html`, `_headers`;
+  - `test/` — `fuzz.test.js` (new), `directory.test.js`, `protocol.test.js`, `online.mjs`, `mock-server.js`, `fixtures/c-vectors.txt`;
+  - `wrangler.jsonc`.
+
+No `src/game` edits.

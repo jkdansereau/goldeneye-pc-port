@@ -1,6 +1,6 @@
 ---
 title: Security & fidelity status
-description: What a release actually installs (no networking, no telemetry, no ROM or assets)
+description: What a release actually installs (opt-in online multiplayer only, no telemetry, no ROM or assets)
 and how faithfully the port tracks the original N64 game's logic.
 ---
 
@@ -27,8 +27,35 @@ legally-owned copy.
 
 At runtime, the engine:
 
-- has **no networking of any kind** (no sockets, no HTTP, checked directly
-  against the source),
+- opens **no network connection unless you use online multiplayer**
+  ([`netplay.md`](netplay.md), added 2026-10-07; findings D409 / D410).
+  - **Before you use it:** until you open the **Online** menu (F9, or the
+    entries in the menus) or pass a `--net-*` option, no socket exists.
+  - **Game traffic** is plain UDP to the other players, or to a host or
+    server you choose. It carries your player name, lobby choices, chat and
+    controller input.
+  - **The online service:** a build configured with one
+    (`GE007_ONLINE_SERVICE_URL`, or `[Net] Service`) also makes one HTTPS /
+    WebSocket connection to it while the menu is open or you host or join
+    through it. It sends your name, game build, and, while you host, your
+    game's details and addresses. It is a Cloudflare Worker run by whoever
+    deployed it (`tools_pc/netplay/cloudflare`). The game refuses any
+    service address that is not `https://`, except this machine (D412).
+    The service only passes on addresses players publish for themselves, so
+    it cannot be used to aim traffic at others. The game also sends game
+    traffic only to ordinary internet or LAN addresses.
+  - **STUN:** one request to `stun.cloudflare.com` learns your public
+    address. Nothing is ever sent to the developers.
+  - **LAN games:** opening it broadcasts one small query on your local
+    network.
+  - No downloads, and no executable content over the network.
+  - Every received packet is bounds-checked and every index range-checked.
+    All text is forced to printable ASCII, and every number a peer sends is
+    made finite and bounded before the game sees it (D412).
+  - The network code is fuzzed under AddressSanitizer, against hostile hosts,
+    hostile joiners and tampered packets (`tools_pc/netplay/netfuzz.c`).
+    *It is new and has not yet had the independent end-to-end review the
+    rest of this page describes,*
 - has **no telemetry, crash reporting, or analytics** of any kind,
 - **never touches the Windows registry** and **never requests elevated
   permissions**,
@@ -81,6 +108,12 @@ replacement, in the `port/` layer. This was audited directly:
   finding log, and moves *toward* matching N64 behavior, not away from it.
   Every other deviation from the decompiled source is one of the documented
   32→64-bit pointer-width ABI corrections described above.
+- **Online multiplayer (D409)** adds one `#ifdef PORT` call in `src/boss.c`
+  (a stage-load hook next to the existing D294 / D235 hooks). It returns
+  immediately unless an online match is starting, and then only sets the
+  state the game's own demo-replay system sets (random seeds, multiplayer
+  setup, a RAM-only save slot) — the game logic itself is unchanged and
+  simply sees four controllers.
 
 **One issue, found and fixed before v0.3.0 shipped**: the port's
 random-number generator (`port/src/random.c`) was documented as a bit-exact

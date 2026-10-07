@@ -415,6 +415,19 @@ void bossMainloop(void)
         toggleFlag = 0;
         pendingGfx = 0;
 
+#ifdef PORT
+        /* D409 online multiplayer seam (port/src/netgame.c): when a netplay
+         * match is starting, write the agreed deterministic stage state
+         * (seeds, MP setup, RAM save slot, controller playback hook, frame-
+         * locked clock) BEFORE this stage's first PRNG draw
+         * (init_player_data_ptrs_construct_viewports) and lvlStageLoad; when
+         * one is ending, undo it. A no-op otherwise -- no game logic change. */
+        {
+            extern void netgameOnStageLoad(int stage);
+            netgameOnStageLoad((int)g_StageNum);
+        }
+#endif
+
         test_if_recording_demos_this_stage_load(g_StageNum, lvlGetSelectedDifficulty());
         if (g_DebugAndUpdateStageFlag)
         {

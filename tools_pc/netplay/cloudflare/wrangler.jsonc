@@ -1,0 +1,41 @@
+{
+  // GoldenEye 007 PC port -- online service (D410). Deploy: see README.md.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ge007-online",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+
+  // The status page. Static asset requests are free and never run the
+  // Worker; only /api/* does.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // One global directory object. Declared with `exports` (the declarative
+  // form Cloudflare recommends for new Workers since 2026-07; it replaces the
+  // tagged `migrations` array, and the two cannot be mixed). The free plan
+  // only offers SQLite-backed Durable Objects.
+  "durable_objects": {
+    "bindings": [{ "name": "DIRECTORY", "class_name": "DirectoryDO" }]
+  },
+  "exports": {
+    "DirectoryDO": { "type": "durable-object", "storage": "sqlite" }
+  },
+
+  // Edge rate limits per address (D412): checked before a request reaches
+  // the Durable Object. namespace_id is any positive integer unique in the
+  // account. Game sockets reconnect rarely; a polling host posts every 2 s.
+  "ratelimits": [
+    { "name": "RL_CONNECT", "namespace_id": "4101", "simple": { "limit": 30, "period": 60 } },
+    { "name": "RL_API", "namespace_id": "4102", "simple": { "limit": 150, "period": 60 } }
+  ],
+
+  "vars": {
+    // Shown in the game's Online menu (optional, up to 95 characters).
+    "MOTD": ""
+  },
+
+  "observability": { "enabled": true }
+}

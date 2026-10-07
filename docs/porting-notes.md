@@ -31,6 +31,7 @@ good that you are looking at one of these.
 - [D12. Collapsing an LOD binding to tile 0 breaks a DETAIL binding](#d12-collapse-an-lod-binding-to-tile-0-is-wrong-for-a-two-texture-detail-binding-d236)
 - [D13. Per-render accumulation is not associative (1 vs 2–3 ticks/frame)](#d13-per-render-accumulation-is-not-associative-the-ports-1-tickframe-can-reach-states-the-n64s-23-ticksframe-never-did-d329)
 - [E. Process / method notes](#e-process--method-notes)
+- [F. Determinism: what breaks lockstep replay / netplay (D409)](#f-determinism-what-breaks-lockstep-replay--netplay-d409)
 
 ## A. Pointer-width struct growth (32→64): the dominant class
 
@@ -1743,3 +1744,144 @@ darkening from a nonzero `ENV_ALPHA` LERP factor is very likely faithful
   `propobj.c:~2393`) — those 4 rely on div-by-zero yielding NaN/inf without
   trapping on both MIPS and x86-64 SSE, matching retail behavior; do not
   "fix" them.
+
+## F. Determinism: what breaks lockstep replay / netplay (D409)
+
+The online multiplayer (D409, `docs/dev/NETPLAY-PLAN.md`) runs the whole
+unmodified simulation on every PC and only exchanges controller input, so
+anything that makes two PCs compute differently is a desync. The audit that
+found these generalises to any replay / TAS / determinism work on this port.
+
+- **F1. A port knob that changes *which game code runs* is simulation
+  input.** Any `port*()` / `video*()` function the game calls whose result
+  depends on per-user config or the window — projection aspect
+  (`portNativeAspect`), FOV scale, draw / LOD distance, room-pool scale,
+  crosshair style or hide, hit flash — changes visibility culling, prop
+  ticks, auto-aim targets or allocation, i.e. game state. Cosmetic-only
+  knobs (filtering, MSAA, tint, HUD scale) are safe. *Heuristic:* grep
+  `src/` for every `extern` port symbol and classify each by whether its
+  value feeds a branch or a number the sim keeps. Netplay pins the unsafe
+  ones (`netgameSimPinned()` in `video.c`); a replay feature would need the
+  same list.
+- **F2. Port code that writes game state outside the game's own input path
+  is invisible to replay.** `input.c` writes `vv_theta`/`vv_verta`, the
+  crosshair + gun pose, crouch, and calls reload / gadget directly, on the
+  scheduler thread, to whichever player is current. None of that goes
+  through a controller sample, so a replay of samples cannot reproduce it.
+  Fix pattern: capture those writes into a per-frame record and re-apply
+  them at one fixed point of the frame (`inputNetCaptureBegin/End`,
+  `inputNetApply`). Every new direct write added to `input.c` must be added
+  to the record too.
+- **F3. The controller-injection seam is `joySetPlaybackFunc()` +
+  `joySetContDataIndex(1)`** (the RAMROM demo player's own hook): called on
+  the game thread once per frame, exactly one sample for all four pads.
+  Feeding `g_contPad` from the SI shim instead gives a variable number of
+  samples per frame (the scheduler thread polls per retrace).
+- **F4. Wall-clock time inside the sim** (`osGetCount()` → `deltaFrames`,
+  D117) differs per machine. A deterministic run needs a frame-locked
+  virtual clock — and only on the game thread: the scheduler and audio
+  threads also call `osGetCount()` and must keep real time
+  (`portNetClockEnable`, `portOnGameThread` in `libultra.c`).
+- **F5. Stage-start state the RAMROM recorder captures is the checklist**
+  (`ramromreplay.c`: seeds, MP globals, save options via the RAM-only
+  folder 100, per-frame tick counts and samples). Two more that it gets for
+  free on hardware but the port does not: frame counters accumulated since
+  boot, and `g_playerPlayerData` fields not all reset per stage — reset both
+  at the stage-load seam.
+- **F6. The game's text renderer trusts its input.** `textRender` /
+  `textMeasure` index `chars[c - 0x21]` unchecked, and `char` is signed on
+  x86, so a byte >= 0x80 indexes *before* the glyph table. Any
+  port-supplied string (player names, chat, typed addresses) must be forced
+  to printable ASCII 0x20..0x7E before it reaches them (`netSanitizeText`,
+  `netui.c safeCopy`).
+- **F7. A render-thread overlay cannot report a game-thread stall -- unless
+  someone else presents a frame.** The port's overlays are built in fast3d's
+  `gfx_run`, which normally runs only when the game thread submits a frame;
+  while the game thread waits (for a peer, a load), nothing new is drawn and
+  the kernel heartbeat calls it a hang. Status that must stay live goes in
+  the window title from the host thread's event pump, and escape hatches go
+  on host-thread keys (Shift+F9). D410 adds the other half: the scheduler
+  thread (`__scMain`, owner of the GL context, idle while the game thread is
+  parked) presents its own frame at the retrace receive -- an empty game DL
+  under the overlays (`portNetWaitFrame`, `netgameWantWaitFrame`). Only do
+  that while the game thread is provably parked, or two frames race.
+- **F8. Method: type-check port TUs without the real toolchain.** MSVC can
+  type-check port C files against the real game headers with a stub
+  `SDL.h`, a forced-include prelude `#define __attribute__(x)`, and a host
+  `string.h` wrapper that `#undef errno` (UCRT's `string.h` pulls `errno.h`,
+  whose macro collides with the `errno` fields of `OSContPad` / `OSContStatus` in `PR/os.h`). fast3d math can be
+  unit-tested by extracting the functions verbatim (`sed -n 'a,bp'`) into a
+  harness that supplies only the globals they touch.
+- **F9. An overlay's emit returns the START of its display list.** fast3d
+  runs what `optionsOverlayEmit` / `netuiEmit` return from that address on.
+  The D409 netui returned `endDl(gdl)` -- the pointer *after* the end -- so
+  its first draw would have executed stale buffer contents (D410). Build one
+  list from the buffer base, return the base, and `NULL` when nothing was
+  appended (golden dumps stay byte-identical). Code that could only be
+  type-checked deserves a line-by-line comparison with a working sibling for
+  runtime conventions like this one.
+- **F10. gbi's DL macros need `_SHIFTL` / `_SHIFTR` from `PR/mbi.h`.** A port
+  TU that includes only `PR/gbi.h` (`libultra.c`) gets an implicit function
+  declaration -- an error under GCC 14. Either define the two pure macros
+  locally (`netui.c`, `optionsoverlay.c`) or build the list in a TU that has
+  them (`netuiWaitFrameDl`).
+- **F11. NAT traversal: one peer, several addresses, one session.** A joiner
+  that tries every address a host published (public via STUN, LAN) can reach
+  it by more than one path -- same LAN, or a router that loops its public
+  address back -- and each path shows a different source address. Dedupe
+  join attempts by their nonce, not by address (the D410 phantom player).
+  Learn the public mapping from the *game's own* socket (that mapping is the
+  one game traffic uses), route STUN replies off the shared socket by the
+  magic cookie, and never block the net thread on DNS during a match
+  (cache the STUN server's address).
+- **F12. "Nobody waiting, so you host" races.** Two quick-match requests in
+  the same second both get told to host and then wait alone forever. Have a
+  lone host re-ask, and make the merge one-way (offer only *older* lobbies)
+  so two hosts can never swap into each other (D410).
+- **F13. Method: end-to-end test a singleton runtime with one process per
+  player plus a fake for each external service** -- a mock of the directory
+  (same core module behind the same routes) and a STUN server that answers
+  with the source address it saw. The selftest's simulated network models
+  "two routes to one host" with alias paths (`simAddPath`); reproduce a
+  networking bug there before fixing it.
+- **F14. Unsigned time deltas wrap when "then" is later than "now".** A
+  loop that takes `now` once and then runs packet handlers which stamp
+  `netTimeUs()` themselves produces timestamps *after* `now`. Then
+  `now - then` (uint64) is huge -- "ages ago" -- and any "is it stale?" check
+  fires. D411: the host's STUN answer looked stale the moment it arrived and
+  was re-asked every tick, so the first registration (which waits for a
+  pending STUN) never ran. It hit intermittently, depending on whether the
+  handler ran in the same microsecond as `now` -- logging hid it. Use a
+  clamped `since(now, then)` (or pass the tick's `now` into handlers).
+- **F15. Peer data is untrusted input to the game's own loops.** Whatever a
+  peer sends that reaches game state is applied identically on every PC, so
+  one crafted packet attacks every player at once -- and the game's code
+  assumes N64-sized inputs. `while (vv_theta >= 360.0f) vv_theta -= 360.0f`
+  (bondview2.c) never ends for infinity, and for 1e30 the subtraction is a
+  no-op. D409's `netDecInputRec` passed peer floats straight through, so a
+  single packet could freeze every game in the match (fixed in D412). Sanitise in the
+  decoder: non-finite -> 0 tested by exponent bits (`-ffast-math` may fold
+  `isfinite()` to true), magnitudes clamped far beyond real input. Do it
+  where every PC runs the same bytes -- the host re-encodes what it decoded,
+  so the clamp must be idempotent -- and sanitising cannot desync.
+  Range-check every index before it reaches a game table (D409's
+  `ngValidateStart`).
+- **F16. A loop whose only exit is "a consumer is still behind".** The host
+  builds lockstep bundles in a `for (;;)` that stops when an active slot lacks
+  input or the ring would overwrite unacked frames. When every player has
+  finished or left -- the *ordinary* end of every match, as each PC leaves
+  the stage and sends MATCH_END -- no slot is active and nobody acks, so
+  neither exit fires: the host's net thread spun forever (D412, latent since
+  D409). Give such loops an explicit "nothing left to do" exit, and test the
+  ordinary end (everyone finishes), not only aborts and disconnects.
+- **F17. Method: fuzz the netplay stack with an "evil peer" that speaks the
+  session layer.** Mutated captured packets mostly bounce off a reliable
+  channel (stale sequence numbers, wrong connection ids). An evil host or
+  joiner that completes the handshake and then sends hostile but *correctly
+  framed* messages reaches every handler. Drive the victim like the game
+  (take matches, load, run frames) and check what the game would consume:
+  finite floats, counts, slots, terminated strings. Run under ASan
+  (`-DNETPLAY_SANITIZE=ON`) and seed the stack's own randomness
+  (`netRandomTestSeed`) so a failure replays. `tools_pc/netplay/netfuzz.c`
+  found F16 in its first minute, as a hang: time each episode and treat one
+  that stops progressing as a finding.

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GoldenEye 007 Online</title>
+  <meta name="description" content="Live multiplayer games, players online and recent matches for the GoldenEye 007 PC port.">
+  <meta name="color-scheme" content="dark light">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23111'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23e8b04a' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23e8b04a'/%3E%3C/svg%3E">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <div>
+          <h1>GoldenEye 007 <span class="thin">Online</span></h1>
+          <p class="sub">PC port &middot; live multiplayer</p>
+        </div>
+      </div>
+      <span id="conn" class="pill pill-wait" role="status">Connecting&hellip;</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="stats" aria-label="Right now" aria-live="polite">
+      <div class="stat"><span class="num" id="s-online">&ndash;</span><span class="lbl">Players online</span></div>
+      <div class="stat"><span class="num" id="s-lobbies">&ndash;</span><span class="lbl">Open lobbies</span></div>
+      <div class="stat"><span class="num" id="s-matches">&ndash;</span><span class="lbl">Matches in progress</span></div>
+      <div class="stat"><span class="num" id="s-today">&ndash;</span><span class="lbl">Matches today</span></div>
+    </section>
+
+    <section aria-labelledby="h-live">
+      <div class="section-head">
+        <h2 id="h-live">Live sessions</h2>
+        <span class="muted" id="live-note"></span>
+      </div>
+      <div id="sessions" class="cards"></div>
+      <p id="sessions-empty" class="empty" hidden>
+        No games right now. Be the first: in the game press <kbd>F9</kbd> and choose
+        <strong>Quick match</strong>.
+      </p>
+    </section>
+
+    <section aria-labelledby="h-recent">
+      <div class="section-head">
+        <h2 id="h-recent">Recent matches</h2>
+      </div>
+      <ol id="recent" class="recent"></ol>
+      <p id="recent-empty" class="empty" hidden>No finished matches yet today.</p>
+    </section>
+
+    <section class="howto" aria-labelledby="h-how">
+      <h2 id="h-how">Play online</h2>
+      <ol>
+        <li>Get the <a href="https://github.com/jkdansereau/goldeneye-pc-port">GoldenEye 007 PC port</a> and your own legally owned ROM.</li>
+        <li>In the game, press <kbd>F9</kbd> (or pick <em>Online</em> on the file screen).</li>
+        <li><strong>Quick match</strong> puts you in the next open game that fits <em>Quick match settings</em> (mode, map, weapons, length, players &mdash; each can be &ldquo;any&rdquo;); <strong>Browse games</strong> lists the ones above; a friend's 6-letter code joins their game directly.</li>
+      </ol>
+      <p class="muted">Every player runs the game on their own PC and sees only their own view. Games connect player to player &mdash; this service only introduces them.</p>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <p>Names are shown as players typed them; private games appear without names or codes.
+      No accounts, no tracking. Updates live.</p>
+  </footer>
+</body>
+</html>

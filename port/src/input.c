@@ -89,6 +89,9 @@
 #include "player.h"
 #include "gun.h"  /* native weapon flags + dedicated reload entry points */
 #include "bondinv.h" /* inventory list for the Xbox-style gadget cycle */
+#include "net_proto.h" /* D409 netplay: NetInputRec */
+#include "netgame.h"
+#include "netui.h"     /* D409: F9 overlay swallows controller 0 */
 
 /* D194 spazz diagnosis: game ticks batched into the current poll (lv.h).
  * Read-only; declared locally to avoid pulling lv.h's wider dependency set. */
@@ -1022,12 +1025,32 @@ static int s_crouchApplied = 0; /* port-owned stance; not the native C-down crou
 static struct player *s_crouchPlayer = NULL;
 static int s_useHeldPrev = 0, s_reloadHeldPrev = 0;
 
+/* D409 netplay capture. During an online match netgame.c samples the local
+ * player once per frame on the game thread (local player made current) and
+ * every direct game write this file would make -- mouse/pad look into
+ * vv_theta/vv_verta, the GEPD crosshair + gun pose, free crouch, dedicated
+ * reload, gadget cycle -- is recorded into s_netRec instead. The record is
+ * sent to every peer and replayed by inputNetApply() on all of them at the
+ * same point of the same frame, so the simulation stays identical. The
+ * dedicated Use key becomes a native B tap (resolved inside the player's own
+ * render pass, where the on-screen interact list is the right one). */
+static int s_netCap = 0;
+static NetInputRec s_netRec;
+static int s_netCrouchApplied[4];
+
 /* GEPD-style crouch operates on the game's existing stance field, without
  * holding the aim button. The game interpolates ducking_height_offset from
  * crouchpos (bondview2.c:7038-7074). Only undo a stance we applied; preserve
  * auto-crouch in tight spaces (autocrouchpos is a separate minimum). */
 static void inputDropCrouch(void)
 {
+    /* D409: while capturing, "not crouching" is simply the absence of
+     * NIA_CROUCH_DOWN in the record; inputNetApply() releases the stance. */
+    if (s_netCap) {
+        s_crouchApplied = 0;
+        s_crouchPlayer = NULL;
+        return;
+    }
     /* The engine can take over the stance (tank, respawn, etc.) between
      * polls; do not undo its new value or write into a different player. */
     if (s_crouchApplied && g_CurrentPlayer == s_crouchPlayer &&
@@ -1413,8 +1436,10 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
 
     /* D194/D238: self-correcting every poll -- cheap (plain field writes,
      * see options.c cur_player_set_control_type), and re-asserts itself if
-     * anything else ever calls the setter (menu, save load) in between. */
-    if (idx == 0 && g_CurrentPlayer != NULL) {
+     * anything else ever calls the setter (menu, save load) in between.
+     * D409: never in an online match -- each player's control style is the
+     * lobby's (controlstyle_player[]), identical on every peer. */
+    if (idx == 0 && g_CurrentPlayer != NULL && !s_netCap) {
         int wantSolitare = naturalPitchMode ? CONTROLLER_CONFIG_SOLITARE_ : CONTROLLER_CONFIG_HONEY_;
         if (cur_player_get_control_type() != wantSolitare) {
             cur_player_set_control_type(wantSolitare);
@@ -1453,6 +1478,28 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         if (stick_x) *stick_x = 0;
         if (stick_y) *stick_y = 0;
         s_menuPointerLive = 0;   /* D345(b): the overlay owns the mouse */
+        return 0;
+    }
+
+    /* D409: the F9 online overlay owns controller 0 the same way (its own
+     * navigation runs in netuiEmit). Edge trackers follow the live state so
+     * closing it produces no phantom press; in a match this player idles. */
+    if (idx == 0 && netuiIsOpen()) {
+        const Uint8 *uiKs = SDL_GetKeyboardState(NULL);
+        s_useHeldPrev = actHeld(uiKs, IA_CANCEL) ||
+            (pads[0] && SDL_GameControllerGetButton(pads[0], SDL_CONTROLLER_BUTTON_A));
+        s_reloadHeldPrev = actHeld(uiKs, IA_RELOAD) ||
+            (pads[0] && SDL_GameControllerGetButton(pads[0], SDL_CONTROLLER_BUTTON_X));
+        s_crouchLatch = 0;
+        s_crouchHeldPrev = 0;
+        inputDropCrouch();
+        padBPrev[0] = pads[0] ? SDL_GameControllerGetButton(pads[0], SDL_CONTROLLER_BUTTON_B) : 0;
+        padYPrev[0] = pads[0] ? SDL_GameControllerGetButton(pads[0], SDL_CONTROLLER_BUTTON_Y) : 0;
+        padSelectPrev = pads[0] ? SDL_GameControllerGetButton(pads[0], SDL_CONTROLLER_BUTTON_BACK) : 0;
+        inputSuspendForOverlay();
+        if (stick_x) *stick_x = 0;
+        if (stick_y) *stick_y = 0;
+        s_menuPointerLive = 0;
         return 0;
     }
 
@@ -1652,8 +1699,13 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                            g_EnterTankAudioState == TANK_RUN_STATE_NOT_RUNNING);
         if (playable) {
             if (useNow && !s_useHeldPrev && !tankState) {
-                bool empty = bond_interact_object();
-                if (configGetInputLog()) sysLogPrintf(LOG_NOTE, "GE_INPUTLOG dedicated use (no target=%d)", empty);
+                if (s_netCap) {
+                    /* D409: native B tap (see s_netCap). */
+                    button |= GE_CONT_B;
+                } else {
+                    bool empty = bond_interact_object();
+                    if (configGetInputLog()) sysLogPrintf(LOG_NOTE, "GE_INPUTLOG dedicated use (no target=%d)", empty);
+                }
             }
         } else if ((scriptIsActive() ? s_scriptUse : actHeld(ks, IA_CANCEL)) && !tankState) {
             /* A on the pad is still native accept outside playable stages.
@@ -1667,9 +1719,13 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         if (useNow && !s_useHeldPrev && tankState && !s_tankBoardLock)
             button |= GE_CONT_B;
         if (reloadNow && !s_reloadHeldPrev && playable) {
-            attempt_reload_item_in_hand(GUNRIGHT);
-            attempt_reload_item_in_hand(GUNLEFT);
-            if (configGetInputLog()) sysLogPrintf(LOG_NOTE, "GE_INPUTLOG dedicated reload (no use)");
+            if (s_netCap) {
+                s_netRec.actions |= NIA_RELOAD;   /* D409: replayed by inputNetApply */
+            } else {
+                attempt_reload_item_in_hand(GUNRIGHT);
+                attempt_reload_item_in_hand(GUNLEFT);
+                if (configGetInputLog()) sysLogPrintf(LOG_NOTE, "GE_INPUTLOG dedicated reload (no use)");
+            }
         }
         s_useHeldPrev = useNow;
         s_reloadHeldPrev = reloadNow;
@@ -2099,7 +2155,10 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
             if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSTICK) ||
                 SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSTICK))
                 crouchNow = 1;
-            if (padB && !padBPrev[idx]) inputCycleGadget();
+            if (padB && !padBPrev[idx]) {
+                if (s_netCap) s_netRec.actions |= NIA_GADGET;   /* D409 */
+                else inputCycleGadget();
+            }
             if (padY && !padYPrev[idx]) button |= GE_CONT_A;
         } else {
             if (padA || padX) button |= GE_CONT_A;
@@ -2159,7 +2218,10 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
              * axis ONLY while aiming; hipfire still crouches by stance alone. */
             if (p->insightaimmode || (button & (GE_CONT_R | GE_CONT_L)))
                 button |= GE_CONT_D;
-            p->crouchpos = CROUCH_SQUAT;
+            if (s_netCap)
+                s_netRec.actions |= NIA_CROUCH_DOWN;   /* D409: replayed by inputNetApply */
+            else
+                p->crouchpos = CROUCH_SQUAT;
             if (!s_crouchApplied && configGetInputLog())
                 sysLogPrintf(LOG_NOTE, "GE_INPUTLOG free crouch applied (aim=%d)", p->insightaimmode);
             s_crouchApplied = 1;
@@ -2500,6 +2562,12 @@ static void aimGepdEdgeScroll(void)
     else if (rY < -th) aimy = (rY + th) * GEPD_SCROLL_SPEED / 60.0;
 
     f32 scale = (fov > 0.0f) ? fov / GEPD_BASE_FOV : 1.0f;
+    if (s_netCap) {   /* D409: replayed by inputNetApply on every peer */
+        if (aimx != 0.0 || aimy != 0.0) s_netRec.flags |= NIR_LOOK;
+        s_netRec.look_dtheta += (f32) aimx * scale;
+        s_netRec.look_dverta += (f32) aimy * scale;
+        return;
+    }
     if (aimx != 0.0) {
         /* GEPD does a bare `camx += ...` -- no [0,360) wrap. The game never
          * wraps vv_theta in on-foot play either (bondviewApplyVertaTheta only
@@ -2536,6 +2604,15 @@ static int aimGepdCompute(double dxPx, double dyLook)
 
     /* Crosshair + gun/arm pose (GEPD formulas, RATIOFACTOR=1 for our 4:3
      * viewport; failsafe weapon offsets 0.15/0 as in goldeneye.c). */
+    if (s_netCap) {   /* D409: replayed by inputNetApply on every peer */
+        s_netRec.flags |= NIR_CROSS;
+        s_netRec.cross_x = (f32) (s_gepdCrossX * aimRangeScale());
+        s_netRec.cross_y = (f32) (s_gepdCrossY * aimRangeScale());
+        s_netRec.gun_az = (f32) (s_gepdCrossX * (1.11f + 0.15f * 1.5f) + fovratio - 1.0f);
+        s_netRec.gun_turn = (f32) (s_gepdCrossY * 1.11f + fovratio - 1.0f);
+        aimGepdEdgeScroll();
+        return 1;
+    }
     p->crosshair_x_pos = (f32) (s_gepdCrossX * aimRangeScale());   /* D338 */
     p->crosshair_y_pos = (f32) (s_gepdCrossY * aimRangeScale());
     p->gun_azimuth_angle   = (f32) (s_gepdCrossX * (1.11f + 0.15f * 1.5f) + fovratio - 1.0f);
@@ -2619,6 +2696,12 @@ static int hipDirectCompute(double dxPx, double dyLook)
     /* dyLook already carries MouseInvertY + MouseYScale (applied by the
      * caller before dt-scaling, same as every other consumer of dyLook) --
      * do not re-apply either here. */
+    if (s_netCap) {   /* D409: replayed by inputNetApply on every peer */
+        s_netRec.flags |= NIR_LOOK;
+        s_netRec.look_dtheta += (f32) (dxPx * 0.1 * sens * scale);
+        s_netRec.look_dverta += (f32) (dyLook * 0.1 * sens * scale);
+        return 1;
+    }
     p->vv_theta += (f32) (dxPx * 0.1 * sens * scale);
     p->vv_verta -= (f32) (dyLook * 0.1 * sens * scale);
     if (p->vv_verta >  90.0f) p->vv_verta =  90.0f;
@@ -2673,11 +2756,21 @@ static int padDirectCompute(int dx, int dy)
     v = (double)dx / 70.0;   /* analogTurn = raw stick \u00b1 5, /70 -- bondview2.c:6222 */
     if (v > 1.0) v = 1.0; else if (v < -1.0) v = -1.0;
     if (v >= 0.0) v *= v; else v = -v * v;
-    p->vv_theta += (f32) (v * k * 3.5);
+    if (s_netCap) {   /* D409: replayed by inputNetApply on every peer */
+        s_netRec.flags |= NIR_LOOK;
+        s_netRec.look_dtheta += (f32) (v * k * 3.5);
+    } else {
+        p->vv_theta += (f32) (v * k * 3.5);
+    }
 
     v = (double)dy / 70.0;   /* analogPitch, /70 -- bondview2.c:6161 */
     if (v > 1.0) v = 1.0; else if (v < -1.0) v = -1.0;
     if (v >= 0.0) v *= v; else v = -v * v;
+    if (s_netCap) {
+        s_netRec.flags |= NIR_LOOK;
+        s_netRec.look_dverta += (f32) (v * k * 3.5);
+        return 1;
+    }
     p->vv_verta -= (f32) (v * k * 3.5);   /* game: speedverta = -v\u00b7(fov/60) */
     if (p->vv_verta >  90.0f) p->vv_verta =  90.0f;
     if (p->vv_verta < -90.0f) p->vv_verta = -90.0f;
@@ -2710,11 +2803,126 @@ int portMouseAimPdActive(void)
 
 int portMouseAimPdGetTurn(f32 *tx, f32 *ty)
 {
+    /* D409: in an online match the turn is the CURRENT player's networked
+     * one (gunfire.c calls this for every player, on every peer). */
+    if (netgameOwnsInput()) {
+        float x = 0.0f, y = 0.0f;
+        if (!netgamePdTurn(&x, &y)) return 0;
+        if (tx) *tx = (f32) x;
+        if (ty) *ty = (f32) y;
+        return 1;
+    }
     if (!portMouseAimPdActive() || g_CurrentPlayer == NULL)
         return 0;
     if (tx) *tx = (f32) (s_gepdCrossX / GEPD_CROSSHAIR_LIMIT * aimRangeScale());   /* D338 */
     if (ty) *ty = (f32) (s_gepdCrossY / GEPD_CROSSHAIR_LIMIT * aimRangeScale());
     return 1;
+}
+
+/* ------------------------------------------------------------------------
+ * D409 netplay capture / replay (see the s_netCap comment near the top).
+ * ---------------------------------------------------------------------- */
+
+void inputNetCaptureBegin(void)
+{
+    memset(&s_netRec, 0, sizeof(s_netRec));
+    s_netCap = 1;
+}
+
+void inputNetCaptureEnd(NetInputRec *out)
+{
+    s_netCap = 0;
+    /* PD mouse aim: the local turn (what portMouseAimPdGetTurn would have
+     * returned to gunfire.c offline). */
+    if (portMouseAimPdActive() && g_CurrentPlayer != NULL) {
+        s_netRec.flags |= NIR_PDTURN;
+        s_netRec.pdturn_x = (f32) (s_gepdCrossX / GEPD_CROSSHAIR_LIMIT * aimRangeScale());
+        s_netRec.pdturn_y = (f32) (s_gepdCrossY / GEPD_CROSSHAIR_LIMIT * aimRangeScale());
+    }
+    out->flags = s_netRec.flags;
+    out->actions = s_netRec.actions;
+    out->look_dtheta = s_netRec.look_dtheta;
+    out->look_dverta = s_netRec.look_dverta;
+    out->cross_x = s_netRec.cross_x;
+    out->cross_y = s_netRec.cross_y;
+    out->gun_az = s_netRec.gun_az;
+    out->gun_turn = s_netRec.gun_turn;
+    out->pdturn_x = s_netRec.pdturn_x;
+    out->pdturn_y = s_netRec.pdturn_y;
+}
+
+void inputNetMatchReset(void)
+{
+    memset(s_netCrouchApplied, 0, sizeof(s_netCrouchApplied));
+    s_crouchApplied = 0;
+    s_crouchPlayer = NULL;
+    s_crouchLatch = 0;
+}
+
+/* Every peer, game thread, once per frame per player, before the frame's
+ * player processing: the effects input.c applies directly offline. Gates are
+ * re-evaluated here from shared game state, so the result is identical on
+ * every peer (the sampling peer's view of them is D frames old). */
+void inputNetApply(int pnum, const NetInputRec *rec)
+{
+    struct player *pp;
+    s32 saved;
+    int alive;
+
+    if (pnum < 0 || pnum >= 4 || !(pp = g_playerPointers[pnum])) return;
+    saved = get_cur_playernum();
+    set_cur_player(pnum);
+
+    if (rec->flags & NIR_LOOK) {
+        pp->vv_theta += (f32) rec->look_dtheta;
+        pp->vv_verta -= (f32) rec->look_dverta;
+        if (pp->vv_verta >  90.0f) pp->vv_verta =  90.0f;
+        if (pp->vv_verta < -90.0f) pp->vv_verta = -90.0f;
+    }
+    if (rec->flags & NIR_CROSS) {
+        pp->crosshair_x_pos = (f32) rec->cross_x;
+        pp->crosshair_y_pos = (f32) rec->cross_y;
+        pp->gun_azimuth_angle = (f32) rec->gun_az;
+        pp->gun_azimuth_turning = (f32) rec->gun_turn;
+    }
+
+    alive = !pp->bonddead && pp->outside_watch_menu && !pp->pause_state && !pp->mpmenuon &&
+            !g_PlayerIsInTank && !lvlGetControlsLockedFlag() && !gameScriptedCameraActive();
+
+    /* Free crouch (same rules as the offline block in inputComputePad). */
+    {
+        int canCrouch = alive && !bondwalkItemCheckBitflags(getCurrentPlayerWeaponId(GUNRIGHT),
+                                                            WEAPONSTATBITFLAG_DISABLE_CROUCH);
+        int held = (rec->actions & NIA_CROUCH_DOWN) != 0;
+        if (canCrouch && held) {
+            pp->crouchpos = CROUCH_SQUAT;
+            s_netCrouchApplied[pnum] = 1;
+        } else if (!(canCrouch && (rec->buttons & GE_CONT_D) && pp->insightaimmode)) {
+            if (s_netCrouchApplied[pnum] && pp->crouchpos == CROUCH_SQUAT) pp->crouchpos = CROUCH_STAND;
+            s_netCrouchApplied[pnum] = 0;
+        } else {
+            s_netCrouchApplied[pnum] = 0;
+        }
+    }
+
+    if (alive && (rec->actions & NIA_RELOAD)) {
+        attempt_reload_item_in_hand(GUNRIGHT);
+        attempt_reload_item_in_hand(GUNLEFT);
+    }
+    if (alive && (rec->actions & NIA_GADGET)) {
+        inputCycleGadget();
+    }
+
+    if (saved >= 0 && saved < 4 && g_playerPointers[saved]) set_cur_player(saved);
+}
+
+/* D409: the N64 control style the PC bindings are tuned for -- what the
+ * per-poll override in inputComputePad enforces offline (1.2 Solitaire with
+ * Natural pitch, else 1.1 Honey). The online lobby proposes it as this
+ * player's style; the match applies it through controlstyle_player[]. */
+int inputPreferredControlStyle(void)
+{
+    return naturalPitchMode ? CONTROLLER_CONFIG_SOLITARE_ : CONTROLLER_CONFIG_HONEY_;
 }
 
 PD_CONSTRUCTOR static void inputConfigInit(void)

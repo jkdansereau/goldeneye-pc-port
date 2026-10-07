@@ -108,9 +108,38 @@ z-fighting, billboard trees, muzzle flashes, the front-end Nintendo logo,
 gunshot SFX — are fixed in this version; what remains is a short list,
 below. Feedback is very welcome.
 
-What a release actually installs (no networking, no telemetry, no ROM or
-game assets shipped) and how faithfully the port tracks the original N64
-game's logic: [Security & fidelity status](docs/security-and-fidelity-status.md).
+What a release actually installs (no networking unless you use the opt-in
+online multiplayer, no telemetry, no ROM or game assets shipped) and how
+faithfully the port tracks the original N64 game's logic:
+[Security & fidelity status](docs/security-and-fidelity-status.md).
+
+**New in the source tree, not yet play-tested: online multiplayer.** Open
+it with **F9**, or **Online** on the file-select screen.
+
+- GoldenEye's 4-player multiplayer, with every player on their own PC and
+  their own full-window view.
+- Every scenario, stage and weapon set, and all 64 characters.
+- Four ways to find a game:
+  - the **online service**: quick match, a game list, and 6-character codes
+    for private games;
+  - LAN;
+  - direct connect;
+  - your own server.
+- **The online service** is a free Cloudflare Worker that anyone can deploy
+  ([`tools_pc/netplay/cloudflare`](tools_pc/netplay/cloudflare/README.md)).
+  It only introduces the players and has a live web page of the games being
+  played. The matches run directly between the players' PCs.
+- It uses deterministic lockstep: only controller input travels.
+- **Quick Match** finds a game that fits your preferences. You can set the
+  mode (team modes included), map, weapons, length and number of players,
+  or leave each as "any".
+- **What is tested:** the network core, the service and the matchmaking are
+  tested, including end to end on one PC. The network code is also fuzzed
+  under AddressSanitizer against hostile hosts and joiners. **Not yet
+  tested:** a real match in the game, and connecting across home routers.
+
+See [`docs/netplay.md`](docs/netplay.md) (design: D409 / D410 / D411 / D412,
+[`docs/dev/NETPLAY-PLAN.md`](docs/dev/NETPLAY-PLAN.md)).
 
 **Working:** boot sequence and front end (menu → mission select → briefing →
 start), front-end menu navigation on the left stick to match the F10 overlay
@@ -199,15 +228,19 @@ directionally, on the way to v1.0:
 - **PAL and JP ROM support** ([issue #85](https://github.com/jkdansereau/goldeneye-pc-port/issues/85)); NTSC-U is the only supported region today.
 - **Controller (pad) button rebinding UI** (keyboard/mouse rebinding shipped
   in v0.4.0), and macOS/ARM builds.
-- **LAN multiplayer**: reviving GoldenEye's original split-screen/deathmatch
-  netplay across multiple PCs on a local network. Genuinely under
-  consideration, but early and not started; no ETA.
+- **Online multiplayer** (online service, LAN, direct and own-server play,
+  each player on their own PC): first implementation in the tree
+  ([`docs/netplay.md`](docs/netplay.md)). Next:
+  - real-match and home-router testing;
+  - deploying the online service;
+  - a full-height 2-player view;
+  - MP cheats in the lobby.
 - General polish: performance, remaining rendering/audio defects, save/config
   robustness.
 
-Not currently planned: new game modes GE never shipped (e.g. co-op), online (non-LAN)
-multiplayer, ray tracing. If any of these matter to you, open an issue —
-it helps prioritize.
+Not currently planned: new game modes GE never shipped (e.g. co-op), ray
+tracing. If any of these matter to you, open an issue — it helps
+prioritize.
 
 ---
 
@@ -363,6 +396,7 @@ lives in `ge007.eep`. Launch with `-fresh` to wipe both before starting
 | Previous weapon     | Mouse wheel up           | —             |
 | Start               | `Enter` / `Tab`          | Start         |
 | Options overlay     | `F10`                    | Select (A toggles/steps; B backs; D-pad/stick adjusts sliders; Start closes) |
+| Online multiplayer  | `F9` ([guide](docs/netplay.md)) | — (once open: D-pad / A / B / Start) |
 
 The default layout is the GEPD-style preset on the keyboard and the standard
 dual-stick scheme on controllers (left stick move, right stick look,
@@ -422,6 +456,7 @@ Key docs are also published as a site:
 | Doc | What's in it |
 |---|---|
 | [`docs/building.md`](docs/building.md) | Full build + asset-extraction guide. |
+| [`docs/netplay.md`](docs/netplay.md) | Online multiplayer: the online service, hosting, joining, LAN, your own server, the lobby, troubleshooting. Online service: [`tools_pc/netplay/cloudflare/README.md`](tools_pc/netplay/cloudflare/README.md); own server: [`tools_pc/netplay/README.md`](tools_pc/netplay/README.md). |
 | [`docs/internals.md`](docs/internals.md) | Architecture, the RSP-emulation approach, GE-vs-PD engine differences, the phased plan. |
 | [`docs/porting-notes.md`](docs/porting-notes.md) | The recurring N64→PC bug classes hit during the port, with fixes. |
 | [`docs/dev/agentic-development.md`](docs/dev/agentic-development.md) | The research angle: the two-agent setup, timeline, handoff workflow, and an assessment of what did and didn't work. |

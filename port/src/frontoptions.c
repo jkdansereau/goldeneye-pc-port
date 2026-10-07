@@ -46,6 +46,7 @@
 #include "watchsettings.h"
 #include "frontoptions.h"
 #include "input.h"
+#include "netgame.h"   /* D410: netgameOnlineActive (idle timer) */
 
 /* front.c functions this screen shares with the cheat screen (not all are in
  * front.h). */
@@ -109,6 +110,15 @@ extern struct rectbbox folder_option_ERASE_bound;   /* front.c:439 */
 
 static const char kLabel[]   = "PC Options";  /* ASCII only: issue #87 / D295 */
 static const char kLabelNL[] = "PC Options\n"; /* height measure only, D400 */
+/* D410: the online-play entry, one line under it (the bar has no room to its
+ * right at 440 wide). Hit bands of the two labels never overlap. */
+static const char kOnline[]   = "Online";
+static const char kOnlineNL[] = "Online\n";
+#define ONLINE_DY (14 + 2 * HIT_PAD + 2)
+
+/* netui.c (its header pulls SDL; keep this TU game-only). */
+extern int netuiIsOpen(void);
+extern int netuiRequestOpen(void);
 
 /* ---- screen state (game thread) ---- */
 static int s_level = 0;          /* 0 = categories, 1 = category, 2/3 = nested pages */
@@ -409,6 +419,14 @@ void frontOptionsMenuInterface(void)
     if (joyGetButtonsPressedThisFrame(PLAYER_1, A_BUTTON | Z_TRIG | START_BUTTON)) {
         if (tab_prev_highlight) {
             goBack();
+        } else if (s_hl >= 0 && s_level == 0 && s_hl < s_pageN && optionsRowIsOnlineEntry(s_pageHdr[s_hl])) {
+            /* D410: Online Multiplayer is not a settings page. Back to file
+             * select (a screen a match can start from) with F9's overlay up. */
+            playSfx(DOOR_LOCK_SFX);
+            configSave();
+            sysLogPrintf(LOG_INFO, "frontoptions: online play");
+            frontChangeMenu(MENU_FILE_SELECT, FALSE);
+            netuiRequestOpen();
         } else if (s_hl >= 0 && s_level == 0) {
             playSfx(DOOR_METAL_CLOSE2_SFX);
             s_page = s_hl;
@@ -778,7 +796,10 @@ Gfx *optionsFileSelectLabel(Gfx *gdl)
      * This hook only runs on MENU_FILE_SELECT, the one screen where
      * g_MenuTimer is an idle timer (elsewhere it is the intro / cast-roll
      * clock). Same write front.c makes when a button is pressed. */
-    if (optionsOverlayIsOpen()) {
+    /* D410: likewise while the F9 online overlay is up, or a lobby / online
+     * match search is running with it closed -- a start must find this
+     * screen, not the attract loop. */
+    if (optionsOverlayIsOpen() || netuiIsOpen() || netgameOnlineActive()) {
         g_MenuTimer = 0;
     }
 
@@ -836,9 +857,30 @@ Gfx *optionsFileSelectLabel(Gfx *gdl)
         frontChangeMenu(MENU_PC_OPTIONS, FALSE);
     }
 
-    /* Same font, size and centre line as Copy/Erase; white idle, the
-     * game's gold while the cursor is over it. */
-    return textRender(gdl, &x, &y, (char *)kLabel, ptrFontZurichBoldChars,
-                      ptrFontZurichBold, hot ? 0xEBD879FF : 0xFFFFFFFF,
-                      viGetX(), viGetY(), 0, 0);
+    /* D410: "Online" under it -- the same label, opening the F9 online-play
+     * overlay. (With the overlay up, controller 0 belongs to it, so neither
+     * label can be clicked through it.) */
+    {
+        s32 oh = 0, ow = 0, ox = x, oy;
+        int ohot;
+        textMeasure(&oh, &ow, (char *)kOnlineNL, ptrFontZurichBoldChars, ptrFontZurichBold, 0);
+        oy = y + ONLINE_DY;
+        ohot = !optionsOverlayIsOpen() && !netuiIsOpen()
+            && menu_update == MENU_INVALID
+            && folder_selected_for_deletion < 0
+            && cursor_h_pos >= (f32)(ox - HIT_PAD) && cursor_h_pos <= (f32)(ox + ow + HIT_PAD)
+            && cursor_v_pos >= (f32)(oy - HIT_PAD) && cursor_v_pos <= (f32)(oy + oh + HIT_PAD);
+        if (ohot && joyGetButtonsPressedThisFrame(PLAYER_1, A_BUTTON | Z_TRIG | START_BUTTON)) {
+            playSfx(DOOR_LOCK_SFX);
+            netuiRequestOpen();
+        }
+        /* Same font, size and centre line as Copy/Erase; white idle, the
+         * game's gold while the cursor is over it. */
+        gdl = textRender(gdl, &x, &y, (char *)kLabel, ptrFontZurichBoldChars,
+                         ptrFontZurichBold, hot ? 0xEBD879FF : 0xFFFFFFFF,
+                         viGetX(), viGetY(), 0, 0);
+        return textRender(gdl, &ox, &oy, (char *)kOnline, ptrFontZurichBoldChars,
+                          ptrFontZurichBold, ohot ? 0xEBD879FF : 0xFFFFFFFF,
+                          viGetX(), viGetY(), 0, 0);
+    }
 }

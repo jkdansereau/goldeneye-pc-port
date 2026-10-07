@@ -9,5 +9,8 @@
 #define GE007_TARGET_PLATFORM "@TARGET_PLATFORM@"
 #define GE007_ROMID "@ROMID@"
 #define GE007_IS_PAL @VERSION_IS_PAL@
+/* D410: the online matchmaking service this build uses by default
+ * (-DGE007_ONLINE_SERVICE_URL=https://NAME.workers.dev; empty = none). */
+#define GE007_ONLINE_SERVICE_URL "@GE007_ONLINE_SERVICE_URL@"
 
 #endif /* PORT_VERSIONINFO_H */

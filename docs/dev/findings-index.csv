@@ -285,3 +285,7 @@ D405,CLOSED,"fast3d/OpenGL: MSAA above the driver max black-screens; two glBindF
 D406,RESOLVED,front-end PC Options screen:,"RESOLVED (2026-09-28, port-layer only, Steam Deck-validated):"
 D407,PARTIAL,Tanks cannot be boarded/exited on PC —,"PARTIAL (fix landed in v0.4.0, port-only):"
 D408,OPEN,Game.SkipIntro skips the post-mission failure dossier:,"OPEN (cosmetic, not root-caused past the handoff site)."
+D409,PARTIAL,Online multiplayer (netplay):,LANDED in the tree (port-layer:
+D410,PARTIAL,"Online service: ""Online"" entries in the game's menus, a waiting-for-players screen, and one free central matchmaking service on Cloudflare (Worker + Durable Ob…","LANDED in the tree (port-layer + tools_pc/, no src/ edits)."
+D411,PARTIAL,"Random matchmaking (Quick Match) made robust, ""like most random matchmaking games"" (user request 2026-10-07):","LANDED + DEPLOYED (service version fb17f5ec, protocol v2)."
+D412,PARTIAL,"Quick Match preferences for every GoldenEye MP variation (mode with team sizes, map, weapons, length, players; each 'Any'; protocol v3) and a hardened online s…","LANDED + DEPLOYED (service 41987cb0, protocol v3)."

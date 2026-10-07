@@ -151,6 +151,16 @@ endif()
 set(VERSION_CODENAME "larkspur")
 set(ORIGIN_URL "https://github.com/jkdansereau/goldeneye-pc-port")
 
+# Online play (D410): the matchmaking service every copy of this build finds
+# games through -- tools_pc/netplay/cloudflare, deployed to Cloudflare's free
+# tier (this one deployed 2026-10-07). Empty = no online service (LAN, direct
+# and self-hosted server play still work). Players can override it with
+# [Net] Service in ge007.ini; a fork running its own service changes it here
+# or with -DGE007_ONLINE_SERVICE_URL=... (a cache variable: set once per
+# build directory).
+set(GE007_ONLINE_SERVICE_URL "https://ge007-online.leighabbott.workers.dev" CACHE STRING
+  "Online matchmaking service URL, e.g. https://ge007-online.NAME.workers.dev")
+
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/versioninfo.h.in"
   "${CMAKE_BINARY_DIR}/port/include/versioninfo.h" @ONLY)
@@ -572,12 +582,18 @@ set(SRC
   ${SRC_ENGINE}
 )
 
+# Online multiplayer core (D409, docs/dev/NETPLAY-PLAN.md): game-independent
+# sockets / protocol / lobby / lockstep relay, built as a static library with
+# its own clean include path (see port/net/CMakeLists.txt). Its PUBLIC include
+# dir gives the port glue (port/src/netgame.c, netui.c, input.c) the headers.
+add_subdirectory(port/net)
+
 # ----------------------------------------------------------------------------
 # Target
 # ----------------------------------------------------------------------------
 set(BIN_NAME "ge007${BIN_REGION}.${TARGET_ARCH}")
 add_executable(ge007 ${SRC})
-target_link_libraries(ge007 ${LIBS})
+target_link_libraries(ge007 ge007net ${LIBS})
 set_target_properties(ge007 PROPERTIES OUTPUT_NAME "${BIN_NAME}")
 if(WIN32)
   set_target_properties(ge007 PROPERTIES WIN32_EXECUTABLE TRUE)
