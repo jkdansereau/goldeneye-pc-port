@@ -313,6 +313,7 @@ D567,FIXED,Front-end PC Options with a pad pulled the game's crosshair to the to
 D568,FIXED,F10 dropdown popup drawn empty and misplaced for a long list on a mid-page row (negative top) —,FIXED 2026-10-06 (port only:
 D569,?,Crosshair color follows the PD port:,CHANGED 2026-10-06 (maintainer request; old presets migrate to Custom RGB)
 D570,FIXED,Scaled crosshair (Crosshair size != 100%) showed a faint copy of the top bar's tip under the bottom bar (WRAP tile flags) —,FIXED 2026-10-06 (port only:
+D571,?,"Project icon restyled to the in-game sight red as pixel art (exe, window, favicon) —",CHANGED 2026-10-06 (maintainer request; make_icon.py; social preview unchanged)
 D407,CLOSED,Tanks cannot be boarded/exited on PC —,CLOSED (2026-09-28 bookkeeping:
 D408,FIXED,Game.SkipIntro skips the post-mission failure dossier:,FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed).
 D415,FIXED,"Shooting a light fixture does not ""kill"" its flickering light (Bunker, Caverns):",FIXED (2026-09-29 bookkeeping:

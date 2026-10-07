@@ -721,6 +721,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D568 | **F10 dropdown popup drawn empty and misplaced for a long list on a mid-page row (negative top)** — full `## D568` entry at file tail | FIXED 2026-10-06 (port only: `ddGeom` keeps the popup on screen; 1280x800 before/after capture) |
 | D569 | **Crosshair color follows the PD port: Original or Custom RGB, left/right stepper, 0-255 sliders** — full `## D569` entry at file tail | CHANGED 2026-10-06 (maintainer request; old presets migrate to Custom RGB) |
 | D570 | **Scaled crosshair (Crosshair size != 100%) showed a faint copy of the top bar's tip under the bottom bar (WRAP tile flags)** — full `## D570` entry at file tail | FIXED 2026-10-06 (port only: CLAMP when scaled in `gunDrawSight` + F10 pointer; 100% unchanged, Dam gate PASS) |
+| D571 | **Project icon restyled to the in-game sight red as pixel art (exe, window, favicon)** — full `## D571` entry at file tail | CHANGED 2026-10-06 (maintainer request; make_icon.py; social preview unchanged) |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | **CLOSED (2026-09-28 bookkeeping: tank board/exit accepted by the user; shipped in v0.4.0).** Earlier: PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed). |
 | D415 | **Shooting a light fixture does not "kill" its flickering light (Bunker, Caverns): the fixture takes the hit but the flicker keeps going (community report, issue #87 comment by the reporter, 2026-09-28, 00 Agent playthrough of v0.4.0).** — full `## D415` entry at file tail | FIXED (2026-09-29 bookkeeping: root-caused and fixed as D430 + D431, user-verified vs GEPD/1964 on Caverns 2026-09-29; #119). Earlier: ROOT-CAUSED as D430 (see there); fix in tree, live check owed. |
@@ -18377,3 +18378,15 @@ image-table entry with CLAMP flags to `texSelect` when the scale is not 1.0; at
 100% the original call is unchanged (Dam gate PASS). The F10 crosshair pointer
 (`optionsoverlay.c`, always non-integer scale) gets the same clamp.
 **Verified:** 105% Custom green capture clean below the bar; Dam gate PASS.
+
+## D571: Project icon restyled: in-game sight red, pixel-art grid — CHANGED 2026-10-06 (maintainer request)
+
+The D550 mark (gold, smooth vector ring) is redrawn by `tools_pc/make_icon.py`
+as pixel art in the in-game sight's red (core RGB 200,40,48; a lighter 225,120,130
+tip texel on each bar like the sprite's anti-aliasing) on #050607: hand-tuned
+16/24/32 grids (1-px ring, 2-px bars, open centre), larger sizes scaled with
+NEAREST (48 = 24 grid x2, 64..512 = 32 grid). Original procedural art (no ROM or
+capture data). Outputs regenerated: exe `.ico`, `docs/favicon.ico` (byte copy),
+`docs/img/icon/ge007-icon.png`, `port/fast3d/ge007_icon.h` (now written with LF).
+`--check` passes; two runs byte-identical. The social preview card is unchanged
+(maintainer decision).

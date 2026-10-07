@@ -5,7 +5,9 @@ The mark is an ORIGINAL generic version of the GE default aim crosshair:
 a circle with four lines (N/S/E/W) crossing the circle's edge and
 extending well past it, open at the centre. Proportions are measured from
 the game's own default crosshair (thin ring, long bars, open centre).
-Site gold (#e8a13a) on near-black (#050607).
+Drawn on a small pixel grid (32x32 master, hand-tuned 16/24) and scaled
+with NEAREST, in the in-game sight red (core RGB 200,40,48; lighter edge
+texels 225,120,130) on near-black (#050607). No glow/gradients/blur.
 A circle-plus-ticks reticle is a generic functional shape (no logo art,
 wordmark or screenshot copied, cf. tree-hygiene rule 4: repo imagery
 must not be derivative game content).
@@ -45,64 +47,56 @@ OUT_FAVICON = ROOT / "docs" / "favicon.ico"
 
 # --- palette -----------------------------------------------------------------
 BG = (5, 6, 7)        # site near-black
-GOLD = (232, 161, 58) # site gold (#e8a13a)
+RED = (200, 40, 48)       # in-game sight red (core texels)
+RED_EDGE = (225, 120, 130)  # lighter AA-edge texel tint
+
+
+# pixel-grid parameters per master grid size N:
+#   (ring radius, ring half-band, bar width (even), gap radius, reach radius)
+# radii are in pixels from the exact centre (N/2 - 0.5 is the centre pixel
+# coordinate, so every shape is mirror-symmetric by construction).
+_GRIDS = {
+    16: (4.6, 0.6, 2, 2.0, 7.5),
+    24: (6.6, 0.55, 2, 3.0, 11.5),
+    32: (9.2, 0.55, 2, 4.0, 14.5),
+}
+
+
+def _master(n: int) -> Image.Image:
+    """Hand-tuned low-res mark on an n x n pixel grid (no anti-aliasing:
+    hard pixels in the sight's red, the outermost bar texel and ring
+    corners get the lighter edge tint like the sprite's AA texels)."""
+    ring_r, band, bar_w, gap, reach = _GRIDS[n]
+    img = Image.new("RGBA", (n, n), BG + (255,))
+    px = img.load()
+    c = (n - 1) / 2.0
+    hw = bar_w / 2.0
+    for y in range(n):
+        for x in range(n):
+            dx, dy = abs(x - c), abs(y - c)
+            d = (dx * dx + dy * dy) ** 0.5
+            col = None
+            if abs(d - ring_r) <= band:
+                col = RED
+            # bars: |perp| < hw, along-axis distance in [gap, reach]
+            for along, perp in ((dx, dy), (dy, dx)):
+                if perp < hw and gap <= along <= reach:
+                    col = RED_EDGE if along > reach - 1 else RED
+            if col is not None:
+                px[x, y] = col + (255,)
+    return img
 
 
 def _crosshair(size: int, small: bool = False) -> Image.Image:
-    """The generic GE default crosshair: a circle with N/S/E/W lines
-    crossing its edge and extending well past it, open centre, in site gold
-    (#e8a13a); proportions measured from the game's own default crosshair
-    (thin ring, long bars, open centre). Rendered at 2x for AA, then
-    downsized. small: a chunkier variant (thicker strokes, wider gap) so
-    the mark survives 16px in the .ico small slots (and the 32px window
-    icon)."""
-    S = size * 2
-    img = Image.new("RGBA", (S, S), BG + (255,))
-    dr = ImageDraw.Draw(img, "RGBA")
-    # Exact centre = the line between the two middle supersample pixels
-    # (continuous coordinate S/2; pixel i covers [i, i+1)). Every shape is
-    # drawn symmetric about it with inclusive PIL coordinates, so each size
-    # is pixel-exactly mirror-symmetric (checked by _symmetric()).
-    c = S // 2
-
-    def rr(v: float) -> int:
-        return int(round(S * v / 512))
-
-    def even(v: float) -> int:
-        return max(2, 2 * int(round(S * v / 512 / 2)))
-
-    def disc(r: int) -> list:
-        return [c - r, c - r, c + r - 1, c + r - 1]
-
-    # faint gold glow behind the reticle (kept very subtle: flat + calm)
-    glow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(glow)
-    gr = rr(190 if small else 200)
-    for i in range(24, 0, -1):
-        g = gr * i // 24
-        if g > 0:
-            gd.ellipse(disc(g), fill=GOLD + (4,))
-    img.alpha_composite(glow)
-
-    # the reticle: a circle + four bars (N/S/E/W) crossing the circle's
-    # edge and extending well past it, with an open centre -- proportions
-    # measured off the game's own default crosshair (thin ring, long bars;
-    # bar reach ~1.45x the ring's outer radius, centre gap ~0.30x).
-    # Small sizes get the chunky variant (thicker strokes, wider gap so
-    # it stays open at 16px).
-    circle_r = rr(140 if small else 150)   # outer radius of the ring
-    ring_w = rr(34 if small else 16)       # ring stroke width
-    bar_w = even(30 if small else 14)      # bar stroke width (even: symmetric)
-    reach = rr(205 if small else 218)
-    gap = rr(52 if small else 45)
-    hw = bar_w // 2
-
-    dr.ellipse(disc(circle_r), outline=GOLD + (255,), width=ring_w)
-    for a, b in ((c - reach, c - gap - 1), (c + gap, c + reach - 1)):
-        dr.rectangle([c - hw, a, c + hw - 1, b], fill=GOLD + (255,))   # vertical
-        dr.rectangle([a, c - hw, b, c + hw - 1], fill=GOLD + (255,))   # horizontal
-
-    return img.resize((size, size), Image.LANCZOS)
+    """Retro red crosshair: the 16/24/32 hand-tuned grids are used 1:1 for
+    the small slots; everything else is the 32 master (24 for 48px) scaled with NEAREST
+    (hard pixel edges)."""
+    if small and size in (16, 24, 32):
+        return _master(size)
+    # integer pixel scale only (48 = 2x the 24 grid) keeps pixels square
+    # and the mark exactly centred.
+    grid = 24 if size == 48 else 32
+    return _master(grid).resize((size, size), Image.NEAREST)
 
 
 
@@ -167,7 +161,8 @@ def make_header() -> None:
         # top level of the [32][32][4] initializer (1024 > first dim 32 ->
         # "too many initializers").
         rows.append("    {" + ",".join(row) + "}")
-    OUT_HEADER.write_text(
+    with open(OUT_HEADER, "w", newline="\n") as fh:
+      fh.write(
         "/* Generated by tools_pc/make_icon.py -- do not edit by hand.\n"
         " * The project mark (a generic version of the GE default aim\n"
         " * crosshair) as a 32x32 RGBA array, row-major, plain R,G,B,A\n"
