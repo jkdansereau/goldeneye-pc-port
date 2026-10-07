@@ -18410,3 +18410,10 @@ no longer serves `python3-pip`, so pip comes from a hash-pinned `get-pip.py`
 SDL `GLIBC_2.4`, `ge007-convert` built against 2.31. Verified: the container
 build run by hand on the X220 (podman) — fresh install there (ROM only ->
 converter -> boot -> clean quit, exit 0). No source changes; packaging only.
+
+CI-built tarball (run 37623073542, c45dece7, the v0.5.0 packaging): floor
+`GLIBC_2.29`, bundled SDL identifies as `SDL-release-2.30.0`. Fresh install
+(empty folder + ROM -> converter -> boot -> clean quit, exit 0) passed on the
+X220 (Fedora 37, glibc 2.36: the box the 24.04 tarball refused to start on) and
+the Steam Deck; the 21-level pixel gate ran on that binary on both, 21/21 PASS
+each. Shipped in v0.5.0.

@@ -30,7 +30,7 @@ Rare "Indy" engine family, one hardware generation apart.
 
 ## Status
 
-<div class="cblock">
+<div class="cblock" markdown="1">
 
 ### v0.5.0 (2026-10-07) — split-screen multiplayer, one options menu, closer to the N64.
 
@@ -98,7 +98,7 @@ single tracker for what comes next.
 
 ## Download
 
-<div class="cblock">
+<div class="cblock" markdown="1">
 
 | Platform | Bundle | Notes |
 |---|---|---|
@@ -214,7 +214,7 @@ architecture, the N64→PC bug catalogue, and how the project is developed.
       i = (n + slides.length) % slides.length;
       img.src = slides[i].src;
       img.alt = "GoldenEye 007 PC port — " + slides[i].cap +
-                ", in-engine capture, 3072×1728";
+                ", in-engine capture, 3840×2160";
       cap.textContent = slides[i].cap;
       idx.textContent = (i + 1) + " / " + slides.length;
     }
