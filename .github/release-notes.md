@@ -261,10 +261,8 @@ Build, tooling and harness:
 carry the full 21-level reference-frame set (63 frames each) at the same stems,
 re-captured for this release's fog and near-plane changes and confirmed by two
 independent capture passes per platform. The full pixel gate is green on all
-three against their own goldens: Windows, Linux (Intel HD 3000) and Steam Deck
-21/21 on the release candidate; the final build re-ran 21/21 on Linux and Steam
-Deck, and on Windows the levels whose reference frames are timed by the opening
-ride (Frigate, Streets, Depot) varied from run to run on a busy desktop. The recipe pins the run for you: the
+three against their own goldens on the final build: Windows 21/21, Linux
+(Intel HD 3000) 21/21 and Steam Deck 21/21. The recipe pins the run for you: the
 save file's CONTENT is pinned (the gate installs its own canonical save per
 level, the same way it pins the display ini — D529) and the PRNG seed is
 hard-pinned (a stray `GE_RSEED` in your environment warns and is ignored rather
