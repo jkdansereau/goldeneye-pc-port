@@ -722,6 +722,7 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D569 | **Crosshair color follows the PD port: Original or Custom RGB, left/right stepper, 0-255 sliders** — full `## D569` entry at file tail | CHANGED 2026-10-06 (maintainer request; old presets migrate to Custom RGB) |
 | D570 | **Scaled crosshair (Crosshair size != 100%) showed a faint copy of the top bar's tip under the bottom bar (WRAP tile flags)** — full `## D570` entry at file tail | FIXED 2026-10-06 (port only: CLAMP when scaled in `gunDrawSight` + F10 pointer; 100% unchanged, Dam gate PASS) |
 | D571 | **Project icon restyled to the in-game sight red as pixel art (exe, window, favicon)** — full `## D571` entry at file tail | CHANGED 2026-10-06 (maintainer request; make_icon.py; social preview unchanged) |
+| D572 | **Linux tarball glibc floor lowered from 2.38 to 2.31: CI builds in the Steam Runtime sniper container with SDL2 2.30.0 from source** — full `## D572` entry at file tail | CHANGED 2026-10-07 (maintainer request; packaging only; X220 glibc 2.36 fresh install PASS) |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | **CLOSED (2026-09-28 bookkeeping: tank board/exit accepted by the user; shipped in v0.4.0).** Earlier: PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed). |
 | D415 | **Shooting a light fixture does not "kill" its flickering light (Bunker, Caverns): the fixture takes the hit but the flicker keeps going (community report, issue #87 comment by the reporter, 2026-09-28, 00 Agent playthrough of v0.4.0).** — full `## D415` entry at file tail | FIXED (2026-09-29 bookkeeping: root-caused and fixed as D430 + D431, user-verified vs GEPD/1964 on Caverns 2026-09-29; #119). Earlier: ROOT-CAUSED as D430 (see there); fix in tree, live check owed. |
@@ -18390,3 +18391,22 @@ capture data). Outputs regenerated: exe `.ico`, `docs/favicon.ico` (byte copy),
 `docs/img/icon/ge007-icon.png`, `port/fast3d/ge007_icon.h` (now written with LF).
 `--check` passes; two runs byte-identical. The social preview card is unchanged
 (maintainer decision).
+
+## D572: Linux tarball glibc floor 2.38 -> 2.31 (Steam Runtime sniper build) — CHANGED 2026-10-07 (maintainer request)
+
+The `linux-build` CI job built on `ubuntu-24.04`, so the game and its bundled
+SDL linked GCC's C23 `__isoc23_strtol`/`__isoc23_sscanf` redirects
+(`GLIBC_2.38`): the release tarball refused to start on Ubuntu 22.04, Debian 12,
+Fedora 38 and older (seen on the X220, Fedora 37 / glibc 2.36). The job now runs
+in the Steam Runtime 3 "sniper" SDK container (Debian 11, glibc 2.31), pinned by
+version + digest, with the SDK's gcc-14 (same compiler as before). Two SDK
+gaps: its `libSDL2-2.0.so.0` is sdl2-compat (aborts with "Failed loading SDL3
+library" unless SDL3 is shipped too), so SDL2 2.30.0 — the version the 24.04
+build bundled and every Linux/Deck test ran — is built from the hash-pinned
+upstream tarball (X11, Wayland+libdecor, PipeWire, Pulse, ALSA, udev, HIDAPI,
+D-Bus/IBus all compiled in, dynamically loaded); and Debian 11's security archive
+no longer serves `python3-pip`, so pip comes from a hash-pinned `get-pip.py`
+(PyInstaller 6.22.3 supports the SDK's Python 3.9). Result: game `GLIBC_2.29`,
+SDL `GLIBC_2.4`, `ge007-convert` built against 2.31. Verified: the container
+build run by hand on the X220 (podman) — fresh install there (ROM only ->
+converter -> boot -> clean quit, exit 0). No source changes; packaging only.

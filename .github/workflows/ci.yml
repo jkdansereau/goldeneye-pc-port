@@ -171,21 +171,32 @@ jobs:
   # here is a "does it compile + link" signal only, not a runtime claim.
   # Not a required check yet; flip it to required once it is reliably green.
   #
-  # Toolchain: ubuntu-24.04 + gcc-14. The port is developed on MinGW GCC 16;
-  # pinning a recent GCC here keeps the first bring-up focused on real
-  # portability gaps rather than a decade of accumulated old-GCC pedantry.
-  # (A "does it build on the GCC a typical distro ships" pass can come later.)
+  # Toolchain: Steam Runtime 3 "sniper" SDK container (Debian 11 base,
+  # glibc 2.31) + its gcc-14. Building against the old glibc is what sets the
+  # tarball's floor: the ubuntu-24.04 build needed glibc 2.38 (C23
+  # __isoc23_* symbols), so it refused to start on Ubuntu 22.04 / Debian 12.
+  # The image is pinned by version AND digest.
+  # SDL2 is built from source (2.30.0, the version the 24.04 build bundled
+  # and every Linux/Deck test used): the SDK's own libSDL2 is sdl2-compat,
+  # which needs SDL3 at runtime. pip is bootstrapped from a hash-pinned
+  # get-pip.py: Debian 11's security archive no longer serves python3-pip.
   linux-build:
     runs-on: ubuntu-24.04
+    container:
+      image: registry.gitlab.steamos.cloud/steamrt/sniper/sdk:3.0.20260805.254768@sha256:1c33c507bc75d012e77df5727f93b0d5b8c3f7c8d4142ba5f7a16882cc92e014
     env:
       CC: gcc-14
       CXX: g++-14
       # CMakeLists.txt opt-in enables CMAKE_{C,CXX}_COMPILER_LAUNCHER=ccache
       # when ccache is on PATH (b4de1c68, speed-ups plan Step 5). Game
       # sources are frozen (1:1 with the decomp), so after the first run only
-      # touched port/ files miss cache -- near-total hit rate.
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      # touched port/ files miss cache -- near-total hit rate. CCACHE_DIR is
+      # set in a step: in a container job ${{ github.workspace }} is the
+      # host path, not the container's.
       CCACHE_MAXSIZE: 500M
+      SDL2_VERSION: 2.30.0
+      SDL2_SHA256: 36e2e41557e0fa4a1519315c0f5958a87ccb27e25c51776beb6f1239526447b0
+      GET_PIP_SHA256: 95c0ae79ccf9ac1e47e4187f49081d6ae1f45997afd4549e14f37337cbcfd766
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -193,18 +204,33 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential gcc-14 g++-14 cmake python3 \
-            python3-pip libsdl2-dev zlib1g-dev libgl1-mesa-dev ccache patchelf
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+          apt-get update
+          apt-get install -y patchelf
+          curl -fsSL -o /tmp/get-pip.py https://bootstrap.pypa.io/pip/3.9/get-pip.py
+          echo "$GET_PIP_SHA256  /tmp/get-pip.py" | sha256sum -c
+          python3 /tmp/get-pip.py --quiet
+
+      - name: Build SDL2 ${{ env.SDL2_VERSION }} from source
+        run: |
+          curl -fsSL -o /tmp/sdl2.tar.gz \
+            "https://github.com/libsdl-org/SDL/releases/download/release-$SDL2_VERSION/SDL2-$SDL2_VERSION.tar.gz"
+          echo "$SDL2_SHA256  /tmp/sdl2.tar.gz" | sha256sum -c
+          tar xzf /tmp/sdl2.tar.gz -C /tmp
+          cmake -S "/tmp/SDL2-$SDL2_VERSION" -B /tmp/sdl-build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local -DSDL_STATIC=OFF -DSDL_TEST=OFF
+          cmake --build /tmp/sdl-build -j"$(nproc)"
+          cmake --install /tmp/sdl-build
+          ldconfig
 
       - name: Restore ccache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-linux-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
+          path: .ccache
+          key: ccache-linux-sniper-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
           restore-keys: |
-            ccache-linux-${{ hashFiles('CMakeLists.txt') }}-
-            ccache-linux-
+            ccache-linux-sniper-${{ hashFiles('CMakeLists.txt') }}-
+            ccache-linux-sniper-
 
       - name: Regenerate ROM-asset symbol file (US)
         run: python3 scripts/gen_romassets.py u
@@ -217,7 +243,7 @@ jobs:
       - name: Freeze asset converter (PyInstaller)
         run: |
           python3 -c "import PyInstaller, sys; sys.exit(PyInstaller.__version__ != '6.22.3')" 2>/dev/null \
-            || python3 -m pip install --quiet --break-system-packages pyinstaller==6.22.3
+            || python3 -m pip install --quiet pyinstaller==6.22.3
           python3 -m PyInstaller --onefile --noconfirm --clean \
             --name ge007-convert \
             --distpath tools_pc/dist/prepare-assets \

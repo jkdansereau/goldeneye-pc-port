@@ -92,8 +92,8 @@ project is as much a study of that process as it is a port. See
 download carries its own runtime libraries and the one-time asset tool (no
 Python, no emulator).
 
-**Linux / Steam Deck:** 64-bit x86 Linux with glibc 2.38 or newer (Ubuntu
-24.04+, Fedora 39+, Debian 13+, current SteamOS or Arch). SDL2 is bundled, so
+**Linux / Steam Deck:** 64-bit x86 Linux with glibc 2.31 or newer (Ubuntu
+20.04+, Debian 11+, Fedora 32+, SteamOS). SDL2 is bundled, so
 the tarball runs as-is; it sideloads onto a Steam Deck with nothing installed.
 
 **Both:** a GPU with OpenGL 3.0 drivers (practically any PC GPU from the last
