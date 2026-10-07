@@ -114,6 +114,8 @@ s32 portNoHitFlash = 0;
  * (gunfire.c gunDrawSight, #ifdef PORT). Default keeps the original
  * authored red sprite; hide is opt-in. */
 s32 portCrosshairHide = 0;
+static int cfgCrosshairPersistent = 0;   /* D436: 1 = draw the sight outside aim mode too */
+int portCrosshairPersistent(void) { return cfgCrosshairPersistent; }
 static int cfgCrosshairColor = 0;   /* 0 = authored sprite; 8 = custom RGB (D569: old presets 1..7 migrate to 8 at startup) */
 static int cfgCrosshairRed = 255, cfgCrosshairGreen = 255, cfgCrosshairBlue = 255;
 /* Former named presets (D373/D381), kept for the D569 ini migration. */
@@ -527,6 +529,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Game.NoHitFlash", &portNoHitFlash, 0, 1);
     configRegisterInt("Game.AIWideView", &cfgAIWideView, 0, 1);   /* D468 */
     configRegisterInt("Video.CrosshairHide",  &portCrosshairHide, 0, 1);  /* v0.4.0 M2 (D373) */
+    configRegisterInt("Video.CrosshairPersistent", &cfgCrosshairPersistent, 0, 1);   /* D436 */
     configRegisterInt("Video.CrosshairColor", &cfgCrosshairColor, 0, 8);  /* 8 = custom; old ini values unchanged */
     configRegisterInt("Video.CrosshairRed",   &cfgCrosshairRed,   0, 255);
     configRegisterInt("Video.CrosshairGreen", &cfgCrosshairGreen, 0, 255);
@@ -775,6 +778,7 @@ static const struct { const char *key; double n64, port; } kVideoPresets[] = {
     { "Game.ScreenShakeIntensity",   1,   1 },   /* D181 */
     { "Game.NoHitFlash",             0,   0 },   /* D232 */
     { "Video.CrosshairHide",         0,   0 },   /* D373 */
+    { "Video.CrosshairPersistent",   0,   0 },   /* D436: aim mode only, as the N64 */
     { "Video.CrosshairColor",        0,   0 },   /* authored red sprite */
     { "Video.CrosshairSize",       100, 100 },
     { "Video.CrosshairStyle",        0,   0 },

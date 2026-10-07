@@ -412,6 +412,7 @@ static struct Row rows[] = {
     { .key="Game.NoHitFlash", .label="No hit flash", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     SEP(G2),
     { .key="Video.CrosshairHide", .label="Show crosshair", .kind=ROW_TOGGLE, .step=1, .names=kOnOffRev },
+    { .key="Video.CrosshairPersistent", .label="Crosshair when not aiming", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },   /* D436 */
     { .key="Video.CrosshairColor", .label="Crosshair color", .kind=ROW_ENUM, .step=1, .names=kCrosshairColor },
     { .key="Video.CrosshairRed", .label="Red", .kind=ROW_SLIDER, .step=5, .shownWhen="Video.CrosshairColor", .shownValue=8 },
     { .key="Video.CrosshairGreen", .label="Green", .kind=ROW_SLIDER, .step=5, .shownWhen="Video.CrosshairColor", .shownValue=8 },
@@ -2035,6 +2036,7 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Video.FogDistance",         100 },  /* 1.0x = N64 fog (D540) */
     { "Video.LodDistance",         200 },  /* 2.0x (D546) */
     { "Video.CrosshairHide",      0 },   /* = 0 (on, N64) */
+    { "Video.CrosshairPersistent", 0 },   /* D436: off = N64 (aim mode only) */
     { "Video.CrosshairColor",   0 },   /* = 0 (authored red sprite) */
     { "Video.CrosshairRed",   255 },
     { "Video.CrosshairGreen", 255 },
@@ -3753,6 +3755,7 @@ static const struct { const char *key, *help; } kRowHelp[] = {
     { "__DisplayMode", "Modern, original or custom graphics presets." },
     { "Video.AspectMode", "Fill window fits the picture to the whole window." },   /* D560: shown only while Fill window is selected (optionsRowHelp) */
     { "Video.CrosshairHide", "When off, the crosshair stays hidden, even with Sight on screen." },
+    { "Video.CrosshairPersistent", "Also shows the crosshair when not aiming. The N64 shows it only in aim mode." },
     { "Video.CrosshairColor", "Original keeps the game's red sight. Custom: set Red, Green and Blue (0-255)." },
     { "Video.CrosshairHealthColor", "The crosshair shifts from green to red as your health drops." },
     { "Video.WidescreenAuto", "This only applies when Native widescreen is off." },

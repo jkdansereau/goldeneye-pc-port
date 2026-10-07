@@ -425,3 +425,4 @@ D533,FIXED,"The probe-doc drift that would have failed CI, plus three tracked-fi
 D534,FIXED,Pre-release review of the 2026-10-05 local batch —,FIXED 2026-10-05 (verify.sh/capture_p7.sh INT/TERM trap; release-notes linux-gate wording; dead security-and-fidelity-status.md links; future-dated 2026-10-07 labels normalised; D526 probe dangling-e…
 D540,FIXED,Fog rework (Deck playtest):,FIXED 2026-10-05 (port:
 D450,FIXED,"Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).","FIXED — port-only: the render thread's gfx_sdl_handle_events drains the same SDL queue as video.c's host pump but had no case for SDL_CONTROLLERDEVICEADDED/REMOVED, so it usually swallowed them and i…"
+D436,FIXED,"Persistent (hipfire) crosshair, opt-in:",FIXED (shipped 2026-09-29; rule-2 sign-off:
