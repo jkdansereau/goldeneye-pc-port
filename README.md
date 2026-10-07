@@ -36,12 +36,13 @@ project is as much a study of that process as it is a port. See
 [How it was made](#how-it-was-made).
 
 <p align="center">
-  <img src="docs/img/shots/feature-splitscreen.jpg" width="23%" alt="3-player split-screen multiplayer in the port">
-  <img src="docs/img/shots/feature-options.jpg" width="23%" alt="The PC options menu: custom crosshair colour sliders">
-  <img src="docs/img/shots/shot-01.jpg" width="23%" alt="Dam, rendered by the port">
-  <img src="docs/img/shots/shot-21.jpg" width="23%" alt="Cradle, rendered by the port">
-  <br><em>All in-engine, running in the port ·
-  <a href="docs/index.md">12 level stills in the project index</a></em>
+  <img src="docs/media/goldeneye-gh-preview.gif" width="64%"
+       alt="~29 s gameplay montage from live v0.5.0 play sessions">
+  <br><em>All in-engine, running in the port: a ~29&nbsp;s montage from live
+  v0.5.0 play sessions (the Facility intro, auto-aim in the Archives,
+  the crosshair options and the Dam sniper rifle, Silo, a 2-player rocket kill,
+  the Facility bathroom, the Dam ending) ·
+  <a href="docs/index.md">14 stills in the project index</a></em>
 </p>
 
 ---

@@ -1,7 +1,7 @@
 # GoldenEye 007 PC Port — v<version>
 
 <p align="center">
-  <img src="https://github.com/jkdansereau/goldeneye-pc-port/raw/v<version>/docs/img/shots/feature-splitscreen.jpg" width="340" alt="3-player split-screen multiplayer in the port">
+  <img src="https://github.com/jkdansereau/goldeneye-pc-port/raw/v<version>/docs/img/shots/feature-splitscreen.jpg" width="340" alt="2-player split-screen multiplayer in the port">
   <img src="https://github.com/jkdansereau/goldeneye-pc-port/raw/v<version>/docs/img/shots/feature-options.jpg" width="340" alt="The PC options menu: custom crosshair colour sliders">
 </p>
 

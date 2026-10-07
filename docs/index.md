@@ -134,11 +134,11 @@ how faithfully it tracks the N64 game, on [Fidelity status](fidelity.md).
     <span class="idx" id="vIdx">1 / 14</span>
   </div>
   <div class="vstage">
-    <img id="vImg" src="img/shots/feature-splitscreen.jpg" alt="GoldenEye 007 PC port — 3-player split-screen multiplayer, in-engine capture">
+    <img id="vImg" src="img/shots/feature-splitscreen.jpg" alt="GoldenEye 007 PC port — 2-player split-screen multiplayer, in-engine capture">
     <button class="vbtn prev" id="vPrev" aria-label="previous capture">&#8249;</button>
     <button class="vbtn next" id="vNext" aria-label="next capture">&#8250;</button>
   </div>
-  <div class="vcap"><span id="vCap">3-player split-screen &mdash; v0.5.0</span></div>
+  <div class="vcap"><span id="vCap">2-player split-screen &mdash; v0.5.0</span></div>
 </div>
 
 ## Play it, or take it apart
@@ -191,7 +191,7 @@ architecture, the N64→PC bug catalogue, and how the project is developed.
   // console-viewer carousel: one media slot, cycle the captures. Vanilla JS.
   (function () {
     var slides = [
-      { src:"img/shots/feature-splitscreen.jpg", cap:"3-player split-screen — v0.5.0" },
+      { src:"img/shots/feature-splitscreen.jpg", cap:"2-player split-screen — v0.5.0" },
       { src:"img/shots/feature-options.jpg", cap:"PC options menu, custom crosshair colour — v0.5.0" },
       { src:"img/shots/shot-01.jpg", cap:"Dam — v0.5.0 intro attract, 4K" },
       { src:"img/shots/shot-03.jpg", cap:"Runway — v0.5.0 intro attract, 4K" },
