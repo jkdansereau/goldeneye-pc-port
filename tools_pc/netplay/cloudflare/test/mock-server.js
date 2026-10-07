@@ -1,4 +1,4 @@
-// Local stand-in for the Cloudflare deployment (D410): the same Directory
+// Local stand-in for the Cloudflare deployment (D414): the same Directory
 // core behind the same routes, on plain HTTP/WebSocket, with no
 // dependencies. Used by the C integration test (netdir_test) and to preview
 // the status page:

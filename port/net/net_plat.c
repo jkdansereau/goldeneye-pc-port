@@ -1,5 +1,5 @@
 /*
- * net_plat.c -- platform layer for the netplay core (D409). See net_plat.h.
+ * net_plat.c -- platform layer for the netplay core (D413). See net_plat.h.
  */
 #include "net_plat.h"
 

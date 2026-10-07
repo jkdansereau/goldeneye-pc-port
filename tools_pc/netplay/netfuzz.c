@@ -1,5 +1,5 @@
 /*
- * netfuzz.c -- robustness fuzzer for the netplay stack (D412).
+ * netfuzz.c -- robustness fuzzer for the netplay stack (D416).
  *
  * Online play means running code against strangers: a quick-match joiner
  * processes whatever a random host sends, a host whatever random joiners
@@ -1802,7 +1802,7 @@ static void episodeEvilJoiner(int steps)
     hc.logCtx = (void *)"host";
     h = netHostCreate(&hc, qTransport(&haddr));
     if (!serverMode && chance(50)) {
-        /* an online quick game (D411 / D412): locked rules, balanced teams */
+        /* an online quick game (D415 / D416): locked rules, balanced teams */
         NdpPrefs p;
         NetSettings rules;
         int maxp;

@@ -1,5 +1,5 @@
 /*
- * net_runtime.c -- the game's background network thread (D409, D410).
+ * net_runtime.c -- the game's background network thread (D413, D414).
  *
  * Only the net thread touches the host object and the sockets' receive side.
  * Requests from other threads (host / connect / leave / LAN scan / online
@@ -7,7 +7,7 @@
  * iteration. The client object is internally locked and may be used from
  * any thread; so is the directory client (net_dir.c, its own thread).
  *
- * Online play through the directory service (D410) is peer to peer: a host is
+ * Online play through the directory service (D414) is peer to peer: a host is
  * a player's own game. The net thread learns each socket's public address
  * from a STUN server, publishes it (with the LAN address) through the
  * directory, and when the directory reports a joiner, sends "punch" packets
@@ -28,7 +28,7 @@
 
 #define LAN_MAX 16
 
-/* online (D410) */
+/* online (D414) */
 #define PUNCH_MAX                8
 #define PUNCH_INTERVAL_US   100000ull
 #define PUNCH_DURATION_US  6000000ull
@@ -119,7 +119,7 @@ static struct {
     int ojMerge;                       /* a lone quick host re-asking (silent) */
     int ojHostPending;                 /* quick match hosts: busy until we connect */
     int ojFails;                       /* quick: games we could not reach this search */
-    NdpPrefs qprefs;                   /* quick: what kind of game (D412) */
+    NdpPrefs qprefs;                   /* quick: what kind of game (D416) */
     NetSettings quickRules;            /* quick: the rules we host with when nobody fits */
     int quickMax;
     uint32_t ojExclude;                /* quick: ...the last one, told to the service */
@@ -162,7 +162,7 @@ static void setOjText(const char *text, int busy)
 
 /* Microseconds from `then` to `now`, never "negative": a timestamp taken by
  * a packet handler inside this tick's pump is LATER than the tick's `now`, and
- * the plain unsigned `now - then` wraps to "ages ago" (D411: the host's STUN
+ * the plain unsigned `now - then` wraps to "ages ago" (D415: the host's STUN
  * answer then looked stale at once, was re-asked every tick, and the first
  * registration -- which waits for it -- never happened). */
 static uint64_t since(uint64_t now, uint64_t then)
@@ -590,7 +590,7 @@ static void onlineJoinTick(uint64_t now)
         if (ds.joinInfoSeq != R.ojSeqJoin && ds.joinInfo.nonce == R.ojNonce) {
             char t[96];
             {
-                /* Only sane addresses get game packets (D412): the service
+                /* Only sane addresses get game packets (D416): the service
                  * filters too, but this check does not depend on it. */
                 int k, kept = 0;
                 for (k = 0; k < ds.joinInfo.ncand && k < NET_MAX_CANDS; k++) {
@@ -1034,7 +1034,7 @@ int netRuntimeLanResults(NetLanGame *out, int max)
     return n;
 }
 
-/* ---- online service (D410) ---- */
+/* ---- online service (D414) ---- */
 
 void netRuntimeSetService(const char *url, int forcePoll)
 {

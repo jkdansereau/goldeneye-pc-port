@@ -1,8 +1,8 @@
 /*
- * netui.c -- F9 online-play overlay (D409, D410).
+ * netui.c -- F9 online-play overlay (D413, D414).
  *
  * See port/include/netui.h for the hooks and the thread model, and
- * docs/netplay.md for the player-facing guide. D410 added the online service
+ * docs/netplay.md for the player-facing guide. D414 added the online service
  * (quick match / browse / host / join by code through the central directory,
  * net_dir.h + net_runtime.h), the "own server" page for ge007-netserver, and
  * the waiting-for-players screen drawn while the game is stalled. The panel reuses the F10
@@ -359,10 +359,10 @@ enum {
     RID_CHAT, RID_START, RID_LEAVE,
     RID_RESUME, RID_LEAVE_MATCH, RID_ABORT_MATCH,
     RID_INFO,
-    /* D410 online service */
+    /* D414 online service */
     RID_ON_QUICK, RID_ON_BROWSE, RID_ON_HOST_PUB, RID_ON_HOST_PRIV, RID_ON_JOIN_CODE, RID_ON_ENTRY,
     RID_ON_REFRESH, RID_CUSTOM, RID_SET_SERVICE, RID_SRV_JOIN_CODE,
-    /* D412 quick-match preferences, browse filter */
+    /* D416 quick-match preferences, browse filter */
     RID_ON_QPREFS, RID_QP_MODE, RID_QP_STAGE, RID_QP_WEAPONS, RID_QP_LENGTH, RID_QP_PLAYERS, RID_QP_SEARCH,
     RID_BR_FILTER
 };
@@ -397,7 +397,7 @@ static struct {
     NetgameHud hud;
     uint64_t now;
     int frontEnd;
-    /* online service (D410) */
+    /* online service (D414) */
     const char *service;     /* URL in effect, "" = none */
     int onlineBusy;          /* an online join / quick match is talking to it */
     char onlineText[96];
@@ -430,10 +430,10 @@ static uint64_t s_localIpUs;
 static uint64_t s_notFrontSinceUs;
 static uint64_t s_dirListUs;
 static int s_onlineAttempt;   /* the current connection came from the online service */
-static int s_quickSearch;     /* ...and it is a quick match (D411): the "searching" screens */
+static int s_quickSearch;     /* ...and it is a quick match (D415): the "searching" screens */
 static uint64_t s_searchStartUs;
 static uint64_t s_countsUs;   /* last LIST asked for, to keep the online counts fresh */
-static NdpPrefs s_qp;         /* quick-match preferences being edited (D412) */
+static NdpPrefs s_qp;         /* quick-match preferences being edited (D416) */
 static int s_qpLoaded, s_qpDirty;
 static uint8_t s_browseFilter = NDP_ANY;   /* browse: one mode, or all */
 static uint32_t s_hostedCodeShown;
@@ -649,7 +649,7 @@ static void hostAction(void)
     setStatus("Starting your game...", INK_META, 3);
 }
 
-/* ---- the online service (D410) ---- */
+/* ---- the online service (D414) ---- */
 
 static int onlineReady(void)
 {
@@ -965,7 +965,7 @@ static void buildBrowse(void)
     action(RID_BACK, 0, "BACK", "", 1);
 }
 
-/* What kind of game Quick Match looks for (D412). A field the chosen mode
+/* What kind of game Quick Match looks for (D416). A field the chosen mode
  * fixes is shown, not offered. */
 static void buildQPrefs(void)
 {
@@ -1002,7 +1002,7 @@ static void buildQPrefs(void)
     action(RID_BACK, 0, "SAVE AND GO BACK", "", 1);
 }
 
-/* ge007-netserver: a matchmaking server someone runs themselves (D409). */
+/* ge007-netserver: a matchmaking server someone runs themselves (D413). */
 static void buildCustom(void)
 {
     const int has = netgameCfgServer()[0] != 0;
@@ -1936,7 +1936,7 @@ static void update(void)
         closeOverlay();
     } else if (!X.hud.inMatch && s_wasInMatch && X.c && X.st.state == NCS_LOBBY) {
         SDL_AtomicSet(&s_open, 1);
-        /* Quick match keeps going (D412): ready for the next match at once;
+        /* Quick match keeps going (D416): ready for the next match at once;
          * the countdown gives anyone who wants out time to leave. */
         if (X.st.lobby.flags & NL_QUICK) s_autoReady = 1;
     }
@@ -2359,7 +2359,7 @@ static Gfx *drawHud(Gfx *gdl)
     return gdl;
 }
 
-/* The waiting screen (D410): drawn on the frames the scheduler presents
+/* The waiting screen (D414): drawn on the frames the scheduler presents
  * while the game thread is parked in a lockstep wait (netgame.c). Who we
  * are waiting for comes from the client's view of the host: before the
  * start, who has finished loading; in a match, whose input for the frame

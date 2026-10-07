@@ -416,7 +416,7 @@ void bossMainloop(void)
         pendingGfx = 0;
 
 #ifdef PORT
-        /* D409 online multiplayer seam (port/src/netgame.c): when a netplay
+        /* D413 online multiplayer seam (port/src/netgame.c): when a netplay
          * match is starting, write the agreed deterministic stage state
          * (seeds, MP setup, RAM save slot, controller playback hook, frame-
          * locked clock) BEFORE this stage's first PRNG draw

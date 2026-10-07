@@ -46,7 +46,7 @@
 #include "watchsettings.h"
 #include "frontoptions.h"
 #include "input.h"
-#include "netgame.h"   /* D410: netgameOnlineActive (idle timer) */
+#include "netgame.h"   /* D414: netgameOnlineActive (idle timer) */
 
 /* front.c functions this screen shares with the cheat screen (not all are in
  * front.h). */
@@ -110,7 +110,7 @@ extern struct rectbbox folder_option_ERASE_bound;   /* front.c:439 */
 
 static const char kLabel[]   = "PC Options";  /* ASCII only: issue #87 / D295 */
 static const char kLabelNL[] = "PC Options\n"; /* height measure only, D400 */
-/* D410: the online-play entry, one line under it (the bar has no room to its
+/* D414: the online-play entry, one line under it (the bar has no room to its
  * right at 440 wide). Hit bands of the two labels never overlap. */
 static const char kOnline[]   = "Online";
 static const char kOnlineNL[] = "Online\n";
@@ -420,7 +420,7 @@ void frontOptionsMenuInterface(void)
         if (tab_prev_highlight) {
             goBack();
         } else if (s_hl >= 0 && s_level == 0 && s_hl < s_pageN && optionsRowIsOnlineEntry(s_pageHdr[s_hl])) {
-            /* D410: Online Multiplayer is not a settings page. Back to file
+            /* D414: Online Multiplayer is not a settings page. Back to file
              * select (a screen a match can start from) with F9's overlay up. */
             playSfx(DOOR_LOCK_SFX);
             configSave();
@@ -796,7 +796,7 @@ Gfx *optionsFileSelectLabel(Gfx *gdl)
      * This hook only runs on MENU_FILE_SELECT, the one screen where
      * g_MenuTimer is an idle timer (elsewhere it is the intro / cast-roll
      * clock). Same write front.c makes when a button is pressed. */
-    /* D410: likewise while the F9 online overlay is up, or a lobby / online
+    /* D414: likewise while the F9 online overlay is up, or a lobby / online
      * match search is running with it closed -- a start must find this
      * screen, not the attract loop. */
     if (optionsOverlayIsOpen() || netuiIsOpen() || netgameOnlineActive()) {
@@ -857,7 +857,7 @@ Gfx *optionsFileSelectLabel(Gfx *gdl)
         frontChangeMenu(MENU_PC_OPTIONS, FALSE);
     }
 
-    /* D410: "Online" under it -- the same label, opening the F9 online-play
+    /* D414: "Online" under it -- the same label, opening the F9 online-play
      * overlay. (With the overlay up, controller 0 belongs to it, so neither
      * label can be clicked through it.) */
     {

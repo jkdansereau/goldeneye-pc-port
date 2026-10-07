@@ -1,4 +1,4 @@
-// GoldenEye 007 PC port -- online service (D410-D412). A Cloudflare Worker plus
+// GoldenEye 007 PC port -- online service (D414-D416). A Cloudflare Worker plus
 // one Durable Object: the game's lobby directory and matchmaker, and the
 // public status page (public/). Designed for the Workers free plan:
 //
@@ -16,7 +16,7 @@
 // /api/live (status page, WebSocket), /api/stats (JSON). Anything else is a
 // static asset.
 //
-// Hardening (D412), on top of the directory's own (src/directory.js):
+// Hardening (D416), on top of the directory's own (src/directory.js):
 //   - the edge turns away an address making too many API requests or
 //     connections (Workers rate-limit bindings) before it costs a Durable
 //     Object request;
@@ -370,7 +370,7 @@ async function edgeAllowed(limiter, key) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    // HTTPS only (D412): players' names and addresses never cross the
+    // HTTPS only (D416): players' names and addresses never cross the
     // internet in the clear, and nobody on the path can rewrite the page.
     // The game refuses http:// itself; this covers everything else.
     // (`wrangler dev` on this machine stays plain http.)

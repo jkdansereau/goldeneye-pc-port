@@ -151,7 +151,7 @@ endif()
 set(VERSION_CODENAME "larkspur")
 set(ORIGIN_URL "https://github.com/jkdansereau/goldeneye-pc-port")
 
-# Online play (D410): the matchmaking service every copy of this build finds
+# Online play (D414): the matchmaking service every copy of this build finds
 # games through -- tools_pc/netplay/cloudflare, deployed to Cloudflare's free
 # tier (this one deployed 2026-10-07). Empty = no online service (LAN, direct
 # and self-hosted server play still work). Players can override it with
@@ -582,7 +582,7 @@ set(SRC
   ${SRC_ENGINE}
 )
 
-# Online multiplayer core (D409, docs/dev/NETPLAY-PLAN.md): game-independent
+# Online multiplayer core (D413, docs/dev/NETPLAY-PLAN.md): game-independent
 # sockets / protocol / lobby / lockstep relay, built as a static library with
 # its own clean include path (see port/net/CMakeLists.txt). Its PUBLIC include
 # dir gives the port glue (port/src/netgame.c, netui.c, input.c) the headers.

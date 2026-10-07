@@ -1,5 +1,5 @@
 /*
- * netgame.c -- online multiplayer: game-side glue (D409, D410).
+ * netgame.c -- online multiplayer: game-side glue (D413, D414).
  *
  * See port/include/netgame.h for the contract and docs/dev/NETPLAY-PLAN.md
  * for the design. Summary of the match lifecycle (all on the game thread):
@@ -95,13 +95,13 @@ static char s_cfgServer[128] = "";
 static int s_cfgHostPort = NET_DEFAULT_HOST_PORT;
 static int s_cfgShowStats = 1;
 static int s_cfgCharacter = 0;   /* last lobby pick (mp_chr_setup index) */
-/* D410 online service: "" = this build's (GE007_ONLINE_SERVICE_URL, set at
+/* D414 online service: "" = this build's (GE007_ONLINE_SERVICE_URL, set at
  * configure time), "off" = none, else a URL. Empty means "the default" and
  * not "none", so an ini written by an older build never switches a newer
  * build's service off. Same for the STUN server ("" = stun.cloudflare.com). */
 static char s_cfgService[NET_DIR_URL_MAX] = "";
 static char s_cfgStun[128] = "";
-/* D412 quick-match preferences: mode (scenario), map, weapons, length,
+/* D416 quick-match preferences: mode (scenario), map, weapons, length,
  * players; 255 = any. */
 static int s_cfgQuick[5] = { NDP_ANY, NDP_ANY, NDP_ANY, NDP_ANY, NDP_ANY };
 
@@ -174,7 +174,7 @@ static struct {
     NetMatchStart heldMs;
     int heldSlot;
     uint64_t heldSinceUs;
-    /* waiting screen (D410): what the game thread is parked on, since when */
+    /* waiting screen (D414): what the game thread is parked on, since when */
     volatile int waitKind;
     volatile uint64_t waitSinceUs;
     volatile uint32_t waitFrame;
@@ -1058,7 +1058,7 @@ int netgameStartRuntime(void)
     return 0;
 }
 
-/* D410 online service. */
+/* D414 online service. */
 const char *netgameServiceUrl(void)
 {
     if (!strcmp(s_cfgService, "off")) return "";

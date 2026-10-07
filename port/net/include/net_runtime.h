@@ -1,12 +1,12 @@
 /*
- * net_runtime.h -- the game's background network thread (D409, D410).
+ * net_runtime.h -- the game's background network thread (D413, D414).
  *
  * Owns the UDP sockets, one NetClient, and (when this PC hosts) one direct
  * NetHost, and pumps them ~1000 times a second so the protocol keeps running
  * while the game thread is busy (stage loads take seconds). Nothing here is
  * started until the player opens online play: no sockets, no traffic.
  *
- * Online play (D410) goes through the directory service (net_dir.h) for
+ * Online play (D414) goes through the directory service (net_dir.h) for
  * finding games only; the match itself is peer to peer with a player's game
  * as the host. The runtime learns each socket's public address from a STUN
  * server (net_stun.h), publishes it, and hole-punches towards joiners.
@@ -65,7 +65,7 @@ int netRuntimeLanResults(NetLanGame *out, int max);
 /* Our player name (client + directory). */
 void netRuntimeSetName(const char *name);
 
-/* ---- online service (D410) ---- */
+/* ---- online service (D414) ---- */
 
 /* Point the directory client at a service ("https://NAME.workers.dev"; an
  * empty URL = no online service) and start it. Cheap: it connects only while
@@ -87,7 +87,7 @@ int netRuntimeIsHostingOnline(void);
  * netRuntimeOnlineBusy; the outcome shows up in the client's state (it
  * connects, or fails with a message). */
 void netRuntimeJoinOnline(uint32_t lobbyId, const char *code);
-/* prefs: what kind of game (D412: mode / map / weapons / length / size, each
+/* prefs: what kind of game (D416: mode / map / weapons / length / size, each
  * NDP_ANY or a value); NULL = any. When nothing fits, this PC hosts a quick
  * game with those preferences as its rules. */
 void netRuntimeQuickOnline(const NdpPrefs *prefs);

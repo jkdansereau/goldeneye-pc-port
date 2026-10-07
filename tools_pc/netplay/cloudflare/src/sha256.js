@@ -1,7 +1,7 @@
 // SHA-256 and HMAC-SHA256, synchronous (FIPS 180-4, RFC 2104). The
 // directory core is synchronous on purpose (one testable state machine);
 // crypto.subtle is async-only, and the inputs here are a few dozen bytes.
-// Used to sign lobby tokens (D412): token = HMAC(secret, "id:code"), so the
+// Used to sign lobby tokens (D416): token = HMAC(secret, "id:code"), so the
 // service can recognise its own lobbies after a restart without storing
 // them, and nobody can claim a code they were not given.
 

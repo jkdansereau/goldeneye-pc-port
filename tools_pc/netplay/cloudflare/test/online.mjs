@@ -1,4 +1,4 @@
-// End-to-end online play through the game's own network runtime (D410).
+// End-to-end online play through the game's own network runtime (D414).
 // Each netonline_test process is one player's runtime, exactly as the game
 // runs it: it finds the others through the service (the local mock), learns
 // its "public" address from a STUN server (a local fake that reports the
@@ -235,7 +235,7 @@ const hostFields = (line) => {
   return { scenario: Number(f[3]), stage: Number(f[4]), weapons: Number(f[5]), max: Number(f[6]) };
 };
 
-// Quick-match preferences (D412), through the real runtimes. A Golden Gun
+// Quick-match preferences (D416), through the real runtimes. A Golden Gun
 // searcher finds nothing and hosts a Golden Gun game (golden gun weapons); a
 // Normal-only searcher does not join it but hosts its own; the next Golden
 // Gun searcher is sent to the first game, the next Normal one to the second.
@@ -302,7 +302,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 300)); // last connection closes
     const snap = dir.snapshot();
     // Every host here reports a result once someone joins, but no match was
-    // ever played: the service only takes results for matches it saw (D412;
+    // ever played: the service only takes results for matches it saw (D416;
     // real results and anonymisation are covered by test/directory.test.js).
     assert.equal(snap.today.matches, 0, `results for matches nobody played were accepted: ${snap.today.matches}`);
     assert.equal(snap.sessions.length, 0, "every lobby gone once its host left");

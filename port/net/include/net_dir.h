@@ -1,5 +1,5 @@
 /*
- * net_dir.h -- client for the online directory service (D410).
+ * net_dir.h -- client for the online directory service (D414).
  *
  * Owns one connection to the service (tools_pc/netplay/cloudflare) on its own
  * thread: a WebSocket when the platform has one (net_http.h), otherwise
@@ -64,7 +64,7 @@ typedef struct NetDirStatus {
 
 /* Idempotent; a new URL restarts. The URL must be https:// -- plain http://
  * only to this machine (local tests); anything else leaves the service
- * UNAVAILABLE with the reason in lastError (D412). */
+ * UNAVAILABLE with the reason in lastError (D416). */
 int netDirStart(const NetDirConfig *cfg);
 void netDirStop(void);
 /* atexit: stop without waiting or freeing (see net_runtime.h). */
@@ -84,8 +84,8 @@ void netDirHost(const NdpHost *rec);
 void netDirUnhost(void);
 void netDirJoin(uint32_t lobbyId, const char *code, uint32_t nonce, const NetAddr *cands, int n);
 /* Quick match. excludeId: a game we were just sent to and could not reach
- * (0 = none) -- not offered again, and counted against it (D411). prefs:
- * what kind of game (D412; NULL = any). */
+ * (0 = none) -- not offered again, and counted against it (D415). prefs:
+ * what kind of game (D416; NULL = any). */
 void netDirQuick(uint32_t nonce, uint32_t excludeId, const NdpPrefs *prefs, const NetAddr *cands, int n);
 /* A finished match of our hosted lobby (id / token filled in here). */
 void netDirReportResult(const NdpResult *r);

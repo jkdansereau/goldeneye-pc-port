@@ -1,5 +1,5 @@
 /*
- * net_sock.h -- UDP sockets + addresses for the netplay core (D409).
+ * net_sock.h -- UDP sockets + addresses for the netplay core (D413).
  *
  * IPv4 only in v1. Addresses are kept in HOST byte order inside NetAddr.
  * Every protocol object (host / client) talks to the network through a

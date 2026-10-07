@@ -1,4 +1,4 @@
-// The online directory's core (D410-D412): lobby registry, codes, joins,
+// The online directory's core (D414-D416): lobby registry, codes, joins,
 // random matchmaking with preferences, match results, live counts.
 // Transport- and runtime-agnostic: the Cloudflare Durable Object
 // (src/index.js) and the local test server (test/mock-server.js) both drive
@@ -15,7 +15,7 @@
 // each side learns the other's candidate addresses (public via STUN + LAN)
 // and they connect to each other directly over UDP.
 //
-// Hardening (D412):
+// Hardening (D416):
 //   - every address a peer publishes is checked against where its request
 //     came from (netaddr.js cleanCands): the directory cannot be used to aim
 //     game traffic at third parties;

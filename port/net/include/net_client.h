@@ -1,6 +1,6 @@
 /*
  * net_client.h -- netplay client: connection, lobby replica, matchmaking
- * requests and the lockstep consumer (D409).
+ * requests and the lockstep consumer (D413).
  *
  * Thread model: one NetClient is driven by the net thread (netClientPump /
  * OnPacket / Tick) and used concurrently by the UI and the game thread
@@ -71,7 +71,7 @@ typedef struct NetClientStatus {
     uint32_t desyncFrame;
     uint8_t discMask;
     uint32_t bundlesAhead;   /* received but not yet consumed */
-    /* waiting screen (D410) */
+    /* waiting screen (D414) */
     int matchGo;             /* start barrier passed */
     uint8_t loadedMask;      /* before GO: players that finished loading */
     uint8_t waitMask;        /* ...out of these (connected players) */

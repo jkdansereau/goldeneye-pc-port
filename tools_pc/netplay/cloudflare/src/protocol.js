@@ -1,12 +1,12 @@
-// GE007 online directory protocol (D410) -- the service side of
+// GE007 online directory protocol (D414) -- the service side of
 // port/net/net_dirproto.c / net_dirproto.h. Change both together.
 //
 // One message = [u8 type][payload], little-endian. Strings are u8 length +
 // bytes (printable ASCII after sanitising); an address is u32 IPv4 (the
 // numeric value, e.g. 127.0.0.1 = 0x7F000001) + u16 port.
 
-export const NDP_VERSION = 3;   // 2: QUICK excludeId, WELCOME / LISTED searching (D411)
-                                // 3: quick-match preferences; lobby weapons / length (D412)
+export const NDP_VERSION = 3;   // 2: QUICK excludeId, WELCOME / LISTED searching (D415)
+                                // 3: quick-match preferences; lobby weapons / length (D416)
 export const ANY = 0xff;        // a quick-match preference that takes anything
 export const MAX_MSG = 2048;
 

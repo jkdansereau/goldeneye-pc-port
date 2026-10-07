@@ -1,5 +1,5 @@
 /*
- * netplay_selftest.c -- protocol + lockstep tests for the netplay core (D409).
+ * netplay_selftest.c -- protocol + lockstep tests for the netplay core (D413).
  *
  * Runs without the game or a ROM. A host (direct or matchmaking-server mode)
  * and N clients talk through a simulated network with latency, jitter, loss,
@@ -699,7 +699,7 @@ static void testCodecs(void)
         CHECK(netDecBundle(&r, &b2) != 0, "truncated bundle (%d bytes) accepted", i);
     }
 
-    /* Hostile floats (D412): the game wraps angles with a while loop, so an
+    /* Hostile floats (D416): the game wraps angles with a while loop, so an
      * infinite or huge turn would hang every PC. Decoded values are finite
      * and bounded; ordinary values pass through unchanged. */
     {
@@ -910,7 +910,7 @@ static void testAbort(void)
     worldFree(&w);
 }
 
-/* The ordinary end of a match (D412): every player's game leaves the stage
+/* The ordinary end of a match (D416): every player's game leaves the stage
  * after the results screen and reports MATCH_END (or one quits with
  * MATCH_LEAVE). The host must close the match and put the lobby back to
  * waiting -- netfuzz found its net thread spinning forever in matchAssemble
@@ -1150,7 +1150,7 @@ static void testBuildMismatch(void)
 /* Real UDP loopback smoke test                                              */
 /* ------------------------------------------------------------------------ */
 
-/* STUN Binding (D410): RFC 5769 §2.2's sample IPv4 response (XOR-MAPPED-
+/* STUN Binding (D414): RFC 5769 §2.2's sample IPv4 response (XOR-MAPPED-
  * ADDRESS 192.0.2.1:32853, plus SOFTWARE / MESSAGE-INTEGRITY / FINGERPRINT
  * attributes the parser must step over), our request format, rejection of
  * other transactions and truncation, and the plain MAPPED-ADDRESS form. */
@@ -1200,7 +1200,7 @@ static void testStun(void)
           a.port == 4500, "MAPPED-ADDRESS fallback");
 }
 
-/* Directory protocol (D410): every message survives encode -> decode, and a
+/* Directory protocol (D414): every message survives encode -> decode, and a
  * truncated / over-long one is refused rather than half-read. The JS side
  * (cloudflare/src/protocol.js) is tested against the same layouts. */
 static void testDirProto(void)
@@ -1514,7 +1514,7 @@ static int dirProtoVectors(void)
     ndpEncUnhost(&w, &un);
     printHex("unhost", buf, w.len);
 
-    /* Preference parity (D412): the same inputs through ndpNormalizePrefs;
+    /* Preference parity (D416): the same inputs through ndpNormalizePrefs;
      * the JS tests run them through gamedata.js normalizePrefs and compare.
      * Deterministic pseudo-random inputs, including out-of-range values. */
     {
@@ -1539,7 +1539,7 @@ static int dirProtoVectors(void)
     return 0;
 }
 
-/* Quick-match preferences (D412): GoldenEye's rules applied to what a
+/* Quick-match preferences (D416): GoldenEye's rules applied to what a
  * searcher asks for, matching, and the rules a searcher hosts with. */
 static void testQuickPrefs(void)
 {
@@ -1623,7 +1623,7 @@ static void testQuickPrefs(void)
     }
 }
 
-/* Online join (D410): a client given several candidate addresses for one
+/* Online join (D414): a client given several candidate addresses for one
  * host (a dead "public" one first, the real one second) connects through
  * whichever answers and keeps talking to it afterwards. */
 static void testMultiCandidateJoin(void)
@@ -1693,7 +1693,7 @@ static int predSomeoneLoadedOthersNot(World *w, void *arg)
     return w->cl[0].loaded && !w->cl[1].loaded && w->cl[0].inMatch;
 }
 
-/* Waiting screen data (D410): between MATCH_START and GO the host reports
+/* Waiting screen data (D414): between MATCH_START and GO the host reports
  * who has finished loading. */
 static void testWaitStatus(void)
 {

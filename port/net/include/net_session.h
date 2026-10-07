@@ -1,6 +1,6 @@
 /*
  * net_session.h -- one peer connection: keepalive, RTT, and a reliable,
- * ordered message channel multiplexed with unreliable messages (D409).
+ * ordered message channel multiplexed with unreliable messages (D413).
  *
  * SESSION packet payload:
  *   u16 ack      -- receiver's next expected reliable seq (cumulative ack)

@@ -1,5 +1,5 @@
 /*
- * net_client.c -- netplay client (D409). See net_client.h.
+ * net_client.c -- netplay client (D413). See net_client.h.
  */
 #include "net_client.h"
 #include "net_gamedata.h"

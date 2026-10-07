@@ -1,5 +1,5 @@
 /*
- * net_proto.c -- wire codecs for the netplay protocol (D409).
+ * net_proto.c -- wire codecs for the netplay protocol (D413).
  */
 #include "net_proto.h"
 
@@ -69,7 +69,7 @@ void netEncInputRec(NetW *w, const NetInputRec *rec)
     }
 }
 
-/* D412: every float a peer sends ends up in game state on every PC. The
+/* D416: every float a peer sends ends up in game state on every PC. The
  * game wraps angles with `while (theta >= 360.0f) theta -= 360.0f`
  * (bondview2.c), which never ends for infinity or 1e30 -- one crafted packet
  * would hang every player's game. So: non-finite -> 0, magnitudes beyond any

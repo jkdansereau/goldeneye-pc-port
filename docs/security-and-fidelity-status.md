@@ -28,7 +28,7 @@ legally-owned copy.
 At runtime, the engine:
 
 - opens **no network connection unless you use online multiplayer**
-  ([`netplay.md`](netplay.md), added 2026-10-07; findings D409 / D410).
+  ([`netplay.md`](netplay.md), added 2026-10-07; findings D413 / D414).
   - **Before you use it:** until you open the **Online** menu (F9, or the
     entries in the menus) or pass a `--net-*` option, no socket exists.
   - **Game traffic** is plain UDP to the other players, or to a host or
@@ -40,7 +40,7 @@ At runtime, the engine:
     through it. It sends your name, game build, and, while you host, your
     game's details and addresses. It is a Cloudflare Worker run by whoever
     deployed it (`tools_pc/netplay/cloudflare`). The game refuses any
-    service address that is not `https://`, except this machine (D412).
+    service address that is not `https://`, except this machine (D416).
     The service only passes on addresses players publish for themselves, so
     it cannot be used to aim traffic at others. The game also sends game
     traffic only to ordinary internet or LAN addresses.
@@ -51,7 +51,7 @@ At runtime, the engine:
   - No downloads, and no executable content over the network.
   - Every received packet is bounds-checked and every index range-checked.
     All text is forced to printable ASCII, and every number a peer sends is
-    made finite and bounded before the game sees it (D412).
+    made finite and bounded before the game sees it (D416).
   - The network code is fuzzed under AddressSanitizer, against hostile hosts,
     hostile joiners and tampered packets (`tools_pc/netplay/netfuzz.c`).
     *It is new and has not yet had the independent end-to-end review the
@@ -108,7 +108,7 @@ replacement, in the `port/` layer. This was audited directly:
   finding log, and moves *toward* matching N64 behavior, not away from it.
   Every other deviation from the decompiled source is one of the documented
   32→64-bit pointer-width ABI corrections described above.
-- **Online multiplayer (D409)** adds one `#ifdef PORT` call in `src/boss.c`
+- **Online multiplayer (D413)** adds one `#ifdef PORT` call in `src/boss.c`
   (a stage-load hook next to the existing D294 / D235 hooks). It returns
   immediately unless an online match is starting, and then only sets the
   state the game's own demo-replay system sets (random seeds, multiplayer

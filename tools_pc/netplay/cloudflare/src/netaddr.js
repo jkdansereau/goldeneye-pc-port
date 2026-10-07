@@ -1,4 +1,4 @@
-// Address helpers for the directory (D412 hardening).
+// Address helpers for the directory (D416 hardening).
 //
 // The directory hands peers each other's addresses, and both sides then send
 // UDP to them. Without checks that is a reflection service: a joiner (or a

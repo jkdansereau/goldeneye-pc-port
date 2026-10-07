@@ -1,5 +1,5 @@
 /*
- * net_gamedata.c -- GoldenEye MP rule tables for the netplay core (D409).
+ * net_gamedata.c -- GoldenEye MP rule tables for the netplay core (D413).
  * Sources (keep in sync): src/game/front.c multi_game_lengths[],
  * mp_player_counts[], multi_stage_setups[], mp_chr_setup[],
  * MP_handicap_table[], MP_controller_configuration_table[],

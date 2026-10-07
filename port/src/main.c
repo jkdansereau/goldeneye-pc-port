@@ -207,7 +207,7 @@ int main(int argc, char **argv)
     audioInit();
     mixerInit();
     inputInit();
-    /* D409: online multiplayer. Registers nothing on the network and opens
+    /* D413: online multiplayer. Registers nothing on the network and opens
      * no socket unless the player opens Online (F9) or passes --net-*. */
     netgameInit();
 

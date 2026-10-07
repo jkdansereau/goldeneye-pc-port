@@ -1,5 +1,5 @@
 /*
- * net_host.c -- lobby host + lockstep input relay (D409). See net_host.h and
+ * net_host.c -- lobby host + lockstep input relay (D413). See net_host.h and
  * docs/dev/NETPLAY-PLAN.md §7 for the protocol.
  */
 #include "net_host.h"
@@ -24,7 +24,7 @@
 #define FRAMES_RESEND_US             12000ull
 #define FRAMES_IDLE_US               50000ull
 /* Quick-match lobbies (autostart) count down once everyone present is
- * ready (D411): long enough for more searching players to drop in while the
+ * ready (D415): long enough for more searching players to drop in while the
  * game is small, at once when it is full. */
 #define AUTOSTART_SECONDS_2               12
 #define AUTOSTART_SECONDS_3               8
@@ -547,7 +547,7 @@ static void matchAssemble(HLobby *L)
                 break;
             }
         }
-        /* D412: once every slot has finished or left, there is nothing left
+        /* D416: once every slot has finished or left, there is nothing left
          * to assemble -- and no consumer holds the ring back (minAck below),
          * so without this the loop never ended: the host's net thread spun
          * forever at the end of every match in which all players finished
@@ -989,7 +989,7 @@ static void handleMsg(void *vctx, NetConn *c, uint8_t type, NetR *r)
             if (ch < NG_NUM_CHARACTERS) p->character = ch;
             if (hc < NG_NUM_HANDICAPS) p->handicap = hc;
             if (ct < NG_NUM_CONTROLS) p->control = ct;
-            /* Quick-match team games keep the host's balanced teams (D412):
+            /* Quick-match team games keep the host's balanced teams (D416):
              * random players don't get to stack one side. */
             if (tm <= 1 && !((L->st.flags & NL_QUICK) && ngScenarioIsTeam(L->st.settings.scenario))) p->team = tm;
             p->ready = rd ? 1 : 0;
@@ -998,7 +998,7 @@ static void handleMsg(void *vctx, NetConn *c, uint8_t type, NetR *r)
         break;
 
     case NM_SETTINGS_SET:
-        /* Quick-match lobbies keep standard rules (D411): whoever happens to
+        /* Quick-match lobbies keep standard rules (D415): whoever happens to
          * be the leader of a random game does not get to change them. */
         if (L && L->st.state == NLS_WAITING && isLeader(h, si) && !(L->st.flags & NL_QUICK)) {
             NetSettings ns;
@@ -1253,7 +1253,7 @@ static void handleJoin(NetHost *h, const NetAddr *from, NetR *r, int datagramLen
     }
     /* The same attempt arriving by a second path: an online joiner sends its
      * JOIN to every address the directory published for us (public + LAN,
-     * D410), and on one LAN -- or behind a router that loops our public
+     * D414), and on one LAN -- or behind a router that loops our public
      * address back -- more than one gets here, each from a different source
      * address. One session per attempt: the first path wins, and its ACCEPT
      * tells the joiner which of our addresses to use. */
@@ -1561,7 +1561,7 @@ void netHostGetStats(NetHost *h, NetHostStats *out)
 }
 
 /* ------------------------------------------------------------------------ */
-/* Direct-mode lobby: online-service integration (D410, net_dir.h)           */
+/* Direct-mode lobby: online-service integration (D414, net_dir.h)           */
 /* ------------------------------------------------------------------------ */
 
 void netHostSetDirectInfo(NetHost *h, const char *code, uint8_t lobbyFlags, int autostart)
@@ -1571,7 +1571,7 @@ void netHostSetDirectInfo(NetHost *h, const char *code, uint8_t lobbyFlags, int 
     L = &h->lobby[0];
     if (code) netStrCopy(L->st.code, (int)sizeof(L->st.code), code);
     if ((lobbyFlags & NL_QUICK) && !(L->st.flags & NL_QUICK)) {
-        /* becoming a quick-match game: standard rules, random stage (D411) */
+        /* becoming a quick-match game: standard rules, random stage (D415) */
         ngDefaultSettings(&L->st.settings);
         L->st.settings.stage = NG_STAGE_RANDOM;
     }

@@ -2,13 +2,13 @@
 #define PORT_NETUI_H
 
 /*
- * F9 online-play overlay (D409, D410). Port-layer only, same contract as the F10
+ * F9 online-play overlay (D413, D414). Port-layer only, same contract as the F10
  * options overlay (optionsoverlay.h): it draws its own 2D display list after
  * the game's (fast3d gfx_run) and appends NOTHING while closed and idle, so
  * golden frame dumps stay byte-identical.
  *
  * Screens: Online (quick match / browse / host / join by code through the
- * online service, D410; LAN games; host on this PC; join by address; your
+ * online service, D414; LAN games; host on this PC; join by address; your
  * own ge007-netserver; settings), the lobby (players, your character /
  * handicap / control / team / ready, the leader's match settings, chat,
  * start / leave), the in-match menu (resume / leave / end for everyone) and
@@ -63,7 +63,7 @@ void netuiOpenFromCli(void);
 int netuiRequestOpen(void);
 
 /* Scheduler thread (libultra.c): the empty game display list of a waiting
- * frame (D410); netuiEmit draws the waiting screen over it. */
+ * frame (D414); netuiEmit draws the waiting screen over it. */
 Gfx *netuiWaitFrameDl(void);
 
 /* Scheduler thread (fast3d gfx_run). NULL = nothing to draw. */

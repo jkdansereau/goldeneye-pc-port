@@ -31,7 +31,7 @@ good that you are looking at one of these.
 - [D12. Collapsing an LOD binding to tile 0 breaks a DETAIL binding](#d12-collapse-an-lod-binding-to-tile-0-is-wrong-for-a-two-texture-detail-binding-d236)
 - [D13. Per-render accumulation is not associative (1 vs 2–3 ticks/frame)](#d13-per-render-accumulation-is-not-associative-the-ports-1-tickframe-can-reach-states-the-n64s-23-ticksframe-never-did-d329)
 - [E. Process / method notes](#e-process--method-notes)
-- [F. Determinism: what breaks lockstep replay / netplay (D409)](#f-determinism-what-breaks-lockstep-replay--netplay-d409)
+- [F. Determinism: what breaks lockstep replay / netplay (D413)](#f-determinism-what-breaks-lockstep-replay--netplay-d409)
 
 ## A. Pointer-width struct growth (32→64): the dominant class
 
@@ -1745,9 +1745,9 @@ darkening from a nonzero `ENV_ALPHA` LERP factor is very likely faithful
   trapping on both MIPS and x86-64 SSE, matching retail behavior; do not
   "fix" them.
 
-## F. Determinism: what breaks lockstep replay / netplay (D409)
+## F. Determinism: what breaks lockstep replay / netplay (D413)
 
-The online multiplayer (D409, `docs/dev/NETPLAY-PLAN.md`) runs the whole
+The online multiplayer (D413, `docs/dev/NETPLAY-PLAN.md`) runs the whole
 unmodified simulation on every PC and only exchanges controller input, so
 anything that makes two PCs compute differently is a desync. The audit that
 found these generalises to any replay / TAS / determinism work on this port.
@@ -1800,7 +1800,7 @@ found these generalises to any replay / TAS / determinism work on this port.
   while the game thread waits (for a peer, a load), nothing new is drawn and
   the kernel heartbeat calls it a hang. Status that must stay live goes in
   the window title from the host thread's event pump, and escape hatches go
-  on host-thread keys (Shift+F9). D410 adds the other half: the scheduler
+  on host-thread keys (Shift+F9). D414 adds the other half: the scheduler
   thread (`__scMain`, owner of the GL context, idle while the game thread is
   parked) presents its own frame at the retrace receive -- an empty game DL
   under the overlays (`portNetWaitFrame`, `netgameWantWaitFrame`). Only do
@@ -1814,8 +1814,8 @@ found these generalises to any replay / TAS / determinism work on this port.
   harness that supplies only the globals they touch.
 - **F9. An overlay's emit returns the START of its display list.** fast3d
   runs what `optionsOverlayEmit` / `netuiEmit` return from that address on.
-  The D409 netui returned `endDl(gdl)` -- the pointer *after* the end -- so
-  its first draw would have executed stale buffer contents (D410). Build one
+  The D413 netui returned `endDl(gdl)` -- the pointer *after* the end -- so
+  its first draw would have executed stale buffer contents (D414). Build one
   list from the buffer base, return the base, and `NULL` when nothing was
   appended (golden dumps stay byte-identical). Code that could only be
   type-checked deserves a line-by-line comparison with a working sibling for
@@ -1829,7 +1829,7 @@ found these generalises to any replay / TAS / determinism work on this port.
   that tries every address a host published (public via STUN, LAN) can reach
   it by more than one path -- same LAN, or a router that loops its public
   address back -- and each path shows a different source address. Dedupe
-  join attempts by their nonce, not by address (the D410 phantom player).
+  join attempts by their nonce, not by address (the D414 phantom player).
   Learn the public mapping from the *game's own* socket (that mapping is the
   one game traffic uses), route STUN replies off the shared socket by the
   magic cookie, and never block the net thread on DNS during a match
@@ -1837,7 +1837,7 @@ found these generalises to any replay / TAS / determinism work on this port.
 - **F12. "Nobody waiting, so you host" races.** Two quick-match requests in
   the same second both get told to host and then wait alone forever. Have a
   lone host re-ask, and make the merge one-way (offer only *older* lobbies)
-  so two hosts can never swap into each other (D410).
+  so two hosts can never swap into each other (D414).
 - **F13. Method: end-to-end test a singleton runtime with one process per
   player plus a fake for each external service** -- a mock of the directory
   (same core module behind the same routes) and a STUN server that answers
@@ -1848,7 +1848,7 @@ found these generalises to any replay / TAS / determinism work on this port.
   loop that takes `now` once and then runs packet handlers which stamp
   `netTimeUs()` themselves produces timestamps *after* `now`. Then
   `now - then` (uint64) is huge -- "ages ago" -- and any "is it stale?" check
-  fires. D411: the host's STUN answer looked stale the moment it arrived and
+  fires. D415: the host's STUN answer looked stale the moment it arrived and
   was re-asked every tick, so the first registration (which waits for a
   pending STUN) never ran. It hit intermittently, depending on whether the
   handler ran in the same microsecond as `now` -- logging hid it. Use a
@@ -1858,21 +1858,21 @@ found these generalises to any replay / TAS / determinism work on this port.
   one crafted packet attacks every player at once -- and the game's code
   assumes N64-sized inputs. `while (vv_theta >= 360.0f) vv_theta -= 360.0f`
   (bondview2.c) never ends for infinity, and for 1e30 the subtraction is a
-  no-op. D409's `netDecInputRec` passed peer floats straight through, so a
-  single packet could freeze every game in the match (fixed in D412). Sanitise in the
+  no-op. D413's `netDecInputRec` passed peer floats straight through, so a
+  single packet could freeze every game in the match (fixed in D416). Sanitise in the
   decoder: non-finite -> 0 tested by exponent bits (`-ffast-math` may fold
   `isfinite()` to true), magnitudes clamped far beyond real input. Do it
   where every PC runs the same bytes -- the host re-encodes what it decoded,
   so the clamp must be idempotent -- and sanitising cannot desync.
-  Range-check every index before it reaches a game table (D409's
+  Range-check every index before it reaches a game table (D413's
   `ngValidateStart`).
 - **F16. A loop whose only exit is "a consumer is still behind".** The host
   builds lockstep bundles in a `for (;;)` that stops when an active slot lacks
   input or the ring would overwrite unacked frames. When every player has
   finished or left -- the *ordinary* end of every match, as each PC leaves
   the stage and sends MATCH_END -- no slot is active and nobody acks, so
-  neither exit fires: the host's net thread spun forever (D412, latent since
-  D409). Give such loops an explicit "nothing left to do" exit, and test the
+  neither exit fires: the host's net thread spun forever (D416, latent since
+  D413). Give such loops an explicit "nothing left to do" exit, and test the
   ordinary end (everyone finishes), not only aborts and disconnects.
 - **F17. Method: fuzz the netplay stack with an "evil peer" that speaks the
   session layer.** Mutated captured packets mostly bounce off a reliable

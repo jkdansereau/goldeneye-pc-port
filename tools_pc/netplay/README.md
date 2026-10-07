@@ -1,8 +1,8 @@
-# Netplay tools: matchmaking server + self-test (D409, D410)
+# Netplay tools: matchmaking server + self-test (D413, D414)
 
 > **Looking for the online service** (quick match, game list and codes for
 > everyone, a live status page, free on Cloudflare)? That is
-> [`cloudflare/`](cloudflare/README.md) (D410). This page covers
+> [`cloudflare/`](cloudflare/README.md) (D414). This page covers
 > `ge007-netserver`: a server you run yourself, which also relays game
 > traffic and so works behind any router.
 
@@ -92,11 +92,11 @@ the same frame everywhere; a leader abort ends the match at the same frame
 and a rematch works; lobby listing hides private lobbies; create / join by
 code / quick match / leader-only start / ready rule / team validation /
 quick-lobby autostart; a build mismatch is refused; the local-address helper;
-and a 240-frame match over real UDP sockets. D410 added: the STUN codec (RFC
+and a 240-frame match over real UDP sockets. D414 added: the STUN codec (RFC
 5769 test vector), the online directory protocol (including messages encoded
 by the JS service), joining through several candidate addresses (one dead;
 and both live, which must still give exactly one player), and the
-start-barrier status the waiting screen shows. D412 added:
+start-barrier status the waiting screen shows. D416 added:
 - **Quick-match preference rules.** C and JS are checked against each other
   on 64 vectors.
 - **Hostile input floats** are made finite and bounded, and a decoded record
@@ -104,7 +104,7 @@ start-barrier status the waiting screen shows. D412 added:
 - **A match that simply ends** returns the lobby to waiting (everyone
   finishes, or one quits).
 
-## Fuzzing (D412)
+## Fuzzing (D416)
 
 `netfuzz` attacks the real code the way strangers online could:
 

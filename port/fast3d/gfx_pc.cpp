@@ -259,7 +259,7 @@ static float g_gpSafeTop = 0.0f;
 static float g_gpSafeHeight = -1.0f;
 static bool g_safe_area_crop_enabled = true;
 
-/* D409 online multiplayer presentation (port/src/netgame.c). Every peer runs
+/* D413 online multiplayer presentation (port/src/netgame.c). Every peer runs
  * and interprets ALL players' views (lvlRender interleaves simulation with
  * each player's render pass, so the DL must be built identically), but each
  * PC shows only its own player: the local viewport S (logical 320x240 space,
@@ -2259,7 +2259,7 @@ static inline int gfx_lod_tile_offset(const int i) {
 static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bool is_rect) {
     if (s_np.active && !is_rect &&
         !gfx_np_overlaps_s(s_np_vp_x, s_np_vp_top, s_np_vp_x + s_np_vp_w, s_np_vp_top + s_np_vp_h)) {
-        return;   /* D409: another player's view -- not presented on this PC */
+        return;   /* D413: another player's view -- not presented on this PC */
     }
     /* D75D: only real model triangles (all indices < MAX_VERTICES); the
      * fullscreen-quad helpers use indices MAX_VERTICES+0..3 and would skew maxtri. */
@@ -3032,7 +3032,7 @@ static inline void gfx_update_aspect_mode(void) {
     const uint32_t side = rsp.aspect_mode & G_ASPECT_CENTER_EXT;
 
     if (s_np.active) {
-        /* D409: the presented quadrant is self-contained; no HUD anchoring. */
+        /* D413: the presented quadrant is self-contained; no HUD anchoring. */
         rsp.aspect_scale = gfx_current_dimensions.aspect_ratio;
         rsp.aspect_ofs = 0.f;
         return;
@@ -3063,7 +3063,7 @@ static void gfx_sp_extra_geometry_mode(uint32_t clear, uint32_t set) {
     gfx_update_aspect_mode();
 }
 
-/* D409: render-target pixel rect (top-down) -> final GL rect, with the same
+/* D413: render-target pixel rect (top-down) -> final GL rect, with the same
  * game-window offset the normal path below applies. */
 static void gfx_np_px_to_final(XYWidthHeight* area, float x1, float ytop, float x2, float ybot) {
     const float H = (float)gfx_current_dimensions.height;
@@ -3082,7 +3082,7 @@ static void gfx_np_px_to_final(XYWidthHeight* area, float x1, float ytop, float 
 
 static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_aspect = false) {
     if (s_np.active) {
-        /* D409: logical S -> render-target T (see s_np). area->y is the
+        /* D413: logical S -> render-target T (see s_np). area->y is the
          * BOTTOM edge in top-down logical units, like the path below. */
         const float kx = s_np.tw / s_np.sw;
         const float ky = s_np.th / s_np.sh;
@@ -3171,7 +3171,7 @@ extern "C" void gfx_get_ui_screen_rect(int32_t *outX, int32_t *outY, int32_t *ou
     *outH = (int32_t)area.height;
 }
 
-/* D409: T in final (GL, offset-applied) coordinates. */
+/* D413: T in final (GL, offset-applied) coordinates. */
 static void gfx_np_target_rect(XYWidthHeight* t) {
     gfx_np_px_to_final(t, s_np.tx, s_np.ty, s_np.tx + s_np.tw, s_np.ty + s_np.th);
 }
@@ -3254,7 +3254,7 @@ static void gfx_calc_and_set_viewport(const Vp_t* viewport) {
     rdp.viewport.width = width;
     rdp.viewport.height = height;
 
-    /* D409: logical bounds of this viewport (top-left origin) for culling
+    /* D413: logical bounds of this viewport (top-left origin) for culling
      * other players' views in netplay presentation. */
     s_np_vp_x = x;
     s_np_vp_top = y - height;
@@ -3263,7 +3263,7 @@ static void gfx_calc_and_set_viewport(const Vp_t* viewport) {
 
     /* Cache the raw (pre window-scale) viewport bounds for the safe-area
      * crop above -- guard against a degenerate/zero-height viewport so a
-     * later divide can't ever see one. D409: not from netplay frames (the
+     * later divide can't ever see one. D413: not from netplay frames (the
      * crop is unused there, and a split-screen quadrant would otherwise
      * leak into the overlays drawn after the game's DL). */
     if (height > 1.0f && !s_np.active) {
@@ -3344,7 +3344,7 @@ static void gfx_dp_set_scissor(uint32_t mode, uint32_t ulx, uint32_t uly, uint32
     rdp.scissor.height = height;
 
     gfx_adjust_viewport_or_scissor(&rdp.scissor, rsp.aspect_mode != 0);
-    gfx_np_clip_scissor(&rdp.scissor);   /* D409: never draw outside T */
+    gfx_np_clip_scissor(&rdp.scissor);   /* D413: never draw outside T */
 
     rdp.viewport_or_scissor_changed = true;
 }
@@ -3602,7 +3602,7 @@ static void gfx_dp_set_subpixel_offset(int16_t x, int16_t y) {
 
 static void gfx_draw_rectangle(int32_t ulx, int32_t uly, int32_t lrx, int32_t lry) {
     if (s_np.active && !gfx_np_overlaps_s(ulx / 4.0f, uly / 4.0f, lrx / 4.0f, lry / 4.0f)) {
-        return;   /* D409: outside the presented view */
+        return;   /* D413: outside the presented view */
     }
     uint32_t saved_other_mode_h = rdp.other_mode_h;
     uint32_t cycle_type = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE));
@@ -4478,7 +4478,7 @@ extern "C" void gfxD157Burst(void) {
  * when the overlay is closed -- in which case nothing is appended and the
  * frame is byte-identical to before (golden dumps unaffected). */
 extern "C" Gfx* optionsOverlayEmit(void);
-/* D409 online-play overlay (port/src/netui.c); same contract as above. */
+/* D413 online-play overlay (port/src/netui.c); same contract as above. */
 extern "C" Gfx* netuiEmit(void);
 
 static uint64_t gfx_perf_now_ns(void) {
@@ -4519,7 +4519,7 @@ extern "C" void gfx_run(Gfx* commands) {
     rendering_state.viewport = {};
     rendering_state.scissor = {};
     const uint64_t perf_tpre = perf_t0 ? gfx_perf_now_ns() : 0;
-    gfx_np_begin_frame();   /* D409: no-op unless an online match is presenting */
+    gfx_np_begin_frame();   /* D413: no-op unless an online match is presenting */
     gfx_run_dl(commands);
     gfx_np_end_frame();
     {

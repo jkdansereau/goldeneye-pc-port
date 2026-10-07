@@ -1,6 +1,6 @@
 /*
  * net_gamedata.h -- GoldenEye multiplayer rule tables for the netplay core
- * (D409). Mirrors src/game/front.c / mp_weapon.c / bondconstants.h so the
+ * (D413). Mirrors src/game/front.c / mp_weapon.c / bondconstants.h so the
  * matchmaking server (which never links the game) can validate settings and
  * the lobby UI can label them. If the game tables ever change, change these
  * with them; netgame.c cross-checks the counts against the game at runtime.

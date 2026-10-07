@@ -1,5 +1,5 @@
 /*
- * ge007-netserver -- GoldenEye 007 PC port matchmaking + relay server (D409).
+ * ge007-netserver -- GoldenEye 007 PC port matchmaking + relay server (D413).
  *
  * Hosts any number of online lobbies: players connect out to this server (no
  * port forwarding needed on their side), list public lobbies, create one

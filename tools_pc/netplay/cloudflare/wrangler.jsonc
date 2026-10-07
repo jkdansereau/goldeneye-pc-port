@@ -1,5 +1,5 @@
 {
-  // GoldenEye 007 PC port -- online service (D410). Deploy: see README.md.
+  // GoldenEye 007 PC port -- online service (D414). Deploy: see README.md.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ge007-online",
   "main": "src/index.js",
@@ -24,7 +24,7 @@
     "DirectoryDO": { "type": "durable-object", "storage": "sqlite" }
   },
 
-  // Edge rate limits per address (D412): checked before a request reaches
+  // Edge rate limits per address (D416): checked before a request reaches
   // the Durable Object. namespace_id is any positive integer unique in the
   // account. Game sockets reconnect rarely; a polling host posts every 2 s.
   "ratelimits": [

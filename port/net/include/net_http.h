@@ -1,6 +1,6 @@
 /*
  * net_http.h -- HTTPS + WebSocket client for the online directory service
- * (D410). Small, blocking, worker-thread API over the platform's own TLS
+ * (D414). Small, blocking, worker-thread API over the platform's own TLS
  * stack, so the port ships no TLS library of its own:
  *
  *   Windows: WinHTTP (system DLL; WebSockets need Windows 8+).

@@ -1,5 +1,5 @@
 /*
- * net_stun.h -- minimal STUN (RFC 5389) Binding client for NAT traversal (D410).
+ * net_stun.h -- minimal STUN (RFC 5389) Binding client for NAT traversal (D414).
  *
  * Online play through the directory service is peer-to-peer: the host is a
  * player's own game. To be reachable through home routers, each side asks a

@@ -51,7 +51,7 @@
 #include "fs.h"
 #include "romdata.h"
 #include "watchsettings.h"
-#include "netgame.h"   /* D409 */
+#include "netgame.h"   /* D413 */
 #include "crash.h"
 
 #if defined(PLATFORM_WINDOWS)
@@ -123,7 +123,7 @@ static int g_determPreTaskTicksGranted = 0;
 static int g_determTraceEnabled = 0;
 static u32 g_determTraceSeq = 0;
 
-/* D409 netplay: frame-locked clock for the GAME thread during an online
+/* D413 netplay: frame-locked clock for the GAME thread during an online
  * match (docs/dev/NETPLAY-PLAN.md H1). Pull model: whenever the game thread
  * reads the count and the last released 1/60 s quantum has already been
  * consumed by updateFrameCounters() (copy_of_osgetcount_value_1 caught up),
@@ -428,7 +428,7 @@ static void *portThreadWrapper(void *arg)
     pt->tid = (unsigned long)pthread_self();
 #endif
 
-    /* D409: remember the game thread (bossMainloop) for the netplay clock. */
+    /* D413: remember the game thread (bossMainloop) for the netplay clock. */
     if (pt->id == 3 /* MAIN_THREAD_ID */) {
         s_gameThread = pthread_self();
         s_gameThreadKnown = 1;
@@ -701,7 +701,7 @@ static void d60logRecv(OSMesgQueue *mq, OSMesg m) {
     ++n;
 }
 
-/* D410: the netplay waiting screen. While the game thread is parked in a
+/* D414: the netplay waiting screen. While the game thread is parked in a
  * lockstep wait (netgame.c) no display list arrives, so nothing is drawn:
  * the last frame would sit frozen for as long as the wait lasts (up to two
  * minutes at the start barrier), and the heartbeat above would report a
@@ -786,12 +786,12 @@ s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
     /* gfxFrameMsgQ is consumed only by boss.c's game thread. Apply queued
      * F10 watch edits there, after releasing the OS queue lock; the SDL
      * input/scheduler and render threads never touch GE watch/save state.
-     * D409: the netplay match starter runs at the same point. */
+     * D413: the netplay match starter runs at the same point. */
     if (mq == &gfxFrameMsgQ) {
         watchSettingsGameTick();
         netgameGameTick();
     }
-    /* D410: __scMain (the retrace queue's sole consumer) presents the
+    /* D414: __scMain (the retrace queue's sole consumer) presents the
      * netplay waiting screen while the game thread is parked. */
     if (g_viRetraceMQ && mq == g_viRetraceMQ && netgameWantWaitFrame()) {
         portNetWaitFrame();
@@ -1173,7 +1173,7 @@ static u8 g_contConnected = 0x1; /* controller 0 connected */
  * OSContPad / OSContStatus arrays joy.c reads via osContGetReadData(). */
 static void contSnapshotFromKeyboard(void)
 {
-    /* D409: during an online match the game reads its controllers through
+    /* D413: during an online match the game reads its controllers through
      * joy.c's playback hook (port/src/netgame.c), and input.c is sampled by
      * netgame on the game thread once per frame. The regular SI path must not
      * consume mouse deltas or write game state meanwhile: hand it neutral

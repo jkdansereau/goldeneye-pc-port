@@ -1,7 +1,7 @@
 # GoldenEye 007 PC port — online service
 
 The central service every copy of the game uses to find online games
-(finding D410). It runs on Cloudflare's **free** tier: a Worker, one Durable
+(finding D414). It runs on Cloudflare's **free** tier: a Worker, one Durable
 Object and a static status page.
 
 - **Directory and matchmaking:** lists open games and hands out 6-character
@@ -196,9 +196,9 @@ byte. The authoritative description is `port/net/include/net_dirproto.h`.
 
 The protocol is at version 3:
 
-- **v2 (D411):** QUICK carries the game the searcher failed to reach;
+- **v2 (D415):** QUICK carries the game the searcher failed to reach;
   WELCOME / LISTED carry how many players are searching.
-- **v3 (D412):** QUICK carries the searcher's preferences; HOST / LISTED
+- **v3 (D416):** QUICK carries the searcher's preferences; HOST / LISTED
   carry each game's weapons and length.
 
 When changing the protocol:

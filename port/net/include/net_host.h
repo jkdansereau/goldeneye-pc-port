@@ -1,5 +1,5 @@
 /*
- * net_host.h -- lobby host + lockstep input relay (D409).
+ * net_host.h -- lobby host + lockstep input relay (D413).
  *
  * One implementation, two deployments:
  *   - direct host (serverMode = 0): runs inside a player's game; exactly one
@@ -62,7 +62,7 @@ typedef struct NetHostStats {
 } NetHostStats;
 void netHostGetStats(NetHost *h, NetHostStats *out);
 
-/* Direct mode (a player's own game hosting) -- the online service (D410):
+/* Direct mode (a player's own game hosting) -- the online service (D414):
  * the lobby code the service assigned, public / quick-match flags, and
  * quick-match auto-start; and a snapshot of the lobby + match for the
  * service's lobby list and status page. Net thread (the host's owner) only. */
@@ -79,7 +79,7 @@ typedef struct NetHostLobbyInfo {
  * until the service assigns one, and the locally made one means nothing. */
 void netHostSetDirectInfo(NetHost *h, const char *code, uint8_t lobbyFlags, int autostart);
 int netHostGetDirectLobby(NetHost *h, NetHostLobbyInfo *out);
-/* A quick-match game's rules (D412: from the searcher's preferences --
+/* A quick-match game's rules (D416: from the searcher's preferences --
  * ndpPrefsToRules): settings (normalised, autostart) and size. Ignored once
  * a match is under way; never lowers the size below the players present. */
 void netHostSetQuickRules(NetHost *h, const NetSettings *rules, int maxPlayers);

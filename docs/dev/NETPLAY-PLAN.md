@@ -1,6 +1,6 @@
 # Online multiplayer (netplay) — design plan
 
-Status: **design + first implementation (v1)**, 2026-10-07. Finding label: **D409**
+Status: **design + first implementation (v1)**, 2026-10-07. Finding label: **D413**
 (see `docs/dev/findings.md`). User-facing guide: [`docs/netplay.md`](../netplay.md).
 Server operations: [`tools_pc/netplay/README.md`](../../tools_pc/netplay/README.md).
 
@@ -127,7 +127,7 @@ watch-settings drain (`watchsettings.c`), overlay + presentation (`fast3d`).
 ## 4. Determinism hazard register
 
 Found by auditing every `port*`/`input*`/`video*` symbol the game calls and
-every port write into game state (study notes in D409).
+every port write into game state (study notes in D413).
 
 | # | Hazard | Why it diverges | Mitigation (v1) |
 |---|---|---|---|
@@ -322,8 +322,8 @@ CLI: `--net-host [port]`, `--net-join addr[:port]`, `--net-server addr[:port]`,
   viewport width for 2 players in netplay), MP cheats in the lobby,
   per-player FOV, rumble from local damage events, chat polish.
   ~~An *Online* entry in the F10 overlay / the front-end menus~~ -- **done
-  in D410** (file-select label, PC Options + F10 root entries).
-* **D410 (landed): the online service.** Player-hosted lobbies brokered by a
+  in D414** (file-select label, PC Options + F10 root entries).
+* **D414 (landed): the online service.** Player-hosted lobbies brokered by a
   central directory with UDP hole punching. The directory is a free
   Cloudflare Worker + Durable Object (`tools_pc/netplay/cloudflare`): lobby
   list, codes, quick match with a one-way merge for simultaneous requests,
@@ -331,12 +331,12 @@ CLI: `--net-host [port]`, `--net-join addr[:port]`, `--net-server addr[:port]`,
   addresses from Cloudflare STUN from their own game sockets; the host
   punches towards each joiner; joiners try every published address. A
   waiting-for-players screen is drawn by the scheduler thread while the game
-  thread is parked (start barrier, late input). Full record: findings D410.
-* **D411 (landed): random matchmaking.** Quick Match pairs whoever is
+  thread is parked (start barrier, late input). Full record: findings D414.
+* **D415 (landed): random matchmaking.** Quick Match pairs whoever is
   searching; unreachable games are skipped and reported (deprioritised, then
   dropped); after three, the searcher hosts; quick games use standard rules
   with a random stage and a 12 / 8 / 3 s fill window; a searching screen.
-* **D412 (landed): every variation, hardened.** Quick Match Settings cover
+* **D416 (landed): every variation, hardened.** Quick Match Settings cover
   mode (team sizes included), map, weapons, length and players, each "any",
   under GoldenEye's own rules. A searcher who finds no fitting game hosts one
   with its preferences as the rules. Protocol v3.
@@ -346,7 +346,7 @@ CLI: `--net-host [port]`, `--net-join addr[:port]`, `--net-server addr[:port]`,
   * **Game side:** peer input floats are sanitised, since a crafted packet
     could hang every PC in the game's angle-wrap loop.
   * **netfuzz under ASan** found the host's net thread spinning forever at
-    the ordinary end of every match (`matchAssemble`), latent since D409.
+    the ordinary end of every match (`matchAssemble`), latent since D413.
     Fixed and regression-tested.
 * **v2:** relay fallback for routers that cannot be hole-punched (TURN, or
   ge007-netserver as a relay for player-hosted lobbies); rollback (needs full

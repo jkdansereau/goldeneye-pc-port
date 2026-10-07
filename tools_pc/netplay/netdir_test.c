@@ -1,13 +1,13 @@
 /*
  * netdir_test.c -- drives the online directory client (port/net/net_dir.c)
  * against a live service, for the end-to-end test in
- * tools_pc/netplay/cloudflare/test/integration.mjs (D410). One role per run:
+ * tools_pc/netplay/cloudflare/test/integration.mjs (D414). One role per run:
  *
  *   netdir_test URL host  [--poll]   register a lobby, print HOSTED <id> <code>,
  *                                    wait for a joiner (JOINREQ ...), play a
  *                                    match (state PLAYING -> WAITING: the
  *                                    service only takes results for matches
- *                                    it saw, D412), report its result,
+ *                                    it saw, D416), report its result,
  *                                    unregister, print DONE
  *   netdir_test URL join CODE [--poll]   print JOININFO ... or ERROR ...
  *   netdir_test URL quick [--poll]       print QUICKHOST or JOININFO ...

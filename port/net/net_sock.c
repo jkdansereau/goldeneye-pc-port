@@ -1,5 +1,5 @@
 /*
- * net_sock.c -- UDP sockets + addresses for the netplay core (D409).
+ * net_sock.c -- UDP sockets + addresses for the netplay core (D413).
  */
 #include "net_sock.h"
 #include "net_plat.h"

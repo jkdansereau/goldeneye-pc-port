@@ -1,4 +1,4 @@
-# ge007net -- the game-independent netplay core (D409, docs/dev/NETPLAY-PLAN.md).
+# ge007net -- the game-independent netplay core (D413, docs/dev/NETPLAY-PLAN.md).
 #
 # Built as a static library with a CLEAN include path: the game's directory
 # include list puts port/shim and the decomp's include/ first, which shadow
@@ -33,12 +33,12 @@ target_include_directories(ge007net
 )
 
 if(WIN32)
-  # winhttp: the online directory service client (D410, net_http.c).
+  # winhttp: the online directory service client (D414, net_http.c).
   target_link_libraries(ge007net PUBLIC ws2_32 bcrypt winmm winhttp)
 else()
   find_package(Threads REQUIRED)
   target_link_libraries(ge007net PUBLIC Threads::Threads)
-  # Online directory service over HTTPS / WebSockets (D410): the system
+  # Online directory service over HTTPS / WebSockets (D414): the system
   # libcurl. Without it the build still has LAN / direct-connect play.
   find_package(CURL)
   if(CURL_FOUND)

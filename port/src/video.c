@@ -31,8 +31,8 @@
 #include "input.h"
 #include "optionsoverlay.h"
 #include "frontoptions.h"
-#include "netgame.h"   /* D409 knob pins */
-#include "netui.h"     /* D409 online overlay keys */
+#include "netgame.h"   /* D413 knob pins */
+#include "netui.h"     /* D413 online overlay keys */
 
 #include "../fast3d/gfx_api.h"
 #include "../fast3d/gfx_sdl.h"
@@ -113,7 +113,7 @@ static int cfgCrosshairRed = 255, cfgCrosshairGreen = 255, cfgCrosshairBlue = 25
 static int cfgCrosshairSize = 100;  /* 100% retains the original 32x32 drawing */
 static int cfgCrosshairStyle = 0;   /* 0 = original; 1 = unused beta asset */
 
-/* D409: during an online match every port knob that changes WHICH GAME CODE
+/* D413: during an online match every port knob that changes WHICH GAME CODE
  * RUNS (projection aspect, FOV, draw / LOD distance, room pool, crosshair
  * asset) must be identical on all peers or the lockstep simulation diverges
  * (docs/dev/NETPLAY-PLAN.md hazards H4-H8, H12). They are pinned to the N64
@@ -247,7 +247,7 @@ f32 portNativeAspect(void)
 {
     f32 a = gfx_current_dimensions.aspect_ratio;
     if (netgameSimPinned()) {
-        return 0.0f;   /* D409 H4: window aspect must not reach the sim */
+        return 0.0f;   /* D413 H4: window aspect must not reach the sim */
     }
     if (!cfgNativeWidescreen || a < 0.01f) {
         return 0.0f;
@@ -260,7 +260,7 @@ f32 portNativeAspect(void)
 f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
 {
     if (netgameSimPinned()) {
-        return fovy;   /* D409 H5: the game's own FOV, unscaled */
+        return fovy;   /* D413 H5: the game's own FOV, unscaled */
     }
     if (!isTitleScreen) {
         /* D334: native widescreen already widens the horizontal FOV through
@@ -311,7 +311,7 @@ f32 portDrawDistanceMultiplier(void)
 {
     f32 mult;
     if (netgameSimPinned()) {
-        return (f32)NET_PIN_DRAWDIST_PCT / 100.0f;   /* D409 H6 */
+        return (f32)NET_PIN_DRAWDIST_PCT / 100.0f;   /* D413 H6 */
     }
     if (cfgDrawDistance != 100) {
         mult = (f32)cfgDrawDistance / 100.0f;
@@ -344,7 +344,7 @@ f32 portLodDistanceMultiplier(void)
 {
     f32 pct;
     if (netgameSimPinned()) {
-        return 100.0f / (f32)NET_PIN_LODDIST_PCT;   /* D409 H7 */
+        return 100.0f / (f32)NET_PIN_LODDIST_PCT;   /* D413 H7 */
     }
     if (cfgLodDistance != 100) {
         pct = (f32)cfgLodDistance;
@@ -397,7 +397,7 @@ f32 portRoomPoolScale(void)
     f32 t;
 
     if (netgameSimPinned()) {
-        /* D409 H8: the D294 formula below evaluated at the pinned distances
+        /* D413 H8: the D294 formula below evaluated at the pinned distances
          * (no FOV/aspect term): sqrt(DD) vs sqrt(1/LOD), capped at 2.0. */
         f32 dd = sqrtf((f32)NET_PIN_DRAWDIST_PCT / 100.0f);
         f32 lod = sqrtf((f32)NET_PIN_LODDIST_PCT / 100.0f);
@@ -853,7 +853,7 @@ void videoPumpEvents(void)
             /* D383: host owns SDL key events; the capture modal consumes the
              * next scancode before F10/ESC can close the UI or navigate. */
             if (optionsBindingKeyDown(&ev.key)) break;
-            /* D409: F9 online overlay (consumes every key while open,
+            /* D413: F9 online overlay (consumes every key while open,
              * except Alt+F4 / F12). */
             if (netuiHostKeyDown(&ev.key)) break;
             /* D145: bare ESC used to exit(0). On the front-end / debrief
@@ -885,11 +885,11 @@ void videoPumpEvents(void)
             }
             break;
         case SDL_TEXTINPUT:
-            netuiHostText(ev.text.text);   /* D409: lobby chat / addresses */
+            netuiHostText(ev.text.text);   /* D413: lobby chat / addresses */
             break;
         case SDL_MOUSEBUTTONDOWN:
             if (optionsBindingMouseDown(&ev.button)) break;
-            if (netuiHostMouseDown(&ev.button)) break;   /* D409 */
+            if (netuiHostMouseDown(&ev.button)) break;   /* D413 */
             /* WI-1: a click in the window (re)locks the cursor in
              * click-to-lock mode; a no-op otherwise. */
             if (!optionsOverlayIsOpen() && !optionsBindingCaptureActive()) {
@@ -898,7 +898,7 @@ void videoPumpEvents(void)
             break;
         case SDL_MOUSEWHEEL:
             if (optionsBindingCaptureActive()) break;
-            if (netuiHostWheel(ev.wheel.y)) break;   /* D409 */
+            if (netuiHostWheel(ev.wheel.y)) break;   /* D413 */
             if (optionsOverlayIsOpen()) {
                 optionsOverlayScroll(ev.wheel.y);   /* move the selection */
             } else {
@@ -925,7 +925,7 @@ void videoPumpEvents(void)
         }
     }
 
-    /* Refresh the window title with the live FPS about once a second. D409:
+    /* Refresh the window title with the live FPS about once a second. D413:
      * plus the online status -- this thread keeps pumping while the game
      * thread waits for a peer, so the title is the one display that stays
      * current through a stall. */
@@ -945,7 +945,7 @@ void videoPumpEvents(void)
         }
     }
 
-    netuiHostPump();   /* D409: text input on/off for the online overlay */
+    netuiHostPump();   /* D413: text input on/off for the online overlay */
 
     /* D287: apply anything the events above (click-to-lock, focus) queued. */
     inputApplyMouseRequests();

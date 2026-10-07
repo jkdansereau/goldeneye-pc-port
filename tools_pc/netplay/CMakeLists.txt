@@ -1,4 +1,4 @@
-# Standalone build of the netplay tools (D409): the matchmaking / relay server
+# Standalone build of the netplay tools (D413): the matchmaking / relay server
 # and the protocol selftest. Needs no ROM, no SDL, no game sources.
 #
 #   cmake -S tools_pc/netplay -B build-net -DCMAKE_BUILD_TYPE=Release
@@ -57,7 +57,7 @@ if(WIN32)
 else()
   find_package(Threads REQUIRED)
   target_link_libraries(ge007net_tools PUBLIC Threads::Threads)
-  # Online directory client (D410): HTTPS / WebSockets through libcurl.
+  # Online directory client (D414): HTTPS / WebSockets through libcurl.
   find_package(CURL)
   if(CURL_FOUND)
     target_link_libraries(ge007net_tools PUBLIC CURL::libcurl)
@@ -71,23 +71,23 @@ target_link_libraries(ge007-netserver PRIVATE ge007net_tools)
 add_executable(netplay_selftest netplay_selftest.c)
 target_link_libraries(netplay_selftest PRIVATE ge007net_tools)
 
-# Robustness fuzzer (D412): hostile hosts, joiners and services against the
+# Robustness fuzzer (D416): hostile hosts, joiners and services against the
 # real code. Best run in a sanitizer build:
 #   cmake -S tools_pc/netplay -B build-net-asan -DNETPLAY_SANITIZE=ON
 add_executable(netfuzz netfuzz.c)
 target_link_libraries(netfuzz PRIVATE ge007net_tools)
 
 # Directory client harness, driven by cloudflare/test/integration.mjs against
-# the local mock service (D410).
+# the local mock service (D414).
 add_executable(netdir_test netdir_test.c)
 target_link_libraries(netdir_test PRIVATE ge007net_tools)
 
 # The game's network runtime end to end (service + STUN + hole punch +
-# direct connection), driven by cloudflare/test/online.mjs (D410).
+# direct connection), driven by cloudflare/test/online.mjs (D414).
 add_executable(netonline_test netonline_test.c)
 target_link_libraries(netonline_test PRIVATE ge007net_tools)
 
 enable_testing()
 add_test(NAME netplay_selftest COMMAND netplay_selftest)
-# A short fuzz pass (D412); longer runs: netfuzz --iters 150 --seed N
+# A short fuzz pass (D416); longer runs: netfuzz --iters 150 --seed N
 add_test(NAME netfuzz_smoke COMMAND netfuzz --iters 8 --seed 1)

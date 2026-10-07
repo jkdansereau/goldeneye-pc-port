@@ -51,7 +51,7 @@ extern MENU current_menu;
 #include "file.h"   /* save_data (D356 reset probe: second-file isolation) */
 #include "optionsoverlay.h"
 #include "watchsettings.h"
-#include "netui.h"   /* D410: netuiRequestOpen (the ONLINE root entry) */
+#include "netui.h"   /* D414: netuiRequestOpen (the ONLINE root entry) */
 #include "../fast3d/gfx_api.h"
 
 /* file2.c; same extern as watchsettings.c (not in a header). */
@@ -393,7 +393,7 @@ static struct Row rows[] = {
     { .key="Video.FpsCap", .label="Frame rate cap", .kind=ROW_FPSCAP },
     { .key="Video.DisplayFPS", .label="Show FPS", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     { .key="__ResetVideo", .label="Reset to defaults", .kind=ROW_ACTION },
-    /* D410: a root entry that is not a section -- it hands over to the F9
+    /* D414: a root entry that is not a section -- it hands over to the F9
      * online-play overlay (netui.c); see optionsRowIsOnlineEntry. No rows. */
     { .key="__HdrOnline", .label="ONLINE MULTIPLAYER", .kind=ROW_HEADER },
     /* D356: the D353 BOND FILE header + "Edit file" chooser row are retired --
@@ -774,7 +774,7 @@ static void overlayUpdateScroll(void)
 static void overlayOpenHeader(int hdr)
 {
     if (optionsRowIsOnlineEntry(hdr)) {
-        /* D410: one options UI at a time (D343) -- close, then open F9's. */
+        /* D414: one options UI at a time (D343) -- close, then open F9's. */
         if (s_open) {
             s_open = 0;
             optionsResetClear();
@@ -905,7 +905,7 @@ static void overlayInit(void)
         int bad = 0;
         static const char *const roots[] = {
             "__HdrInput", "__HdrGameplay", "__HdrGraphics", "__HdrAudio", "__HdrVideo",
-            "__HdrOnline"   /* D410: opens the F9 overlay, never walked here */
+            "__HdrOnline"   /* D414: opens the F9 overlay, never walked here */
         };
         s_section = -1; s_sel = 0; s_scroll = 0;
         overlayUpdateVisible();

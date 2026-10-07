@@ -1,5 +1,5 @@
 /*
- * net_stun.c -- minimal STUN Binding client (D410). See net_stun.h.
+ * net_stun.c -- minimal STUN Binding client (D414). See net_stun.h.
  */
 #include "net_stun.h"
 #include "net_plat.h"

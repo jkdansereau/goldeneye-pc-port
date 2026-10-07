@@ -1,5 +1,5 @@
 /*
- * net_dirproto.h -- the online directory protocol (D410): messages between
+ * net_dirproto.h -- the online directory protocol (D414): messages between
  * the game and the central matchmaking service (tools_pc/netplay/cloudflare,
  * a Cloudflare Worker + Durable Object). Mirrored byte for byte by
  * tools_pc/netplay/cloudflare/src/protocol.js -- change both together.
@@ -29,8 +29,8 @@
 extern "C" {
 #endif
 
-#define NDP_VERSION        3   /* 2: QUICK excludeId, WELCOME / LISTED searching (D411)
-                                 * 3: quick-match preferences; lobby weapons / length (D412) */
+#define NDP_VERSION        3   /* 2: QUICK excludeId, WELCOME / LISTED searching (D415)
+                                 * 3: quick-match preferences; lobby weapons / length (D416) */
 #define NDP_ANY            0xFF   /* a quick-match preference that takes anything */
 #define NDP_MAX_MSG        2048   /* service rejects larger messages */
 #define NDP_TOKEN_MAX      33     /* 32 hex chars + NUL */
@@ -93,7 +93,7 @@ typedef struct NdpPlayer {
     uint8_t ready;
 } NdpPlayer;
 
-/* What a searcher wants from a quick-match game (D412). Every field is
+/* What a searcher wants from a quick-match game (D416). Every field is
  * NDP_ANY or a value: scenario NG_SCENARIO_*, stage 1..11 (a specific map --
  * the random-stage games match only "any"), weapons 0..13, length 0..7,
  * players 2..4 (the game's size). ndpNormalizePrefs makes a set consistent
@@ -144,7 +144,7 @@ typedef struct NdpQuick {
     uint32_t nonce;
     uint32_t lobbyId;               /* the asker's own quick lobby, 0 = none:
                                      * only OLDER lobbies are then offered */
-    uint32_t excludeId;             /* a lobby we just failed to reach (D411):
+    uint32_t excludeId;             /* a lobby we just failed to reach (D415):
                                      * not offered again, counted against it */
     NdpPrefs prefs;                 /* what kind of game (v3) */
     uint8_t ncand;
@@ -260,14 +260,14 @@ int ndpDecResult(NetR *r, NdpResult *m);
 
 /* Candidate addresses worth publishing: not 0.0.0.0, not port 0. */
 int ndpCandValid(const NetAddr *a);
-/* An address it is sane to send game packets to (D412): not this-network,
+/* An address it is sane to send game packets to (D416): not this-network,
  * link-local, multicast, reserved or broadcast; port 1024 or above (the game
  * uses 27007 or an ephemeral port). Loopback is allowed (local play). The
  * service already filters what it hands out; this is the client's own
  * check, in case it is talking to something else. */
 int ndpCandSendable(const NetAddr *a);
 
-/* Quick-match preferences (D412). */
+/* Quick-match preferences (D416). */
 void ndpPrefsAny(NdpPrefs *p);
 /* Out-of-range fields -> any; then GoldenEye's rules: a team mode fixes the
  * game size (2v2 / 3v1: 4, 2v1: 3), a small map caps it (or is dropped when

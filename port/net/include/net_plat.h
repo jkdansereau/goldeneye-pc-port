@@ -1,5 +1,5 @@
 /*
- * net_plat.h -- tiny platform layer for the netplay core (D409).
+ * net_plat.h -- tiny platform layer for the netplay core (D413).
  *
  * The netplay core (port/net) is plain C99 with no game dependencies so the
  * same sources build into the game, the standalone matchmaking server and the
@@ -28,7 +28,7 @@ void netSleepUs(uint32_t us);
 void netRandomBytes(void *buf, int n);
 uint32_t netRandom32(void);
 uint64_t netRandom64(void);
-/* Tests only (D412 netfuzz): a nonzero seed makes every "random" value --
+/* Tests only (D416 netfuzz): a nonzero seed makes every "random" value --
  * nonces, connection ids, lobby codes, match seeds -- repeatable, so a
  * failing fuzz run can be replayed. The game never calls it. */
 void netRandomTestSeed(uint64_t seed);

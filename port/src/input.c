@@ -89,9 +89,9 @@
 #include "player.h"
 #include "gun.h"  /* native weapon flags + dedicated reload entry points */
 #include "bondinv.h" /* inventory list for the Xbox-style gadget cycle */
-#include "net_proto.h" /* D409 netplay: NetInputRec */
+#include "net_proto.h" /* D413 netplay: NetInputRec */
 #include "netgame.h"
-#include "netui.h"     /* D409: F9 overlay swallows controller 0 */
+#include "netui.h"     /* D413: F9 overlay swallows controller 0 */
 
 /* D194 spazz diagnosis: game ticks batched into the current poll (lv.h).
  * Read-only; declared locally to avoid pulling lv.h's wider dependency set. */
@@ -1025,7 +1025,7 @@ static int s_crouchApplied = 0; /* port-owned stance; not the native C-down crou
 static struct player *s_crouchPlayer = NULL;
 static int s_useHeldPrev = 0, s_reloadHeldPrev = 0;
 
-/* D409 netplay capture. During an online match netgame.c samples the local
+/* D413 netplay capture. During an online match netgame.c samples the local
  * player once per frame on the game thread (local player made current) and
  * every direct game write this file would make -- mouse/pad look into
  * vv_theta/vv_verta, the GEPD crosshair + gun pose, free crouch, dedicated
@@ -1044,7 +1044,7 @@ static int s_netCrouchApplied[4];
  * auto-crouch in tight spaces (autocrouchpos is a separate minimum). */
 static void inputDropCrouch(void)
 {
-    /* D409: while capturing, "not crouching" is simply the absence of
+    /* D413: while capturing, "not crouching" is simply the absence of
      * NIA_CROUCH_DOWN in the record; inputNetApply() releases the stance. */
     if (s_netCap) {
         s_crouchApplied = 0;
@@ -1437,7 +1437,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
     /* D194/D238: self-correcting every poll -- cheap (plain field writes,
      * see options.c cur_player_set_control_type), and re-asserts itself if
      * anything else ever calls the setter (menu, save load) in between.
-     * D409: never in an online match -- each player's control style is the
+     * D413: never in an online match -- each player's control style is the
      * lobby's (controlstyle_player[]), identical on every peer. */
     if (idx == 0 && g_CurrentPlayer != NULL && !s_netCap) {
         int wantSolitare = naturalPitchMode ? CONTROLLER_CONFIG_SOLITARE_ : CONTROLLER_CONFIG_HONEY_;
@@ -1481,7 +1481,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         return 0;
     }
 
-    /* D409: the F9 online overlay owns controller 0 the same way (its own
+    /* D413: the F9 online overlay owns controller 0 the same way (its own
      * navigation runs in netuiEmit). Edge trackers follow the live state so
      * closing it produces no phantom press; in a match this player idles. */
     if (idx == 0 && netuiIsOpen()) {
@@ -1700,7 +1700,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
         if (playable) {
             if (useNow && !s_useHeldPrev && !tankState) {
                 if (s_netCap) {
-                    /* D409: native B tap (see s_netCap). */
+                    /* D413: native B tap (see s_netCap). */
                     button |= GE_CONT_B;
                 } else {
                     bool empty = bond_interact_object();
@@ -1720,7 +1720,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
             button |= GE_CONT_B;
         if (reloadNow && !s_reloadHeldPrev && playable) {
             if (s_netCap) {
-                s_netRec.actions |= NIA_RELOAD;   /* D409: replayed by inputNetApply */
+                s_netRec.actions |= NIA_RELOAD;   /* D413: replayed by inputNetApply */
             } else {
                 attempt_reload_item_in_hand(GUNRIGHT);
                 attempt_reload_item_in_hand(GUNLEFT);
@@ -2156,7 +2156,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
                 SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSTICK))
                 crouchNow = 1;
             if (padB && !padBPrev[idx]) {
-                if (s_netCap) s_netRec.actions |= NIA_GADGET;   /* D409 */
+                if (s_netCap) s_netRec.actions |= NIA_GADGET;   /* D413 */
                 else inputCycleGadget();
             }
             if (padY && !padYPrev[idx]) button |= GE_CONT_A;
@@ -2219,7 +2219,7 @@ unsigned inputComputePad(int idx, signed char *stick_x, signed char *stick_y)
             if (p->insightaimmode || (button & (GE_CONT_R | GE_CONT_L)))
                 button |= GE_CONT_D;
             if (s_netCap)
-                s_netRec.actions |= NIA_CROUCH_DOWN;   /* D409: replayed by inputNetApply */
+                s_netRec.actions |= NIA_CROUCH_DOWN;   /* D413: replayed by inputNetApply */
             else
                 p->crouchpos = CROUCH_SQUAT;
             if (!s_crouchApplied && configGetInputLog())
@@ -2562,7 +2562,7 @@ static void aimGepdEdgeScroll(void)
     else if (rY < -th) aimy = (rY + th) * GEPD_SCROLL_SPEED / 60.0;
 
     f32 scale = (fov > 0.0f) ? fov / GEPD_BASE_FOV : 1.0f;
-    if (s_netCap) {   /* D409: replayed by inputNetApply on every peer */
+    if (s_netCap) {   /* D413: replayed by inputNetApply on every peer */
         if (aimx != 0.0 || aimy != 0.0) s_netRec.flags |= NIR_LOOK;
         s_netRec.look_dtheta += (f32) aimx * scale;
         s_netRec.look_dverta += (f32) aimy * scale;
@@ -2604,7 +2604,7 @@ static int aimGepdCompute(double dxPx, double dyLook)
 
     /* Crosshair + gun/arm pose (GEPD formulas, RATIOFACTOR=1 for our 4:3
      * viewport; failsafe weapon offsets 0.15/0 as in goldeneye.c). */
-    if (s_netCap) {   /* D409: replayed by inputNetApply on every peer */
+    if (s_netCap) {   /* D413: replayed by inputNetApply on every peer */
         s_netRec.flags |= NIR_CROSS;
         s_netRec.cross_x = (f32) (s_gepdCrossX * aimRangeScale());
         s_netRec.cross_y = (f32) (s_gepdCrossY * aimRangeScale());
@@ -2696,7 +2696,7 @@ static int hipDirectCompute(double dxPx, double dyLook)
     /* dyLook already carries MouseInvertY + MouseYScale (applied by the
      * caller before dt-scaling, same as every other consumer of dyLook) --
      * do not re-apply either here. */
-    if (s_netCap) {   /* D409: replayed by inputNetApply on every peer */
+    if (s_netCap) {   /* D413: replayed by inputNetApply on every peer */
         s_netRec.flags |= NIR_LOOK;
         s_netRec.look_dtheta += (f32) (dxPx * 0.1 * sens * scale);
         s_netRec.look_dverta += (f32) (dyLook * 0.1 * sens * scale);
@@ -2756,7 +2756,7 @@ static int padDirectCompute(int dx, int dy)
     v = (double)dx / 70.0;   /* analogTurn = raw stick \u00b1 5, /70 -- bondview2.c:6222 */
     if (v > 1.0) v = 1.0; else if (v < -1.0) v = -1.0;
     if (v >= 0.0) v *= v; else v = -v * v;
-    if (s_netCap) {   /* D409: replayed by inputNetApply on every peer */
+    if (s_netCap) {   /* D413: replayed by inputNetApply on every peer */
         s_netRec.flags |= NIR_LOOK;
         s_netRec.look_dtheta += (f32) (v * k * 3.5);
     } else {
@@ -2803,7 +2803,7 @@ int portMouseAimPdActive(void)
 
 int portMouseAimPdGetTurn(f32 *tx, f32 *ty)
 {
-    /* D409: in an online match the turn is the CURRENT player's networked
+    /* D413: in an online match the turn is the CURRENT player's networked
      * one (gunfire.c calls this for every player, on every peer). */
     if (netgameOwnsInput()) {
         float x = 0.0f, y = 0.0f;
@@ -2820,7 +2820,7 @@ int portMouseAimPdGetTurn(f32 *tx, f32 *ty)
 }
 
 /* ------------------------------------------------------------------------
- * D409 netplay capture / replay (see the s_netCap comment near the top).
+ * D413 netplay capture / replay (see the s_netCap comment near the top).
  * ---------------------------------------------------------------------- */
 
 void inputNetCaptureBegin(void)
@@ -2916,7 +2916,7 @@ void inputNetApply(int pnum, const NetInputRec *rec)
     if (saved >= 0 && saved < 4 && g_playerPointers[saved]) set_cur_player(saved);
 }
 
-/* D409: the N64 control style the PC bindings are tuned for -- what the
+/* D413: the N64 control style the PC bindings are tuned for -- what the
  * per-poll override in inputComputePad enforces offline (1.2 Solitaire with
  * Natural pitch, else 1.1 Honey). The online lobby proposes it as this
  * player's style; the match applies it through controlstyle_player[]. */

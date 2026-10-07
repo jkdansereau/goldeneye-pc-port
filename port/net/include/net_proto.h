@@ -1,5 +1,5 @@
 /*
- * net_proto.h -- GoldenEye netplay wire protocol (D409).
+ * net_proto.h -- GoldenEye netplay wire protocol (D413).
  *
  * See docs/dev/NETPLAY-PLAN.md §7 for the message table. Everything here is
  * game-independent: the host/server never runs the game, it only relays
@@ -16,7 +16,7 @@
 extern "C" {
 #endif
 
-#define NET_PROTO_VERSION        2   /* 2: NP_PUNCH, NM_MATCH_WAIT (D410) */
+#define NET_PROTO_VERSION        2   /* 2: NP_PUNCH, NM_MATCH_WAIT (D414) */
 #define NET_MAGIC                0x4E374547u   /* bytes 'G','E','7','N' on the wire */
 #define NET_MAX_PACKET           1200
 #define NET_HEADER_SIZE          12
@@ -168,7 +168,7 @@ typedef struct NetSettings {
 #define NL_PUBLIC  0x01
 #define NL_SERVER  0x02   /* hosted by a matchmaking server */
 #define NL_QUICK   0x04   /* quick-match lobby */
-#define NL_ONLINE  0x08   /* player-hosted, registered with the online service (D410) */
+#define NL_ONLINE  0x08   /* player-hosted, registered with the online service (D414) */
 
 enum NetLobbyRunState {
     NLS_WAITING = 0,

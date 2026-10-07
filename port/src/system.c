@@ -157,7 +157,7 @@ const char *sysGetTokenString(void)
         buf[0] = '\0';
         for (int i = 1; i < g_argc && g_argv[i]; ++i) {
             size_t len;
-            /* D409: port-only netplay switches (--net-host 27007, --net-join
+            /* D413: port-only netplay switches (--net-host 27007, --net-join
              * addr, ...) are not cartridge tokens; keep them and their value
              * out of the game's small token buffer. */
             if (strncmp(g_argv[i], "--net-", 6) == 0) {

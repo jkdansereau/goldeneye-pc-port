@@ -138,7 +138,7 @@ it with **F9**, or **Online** on the file-select screen.
   under AddressSanitizer against hostile hosts and joiners. **Not yet
   tested:** a real match in the game, and connecting across home routers.
 
-See [`docs/netplay.md`](docs/netplay.md) (design: D409 / D410 / D411 / D412,
+See [`docs/netplay.md`](docs/netplay.md) (design: D413 / D414 / D415 / D416,
 [`docs/dev/NETPLAY-PLAN.md`](docs/dev/NETPLAY-PLAN.md)).
 
 **Working:** boot sequence and front end (menu → mission select → briefing →

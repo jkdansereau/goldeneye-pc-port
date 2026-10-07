@@ -1,5 +1,5 @@
 /*
- * net_http.c -- HTTPS + WebSocket client (D410). See net_http.h.
+ * net_http.c -- HTTPS + WebSocket client (D414). See net_http.h.
  *
  * Windows uses WinHTTP. Its WebSocket entry points (Windows 8+) are looked up
  * at run time from winhttp.dll so the code builds with any SDK / MinGW

@@ -88,7 +88,7 @@ int  inputMenuPointerLive(void);
 /* Re-enumerate gamepads after a hotplug (SDL_CONTROLLERDEVICEADDED/REMOVED). */
 void inputRescanPads(void);
 
-/* D409: the N64 control style (0 = 1.1 Honey .. 3 = 1.4 Goodnight) the PC
+/* D413: the N64 control style (0 = 1.1 Honey .. 3 = 1.4 Goodnight) the PC
  * bindings are tuned for; the online lobby's default for this player. */
 int inputPreferredControlStyle(void);
 

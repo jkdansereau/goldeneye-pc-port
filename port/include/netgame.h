@@ -1,5 +1,5 @@
 /*
- * netgame.h -- online multiplayer: game-side glue (D409, D410).
+ * netgame.h -- online multiplayer: game-side glue (D413, D414).
  *
  * Design: docs/dev/NETPLAY-PLAN.md. Every peer runs the unmodified N64
  * multiplayer simulation for all players; only controller input travels.
@@ -64,7 +64,7 @@ void netgameGetHud(NetgameHud *out);
 /* User actions (any thread; executed on the game thread). */
 void netgameRequestLeaveMatch(void);
 
-/* Waiting screen (D410). While the game thread is parked waiting for the
+/* Waiting screen (D414). While the game thread is parked waiting for the
  * other players -- the start barrier after loading, or a peer's input that
  * is late -- no frames are drawn. The scheduler thread asks
  * netgameWantWaitFrame() at every retrace and, when it says so, presents a
@@ -108,13 +108,13 @@ void netgameCfgSetCharacter(int character);
 /* Starts the runtime and points it at the online service + STUN server. */
 int netgameStartRuntime(void);
 
-/* D410 online service: the URL in effect ("" = none), and the [Net] Service
+/* D414 online service: the URL in effect ("" = none), and the [Net] Service
  * setting behind it ("" = this build's default, "off" = none). */
 const char *netgameServiceUrl(void);
 const char *netgameCfgService(void);
 void netgameCfgSetService(const char *url);
 
-/* D412 quick-match preferences ([Net] QuickMode / QuickStage / QuickWeapons /
+/* D416 quick-match preferences ([Net] QuickMode / QuickStage / QuickWeapons /
  * QuickLength / QuickPlayers), as five bytes in that order -- the layout of
  * NdpPrefs; 255 = any. Set normalises (GoldenEye's rules); caller saves. */
 void netgameCfgQuickPrefs(unsigned char out[5]);

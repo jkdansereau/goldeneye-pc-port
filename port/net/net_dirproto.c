@@ -1,5 +1,5 @@
 /*
- * net_dirproto.c -- online directory protocol codec (D410). See
+ * net_dirproto.c -- online directory protocol codec (D414). See
  * net_dirproto.h; mirrored by tools_pc/netplay/cloudflare/src/protocol.js.
  */
 #include "net_dirproto.h"
@@ -45,7 +45,7 @@ static void decName(NetR *r, char *out, int cap, const char *fallback)
     netSanitizeText(out, cap, fallback);
 }
 
-/* ---- quick-match preferences (D412) ---- */
+/* ---- quick-match preferences (D416) ---- */
 
 void ndpPrefsAny(NdpPrefs *p)
 {

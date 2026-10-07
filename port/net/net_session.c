@@ -1,5 +1,5 @@
 /*
- * net_session.c -- connection + reliable channel (D409). See net_session.h.
+ * net_session.c -- connection + reliable channel (D413). See net_session.h.
  */
 #include "net_session.h"
 #include "net_plat.h"

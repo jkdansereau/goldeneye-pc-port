@@ -1,7 +1,7 @@
 /*
  * netonline_test.c -- drives the game's network runtime (port/net/net_runtime.c)
  * through the online flows, for tools_pc/netplay/cloudflare/test/online.mjs
- * (D410): the directory service (the local mock), a STUN server (a local
+ * (D414): the directory service (the local mock), a STUN server (a local
  * fake), hole punching and the direct UDP connection, exactly as the game
  * uses them. One player per process, like the game (the runtime is a
  * singleton):

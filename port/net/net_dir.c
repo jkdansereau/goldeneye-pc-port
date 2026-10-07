@@ -1,5 +1,5 @@
 /*
- * net_dir.c -- online directory service client (D410). See net_dir.h and
+ * net_dir.c -- online directory service client (D414). See net_dir.h and
  * net_dirproto.h (wire format), tools_pc/netplay/cloudflare (the service).
  */
 #include "net_dir.h"
@@ -731,7 +731,7 @@ void netDirQuick(uint32_t nonce, uint32_t excludeId, const NdpPrefs *prefs, cons
     for (i = 0; i < n && i < NET_MAX_CANDS; i++) q.cand[q.ncand++] = cands[i];
     netMutexLock(D.mx);
     /* A quick lobby of our own asking again: the service offers only older
-     * ones, so two lone quick hosts merge one way (D410). */
+     * ones, so two lone quick hosts merge one way (D414). */
     if (D.hostWanted && (D.host.flags & NDPF_QUICK)) q.lobbyId = D.host.lobbyId;
     nwInit(&w, b, sizeof(b));
     ndpEncQuick(&w, &q);
