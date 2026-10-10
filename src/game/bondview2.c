@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "portaddr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #ifdef PORT
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,8 +98,15 @@
 
 
 #if defined(VERSION_US)
+    /* MACOS-ADDR-WINDOW/M2: the font-table globals are s32 holding truncated pointers
+     * (D88 class); re-base on use. Identity at PORT_ADDR_BASE == 0. */
+#if defined(PORT)
+    #define BONDVIEW_2ND_FONTTABLE(_param) PORT_N64PTR(void, copy_2ndfonttable)
+    #define BONDVIEW_1ST_FONTTABLE(_param) PORT_N64PTR(void, copy_1stfonttable)
+#else
     #define BONDVIEW_2ND_FONTTABLE(_param) copy_2ndfonttable
     #define BONDVIEW_1ST_FONTTABLE(_param) copy_1stfonttable
+#endif
 #elif defined(VERSION_JP) || defined(VERSION_EU)
     #define BONDVIEW_2ND_FONTTABLE(_param) dword_CODE_bss_jp80079CEC[_param]
     #define BONDVIEW_1ST_FONTTABLE(_param) dword_CODE_bss_jp80079Cd8[_param]
@@ -643,11 +655,7 @@ void solo_char_load(void)
                 pitemheader = NULL;
             }
 
-#ifdef PORT
-            something_with_generating_object(self, prop, item, 0, (WeaponObjRecord *)(uintptr_t)(u32)(helddst), (ItemModelFileRecord *)pitemheader);  /* D441: zero-extend s32-held DRAM ptr */
-#else
-            something_with_generating_object(self, prop, item, 0, (WeaponObjRecord *)helddst, (ItemModelFileRecord *)pitemheader);
-#endif
+            something_with_generating_object(self, prop, item, 0, PORT_N64PTR(WeaponObjRecord, helddst), (ItemModelFileRecord *)pitemheader);
         }
 
         chrlvMergeKneelToStand(self, 0.0f);
@@ -1145,7 +1153,15 @@ void bondviewCalcIntroSwirlCamera(s32 index, f32 time, coord3d *pos, coord3d *lo
 {
     struct SetupIntroSwirl *base;
     struct SetupIntroSwirl *loopbase;
+#if defined(PORT)
+    /* MACOS-ADDR-WINDOW: written pointbuf[0..11] via `&pointbuf[i*3]` then dst[3..5]
+     * (i = -1..2), but declared [10] -- a 2-float stack overrun that on arm64
+     * corrupts the saved frame pointer (Fp=0x374d56eac1a00000 at the fault).
+     * N64/MinGW absorb it; give it room on the port. */
+    f32 pointbuf[12];
+#else
     f32 pointbuf[10];
+#endif
     struct SetupIntroSwirl *swirl;
     f32 frac;
     f32 *dst;
@@ -1294,13 +1310,13 @@ void bondviewFrozenCameraTick(u16 buttons, u16 oldbuttons, struct coord3d *pos, 
 #if defined(VERSION_US)
                 setFontTables(ptrFontZurichBoldChars, ptrFontZurichBold);
 #ifdef PORT
-                hudmsgBottomShow((char *)(uintptr_t)ptr_random06cam_entry->lang1c.lang_ptr);
+                hudmsgBottomShow(PORT_N64PTR(char, ptr_random06cam_entry->lang1c.lang_ptr));
 #else
                 hudmsgBottomShow(ptr_random06cam_entry->lang1c.lang_ptr);
 #endif
 #else
 #ifdef PORT
-                hudmsgBottomShow((char *)(uintptr_t)ptr_random06cam_entry->lang1c.lang_ptr, ptrFontZurichBoldChars, ptrFontZurichBold);
+                hudmsgBottomShow(PORT_N64PTR(char, ptr_random06cam_entry->lang1c.lang_ptr), ptrFontZurichBoldChars, ptrFontZurichBold);
 #else
                 hudmsgBottomShow(ptr_random06cam_entry->lang1c.lang_ptr, ptrFontZurichBoldChars, ptrFontZurichBold);
 #endif
@@ -1313,13 +1329,13 @@ void bondviewFrozenCameraTick(u16 buttons, u16 oldbuttons, struct coord3d *pos, 
                 {
 #if defined(VERSION_US)
 #ifdef PORT
-                    hudmsgBottomShow((char *)(uintptr_t)ptr_random06cam_entry->lang20.lang_ptr);
+                    hudmsgBottomShow(PORT_N64PTR(char, ptr_random06cam_entry->lang20.lang_ptr));
 #else
                     hudmsgBottomShow(ptr_random06cam_entry->lang20.lang_ptr);
 #endif
 #else
 #ifdef PORT
-                    hudmsgBottomShow((char *)(uintptr_t)ptr_random06cam_entry->lang20.lang_ptr, ptrFontZurichBoldChars, ptrFontZurichBold);
+                    hudmsgBottomShow(PORT_N64PTR(char, ptr_random06cam_entry->lang20.lang_ptr), ptrFontZurichBoldChars, ptrFontZurichBold);
 #else
                     hudmsgBottomShow(ptr_random06cam_entry->lang20.lang_ptr, ptrFontZurichBoldChars, ptrFontZurichBold);
 #endif
@@ -7862,6 +7878,7 @@ void bondviewFrozenMoveBond(s8 stick_x, s8 stick_y, u16 buttons, u16 oldbuttons)
         return;
     }
 
+    room_pointer_tile = (struct StandTile *)0;
     bondviewFrozenCameraTick(buttons, oldbuttons, &property_pos, &property_pos2, &property_offset, &room_pointer_tile, &stan_walk_start);
     currentPlayerSetCameraMode(1);
     bondviewSetCurrentPlayerPosition(&property_pos, &property_pos2, &property_offset, room_pointer_tile, &stan_walk_start);
@@ -8102,11 +8119,7 @@ void bondviewMovePlayerUpdateViewport(s8 stick_x, s8 stick_y, u16 buttons)
 
     if ((cameraBufferToggle != 0) && (viGetFrameBuf2() == (u8*)(cfb_16[1])))
     {
-#ifdef PORT
-        viSetFrameBuf2((u8 *)(uintptr_t)(u32)(resolution));  /* D441: zero-extend s32-held DRAM ptr */
-#else
-        viSetFrameBuf2((u8 *) resolution);
-#endif
+        viSetFrameBuf2(PORT_N64PTR(u8, resolution));
     }
 
 #ifdef VERSION_EU
@@ -8341,12 +8354,12 @@ void bondviewUpdateCameraMatrices(coord3d* cam_pos, coord3d* cam_look_dir, coord
         clpos.x, clpos.y, clpos.z,
         cam_up->x, cam_up->y, cam_up->z);
 
-    matrix_4x4_set_lookat((Mtxf*) g_CurrentPlayer->field_64,
+    matrix_4x4_set_lookat(PORT_N64PTR(Mtxf, g_CurrentPlayer->field_64),
         cam_pos->x, cam_pos->y, cam_pos->z,
         cam_look_dir->x, cam_look_dir->y, cam_look_dir->z,
         cam_up->x, cam_up->y, cam_up->z);
 
-    matrix_4x4_set_basis_and_position((Mtxf*) g_CurrentPlayer->field_68,
+    matrix_4x4_set_basis_and_position(PORT_N64PTR(Mtxf, g_CurrentPlayer->field_68),
         cam_pos->x, cam_pos->y, cam_pos->z,
         cam_look_dir->x, cam_look_dir->y, cam_look_dir->z,
         cam_up->x, cam_up->y, cam_up->z);
@@ -8381,13 +8394,13 @@ void bondviewUpdateCameraMatrices(coord3d* cam_pos, coord3d* cam_look_dir, coord
     scale = bgGetLevelVisibilityScale();
 
     matrix_scalar_multiply(scale, spC4.m[0]);
-    guMtxF2L((f32 (*)[4]) &spC4, (Mtx* ) g_CurrentPlayer->field_5C);
-    sub_GAME_7F059334((s32* ) g_CurrentPlayer->field_5C, (s32* ) g_CurrentPlayer->field_60);
+    guMtxF2L((f32 (*)[4]) &spC4, PORT_N64PTR(Mtx, g_CurrentPlayer->field_5C));
+    sub_GAME_7F059334(PORT_N64PTR(s32, g_CurrentPlayer->field_5C), PORT_N64PTR(s32, g_CurrentPlayer->field_60));
 
-    currentPlayerSetMatrix10C8((Mtx* ) g_CurrentPlayer->field_5C);
-    currentPlayerSetMatrix10C4((Mtx* ) g_CurrentPlayer->field_60);
-    currentPlayerSetMatrix10CC((Mtxf* ) g_CurrentPlayer->field_64);
-    currentPlayerSetViewToWorldMtxf((Mtxf* ) g_CurrentPlayer->field_68);
+    currentPlayerSetMatrix10C8(PORT_N64PTR(Mtx, g_CurrentPlayer->field_5C));
+    currentPlayerSetMatrix10C4(PORT_N64PTR(Mtx, g_CurrentPlayer->field_60));
+    currentPlayerSetMatrix10CC(PORT_N64PTR(Mtxf, g_CurrentPlayer->field_64));
+    currentPlayerSetViewToWorldMtxf(PORT_N64PTR(Mtxf, g_CurrentPlayer->field_68));
 
 #ifdef PORT
     sub_GAME_7F078464(lookat);
@@ -8850,7 +8863,17 @@ void mp_respawn_handler(void)
 {
     coord3d start_pos = ZeroCoordSpawnPos;
     f32 start_look_angle;
+#ifdef PORT
+    /* MACOS-CAST-CENSUS: PadRecord.stan is a StandTile* host pointer. An s32 local
+     * truncates it, and every consumer below (bondviewYPositionRelated,
+     * change_player_pos_to_target, prop->stan) rebuilds it unbased and
+     * dereferences it. Local only -- no struct/ABI impact -- and the s32 pad
+     * below keeps the N64 stack layout identical. The solo twin
+     * (bondview_r.c:102) already declares this StandTile*. */
+    StandTile *start_stan;
+#else
     s32 start_stan;
+#endif
     s32 pad;
     f32 stan_height;
     s32 var_v0;
@@ -8894,7 +8917,7 @@ void mp_respawn_handler(void)
     start_stan = g_Startpad[var_v1]->stan;
 
 #ifdef PORT
-    stan_height = bondviewYPositionRelated((StandTile *)(uintptr_t)(u32)(start_stan), start_pos.x, start_pos.z);  /* D441: zero-extend s32-held DRAM ptr */
+    stan_height = bondviewYPositionRelated(start_stan, start_pos.x, start_pos.z);  /* D604: start_stan is a StandTile* under PORT; the D441 (u32) cast truncated it */
 #else
     stan_height = bondviewYPositionRelated(start_stan, start_pos.x, start_pos.z);
 #endif
@@ -8913,7 +8936,7 @@ void mp_respawn_handler(void)
 #endif
 
 #ifdef PORT
-    change_player_pos_to_target(&g_CurrentPlayer->field_488, &start_pos, (StandTile *)(uintptr_t)(u32)(start_stan));  /* D441: zero-extend s32-held DRAM ptr */
+    change_player_pos_to_target(&g_CurrentPlayer->field_488, &start_pos, start_stan);  /* D604 */
 #else
     change_player_pos_to_target(&g_CurrentPlayer->field_488, &start_pos, start_stan);
 #endif
@@ -8925,7 +8948,7 @@ void mp_respawn_handler(void)
     g_CurrentPlayer->prop->pos.y = g_CurrentPlayer->bondprevpos.y = start_pos.f[1];
     g_CurrentPlayer->prop->pos.z = g_CurrentPlayer->bondprevpos.z = start_pos.f[2];
 #ifdef PORT
-    g_CurrentPlayer->prop->stan = (StandTile *)(uintptr_t)(u32)(start_stan);  /* D441: zero-extend s32-held DRAM ptr */
+    g_CurrentPlayer->prop->stan = start_stan;  /* D604 */
 #else
     g_CurrentPlayer->prop->stan = start_stan;
 #endif
@@ -10941,7 +10964,12 @@ join_768:
             {
                 startframe = (0.0f <= frame) ? (frame) : (0.0f);
 #ifdef PORT
-                modelSetAnimation(ppointers[index]->bodyModel, (ModelAnimation *)(uintptr_t)(u32)(anim), 0, startframe, angle, 16.0f);  /* D441: zero-extend s32-held DRAM ptr */
+                /* D603: `anim` is an s32 holding an N64-form address ((s32)ptr_animation_table + a ROM
+                 * offset, or a firing-table word). The D441 zero-extend is only right where the DRAM
+                 * window base is 0 (Windows/Linux); on arm64 macOS the base must be re-added
+                 * (PORT_N64PTR; identity at base 0) or modelSetAnimFrame faults on the bare 0x70xxxxxx
+                 * address (live 2P crash, stage 38, playerTick). §A1 s32-slot class, cf. D587/D595. */
+                modelSetAnimation(ppointers[index]->bodyModel, PORT_N64PTR(ModelAnimation, (u32)(anim)), 0, startframe, angle, 16.0f);
 #else
                 modelSetAnimation(ppointers[index]->bodyModel, (ModelAnimation *) anim, 0, startframe, angle, 16.0f);
 #endif

@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "portaddr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include <math.h>
 #include <bondtypes.h>
 #include "chr.h"

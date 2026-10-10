@@ -48,6 +48,16 @@
 #define PUN_ATTACK_ITEM(punchr, field) ((s32)(punchr)->field.attack_item)
 #endif
 
+/* MACOS-ADDR-WINDOW/M2: `(s32)&ANIM_DATA_x + (s32)&ptr_animation_table->data` is an N64
+ * address, and animation_table_ptrs1[] slots hold N64 addresses; re-base where
+ * such a value becomes a pointer. Identity at PORT_ADDR_BASE == 0. */
+#if defined(PORT)
+#include "portaddr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
+
 point2d D_800309F0 = {0, 0};
 
 // forward declarations
@@ -609,7 +619,7 @@ void chrlvPerformAnimationForActor(ChrRecord *self, s32 animID, s32 startframe, 
     chrStopFiring(self);
 
 #ifdef PORT
-    modelSetAnimation(self->model, (void *)(uintptr_t)(u32)(animation_table_ptrs1[animID]), (bitfield & ANIM_MIRROR) != 0, startframef, phi_f0, (f32)interpol_time60);  /* D441: zero-extend s32-held DRAM ptr */
+    modelSetAnimation(self->model, PORT_N64PTR(void, animation_table_ptrs1[animID]), (bitfield & ANIM_MIRROR) != 0, startframef, phi_f0, (f32)interpol_time60);
 #else
     modelSetAnimation(self->model, (void *)animation_table_ptrs1[animID], (bitfield & ANIM_MIRROR) != 0, startframef, phi_f0, (f32)interpol_time60);
 #endif
@@ -4986,7 +4996,7 @@ bool if_actor_able_set_on_path(ChrRecord *self, s32 pathid)
     if (pathid && chrIsNotDeadOrShot(self))
     {
 #ifdef PORT
-        set_actor_on_path(self, (struct patrol_path *)(uintptr_t)(u32)(pathid));  /* D441: zero-extend s32-held DRAM ptr */
+        set_actor_on_path(self, PORT_N64PTR(struct patrol_path, pathid));  /* D587: s32-held DRAM patrol-path slot; PORT_N64PTR rebases on macos (identity at base 0) */
 #else
         set_actor_on_path(self, pathid);
 #endif

@@ -13,6 +13,9 @@
 #include <string.h>
 #include <math.h>
 
+/* Prevent GCC's implicit declaration warning */
+extern void exit(int status);
+
 #if defined(_WIN32)
 #include <direct.h>
 #define GE_MKDIR(p) _mkdir(p)
@@ -57,7 +60,7 @@ static int initDone = 0;
  * at modern resolutions without requiring 4x anti-aliasing.
  */
 static int cfgVSync         = 1;   /* swap interval: 0 = off, 1 = on            */
-static int cfgFpsCap        = 60;  /* frame cap in fps; 0 = uncapped (vsync); menu only exposes 30/60 */
+static int cfgFpsCap        = -1;  /* frame cap in fps; -1 = Auto (match display refresh, 60..144), 0 = uncapped (vsync); menu: Auto/30/60, and 90/120/144 = D578 interpolation */
 static int cfgMSAA          = 2;   /* 1/2/4/8/16 samples; 2x default is lighter on low-end GPUs */
 static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N64 3-point + trilinear, 3 = trilinear (Trilinear option, playtest 2026-10-03) */
 static int cfgFixMipTex     = 1;   /* RC2: clip mip-contaminated texture uploads to base height */
@@ -540,7 +543,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.CrosshairHealthColor", &cfgCrosshairHealth, 0, 1);   /* D511 */
     configRegisterInt("Game.AllUnlocked", &portAllUnlocked, 0, 1);
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
-    configRegisterInt("Video.FpsCap",        &cfgFpsCap,     0, 1000);
+    configRegisterInt("Video.FpsCap",        &cfgFpsCap,    -1, 1000);
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 16);   /* D443: 16x added */
     configRegisterInt("Video.TextureFilter", &cfgTexFilter,  0, 3);   /* Trilinear option (playtest 2026-10-03) */
     configRegisterInt("Video.FixMipTextures", &cfgFixMipTex, 0, 1);
@@ -756,7 +759,9 @@ static void videoApplyLowEndDefaults(void)
  * entry: key, N64 value, port default (the C initializer). The full audit,
  * including the keys deliberately left OUT (MSAA, VSync, FpsCap, window /
  * fullscreen, accuracy fixes, input feel, bindings, volumes, SkipIntro,
- * AllUnlocked), is in findings D440.
+ * AllUnlocked, and the crosshair look -- Color/Size/Style and the D511
+ * Alpha/HealthColor: user aiming preferences, 2026-10-07), is in findings
+ * D440. Hide and Persistent stay: they decide WHEN the sight is drawn.
  * Culling needs no key of its own: frustum-cull planes, the fog/LOD scale
  * (D222) and the room-pool budget (D294, portRoomPoolScale) all derive from
  * FovScale / widescreen / draw / LOD distance and are identity when those
@@ -779,9 +784,6 @@ static const struct { const char *key; double n64, port; } kVideoPresets[] = {
     { "Game.NoHitFlash",             0,   0 },   /* D232 */
     { "Video.CrosshairHide",         0,   0 },   /* D373 */
     { "Video.CrosshairPersistent",   0,   0 },   /* D436: aim mode only, as the N64 */
-    { "Video.CrosshairColor",        0,   0 },   /* authored red sprite */
-    { "Video.CrosshairSize",       100, 100 },
-    { "Video.CrosshairStyle",        0,   0 },
     { "Input.AimMode",               0,   0 },   /* N64 aim (D337) */
     { "Input.AimRange",              1,   0 },   /* N64 aim limits (D338) */
 };
@@ -801,6 +803,14 @@ int videoApplyPreset(int which)
         configSetValue(kVideoPresets[i].key, want);
         if (initDone && !strncmp(kVideoPresets[i].key, "Video.", 6))
             videoRequestLiveConfigForKey(kVideoPresets[i].key);
+        changed++;
+    }
+    /* D578: Original N64 also drops an interpolated frame rate back to the
+     * console's (a lower cap such as 30 is left alone). Not a bundle key, so
+     * picking 120 does not flip Display mode to Custom. */
+    if (which == VIDEO_PRESET_N64 && (cfgFpsCap > 60 || cfgFpsCap < 0)) {
+        configSetValue("Video.FpsCap", 60);
+        if (initDone) videoRequestLiveConfigForKey("Video.FpsCap");
         changed++;
     }
     sysLogPrintf(LOG_INFO, "video: applied %s preset (%d value(s) changed)",
@@ -1008,8 +1018,109 @@ static double fpsWindowStart = 0.0;
 static int fpsNumFrames = 0;
 static float vidAvgFPS = 0.f;
 
+/* D578: frame interpolation. A cap above the console VI rate draws extra,
+ * matrix-blended frames between game frames (port/fast3d/gfx_pc.cpp; the
+ * render worker in port/src/libultra.c paces them). The sim stays at the VI
+ * rate. s_interpHz is the present rate the worker uses, 0 = off. Presents
+ * cannot outrun the display (VSync or a compositor holds the swap): the rate
+ * is held to the reported refresh, and interpolation is off when that is no
+ * faster than the VI rate (a 60 Hz panel). s_dumpBias: the worker presents a game frame after
+ * videoEndFrame counted it, so captures name it one lower. */
+extern u32 osTvType;   /* port/src/libultra.c */
+static SDL_atomic_t s_interpHzAtomic;
+static int s_dumpBias = 0;
+static int s_dumpSlot = -1;   /* D578: GE_PCDUMP_PRESENTS names each present */
+
+/* Auto (Video.FpsCap = -1): match the display. Refresh unknown, or no faster
+ * than the sim (60 Hz panel, 59.94 reported as 59/60) -> the VI rate, i.e. the
+ * plain non-interpolated path; otherwise the refresh clamped to 144. */
+int videoAutoFpsCap(void)
+{
+    const int vi = (osTvType == 0) ? 50 : 60;
+    const int refresh = gfx_sdl_get_refresh_rate();
+    if (refresh <= vi + 5) return vi;
+    return refresh > 144 ? 144 : refresh;
+}
+
+static void videoApplyFpsCap(void)
+{
+    static int lastHz = -1, lastTarget = -1;
+    const int vi = (osTvType == 0) ? 50 : 60;   /* OS_TV_PAL; MPAL is 60 Hz (D488) */
+    const int cap = cfgFpsCap < 0 ? videoAutoFpsCap() : cfgFpsCap;   /* effective cap */
+    int hz = 0;
+    if (cap > vi) {
+        const int refresh = gfx_sdl_get_refresh_rate();
+        hz = cap;
+        /* Presents cannot reach the screen faster than it refreshes: with VSync
+         * the swap waits for it, and without it a composited window (Windows
+         * DWM, measured ~8 ms per swap on a 60 Hz panel) still does. */
+        static int force = -1;   /* GE_INTERP_FORCE: dev/test, ignore the refresh rate */
+        if (force < 0) force = getenv("GE_INTERP_FORCE") != NULL;
+        if (!force && refresh > 0 && refresh < hz) {
+            hz = refresh;
+        }
+        if (hz <= vi + 5) {
+            hz = 0;   /* nothing to gain: a display no faster than the sim */
+        }
+        if (hz != lastHz) {
+            if (hz > 0) {
+                sysLogPrintf(LOG_INFO, "video: frame interpolation on: %d fps presents, %d Hz sim (FpsCap %d, display %d Hz, VSync %d)",
+                             hz, vi, cfgFpsCap, refresh, cfgVSync);
+            } else {
+                sysLogPrintf(LOG_WARNING, "video: FpsCap=%d needs a display faster than %d Hz "
+                             "(this one reports %d Hz); holding at %d fps", cfgFpsCap, vi, refresh, vi);
+            }
+        }
+    } else if (lastHz > 0) {
+        sysLogPrintf(LOG_INFO, "video: frame interpolation off (FpsCap %d)", cfgFpsCap);
+    }
+    lastHz = hz;
+    SDL_AtomicSet(&s_interpHzAtomic, hz);
+    /* Interpolation paces its own presents; otherwise the old cap (a cap
+     * above the VI rate without interpolation can only mean the VI rate). */
+    const int target = hz > 0 ? 0 : (cap > vi ? vi : cap);
+    if (target != lastTarget) {
+        lastTarget = target;
+        gfx_set_target_fps(target);
+    }
+}
+
+int videoInterpHz(void)
+{
+    return SDL_AtomicGet(&s_interpHzAtomic);
+}
+
+int videoInterpVSync(void)
+{
+    return cfgVSync != 0;
+}
+
+/* Render worker (GL thread): display refresh and the live GL swap interval. */
+void videoInterpInfo(int *refreshHz, int *swapInterval)
+{
+    *refreshHz = gfx_sdl_get_refresh_rate();
+    *swapInterval = wmAPI ? wmAPI->get_swap_interval() : -1;
+}
+
+
 int videoInit(void)
 {
+    /* D578: fresh install (no Video.VSync in the ini) under gamescope / Steam
+     * Deck Game Mode: gamescope already syncs to the panel, and our own VSync
+     * path tops out ~75 fps there, so default VSync off. An ini that has the
+     * key (any user choice, or a prior run) is never touched. */
+    {
+        const char *gs = getenv("GAMESCOPE_WAYLAND_DISPLAY");
+        const char *sd = getenv("SteamDeck");
+        const int gamescope = (gs && *gs) || (sd && !strcmp(sd, "1"));
+        if (gamescope && !configIntKeyWasLoaded("Video.VSync")) {
+            cfgVSync = 0;
+            configSave();   /* configLoad already wrote VSync=1 for this fresh ini */
+            sysLogPrintf(LOG_NOTE, "video: gamescope/Steam Deck detected, fresh ini: Video.VSync defaulted to 0");
+        } else if (gamescope) {
+            sysLogPrintf(LOG_NOTE, "video: gamescope/Steam Deck detected; Video.VSync=%d kept from ini", cfgVSync);
+        }
+    }
     /* D569: Crosshair color is Original (0) or Custom RGB (8), as in the PD
      * port. Inis from v0.5.0 builds before this may hold a named preset 1..7:
      * carry its colour into the Custom channels once, so nothing changes. */
@@ -1075,7 +1186,8 @@ int videoInit(void)
         sysLogPrintf(LOG_WARNING, "video: Video.FpsCap=%d too low (throttles the sim); using 0 (uncapped)", cfgFpsCap);
         cfgFpsCap = 0;
     }
-    gfx_set_target_fps(cfgFpsCap);   /* 0 = uncapped */
+    gfx_sdl_poll_refresh_rate();   /* D578: host thread, window exists */
+    videoApplyFpsCap();   /* 0 = uncapped; above the VI rate = D578 interpolation */
 
     /* Texture filtering. 1 = bilinear (default, matches prior behaviour),
      * 0 = crisp nearest, 2 = N64 3-point emulation + trilinear mips (opt-in;
@@ -1147,6 +1259,8 @@ int videoRestartRequested(void)
     return s_restartReq;
 }
 
+int videoVSyncOn(void) { return cfgVSync != 0; }   /* D600: the tick lock only engages with VSync */
+
 int videoQuitRequested(void)
 {
     return SDL_AtomicGet(&s_quitReq) != 0;
@@ -1210,6 +1324,23 @@ static float videoOutputAspect(void)
     }
 }
 
+/* Render worker: show one interpolation present slot. Brackets the GL work
+ * as a frame for the D344 quit protocol (a quit parks here, never mid-swap). */
+void videoInterpPresent(int slot)
+{
+    SDL_AtomicSet(&s_inFrame, 1);
+    if (SDL_AtomicGet(&s_quitReq)) {
+        videoRenderPark();
+    }
+    s_dumpBias = -1;
+    s_dumpSlot = slot;
+    gfx_interp_present(slot, cfgVSync);
+    s_dumpSlot = -1;
+    s_dumpBias = 0;
+    SDL_AtomicSet(&s_inFrame, 0);
+    ++fpsNumFrames;
+}
+
 void videoStartFrame(void)
 {
     if (!initDone) {
@@ -1234,7 +1365,6 @@ void videoStartFrame(void)
     int dirty = SDL_AtomicSet(&liveCfgDirty, 0);
     if (dirty) {
         if (dirty & VCFG_VSYNC) wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
-        if (dirty & VCFG_FPS) gfx_set_target_fps(cfgFpsCap);
         if (dirty & VCFG_FILTER) videoApplyTexFilter();
         if (dirty & VCFG_FOV) portFovScale = cfgFovScale / 100.0f;
         if (dirty & VCFG_ANISO) gfx_set_anisotropy_level(cfgAniso);
@@ -1243,6 +1373,10 @@ void videoStartFrame(void)
                      "(vsync=%d fpscap=%d texfilter=%d fov=%.1f aniso=%d)",
                      dirty, cfgVSync, cfgFpsCap, cfgTexFilter, cfgFovScale, cfgAniso);
     }
+
+    /* D578: every frame (cheap): FpsCap/VSync edits and a window moved to a
+     * display with another refresh rate all land here. */
+    videoApplyFpsCap();
 
     gfx_set_output_aspect(videoOutputAspect());
     gfx_start_frame();
@@ -1255,11 +1389,16 @@ void videoStartFrame(void)
  * CREATED the window pumps them — and every game thread can be blocked on a
  * message queue at any time. So the host main thread (which created the
  * window in videoInit) must keep pumping; otherwise the window goes
- * "Not Responding" and ESC/close never arrive. fast3d's own handle_events
- * (which runs during rendering) remains as a backstop.
+ * "Not Responding" and ESC/close never arrive. On macOS AppKit strictly
+ * requires this main-thread pump, so fast3d's render-thread event handler is
+ * disabled there; on other platforms it remains as a backstop.
  */
 void videoPumpEvents(void)
 {
+    {   /* D578: keep the display refresh rate current (window moved, mode change) */
+        static unsigned pumpN = 0;
+        if ((pumpN++ % 120) == 0) gfx_sdl_poll_refresh_rate();
+    }
     if (!initDone) {
         return;
     }
@@ -1393,10 +1532,15 @@ static void videoPreSwapCapture(void)
                 hi = 0x7fffffff;
             GE_MKDIR("ppm");
         }
-        if ((int)frames >= lo && (int)frames <= hi &&
-            ((int)frames - lo) % step == 0) {
+        const int fr = (int)frames + s_dumpBias;   /* D578 */
+        if (fr >= lo && fr <= hi && (fr - lo) % step == 0) {
             char path[128];
-            snprintf(path, sizeof(path), "ppm/frame_%06d.ppm", (int)frames);
+            static int perPresent = -1;   /* D578 dev: every present, not the last per frame */
+            if (perPresent < 0) perPresent = getenv("GE_PCDUMP_PRESENTS") != NULL;
+            if (perPresent && s_dumpSlot >= 0)
+                snprintf(path, sizeof(path), "ppm/frame_%06d_p%d.ppm", fr, s_dumpSlot);
+            else
+                snprintf(path, sizeof(path), "ppm/frame_%06d.ppm", fr);
             gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_window_dimensions.width,
                                       (uint32_t)gfx_current_window_dimensions.height, path);   /* D447: whole window, bars included */
         }
@@ -1441,7 +1585,9 @@ void videoEndFrame(void)
     SDL_AtomicSet(&s_inFrame, 0);
 
     ++frames;
-    ++fpsNumFrames;
+    if (!SDL_AtomicGet(&s_interpHzAtomic)) {
+        ++fpsNumFrames;   /* D578: with interpolation, presents are counted */
+    }
 
     double now = wmAPI->get_time();
     if (fpsWindowStart == 0.0) {
@@ -1451,6 +1597,11 @@ void videoEndFrame(void)
         vidAvgFPS = (float)(fpsNumFrames / (now - fpsWindowStart));
         fpsNumFrames = 0;
         fpsWindowStart = now;
+        {
+            static int s_perfOn = -1;   /* D578: per-second present rate for stress sweeps */
+            if (s_perfOn < 0) s_perfOn = getenv("GE_PERFSTAT") != NULL;
+            if (s_perfOn) fprintf(stderr, "PERFSTAT presents=%.1f/s frame=%u\n", vidAvgFPS, (unsigned)frames);
+        }
     }
 }
 

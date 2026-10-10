@@ -16,6 +16,11 @@ struct GfxClipParameters {
 enum FilteringMode { FILTER_NONE, FILTER_LINEAR, FILTER_THREE_POINT, FILTER_TRILINEAR };
 enum MipmapFilteringMode { MIPMAP_DISABLED, MIPMAP_NEAREST, MIPMAP_LINEAR };
 
+/* D578: frame-interpolation present slots (gfx_opengl.cpp / gfx_pc.cpp), a
+ * ring: a game frame's passes go after the slots still waiting to be shown
+ * (D583). 8 = two game frames of 4 presents (240 Hz); allocated on first use. */
+#define GFX_INTERP_SLOTS 8
+
 struct GfxRenderingAPI {
     const char* (*get_name)(void);
     int (*get_max_texture_size)(void);
@@ -48,6 +53,9 @@ struct GfxRenderingAPI {
     bool (*start_draw_to_framebuffer)(int fb_id, float noise_scale);
     void (*copy_framebuffer)(int fb_dst, int fb_src, int left, int top, bool flip_y, bool use_back);
     void (*clear_framebuffer)(bool clear_color, bool clear_depth);
+    /* D579: scissored clear of one axis-aligned region of the BOUND target
+     * (x, y in GL bottom-up target pixels, as for set_scissor). */
+    void (*clear_region)(bool clear_color, bool clear_depth, int x, int y, int w, int h);
     void (*resolve_msaa_color_buffer)(int fb_id_target, int fb_id_source);
     void* (*get_framebuffer_texture_id)(int fb_id);
     void (*select_texture_fb)(int fb_id);

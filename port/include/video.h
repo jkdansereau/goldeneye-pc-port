@@ -39,6 +39,12 @@ void videoDestroy(void);
 void videoStartFrame(void);
 void videoSubmitCommands(Gfx *cmds);   /* runs the software RSP on the list */
 void videoEndFrame(void);
+/* D578: frame interpolation present rate (0 = off) and the worker-side present. */
+int videoInterpHz(void);
+int videoAutoFpsCap(void);   /* D578: what Video.FpsCap=-1 (Auto) resolves to now */
+int videoInterpVSync(void);   /* D578: swaps block on the display refresh */
+void videoInterpInfo(int *refreshHz, int *swapInterval);   /* D578 log */
+void videoInterpPresent(int slot);
 
 /* Host-thread SDL event pump: keeps the window responsive (Windows only
  * dispatches messages to the creating thread) and handles quit. Called in a
@@ -51,6 +57,7 @@ void videoPumpEvents(void);
  * could be inside the GL driver (the 0x119 bugchecks). */
 void videoRequestQuit(const char *why);
 int  videoQuitRequested(void);
+int  videoVSyncOn(void);   /* D600 */
 /* D443: orderly quit + relaunch (main.c atexit reads videoRestartRequested). */
 void videoRequestRestart(const char *why);
 int  videoRestartRequested(void);

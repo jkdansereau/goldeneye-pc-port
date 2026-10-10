@@ -23,6 +23,7 @@
 #include <PR/ultratypes.h>
 #include <PR/os.h>
 #include <tlb_manage.h>
+#include "portaddr.h"
 
 /* --- Segment start/end getters (normally linker-script symbols) --------- */
 /* On the PC the ROM is loaded by romdata.c; these are unused. Return 0.   */
@@ -102,8 +103,24 @@ u8 (*tlbmanageGetTlbAllocatedBlock(void))[TLB_BLOCK_SIZE]
      * lives up there, at 0x707FFD30). Reclaim ~4 MB of it for the mempool
      * area; the extra goes to MEMPOOL_STAGE (boss.c:218 gives STAGE
      * everything that isn't the fixed PERMANENT bank). Stays well clear of
-     * animations_frame_buffer. */
-    return (u8 (*)[TLB_BLOCK_SIZE])(PORT_DRAM_V1_BASE + 0x700000UL);   /* portaddr.h */
+     * animations_frame_buffer.
+     *
+     * D610 (macos branch): #95 (danturn) puts the ceiling at 0x707F0000 -
+     * ~960 KiB further up, i.e. it reclaims the gap just below
+     * animations_frame_buffer (0x707FFD30). That is a SILENT BEHAVIOUR CHANGE
+     * on the base-0 platforms (MEMPOOL_STAGE gets ~960 KiB more, so the
+     * per-level -m* budget that OOMs at the N64-fidelity ceiling stops OOMing
+     * at a different point, and any level that did OOM would OOM elsewhere).
+     * Keep the shipped base-0 value EXACTLY as it is today, and take #95's
+     * value only where the window is actually shifted (arm64 macOS, where the
+     * 21/21-level arm64 gate was measured). Re-applying #95 must not replace
+     * this with an unconditional portN64ToHost(0x707F0000).
+     */
+#if PORT_ADDR_BASE != 0
+    return (u8 (*)[TLB_BLOCK_SIZE])(PORT_DRAM_V1_BASE + 0x7FF000UL);
+#else
+    return (u8 (*)[TLB_BLOCK_SIZE])(PORT_DRAM_V1_BASE + 0x700000UL);
+#endif
 }
 
 /* --- K&R libc helpers (IDO provided these; MinGW's libc does not) -------- */

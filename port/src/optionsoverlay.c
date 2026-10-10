@@ -144,7 +144,11 @@ static const char *const kGameplayView[] = { "Original", "Extended", NULL };   /
  * have it, but it's dropped from the menu: with VSync on (the default) it's
  * indistinguishable from 60, and with VSync off it just burns GPU time
  * re-presenting the same simulated frame -- confusing for no real benefit. */
-static const int         kFpsCapSeq[] = { 30, 60 };
+/* D578: 90/120/144 draw interpolated frames between the 60 Hz game frames
+ * (port/fast3d/gfx_pc.cpp); the sim rate is unchanged. */
+/* -1 = Auto: match the display refresh (60..144; the default). */
+static const int         kFpsCapSeq[] = { -1, 30, 60, 90, 120, 144 };
+#define FPSCAP_N ((int)(sizeof(kFpsCapSeq) / sizeof(kFpsCapSeq[0])))
 
 /* Windowed-mode resolution presets. Filtered at init to those that fit the
  * desktop; the Resolution row cycles the surviving list. */
@@ -807,6 +811,9 @@ static void fpsTick(void)
     uint64_t dtUs = nowUs - winStartUs;
     if (dtUs >= 500000) {
         int fps = (int)((double)frames * 1e6 / (double)dtUs + 0.5);
+        /* D578: with frame interpolation the screen gets more frames than the
+         * overlay is emitted (once per game frame): show what video.c counts. */
+        if (videoInterpHz() > 0) fps = (int)(videoGetFPS() + 0.5f);
         snprintf(s_fpsText, sizeof(s_fpsText), "%d FPS", fps);
         winStartUs = nowUs;
         frames = 0;
@@ -863,6 +870,8 @@ static float ovScale(void)
 }
 extern void gfx_set_overlay_scale(float s);
 
+static s32 bodyWidth(const char *str);   /* D577: used by overlayLayout */
+
 static struct OvLayout overlayLayout(void)
 {
     struct OvLayout o;
@@ -885,8 +894,32 @@ static struct OvLayout overlayLayout(void)
     o.hintY = o.bottom + 3;
     o.labelX = o.left + 10;
     o.valueR = o.right - 10;
-    o.barX1 = o.valueR - 54;
-    o.barX0 = o.barX1 - 66;
+    {   /* D577: the bar and value column are fixed canvas units, but the
+         * canvas shrinks with HudScale (D512), so at HUD 150 slider labels
+         * only had 53 units and ended in "..". When the page's widest slider
+         * label does not fit, shorten the bar (66 -> 32), then the value
+         * column (54 -> 40). Measured over the whole page so the bar never
+         * moves while scrolling; a page that fits (HUD 100) is unchanged. */
+        s32 valueW = 54, barW = 66, need = 0;
+        if (s_section >= 0) {
+            for (int p = 0; p < s_visN; p++) {
+                const struct Row *r = &rows[s_visIdx[p]];
+                if (r->kind != ROW_SLIDER || isSepRow(r)) continue;
+                s32 lw = bodyWidth(r->label) + 4;   /* + the 4-unit gap before the bar */
+                if (lw > need) need = lw;
+            }
+        }
+        s32 over = need - (o.valueR - valueW - barW - o.labelX);
+        if (over > 0) {
+            s32 cut = over < barW - 32 ? over : barW - 32;
+            barW -= cut;
+            over -= cut;
+        }
+        if (over > 0)
+            valueW -= over < valueW - 40 ? over : valueW - 40;
+        o.barX1 = o.valueR - valueW;
+        o.barX0 = o.barX1 - barW;
+    }
     return o;
 }
 
@@ -1656,10 +1689,10 @@ static void rowAdjust(struct Row *r, int dir)
     }
     case ROW_FPSCAP: {
         int idx = 0;
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < FPSCAP_N; i++) {
             if (kFpsCapSeq[i] == (int)lround(v)) idx = i;
         }
-        idx = (idx + dir + 2) % 2;
+        idx = (idx + dir + FPSCAP_N) % FPSCAP_N;
         rowSetStepWatch(r, (double)kFpsCapSeq[idx]);
         break;
     }
@@ -1815,12 +1848,13 @@ static void ddBuild(const struct Row *r)
         }
         s_ddN = MSAA_N;
     } else if (r->kind == ROW_FPSCAP) {
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < FPSCAP_N; i++) {
             s_ddVals[i] = kFpsCapSeq[i];
-            snprintf(s_ddLab[i], sizeof(s_ddLab[i]), "%d FPS", kFpsCapSeq[i]);
+            if (kFpsCapSeq[i] < 0) snprintf(s_ddLab[i], sizeof(s_ddLab[i]), "Auto (%d FPS)", videoAutoFpsCap());
+            else snprintf(s_ddLab[i], sizeof(s_ddLab[i]), "%d FPS", kFpsCapSeq[i]);
             if (kFpsCapSeq[i] == cur) s_ddCur = i;
         }
-        s_ddN = 2;
+        s_ddN = FPSCAP_N;
     } else if (r->kind == ROW_RES) {
         for (int k = 0; k < s_resFitN && k < DD_MAX; k++) {
             int i = s_resFit[k];
@@ -2018,7 +2052,6 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Input.PadTriggerPct",     25 },  /* = 25 (was 23; rounded, D508) */
     { "Input.RumbleScale", 0.5 },       /* = gRumbleScale (0.5f), D401 */
     { "Input.CrouchMode",        1 },   /* = 1 (toggle; D556) */
-    { "Input.MenuPointerMode",   1 },   /* = 1 (direct pointer); no F10 row since D561 (front-end-only legacy option, ini key kept) */
     { "Input.MouseSmoothing",    0 },   /* = 0 (raw) */
     { "Input.MouseRawInput",     0 },   /* = 0 (off) */
     { "Input.ControlScheme",     0 },   /* = 0 (Modern), D513 */
@@ -2056,7 +2089,7 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Video.Fullscreen", 0 },   /* = 0 (windowed) */
     { "Video.FullscreenMode", 0 },   /* = 0 (borderless, D511) */
     { "Video.VSync",        1 }, /* = 1 (on) */
-    { "Video.FpsCap",      60 }, /* = 60 */
+    { "Video.FpsCap",      -1 }, /* = -1 (Auto: match display refresh) */
     { "Video.DisplayFPS",   0 }, /* registered 0 */
     /* AUDIO (port/src/audio.c, D470) */
     { "Audio.MasterVolume", 100 }, /* = 100 (bit-identical passthrough) */
@@ -2934,7 +2967,8 @@ static void valueText(int i, char *out, int n)
     }
     if (r->kind == ROW_FPSCAP) {
         int fps = (int)lround(v);
-        if (fps <= 0) snprintf(out, n, "Uncapped");
+        if (fps < 0) snprintf(out, n, "Auto (%d FPS)", videoAutoFpsCap());
+        else if (fps == 0) snprintf(out, n, "Uncapped");
         else          snprintf(out, n, "%d FPS", fps);
         return;
     }
@@ -3758,6 +3792,7 @@ int optionsRowIsShown(int i)
  * resolution, VSync, anti-aliasing, volumes and sensitivities carry no tip). */
 static const struct { const char *key, *help; } kRowHelp[] = {
     { "__DisplayMode", "Modern, original or custom graphics presets." },
+    { "Video.FpsCap", "Auto matches your display. Above 60 adds blended in-between frames. The game still runs at 60." },   /* D578 */
     { "Video.AspectMode", "Fill window fits the picture to the whole window." },   /* D560: shown only while Fill window is selected (optionsRowHelp) */
     { "Video.CrosshairHide", "When off, the crosshair stays hidden, even with Sight on screen." },
     { "Video.CrosshairPersistent", "Shows the crosshair all the time. The N64 shows it only while aiming. Off by default." },

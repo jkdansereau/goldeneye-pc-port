@@ -43,6 +43,12 @@
 #include "game/player.h"
 #include "game/frametiming.h"
 #include "PR/R4300.h"
+#if defined(PORT)
+#include "portaddr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 
 /**
  * @file boss.c
@@ -165,7 +171,18 @@ void bossInitMainthreadData(void)
     OSMesg bossmsg;
     OSTimer bosstimer;
     OSMesgQueue bossmq;
+#ifdef PORT
+    /* D611 (macos branch): the mempool arena start is a live host pointer,
+     * not a 32-bit address, once PORT_ADDR_BASE != 0 (arm64 macOS: the 4 GiB
+     * __PAGEZERO forbids the base-0 view, D609). Same class as D453, which
+     * widened mempCheckMemflagTokens' own parameter to uintptr_t but left
+     * this caller's carrier truncating. Identity at PORT_ADDR_BASE == 0
+     * (see the assignment below: the N64 expression is the identity on any
+     * address below 4 GiB). */
+    uintptr_t start;
+#else
     u32 start;
+#endif
     u32 unused;
     s32 i;
 
@@ -261,7 +278,19 @@ void bossInitMainthreadData(void)
         g_CurentMMallocValue = (s32) (strtol(tokenFind(1, "-m"), 0, 0) << 0xa);
     }
 
+#ifdef PORT
+    /* D611: the N64 expression round-trips the address through two 32-bit
+     * carriers (osVirtualToPhysical returns u32; PHYS_TO_K0 is (u32)(x)),
+     * which is lossless only while the arena sits below 4 GiB. Take the
+     * committed address directly - dram_syms.S defines _bssSegmentEnd as
+     * PORT_DRAM_V1_BASE + 0x50000, i.e. the same value the N64 expression
+     * yields at PORT_ADDR_BASE == 0. The size argument below keeps its
+     * (u32) operands: both carriers truncate consistently, so the extent
+     * (block - start) is base-invariant. */
+    start = (uintptr_t)&_bssSegmentEnd;
+#else
     start = (PHYS_TO_K0(osVirtualToPhysical(&_bssSegmentEnd)));
+#endif
     mempCheckMemflagTokens(start, ((u32)tlbmanageGetTlbAllocatedBlock() - (u32)start));
     mempResetBank(MEMPOOL_PERMANENT);
     langInit();

@@ -25,6 +25,7 @@
 #include "config.h"
 #include "versioninfo.h"
 #include "updatecheck.h"
+#include "updatecheck_parse.h"
 
 #define UC_HOST      "api.github.com"
 /* /releases/latest deliberately excludes drafts and pre-releases (maintainer
@@ -33,7 +34,7 @@
 #define UC_URL       "https://" UC_HOST UC_PATH
 #define UC_RELEASES  "https://github.com/jkdansereau/goldeneye-pc-port/releases"
 #define UC_UA        "ge007-pc-port"
-#define UC_BODY_MAX  (64 * 1024)
+#define UC_BODY_MAX  (256 * 1024)
 
 static int cfgCheckUpdates = 0;        /* Game.CheckUpdates, default OFF */
 static SDL_atomic_t s_ready;           /* 1 once s_tag is published */
@@ -42,56 +43,6 @@ static char s_tag[32];
 PD_CONSTRUCTOR static void updateCheckConfigInit(void)
 {
     configRegisterInt("Game.CheckUpdates", &cfgCheckUpdates, 0, 1);
-}
-
-/* Parse "vMAJOR.MINOR.PATCH" (missing parts = 0, suffix ignored). */
-static int parseVer(const char *s, int v[3])
-{
-    v[0] = v[1] = v[2] = 0;
-    if (*s == 'v' || *s == 'V') s++;
-    if (*s < '0' || *s > '9') return 0;
-    for (int i = 0; i < 3; i++) {
-        if (*s < '0' || *s > '9') break;
-        v[i] = (int)strtol(s, (char **)&s, 10);
-        if (*s != '.') break;
-        s++;
-    }
-    return 1;
-}
-
-static int versionNewer(const char *tag, const char *running)
-{
-    int a[3], b[3];
-    if (!parseVer(tag, a) || !parseVer(running, b)) return 0;
-    for (int i = 0; i < 3; i++) {
-        if (a[i] != b[i]) return a[i] > b[i];
-    }
-    return 0;
-}
-
-/* Minimal scan for "tag_name": "<value>". */
-static int extractTag(const char *body, char *out, size_t n)
-{
-    const char *p = strstr(body, "\"tag_name\"");
-    if (!p) return 0;
-    p += 10;
-    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
-    if (*p != ':') return 0;
-    p++;
-    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
-    if (*p != '"') return 0;
-    p++;
-    size_t i = 0;
-    /* Tag characters only (no control/ANSI bytes reach the log). */
-    while (*p && *p != '"' && i + 1 < n) {
-        char c = *p++;
-        if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-              c == '.' || c == '_' || c == '-')) return 0;
-        out[i++] = c;
-    }
-    if (*p != '"' || i == 0) return 0;
-    out[i] = 0;
-    return 1;
 }
 
 #ifdef _WIN32
@@ -174,9 +125,20 @@ static int fetchLatest(char *buf, size_t cap)
     if (!f) return 0;
     size_t got;
     while (len + 1 < cap && (got = fread(buf + len, 1, cap - 1 - len, f)) > 0) len += got;
+    int full = 0;
+    if (len + 1 == cap) {
+        /* The body is longer than cap: drain the rest (discarded) so curl
+         * can write to EOF and exit cleanly instead of dying on SIGPIPE. */
+        full = 1;
+        char scratch[4096];
+        while (fread(scratch, 1, sizeof(scratch), f) > 0) { }
+    }
     int rc = pclose(f);   /* nonzero if curl is missing (127) or failed */
     buf[len] = 0;
-    return rc == 0 && len > 0;
+    /* A full buffer is success: the tag field lives in the first bytes of
+     * the JSON, so a truncated body is still usable. Otherwise curl -f's
+     * nonzero rc on an HTTP error (with an empty body) must stand. */
+    return len > 0 && (rc == 0 || full);
 #endif
 }
 

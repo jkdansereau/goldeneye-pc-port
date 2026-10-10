@@ -40,6 +40,15 @@ void sysLogPrintf(enum LogLevel level, const char *fmt, ...)
 void sysFatalError(const char *fmt, ...)
     __attribute__((format(printf, 1, 2))) __attribute__((noreturn));
 
+/*
+ * D576: open $S/ge007.log (next to the ini) as a duplicate sink for every
+ * sysLogPrintf/sysFatalError line -- on a normal (double-click) launch
+ * stderr is lost. Rolls a previous run's ge007.log to ge007.prev.log, caps
+ * the file at 8 MiB, and closes it via atexit. Idempotent; if the file
+ * cannot be opened, logging continues on stderr only.
+ */
+void sysLogOpenFile(void);
+
 /* --- Paths -------------------------------------------------------------- */
 
 /*

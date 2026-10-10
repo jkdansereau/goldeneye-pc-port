@@ -10,7 +10,9 @@
 #include "romdata.h"
 #ifdef PORT
 #include "envflag.h"   /* cached getenv for hot-path probes */
+#include "system.h"   /* sysLogPrintf: D582 / D602 one-shot diagnostics */
 #endif
+#include "portaddr.h" /* MACOS-ADDR-WINDOW/M2: DRAM window base */
 extern resource_lookup_data_entry resource_lookup_data_array[]; /* ob.c */
 
 static void langFixupLoadedBank(char *name, void *p)
@@ -19,6 +21,16 @@ static void langFixupLoadedBank(char *name, void *p)
     if (idx >= 0 && resource_lookup_data_array[idx].poolRemaining != 0)
         romdataFixupLangBank((u8 *)p, resource_lookup_data_array[idx].poolRemaining);
 }
+#endif
+
+/* g_LangBanks[] holds N64 DRAM addresses as s32 (they must fit s32, see
+ * memp.h / MACOS-ADDR-WINDOW). Re-base only where a slot becomes a pointer; identity at
+ * PORT_ADDR_BASE == 0, so Windows/Linux are unchanged. */
+#if defined(PORT)
+#include "portaddr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
 #endif
 
 // bss
@@ -271,13 +283,13 @@ void langInit(void) {
     g_LangBanks[LOPTIONS] = _fileNameLoadToBank(LnameX_lookuptable[LOPTIONS][j_text_trigger], FILELOADMETHOD_DEFAULT, 0x100, MEMPOOL_PERMANENT);
     g_LangBanks[LMISC] = _fileNameLoadToBank(LnameX_lookuptable[LMISC][j_text_trigger], FILELOADMETHOD_DEFAULT, 0x100, MEMPOOL_PERMANENT);
 #ifdef PORT
-    langFixupLoadedBank(LnameX_lookuptable[LGUN][j_text_trigger], (void *)g_LangBanks[LGUN]);
-    langFixupLoadedBank(LnameX_lookuptable[LTITLE][j_text_trigger], (void *)g_LangBanks[LTITLE]);
-    langFixupLoadedBank(LnameX_lookuptable[LMPMENU][j_text_trigger], (void *)g_LangBanks[LMPMENU]);
-    langFixupLoadedBank(LnameX_lookuptable[LPROPOBJ][j_text_trigger], (void *)g_LangBanks[LPROPOBJ]);
-    langFixupLoadedBank(LnameX_lookuptable[LMPWEAPONS][j_text_trigger], (void *)g_LangBanks[LMPWEAPONS]);
-    langFixupLoadedBank(LnameX_lookuptable[LOPTIONS][j_text_trigger], (void *)g_LangBanks[LOPTIONS]);
-    langFixupLoadedBank(LnameX_lookuptable[LMISC][j_text_trigger], (void *)g_LangBanks[LMISC]);
+    langFixupLoadedBank(LnameX_lookuptable[LGUN][j_text_trigger], PORT_N64PTR(void, g_LangBanks[LGUN]));
+    langFixupLoadedBank(LnameX_lookuptable[LTITLE][j_text_trigger], PORT_N64PTR(void, g_LangBanks[LTITLE]));
+    langFixupLoadedBank(LnameX_lookuptable[LMPMENU][j_text_trigger], PORT_N64PTR(void, g_LangBanks[LMPMENU]));
+    langFixupLoadedBank(LnameX_lookuptable[LPROPOBJ][j_text_trigger], PORT_N64PTR(void, g_LangBanks[LPROPOBJ]));
+    langFixupLoadedBank(LnameX_lookuptable[LMPWEAPONS][j_text_trigger], PORT_N64PTR(void, g_LangBanks[LMPWEAPONS]));
+    langFixupLoadedBank(LnameX_lookuptable[LOPTIONS][j_text_trigger], PORT_N64PTR(void, g_LangBanks[LOPTIONS]));
+    langFixupLoadedBank(LnameX_lookuptable[LMISC][j_text_trigger], PORT_N64PTR(void, g_LangBanks[LMISC]));
 #endif
 }
 
@@ -385,7 +397,7 @@ void langLoadToAddr(u32 id)
 {
     g_LangBanks[id] = _fileNameLoadToBank(LnameX_lookuptable[id][j_text_trigger],1,0x100,MEMPOOL_STAGE);
 #ifdef PORT
-    langFixupLoadedBank(LnameX_lookuptable[id][j_text_trigger], (void *)g_LangBanks[id]);
+    langFixupLoadedBank(LnameX_lookuptable[id][j_text_trigger], PORT_N64PTR(void, g_LangBanks[id]));
 #endif
 }
 
@@ -394,7 +406,7 @@ void langLoadToBank(int id,u8 *target,int size)
 {
     g_LangBanks[id] = _fileNameLoadToAddr(LnameX_lookuptable[id][j_text_trigger],1,target,size);
 #ifdef PORT
-    langFixupLoadedBank(LnameX_lookuptable[id][j_text_trigger], (void *)g_LangBanks[id]);
+    langFixupLoadedBank(LnameX_lookuptable[id][j_text_trigger], PORT_N64PTR(void, g_LangBanks[id]));
 #endif
 }
 
@@ -421,7 +433,7 @@ u8 * langGet(s32 slotID)
         return NULL;
     }
 #endif
-    u32 * textbank_ptr = g_LangBanks[slotID >> 10]; /* get the text file bank ID index the text ptr table */
+    u32 * textbank_ptr = PORT_N64PTR(u32, g_LangBanks[slotID >> 10]); /* get the text file bank ID index the text ptr table */
 #ifdef PORT
     /* D129 cont.: g_LangBanks[] holds pointer-width entries (u32* under PORT) and is only populated for banks the
      * current flow has loaded.  A bare `-level_XX` boot that reaches the
@@ -429,11 +441,28 @@ u8 * langGet(s32 slotID)
      * slot that was never filled -> stale/garbage non-NULL value -> fault on
      * the table read below.  Reject anything that is not a plausible mapped
      * DRAM address. */
-    if ((uintptr_t)textbank_ptr < 0x10000 || (uintptr_t)textbank_ptr >= 0x400000000ULL) {
+    if (!portAddrIsMapped(textbank_ptr)) {  /* D573: arena views + cart */
         return NULL;
     }
 #endif
     u32 textslot_offset = textbank_ptr[slotID & 0x03FF]; /* load the textbank ptr table then get the slot's offset */
+#ifdef PORT
+    /* D582 (#152): a bank pointer that passes the check above can still point
+     * at memory that no longer holds a language bank (seen: Cuba end credits,
+     * offset -> 0xe236b67a). Banks are < 64 KiB (romdataFixupLangBank), so a
+     * larger offset is stale data: log it and return an empty string (callers
+     * such as textMeasure dereference the result). D602 found the same fault
+     * on macOS (end credits, bank + 0x721E08F2); this check covers it. */
+    if (textslot_offset >= 0x10000u) {
+        static int nlog;
+        static u8 empty[1];
+        if (nlog++ < 8) {
+            sysLogPrintf(LOG_WARNING, "D582: langGet stale bank: slot 0x%x bank %d offset 0x%x (bank ptr %p)",
+                         (unsigned) slotID, (int) (slotID >> 10), (unsigned) textslot_offset, (void *) textbank_ptr);
+        }
+        return empty;
+    }
+#endif
 
 #ifdef PORT
     /* D456: rebuild the result at pointer width; a u32 here truncates any arena address >= 4 GiB. */

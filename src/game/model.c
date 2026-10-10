@@ -13,6 +13,16 @@
 #include "initunk_005520.h"
 #include "math_asinfacosf.h"
 #include "math_floor.h"
+
+/* MACOS-ADDR-WINDOW/M2: ModelAnimation.bitDescriptors/bitStream are u32 fields holding N64
+ * addresses (D32: the blob base is added by expand_ani_table_entries). Re-base
+ * where they become pointers; identity at PORT_ADDR_BASE == 0. */
+#if defined(PORT)
+#include "portaddr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include "math_ceil.h"
 #include "math_unk_05A9E0.h"
 #include "objecthandler.h"
@@ -78,6 +88,11 @@ Model *modelmgrInstantiateModel(ModelFileHeader *header)
             /* PC port (D53.2): this buffer is used as a struct Model via the
              * same type-pun as g_ModelSlots; on PC that struct is 0xE8 bytes,
              * not the N64 0x20 slot size. */
+            {
+                static int fb = 0;
+                osSyncPrintf("modelmgr: STAGE model fallback #%d (numRecords=%d)\n",
+                             ++fb, (int)header->numRecords);
+            }
             model = mempAllocBytesInBank(sizeof(struct Model), MEMPOOL_STAGE);
 #else
             model = mempAllocBytesInBank(0x20, MEMPOOL_STAGE);
@@ -980,7 +995,7 @@ u16 modelAnimReadRootMotionValue(ModelAnimation *anim, s32 fieldIndex, s32 extra
     u8 bitsThisRead;
 
     result = 0;
-    desc = (ModelAnimBitField *)anim->bitDescriptors + fieldIndex; // D32: u32 -> ptr
+    desc = PORT_N64PTR(struct ModelAnimBitField, anim->bitDescriptors) + fieldIndex; // D32: u32 -> ptr (MACOS-ADDR-WINDOW/M2 re-base)
     bitsRemaining = desc->bitCount;
 
     if (bitsRemaining > 0)
@@ -988,7 +1003,7 @@ u16 modelAnimReadRootMotionValue(ModelAnimation *anim, s32 fieldIndex, s32 extra
         totalBitOffset = extraBitOffset + desc->bitOffset;
         byteIndex = totalBitOffset >> 3;
         totalBitOffset &= 7;
-        byteptr = (u8 *)anim->bitStream + byteIndex; // D32: u32 -> ptr
+        byteptr = PORT_N64PTR(u8, anim->bitStream) + byteIndex; // D32: u32 -> ptr (MACOS-ADDR-WINDOW/M2 re-base)
         bitsThisRead = 8 - totalBitOffset;
 
         if (bitsRemaining >= bitsThisRead)
@@ -1665,24 +1680,24 @@ void process_02_position(ModelRenderData *arg0, Model *model, ModelNode *node)
 
     rot1 = D_80036094;
     
-    sub_GAME_7F06DEC0(jointnum.v, model->gunhand, skeleton, model->anim, model->unk34, &rot1);
+    sub_GAME_7F06DEC0(jointnum.v, model->gunhand, skeleton, model->anim, PORT_N64PTR(u8, model->unk34), &rot1);
 
     if (model->unk2c != 0.0f)
     {
         rot2 = D_800360A0;
-        sub_GAME_7F06DEC0(jointnum.v, model->gunhand, skeleton, model->anim, model->unk38, &rot2);
+        sub_GAME_7F06DEC0(jointnum.v, model->gunhand, skeleton, model->anim, PORT_N64PTR(u8, model->unk38), &rot2);
         sub_GAME_7F06D160(&rot1, &rot2, model->unk2c);
     }
 
     if (model->unk84 != 0.0f)
     {
         rot3 = D_800360AC;
-        sub_GAME_7F06DEC0(jointnum.v, model->unk25, skeleton, model->anim2, model->unk64, &rot3);
+        sub_GAME_7F06DEC0(jointnum.v, model->unk25, skeleton, model->anim2, PORT_N64PTR(u8, model->unk64), &rot3);
 
         if (model->unk5c != 0.0f)
         {
             rot4 = D_800360B8;
-            sub_GAME_7F06DEC0(jointnum.v, model->unk25, skeleton, model->anim2, model->unk68, &rot4);
+            sub_GAME_7F06DEC0(jointnum.v, model->unk25, skeleton, model->anim2, PORT_N64PTR(u8, model->unk68), &rot4);
             sub_GAME_7F06D160(&rot3, &rot4, model->unk5c);
         }
 
@@ -1861,18 +1876,18 @@ void process_03_unknown(ModelRenderData *renderData, Model *model, ModelNode *no
     jointIndex = rodata->JointID;
     skeleton = model->obj->Skeleton;
 
-    angle = sub_GAME_7F06E540(jointIndex, model->gunhand, skeleton, model->anim, (u8 *)model->unk34);
+    angle = sub_GAME_7F06E540(jointIndex, model->gunhand, skeleton, model->anim, PORT_N64PTR(u8, model->unk34));
 
     if (model->unk2c != 0.0f) {
-        tmp = sub_GAME_7F06E540(jointIndex, model->gunhand, skeleton, model->anim, (u8 *)model->unk38);
+        tmp = sub_GAME_7F06E540(jointIndex, model->gunhand, skeleton, model->anim, PORT_N64PTR(u8, model->unk38));
         angle = sub_GAME_7F06D0CC(angle, tmp, model->unk2c);
     }
 
     if (model->unk84 != 0.0f) {
-        tmp = sub_GAME_7F06E540(jointIndex, model->unk25, skeleton, model->anim2, (u8 *)model->unk64);
+        tmp = sub_GAME_7F06E540(jointIndex, model->unk25, skeleton, model->anim2, PORT_N64PTR(u8, model->unk64));
 
         if (model->unk5c != 0.0f) {
-            tmp2 = sub_GAME_7F06E540(jointIndex, model->unk25, skeleton, model->anim2, (u8 *)model->unk68);
+            tmp2 = sub_GAME_7F06E540(jointIndex, model->unk25, skeleton, model->anim2, PORT_N64PTR(u8, model->unk68));
             tmp = sub_GAME_7F06D0CC(tmp, tmp2, model->unk5c);
         }
 
@@ -5994,7 +6009,12 @@ s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
     s32 ret;
     s32 source;
     s32 frameSize;
+#if defined(PORT)
+    /* MACOS-ADDR-WINDOW/M2: keep the buffer address at full pointer width (D59 buffer). */
+    uintptr_t dest;
+#else
     u32 dest;
+#endif
     u32 size;
 
     ret = 0;
@@ -6034,7 +6054,7 @@ s32 loadAnimationFrame(ModelAnimation* anim, s32 frame, ModelSkeleton* unused)
         size = ((u32) (frameSize + 15) >> 4) * 16;
 
         // This copies one animation frame from ROM to the destination in RAM
-        romCopy((void* ) dest, (void* ) source, size);
+        romCopy((void *)dest, (void *)source, size);
 
         // Increment this which serves nothing
         D_80036414->uselessPointer += 1;
@@ -6135,7 +6155,7 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
                 {
                     ModelRoData_DisplayListRecord* rodata = &node->Data->DisplayList;
                     PROMOTE(rodata->Vertices);
-                    rodata->BaseAddr = (void *)fileramaddr;
+                    rodata->BaseAddr = PORT_N64PTR(void, fileramaddr);
                     break;
                 }
 
@@ -6153,7 +6173,7 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
                         PROMOTE(rodata->CollisionVertices[i].LinkedTo);
 #endif
                     }
-                    rodata->BaseAddr = (void *)fileramaddr;
+                    rodata->BaseAddr = PORT_N64PTR(void, fileramaddr);
                     break;
                 }
 
@@ -6177,7 +6197,7 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
                         PROMOTE(rodata->Children[i].unk04);
                     }
 
-                    rodata->BaseAddr = (void *)fileramaddr;
+                    rodata->BaseAddr = PORT_N64PTR(void, fileramaddr);
                     break;
                 }
 
@@ -6196,14 +6216,14 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
                         PROMOTE(rodata->Children[i].unk04);
                     }
 
-                    rodata->BaseAddr = (void *)fileramaddr;
+                    rodata->BaseAddr = PORT_N64PTR(void, fileramaddr);
                     break;
                 }
 
             case MODELNODE_OPCODE_OP06:
                 {
                     ModelRoData_Op06Record* rodata = &node->Data->Op06;
-                    rodata->BaseAddr = (void *)fileramaddr;
+                    rodata->BaseAddr = PORT_N64PTR(void, fileramaddr);
                     break;
                 }
 
@@ -6241,7 +6261,7 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
                 {
                     ModelRoData_Op11Record* rodata = &node->Data->Op11;
                     PROMOTE(rodata->unk0c[15]);
-                    rodata->BaseAddr = (void *)fileramaddr;
+                    rodata->BaseAddr = PORT_N64PTR(void, fileramaddr);
                     break;
                 }
 
@@ -6249,7 +6269,7 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
                 {
                     ModelRoData_GunfireRecord* rodata = &node->Data->Gunfire;
                     PROMOTE(rodata->Image);
-                    rodata->BaseAddr = (void *)fileramaddr;
+                    rodata->BaseAddr = PORT_N64PTR(void, fileramaddr);
                     break;
                 }
 
@@ -6258,7 +6278,7 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
                     ModelRoData_ShadowRecord* rodata = &node->Data->Shadow;
                     PROMOTE(rodata->image);
                     PROMOTE(rodata->Header);
-                    rodata->BaseAddr = (void *)fileramaddr;
+                    rodata->BaseAddr = PORT_N64PTR(void, fileramaddr);
                     break;
                 }
 
@@ -6266,7 +6286,7 @@ void modelPromoteNodeOffsetsToPointers(ModelNode *node, u32 vma, u32 fileramaddr
                 {
                     ModelRoData_DisplayListPrimaryRecord* rodata = &node->Data->DisplayListPrimary;
                     PROMOTE(rodata->Vertices);
-                    rodata->BaseAddr = (void *)fileramaddr;
+                    rodata->BaseAddr = PORT_N64PTR(void, fileramaddr);
                     break;
                 }
 

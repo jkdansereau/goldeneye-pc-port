@@ -33,6 +33,16 @@
 #include "model.h"
 #include "tex.h"
 
+/* MACOS-ADDR-WINDOW/M2: animation_table_ptrs1/2 slots and vtxstore_allocate() results hold
+ * N64/window addresses as s32; re-base where they become pointers. Identity at
+ * PORT_ADDR_BASE == 0. */
+#if defined(PORT)
+#include "portaddr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
+
 #ifdef PORT
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,7 +80,7 @@ static s32 d193aAnimIndex(void *anim) {
     s32 i;
     if (anim == NULL) return -1;
     for (i = 0; animation_table_ptrs1[i] != 0; i++) {
-        if ((void *)(uintptr_t)(u32)animation_table_ptrs1[i] == anim) return i;
+        if (PORT_N64PTR(void, animation_table_ptrs1[i]) == anim) return i;
     }
     return -1;
 }
@@ -2486,23 +2496,11 @@ s32 chrTick(PropRecord *prop)
     {
         if (D_8002C904)
         {
-#ifdef PORT
-            if (((ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[g_AnimationTablePointerCountRelated])) != ((ModelAnimation *)1))  /* D441: zero-extend s32-held DRAM ptr */
-#else
-            if (((ModelAnimation *)animation_table_ptrs1[g_AnimationTablePointerCountRelated]) != ((ModelAnimation *)1))
-#endif
+            if (PORT_N64PTR(ModelAnimation, animation_table_ptrs1[g_AnimationTablePointerCountRelated]) != PORT_N64PTR(ModelAnimation, 1))
             {
-#ifdef PORT
-                if (objecthandlerGetModelAnim(model) != ((ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[g_AnimationTablePointerCountRelated])))  /* D441: zero-extend s32-held DRAM ptr */
-#else
-                if (objecthandlerGetModelAnim(model) != ((ModelAnimation *)animation_table_ptrs1[g_AnimationTablePointerCountRelated]))
-#endif
+                if (objecthandlerGetModelAnim(model) != PORT_N64PTR(ModelAnimation, animation_table_ptrs1[g_AnimationTablePointerCountRelated]))
                 {
-#ifdef PORT
-                    modelSetAnimation(model, (ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs1[g_AnimationTablePointerCountRelated]), 0, 0.0f, 0.5f, 0.0f);  /* D441: zero-extend s32-held DRAM ptr */
-#else
-                    modelSetAnimation(model, (ModelAnimation *)animation_table_ptrs1[g_AnimationTablePointerCountRelated], 0, 0.0f, 0.5f, 0.0f);
-#endif
+                    modelSetAnimation(model, PORT_N64PTR(ModelAnimation, animation_table_ptrs1[g_AnimationTablePointerCountRelated]), 0, 0.0f, 0.5f, 0.0f);
                 }
             }
         }
@@ -3435,10 +3433,15 @@ after_opcode:
     }
 
 #ifdef PORT
-    /* PC port (D43/D45): CollisionRelatedNode is a raw vma (u32), not a pointer. */
-    relatednode = (ModelNode *)(uintptr_t)((ModelRoData_DisplayList_CollisionRecord *) node)->CollisionVertices[bestindex].CollisionRelatedNode;
+    /* PC port (D43/D45): CollisionRelatedNode is a raw vma (u32), not a pointer.
+     * MACOS-BLOODSTAIN: that vma is an N64 address (the port stores window pointers as
+     * 32-bit values, and PORT_ADDR_BASE is 4 GiB-aligned, so the low 32 bits
+     * ARE the N64 address), so it must be re-based like every other
+     * address-carrying field -- a bare cast leaves it as 0x7070_xxxx and the
+     * &relatednode->Data deref below faults. Test the re-based pointer. */
+    relatednode = PORT_N64PTR(ModelNode, ((ModelRoData_DisplayList_CollisionRecord *) node)->CollisionVertices[bestindex].CollisionRelatedNode);
 
-    if (((ModelRoData_DisplayList_CollisionRecord *) node)->CollisionVertices[bestindex].CollisionRelatedNode != 0)
+    if (relatednode != NULL)
 #else
     relatednode = (ModelNode *) ((ModelRoData_DisplayList_CollisionRecord *) node)->CollisionVertices[bestindex].CollisionRelatedNode;
 
@@ -3452,7 +3455,7 @@ after_opcode:
 
     if (((ModelRwData_DisplayList_CollisionRecord *) rwdata)->Vertices == ((ModelRoData_DisplayList_CollisionRecord *) node)->Vertices)
     {
-        newvertices = (Vertex *) vtxstore_allocate(((ModelRoData_DisplayList_CollisionRecord *) node)->numVertices, 0xcccc, 0, 0);
+        newvertices = PORT_N64PTR(Vertex, vtxstore_allocate(((ModelRoData_DisplayList_CollisionRecord *) node)->numVertices, 0xcccc, 0, 0));
 
         if (newvertices != NULL)
         {
@@ -3469,7 +3472,7 @@ after_opcode:
 
     if ((relatedrwdata != NULL) && (relatedrwdata->Vertices == relatedrodata->Vertices))
     {
-        newvertices = (Vertex *) vtxstore_allocate(relatedrodata->numVertices, 0xcccc, 0, 0);
+        newvertices = PORT_N64PTR(Vertex, vtxstore_allocate(relatedrodata->numVertices, 0xcccc, 0, 0));
 
         if (newvertices != NULL)
         {

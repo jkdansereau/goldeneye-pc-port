@@ -2,6 +2,9 @@
 #include <PR/libaudio.h>
 #include <os_extension.h>
 #include "music.h"
+#ifdef PORT
+#include "portaddr.h"
+#endif
 #include "snd.h"
 #ifdef PORT
 #include <stdio.h>
@@ -848,6 +851,18 @@ ALSoundState *sndSetupSound(struct ALBankAlt_s *soundBank, ALSound* sound)
 {
     s32 decayTimeFlag;
     ALKeyMap *keymap = sound->keyMap;
+#ifdef PORT
+    /* D601: the free-list head was read BEFORE the mask was taken. On the PC
+     * sndPlaySfx() runs on the game thread while amMain (a real preemptible
+     * thread) pushes freed states onto the same head via sndUnlinkClearSound;
+     * a stale head here pops a node that is already gone/reused, links one
+     * node into the active list twice and closes it into a cycle (live hang:
+     * Archives stage load, lvlStageLoad -> sndSetSfxSlotVolume walks the
+     * cyclic list forever). Take the section first so the read, the pop and
+     * the relink are one atomic step (the recursive section makes the inner
+     * OS_IM_NONE below a depth++). Concurrency-correctness only. */
+    OSIntMask d601Mask = osSetIntMask(OS_IM_NONE);
+#endif
     ALSoundState *state = (ALSoundState *)D_800243E4.g_sndPlayerSoundStatePtr;
     OSIntMask mask;
 
@@ -904,6 +919,9 @@ ALSoundState *sndSetupSound(struct ALBankAlt_s *soundBank, ALSound* sound)
         state->vol = (u16)0x7fff;
     }
 
+#ifdef PORT
+    osSetIntMask(d601Mask);   /* D601 */
+#endif
     return state;
 }
 
@@ -914,6 +932,14 @@ ALSoundState *sndSetupSound(struct ALBankAlt_s *soundBank, ALSound* sound)
  */
 void sndUnlinkClearSound(ALSoundState *state)
 {
+#ifdef PORT
+    /* D601: this mutates the active list (D_800243E4.node) and the free list
+     * with no section at all, from amMain, while the game thread's
+     * sndSetupSound()/sndSetSfxSlotVolume()/sndPlaySfx() take OS_IM_NONE
+     * around the same lists: the exclusion was one-sided. Same class as D152
+     * (sndSetSfxSlotVolume) and D285 (preempt scan). Concurrency only. */
+    OSIntMask d601Mask = osSetIntMask(OS_IM_NONE);
+#endif
     if (state == (ALSoundState *)D_800243E4.node.next)
     {
         D_800243E4.node.next = state->link.next;
@@ -963,6 +989,9 @@ void sndUnlinkClearSound(ALSoundState *state)
 
         state->state = NULL;
     }
+#ifdef PORT
+    osSetIntMask(d601Mask);   /* D601 */
+#endif
 }
 
 /**
@@ -1103,12 +1132,12 @@ ALSoundState *sndPlaySfx(struct ALBankAlt_s *soundBank, s16 soundIndex, ALSoundS
          * slots than the N64 image -- and sndSetupSound() then faults on
          * sound->keyMap.  Until audio lands, skip a sound whose pointer is
          * plainly not a mapped address rather than crash the level.
-         * ALSound lives in game DRAM (~0x7000_0000..) or the cart image
-         * (0x1_4000_0000..); anything else (e.g. 0x0000_5622_0001_0001) is a
-         * byte-scrambled / OOB read. */
+         * ALSound lives in the game DRAM arena (the music heap) or the cart
+         * image; anything else (e.g. 0x0000_5622_0001_0001) is a
+         * byte-scrambled / OOB read. D573 (#108): test the real windows
+         * (portAddrIsMapped) instead of a [64 KiB, 16 GiB) literal. */
         {
-            uintptr_t sp = (uintptr_t)sound;
-            if (sp < 0x10000 || sp >= 0x400000000ULL) {
+            if (!portAddrIsMapped(sound)) {  /* D573: arena views + cart */
                 return NULL;
             }
         }

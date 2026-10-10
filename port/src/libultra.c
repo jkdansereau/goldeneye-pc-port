@@ -27,6 +27,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
+#include <math.h>   /* D583: floor/fabs in the present grid */
 
 #include <SDL.h>
 
@@ -44,6 +45,7 @@
 
 #include "platform.h"
 #include "system.h"
+#include "portaddr.h"
 #include "crash.h"   /* D38: crashDumpThreads() */
 #include "video.h"
 #include "audio.h"
@@ -59,6 +61,13 @@
 
 /* fast3d (C++): the software RSP entry point. */
 extern void gfx_run(Gfx *commands);
+/* D578: frame interpolation (port/fast3d/gfx_pc.cpp). */
+extern void gfx_interp_reset(void);
+extern int gfx_interp_last_exact(void);
+extern int gfx_interp_body_runs(void);
+extern void gfx_interp_trigger_counts(unsigned* turn, unsigned* clamp, unsigned* set, unsigned* room);
+extern int gfx_interp_tick(Gfx *commands, const float *alphas, int n, int base);
+extern void gfx_tick_counts(unsigned *batches, unsigned *tris, unsigned *texloads, unsigned *texmiss, unsigned *dynbytes, unsigned *texus);   /* D583 SLOW line */
 extern void videoSyncSplitScreen(void); /* D416 */
 
 /* ------------------------------------------------------------------------ */
@@ -200,7 +209,30 @@ static OSMesg g_viRetraceMsg = 0;
  * frame rate (the N64 VI interrupt fires once per frame; GE calls
  * osViSetEvent with NUM_FIELDS=1, i.e. "every retrace"). */
 static uint64_t g_nextTickUs = 0;
+/* D578: scheduled time of the latest posted retrace (the sim timeline the
+ * render worker blends against; regular, unlike the posting time). */
+static uint64_t g_lastViUs = 0;
 static uint32_t g_tickIntervalUs = 1000000 / 60; /* NTSC frame rate */
+
+/* D600: display-locked retrace. The pacemaker below is a free-running wall
+ * clock (16666 us: 1e6/60 truncated, ~40 ppm fast) while the swap blocks on
+ * the display's vblank, so with VSync on the tick's phase slides against the
+ * vblank (~7 min beat on a 60.000 Hz panel). Once the tick lands inside the
+ * render+swap window every frame is late and boss.c's tick gate skips
+ * (22-33 ms frames) until the phase slides back out; every launch starts at a
+ * random phase, so a restart "re-rolls" it. Fix: a first-order phase lock.
+ * After each swap return (= a vblank) the render side nudges the NEXT tick so
+ * it fires D600_TARGET_US after the vblank, leaving the rest of the period
+ * for game logic + render. Only engaged when VSync is on and consecutive swap
+ * returns are one game frame apart (a 60 Hz-class display); otherwise the
+ * pacemaker free-runs exactly as before. GE_NOTICKLOCK=1 disables it (A/B). */
+#define D600_TARGET_US    1500
+#define D600_MAX_NUDGE_US 100
+static int64_t  g_tickNudgeUs = 0;        /* written by the render side, consumed by the pacemaker */
+static uint64_t g_vbLastUs = 0;
+static int      g_tickLockMode = 0;       /* 0 undecided, 1 on, -1 off (env / runaway guard) */
+static int      g_tickLockSame = 0;       /* consecutive saturated nudges, runaway guard */
+static int      g_tickLockLogN = 0;
 
 static PortThread *portFind(OSThread *t)
 {
@@ -313,7 +345,8 @@ static void *portTickThread(void *arg)
 
         now = sysGetMicroseconds();
         if (now >= g_nextTickUs) {
-            g_nextTickUs += g_tickIntervalUs;
+            __atomic_store_n(&g_lastViUs, g_nextTickUs, __ATOMIC_RELEASE);   /* D578 */
+            g_nextTickUs += (int64_t)g_tickIntervalUs + __atomic_exchange_n(&g_tickNudgeUs, 0, __ATOMIC_RELAXED);   /* D600 */
             if (g_nextTickUs <= now) g_nextTickUs = now + g_tickIntervalUs;
             portPostVIEvent();
         }
@@ -423,13 +456,40 @@ void osCreateThread(OSThread *t, OSId id, void (*entry)(void *), void *arg,
 #if !defined(_WIN32)
 #include <sys/mman.h>
 /* The decomp aligns/compares stack-buffer pointers by truncating to u32
- * (e.g. `(u32)compbuffer` in image.c texLoad) — an N64 assumption. glibc
- * puts pthread stacks above 4 GiB, so those truncations corrupt. Force each
- * game-thread stack into the low 2 GiB with MAP_32BIT so every such idiom
- * works exactly as on the console. Windows pthread stacks are already low. */
+ * (e.g. `(u32)compbuffer` in image.c texLoad) — an N64 assumption. Windows
+ * pthread stacks are already low, so every such idiom works there.
+ *
+ * On macOS the whole N64 window is reserved PROT_NONE by portAddrInit, so each
+ * game-thread stack is carved from the window's stack region
+ * [PORT_ADDR_BASE + 0xA0000000, + 0xC0000000), leaving a PROT_NONE guard page
+ * below it; the stack's host address then truncates to its N64 address exactly
+ * as on Windows.
+ *
+ * On Linux (PORT_ADDR_BASE == 0) the window is not reserved, so keep the
+ * original MAP_32BIT allocation: addresses below 2 GiB truncate identically. */
+#define PORT_STACK_REGION_OFF  0xA0000000ULL
+#define PORT_STACK_REGION_SIZE (512ULL << 20)
+#define PORT_STACK_GUARD       0x4000ULL
+
+static uintptr_t s_stackNext = 0;
+
 static void *portAllocLowStack(size_t sz)
 {
-#if defined(MAP_32BIT)
+#if PORT_ADDR_BASE != 0
+    const uintptr_t region = (uintptr_t)PORT_ADDR_BASE + PORT_STACK_REGION_OFF;
+    if (s_stackNext == 0)
+        s_stackNext = region;
+    const uintptr_t base = s_stackNext + PORT_STACK_GUARD;
+    const uintptr_t end = base + sz;
+    if (end > region + PORT_STACK_REGION_SIZE)
+        return NULL;
+    void *p = mmap((void *)base, sz, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    if (p != (void *)base)
+        return NULL;
+    s_stackNext = end;
+    return p;
+#elif defined(MAP_32BIT)
     void *p = mmap(NULL, sz, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT
 #if defined(MAP_STACK)
@@ -438,8 +498,11 @@ static void *portAllocLowStack(size_t sz)
                    , -1, 0);
     if (p != MAP_FAILED)
         return p;
-#endif
     return NULL;
+#else
+    (void)sz;
+    return NULL;
+#endif
 }
 #endif
 
@@ -586,8 +649,11 @@ void osEnqueueMesg(OSMesgQueue *mq, OSMesg msg)
     pthread_mutex_unlock(&pq->lock);
 }
 
+extern void interpPortalOnSend(void *mq, void *msg);   /* D578: port/src/interpportal.c */
+
 s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
 {
+    interpPortalOnSend(mq, msg);   /* D578: game-thread snapshot for the portal-scissor replay */
     PortQueue *pq = portQueueGet(mq);
     pthread_mutex_lock(&pq->lock);
     while (mq->validCount >= mq->msgCount) {
@@ -938,7 +1004,7 @@ static void piServiceDma(s32 direction, u32 srcPA, void *dstVA, u32 size)
             sysFatalError("D60: ROM-read target %p + 0x%X not host-mapped "
                           "(src=0x%08X)", dstVA, size, srcPA);
         }
-        memcpy(dstVA, (const void *)(uintptr_t)srcPA, size);
+        memcpy(dstVA, portN64ToHost(srcPA), size);
     } else {
         /* OS_WRITE: the game never writes the cart (saves go to EEPROM via
          * osEeprom*, shimmed separately). Log and drop. */
@@ -1247,6 +1313,47 @@ s32 osMotorStop(OSPfs *pfs)
 
 void osSpTaskLoad(OSTask *t) { (void)t; /* nothing to load on the host */ }
 
+/* D600: called by the render side right after videoEndFrame() returns, i.e.
+ * just after the blocking swap returned at a vblank. */
+static void portNoteSwapReturn(void)
+{
+    if (g_tickLockMode == 0) {
+        g_tickLockMode = (g_determEnabled || getenv("GE_NOTICKLOCK") != NULL) ? -1 : 1;
+        if (g_tickLockMode < 0) sysLogPrintf(LOG_NOTE, "D600: display-locked tick disabled");
+    }
+    if (g_tickLockMode < 0) return;
+    uint64_t t = sysGetMicroseconds();
+    uint64_t last = g_vbLastUs;
+    g_vbLastUs = t;
+    if (!videoVSyncOn() || last == 0) return;
+    const int64_t P = (int64_t)g_tickIntervalUs;
+    const int64_t gap = (int64_t)(t - last);
+    if (gap < P * 9 / 10 || gap > P * 11 / 10) return;   /* not one vblank per game frame: leave it free-running */
+    int64_t next = (int64_t)__atomic_load_n(&g_nextTickUs, __ATOMIC_RELAXED);
+    int64_t phase = (next - (int64_t)t) % P;
+    if (phase < 0) phase += P;
+    int64_t err = phase - D600_TARGET_US;               /* >0: tick is later than target */
+    if (err >= P / 2) err -= P; else if (err < -P / 2) err += P;
+    int64_t nudge = -err / 8;
+    if (nudge > D600_MAX_NUDGE_US) nudge = D600_MAX_NUDGE_US;
+    if (nudge < -D600_MAX_NUDGE_US) nudge = -D600_MAX_NUDGE_US;
+    /* Runaway guard (a driver that ignores vsync makes the swap return track
+     * the render, and the loop would chase it): a lock that stays saturated
+     * far longer than a full-period slew needs is not converging. */
+    if (nudge == D600_MAX_NUDGE_US || nudge == -D600_MAX_NUDGE_US) {
+        if (++g_tickLockSame > 400) {
+            g_tickLockMode = -1;
+            sysLogPrintf(LOG_WARNING, "D600: display-locked tick not converging; disabled (swap may not block on vblank)");
+            return;
+        }
+    } else {
+        g_tickLockSame = 0;
+    }
+    __atomic_store_n(&g_tickNudgeUs, nudge, __ATOMIC_RELAXED);
+    if ((++g_tickLockLogN % 300) == 1)
+        sysLogPrintf(LOG_NOTE, "D600: tick lock phase=%lld us err=%lld us nudge=%lld us", (long long)phase, (long long)err, (long long)nudge);
+}
+
 static void portRenderGfxTask(Gfx *dl)
 {
     uint64_t t0 = sysGetMicroseconds();
@@ -1254,6 +1361,7 @@ static void portRenderGfxTask(Gfx *dl)
     videoSyncSplitScreen();
     gfx_run(dl);
     videoEndFrame();
+    portNoteSwapReturn();   /* D600 */
     g_lastFrameUs = sysGetMicroseconds();
     if (++g_framesRendered <= 5 || (g_framesRendered % 300) == 0)
         sysLogPrintf(LOG_NOTE, "frame %d rendered in %llu us",
@@ -1277,12 +1385,549 @@ static void portRenderGfxTask(Gfx *dl)
 static pthread_mutex_t s_rwLock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t s_rwCond = PTHREAD_COND_INITIALIZER;
 static Gfx *s_rwTask = NULL;   /* submitted display list; NULL = worker idle */
+static uint64_t s_rwTaskViUs;  /* D578: g_lastViUs when it was submitted */
+/* D583: when the game submitted the task, and when the worker last posted
+ * SP/DP done: split a late frame into the game's own work, time the game was
+ * still waiting for our previous frame, and the worker's pickup delay. */
+static int64_t s_rwTaskSubmitUs, s_rwLastDoneUs;
 static int s_rwMode = 0;       /* 0 = undecided, 1 = worker, -1 = inline */
+
+/* D578: frame interpolation pacing (worker thread only; fast3d does the
+ * drawing, see gfx_pc.cpp). A game frame is stamped with the scheduled time
+ * S of the retrace it was submitted after. A present at wall time t shows sim
+ * time t - L, i.e. the blend alpha = (t - L - S_prev) / (S - S_prev): every
+ * refresh between two game frames lands at its position on the sim timeline,
+ * whatever the present rate (90 on a Deck OLED, 120, 144). L follows the
+ * frame's last present, so that one shows the frame exactly (see below);
+ * about half a tick of extra latency at 120. All passes for a game frame are drawn when it arrives, before
+ * SP/DP done (the game reuses its buffers after that); the worker then swaps
+ * the stored slots on its present clock, waking early for a new frame. */
+#define IP_SLOTS 8   /* = GFX_INTERP_SLOTS (port/fast3d/gfx_rendering_api.h) */
+static int64_t s_ipPrevS, s_ipCurS;
+static double s_ipDelayEma;        /* submit time - S, us */
+static double s_ipLag;             /* present time - sim time shown, us */
+static double s_ipPassEma;         /* CPU cost of one pass, us */
+static double s_ipDrawPk;          /* D583: decaying peak of a whole frame's draw time, us */
+static double s_ipSwapEma;         /* D583: time a present takes (show + swap + finish), us */
+static int s_ipWasOn;
+/* D583: present slots are a ring. Slots [s_qHead, s_qHead + s_qLen) are
+ * stored and waiting, in due order; a new game frame's passes go after them,
+ * so a frame never drops the previous frame's unshown presents (that left
+ * ~8% of 120 Hz ticks with one present and a 16 ms hole: VRR flicker). */
+static int64_t s_ipTimes[IP_SLOTS];   /* due time per ring slot */
+static uint8_t s_ipIdx[IP_SLOTS];     /* position within its game frame */
+static uint8_t s_ipWhy[IP_SLOTS];      /* D583 hold causes: 0 blended, 1 exact fallback, 2 alpha clamped to 0, 3 clamped to 1 (late/stale) */
+static double s_ipSim[IP_SLOTS];      /* D583: sim time each slot shows (prevS + alpha * dS), us */
+static int s_qHead, s_qLen;
+/* D583: one continuous present grid. s_gNext = the next grid point no frame
+ * has taken yet; each game frame takes the next round(dS / period) points
+ * (2 per tick at 120 Hz), so presents are evenly spaced whatever the game
+ * frame's arrival jitter. Re-anchored only when a frame is ready after its
+ * first point (a stall) or the period changes. Rebuilding it every tick from
+ * the last swap return (under VRR, our own present time) wobbled it. */
+static double s_gNext, s_gPeriod, s_gAcc;
+static double s_gMinSlack;         /* least spare time (grid point - ready) this window */
+static int s_gWin;                 /* frames in the window */
+/* Swap-driven pacing (VSync on): a blocking swap returns at a vblank, so the
+ * swap-return times ARE the display clock. s_vbLast = last return, s_vbP =
+ * measured refresh period (EMA of gaps near one period). */
+static int64_t s_vbLast;
+static double s_vbP;
+static unsigned s_vbOut;           /* consecutive off-period gaps */
+static double s_vbOutGap[8];
+
+/* 10 s stats window (worker thread only). */
+static int64_t s_stStart;
+static unsigned s_stFrames, s_stExactFrames, s_stPresents;
+/* D578 VRR cadence: present-gap histogram (<7, 7-9.5, 9.5-12, 12-20, >20 ms),
+ * slots dropped unshown, ticks by slot count (1, 2, 3, 4+). */
+static unsigned s_stGap[5], s_stDrop, s_stSlotsN[4], s_stAnchor, s_stPull;
+/* D583 motion: sim-time step between consecutive presents, in grid periods:
+ * hold (< 0.25), short (< 0.75), ok (< 1.25), long (< 1.75), jump. Even
+ * present timing can still show uneven motion (a frame forced exact shows the
+ * same image twice: a hold, then a jump). */
+static unsigned s_stMot[5];
+static unsigned s_stHoldWhy[4];   /* D583: holds by the cause of the second present (s_ipWhy) */
+/* D583: present cost (show + swap + finish): longest, and how many took over
+ * half a refresh (a swap that blocks holds the worker: the next game frame
+ * starts its draw late). */
+static double s_stSwapMax;
+static unsigned s_stSwapLong;
+/* D583: game-side split (see s_rwTaskSubmitUs): game work after its retrace /
+ * our previous done, time it was blocked by our previous frame, our pickup. */
+static double s_stGameSum, s_stGameMax, s_stBlockSum, s_stBlockMax, s_stPickSum, s_stPickMax;
+static unsigned s_stGameLong, s_stBlocked;
+static double s_stLastSim;
+static int64_t s_stLastPres;
+
+static int portInterpSwapDriven(void)
+{
+    /* D578: the LIVE swap interval decides, not the setting: a driver that
+     * forces VSync off (swap interval 0) gives non-blocking swaps, and
+     * swap-driven pacing then measures swap cost as the display period. */
+    static int64_t s_ivAt;
+    static int s_iv = 1;
+    const int64_t now = (int64_t)sysGetMicroseconds();
+    if (now - s_ivAt > 1000000) {   /* re-read ~1/s (render worker thread) */
+        int rf = 0;
+        videoInterpInfo(&rf, &s_iv);
+        s_ivAt = now;
+    }
+    return videoInterpVSync() && videoInterpHz() > 0 && s_iv != 0;
+}
+
+static int portInterpLog(void)
+{
+    static int v = -1;   /* GE_INTERPLOG: pacing trace (first ~2000 lines) */
+    if (v < 0) { const char *e = getenv("GE_INTERPLOG"); v = e ? (atoi(e) > 1 ? atoi(e) : 2000) : 0; }   /* =<n>: line cap */
+    return v > 0 ? v-- : 0;
+}
+
+static int portInterpAlpha1(void)
+{
+    static int v = -1;   /* GE_INTERP_ALPHA1: every pass exact (identity gate) */
+    if (v < 0) v = getenv("GE_INTERP_ALPHA1") != NULL;
+    return v;
+}
+
+static void portRenderGfxTaskInterp(Gfx *dl, uint64_t viUs, int hz)
+{
+    const int64_t tick = (int64_t)g_tickIntervalUs;
+    const int64_t P = 1000000 / hz;
+    const int64_t A = (int64_t)sysGetMicroseconds();
+    const int64_t S = (int64_t)viUs;
+    float alphas[IP_SLOTS];
+    int n = 0;
+    /* D583: game-side split of this frame's submit delay (A - S). */
+    const int64_t subU = s_rwTaskSubmitUs, doneU = s_rwLastDoneUs;
+    const int64_t gStart = (doneU > S) ? doneU : S;
+    const int64_t gameUs = subU > gStart ? subU - gStart : 0;
+    const int64_t blockUs = doneU > S ? doneU - S : 0;
+    const int64_t pickUs = A > subU ? A - subU : 0;
+    s_stGameSum += (double)gameUs; if ((double)gameUs > s_stGameMax) s_stGameMax = (double)gameUs;
+    s_stBlockSum += (double)blockUs; if ((double)blockUs > s_stBlockMax) s_stBlockMax = (double)blockUs;
+    s_stPickSum += (double)pickUs; if ((double)pickUs > s_stPickMax) s_stPickMax = (double)pickUs;
+    if (gameUs > (tick * 3) / 4) s_stGameLong++;
+    if (blockUs > 0) s_stBlocked++;
+
+    const int stale = !s_ipWasOn || s_ipCurS == 0 || S <= s_ipCurS || S - s_ipCurS > 4 * tick;
+    if (stale) {
+        gfx_interp_reset();
+        s_ipPrevS = S - tick;
+        s_ipDelayEma = (double)(A - S);
+    } else {
+        s_ipPrevS = s_ipCurS;
+        s_ipDelayEma = 0.9 * s_ipDelayEma + 0.1 * (double)(A - S);
+    }
+    s_ipCurS = S;
+    s_ipWasOn = 1;
+
+    /* D583: slot times come from one continuous present grid (s_gNext), so
+     * every present is one display period after the last whatever the game
+     * frame's arrival jitter. Grid period: the display's reported refresh
+     * with VSync (not the measured swap gaps: under G-Sync/VRR a swap returns
+     * when we present, so the "period" is our own cadence fed back), else the
+     * target rate. */
+    const int swapDriven = portInterpSwapDriven();
+    int maxN = IP_SLOTS / 2;   /* the ring holds this frame + one still waiting */
+    /* With the F10 overlay open, one pass per game frame: it is a menu, and
+     * replaying its text in a second pass measured a few px of difference
+     * between passes in a level (shimmer). The timeline continues, so
+     * nothing jumps when it closes. */
+    {
+        extern int optionsOverlayIsOpen(void);
+        if (optionsOverlayIsOpen()) maxN = 1;
+    }
+    if (s_ipPassEma > 0 && s_ipPassEma * maxN > 0.8 * (double)tick) {
+        maxN = (int)(0.8 * (double)tick / s_ipPassEma);   /* slow GPU/CPU: fewer passes */
+        if (maxN < 1) maxN = 1;
+    }
+    double Pg = (double)P;
+    if (swapDriven) {
+        int rfN = 0, ivN = 0;
+        videoInterpInfo(&rfN, &ivN);
+        Pg = (rfN > 0) ? 1e6 / (double)rfN : (s_vbP > 0.0) ? s_vbP : (double)P;
+    }
+    {
+        /* Within 1% of tick/k: use exactly tick/k. A 60 Hz game on a 120 Hz
+         * grid is then exactly 2 presents per tick, with no beat between the
+         * two clocks (the reported refresh is an integer, 119 for 119.88). */
+        const double k = floor((double)tick / Pg + 0.5);
+        if (k >= 1.0 && fabs((double)tick / k - Pg) < 0.01 * Pg) Pg = (double)tick / k;
+    }
+    /* Grid points this frame spans: dS / period, the fraction carried
+     * (90 Hz: 1.5 -> 2, 1, 2, 1, ...). */
+    if (stale) s_gAcc = 0.0;
+    s_gAcc += (double)(S - s_ipPrevS) / Pg;
+    int want = (int)floor(s_gAcc + 0.5);
+    if (want < 1) want = 1;
+    s_gAcc -= (double)want;
+    if (s_gAcc < -1.0 || s_gAcc > 1.0) s_gAcc = 0.0;
+    if (want > IP_SLOTS / 2) want = IP_SLOTS / 2;   /* a long hitch; the grid re-anchors below */
+    n = want < maxN ? want : maxN;
+    /* D583: a frame that arrives a tick late (a stall on the game side) gets
+     * more grid points (3 at 90 Hz), and with a restart that was 6 passes and a
+     * 16 ms draw on top of the stall. Two passes keep it short. */
+    /* D583: a frame that arrives a tick late (a stall on the game side) gets
+     * more grid points (3 at 90 Hz), and with a restart that was 6 passes and a
+     * 16 ms draw on top of the stall. Two passes keep it short. */
+    if ((S - s_ipPrevS) > tick + tick / 2 && n > 2) n = 2;
+    /* Nothing can be shown before this frame's passes are drawn. D583: a
+     * frame's real draw time, not passes x pass cost: a turn-softened or
+     * exact restart redraws its passes (about twice the estimate), and the
+     * first present then went out late, then the next on time (an uneven
+     * pair of gaps). The peak decays, so a past spike stops costing latency. */
+    double drawEst = (double)n * s_ipPassEma;
+    if (s_ipDrawPk > drawEst) drawEst = s_ipDrawPk;
+    const int64_t ready = A + (int64_t)drawEst + 500;
+    {
+        const double margin = 1000.0;   /* arrival jitter the grid absorbs without a re-anchor */
+        const double slack = s_gNext - (double)ready;
+        if (stale) {
+            /* The waiting presents belong to a timeline that is gone. */
+            s_stDrop += (unsigned)s_qLen;
+            s_qLen = 0;
+        }
+        if (stale || s_gNext == 0.0 || fabs(Pg - s_gPeriod) > 0.002 * Pg || slack < 0.0) {
+            /* Ready after the next grid point (a stall, a late frame) or a new
+             * period: start the grid at ready. One uneven gap, then even again. */
+            if (!stale && s_gNext != 0.0) s_stAnchor++;
+            s_gNext = (double)ready + margin;
+            if (s_qLen > 0) {
+                /* Never ahead of a present still waiting (a period change). */
+                const double after = (double)s_ipTimes[(s_qHead + s_qLen - 1) % IP_SLOTS] + 0.75 * Pg;
+                if (s_gNext < after) s_gNext = after;
+            }
+            s_gMinSlack = 1e18;
+            s_gWin = 0;
+        } else {
+            /* Latency trim: a late frame re-anchors the grid later, nothing moves
+             * it back. Once a second, if every frame had spare time, move the
+             * grid earlier by part of it (at most a quarter period: the gap to
+             * the waiting presents stays >= 0.75 period). */
+            if (slack < s_gMinSlack) s_gMinSlack = slack;
+            /* Ten frames when over a period is spare (a load, a stall that
+             * left a deep queue), else a second. */
+            if (++s_gWin >= (s_gMinSlack > margin + Pg ? 10 : 60)) {
+                if (s_gMinSlack > margin + Pg) {
+                    /* Over a period spare (after a load or a stall): take it
+                     * all back at once and drop the waiting presents it
+                     * overtakes (older images; the timeline stays in order). */
+                    s_gNext -= s_gMinSlack - margin;
+                    s_ipLag -= s_gMinSlack - margin;   /* the lag follows (it only falls slowly) */
+                    while (s_qLen > 0 &&
+                           (double)s_ipTimes[(s_qHead + s_qLen - 1) % IP_SLOTS] > s_gNext - 0.75 * Pg) {
+                        s_qLen--;
+                        s_stDrop++;
+                    }
+                    s_stPull++;
+                } else if (s_gMinSlack > margin + 500.0) {
+                    double d = s_gMinSlack - margin;
+                    if (d > 0.25 * Pg) d = 0.25 * Pg;
+                    s_gNext -= d;
+                    s_ipLag -= d;
+                    s_stPull++;
+                }
+                s_gMinSlack = 1e18;
+                s_gWin = 0;
+            }
+        }
+        s_gPeriod = Pg;
+    }
+    int64_t times[IP_SLOTS];
+    for (int j = 0; j < n; j++) {
+        /* n < want (slow GPU, overlay): spread over the frame's grid points,
+         * the last pass on the last point (it shows the frame exactly). */
+        const int idx = want - 1 - ((n - 1 - j) * want) / n;
+        times[j] = (int64_t)(s_gNext + (double)idx * Pg);
+    }
+    s_gNext += (double)want * Pg;
+    /* The lag (present time minus the sim time it shows) is set so this
+     * frame's LAST present shows the frame exactly (alpha 1) and earlier ones
+     * fall between it and the previous frame. Only matrices are blended;
+     * the sky, effects and anything not matched are always this frame's, so
+     * ending each frame on alpha 1 keeps them in step (a fixed one-tick lag
+     * measured alpha ~0 / 0.5 and the world trailed the rest: ghosting in
+     * the maintainer's 120 Hz test). Rises at once, falls slowly, so a frame
+     * with one slot fewer (90 Hz) does not swing it back and forth. */
+    {
+        const double wantLag = (double)(times[n - 1] - S);
+        if (stale || wantLag > s_ipLag) s_ipLag = wantLag;
+        else s_ipLag += 0.05 * (wantLag - s_ipLag);
+    }
+    uint8_t why[IP_SLOTS];
+    for (int i = 0; i < n; i++) {
+        double a = ((double)times[i] - s_ipLag - (double)s_ipPrevS) / (double)(S - s_ipPrevS);
+        why[i] = 0;
+        if (a < 0.0) { a = 0.0; why[i] = 2; }
+        if (a > 1.0 + 1e-6 || stale) why[i] = 3;
+        if (a > 1.0 || stale || portInterpAlpha1()) a = 1.0;
+        alphas[i] = (float)a;
+    }
+
+    if (portInterpLog()) {
+        char b[160]; int o = 0;
+        for (int i = 0; i < n && o < (int)sizeof(b) - 24; i++)
+            o += snprintf(b + o, sizeof(b) - o, " %.3f@%+lld", alphas[i], (long long)(times[i] - A));
+        sysLogPrintf(LOG_NOTE, "IPLOG tick S=%lld dS=%lld delay=%lld n=%d:%s", (long long)S,
+                     (long long)(S - s_ipPrevS), (long long)(A - S), n, b);
+    }
+    videoStartFrame();
+    videoSyncSplitScreen();
+    const uint64_t t0 = sysGetMicroseconds();
+    /* D583: this frame's passes go after the presents still waiting. */
+    while (s_qLen > IP_SLOTS - n) {
+        s_qHead = (s_qHead + 1) % IP_SLOTS;
+        s_qLen--;
+        s_stDrop++;
+    }
+    const int base = (s_qHead + s_qLen) % IP_SLOTS;
+    const int filled = gfx_interp_tick(dl, alphas, n, base);
+    for (int j = 0; j < filled; j++) {
+        const int slot = (base + j) % IP_SLOTS;
+        s_ipTimes[slot] = times[j];
+        s_ipIdx[slot] = (uint8_t)j;
+        /* An exact fallback inside gfx_interp_tick drew every pass at alpha 1. */
+        const double aj = gfx_interp_last_exact() ? 1.0 : (double)alphas[j];
+        s_ipSim[slot] = (double)s_ipPrevS + aj * (double)(S - s_ipPrevS);
+        s_ipWhy[slot] = gfx_interp_last_exact() ? 1 : why[j];
+    }
+    s_qLen += filled;
+    unsigned tkB = 0, tkT = 0, tkX = 0, tkM = 0, tkD = 0, tkU = 0;
+    gfx_tick_counts(&tkB, &tkT, &tkX, &tkM, &tkD, &tkU);
+    if (filled > 0) {
+        /* Capped: a shader prewarm or level-load frame (50-100 ms) is not a
+         * draw time, and learning it held ~40 ms of latency for seconds. */
+        double drew = (double)(sysGetMicroseconds() - t0);
+        if ((S - s_ipPrevS) > tick + tick / 2 || (A - S) > (tick * 5) / 6 || drew > 0.5 * (double)tick) {
+            /* D583: a slow game frame (spawn-in drops): late from the game
+             * (dS > 1 tick, a large submit delay) or slow to draw here. */
+            static int s_slowLog = 0;
+            if (s_slowLog++ < 300)
+                sysLogPrintf(LOG_NOTE, "D583 SLOW frame %d: dS %lld us, submit delay %lld us (game %lld, blocked by us %lld, pickup %lld), draw %.0f us (%d passes, %u batches, %u tris, %u texture lookups: %u misses, %u dyn-hash bytes, %u us in import)",
+                             g_framesRendered + 1, (long long)(S - s_ipPrevS), (long long)(A - S), (long long)gameUs,
+                             (long long)blockUs, (long long)pickUs, drew, gfx_interp_body_runs(), tkB, tkT, tkX, tkM, tkD, tkU);
+        }
+        if (drew > 0.4 * (double)tick) drew = 0.4 * (double)tick;
+        s_ipDrawPk = drew > s_ipDrawPk ? drew : s_ipDrawPk - 0.05 * (s_ipDrawPk - drew);
+        /* D578 (c): divide by the passes actually drawn (an exact restart
+         * discards earlier ones) and reject single slow outliers. */
+        int runs = gfx_interp_body_runs();
+        if (runs < filled) runs = filled;
+        double per = (double)(sysGetMicroseconds() - t0) / runs;
+        if (s_ipPassEma > 0 && per > 1.5 * s_ipPassEma) per = 1.5 * s_ipPassEma;
+        s_ipPassEma = s_ipPassEma > 0 ? 0.9 * s_ipPassEma + 0.1 * per : per;
+    }
+    videoEndFrame();
+    g_lastFrameUs = sysGetMicroseconds();
+    if (++g_framesRendered <= 5 || (g_framesRendered % 300) == 0)
+        sysLogPrintf(LOG_NOTE, "frame %d rendered (%d interp pass(es), %.0f us each, %d Hz presents)",
+                     g_framesRendered, filled, s_ipPassEma, hz);
+
+    /* D578: always-on pacing stats, once per 10 s while interpolating. */
+    {
+        int allOne = 1;
+        for (int i = 0; i < n; i++) if (alphas[i] < 1.0f) allOne = 0;
+        s_stFrames++;
+        s_stSlotsN[n >= 4 ? 3 : n >= 1 ? n - 1 : 0]++;
+        if (allOne || gfx_interp_last_exact()) s_stExactFrames++;
+        const int64_t now = (int64_t)sysGetMicroseconds();
+        int refresh = 0, swapIv = 0;
+        if (s_stStart == 0) {
+            s_stStart = now;
+            videoInterpInfo(&refresh, &swapIv);
+            sysLogPrintf(LOG_NOTE, "D578 interp start: target %d Hz, refresh %d Hz, swap interval %d, %s pacing",
+                         hz, refresh, swapIv, swapDriven ? "swap-driven" : "timer");
+        } else if (now - s_stStart >= 10 * 1000000) {
+            const double secs = (double)(now - s_stStart) / 1e6;
+            videoInterpInfo(&refresh, &swapIv);
+            unsigned trTurn = 0, trClamp = 0, trSet = 0, trRoom = 0;
+            gfx_interp_trigger_counts(&trTurn, &trClamp, &trSet, &trRoom);
+            sysLogPrintf(LOG_NOTE,
+                         "D578 interp triggers: %u turn-exact, %u turn-softened, %u set-change-exact, "
+                         "%u room-change-exact",
+                         trTurn, trClamp, trSet, trRoom);
+            {
+                extern void interpPortalCounts(unsigned out[8]);
+                extern unsigned interpPortalExtraCount(void);
+                unsigned pc[8];
+                interpPortalCounts(pc);
+                sysLogPrintf(LOG_NOTE,
+                             "D578 portal replay: replaced %u, replays %u, fullview %u, gatefail %u, noroom %u, "
+                             "unreached %u, nocam %u, nosnap %u, undrawn-room replays %u",
+                             pc[0], pc[1], pc[2], pc[3], pc[4], pc[5], pc[6], pc[7], interpPortalExtraCount());
+            }
+            sysLogPrintf(LOG_NOTE,
+                         "D578 interp: %.1f presents/s, target %d Hz, refresh %d Hz, swap interval %d, "
+                         "%s, vblank period %.0f us, %u game frames, %.0f%% exact",
+                         (double)s_stPresents / secs, hz, refresh, swapIv,
+                         swapDriven ? "swap-driven" : "timer", s_vbP, s_stFrames,
+                         s_stFrames ? 100.0 * (double)s_stExactFrames / (double)s_stFrames : 0.0);
+            sysLogPrintf(LOG_NOTE,
+                         "D578 cadence: gaps <7:%u 7-9.5:%u 9.5-12:%u 12-20:%u >20:%u ms | dropped %u | "
+                         "slots/tick 1:%u 2:%u 3:%u 4+:%u | tick %.0f us | grid %.1f us, re-anchors %u, trims %u, draw peak %.0f us | "
+                         "motion hold:%u (exact %u, a=0 %u, late %u, other %u) short:%u ok:%u long:%u jump:%u | present avg %.0f max %.0f us, %u over half a refresh",
+                         s_stGap[0], s_stGap[1], s_stGap[2], s_stGap[3], s_stGap[4], s_stDrop,
+                         s_stSlotsN[0], s_stSlotsN[1], s_stSlotsN[2], s_stSlotsN[3],
+                         s_stFrames ? secs * 1e6 / (double)s_stFrames : 0.0, s_gPeriod, s_stAnchor, s_stPull, s_ipDrawPk,
+                         s_stMot[0], s_stHoldWhy[1], s_stHoldWhy[2], s_stHoldWhy[3], s_stHoldWhy[0], s_stMot[1], s_stMot[2], s_stMot[3], s_stMot[4], s_ipSwapEma, s_stSwapMax, s_stSwapLong);
+            s_stSwapMax = 0.0;
+            s_stSwapLong = 0;
+            if (s_stFrames > 0) {
+                sysLogPrintf(LOG_NOTE,
+                             "D583 game side: work avg %.0f max %.0f us (%u over 3/4 tick) | blocked by our previous frame: %u frames, avg %.0f max %.0f us | pickup avg %.0f max %.0f us",
+                             s_stGameSum / s_stFrames, s_stGameMax, s_stGameLong, s_stBlocked, s_stBlockSum / s_stFrames,
+                             s_stBlockMax, s_stPickSum / s_stFrames, s_stPickMax);
+            }
+            s_stGameSum = s_stGameMax = s_stBlockSum = s_stBlockMax = s_stPickSum = s_stPickMax = 0.0;
+            s_stGameLong = s_stBlocked = 0;
+            s_stAnchor = s_stPull = 0;
+            memset(s_stMot, 0, sizeof(s_stMot));
+            memset(s_stHoldWhy, 0, sizeof(s_stHoldWhy));
+            memset(s_stGap, 0, sizeof(s_stGap));
+            memset(s_stSlotsN, 0, sizeof(s_stSlotsN));
+            s_stDrop = 0;
+            s_stStart = now;
+            s_stFrames = s_stExactFrames = s_stPresents = 0;
+        }
+    }
+}
+
+/* Show the next waiting slot; called once it is due. */
+static void portInterpPresentNext(void)
+{
+    /* D583: a present whose successor is already due is skipped: the display
+     * fell a whole period behind (a stall, a fixed refresh a little slower
+     * than the grid), and showing it would delay every later one. */
+    const int64_t leadS = portInterpSwapDriven() ? 1000 : 0;
+    while (s_qLen >= 2 && (int64_t)sysGetMicroseconds() >= s_ipTimes[(s_qHead + 1) % IP_SLOTS] - leadS) {
+        s_qHead = (s_qHead + 1) % IP_SLOTS;
+        s_qLen--;
+        s_stDrop++;
+    }
+    const int k = s_qHead;
+    s_qHead = (s_qHead + 1) % IP_SLOTS;
+    s_qLen--;
+    const int64_t due = s_ipTimes[k];
+    if (portInterpSwapDriven() && s_vbLast != 0) {
+        /* Swap-driven: no timer, the blocking swap is the clock. Guard only
+         * against a swap that does not block (no real VSync): never present
+         * twice within 0.7 of the target period. */
+        const int hz0 = videoInterpHz();
+        /* Based on the measured display period, not the target rate. */
+        int rfG = 0, ivG = 0;
+        videoInterpInfo(&rfG, &ivG);
+        const double pG = rfG > 0 ? 1e6 / (double)rfG : s_vbP > 0.0 ? s_vbP : 1000000.0 / (hz0 > 0 ? hz0 : 60);
+        const int64_t minGap = (int64_t)(0.7 * pG);
+        for (;;) {
+            const int64_t left = s_vbLast + minGap - (int64_t)sysGetMicroseconds();
+            if (left <= 0) break;
+            if (left > 2000) sysSleep(1000);
+            else sysCpuRelax();
+        }
+    }
+    const int64_t t0 = (int64_t)sysGetMicroseconds();
+    videoInterpPresent(k);
+    const int64_t r = (int64_t)sysGetMicroseconds();
+    if (portInterpLog())
+        sysLogPrintf(LOG_NOTE, "IPLOG present k=%d at=%lld late=%lld swap=%lld", k, (long long)t0,
+                     (long long)(t0 - due), (long long)(r - t0));
+    const int hz = videoInterpHz();
+    const int64_t P = 1000000 / (hz > 0 ? hz : 60);
+    s_stPresents++;
+    s_ipSwapEma = s_ipSwapEma > 0.0 ? 0.95 * s_ipSwapEma + 0.05 * (double)(r - t0) : (double)(r - t0);
+    if ((double)(r - t0) > s_stSwapMax) s_stSwapMax = (double)(r - t0);
+    if ((r - t0) > P / 2) s_stSwapLong++;
+    if (s_stLastPres != 0) {
+        const int64_t g = r - s_stLastPres;
+        s_stGap[g < 7000 ? 0 : g < 9500 ? 1 : g < 12000 ? 2 : g < 20000 ? 3 : 4]++;
+    }
+    s_stLastPres = r;
+    if (s_gPeriod > 0.0) {
+        const double st = (s_ipSim[k] - s_stLastSim) / s_gPeriod;
+        if (s_stLastSim != 0.0 && st > -1.0 && st < 8.0)
+        {
+            s_stMot[st < 0.25 ? 0 : st < 0.75 ? 1 : st < 1.25 ? 2 : st < 1.75 ? 3 : 4]++;
+            if (st < 0.25) s_stHoldWhy[s_ipWhy[k] & 3]++;
+        }
+        s_stLastSim = s_ipSim[k];
+    }
+    if (portInterpSwapDriven()) {
+        /* The swap returned at a vblank: that is the display clock. Track the
+         * refresh period from gaps near one period (a missed vblank or an idle
+         * stretch is not a period). */
+        if (s_vbLast != 0) {
+            const double gap = (double)(r - s_vbLast);
+            if (s_vbP <= 0.0) {
+                /* Seed from the REAL refresh, not the target rate (120 target
+                 * on a 90 Hz Deck, gamescope caps): else every gap is rejected. */
+                int rf = 0, iv = 0;
+                videoInterpInfo(&rf, &iv);
+                s_vbP = (rf > 0) ? 1e6 / (double)rf : (double)P;
+            }
+            if (gap > 0.75 * s_vbP && gap < 1.3 * s_vbP) {
+                s_vbP = 0.95 * s_vbP + 0.05 * gap;
+                s_vbOut = 0;
+            } else {
+                /* Slow re-seed: many consecutive off-period gaps mean the
+                 * estimate is wrong (swap interval change, cap); take the
+                 * median of the recent gaps. */
+                s_vbOutGap[s_vbOut++ & 7] = gap;
+                if (s_vbOut >= 16) {
+                    double a[8];
+                    for (int i = 0; i < 8; i++) a[i] = s_vbOutGap[i];
+                    for (int i = 1; i < 8; i++)
+                        for (int j = i; j > 0 && a[j - 1] > a[j]; j--) { double t = a[j]; a[j] = a[j - 1]; a[j - 1] = t; }
+                    s_vbP = 0.5 * (a[3] + a[4]);
+                    s_vbOut = 0;
+                }
+            }
+            {
+                /* D578: never estimate a display period longer than the real
+                 * refresh's (+10%). A run of missed vblanks or one-present
+                 * ticks re-seeded it to ~16.7 ms on a 120 Hz panel, and the
+                 * 0.7-period gate above then held presents at 60. */
+                int rf = 0, iv = 0;
+                videoInterpInfo(&rf, &iv);
+                if (rf > 0 && s_vbP > 1.1e6 / (double)rf) {
+                    s_vbP = 1e6 / (double)rf;
+                }
+            }
+        }
+        s_vbLast = r;
+    }
+}
+
+/* D583: a waiting present that falls due while the new frame draws would go
+ * out late (by up to the draw time), then the next one on time: an uneven
+ * pair of gaps. Show it first, at its time, when the frame can afford the
+ * wait: the game is waiting for this frame's SP/DP done, so never when the
+ * wait + present + draw would run past ~60% of a tick (a compositor whose
+ * swap blocks a whole refresh, a slow GPU: then draw first, as before). */
+static void portInterpPresentBeforeDraw(uint64_t viUs)
+{
+    const int64_t tick = (int64_t)g_tickIntervalUs;
+    const int64_t lead = portInterpSwapDriven() ? 1000 : 0;
+    const double drawEst = s_ipDrawPk > 2.0 * s_ipPassEma ? s_ipDrawPk : 2.0 * s_ipPassEma;
+    while (s_qLen > 0) {
+        const int64_t now = (int64_t)sysGetMicroseconds();
+        const int64_t due = s_ipTimes[s_qHead] - lead;
+        if ((double)due > (double)now + drawEst + 300.0) break;   /* falls after the draw */
+        const int64_t wait = due > now ? due - now : 0;
+        if ((double)(now - (int64_t)viUs + wait) + s_ipSwapEma + drawEst > 0.6 * (double)tick) break;
+        while ((int64_t)sysGetMicroseconds() < due) {
+            if (due - (int64_t)sysGetMicroseconds() > 2000) sysSleep(1000);
+            else sysCpuRelax();
+        }
+        portInterpPresentNext();
+    }
+}
 
 static void *portRenderWorker(void *arg)
 {
     (void)arg;
     for (;;) {
+        int presentDue = 0;
         pthread_mutex_lock(&s_rwLock);
         while (s_rwTask == NULL) {
             /* Quit while idle: stop taking frames and never touch GL again.
@@ -1294,19 +1939,88 @@ static void *portRenderWorker(void *arg)
                 pthread_mutex_unlock(&s_rwLock);
                 for (;;) sysSleep(100000);
             }
+            /* D578: sleep until the next stored present is due, or a frame. */
+            int64_t waitUs = 100 * 1000;
+            /* D578: with VSync the slot times are predicted vblanks. Presenting
+             * back-to-back and letting the blocking swap pace only works on a
+             * fixed refresh: under G-Sync/VRR a swap does not wait for a beat,
+             * the slots went out bunched and early, the panel followed that
+             * uneven cadence (brightness shimmer) and NVIDIA's layered-DXGI
+             * fullscreen path showed black frames. Present each slot at its
+             * time minus a small lead; on a fixed refresh the swap still lands
+             * on the same vblank. */
+            const int64_t lead = portInterpSwapDriven() ? 1000 : 0;
+            if (s_qLen > 0) {
+                waitUs = s_ipTimes[s_qHead] - lead - (int64_t)sysGetMicroseconds();
+                if (waitUs <= 0) {
+                    presentDue = 1;
+                    break;
+                }
+            }
+            /* An absolute CLOCK_REALTIME deadline is too coarse for this
+             * (MinGW: off by several ms either way, measured). While a present
+             * is pending, sleep 1 ms at a time to 2 ms before it, then spin,
+             * watching for a new frame throughout. */
+            if (s_qLen > 0) {
+                const int64_t due = s_ipTimes[s_qHead] - lead;
+                pthread_mutex_unlock(&s_rwLock);
+                for (;;) {
+                    const int64_t left = due - (int64_t)sysGetMicroseconds();
+                    if (left <= 0 || __atomic_load_n(&s_rwTask, __ATOMIC_ACQUIRE) != NULL) break;
+                    if (left > 2000) sysSleep(1000);
+                    else sysCpuRelax();
+                }
+                pthread_mutex_lock(&s_rwLock);
+                continue;
+            }
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
-            ts.tv_nsec += 100 * 1000 * 1000;
-            if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+            uint64_t ns = (uint64_t)ts.tv_nsec + (uint64_t)waitUs * 1000u;
+            ts.tv_sec += (time_t)(ns / 1000000000u);
+            ts.tv_nsec = (long)(ns % 1000000000u);
             pthread_cond_timedwait(&s_rwCond, &s_rwLock, &ts);
         }
+        if (presentDue) {
+            pthread_mutex_unlock(&s_rwLock);
+            portInterpPresentNext();
+            continue;
+        }
         Gfx *dl = s_rwTask;
+        const uint64_t viUs = s_rwTaskViUs;
         pthread_mutex_unlock(&s_rwLock);
 
-        portRenderGfxTask(dl);
+        /* D578: with VSync nothing is presented here: a swap blocks for a
+         * refresh, and the game waits for SP/DP done (posted below, after the
+         * passes are drawn), so a swap before the draw cost the game whole
+         * retraces (Deck Game Mode: 90 fps unreachable on idle hardware). The
+         * finished passes live in the present-slot FBOs
+         * (gfx_opengl_interp_store), so presenting after SP/DP is safe. D583:
+         * the previous frame's unshown slots stay queued (ring), they are not
+         * dropped: the new frame's slots come after them on the grid. */
+        const int hz = videoInterpHz();
+        if (hz > 0 && viUs != 0) {
+            portInterpPresentBeforeDraw(viUs);
+            const int64_t d0 = (int64_t)sysGetMicroseconds();
+            const int q0 = s_qLen;
+            portRenderGfxTaskInterp(dl, viUs, hz);
+            if (portInterpLog())   /* D583: line late presents up against the draw they fell in */
+                sysLogPrintf(LOG_NOTE, "IPLOG draw at=%lld dur=%lld vi+%lld q %d->%d next_due=%lld",
+                             (long long)d0, (long long)((int64_t)sysGetMicroseconds() - d0),
+                             (long long)(d0 - (int64_t)viUs), q0, s_qLen,
+                             (long long)(s_qLen > 0 ? s_ipTimes[s_qHead] - d0 : -1));
+        } else {
+            if (s_ipWasOn) {
+                s_ipWasOn = 0;
+                s_vbLast = 0; s_vbP = 0.0; s_vbOut = 0;   /* re-measure next time */
+                s_qLen = 0; s_gNext = 0.0;
+                gfx_interp_reset();
+            }
+            portRenderGfxTask(dl);
+        }
 
         pthread_mutex_lock(&s_rwLock);
         s_rwTask = NULL;
+        s_rwLastDoneUs = (int64_t)sysGetMicroseconds();   /* D583 */
         pthread_cond_broadcast(&s_rwCond);
         pthread_mutex_unlock(&s_rwLock);
         portPostEventForce(OS_EVENT_SP);   /* D134: must not be dropped */
@@ -1373,6 +2087,8 @@ void osSpTaskStartGo(OSTask *t)
             }
         }
         s_rwTask = (Gfx *)t->t.data_ptr;
+        s_rwTaskViUs = __atomic_load_n(&g_lastViUs, __ATOMIC_ACQUIRE);   /* D578 */
+        s_rwTaskSubmitUs = (int64_t)sysGetMicroseconds();   /* D583 */
         pthread_cond_broadcast(&s_rwCond);
         pthread_mutex_unlock(&s_rwLock);
         return;
@@ -1422,8 +2138,8 @@ void osWritebackDCache(void *addr, int size)      { (void)addr; (void)size; }
 void osWritebackDCacheAll(void)                    { }
 void osInvalICache(void *addr, int size)           { (void)addr; (void)size; }
 void osInvalDCache(void *addr, int size)           { (void)addr; (void)size; }
-u32   osVirtualToPhysical(void *va)                { return (u32)(uintptr_t)va; }
-void *osPhysicalToVirtual(u32 pa)                  { return (void *)(uintptr_t)pa; }
+u32   osVirtualToPhysical(void *va)                { return portHostToN64(va); }
+void *osPhysicalToVirtual(u32 pa)                  { return portN64ToHost(pa); }
 
 /* ------------------------------------------------------------------------ */
 /* Misc                                                                      */

@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "portaddr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include "chrobjdata.h"
 #include "image.h"
 #include "math_asinfacosf.h"
@@ -60,11 +65,7 @@ void sub_GAME_7F0762E0(ModelFileHeader *objheader, u8 *name, u8 *dst, struct tex
         
         delta = ((s32) ((romremaining + filedata) - (s32) name)) - ((s32) (((u8 *) objheader->Switches) + (((u32) gdl) & 0x00ffffff)));
         
-#ifdef PORT
-        texCopyGdls((Gfx *) (((u8 *) objheader->Switches) + (((u32) gdl) & 0x00ffffff)), (Gfx *)(uintptr_t)(u32)((romremaining + filedata) - (s32) name), (s32) name);  /* D441: zero-extend s32-held DRAM ptr */
-#else
-        texCopyGdls((Gfx *) (((u8 *) objheader->Switches) + (((u32) gdl) & 0x00ffffff)), (Gfx *) ((romremaining + filedata) - (s32) name), (s32) name);
-#endif
+        texCopyGdls((Gfx *) (((u8 *) objheader->Switches) + (((u32) gdl) & 0x00ffffff)), PORT_N64PTR(Gfx, (romremaining + filedata) - (s32) name), (s32) name);
 
         texLoadFromModelFileHeader(objheader, buffer);
 
@@ -106,11 +107,7 @@ void sub_GAME_7F0762E0(ModelFileHeader *objheader, u8 *name, u8 *dst, struct tex
         name = (u8 *) (((s32) (((u8 *) objheader->Switches) + (replacementgdl & 0x00ffffff))) - filedata);
 #endif
 
-#ifdef PORT
-        fileSetSize(filenum, (u8 *)(uintptr_t)(u32)(filedata), (((s32) name + 0xf) & (~0xf)), dst == 0);  /* D441: zero-extend s32-held DRAM ptr */
-#else
-        fileSetSize(filenum, (u8 *) filedata, (((s32) name + 0xf) & (~0xf)), dst == 0);
-#endif
+        fileSetSize(filenum, PORT_N64PTR(u8, filedata), (((s32) name + 0xf) & (~0xf)), dst == 0);
     }
 }
 

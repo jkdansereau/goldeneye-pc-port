@@ -17,6 +17,12 @@
 #include "mp_music.h"
 #include "file.h"
 #include "assets/obseg/text/LmpmenuE.h"
+#if defined(PORT)
+#include "portaddr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 
 #ifdef REFRESH_PAL
 #define MPMENU_YOFF 8   /* PAL: every text row sits 8 pixels lower */
@@ -1421,12 +1427,9 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
             // Must remain a comma expression for matching
 #ifdef PORT
             h2 = (char *) langGet(getStringID(LMPMENU, MPMENU_STR_1D_KILLS)), /* KILLS */
+                sprintf(rankbuffer, ascii_pnum_KILLS, PORT_N64PTR(char, q), curplayernum + 1, (char *) h2); /* -> "P<n> KILLS" */
 #else
             h2 = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1D_KILLS)), /* KILLS */
-#endif
-#ifdef PORT
-                sprintf(rankbuffer, ascii_pnum_KILLS, (char *)(uintptr_t)(u32)(q), curplayernum + 1, (char *) h2); /* -> "P<n> KILLS" */ /* D441: zero-extend s32-held DRAM ptr */
-#else
                 sprintf(rankbuffer, ascii_pnum_KILLS, (char *) q, curplayernum + 1, (char *) h2); /* -> "P<n> KILLS" */
 #endif
  
@@ -1499,12 +1502,9 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
             // Must remain a comma expression for matching.
 #ifdef PORT
             h2 = (char *) langGet(getStringID(LMPMENU, MPMENU_STR_1E_LOSSES)), /* LOSSES */
+                sprintf(rankbuffer, ascii_pnum_LOSSES, PORT_N64PTR(char, q), curplayernum + 1, (char *) h2); /* -> "P<n> LOSSES" */
 #else
             h2 = (s32) langGet(getStringID(LMPMENU, MPMENU_STR_1E_LOSSES)), /* LOSSES */
-#endif
-#ifdef PORT
-                sprintf(rankbuffer, ascii_pnum_LOSSES, (char *)(uintptr_t)(u32)(q), curplayernum + 1, (char *) h2); /* -> "P<n> LOSSES" */ /* D441: zero-extend s32-held DRAM ptr */
-#else
                 sprintf(rankbuffer, ascii_pnum_LOSSES, (char *) q, curplayernum + 1, (char *) h2); /* -> "P<n> LOSSES" */
 #endif
  
@@ -1622,7 +1622,7 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
             y = (viGetViewTop() - (fav_textheight >> 1)) + (37 + MPMENU_YOFF);
             viewleft = viGetX(); h1 = viGetY();
             gdl = textRender(gdl, &x, &y, text, ptrFontBankGothicChars, ptrFontBankGothic, 0x00ff00b0, viewleft, h1, 0, 0);
-            text = (char *) frontGetPlayersFavoriteWeaponInHand(curplayernum, 0);
+            text = PORT_N64PTR(char, frontGetPlayersFavoriteWeaponInHand(curplayernum, 0));
             textMeasure(&fav_textheight, &fav_textwidth, text, ptrFontBankGothicChars, ptrFontBankGothic, 0);
             x = ((viGetViewLeft() + fav_x_offset) - (fav_textwidth >> 1)) + 80;
             x2 = viGetViewTop();
@@ -1644,7 +1644,7 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
  
             if (g_CurrentPlayer->ptr_text_first_mp_award)
             {
-                text = (char *) g_CurrentPlayer->ptr_text_first_mp_award;
+                text = PORT_N64PTR(char, g_CurrentPlayer->ptr_text_first_mp_award);
                 textMeasure(&fav_textheight, &fav_textwidth, text, ptrFontBankGothicChars, ptrFontBankGothic, 0);
                 x = ((viGetViewLeft() + fav_x_offset) - (fav_textwidth >> 1)) + 80;
                 y = (viGetViewTop() - (fav_textheight >> 1)) + (75 + MPMENU_YOFF);
@@ -1655,7 +1655,7 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
 
             if (g_CurrentPlayer->ptr_text_second_mp_award)
             {
-                text = (char *) g_CurrentPlayer->ptr_text_second_mp_award;
+                text = PORT_N64PTR(char, g_CurrentPlayer->ptr_text_second_mp_award);
                 textMeasure(&fav_textheight, &fav_textwidth, text, ptrFontBankGothicChars, ptrFontBankGothic, 0);
                 x = ((viGetViewLeft() + fav_x_offset) - (fav_textwidth >> 1)) + 80;
                 y = (viGetViewTop() - (fav_textheight >> 1)) + (88 + MPMENU_YOFF);

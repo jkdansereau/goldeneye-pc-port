@@ -1507,7 +1507,7 @@ void proplvreset2(enum LEVELID stageId)
                 /** Ugly matching hack. 
                 *   TODO: investigate if there's a way to get rid of this.
                 */
-                if ((((u32) local_stage) ^ 0) + ((u32)vol->plink));
+                if ((((uintptr_t) local_stage) ^ 0) + ((u32)vol->plink));
 
 #ifdef PORT
                 vol->plink = (void *) (((uintptr_t) local_stage) + ((u32)vol->plink));

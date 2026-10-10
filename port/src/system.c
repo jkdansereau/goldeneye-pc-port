@@ -27,6 +27,9 @@
   #include <unistd.h>
   #include <time.h>
   #include <sys/stat.h>
+  #if defined(PLATFORM_MACOS)
+    #include <mach-o/dyld.h> /* _dyld_get_image_header, _NSGetExecutablePath */
+  #endif
 #endif
 
 #include "system.h"
@@ -59,9 +62,43 @@ uintptr_t sysImageBase(void)
 {
 #if defined(PLATFORM_WINDOWS)
     return (uintptr_t)GetModuleHandleW(NULL);
+#elif defined(PLATFORM_MACOS)
+    /* The mach_header of the main image == its load address. Unlike Windows
+     * there is no fixed base: arm64 is PIE-only (and `-image_base` is ignored),
+     * so this is 0x1_0000_0000 + a per-run ASLR slide. M1's image-relative
+     * address rule uses this; get the slide from _dyld_get_image_vmaddr_slide. */
+    return (uintptr_t)_dyld_get_image_header(0);
 #else
     /* TODO: parse /proc/self/maps for the first executable mapping. */
     return 0;
+#endif
+}
+
+/* Fill `buf` with the directory containing the executable, or "" on failure.
+ * Linux reads /proc/self/exe; macOS uses _NSGetExecutablePath (no /proc, and
+ * _POSIX_C_SOURCE=199309L above hides readlink on Darwin). */
+static void getExeDir(char *buf, size_t buflen)
+{
+    buf[0] = 0;
+#if defined(PLATFORM_MACOS)
+    uint32_t n = (uint32_t)buflen;
+    if (_NSGetExecutablePath(buf, &n) == 0) {
+        char *slash = strrchr(buf, '/');
+        if (slash) *slash = 0; else buf[0] = 0;
+    } else {
+        buf[0] = 0;
+    }
+#elif defined(PLATFORM_LINUX)
+    ssize_t n = readlink("/proc/self/exe", buf, buflen - 1);
+    if (n > 0) {
+        buf[n] = 0;
+        char *slash = strrchr(buf, '/');
+        if (slash) *slash = 0; else buf[0] = 0;
+    } else {
+        buf[0] = 0;
+    }
+#else
+    (void)buf; (void)buflen;
 #endif
 }
 
@@ -85,28 +122,130 @@ void sysSleep(uint32_t micros)
 
 /* --- Logging ------------------------------------------------------------ */
 
+/* D576: also send every log line to $S/ge007.log (next to ge007.ini),
+ * because a normal (double-click) launch loses stderr. One fputs per line
+ * keeps lines whole when several threads log at once (the CRT locks per
+ * call); the file is flushed after every line (the game may crash and the
+ * log must survive; this is not a per-pixel hot path). Capped at 8 MiB
+ * total (debug env vars can make the log very chatty).
+ * Plain C stdio + remove()/rename() only, so Windows (mingw) and Linux
+ * both build this. */
+#define SYS_LOG_FILE_CAP (8u * 1024u * 1024u)
+
+static FILE  *g_logFile      = NULL;
+static size_t g_logFileBytes = 0;
+static int    g_logFileCapped = 0;
+static int    g_logFileTried  = 0;
+
+static void sysLogCloseFile(void)
+{
+    if (g_logFile) {
+        fclose(g_logFile);
+        g_logFile = NULL;
+    }
+}
+
+/* Write one already-formatted line (NUL-terminated, ends in '\n') to the
+ * log file, honouring the size cap. */
+static void sysLogWriteFile(const char *line)
+{
+    if (!g_logFile || g_logFileCapped)
+        return;
+    size_t len = strlen(line);
+    if (fwrite(line, 1, len, g_logFile) != len) {
+        g_logFileCapped = 1; /* unwriteable: stop trying (no cap note) */
+        return;
+    }
+    g_logFileBytes += len;
+    if (g_logFileBytes >= SYS_LOG_FILE_CAP) {
+        fputs("[NOTE ] log: size cap reached, further lines go to stderr only\n",
+              g_logFile);
+        g_logFileCapped = 1;
+    }
+    fflush(g_logFile);
+}
+
+void sysLogOpenFile(void)
+{
+    char logpath[1024], prevpath[1024];
+    if (g_logFile || g_logFileTried)
+        return; /* idempotent */
+    g_logFileTried = 1;
+
+    /* sysResolvePath returns one static buffer; copy each path out. */
+    strncpy(logpath, sysResolvePath("$S/ge007.log"), sizeof(logpath) - 1);
+    logpath[sizeof(logpath) - 1] = 0;
+    strncpy(prevpath, sysResolvePath("$S/ge007.prev.log"), sizeof(prevpath) - 1);
+    prevpath[sizeof(prevpath) - 1] = 0;
+
+    /* Roll the previous run's log to ge007.prev.log (drop any older
+     * one first); failures are ignored (std C has no portable stat). */
+    remove(prevpath);
+    rename(logpath, prevpath);
+    g_logFile = fopen(logpath, "w");
+    if (!g_logFile) {
+        /* Carry on with stderr only; at most one warn (no error spam). */
+        sysLogPrintf(LOG_WARNING, "log: cannot open %s, stderr only", logpath);
+        return;
+    }
+    g_logFileBytes = 0;
+    g_logFileCapped = 0;
+    atexit(sysLogCloseFile);
+}
+
 void sysLogPrintf(enum LogLevel level, const char *fmt, ...)
 {
     static const char *tags[] = { "ERROR", "WARN ", "NOTE ", "INFO ", "DEBUG" };
+    char buf[1024];
+    int off, n;
     va_list ap;
+
     if ((int)level >= 5) level = LOG_DEBUG;
-    fprintf(stderr, "[%s] ", tags[level]);
+    off = snprintf(buf, sizeof(buf), "[%s] ", tags[level]);
+    if (off < 0) off = 0;
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    n = vsnprintf(buf + off, sizeof(buf) - (size_t)off - 1, fmt, ap);
     va_end(ap);
-    fprintf(stderr, "\n");
+    if (n > 0)
+        off += n;
+    else
+        off = (int)strlen(buf); /* message truncated: advance past what fit */
+    if (off > (int)sizeof(buf) - 2)   /* vsnprintf returns the untruncated length */
+        off = (int)sizeof(buf) - 2;   /* room for '\n' + NUL */
+    buf[off++] = '\n';
+    buf[off] = 0;
+
+    fputs(buf, stderr);
+    sysLogWriteFile(buf);
 }
 
 void sysFatalError(const char *fmt, ...)
 {
+    char buf[1024];
+    int off, n;
     va_list ap;
+
+    off = snprintf(buf, sizeof(buf), "[FATAL] ");
+    if (off < 0) off = 0;
+    va_start(ap, fmt);
+    n = vsnprintf(buf + off, sizeof(buf) - (size_t)off - 1, fmt, ap);
+    va_end(ap);
+    if (n > 0)
+        off += n;
+    else
+        off = (int)strlen(buf);
+    if (off > (int)sizeof(buf) - 2)   /* vsnprintf returns the untruncated length */
+        off = (int)sizeof(buf) - 2;   /* room for '\n' + NUL */
+    buf[off++] = '\n';
+    buf[off] = 0;
+
     fflush(stdout);
     fflush(stderr);
-    fprintf(stderr, "[FATAL] ");
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-    fprintf(stderr, "\n");
+    fputs(buf, stderr);
+    if (g_logFile) {   /* the fatal line bypasses the size cap: it is the one that matters */
+        fputs(buf, g_logFile);
+        fflush(g_logFile);
+    }
     fflush(stderr);
     abort();
 }
@@ -243,6 +382,13 @@ const char *sysGetExeDir(void)
                 *slash = 0;
         }
     }
+#else
+    if (exeDir[0] == '.' && exeDir[1] == 0) {
+        char d[512];
+        getExeDir(d, sizeof(d));
+        if (d[0])
+            snprintf(exeDir, sizeof(exeDir), "%s", d);
+    }
 #endif
     return exeDir;
 }
@@ -299,16 +445,7 @@ const char *sysResolvePath(const char *path)
         else {
             static char sexedir[1024] = "";
             if (!sexedir[0]) {
-                ssize_t n = readlink("/proc/self/exe", sexedir, sizeof(sexedir) - 1);
-                if (n > 0) {
-                    char *slash;
-                    sexedir[n] = 0;
-                    slash = strrchr(sexedir, '/');
-                    if (slash)
-                        *slash = 0;
-                    else
-                        sexedir[0] = 0;
-                }
+                getExeDir(sexedir, sizeof(sexedir));
             }
             if (sexedir[0])
                 snprintf(out, sizeof(out), "%s/data/%s", sexedir, path + 3);

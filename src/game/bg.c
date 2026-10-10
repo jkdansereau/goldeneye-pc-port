@@ -8,6 +8,12 @@
 #include <memp.h>
 #include "bg.h"
 #include "lightfixture.h"
+#if defined(PORT)
+#include "portaddr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include "bondview.h"
 #include "chr.h"
 #include "debug_camera.h"
@@ -883,6 +889,20 @@ void load_bg_file(LEVEL_INDEX levelid)
     lightFixtureInitTables();
  
     ptr_bg_data = (bg_addr_t)header;
+#ifdef PORT
+    /* D590 mechanism check (GE_D590HDR-gated): prove `header` (a stack array on
+     * the bg-load worker thread) has its low 32 bits inside the D131 image-rel
+     * range [0x40M,0x70M) — i.e. that the dropped PORT_N64PTR re-base was what
+     * remapped this stack address onto the PE image (fault = imagebase +
+     * (low32 - 0x40M)). If low32 is OUTSIDE the window, the D588-class
+     * diagnosis is wrong — stop and report. */
+    if (getenv("GE_D590HDR"))
+    {
+        uint32_t hdr_lo = (uint32_t)(uintptr_t)header;
+        osSyncPrintf("D590HDR header=%p low32=0x%08x in-window=%d\n", (void *)header,
+                     (unsigned)hdr_lo, (unsigned)(hdr_lo >= 0x40000000u && hdr_lo < 0x70000000u));
+    }
+#endif
     obLoadBGFileBytesAtOffset(levelinfotable[levelentry_index].bg_seg_filename, (u8 *) ptr_bg_data, 0, 0x40);
 
     if (((levelid && ptr_bg_data) && levelentry_index));
@@ -897,8 +917,13 @@ void load_bg_file(LEVEL_INDEX levelid)
  
     gptr_stan = (bg_addr_t) _fileNameLoadToBank(levelinfotable[levelentry_index].bg_stan_filename, 2, 0, 4);
  
-    stanDetermineEOF((struct StanPrefixRecord *) gptr_stan, 0, (u8 *) gptr_stan);
-    stanLoadFile((struct StanPrefixRecord *) gptr_stan);
+    /* D588-class (ABI/pointer-width, §A1): under PORT, ptr_bg_data/gptr_stan are
+     * full-width host bg_addr_t (D457) — PORT_N64PTR here truncated the low 32
+     * bits and re-based them into the image window, so a bg-load worker stack
+     * (or any bank pointer inside the window) faulted. Plain cast: identity
+     * under N64, correct under PORT. */
+    stanDetermineEOF((struct StanPrefixRecord *)gptr_stan, 0, (u8 *)gptr_stan);
+    stanLoadFile((struct StanPrefixRecord *)gptr_stan);
  
     sub_GAME_7F0B4810(levelinfotable[levelentry_index].levelscale);
     setLevelScale(levelinfotable[levelentry_index].levelscale);
@@ -3082,11 +3107,7 @@ void bgBuildRoomVtxBounds(s32 roomID)
             numvertices = ((gdl[cmdindex].dma.par >> 4) & 0xf) + 1;
 #endif
 
-#ifdef PORT
-            vtx = (Vtx *)(SEGMENT_OFFSET(gdl[cmdindex].dma.addr) + (uintptr_t)vertices);
-#else
-            vtx = (Vtx *)(SEGMENT_OFFSET(gdl[cmdindex].dma.addr) + (u32)vertices);
-#endif
+            vtx = (Vtx *)PORT_N64PTR(void, SEGMENT_OFFSET(gdl[cmdindex].dma.addr) + (u32)vertices);
 
 #if defined(PORT)
             /* TEMP D69 safety net: the room primary/secondary DL binaries

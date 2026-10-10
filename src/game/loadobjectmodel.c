@@ -565,6 +565,15 @@ void setupUpdateObjectRoomPosition(ObjectRecord *obj)
 }
 
 
+#ifdef PORT
+/* D580: N64 `(u8)cmd[0]` is the propDef type only on big-endian (header word =
+ * [u16 extrascale][u8 state][u8 type]); on little-endian it is the low byte of
+ * extrascale.  Read the struct member (offset 3), as sizepropdef does. */
+#define REUSE_PDTYPE(c) (((PropDefHeaderRecord *)(c))->type)
+#else
+#define REUSE_PDTYPE(c) ((u8)(c)[0])
+#endif
+
 ObjectRecord *setupFindObjForReuse(s32 wanttype, ObjectRecord **offscreenobjptr, ObjectRecord **anyobjptr, bool musthaveprop, bool musthavemodel, ModelFileHeader *modeldef)
 {
     ObjectRecord *offscreenobj = NULL;
@@ -574,9 +583,9 @@ ObjectRecord *setupFindObjForReuse(s32 wanttype, ObjectRecord **offscreenobjptr,
 
     if (cmd)
     {
-        while ((u8)cmd[0] != PROPDEF_END)
+        while (REUSE_PDTYPE(cmd) != PROPDEF_END)
         {
-            if ((wanttype & 0xff) == (u8)cmd[0])
+            if ((wanttype & 0xff) == REUSE_PDTYPE(cmd))
             {
                 ObjectRecord *obj = (ObjectRecord *)cmd;
 

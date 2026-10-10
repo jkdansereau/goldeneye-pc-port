@@ -4,6 +4,10 @@
 #include "image_bank.h"
 #ifdef PORT
 #include <gimgfixup.h>
+#include "portaddr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
 #endif
 
 // bss
@@ -95,9 +99,23 @@ struct sImageTableEntry *mpstageselimages;
 extern u8* _GlobalimagetableSegmentRomStart;
 
 
-void texSetBitstring(s32 pos) {
 #ifdef PORT
-    img_curpos = (u8 *)(uintptr_t)(u32)(pos);  /* D441: zero-extend s32-held DRAM ptr */
+void texSetBitstring(u8 *pos)
+#else
+void texSetBitstring(s32 pos)
+#endif
+{
+#if defined(PORT)
+    /* D588: the argument is a LIVE host pointer; take it at full pointer
+     * width. The pre-#95 code zero-extended the s32 (D441); the #95
+     * re-apply re-based it through portN64ToHost(), which remaps the D131
+     * image-relative range [0x40000000, 0x70000000) onto the image and
+     * mis-maps any native (out-of-window) pointer whose low 32 bits fall
+     * there -- e.g. the Windows game thread's native 8 MB stack
+     * (0x618Dxxxx..0x620Dxxxx), whose compbuffer pointer faulted in
+     * texReadBits(). Full width is identity at base 0 (Win/Linux) and
+     * exact for in-window (macOS) pointers. */
+    img_curpos = pos;
 #else
     img_curpos = pos;
 #endif
@@ -178,7 +196,7 @@ extern Gfx* globalDL_0x900;
 extern Gfx* globalDL_0x9a8;
 extern Gfx* globalDL_0xa50;
 
-#if defined(__x86_64__)
+#if defined(PLATFORM_64BIT)
 /* D39 (docs/dev/findings.md): on N64 all 49 symbols above link inside the
  * Globalimagetable segment at physical 0x02xxxxxx (ge007.ld), so
  * `globalbank_rdram_offset + (u32)&sym` rebases each onto pGlobalimagetable.
@@ -259,13 +277,13 @@ void texReset(void)
     pGlobalimagetable = ((u32)pGlobalimagetable + 0xFFFU) & 0xFFFFF000;
 #endif
 
-    romCopy(pGlobalimagetable, &_GlobalimagetableSegmentRomStart, size);
+    romCopy(PORT_N64PTR(void, pGlobalimagetable), &_GlobalimagetableSegmentRomStart, size);
 
 #ifdef PORT
     /* D68 (docs/dev/findings.md): the ROM copy is N64 big-endian; convert
      * the CPU-interpreted u32 fields (IMAGESEG Gfx w1 words and
      * sImageTableEntry.index) to host order before any code reads them. */
-    gimgFixupGlobalimagetable((u8 *)pGlobalimagetable);
+    gimgFixupGlobalimagetable((u8 *)PORT_N64PTR(void, pGlobalimagetable));
 #endif
 
 #ifdef PORT
@@ -340,6 +358,6 @@ void texReset(void)
     /* D68: explosion.c executes the compiled globalDL_0xNNN shadows via
      * g_ExplosionDisplayLists[]; copy the IMAGESEG words that texLoad()
      * patched in the ROM copy over into those arrays. */
-    gimgSyncCompiledGlobalDLs((u8 *)pGlobalimagetable);
+    gimgSyncCompiledGlobalDLs((u8 *)PORT_N64PTR(void, pGlobalimagetable));
 #endif
 }

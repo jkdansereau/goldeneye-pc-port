@@ -35,7 +35,7 @@ extern int snprintf(char *str, size_t maxsize, const char *format, ...);
 #else
   /* POSIX: mmap the ROM at the fixed cart address (mirrors the VirtualAlloc
    * path). <sys/mman.h> is a host header the decomp include path does not
-   * shadow. */
+   * shadow. <errno.h> is included further down, after ultra64.h. */
   #include <sys/mman.h>
 #endif
 
@@ -45,13 +45,27 @@ extern int snprintf(char *str, size_t maxsize, const char *format, ...);
 #include "pcmodels.h"
 #include "pccg.h"
 #include "romconvert.h"
+#include "portaddr.h"
 
 /* D50: struct font/fontchar layouts for the font-segment re-layout. Order
  * matters (see pcmodels.c): ultra64.h must finish before bondtypes.h. */
 #include <ultra64.h>
 #include "bondtypes.h"
 
-#define CART_BASE   0x10000000u
+#if !defined(PLATFORM_WINDOWS)
+/* Must come after ultra64.h: libc defines `errno` as a macro (glibc:
+ * `(*__errno_location ())`), which would rewrite the N64 `u8 errno;`
+ * fields in PR/os.h (OSContStatus, OSContPad, ...) into a function
+ * declaration and break the build ("field '__errno_location' declared as
+ * a function"). Only the mmap-failure diagnostic below reads errno. */
+  #include <errno.h>
+#endif
+
+#define CART_BASE   0x10000000u                          /* N64 cart address */
+/* Host address the ROM is mapped at (PORT_ADDR_BASE + CART_BASE; identity on
+ * Windows/Linux). Game-visible 32-bit cart values stay CART_BASE-based; this
+ * is only for the mapping and the host-side pointers into it. */
+#define CART_HOST   ((uintptr_t)portN64ToHost(CART_BASE))
 
 static u8  *rom = NULL;        /* heap copy (fallback path) */
 static u32  romSize = 0;
@@ -235,15 +249,15 @@ static void romdataRaw16Walk(const u8 *ctl, u32 ctlSize, u8 *tbl, u32 tblSize,
 static int romdataFinishCartMap(const char *tok, u8 *img,
                                 u32 sideTotal, u32 cgTotal)
 {
-    memcpy((void *)(uintptr_t)CART_BASE, img, romSize);
+    memcpy((void *)CART_HOST, img, romSize);
     free(img);
     mappedAtCartBase = 1;
     sysLogPrintf(LOG_INFO, "romdataInit: %s (%u bytes) mapped at 0x%08X "
                  "(cart base)%s%s", tok, romSize, CART_BASE,
                  sideTotal ? ", + model sidecars" : "",
                  cgTotal ? ", + bg/stan sidecars" : "");
-    pcmodelsLoadSidecars(CART_BASE, romSize);
-    pccgLoadSidecars(CART_BASE + romSize + pcmodelsTotalSize());
+    pcmodelsLoadSidecars(CART_HOST, romSize);
+    pccgLoadSidecars(CART_HOST + romSize + pcmodelsTotalSize());
 
     /* D55: the RLE folder-menu background at `unknown2` has a big-endian w/h
      * header that rle_expand_8bit() reads little-endian; match the N64 .data
@@ -370,9 +384,9 @@ int romdataInit(void)
         {
             u32 maplen = romSize + sideTotal + cgTotal;
 #if defined(PLATFORM_WINDOWS)
-            void *at = VirtualAlloc((LPVOID)CART_BASE, maplen,
+            void *at = VirtualAlloc((LPVOID)CART_HOST, maplen,
                                     MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-            if (at == (void *)(uintptr_t)CART_BASE)
+            if (at == (void *)CART_HOST)
                 return romdataFinishCartMap(tok, img, sideTotal, cgTotal);
             /* D179 tail: the fixed-address map failed. Say exactly why (Win32
              * error + what already occupies the range) and stop here: the
@@ -411,22 +425,33 @@ int romdataInit(void)
             /* POSIX: anonymous fixed-address mmap. MAP_FIXED_NOREPLACE (Linux
              * 4.17+) fails instead of clobbering an existing mapping; where it
              * is unavailable the plain hint is advisory and the == check below
-             * catches a relocated result. */
+             * catches a relocated result. On macOS portAddrInit has already
+             * reserved the whole window, so MAP_FIXED lands inside our range. */
             int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+#ifndef PLATFORM_MACOS
 #ifdef MAP_FIXED_NOREPLACE
             flags |= MAP_FIXED_NOREPLACE;
+#elif defined(PLATFORM_MACOS)
+            /* __PAGEZERO ends at CART_BASE in the macOS build, so this range
+             * is deliberately vacant. Darwin has no MAP_FIXED_NOREPLACE and
+             * otherwise treats CART_BASE only as a hint, relocating it. */
+            flags |= MAP_FIXED;
 #endif
-            void *at = mmap((void *)(uintptr_t)CART_BASE, maplen,
+#else
+            flags |= MAP_FIXED;
+#endif
+            void *at = mmap((void *)CART_HOST, maplen,
                             PROT_READ | PROT_WRITE, flags, -1, 0);
-            if (at != MAP_FAILED && at == (void *)(uintptr_t)CART_BASE) {
+            int mapErrno = errno;
+            if (at != MAP_FAILED && at == (void *)CART_HOST) {
                 mappedLen = maplen;
                 return romdataFinishCartMap(tok, img, sideTotal, cgTotal);
             }
             if (at != MAP_FAILED)
                 munmap(at, maplen);
             sysLogPrintf(LOG_WARNING, "romdataInit: could not map 0x%08X "
-                         "(ASLR/kernel refused the fixed address); using heap "
-                         "copy — direct ROM reads will fail", CART_BASE);
+                         "(mmap result=%p errno=%d); using heap copy — direct "
+                         "ROM reads will fail", CART_BASE, at, mapErrno);
 #endif
         }
 
@@ -443,9 +468,9 @@ void romdataDestroy(void)
 {
     if (mappedAtCartBase) {
 #if defined(PLATFORM_WINDOWS)
-        VirtualFree((LPVOID)CART_BASE, 0, MEM_RELEASE);
+        VirtualFree((LPVOID)CART_HOST, 0, MEM_RELEASE);
 #else
-        munmap((void *)(uintptr_t)CART_BASE, (size_t)mappedLen);
+        munmap((void *)CART_HOST, (size_t)mappedLen);
         mappedLen = 0;
 #endif
         mappedAtCartBase = 0;
@@ -458,7 +483,7 @@ void romdataDestroy(void)
 const u8 *romdataGetRom(void)
 {
     if (mappedAtCartBase)
-        return (const u8 *)(uintptr_t)CART_BASE;
+        return (const u8 *)CART_HOST;
     return rom;
 }
 u32       romdataGetRomSize(void) { return romSize; }
@@ -477,6 +502,22 @@ int romdataCartAddrValid(u32 addr, u32 size)
     /* D50/D69: the model + bg/stan sidecar images extend the valid cart
      * region (concatenated: ROM, then pcmodels, then pccg). */
     return off + size <= romSize + pcmodelsTotalSize() + pccgTotalSize();
+}
+
+/* D573: see portaddr.h. DRAM views first (the common case), then the cart
+ * image; widened before the subtraction so a pointer above 4 GiB can never
+ * truncate into a window. */
+int portAddrIsMapped(const void *p)
+{
+    uintptr_t v = (uintptr_t)p;
+    if (v - (uintptr_t)PORT_DRAM_V1_BASE < (uintptr_t)PORT_DRAM_SIZE)
+        return 1;
+    if (v - (uintptr_t)PORT_DRAM_K0_BASE < (uintptr_t)PORT_DRAM_SIZE)
+        return 1;
+    if (mappedAtCartBase && v - (uintptr_t)CART_BASE <
+            (uintptr_t)romSize + pcmodelsTotalSize() + pccgTotalSize())
+        return 1;
+    return 0;
 }
 
 const void *romdataMapVa(u32 va)

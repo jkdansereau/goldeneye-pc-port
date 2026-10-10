@@ -2,6 +2,11 @@
 #include "porttick.h" /* D486 */
 #endif
 #include <ultra64.h>
+#if defined(PORT)
+#include "portaddr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include <PR/os.h>
 #include <PR/gbi.h>
 #include <gbi_extension.h>

@@ -60,7 +60,11 @@ u32 decompressdata(u8 *src, u8 *dst, struct huft *huffman_table)
     return produced;
 }
 
-s32 rzipGetSomething(void)
+u8 *rzipGetSomething(void)
 {
-    return (s32)(uintptr_t)s_rz_nextin;
+    /* D588: return the live cursor at full pointer width (see the header
+     * guard). The pre-#95 (s32)(uintptr_t) truncation fed the #95
+     * portN64ToHost() re-base in texSetBitstring and mis-mapped on
+     * native pointers in the D131 image-relative range. */
+    return s_rz_nextin;
 }

@@ -36,6 +36,11 @@
 #include <random.h>
 #include <snd.h>
 #include <ultra64.h>
+#if defined(PORT)
+#include "portaddr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #ifdef PORT
 #include <stdlib.h>
 #include "envflag.h"
@@ -1138,11 +1143,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     {
                         zero = 0; // debug value maybe?
                         /* D32/D33: table holds s32 offsets; cast at use site. */
-#ifdef PORT
-                        modelSetAnimation(AircraftEntityp->model, (ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs2[anim_id]), zero, startframe, 0.5f, (s32)ai->INTERPOL_TIME60);  /* D441: zero-extend s32-held DRAM ptr */
-#else
-                        modelSetAnimation(AircraftEntityp->model, (ModelAnimation *)animation_table_ptrs2[anim_id], zero, startframe, 0.5f, (s32)ai->INTERPOL_TIME60);
-#endif
+                        modelSetAnimation(AircraftEntityp->model, PORT_N64PTR(ModelAnimation, animation_table_ptrs2[anim_id]), zero, startframe, 0.5f, (s32)ai->INTERPOL_TIME60);
                         if (endframe >= 0)
                         {
                             modelSetAnimEndFrame(AircraftEntityp->model, endframe);

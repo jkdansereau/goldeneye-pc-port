@@ -29,6 +29,10 @@
 #ifdef PORT
 #include <stdlib.h>
 #include "envflag.h"
+#include "portaddr.h"
+#else
+/* N64 build: the port address window is the identity (see port_addr.h). */
+#define PORT_N64PTR(T, x) ((T *)(x))
 #endif
 
 
@@ -402,7 +406,7 @@ void setupRarewareLogoData(s32 address, s32 size) {
     D_8002A89C = -40.0f;
     intro_eye_counter = 0;
     virtualaddress = address;
-    romCopy(virtualaddress, &_rarewarelogoSegmentRomStart, ALIGN64_V2((u32)&_rarewarelogoSegmentEnd - (u32)&_rarewarelogoSegmentStart));
+    romCopy(PORT_N64PTR(void, virtualaddress), &_rarewarelogoSegmentRomStart, ALIGN64_V2((u32)&_rarewarelogoSegmentEnd - (u32)&_rarewarelogoSegmentStart));
 }
 
 
@@ -421,7 +425,7 @@ Gfx *retrieve_display_rareware_logo(Gfx *gdl)
 #endif
 
     D_8002A7D0 = (1 - D_8002A7D0);
-    gSPSegment(gdl++, SPSEGMENT_GETITLE, osVirtualToPhysical(virtualaddress));
+    gSPSegment(gdl++, SPSEGMENT_GETITLE, osVirtualToPhysical(PORT_N64PTR(void, virtualaddress)));
     if ((gunbarrel_mode == 0) || (gunbarrel_mode == 1)) {
         s32 var1;
         s32 var2;
@@ -466,8 +470,8 @@ void sub_GAME_7F008DE4(u8 **addr, s32 *size) {
     *size -= 0x40400;
     *addr += 0x40400;
     dword_CODE_bss_80069588 = *addr;
-    romCopy(dword_CODE_bss_80069588, (void *)(s32)&unknown2, ALIGN64_V2(((u32)&unknown2_end - (u32)&unknown2)));
-    rle_expand_8bit(dword_CODE_bss_80069588, dword_CODE_bss_8006958C);
+    romCopy(PORT_N64PTR(void, dword_CODE_bss_80069588), PORT_N64PTR(void, &unknown2), ALIGN64_V2(((u32)&unknown2_end - (u32)&unknown2)));
+    rle_expand_8bit(PORT_N64PTR(u8, dword_CODE_bss_80069588), PORT_N64PTR(u8, dword_CODE_bss_8006958C));
 }
 
 
@@ -492,11 +496,7 @@ void initializeGunBarrelIntro(u8 *gfxBuffer, s32 bufferSize)
     bufferSize -= 0x200;
     gfxBuffer += 0x200;
     
-#ifdef PORT
-    createGunbarrelRenderHole((struct s_display_list_something *)(uintptr_t)(u32)(barrelDisplayListPtr), 0x1E);  /* D441: zero-extend s32-held DRAM ptr */
-#else
-    createGunbarrelRenderHole(barrelDisplayListPtr, 0x1E);
-#endif
+    createGunbarrelRenderHole(PORT_N64PTR(struct s_display_list_something, barrelDisplayListPtr), 0x1E);
     
     gunbarrelgfxListPointer = (Gfx*)gfxBuffer;
 #ifdef PORT
@@ -526,7 +526,7 @@ void initializeGunBarrelIntro(u8 *gfxBuffer, s32 bufferSize)
      * N64 K0 value from the physical offset; seg_addr() passes it through to
      * the KSEG0 mirror at 0x80000000 (segments 7/8 are never registered, so
      * the unmarked-segment path is skipped). */
-    sub_GAME_7F01BFF8(gunbarrelgfxListPointer, (Vtx *)(OS_K0_TO_PHYSICAL((void *)barrelDisplayListPtr) | 0x80000000u), 0x1E);
+    sub_GAME_7F01BFF8(gunbarrelgfxListPointer, (Vtx *)(OS_K0_TO_PHYSICAL((void *)portN64ToHost((u32)barrelDisplayListPtr)) | 0x80000000u), 0x1E);
 #else
     sub_GAME_7F01BFF8(gunbarrelgfxListPointer, barrelDisplayListPtr + 0x80000000, 0x1E);
 #endif

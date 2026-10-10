@@ -1,4 +1,7 @@
 #include <ultra64.h>
+#ifdef PORT
+#include <stdio.h> /* D589 D589POOL probe only (decode-time full pool dump) */
+#endif
 #include "bondconstants.h"
 #include "image.h"
 #include "image_bank.h"
@@ -300,6 +303,56 @@ s32 texInflateZlib(u8 *src, u8 *dst, s32 arg2, s32 forcenumimages, struct texpoo
 
         decompressdata(img_curpos, &scratch2, (struct huft *)&scratch);
         imagebytesout = texAlignIndices(scratch2, width, height, format, &dst[totalbytesout]);
+#ifdef PORT
+        /* D589 pin probe: companion to the non-zlib D589SRC/D589DST dumps --
+         * for the first ~60 zlib texture files, print the first 32 bytes of
+         * the DECOMPRESSED scratch and of the POOL just written, so a
+         * same-seed A/B localizes whether a platform divergence enters at
+         * the zlib output, the pool write, or after the write (memory view).
+         * Diagnostic-only, inert unless GE_ZLIBDUMP is set; print only. */
+        if (j == 0)
+        {
+            static int s_zdump = -1;
+            if (s_zdump < 0)
+                s_zdump = getenv("GE_ZLIBDUMP") ? 60 : 0;
+            if (s_zdump-- > 0)
+            {
+                int k;
+                osSyncPrintf("ZDUMP texnum=%d fmt=%d w=%d h=%d scratch=",
+                             (int)arg4->rightpos->texturenum, (int)format, (int)width, (int)height);
+                for (k = 0; k < 32; k++)
+                    osSyncPrintf(" %02x", (unsigned)scratch2[k]);
+                osSyncPrintf(" pool=");
+                for (k = 0; k < 32; k++)
+                    osSyncPrintf(" %02x", (unsigned)dst[totalbytesout + k]);
+                osSyncPrintf("\n");
+            }
+        }
+        /* D589 pin probe (session D+): FULL decoded-image pool dump at DECODE
+         * time (zlib path -- post-texAlignIndices, pre-swap), the companion
+         * to the non-zlib D589POOL dump above. Same env gate, same
+         * address-keyed naming (texdump/d_z_<texnum>.bin). */
+        if (j == 0)
+        {
+            static int s_d589poolz = -1;
+            if (s_d589poolz < 0)
+                s_d589poolz = getenv("GE_D589POOL") ? 300 : 0;
+            if (s_d589poolz-- > 0)
+            {
+                char pn[64];
+                snprintf(pn, sizeof pn, "texdump/d_z_%d.bin", (int)arg4->rightpos->texturenum);
+                FILE* pf = fopen(pn, "wb");
+                if (pf)
+                {
+                    fwrite(&dst[totalbytesout], 1, (size_t)imagebytesout, pf);
+                    fclose(pf);
+                }
+                osSyncPrintf("D589POOL z texnum=%d addr=%p bytes=%d\n",
+                             (int)arg4->rightpos->texturenum, (void *)&dst[totalbytesout],
+                             (int)imagebytesout);
+            }
+        }
+#endif
         texSetBitstring(rzipGetSomething());
 
         if ((arg2 == 1) && (forcenumimages > 0))
@@ -974,6 +1027,30 @@ s32 texInflateNonZlib(u8 *src, u8 *dst, s32 arg2, s32 forcenumimages, struct tex
             osSyncPrintf("D219RAW texnum=%d format=%d width=%d height=%d compmethod=%d i=%d\n",
                          (int)g_TexNumToLoad, (int)format, (int)width, (int)height, (int)compmethod, (int)i);
         }
+        /* D589 next-step (docs/dev/findings.md): diagnostic-only, inert
+         * unless GE_TEXSRC is set. Log the first 32 SOURCE bytes (payload
+         * start, pre-decode) of the first image of every non-zlib RZ file,
+         * so a same-seed A/B can compare the bitstream region on both
+         * platforms: the pool-side GE_TEXRAW dumps are a clean per-word
+         * reversal (rev32) on arm64, and this tells us whether the source
+         * region is already reversed (upstream) or the write is.
+         * No behavior change -- print only. */
+        if (i == 0)
+        {
+            static int s_d589src = -1;
+            if (s_d589src < 0)
+                s_d589src = getenv("GE_TEXSRC") ? 500 : 0;
+            if (s_d589src-- > 0)
+            {
+                const u8 *pp = (const u8 *)img_curpos;
+                int k;
+                osSyncPrintf("D589SRC texnum=%d fmt=%d w=%d h=%d cm=%d src=",
+                             (int)g_TexNumToLoad, (int)format, (int)width, (int)height, (int)compmethod);
+                for (k = 0; k < 32; k++)
+                    osSyncPrintf(" %02x", (unsigned)pp[k]);
+                osSyncPrintf("\n");
+            }
+        }
 #endif
 
         switch (compmethod)
@@ -1085,6 +1162,58 @@ s32 texInflateNonZlib(u8 *src, u8 *dst, s32 arg2, s32 forcenumimages, struct tex
             for (dbgk = 0; dbgk < 12 && dbgk < width * height; dbgk++)
                 osSyncPrintf(" %04x", (unsigned)p16[dbgk]);
             osSyncPrintf("\n");
+        }
+        /* D589 next-step (docs/dev/findings.md): companion to GE_TEXSRC --
+         * dump the first 32 POOL bytes (post-decode, pre-swap/shrink) of the
+         * first image of every non-zlib RZ file, so a same-seed A/B tells us
+         * which pool writes (if any) diverge between platforms. The source
+         * bytes (GE_TEXSRC) are byte-identical on both; this shows the
+         * decoded output. Diagnostic-only, inert unless GE_TEXSRC is set.
+         * No behavior change -- print only. */
+        if (i == 0)
+        {
+            static int s_d589dst = -1;
+            if (s_d589dst < 0)
+                s_d589dst = getenv("GE_TEXSRC") ? 500 : 0;
+            if (s_d589dst-- > 0)
+            {
+                const u8 *oo = &dst[totalbytesout];
+                int k;
+                osSyncPrintf("D589DST texnum=%d fmt=%d w=%d h=%d cm=%d dst=",
+                             (int)g_TexNumToLoad, (int)format, (int)width, (int)height, (int)compmethod);
+                for (k = 0; k < 32; k++)
+                    osSyncPrintf(" %02x", (unsigned)oo[k]);
+                osSyncPrintf("\n");
+            }
+        }
+        /* D589 pin probe (session D+): FULL decoded-image pool dump at DECODE
+         * time (non-zlib path), so a same-seed A/B tells a writer-side
+         * divergence (pool already rev32 the instant the decode writes it)
+         * from a later clobber (pool correct at decode, rev32 at import time).
+         * The 32-byte D589DST/ZDUMP windows above are too narrow to settle
+         * that. Writes texdump/d_nz_<texnum>.bin and logs the pool address
+         * (host pointer, comparable to GE_TEXI's addr=) so the bin can be
+         * matched to the import-time rNNN bin by address. Diagnostic-only,
+         * inert unless GE_D589POOL. */
+        if (i == 0)
+        {
+            static int s_d589pool = -1;
+            if (s_d589pool < 0)
+                s_d589pool = getenv("GE_D589POOL") ? 300 : 0;
+            if (s_d589pool-- > 0)
+            {
+                char pn[64];
+                snprintf(pn, sizeof pn, "texdump/d_nz_%d.bin", (int)g_TexNumToLoad);
+                FILE* pf = fopen(pn, "wb");
+                if (pf)
+                {
+                    fwrite(&dst[totalbytesout], 1, (size_t)imagebytesout, pf);
+                    fclose(pf);
+                }
+                osSyncPrintf("D589POOL nz texnum=%d addr=%p bytes=%d\n",
+                             (int)g_TexNumToLoad, (void *)&dst[totalbytesout],
+                             (int)imagebytesout);
+            }
         }
 #endif
 
@@ -1744,18 +1873,19 @@ void texReadAlphaBits(u8 *image,s32 count)
 s32 texReadUncompressed(u8 *dst, s32 width, s32 height, s32 format)
 {
 #ifdef PORT
-	u32 *dst32 = (u32 *)(((uintptr_t)dst + 0xf) & ~0xf);
+	/* MACOS-TEXALIGN: aligning a host pointer through u32 truncates it -- on arm64 dst is
+	 * ~0x1000_70xx_xxxx and these would become unbased 0x70xx_xxxx, then be
+	 * written through. Align at full pointer width instead. Identical result
+	 * where pointers are 32-bit. NOTE: currently unreachable on the PC port --
+	 * textures come from the pre-converted pccg sidecars, and a GE_D303 probe
+	 * over a full level boot recorded zero calls -- so this is latent, fixed
+	 * defensively rather than in response to an observed fault. */
+	u32 *dst32 = (u32 *)(((uintptr_t)dst + 0xf) & ~(uintptr_t)0xf);
+	u16 *dst16 = (u16 *)(((uintptr_t)dst + 7) & ~(uintptr_t)7);
+	u8 *dst8 = (u8 *)(((uintptr_t)dst + 7) & ~(uintptr_t)7);
 #else
 	u32 *dst32 = (u32 *)(((u32)dst + 0xf) & ~0xf);
-#endif
-#ifdef PORT
-	u16 *dst16 = (u16 *)(((uintptr_t)dst + 7) & ~7);
-#else
 	u16 *dst16 = (u16 *)(((u32)dst + 7) & ~7);
-#endif
-#ifdef PORT
-	u8 *dst8 = (u8 *)(((uintptr_t)dst + 7) & ~7);
-#else
 	u8 *dst8 = (u8 *)(((u32)dst + 7) & ~7);
 #endif
 	s32 x;
@@ -2618,6 +2748,7 @@ void texLoad(s32 *updateword, struct texpool *pool)
             }
 
             pool->leftpos += bytesout;
+
         }
 
         texFreeBytesInBuffer(pool);

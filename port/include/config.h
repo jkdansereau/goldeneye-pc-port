@@ -35,6 +35,7 @@ void configRegisterString(const char *key, char *value, int bufSize);
  * a file load). Return 1 if the key exists. Used by the settings presets. */
 int configSetValue(const char *key, double v);
 int configGetValue(const char *key, double *out);
+int configIntKeyWasLoaded(const char *key);   /* key present in the ini at last configLoad */
 
 /* [Debug] knobs, env-var-or-ini. GE_PCDUMP / GE_INPUTLOG override the ini. */
 const char *configGetFrameDump(void);   /* "lo-hi[:step]" or NULL if unset */

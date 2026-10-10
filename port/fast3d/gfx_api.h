@@ -44,6 +44,13 @@ void gfx_start_frame(void);
 void gfx_run(Gfx* commands);
 void gfx_end_frame(void);
 void gfx_set_target_fps(int);
+/* D578: frame interpolation (gfx_pc.cpp), driven by the render worker. */
+void gfx_interp_reset(void);
+int gfx_interp_tick(Gfx* commands, const float* alphas, int n, int base);
+int gfx_interp_last_exact(void);
+int gfx_interp_body_runs(void);
+void gfx_interp_trigger_counts(unsigned* turn, unsigned* clamp, unsigned* set, unsigned* room);
+void gfx_interp_present(int slot, int vsync);
 void gfx_set_texture_filter(enum FilteringMode mode);
 void gfx_set_mipmap_filter(enum MipmapFilteringMode mode);
 void gfx_set_fix_mip_textures(int on);

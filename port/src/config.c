@@ -226,6 +226,13 @@ static char *trim(char *s)
 static int s_unknownKeys;
 static char s_unknownFirst[48];
 
+/* Keys the port used to write and has since retired: dropped silently
+ * (not counted as unknown) and not written back by configSave. */
+static const char *const kRetiredKeys[] = {
+    "Input.MenuPointerMode",   /* D574 */
+    "Input.MenuPointerSpeed",  /* D574 */
+};
+
 static void applyKV(const char *dottedKey, const char *val)
 {
     for (int i = 0; i < numIntOpts; i++) {
@@ -272,6 +279,9 @@ static void applyKV(const char *dottedKey, const char *val)
             strOpts[i].value[strOpts[i].bufSize - 1] = 0;
             return;
         }
+    }
+    for (size_t r = 0; r < sizeof(kRetiredKeys) / sizeof(kRetiredKeys[0]); r++) {
+        if (ci_eq(kRetiredKeys[r], dottedKey)) return;  /* D574 */
     }
     sysLogPrintf(LOG_NOTE, "config: unknown key '%s' (ignored)", dottedKey);
     if (s_unknownKeys++ == 0) {   /* D472: surfaced once in the F10 overlay */
@@ -323,6 +333,16 @@ int configSetValue(const char *key, double v)
             return 1;
         }
     }
+    return 0;
+}
+
+/* 1 if the last configLoad read this registered int key from the ini (0 on a
+ * fresh install or an ini that predates the key). Lets a default depend on
+ * "the user never chose" (D578 gamescope VSync default). */
+int configIntKeyWasLoaded(const char *key)
+{
+    for (int i = 0; i < numIntOpts; i++)
+        if (ci_eq(intOpts[i].key, key)) return intOpts[i].seen;
     return 0;
 }
 

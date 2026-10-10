@@ -188,7 +188,6 @@ extern s32 lvlGetCurrentStageToLoad(void);
 #define CONTROLLER_CONFIG_HONEY_    0
 #define CONTROLLER_CONFIG_SOLITARE_ 1
 #define CONTROLLER_CONFIG_GOODNIGHT_ 3   /* 1.4: SOLITARE movement, swapped button roles (bondview2.c) */
-#define MENU_POINTER_GAIN  1.5
 #define TRIG_THRESHOLD     (30 * 256)
 #define RSTICK_THRESHOLD   0x4000
 /* Mouse-look tuning. GE's aim model is mode-dependent (bondview2.c
@@ -479,7 +478,7 @@ static int controlScheme = 0;                    /* D513 Input.ControlScheme: 0 
 static char padStr[MAX_PADS][PA_COUNT][32];      /* Input.Pad[N].<Action> */
 static char padStrKey[MAX_PADS][PA_COUNT][40];
 static PadTable padTabBuf[2];
-static SDL_atomic_t padTabPub;                   /* published PadTable* */
+static void *padTabPub;                         /* published PadTable*; pointer-sized/aligned for SDL_Atomic{Get,Set}Ptr (D599) */
 static unsigned padTabSig = 0;
 static int padTabValid = 0;
 
@@ -835,7 +834,14 @@ void inputApplyMouseRequests(void)
  * pointer could not reach the outer grid cells. Click-to-lock is the only
  * mode now; existing ini files setting the old key are ignored.
  * Controller input is entirely independent of all of this. */
+/* D594: on macOS the FOCUS_GAINED-driven click-to-lock is unreliable (AppKit
+ * key-window; no focus events over ssh), so start armed like PD's MLOCK_ON --
+ * the mouse is locked by default in-stage (see reconcileGrab()). */
+#ifdef PLATFORM_MACOS
+static int captureArmed     = 1;   /* D594: PD MLOCK_ON default (see reconcileGrab) */
+#else
 static int captureArmed     = 0;   /* user has clicked to lock (capture mode) */
+#endif
 static int windowFocused    = 1;
 static int mouseAimSpeed  = 16;     /* aim-mode sensitivity, percent (B3: 50 -> 25 M-29 -> 16; still overshot at 25) */
 static int gepdSens       = 38;     /* D194 Input.GepdSens: GEPD SENSITIVITY setting, range 1..500
@@ -861,7 +867,6 @@ static int sensLink       = 1;     /* F10 overlay: keep aim/turn sens at the
 static int mouseTurnSpeed = 50;     /* hipfire yaw sensitivity, percent
                                         (40 = M-123 match point at GepdSens=30; 50 = the user's
                                         "~20-35% faster" default request, same +25% as gepdSens) */
-static int menuPointerSpeed = 100;  /* front-end cursor speed, percent */
 static int mouseInvertY   = 0;      /* 1 = mouse-down looks up */
 static int mouseYScale    = 100;    /* extra vertical (pitch) sensitivity, % */
 static int mouseSmoothing = 0;      /* 0 = raw; 1..90 = low-pass strength (%) */
@@ -1078,7 +1083,6 @@ static int wheelFwd  = 0;
 static int wheelBack = 0;
 
 /* Item 1 (D165) — front-end pointer P-controller state. */
-static int    menuPointerMode  = 1;    /* 0 = legacy velocity, 1 = 1:1 pointer */
 static int    hipfirePitchSpeed = 100; /* D166: hipfire pitch pulse rate, percent */
 static int    menuPrevActive = 0;
 static double hipPitchPhase = 0.0;              /* D166: hipfire pitch pulse phase 0..1     */
@@ -1250,6 +1254,8 @@ static void inputOpenPads(void)
  * SUSTAINED: the stick stays deflected until a later entry changes it; SNONE
  * re-centres it. CHOLD/CREL hold/release GEPD crouch (D377);
  * UHOLD/UREL and RELOADHOLD/RELOADREL exercise dedicated use/reload (D378).
+ * MLB<n>/MRB<n> (D597) press/release the sustained mouse buttons (n=1 press,
+ * 0 release; slot 0 only): headless fire for the D595-class regression.
  * "Frame" = count of controller-0 reads since launch (roughly
  * 2 per rendered frame -- watch GE_INPUTLOG to calibrate). Unset env => no
  * effect; when set it is the ONLY controller-0 input source.
@@ -1279,7 +1285,7 @@ static int scriptMsMode(void)
 }
 
 struct scriptEntry { long frame; unsigned mask; int sx, sy; int hasStick;
-                     int hasMouse, mdx, mdy; int hasHold, hold;    /* D337 mouse/aim tokens */
+                     int hasMouse, mdx, mdy, mlb, mrb; int hasHold, hold; /* D337/D597 mouse tokens */
                      int hasZHold, zhold;                          /* D207: sustained fire */
                      int hasCHold; unsigned chold;                 /* abpad: sustained C buttons (1.2 walk/strafe) */
                      int hasCrouch, crouch;                       /* D377: free-crouch QA */
@@ -1292,7 +1298,7 @@ struct scriptSlot {
     int count;        /* -1 = not parsed yet, 0 = parsed empty */
     long frame;       /* controller reads for this slot since launch */
     int curSX, curSY; /* stick set by the last scriptApply() for this slot */
-    int mouseOn, mdx, mdy;   /* sustained scripted mouse (slot 0 only) */
+    int mouseOn, mdx, mdy, mlb, mrb;   /* sustained scripted mouse (slot 0 only) */
     int hold, zhold, crouch, use, reload;  /* latest sustained holds */
     unsigned chold;          /* latest sustained C-button mask */
     int ignoredWarned;       /* P1..P3: warned once about mouse/crouch tokens */
@@ -1350,6 +1356,29 @@ static void scriptApplyToken(struct scriptEntry *e, const char *s, int n,
         memcpy(num, s + 3, k); num[k] = 0;
         e->hasMouse = 1;
         if (s[2] == 'X' || s[2] == 'x') e->mdx = atoi(num); else e->mdy = atoi(num);
+        return;
+    }
+    /* D597: sustained scripted mouse buttons: MLB<n> MRB<n> (n=1 press,
+     * 0 release; latest entry wins), slot 0 only. Headless fire for the
+     * D595-class regression: aim with MDX, MLB1 on an AI -> struck animation
+     * with no SIGSEGV. A headless window has no real mouse state, so the
+     * bit ORs into the polled mask (see the D337 block in
+     * inputComputePadSlot); the game's mouse-button bindings (LMB=IA_FIRE)
+     * then drive it like a real press. */
+    if (n > 3 && (SDL_strncasecmp("MLB", s, 3) == 0 || SDL_strncasecmp("MRB", s, 3) == 0)) {
+        if (slot > 0) {   /* no mouse path on slots 1-3: ignore, warn once */
+            struct scriptSlot *st = &scriptSlots[slot];
+            if (!st->ignoredWarned) {
+                st->ignoredWarned = 1;
+                sysLogPrintf(LOG_WARNING, "%s: mouse tokens are ignored for slots 1-3 ('%.*s')",
+                             scriptTag(slot), n, s);
+            }
+            return;
+        }
+        char num[16]; int k = n - 3; if (k > 15) k = 15;
+        memcpy(num, s + 3, k); num[k] = 0;
+        e->hasMouse = 1;
+        if (s[1] == 'L') e->mlb = atoi(num) != 0; else e->mrb = atoi(num) != 0;   /* MLB/MRB: the L/R is index 1 */
         return;
     }
     if (n == 5 && SDL_strncasecmp("RHOLD", s, 5) == 0) { e->hasHold = 1; e->hold = 1; return; }
@@ -1417,7 +1446,7 @@ static void scriptParse(int slot)
         e->mask = 0;
         e->sx = e->sy = 0;
         e->hasStick = 0;
-        e->hasMouse = e->mdx = e->mdy = 0;
+        e->hasMouse = e->mdx = e->mdy = e->mlb = e->mrb = 0;
         e->hasHold = e->hold = 0;
         e->hasZHold = e->zhold = 0;
         e->hasCHold = 0; e->chold = 0;
@@ -1466,6 +1495,8 @@ static void scriptRefreshHolds(int slot)
             st->mouseOn = 1;
             st->mdx = st->entries[i].mdx;
             st->mdy = st->entries[i].mdy;
+            st->mlb = st->entries[i].mlb;   /* D597 */
+            st->mrb = st->entries[i].mrb;
         }
         if (st->entries[i].hasHold && st->entries[i].frame > bestH) {
             bestH = st->entries[i].frame;
@@ -1492,6 +1523,75 @@ static void scriptRefreshHolds(int slot)
             st->reload = st->entries[i].reload;
         }
     }
+}
+
+/* Input record/replay (test harness, port-only). GE_INPUTRECORD=<file>
+ * appends controller 0's final button mask + stick per controller read;
+ * GE_INPUTREPLAY=<file> feeds the same stream back read for read (then
+ * neutral). Reads are tick-driven, so with -level_XX and a pinned GE_RSEED a
+ * replay re-plays a human run (tools_pc/levelbench.sh --replay). Pad only:
+ * mouse aim is not captured; D404 centred right-stick look is (fields 4-6). */
+static int s_replayActive;                          /* GE_INPUTREPLAY stream open */
+static int s_recPadDX, s_recPadDY, s_recPadDirect;  /* this poll's D404 pad-direct look */
+static int padDirectCompute(int dx, int dy);
+
+static FILE *s_rec, *s_rep;
+static int s_rrInit, s_repFetched;
+static struct { unsigned b; int x, y, pdx, pdy, pd, use, reload; } s_repCur;
+static int s_recUse, s_recReload;   /* this poll's dedicated use/reload (D378) */
+
+static void inputRecordReplayInit(void)
+{
+    if (s_rrInit) return;
+    s_rrInit = 1;
+    const char *r = getenv("GE_INPUTRECORD");
+    const char *p = getenv("GE_INPUTREPLAY");
+    if (p && *p) {
+        s_rep = fopen(p, "r");
+        s_replayActive = s_rep != NULL;
+        sysLogPrintf(LOG_NOTE, "GE_INPUTREPLAY %s: %s", p, s_rep ? "playing" : "cannot open");
+    }
+    if (r && *r) {
+        s_rec = fopen(r, "w");
+        if (s_rec) setvbuf(s_rec, NULL, _IOLBF, 0);   /* survive a crash/kill */
+        sysLogPrintf(LOG_NOTE, "GE_INPUTRECORD %s: %s", r, s_rec ? "recording" : "cannot open");
+    }
+}
+
+/* Read this poll's replay line (once per controller-0 poll). */
+static void replayFetch(void)
+{
+    inputRecordReplayInit();
+    if (!s_rep || s_repFetched) return;
+    s_repFetched = 1;
+    char line[128];
+    memset(&s_repCur, 0, sizeof s_repCur);
+    if (!fgets(line, sizeof line, s_rep) ||
+        sscanf(line, "%x %d %d %d %d %d %d %d", &s_repCur.b, &s_repCur.x, &s_repCur.y,
+               &s_repCur.pdx, &s_repCur.pdy, &s_repCur.pd, &s_repCur.use, &s_repCur.reload) < 3) {
+        sysLogPrintf(LOG_NOTE, "GE_INPUTREPLAY: end of stream");
+        fclose(s_rep);
+        s_rep = NULL;
+        s_replayActive = 0;
+        memset(&s_repCur, 0, sizeof s_repCur);
+    }
+}
+
+static void inputRecordReplay(unsigned *button, int *sx, int *sy)
+{
+    replayFetch();
+    if (s_replayActive || s_repFetched) {
+        *button = s_repCur.b; *sx = s_repCur.x; *sy = s_repCur.y;
+        /* D404 centred pad aim turns the camera directly, not via the
+         * stick channel: re-apply the recorded deflection, same poll. */
+        if (s_repCur.pd) padDirectCompute(s_repCur.pdx, s_repCur.pdy);
+    }
+    s_repFetched = 0;
+    if (s_rec) {
+        fprintf(s_rec, "%x %d %d %d %d %d %d %d\n", *button, *sx, *sy,
+                s_recPadDX, s_recPadDY, s_recPadDirect, s_recUse, s_recReload);
+    }
+    s_recPadDX = s_recPadDY = s_recPadDirect = s_recUse = s_recReload = 0;
 }
 
 static unsigned scriptApply(int slot, unsigned button)
@@ -2038,9 +2138,18 @@ static void inputBindingProbe(void)
 static int actHeld(const Uint8 *ks, int act)
 {
     /* Front-end mouse clicks stay fixed UI controls. Click-to-lock while
-     * playing cannot fire a newly rebound button until the grab succeeds. */
-    Uint32 mb = mouseEnabled && mouseGrabbed &&
-                current_menu == GE_MENU_RUN_STAGE && !optionsOverlayIsOpen()
+     * playing cannot fire a newly rebound button until the grab succeeds.
+     * D594: the in-stage test must match the file-wide `menuMode` semantics
+     * (RUN_STAGE *or* INVALID). A forced-level start (-level_NN) leaves
+     * current_menu at MENU_INVALID, so the old strict ==RUN_STAGE check
+     * silently disabled every mouse-driven action (fire, aim) in that path --
+     * the reason mouse look worked but the mouse button never did. PD has no
+     * such gate; a real front-end menu is a specific MENU_ id (menuMode 1),
+     * so it still stays a UI control. */
+    int inStage = (current_menu == GE_MENU_RUN_STAGE ||
+                   current_menu == GE_MENU_INVALID);
+    Uint32 mb = mouseEnabled && mouseGrabbed && inStage &&
+                !optionsOverlayIsOpen()
               ? SDL_GetMouseState(NULL, NULL) : 0;
     for (int k = 0; k < BIND_MAX_KEYS; k++) {
         int code = g_bind[act][k];
@@ -2245,6 +2354,10 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                 mouseDX = (double)scriptSlots[0].mdx;
                 mouseDY = (double)scriptSlots[0].mdy;
                 mouseGrabbed = 1;
+                /* D597: scripted sustained mouse buttons (MLB/MRB) OR into the
+                 * polled mask; a headless window has no real mouse state. */
+                if (scriptSlots[0].mlb) mb |= SDL_BUTTON(1);
+                if (scriptSlots[0].mrb) mb |= SDL_BUTTON(2);
             }
         }
         /* D196: the F10 options overlay forces the OS cursor visible via
@@ -2373,6 +2486,9 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
         int padReload = (slot0Held & (1u << PA_RELOAD)) != 0;
         int useNow = scriptIsActive(0) ? scriptSlots[0].use : (actHeld(ks, IA_CANCEL) || padUse);
         int reloadNow = scriptIsActive(0) ? scriptSlots[0].reload : (actHeld(ks, IA_RELOAD) || padReload);
+        replayFetch();
+        if (s_replayActive) { useNow = s_repCur.use; reloadNow = s_repCur.reload; }
+        s_recUse = useNow; s_recReload = reloadNow;
         int playable = inputCanUseGameplayActions(menuMode);
         /* D407: on the N64 the B bit also drives bondview2.c's tank
          * handlers (board when g_BondCanEnterTank, exit while
@@ -2490,14 +2606,7 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                              lookDtScale, edx, dyLook);
             }
 
-            if (menuMode && !menuPointerMode) {
-                /* Legacy velocity mode (Input.MenuPointerMode = 0): mouse
-                 * velocity -> stick. Kept as a fallback; integrates as
-                 * velocity^2 through front.c (D165). */
-                double g = MENU_POINTER_GAIN * (menuPointerSpeed / 100.0);
-                sx += (int)(edx * g);
-                sy -= (int)(dyLook * g);   /* front-end cursor: +sy = up */
-            } else if (menuMode) {
+            if (menuMode) {
                 /* Front-end menu pointer.
                  *
                  * front.c frontUpdateControlStickPosition() is the game's cursor
@@ -2805,7 +2914,10 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                 rys = (int)lround(padSmSY[idx]);
             }
             if (padLookInvertY) rys = -rys;
-            if (aimModeGet() == AIMMODE_CENTRED && padDirectCompute(rxs, rys)) {
+            if (idx == 0) { s_recPadDX = rxs; s_recPadDY = rys; s_recPadDirect = 0; }
+            if (aimModeGet() == AIMMODE_CENTRED && !(idx == 0 && s_replayActive) &&
+                padDirectCompute(rxs, rys)) {
+                if (idx == 0) s_recPadDirect = 1;
                 /* D404 (resolved by implementation, 2026-09-28): pad CENTRED
                  * aim -- the stick drives the camera directly (crosshair
                  * pinned at centre), the pad-side twin of the mouse CENTRED
@@ -2964,6 +3076,10 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
     if (sy > STICK_MAX)  sy = STICK_MAX;
     if (sy < -STICK_MAX) sy = -STICK_MAX;
 
+    if (idx == 0) {
+        inputRecordReplay(&button, &sx, &sy);
+    }
+
     if (stick_x) *stick_x = (signed char)sx;
     if (stick_y) *stick_y = (signed char)sy;
 
@@ -3013,7 +3129,17 @@ static void applyGrab(int want)
  * per controller-0 poll (menuMode known there) and from the notify hooks. */
 static void reconcileGrab(int menuMode)
 {
+#ifdef PLATFORM_MACOS
+    /* D594: the FOCUS_GAINED-driven `windowFocused` gate is unreliable on
+     * macOS (AppKit key-window; no focus events over ssh), so a click-to-lock
+     * that waits on it never arms and the mouse button + look stay dead. PD
+     * keeps the mouse locked by default (MLOCK_ON); match it -- drop only the
+     * focus gate. Menus and aim-holds still free the cursor (menuMode /
+     * s_absAimSuspend, exactly as on every other platform). */
+    int want = captureArmed && !menuMode;
+#else
     int want = captureArmed && windowFocused && !menuMode; /* click-to-lock */
+#endif
     if (s_absAimSuspend) {
         want = 0;   /* D194: an aim hold wants the free cursor for absolute aim */
     }
@@ -3929,8 +4055,6 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.TankAimScale", &tankAimScale, 10, 300);   /* D407 */
     configRegisterInt("Input.MouseTurnSpeed", &mouseTurnSpeed, 1, 500);
     configRegisterInt("Input.SensLink", &sensLink, 0, 1);
-    configRegisterInt("Input.MenuPointerSpeed", &menuPointerSpeed, 10, 500);
-    configRegisterInt("Input.MenuPointerMode", &menuPointerMode, 0, 1);
     configRegisterInt("Input.HipfirePitchSpeed", &hipfirePitchSpeed, 10, 500);
     configRegisterInt("Input.MouseInvertY", &mouseInvertY, 0, 1);
     configRegisterInt("Input.MouseYScale", &mouseYScale, 1, 500);

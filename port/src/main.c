@@ -23,6 +23,7 @@
 
 #include "platform.h"
 #include "system.h"
+#include "portaddr.h"
 #include "config.h"
 #include "updatecheck.h"
 #include "fs.h"
@@ -133,10 +134,22 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    /* D576: also log to $S/ge007.log (next to the ini) -- on a normal
+     * double-click launch stderr is lost. $S resolves from the CWD/exe dir
+     * and needs no prior setup, so open it here and let the banner below
+     * be the file's first line. */
+    sysLogOpenFile();
+
     sysLogPrintf(LOG_INFO, "GoldenEye 007 PC port starting "
                 "(%s, %s %s) -- %s",
                 GE007_ROMID, GE007_VERSION_HASH, GE007_VERSION_CODENAME,
                 GE007_ORIGIN_URL);
+
+    /* Reserve the N64 address-space window before anything else maps or
+     * allocates (macOS: 4 GiB PROT_NONE; elsewhere a no-op). Must precede
+     * crashInit so the reservation is in place for every later stage, and any
+     * failure here is reported before SDL/GL are involved. */
+    portAddrInit();
 
     /* Crash handler first, so any failure below is debuggable. */
     crashInit();

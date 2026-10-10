@@ -1,4 +1,9 @@
 #include <ultra64.h>
+#if defined(PORT)
+#include "portaddr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #ifdef PORT
 #include <stdio.h>
 #include <stdlib.h>
@@ -435,7 +440,8 @@ void bondviewLoadSetupIntroSection(void)
         {
             rand_camera_index--;
 #ifdef PORT
-            ptr_random06cam_entry = (struct SetupIntroCamera *)(uintptr_t)ptr_random06cam_entry->prev;
+            /* D88/MACOS-ADDR-WINDOW: prev is a u32 holding the truncated host pointer; re-base. */
+            ptr_random06cam_entry = PORT_N64PTR(struct SetupIntroCamera, ptr_random06cam_entry->prev);
 #else
             ptr_random06cam_entry = ptr_random06cam_entry->prev;
 #endif

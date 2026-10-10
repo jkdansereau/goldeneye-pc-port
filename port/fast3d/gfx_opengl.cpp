@@ -20,6 +20,11 @@
 #include "gfx_rendering_api.h"
 #include "gfx_pc.h"
 
+/* D578 L3: the glad (GL 1.0 base) header lacks this token. */
+#ifndef GL_CLEAR_COLOR
+#define GL_CLEAR_COLOR 0x0C22
+#endif
+
 using namespace std;
 
 struct ShaderProgram {
@@ -757,18 +762,29 @@ static void gfx_opengl_upload_texture(const uint8_t* rgba32_buf, uint32_t width,
          * globalDL_0x078..0x9a8) -- that's the one shape we actually need. */
         const bool is_fire_shape = (width == 16 && height == 14);
         if ((is_fire_shape || td < 400) && width && height && width < 4096 && height < 4096) {
-            char nm[128];
+            char base[128], nm[160];
             if (is_fire_shape) {
-                snprintf(nm, sizeof nm, "texdump/fire%03d_%ux%u_mip%d.ppm", td_fire++, width, height, (int)gen_mipmaps);
+                snprintf(base, sizeof base, "texdump/fire%03d_%ux%u_mip%d", td_fire++, width, height, (int)gen_mipmaps);
             } else {
-                snprintf(nm, sizeof nm, "texdump/t%03d_%ux%u_mip%d.ppm", td++, width, height, (int)gen_mipmaps);
+                snprintf(base, sizeof base, "texdump/t%03d_%ux%u_mip%d", td++, width, height, (int)gen_mipmaps);
             }
+            /* D592: PPM = the RGB triage view (alpha dropped). */
+            snprintf(nm, sizeof nm, "%s.ppm", base);
             FILE* f = fopen(nm, "wb");
             if (f) {
                 fprintf(f, "P6\n%u %u\n255\n", width, height);
                 for (uint32_t p = 0; p < width * height; p++)
                     fwrite(rgba32_buf + 4 * p, 1, 3, f);
                 fclose(f);
+            }
+            /* D592 (Q1): the EXACT 4-byte RGBA32 glTexImage2D input (with
+             * alpha), so the Mac/Win upload comparison is byte-exact (the PPM
+             * alone cannot reveal an alpha / channel-order artifact). */
+            snprintf(nm, sizeof nm, "%s.rgba32", base);
+            FILE* fb = fopen(nm, "wb");
+            if (fb) {
+                fwrite(rgba32_buf, 1, (size_t)width * height * 4, fb);
+                fclose(fb);
             }
         }
     }
@@ -1182,6 +1198,12 @@ static int s_gpuq_idx = 0, s_gpuq_valid[2] = { 0, 0 };
 static double s_gpuq_ms = 0.0;
 static int s_gpuq_n = 0, s_gpuq_frames = 0;
 
+/* D578: an extra interpolation pass of the same game frame must reuse its
+ * noise seed (frame_count advances once per game frame, as at 60 fps). */
+extern "C" void gfx_opengl_frame_count_rewind(void) {
+    frame_count--;
+}
+
 static void gfx_opengl_start_frame(void) {
     frame_count++;
     if (s_gpuq_on < 0) {
@@ -1262,6 +1284,74 @@ extern "C" bool gfx_opengl_dump_bound_fbo(uint32_t width, uint32_t height, const
 }
 
 static void gfx_opengl_finish_render(void) {
+}
+
+/* D578: present queue for frame interpolation (gfx_pc.cpp). Each slot is a
+ * plain RGBA8 colour FBO at window size; the default framebuffer is single-
+ * sampled (MSAA lives in the game framebuffer), so a nearest blit each way is
+ * an exact copy. Bindings are put back the way copy_framebuffer leaves them. */
+static GLuint s_islot_fbo[GFX_INTERP_SLOTS], s_islot_tex[GFX_INTERP_SLOTS];
+static uint32_t s_islot_w, s_islot_h;
+static uint32_t s_islot_tw[GFX_INTERP_SLOTS], s_islot_th[GFX_INTERP_SLOTS];   /* D583: per-slot storage size */
+
+static void gfx_opengl_interp_restore_binding(void) {
+    glBindFramebuffer(GL_FRAMEBUFFER, current_framebuffer == 0 ? 0 : framebuffers[current_framebuffer].fbo);
+    glReadBuffer(GL_BACK);
+    glEnable(GL_SCISSOR_TEST);
+}
+
+extern "C" void gfx_opengl_interp_store(int slot, uint32_t width, uint32_t height) {
+    if (slot < 0 || slot >= GFX_INTERP_SLOTS || width == 0 || height == 0) {
+        return;
+    }
+    if (s_islot_fbo[0] == 0) {
+        glGenFramebuffers(GFX_INTERP_SLOTS, s_islot_fbo);
+        glGenTextures(GFX_INTERP_SLOTS, s_islot_tex);
+    }
+    if (width != s_islot_tw[slot] || height != s_islot_th[slot]) {
+        /* D583: each slot is sized on its first store at a new window size, so
+         * slots a mode never uses (5-8 below 240 Hz) never take VRAM. */
+        GLint prevTex = 0;
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);   /* fast3d caches its bindings */
+        glBindTexture(GL_TEXTURE_2D, s_islot_tex[slot]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, (GLsizei)width, (GLsizei)height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, s_islot_fbo[slot]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_islot_tex[slot], 0);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)prevTex);
+        s_islot_tw[slot] = width;
+        s_islot_th[slot] = height;
+    }
+    s_islot_w = width;
+    s_islot_h = height;
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glReadBuffer(GL_BACK);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_islot_fbo[slot]);
+    glBlitFramebuffer(0, 0, (GLint)width, (GLint)height, 0, 0, (GLint)width, (GLint)height,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    gfx_opengl_interp_restore_binding();
+}
+
+/* D578: block until the GL queue (and so a VSync'd swap) completes, so the
+ * render worker's present clock learns the display's real refresh timing. */
+extern "C" void gfx_opengl_interp_sync(void) {
+    glFinish();
+}
+
+extern "C" void gfx_opengl_interp_show(int slot) {
+    if (slot < 0 || slot >= GFX_INTERP_SLOTS || s_islot_fbo[slot] == 0 || s_islot_tw[slot] == 0) {
+        return;
+    }
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, s_islot_fbo[slot]);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    /* The slot's own size: one stored before a window resize can still be pending (D583 ring). */
+    glBlitFramebuffer(0, 0, (GLint)s_islot_tw[slot], (GLint)s_islot_th[slot], 0, 0, (GLint)s_islot_tw[slot], (GLint)s_islot_th[slot],
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    gfx_opengl_interp_restore_binding();
 }
 
 static int gfx_opengl_create_framebuffer() {
@@ -1405,6 +1495,29 @@ void gfx_opengl_clear_framebuffer(bool clear_color, bool clear_depth) {
     glEnable(GL_SCISSOR_TEST);
 }
 
+/* D579: scissored clear of one region of the bound target. Same
+ * bottom-up pixel coordinates as gfx_opengl_set_scissor. Mirrors the
+ * depth-mask save/restore of gfx_opengl_clear_framebuffer. */
+void gfx_opengl_clear_region(bool clear_color, bool clear_depth, int x, int y, int w, int h) {
+    if (w <= 0 || h <= 0) return;
+
+    GLbitfield mask = 0;
+    if (clear_color) {
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        mask |= GL_COLOR_BUFFER_BIT;
+    }
+    if (clear_depth) {
+        glDepthMask(GL_TRUE);
+        mask |= GL_DEPTH_BUFFER_BIT;
+    }
+    glScissor(x, y, w, h);
+    glEnable(GL_SCISSOR_TEST);
+    glClear(mask);
+    if (clear_depth) {
+        glDepthMask(current_depth_mask ? GL_TRUE : GL_FALSE);
+    }
+}
+
 void gfx_opengl_resolve_msaa_color_buffer(int fb_id_target, int fb_id_source) {
     if (!gfx_framebuffers_enabled) {
         return;
@@ -1541,6 +1654,7 @@ struct GfxRenderingAPI gfx_opengl_api = {
     gfx_opengl_start_draw_to_framebuffer,
     gfx_opengl_copy_framebuffer,
     gfx_opengl_clear_framebuffer,
+    gfx_opengl_clear_region,
     gfx_opengl_resolve_msaa_color_buffer,
     gfx_opengl_get_framebuffer_texture_id,
     gfx_opengl_select_texture_fb,

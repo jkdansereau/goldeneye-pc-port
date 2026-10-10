@@ -6,6 +6,16 @@
 #include "math.h"
 #include "math_floor.h"
 
+/* MACOS-ADDR-WINDOW/M2: these tables store animation addresses as N64 values (s32/union
+ * offset) that are then cast to pointers. Re-base when the pointer is formed;
+ * identity at PORT_ADDR_BASE == 0. */
+#if defined(PORT)
+#include "portaddr.h"
+#define ANI_ADDR(x) ((void *)portN64ToHost((u32)(x)))
+#else
+#define ANI_ADDR(x) ((void *)(x))
+#endif
+
 
 /**
  * Gets the number of currently allocated heads and bodies
@@ -191,7 +201,20 @@ s32 initResolveAnimTable(struct StruckAnim *entries)
             entry++;
             ptr_animation_table_addr = (struct StruckAnim *)(&ptr_animation_table);
 #ifdef PORT
-            entry[-1].struck_anim = (ModelAnimation *)(uintptr_t)(u32)((*((s32 *)entries)) + (0, address));  /* D441: zero-extend s32-held DRAM ptr */
+            /* D595 (2026-10-08, §A1 cross-tag): `ptr_animation_table` is a
+             * live host pointer. The original (s32) read truncated it to its
+             * low 32 bits: identity on x86_64 (PORT_ADDR_BASE == 0, the
+             * PERMANENT bank is s32-low at 0x70xxxxxx) but on arm64 macOS
+             * (PORT_ADDR_BASE = 16 TiB) it drops the high 32 bits, so every
+             * resolved `struck_anim` (hit / stagger / death reaction) landed
+             * in bogus low memory. The first time an AI played one --
+             * triggered_on_shot_hit -> modelSetAnimation2 -- modelSetAnimFrame
+             * dereferenced the garbage ModelAnimation and SIGSEGV'd. Reached
+             * only now that mouse fire works (D594). Read the base at full
+             * pointer width and add the small N64 ROM offset (u32); identical
+             * to the old value on every PORT_ADDR_BASE == 0 platform. */
+            entry[-1].struck_anim =
+                (ModelAnimation *)((uintptr_t)(*entries).struck_anim + (u32)address);
 #else
             entry[-1].struck_anim = (ModelAnimation *)((*((s32 *)entries)) + (0, address));
 #endif

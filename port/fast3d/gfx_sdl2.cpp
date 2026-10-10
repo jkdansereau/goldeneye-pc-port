@@ -86,6 +86,20 @@ static void gfx_sdl_get_active_window_refresh_rate(uint32_t* refresh_rate) {
     *refresh_rate = mode.refresh_rate;
 }
 
+// D581 (#151): SDL display 0 is not the OS primary on multi-monitor setups. The
+// primary display is the one whose bounds contain the desktop origin (0,0)
+// (X11/Xwayland/Windows convention); fall back to display 0.
+static int primary_display_index() {
+    const int n = SDL_GetNumVideoDisplays();
+    for (int i = 0; i < n; ++i) {
+        SDL_Rect r;
+        if (SDL_GetDisplayBounds(i, &r) == 0 && r.x <= 0 && r.y <= 0 && r.x + r.w > 0 && r.y + r.h > 0) {
+            return i;
+        }
+    }
+    return 0;
+}
+
 static void gfx_sdl_init(const struct GfxWindowInitSettings *set) {
     window_width = set->width;
     window_height = set->height;
@@ -116,7 +130,7 @@ static void gfx_sdl_init(const struct GfxWindowInitSettings *set) {
     // behaviour, and 4:3 so the pointer maps onto the render with no letterbox.
     if (window_width <= 0 || window_height <= 0) {
         SDL_DisplayMode dm;
-        if (SDL_GetDesktopDisplayMode(0, &dm) == 0 && dm.w > 0 && dm.h > 0) {
+        if (SDL_GetDesktopDisplayMode(primary_display_index(), &dm) == 0 && dm.w > 0 && dm.h > 0) {
             int maxw = (int)(dm.w * 0.85);
             int maxh = (int)(dm.h * 0.85);
             if (maxw * 3 > maxh * 4) { window_height = maxh; window_width = maxh * 4 / 3; }
@@ -142,10 +156,15 @@ static void gfx_sdl_init(const struct GfxWindowInitSettings *set) {
     }
 
     if (set->centered) {
-        SDL_DisplayMode mode = {};
-        SDL_GetCurrentDisplayMode(0, &mode);
-        posX = mode.w / 2 - window_width / 2;
-        posY = mode.h / 2 - window_height / 2;
+        // centre on the primary display, in global desktop coordinates
+        SDL_Rect b = { 0, 0, 0, 0 };
+        if (SDL_GetDisplayBounds(primary_display_index(), &b) != 0 || b.w <= 0 || b.h <= 0) {
+            SDL_DisplayMode mode = {};
+            SDL_GetCurrentDisplayMode(0, &mode);
+            b.x = 0; b.y = 0; b.w = mode.w; b.h = mode.h;
+        }
+        posX = b.x + b.w / 2 - window_width / 2;
+        posY = b.y + b.h / 2 - window_height / 2;
     }
 
     if (set->fullscreen_is_exclusive) {
@@ -348,6 +367,12 @@ static void gfx_sdl_get_dimensions(uint32_t* width, uint32_t* height, int32_t* p
 }
 
 static void gfx_sdl_handle_events(void) {
+#if defined(__APPLE__)
+    /* AppKit requires event polling on the process main thread. The host
+     * loop in videoPumpEvents owns the complete SDL queue, so the scheduler
+     * render thread must not call SDL_PollEvent on macOS. */
+    return;
+#else
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
@@ -402,6 +427,7 @@ static void gfx_sdl_handle_events(void) {
                 break;
         }
     }
+#endif
 }
 
 /* The window/context are created on the host main thread, but the game's
@@ -445,6 +471,21 @@ extern "C" void gfx_sdl_release_context(void) {
 /* The host thread owns SDL event pumping (see videoPumpEvents); when it sees
  * a window resize it calls this to refresh the cached drawable size that
  * fast3d uses for scaling. */
+/* D578: refresh rate of the window's display, polled on the host thread
+ * (SDL video calls belong there) and read by the render thread. 0 = unknown. */
+static SDL_atomic_t s_refresh_hz;
+
+extern "C" void gfx_sdl_poll_refresh_rate(void) {
+    SDL_DisplayMode mode;
+    const int idx = wnd ? SDL_GetWindowDisplayIndex(wnd) : -1;
+    const int hz = (idx >= 0 && SDL_GetCurrentDisplayMode(idx, &mode) == 0) ? mode.refresh_rate : 0;
+    SDL_AtomicSet(&s_refresh_hz, hz);
+}
+
+extern "C" int gfx_sdl_get_refresh_rate(void) {
+    return SDL_AtomicGet(&s_refresh_hz);
+}
+
 extern "C" void gfx_sdl_update_cached_size(void) {
     if (wnd) {
         SDL_GL_GetDrawableSize(wnd, &window_width, &window_height);

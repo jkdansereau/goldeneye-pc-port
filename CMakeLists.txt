@@ -25,11 +25,26 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 # name as an inherited one — CCTVRecord's `pad` — see docs/internals.md.)
 # An explicit -DCMAKE_C_COMPILER=... always wins.
 if(NOT DEFINED CMAKE_C_COMPILER)
-  find_program(_GE007_GCC NAMES gcc)
+  if(CMAKE_HOST_APPLE)
+    # Homebrew installs real GNU GCC with a version suffix; /usr/bin/gcc is
+    # Apple Clang and does not support the Plan 9 struct extensions required
+    # by the decomp's `inherits` pattern.
+    find_program(_GE007_GCC
+      NAMES gcc-16 gcc-15 gcc-14 gcc-13 gcc-12 gcc-11 gcc)
+  else()
+    find_program(_GE007_GCC NAMES gcc)
+  endif()
   if(_GE007_GCC)
     set(CMAKE_C_COMPILER "${_GE007_GCC}" CACHE FILEPATH "C compiler" FORCE)
     get_filename_component(_GE007_GCC_DIR "${_GE007_GCC}" DIRECTORY)
-    find_program(_GE007_GXX NAMES g++ PATHS "${_GE007_GCC_DIR}" NO_DEFAULT_PATH)
+    if(CMAKE_HOST_APPLE)
+      find_program(_GE007_GXX
+        NAMES g++-16 g++-15 g++-14 g++-13 g++-12 g++-11 g++
+        PATHS "${_GE007_GCC_DIR}" NO_DEFAULT_PATH)
+    else()
+      find_program(_GE007_GXX NAMES g++
+        PATHS "${_GE007_GCC_DIR}" NO_DEFAULT_PATH)
+    endif()
     if(_GE007_GXX)
       set(CMAKE_CXX_COMPILER "${_GE007_GXX}" CACHE FILEPATH "CXX compiler" FORCE)
     endif()
@@ -37,16 +52,47 @@ if(NOT DEFINED CMAKE_C_COMPILER)
 endif()
 
 if(APPLE)
+  # CMAKE_OSX_ARCHITECTURES is normally EMPTY here (the build targets the host
+  # arch), so an arm64 Mac used to fall into the 10.13 (Intel) floor and ld
+  # warned that the brew-gcc aarch64 runtime libs and the generated .s objects
+  # carry a newer floor than the linked one. D609 (macos branch): also consult
+  # the host machine when no explicit -arch list was requested. CMake's own
+  # CMAKE_HOST_SYSTEM_PROCESSOR is EMPTY on macOS (its `uname -p` probe
+  # returns "unknown" there - same class as D515's stripped-env arch probe),
+  # so ask `uname -m` directly. 11.0 is Big Sur, the first arm64 release.
   if(CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "" FORCE)
-  else()
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "" FORCE)
+    set(_GE007_OSX_FLOOR "11.0")
+  elseif(CMAKE_OSX_ARCHITECTURES STREQUAL "")
+    # No /bin/uname on macOS, and CMake's execute_process looks the name up in
+    # PATH - so pass the bare name.
+    execute_process(COMMAND uname -m OUTPUT_VARIABLE _GE007_UNAME_M
+                    RESULT_VARIABLE _GE007_UMRC)
+    if(_GE007_UMRC EQUAL 0)
+      string(STRIP "${_GE007_UNAME_M}" _GE007_UNAME_M)
+      if(_GE007_UNAME_M MATCHES "^(aarch64|arm64)")
+        set(_GE007_OSX_FLOOR "11.0")
+      else()
+        set(_GE007_OSX_FLOOR "10.13")
+      endif()
+    endif()
   endif()
+  if(NOT DEFINED _GE007_OSX_FLOOR)
+    set(_GE007_OSX_FLOOR "10.13")
+  endif()
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "${_GE007_OSX_FLOOR}" CACHE STRING "" FORCE)
+  unset(_GE007_OSX_FLOOR)
+  message(STATUS "macOS deployment target floor: ${CMAKE_OSX_DEPLOYMENT_TARGET}")
 endif()
 
 # ASM is needed for the generated absolute ROM asset symbols
 # (port/src/romassets_<region>.s, see scripts/gen_romassets.py).
 project(ge007 C CXX ASM)
+
+# Debug gate: validate every u32 -> host-pointer conversion against the regions
+# the port actually maps, and report offenders at the conversion site with a
+# backtrace. Off by default (zero cost); enable with -DPORT_ADDR_STRICT=ON.
+# Catches the MACOS-SFX-BOUND through MACOS-TEXALIGN truncated/never-rebased-pointer family early.
+option(PORT_ADDR_STRICT "Validate N64->host address conversions at runtime" OFF)
 
 include(TargetArch)
 include(FindPkgConfig)
@@ -92,6 +138,21 @@ else()
   set(TARGET_IS_64BIT FALSE)
 endif()
 message(STATUS "Target arch: ${TARGET_ARCH} (64bit=${TARGET_IS_64BIT})")
+
+# Host base of the N64 address window (port/include/portaddr.h, D607). Must be
+# set BEFORE add_definitions below, and AFTER target_architecture(): D609 showed
+# CMAKE_SYSTEM_PROCESSOR/CMAKE_HOST_SYSTEM_PROCESSOR are EMPTY on macOS, so the
+# gate uses TARGET_ARCH (the D609 pagezero gate uses the same test).
+# 0 on Windows/Linux; 16 TiB on arm64 macOS (overridable with
+# -DPORT_ADDR_BASE=... for tooling, e.g. an ASan build whose shadow region
+# overlaps 16 TiB). Fed to the compiler (-DPORT_ADDR_BASE) and to
+# scripts/gen_macho_syms.py --base for the romassets absolute symbols, so the
+# cart pairing (romdata.c CART_HOST vs romassets_*.s values) agrees.
+if(APPLE AND TARGET_ARCH MATCHES "^aarch64$")
+  set(PORT_ADDR_BASE 0x100000000000 CACHE STRING "Host base of the N64 address window (arm64 macOS)")
+else()
+  set(PORT_ADDR_BASE 0x0 CACHE STRING "Host base of the N64 address window")
+endif()
 
 if(WIN32)
   set(TARGET_OS "windows")
@@ -149,7 +210,7 @@ endif()
 # Provenance, printed by --version and at startup (port/src/main.c): a build
 # keeps pointing at this repository no matter who compiles or renames it.
 set(VERSION_CODENAME "larkspur")
-set(GE007_VERSION "0.5.0")   # bump on every release
+set(GE007_VERSION "0.6.0")   # bump on every release
 set(ORIGIN_URL "https://github.com/jkdansereau/goldeneye-pc-port")
 
 configure_file(
@@ -164,7 +225,18 @@ configure_file(
 # the toolchain include dir from the compiler location (MinGW/MSYS2 layout:
 # bin/../include) and generate an absolute-path include.
 get_filename_component(_PORT_GCC_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
-get_filename_component(PORT_HOST_STRING_H "${_PORT_GCC_DIR}/../include/string.h" ABSOLUTE)
+if(APPLE)
+  execute_process(
+    COMMAND xcrun --show-sdk-path
+    OUTPUT_VARIABLE _PORT_MACOS_SDK OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+  if(NOT _PORT_MACOS_SDK)
+    message(FATAL_ERROR "Cannot locate the macOS SDK; install the Xcode Command Line Tools")
+  endif()
+  set(PORT_HOST_STRING_H "${_PORT_MACOS_SDK}/usr/include/string.h")
+else()
+  get_filename_component(PORT_HOST_STRING_H "${_PORT_GCC_DIR}/../include/string.h" ABSOLUTE)
+endif()
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststring.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hoststring.h" @ONLY)
@@ -173,7 +245,11 @@ configure_file(
 # the include path and shadows the system header; libstdc++'s <thread>/gthr
 # headers in the fast3d C++ TUs need the real <sched.h> (cpu_set_t,
 # sched_yield). Both MinGW and Linux keep <sched.h> at bin/../include.
-get_filename_component(PORT_HOST_SCHED_H "${_PORT_GCC_DIR}/../include/sched.h" ABSOLUTE)
+if(APPLE)
+  set(PORT_HOST_SCHED_H "${_PORT_MACOS_SDK}/usr/include/sched.h")
+else()
+  get_filename_component(PORT_HOST_SCHED_H "${_PORT_GCC_DIR}/../include/sched.h" ABSOLUTE)
+endif()
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hostsched.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hostsched.h" @ONLY)
@@ -183,7 +259,11 @@ configure_file(
 # one C++ TU (fast3d): MinGW's own sec_api/stdlib_s.h does `#include
 # <stdlib.h>`, which resolves to the N64 header via -I. The shim routes C++
 # TUs to the host header by absolute path (same trick as hoststring.h).
-get_filename_component(PORT_HOST_STDLIB_H "${_PORT_GCC_DIR}/../include/stdlib.h" ABSOLUTE)
+if(APPLE)
+  set(PORT_HOST_STDLIB_H "${_PORT_MACOS_SDK}/usr/include/stdlib.h")
+else()
+  get_filename_component(PORT_HOST_STDLIB_H "${_PORT_GCC_DIR}/../include/stdlib.h" ABSOLUTE)
+endif()
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststdlib.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hoststdlib.h" @ONLY)
@@ -213,8 +293,13 @@ add_definitions(
   -D_LANGUAGE_C=1
   -DAVOID_UB=1
   -DPAL=${VERSION_IS_PAL}
+  -DPORT_ADDR_BASE=${PORT_ADDR_BASE}
   ${REGION_DEFS}
 )
+if(PORT_ADDR_STRICT)
+  add_definitions(-DPORT_ADDR_STRICT=1)
+  message(STATUS "PORT_ADDR_STRICT enabled: N64->host conversions are validated at runtime")
+endif()
 if(TARGET_IS_64BIT)
   add_definitions(-DPLATFORM_64BIT=1)
 endif()
@@ -238,7 +323,9 @@ add_compile_options(
 # runs the same way; the genuinely understood cases are still fixed properly
 # under #ifdef PORT (D189). A hardened Linux build would need the whole class
 # swept first — tracked in docs/dev/findings.md.
-add_compile_options(-fno-stack-protector)
+if(NOT GE_STACK_PROTECTOR_ALL)
+  add_compile_options(-fno-stack-protector)
+endif()
 # Keep frame pointers: dbghelp's StackWalk64 (crash handler + thread dumps)
 # cannot read DWARF unwind info on MinGW, so the EBP chain is the only way to
 # get a real backtrace of a hung/crashed game thread.
@@ -288,14 +375,18 @@ add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-function>)
 # automatic base-pointer conversion the idiom relies on). C only — the decomp
 # is C; fast3d C++ does not use `inherits`.
 if(NOT MINGW)
-  add_compile_options($<$<COMPILE_LANGUAGE:C>:-fplan9-extensions>)
-  # GCC 14 promoted several long-standing C leniencies to hard errors
-  # (int<->pointer for a known prototype, incompatible-pointer arg types,
-  # implicit int/function). The WIP decomp still trips these (e.g.
-  # append_text_picked_up's vestigial u8* params in propobj.c). -fpermissive
-  # downgrades them to warnings — the C counterpart of the -Wno-error lines
-  # above, and the documented path for building older C against GCC 14+.
-  add_compile_options($<$<COMPILE_LANGUAGE:C>:-fpermissive>)
+  # GCC-only flags: the macOS default compiler is Apple clang (via the
+  # /usr/bin/gcc c99 shim), which rejects both of these.
+  if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    add_compile_options($<$<COMPILE_LANGUAGE:C>:-fplan9-extensions>)
+    # GCC 14 promoted several long-standing C leniencies to hard errors
+    # (int<->pointer for a known prototype, incompatible-pointer arg types,
+    # implicit int/function). The WIP decomp still trips these (e.g.
+    # append_text_picked_up's vestigial u8* params in propobj.c). -fpermissive
+    # downgrades them to warnings — the C counterpart of the -Wno-error lines
+    # above, and the documented path for building older C against GCC 14+.
+    add_compile_options($<$<COMPILE_LANGUAGE:C>:-fpermissive>)
+  endif()
 endif()
 
 # ASLR must be OFF: dram_syms.s defines absolute symbols (cfb_16 @ 0x70000000,
@@ -329,6 +420,30 @@ elseif(UNIX AND NOT APPLE)
   # relocations are fine (unlike a 0x140000000 base, which needs mcmodel=large).
   # This is the ELF analogue of the Windows build's fixed 0x140000000 base.
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Ttext-segment=0x20000000")
+elseif(APPLE)
+  # Mach-O executables normally reserve [0, 4 GiB) as __PAGEZERO. The x86_64
+  # (Intel) port needs fixed mappings at 0x10000000 (ROM), 0x70000000 (s32-safe
+  # DRAM) and 0x80000000 (KSEG0 mirror), so shrink the guard to 64 KiB and keep
+  # null/low-pointer protection only that far (#88).
+  #
+  # D609: on arm64 macOS that flag is FATAL AT EXEC, not at link time. The
+  # Apple-Silicon kernel enforces the 4 GiB guard region (SVE): an image whose
+  # __PAGEZERO is smaller than 0x100000000 is SIGKILL'd by the kernel during
+  # exec, before dyld runs - no output, no crash report, no unified-log entry
+  # at unprivileged levels, and lldb refuses the image ("Malformed Mach-o file").
+  # Reproduced with a 6-line C program: `gcc probe.c -Wl,-pagezero_size,0x10000`
+  # exits 137 (128+9); the same program with the default pagezero exits 7. The
+  # arm64 port does not need the shrink at all - portaddr.h already shifts the
+  # whole N64 window up by PORT_ADDR_BASE = 16 TiB, so every required mapping
+  # (ROM, DRAM V1/K0) lives far above the guard; verified with the same minimal
+  # probe (shm_open + the two MAP_FIXED mmaps at 0x100070000000 / 0x100080000000
+  # alias correctly and exit 7). So: shrink on x86_64 only, default on arm64.
+  if(TARGET_ARCH MATCHES "^aarch64$")
+    message(STATUS "arm64 macOS: keeping the default 4 GiB __PAGEZERO (arena is at PORT_ADDR_BASE)")
+  else()
+    set(CMAKE_EXE_LINKER_FLAGS
+      "${CMAKE_EXE_LINKER_FLAGS} -Wl,-pagezero_size,0x10000")
+  endif()
 endif()
 
 # port/shim first: PC-only shadow headers (bondtypes.h, bondconstants.h,
@@ -343,6 +458,7 @@ include_directories(
   "${CMAKE_SOURCE_DIR}/src/game"
   "${CMAKE_SOURCE_DIR}/src/libultra"
   "${CMAKE_SOURCE_DIR}/src/libultra/audio"
+  "${CMAKE_SOURCE_DIR}/src/libultra/gu"
   "${CMAKE_SOURCE_DIR}/port/include"
   "${CMAKE_BINARY_DIR}/port/include"
 )
@@ -396,6 +512,8 @@ if(NOT EXTRA_LIBRARIES)
     set(EXTRA_LIBRARIES dbghelp -static-libstdc++ pthread)
   elseif(WIN32)
     set(EXTRA_LIBRARIES dbghelp -static-libstdc++)
+  elseif(APPLE)
+    set(EXTRA_LIBRARIES stdc++ m pthread)
   else()
     set(EXTRA_LIBRARIES stdc++ m dl pthread)
   endif()
@@ -415,14 +533,14 @@ file(GLOB_RECURSE SRC_FAST3D    "${CMAKE_SOURCE_DIR}/port/fast3d/*.cpp"
 # scripts/gen_romassets.py). Defines every obseg/ramrom/music label and the
 # ge007.ld segment markers as 0x10000000 + rom_offset, so `&symbol` / romCopy()
 # work once romdata.c maps the .z64 at 0x10000000.
-set(SRC_ROMASSETS "${CMAKE_SOURCE_DIR}/port/src/romassets_${ASSET_REGION}.s")
-if(NOT EXISTS ${SRC_ROMASSETS})
-  message(FATAL_ERROR "Missing ${SRC_ROMASSETS} — run: python3 scripts/gen_romassets.py ${ASSET_REGION}")
+set(SRC_ROMASSETS_INPUT "${CMAKE_SOURCE_DIR}/port/src/romassets_${ASSET_REGION}.s")
+if(NOT EXISTS ${SRC_ROMASSETS_INPUT})
+  message(FATAL_ERROR "Missing ${SRC_ROMASSETS_INPUT} — run: python3 scripts/gen_romassets.py ${ASSET_REGION}")
 endif()
 
 # Absolute symbols inside the reserved N64-DRAM region (port/src/dram.c):
 # cfb_16 (replaces src/cfb.c) and _bssSegmentEnd (mempool start marker).
-set(SRC_DRAM_SYMS "${CMAKE_SOURCE_DIR}/port/src/dram_syms.S")
+set(SRC_DRAM_SYMS_INPUT "${CMAKE_SOURCE_DIR}/port/src/dram_syms.S")
 
 # D441 high-arena test flavour: relocate the DRAM arena for test builds
 # (tier 1 = 0x90000000). Build option only — the default build is unchanged.
@@ -441,6 +559,64 @@ if(GE_HIGHARENA_BASE)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${_d441_arena_def}")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_d441_arena_def}")
   set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${_d441_arena_def}")
+endif()
+
+# Apple: the two absolute-symbol files are converted to Mach-O spelling
+# (scripts/gen_macho_syms.py: .global -> .globl with a leading underscore,
+# ELF-style directives dropped). dram_syms.S is C-preprocessed first: it
+# pulls the arena bases from portaddr.h (PORT_ADDR_BASE + offset; the header
+# self-detects the 16 TiB arm64 base from its own __ASSEMBLER__ branch, no
+# -D needed), and the Mach-O assembler does not run the C preprocessor on
+# .s input. Only the high-arena test flavour passes a -D override.
+if(APPLE)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  # The generated .s files land in a build-dir subdir; CMake creates dirs for
+  # rules with C/C++ outputs only, so make it explicitly (the cc -E -o below
+  # fails with "No such file or directory" otherwise).
+  file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/port/src")
+  set(SRC_ROMASSETS "${CMAKE_BINARY_DIR}/port/src/romassets_${ASSET_REGION}_macho.s")
+  set(SRC_DRAM_SYMS_EXPANDED "${CMAKE_BINARY_DIR}/port/src/dram_syms_expanded.s")
+  set(SRC_DRAM_SYMS "${CMAKE_BINARY_DIR}/port/src/dram_syms_macho.s")
+  add_custom_command(
+    OUTPUT "${SRC_ROMASSETS}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
+            --base "${PORT_ADDR_BASE}"
+            "${SRC_ROMASSETS_INPUT}" "${SRC_ROMASSETS}"
+    DEPENDS "${SRC_ROMASSETS_INPUT}"
+            "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
+    VERBATIM)
+  set(_dram_syms_pp_def "")
+  if(GE_HIGHARENA_BASE)
+    set(_dram_syms_pp_def "-DPORT_DRAM_V1_BASE=${GE_HIGHARENA_BASE}")
+  endif()
+  # D607: the COMMAND list must stay one CMake argument per argv element:
+  # quoting the whole "cc -E -I..." as ONE string works on Windows (cmd
+  # parses the command line) but /bin/sh on macOS/Linux treats the entire
+  # string as a single filename ("No such file or directory").
+  add_custom_command(
+    OUTPUT "${SRC_DRAM_SYMS_EXPANDED}"
+    COMMAND "${CMAKE_C_COMPILER}" "-E"
+            "-I${CMAKE_SOURCE_DIR}/port/include"
+            ${_dram_syms_pp_def}
+            "${SRC_DRAM_SYMS_INPUT}"
+            "-o" "${SRC_DRAM_SYMS_EXPANDED}"
+    DEPENDS "${SRC_DRAM_SYMS_INPUT}"
+            "${CMAKE_SOURCE_DIR}/port/include/portaddr.h"
+    VERBATIM)
+  add_custom_command(
+    OUTPUT "${SRC_DRAM_SYMS}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
+            "${SRC_DRAM_SYMS_EXPANDED}" "${SRC_DRAM_SYMS}"
+    DEPENDS "${SRC_DRAM_SYMS_EXPANDED}"
+            "${CMAKE_SOURCE_DIR}/scripts/gen_macho_syms.py"
+    VERBATIM)
+  set_source_files_properties(${SRC_ROMASSETS} ${SRC_DRAM_SYMS_EXPANDED} ${SRC_DRAM_SYMS}
+    PROPERTIES GENERATED TRUE)
+else()
+  set(SRC_ROMASSETS "${SRC_ROMASSETS_INPUT}")
+  set(SRC_DRAM_SYMS "${SRC_DRAM_SYMS_INPUT}")
 endif()
 
 # Game code — compiled unmodified.
@@ -471,6 +647,39 @@ file(GLOB SRC_LIBAUDIO "${CMAKE_SOURCE_DIR}/src/libultra/audio/*.c")
 file(GLOB SRC_LIBULTRARE_AUDIO "${CMAKE_SOURCE_DIR}/src/libultrare/audio/*.c")
 # gu matrix helpers.
 file(GLOB SRC_GU "${CMAKE_SOURCE_DIR}/src/libultra/gu/*.c")
+
+# GCC for Darwin crashes while lowering the decomp's ELF-style
+# `#pragma weak alias = target` directives. Compile generated copies with
+# those directives removed, then provide their aliases in Mach-O assembly.
+set(SRC_MACHO_ALIASES "")
+if(APPLE)
+  set(_MACHO_GENERATED_SOURCES "")
+  set(_MACHO_WEAK_INPUTS
+    "${CMAKE_SOURCE_DIR}/src/game/lv.c"
+    "${CMAKE_SOURCE_DIR}/src/game/objective_status.c"
+    "${CMAKE_SOURCE_DIR}/src/game/spectrum.c"
+    "${CMAKE_SOURCE_DIR}/src/libultra/gu/sinf.c"
+    "${CMAKE_SOURCE_DIR}/src/libultra/gu/cosf.c")
+  foreach(_INPUT IN LISTS _MACHO_WEAK_INPUTS)
+    get_filename_component(_NAME "${_INPUT}" NAME)
+    set(_OUTPUT "${CMAKE_BINARY_DIR}/port/src/macho_${_NAME}")
+    add_custom_command(
+      OUTPUT "${_OUTPUT}"
+      COMMAND "${Python3_EXECUTABLE}"
+              "${CMAKE_SOURCE_DIR}/scripts/strip_weak_pragmas.py"
+              "${_INPUT}" "${_OUTPUT}"
+      DEPENDS "${_INPUT}" "${CMAKE_SOURCE_DIR}/scripts/strip_weak_pragmas.py"
+      VERBATIM)
+    list(APPEND SRC_MACHO_ALIASES "${_OUTPUT}")
+    list(APPEND _MACHO_GENERATED_SOURCES "${_OUTPUT}")
+    list(REMOVE_ITEM SRC_GAME "${_INPUT}")
+    list(REMOVE_ITEM SRC_GU "${_INPUT}")
+  endforeach()
+  list(APPEND SRC_MACHO_ALIASES
+    "${CMAKE_SOURCE_DIR}/port/src/macho_weak_aliases.s")
+  set_source_files_properties(${_MACHO_GENERATED_SOURCES}
+    PROPERTIES GENERATED TRUE)
+endif()
 
 # VI mode table (DATA, not a driver): fr.c references osViModeTable ~15x.
 # This is the only libultra/io file we compile — the rest are hardware
@@ -589,6 +798,7 @@ set(SRC
   ${SRC_LIBULTRARE_LIBC}
   ${SRC_ASSETS}
   ${SRC_GU}
+  ${SRC_MACHO_ALIASES}
   ${SRC_ENGINE}
 )
 

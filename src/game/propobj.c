@@ -10,6 +10,11 @@
 #include "porttick.h" /* D486 */
 #endif
 #include <ultra64.h>
+#if defined(PORT)
+#include "portaddr.h"
+#else
+#define PORT_N64PTR(T, x) ((T *)(x))
+#endif
 #include <math.h>
 #ifdef PORT
 #include <stdio.h>  /* D202/M-65 diag probe only (doorSndProbe); remove with it */
@@ -5741,11 +5746,7 @@ s32 objTick(struct PropRecord *prop)
 #endif
 				temp_s0_6 = render_pad2F4->model;
 
-#ifdef PORT
-				if (temp_s0_6->anim == (ModelAnimation *)(uintptr_t)(u32)(animation_table_ptrs2[1])) /* D32/D33 */  /* D441: zero-extend s32-held DRAM ptr */
-#else
-				if (temp_s0_6->anim == (ModelAnimation *)animation_table_ptrs2[1]) /* D32/D33 */
-#endif
+				if (temp_s0_6->anim == PORT_N64PTR(ModelAnimation, animation_table_ptrs2[1])) /* D32/D33 */
 				{
 					modelSetAnimTranslationScale(temp_s0_6, 10.438f);
 					setsubroty(render_pad2F4->model, M_PI_F);
@@ -7749,18 +7750,18 @@ void objDeform(ObjectRecord *obj, E_EXPLOSIONTYPE explosiontype)
         adjust_height = 1;
     }
     
-    newverts = vtxstore_allocate(rodata->numVertices, 0x0b0b, model->obj, objGetDestroyedLevel(obj));
+    newverts = PORT_N64PTR(Vertex, vtxstore_allocate(rodata->numVertices, 0x0b0b, model->obj, objGetDestroyedLevel(obj)));
     
     if (newverts != NULL)
     {
-        if ((*vtxslot) != rodata->Vertices)
+        if (PORT_N64PTR(Vertex, *vtxslot) != rodata->Vertices)
         {
             for (i = 0, offset = 0; i < rodata->numVertices; i++, offset += sizeof(Vertex))
             {
-                *((Word4 *) (((u8 *) newverts) + offset)) = *((Word4 *) (((u8 *) (*vtxslot)) + offset));
+                *((Word4 *) (((u8 *) newverts) + offset)) = *((Word4 *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset));
             }
 
-            sub_GAME_7F09C044(*vtxslot);
+            sub_GAME_7F09C044(PORT_N64PTR(Vertex, *vtxslot));
         }
         else
         {
@@ -7774,9 +7775,9 @@ void objDeform(ObjectRecord *obj, E_EXPLOSIONTYPE explosiontype)
     }
     else
     {
-        if ((*vtxslot) != rodata->Vertices)
+        if (PORT_N64PTR(Vertex, *vtxslot) != rodata->Vertices)
         {
-            sub_GAME_7F09C044(*vtxslot);
+            sub_GAME_7F09C044(PORT_N64PTR(Vertex, *vtxslot));
             *vtxslot = rodata->Vertices;
             obj->runtime_bitflags |= 4;
         }
@@ -7816,14 +7817,14 @@ void objDeform(ObjectRecord *obj, E_EXPLOSIONTYPE explosiontype)
         
         do
         {
-            if (((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y < ymin)
+            if (((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y < ymin)
             {
-                ymin = ((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y;
+                ymin = ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y;
             }
             
-            if (ymax < ((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y)
+            if (ymax < ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y)
             {
-                ymax = ((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y;
+                ymax = ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y;
             }
             
             i++;
@@ -7883,7 +7884,7 @@ void objDeform(ObjectRecord *obj, E_EXPLOSIONTYPE explosiontype)
         {
             if (obj->mtx.m[1][1] >= 0.0f)
             {
-                if (((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y >= ymid)
+                if (((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y >= ymid)
                 {
                     if (adjust_height)
                     {
@@ -7903,7 +7904,7 @@ void objDeform(ObjectRecord *obj, E_EXPLOSIONTYPE explosiontype)
                     chance = 90;
                 }
             }
-            else if ((ymid ^ 0) >= ((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y)
+            else if ((ymid ^ 0) >= ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y)
             {
                 if (adjust_height)
                 {
@@ -7932,10 +7933,10 @@ void objDeform(ObjectRecord *obj, E_EXPLOSIONTYPE explosiontype)
         {
             if (((s32) (chrObjRandomGetNext() % 100)) < chance)
             {
-                ((Vertex *) (((u8 *) (*vtxslot)) + offset))->r = 0;
-                ((Vertex *) (((u8 *) (*vtxslot)) + offset))->g = 0;
-                ((Vertex *) (((u8 *) (*vtxslot)) + offset))->b = 0;
-                ((Vertex *) (((u8 *) (*vtxslot)) + offset))->a = 255;
+                ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->r = 0;
+                ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->g = 0;
+                ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->b = 0;
+                ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->a = 255;
             }
             else
 #ifdef VERSION_EU
@@ -7944,17 +7945,17 @@ void objDeform(ObjectRecord *obj, E_EXPLOSIONTYPE explosiontype)
             if ((explosiontype * 2) == EXPLOSION_MEDIUM)
 #endif
             {
-                ((Vertex *) (((u8 *) (*vtxslot)) + offset))->a = 0;
+                ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->a = 0;
             }
             
-            ((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y = (((f32) (((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y - ymin)) * yscale) + ((f32) ymin);
-            ((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.x += (chrObjRandomGetNext() % 80) - 40;
-            ((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y += (chrObjRandomGetNext() % 80) - 40;
-            ((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.z += (chrObjRandomGetNext() % 80) - 40;
+            ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y = (((f32) (((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y - ymin)) * yscale) + ((f32) ymin);
+            ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.x += (chrObjRandomGetNext() % 80) - 40;
+            ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y += (chrObjRandomGetNext() % 80) - 40;
+            ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.z += (chrObjRandomGetNext() % 80) - 40;
                 
-            if (((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y < ymin)
+            if (((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y < ymin)
             {
-                ((Vertex *) (((u8 *) (*vtxslot)) + offset))->coord.y = ymin;
+                ((Vertex *) (((u8 *) PORT_N64PTR(Vertex, *vtxslot)) + offset))->coord.y = ymin;
             }
 
             i++;

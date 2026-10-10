@@ -23,6 +23,11 @@ void gfx_sdl_park_for_exit(void);
  * host thread's event pump). */
 void gfx_sdl_update_cached_size(void);
 
+/* D578: display refresh rate (Hz) of the window; poll on the host thread,
+ * read anywhere. 0 = unknown. */
+void gfx_sdl_poll_refresh_rate(void);
+int gfx_sdl_get_refresh_rate(void);
+
 #ifdef __cplusplus
 }
 #endif
