@@ -84,6 +84,19 @@ mostly agent-authored.
    README Legal section must name every rights holder the game's trademarks
    implicate. Rewriting pushed history (squash) needs explicit maintainer
    consent, and any such report states the remote + branch it applies to.
+7. **Squashes and history rebuilds must not erase contributor PRs.** Release
+   lines may squash *our own* work, but every contributor PR whose content
+   shipped gets a zero-diff record merge at its timeline position (merge
+   commit with the PR head as second parent, tree unchanged) so the PR shows
+   as merged and the contributor's commits stay reachable in public history
+   with their authorship. If the PR's base is a stale internal branch, merge
+   it there via `gh pr merge` so the badge is true; GitHub refuses a base
+   change to a branch that already contains the head. Superseded/reworked
+   PRs are never merged — comment + let the author close. Before force-
+   pushing a rewritten release branch: back up the pushed tip to Forgejo
+   (`backup/<branch>-pre-rebuild-<date>`), pass a byte-identical tree-diff
+   gate against the old tip, re-run CI, and note the rebuild in any open
+   issue that tells people to build the branch.
 
 ## Critical files
 
