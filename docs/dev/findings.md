@@ -723,6 +723,16 @@ covers D24–D69; the log continues in §H (D32 procedure, D70–D121).
 | D570 | **Scaled crosshair (Crosshair size != 100%) showed a faint copy of the top bar's tip under the bottom bar (WRAP tile flags)** — full `## D570` entry at file tail | FIXED 2026-10-06 (port only: CLAMP when scaled in `gunDrawSight` + F10 pointer; 100% unchanged, Dam gate PASS) |
 | D571 | **Project icon restyled to the in-game sight red as pixel art (exe, window, favicon)** — full `## D571` entry at file tail | CHANGED 2026-10-06 (maintainer request; make_icon.py; social preview unchanged) |
 | D572 | **Linux tarball glibc floor lowered from 2.38 to 2.31: CI builds in the Steam Runtime sniper container with SDL2 2.30.0 from source** — full `## D572` entry at file tail | CHANGED 2026-10-07 (maintainer request; packaging only; X220 glibc 2.36 fresh install PASS) |
+| D573 | **`sndPlaySfx` / `langGet` pointer guards used an absolute [64 KiB, 16 GiB) literal; replaced by `portAddrIsMapped()` (DRAM arena views + mapped cart image)** — full `## D573` entry at file tail | FIXED 2026-10-07 (from #108, italoarruda; Windows build + golden: egypt PASS, dam A/B identical to baseline) |
+| D574 | **Legacy front-end menu-pointer Velocity mode deleted (`Input.MenuPointerMode` / `Input.MenuPointerSpeed`); retired ini keys dropped silently** — full `## D574` entry at file tail | FIXED 2026-10-07 (D561 follow-up; build + ini runtime check) |
+| D575 | **Update check (D551) gave no result on Linux/macOS when `/releases/latest` exceeded 64 KB (curl SIGPIPE); parse helpers moved to a header with an offline test** — full `## D575` entry at file tail | FIXED 2026-10-07 (harness 19/19; live Linux/Deck matrix owed) |
+| D576 | **`ge007.log` written next to the ini (previous run kept as `ge007.prev.log`, 8 MiB cap)** — full `## D576` entry at file tail | FIXED 2026-10-07 (Windows runtime check) |
+| D577 | **F10 slider labels ended in ".." at HUD 150: the slider bar and value column now shrink when the page's widest slider label does not fit** — full `## D577` entry at file tail | FIXED 2026-10-07 (captures HUD 100 unchanged / HUD 150 whole) |
+| D578 | **Frame interpolation above 60 fps (`Video.FpsCap` 90/120/144): extra matrix-blended frames between game frames, paced by the D481 render worker (rework of PR #137 by f1zz1ec0ke)** — full `## D578` entry at file tail | BUILT 2026-10-07 (Windows: identity gates; live 120 Hz pacing exact at 90/120; by-eye high-refresh + Deck 90 Hz check owed) |
+| D579 | **Issue #150: hugging a wall makes geometry vanish (N64 native widescreen does not). Root cause: a v0.5.0 regression from D543, the CPU near clip cutting at the near plane while GL runs with GL_DEPTH_CLAMP; the cull/scissor/ucode theories were all dead ends.** Fix: clip at the camera plane (w = 0.01), with fog for clip-created vertices at max(z/w, -1); D579 diagnostics removed (last bg.c probe 2026-10-10); its mixed-w no-cull caused the Cradle flicker (D584). | FIXED 2026-10-09 (maintainer-verified, Dam gate 16:9; golden sweep owed) |
+| D583 | **120 fps + VSync on G-Sync/VRR: fullscreen black frames + OLED VRR flicker from the interpolation present scheduler.** Black frames fixed (VSync presents wait for their slot time; slot grid uses the reported refresh, not the measured swap gap). The OLED flicker was the present cadence (8% of ticks got 1 slot, early/late gap pairs, dropped slots); fixed by one continuous present grid snapped to tick/N, an 8-slot present ring (no drops), a capped draw-time peak for the ready time, and showing a waiting present before the next frame's draw. 120.0 presents/s, 99%+ of gaps in 7-9.5 ms. | FIXED on PC 2026-10-09 (G-Sync OLED, maintainer by eye); Deck 90 good on most levels (per-level pass 2026-10-10); open: Bunker fight draw cost, Jungle feel (see 2026-10-10 addendum) |
+| D584 | **Cradle catwalk shadow flicker at every frame rate (regression from D579).** D579 stopped cull-testing triangles with a vertex behind the camera; Cradle's translucent two-faced catwalk walls then drew both faces. Fix: mixed-w triangles get the homogeneous facing test det[x y w] (no division by w), identical in sign to the pre-D579 XOR flip but well-conditioned. #150 stays fixed (its real fix was the D543 camera-plane clip). | FIXED 2026-10-10 (maintainer Deck: Cradle clean, Dam wall-hug clean) |
+| D614 | **Deck Bunker fight texture-cache thrash: CI8 keys hashed leftover palette entries past a partial TLUT load, so the same image re-imported whenever draw order changed (1,000-4,000 evictions per 10 s).** A loaded-extent CI8 key cut re-imports 60-70% but changed neither import time (-7%) nor pacing, and 84-315 texels per run index past the extent (fidelity risk): reverted. Not the cause of the fight drops; D583 present scheduling remains the lead. | OPEN: measured, fix not shipped (2026-10-10) |
 | D407 | **Tanks cannot be boarded/exited on PC — the v0.4.0 use/reload split (D378/D393) removed the B-button tap the engine's tank handlers in `bondview2.c` consume (user report 2026-09-28, Runway/Streets)** — full `## D407` entry at file tail | **CLOSED (2026-09-28 bookkeeping: tank board/exit accepted by the user; shipped in v0.4.0).** Earlier: PARTIAL (fix landed in v0.4.0, port-only): present `GE_CONT_B` on the use (E / pad A) rising edge only while `g_PlayerIsInTank == 1` or `g_BondCanEnterTank != 0`; E keeps its D378 no-reload-fallback semantics elsewhere, N64 layout unaffected. D407(b) same cycle: front PC Options page-edge highlight clamp + mouse-wheel / W-S paging (wheel queue consumed on the menu, D223); its wheel mapping shipped inverted and was fixed to match W/S (wheel up = step up). D407(c): board-animation lockout, menu-accept B gate in tank states, in-tank aim routed through the legacy velocity stick + `Input.TankAimScale` knob. RESOLVED 2026-09-28: all port-only (src/game zero-diff), 10 TANKDBG probes stripped, release binary verified clean, user live tank drive signed off (board + exit OK, aim feel good). |
 | D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed). |
 | D415 | **Shooting a light fixture does not "kill" its flickering light (Bunker, Caverns): the fixture takes the hit but the flicker keeps going (community report, issue #87 comment by the reporter, 2026-09-28, 00 Agent playthrough of v0.4.0).** — full `## D415` entry at file tail | FIXED (2026-09-29 bookkeeping: root-caused and fixed as D430 + D431, user-verified vs GEPD/1964 on Caverns 2026-09-29; #119). Earlier: ROOT-CAUSED as D430 (see there); fix in tree, live check owed. |
@@ -16048,7 +16058,7 @@ Under PORT `struct image_entry` puts `dataoffset:24` in bits 0-23 (D67), so byte
 | Video.DrawDistanceAutoFov / LodDistanceAutoFov | 0 / 0 | 0 / 0 | yes (identity guard) |
 | Video.FovScale, Game.HudScale | 100, 100 | 100, 100 | yes (identity) |
 | Game.ScreenShakeIntensity, Game.NoHitFlash | 1.0, 0 | 1.0, 0 | yes (identity) |
-| Video.CrosshairHide/Color/Size/Style | 0/0/100/0 | same | yes (identity) |
+| Video.CrosshairHide | 0 | same | yes (identity) |
 | Input.AimMode | 0 (N64) | 0 | yes (identity) |
 | Input.AimRange | 0 (PC) | 1 (N64 limits, D338) | yes |
 | Culling | — | — | no key: frustum planes / fog-LOD scale (D222) and the room pool (D294 `portRoomPoolScale`) derive from FOV, widescreen, draw and LOD distance and are identity at the values above |
@@ -16058,6 +16068,7 @@ Under PORT `struct image_entry` puts `dataoffset:24` in bits 0-23 (D67), so byte
 | Video.CrosshairRed/Green/Blue, DisplayFPS | — | — | no (only used with Custom colour / overlay) |
 | Game.SkipIntro, Game.AllUnlocked | 0, 0 | 0, 0 | **no** — progression/convenience, not presentation (AllUnlocked has save implications, D387) |
 | Input.* feel (sensitivities, deadzones, smoothing, mouse model AimAbsolute/MouseDirectLook/NaturalPitch, CrouchMode), Input.Bind.*, Bond.* (per-save), Audio.*, Debug.* | — | — | **no** — spec: bindings/volumes untouched; mouse modes have no N64 counterpart |
+| Video.CrosshairColor/Size/Style, Video.CrosshairAlpha, Video.CrosshairHealthColor (D511) | 0/100/0/100/0 | same | **no** — removed/kept out 2026-10-07 (maintainer: presets are visual options; the crosshair look is a user aiming preference). They survive a preset press and never flip Display mode to Custom. `CrosshairHide` and `CrosshairPersistent` (D436) stay in: they decide when the sight is drawn, which is N64 behaviour |
 
 **Overscan — which is faithful:** `SafeAreaCrop=0`. The N64 VI scans out the whole 640x480 framebuffer including GE's black safe-area border; a CRT's overscan hid part of it but by a set-dependent amount, and emulators/1964 show the full frame. The crop (`gfx_pc.cpp` `gfx_adjust_viewport_or_scissor`) is a port-side remap that stretches the inset gameplay viewport to the window (and trims the D246 1-unit side margin), so 0 = the signal the console output.
 **4:3 limitation:** the preset gives a 4:3 *projection*; in a non-4:3 window it is stretched to the window (as the N64 image is on a 16:9 TV set to stretch). A pillarboxed gameplay mode does not exist in fast3d today — follow-up for the ROADMAP (lead).
@@ -16088,7 +16099,7 @@ Under PORT `struct image_entry` puts `dataoffset:24` in bits 0-23 (D67), so byte
 
 **NOT done (owed):** the full ~396-site census with per-site provenance classification (H real hazard / R ROM-address 32-bit / I integer-only / ?), the audit table `docs/dev/ABI-PTRCAST-AUDIT.md` (the agent that started it died before writing it), the `GE_HIGHARENA` high-address test mode, and review of #107/#108 (still the #108 range-check concern in ROADMAP §2). 185 pointer-cast warning sites remain in the touched files; many are intentional (`(s32)&ANIM_DATA_*` offsets, D34). Nothing was tested with an arena above 4 GB.
 
-**Status:** PARTIAL (part 1 landed; census and high-arena test build done 2026-10-03; full-game tier-1 sweep and the above-4-GiB tier owed).
+**Status:** PARTIAL (part 1 landed; census + tier-1 high-arena build done 2026-10-03; tier-1 all-level sweep 21/21 PASS 2026-10-05; **macOS campaign sweep 21/21 PASS 2026-10-08** — the above-4-GiB tier-2 hazards were *live-exercised* on Apple Silicon and did not fire; the u32-slot / `mema.c` / `initanitable.c` widenings remain owed as structural fixes).
 
 **2026-10-03: complete census + high-arena test build (batches 1-5).** Lead-planned, the mechanical edits applied by the local Qwen worker one prompt at a time, each lead-verified (diff, rebuild, runs).
 - **Census:** one machine-readable list replacing parts 1/2: 424 compiler sites (`-Wpointer-to-int-cast` 276, `-Wint-conversion` 102, `-Wint-to-pointer-cast` 46; prior tags carried forward for 385) plus 460 raw grep hits for the classes no compiler flags (sizeof copies, raw-offset aliases, address conversions, bit-31 tests, negated indexes, stride allocs, s32 sentinels, raw struct I/O). Local artefacts: `scratch/d441/` (sites_tagged.csv, invisible_hits.csv).
@@ -16126,6 +16137,8 @@ Under PORT `struct image_entry` puts `dataoffset:24` in bits 0-23 (D67), so byte
 **2026-10-01: #107 folded in.** The two sites from outside PR #107 (italoarruda), both confirmed by the census as REAL hazards for an arena at or above 2 GiB, are fixed with the PR's own `uintptr_t` arithmetic under `#ifdef PORT` (`#else` arms unchanged): `lightfixture.c` `lightFindVertexBaseForTri` (segment-14 vertex base `(s32)vertices + offset` re-cast to `Vtx*`) and `bg.c` `bgRoomCalcBB` (loop bound `(Vtx*)((s32)vertices + usize)` compared with a full-width pointer; above 2 GiB the loop never runs and the room keeps an inverted bounding box). Identical values with today's low arena; `-level_09` load smoke clean (rc=0, 0 red-zone hits). Read-side census (part 2, 403 `-Wint-conversion`/`-Wint-to-pointer-cast` warnings) is in the local note `docs/dev/notes/ABI-CENSUS-D441-PART2.md`; its model.c rows predate D457(c)(d) and need a re-run. **Also 2026-10-01:** `options.c` `draw_watch_controller` second-controller opaque path passed `(s32)(&table2)` (a stack address) into a `WatchContButtonPositions *`, the missed sibling of the D290 fix 60 lines above (census TOP-10 item 8); now `&table2` under `#ifdef PORT`. Read-side census re-run after D457(c)(d): 403 -> 320 warnings (model.c 65 -> 12, bondview2.c 27 -> 14; chr.c 190 = 31 distinct D34 initialiser lines). Same pass: `boss.c` main loop sent the stack-local `localGfxDoneMsg` address to `rspGfxTaskStart` through the `s32 rspReplyMsg` every frame (census TOP-10 item 8); now `(OSMesg)&localGfxDoneMsg` under `#ifdef PORT` (menu + `-level_09` smoke clean).
 
 **2026-10-05: tier-1 all-level sweep (P6, maintainer time slot).** The tier-1 build (`-DPORT_DRAM_V1_BASE=0x90000000`) ran against the default build on all 21 solo levels, including the Cuba ending cutscene. Gate = the tools_pc/golden recipe per level (seed `0x0123456789abcdef`, `20:START` intro skip, `GE_PCDUMP 900-1500:300`; Cuba = no input, `300-900:300`), ini pinned 640x480, then `tools_pc/framediff.py` with the per-level run-to-run limits verify.sh uses (1 % tol-2; Jungle/Surface 2 3 %; Cuba structural only). Driver: `scratch/d441/sweep2.py` (worktree), levels in parallel in isolated instance dirs (copied `data/`, pinned ini, `MasterVolume = 0`); ~5 min wall at 4-way. **Result: 21/21 PASS, 0 crashes; worst over-tol 2.38 % (Jungle) and 1.38 % (Surface 2), both under their 3 % limit; every 1 %-limit level <= 0.24 % (worst Silo 0.238 %, Egypt 0.173 %) = residual self-noise.** No fix batch was needed, so the abi ratchet stays at 389.
+
+**2026-10-08: macOS (Apple Silicon) full-campaign sweep — the tier-2 detector run.** With D594/D595 cleared the input + AI-anim blockers on the maintainer's M3 Mac (arm64, `PORT_ADDR_BASE` = 16 TiB: the *only* view available there, so every above-4-GiB tier-2 hazard is live on every allocation — the D595 class), all 21 solo levels (incl. the Cuba ending cutscene) were driven end-to-end over SSH. Gate per level = no `ge007.crash.log` + a full `GE_PCDUMP=900-1500:300` frame set (3/3), `GE_QUITFRAME=1502`, `GE_INPUTSCRIPT=20:START`, seed `0x123456789abcdef`, `GE_FAKE_DECK=0`, remote-side `perl alarm` watchdog (no coreutils `timeout` on macOS), one ssh session per level; one retry allowed on a D117 flake. Driver: `scratch/d441/macsweep.sh` (main checkout). **Result: 21/21 PASS, 0 crash logs, 0 flakes. Two runs: (a) the 9-level AI-dense/ending subset (Dam, Facility, Runway, Bunker1, Silo, Frigate, Bunker2, Aztec, Cuba), (b) the remaining 12 (Surface1, Surface2, Statue, Archives, Streets, Depot, Train, Jungle, Control, Caverns, Cradle, Egypt).** This is a crash/corruption *detector* for the tier-2 hazard class, not a pixel gate (no Mac goldens exist; the D441 framediff recipe is win/linux-only). A clean sweep means the hazards *did not fire during campaign play*, not that they are eliminated: the u32-slot stores, the `mema.c` widening (D453) and the `initanitable.c` heap slots are still owed structurally (a level that never grows the relevant allocation high won't trip them), and the `store-to-u32 vs arithmetic-only` per-site tag + `#108` range check stand. **D594 no-regression check (Windows, the `macos` tip):** the `actHeld` in-stage = RUN_STAGE-or-INVALID relaxation is un-gated (it also fixes forced `-level_NN` starts on base-0 platforms) — forced `-level_09`: 3/3 PCDUMP frames, 100 % non-clear, no crash, clean `GE_QUITFRAME` exit; menu start: frames render, rc=0, no crash. It is a no-op for normal menu play (`current_menu == RUN_STAGE`); Linux is the same code path and falls to the #131 CI sweep.
 
 **Measurement caveats (for future sweeps, all measured 2026-10-05):** (1) the 60-480 window the P6 prompt suggested is invalid — D117 intro-camera nondeterminism gives ~74 % px divergence between two seeded same-build runs there; the seeded golden window (900-1500) is the gate (self-noise in the golden window is well under the per-level limits; e.g. dam build-vs-build 0.01-0.04 % at tol 2). (2) The 60 Hz vsync-on pace is part of the recipe: uncap the frame rate (VSync=0/FpsCap=0) and the wall-clock 100 ms timers' tick alignment shifts, self-noise ~5 % px (tol 0). (3) `GE_DETERM=1` is NOT usable for this gate when uncapped: its pacemaker branch still services wall-clock timers, so self-noise is 33-35 % px at 900-1500 — D117 follow-up: virtualise the timers in determinism mode before trusting it for frame gates. Status: tier-1 sweep owed item CLOSED; remaining owed = the above-4-GiB tier (u32 slots widened / `portHostToN64`), `mema.c` widening (D453), `initanitable.c` heap slots, the remaining `-Wint-conversion`/`-Wpointer-to-int-cast` rows.
 ## D442 — Game.AllUnlocked reworked to a pure RAM override; save patch + D387 merge removed (2026-09-30)
@@ -18417,3 +18430,2391 @@ CI-built tarball (run 37623073542, c45dece7, the v0.5.0 packaging): floor
 X220 (Fedora 37, glibc 2.36: the box the 24.04 tarball refused to start on) and
 the Steam Deck; the 21-level pixel gate ran on that binary on both, 21/21 PASS
 each. Shipped in v0.5.0.
+
+## D573: SFX / text-bank pointer guards test the real address windows (#108) — FIXED 2026-10-07
+
+Reported and first fixed by italoarruda (#108). `sndPlaySfx()` (C7/D127,
+`src/snd.c`) and `langGet()` (D129, `src/game/language.c`) both reject a
+garbage pointer read out of game data with the literal test
+`p < 0x10000 || p >= 0x400000000ULL`. That bound is only right while every
+real address sits below 16 GiB. With the arena moved (macOS `PORT_ADDR_BASE`
+on the `macos` branch, #95; the D441 above-4-GiB tier) every real `ALSound*`
+and text bank fails it, so all SFX go silent and text lookups return NULL.
+#108 raised the bound to 0x8000_0000_0000, but that drops the guard's own
+documented catch (`0x0000_5622_0001_0001`, below the new bound), and it left
+`langGet()` unchanged.
+
+**Fix.** `portAddrIsMapped(const void *)` (declared in
+`port/include/portaddr.h`, defined in `port/src/romdata.c`) is true only inside
+the two DRAM arena views (`PORT_DRAM_V1_BASE` / `PORT_DRAM_K0_BASE`, each
+`PORT_DRAM_SIZE`) or the mapped cart image (`CART_BASE`, ROM + model/bg
+sidecars, the same length `romdataCartAddrValid()` uses). The low 64 KiB lies
+outside every window, so NULL-ish values are still rejected. Both guards now
+call it. It follows the window constants, so a moved arena needs no change
+here, and it is stricter than the old literal: an unmapped address under
+16 GiB is now rejected too. Every legitimate pointer is inside a window: the
+SFX/instrument banks are allocated from the music heap (`music.c`,
+`alHeapAlloc` on a mem-pool block) and the text banks from the mem pool
+(`_fileNameLoadToBank` / `_fileNameLoadToAddr`), both in the DRAM arena. When
+#95 lands, its `portAddrIsInWindow()` and this helper should become one
+function (Track C header unification). No game logic changes; both guards sit
+in existing `#ifdef PORT` blocks.
+
+**Verified.** Windows `ntsc-final` build clean (no new warnings).
+`verify.sh egypt` PASS. `verify.sh dam` reports REGRESSION at frame 1500
+(7416 px, 2.414% over tol): the same count, byte for byte, on a baseline build
+of the same branch without this change (run twice), so that is pre-existing
+Dam drift, not D573.
+
+## D574: legacy menu-pointer Velocity mode deleted — FIXED 2026-10-07 (D561 follow-up)
+
+D561 removed the F10 row for `Input.MenuPointerMode` but kept the key and the
+D165 velocity path for one release. Now deleted: the `menuMode &&
+!menuPointerMode` branch in `port/src/input.c` (mouse velocity fed to the
+front-end cursor as stick input), `MENU_POINTER_GAIN`, both config
+registrations, and the `kResetDefaults` row in `optionsoverlay.c`. The Direct
+(1:1) pointer is the only behaviour, as it has been by default. Existing inis
+still carry the two keys, and an unregistered key would surface the D472
+"unknown key" notice in F10, so `port/src/config.c` gains `kRetiredKeys[]`:
+those keys are dropped without a log line or notice, and `configSave` (which
+writes only registered keys) removes them on the next save.
+
+Implemented by the local model from a scoped brief; reviewed by the lead.
+**Verified:** build rc 0; grep leaves only the two retired-key strings; a
+Windows run with an ini holding `MenuPointerMode = 0` / `MenuPointerSpeed = 150`
+logged no unknown key and wrote the ini back without them.
+
+## D575: update check gave no result on responses over 64 KB (Linux/macOS) — FIXED 2026-10-07
+
+`fetchLatest()` (`port/src/updatecheck.c`, non-Windows) read curl's output
+through `popen()` into a 64 KB buffer and closed the pipe when it was full;
+curl, still writing, died on SIGPIPE, and the nonzero exit made the whole
+check report "no result" although `tag_name` sits in the first ~1.5 KB. Now
+the rest of the pipe is drained before `pclose()`, a full buffer counts as
+success (an HTTP error, curl `-f` with an empty body, still fails), and the cap
+is 256 KB (static buffer). Windows (WinHTTP) already stopped cleanly at the
+cap; unchanged. `parseVer` / `versionNewer` / `extractTag` moved verbatim to
+`port/include/updatecheck_parse.h` (static inline, no SDL) so
+`tools_pc/updatecheck_test.c` can test them offline: 10 version comparisons
+and 9 tag-extraction cases (spaces, newline, missing field, control bytes,
+empty, unterminated, over-long tag into a 32-byte buffer, a 300 KB body).
+
+Implemented by the local model from a scoped brief; reviewed by the lead.
+**Verified:** harness 19/19 PASS; Windows build rc 0. **Owed (maintainer):**
+the live half of the D551 validation matrix: throwaway builds with an old
+`GE007_VERSION` on Windows and the Deck against the real endpoint.
+
+## D576: `ge007.log` next to the ini — FIXED 2026-10-07
+
+A normal (double-click) launch loses stderr, so every `sysLogPrintf` /
+`sysFatalError` line now also goes to `$S/ge007.log` (`port/src/system.c`).
+`sysLogOpenFile()` runs in `main()` just before the startup banner (`$S`
+resolves from the working/exe dir with no setup), moves a previous log to
+`ge007.prev.log`, and registers an `atexit` close. Each line is formatted once
+into a 1 KB buffer and written with one call to stderr and one to the file
+(whole lines when threads log at once), flushed per line so a crash keeps the
+log. The file stops at 8 MiB with one note line; a fatal line is written even
+past the cap. If the file cannot be opened, logging stays stderr-only. Lines
+over ~1 KB are now truncated on stderr too (none in normal runs).
+
+Implemented by the local model from a scoped brief; the lead fixed one
+off-by-one in review (the truncation clamp let the terminator land one byte
+past the buffer, because `vsnprintf` returns the untruncated length) and made
+the fatal line bypass the cap. **Verified (Windows):** two front-end runs with
+`GE_QUITFRAME`: banner is line 1, the first run's log became
+`ge007.prev.log`, the file is byte-identical to stderr.
+
+## D577: F10 slider labels ellipsised at HUD 150 — FIXED 2026-10-07
+
+`overlayLayout()` (`port/src/optionsoverlay.c`) placed the slider bar at fixed
+canvas units (value column 54, bar 66), but the canvas shrinks with
+`Game.HudScale` (D512: `ovW = 320*100/hud`). At HUD 150 a slider label had 53
+units (160 at HUD 100), so "Anisotropic filtering", "Draw distance", "Fog
+distance" showed as "Anisotrop..", "Draw dist..", "Fog dista..". (Open item
+from D554.) Now, on a settings page, the widest slider label over the whole
+page (so the bar never moves while scrolling) is measured; if it does not fit,
+the bar shrinks first (66 -> 32), then the value column (54 -> 40); anything
+still too long keeps the existing ".." fallback. A page that fits is laid out
+exactly as before. Drag hit-testing and the label limits read the same layout.
+
+**Verified:** build rc 0; 1280x720 captures of the Video page with
+`GE_OPTIONSOVERLAY_SECTION=__HdrVideo`: HUD 150 labels whole (before/after
+pair); HUD 100 bar, value and label positions match the unfixed build.
+**Owed (maintainer):** by-eye pass of the other slider pages at HUD 150.
+
+## D578: frame interpolation above 60 fps (rework of PR #137) — BUILT 2026-10-07
+
+**Credit.** Design and first implementation by f1zz1ec0ke (#137, their D409):
+blend every `G_MTX` between the previous and current game frame, match
+matrices across frames by the geometry they transform plus an occurrence
+count, reject implausible pairs, port-only, inert at 60. Reworked here onto
+v0.5.0's D481 render worker and generalised from a fixed 2x to any present
+rate, so the Steam Deck OLED's 90 Hz works.
+
+**Why a rework.** #137 rendered a 50/50 pass plus the real pass on the
+scheduler thread and deferred the real swap into `osRecvMesg`. On v0.5.0 the
+GL context belongs to the render worker (D481), so that swap would come from
+the wrong thread, unlocked against `gfx_run`. A fixed 50/50 split also cannot
+do 90 Hz (1.5 presents per game frame).
+
+**Design (port-only, no game state touched).**
+- *When:* `Video.FpsCap` above the VI rate (menu 90/120/144) and a display
+  faster than the VI rate. The present rate is `min(cap, display refresh)`.
+  Presents cannot outrun the display: VSync, or the compositor, holds the swap
+  (measured ~8 ms per swap on a 60 Hz Windows panel with VSync off). So on a
+  60 Hz display interpolation stays off and the log says so. Refresh is polled
+  on the host thread (`gfx_sdl_poll_refresh_rate`). Off under GE_DETERM and
+  GE_RENDERINLINE (no worker).
+- *Timeline:* every game frame is stamped with the scheduled time S of the
+  retrace it was submitted after (`g_lastViUs`, a regular grid). A present at
+  wall time t shows sim time t - L, with L = one tick + the smoothed submit
+  delay: alpha = (t - L - S_prev) / (S - S_prev). Any present rate lands each
+  refresh at its true place between two game frames. A 2-tick game frame is
+  handled, and a stall (> 4 ticks) resets. The cost is one tick of extra
+  latency.
+- *Rendering:* all passes for a game frame are drawn when its DL arrives,
+  BEFORE SP/DP done is posted. The game double-buffers its DL/vtx pools
+  (`dyn.c`), but textures and CPU-written data may change once it moves on.
+  Each pass is copied to one of 4 present slots (`gfx_opengl_interp_store`,
+  window-size RGBA8 FBOs, nearest blit). The worker then swaps the slots on
+  its present clock, sleeping on the mailbox condition so a new frame always
+  wins. A new frame drops unshown slots of the previous one, except that a
+  frame never shown at all gets its first slot first. The first slot of a
+  frame is never scheduled later than half a tick. If presents block, the
+  clock re-locks just before the next refresh.
+- *Pass identity:* the RSP/RDP emulation state, segment table and safe-area
+  viewport cache are snapshotted at the start of a game frame and restored
+  before each further pass. The GL backend's noise seed (`frame_count`)
+  advances once per game frame. The port overlay is emitted once and
+  replayed. D509 aspect settle and shader prewarm happen once per frame.
+  `rendering_state` is not restored, because it mirrors the live GL bindings.
+- *Blend:* plain lerp for projections. For modelviews (GE keeps the camera
+  there), each basis row is blended and then rescaled to the blended length,
+  which fixes #137's cos(theta/2) shrink on fast turns. alpha = 1 leaves the
+  matrix untouched.
+- *Cost guard:* the passes per frame are limited so they take at most 60% of
+  a tick (EMA of the per-pass CPU cost). On a slow box this falls back to one
+  pass.
+- Original N64 preset: drops an interpolated cap back to 60 (not a bundle key,
+  so picking 120 does not flip Display mode). F10 tip added.
+- Dev switches: `GE_INTERP_ALPHA1` (every pass exact), `GE_INTERP_SELFCHECK`
+  (pass 0 vs last pass pixel diff), `GE_INTERPLOG` (pacing trace),
+  `GE_INTERP_FORCE` (ignore the refresh guard), `GE_PCDUMP_PRESENTS` (one
+  capture per present). `verify.sh` gains `VERIFY_INI_EXTRA`.
+
+**Verified (Windows, RTX-class GPU, 60 Hz panel, so `GE_INTERP_FORCE` and
+VSync off were needed to run it).**
+- Default 60: `verify.sh` facility/egypt PASS (one earlier egypt frame-900
+  flake, then PASS x2).
+- Identity: with every pass exact at 120, Facility 900/1200/1500 differ from
+  the golden by the same gun-model region and amount as a 60 fps capture of
+  the same build (3-5k px each, both). SELFCHECK: pass 0 vs pass 1 are
+  identical except on ~1% of frames, by 1-4 px (known residue: a DL's first
+  draws can use the GL texture bound at the end of the previous frame, and a
+  later pass inherits pass 0's last binding; forcing a re-bind measured
+  worse). The noise-seed fix took the early-level frames from thousands of
+  differing px to 0.
+- Pacing trace at 120: two slots per game frame, alpha exactly 0.5 apart,
+  2-tick game frames handled. On the 60 Hz panel the second present rarely
+  fits (the swap blocks ~8 ms), which is why the refresh guard exists.
+- Live pacing on a 120 Hz Windows display (VSync on, `GE_INTERPLOG`, 500
+  presents): 120 cap -> interval 8.333 ms avg (max 8.44), 90 cap -> 11.110 ms
+  (max 11.64), no present > 2 ms late, sim 300/300 ticks at full rate. Two
+  fixes got there: the first slot is scheduled no earlier than arrival + the
+  expected draw time, and waits no longer use an absolute CLOCK_REALTIME
+  `pthread_cond_timedwait` (MinGW: coarse, overshot 5-10 ms and dropped half
+  the second presents); while a present is pending the worker sleeps 1 ms
+  at a time, then spins the last 2 ms, polling the mailbox.
+- Maintainer live test (120 Hz display): smoother at 120, but the F10
+  overlay doubled/flickered above 60. Cause: emitting the overlay sets its
+  scale (D510 `gfx_set_overlay_scale`) as a side effect; the replay in pass
+  1 ran with the reset 1.0, so every other present showed a smaller panel.
+  Fixed (the emitted scale is reused). A few px of text still differed
+  between passes in a level, so while F10 is open the worker draws one
+  pass per game frame (it is a menu; the timeline continues). Regression
+  set after the fix: F10 front end + in level 0 px between passes, 2P
+  split-screen 2 frames x 1 px, pacing at 120 exact, default-60 goldens
+  facility/bunker1 PASS. The F10 frame-cap dropdown also listed only
+  30/60 (count hard-coded to 2); fixed.
+- Second maintainer pass (120 Hz): flicker on the Facility bathroom stall
+  doors, ghost pieces of sinks. Identical models share their geometry key
+  and the game reorders them between frames; matching by draw order paired
+  a door with its neighbour. Now each matrix takes the nearest unused
+  previous matrix of its group (position + rotation scaled by distance).
+  Also: the fixed one-tick lag gave alpha ~0 / 0.5, so blended matrices
+  trailed everything not blended (sky, effects) by 0.5-1 tick. The lag now
+  follows each frame's last present, which shows the frame exactly
+  (measured 0.500 / 1.000 at 120; 0.333 / 1.000, 0.683 at 90), with half
+  the latency. With VSync the worker now waits for the swap to complete
+  (glFinish): drivers queue VSync swaps and return at once, so the present
+  clock ran on its own 120.000 Hz timer against the real panel rate (a
+  dropped/repeated frame every few seconds). Swap-completion pacing at 120:
+  8.334 ms avg, sd 0.23 ms, no gap > 1.5x; cost ~0.5 ms per present. The
+  FPS counter now shows presents (it counted overlay emits, so read 60).
+  Regression set unchanged (F10 0 px, 2P <= 4 px on 2 frames, goldens PASS).
+- Third maintainer pass (120 Hz, Dam tunnel, F12 shots): rectangular holes
+  showing the blue fog colour in walls/side openings while turning. GE clips
+  each room seen through a portal to the portal's screen rectangle
+  (`bg.c bgScissorCurrentPlayerView`), computed for the current camera; the
+  in-between pass draws the room at the blended camera and the stale
+  rectangle cut it. In passes with alpha < 1, while a perspective projection
+  is loaded, a scissor inside the 3D viewport is widened to the viewport
+  (the room set stays the game's; depth still occludes). Also: a modelview
+  LOAD with no previous match (a room just come into view) now gets the
+  camera correction measured on the last matched LOAD of the pass
+  (inverse(cur) * blended, the same for every static object), so it moves
+  with its neighbours. Regression set green (2P residue 6 frames <= 12 px
+  that run; alpha-1 runs cannot reach either change).
+- Fourth pass: (a) everything flickered while walking forward. The widened
+  scissor let rooms drawn WITHOUT depth test (`bg.c` render modes
+  G_RM_AA_OPA_SURF2 / OPA_TERR2 rely on the portal clip and draw order)
+  paint over nearer ones in every in-between pass. Widening removed; the
+  portal rectangle is now MOVED instead (`gfx_interp_scissor`): its corners
+  as view directions are rotated by the drawing room's camera correction
+  and re-projected, in N64 units, then window-mapped. (b) Holes remained
+  on very fast flicks: the game culls rooms for the current camera only,
+  so an in-between view can look at rooms that are not in the DL at all.
+  A frame whose camera turns > 6 deg per tick (measured on the first 8
+  modelview LOADs) is re-drawn with every present exact.
+- Dumps: every game frame is captured once (fixed two ways in which a slow
+  present could skip a frame entirely). Clean `GE_QUITFRAME` exits.
+
+**Owed (maintainer).**
+- A 120/144 Hz display: fast mouse flicks at high sensitivity, camera cuts
+  (Dam bungee, intros), 2P split-screen, Facility explosions.
+- The Steam Deck OLED at 90 Hz (Linux build).
+- The X220: the cost guard should keep it at one pass.
+
+**Not verified.** PAL (50 Hz sim). Split-screen matching across viewports
+(the plausibility check should catch mismatches).
+
+### D578 addendum (2026-10-07): exact-frame fallback + far-clip widening
+
+**Tunnel/room holes on turns.** Cause: in-between passes blend the list the
+game culled for camera N with the camera at N+alpha, so rooms newly entering
+view during a turn are missing. GE folds the lookat into the *projection*
+(room modelviews are scale*translation only), so the committed 6 deg
+modelview gate could never see a turn.
+
+**Fix (port-only, `gfx_pc.cpp`).** `gfx_interp_cam_offset_deg()` measures the
+view angle between the raw and blended folded projections; divided by
+(1-alpha) it is a pacing-independent per-tick turn. Above 1.5 deg/tick the
+frame is presented exact (the gate's restart machinery); hysteresis releases
+only below 0.5 deg/tick so a turn stays exact end-to-end. Default ON;
+`GE_INTERPFALLBACK_OFF=1` disables, `GE_INTERPFALLBACK_DEG` tunes. The
+`GE_INTERPCLIP_*` far-clip widening is kept: removal (cap-fb3) brought back
+the far-clip corner-cut vanish of ridgelines on blended frames.
+
+**Evidence.** Detector: OFF segment worst 276 px, 17 confirmed-hole frames;
+ON segment (non-normalised, jittery alpha) worst 1777 px. Alpha-normalised
+build (cap-fb2): maintainer "mostly worked", holes gone. Slim far-clip +
+hysteresis (cap-fb4): "not all fixed yet", residual artifact not identified.
+
+**Known limitation.** An unidentified residual artifact remains in cap-fb4
+(candidates: distant flicker at the widened-band pop, post-turn settle, or
+holes on gentle turns below 1.5 deg/tick). Default-60 goldens unaffected
+(PASS). Owed: live 120 Hz Windows, Deck OLED 90 Hz, X220 checks.
+
+**Far-clip tuning (Dam playtest, same day).** Widening 1.5x: distant NPCs flicker
+through solid walls; 1.25x: partial NPC flicker, tunnel phasing unchanged; off:
+distant geometry flicker returns. Default is now 1.1x
+(`GE_INTERPCLIP_FAR`; `GE_INTERPCLIP_OFF=1` disables). Remaining limitation:
+upper tunnel / outside rooms phase in and out on blended frames when they sit at
+the game's per-tick visibility edge (not in that tick's display list; no blend
+can draw them). Portal scissors (`GE_INTERPSCIS_OFF`) not conclusively ruled out.
+
+**Set-change fallback + pacing (same day).** A frame whose set of matched
+matrices changed since the last tick (new/vanished rooms or objects) is now
+presented exact (`GE_INTERPSET_OFF=1` disables; Dam playtest: "pretty good").
+Cost on a Steam Deck OLED at 90 Hz: ~0.5 ms per in-between pass, no
+measurable effect on present rate (set check / fallback / clip / scissors
+A/B all within noise). Pacing: game-frame arrival jitters by up to 7 ms, so
+an early frame dropped a still-pending second slot (~10% of slots; 79 of 90
+presents/s on the Deck). The worker now presents a pending slot that is due
+within one present period before drawing the new frame
+(`GE_INTERP_NOFLUSH=1` restores dropping): Deck 90 Hz median 78-79 -> 82-83
+presents/s. A first slot that falls before the frame is drawn is shifted
+alone instead of shifting the whole grid. Remaining ~8% shortfall at 90 Hz is
+unexplained (present gaps of 13-20 ms on the Wayland compositor path).
+`GE_PERFSTAT=1` now also prints the per-second present rate. X220 (60 Hz
+panel, `GE_INTERP_FORCE=1` 120 stress): 116-120 presents/s, no crashes in
+six levels; Deck six-level sweep: no crashes.
+
+### D578 addendum: swap-driven present pacing (2026-10-07)
+
+Symptom: uneven presents at 90/120 and Steam Deck Game Mode could not hold 90 fps at 15-25% load. Cause: the render worker made a blocking vsync swap (the "never shown" present and the flush present) BEFORE drawing the next game frame, and the game waits for SP/DP done, which is posted only after the draw; under gamescope a swap blocks a full refresh, so game frames were missed. Slot times were also a free-running timer grid while the image appeared at whatever vblank the swap landed on.
+
+Fix (port/src/libultra.c, VSync on only): (1) no swap before SP/DP done. The finished passes already live in the present-slot FBOs (gfx_opengl_interp_store), so gfx_pc retains everything needed and nothing in the game's buffers is read after the draw; leftover slots of the previous frame are simply dropped. (2) Presents run back-to-back, each blocking swap = one refresh; slot times (hence alphas) are predicted vblanks from an EMA of swap-return gaps (s_vbLast/s_vbP), first slot = first vblank after the passes are drawn. A min-gap guard (0.7 of the target period) covers a swap that does not actually block. Passes are still all drawn up front (gfx_interp_tick is not lazy), only the times are vblank-aligned. (3) The flush workaround and GE_INTERP_NOFLUSH were removed. VSync off keeps the old timer grid and pre-draw never-shown present (swap does not block there). (4) Always-on 10 s line "D578 interp: ... presents/s, target, refresh, swap interval, vblank period, % exact" plus a start line (libultra.c; helpers videoInterpVSync/videoInterpInfo in video.c, gfx_interp_last_exact in gfx_pc.cpp).
+
+Smoke (Windows, 120 Hz, FpsCap 120, GE_INTERP_FORCE, level default): 115-119 presents/s. Deck Game Mode unverified. Confidence medium: the remaining risk is a swap held by gamescope for more than one refresh delaying the worker's pickup of the next game frame (at most one refresh, no longer two).
+
+D578 addendum (swap-driven vblank period): s_vbP is now seeded from the real refresh (videoInterpInfo) and its gap filter is relative to the s_vbP estimate (0.75..1.3x), with a median re-seed after 16 consecutive off-period gaps; minGap is 0.7*s_vbP; s_vbLast/s_vbP/s_ipLastN reset on the interp-off transition. Fixes target != refresh (120 on 90 Hz Deck, gamescope caps). Build-verified only; confidence medium until Deck-checked.
+
+D578 addendum (turn fallback softened; Deck 90 Hz: 9-64% exact frames): the exact fallback fired on ordinary stick turns because the projection-offset trigger engaged at 1.5 deg/tick (alpha-normalised) with hysteresis release at 0.5, i.e. any turn above ~1.5 deg/tick stayed exact for its whole duration. Now two-level (gfx_pc.cpp, gfx_interp_load_matrix projection branch + gfx_interp_tick): perTick in (GE_INTERPFALLBACK_DEG=1.5, GE_INTERPFALLBACK_HARD=8 default] re-runs the frame once with its alphas pulled toward 1 by softDeg/perTick (a' = 1-(1-a)*s), so the blended offset from camera N equals the threshold-level offset that showed no portal holes, yet the view still advances smoothly; only perTick > 8 (hysteresis release at 70%) or the existing 6 deg modelview gate or a set change goes fully exact. The 10 s log gains "D578 interp triggers: N turn-exact, N turn-softened, N set-change-exact". Set-change (GE_INTERPSET_MAX=0, any unmatched matrix) is untouched; the counters will show whether it is the remaining source. Risk: the Dam tunnel holes were seen at ~2.5 deg/tick with the old exact fallback OFF; the softened offset is bounded to the 1.5 deg/tick-equivalent level but that is not playtested. Build-verified only; confidence medium-low until Deck-checked (tune GE_INTERPFALLBACK_HARD down if holes return).
+
+D578 addendum (task 2, draw-on-swap with VSync, NOT done, blocker): gfx_interp_tick walks the game's live display list directly (vtx, matrix, texture/palette pointers, segment tables point into game memory; nothing is converted into a persistent per-frame form), and the game starts building the next frame into reused DL/vertex/matrix buffers as soon as SP/DP done is posted. Drawing later passes after posting SP/DP done would therefore read data the game is rewriting. Retaining it would need either a full copy of every referenced buffer per frame or a persistent converted command stream (a new renderer layer), both out of budget. The current design (all passes drawn into present-slot FBOs before SP/DP done, presented afterwards) is the safe form; the residual cost is a frame arriving while a swap blocks the worker waits at most one refresh. Confidence high on the blocker.
+
+### D578 addendum (Deck Cradle evidence: 69-100% exact frames)
+Build-verified only, not run (confidence medium). (a) The modelview 6 deg/tick gate in gfx_interp_matrix was the real turn-exact trigger (cliff); now graded like the projection check (soft from 1.5, exact above max(fast-turn gate, GE_INTERPFALLBACK_HARD=8)). (b) Set-change exact now needs changed > max(GE_INTERPSET_MAX, GE_INTERPSET_MIN=4) and > GE_INTERPSET_PCT=20% of the previous matrix set; unmatched matrices already draw exact with the camera correction. (c) s_ipPassEma divides by passes actually drawn (gfx_interp_body_runs), clamps a sample to 1.5x EMA, and the pass budget is 0.8*tick (was 0.6). Dam tunnel scissor/clip protection untouched.
+
+### D578 addendum (Auto frame-rate cap, gamescope VSync default)
+Build-verified only, not run (confidence medium). `Video.FpsCap = -1` is the new Auto value and the fresh-install default (was 60; registered range now -1..1000; 0 stays "uncapped", so existing inis keep their meaning). Auto resolves each frame in `videoApplyFpsCap` via `videoAutoFpsCap()`: the measured display refresh (`gfx_sdl_get_refresh_rate`), clamped to 144, and the VI rate (60 NTSC / 50 PAL) when the refresh is unknown or <= VI+5 -- so a 60 Hz panel takes the same non-interpolated path as the old default 60. F10 row: "Auto (N FPS)" first in `kFpsCapSeq`; reset default -1; the N64 preset also maps Auto to 60. Gamescope: `videoInit` defaults `Video.VSync` to 0 when `GAMESCOPE_WAYLAND_DISPLAY` is set or `SteamDeck=1` AND the ini had no `Video.VSync` key (new `configIntKeyWasLoaded`, since configLoad had already written VSync=1); logged once at LOG_NOTE and the ini re-saved so the choice persists. An ini that has the key is never touched. Risks: old builds clamp -1 to 0 (uncapped) if an ini is shared downgrade-wise; Auto on a 75 Hz desktop panel now interpolates to 75 by default; an ini that predates `Video.VSync` counts as fresh under gamescope.
+
+### D578 addendum: room-change-exact + room-scissor recompute scoping (2026-10-08)
+
+**Task 1 (implemented, build-verified only; Deck/Dam runtime check owed).** bg.c emits every room as `gSPSegment(SPSEGMENT_BG_VTX = 14, room vertices)` + `gSPDisplayList` (`bgRenderRoomPrimary/Secondary`, bg.c ~2932/2967), each inside a per-room `gDPSetScissor` from `bgScissorCurrentPlayerViewF(room bbox)`. The segment-14 base is unique per room, so `gfx_sp_moveword` (G_MW_SEGMENT) records it per pass in `s_interp_rooms_pass` (gfx_pc.cpp); after each pass the list is sorted/uniqued and compared with the previous game frame's list. A difference on a blended pass sets `s_interp_fast` with `s_interp_why = 3`, so the whole frame is re-run exact; counted as `room-change-exact` in the 10 s "D578 interp triggers" log line (libultra.c) plus a capped `D578 ROOMCHANGE` stderr line. `GE_INTERPROOM_OFF=1` disables. The object set-change 20% gate is untouched. Exact (alpha 1) frames are not affected (the check runs only when alpha < 1). Confidence: medium-high that the detection is right; unknown how often it fires on Dam (watch the counter; if it fires on most turning frames the exact fraction rises and a hysteresis/min-size rule may be wanted).
+
+**Task 2 (not implemented; scoping).** A room scissor is NOT a single portal's projection. `sub_GAME_7F0B7F84` (portal descent, bg.c ~4100, depth <= 16) recurses room->portal->room carrying `parentbox`; each portal's screen box comes from `sub_GAME_7F0B5864` (projects the portal polygon points via `sub_GAME_7F0B5528` with the CURRENT camera, cached per frame in `table_for_portals`) and is intersected with the parent box. `sub_GAME_7F0B39BC` stores the resulting box per drawn room in `dword_CODE_bss_8007FFA0[i].bbox` (+roomid, unk1 = draw order); `bgScissorCurrentPlayerViewF` clamps it to the player view. A port-side recompute needs: (1) the portal graph (room -> portals -> other room, polygon vertices in world space; `table_for_portals` / portal data in `ptr_bg_data`), (2) the descent path that reached each drawn room (not stored; only the final intersected bbox is kept), (3) the same near-plane clipping as `sub_GAME_7F0B5528`. Mapping scissor -> room is available (the segment-14 id seen before the scissor-using DL, or roomid via the bbox list), but path-dependent intersection means a recompute must replay the descent per pass with the interpolated view-projection. Feasible only with a read-only accessor that exports the per-room path (list of portal ids) captured in `sub_GAME_7F0B39BC`; the existing matrix-delta correction in `gfx_interp_scissor` remains the fallback.
+
+### D578 addendum: port-side portal-scissor replay (2026-10-08)
+
+**Implemented (build-verified; replay validated at alpha = 1 on Dam; interpolated look not seen by eye).** Task 2 of the previous addendum, done without touching `src/game`. `port/src/interpportal.c` (+ `port/include/interpportal.h`) transcribes bg.c's visibility traversal (`bgDetermineVisibleRoomsImpl` final pass: the global vis command list `parse_global_vis_command_list`, the portal queue/descent `sub_GAME_7F0B7F84` with the per-room visit cap and depth caps, `sub_GAME_7F0B5864` portal projection cache + D106/D271 guard, `sub_GAME_7F0B5528` near-plane clipping, `bgIsRoomOnScreen`, `sub_GAME_7F0B39BC` room list/union) against a private copy of all mutable state; portal polygons and the vis list are read in place, portal metrics via the pure `sub_GAME_7F0B96CC`. Scissor output goes through the same `bgScissorCurrentPlayerViewF` clamp/ceil.
+
+- **Threading (the surprise).** The render worker (D481) draws frame N while the game thread is already building N+1, so live game state (`dword_CODE_bss_8007FFA0`, `g_BgNumberOfRoomsDrawn`, the player's matrices) is not frame N's. The first check run showed it directly (`extra`/`game=` counts changing mid-compare). So `interpPortalOnSend` (called from the `osSendMesg` shim, i.e. on the game thread inside `rspGfxTaskStart`, recognised as `mq == sched_cmdQ && msg == g_gfxTaskSettingsList`) snapshots everything the replay needs (camera `field_10CC`/`projmatrixf`, player scale/view params, screensize, zrange, level scalars, per-room bounds, portal control bytes/connections, the vis stack, and the game's own per-room boxes) into a 4-slot ring keyed by the display-list pointer; `gfx_frame_body` selects it with `interpPortalPassBegin(commands)`. This also means any other render-side read of live bg state (e.g. `viGetZRange` in the clip widening) is one frame ahead; harmless there, noted for later.
+- **Camera for a blended pass.** GE loads the room projection `field_10E0 = lookat(room-scaled pos) * persp` (row vectors; `matrix_4x4_multiply(a,b,r)` is `r = b * a`). With `persp = projmatrixf`, `L = P * persp^-1` for the raw and the blended (pre-clip-widening) projection gives both rotations and camera positions in the room-scaled space; `dcam = (spos_blend - spos_raw) / D_800364CC` is applied to the world camera recovered from `field_10CC`, the blended rotation is renormalised (undo the lerp shrink), and Bond's position moves by `dcam`. Exact passes use `field_10CC` itself. A projection pair is accepted as the room projection only if the derived raw rotation matches `field_10CC` (max 0.05): the pure-persp, HUD and menu loads fail that and are ignored (the replay stays cached per pass, so a persp load between room draws cannot flip a room back to the old correction).
+- **Mapping and fallback.** `gfx_interp_scissor` (blend passes only) asks `interpPortalScissor(seg14, game scissor)`. seg14 (`gfx_sp_moveword`) identifies the room by `OS_K0_TO_PHYSICAL(g_BgRoomInfo[r].vertices)`; the replacement is used only if the game's own scissor for that room (from the snapshot) equals the scissor being applied (1 px tolerance), and the room was reached by the replay. Otherwise (full-view HUD scissors, props drawn between rooms, split-screen players, unreached rooms) the old matrix correction runs unchanged. Replacement is the faithful replayed box (no union with the game's box; `GE_INTERPPORTAL_UNION=1` adds the union).
+- **Switches.** Default ON. `GE_INTERPPORTAL_OFF=1` (also keeps the snapshot off) restores the previous behaviour; `GE_INTERPPORTAL_CHECK=1` logs `D578 PORTALCHECK` lines: on every exact (alpha = 1) pass the replay with the unmodified camera is diffed against the game's per-room boxes (works without interpolation; log shows `miss/extra/bad`, camera `rotdiff`/`scalediff`), and on blended passes a sanity line (`maxshift` px, `dcam`). Exact frames are byte-identical to before (no scissor touched).
+- **Validation (Windows, Dam `-level_33`, 120 Hz interpolation on this PC, `GE_QUITFRAME`).** 1200 alpha-1 passes checked: 0 frames with any missing/extra/different room box (maxdiff 0.0000 px), camera derivation `rotdiff` 1e-5, `scalediff` 0.003 (scaled units), i.e. the transcription is bit-exact for the covered views (Dam spawn/intro, 5-8 rooms). Covered camera motion was small, so deeper chains (the tunnel) are not exercised; run the check while walking the tunnel on the Deck/PC and expect `bad=0` throughout. Counters in the 4000-replacement stats line: `fullview` (non-room scissors left alone), `gatefail` (sub-rect scissors not matching their room), `noroom`, `unreached`.
+- **Confidence / risks.** Medium-high that the replay equals the game's traversal (0 mismatches, same code path); medium that the blended camera derivation is right for large turns (rotation lerp, linear in the projection; the existing turn/set-change fallbacks still gate those). Untested by eye: whether the replayed boxes remove the tunnel pop at 90 fps (maintainer check on the Deck). Known gaps: split-screen (replay skipped via the rotation check/gate), `VISOP_PRELOAD_*` skipped (no effect on boxes), the vis command `Unk80081600` function-static is replicated, not read. If the faithful box shows seams, try `GE_INTERPPORTAL_UNION=1` before reverting to the old correction with `GE_INTERPPORTAL_OFF=1`.
+
+### D578 addendum (2026-10-08, uncommitted): undrawn-room fallback for the Dam tunnel holes
+
+**Claim (confidence MEDIUM, unverified on the Deck):** tunnel holes come from rooms that the in-between camera can see but the game's display list never drew. The list is built for the current frame's camera; the existing room-set-change gate only compares the previous and current frame's lists, so a room absent from both but reachable mid-way is missed.
+
+**Evidence for it:** (a) `allexact` removed almost all flicker on the Deck, so it is in the in-between passes; (b) the 10-07 diagnosis note shows holes absent in both exact neighbours; (c) rect size is not the cause: widening the replay rect to the union with the game's rect changed nothing on the Deck (reverted); (d) the replay's `extra` rooms exist as a signal (`rp_check` already counted them).
+
+**Change:** `interpportal.c` `rp_replay_now` counts rooms the replay reaches at the interpolated camera with no game-drawn room and a rect of at least 3x3 px; `gfx_interp_tick` forces exact presents for that game frame (same class as a room change, trigger counter shared with `room-change-exact`). Switches: `GE_INTERPREACH_OFF=1` or `noreach` in `d578_live`. Log: `D578 REACH` lines and an "undrawn-room replays" counter on the 10 s portal line.
+
+**Verified:** builds on Windows; 1500-frame headless Dam run at 120 is crash-free and the fallback fired on 5 of 2557 replays (the route did not reach the tunnels). **Not verified:** that it removes the tunnel flicker. Maintainer test: Dam tunnels at 90/120, then flip `noreach` in `d578_live` and compare.
+
+**Deck result (2026-10-08, same day): NOT the main cause.** With the fallback on (e2b988f0) the flicker remained; the fallback fired on only 11-13 of ~11k replays. Live A/B: `noportal` = no change; `noportal nosciss noclip noreach` = slightly MORE frequent, so the extras help a little but the base cause is elsewhere. The maintainer notes it mostly appears when SPRINTING toward the tunnel (large per-tick translation, so the in-between camera is far from the list-owning camera). A 900-present quarter-size burst taken inside the tunnel found no wall-hole outliers (temporal-outlier detector, tracers masked); the only one-present anomalies were bullet tracers. Detector or capture may have missed a thin or distant artifact: describe the exact visual first. Tooling kept (dev only): `burst` word in `d578_live` + `touch d578_burst` saves 900 quarter-size presents to `ppm/` (Deck has no keyboard, so ssh-triggered; delete them after pulling).
+
+**If it does not fix it:** the next causes in order are (1) rooms drawn without depth test (OPA_SURF2/TERR2) reordering under the interpolated camera, (2) a replay that stops early (`unreached` counter), (3) hole-fill in the present path (last resort: needs a sky mask and both neighbour frames, fragile).
+
+### D578 addendum (2026-10-08, uncommitted): Dam in-between flicker -- diagnostics, `dclamp` and `projset` A/B switches
+
+**Status: built, NOT runtime-verified (confidence LOW that either switch fixes the flicker; HIGH on the code-reading facts below).** Defaults are unchanged: with `d578_live` empty the output is identical to the previous build, except for the added `D578 PROJDIAG` stderr line.
+
+**Code facts that differ from the review's premises:**
+1. `GL_DEPTH_CLAMP` is already enabled at GL init (`gfx_opengl.cpp`, whenever `GLAD_GL_ARB_depth_clamp`, which is forced true on GL >= 3.2). So `dclamp` alone cannot add a clamp; the A/B therefore *disables* the clamp for the exact pass and relies on it for in-between passes.
+2. The software RSP rejects whole triangles on the CPU when all three vertices have `z > w` (`CLIP_FAR`, `gfx_sp_vertex` and the float-vertex path). GL depth clamp cannot rescue those, and the lerped far plane sits closer than both source planes, so triangles between the lerped and the real plane were dropped before GL ever saw them. `dclamp` therefore also drops the CLIP_FAR bit on in-between passes.
+3. The room projection is `lookat * persp` (row vectors; `bondview2.c` `matrix_4x4_multiply(projmtx, &spC4, &sp60)` means `sp60 = spC4 * proj`, D32). The lookat is built from `scaledpos = (cam - current_model_pos) * D_800364CC`, so its translation T is nonzero. Hence `M[i][2] = A*L[i][2]` (i < 3) and `M[3][2] = A*T.z + B`, with `A = (n+f)/(n-f)`, `B = 2nf/(n-f)`. `P[3][0..2]` is the lookat translation row times the perspective diagonal, not `k*L[2]`. The knorm test in `gfx_interp_conservative_clip` passes only because `M[3][2]` is dominated by B while the camera is near the model origin; when T grows it can flap, switching the widening on and off between ticks. `l22 = M[3][2]/k` is about 1, not `L[2][2]`, so the live code adds `dA*l22` to `M[2][2]` (should be `dA*L[2][2]`) and never scales `M[0][2]`/`M[1][2]`: a heading-dependent tilt. The review's corrected formula (`M[i][2] *= A2/A` for i < 3; `M[3][2] = (M[3][2]-B)*A2/A + B2`) matches this derivation. It is in the tree as `gfx_interp_conservative_clip_fixed`, UNUSED.
+4. Matches the review: all projection LOADs share match key 0, so several per frame are paired by distance only. `PROJDIAG` counts how often the matched index differs from load order.
+
+**Switches (`d578_live`, sampled once per game frame):** `dclamp` -- in-between passes: GL clamp on, CLIP_FAR reject off, `gfx_interp_conservative_clip` skipped; exact pass: clamp off; clamp restored to the default after the frame; silently ignored (logged once) without GL support. `projset` -- each tick records, on pass 0, one signature byte per projection LOAD (1 = `|P[3][0..2]|` within 5% of `|k|` from the live n,f); a count or signature change vs the previous tick forces exact presents (`why = 4`, counted in `PROJDIAG projset-exact`).
+
+**Log:** every ~10 s while interpolating, `D578 PROJDIAG passes=.. loads/pass min/avg/max | clip applied/disabled/badnf/knorm-skip/dclamp | knorm/|k| range, l22 range | pairs N order-mismatch M | projset-exact=.. [dclamp=0|1 projset=0|1]`, then one `last pass proj[i]: knorm |k| l22 code paired-with` line per projection of the most recent in-between pass (`code` 0 applied, 1 disabled, 2 bad n/f, 3 knorm mismatch, 4 dclamp; `paired-with` -1 = no match, -2 = not paired). The classification mirrors the live early-outs; a pair rejected by `gfx_interp_plausible` still shows its pre-clip code.
+
+**Maintainer test (Deck, Dam, 90 Hz):** sprint toward the tunnel with `d578_live` empty, then `dclamp`, then `dclamp projset`; report flicker yes/no for each and send the PROJDIAG lines.
+
+**Deck results (2026-10-08, Dam tunnel sprint, 90 Hz, Game Mode) -- NONE of the five variants removed the flicker:** empty, `dclamp`, `dclamp projset`, `exactproj` (in-between passes keep the exact room projection, modelview blend kept), `clipfix` (both source projections widened before the lerp). Ruled out as the prime cause: far-plane clip range or asymmetry, the CPU far reject, the projection-LOAD set changing between ticks (`projset-exact=0` in the baseline), the projection lerp itself (second order, and `exactproj` removes it), and matrix pairing by shared key 0 (order-mismatch 0.2-1% of pairs).
+
+**New facts from `PROJDIAG`:** (1) The live `knorm ~ |k|` gate skips every folded room projection (knorm 26-290 vs |k| = 10.00): ~1,100-1,900 skips per 10 s, `applied` counts only pure-perspective loads. The widening therefore never touched room geometry at Dam. (2) The structural gate `M[i][2] + A*M[i][3] = 0` (rows 0-2), `M[3][2] + A*M[3][3] = B` holds for the room loads to ~1e-5 (r0 max 1.5e-5, r1 -1.5e-5..2.8e-5; 100% pass in clean windows) and failed 7 loads in the load-screen window (r1 to -50: the menu/watch projections it is meant to reject). `gfx_interp_clipfix_widen` uses it and is the correct widening if the clip is ever wanted; it is behind the `clipfix` live word, off by default. (3) 29-227 projection LOADs per pass.
+
+**Still open:** `allexact` removes the flicker, so it lives in the blended (alpha < 1) passes, in something other than the projection. Remaining suspects: per-object modelview pairing/ghosting, rooms drawn without depth test reordering under the interpolated camera (OPA_SURF2/TERR2), the deep tunnel portal chain, and a hole-fill in the present path. Next step is a pixel-level look at what actually changes between presents (burst capture), not another switch.
+
+### D578 addendum (2026-10-08, later): Dam flicker narrowed to per-pixel content of the blended passes; stage-elimination + hole-capture tooling
+
+**Status: NOT FIXED. Everything below is measured on the Deck (Game Mode, Dam, 90 Hz) unless stated. Symptom (maintainer, repeated): geometry (walls/terrain) drops out and the skybox shows through; worst at the END of the first tunnel / the gap before the second, while moving FORWARD (turns are already covered by the exact-frame fallback). `allexact` removes it, so it lives in the alpha < 1 passes. The truck passing through the tunnel eases it briefly (consistent with the set-change exact fallback firing on its matrices, not a truck-specific mechanism).**
+
+**Measured (`tristat` word, per-room triangle fate, in-between vs the exact pass of the same game frame, ~1,950 passes):** `seen` is identical in every room (the DL is the same), `eye`-plane crossings identical, net emitted-triangle difference is ~0 on average (+79, +147, -66, -175, +38 ... per 10 s) and only 1 of ~1,950 passes emitted < 97% of the exact pass. The four loss events logged first (frames 1769/2161: backface-cull +82/+93 in room 5d1f0; 5371/5375/6038: top/left trivial reject) were selected by logging only losses; they do not show a systematic loss. **The CPU never drops materially more triangles in blended passes. The dropout is not a count of missing triangles.**
+
+**Eliminated by Deck A/B (each flickered the same):** empty switch; `dclamp` (GL clamp on in-between, CPU CLIP_FAR reject off); `dclamp projset`; `exactproj` (exact room projection, modelview blend kept); `clipfix` (both source projections widened before the lerp, structural gate); `nodepth` (no depth test on in-between passes); `nocull` (no backface cull); `fullsciss` (room scissors = whole viewport). Earlier, from the 10-08 morning: `noportal`, `nosciss`, `noclip`, `noreach` (no change). So far-plane clipping, depth testing, backface culling, scissors, portal replay, projection lerp, projection count, matrix pairing (order-mismatch 0.2-1%) and the visible-set gates are all NOT the cause.
+
+**What is left:** triangles that exist, are emitted, are not depth/cull/scissor-rejected, yet the pixels are sky/background: (a) vertices transformed to the wrong place (modelview or projection for a subset of loads: not tested directly -- `exactproj` fixed only the projection side, and 29-227 projection loads per pass are paired by distance so a wrong pairing for a few would not show in the order-mismatch count if the matrices are near-identical); (b) fog turning distant geometry into sky colour in the blended pass; (c) colour-combiner / blend / texture state differing between passes (rendering_state is NOT restored between passes and mirrors live GL bindings; the "known residue" note in gfx_interp_tick); (d) draw order (sky drawn after rooms in a blended pass); (e) GL state the interp store/restore leaves behind. Do not guess among these: capture the failing frame (below).
+
+**Tooling added (all behind `d578_live` words, off by default):** `PROJDIAG` (10 s line: projection-load counts, structural-gate pass/fail and residuals, widening skips), `tristat`, `exactproj`, `clipfix`, `dclamp`, `projset`, `nodepth`, `nocull`, `fullsciss`, `holecap`. All diagnostic lines also go to `ge007.log` (Game Mode swallows stderr). **`holecap` is the next instrument and has not yet been run in the tunnel:** every game frame it compares the first in-between slot with the exact slot at 1/4 resolution, and with the PREVIOUS exact frame; a pixel that differs from BOTH exact neighbours cannot be explained by motion (an interpolated image only contains what the two neighbouring exact frames contain), so 16x16 blocks that are >= 14/16 unexplained are a hole. On a hit it saves `holecap_<frame>_{ib,ex,prev}.ppm` (ib/ex full resolution, prev at 1/4) in the game's working directory, up to 8, and logs `D578 HOLECAP`. A first version (blocks that merely differ between ib and ex) false-triggered on turning frames at level start and burned its cap; the both-neighbours rule fixes that. `<repo>/scratch` is not needed: pull the PPMs, convert with a PNG writer, view `ib | ex | diff` side by side; delete the Deck files afterwards.
+
+**Structural clip gate (kept, correct, unused by default):** the room projection is `lookat * persp` (row vectors), so `M[i][2] + A*M[i][3] = 0` (rows 0-2) and `M[3][2] + A*M[3][3] = B`, with `A = (n+f)/(n-f)`, `B = 2nf/(n-f)`. Verified on the Deck: 100% pass on room loads, residuals ~1e-5; rejects menu/watch projections. The old `|P[3][0..2]| ~ |k|` gate skipped every folded room projection (knorm 26-290 vs |k| = 10) so the far-clip widening never touched room geometry at Dam.
+
+### Addendum 2026-10-09: Dam tunnel flicker fixed (two causes), shadow-flicker trade-off
+
+**Cause 1 (portal replay):** the port-side portal-chain replay (`interpPortalScissor`) sometimes returned a near-full-view rect for a far room (seen: room 131, 128..1164 x 33..600 slot px, against a small portal opening). That room draws without depth, so it painted over the nearer tunnel (holecap frame 4745, Deck). **Fix:** the replayed rect is clamped to the union of the room's game rects in the previous and current exact frames, padded by 8 px (`port/src/interpportal.c`).
+
+**Cause 2 (modelview pairing), the main flicker:** in-between passes paired each modelview with a previous-frame matrix by nearest transform, then blended. Room and prop matrices were matched to the wrong instance and drawn between two places, so geometry phased in and out while the camera moved. Live Deck A/B (the `d578_live` words): `mvexact` was clean and survived a level restart; `nocorr` alone still flickered. Excluding only unkeyed or ambiguous pairs was not enough. **Fix:** in-between passes draw modelviews exactly as the game loaded them, and only the projection (which carries the camera) is blended. The `mvblend` word restores the old blend for development.
+
+**Found by:** an inventory of every in-between-versus-exact difference (dev-process §8 "Regression triage first", applied to a new feature), then one live switch per uncovered difference, flipped over ssh in a single session. **Verified:** maintainer, Dam on Deck at 90 Hz and on PC at 120 Hz. Accuracy at 240 fps (PC, forced): the 21-level golden sweep matches the 60 fps goldens on 20/21; Streets is the D579 near-clip re-base, and the 4 sweep misses passed when run singly. Engine headroom is about 0.5 ms per in-between pass, so 240 fps on this PC is limited by the display.
+
+**Known trade-offs (open):** (1) moving models update at the game-tick cadence in in-between passes; (2) decal shadows flicker at high FPS (Dam, Cradle catwalks; `mvblend` stops it), likely because the shadow's exact modelview disagrees with the blended surface under it. (3) The holecap trigger now needs 30 or more blocks, so one-frame tracers and sparks no longer use up the capture cap. (4) Harness: `verify.sh` pins `Video.DeckPresetApplied = 1`; Deck captures with interpolation on still come out at 1280x800 against 640x480 goldens (open tooling item).
+
+### Addendum 2026-10-09 (late): exact-frame regression + VSync 60 lock fixed; black-frame flicker open
+
+**Regression from the morning fix (17ec86c4), now fixed:** the early return that draws modelviews exact skipped the pairing, so no previous-frame modelview was marked taken. The set-change detector counted them all as changed and made ~96-100% of frames exact, so 120 fps showed duplicated exact frames and looked like 60. The pairing now runs for bookkeeping and the modelview is still drawn exact. Log after the fix: 0-6% exact at ~120 presents/s. The earlier "Dam clean" verdict was taken while most frames were exact, so the tunnel and gap need a re-check with real in-between frames.
+
+**VSync held at 60, fixed (`port/src/libultra.c`):** (1) swap-driven pacing keyed off the VSync setting, not the live swap interval, so a driver that forces VSync off produced non-blocking swaps that were measured as the display period; it now reads the live interval (~1/s). (2) The display-period estimator could re-seed to ~16.7 ms after a run of slow swaps, and the 0.7-period gate then held presents at 60 on a 120 Hz panel; the estimate is now capped at the real refresh period +10%. Verified: 120.0 presents/s, swap interval 1, period 8.33 ms, 2-6% exact.
+
+**Black frames at 120 with VSync on:** moved to D583 (present scheduler under G-Sync/VRR; the back-buffer hypothesis was refuted there).
+
+### Addendum 2026-10-10: in-between depth-clip widening now default OFF
+
+**Symptom (maintainer, Deck 90, per-level pass):** above 60 fps only, at one long range: a Frigate computer terminal's shadow visible through a wall from outside; Statue's Valentin visible through the shipping crate he spawns in until approached. Clean at 60.
+
+**Cause:** `gfx_interp_conservative_clip` (the far-clip widening on in-between projection loads, FAR 1.1). Its own comments already recorded that 1.25-1.5 "made distant NPCs flicker through walls" and that the live formula adds a heading-dependent tilt (`gfx_interp_conservative_clip_fixed` is the unused corrected form). Live `noclip` on the running Deck game removed the Frigate glitch immediately.
+
+**Fix:** `interp_clip_off()` gates all three widening paths (`gfx_interp_conservative_clip`, `gfx_interp_clipfix_widen`, the PROJDIAG gate) and is ON by default; `GE_INTERPCLIP_ON=1` or `clipon` in d578_live opts back in (`GE_INTERPCLIP_OFF` / `noclip` still force it off). Commit ce809cd4. **Owed:** the Dam distant-ridgeline check without it (the reason it was added, cap-fb3 2026-10-07); if the ridgelines vanish again, try the `_fixed` form instead of the old one.
+
+**Release strip (2026-10-10, v0.5.1):** the `d578_live` live-word file and every word it read, `holecap`, `burst` capture, `tristat`, `GE_INTERP_SELFCHECK`, `GE_INTERPPORTAL_CHECK`, PROJDIAG, the `GE_INTERPSCIS_*` / `GE_INTERPSCISSOR` / `GE_INTERPGATE_ABFILE` knobs and the matrix-counting set-change check (`GE_INTERPSET_*`, which only ran with `mvblend`) were removed; each site collapsed to its default branch (clip widening off, replay box unioned with the game box, in-place restart on, glFinish skipped under gamescope). Kept: the 10 s stats lines, `D583 SLOW`, IPLOG/`GE_INTERPLOG`, `GE_INTERPCLIP_ON`, `GE_INTERPFALLBACK_*`, `GE_INTERP_FAST_TURN`, `GE_INTERPROOM/REACH_OFF`, `GE_INTERPPORTAL_OFF/_UNION`. The removed switches are in `feat/d583-deck90` history for a future debug build.
+
+## D579: Issue #150 "geometry disappears when too close" -- FIXED: the D543 CPU near clip cut at the near plane under GL_DEPTH_CLAMP; now cuts at the camera plane (2026-10-08, fixed 2026-10-09)
+
+**Status: FIXED 2026-10-09 (maintainer-verified at the Dam gate in 16:9, floor haze intact; golden sweep owed). Root cause and fix: see "Resolution" at the end of this entry. Everything between here and there is the superseded investigation record (the cull was never the cause).**
+
+**Bug (GitHub #150, reporter Tasosgemah):** hugging a wall/surface makes the geometry in front of you vanish; the view becomes a dark, low-contrast smear. N64 native widescreen does NOT do this. Two symptoms were chased in one tree: (a) the disappearance itself ("black wedge + peephole" in early captures), and (b) a file-select regression where the 16:9 pillarbox bars showed stale game pixels instead of black.
+
+**Theory refuted (this is why the working tree looks the way it does):** the leading theory for (a) was "a near-plane-straddling portal produces a degenerate room-scissor box that is not drawn". run5 (`scratch/d150/run5.log`, `GE_DSCI=1 GE_D150=1`) refuted it: the portal probe (now `GE_D579` -- the probe was mislabelled D150, already taken, hence the re-label) shows finite, reasonable portal boxes, and the `GE_DSCI` diagnostic found **zero** degenerate scissor boxes (the `gfx_scissor_raw` full-view fallback never fired). The room scissor is not dropping the geometry here.
+
+**Landed half (keep): the N64 clear model.** The N64 RSP never clears color (gmain.s clears depth only; VI never writes VRAM), so undrawn regions keep the previous frame's pixels. The port's per-frame black clear turned those into black (the dramatic wedge) and leaked stale pixels into the 16:9 bars. `gfx_frame_body` now does **no canvas color clear** (persistent VRAM, N64-faithful) and clears only the 4 letterbox/pillarbox bars via the new `gfx_rapi->clear_region` (gfx_opengl.cpp); `gfx_init` clears the FBO attachments once at creation. This fixed the file-select stale bars. **Still open: a 1px seam on the left bar** (boundary between the cleared `[0,ox)` and the canvas at `ox` -- suspect `gfx_adjust_viewport_or_scissor` rounding; try a `+1px` left bar and check where the canvas actually starts).
+
+**The cull-sign lead (superseded by Update 2 below): the backface-cull sign at w~0.** The full-res run4 captures show the smear is a **textured wall panel at extreme close range, dark and blurred, occluding the room** (right side of frame: normal sharp scene -- floor, hazard stripes; left/center: the giant panel). Reading: the camera has penetrated (or is on) the near face of a wall, and the face that the RSP would cull is being drawn. The port's cull test in `gfx_sp_tri1` computes the signed screen area as an **NDC cross with per-vertex `x/w` division** plus an XOR "one-behind negates" fixup. That disagrees with the RSP, which culls on **w-scaled clip-space coordinates (no per-vertex division)** -- GE's ucode (`gmain.s`) runs its cull determinant on w-scaled coords, and the PD port's copy has the same NDC form, which GE's wall-hugging case exposes: when a vertex straddles w=0 (or the per-vertex w's differ a lot, a big close triangle), the `x/w` terms blow up to +-huge and the sign of the cross becomes dominated by the w~0 vertex's coordinate sign -- arbitrary. Consequence: the back face of the near wall passes the cull and is drawn as the giant dark panel (its texture at ~1000x magnification = the blur; the outward face of the wall is the dark side = the darkness). The N64 never shows it because its cull sign there is well-defined.
+
+**Fix tried and REFUTED (maintainer A/B at the wall spot, 2026-10-08; the CULLCLIP variant -- the CULLV2 variant and its aftermath are in Update 2 below):** compute the cull cross on w-scaled clip-space coordinates (raw `x`, `y`), dropping the per-vertex division and the XOR fixup (clip-space coords are bounded; a straddling triangle's cross is well-defined without one). **Both `GE_CULLNDC=1` (old NDC) and the default (clip-space) still show the smear, and the clip-space variant looked WORSE** (it also moved ~4% of pixels on the surface1 golden frame 900 -- expected, it was never golden-captured). The cull sign is NOT the #150 cause. The tree now ships the old NDC cull as the default; the clip-space variant stays opt-in behind `GE_CULLCLIP=1` for post-mortem only.
+
+**Update 2 (2026-10-08 late -- the rest of the cull series; all variants refuted, #150 narrowed):**
+
+- **`GE_D579T` per-triangle telemetry built** (any vertex w < 50, capped 64 lines/frame; gates `R0` = D233 trivial-reject, `C` = cull, `N` = D543 all-behind, `E` = emitted; `T` rows = triangles, `R` = rects; C rows carry x, y, w, z/w, cross, mode) + standalone **`GE_X_NOCULL`** knob (independent of the D578 `s_x_nocull` stage word). Logs: `scratch/d150/d579t-{1,nocull,v2,v2b,mixw}.err.txt`.
+- **NOCULL run confirms the cull is the leak cause:** zero C rejects; the wall shows at the spot (a small sliver remains -- the D543 clip-created-vertex lerp blemish, invisible at 320x240, not the main bug). `N` all-behind discards continue and are RDP-equivalent (correct).
+- **CULLV2 refuted and DELETED (was opt-in `GE_CULLV2=1`):** clip-space determinant in the ucode's winding (v2-v1, v3-v1) with a sign flip intended to "restore the shipped NDC decision". The equivalence claim was **wrong**: the NDC signed area and the clip-space signed area disagree on **disparate-w** triangles (one near vertex + two far vertices -- the norm for near-camera geometry), so CULLV2 flipped cull decisions on normal near geometry (maintainer: "completely broken"). NOTE for the record: the CULLV2 build's in-front decision was actually the CULLCLIP decision (the two flips cancel), so the "worse" vs "completely broken" delta between the two A/Bs was the **D543 u/v "fix" riding in the CULLV2 build, not the cull** -- no clean cull-sign A/B ever ran.
+- **The D543 u/v "fix" was a non-bug and is REVERTED.** It stored w-scaled (u*w)/w at near-clip vertices; the GLSL contract (gfx_opengl.cpp: attributes carry q*w, the shader divides by w itself; the UV attribute is raw u) means the original linear clip-space u/v lerp was correct. The "fix" made every near-clip vertex (floor/wall within a few units of the camera -- i.e. always) sample the wrong texture region = the "terrible warping" scene. The tree has the original lerp.
+- **The any_w_neg guard -- built, maintainer A/B, REFUTED:** cull only all-in-front triangles (all w > 0) with the shipped NDC cross VERBATIM (golden-safe by construction); mixed-w triangles skip the cull and fall through to the D543 near clip (mirroring the RDP: all-behind -> discarded, straddling -> clipped + emitted; the ucode has no CPU near clip, established from gmain.s). Result: **"still happens."**
+- **Why it still happens -- the third mechanism (isolated from `d579t-mixw.err.txt`, no new runs):** the residual `C` rejects at the spot are on **all-in-front faces with NDC cross ~ +0.0** (near z/w, on-screen x/w; e.g. frames 3437-3439, mode B, cross +0.0/+0.1). When the camera hugs the wall, the wall faces are **near-degenerate in NDC** (edge-on: x/w ~ constant across the face), so the per-vertex 1/w cross sign is numerically meaningless (float-noise +-0.0) while the RSP's bounded w-scaled determinant is well-conditioned. The leak is on faces where the NDC cull is **ill-conditioned**, not only where it is undefined (w < 0).
+- **Offline determinant pass (C rows carry x, y, w -- no build needed):** the ucode-winding candidate det_B = (v2-v1)x(v3-v1) in clip space is **decisively negative** (-1..-8) on the near-culled mode-B faces, so a naive det_B cull (BACK: cull det <= 0) culls them too -- det_B alone does NOT keep the wall faces. The data gap is closed: **`E` rows now carry the same (x, y) coordinates, w (the base row) and the NDC cross** (extension built 2026-10-09; C and E rows are directly pairable). Pair faces by (x, y, w) between the E set (nocull) and the C set (default) and evaluate candidate rules (NDC, det_B, det_A, the fast3d clamped fixed-point form) for one that keeps every wall-visible face while agreeing with NDC on decisive faces (golden safety). The gmain.s cull-block disassembly is scrambled (reordered instructions + register aliasing) and its sign convention cannot be read reliably; the PD reference port (pd_port/port/fast3d/gfx_pc.cpp) uses the same NDC+XOR form -- there is no alternative to copy.
+- **1964 SETTLED (the old decisive A/B is no longer owed):** 1964 KEEPS the wall at the spot; the port leaks the skybox through. Real content divergence, not a D526-class sharp-display reveal. The MSAA-off A/B is likewise void (it served the reveal hypothesis).
+
+**Owed (in order; supersedes the earlier list):**
+1. **DONE 2026-10-09:** `GE_D579T` E rows log x, y (same coordinates as C rows), the cull bits and the NDC cross (na when mixed-w); build green.
+2. Two ~10 s walks at the spot: default build, then `GE_X_NOCULL=1`, both `GE_D579T=1`; save stderr to `scratch/d150/`.
+3. Offline pairing: match E faces (nocull, wall-visible) against C faces (default, culled) by (x, y, w); find the decision rule that keeps all wall-visible faces and matches NDC on decisive in-front faces. If no determinant rule works: an ill-conditioning suppression -- skip the cull when |cross| * face-extent < eps (emitted faces; the RDP-mirroring near clip handles them; decisive faces unchanged -> goldens safe).
+4. If a fix lands: maintainer validation at the spot + a normal-room sanity pass -> 21-level golden sweep (the NDC-default build is the baseline; do NOT re-base off any clip-space build) -> the #150 work is already committed separately from the D578 remainder (2026-10-09, `feat/interp-fps`) -> strip the probes (`GE_D579T`, `GE_X_NOCULL`, `GE_D579`, `GE_DSCI`) per the strip-when-landed rule.
+5. Separate cosmetic: the 1px left-bar seam (suspects above).
+
+### Resolution (2026-10-09)
+
+**Root cause: a v0.5.0 regression from D543**, not the cull. D543's CPU near clip (`gfx_sp_tri1`, `port/fast3d/gfx_pc.cpp`) cut triangles at the near plane (`d = z + w`). GL runs with `GL_DEPTH_CLAMP` (`gfx_opengl.cpp`, enabled whenever `ARB_depth_clamp` exists), so the GPU never near-clips: geometry between the eye and the near plane is meant to reach the rasterizer, as on the N64 (1964 keeps the wall). When the player hugs a wall, its faces sit in that band, and D543 cut them away or dropped them whole, so the sky showed through. 16:9 makes it easier to hit because more of the wall is that close at the screen edges.
+
+**How it was found:** the maintainer placed the first sighting at v0.4.1/v0.5.0. `git tag --contains` put D540/D543/D553 (`4b710728`) first in v0.5.0. One run with `GE_NEARCLIP=0` showed no see-through. The `GE_D579T` camera-to-wall probe (eye-to-face-plane distance) had already shown every culled face with the eye on the consistent side (+16.95 units; 15,673 faces), so the cull was behaving correctly. The earlier cull, gmain.s and guard-band work below was a dead end. Process lesson: `docs/dev-process.md` §8 "Regression triage first"; bug class: `docs/porting-notes.md` D35.
+
+**Fix (port layer only):** the clip now cuts at the camera plane, `d = w - 0.01`, which is all D543's purpose needs (no attribute extrapolation across w = 0). A clip-created vertex now sits on the camera plane, where z/w can be below -1, so its fog is evaluated at `max(z/w, -1)` (the near-plane value), keeping D553's static haze at the player's feet unchanged. The `any_w_neg` cull guard stays. The D579 dev diagnostics (`GE_D579T`, `GE_D579K`, `GE_X_NOCULL`, `GE_DSCI`) are removed.
+
+**Verified:** maintainer, Dam gate wall-hug in 16:9, no see-through and no floor smear. **Owed:** 21-level golden sweep.
+
+### Addendum 2026-10-10: follow-ups (stale watch pixels, Cradle regression, probe strip)
+
+- **Native widescreen stale watch pixels** (ac50865d, maintainer Deck OK): the no-colour-clear model left the canvas strips outside a 4:3 front-end screen undrawn. `gfx_frame_body` now clears those strips (like the letterbox bars) when `current_menu != RUN_STAGE` and `portNativeAspect() > 4/3`; in-stage frames keep the N64 no-clear.
+- **Cradle catwalk flicker was a D579 regression** (the mixed-w no-cull): fixed in D584 with the homogeneous facing test. The no-colour-clear and the degenerate-scissor full-view fallback were A/B'd on the Deck and are NOT involved.
+- **Probe strip:** the last D579 probe, the `GE_D579` block in `src/game/bg.c` (sub_GAME_7F0B5864), is removed (bg.c restored to its v0.5.0 bytes). No `GE_D579*` / `GE_DSCI` / `GE_X_NOCULL` remain. Still owed: the 21-level golden sweep.
+
+## D580: #153 hatCreate -> setupFindObjForReuse crash (propDef type read via `(u8)cmd[0]`) — FIXED 2026-10-09 (ABI/endianness, Rule-2 exception; unverified at runtime)
+
+- Symptom (issue #153, v0.5.0 Windows): access violation in `setupFindObjForReuse` (loadobjectmodel.c) from `hatCreate` <- `hatCreateForChr` <- AI `TRYGiveMeHat`; RAX 0x0000001600000015 (two adjacent 32-bit words read as a pointer), fault = RAX+0x30 (`obj->prop->parent`).
+- Root cause: the propDefs walk tested the record type with `(u8)cmd[0]` (`cmd` is `u32 *`). On N64 (big-endian) the low byte of the header word `[u16 extrascale][u8 state][u8 type]` is the type; on little-endian PC it is the low byte of `extrascale`. So records were matched as PROPDEF_HAT by extrascale (0x11) instead of type, and non-object records (words 0x15, 0x16 ...) were cast to ObjectRecord and `obj->prop` read from garbage. The walk could also end early/late on `PROPDEF_END`. Same defect class as D139 (`cleanup_objects.c` CLEANUP_PDTYPE), which fixed that sibling but missed this one. Stride (`sizepropdef`) was verified consistent with `PROPDEF_PC_BYTES`.
+- Fix: `#ifdef PORT` macro `REUSE_PDTYPE` reads `PropDefHeaderRecord::type`. No logic change.
+- Siblings: grepped `src/game` for `(u8)x[0]` type reads; only cleanup_objects.c (already fixed, D139) and this function.
+- Confidence: high on cause (matches RAX/fault signature); runtime verification owed (hat-spawning guard AI).
+
+## D581: First launch opened on the leftmost monitor, not the primary — FIXED 2026-10-09 (port only, #151)
+
+Cause: with no saved Window.X/Y, `gfx_sdl2.cpp` centred the window using display 0 mode size as absolute coordinates (and sized it from display 0). SDL display 0 is not the OS primary on multi-monitor X11/Xwayland, and the coordinates ignored the display desktop offset, so the window landed on the left monitor. Fix: `primary_display_index()` picks the display whose bounds contain desktop origin (0,0), falling back to 0; auto size and centring use it, centring in global coordinates. Saved positions (Window.X/Y >= 0) untouched. Build verified; runtime check needs a dual-monitor desktop with non-leftmost primary. Confidence: medium-high (native Wayland may ignore requested positions).
+
+## D582: #152 v0.5.0 Linux crash in the ending credits (Cuba), textMeasure reading a garbage string pointer — ANALYSIS ONLY 2026-10-09
+
+**Report:** issue #152 (Debian 13.7, v0.5.0 / 5c43e69, ntsc-final). SIGSEGV a few
+seconds into the ending cutscene after left-clicking; not reproducible on a second
+completion. FAULT ADDR = Rdx = 0xe236b67a, PC 0x200d53b9.
+
+**Symbolization (high confidence).** The *actual* released tarball
+(`gh release download v0.5.0`, CI gcc-14/sniper build, debug line info present)
+was addr2line'd directly, not a rebuild (a local WSL gcc-13 rebuild put different
+functions at every address and was discarded):
+`textMeasure` textrelated.c:750 (`while (*text != '\0')`, first deref of `text`)
+<- `bondviewRenderCredits` bondview2.c:9134/9136 <- `lvlRender` lv.c:931 <-
+`bossMainloop` boss.c:710 <- `bossEntry` <- `portThreadWrapper`. Disassembly
+(0x20013463..0x200134d6) shows `call langGet; mov %rax,%r15; mov %r15,%rdx;
+call textMeasure`: the full 64-bit return value of `langGet(credits_pointer[i].TextId1)`
+reaches textMeasure unmodified, so the caller/prototype are NOT truncating
+(langGet is declared `u8 *langGet(s32)`; CreditsEntry is 12 bytes, u16 fields,
+no widened member). The value 0xe236b67a is what langGet *returned*.
+
+**Mechanism.** langGet returns `(u8*)g_LangBanks[bank] + textbank[slot]`. The bank
+pointer passed D129's plausibility check (non-NULL, <16 GiB) but the slot offset
+read from it is garbage, i.e. `g_LangBanks[bank]` points at memory that no longer
+holds a (fixed-up) language bank. This is a stale-bank read, not an A1
+pointer-width truncation. Credits only render on `LEVELID_CUBA` (`credits_state==1`).
+Candidate for the stale pointer: `lvlUnloadStageTextData` (lv.c:1695) only calls
+`langClearBank` when `g_CurrentStageToLoad != LEVELID_TITLE`, so when the ending
+transitions out (click = skip/advance) the Cuba bank in the MEMPOOL_STAGE arena is
+freed/reused while `g_LangBanks[]` keeps the pointer, and any credits frame still
+rendered reads reused memory. N64 does not fault (KSEG0 address masking); the PC
+build segfaults. Timing-dependent -> matches "did not reproduce". This ordering is
+unverified (no runtime available).
+
+**Not fixed.** Not an ABI/layout defect, so outside the AGENTS.md rule-2 exception;
+no src/game edit made. Options for the maintainer: (a) port-layer guard in
+`langGet` (`#ifdef PORT`, D129 precedent): reject `textslot_offset >= 0x10000`
+(banks are < 64 KB per romdataFixupLangBank) and/or clear `g_LangBanks[]` on
+stage-pool release in port code; (b) verify the ordering with a GE_PCDUMP/credits
+click-skip run on Cuba. Confidence in symbolization: high; in the stale-bank
+mechanism: medium-low.
+
+## D583: 120 fps + VSync on G-Sync/VRR — black frames (fullscreen) and OLED VRR flicker from the interpolation present scheduler — FIXED on PC 2026-10-09; Deck 90 fixed 2026-10-09 (PC 120 re-check owed)
+
+**Report (maintainer, 2026-10-09):** at FpsCap 120 + VSync, whole-screen black
+frames for a refresh, occasionally (1-2 per Dam walk, also in the attract/cutscenes);
+absent at 60. Separately, a whole-screen brightness flicker on an LG OLED with
+G-Sync (enabled for windowed + fullscreen) that other games and the PD port do not
+show. NVIDIA "Vulkan/OpenGL present method" = Prefer layered on DXGI swapchain
+(driver default).
+
+**Bisection (one variable per run, maintainer by-eye + log):**
+- `blackcap` probe (3x3 near-black readback of each stored slot and of the back
+  buffer after show, before swap): 0 black stores / 0 black presents during the
+  walk (only boot/fade frames). The black happens **after** our back buffer, so the
+  third-party review's suspects (empty-pass replay, undefined back buffer,
+  cfgVSync vs live interval) are all refuted for this symptom.
+- Maximized window: clean. Exclusive and borderless fullscreen: flicker.
+- NVIDIA present method = Prefer native: borderless clean (exclusive then picks a
+  wrong resolution — separate, see ROADMAP). So the layered-DXGI fullscreen path
+  is the place the black is produced.
+- Period floor (clamp measured vblank period >= 0.95 x refresh) alone: still black,
+  presents dropped to 81-101/s. Refuted, reverted.
+- Post-swap `glFinish` removed (`nosync`): black gone but presents 91-100/s
+  (the swap-return clock lost its anchor). Not the fix; kept as a dev word only.
+
+**Root cause (high confidence for the mechanism, by construction + logs):** the
+VSync ("swap-driven") present path assumed a **fixed refresh**:
+1. Slots were presented **back-to-back**, relying on each blocking swap to space
+   them one refresh apart (libultra.c render-worker loop). Under VRR a swap does
+   not wait for a beat: slots went out bunched and ~2.5 ms early.
+2. The slot grid's period was the **measured swap-return gap**. Under VRR that is
+   our own cadence fed back: it drifted to 6.6-7.7 ms at 120 Hz, slots outran the
+   panel and swaps stalled 15-40 ms. Those stalls are what the layered-DXGI
+   fullscreen path turned into black frames.
+
+**Landed (uncommitted, feat/interp-fps):**
+- VSync presents wait for each slot's scheduled time minus a 1 ms lead (`nodue`
+  d578_live restores back-to-back). On a fixed refresh the swap still lands on the
+  same vblank.
+- Slot times + the 0.7-period double-present gate use the display's reported
+  refresh (1e6/Hz), not the measured gap (the measured value remains for the stats
+  line and as the unknown-refresh fallback).
+- Result (maintainer, 120 + VSync, layered, G-Sync): **no black frames**; slow
+  swaps 8 -> 1 per run. Whole-screen shimmer reduced but **OLED VRR flicker still
+  bad**.
+
+**Remaining cause — cadence (measured, `D578 cadence` stats line, 3 x 10 s, Dam):**
+game tick a steady 16 667 us; **8% of ticks get 1 slot instead of 2** (34-50 per
+10 s) -> 66-83 gaps of 12-20 ms per 10 s; **~20% of gaps off-grid in early/late
+pairs** (<7 ms: 53-136, 9.5-12 ms: 43-119); 5-18 slots dropped unshown; 111-115
+presents/s instead of 120. A VRR OLED shifts brightness with frame-time changes,
+so this cadence *is* the flicker. Causes in the scheduler
+(`portRenderGfxTaskInterp`):
+- A tick's slots must lie in `[first vblank after ready, A + tick)`: the grid
+  phase vs the tick's arrival A + its render time decides whether one or two grid
+  points fit.
+- The grid is re-anchored every tick to `s_vbLast` (last swap return), which under
+  VRR is our own present time + jitter: the grid wobbles tick to tick.
+- A new tick drops the previous tick's unshown slots.
+PD and other games present each rendered frame once at a steady cadence; nothing
+can fit a variable number of presents per tick.
+
+**Proposed rework (next session):**
+1. **One continuous present grid** at the display period (1e6/refresh), anchored
+   once; re-anchored only after a real stall (a swap > ~2 periods late) or a
+   refresh/interval change. Never rebuilt per tick.
+2. **Fixed slots per tick** = round(refresh / 60) (2 at 120, 3 at 180, 4 at 240;
+   fractional refresh such as 90/144 keeps the current variable count but drawn
+   from the continuous grid): the next N grid points after the passes are ready,
+   even if the last one falls past A + tick. The existing lag/alpha logic (`want =
+   last slot time - S`) already follows when slots are shown.
+3. **No drop of pending slots on a new tick**: the present slots become a ring;
+   the next tick writes the slots not pending. `GFX_INTERP_SLOTS` / `IP_SLOTS` = 4
+   holds only two ticks at 120 Hz — raise to 8 (two ticks at 240) or cap N at
+   slots/2. Slot indices are passed through `gfx_interp_tick` ->
+   `gfx_opengl_interp_store` and `videoInterpPresent`; `gfx_opengl_interp_*`
+   resize/holecap/selfcheck use slot 0..n-1 and need the base offset.
+4. Keep the post-swap `glFinish` (swap-return timing) and the due-time lead.
+5. Verify with the `D578 cadence` line: target 120.0 presents/s, >= 98% of gaps in
+   7-9.5 ms, 0 dropped, slots/tick all 2; then the maintainer's OLED by eye; then
+   fixed-refresh (VSync without G-Sync) + Deck 90 Hz regression; no golden
+   impact expected (timing only).
+
+**Rework landed (2026-10-09, `port/src/libultra.c` render worker; slot ring in
+`gfx_pc.cpp` / `gfx_opengl.cpp`):**
+1. **Continuous grid** (`s_gNext`): each game frame takes the next round(dS /
+   period) grid points, fraction carried (90 Hz: 2, 1, 2, 1). Period = reported
+   refresh with VSync, target rate without; **snapped to exactly tick/k when
+   within 1%**, so a 60 Hz game on 120 Hz is exactly 2 presents per tick with no
+   beat between the clocks (and an integer-reported 119 for 119.88 Hz lands on
+   the right grid). Re-anchored only when a frame is ready after its first grid
+   point (stall) or the period changes; a once-a-second trim (<= 1/4 period)
+   takes back spare latency, and a 10-frame trim drops > 1 period of excess at
+   once (after a load), discarding the waiting presents it overtakes.
+2. **Slot ring**: `GFX_INTERP_SLOTS` 4 -> 8, `gfx_interp_tick(..., base)` stores
+   pass i in slot (base + i) mod 8; slot FBO storage is allocated per slot on
+   first use (120 Hz still uses 4). A new frame never drops waiting presents; a
+   present whose successor is already due is skipped instead.
+3. **Ready time from the real draw time**: a decaying peak of the whole frame's
+   draw (turn-softened / exact restarts redraw the passes), capped at 0.4 tick
+   so a shader-prewarm or load frame (50-100 ms) is not learned (it held ~40 ms
+   of latency for seconds in the first build).
+4. **Present before draw**: a waiting present that falls due while the next
+   frame draws (it went out late by the draw time, then the next on time: an
+   early/late pair) is shown first, but only when wait + present + draw stays
+   under 60% of a tick (never on a compositor whose swap blocks a refresh).
+5. Kept: post-swap `glFinish`, the 1 ms due lead, the 0.7-period double-present
+   gate.
+
+**Verified (windowed Dam, 120 + VSync, G-Sync, 10 s windows):** 120.0
+presents/s; gaps in 7-9.5 ms 98.8 / 99.7 / 99.2% (the window holding the level
+load: 97.7%); 0 dropped; slots/tick all 2. Timer pacing (VSync off, FpsCap 144,
+2.4 per tick): 144.2 presents/s, slots 2/3 at 3:2. Maintainer, fullscreen OLED by
+eye: flicker gone ("seems great"). Owed: fixed-refresh (G-Sync off) regression check.
+
+**Deck 90 follow-up (2026-10-09, OPEN):** present timing on the Deck is even
+(90.0/s, gaps 9.5-12 ms) and the maintainer called it "way better than before",
+but it is not smooth: drops at spawn-in, and on the Dam wall (past the 2nd guard
+tower) hitching that lasts until the level ends. Measured causes: (1) on the Dam
+wall the REACH test fired every frame (7-25 rooms the replay reaches that the
+game culled by distance), so 90-100% of frames were exact = 60 fps motion on 90
+Hz; (2) ROOMCHANGE made every ~5th frame exact as distant rooms entered and left
+the set; (3) draws of 8-10 ms (3-4 passes of 2.5-3 ms, turn-softened restarts
+double them) hold queued presents; (4) game-side stalls (missed ticks). An
+experiment series is parked on branch `wip/d583-deck-pacing` (5b66e012, not for
+merge): REACH on display-list truth helped (10-21% exact on the wall), dropping
+ROOMCHANGE brought guard-tower flicker back (entering rooms drawn with the
+current camera's scissor), and presents between passes made it worse (the game
+lost ticks: a swap that blocks under gamescope sat ahead of SP/DP done). Next
+step: a holistic review (local HANDOFF), not more point fixes.
+
+**Deck 90 fixed (2026-10-09, branch `feat/d583-deck90`, maintainer Deck by eye:
+"looks really good and feels pretty good").** The review found that presents
+were already even; the cost was redraws and the in-between images. Changes
+(`gfx_pc.cpp` interpolation, `interpportal.c`, `libultra.c` stats):
+1. **False turn detection (the main cost).** The turn gate measured the camera
+   offset on the projection *after* the far-clip widening, which alone reads as
+   ~0.16 deg, and divided it by (1 - alpha) floored at 0.05: a pass with alpha
+   just under 1 (the lag falls slowly) read as ~3 deg/tick and every such frame
+   was "softened" and redrawn from scratch (100-230 per 10 s). Now measured on
+   the blended projection before widening, and only where (1 - alpha) > 0.1 or
+   the offset is > 0.25 deg (float rounding in the angle is ~0.05 deg).
+2. **No full redraws.** An exact fallback draws the exact image once and stores
+   it in every slot (it drew n identical passes). A turn that needs softening is
+   applied at the frame's start from the previous frame's measured turn (a turn
+   is smooth); a frame is redrawn only when its own turn needs > 25% more. The
+   turn is often first seen on a later projection load (GE loads one per room),
+   so switching alpha in place mid-pass would tear between rooms; an in-place
+   switch is kept for the first load only (`noinplace` in d578_live = off).
+3. **Room scissor = union of the replayed box and the game's box.** The replay
+   alone clipped distant Dam guard towers on in-between presents (flicker that
+   depended on distance; `nounion` = replay box only). Rooms that enter the drawn
+   set and that the replay does not reach are hidden on in-between passes
+   (`nohide`); REACH holes are judged on display-list truth (a hole only if the
+   previous DL drew the room and this one does not); ROOMCHANGE only when the
+   replay did not run (from the parked WIP branch).
+4. **Projection pairing.** All projection loads shared one pairing bucket with
+   one-to-one claims; when the count changed (outside rooms seen from a guard
+   tower window coming and going) a load ran out of partners or paired with a
+   different kind of projection and its object was drawn at the wrong camera or
+   depth for one in-between present (the tower's wall alarm vanished; burst
+   capture, present 639). A projection now pairs with the nearest previous one
+   even if claimed, and a per-pass memo gives identical source projections the
+   identical blend (235-776 corrections per 10 s logged); `nomemo` = old.
+   Shared partners leave previous projections unclaimed, so projections are
+   left out of the set-change count (first PC 120 re-check: 23 "vanished"
+   projections per frame made 71-100% of Dam frames exact; after: 1%).
+5. **Present cost under gamescope.** The game itself needs ~0.15 ms per frame
+   on the Deck and is almost never waiting on us (new `D583 game side` line:
+   game work after its retrace / blocked by our previous frame / worker
+   pickup). The real cost was the post-swap `glFinish`: 3.3 ms per present (up
+   to 14) on the thread that also draws, so the worker picked up new frames
+   3.5-6 ms late and dropped up to 40 presents per 10 s in NPC-heavy areas.
+   Skipped under gamescope (`GAMESCOPE_WAYLAND_DISPLAY` / `SteamDeck`): 0.3 ms
+   per present, pickup < 1 ms, 0 drops (maintainer: "definitely an
+   improvement"). Kept on PC (the VRR fix relied on it); `finish` / `nofinish`
+   in d578_live force it. Side effect: swap-return gaps no longer measure the
+   real flip there (gamescope's stats pipe would).
+6. **Cut detection replaces the set-change check** while modelviews are drawn as
+   loaded (only the camera blends): an unmatched object costs nothing visually,
+   and counted on matrices a crowd of animating guards made 30-50% of Deck
+   frames exact (hold, jump; still 14% at a 60% limit). A frame is now exact
+   when most of its projection loads have no plausible previous partner (the
+   camera jumped). A first version that fired on any odd projection hit 8
+   consecutive frames; it now needs a majority. The matrix set-change check
+   runs only with `mvblend` or an explicit GE_INTERPSET_PCT (default 60% then).
+   Maintainer, Deck crowd fight: "good now".
+   A tried "tight budget" mode (<= 2 passes, no softened redraws while frames
+   ran late) made heavy areas worse (32-35% exact) and was removed.
+7. **Instruments:** cadence line + motion histogram and present cost; `D583
+   decisions` (pre-softened / in-place / late redraws); `D583 projection memo`;
+   `D583 ROOMSET` (room-set changes with hidden rooms, capped); `D583 SHRINK`
+   (replayed box < half the game's); `D583 SLOW`; all to ge007.log.
+
+**Deck result (Dam, 90 Hz, VSync):** draw peak 8-10 ms -> 3-5 ms; 88-90
+presents/s with 0-3% exact frames on the wall walk; motion histogram mostly
+`ok`. Remaining non-pacing items seen during the checks, present with every
+present exact (so not interpolation): the outside seen through a guard tower's
+window/doorway changes as its rooms leave/re-enter the drawn set, and on the
+Dam wall the grate decals vanish behind a sliding edge and the wall lighting
+shifts with view (ROADMAP). Both are faithful: also in v0.5.0, and the
+maintainer saw the exact same behaviour on 1964 (GEPD). Also seen: a game-side delay of ~14 ms on every
+other frame in some stretches (submit delay; present cost now logged to tell a
+blocking swap from game CPU time). PC 120 + VSync re-check (2026-10-09,
+windowed Dam, G-Sync): 120.0 presents/s, 99% of gaps 7-9.5 ms, 1% exact,
+motion `ok`. Seen after the cut-detection build (maintainer, Deck): the Dam truck
+can flicker briefly; Aztec M16 viewmodel flicker in some spots; rare dead-body
+flicker before fade-out (all unexplained, need captures). Owed: a per-level Deck pass and a 90 fps
+performance validation across levels (only Dam was exercised).
+
+**Dev words removed at close-out:** `blackcap`, `blackpix`, `nosync`, `nodue`
+(and `gfx_opengl_interp_black`). The `D578 cadence` stats line stays, now with
+grid period, re-anchors, trims and draw peak.
+
+**Also seen:** brief haziness in some spots / on guards at 120 (D578 interp
+artifact, not pacing) — separate D578 item.
+
+### Addendum 2026-10-10: Deck per-level pass, hold causes, Bunker draw cost
+
+**Per-level pass (maintainer, Deck 90, all levels briefly):** "overall very strong". Fixed from it: props/shadows through walls at range (D578 addendum, widening off), Cradle catwalk flicker (D584). Turn-softening re-tune closed as not needed (Dam: 98-99.7% of gaps 9.5-12 ms, 0-5 dropped per 10 s, maintainer saw no tunnel holes). Open: Bunker 1/2 fight drops, Jungle feel, Cradle turret explosions (noted only).
+
+**Hold causes (cadence line, 6d7aa851):** `motion hold:N (exact, a=0, late, other)`. Jungle: every hold is an exact fallback (1-7 per 10 s), almost all REACH (a room the previous display list drew and this one dropped; the trigger's log lines are capped, the count is in `room-change-exact`). `noreach` removed them with no visible holes in Jungle, but the maintainer felt no real difference ("not significantly"; Egyptian and others feel better). So the Jungle feel is not holes/holds and does not show in the pacing stats. Untested lead: content refreshed at the game tick inside a blended 90 Hz view (the sky is always this frame's; objects not paired).
+
+**Bunker draw cost (SLOW line now carries batches, tris, texture lookups / misses / dyn-hash bytes / time in `import_texture`, 51f2282d):** fight frames draw 9-17 ms. Per pass ~550-800 batches, ~3,500-4,700 tris, ~4-5 ms on the Deck: ~6 us per batch. Texture lookups = about 1.2 per batch, 3-55 real misses, no dynamic-texture hashing; ~1 us per lookup (2.4-4.9 ms of a frame), mostly the GL bind and flush that come with each batch.
+- **Refuted:** "the same texture is re-imported back to back". A skip-if-already-bound build (no flush/lookup/bind when the unit holds the same key) left batches per frame unchanged: consecutive batches really use different textures. Reverted; not worth its risk.
+- **Landed: late-soften budget gate** (`gfx_interp_tick`, `nobudget` = old behaviour). A softened restart redraws every pass; when the pass just drawn says n+1 passes exceed 3/4 of a tick, the restart is skipped (that frame's in-between image keeps a little more turn blend). Bunker fight: 3-pass frames 28 of ~290 slow frames (was most of them), 17-35 restarts skipped per 10 s, goldens unaffected (60 fps path untouched). Drops remain: 2-pass frames still reach ~13 ms. Note: unlike the removed "tight budget" mode (item 6 above), this never forces exact frames.
+- **Leads for the next session:** (1) spike frames with 150-180 texture MISSES costing 10-18 ms in `import_texture` (~70 us per miss): likely cache churn with many guards on screen (`TEXTURE_CACHE_MAX_SIZE` 1024, CI textures keyed on palette content) or first-use decode; (2) per-batch cost ~6 us: fewer state changes / persistent VBO streaming / batching across texture changes are the structural options; (3) the last windows of the final run showed split present gaps (7-9.5 ms: 444-565, 12-20 ms: 236-292 per 10 s) with no softening activity: unexplained, read with the game state in mind.
+
+### Addendum 2026-10-10 (late): Bunker fight drops are present scheduling, not draw cost
+
+Measured with the new Deck harness (`tools_pc/levelbench.sh` + `deckrunner.sh`, Game Mode, a recorded Bunker 1 fight replayed with `--replay`; replays drift a little with emergent AI but reproduce the same activity).
+
+- **Symptom:** in the fight, presents stay at ~90/s (0-16 dropped per 10 s) but split into ~8 ms / ~14 ms gap pairs (up to 50-65% of a window's gaps; maintainer saw ~80 fps). Game side idle (~0.15 ms per tick).
+- **Not CPU-bound:** `perf` over 20 s of fight: the render worker is on-CPU ~30% of one core, ~40% of that is its own pacing spin (`clock_gettime`, `sysCpuRelax`); Mesa's `gl0` / `gdrv0` threads ~6% each.
+- **Not the GPU clock:** the governor holds 200 MHz for most of the fight (`pp_dpm_sclk`, 40-86% busy), but with Manual GPU Clock 1600 (QAM) the fight is unchanged (8.3% uneven, fight-frame draw ~10.5 ms).
+- **Not the vertex upload:** a streaming ring VBO (glBufferSubData at stride-aligned offsets instead of a glBufferData per batch) measured 4.3% / 3.1% uneven vs 8.6% / 4.0% for two runs of the old build: inside replay noise. Dropped.
+- **Cause (IPLOG, new `IPLOG draw` line + `GE_INTERPLOG=<n>` line cap):** of 793 present gaps >= 12 ms, 567 (72%) are a present that fell due while the single render worker was drawing the next frame; it goes out when the draw ends, median 6.8 ms late (draw median 8.8 ms in those frames). 556 of 618 overdue cases are an EARLIER frame's slot waiting behind the new draw; only 62 are the frame's own slot.
+- **Tried: present a due slot between passes** (hook after `gfx_opengl_interp_store`, never waits, only while swaps are cheap): fired 41 times in 100 s; 5.8% -> 4.7% uneven, within noise. The due point usually falls in the last pass or a single long pass. Reverted.
+- **Next (maintainer chose this before the v0.5.1 gates):** decouple present from draw: a present thread with a shared GL context that blits finished slot textures and swaps at their times while the worker draws. Mind D583's lesson that a refresh-blocking swap must never sit ahead of SP/DP done (under gamescope VSync is now off and swaps are ~0.3 ms).
+
+## D584: Cradle catwalk shadow flicker at every frame rate (regression from D579) — FIXED 2026-10-10 (port only)
+
+**Symptom:** on Cradle, shadow-like flicker over the whole level wherever the translucent 2D catwalk half-walls are, at 30/60/90 fps on the Deck. Not in v0.5.0.
+
+**Bisect (Deck builds from known commits, maintainer by eye):** v0.5.0 clean; 2573f437 clean; 0886f413 (D579 diagnostics + no-colour-clear model) flickers. Note: the Deck backup named `bak-pre464f722b` was clean but was NOT built from 3c3191c0 (464f722b itself flickers and is diagnostics only), so backup names are not provenance; bisect only with builds made from a known commit. Live A/B on the current build: `nodegen` (D579 degenerate-scissor full-view fallback off) and `clearcol` (pre-D579 per-frame colour clear) did not help; `oldcull` (pre-D579 XOR behind-eye cull for mixed-w triangles) fixed it.
+
+**Cause:** D579 made triangles with any vertex at w < 0 skip the face-orientation cull ("undefined across w = 0"). Cradle's catwalk walls are translucent and two-faced, large enough to straddle the camera plane; without the cull both faces drew, doubling the translucency and flickering as vertices crossed w = 0.
+
+**Fix (`gfx_sp_tri1`):** mixed-w triangles are cull-tested with the homogeneous determinant det[x y w] (cross = -det). For all w > 0 its sign equals the shipped NDC cross (10,000/10,000 random triangles), so the all-in-front path is unchanged and still uses the NDC form verbatim; for mixed w it equals the old XOR flip exactly (17,561/17,561), without the x/w blow-up near w = 0. #150 stays fixed: its real fix was the D543 clip at the camera plane (3c3191c0); maintainer re-checked the Dam gate wall hug. `nohcull` in d578_live restores the D579 no-cull for A/B.
+
+**Seen during the A/B, not chased:** a very brief Bond viewmodel glitch twice on the `oldcull` build only (not seen on the final build); Cradle turrets' explosions may draw wrongly (ROADMAP note, not investigated).
+
+## D607: Address model unified into one header (D441 `portaddr.h` + the #95 `port_addr.h`) — DONE 2026-10-07 (macos branch)
+
+*Labelled D579 on the macos branch; renumbered at the v0.5.1 merge (the interpolation work had used D579-D585).*
+
+The macOS arm64 window model from #95 (danturn) and the D441/D573 DRAM-arena
+macros were two headers describing the same address space in different
+dialects (`PORT_ADDR_BASE` + image-relative `portN64ToHost` vs
+`PORT_DRAM_V1_BASE` + `portAddrIsMapped`). They are now ONE header,
+`port/include/portaddr.h` (the D441 name; #95's `port_addr.h` is
+superseded — re-applying #95 is a mechanical `#include` rename plus
+folding its two `portAddrIsInWindow` guard sites into `portAddrIsMapped`,
+which is the same check with the same call sites, src/snd.c +
+src/game/language.c):
+
+- `PORT_ADDR_BASE`: 0 on Windows/Linux/x86_64 macOS, `0x100000000000`
+  (16 TiB) on `__APPLE__ && __aarch64__` (native preprocessor macros,
+  mirroring platform.h's PLATFORM_MACOS/PLATFORM_ARM; the header stays
+  self-contained — no platform.h include, so it survives the asm
+  prepass and C++ TUs alike). `#ifndef`-guarded, overridable by -D
+  (the D441 high-arena flavour, ASan LowMem bases, the #95
+  `PORT_ADDR_BASE` cache var).
+- `PORT_DRAM_V1_BASE`/`PORT_DRAM_K0_BASE` are now `PORT_ADDR_BASE +
+  0x70000000UL` / `+ 0x80000000UL` (still `-D`-overridable): bit-identical
+  to the pre-unification literals on x86_64 (base 0), and one-line shifts
+  for arm64.
+- `portN64ToHost`/`portHostToN64` + `PORT_N64PTR` (from #95) declared
+  here; their `port_addr.c` implementation and `g_portImageBase` /
+  `g_portUseImageRel` / `portAddrInit` land with the #95
+  re-application. Identity at base 0: the image-relative path
+  round-trips the exact truncation D131 fixed.
+- CMake (Apple branch): the `dram_syms.S` prepass now needs NO
+  `-DPORT_DRAM_V1_BASE` default (the header self-detects; only the
+  GE_HIGHARENA_BASE flavour passes an override). `gen_macho_syms.py`
+  also strips C-style integer suffixes (`UL`, `ULL`, ...) from `.set`
+  expressions, so Apple's `as` never parses them.
+
+**Identity gate (Windows, x86_64, base 0):** build 218/218 rc 0;
+`tools_pc/verify.sh dam` PASS (worst_cell 1.15 < 3.0). Full 21-level
+sweep + 60-second level_09 run + Linux X220 build: owed with Task 4.
+**Mac gate:** `gcc -E -D__APPLE__=1 -D__aarch64__=1` on `dram_syms.S`
+emits `(0x100000000000 + 0x70000000)` `.set` lines that
+`gen_macho_syms.py` normalises to clean Mach-O; the real Apple `as`
+build on the maintainer's Mac is the outstanding proof.
+| D607 | **Address model unified into one header: D441's `portaddr.h` arena macros + #95's `port_addr.h` window model (`PORT_ADDR_BASE`, `portN64ToHost`, image-relative encoding), with #95's `portAddrIsInWindow` folded into D573's `portAddrIsMapped`** — full `## D607` entry at file tail | DONE 2026-10-07 (macos branch; Windows identity gate: build + dam golden PASS; Mac `as` build owed) |
+
+## D608: D34 `ANIM_DATA_x` re-basing guard was `__x86_64__`-only — arm64 macOS link failed with hundreds of undefined `_ANIM_DATA_*` — FIXED 2026-10-07 (macos branch)
+
+*Labelled D580 on the macos branch; renumbered at the v0.5.1 merge (the interpolation work had used D579-D585).*
+
+`assets/animationtable_data.h` redefines the `ANIM_DATA_x` symbols as lvalues
+into `g_pc_animdata_base` (D34: the N64 `animationtable_data.c` segment links
+at VMA 0, so `&ANIM_DATA_x` is a segment offset and game code re-bases it;
+the PC form points at the loaded image base instead, and the N64 array
+definitions are not compiled on PC). The guard was `#if defined(__x86_64__)`,
+so the first Apple-silicon link fell through to the N64 `extern s32
+_ANIM_DATA_*` declarations and failed with hundreds of undefined symbols.
+Widened to `__x86_64__ || (__aarch64__ && __APPLE__)`: the arm64 image is
+loaded at the 16 TiB `PORT_ADDR_BASE` window, which is the same re-basing
+class, and `port/src/romdata.c` already sets `g_pc_animdata_base`
+unconditionally. Mechanical guard widening — no logic change, no N64-side
+change (rule 2's ABI/layout class).
+
+## D609: macOS arm64 SIGKILL at exec — the `-pagezero_size` link flag is x86_64-only (and the deployment-target floor probe is blind on macOS) — FIXED 2026-10-07 (macos branch)
+
+*Labelled D581 on the macos branch; renumbered at the v0.5.1 merge (the interpolation work had used D579-D585).*
+
+The first arm64 Mac binary was killed ~0.3 s after launch with no output and
+no port-side crash log: `rc=137` (SIGKILL) from the shell, before `main`
+rans. Cause: the CMake APPLE branch applied `-Wl,-pagezero_size,0x10000`
+unconditionally (inherited from #88, whose rationale is explicitly *x86_64*
+macOS — the 4 GiB `__PAGEZERO` default wastes virtual address space for the
+low-arena model). On Apple Silicon the kernel enforces a **4 GiB minimum**
+`__PAGEZERO` (the SVE ABI constraint); a smaller value makes `execve` fail
+outright, so nothing runs — not dyld, not the port's `crashHandler`, hence
+no log line. Reproduced in isolation: a six-line `printf` program linked
+with `-Wl,-pagezero_size,0x10000` exits 137 on the Mac, and the same
+program with the default pagezero runs. Fix: gate the flag to non-arm64
+Apple (`TARGET_ARCH` match `^aarch64$` keeps the default 4 GiB), which is
+also what the low-arena-vs-`PORT_ADDR_BASE` decision in D607 already keys
+on.
+
+Same block, second macOS-only trap: the deployment-target floor was chosen
+from `CMAKE_OSX_ARCHITECTURES`, which is **empty** in this build (the build
+targets the host arch), so an arm64 Mac took the 10.13 (Intel) floor and
+`ld` warned that the brew-gcc aarch64 runtime objects and the generated
+`.s` objects carry a newer floor than the linked one. CMake's own
+`CMAKE_HOST_SYSTEM_PROCESSOR` is *also* empty on macOS — its `uname -p`
+probe returns `unknown` there, the same class of blind arch probe as D515's
+stripped-env `PROCESSOR_ARCHITECTURE` — so the block now asks `uname -m`
+directly (bare name: there is no `/bin/uname` on macOS, and
+`execute_process` looks the name up in PATH) and takes the 11.0 (Big Sur,
+first arm64 release) floor on `aarch64`. Cosmetic (warnings only), but it
+keeps the floor honest for the shipped Mac bundle.
+
+## D610: `GE_MEMPOOL_CEILING` in `port/src/n64stubs.c` assumed the D441 base-0 arena — now keyed on `PORT_ADDR_BASE` — FIXED 2026-10-07 (macos branch)
+
+*Labelled D582 on the macos branch; renumbered at the v0.5.1 merge (the interpolation work had used D579-D585).*
+
+`port/src/n64stubs.c` caps the `-m` mempool size at
+`GE_MEMPOOL_CEILING = 0x70000000u + 0x700000`, i.e. "the top of the 8 MB
+V1 view minus a page", which is only meaningful when the arena sits at
+0x70000000 (D441's base-0 model). With `PORT_ADDR_BASE != 0` (arm64 macOS,
+D607/D609) the arena is at `PORT_ADDR_BASE + 0x70000000` and the ceiling
+must move with it, so the define is now `#if PORT_ADDR_BASE != 0`-guarded:
+base-0 platforms keep the literal `0x700000` offset byte-identically (the
+D441 comment stays true there), arm64 gets `+0x7FF000` — the top of the
+8 MB V1 mapping less 0x1000, consistent with `port/src/dram_syms.S`, which
+parks `animations_frame_buffer` at `PORT_DRAM_V1_BASE + 0x7FFD30`.
+
+## D611: mempool arena start is carried in 32-bit types end to end — arm64 macOS SIGSEGVs inside `inflate` at the arena-relative address (blocker for the #95 model re-application) — DIAGNOSED 2026-10-07, arena-start leg FIXED (see D612)
+
+*Labelled D583 on the macos branch; renumbered at the v0.5.1 merge (the interpolation work had used D579-D585).*
+
+With D609/D610 in, the Mac binary boots (video/audio/input init, ROM mapped)
+and then SIGSEGVs at fault addr `0x707FE8E2` — an *arena-relative* address:
+the live pointer would be `PORT_ADDR_BASE + 0x707FE8E2`. Backtrace
+(`ge007.crash.log`, port crash handler): `portThreadWrapper -> bossEntry ->
+bossInitMainthreadData -> langInit -> fileIndexLoadToBank -> load_resource ->
+decompressdata -> inflate (system zlib)`. The chain that loses the base:
+
+1. `port/src/dram_syms.S` — `_bssSegmentEnd = PORT_DRAM_V1_BASE + 0x50000`,
+   a full 64-bit committed address on arm64 (correct, mapped).
+2. `src/boss.c:264` — `start = PHYS_TO_K0(osVirtualToPhysical(&_bssSegmentEnd))`:
+   `osVirtualToPhysical` (`port/src/libultra.c:1425`) returns `u32`, and
+   `PHYS_TO_K0` (`port/shim/PR/R4300.h:25`) is `((u32)(x))` — two truncations
+   in the port layer.
+3. `src/boss.c:168` — `u32 start;` — the game-side carrier (the third
+   truncation). `src/memp.c` was already widened for its half of this
+   (D453: "arena start is a host pointer; carry it in `uintptr_t`, not
+   `s32`" — `mempCheckMemflagTokens(uintptr_t, s32)`), but the caller's
+   local never was, so every bank start handed back by
+   `mempSetBankStarts`/`mempAllocBytesInBank` is the relative
+   `0x7005xxxx`, unmapped on arm64 (the 4 GiB `__PAGEZERO` forbids the
+   base-0 view there — D609).
+
+This is the same class as D453 and D131 (pointer-width-driven truncation),
+but it is *not* a one-line widening: three carriers, one of them a game-file
+local, and the identical pattern recurs at the ~46 sites #95 carries
+`PORT_N64PTR`/`portN64ToHost` for. Fixing it belongs to the #95 address-model
+re-application (Task 4 of the macOS plan), not to a local patch — the
+`port_addr.c` implementation (`portN64ToHost`/`portHostToN64`,
+`g_portImageBase`, `g_portUseImageRel`, `portAddrInit`) is still not in this
+branch's tree (D607 declares the API in `portaddr.h`; the implementation
+lands with the re-application).
+
+**Gate record for the D608-D610 work (Windows identity leg):** build 250/250
+rc 0; `tools_pc/verify.sh dam` reports REGRESSION `worst_cell=3.106875`
+(2.4 % of pixels over tol, `maxchan=150`). The identical number reproduces
+from the main checkout's tip against the same `tools_pc/golden/dam/win` set,
+whose last regeneration is commit 4b710728 (the v0.5.0 fold-in) — the D565
+fog-distance floor and the D569/D570 crosshair changes postdate it. Stale
+goldens, not a D608-D610 regression; regenerating the win golden set is the
+prerequisite for a meaningful dam gate, and is owed with Task 4.
+| D608 | **D34 `ANIM_DATA_x` re-basing guard in `assets/animationtable_data.h` was `__x86_64__`-only: the first arm64 macOS link failed with hundreds of undefined `_ANIM_DATA_*`** — full `## D608` entry at file tail | FIXED 2026-10-07 (macos branch; mechanical guard widening, arm64 link clean) |
+| D609 | **macOS arm64 SIGKILL at exec: `-Wl,-pagezero_size,0x10000` (#88, x86_64 rationale) violates the kernel's 4 GiB minimum `__PAGEZERO` on Apple Silicon; plus the deployment-target floor probe is blind on macOS (`CMAKE_HOST_SYSTEM_PROCESSOR` empty there)** — full `## D609` entry at file tail | FIXED 2026-10-07 (macos branch; probe-confirmed; arm64 keeps the 4 GiB pagezero, floor 11.0) |
+| D610 | **`GE_MEMPOOL_CEILING` (`port/src/n64stubs.c`) hard-coded the D441 base-0 arena top; now `#if PORT_ADDR_BASE != 0`-keyed so arm64 gets the arena-relative ceiling and base-0 platforms keep the literal** — full `## D610` entry at file tail | FIXED 2026-10-07 (macos branch; base-0 identity by construction) |
+| D611 | **Mempool arena start is truncated to 32 bits at three carriers (`osVirtualToPhysical`, `PHYS_TO_K0`, `src/boss.c:168 u32 start`) so arm64 macOS banks live at arena-relative addresses -> SIGSEGV in `inflate`; blocker for the #95 address-model re-application** — full `## D611` entry at file tail | DIAGNOSED 2026-10-07 (macos branch; arena-start leg fixed as D612, rest owed with the #95 re-application) |
+| D612 | **Arena-start leg fixed (`src/boss.c`: PORT-only `uintptr_t start` + the direct committed address, D453 class); the next arm64 family is the D441 s32-held DRAM pointer slots (`initanitable.c` `expand_ani_table_entries`), whose `(uintptr_t)(u32)` zero-extend is base-0-only and needs `portN64ToHost`** — full `## D612` entry at file tail | PARTIAL 2026-10-07 (macos branch: Mac boot advanced `langInit` -> `alloc_load_expand_ani_table`; remaining sites owed with the #95 re-application) |
+| D613 | **PR #95 (macos branch) re-applied onto `release/v0.5.1` — the stale-base merge the macos track carried as a behind-`origin/macos` pull; 3-way over the v0.5.1 tree, resolved by signature (keep ours unless the D441 `(uintptr_t)(u32)` truncation needs theirs' `PORT_N64PTR` rebase; memp always theirs; D573 guards supersede theirs)** — full `## D613` entry at file tail | FIXED 2026-10-07 (macos branch) |
+| D586 | **Apple `gen_macho_syms.py --base` parse was dead code (undefined `args`), the shifted literals emitted bare (assembler "expected newline"), and the generated `.s` dir missing on a fresh macOS build dir — arm64 macOS build now completes and boots (self-test ALL PASS, 600+ frames, no SIGSEGV)** — full `## D586` entry at file tail | FIXED 2026-10-07 (macos branch) |
+| D587 | **macos sweep: 9 of the first 13 levels SIGSEGV at one site — `if_actor_able_set_on_path` derefs the raw N64 patrol-path address in the s32 `pathid` slot (ours' D441 zero-extend is base-0-only); adopted theirs' `PORT_N64PTR` rebase** — full `## D587` entry at file tail | FIXED 2026-10-07 (macos branch) |
+| D588 | **Windows x86_64 SIGSEGV (deterministic 3/3) in `texReadBits` under `lvlStageLoad`: the #95 `texSetBitstring` re-base maps the native worker-thread stack (low-32 in the D131 image-rel range `[0x40M,0x70M)`) onto the PE image; fix = full pointer-width arg (`u8 *`) + widen `rzipGetSomething()` to `u8 *` on the PORT build (N64-identity, Mac-neutral)** — full `## D588` entry at file tail | FIXED 2026-10-07 (macos branch) |
+| D589 | **macOS arm64: wide-pixel (32-bit RGBA / 16-bit) textures render as colourful static / confetti (the Surface 1/2 billboard trees) while x86_64 renders them correctly. The "pool holds the rev32" line is SUPERSEDED: the decode-time pool is 134/134 byte-identical Mac/Win (the writer side is clean); the rev32 happens at the *import* — fast3d's `gfx_tex_source_is_c_array` mis-classifies every DRAM/cart source as a C-compiled array on arm64 macOS (host/raw address-space mixup) and `gfx_tex_normalize_source` bswaps it. See D591 for the root-cause line + fix (`9c59cbe7`), now **Mac A/B verified** (carray=0, decoded texels no longer reversed). The frame still diverged (the "rock striping") from a SECOND cause, **D592** (initially framed as a GL-layer / NPOT `glGenerateMipmap` divergence, later CLOSED as a **non-issue** — a VHF-metric false-positive on natural rock grain; the sampler state + NPOT mip levels are byte-identical Win/Mac and the maintainer's live Mac look is clean). D589 is RESOLVED (both causes closed: D591 fixed, D592 non-issue).** — full `## D589` entry at file tail | RESOLVED 2026-10-08 (macos branch; byte order fixed+verified = D591; the SECOND CAUSE D592 is CLOSED as a non-issue — VHF-metric false-positive, sampler+mips byte-identical Win/Mac, maintainer live-look clean; NPOT guard + 82dbea9c reverted b80dcd08) |
+| D590 | **Windows x86_64 deterministic SIGSEGV in `load_bg_file` (bg-load worker thread, 4/4 incl. a plain run) — the D588 bug class at a different site: `load_bg_file` reads the stack `header` array (full-width host `bg_addr_t` on PORT) through `PORT_N64PTR`, which truncates to 32 bits and re-maps the worker-stack address onto the PE image (`fault = imagebase + (low32 − 0x40000000)`); fix = drop `PORT_N64PTR` for the full-width operands (`ptr_bg_data`/`ptr_bgdata_offsets`/`gptr_stan`) — plain casts, N64-identity; 5/5 Dam runs exit 0; `PORT_ADDR_STRICT` Dam run clean (path-coverage caveat)** — full `## D590` entry at file tail | FIXED 2026-10-08 (macos branch) |
+| D591 | **arm64 macOS fast3d mis-classifies every DRAM/cart texture source as a “C-compiled array” and byte-swaps it — the rev32 behind the D589 confetti. `gfx_tex_source_is_c_array` (`port/fast3d/gfx_pc.cpp`) stripped `PORT_ADDR_BASE` before comparing to host-space `PORT_DRAM_V1/K0_BASE` bounds; at `PORT_ADDR_BASE==0` the two spaces coincide (accidentally correct) but at 16 TiB (arm64 macOS) every in-window source falls through to the C-array default and `gfx_tex_normalize_source` bswaps it. Decode-time pool is 134/134 byte-identical Mac/Win; the reversal is import-time only. Fix = compare the host pointer directly (drop the subtraction), port-layer only, no-op at base 0. Win verified byte-identical (400/400 r-bins + PPM unchanged); **Mac A/B now verified** (carray=0, raw8 matches Win, rev32 gone).** — full `## D591` entry at file tail | FIXED + Mac A/B VERIFIED 2026-10-08 (macos branch; `9c59cbe7`) — byte order confirmed gone on the Mac; the remaining D589 scatter is the second cause D592 |
+| D592 | **arm64 macOS — the "rock striping" (the remaining cross-platform frame diff after the D591 byte-order fix) is a VHF-metric FALSE-POSITIVE, not a GL-layer defect. The CPU texel bytes, the GL sampler state, and the NPOT mip level counts are all byte-identical Win/Mac (the `GE_TEXSTATE` probe: the Metal backend builds the full NPOT mip chain, the aniso extension is present on both, and the NPOT rock texture gets min=trilinear/mag=linear/aniso=4 on both sides); a 0-pink scan confirmed D591 held; and the maintainer's live Mac look showed the Dam rendering clean (no visible striping, ammo counter not pink, F10 menu fine). The "most-striped" cell was smooth-shaded rock grain, not a periodic row-stripe. The NPOT `glGenerateMipmap` guard + companion single-level sampler fix (`9bed5904` / `82dbea9c`) were reverted as dead weight (`b80dcd08`, which also strips the `GE_TEXSTATE` probe).** — full `## D592` entry at file tail | CLOSED (non-issue) 2026-10-08 (macos branch; VHF-metric false-positive — sampler state + NPOT mip levels byte-identical Win/Mac, maintainer live Mac look clean, 0 pink; NPOT guard `9bed5904` + companion `82dbea9c` reverted `b80dcd08`; `GE_TEXSTATE` stripped; the genuine symptom was D591, fixed. The D592 live look was mouse-look-only due to D594) |
+| D593 | **Windows x86_64 — an occasional render-thread stall fired the kernel's "no frame rendered for N ms" watchdog (observed once, 8001 ms, on an NVIDIA RTX 5090 during a `GE_TEXDUMP`/`GE_TEXRAW` heavy-I/O debug run; pre-existing, NOT the D591 x86_64 no-op). Tracked, not yet root-caused (probe I/O load vs a genuine render-thread hang).** — full `## D593` entry at file tail | OPEN 2026-10-08 (Windows; single observation; repro + root-cause owed) |
+| D594 | **arm64 macOS — partial input: mouse-look (relative motion) + F10 work, but the mouse *buttons* (fire / aim) do not, and the cursor "exits" the window. `GE_KEYLOG` **disproved** the cross-thread-poll prime suspect (WASD + LMB reach both the main-thread pump and the scheduler-thread poll); the real gap was the `actHeld` mouse gate on `current_menu == RUN_STAGE` (a forced `-level_NN` start leaves `current_menu == INVALID (-1)`, so the mouse was never read) + the macOS `reconcileGrab` `windowFocused` gate. Fixed by matching PD's input model (in-stage = RUN_STAGE *or* INVALID; macOS grab = PD's MLOCK_ON, no focus gate).** — full `## D594` entry at file tail | **FIXED 2026-10-08** (macos branch; `actHeld` menu gate + macOS `reconcileGrab` focus gate → PD MLOCK_ON; LMB fire verified on the Mac; unblocked D595) |
+| D595 | **arm64 macOS — deterministic SIGSEGV in `modelSetAnimFrame` when an AI plays a hit/stagger/death animation (fire → `triggered_on_shot_hit` → `modelSetAnimation2`); the anim-table resolver `initResolveAnimTable` read the live `ptr_animation_table` host pointer as a truncated `(s32)`, dropping the 16 TiB `PORT_ADDR_BASE` on arm64 macOS → every `struck_anim` resolved to bogus low memory. §A1 live-host-pointer-truncation class (D588/D590/D591).** — full `## D595` entry at file tail | **FIXED 2026-10-08** (macos branch; read the base at full pointer width — identity on x86_64; verified no crash on the Mac) |
+| D596 | **the `win/` golden set predates D565/D569/D570, so `verify.sh` on the `macos` branch (and the main tip) reported a `REGRESSION worst_cell=3.106875` that is a stale reference, not a branch regression — the branch's Windows identity gate was unmeasurable. Recipe-side fix: regenerate the `win/` set from `e0a2d4b9` (pre-D609 tree; `scratch/wt-goldens`), `capture_p7.sh -p win` with LOWERCASE level names (the `golden_dump_for` case table is lowercase — `Dam` silently falls to the default window); `verify.sh sweep` 21/21 PASS.** — full `## D596` entry at file tail | **FIXED 2026-10-08** (macos branch; win goldens regenerated from `e0a2d4b9`, 21/21 PASS; recipe-side only, no game-code change; the linux/deck sets need their own re-capture round before any new cross-platform number is read) |
+| D597 | **GE_INPUTSCRIPT gains `MLB<n>`/`MRB<n>` (sustained mouse-button tokens, slot 0): the D337 harness could script mouse motion (MDX/MDY) but no mouse *button*, so the D595-class "fire at an AI" regression had no headless recipe and the D594 unblock (LMB reaches `IA_FIRE` in a forced-level start) was unverifiable headlessly. Port-only: the bit ORs into the polled `SDL_GetMouseState` mask in `inputComputePadSlot`'s harness block; the game's own mouse bindings drive it; no change when the env is unset; the `GE_KEYLOG` probe now logs the effective mask.** — full `## D597` entry at file tail | **FIXED 2026-10-08** (macos branch; Windows menu + forced-level keylog checks; Mac sweep-fire no-crash run + no-env no-op run; the live E1 LMB fire is the struck-animation ground truth; cmd-wrapper gotcha: direct PE launch from this MSYS shell drops `GE_*` env vars — wrap in `cmd.exe //c`) |
+| D598 | **arm64 macOS gameplay is "a bit choppy" on heavy levels (Cradle-class) — unmeasured (maintainer live observation, 2026-10-08). First clue: the port's per-300-frame blocks complete in 6–17 ms on the M3, so the CPU side is far faster than the frame budget — the chop is more likely display/swap pacing (Metal-backend swap interval / vsync / the scheduler's 60 Hz pacing assumption) than software-RSP throughput; a measurement plan (reproduce → block-time A/B vs Win → display-path bisect) is in the entry.** — full `## D598` entry at file tail | **RESOLVED 2026-10-08 by D600** (display-locked retrace tick; live playtest confirmation owed) |
+| D599 | **arm64 macOS: SIGBUS (signal 10) the moment a game controller is connected — `padTabPub` was declared `SDL_atomic_t` (4 bytes) but accessed through `SDL_AtomicGetPtr/SetPtr((void **)&padTabPub)` (8-byte atomic pointer ops). On arm64 the 4-byte-aligned object faults in the 8-byte atomic; on x86 it silently overlaps the adjacent `padTabSig`. Port-layer fix: declare it `void *`.** — full `## D599` entry at file tail | **FIXED 2026-10-08** (macos branch; Mac M3 re-run with a connected Xbox pad: menu + Dam clean, pad table rebuilds; Windows/Linux builds not re-run) |
+| D600 | **VSync-on frame pacing: the 60 Hz VI retrace tick is a free-running wall-clock pacemaker (16666 us, ~40 ppm fast) not locked to the display vblank, so its phase slides against the blocking swap (~7 min beat on a 60.000 Hz panel); when it lands in the render+swap window every frame is late, the tick gate skips, and fps stays at 40-50 until the phase slides back. Random start phase per launch = a restart re-rolls it. Port-layer fix: first-order phase lock of the tick to the swap-return time.** — full `## D600` entry at file tail | **FIXED + LIVE-CONFIRMED 2026-10-08** (macos branch; Mac M3: 11000-frame Cradle run flat 16.67 ms / swap-pace flat 13.6 ms, no creep; Windows: guard self-disables where the swap does not block, baseline unchanged; maintainer live play: the chop is gone, full campaign + 52k-frame session clean; resolves D598) |
+| D601 | **Long-session hang at stage load (macOS playtest, Archives): the active sound-state list (`D_800243E4.node`) became cyclic, so `sndSetSfxSlotVolume`'s walk in `lvlStageLoad` never ends (game thread live-spins, audio thread contends, watchdog fires, black screen). Cause: unsynchronised list mutation between the game thread and amMain — `sndSetupSound` read the free-list head BEFORE taking the interrupt section, and `sndUnlinkClearSound` mutated both lists with NO section.** — full `## D601` entry at file tail | **FIXED + LIVE-CONFIRMED 2026-10-08** (macos branch; `#ifdef PORT` guard, D152/D285 class; evidence = live lldb read of the hung process; maintainer full-campaign completion incl. Archives, no hang) |
+| D602 | **macOS end-credits SIGBUS: `bondviewRenderCredits` -> `textMeasure` faulted on `langGet()` result = bank + 0x721E08F2 (garbage slot offset in a loaded text bank), at the START of the credits in a ~1 h natural session; the same Cuba stage booted fresh (`-level_54`) renders the whole cast roll correctly on the Mac. ROOT CAUSE NOT FOUND — mitigated with an impossible-offset guard + one-shot diagnostic.** — full `## D602` entry at file tail | **MITIGATED 2026-10-08, OPEN** (macos branch; `langGet` returns NULL for offset > 1 MiB and logs the bank state once as `D602:`; needs one natural-flow re-trigger to diagnose) |
+| D603 | **arm64 macOS multiplayer (2P, stage 38) SIGSEGV in `modelSetAnimFrame` via `playerTick`: the player body-model animation pointer `anim` (an `s32` holding an N64-form address) was zero-extended `(uintptr_t)(u32)(anim)` — D441's base-0 tier — instead of re-based with `PORT_N64PTR`, so `modelSetAnimation` got the bare `0x707b2658`. §A1 s32-slot class, D587/D595 sibling.** — full `## D603` entry at file tail | **FIXED 2026-10-08, live confirmation owed** (macos branch; identity at PORT_ADDR_BASE==0; headless 2/3/4P + solo smoke clean but the death/firing-animation path is not reachable headlessly) |
+| D604 | **arm64 macOS multiplayer respawn SIGSEGV: `mp_respawn_handler` kept the spawn pad's `stan` in a `StandTile *` local (PORT) but three D441 casts `(uintptr_t)(u32)(start_stan)` truncated that 64-bit pointer to 32 bits, dropping the window base; `bondviewYPositionRelated` then dereferenced bare `0x7016ff30`. (My D603 audit had wrongly called these casts a no-op.)** — full `## D604` entry at file tail | **FIXED + LIVE-CONFIRMED 2026-10-08** (macos branch; maintainer 2P respawn OK; identity at PORT_ADDR_BASE==0) |
+
+## D612: arena-start leg fixed; next arm64 truncation family is the D441 s32-held DRAM pointer slots — PARTIAL 2026-10-07 (macos branch)
+
+*Labelled D584 on the macos branch; renumbered at the v0.5.1 merge (the interpolation work had used D579-D585).*
+
+The D611 chain is fixed at its game-side carrier instead of at the two port-side
+ones: `src/boss.c` now declares `start` as `uintptr_t` under `#ifdef PORT`
+(the N64 `u32` branch untouched) and takes the committed address directly,
+`start = (uintptr_t)&_bssSegmentEnd`, instead of the N64 round-trip through
+`osVirtualToPhysical` (returns `u32`) and `PHYS_TO_K0` (`((u32)(x))`).
+Identity at `PORT_ADDR_BASE == 0`: both expressions yield `0x70050000` for
+any address below 4 GiB, and the only other use of `start` is the `(u32)`-cast
+size operand, which truncates identically either way — so the Windows/Linux
+extent `(block - start)` is base-invariant and unchanged. This is the D453
+pattern ("arena start is a host pointer; carry it in `uintptr_t`, not `s32`")
+applied to the caller that D453 left behind; rule-2 class §A1 (pointer-width
+carrier), no behaviour change, no N64-side change.
+
+**Effect on the Mac:** the mempool banks are now committed addresses
+(`PORT_DRAM_V1_BASE + 0x50000` .. `+0x7FF000`, inside the 8 MB V1 mapping),
+`langInit` completes, and the run advances to the next family: SIGSEGV at
+`0x707B50E4` inside `alloc_load_expand_ani_table` (src/game/initanitable.c).
+
+**That family, named:** `expand_ani_table_entries` stores DRAM pointers in
+**s32 slots** (`animation_table_ptrs1/2`, `*var_v0`) and D441 fixed the
+dereference with `(struct anim_entry *)(uintptr_t)(u32)(*var_v0)` — a
+**zero-extend of the arena-relative value**, which is only correct while the
+arena sits below 4 GiB (D441's base-0 tier). On arm64 the slot must be
+converted with `portN64ToHost` (add `PORT_ADDR_BASE`), i.e. exactly the
+`PORT_N64PTR` territory of #95 — and the same shape recurs at the other
+tier-2 sites the D441 census logged as owed (`initanitable.c` heap slots,
+`mema.c`, the `struct player`/`struct hand` raw offsets in porting-notes §A1).
+The `port_addr.c` implementation is still not in this branch's tree, so those
+stay with the #95 re-application rather than being patched one cast at a
+time under a locally invented name.
+
+## D613: PR #95 (macos branch) re-applied onto release/v0.5.1 — the stale-base merge the macos track had been carrying as a 5-commit-behind origin/macos — FIXED 2026-10-07 (macos branch)
+
+*Labelled D585 on the macos branch; renumbered at the v0.5.1 merge (the interpolation work had used D579-D585).*
+
+The macos track's #95 (danturn's macos-branch model work: `port_addr.c`
+implementation, the D441 `PORT_N64PTR` rebase sites, the mema/front/etc.
+arm64 fixes) sat on a stale base (5 commits behind at the pull, 45 ahead /
+5 behind overall). Re-applied as a 3-way (`git apply -3`) over
+`release/v0.5.1 @ 72c4f4c0`: 23 files clean, 37 conflicted (~110 markers),
+resolved by signature: keep ours (v0.5.1) unless ours truncates an arena
+address through the D441 `(uintptr_t)(u32)(slot)` pattern — then adopt
+theirs' `PORT_N64PTR` rebase. Full-width base+offset carriers (ours' D457/D456)
+are Mac-safe and kept. memp.c always theirs (pool start/end need
+`portN64ToHost`; `poolAreaStart` is an N64 address carried from boss.c).
+The FlyingParticles buffer stays ours (static C array → real host pointer;
+rebasing a .bss address would truncate it). D573's `portAddrIsMapped`
+supersedes theirs' `portAddrIsInWindow` guards; theirs' TEMP D65
+`GE_D63` probe block dropped (v0.5.1 removed it). Header unified to the
+D607 one-header model (`portaddr.h`, not `port_addr.h`). Post-resolver
+mechanical fixes: boss.c include block + unclosed `#ifdef PORT` at the
+rspGfxTaskStart block, image.c duplicate dst16/dst8 arms (theirs'
+MACOS-TEXALIGN block declares all three at full width), mpmenu.c comma-
+expression `#ifdef` arms restored, model.c PROMOTE N64 arm restored
+(theirs' `portN64ToHost` landed in the wrong branch; PROMOTE is Mac-safe
+as-is: the zero-extension cancels through `diff`). Windows build verified
+clean (252 steps, fresh exe) before landing. Rule-2 class §A1 throughout
+(pointer-width carriers, address-carry fixes at the game-side carrier per
+D612's reasoning); no logic/behaviour change.
+
+## D586: Apple `gen_macho_syms.py --base` parse was dead code (referenced an undefined `args`) and the generated `.s` dir is missing on a fresh macOS build dir — FIXED 2026-10-07 (macos branch)
+
+Three build-layer fixes for the Apple path: (a) the `--base` branch in
+`scripts/gen_macho_syms.py` referenced `args` — the script has no argparse;
+replaced with a manual `sys.argv` parse (`base = int(argv[1], 0)`); (b) the
+`--base`-shifted literals were emitted bare (`10001049A390` — the assembler
+reads it as invalid, "expected newline"); now `0x`-prefixed; (c) the
+`cc -E -o` custom commands for `romassets_*_macho.s` / `dram_syms` fail on a
+fresh macOS build dir because `build-pc/port/src` doesn't exist yet — added
+`file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/port/src")` before the Apple
+custom commands. `dram_syms` is NOT `--base`d (it includes `portaddr.h` and
+uses `PORT_DRAM_V1_BASE + offset`, preprocessed); `romassets_u.s`'s 1762 raw
+cart-address `.set` lines are. Result: the arm64 macOS build completes and
+boots — self-test ALL PASS, ROM mapped, 600+ frames rendered, no SIGSEGV
+(the D612 ladder's endpoint cleared by D613's re-application).
+
+## D587: macos sweep — 9 of the first 13 levels SIGSEGV at the same site: `if_actor_able_set_on_path` derefs the raw N64 patrol-path address held in the s32 `pathid` slot — FIXED 2026-10-07 (macos branch)
+
+The arm64 sweep's first crash family is uniform: fault addrs `0x701b…`–`0x7021…`
+(N64 DRAM, unmapped on the Mac window) at `if_actor_able_set_on_path + 64`
+under `ai` → `chrlvActionTick` → `chrTick` → `propsTick` → `lvlRender`.
+`src/game/chraction.c` carried ours' D441 zero-extend `(struct patrol_path
+*)(uintptr_t)(u32)(pathid)` — base-0-only (the resolver kept ours because ours
+does not *truncate*, it zero-extends, which is only correct with
+`PORT_ADDR_BASE == 0`). Adopted theirs' rebase: `PORT_N64PTR(struct patrol_path,
+pathid)` (identity at base 0; `portN64ToHost` maps the DRAM slot into the
+window on the Mac; `pathid == 0` yields NULL, same as the old cast). Rule-2
+class §A1 (address-carry at the game-side carrier, per D612's reasoning).
+Windows build re-verified clean. Remaining `(uintptr_t)(u32)` D441 sites stay
+under the task-6 audit until the sweep reaches them.
+
+## D588: Windows x86_64 SIGSEGV in `texReadBits` (deterministic 3/3) — the #95 `texSetBitstring` re-base mis-maps the native worker-thread stack into the D131 image-rel range — FIXED 2026-10-07 (macos branch)
+
+Symptom: the worktree `ge007.x86_64.exe` (head c675ee99, post-#95 re-apply
+D613) SIGSEGVs deterministically (3/3) in a worker thread at
+`texReadBits` (`src/game/image_bank.c`) under `texInflateNonZlib` →
+`texLoad` → `texLoadFromDisplayList` → `lvlStageLoad`. Fault addrs are of the
+form `imagebase + (native_stack_low32 − 0x40000000)` — e.g. `0x161ccebc1`
+= `0x140000000 + (0x61ccebc1 − 0x40000000)` — i.e. inside the PE image but
+past its end (unmapped).
+
+Root cause: the #95 re-apply (D613) changed the `PORT` body of
+`texSetBitstring` from the D441 base-0 zero-extend `(u8 *)(uintptr_t)(u32)pos`
+to `portN64ToHost((u32)pos)`. The callers pass a **live host pointer** —
+texLoad's stack `compbuffer`, or the DRAM mempool cursor returned by
+`rzipGetSomething()` (itself `(s32)(uintptr_t)s_rz_nextin`, truncated to 32
+bits). On Windows the libwinpthread game/render thread's native 8 MB stack
+lives at `0x618d…`–`0x620d…`, whose low 32 bits fall **inside the D131
+image-relative encoding range `[0x40000000, 0x70000000)`**. `portN64ToHost`
+therefore re-maps that low-32 onto the PE image (`imagebase + (low32 − 0x40M)`),
+landing past the image's end → `texReadBits` dereferences an unmapped page
+and faults. The M2 re-base was correct for in-window (macOS) pointers, whose
+low 32 bits are genuine N64 offsets; it is wrong for a **native** (out-of-
+window) pointer that merely *collides* with the image-rel range.
+
+Fix (rule-2 §A1 pointer-width; N64-identity): take the argument at **full
+pointer width** on the PORT build and drop the truncate-then-re-base.
+`src/game/image_bank.{c,h}`: `void texSetBitstring(u8 *pos)` under
+`#ifdef PORT` (N64 keeps `s32 pos`; on MIPS pointer == s32 width), body
+`img_curpos = pos;`. `port/src/rzdecomp.c` + `src/game/decompress.h`:
+widen `rzipGetSomething()` to return `u8 *` (the live `s_rz_nextin` cursor)
+under `#ifdef PORT` so the cursor is not truncated to s32 before reaching
+`texSetBitstring` (N64 build keeps the s32 form in `src/game/decompress.c`,
+which is EXCLUDED from the PC build). Full width is identity at base 0
+(Windows/Linux) and, for an in-window pointer, identical to the old re-based
+value on macOS — so this is Mac-neutral and strictly correct on all three
+platforms.
+
+Also audited every other `portN64ToHost((u32) …)` M2 re-base in the tree: all
+the remaining ones (`memp.c`, `mema.c`, `model.c`, `chr.c`, `bondview*.c`,
+`chraction.c`, `initactorpropstuff.c`, `title.c`, `othermodemicrocode.c`,
+`language.c`) operate on *stored N64 u32 fields / DRAM addresses*, which is the
+correct M2 usage. `texSetBitstring` (and its `rzipGetSomething` feeder) were
+the only two that re-based a **live** host pointer.
+
+Verification: Windows build 251/251 clean; the previously-3/3-crashing
+`-level_33` (dam) run now passes `lvlStageLoad`, renders 300 frames, and exits
+0 on `GE_QUITFRAME` with no fault/backtrace. Mac build unaffected (in-window
+stack ⇒ D588 changes no Mac behaviour here). Cross-tag D131 (image-rel
+range), D441 (base-0 zero-extend), D613 (#95 re-apply that introduced the
+re-base).
+
+---
+
+## D589: macOS arm64 wide-pixel textures render as colourful static (Surface 1/2 billboard trees) — PARTIAL 2026-10-08 (macos branch; the rev32 / byte-order half is root-caused + FIXED + Mac-verified as D591; a SECOND cause — a GL-layer divergence (GL texture-object / mipmap / sampling, downstream of byte-identical fast3d texels; D592) — keeps D589 open, the rock striping remaining; the decode/normalize/D75-swap path and the glTexImage2D input are proven byte-identical Mac/Win)
+
+### Symptom
+
+Live user report on the macOS (arm64) build: the **Surface 1 / Surface 2
+billboard trees** (and, on the Dam, the rock-face textures) render as
+**colourful static / confetti** (green/purple/pink dithered noise, no tree
+structure) instead of the correct snow pines. Sky, ground, weapon and
+single-byte-format (CI4/CI8/I4/I8/IA8) textures render correctly on the Mac;
+only the **wide-pixel** (32-bit RGBA / 16-bit) textures garble. The x86_64
+(Windows) build renders the same scenes correctly.
+
+This is a *content* (byte-order) defect in the texels, **not** a geometry /
+billboard defect — the quads sit at the right place and size on both platforms
+(cf. D236, the closed billboard *wall/sheet* issue, which was a tiling /
+geometry problem, a different bug). It is also *Mac-only*: x86_64 is fine.
+
+### Evidence (all same-seed, same-level A/B; the Mac is at `c675ee99`, the
+Windows at `8bfc5a1b` — D588 is Mac-neutral so the texture code is identical)
+
+1. **Captures.** `mac-surface1-f900` = confetti trees; `win-surface1-f900`
+   = structured snow pines, same frame / camera / seed.
+2. **The TLUT is NOT the bug.** Aligning the two `GE_TEXI` import logs by
+   normalised N64 address (Mac addr = 16 TiB window base + off; Windows
+   base-0), every import with a real palette (`palfmt != 0`) carries the
+   **identical** `pal[0..3]` on both platforms. The palettes load correctly on
+   the Mac, so the garble is in the texel bytes, not the palette.
+3. **The texel bytes are byte-reversed on the Mac — proved on the first
+   import (r000), a clean per-32-bit-word reversal, not noise.** A fresh
+   single-frame Dam A/B (`-level_33`, `GE_RSEED=0x0123456789abcdef`,
+   `GE_INPUTSCRIPT=20:START`, `GE_TEXDUMP=1 GE_TEXRAW=1`) aligned by **import
+   sequence** (same seed + level ⇒ the common prefix of the two import lists
+   is 1:1). The very first 32-bit RGBA import — `r000_f3_s1_64x64`, N64 addr
+   `0x701994f8`, imported identically (same address, same format, same first
+   import) in both runs — is a **perfect 4096-byte per-32-bit-word reversal**
+   of x86_64's `texdump/r000`: mac `98 87 98 76 | bb a9 98 98 | dd cc bb ba
+   | ee dd cc bb | ed ff ff fe | …` vs win `76 98 87 98 | 98 98 a9 bb | ba
+   bb cc dd | cc cb dc ee | fe ff ff ed | …` (every one of the 1024 words
+   matches `mac[k:k+4] == reverse(win[k:k+4])`). These are *structured*
+   ramp/gradient texels, so this is real content, exactly byte-reversed —
+   not noise. Nine more aligned imports are clean `rev32` the same way (all
+   32-bit and 16-bit families).
+   **Caveat on the "other" bucket:** of the 99-tuple common prefix, **68 are
+   re-imports** (the same `(addr,fmt,siz)` appears >1× in the log) and are
+   imported at slightly different frames in the two runs, so their content
+   legitimately differs — they match under *no* transform and are **not**
+   evidence for or against a byte-order difference. The 10 clean-`rev32`
+   samples (incl. r000) are the single-import, same-moment subset and are the
+   meaningful signal.
+
+### Why this garbles (the D219 contract)
+
+`src/game/image.c` (D219 / M-113 / M-115): the runtime-decoded wide-pixel
+families have opposite byte-order contracts, keyed on GBI size:
+
+- **16-bit** (`import_texture_rgba16` / `import_texture_ia16`): read the pool
+  as *manually big-endian* bytes → the store must `bswap16` (`PORT_PIXEL16`).
+- **32-bit** (`import_texture_rgba32`, `port/fast3d/gfx_pc.cpp:896`): does
+  `PD_BE32()` on a **native** u32 load — it expects the pool to hold **native
+  host-order words** (`PORT_PIXEL32` = identity).
+
+On x86_64 (little-endian) the pool holds native-LE words, `import_texture_rgba32`
+applies `PD_BE32`, and the GPU gets the correct texels. The A/B shows the
+**arm64 pool holds the reversed (big-endian) order**, so after `PD_BE32` the
+arm64 GPU samples byte-swapped texels (R↔A, G↔B) → the colourful static.
+
+### Root cause (two candidates; the writing line is not yet pinned)
+
+`import_texture_rgba32` and `texReadUncompressed` (the `TEXFORMAT_RGBA32` /
+`RGB24` `dst32[x] = PORT_PIXEL32(px)` store) are *shared* code and run
+identically on both platforms, so the reversed pool must originate upstream:
+
+1. **(a) a big-endian write into the 32-bit pool on arm64.** Something in the
+   sidecar / asset pipeline lays the 32-bit texels down byte-reversed on the
+   16 TiB base. The sidecar load (`port/src/pccg.c:119 pccgLoadSidecars`) is a
+   byte-exact `fsRead`, so if it is the source it must be a mis-addressed read
+   (candidate 2).
+2. **(b) the source region is mis-addressed on the 16 TiB image-rel** (D131
+   class, the same family as D588): either the pccg sidecar is read from the
+   wrong in-window address, or the runtime bitstream (`texReadBits`,
+   `img_curpos`) points at a shifted region, so the decoder reconstructs
+   byte-reversed texels.
+
+### Next (concrete, owed)
+
+- Instrument the write: dump the *source* region bytes (before `import_*`)
+  for one 32-bit RGBA texture on **both** platforms — `GE_TEXDUMP_ADDR=<host
+  addr>` (host addr differs per platform: 16 TiB window on arm64, base-0 on
+  x86_64; take it from each run's own `GE_TEXI` log) — and compare. If the
+  source is already `rev32` → mechanism (b) (mis-addressed / byte-reversed
+  source); if the source is native-LE on both but the pool is `rev32` on the
+  Mac → mechanism (a) (a Mac-specific store) and the defect is the `dst32` /
+  sidecar write.
+
+- **BLOCKED (2026-10-08) — UNBLOCKED by D590 (2026-10-08):** the D589 A/B needs a working Windows `build-pc/` to
+  produce the Win-side rNNN pool dumps, but the Windows build now hits a
+  **new deterministic `load_bg_file` SIGSEGV** (`src/game/bg.c:897`,
+  `exe+0x729b`, bg-load worker thread, 4/4 incl. a plain run with no probe env
+  vars — so it is NOT the `GE_ZLIBDUMP`/`GE_D589POOL` probes and NOT a
+  `bg.c` change; the tree is clean at `eed6b774`). Two open hypotheses: a
+  build/reconfigure delta from the full 251-object rebuild (CMakeCache
+  regenerated) vs. the new `image_rel=1` path in `load_bg_file` (D607/D613
+  unification). Full state + investigation order:
+  `docs/dev/notes/HANDOFF-WIN-LOADBG-CRASH.md`. The Mac is also unreachable
+  (ssh to the Mac timed out ×3).
+- Note: the arm64 **single-frame** run (`GE_PCDUMP=900:900 GE_QUITFRAME=901`)
+  crashes with a null-PC (`PC=0x0` SIGSEGV) on Surface 1/Dam at the
+  early-quit path — a *separate* defect to file (the full-sweep / full-boot
+  runs are unaffected); do not let it mask the texture diagnosis.
+
+**Offline L1/L2 leads (2026-10-08, `scratch/d589-dam/` dumps; the Mac is
+unreachable — no new A/B):**
+
+- **L1 (find the ASCII writer) — the ASCII tell is a false positive.** The
+  "ASCII runs" in the Mac r000 bin are the normal shape of 4-bit CI packed
+  pixel data: every byte holds two 4-bit palette indices, so most bytes are
+  printable ASCII, and adjacent pixels frequently share an index (repeating
+  byte pairs like `76 98 98 87 98 98 …`). The **Windows** r000 bin shows the
+  same character exactly. r000 is *not* being clobbered by non-texture
+  data; there is no second writer at this bin. The ASCII-run reasoning in
+  the D589 review is retired.
+- **Pairing check (before trusting any Mac-vs-Win bin comparison): the
+  import sequences have diverged.** Of 800 dump names per side, **464 do not
+  match** (the `WxH` suffix disagrees at the same rNNN index — e.g. r036 is
+  `48x32` on Mac vs `32x32` on Win), and of the 336 names that *do* match,
+  334 differ in content. Pairing by tdc index is invalid until the import
+  lists are aligned; any byte-level "rev32" comparison made on mis-paired
+  bins proves nothing.
+- **L2 (pool-cursor state) — 2026-10-08, both legs run: the pool state
+  MATCHES THROUGH LOAD 8; the allocator half is NOT yet retired.** A `GE_TEXP`-gated probe in `texLoad`
+  (image.c, after the pool write) dumps the pool cursors + the just-
+  written tex header for the first 8 loads, plus a `GE_SIZEOF` startup
+  line (`port/src/main.c`: struct tex/texpool + native scalar widths).
+  One-pass Mac script `scratch/mac_d589_onecmd.sh` (sync to `65d2eb5a`,
+  clean build, seeded Dam run `GE_TEXP=1 GE_SIZEOF=1 GE_RSEED=0x0123456789abcdef
+  GE_QUITFRAME=1500 GE_INPUTSCRIPT=20:START`, 640x480 ini; game exit 0,
+  no crash log — the D590 fix landed in the sync, so the Mac did NOT hit
+  the bg-load crash) vs the identical Windows run. **Every field of all
+  8 loads matches**: same texnum order (2106, 2084, 2085, 2088, 2089,
+  2098, 2099, 2100), same `bytesout` (3136/448), same `leftpos-start`
+  deltas (+3144…+17088, i.e. `bytesout+8` per load), same `end-rightpos`
+  deltas (−24…−192, 24 = PC `sizeof(struct tex)` per load, N64 16),
+  same fmt/maxlod/w/h per tex; `start/end` sit at identical offsets
+  (0x112050/0x1ae450) in each platform's DRAM view. **`sizeof` also
+  matches where it matters**: `struct tex`=24, `struct texpool`=32 on
+  both (the D457 widening); the only ABI-width difference is `long`
+  (8 arm64 / 4 x86_64), which neither struct contains. Artifacts:
+  `scratch/d589-dam/{mac-texp,win-texp1500}/`.
+  **Consequence: the pool/allocator state MATCHES THROUGH LOAD 8 — the
+  divergence is later in the sequence / at import-time reads. Not
+  retired, only not-yet-reached: the earlier 224/400 texdump-bin
+  `size_bytes` divergence happens later, so a full-sequence cursor sweep
+  (the raised `GE_TEXP` cap, self-determinism first — the loads run on
+  the bg-load worker thread, so a platform that differs from its *own*
+  second run makes every cross-platform diff meaningless) is owed
+  before L3 or any texdump A/B. If the first diverging load is found,
+  also check its decode for uninitialised-byte consumption (the 1×1
+  texnum=1608 zlib scratch showed stale stack garbage in bytes 1–31 —
+  a classic cross-platform difference source), before L3 (K0/V1).
+
+### D591 A/B result (2026-10-08) — the byte order is fixed; a SECOND cause (D592) keeps D589 open
+
+The D591 fix (`9c59cbe7`) was A/B'd on the arm64 Mac (back online at
+HEAD `25f92e09`). **The rev32 / byte-order defect is gone:** `GE_TEXN
+carray=0` on every probe line (was `1`), the Mac `raw8` bytes equal the
+Win baseline, and the decoded wide-pixel texels are no longer byte-reversed.
+So the *mechanism this entry was chasing* ("the pool holds the rev32",
+root-caused as the `gfx_tex_source_is_c_array` host/raw mixup in D591) is
+closed.
+
+**But D589 as a whole is NOT closed.** After the fix the Dam frame still
+diverges from Windows at **~31.8% of pixels** (was ~96% pre-fix), and the
+divergence is spread across the **whole 3D scene** (per-80px-cell 0–73%,
+worst in the sky-adjacent top-right), **not** localized to one texture or
+the HUD — and there are **no pink/magenta pixels on either side** in the
+HUD region, so the D219/M-114 "ammo HUD pink" class is not present. That
+broad-scatter signature (structurally-aligned geometry + HUD, wrong
+*content* scattered everywhere) points at a **second, distinct cause,
+filed as D592**: the two platforms import the same *set* of textures
+(decoded-shape multiset matches 1166/1167; the Mac has 10 fewer 16-bit/f2
+textures) but in a **different order** — the import streams are identical
+through r000–r098, then scramble. The rNNN texdump index is a per-run
+*positional* counter, so once the order diverges the rNNN-suffixed bins are
+not cross-platform-alignable and (if texture→object binding keys on import
+position) individually-correct textures land on different regions.
+Maintainer visual-sanity package: `scratch/d589-dam/ab3-mac/`.
+
+Cross-tag D219 (the wide-pixel byte-order contract), D159 (the sibling
+odd-row pre-swap class, `#ifdef PORT` no-op in `image.c`), D131 (image-rel
+range), D441 (the address model), D236 (the closed billboard *wall*, a
+different geometry bug), **D591 (the byte-order root-cause, now
+verified-fixed), D592 (the second cause — a GL-layer divergence, downstream of byte-identical fast3d texels; the initial import-order theory was a camera-dependent red herring, DISPROVEN — D589 stays open on this)**. The D589 "pairing check" above
+(464/800 name mismatch) is the same camera-dependent import-order effect, now retired as a red herring (see D592);
+
+## D590: Windows x86_64 deterministic SIGSEGV in `load_bg_file` (bg-load worker thread) — the bg-load path re-based a full-width host `bg_addr_t` through `PORT_N64PTR`, mapping the worker-thread stack header array onto the PE image — FIXED 2026-10-08 (macos branch)
+
+Symptom: the `macos` branch Windows build (tree clean at `eed6b774`, after a
+full 251-object reconfigure) SIGSEGVd **deterministically (4/4, incl. a
+plain run with no probe env vars)** in `load_bg_file`
+(`src/game/bg.c:897`, `exe+0x729b`, `mov 0x4(%rdx),%edx`), on the **bg-load
+worker thread** (`portThreadWrapper` → `bossEntry` → `bossMainloop` →
+`lvlStageLoad` → `load_bg_file`). Fault addr `0x0000000161ecfb74`; thread
+stack `0x614d0000..0x61cd0000`, `RSP=0x61ccbab8`. The last *working* run
+(`dam_win2.log`, exe built at `08c7246a`) predated the full rebuild; the
+crash blocked the D589 Mac-vs-Win texture A/B (it needs the Win-side rNNN
+pool dumps). Full state at the time: `docs/dev/notes/HANDOFF-WIN-LOADBG-CRASH.md`.
+
+Root cause: **the D588 bug class, at a different site.** `load_bg_file`
+holds the stage header in a local stack array (`s32 header[0x10]`) and
+publishes it as `ptr_bg_data = (bg_addr_t)header` — on the PORT build
+`bg_addr_t` is a **full-width `u8 *`** (D457). Line 897 then read the header
+through `((s32 *)PORT_N64PTR(void, ptr_bg_data))[1]`; under PORT
+`PORT_N64PTR` expands to `portN64ToHost((uint32_t)(expr))` — i.e. it
+**dropped the top 32 bits of a live host pointer and re-based the
+remainder**. The arithmetic is exact: the `GE_D590HDR` probe (below) shows
+`header = 0x61ecfb70` on the bg-load worker stack; low 32 bits
+`0x61ecfb70` fall inside the D131 image-rel window
+`[0x40000000, 0x70000000)`, so `portN64ToHost` remaps it to
+`imagebase + (0x61ecfb70 − 0x40000000)` = **`0x161ecfb70`** — the fault
+address `0x161ecfb74` is that value + 4, i.e. exactly the faulting load
+(`word[1]` of the header). The layout-shift of the full rebuild put the
+worker stack deterministically in the colliding range (D588 already
+recorded Windows worker stacks at `0x618d…`–`0x620d…`); the earlier
+working run sat outside it. The handoff's "disassembly puzzle" (faulting
+PC on the `image_rel==0` branch with `R8=1`) is immaterial — the fault
+address pins the cause; a tail-merged / mis-attributed PC is the likely
+explanation.
+
+Fix (rule-2 §A1 pointer-width exception, N64-identity): in
+`src/game/bg.c` `load_bg_file`, drop `PORT_N64PTR` wherever the operand is
+already a full-width host pointer and use the plain cast (a no-op under
+N64, where the macro is the identity and `bg_addr_t` is `s32`):
+- line 897: `((s32 *)ptr_bg_data)[1]` (`ptr_bg_data` = the stack `header`);
+- line 906-907: `(struct StanPrefixRecord *)gptr_stan` / `(u8 *)gptr_stan`
+  (`gptr_stan` is a host pointer per D457);
+- line 919: `data = (s32 *)ptr_bg_data` (reassigned from
+  `mempAllocBytesInBank`);
+- lines 939-957: `((s32 *)ptr_bgdata_offsets)[2..4]` (the same stack
+  `header`).
+Left in place (legitimate 32-bit N64 operands): line 3096
+(`SEGMENT_OFFSET(gdl[...].dma.addr) + (u32)vertices`) and every other
+`PORT_N64PTR` use whose operand is a stored N64 u32 field / DRAM address.
+Mechanism check (kept, `GE_D590HDR`-gated, one line): log
+`(uintptr_t)header` and its low32 at the `ptr_bg_data = (bg_addr_t)header`
+site; a correct run prints `low32=0x61ecfb70 in-window=1` on the Dam
+repro. If `in-window=0` ever appears while the pre-fix build still
+crashed, the D588-class diagnosis would be wrong.
+
+Verification (Windows, `scratch/wt-macos/build-pc`, `-level_33` (Dam),
+`GE_QUITFRAME=300 GE_RSEED=0x0123456789abcdef GE_INPUTSCRIPT=20:START`):
+- pre-fix: 4/4 SIGSEGV (`ge007.crash.log`, fault `0x161ecfb74` /
+  `0x161ccebc1` across runs);
+- post-fix normal build: **5/5 exit 0**, 300 frames rendered, orderly
+  `GE_QUITFRAME` quit, no FATAL/backtrace, `D590HDR header=…61ecfb70
+  in-window=1` confirming the collision mechanism;
+- `PORT_ADDR_STRICT` build (`build-pc-strict`): Dam run exit 0 with **zero
+  strict reports** besides the injected `GE_ADDRSTRICT_SELFTEST` negative
+  (proving the detector is live). Caveat: strict validates that a re-based
+  u32 maps to a *known N64 region*; a truncated live pointer whose low32
+  lands in-window (this bug class) passes it, so a clean strict run is
+  path-coverage evidence (Dam, 300 frames), not a proof that no other
+  full-pointer-through-`PORT_N64PTR` sites exist. The wide audit (all
+  `PORT_N64PTR` uses on full-width pointers) remains owed (D588 rule: only
+  stored N64 u32 fields / DRAM addresses may feed the re-base).
+- Platform scope: same defect class on the macOS build (an out-of-window
+  stack pointer there is benign because the window base is 0 and the low32
+  is the genuine N64 offset), but the plain cast is identity-correct on all
+  three platforms.
+
+Also fixed in the same commit: `port/src/port_addr.c` `PORT_ADDR_STRICT`
+build on Windows — the unconditional `#include <execinfo.h>` (POSIX-only)
+broke the mingw build; the include now matches the existing
+macOS/Linux guard on the backtrace block (Windows strict runs still log
+the bad address, without a native backtrace).
+
+Cross-tag D588 (the same bug class, `texSetBitstring`/`rzipGetSomething`
+sites — the canonical §A1 cross-tag for this defect), D457 (the
+full-width `bg_addr_t`/`gptr_stan` retype that made the operand
+full-width), D131 (the image-rel window), D441 (the address model), D589
+(the texture A/B this crash was blocking). §A1 cross-tag added to
+`docs/porting-notes.md` (incl. the fault-addr diagnostic tell:
+**fault addr == imagebase + (low32 − 0x40000000)** ⇒ a live host pointer
+was truncated and re-based).
+
+## D591: arm64 macOS fast3d mis-classifies every DRAM/cart texture source as a "C-compiled array" and byte-swaps it — the rev32 that makes the D589 pool render as static — FIXED + Mac A/B VERIFIED 2026-10-08 (macos branch; fix `9c59cbe7`; byte order confirmed gone on the Mac, but D589 stays open on the second cause, D592)
+
+### Symptom
+
+The D589 symptom (Surface 1/2 billboard trees + Dam rock faces render as
+colourful confetti/static on the macOS arm64 build, while sky/ground/CI
+textures and the *entire Windows* image are correct) was, by the time of
+this finding, **localized to a single line but the mechanism was still
+labelled "the pool holds the rev32" (unproven)**. A full-sequence A/B
+settled the mechanism:
+
+- **Decode-time pool is byte-identical.** `GE_TEXDUMP`+`GE_TEXRAW` on both
+  platforms: 400 import-time `r*.bin` dumps each. The 134 `d_nz_*.bin`
+  decode-time pool dumps are **134/134 byte-identical** Mac vs Win — the
+  writer/`rle_expand`/pool-store side is clean (the D589 "pool holds the
+  rev32" theory is wrong: the pool is correct).
+- **Import-time sources are a clean rev32 on the Mac only.** The
+  import-time `r*.bin` bins differ 347/350 on the common names, and the
+  wide-pixel classes are an *exact* 32-bit byte reversal: r000 (f3 64x64)
+  and r003 (f2 1x1) are **100% rev32** (Mac bin == `byteswap32` of the Win
+  bin, byte 0 onward); the 8-bit CI classes show the ~50% coincidence rate
+  you'd expect from single-byte texels. The GE_TEXN discriminator probe
+  (added in the same work, `port/fast3d/gfx_pc.cpp`, `GE_TEXDUMP`-gated)
+  shows the whole story on one line each side:
+
+  ```
+  Win: GE_TEXN[0] carray=0 raw8= 76 98 87 98 98 98 a9 bb ...  norm8==raw8
+  Mac: GE_TEXN[0] carray=1 raw8= 76 98 87 98 98 98 a9 bb ...  norm8=rev32(raw8)
+  ```
+
+  Same `raw8` (the pool bytes are identical), **different `carray` verdict**
+  → on the Mac `gfx_tex_normalize_source` bswaps every pool source; on
+  Windows it passes the raw pointer through.
+
+### Root cause
+
+`gfx_tex_source_is_c_array` (`port/fast3d/gfx_pc.cpp:834`) mixes two
+address spaces in one test. It stripped the window base first, putting
+`a` in **N64 raw space** (a pool pointer `0x1000701994f8` → `a =
+0x701994f8`), but the range bounds it compared against are
+**host-space** — `PORT_DRAM_V1_BASE`/`PORT_DRAM_K0_BASE` are defined as
+`PORT_ADDR_BASE + 0x70000000`/`+0x80000000` (`port/include/portaddr.h:86,89`).
+At `PORT_ADDR_BASE == 0` (x86_64/Windows/Linux) the two spaces coincide so
+the test is accidentally correct. At `PORT_ADDR_BASE == 0x100000000000`
+(arm64 macOS) they diverge by 16 TiB: `a = 0x701994f8` is **above** the
+cart window in raw space (`0x701994f8 > 0x20000000`, so the cart check
+fails) and far **below** the host-space `PORT_DRAM_V1_BASE =
+0x100070000000` (so both DRAM checks fail), so all three range checks miss
+and the function falls through to `return true` ("C-compiled array") for
+every DRAM and cart texture source. `gfx_tex_normalize_source` then
+builds a stable `PD_BE32`-swapped copy of each such source, and fast3d
+consumes the swapped copy — a clean rev32 of the whole wide-pixel texture
+pool. That is the D589 confetti (and the D219/M-114 "ammo HUD pink"
+symptom class).
+
+The K0→V1 mirror normalisation at `gfx_pc.cpp:1285` does it right (compares
+the host pointer against the host-space `PORT_DRAM_K0_BASE` directly, no
+subtraction); the C-array test was the one site that stripped the base.
+
+### Fix
+
+`port/fast3d/gfx_pc.cpp` `gfx_tex_source_is_c_array`: compare the **host
+pointer** directly against the host-space bounds (drop the
+`− PORT_ADDR_BASE`), and express the cart range as
+`PORT_ADDR_BASE + 0x10000000 … PORT_ADDR_BASE + 0x20000000`. Port-layer
+only (no `src/game` change); a plain no-op on the N64 build and on
+`PORT_ADDR_BASE==0`. Commit `9c59cbe7`.
+
+### Verification state (at commit time)
+
+- **Windows: no-op confirmed.** Rebuilt `build-pc` (x86_64, `ntsc-final`),
+  ran the seeded Dam with `GE_TEXDUMP=1 GE_TEXRAW=1 GE_PCDUMP=150
+  GE_RSEED=0x0123456789abcdef GE_QUITFRAME=1500 GE_INPUTSCRIPT=20:START`:
+  `GE_TEXN[0] carray=0` (unchanged), and all **400/400** import-time
+  `r*.bin` are **byte-identical** to the pre-fix capture (and PPM
+  `frame_000150` regenerated at the same size). Windows behaviour is
+  unchanged by the fix, as the `PORT_ADDR_BASE==0` no-op requires.
+- **Mac A/B — VERIFIED 2026-10-08 (Mac back online).** Clean arm64 build
+  at HEAD `25f92e09`, seeded Dam run (`GE_TEXDUMP=1 GE_TEXRAW=1
+  GE_PCDUMP=150 GE_RSEED=0x0123456789abcdef GE_QUITFRAME=1500
+  GE_INPUTSCRIPT=20:START`): **`GE_TEXN carray=0` on all 6 probe lines**
+  (was `carray=1` pre-fix) and the Mac `raw8` bytes now equal the Win
+  baseline byte-for-byte. The rev32 is gone. **But the D589 symptom is not
+  fully closed** — a *second, distinct* cause surfaced (a GL-layer divergence — GL texture-object / mipmap / sampling, downstream of byte-identical fast3d texels; **D592**; the initial "import-order" framing was a camera-dependent red herring, later DISPROVEN): the frame still diverges at
+  the pixel level (the rock striping; the exact `glTexImage2D` input is byte-identical Mac/Win; no pink/magenta on
+  either side in the HUD region — the D219/M-114 "ammo HUD pink" class is
+  *not* present; the HUD is clean). So **D591 (byte order) is
+  verified-fixed; D589 stays open on D592.** Maintainer visual-sanity
+  package: `scratch/d589-dam/ab3-mac/{d591_sbs_win_mac.png,
+  d591_diffmap.png, D591-AB-SUMMARY.txt}`. (The earlier "400/400 bins
+  byte-identical" was a *filename-based* match on the rNNN index; see D592
+  for why that comparison is unreliable once the import order diverges.)
+
+### Cross-tag
+
+D589 (the symptom this root-causes; its "pool holds the rev32" line is
+superseded by this entry), D219/M-114 (the "ammo HUD pink" symptom class
+— same rev32 mechanism), D441 (the host-address model / above-4-GiB tier
+whose D441 note sits on the very range this function tests), D457 / D131
+(the address-space model). §A1 cross-tag added to
+`docs/porting-notes.md` (diagnostic tell: a platform where
+`PORT_ADDR_BASE != 0` and a range test strips the base *before* comparing
+to host-space `PORT_DRAM_*` bounds ⇒ every in-window source falls through
+to the C-array default and gets bswapped).
+
+## D592: arm64 macOS — the "rock striping" (the remaining cross-platform frame diff after the D591 byte-order fix) — **CLOSED as a NON-ISSUE (VHF-metric false-positive), 2026-10-08.** The "stripes" were natural rock grain flagged by a crude high-frequency metric, *not* a GL-layer artifact: the CPU texel bytes, the GL sampler state, and the NPOT mip level counts are all **byte-identical Win/Mac**, and the **maintainer's live Mac look shows the Dam rendering clean** (no visible striping; ammo counter not pink; F10 menu fine). The NPOT `glGenerateMipmap` guard + companion single-level sampler fix (`9bed5904` / `82dbea9c`) were **reverted as dead weight** (`b80dcd08`); the genuine cross-platform symptom (pink HUD) was **D591 (fixed)**. 2026-10-08 (macos branch; the "second cause" that kept D589 open is resolved — see Close-out below)
+
+### Symptom
+
+After the D591 byte-order fix is verified on the arm64 Mac (D589 confetti
+rev32 gone; `GE_TEXN carray=0`; decoded texels no longer reversed), the
+same seeded Dam A/B still diverges from Windows at **~31.8% of pixels
+at frame 150** (down from ~96% pre-fix, but far from clean). The
+divergence is spread across the **whole 3D scene** (per-80px-cell 0–73%;
+worst in the sky-adjacent top-right), **not** localized to one texture or
+the HUD, and there are **no pink/magenta pixels on either side** in the
+HUD region (the D219/M-114 "ammo HUD pink" class is not present — the HUD
+is clean). Geometry + HUD are structurally aligned on both sides; what
+differs is the *texture content* scattered across regions.
+
+### Evidence (byte-level, 2026-10-08; keyed by the stable RAW source address, not rNNN)
+
+The rNNN "import-order" line above was a **red herring**: frame 150's
+camera pose already differs between the two runs (truck / hut / horizon /
+clouds all shifted), so the *visible* texture set — and hence the import
+*order* — differs for a benign reason. `tdc` is positional by construction,
+so rNNN is not a cross-platform key. The decisive test is the **decoded
+bytes, keyed by the stable RAW-space source address** (`orig_addr -
+PORT_ADDR_BASE`, the low-32 address the game uses), via two new
+`GE_`-gated probes (`GE_TEXN` now logs the `d75` verdict + `dxt0` +
+`rawaddr`; `GE_TEXDUMPROW=1` dumps the FINAL post-transform source bytes
+to `texdump/row_<rawaddr>_f<fmt>_s<siz>.bin`):
+
+- **The D75 odd-row swap never fires on either platform.** Every one of
+  the ~1170 imports is `carray=0` (a DRAM pool source, raw `0x70xxxxxx`)
+  and `d75=0`. D591 fixed `gfx_tex_source_is_c_array`, so the `d75_swap`
+  gate (which re-uses that classifier, `gfx_pc.cpp:1275`) is now 0
+  everywhere. The "alt-row / odd-row swizzle" hypothesis is therefore
+  **disproven** — there is no swizzle being applied or skipped.
+- **The decoded source is byte-identical cross-platform.** Of 141 unique
+  `rawaddr` row-bins per side, 112 share an address and are **100%
+  byte-identical (0 differ)**; the 29 Win-only + 29 Mac-only are the
+  *same content at different pool addresses* (the pool allocator placed
+  the 16-bit/`f2` textures differently) — by content hash the two
+  platforms have **exactly the same 128 unique texture blobs, 0 differ**.
+  The decode / `gfx_tex_normalize_source` / destride path is clean.
+- **The exact `glTexImage2D` input is byte-identical cross-platform.** The
+  `GE_TEXDUMP` GL-level PPMs (`gfx_opengl_upload_texture`, `tNNN_WxH_mipM`
+  = the post-expansion RGBA32 buffer handed to the driver, 400 per side)
+  match as a **multiset of (W,H,content): 400/400, 0 differ**.
+- **Conclusion:** fast3d produces byte-identical texels down to the
+  driver hand-off, yet the Mac renders the rock striped (maintainer
+  eyeball). The divergence is **downstream of the CPU texel data** — in
+  the GL texture-object build, `glGenerateMipmap`, or sampling (the
+  GL-driver / GPU path) — not in the decode/normalize/swap or
+  import-order logic.
+
+### Root cause — PINNED (HIGH confidence): Metal `glGenerateMipmap` on NPOT textures, trilinear-sampled
+
+The CPU-side input to `glTexImage2D` is proven byte-identical (below), so
+the striping is introduced by the GL backend. The backend is now identified
+and the responsible path narrowed by a 5-run ini A/B (2026-10-08):
+
+- **Backend.** `--debug-gl`: Mac = **Apple M3, GL 4.1 (Metal), vendor
+  Apple, GLSL 4.10** (Apple's deprecated GL core, Metal-backed); Win =
+  **NVIDIA GeForce RTX 5090, GL 4.6, GLSL 4.60**. The Metal path is the
+  divergent layer. (The earlier "ANGLE→Metal or Mesa" guess is corrected:
+  the Mac runs Apple's native GL 4.1 / Metal, **not ANGLE**.)
+- **Q1 (byte-exact upload, incl. alpha).** A `.rgba32` sibling dump of the
+  `glTexImage2D` buffer (added this turn, `GE_TEXDUMP`) shows **116/116
+  unique content blobs byte-identical Mac/Win, 0 platform-exclusive —
+  *including alpha*** (the RGB-only PPM check was a lossy proxy: 66% of
+  the sampled texels are non-opaque, so the alpha is real and it matches).
+  The upload is airtight.
+- **A/B (ini-only, 5 runs, one clean build).** Per-80px-cell *change* vs
+  the R0 baseline (TF=1 AN=4 FM=1 MSAA=2):
+  - **R4 MSAA-off (MSAA=1): 6.1%** and **R1 aniso-off (AN=1): 5.1%** →
+    MSAA and anisotropy are **exonerated** (near no-ops on the frame).
+  - **R2 nearest (TF=0): 9.1%** → the linear-filter path matters.
+  - **R3 all-off (TF=0 AN=1 FM=0 MSAA=1): 26.4%** → the **mipmap /
+    linear-filter sampling path is the dominant lever**, concentrated in the
+    same scene cells that differ from Win. No toggle *converges* the frame
+    toward Win (R3 is 34.6% vs Win, *worse* than R0's 28.4%) — expected,
+    since Win renders with filtering ON and the frame-150 camera also
+    differs (the P0 camera pin is owed for a clean pixel test). The A/B
+    localizes the *lever*, not a "fix" setting.
+- **NPOT (Q2).** The upload shapes include **6 NPOT sizes, 114/400
+  uploads, dominated by 32x48 (×61)** (plus 48x32, 32x33, 16x3, 64x17,
+  56x54). `glGenerateMipmap` on an NPOT texture is **undefined behaviour
+  in the GL 1.x contract (mips only on power-of-two)**; the Metal backend
+  evidently generates (or leaves) a bad chain and trilinear
+  (`GL_LINEAR_MIPMAP_LINEAR`) sampling of it reads as the row-shifted /
+  interleaved striping. The rock is almost certainly the 32x48 NPOT family.
+
+**Confidence: HIGH** that the striping is the Metal `glGenerateMipmap`-on-
+NPOT / trilinear-sampling path (byte-identical upload + the A/B exonerating
+MSAA/aniso + the dominant NPOT shape). **MEDIUM** that the *exact*
+mechanism is row-shifted generated mips (inferred from the interleaved
+visual + NPOT + A/B, not directly dumped — a per-mip `glGetTexImage` would
+close this).
+
+**What is not the cause** (ruled out by the byte comparison + A/B): the
+decode path, `gfx_tex_source_is_c_array` / `gfx_tex_normalize_source`
+(D591, fixed), the D75 odd-row swap (0 on both), destride, import ordering
+(benign camera effect), MSAA (6.1%), aniso (5.1%). Keep D589 open on this
+until the fix lands.
+
+**Base-space audit (2026-10-08, the "any other classifier?" sweep).**
+`grep` of `port/` for a strip-`PORT_ADDR_BASE`-then-compare-host-bounds
+pattern and for any other swap-gate: the *only* address-space classifier is
+`gfx_tex_source_is_c_array` (line 834) — the one D591 fixed — and the
+*only* alt-row/odd-row swap decision is `d75_swap` (line 1275), which
+re-uses that same (now-correct) classifier, so it is 0 for every DRAM/cart
+source. No other code path classifies a texture source by address space or
+gates an odd-row/alt-row swap. The `PORT_ADDR_BASE` uses in
+`port/src/{libultra,n64stubs,romdata}.c` are host-space *mappings* (add the
+base), not strip-then-compare. So the "alt-row swizzle" theory is dead not
+just because `d75=0`, but because there is a single swap gate and it is
+off; the striping has no fast3d-side origin — it is the Metal GL layer.
+
+### Next (concrete, owed)
+
+- **Fix (port layer, `gfx_opengl.cpp`) — IMPLEMENTED 2026-10-08 (`9bed5904`):**
+  a `GE_NPOT_NOGENMIP` guard skips `glGenerateMipmap` for non-POT textures,
+  so the sampler uses a single level (N64-faithful — the RDP only mip-mapped
+  POT). `GE_`-gated and **default-OFF**, so x86_64/Win (which tolerates NPOT
+  mips) is untouched by default. **Win A/B:** guard ON vs OFF changes 5.2%
+  of pixels, localized to the NPOT scene/rock cells (NVIDIA's NPOT mips were
+  only the grazing-angle shimmer the guard removes); the unset path is
+  code-identical to before.
+- **Companion sampler fix (`82dbea9c`):** the skip-only guard left the sampler
+  on a mipmap-aware min filter, so on Metal the (now-absent) mip levels read as
+  **black** — a Mac R0-off vs R1-on A/B showed a +5.5 % black-pixel regression
+  over the NPOT rock region (a cell went to solid 0,0,0). `set_sampler`
+  now, under `GE_NPOT_NOGENMIP`, queries the bound texture for a mip level 1
+  and forces the single-level (`MIPMAP_DISABLED`) min filter when it is absent.
+  POT textures (level 1 present) and the default-off path are untouched.
+- **Mac A/B NEGATIVE RESULT (2026-10-08, guard + companion):** rebuilt the
+  arm64 binary and A/B'd `GE_NPOT_NOGENMIP` off (R0) vs on (R1) on Dam
+  (`-level_33`, PCDUMP=150, pinned seed/input). The black regression is gone
+  (R1 black 3.63 % vs R0 3.65 %), **but the "rock-band" vertical high-freq
+  energy is UNCHANGED (11.16 → 11.17) — the guard does NOT clear the
+  striping.** Worse, the "most-striped" cell (per-cell vertical variance ×
+  sign-changes) has a **smooth** per-row-mean profile (40→…→90→back, R0≈R1),
+  i.e. a smoothly-shaded rock, *not* a periodic row-stripe. So (a) the
+  NPOT-mipmap → trilinear pin is **not supported** (removing the mip chain
+  changes nothing), and (b) this Dam frame-150 repro may not even show the
+  user's actual symptom (fine-grained noise on walls/snow, the D219/M-114
+  pink-HUD class). **The pin stands down; D592 re-pinning is owed via the P0
+  camera-pinned pixel test on a symptom-matching repro (snow walls / ammo
+  counter), not on Dam.** Visual package: `scratch/d589-dam/ab3-mac/npot_guard/`
+- **Confirm.** A camera-pinned frame (P0, owed) for a clean pixel test — now
+  the **critical** next step, since the guard A/B came back negative (the
+  mip chain is not the cause). If a per-mip `glGetTexImage` / `glGetTexLevel`
+  dump is wanted it should target the *actual* symptom repro (snow walls /
+  ammo counter), not Dam. A known Metal texture quirk would be reported
+  (report, not fix) if the cause is confirmed to be driver-side.
+- **Self-determinism** (worker-thread loads): still a good hygiene step,
+  but it is no longer on D592's critical path (the byte-level diff is
+  already pinned to the GL layer).
+- Do **not** fold this into D591 (byte order) — it is a distinct,
+  later-in-the-pipeline defect. Keep D589 open on this until the GL-layer
+  cause is pinned and the scene matches.
+
+Cross-tag D589 (the symptom this second cause keeps open), D591 (the
+byte-order fix that closed the rev32 half — it also closed the D75 gate,
+disproving the swizzle theory), D219/M-114 (the HUD-pink class, *not*
+present here). The rNNN "import-order" theory is retired as a red herring
+(camera-dependent), kept only as the tooling note in the evidence above.
+
+### Close-out (2026-10-08) — CLOSED as a non-issue; NPOT guard + companion reverted
+
+Three new data points (all 2026-10-08) close D592 as a **metric false-
+positive, not a GL-layer defect**:
+
+- **`GE_TEXSTATE` GL-state probe (added `de5a0fea`, stripped `b80dcd08`).**
+  The effective sampler state the port sets is **byte-identical Win/Mac**:
+  the NPOT rock texture gets `min=0x2703` (GL_LINEAR_MIPMAP_LINEAR =
+  trilinear), `mag=0x2601` (linear), **aniso=4**, `mmode=MIPMAP_LINEAR`, and
+  the aniso extension is present on **both** platforms. The **NPOT mip level
+  counts are also identical** (32×48→6, 48×32→6, 32×33→6, 56×54→6, 16×3→5,
+  64×17→7): the Apple M3 (Metal) backend **does build the full NPOT mip
+  chain** — it does not silently drop the mips. So neither the sampler
+  *state* nor the mip *chain* differs between platforms; there is no
+  GL-layer divergence to fix.
+- **Pink/magenta scan of frame-150 (both sides): 0 pink pixels on Win, 0 on
+  Mac** → the D219/M-114 "ammo HUD pink" class is not present; **D591
+  (the byte-order fix) held** — the genuine cross-platform symptom is gone.
+- **The maintainer's live Mac look (mouse-look across the Dam): "stuff looks
+  fine, ammo counter is fine, F10 menu is fine, what I can see is fine."**
+  No visible striping. The "most-striped" cell had already shown a *smooth*
+  per-row profile (rock grain, not a periodic row-stripe), so the VHF metric
+  was counting natural rock grain as "stripes."
+
+**Disposition.** D592 is closed as a **non-issue**: the "rock striping" was a
+false positive of the crude vertical-high-frequency metric on naturally-
+shaded rock, and every byte-level layer (CPU texels, GL sampler state, NPOT
+mip level counts) is byte-identical Win/Mac. **The `GE_NPOT_NOGENMIP` guard +
+companion single-level sampler fix (`9bed5904` / `82dbea9c`) are reverted
+(`b80dcd08`) as dead weight** — their motivation (a bad NPOT mip chain) is
+disproven and the guard A/B showed no effect on the rock region. The
+`GE_TEXSTATE` D592 probe is stripped in the same commit. The second cause that
+kept **D589** open is thereby resolved (its remaining diff was D592, now
+closed).
+
+**Caveat (honest scope):** the maintainer's look was **mouse-look only**
+(camera turn, no free walking) because of **D594** (a macOS partial-input bug
+— see below), so it is a *limited-vantage* confirmation, not a full-scene
+sweep. It agrees, however, with every byte-level test and with the smooth-
+per-row cell analysis, so the close stands. A full-scene headless camera
+sweep would be a nice-to-have, not owed.
+
+Cross-tag **D594** (the macOS partial-input bug that forced the mouse-look-
+only look), D591 (the byte-order fix that removed the real symptom), D589
+(closed on this), D219/M-114 (the HUD-pink class, confirmed absent).
+
+## D593: Windows x86_64 — an occasional render-thread stall fired the kernel's "no frame rendered for N ms" watchdog (observed 8001 ms) — OPEN 2026-10-08 (Windows; tracked from a single observation during the D591 verification; pre-existing, root-cause owed)
+
+### Observation
+During the D591 Windows verification (an `ntsc-final` build on an NVIDIA
+GeForce RTX 5090, GL 4.6), one run with the heavy-I/O debug probes enabled
+(`GE_TEXDUMP=1 GE_TEXRAW=1`, which `fopen`/`fwrite` hundreds of
+`texdump/*.bin` / `.ppm` / `.rgba32` files) **stalled the render thread for
+8001 ms** and the kernel's render-park watchdog logged **"no frame rendered
+for 8001 ms"** before the run recovered / was cut. The same run family
+otherwise exits 0 and N-1 of the batch were clean, so this is a flake, not a
+deterministic hang.
+
+### Context
+- **Pre-existing / not D591.** The D591 fix (`gfx_tex_source_is_c_array`) is
+  a no-op at `PORT_ADDR_BASE==0` (x86_64) — it cannot stall the render
+  thread. The stall was observed while D591 code was present, but the
+  mechanism is unrelated.
+- **Suspected trigger: the probe I/O load.** The `GE_TEXDUMP` /
+  `GE_TEXRAW` / `GE_TEXDUMPROW` family writes a large number of small files
+  on the render thread; a page-fault / disk-flush burst on a fast-GPU host
+  can exceed the watchdog threshold. If so, the stall is **probe-induced**
+  (a debugging-tool cost), not a real game defect — normal play (no `GE_`
+  probes) is unaffected.
+- **Alternative: a genuine one-off render-thread / GPU-driver stall** (a
+  D344-class `exit()`-during-GL-render interaction, or an NVIDIA driver
+  hiccup). This would be the more important case.
+
+### Next (owed)
+- **Reproduce in isolation:** a plain (no-`GE_`-probe) Win loop vs a
+  probe-heavy loop; record whether the "no frame rendered" watchdog only
+  fires with the heavy I/O. That separates probe-induced cost from a real
+  hang.
+- If probe-induced: document it as a known cost of the `GE_` dump family
+  (and, if cheap, batch the file writes or move them off the render thread).
+  If a genuine hang: root-cause the render-thread stall (D344 / driver) and
+  fix in the port layer.
+
+### Cross-tag
+D591 (observed during its Win verification; the fix is a confirmed x86_64
+no-op), D344 (the `exit()`-during-GL-render memory class the render-park
+watchdog guards). Not on the D589/D592 critical path (a Windows reliability
+flake, independent of the arm64 GL-layer work).
+
+## D594: arm64 macOS — partial input: mouse-look (relative motion) and F10 work, but mouse *buttons* (fire / aim) do not; the cursor "exits" the window — FIXED 2026-10-08 (macos branch; observed during the D592 live-look; root-caused + fixed via the `GE_KEYLOG` probe; unblocked D595)
+
+### Symptom
+While doing the D592 live Mac look (a **native** macOS Terminal.app launch of
+`ge007.aarch64 -level_33`), the Dam scene renders correctly, but the game is
+**look-only**:
+- **Mouse-look (relative motion) WORKS** — the camera turns with mouse
+  movement.
+- **F10 WORKS** — the F10 menu (pause/options) responds.
+- **WASD / arrow-key movement does NOT work** — the player cannot move.
+- **Mouse buttons (left/right click) do NOT work** — no fire / no aim-activate.
+- The cursor appears to **"exit" the window** (a relative-mouse-mode capture
+  issue).
+
+### Known (2026-10-08)
+- **Not an ssh-launch artifact:** it reproduces from a *native* macOS
+  Terminal.app launch (a proper GUI session), so it is not the
+  "ssh-launched window has no key focus" case.
+- The input code (`port/src/input.c`) is **standard SDL2** (keyboard + mouse +
+  gamecontroller via `SDL_INIT_GAMECONTROLLER`); the only `PLATFORM_MACOS`
+  code in `port/src/{input,system,video}.c` is image-base / exe-dir / time —
+  **nothing input-specific.**
+- Likely suspects (root-cause owed): (a) the SDL **relative-mouse-mode**
+  interaction on macOS — `input.c:1589-1590` explicitly sets
+  `SDL_HINT_MOUSE_RELATIVE_MODE_WARP=0` + `RELATIVE_SYSTEM_SCALE=0`, so the
+  cursor is not warped back to centre and drifts out ("exits"); (b) whether
+  SDL **keyboard** events are delivered at all (F10 works but WASD doesn't is
+  odd for a plain KEYDOWN stream — suggests either a per-key binding/mapping
+  gap or a focus subtlety); (c) mouse-*button* events being suppressed in
+  relative mode.
+
+### Root-cause candidate (structural, 2026-10-08)
+The game's keyboard/mouse **poll** (`SDL_GetKeyboardState` / `SDL_GetMouseState`
+in `inputComputePadSlot`, `input.c`) runs on the **scheduler thread**
+(`osContStartReadData → inputComputePad`, `input.c:767`). On macOS the
+render-thread SDL pump is **disabled** (`gfx_sdl2.cpp`: AppKit requires polling
+on the main thread, so `gfx_sdl_handle_events` returns immediately) and all
+SDL event delivery is **main-thread-only** — the main-thread pump
+(`videoPumpEvents`, `video.c`) handles the *events* (F10, ESC, window, mouse-
+button for click-to-lock) but **not** the held-key poll. So the scheduler-
+thread `SDL_GetKeyboardState`/`SDL_GetMouseState` may read stale/zero state
+that the main-thread pump is the only thing updating — which would explain why
+**F10 (an event on the main thread) works but WASD / mouse buttons (a poll on
+the scheduler thread) do not**, while relative mouse-look (a different, shared
+mechanism) still works. Prime suspect; `GE_KEYLOG` (below) confirms.
+
+### Root-cause (CONFIRMED 2026-10-08) — the cross-thread poll suspect is DISPROVEN; it was a menu-state gate
+
+The `GE_KEYLOG` probe (two Mac runs, `GE_KEYLOG=1 … -level_33`) **disproved** the
+structural cross-thread-poll suspect: WASD `SDL_KEYDOWN` **and** LMB
+`MOUSEBUTTONDOWN` both reach **both** the main-thread pump (`E main …`) and the
+scheduler-thread poll (`P sched A/W/S/D/LMB …`). So the poll *does* see the
+state. The "WASD does not work" line of the D592 live-look **did not
+reproduce** — the WASD poll reads fine on macOS.
+
+The reproducible defect is the **mouse *button*** actions (fire, aim). Root
+cause: `actHeld()` (`port/src/input.c`) gates the mouse-button read on
+`current_menu == GE_MENU_RUN_STAGE` (**11**). But a forced-level start
+(`-level_NN`, the standard capture/test path) leaves `current_menu` at
+`MENU_INVALID` (**-1**) and never transitions it to `MENU_RUN_STAGE` — so the
+gate was false and `SDL_GetMouseState` was never consulted, silently disabling
+every mouse-driven action. PD has **no such gate** (it reads the fire/aim
+buttons directly), which is why PD fires fine on the same trackpad. A second,
+secondary macOS gap: `reconcileGrab()` gated the cursor capture on
+`windowFocused`, but `FOCUS_GAINED`/`FOCUS_LOST` are unreliable on macOS
+(AppKit key-window; absent over ssh), so the click-to-lock could stay
+un-armed and the relative-look/grab would release (the "cursor exits" symptom).
+
+### Fix (2026-10-08, macos branch) — match PD's input model
+1. **`actHeld()`**: the in-stage test now matches the file-wide `menuMode`
+   semantics — `current_menu == RUN_STAGE || current_menu == INVALID` (not a
+   strict `== RUN_STAGE`). A real front-end menu is a specific `MENU_` id
+   (`menuMode` 1) and still stays a UI control; only the in-stage states
+   (RUN_STAGE or the forced-start INVALID) treat the mouse as a gameplay
+   button. This is exactly the PD model.
+2. **macOS grab = PD's MLOCK_ON**: on `PLATFORM_MACOS`, `captureArmed` defaults
+   to 1 (armed by default) and `reconcileGrab()` drops the `windowFocused`
+   gate (wants the grab whenever in-stage and no menu/aim-hold). The mouse is
+   locked in-stage like PD's `MLOCK_ON`; menus and aim-holds still free the
+   cursor. Non-macOS platforms keep the original click-to-lock unchanged.
+
+**Consequence:** once fire worked, it immediately exposed a *separate* arm64-only
+crash in the weapon-fire → AI hit-reaction animation path — filed as **D595**.
+
+### Probe (`GE_KEYLOG`) — IMPLEMENTED 2026-10-08 (port layer, two sites)
+Two env-gated, default-off loggers write to `./ge_keylog.txt` (validated on
+Windows): `geKeyLogEvent` in `video.c` logs each `SDL_KEYDOWN`/`KEYUP`/
+`SDL_MOUSEBUTTONDOWN`/`UP` on the **main thread** (`E main …`); `geKeyLogPoll`
+in `input.c` logs the scheduler-thread **poll**'s A/W/S/D + LMB/RMB on change
+(`P sched …`). Run it natively on the Mac (`GE_KEYLOG=1 ./build-mac/ge007.aarch64
+-level_33`), press WASD + click, then read the log:
+- `E main KEYDOWN` for W/A/S/D **present** but `P sched A/W/S/D` stays 0 → the
+cross-thread poll is the bug (scheduler thread never sees the main-thread
+  keyboard/mouse state). Fix: read the poll on the main thread (or pass the
+  state across), port-layer only.
+- No `E main KEYDOWN` for W/A/S/D (but F10's arrives) → a per-key
+delivery/focus issue (the window isn't the AppKit key window for regular keys).
+- `P sched` shows the keys but nothing moves → the keys→stick mapping is the gap.
+- `GE_KEYLOG` is registered in [`GE-PROBE-CATALOG.md`](GE-PROBE-CATALOG.md) as
+  **STRIP before main** (a one-off D594 diagnostic, no shipping value).
+- Cross-tag D592 (the D592 live look was mouse-look-only *because of* D594;
+  D592 is still closed on its own byte-level evidence).
+
+### Status
+**FIXED 2026-10-08 (macos branch).** Root-caused via `GE_KEYLOG` (cross-thread
+poll disproven; the real gap was the `actHeld` `current_menu` menu gate + the
+macOS `reconcileGrab` focus gate) and fixed by matching PD's input model
+(see Fix above). Verified on the Mac: LMB fire now reaches the input layer
+(`GE_CONT_G` set), relative-look + F10 unchanged, no crash; and the
+maintainer's **2026-10-08 live pass (Launch E)** confirmed mouse, keyboard
+and pad all work as expected on the Mac, matching Win/Linux. Unblocked **D595**
+(the arm64 AI-anim crash that firing then exposed — also fixed). Not blocking
+D592 (closed) or the D591 byte-order fix (verified).
+
+## D595: arm64 macOS — deterministic SIGSEGV in `modelSetAnimFrame` when an AI plays a hit/stagger/death animation — the anim-table resolver truncated the live `ptr_animation_table` host pointer to `(s32)`, dropping the 16 TiB base — FIXED 2026-10-08 (macos branch; §A1 cross-tag; unblocked by D594)
+
+### Symptom
+Once mouse fire worked (**D594** fixed), the first time a shot hit a guard and
+the guard played a hit / stagger / death-reaction animation, the game SIGSEGV'd:
+```
+#02 modelSetAnimFrame + 164
+#03 modelSetAnimation2 + 168
+#04 triggered_on_shot_hit + 1172
+#07 chraiDefaultWeaponFireHandler
+```
+arm64 macOS only — the identical fire → AI-anim path is clean on Windows and
+Linux (x86_64).
+
+### Root-cause
+`initResolveAnimTable()` (`src/game/initactorpropstuff.c`) resolves the
+`ModelAnimation *struck_anim` pointers of the `StruckAnim` reaction tables
+(`death_stagger`, and the `g_HitReactionTable[*].deathAnims / flinchAnims` via
+`initWeaponAnimGroups`). Each entry holds a small N64 ROM offset
+(`PTR_ANIM_*`, e.g. `0x1C`); the resolver adds it to the base of the loaded
+anim table, `ptr_animation_table` (`mempAllocBytesInBank(…, MEMPOOL_PERMANENT)`
+— a **live host pointer**).
+
+The PORT path read that base **as a truncated `(s32)`**:
+```c
+entry[-1].struck_anim = (ModelAnimation *)(uintptr_t)(u32)((*((s32 *)entries)) + (0, address));
+```
+On every `PORT_ADDR_BASE == 0` platform (Windows / Linux x86_64) the PERMANENT
+bank is s32-low (`0x70xxxxxx`), so the `(s32)` read is identity. On **arm64
+macOS** (`PORT_ADDR_BASE = 16 TiB`), `ptr_animation_table` is `0x10007xxxxxx`;
+reading it as `(s32)` keeps only the low 32 bits, so every resolved
+`struck_anim` landed in bogus low memory (`0x00007xxxxxx`). The first time
+`modelSetAnimation2` handed that garbage `ModelAnimation` to
+`modelSetAnimFrame` → `modelConstrainOrWrapAnimFrame` dereferenced
+`anim->unk07`/`anim->unk04` → SIGSEGV.
+
+This is the **§A1 live-host-pointer-truncation** class (D588 / D590 / D591):
+a stored/live host pointer fed through a `(s32)` (truncating) rebase. The other
+anim-resolution sites (`bondhead.c`, `bondview2.c`) already use a full-width
+`(uintptr_t)&ptr_animation_table->data` base; `initResolveAnimTable` was the
+one site still on the `(s32)` form.
+
+### Fix (2026-10-08, macos branch) — §A1 narrow exception (pointer-width misread; no logic/behavior change)
+Read the base at full pointer width and add the small N64 ROM offset as `u32`
+(the offset is never widened, per the §A1 rule):
+```c
+entry[-1].struck_anim =
+    (ModelAnimation *)((uintptr_t)(*entries).struck_anim + (u32)address);
+```
+`(*entries).struck_anim` reads the 8-byte `ptr_animation_table` value at
+full width. **Identity on every `PORT_ADDR_BASE == 0` platform** (the value is
+s32-low there, so the 8-byte read == the old 4-byte read); correct on arm64
+macOS.
+
+### Verification (2026-10-08, Mac)
+Rebuilt; `-level_33` at the Dam; LMB fire (now that D594 works) into a guard →
+the guard plays its hit/death animation, **no SIGSEGV**, no `ge007.crash.log`,
+frames advance. (Win/Linux unaffected by the change — identity read.)
+Plus the **maintainer's live pass (Launch E, 2026-10-08)**: real LMB fire at
+Dam guards (the E1 ground-truth hit-anim check) with **no crash and no
+`ge007.crash.log`** for the whole session; the `GE_KEYLOG` log shows the
+real `MOUSEBT-DOWN button=1` events on the main-thread side *and* `LMB=1`
+on the scheduler-poll side — the struck-animation path was exercised by hand,
+not just by the D597 scripted sweep-fire.
+
+### Status
+**FIXED 2026-10-08 (macos branch).** §A1 cross-tag: see the `porting-notes.md`
+§A1 catalogue (D595 entry — the `initResolveAnimTable` site of the
+`ptr_animation_table`-truncation class). Unblocked by D594 (mouse fire); this
+was the last input-blocker to a playable arm64 macOS build.
+
+## D596: the `win/` golden set predates D565/D569/D570 — the `macos` branch's Windows identity gate was unmeasurable; regenerated from `e0a2d4b9` (pre-D609 tree), 21/21 PASS — FIXED 2026-10-08 (macos branch; recipe-side only, no game-code change)
+
+**Symptom.** `tools_pc/golden/<level>/win` was last regenerated at `4b710728`
+(the v0.5.0 fold-in), i.e. before the D565 fog-distance floor and the
+D569/D570 crosshair changes. `verify.sh` against the stale set reports
+`REGRESSION worst_cell=3.106875` (limit 3.0) **from both the `macos` branch
+and the main checkout's tip** — a stale reference, not a branch regression
+(HANDOFF-MAC-TRACK-C §4). The consequence: the `macos` branch (whose
+D607-D612 edits are all identity at `PORT_ADDR_BASE == 0`) had *no working
+Windows pixel gate* — a Windows-side regression on that branch would be
+invisible.
+
+**Fix (recipe-side only):** regenerate the `win/` set from `e0a2d4b9` (the
+D608 commit — the top of the chain *before* the branch's own Apple/guard
+edits D609/D610/D612; D607/D608 are identity on Windows at base 0, so the
+reference keeps the current release-line look — D565/D569/D570 included —
+while staying independent of the branch's edits). Worktree `scratch/wt-goldens`
+(`git worktree add` at `e0a2d4b9`, `data/` junction to the main checkout),
+`./build-pc.sh ntsc-final`, then `tools_pc/capture_p7.sh -b build-pc -p win
+-j 2` with **lowercase level names**. 63 frames, every level rc=0
+(dam 1500-1700:100, frigate/surface2/streets/depot/cradle 1000-1400:200,
+cuba 300-900:300 `SNONE`, the rest 900-1500:300 — per `golden_dump_for`).
+
+**Gotcha (cost one re-capture):** `capture_p7.sh`'s windows come out of
+`verify.sh`'s `golden_dump_for`, whose case table is **lowercase**
+(`dam`, `frigate|...`, `cuba`). Passing `Dam:33` / `Cradle:41` ... silently
+fell through to the default `900-1500:300` window for every level — the
+capture log's per-level `window=` line is the only tell. Lowercase names
+are also what the golden folder names are.
+
+**Verification (2026-10-08, Windows, `macos` tip `43542455`):**
+`./tools_pc/verify.sh sweep -j 2` over all 21 levels: **21/21 PASS** —
+worst structural cell 8.44 (streets, cell-mean units; every per-pixel tier
+within its per-level limit; run-to-run residual). The gate is measurable
+again on the branch.
+
+**Caveat (cross-platform spread):** the `linux/` and `deck/` sets (captured
+2026-10-05 from a pre-D565/D569 tree) now differ from the new `win/` set by
+exactly that visual delta. Per the D521 rule the cross-platform spread is
+informational only (never a parity gate; each platform's gate is its own
+captures against its own goldens) — but a *fresh* linux/deck capture round
+on those boxes is owed before reading any new cross-platform number.
+
+**Status: FIXED 2026-10-08 (macos branch; win goldens regenerated from
+`e0a2d4b9`, 21/21 PASS, recipe-side only).**
+
+## D597: GE_INPUTSCRIPT gains `MLB<n>`/`MRB<n>` (sustained mouse-button tokens, slot 0) — headless scripted fire; automates the D595-class regression — port-only test-harness addition, 2026-10-08
+
+**Motivation.** D595 (the arm64 SIGSEGV on an AI's struck animation) was
+reproduced only with a *human* at the mouse (aim + LMB on a guard). The
+`GE_INPUTSCRIPT` harness could script mouse *motion* (MDX/MDY, D337) and
+pad/keyboard buttons, but no mouse *button* — so the D595-class crash (and
+any future "fire at an AI" check) had no headless recipe. It is also what
+makes the D594 unblock *verifiable* headlessly (LMB now reaches the game's
+`IA_FIRE` binding in a forced-level start).
+
+**Fix (port-only, test harness):** two sustained tokens, slot 0 only
+(slots 1-3 have no mouse path — ignored with the existing one-per-script
+warning, like MDX/MDY):
+
+- `MLB<n>` / `MRB<n>` — sustain LMB/RMB: `n=1` press, `0` release; latest
+  entry wins (same "latest entry" semantics as MDX/MDY).
+- Injection: OR'd into the polled `SDL_GetMouseState` mask in
+  `inputComputePadSlot`'s D337 harness block (a headless window has no real
+  mouse state), so the game's own mouse-button bindings (LMB = `IA_FIRE` in
+  the mouse scheme) drive it exactly like a real press. No game-code change;
+  no change when `GE_INPUTSCRIPT` is unset (the OR sits inside the
+  `scriptIsActive(0)` block; the `D594` `GE_KEYLOG` probe now logs the
+  *effective* mask, scripted bits included).
+
+**Headless D595-regression recipe (Mac, `macos` tip):**
+`GE_INPUTSCRIPT="<intro>:START;<aim-frame>:MDX<n>,MLB1;<release>:MLB0"`
+aimed at a Dam guard — pre-D595 the same script SIGSEGVs (D595 repro);
+post-D595 the guard plays its struck animation and the run completes clean.
+Also usable as a runtime smoke check in #131's self-hosted sweep.
+
+**Verification (2026-10-08, Windows, `macos` tip + this change):**
+- Menu path: `GE_INPUTSCRIPT="200:MLB1;600:MLB0,MRB1;900:MRB0" GE_KEYLOG=1`
+  — `ge_keylog.txt` shows the poll log stepping `LMB=1` (200–600),
+  `RMB=1` (600–900), both 0 after; `GE_INPUTSCRIPT: 2 entries parsed` in
+  the run log.
+- In-level path (the D594 unblock): same-recipe forced `-level_09` run —
+  script parsed, `LMB=1` in the poll log for the scripted window, frames
+  advance, no crash.
+- **Mac D595-regression run (2026-10-08, `macos` tip + this change, M3
+  Mac):** `GE_INPUTSCRIPT="400:MDX60,MLB1;1000:MDX-60;1600:MDX0,MLB0"`
+  (sweep right then left *while* firing) on Dam 33, `GE_PCDUMP=900-1800:300`,
+  `GE_QUITFRAME=1802` — rc=0 clean `GE_QUITFRAME` exit, **no
+  `ge007.crash.log`**, 4/4 frames (each a full 921 615-byte P6), and
+  `ge_keylog.txt` shows `LMB=1` for the scripted window then 0 — the
+  D597 injection reaches the Mac scheduler poll. A no-env
+  `GE_PCDUMP=900-1500:300` run alongside: 3/3 frames, clean, no keylog
+  file (the env-unset path is a no-op, as required). *Nuance:* the headless
+  log cannot confirm the crosshair actually hit a guard, so the
+  struck-animation ground truth is the maintainer's live LMB fire (the
+  checklist's E1); the sweep-fire run is the standing automatable
+  no-crash-while-firing gate (and the #131 runtime smoke check).
+
+**Gotcha (cost two runs + two probe rebuilds):** this MSYS2 shell drops
+*custom* `GE_*` env vars on a **direct PE launch** (`GE_...=1 ./build-pc/
+ge007.x86_64.exe` — the native child sees a stripped env; `getenv`
+returns null; same class as the documented TMP/TEMP drop, but it hit
+`GE_INPUTSCRIPT`/`GE_KEYLOG` too, which looked like the script harness
+wasn't polling at all). **Wrap the game in `cmd.exe //c "timeout 90
+.<exe> ..."`** and every env var passes intact (verified:
+`FOO=1 cmd.exe //c "if defined FOO (echo SEEN)"` → SEEN). The Mac (zsh)
+and Deck launches are unaffected — native shells pass env natively.
+
+**Status: FIXED 2026-10-08 (macos branch; Windows + Mac verified; no
+game-code change, no behavior change when the env is unset; the live
+E1 LMB-fire is the struck-animation ground truth).**
+
+## D598: arm64 macOS — gameplay is "a bit choppy" on heavy levels (Cradle-class); unmeasured — OPEN 2026-10-08 (macos branch; maintainer live observation)
+
+**Symptom.** During the 2026-10-08 maintainer live pass (Launch E,
+`MENU-LIVE-CHECKLIST.md`), input/menus all behaved as on Win/Linux, but
+gameplay is "a bit choppy on levels such as Cradle" (maintainer's words —
+Cradle 41 is an AI-dense level; "levels such as" implies a load pattern,
+not one level). Menus and lighter scenes read fine.
+
+**First clue (not a diagnosis).** The live run's console log shows the
+port's per-300-frame blocks completing in **6–17 ms** on the M3
+(`frame N rendered in X us`) — i.e. the scheduler-thread work (software
+RSP + game logic) is far faster than the 5 s a 300-frame block represents
+at 60 Hz. If the CPU side is that idle, the choppiness is more likely in
+the *display/swap pacing* layer (GL swap interval on the Metal backend,
+vsync, or the scheduler's 60 Hz frame-timing/pacing assumption running
+against a VSync-ed display) than in software-RSP throughput. This is a
+hypothesis to test, not a conclusion — a heavy Cradle frame may still
+spike the block time.
+
+**Owed (measurement, before the merge is "final"):**
+1. Reproduce: Cradle 41 live on the Mac; note the chop pattern
+   (constant vs frame-aligned spikes; menu/Dam comparison).
+2. Instrument: the port already logs per-300-frame block time (`NOTE
+   frame N rendered in X us`) — run Cradle on Mac + Win with the same
+   `GE_RSEED` and compare block times at matching frames (is the CPU side
+   fast on both, or spiky only on Mac?).
+3. If block times are fine on Mac, bisect the display path: GL swap
+   interval / vsync state on the Metal backend, `SDL` window flags, and
+   whether the scheduler's 60 Hz pacing loop assumes an *un*-VSynced
+   swap (a VSync-ed swap adds display-timing coupling the N64/Win
+   pacing logic never had).
+4. Record the fix (or the "display-backend limitation" call, if that's
+   what it is) with before/after block-time numbers.
+
+**Cross-refs.** The D441 Mac sweep is a crash/corruption detector, not a
+performance gate (frame counts, not pacing) — a clean sweep says nothing
+about D598. `ge_keylog.txt` / the run log from the live pass are in
+`~/ge007/cap33/` on the Mac (local note, not in the tree).
+
+**Measurement 1 (2026-10-08, M3, scripted Cradle `-level_41`, `GE_PERFSTAT=1`,
+2400 frames, same ini as the live pass, no crash log).** Frame interval is a
+flat 16.66-16.67 ms (60.0 fps) in every 300-frame window; 0 frames >20 ms
+after the 2-frame startup spike (78 ms at frame 2); max steady-state spike
+17.6 ms; game-thread busy 0.02-0.03 ms/msg; `run` 10-11 ms of which GPU
+1.4-1.6 ms; swap/pace 8-9 ms (idle headroom). So in-process pacing and CPU/GPU
+cost are NOT the problem on the scripted spawn scene (tris ~2000). Caveat: the
+scene is light (no firefight); a live heavy moment, or a display-side effect
+(compositor, fullscreen mode; the M3 MacBook Air panel is fixed 60 Hz, not ProMotion) that
+the in-process interval cannot see, is not excluded. Next: a `GE_PERFSTAT=1`
+log captured during an actual chop; and compare the display refresh rate.
+
+**Measurement 2 (2026-10-08, M3 MacBook Air, automated battery
+`scratch/mac_preplay.sh` + A/B `mac_pace_ab.sh`/`mac_pace_rep.sh`, isolated run dir).**
+Windowed 1280x720 vsync, 3000 frames: statue/train/runway/surface2 hold 60.0 fps;
+facility/streets/control/archives/cradle ran 40-51 fps (interval 18-25 ms, mix of
+16.7 and 33 ms frames) although dl 0.2-0.9 ms and GPU 0.7-1.3 ms, with swap/pace
+14-15 ms. The slow mode is a per-RUN bimodal state, not a level property: facility
+repeated 4x at cap60 = 60.0 x4; at FpsCap=0 = 60,60,43.1,60; an earlier identical
+facility config ran 41.5. It does not follow vsync on/off, windowed vs fullscreen, or
+FpsCap alone (all four vsync/fullscreen combos read 60.0 once). Cradle's slow run
+recovered over time (46->51 fps as swap/pace fell). Reads as intermittent
+vsync/compositor phase lock or CPU-core placement (fanless Air, uptime 31 d; idle CPU, no thermal flags, but memory pressure: 15 GB used / 0.4 GB free), not
+render cost. Not a crash/correctness issue. Next: repeat n>=10 per config with
+`taskpolicy`/QoS and `powermetrics` core residency to separate the two.
+
+**Measurement 3 (2026-10-08).** 10 back-to-back facility launches (windowed
+1280x720, vsync, FpsCap 60) with memory pressure sampled per run: 10/10 at 59.9-60.0
+fps, system memory free 89-92 %, 0 swapouts. So memory pressure is not the cause and
+the slow mode did not reproduce in a quiet 10-run series. The slow runs occurred
+inside long back-to-back batteries launched over ssh (unfocused/occluded window,
+possible App Nap / core demotion, or sustained-load heat soak on the fanless Air);
+the maintainer's foreground fullscreen Cradle run was a flat 60.0. Working
+conclusion (LOW confidence): harness artifact, not a port defect. Reopen only if the
+maintainer sees sustained sub-60 in foreground live play; then capture `GE_PERFSTAT=1`.
+
+**Measurement 4 (2026-10-08, maintainer live playtest with GE_PERFSTAT; SUPERSEDES the
+"harness artifact" conclusion of measurement 3).** The maintainer reproduced it live:
+random, session-wide, fps does not recover, sometimes survives one restart, gone after
+two. The live log shows, within ONE process, `swap/pace` creeping 10.7 -> 15.1 ms over
+~8700 frames (~0.5 us/frame) while real work (`dl`, `run - swap`) stays flat, and the
+interval flipping 16.7 -> 22-25 ms once the wait passes ~14 ms; the next process
+started at swap/pace 14.9 and hit the cliff within ~2700 frames. Nothing performance
+related is cached across launches (ge007.ini holds settings only, ge007.shaders is a
+shader-name list unchanged since 10-07). **Diagnosis (strong fit, not yet A/B'd):** the
+VI retrace is posted by a free-running wall-clock pacemaker thread
+(`portTickThread`, `g_tickIntervalUs = 1000000 / 60` = 16666 us, integer-truncated, i.e.
+~40 ppm FAST vs 16666.67 us) that is NOT locked to the display's vsync. Pacemaker phase
+slides ~0.67 us/frame against the swap, a ~7 min beat; when the tick lands within the
+render+swap window every frame is late and the tick gate skips (33 ms frames). Each
+launch starts at a random phase, so a restart re-rolls it (explains bimodal per-run
+results, "two restarts fixes it", and Cradle's slow recovery). The same architecture
+exists on every platform with vsync (D475 "frame limiter skipping a retrace", parked
+Statue/Cradle hitching) — macOS just shows it with a slow, visible beat.
+Next (after the maintainer's session): decisive A/B with a temporary `GE_TICKUS` override
+(16666 vs 16667 vs 16670: drift sign/rate must change as predicted), then a
+display-locked pacemaker (re-anchor `g_nextTickUs` to the swap-return time when
+VSync=1) — port layer, determinism path untouched.
+
+**Status: RESOLVED 2026-10-08 by D600 (display-locked retrace tick; live playtest confirmation owed). Measurements 1-4 above are the evidence trail; measurement 3's "harness artifact" conclusion was wrong.**
+
+## D599: arm64 macOS SIGBUS on controller connect — `padTabPub` type/size mismatch with SDL_Atomic{Get,Set}Ptr — FIXED 2026-10-08 (macos branch)
+
+**Symptom.** Maintainer connected an Xbox Series X controller during a live
+macOS playtest (menu): immediate `ge007.crash.log`, SIGNAL 10 (SIGBUS),
+backtrace `padTabGet+140 <- inputComputePad <- contSnapshotFromKeyboard <-
+osContStartReadData <- joyPoll`, fault address = `&padTabPub`.
+
+**Root cause.** `port/src/input.c`: `static SDL_atomic_t padTabPub;` is a 4-byte
+`int` struct, but `padTabGet` publishes/reads a `PadTable *` through
+`SDL_AtomicSetPtr/GetPtr((void **)&padTabPub)`, i.e. 8-byte atomic accesses.
+The object sits at a 4-aligned (not 8-aligned) address (`...e2c`), and the
+arm64 8-byte atomic load faults (SIGBUS). `padTabGet` is only reached when a
+pad is present (`pads[idx] ? padActHeld(&padTabGet()->...)`), which is why the
+earlier no-pad sweeps and live passes never hit it (Launch E's pad item E3 was
+conditional on a pad being attached). On x86_64 the same code does not fault but
+overlaps the next object (`padTabSig`) with the pointer's upper half: a latent
+memory-overlap bug on Windows/Linux too, benign only by layout luck.
+
+**Fix.** `static void *padTabPub;` (pointer-sized and aligned). Call sites
+unchanged. Port layer only; no game code. Behaviour change on x86: `padTabSig`
+is no longer clobbered by the published-pointer store.
+
+**Verification (Mac M3, Xbox Series X pad connected).** Menu 1200 frames and
+Dam 1500 frames: rc 0, no crash log, `input: pad table rebuilt` logged.
+Windows/Linux not rebuilt for this one-line change; build + a pad run owed there.
+Also found while looking: the other `SDL_atomic_t` objects in port/ are all
+int-style accesses (audio.c, input.c, optionsoverlay.c) — no further pointer misuse.
+
+**Status: FIXED 2026-10-08 (macos branch).**
+
+## D600: display-locked retrace tick (fixes the D598 macOS "choppy / fps never recovers / restart re-rolls it") — FIXED 2026-10-08 (macos branch)
+
+**Symptom.** Maintainer live playtest on the M3 MacBook Air: random, session-wide
+slowdown (40-50 fps) that does not recover, sometimes survives one restart and is gone
+after two; VSync off stops it. Not CPU/GPU load, memory pressure or thermals (D598
+measurements 1-3).
+
+**Mechanism.** `portTickThread` (libultra.c) posts the VI retrace on a free-running
+wall clock: `g_tickIntervalUs = 1000000 / 60` = 16666 us (truncated; true 16666.67,
+i.e. ~40 ppm fast). With VSync on, the render worker's swap blocks on the display
+vblank. The tick phase therefore slides against the vblank by ~0.67 us/frame (live
+log: `swap/pace` creeping 10.7 -> 15.1 ms over ~8700 frames = ~0.5 us/frame, ~7 min
+per full beat). While the tick is inside the render+swap window every frame is late
+and boss.c's tick gate skips (frame intervals 22-33 ms) until the phase slides back
+out. Each launch starts at a random phase, so a restart re-rolls it. Nothing is
+cached across launches. The same architecture exists on every VSync platform
+(D475 "frame limiter skipping a retrace", parked Statue/Cradle hitching); macOS shows
+it because its swap blocks and the beat is slow and visible.
+
+**Fix (port layer only).** `portNoteSwapReturn()` in `port/src/libultra.c`, called
+after `videoEndFrame()` in `portRenderGfxTask`: a first-order phase lock. Phase =
+(next tick - swap-return time) mod period; error vs a 1500 us target; the next tick
+is nudged by err/8, clamped to +-100 us/frame, consumed by the pacemaker via an
+atomic exchange. Engages only when `videoVSyncOn()` (new accessor, video.c/h) and
+consecutive swap returns are within 10 % of one game frame; otherwise the pacemaker
+free-runs exactly as before. Runaway guard: >400 consecutive saturated nudges disables
+it (a driver that does not block on vblank would make the swap return track the
+render). `GE_NOTICKLOCK=1` disables it (A/B), `GE_DETERM` keeps it off. Log line
+`D600: tick lock phase=... err=... nudge=...` every 300 locked frames.
+
+**Verification.** Mac M3, windowed 1280x720 VSync 1 FpsCap 60, Cradle 11000 frames:
+phase converged from 7685 us off-target to ~1.1-2.3 ms band within the first window and
+held; `interval` 16.66-16.67 ms in every 300-frame block; `swap/pace` flat 13.5-13.65 ms
+(previously creeping ~0.5 ms/1000 frames); no crash log. Windows x86_64: the swap
+returns in <1 ms (does not block on vblank), the guard disabled the lock after the
+initial slew as designed, steady 16.72 ms identical to the `GE_NOTICKLOCK=1` baseline.
+**Not covered:** an unlocked-vs-locked same-session A/B over a full ~7 min beat (the
+unlocked behaviour is from the maintainer's live log), real gameplay load, the
+interp (D578) branch interaction (its swap-driven presents sit on top of the same
+pacemaker; recheck when merging), Linux/Deck. Maintainer live playtest owed.
+
+**Status: FIXED 2026-10-08 (macos branch; LIVE-CONFIRMED 2026-10-08 (maintainer, macOS M3: the chop is gone in live play — Cradle-class levels and the full campaign; the 52k-frame session ended at a clean `video: quit requested` exit, and `ge007.log` shows the D600 tick-lock lines active with flat 14-15 ms render/swap)).**
+
+## D601: cyclic sound-state list at stage load (unsynchronised sndSetupSound / sndUnlinkClearSound) — FIXED 2026-10-08 (macos branch; live confirmation owed)
+
+**Symptom.** Maintainer's ~1 h macOS playtest (225,697 rendered frames, flat 60 fps on
+D600): loading Archives gave a permanent black screen. Log: `D152: osSetIntMask lock
+stuck >2s -- stealing from owner=<mainThread> depth=3`, then `kernel heartbeat: no frame
+rendered for 8002/13018/18035 ms` (frames frozen at 225697), `D204 audio queue full`.
+
+**Evidence (live process, lldb via Terminal + `sample`).** The game thread was inside
+`lvlStageLoad -> sndSetScalerApplyVolumeAllSfxSlot -> sndSetSfxSlotVolume` (snd.c walk),
+spinning on `alEvtqPostEvent`; amMain contended in `sndPlayerVoiceHandler ->
+alEvtqNextEvent`. Reading the list from the hung process (`scratch/ldb_hang.py`):
+`g_sndAllocatedVoicesCount = 3`, but the active list `D_800243E4.node.next` is a 4-node
+**cycle** (the tail's `next` points back at the first node instead of NULL), so
+`while (item != NULL)` never terminates. `s_imHeld/Owner/Depth` = 0/0/0 at capture (the
+2 s steal had already reshuffled ownership: consequence, not cause).
+
+**Cause.** The port runs the N64 audio manager (amMain) as a real preemptible thread; the
+N64 relied on interrupt masking, emulated by the global recursive `osSetIntMask(OS_IM_NONE)`
+section. Two list mutators were not covered by it:
+1. `sndSetupSound` (game thread via `sndPlaySfx`) read the free-list head
+   `g_sndPlayerSoundStatePtr` BEFORE taking the section, so a concurrent free (below) made
+   it pop a stale node and relink one state into the active list twice -> cycle.
+2. `sndUnlinkClearSound` (amMain, via `sndDisposeSound`) unlinked from the active list and
+   pushed onto the free list with NO section at all; the game thread's guarded code
+   therefore had nothing to exclude. (Same one-sided-exclusion class as D152
+   `sndSetSfxSlotVolume` and D285 the preempt scan.)
+Rare (needs a play-SFX on the game thread to land inside a dispose on amMain), hence ~1 h.
+
+**Fix.** `src/snd.c`, both under `#ifdef PORT`, concurrency-correctness only (N64 build
+byte-identical): `sndSetupSound` takes the section before reading the free-list head and
+releases it before returning; `sndUnlinkClearSound` runs its whole body inside the section
+(recursive, so nested callers are unaffected). **Rule-2 bucket call (flag for the
+maintainer):** treated as the D152/D285 precedent class (add the missing OS_IM_NONE guard
+that the port's preemptive audio thread needs; no logic change), not a bucket-(c) behaviour
+change, so no sign-off was requested; veto = revert the two guards.
+
+**Verification.** Windows build clean. Mac M3 (rebuilt with the guards): scripted Dam fire 6000 frames,
+Archives 3500 and Cradle 3500 frames all rc 0, no crash log, 0 `D152` lines, 0 watchdog
+heartbeats (smoke only; the race is rare). A deterministic repro does not exist; the confirm is
+the next long playtest (no `D152 ... stealing` line, no heartbeat). Stage-load robustness
+alternative not taken: a bounded walk / cycle guard in `sndSetSfxSlotVolume` would hide any
+future corruption rather than prevent it.
+
+**Status: FIXED 2026-10-08 (macos branch; LIVE-CONFIRMED 2026-10-08 (maintainer completed the full campaign on Agent, Archives among the levels — the stage-load hang never recurred; no `ge007.crash.log` in the session)).**
+
+## D602: end-credits crash on bad language-bank slot offset (macOS natural session) — MITIGATED, root cause OPEN (2026-10-08, macos branch)
+
+**Symptom.** Maintainer's ~1 h natural macOS session (206,700 rendered frames), cleared the
+campaign through Cradle, then SIGBUS at the start of the end credits, before the cast roll.
+`ge007.crash.log`: SIGNAL 10, fault addr `0x1000e236b67a` (= window base + 0xE236B67A), leaf
+callee of `bondviewRenderCredits.part.0+444` (the `textMeasure` read of the `langGet()` result).
+Registers show a valid bank pointer (`0x10007018ad88`); the string pointer is bank +
+`0x721E08F2`, i.e. the slot-table entry read from the loaded bank is not a plausible offset.
+
+**What is known.**
+- `langGet(slot)` = bank pointer + `table[slot & 0x3FF]`. The bank is mapped (it passes the D129 /
+  D573 `portAddrIsMapped` check); the table entry is garbage. Real text banks are a few KiB.
+- Bank 20 = `Llen` (the Cuba bank); the credits entries use text ids in that range. Table entries
+  are byte-swapped in place after load by `romdataFixupLangBank`, which STOPS at the first entry
+  that looks invalid (`v != 0 && (v <= i*4 || v >= blobSize)`) and trusts
+  `resource_lookup_data_array[idx].poolRemaining` as the blob size — a partial fixup (or a
+  slot id past the table, or a stale/overwritten bank) would give exactly this garbage.
+- A fresh `-level_54` boot on the Mac (and Windows, 20000 frames) is clean: the Mac cast roll
+  ("Starring 007 James Bond", "Guest Star Oddjob", "Also Featuring General Arkady Ourumov")
+  renders with correct text, so the bank/fixup work on a cold start. The failing state is
+  specific to a long session / the natural level flow (earlier stage banks loaded and freed in the
+  same process).
+- Not yet known: whether it is Mac-only, and which of the three mechanisms above it is.
+
+**Mitigation (src/game/language.c, `#ifdef PORT`, same file/precedent as D129, D456, D573).**
+`langGet` returns NULL (a missing string, which callers already handle) when the table entry
+exceeds 1 MiB, instead of handing `textMeasure` a wild pointer; and it logs ONCE, as
+`D602: langGet(0x...) bank N (name) slot S offset 0x... is impossible; bank=... poolRemaining=...
+tbl[0..3]=... tbl[slot-1..slot+1]=...`. Valid lookups are unchanged (verified: bare Cuba cast roll
+frames, no `D602` line). Worst case the affected credit lines are blank instead of a crash.
+
+**Owed.** Re-trigger via the natural flow (finish a level, then the credits; or in a long session
+pick Cuba from the unlocked mission list) and read the `D602:` line: `poolRemaining`
+and `tbl[...]` say whether the fixup stopped early, the slot is past the table, or the bank was
+overwritten. Then fix the real cause (and decide whether the guard stays).
+
+**Follow-up (2026-10-08, maintainer, guarded build, ~16k-frame session):** the end credits
+roll normally where the 1 h session crashed. The log has NO `D602:` line and no crash log, so
+the guard was not exercised: the original fault did not recur on this shorter flow. This
+neither confirms the guard nor explains the crash; the failing bank state still needs a
+long-session / natural-flow repro. The guard stays as a safety net.
+
+**Status: MITIGATED 2026-10-08, OPEN (root cause owed).**
+
+## D603: macOS multiplayer crash — `playerTick` zero-extends an N64-form animation address — FIXED 2026-10-08 (macos branch; live confirmation owed)
+
+**Symptom.** Maintainer, live, 2-player split-screen (`D416 split=1 players=2 stage=38`): SIGSEGV
+(SIGNAL 11), fault addr `0x707b2658`, backtrace `modelSetAnimFrame + 164 <-
+modelSetAnimation2 + 168 <- playerTick + 2192 <- propsTick <- lvlRender`. The fault address is a
+bare N64-form DRAM address (`0x70xxxxxx`) with no window base — the D587/D595 signature.
+
+**Cause.** `src/game/bondview2.c` `playerTick`: `s32 anim` is computed as
+`g_bondviewBondDeathAnimations[..] + (s32)ptr_animation_table` (death anims) or
+`fa->anim + (s32)ptr_animation_table` (firing groups), i.e. an N64-form address (the low 32 bits
+of the live host pointer = the arena-relative value), or a firing-table word. The PORT call
+converted it with D441's zero-extend, `(ModelAnimation *)(uintptr_t)(u32)(anim)`, which is only
+correct where the window base is 0 (Windows/Linux). On arm64 macOS (base 16 TiB) the base is
+missing, so `modelSetAnimation` -> `modelSetAnimFrame` dereferences the bare address.
+
+**Fix (src/game/bondview2.c, `#ifdef PORT`, §A1 narrow exception: s32-slot pointer-width, no
+logic/behaviour change).** `PORT_N64PTR(ModelAnimation, (u32)(anim))` — identity at
+`PORT_ADDR_BASE == 0`. `players_cur_animation` and the s32 compares stay in N64 form.
+
+**Verification.** Windows build clean. Mac M3 headless (GE_STARTMP/GE_MPVIRT, stage 38, both seats
+scripted to move/fire): 2P, 3P and 4P 2000 frames rc 0, no crash log; solo Dam/Archives stress
+clean. **Not reproduced pre-fix headlessly**: the faulting branch (a body-model animation change
+for a real player, e.g. death/firing group) is not reached by idle or fire-only seats, so the live
+re-test (including dying) is the confirmation.
+
+**Audit of the remaining D441 `(uintptr_t)(u32)` sites (not changed).** `bondview2.c:8920/8939/8951`
+were judged "a `StandTile *` local, no-op" — **WRONG, see D604**: `(u32)` of a pointer truncates. `model.c:6322` verified Mac-safe (D587 audit);
+`objecthandler_2.c` (GDL diff arithmetic), `rsp.c` (output buffer), `mema.c:582` and
+`model.c:6028` run on every solo level on the Mac. **`chrprop.c:1311`** (`shotdata->hits[i].unk44`,
+a ModelNode pointer stored in an s32) and `front.c:8620` (menu video buffer) were not proven reached
+and are the next suspects if a similar bare-`0x70xxxxxx` fault appears.
+
+**Status: FIXED 2026-10-08 (macos branch). The same maintainer 2P session (after D604) ran through spawn/respawn with no crash; the death-animation branch itself is still only indirectly exercised.**
+
+## D604: macOS multiplayer (re)spawn crash — `(u32)` cast truncates a pointer-typed `start_stan` — FIXED 2026-10-08 (macos branch; live confirmation owed)
+
+**Symptom.** Maintainer, live 2P (`D416 split=1 players=2 stage=38`, P1 keyboard/mouse + 1
+controller): SIGSEGV (11) on pressing Enter as P1, fault addr `0x7016ff36` (x0 = `0x7016ff30`, a
+bare N64-form address), backtrace `mp_respawn_handler + 200 <- maybe_mp_interface <- lvlRender`.
+(Entered after D603 fixed the preceding `modelSetAnimFrame` crash in `playerTick`.)
+
+**Cause.** `src/game/bondview2.c` `mp_respawn_handler` declares, under PORT, `StandTile *start_stan`
+(correct: `PadRecord.stan` is a host pointer at pad+0x30). Three consumers still carried the D441
+casts written for an `s32` local — `(StandTile *)(uintptr_t)(u32)(start_stan)`. Applied to a
+**pointer**, `(u32)` TRUNCATES to the low 32 bits, then zero-extends: the arm64 window base
+(16 TiB) is lost and `bondviewYPositionRelated` / `change_player_pos_to_target` /
+`prop->stan` receive a bare `0x70xxxxxx`. Disassembly of the crashing build shows it:
+`ldr w21, [x0, #0x30]` (32-bit load of the pointer). Identity on Windows/Linux (base 0) so it never
+showed there. The solo twin in `bondview_r.c` has no such casts, which is why only multiplayer
+respawn hit it.
+
+**Fix.** Use `start_stan` directly at all three sites (`#ifdef PORT` branches only). Rebuilt
+disassembly: `ldr x21, [x0, #0x30]`. **Lesson / audit rule:** a D441 `(uintptr_t)(u32)(x)` cast is only
+correct when `x` is an `s32`/`u32` slot (zero-extend, base-0 tier). On a pointer-typed operand it is a
+truncation. The D603 audit (and the D587 handoff list) classed these by "s32-held" without checking
+the operand type; the other sites were re-checked by type: `chrprop.c:1311` (`s32 unk44` param ->
+ModelNode*, N64-form: needs `PORT_N64PTR` if ever dereferenced on the Mac; not reached yet),
+`front.c:8620` (`s32` menu video buffer, not read by the GL port), `rsp.c:251/256` (`s32` output
+buffer bounds, unused by the software RSP), `mema.c:582` and `model.c:6028` (`s32` slots, run
+every level). No other pointer-typed operand under a `(u32)` cast was found.
+
+**Verification.** Windows build clean; Mac rebuilt: 2P and 4P headless 2000 frames rc 0, no crash.
+**The faulting path is a respawn (press Enter after dying in MP) and is not reachable headlessly**;
+the disassembly (64-bit load) plus the maintainer's live 2P retest (die, press Enter) is the proof.
+
+**Status: FIXED + LIVE-CONFIRMED 2026-10-08 (maintainer, macOS 2P: Enter/start/respawn with keyboard+mouse P1 and 1 controller works).**
+
+
+## D614: Deck Bunker fight texture-cache thrash — MEASURED, fix NOT shipped (2026-10-10, v0.6.0 prep; follow-up to D583/D585)
+
+**Question.** D583's SLOW lines showed big `import` times in Bunker 1 fight frames on the Deck (e.g. 13.6 ms of a 15.5 ms draw, 166 misses). Is texture import the cause of the fight drops, and is it cheap to fix?
+
+**Probe (temporary, removed):** per-10 s counters for new vs repeat misses (repeat = the address was imported before), LRU evictions, `G_INVALTEXCACHE` invalidations, `glTexImage2D` and `glGenerateMipmap` time, and which `TextureCacheKey` field differed from the address's previous key. Deck, `tools_pc/levelbench.sh` Bunker 1 replay (`bunker1.demo.orig2`), 100 s.
+
+**Data.**
+- The 1024-entry cache sits full in fights and evicts 1,000-4,000 entries per 10 s; ~95% of misses are repeats; invalidations 0. `glGenerateMipmap` is negligible (~0.3 us each); `glTexImage2D` is about half of import time.
+- Raising `TEXTURE_CACHE_MAX_SIZE` to 4096 does not help: repeat misses happen with zero evictions (new keys for known addresses), and total import time doubled. `TextureCacheKey::Hasher` hashes only the address, so all variants of one address share a bucket and lookups slow down as variants pile up.
+- Key-field split: ~95% of repeat misses differ in `palette_hash`; ~5% only in `palette_addrs`. By format: CI8 dominates (e.g. 3,436 CI8 vs 657 CI4 in one window), and every CI8 case followed a TLUT load of fewer than 256 entries. The D217 whole-table hash includes entries left over from earlier draws, so the same image gets a new key whenever draw order changes.
+- Fix tried: hash CI8 keys over `palette[0, extent)` of the entries the material's TLUT load(s) wrote. Repeats fell from 9,952 to 3,067-4,122 per run and evictions from 9,284 to 2,418-3,488, **but import time fell only ~7% (2.36 s -> 2.10-2.20 s per 100 s) and pacing did not change beyond run-to-run noise** (uneven share 7.6% base vs 8.0-9.1%). An exactness check found 84 and 315 CI8 texels per run indexing past the loaded extent: those read leftover entries (stale TMEM on the N64 as well), and with the narrower key a cache hit could show a different leftover than a fresh decode. A small fidelity risk for no felt gain: **reverted.**
+
+**Conclusion.** The thrash is real waste but not the cause of the Deck fight drops; D583's present-scheduling finding (a due present stuck behind the single worker's draw) remains the lead, with the parked present thread (D585) as the structural fix. If the thrash is revisited: key CI8 on the loaded extent only when the texture's max index is known to be inside it (e.g. memoise the max index per address+size with invalidation on tex-pool reuse), and give `Hasher` the full key so variants spread across buckets.
+
+**Ops note.** Two `deckrunner.sh` instances (one from an earlier Game Mode launch) raced for the same job files: one claimed a job and the other ran it with empty arguments, clobbering results and running levels concurrently. Check `pgrep -af deckrunner.sh` before queueing.

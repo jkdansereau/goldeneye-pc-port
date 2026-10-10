@@ -315,6 +315,16 @@ D569,?,Crosshair color follows the PD port:,CHANGED 2026-10-06 (maintainer reque
 D570,FIXED,Scaled crosshair (Crosshair size != 100%) showed a faint copy of the top bar's tip under the bottom bar (WRAP tile flags) —,FIXED 2026-10-06 (port only:
 D571,?,"Project icon restyled to the in-game sight red as pixel art (exe, window, favicon) —",CHANGED 2026-10-06 (maintainer request; make_icon.py; social preview unchanged)
 D572,?,Linux tarball glibc floor lowered from 2.38 to 2.31:,CHANGED 2026-10-07 (maintainer request; packaging only; X220 glibc 2.36 fresh install PASS)
+D573,FIXED,"sndPlaySfx / langGet pointer guards used an absolute [64 KiB, 16 GiB) literal; replaced by portAddrIsMapped() (DRAM arena views + mapped cart image) —","FIXED 2026-10-07 (from #108, italoarruda; Windows build + golden:"
+D574,FIXED,Legacy front-end menu-pointer Velocity mode deleted (Input.MenuPointerMode / Input.MenuPointerSpeed); retired ini keys dropped silently —,FIXED 2026-10-07 (D561 follow-up; build + ini runtime check)
+D575,FIXED,Update check (D551) gave no result on Linux/macOS when /releases/latest exceeded 64 KB (curl SIGPIPE); parse helpers moved to a header with an offline test —,FIXED 2026-10-07 (harness 19/19; live Linux/Deck matrix owed)
+D576,FIXED,"ge007.log written next to the ini (previous run kept as ge007.prev.log, 8 MiB cap) —",FIXED 2026-10-07 (Windows runtime check)
+D577,FIXED,"F10 slider labels ended in "".."" at HUD 150:",FIXED 2026-10-07 (captures HUD 100 unchanged / HUD 150 whole)
+D578,OPEN,Frame interpolation above 60 fps (Video.FpsCap 90/120/144):,BUILT 2026-10-07 (Windows:
+D579,FIXED,Issue #150: hugging a wall makes geometry vanish (N64 native widescreen does not).,"FIXED 2026-10-09 (maintainer-verified, Dam gate 16:9; golden sweep owed)"
+D583,FIXED,120 fps + VSync on G-Sync/VRR:,"FIXED on PC 2026-10-09 (G-Sync OLED, maintainer by eye); Deck 90 good on most levels (per-level pass 2026-10-10); open:"
+D584,FIXED,Cradle catwalk shadow flicker at every frame rate (regression from D579).,FIXED 2026-10-10 (maintainer Deck:
+D614,OPEN,Deck Bunker fight texture-cache thrash:,"OPEN: measured, fix not shipped (2026-10-10)"
 D407,CLOSED,Tanks cannot be boarded/exited on PC —,CLOSED (2026-09-28 bookkeeping:
 D408,FIXED,Game.SkipIntro skips the post-mission failure dossier:,FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed).
 D415,FIXED,"Shooting a light fixture does not ""kill"" its flickering light (Bunker, Caverns):",FIXED (2026-09-29 bookkeeping:
@@ -429,3 +439,29 @@ D534,FIXED,Pre-release review of the 2026-10-05 local batch —,FIXED 2026-10-05
 D540,FIXED,Fog rework (Deck playtest):,FIXED 2026-10-05 (port:
 D450,FIXED,"Unplugging and replugging a controller was not picked up (user, GameSir-G7 Pro; 2026-09-29).","FIXED — port-only: the render thread's gfx_sdl_handle_events drains the same SDL queue as video.c's host pump but had no case for SDL_CONTROLLERDEVICEADDED/REMOVED, so it usually swallowed them and i…"
 D436,FIXED,"Persistent (hipfire) crosshair, opt-in:",FIXED (shipped 2026-09-29; rule-2 sign-off:
+D607,OPEN,Address model unified into one header:,DONE 2026-10-07 (macos branch; Windows identity gate:
+D608,FIXED,D34 ANIM_DATA_x re-basing guard in assets/animationtable_data.h was __x86_64__-only:,"FIXED 2026-10-07 (macos branch; mechanical guard widening, arm64 link clean)"
+D609,FIXED,macOS arm64 SIGKILL at exec:,"FIXED 2026-10-07 (macos branch; probe-confirmed; arm64 keeps the 4 GiB pagezero, floor 11.0)"
+D610,FIXED,GE_MEMPOOL_CEILING (port/src/n64stubs.c) hard-coded the D441 base-0 arena top; now #if PORT_ADDR_BASE != 0-keyed so arm64 gets the arena-relative ceiling and b…,FIXED 2026-10-07 (macos branch; base-0 identity by construction)
+D611,FIXED,"Mempool arena start is truncated to 32 bits at three carriers (osVirtualToPhysical, PHYS_TO_K0, src/boss.c:168 u32 start) so arm64 macOS banks live at arena-re…","DIAGNOSED 2026-10-07 (macos branch; arena-start leg fixed as D612, rest owed with the #95 re-application)"
+D612,PARTIAL,Arena-start leg fixed (src/boss.c:,PARTIAL 2026-10-07 (macos branch:
+D613,FIXED,PR #95 (macos branch) re-applied onto release/v0.5.1 —,FIXED 2026-10-07 (macos branch)
+D586,FIXED,"Apple gen_macho_syms.py --base parse was dead code (undefined args), the shifted literals emitted bare (assembler ""expected newline""), and the generated .s dir…",FIXED 2026-10-07 (macos branch)
+D587,FIXED,macos sweep: 9 of the first 13 levels SIGSEGV at one site —,FIXED 2026-10-07 (macos branch)
+D588,FIXED,Windows x86_64 SIGSEGV (deterministic 3/3) in texReadBits under lvlStageLoad:,FIXED 2026-10-07 (macos branch)
+D589,RESOLVED,macOS arm64: wide-pixel (32-bit RGBA / 16-bit) textures render as colourful static / confetti (the Surface 1/2 billboard trees) while x86_64 renders them corre…,RESOLVED 2026-10-08 (macos branch; byte order fixed+verified = D591; the SECOND CAUSE D592 is CLOSED as a non-issue —
+D590,FIXED,"Windows x86_64 deterministic SIGSEGV in load_bg_file (bg-load worker thread, 4/4 incl.",FIXED 2026-10-08 (macos branch)
+D591,FIXED,arm64 macOS fast3d mis-classifies every DRAM/cart texture source as a “C-compiled array” and byte-swaps it —,FIXED + Mac A/B VERIFIED 2026-10-08 (macos branch; 9c59cbe7) —
+D592,CLOSED,"arm64 macOS — the ""rock striping"" (the remaining cross-platform frame diff after the D591 byte-order fix) is a VHF-metric FALSE-POSITIVE, not a GL-layer defect.",CLOSED (non-issue) 2026-10-08 (macos branch; VHF-metric false-positive —
+D593,OPEN,"Windows x86_64 — an occasional render-thread stall fired the kernel's ""no frame rendered for N ms"" watchdog (observed once, 8001 ms, on an NVIDIA RTX 5090 duri…",OPEN 2026-10-08 (Windows; single observation; repro + root-cause owed)
+D594,FIXED,arm64 macOS — partial input:,FIXED 2026-10-08 (macos branch; actHeld menu gate + macOS reconcileGrab focus gate → PD MLOCK_ON; LMB fire verified on the Mac; unblocked D595)
+D595,FIXED,arm64 macOS — deterministic SIGSEGV in modelSetAnimFrame when an AI plays a hit/stagger/death animation (fire → triggered_on_shot_hit → modelSetAnimation2); th…,FIXED 2026-10-08 (macos branch; read the base at full pointer width —
+D596,FIXED,"the win/ golden set predates D565/D569/D570, so verify.sh on the macos branch (and the main tip) reported a REGRESSION worst_cell=3.106875 that is a stale refe…","FIXED 2026-10-08 (macos branch; win goldens regenerated from e0a2d4b9, 21/21 PASS; recipe-side only, no game-code change; the linux/deck sets need their own re-capture round before any new cross-plat…"
+D597,FIXED,"GE_INPUTSCRIPT gains MLB<n>/MRB<n> (sustained mouse-button tokens, slot 0):",FIXED 2026-10-08 (macos branch; Windows menu + forced-level keylog checks; Mac sweep-fire no-crash run + no-env no-op run; the live E1 LMB fire is the struck-animation ground truth; cmd-wrapper gotch…
+D598,RESOLVED,"arm64 macOS gameplay is ""a bit choppy"" on heavy levels (Cradle-class) —",RESOLVED 2026-10-08 by D600 (display-locked retrace tick; live playtest confirmation owed)
+D599,FIXED,arm64 macOS: SIGBUS (signal 10) the moment a game controller is connected —,FIXED 2026-10-08 (macos branch; Mac M3 re-run with a connected Xbox pad:
+D600,FIXED,VSync-on frame pacing:,FIXED + LIVE-CONFIRMED 2026-10-08 (macos branch; Mac M3:
+D601,FIXED,"Long-session hang at stage load (macOS playtest, Archives):","FIXED + LIVE-CONFIRMED 2026-10-08 (macos branch; #ifdef PORT guard, D152/D285 class; evidence = live lldb read of the hung process; maintainer full-campaign completion incl."
+D602,OPEN,macOS end-credits SIGBUS:,"MITIGATED 2026-10-08, OPEN (macos branch; langGet returns NULL for offset > 1 MiB and logs the bank state once as D602:; needs one natural-flow re-trigger to diagnose)"
+D603,FIXED,"arm64 macOS multiplayer (2P, stage 38) SIGSEGV in modelSetAnimFrame via playerTick:","FIXED 2026-10-08, live confirmation owed (macos branch; identity at PORT_ADDR_BASE==0; headless 2/3/4P + solo smoke clean but the death/firing-animation path is not reachable headlessly)"
+D604,FIXED,arm64 macOS multiplayer respawn SIGSEGV:,FIXED + LIVE-CONFIRMED 2026-10-08 (macos branch; maintainer 2P respawn OK; identity at PORT_ADDR_BASE==0)
