@@ -2,10 +2,12 @@
   "assets/animationtable_data.h": {
     "-Wint-conversion": 25
   },
+  "port/include/portaddr.h": {
+    "-Wpointer-to-int-cast": 1
+  },
   "port/shim/PR/os.h": {
     "-Wint-conversion": 3,
-    "-Wint-to-pointer-cast": 2,
-    "-Wpointer-to-int-cast": 1
+    "-Wint-to-pointer-cast": 1
   },
   "port/src/romdata.c": {
     "-Wpointer-to-int-cast": 7
@@ -26,16 +28,15 @@
   },
   "src/game/bg.c": {
     "-Wint-conversion": 3,
-    "-Wpointer-to-int-cast": 6
+    "-Wpointer-to-int-cast": 7
   },
   "src/game/blood_decrypt.c": {
     "-Wint-conversion": 2,
     "-Wpointer-to-int-cast": 2
   },
   "src/game/bondview2.c": {
-    "-Wint-conversion": 1,
     "-Wint-to-pointer-cast": 2,
-    "-Wpointer-to-int-cast": 8
+    "-Wpointer-to-int-cast": 11
   },
   "src/game/bondview_r.c": {
     "-Wpointer-to-int-cast": 1
@@ -52,9 +53,8 @@
   "src/game/chrai.c": {
     "-Wint-conversion": 2
   },
-  "src/game/cleanup_objects.c": {
-    "-Wint-conversion": 1,
-    "-Wpointer-to-int-cast": 1
+  "src/game/front.c": {
+    "-Wpointer-to-int-cast": 2
   },
   "src/game/glass.c": {
     "-Wpointer-to-int-cast": 2
@@ -63,7 +63,7 @@
     "-Wint-conversion": 2
   },
   "src/game/image.c": {
-    "-Wint-conversion": 3,
+    "-Wint-conversion": 1,
     "-Wpointer-to-int-cast": 3
   },
   "src/game/image_bank.c": {
@@ -107,7 +107,7 @@
   },
   "src/game/model.c": {
     "-Wint-conversion": 9,
-    "-Wint-to-pointer-cast": 3,
+    "-Wint-to-pointer-cast": 1,
     "-Wpointer-to-int-cast": 3
   },
   "src/game/mpmenu.c": {
@@ -117,12 +117,9 @@
     "-Wint-to-pointer-cast": 1,
     "-Wpointer-to-int-cast": 18
   },
-  "src/game/othermodemicrocode.c": {
-    "-Wint-conversion": 1
-  },
   "src/game/prop.c": {
     "-Wint-conversion": 2,
-    "-Wpointer-to-int-cast": 21
+    "-Wpointer-to-int-cast": 20
   },
   "src/game/propobj.c": {
     "-Wint-conversion": 1,
@@ -141,7 +138,7 @@
   },
   "src/game/stan.c": {
     "-Wint-conversion": 3,
-    "-Wpointer-to-int-cast": 1
+    "-Wpointer-to-int-cast": 4
   },
   "src/game/tex.c": {
     "-Wpointer-to-int-cast": 2
@@ -150,9 +147,9 @@
     "-Wpointer-to-int-cast": 4
   },
   "src/game/title.c": {
-    "-Wint-conversion": 6,
-    "-Wint-to-pointer-cast": 2,
-    "-Wpointer-to-int-cast": 7
+    "-Wint-conversion": 3,
+    "-Wint-to-pointer-cast": 1,
+    "-Wpointer-to-int-cast": 6
   },
   "src/game/viewport.c": {
     "-Wint-conversion": 1

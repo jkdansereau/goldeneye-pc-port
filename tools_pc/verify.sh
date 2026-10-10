@@ -270,7 +270,12 @@ stage_workdir() {
   cp "$ROOT/data/ge007.$ROMID.z64" "$d/data/" &&
   cp -r "$ROOT/data/pccg-$ROMID" "$ROOT/data/pcmodels-$ROMID" "$d/data/" &&
   cp "$CANON_EEP" "$d/data/ge007.eep" &&
-  printf '[Window]\nWidth = 640\nHeight = 480\n' > "$d/data/ge007.ini"
+  # Video.DeckPresetApplied: the D283 Steam Deck preset would otherwise switch
+  # a fresh ini to fullscreen 1280x800 on a Deck, and no frame would compare.
+  printf '[Window]\nWidth = 640\nHeight = 480\n[Video]\nDeckPresetApplied = 1\n' > "$d/data/ge007.ini" &&
+  # VERIFY_INI_EXTRA: extra ini lines for an option-specific gate (D578:
+  # '[Video]\nFpsCap = 120\nVSync = 0'); the goldens are captured without it.
+  { [ -z "${VERIFY_INI_EXTRA:-}" ] || printf '%b\n' "$VERIFY_INI_EXTRA" >> "$d/data/ge007.ini"; }
 }
 # EXIT only (D534): INT/TERM just exit, which fires EXIT.
 CUR_CAPDIR=""

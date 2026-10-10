@@ -294,6 +294,93 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Experimental macOS (Apple Silicon) build. Compiles + links with Homebrew's
+  # real GNU GCC (Apple Clang cannot compile the decomp's Plan 9 struct
+  # extensions) and packages the bundle with scripts/package-macos.sh: the
+  # non-system dylibs (sdl2-compat + SDL3, libstdc++, libgcc_s) are copied
+  # next to the exe with @executable_path install names, re-signed ad-hoc.
+  # The bundle is not notarized; the README inside it gives the one-line
+  # `xattr -dr com.apple.quarantine .` unblock. Like linux-build this is a
+  # "compiles + links + packages" signal, not a runtime claim. Not a required
+  # check. Mirrors the maintainer's local build-mac configuration (Unix
+  # Makefiles, RelWithDebInfo, newest Homebrew gcc-N).
+  macos-build:
+    runs-on: macos-14
+    env:
+      CCACHE_MAXSIZE: 500M
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: |
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.ccache" >> "$GITHUB_ENV"
+          brew install gcc cmake sdl2 sdl3 ccache
+          ls "$(brew --prefix)"/bin/gcc-[0-9]* "$(brew --prefix)"/bin/g++-[0-9]*
+
+      - name: Restore ccache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-macos-arm64-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-macos-arm64-${{ hashFiles('CMakeLists.txt') }}-
+            ccache-macos-arm64-
+
+      - name: Regenerate ROM-asset symbol file (US)
+        run: python3 scripts/gen_romassets.py u
+
+      # Same frozen first-run converter as linux-build. The runner's python3
+      # is Homebrew's (PEP 668, no system pip installs), so use a venv.
+      - name: Freeze asset converter (PyInstaller)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet pyinstaller==6.22.3
+          "$RUNNER_TEMP/venv/bin/python" -m PyInstaller --onefile --noconfirm --clean             --name ge007-convert             --distpath tools_pc/dist/prepare-assets             --workpath build-pyinst --specpath build-pyinst             tools_pc/dist/prepare-assets/prepare-assets.py
+          ls -la tools_pc/dist/prepare-assets/ge007-convert
+
+      - name: Configure (ntsc-final)
+        run: |
+          GCC="$(ls "$(brew --prefix)"/bin/gcc-[0-9]* | sort -t- -k2 -n | tail -1)"
+          GXX="$(ls "$(brew --prefix)"/bin/g++-[0-9]* | sort -t- -k2 -n | tail -1)"
+          echo "using $GCC / $GXX"
+          cmake -S . -B build-mac -DROMID=ntsc-final -DCMAKE_BUILD_TYPE=RelWithDebInfo             -DCMAKE_C_COMPILER="$GCC" -DCMAKE_CXX_COMPILER="$GXX"
+
+      - name: Build (ntsc-final)
+        run: cmake --build build-mac -j"$(sysctl -n hw.ncpu)"
+
+      - name: ccache stats
+        run: ccache -s
+
+      - name: Show binary
+        run: |
+          ls -la build-mac/ge007* || true
+          file build-mac/ge007* || true
+          otool -L build-mac/ge007.aarch64
+
+      - name: Package macOS bundle
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            V="${GITHUB_REF_NAME}"
+          else
+            V="0.0.0-ci.${GITHUB_SHA::7}"
+          fi
+          bash scripts/package-macos.sh build-mac dist "$V"
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: goldeneye-pc-port-macos-arm64
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   # Real Windows (MSYS2 MINGW64) build — the only platform the port is
   # developed and tested on. This compiles and LINKS the full executable.
   #
@@ -417,14 +504,14 @@ jobs:
       # -level_09 soak, a golden-frame diff) would run on a self-hosted runner
       # instead. Not planned.
 
-  # Tags only. Attach the packaged Windows + Linux bundles to a DRAFT
+  # Tags only. Attach the packaged Windows + Linux + macOS bundles to a DRAFT
   # pre-release so a human can do the ROM smoke-test on each platform before
   # publishing. This job — and only this job — gets contents: write, and it
   # is also the only job that attests build provenance (id-token: write +
   # attestations: write; attest-build-provenance needs both).
   release:
     if: github.ref_type == 'tag'
-    needs: [ changes, validate, windows-build, linux-build ]
+    needs: [ changes, validate, windows-build, linux-build, macos-build ]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -454,6 +541,11 @@ jobs:
           name: goldeneye-pc-port-linux-x86_64
           path: dist
 
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: goldeneye-pc-port-macos-arm64
+          path: dist
+
       # SLSA build provenance for the release artifacts (in-toto, signed by
       # GitHub's OIDC key for this repo's workflow at the tagged commit).
       # Anyone can check a downloaded file:
@@ -474,7 +566,7 @@ jobs:
           ASSETS=(dist/*.zip dist/*.zip.sha256 dist/*.tar.gz dist/*.tar.gz.sha256)
           NOTES="$(mktemp)"
           # Asset names are built from the tag with the leading v stripped
-          # (bundle-{linux,win}.sh), so substitute the same form -- a raw
+          # (bundle-{linux,win}.sh, package-macos.sh), so substitute the same form -- a raw
           # TAG would make the notes reference goldeneye-pc-port-v*.* assets
           # that don't exist.
           NOTES_VERSION="${TAG#v}"

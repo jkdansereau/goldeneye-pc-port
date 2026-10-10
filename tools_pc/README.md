@@ -31,6 +31,8 @@ investigation artifacts.
 | `framediff.py` | Visual regression: candidate `GE_PCDUMP` frames vs `tools_pc/golden/`, per-region divergence. Structural/tolerant by default; `--exact` after `GE_DETERM`. |
 | `pixcount.py` | Count non-black pixels in a PPM dump — "did the scene render anything" as a number. |
 | `level_sweep.sh` | Bare `-level_XX` boot of all 21 solo levels → PASS / NO-FRAMES / CRASH. Predates `verify.sh sweep`; kept as the battle-tested full-21-level runner until `verify.sh sweep` has done an equivalent soak. |
+| `levelbench.sh` | Boot one solo level, run a scripted input pattern (`fight` / `turn` / `idle` / `raw:`) or a recorded demo (`--record` / `--replay`, pad input incl. dedicated use, pinned `GE_RSEED`), quit via `GE_QUITFRAME`, keep `ge007.log` + a cadence/SLOW summary. Windows, Linux, Deck. |
+| `deckrunner.sh` | Steam Deck Game Mode job runner: add it to Steam as a non-Steam game and start it; it runs `levelbench.sh` jobs dropped into `~/lb/queue/` over ssh (gamescope hides ssh-launched windows). |
 | `playtest.sh` | Launch a level for `docs/dev/LEVEL-PLAYTEST.md` human validation (WS6). |
 | `audiodebug.ps1` | Audio counterpart to `debug.ps1` (that one is for crashes; this one is for audio behaviour). Drives the `GE_D204` health monitor + `GE_AUDIOTRACE`/`GE_AUDIODUMP` and prints a pass/fail verdict: real-time ratio, queue starvation, dropped blocks, oversized blocks, plus a soundIndex histogram. `-Play` for an instrumented interactive playtest (the D202 workflow), `-Soak` for a 5-min stability run, `-SyncData` to mirror `./data` first. |
 | `debug.ps1` / `repro_gdb.sh` / `attach_animgen.sh` | Launch (or attach to) the game under gdb so a crash always leaves a backtrace. |
