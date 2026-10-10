@@ -138,6 +138,7 @@ Full steps, controls and troubleshooting are in the bundled `README.md`.
 | On the Steam Deck at 90 fps, firefights in the centre of Bunker 1 and 2 can drop several fps | Performance, Deck only | Set the frame cap to 60 for those levels |
 | Jungle can feel slightly less smooth at 90 fps than other levels | Feel | Frame cap 60 |
 | Cradle's turret explosions may draw wrongly | Cosmetic; reported, not yet investigated | None |
+| After alt-tabbing away, the picture can look hazy until it settles; fast repeated alt-tab is wonkier and takes longer | Cosmetic, Windows | It recovers on its own; alt-tab again or give it a couple of seconds |
 | macOS (Apple Silicon) is experimental, tested on one Mac, and not notarized | Platform | Run `xattr -dr com.apple.quarantine <folder>` before the first launch; reports welcome |
 | PAL and JP ROMs aren't supported in release packages | NTSC-U only | Use an NTSC-U ROM. Both regions convert, build and boot from source; packaging is still open |
 | Changing aspect ratio inside a level can briefly glitch the gun/hand model, rarely | Cosmetic, one-off | Change the ratio from the front-end PC Options, or accept it |

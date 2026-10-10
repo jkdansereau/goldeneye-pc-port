@@ -58,9 +58,12 @@ project is as much a study of that process as it is a port. See
     display, and the *Original N64* preset caps at 60. This is a rework of
     f1zz1ec0ke's #137. I checked 120 Hz with VSync on a G-Sync display
     on PC and 90 fps on the Steam Deck.
-  - **macOS on Apple Silicon, experimental, build from source.** Based on
-    danturn's #95 (with Julio C. Rocha's earlier Intel groundwork in
-    #88). There is no macOS download. See [Building](docs/building.md).
+  - **macOS on Apple Silicon (experimental).** There is now a `macos-arm64`
+    download (or build from source; see [Building](docs/building.md)). Based
+    on danturn's #95 (with Julio C. Rocha's earlier Intel groundwork in
+    #88). A campaign sweep and live sessions ran without crashes on one M3
+    Mac; the download is not notarized, so see [macOS](#macos-apple-silicon-experimental)
+    for the one-line unblock. Test reports are very welcome.
   - **Fixes:** geometry vanishing when you press against a wall (#150),
     the first launch opening on the wrong monitor (#151), a Linux crash in the
     end credits (#152), a crash when a guard spawns with a hat (#153), a
