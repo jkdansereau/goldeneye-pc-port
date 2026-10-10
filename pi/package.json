@@ -1,0 +1,31 @@
+{
+  "name": "ge007-pi-tooling",
+  "version": "0.1.0",
+  "description": "GoldenEye 007 PC port - agent-development tooling: model-pinned subagent roles and evidence-ledger compaction (see pi/README.md)",
+  "license": "MIT",
+  "keywords": [
+    "pi-package"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": ">=0.86.1"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-ai": {
+      "optional": true
+    }
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/compaction-ledger/index.ts"
+    ],
+    "subagents": {
+      "agents": [
+        "./agents"
+      ]
+    }
+  }
+}

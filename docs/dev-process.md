@@ -255,6 +255,62 @@ real, already-granted case, kept as historical record) into a reusable
 process; new requests cite this section rather than re-deriving the case
 for a process each time.
 
+## 8. LLM session discipline (model tiers, data-before-edit, context resets)
+
+Standing rules for LLM-agent sessions, fixed 2026-10-09 after the session
+forensics on the #150 cull hunt (pi session `01a11ec6`, 2026-10-09): a
+27B 4-bit-quantized default model spent an evening firing unvalidated
+render fixes at the maintainer for A/B (four consecutive failures), and
+the mid-session compaction summary promoted an unvalidated hypothesis to
+"diagnosed" — the post-compaction turns then built three more fix
+candidates on that false premise. The loss was model + discipline, not
+retrieval; the rules below are the zero- and low-cost countermeasures.
+
+- **Model tiers.** Planning, diagnosis, and anything that touches a
+  contested claim run on the strongest model available — the frontier
+  `openrouter/deepseek/deepseek-v4-pro` (no local contention) or, with
+  the local backend switched, `strata-coder-hard`. Only ONE local backend
+  can run at a time (ninfer ↔ strata), so the **standing backend is ninfer** and the
+  session default is its model (`qwen3.8-27b-nvfp4full`, the
+  `ninfer-coding.bat` 4-bit daily driver). The strong *local* tier is
+  the same backend under `ninfer-quality.bat` (groupwise-int
+  `qwen3.8-27b`, 200k ctx) — a launcher restart, not a backend
+  switch; the strata 125B remains the top local option at the cost of a
+  full switch. Mechanical labor — builds, captures,
+  log triage, golden sweeps, doc sync — goes to the ninfer models via
+  the model-pinned subagent roles in the `pi/` package (see
+  `pi/README.md`): 4-bit for build/capture/triage/doc-sync, and
+  `pairing` pinned to `inherit` so the reasoning step follows the
+  parent session’s tier. 4-bit is never a planning or diagnosis model.
+- **Data before edit.** If a probe log for the current hypothesis
+  already exists on disk, the next action is *analyzing it*, not building
+  another fix candidate. The maintainer gates only the final candidate;
+  intermediate variants are judged by the golden sweep (regressions are
+  machine-detected), not by maintainer A/B — one A/B is the gate, not
+  the test harness.
+- **Context resets.** After a second failed maintainer A/B, or after a
+  compaction whose state is contested, do not continue the session: write
+  a HANDOFF brief and start a fresh session from it. Compaction summaries
+  must carry an **evidence ledger** — one line per live hypothesis tagged
+  `refuted` / `unvalidated` / `validated (<artifact: log, golden frame,
+  maintainer A/B, commit>)`, and `"diagnosed"` is forbidden for any fix
+  lacking a maintainer A/B or a passing golden sweep. The
+  `pi/extensions/compaction-ledger/` extension encodes this prompt (and,
+  with `GE_COMPACT_MODEL`, summarizes on a stronger model than the
+  session's labor model).
+- **Regression triage first.** Before any probe or theory on a bug,
+  ask when it first appeared. If a release window is known, list the
+  commits in `git log <good>..<bad>` that touch the subsystem and run the
+  off switch each of them shipped with, one run per switch. The #150
+  wall-hug see-through (D579) spent days on cull/ucode/guard-band probes; a
+  single `GE_NEARCLIP=0` run named the v0.5.0 feature (D543) and the fix
+  was one line. Corollaries: when an A/B refutes a layer, leave that layer;
+  when a probe shows the code behaving correctly, pivot instead of probing
+  deeper; a delegated decode is a cross-check, never the lead.
+- **Briefs are mandatory** (§1): no investigation kickoff without a
+  BUDGET line and a filled brief template — including the MODEL line
+  below, so the tier choice is visible in the brief itself.
+
 ## Investigation-brief template
 
 ```
@@ -263,6 +319,8 @@ READ FIRST: docs/porting-notes.md; docs/dev/findings.md <specific Dxx entries>.
 FILES YOU MAY TOUCH: <disjoint from any other in-flight work>.
 KNOWN-GOOD / RULED OUT: <list; do not re-investigate>.
 PRE-FLIGHT ATTACHED: <probe output, baseline capture, PD-port pointer>.
+MODEL: <tier + model id, per §8 — planning/diagnosis on the strong
+  model; mechanical labor delegated to the pi/ subagent roles>.
 BUDGET: <N build->run cycles / ~M min>. On expiry: revert probes, write up with confidence.
 CONSTRAINTS: diagnosis may trace as deep into src/game state as the evidence
   needs — name the exact struct/field/logic responsible before concluding
