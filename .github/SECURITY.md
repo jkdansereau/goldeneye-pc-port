@@ -51,12 +51,12 @@ by this repo's CI from the release tag, and nothing else. Verify any
 downloaded artifact with:
 
 ```sh
-gh attestation verify goldeneye-pc-port-0.5.0-win64.zip \
+gh attestation verify goldeneye-pc-port-0.6.0-win64.zip \
   --repo jkdansereau/goldeneye-pc-port
 ```
 
 (use the name of the file you downloaded, e.g.
-`goldeneye-pc-port-0.5.0-linux-x86_64.tar.gz` on Linux). A passing check confirms both
+`goldeneye-pc-port-0.6.0-linux-x86_64.tar.gz` on Linux). A passing check confirms both
 the file's digest and its provenance; a tampered or foreign file fails.
 Releases before v0.5.0 have no attestations — for those, the per-file
 `.sha256` sidecars and a from-source build are the available checks.

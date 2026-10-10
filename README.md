@@ -6,8 +6,8 @@
 ![license](https://img.shields.io/badge/license-MIT-ffb454)
 
 **GoldenEye 007 (Nintendo 64, 1997) as a native PC game for Windows, Linux
-and Steam Deck.** Native widescreen, a steady 60 fps, 2–4 player
-split-screen, mouse and keyboard or a modern controller, rebindable controls
+and Steam Deck.** Native widescreen, 60 fps or higher (90/120/144 on fast
+displays), 2–4 player split-screen, mouse and keyboard or a modern controller, rebindable controls
 and an in-game options menu. No
 emulator, and not a binary recompilation: the game's own
 reconstructed C, rebuilt from the
@@ -24,9 +24,9 @@ then follow the [Quick start](#quick-start).
 > downloads contain no Nintendo code or assets, and no ROM. See
 > [What's a ROM?](#whats-a-rom) and [Legal](#legal).
 
-**v0.5.0** is the current release. It is a **pre-1.0 release, not a
+**v0.6.0** is the current release. It is a **pre-1.0 release, not a
 finished product**: the campaign and split-screen multiplayer play end to
-end, but expect missing pieces (PAL/JP ROMs, macOS) and the occasional
+end, but expect missing pieces (PAL/JP ROMs, a notarized macOS build) and the occasional
 breaking change between versions. v1.0 is the target for a feature-complete
 build.
 
@@ -49,6 +49,31 @@ project is as much a study of that process as it is a port. See
 
 ## News
 
+- **RELEASE-DATE** — **v0.6.0** ([release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.6.0)):
+  - **Frame rates above 60.** `Video.FpsCap` now offers 90, 120 and 144, and
+    an **Auto** setting (the new default on fresh installs) that matches your
+    display's refresh rate. Frames between game ticks are blended from the
+    previous and current frame; the game still simulates at its original
+    rate. It costs one game tick of extra latency, does nothing on a 60 Hz
+    display, and the *Original N64* preset caps at 60. This is a rework of
+    f1zz1ec0ke's #137. I checked 120 Hz with VSync on a G-Sync display
+    on PC and 90 fps on the Steam Deck.
+  - **macOS on Apple Silicon, experimental, build from source.** Based on
+    danturn's #95 (with Julio C. Rocha's earlier Intel groundwork in
+    #88). There is no macOS download. See [Building](docs/building.md).
+  - **Fixes:** geometry vanishing when you press against a wall (#150),
+    the first launch opening on the wrong monitor (#151), a Linux crash in the
+    end credits (#152), a crash when a guard spawns with a hat (#153), a
+    sound/text pointer check that rejected valid pointers (#108), a Cradle
+    catwalk shadow flicker, and stale watch pixels in native widescreen.
+  - **Smaller changes:** the legacy front-end Velocity pointer mode is gone,
+    the Linux/macOS update check no longer fails on a large response, every
+    run is also logged to `ge007.log` next to the ini, and F10 slider labels
+    fit at HUD 150.
+  - **Known issues on the Steam Deck at 90 fps:** firefights in the centre of
+    Bunker 1 and 2 can drop several fps, and Jungle can feel slightly less
+    smooth than other levels. Cradle's turret explosions may draw wrongly
+    (reported, not yet investigated).
 - **2026-10-07** — **v0.5.0** ([release notes](https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0)), the first release
   since v0.4.0; it includes the v0.4.1 work, which was never published on
   its own:
@@ -104,7 +129,7 @@ the first launch lowers draw distance and anti-aliasing to keep up. A
 keyboard and mouse, or a controller (Xbox, PlayStation, Switch and most
 SDL-supported pads); split-screen needs one controller per extra player.
 
-**Not yet:** macOS, ARM Linux and Windows 7 are on the [roadmap](#roadmap).
+**macOS (Apple Silicon, experimental):** an M1 or later Mac on macOS 14 or newer, using the `macos-arm64` download (nothing to install; it is not notarized, so see [macOS](#macos-apple-silicon-experimental) for the one-line unblock) or a [source build](#building-from-source). **Not yet:** ARM Linux and Windows 7 are on the [roadmap](#roadmap).
 
 ## Quick start
 
@@ -210,6 +235,14 @@ Backspace.
   and *Aspect ratio → Original* shows the exact 4:3 frame.
 - **A steady 60 fps**, with VSync and a frame cap (30 or 60), including on
   low-end GPUs.
+- **Frame rates above 60:** 90, 120 or 144 fps, or **Auto** to match your
+  display. Extra frames are blended between game ticks (the game still runs at
+  its original rate), at the cost of one tick of latency. It has no effect on
+  a 60 Hz display, and the *Original N64* preset keeps 60. See
+  [framerate and pacing](docs/framerate-and-pacing.md).
+- **macOS (Apple Silicon), experimental:** a `macos-arm64` download, not
+  notarized (one Terminal command to unblock it, see [macOS](#macos-apple-silicon-experimental)),
+  or build from source. I'd like test reports.
 - **Graphics options:** resolution, borderless or exclusive fullscreen,
   a Center window action while windowed, MSAA (up to 16×), anisotropic
   filtering, and nearest, bilinear, trilinear or the N64's own 3-point
@@ -238,17 +271,22 @@ Backspace.
 ## Status
 
 **Fully playable, with a small set of known caveats.** All 20 solo missions
-and the end-of-campaign credits load, render and run crash-free. v0.5.0 was
-played on Windows and Steam Deck (campaign spot-checks, 2–4 player
-split-screen and controller-only sessions), and every level's reference
-frames were compared pixel by pixel on Windows, Linux and Steam Deck. The
+and the end-of-campaign credits load, render and run crash-free. v0.6.0 adds
+frame rates above 60 and experimental macOS support; I checked the new
+frame-rate path and the listed fixes by playing on Windows and Steam Deck (120 Hz
+with VSync on a G-Sync display on PC, 90 fps on the Deck), and a macOS
+Apple Silicon build ran the 21-level campaign sweep and live sessions without crashes. The 21-level pixel comparison of reference
+frames against goldens (Windows, Linux, Steam Deck) was last done for v0.5.0. The
 full campaign was last played end to end, at Agent difficulty on all three
 platforms, for v0.4.0. Split-screen was played live in 2P on every
 multiplayer map and in 4P on Temple.
 
 **Known issues:** see the **[known-issues table](docs/ROADMAP.md#known-issues)**
 (what you'll notice, impact, workarounds). The short version: NTSC-U ROMs
-only in the release packages, and no macOS/ARM builds yet.
+only in the release packages, and the Apple Silicon macOS download is
+experimental and not notarized. On the Steam Deck at 90 fps, Bunker 1/2
+centre firefights can drop several fps and Jungle can feel slightly less smooth
+than other levels.
 
 > ***All unlocked* never changes your save** since v0.5.0: it unlocks every
 > level and cheat in memory only, and switching it off shows your real
@@ -302,7 +340,7 @@ common keys and their defaults:
 [Video]
 Fullscreen = 0
 VSync = 1
-FpsCap = 60
+FpsCap = -1
 MSAA = 2
 TextureFilter = 1
 NativeWidescreen = 1
@@ -313,7 +351,9 @@ DrawDistance = 200
 MasterVolume = 100
 ```
 
-`Fullscreen` 1 is borderless fullscreen; `TextureFilter` is 0 nearest,
+`Fullscreen` 1 is borderless fullscreen; `FpsCap` -1 is Auto (match the display,
+up to 144), 0 is uncapped, otherwise a fps cap (30, 60, or 90/120/144 for frame
+interpolation on a faster display; an existing ini keeps its value); `TextureFilter` is 0 nearest,
 1 bilinear, 2 the N64 3-point filter, 3 trilinear; `FovScale` and `DrawDistance` are
 percentages of the original (the options overlay shows the field of view in
 degrees). On Atom/Celeron-class GPUs the first launch writes lighter values
@@ -406,15 +446,15 @@ place: [`docs/ROADMAP.md`](docs/ROADMAP.md). In brief:
 - **PAL and JP ROM support** in the release packages
   ([#85](https://github.com/jkdansereau/goldeneye-pc-port/issues/85)). Both
   regions already convert, build and boot from source.
-- **macOS and ARM builds**.
+- **A notarized macOS build, Intel Macs and ARM Linux.** Apple Silicon macOS is
+  an experimental, unsigned download in v0.6.0.
 - The remaining small accuracy differences, each checked against the N64
   game in an emulator.
 - **1.0 sign-off**: a full campaign playthrough at more than one difficulty
   plus a split-screen session, on every platform that ships.
 
 This is spare-time work, so there's no timeline. Opt-in extras beyond the N64
-game (LAN play, bots, co-op, HD textures, enhanced visuals, frame rates above
-60) come after 1.0, and always off by default. Not planned: online
+game (LAN play, bots, co-op, HD textures, enhanced visuals) come after 1.0, and always off by default. Not planned: online
 multiplayer over the internet, achievements or cloud saves, remake-scope
 assets (new models, music or voice), and new movement mechanics. If any of
 these matter to you, open an issue — it helps prioritize.
@@ -454,7 +494,7 @@ code with this one.
 | **How** | Decompilation-based source port: human-reconstructed C, compiled for the host; game logic runs as written | Static binary recompilation: the shipped machine code is auto-translated to C; the source is machine-generated |
 | **Lineage** | [GoldenEye 007 decompilation](https://github.com/n64decomp/007) + [Perfect Dark PC port](https://github.com/fgsfdsfgs/perfect_dark) engine family | Xbox 360 "…Recompiled" static-recompilation family |
 | **Renderer** | Software RSP → OpenGL | Hardware (Vulkan) |
-| **Status** | Pre-1.0 releases; full campaign and split-screen playable at 60 fps (see [Status](#status)) | Playable full game |
+| **Status** | Pre-1.0 releases; full campaign and split-screen playable at 60 fps or higher (see [Status](#status)) | Playable full game |
 | **Why it exists** | To run the *original* N64 game from source, and as a [case study in AI-agent collaboration](#how-it-was-made) on a hard low-level codebase | To get a playable PC release of the remaster |
 
 ---
@@ -499,6 +539,37 @@ The executable is written to `build-pc/ge007.x86_64` (on Windows,
 `build-pc/ge007.x86_64.exe`). To run a source build, create `data/` in the
 repo root, put your ROM in it as in [What's a ROM?](#whats-a-rom), and run
 `./build-pc/ge007.x86_64` from the repo root.
+
+### macOS (Apple Silicon, experimental)
+
+**Download:** `goldeneye-pc-port-<version>-macos-arm64.tar.gz` from the release
+page, for Apple Silicon (M1 or later), macOS 14 or newer. It bundles SDL2 and the
+C++ runtime, so Homebrew is not needed. The app is experimental and **not
+signed with an Apple Developer ID or notarized**, so Gatekeeper blocks it when
+it comes from a download. Unpack it, then run `xattr -dr com.apple.quarantine <folder>` in Terminal once, before the first launch:
+
+```sh
+xattr -dr com.apple.quarantine goldeneye-pc-port-<version>-macos-arm64
+```
+
+Then set up `data/` with your ROM as in the package README and run
+`./ge007.aarch64` from that folder in Terminal. If you launch it first, the process
+stalls before the window appears (it never reached `main` in my test; that is
+most likely Gatekeeper, and clearing the flag afterwards did not unstick that
+copy), so re-extract the archive and clear the flag before launching. I have run
+the package on one M3 Mac only, so test reports (what Mac, what macOS, what
+happened) are very welcome.
+
+**Build from source:** use Homebrew's
+GNU `gcc` (Apple's Clang can't compile the decomp), then the same
+asset-extraction and `./build-pc.sh ntsc-final` steps as above. Details are in
+[`docs/building.md`](docs/building.md).
+
+```sh
+brew install cmake gcc sdl2 zlib python3
+```
+
+On Apple Silicon the executable is tagged `aarch64` instead of `x86_64`.
 
 ## How it works
 
@@ -607,14 +678,16 @@ This port is a thin layer on a large amount of other people's work.
 
 **Contributors**
 
-- **dolent** (#120, #121, #122, #123), **italoarruda** (#107, #109),
-  **JosephAHK** (#133), and **MST246** (the #125 investigation), plus
-  everyone who filed issues.
+- **dolent** (#120, #121, #122, #123), **italoarruda** (#106, #107, #108, #109),
+  **danturn** (#95 macOS, #96), **Julio C. Rocha** (#88 macOS Intel groundwork),
+  **f1zz1ec0ke** (#137 frame interpolation), **JosephAHK** (#133), and
+  **MST246** (the #125 investigation), plus everyone who filed issues.
 
 **Consultation**
 
 - **f1zz1ec0ke** ([GitHub](https://github.com/f1zz1ec0ke)): LLM consultation on model
-  tuning, agent harnesses, and agentic strategy throughout the port's development.
+  tuning, agent harnesses, and agentic strategy throughout the port's development
+  (and the author of the #137 frame-interpolation design noted above).
 
 **Tools and models used to develop the port**
 
@@ -700,4 +773,4 @@ is covered by [`NOTICE`](NOTICE), not by that license.
 
 ---
 
-*Last updated 2026-10-07 — v0.5.0 · <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a> · <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>*
+*Last updated 2026-10-10 — v0.6.0 · <a href="https://github.com/jkdansereau/goldeneye-pc-port">GitHub</a> · <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases">Releases</a>*

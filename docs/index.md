@@ -1,15 +1,15 @@
 ---
 title: GoldenEye 007 PC Port
-# v0.5.0: status bumped from v0.4.0. Description kept short (Bing's 160 limit).
+# v0.6.0: status bumped from v0.5.0. Description kept short (Bing's 160 limit).
 description: >-
   A native PC port of GoldenEye 007 (Nintendo 64, 1997), built from
-  decompiled source with a software RSP. v0.5.0 for Windows, Linux and
+  decompiled source with a software RSP. v0.6.0 for Windows, Linux and
   Steam Deck.
 # Freshness signals for jekyll-seo-tag (article:published_time / modified_time
 # and the WebPage JSON-LD dates). Keep these equal to the last real content
 # change of THIS page, not to the last release.
 date: '2026-10-05'
-modified_time: '2026-10-07'
+modified_time: '2026-10-10'
 locale: en_US
 # The masthead is this page's title, so its first content h2 must NOT get the
 # amber page-title look (double header). See the .flat-title rule in
@@ -32,7 +32,30 @@ Rare "Indy" engine family, one hardware generation apart.
 
 <div class="cblock" markdown="1">
 
-### v0.5.0 (2026-10-07) — split-screen multiplayer, one options menu, closer to the N64.
+### v0.6.0 (RELEASE-DATE) — frame rates above 60, experimental macOS, fixes.
+
+- **Frame rates above 60:** the frame cap offers 90, 120 and 144, and **Auto**
+  (the default on fresh installs) matches your display. Frames between game
+  ticks are blended; the game still simulates at its original rate. It costs
+  one game tick of latency and does nothing on a 60 Hz display. A rework of
+  f1zz1ec0ke's #137. See [framerate and pacing](framerate-and-pacing.md).
+- **macOS on Apple Silicon, experimental:** a `macos-arm64` download (not
+  notarized; run `xattr -dr com.apple.quarantine <folder>` once before the
+  first launch) or build from source. Based on danturn's #95.
+- **Fixes:** geometry vanishing against a wall (#150), the first launch opening
+  on the wrong monitor (#151), a Linux end-credits crash (#152), a hat-spawn
+  crash (#153), the Cradle catwalk shadow flicker, and stale pixels beside the
+  native-widescreen picture.
+- **Known issues:** on the Steam Deck at 90 fps, Bunker 1/2 centre firefights
+  can drop several fps and Jungle can feel slightly less smooth; Cradle's
+  turret explosions may draw wrongly (not yet investigated).
+
+</div>
+
+<details>
+<summary>v0.5.0 (2026-10-07) — split-screen multiplayer, one options menu, closer to the N64</summary>
+
+<div class="cblock" markdown="1">
 
 - **2–4 player split-screen multiplayer** on every multiplayer map, each
   player with their own pad, controls and aim settings.
@@ -57,6 +80,7 @@ Rare "Indy" engine family, one hardware generation apart.
   look-ahead defaults), and controllers are picked up again when replugged.
 
 </div>
+</details>
 
 What remains is a short list, under [Known issues](#known-issues).
 
@@ -74,7 +98,7 @@ single tracker for what comes next.
 <ul>
 <li><strong>NTSC-U ROMs only in the release packages.</strong> PAL and JP ROMs convert, build and run from source, but release packages ship the US (NTSC-U) ROM. On the roadmap.</li>
 <li><strong>Changing the aspect ratio in a level can briefly glitch the gun/hand model</strong> (cosmetic, one-off). Change the ratio from the front-end PC Options, or accept it (D509).</li>
-<li><strong>No macOS or ARM builds yet.</strong> Today the release ships Windows, Linux and Steam Deck (keyboard, mouse and controller-button rebinding are all supported, defaults in the <a href="https://github.com/jkdansereau/goldeneye-pc-port#controls">README's Controls section</a>); macOS and ARM are on the roadmap.</li>
+<li><strong>No ARM Linux build; macOS is experimental.</strong> The release ships Windows, Linux and Steam Deck (keyboard, mouse and controller-button rebinding are all supported, defaults in the <a href="https://github.com/jkdansereau/goldeneye-pc-port#controls">README's Controls section</a>). macOS on Apple Silicon is an experimental, not-notarized download (run <code>xattr -dr com.apple.quarantine &lt;folder&gt;</code> before the first launch) or a source build; ARM Linux is on the roadmap.</li>
 <li><strong>Saves from v0.4.0 and earlier can hold fake unlocks from <code>All unlocked</code></strong> — <code>All unlocked</code> has not written your save since v0.5.0, but saves made while it was on in v0.4.0 and earlier can hold fake unlocks and are not repaired; back up <code>data/ge007.eep</code> if you used it on an older build (D442, D387).</li>
 <li><strong>The first frame of a level takes a little longer</strong> while its textures upload — a brief FPS-counter dip; nothing to fix (D475, D480).</li>
 <li><strong>In widescreen, far objects almost fully in fog can still show a faint distant building edge</strong> (4:3 matches the N64). Cosmetic (D503).</li>
@@ -88,7 +112,7 @@ single tracker for what comes next.
 <p class="warn"><strong>Warning:</strong> always use the latest release — earlier builds are kept in the release history for reference only; they lack the features and fixes of newer versions, so don't install an older release.</p>
 
 <ul>
-<li><strong>2026-10-07 — v0.5.0</strong>: what it adds is the Status list above. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0">Release notes</a>.</li>
+<li><strong>2026-10-07 — v0.5.0</strong>: split-screen multiplayer, one options menu, closer-to-N64 fog and fidelity fixes, emulator save import. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.5.0">Release notes</a>.</li>
 <li><strong>2026-09-28 — v0.4.0</strong>: native widescreen, a complete aim system for mouse and controller, in-game key rebinding, crosshair customization, rumble-pak haptics, a rebuilt options overlay, and a broad fidelity-fix pass. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.4.0">Release notes</a>.</li>
 <li><strong>2026-09-20 — v0.3.0</strong>: the first release with the complete campaign playable end to end at 60 fps on Windows, Linux, and Steam Deck. <a href="https://github.com/jkdansereau/goldeneye-pc-port/releases/tag/v0.3.0">Release notes</a>.</li>
 <li><strong>2026-09-04 → 2026-09-16 — v0.1.0 – v0.2.2</strong>: the alpha and beta cycle — build chain, software RSP, first rendered frames, front end, and per-level stabilization across the campaign.</li>
@@ -104,7 +128,8 @@ single tracker for what comes next.
 |---|---|---|
 | **Windows** (x86_64) | [win64.zip](https://github.com/jkdansereau/goldeneye-pc-port/releases) | Engine + runtime DLLs + the one-time asset tool. |
 | **Linux** (x86_64) / **Steam Deck** | [linux tarball](https://github.com/jkdansereau/goldeneye-pc-port/releases) | SDL2 is bundled, so it runs as-is on any distro, and sideloads onto a Deck with nothing installed. |
-| macOS / ARM Linux | — | Roadmap: not shipped yet. |
+| **macOS** (Apple Silicon, experimental) | macos-arm64 tarball | SDL2 and the C++ runtime are bundled. Not notarized: run `xattr -dr com.apple.quarantine <folder>` once before the first launch. Tested on one Mac; reports welcome. |
+| ARM Linux | — | No download; on the roadmap. |
 
 **Bring your own ROM.** Both bundles contain no ROM and no game assets: you
 supply your own GoldenEye 007 N64 ROM (the
