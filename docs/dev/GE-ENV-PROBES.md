@@ -19,6 +19,18 @@ Two classes:
 
 | Env var | File:line | What it does | Status |
 |---|---|---|---|
+| `GE_INPUTRECORD` | `port/src/input.c:1547` | Records pad input to a file (D583 Deck harness; `levelbench.sh --record`). | live tooling |
+| `GE_INPUTREPLAY` | `port/src/input.c:1548` | Replays a `GE_INPUTRECORD` file (`levelbench.sh --replay`; pin `GE_RSEED`). | live tooling |
+| `GE_INTERPLOG` | `port/src/libultra.c:1482` | D578 IPLOG pacing trace (`=<n>` caps the lines). | live diag |
+| `GE_INTERP_ALPHA1` | `port/src/libultra.c:1489` | D578: every interpolated pass exact (identity check). | live diag |
+| `GE_INTERP_FORCE` | `port/src/video.c:1058` | D578: interpolate even when the display refresh is not above the VI rate. | live diag |
+| `GE_INTERPCLIP_ON / GE_INTERPCLIP_OFF` | `port/fast3d/gfx_pc.cpp:1816` | D578 in-between depth-clip widening (default off since 2026-10-10). | live switch |
+| `GE_INTERPPORTAL_OFF` | `port/fast3d/gfx_pc.cpp:4156` | D578: disable the portal-scissor replay on in-between passes. | live switch |
+| `GE_INTERPROOM_OFF` | `port/fast3d/gfx_pc.cpp:6059` | D578: disable the room-change exact fallback. | live switch |
+| `GE_INTERPREACH_OFF` | `port/fast3d/gfx_pc.cpp:6128` | D583: disable the REACH exact fallback. | live switch |
+| `GE_PCDUMP_PRESENTS` | `port/src/video.c:1539` | With `GE_PCDUMP`: one capture per present instead of per game frame. | live tooling |
+| `GE_NOTICKLOCK` | `port/src/libultra.c:1321` | D600: disable the display-locked retrace tick. | live switch |
+| `GE_ADDRSTRICT_SELFTEST` | `port/src/port_addr.c:122` | D607 (macOS): address-window self-test at startup. | live diag |
 | `GE_PCDUMP` | `port/fast3d/gfx_opengl.cpp:1079` (`is_pcdump`), `gfx_opengl.cpp:700`, `port/src/video.c:188`, `port/src/config.c:46` (`configGetFrameDump`) | Per-frame framebuffer PPM dump to `$PCDUMP` dir (verification-ritual golden captures, `tools_pc/framediff.py`/`pixcount.py`). Also settable via `[Debug] FrameDump` ini (env wins). **M-33/D168: the writer now emits rows top-to-bottom — captures before that fix are vertically flipped.** | **live** |
 | `GE_INPUTSCRIPT` | `port/src/input.c:306` | Headless scripted controller-0 input: `"<frame>:<tok>,…;…"` (`SUP/SDOWN/SLEFT/SRIGHT/SNONE` sustain, buttons pulse; `ZHOLD`/`ZREL` sustain fire, D207 M-201). Sole input source when set. | **live** |
 | `GE_INPUTSCRIPT_MS` | `port/src/input.c:1194` | abpad: entry times in `GE_INPUTSCRIPT` are milliseconds since SDL init instead of controller reads (`tools_pc/abpad`). C-button holds `CUPHOLD`/`CDOWNHOLD`/`CLEFTHOLD`/`CRIGHTHOLD`/`CNONE` (1.2 walk/strafe) also live in the script parser. | **live** |
@@ -134,6 +146,12 @@ Two classes:
 
 | Env var | File:line | Finding / what it logged | Status |
 |---|---|---|---|
+| `GE_D589POOL` | `src/game/image.c:339,1202` | D589 (macOS): texture-pool decode trace. | open diag |
+| `GE_D590HDR` | `src/game/bg.c:899` | D590: `load_bg_file` header trace. | closed |
+| `GE_TEXDUMPROW` | `port/fast3d/gfx_pc.cpp:1480` | D591/D592 (macOS): per-row texture dump. | closed |
+| `GE_TEXIMP2` | `port/fast3d/gfx_pc.cpp:1588` | D592 (macOS): import-order trace. | closed |
+| `GE_TEXSRC` | `src/game/image.c:1042,1177` | D591 (macOS): texture source-address trace. | closed |
+| `GE_ZLIBDUMP` | `src/game/image.c:317` | D611 (macOS): inflate input/output dump. | closed |
 | `GE_D51` | `port/src/libultra.c:496`, `src/game/model.c:125,244,544` | msgQ 32-slot overflow watch / ModelSlot layout | dead (D51 closed) — removed 2026-10-03 (strip batch 5, `chore/strip-batch5`); tombstone — the generator flags it GONE |
 | `GE_D54` | — (all blocks stripped M-32, commit `49ce620a`) | music seq-table ABI / endianness (`ALMidiHdr`) | dead (D54 closed) — fully removed (kept here as a tombstone; the generator flags it GONE) |
 | `GE_D154` | `src/game/bg.c:3418,3447,3632` (capped 64 calls) | bg room-GDL call trace (room / gdlidx / vtxoff / op / raw hdr words) | dead (D154 closed) — removed 2026-10-03 (strip batch 5, `chore/strip-batch5`); tombstone — the generator flags it GONE |
