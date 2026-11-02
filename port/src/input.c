@@ -479,7 +479,7 @@ static int controlScheme = 0;                    /* D513 Input.ControlScheme: 0 
 static char padStr[MAX_PADS][PA_COUNT][32];      /* Input.Pad[N].<Action> */
 static char padStrKey[MAX_PADS][PA_COUNT][40];
 static PadTable padTabBuf[2];
-static SDL_atomic_t padTabPub;                   /* published PadTable* */
+static void *padTabPub;                          /* published PadTable* (SDL_AtomicGetPtr/SetPtr need full pointer width; SDL_atomic_t is a 32-bit int) */
 static unsigned padTabSig = 0;
 static int padTabValid = 0;
 

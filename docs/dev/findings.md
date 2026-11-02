@@ -18417,3 +18417,43 @@ CI-built tarball (run 37623073542, c45dece7, the v0.5.0 packaging): floor
 X220 (Fedora 37, glibc 2.36: the box the 24.04 tarball refused to start on) and
 the Steam Deck; the 21-level pixel gate ran on that binary on both, 21/21 PASS
 each. Shipped in v0.5.0.
+
+## D573: Runs on arm64 Linux (Raspberry Pi 5) — FIXED 2026-11-01 (port; src/ changes are guards only)
+
+The port built for arm64 Linux but crashed or hung at several points on a
+Raspberry Pi 5 (8 GB, Ubuntu 24.04 arm64, gcc 13, Mesa V3D 7.1). Five causes:
+
+1. **x86-64-only guards.** The 64-bit fixes in `src/` (audi.c, music.c, memp.c,
+   game/rsp.c, image_bank.c, initunk_005450.c, objecthandler.c, the
+   libultra/audio files) and `port/include/pc_protos.h` were keyed on
+   `__x86_64__`, so arm64 compiled the N64 32-bit paths. Each guard is now
+   `(defined(__x86_64__) || defined(__aarch64__))` — the same code x86-64 already
+   runs. Includes the D34 ANIM_DATA lvalues in `assets/animationtable_data.h`
+   (link error without it). `port/src/system.c` / `platform.h` left as they are.
+2. **No MAP_32BIT on arm64.** `portAllocLowStack` (port/src/libultra.c) relies
+   on MAP_32BIT to keep game-thread stacks below 2 GiB; without it texLoad's
+   compbuffer pointer was truncated (crash at startup). arm64 now probes the free
+   gap 0x30000000–0x40000000 with `MAP_FIXED_NOREPLACE` (+ `MAP_STACK`).
+3. **`padTabPub` was an `SDL_atomic_t`** (32-bit int) used with
+   `SDL_AtomicGetPtr`/`SDL_AtomicSetPtr` (port/src/input.c). The 64-bit pointer
+   spilled into the next variable and read back as base+0x100000000 (crash in
+   padActHeld on level load). Now a `void *`. Platform-independent bug: x86-64
+   was only spared by what the linker placed next to it.
+4. **Timer race** (port/src/libultra.c). `portServiceTimers` posted a one-shot
+   timer's message, then cleared `active`; on another core the receiver could
+   re-arm the same timer in between, and the clear lost it (hang in
+   bossInitMainthreadData). `g_ptimers` is now guarded by a mutex in
+   osSetTimer/osStopTimer/portServiceTimers/portNextTimerUs, a one-shot is
+   retired before its message is sent, and osSetTimer sets `active` last.
+   Platform-independent; timing made it show on the Pi's cores.
+5. **bg.c specialportalarray walk** bounded by `&g_BgCurrentRoom` (the next
+   global). arm64's layout puts 4 zero bytes between the two, read as a level-0
+   entry, and the loop never ended (hang loading Dam). Under `#ifdef PORT` the
+   walk is bounded by the table's own size — layout-driven misread, same class
+   as porting-notes §A1; no behaviour change.
+
+Verified on the Pi 5 (ntsc-final): `-level_XX` boot of all 21 solo levels with
+`GE_PCDUMP` frames, 21/21 rendered (screenshots checked); Dam played by hand
+with keyboard/mouse. Needs `MESA_GL_VERSION_OVERRIDE=3.3
+MESA_GLSL_VERSION_OVERRIDE=330` on V3D (it advertises GL 3.1). Not run: the
+golden PCDUMP diff, pal/jpn configure, or an x86-64 rebuild.

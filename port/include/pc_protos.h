@@ -31,7 +31,7 @@
 #ifndef _PC_PROTOS_H_
 #define _PC_PROTOS_H_
 
-#if defined(PORT) && defined(__x86_64__) && !defined(__cplusplus)
+#if defined(PORT) && (defined(__x86_64__) || defined(__aarch64__)) && !defined(__cplusplus)
 
 #include <PR/ultratypes.h> /* u8..s32, f32, size_t (host on PC) */
 #include <PR/gbi.h>        /* Gfx, Mtx, Vtx, Light (shimmed on PC) */

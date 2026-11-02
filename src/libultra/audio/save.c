@@ -21,7 +21,7 @@
 #include <libaudio.h>
 #include "synthInternals.h"
 #include <os.h>
-#if defined(__x86_64__)
+#if (defined(__x86_64__) || defined(__aarch64__))
 #endif
 #include "include/assert.h"
 
