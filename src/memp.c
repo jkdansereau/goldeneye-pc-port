@@ -73,7 +73,7 @@ void mempCheckMemflagTokens(s32 poolAreaStart, s32 poolAreaSize)
     if (poolSizes.me == 0)
     {
         poolSizes.mf = 0;
-#if defined(__x86_64__)
+#if (defined(__x86_64__) || defined(__aarch64__))
         /* D36 (PC port): the PERMANENT bank must also hold the enlarged
          * music heap (MUSIC_ALLOCATION_BYTES in src/music.c, 0x2E000 ->
          * 0x32000 on x86-64 due to libaudio pointer bloat). Grow the bank on

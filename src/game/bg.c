@@ -343,7 +343,15 @@ void sub_GAME_7F0B37EC(void) {
     u32 masked;
 
     ptr = (u8 *)specialportalarray;
+#ifdef PORT
+    /* The N64 link places g_BgCurrentRoom directly after this table and the
+     * walk stops on its address. A host linker may pad between them (arm64
+     * leaves 4 zero bytes), which reads as a level-0 entry whose `ptr[1] >=
+     * portal` never fails -> endless loop on Dam. Bound it by the table. */
+    end = specialportalarray + sizeof(specialportalarray);
+#else
     end = (u8 *)&g_BgCurrentRoom;
+#endif
 
     do {
         if (levelentry_index == *ptr++) {

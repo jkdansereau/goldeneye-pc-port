@@ -178,7 +178,7 @@ extern Gfx* globalDL_0x900;
 extern Gfx* globalDL_0x9a8;
 extern Gfx* globalDL_0xa50;
 
-#if defined(__x86_64__)
+#if (defined(__x86_64__) || defined(__aarch64__))
 /* D39 (docs/dev/findings.md): on N64 all 49 symbols above link inside the
  * Globalimagetable segment at physical 0x02xxxxxx (ge007.ld), so
  * `globalbank_rdram_offset + (u32)&sym` rebases each onto pGlobalimagetable.
