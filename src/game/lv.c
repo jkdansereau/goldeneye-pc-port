@@ -836,6 +836,13 @@ Gfx* lvlRender(Gfx* DL)
             propsTick();
             chraiUpdateOnscreenPropCount();
             chrpropUpdateAutoaimTarget();
+#if defined(PORT) && defined(__SWITCH__)
+            {   /* project-dam: Game.AimAssist (port/src/switch/nxgame.c): just before the player's own shot tests,
+                 * the one moment the guards' hit lists exist (propsTick builds them, the render frees them) */
+                extern void nxAimAssistFrame(void);
+                nxAimAssistFrame();
+            }
+#endif
             chraiCheckUseHeldItems();
 
             if (bond_pressed_reload_activate() && bond_interact_object())

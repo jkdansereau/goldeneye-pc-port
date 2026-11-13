@@ -116,8 +116,12 @@ static const char *const kOrigStyle[] = { "1.1 Honey", "1.2 Solitaire", "1.3 Kis
 static int s_padSeat = 0;   /* D469: seat edited by the Controller page rows */
 static const char *const kControlScheme[] = { "Extended", "Original", NULL };   /* D513/D554: display text only (index = stored value) */
 #if defined(__SWITCH__)
-static const char *const kAimMode[]   = { "Original", "Centered", "Centered + sway", NULL };   /* D337; project-dam */
+static const char *const kAimMode[]   = { "Original", "Centered", NULL };   /* D337; project-dam: the weapon sway is part of Centered */
 static const char *const kTurnAccel[] = { "Off", "Low", "High", NULL };   /* project-dam */
+static const char *const kAimZoom[]   = { "Off", "1.5x", "2x", NULL };    /* project-dam */
+static const char *const kAimAssist[] = { "Off", "Low", "High", NULL };   /* project-dam */
+static const char *const kAimEntry[]  = { "Off", "Move view", "Centre crosshair", NULL };   /* project-dam */
+static const char *const kLookAhead[] = { "Off", "Low", "Medium", "High", NULL };   /* project-dam */
 #else
 static const char *const kAimMode[]   = { "Original", "Centered", NULL };   /* D337 */
 #endif
@@ -202,6 +206,10 @@ struct Row {
      * Resolved to hidePtr at init. */
     const char        *hiddenIfOn;
     int               *hidePtr;
+    /* project-dam: the opposite, hidden while the source is 0 (the aim rows that
+     * need the Centered aim style, while Aim style is Original). */
+    const char        *hiddenIfOff;
+    int               *hideOffPtr;
     /* Show RGB sliders only while the colour selector is set to Custom. */
     const char        *shownWhen;
     int                shownValue;
@@ -364,9 +372,16 @@ static struct Row rows[] = {
     { .key="Input.Pad.Gadget", .label="Cycle gadget", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3, .schemeOnly=1 },
     { .key="Input.Pad.Start", .label="Pause/start", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3, .schemeOnly=1 },
 #if defined(__SWITCH__)
-    /* project-dam: the aim rows live here on the console (no Mouse page). */
+    /* project-dam: the aim rows live here on the console (no Mouse page), grouped between two separators. */
+    SEP(C1),
     { .key="Input.AimMode", .label="Aim style", .kind=ROW_ENUM, .step=1, .names=kAimMode },
     { .key="Input.AimRange", .label="Aim range", .kind=ROW_ENUM, .step=1, .names=kAimRange, .hiddenIfOn="Input.AimMode" },
+    { .key="Input.PadAimLookSens", .label="Aim sensitivity", .kind=ROW_SLIDER, .step=5 },   /* project-dam */
+    { .key="Game.AimZoom", .label="Aim zoom (handheld)", .kind=ROW_ENUM, .step=1, .names=kAimZoom, .hiddenIfOff="Input.AimMode" },   /* project-dam: nxgame.c */
+    { .key="Game.AimAssist", .label="Aim assist", .kind=ROW_ENUM, .step=1, .names=kAimAssist, .hiddenIfOff="Input.AimMode" },       /* project-dam: nxgame.c */
+    { .key="Game.AimEntry", .label="Aim entry", .kind=ROW_ENUM, .step=1, .names=kAimEntry, .hiddenIfOff="Input.AimMode" },           /* project-dam: nxgame.c */
+    { .key="Game.AimStop", .label="Stop on aim", .kind=ROW_TOGGLE, .step=1, .names=kOnOff, .hiddenIfOff="Input.AimMode" },           /* project-dam: nxgame.c */
+    SEP(C2),
 #endif
     { .key="Input.PadLookInvertY", .label="Invert look", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     /* Wave A: per-stick deadzone + right-stick (natural-pitch) feel options. */
@@ -375,9 +390,9 @@ static struct Row rows[] = {
     { .key="Input.PadLookSensX", .label="Horizontal look sensitivity", .kind=ROW_SLIDER, .step=5 },
     { .key="Input.PadLookSensY", .label="Vertical look sensitivity", .kind=ROW_SLIDER, .step=5 },
 #if defined(__SWITCH__)
-    { .key="Input.PadAimLookSens", .label="Aim sensitivity", .kind=ROW_SLIDER, .step=5 },   /* project-dam */
-    { .key="Input.PadLookCurve", .label="Look precision", .kind=ROW_SLIDER, .step=25 },    /* project-dam */
-    { .key="Input.PadTurnAccel", .label="Turn acceleration", .kind=ROW_ENUM, .step=1, .names=kTurnAccel },
+    { .key="Input.PadLookCurve", .label="Look precision", .kind=ROW_SLIDER, .step=25, .hiddenIfOff="Input.AimMode" },    /* project-dam */
+    { .key="Input.PadTurnAccel", .label="Turn acceleration", .kind=ROW_ENUM, .step=1, .names=kTurnAccel, .hiddenIfOff="Input.AimMode" },
+    { .key="Game.LookAhead", .label="Look ahead (Extended)", .kind=ROW_ENUM, .step=1, .names=kLookAhead, .hiddenIfOff="Input.AimMode" },   /* project-dam: nxgame.c */
 #endif
     { .key="Input.PadLookSmooth", .label="Look smoothing", .kind=ROW_SLIDER, .step=1 },   /* D506: raw 0-10, shown as whole % */
     { .key="Input.PadSouthpaw", .label="Southpaw", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
@@ -1167,6 +1182,7 @@ static void overlayUpdateVisible(void)
             if (rows[i].hub) continue;   /* hub-only rows live on the root list */
             if (rows[i].kind != ROW_BOND_FILE &&
                 !(rows[i].hidePtr && *rows[i].hidePtr) &&
+                !(rows[i].hideOffPtr && *rows[i].hideOffPtr == 0) &&
                 (!rows[i].showPtr || *rows[i].showPtr == rows[i].shownValue) &&
                 rowSchemeOk(&rows[i]) && rowPlatformOk(&rows[i]))
                 s_visIdx[s_visN++] = i;
@@ -1412,6 +1428,9 @@ static void overlayInit(void)
             if (rows[i].hiddenIfOn &&
                 strcmp(rows[j].key, rows[i].hiddenIfOn) == 0)
                 rows[i].hidePtr = rows[j].ptr;
+            if (rows[i].hiddenIfOff &&
+                strcmp(rows[j].key, rows[i].hiddenIfOff) == 0)
+                rows[i].hideOffPtr = rows[j].ptr;
             if (rows[i].shownWhen &&
                 strcmp(rows[j].key, rows[i].shownWhen) == 0)
                 rows[i].showPtr = rows[j].ptr;
@@ -2185,28 +2204,57 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Input.MouseYScale",      100 },  /* = 100 (native), Wave A item 6 */
     { "Input.MouseInvertY",      0 },   /* = 0 */
 #if defined(__SWITCH__)
-    { "Input.AimMode",           2 },   /* project-dam: = Centred + sway on the console */
+    { "Input.AimMode",           1 },   /* project-dam: = Centred (with the weapon sway) on the console */
 #else
     { "Input.AimMode",           0 },   /* = AIMMODE_N64 (0) */
 #endif
     { "Input.AimRange",          0 },   /* = 0 (PC) */
+#if defined(__SWITCH__)
+    { "Input.PadLookInvertY",    1 },   /* project-dam: = 1 (inverted) */
+#else
     { "Input.PadLookInvertY",    0 },   /* = 0 */
+#endif
+#if defined(__SWITCH__)
+    { "Input.PadDeadzoneL",     3000 },/* project-dam: = NX_DZ_L (10%) */
+#else
     { "Input.PadDeadzoneL",     7500 },/* = STICK_DEADZONE (7500 = 25%, D546), Wave A */
+#endif
 #if defined(__SWITCH__)
     { "Input.PadDeadzoneR",     3000 },/* project-dam: = NX_STICK_DEADZONE_R (10%) */
 #else
     { "Input.PadDeadzoneR",     7500 },/* = STICK_DEADZONE (7500 = 25%, D546), Wave A */
 #endif
-    { "Input.PadLookSensX",     100 },  /* = 100 (native), Wave A */
-    { "Input.PadLookSensY",     100 },  /* = 100 (native), Wave A */
 #if defined(__SWITCH__)
-    { "Input.PadAimLookSens",    50 },  /* project-dam: = 0.5x */
-    { "Input.PadLookCurve",     300 },  /* project-dam: = 3.0 */
-    { "Input.PadTurnAccel",       1 },  /* project-dam: = Low */
+    { "Input.PadLookSensX",      85 },  /* project-dam: = NX_LOOK_SENS (0.85x) */
+#else
+    { "Input.PadLookSensX",     100 },  /* = 100 (native), Wave A */
 #endif
+#if defined(__SWITCH__)
+    { "Input.PadLookSensY",      85 },  /* project-dam: = NX_LOOK_SENS (0.85x) */
+#else
+    { "Input.PadLookSensY",     100 },  /* = 100 (native), Wave A */
+#endif
+#if defined(__SWITCH__)
+    { "Input.PadAimLookSens",    75 },  /* project-dam: = 0.75x */
+    { "Game.AimZoom",             2 },  /* project-dam: = 2x */
+    { "Game.AimAssist",           2 },  /* project-dam: = High */
+    { "Game.AimEntry",            1 },  /* project-dam: = Move view */
+    { "Game.AimStop",             1 },  /* project-dam: = on */
+    { "Game.LookAhead",           3 },  /* project-dam: = High */
+    { "Input.PadLookCurve",     200 },  /* project-dam: = 2.0 (the game's own) */
+    { "Input.PadTurnAccel",       2 },  /* project-dam: = High */
+#endif
+#if defined(__SWITCH__)
+    { "Input.PadLookSmooth",      2 },  /* project-dam: = NX_LOOK_SMOOTH */
+#else
     { "Input.PadLookSmooth",      0 },  /* = 0 (off), Wave A */
+#endif
     { "Input.PadSouthpaw",        0 },  /* = 0 (off), Wave A */
+#if defined(__SWITCH__)
+    { "Input.PadTriggerPct",     10 },  /* project-dam: = NX_TRIGGER_PCT */
+#else
     { "Input.PadTriggerPct",     25 },  /* = 25 (was 23; rounded, D508) */
+#endif
     { "Input.RumbleScale", 0.5 },       /* = gRumbleScale (0.5f), D401 */
     { "Input.CrouchMode",        1 },   /* = 1 (toggle; D556) */
     { "Input.MouseSmoothing",    0 },   /* = 0 (raw) */
@@ -3865,7 +3913,7 @@ static Gfx *overlayEmitLocked(void)
     {
         char raw[64], title[64];
         if (s_section >= 0) optionsRowTitle(s_section, raw, sizeof(raw));
-        else snprintf(raw, sizeof(raw), "PC Options");
+        else snprintf(raw, sizeof(raw), "Options");
         titleCase(raw, title, sizeof(title));
         gdl = drawBody(gdl, o.left + 9, o.top + 2, title, 0x000000ff);   /* PD: title shadow pass */
         gdl = drawBody(gdl, o.left + 8, o.top + 1, title, PD_TITLE_TEXT);
@@ -3965,7 +4013,7 @@ int optionsRowIsHeader(int i)
 int optionsRowIsShown(int i)
 {
     struct Row *r = rowAt(i);
-    return r && r->found && !(r->hidePtr && *r->hidePtr) &&
+    return r && r->found && !(r->hidePtr && *r->hidePtr) && !(r->hideOffPtr && *r->hideOffPtr == 0) &&
            !isSepRow(r) && !isBackRow(r) &&   /* F10-only furniture */
            (!r->showPtr || *r->showPtr == r->shownValue) && rowSchemeOk(r) &&
            (r->kind != ROW_BOND_FILE || current_menu == MENU_FILE_SELECT);   /* front-end profile chooser */
@@ -3993,6 +4041,17 @@ static const struct { const char *key, *help; } kRowHelp[] = {
     { "Game.ScreenShakeIntensity", "Sets how strongly explosions shake the screen." },
     { "Input.AimMode", "Original lets the crosshair move. Centered keeps it in the middle." },
     { "Input.AimRange", "Sets how far the crosshair can move from the center." },
+    { "Game.AimZoom", "Zooms in while you aim, to hit heads on the small screen. Handheld only." },
+    { "Game.AimAssist", "Slows the aim stick while the crosshair is on or near an enemy." },
+    { "Game.AimEntry", "Aim starts on Auto-aim's target: view follows it, or crosshair centres." },
+    { "Game.AimStop", "Stops your character dead when you aim with the move stick released." },
+    { "Input.PadAimLookSens", "How fast the right stick turns while you aim. Lower is finer." },
+    { "Input.PadLookCurve", "Steeper = finer small stick moves, same top speed. 2.0 is the original." },
+    { "Input.PadTurnAccel", "Speeds up the turn when the stick is held at the edge." },
+    { "Game.BloodOnHit", "A hit on a guard shows a dark-red puff, not the yellow wall puff." },
+    { "Video.MSAA", "Smooths jagged edges while docked. Higher is cleaner but slower." },
+    { "Video.MSAAHandheld", "Smooths jagged edges in handheld mode. Higher is cleaner but slower." },
+    { "Video.FXAA", "A final pass that smooths edges without blurring flat textures." },
     { "Input.CrosshairCursor", "Uses the crosshair as the mouse pointer in this menu." },
     { "Input.ControlScheme", "Choose the port's modern controls or the original game's." },
     { "Bond.Control", "The original game's control presets." },
@@ -4000,6 +4059,7 @@ static const struct { const char *key, *help; } kRowHelp[] = {
     { "Input.PadSouthpaw", "Swaps the fire and aim triggers." },
     { "Bond.AutoAim", "Bond automatically aims at nearby targets." },
     { "Bond.LookAhead", "Tilts the view up or down on slopes." },
+    { "Game.LookAhead", "Levels the view as you walk (Extended controls). Sets how fast." },
     { "Bond.Sight", "Shows or hides the game's own crosshair, saved per profile." },
     { "Video.FovScale", "Sets the vertical view angle in degrees. 60 is the original." },
     { "Game.AIWideView", "Extends guard behavior to any widescreen view." },

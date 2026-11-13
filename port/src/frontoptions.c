@@ -36,8 +36,8 @@ extern struct rectbbox folder_option_ERASE_bound;   /* front.c */
 #define LABEL_GAP   28    /* D400: text-only, a plain word gap after Erase */
 #define HIT_PAD     4
 
-static const char kLabel[]   = "PC Options";  /* ASCII only: issue #87 / D295 */
-static const char kLabelNL[] = "PC Options\n"; /* height measure only, D400 */
+static const char kLabel[]   = "Options";  /* ASCII only: issue #87 / D295 */
+static const char kLabelNL[] = "Options\n"; /* height measure only, D400 */
 
 static void playSfx(s16 id)
 {

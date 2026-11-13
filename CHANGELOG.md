@@ -3,13 +3,20 @@
 ## [Unreleased] - minor
 
 ### Added
+- Look ahead (Extended) on the Controller page (Switch; Off, Low, Medium or High speed, High by default): walking forward with the look stick at rest eases the view back to level; the game's own Look ahead never fired with the Extended controls because its walk is digital, and stays on the Game page
 - Anti-aliasing on the Switch: MSAA 2x handheld and 4x docked, plus FXAA, a final pass that smooths polygon and rail edges without blurring flat textures; the Switch display mode turns them on
+- Aim zoom and Aim assist on the Controller page (Switch): handheld only, the picture zooms 2x while you aim (1.5x available) so a head is big enough to hit on the small screen, and the aim stick slows down while the crosshair is on or near an enemy; centered aim only, and the aim stick slows with the zoom
+- Aim entry on the Controller page (Switch, Move view by default): when you start aiming, the crosshair no longer slides away from the enemy it was on; the view turns with it to the centre in a few frames (or the crosshair centres at once)
+- Stop on aim on the Controller page (Switch, on by default): aiming with the move stick released stops your character at once; the game lets him glide for about a second (the head-bob filter keeps pushing him), so the enemy the auto-aim had picked drifted out of the crosshair
 - Blood on hit (Game page, on by default): a bullet in a guard's body makes a dark-red puff instead of the wall's pale-yellow one, so hits read as hits; off restores the original game
-- Look precision and Turn acceleration on the Controller page: a steeper stick curve (3.0 by default, the original game uses 2.0) for fine aim, and a turn that speeds up when the stick is held at the edge (Low by default) for wide turns
-- Centered + sway aim style, the default on the Switch: the crosshair stays at the centre and the weapon trails the camera when it turns, then settles back at the weapon's own pace
-- Aim sensitivity on the Controller page: how fast the right stick turns while aiming (0.5x by default)
+- Look precision and Turn acceleration on the Controller page: a stick curve you can steepen (2.0 by default, the original game's) for fine aim, and a turn that speeds up when the stick is held at the edge (High by default) for wide turns
+- Centered aim style, the default on the Switch: the crosshair stays at the centre and the weapon trails the camera when it turns, then settles back at the weapon's own pace (there is no separate Centered + sway: it is part of Centered)
+- Aim sensitivity on the Controller page: how fast the right stick turns while aiming (0.75x by default)
 
 ### Changed
+- The options entry on the file select screen and the title of the options menu read "Options" instead of "PC Options"
+- The Switch controller defaults are tuned values: both stick deadzones 10%, look sensitivity 0.85x, vertical look inverted, look smoothing 2, trigger threshold 10%, Aim sensitivity 0.75x, Turn acceleration High, Aim zoom 2x, Aim assist High, Look ahead High
+- The Controller page hides the aim rows that need the Centered aim style (Aim zoom, Aim assist, Aim entry, Stop on aim, Look ahead, Look precision, Turn acceleration) while Aim style is Original, where they do nothing
 - Display mode on the Switch has three choices: Switch (the game's own settings), N64 (the original look) and Custom; Switch and N64 only show Show FPS, and Custom shows every other graphics option (aspect, widescreen, VSync, frame cap, anti-aliasing, FXAA, texture filter, anisotropy, draw, fog and LOD distance) to tune the picture
 - The right stick deadzone is 10% by default on the Switch instead of 25%, so small aim movements register; settings that still had the old default move to it once
 - The options no longer show the Mouse and Key Bindings pages, which need a mouse or a keyboard; Aim sensitivity replaces the aim-mode sensitivity and precision curve options

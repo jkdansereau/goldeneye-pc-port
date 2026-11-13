@@ -306,7 +306,7 @@ f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
      * but it also raised the game's narrow zoom FOVs (sniper/camera down to
      * 7 degrees, the watch zoom) to 20, capping scope magnification at about
      * a third of the N64's. Never floor above the game's own value. */
-    const f32 floorFovY = fovy < 20.0f ? fovy : 20.0f;
+    f32 floorFovY = fovy < 20.0f ? fovy : 20.0f;
     if (!isTitleScreen) {
         /* D334: native widescreen already widens the horizontal FOV through
          * the projection aspect; the Phase-4 vertical boost below was the
@@ -319,6 +319,14 @@ f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
         if (portFovScale > 0.4f && portFovScale < 2.01f && portFovScale != 1.0f) {
             fovy *= portFovScale;
         }
+#if defined(PLATFORM_SWITCH)
+        {   /* project-dam: Game.AimZoom (nxgame.c); 1.0f unless handheld and aiming */
+            extern float nxAimZoomFactor(void);
+            const f32 z = nxAimZoomFactor();
+            fovy /= z;
+            floorFovY /= z;   /* the scope zooms past the game's own minimum too */
+        }
+#endif
     }
     if (fovy > 160.0f)    { fovy = 160.0f; }
     if (fovy < floorFovY) { fovy = floorFovY; }
