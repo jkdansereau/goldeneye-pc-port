@@ -16,7 +16,7 @@
 ### Changed
 - The options entry on the file select screen and the title of the options menu read "Options" instead of "PC Options"
 - The Switch controller defaults are tuned values: both stick deadzones 10%, look sensitivity 0.85x, vertical look inverted, look smoothing 2, trigger threshold 10%, Aim sensitivity 0.75x, Turn acceleration High, Aim zoom 2x, Aim assist High, Look ahead High
-- The Controller page hides the aim rows that need the Centered aim style (Aim zoom, Aim assist, Aim entry, Stop on aim, Look ahead, Look precision, Turn acceleration) while Aim style is Original, where they do nothing
+- The Controller page hides the aim rows that need the Centered aim style (Aim zoom, Aim assist, Aim entry, Stop on aim, Look ahead, Look precision, Turn acceleration) while Aim style is Original, and the aim group and these rows with the Original control style: they only work with the Extended controls
 - Display mode on the Switch has three choices: Switch (the game's own settings), N64 (the original look) and Custom; Switch and N64 only show Show FPS, and Custom shows every other graphics option (aspect, widescreen, VSync, frame cap, anti-aliasing, FXAA, texture filter, anisotropy, draw, fog and LOD distance) to tune the picture
 - The right stick deadzone is 10% by default on the Switch instead of 25%, so small aim movements register; settings that still had the old default move to it once
 - The options no longer show the Mouse and Key Bindings pages, which need a mouse or a keyboard; Aim sensitivity replaces the aim-mode sensitivity and precision curve options

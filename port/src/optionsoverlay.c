@@ -377,10 +377,10 @@ static struct Row rows[] = {
     { .key="Input.AimMode", .label="Aim style", .kind=ROW_ENUM, .step=1, .names=kAimMode },
     { .key="Input.AimRange", .label="Aim range", .kind=ROW_ENUM, .step=1, .names=kAimRange, .hiddenIfOn="Input.AimMode" },
     { .key="Input.PadAimLookSens", .label="Aim sensitivity", .kind=ROW_SLIDER, .step=5 },   /* project-dam */
-    { .key="Game.AimZoom", .label="Aim zoom (handheld)", .kind=ROW_ENUM, .step=1, .names=kAimZoom, .hiddenIfOff="Input.AimMode" },   /* project-dam: nxgame.c */
-    { .key="Game.AimAssist", .label="Aim assist", .kind=ROW_ENUM, .step=1, .names=kAimAssist, .hiddenIfOff="Input.AimMode" },       /* project-dam: nxgame.c */
-    { .key="Game.AimEntry", .label="Aim entry", .kind=ROW_ENUM, .step=1, .names=kAimEntry, .hiddenIfOff="Input.AimMode" },           /* project-dam: nxgame.c */
-    { .key="Game.AimStop", .label="Stop on aim", .kind=ROW_TOGGLE, .step=1, .names=kOnOff, .hiddenIfOff="Input.AimMode" },           /* project-dam: nxgame.c */
+    { .key="Game.AimZoom", .label="Aim zoom (handheld)", .kind=ROW_ENUM, .step=1, .names=kAimZoom, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },   /* project-dam: nxgame.c */
+    { .key="Game.AimAssist", .label="Aim assist", .kind=ROW_ENUM, .step=1, .names=kAimAssist, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },       /* project-dam: nxgame.c */
+    { .key="Game.AimEntry", .label="Aim entry", .kind=ROW_ENUM, .step=1, .names=kAimEntry, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },           /* project-dam: nxgame.c */
+    { .key="Game.AimStop", .label="Stop on aim", .kind=ROW_TOGGLE, .step=1, .names=kOnOff, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },           /* project-dam: nxgame.c */
     SEP(C2),
 #endif
     { .key="Input.PadLookInvertY", .label="Invert look", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
@@ -390,9 +390,9 @@ static struct Row rows[] = {
     { .key="Input.PadLookSensX", .label="Horizontal look sensitivity", .kind=ROW_SLIDER, .step=5 },
     { .key="Input.PadLookSensY", .label="Vertical look sensitivity", .kind=ROW_SLIDER, .step=5 },
 #if defined(__SWITCH__)
-    { .key="Input.PadLookCurve", .label="Look precision", .kind=ROW_SLIDER, .step=25, .hiddenIfOff="Input.AimMode" },    /* project-dam */
-    { .key="Input.PadTurnAccel", .label="Turn acceleration", .kind=ROW_ENUM, .step=1, .names=kTurnAccel, .hiddenIfOff="Input.AimMode" },
-    { .key="Game.LookAhead", .label="Look ahead (Extended)", .kind=ROW_ENUM, .step=1, .names=kLookAhead, .hiddenIfOff="Input.AimMode" },   /* project-dam: nxgame.c */
+    { .key="Input.PadLookCurve", .label="Look precision", .kind=ROW_SLIDER, .step=25, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },    /* project-dam */
+    { .key="Input.PadTurnAccel", .label="Turn acceleration", .kind=ROW_ENUM, .step=1, .names=kTurnAccel, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },
+    { .key="Game.LookAhead", .label="Look ahead (Extended)", .kind=ROW_ENUM, .step=1, .names=kLookAhead, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },   /* project-dam: nxgame.c */
 #endif
     { .key="Input.PadLookSmooth", .label="Look smoothing", .kind=ROW_SLIDER, .step=1 },   /* D506: raw 0-10, shown as whole % */
     { .key="Input.PadSouthpaw", .label="Southpaw", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
