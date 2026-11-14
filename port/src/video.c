@@ -1379,6 +1379,13 @@ static void videoRenderPark(void)
     gfx_sdl_park_for_exit();
     SDL_AtomicSet(&s_inFrame, 0);
     SDL_AtomicSet(&s_parked, 1);
+    {
+        /* project-dam: parked for good, except that the Switch's orderly exit
+         * (libultra.c portThreadsStop) lets this thread leave, so its stack can
+         * be released before control goes back to the launcher. */
+        extern void portThreadsParkUntilQuit(void);
+        portThreadsParkUntilQuit();
+    }
     for (;;) {
         sysSleep(100000);
     }

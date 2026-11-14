@@ -135,6 +135,21 @@ static int romHeaderValid(const u8 *h, char *err, size_t errsz)
 
 static u32 romdataBswap32(u32 v); /* defined below; used by the D55 fixup */
 
+/* project-dam: the ROM labels (romassets_*.s) are link-time absolutes at their
+ * N64 cart value, 0x10000000 + offset. That equals the host address only when
+ * the window base is 0; with the Switch's variable base, reading the ROM
+ * through a label needs the base added. Pointers outside the cart range (the
+ * macOS build bakes the base into the label) pass through untouched. */
+static const u8 *romdataCartPtr(const void *p)
+{
+#if defined(PLATFORM_SWITCH)
+    uintptr_t v = (uintptr_t)p;
+    if (v >= 0x10000000u && v < 0x20000000u)
+        return (const u8 *)portN64ToHost((u32)v);
+#endif
+    return (const u8 *)p;   /* every other build: the label is the host address */
+}
+
 /* D230: RAW16 wavetable samples are stored big-endian s16 in the ROM (the
  * N64 CPU reads them that way), but the PC mixer's resampler consumes
  * host-native (little-endian) s16 — so every RAW16 instrument plays as a
@@ -267,7 +282,7 @@ static int romdataFinishCartMap(const char *tok, u8 *img,
      * copy by swapping it in place (no-op if it already reads as LE). */
     {
         extern void *unknown2; /* absolute cart address */
-        u32 *hdr = (u32 *)&unknown2;
+        u32 *hdr = (u32 *)romdataCartPtr(&unknown2);
         if ((u16)*hdr > 512 || (u16)(*hdr >> 16) > 512)
             *hdr = romdataBswap32(*hdr);
     }
@@ -285,17 +300,17 @@ static int romdataFinishCartMap(const char *tok, u8 *img,
         /* Each tbl segment runs to the end of the ROM; bound the swap range
          * by that (the real segment is smaller, but base/len are validated
          * against this anyway). */
-        romdataRaw16Walk((const u8 *)&_sfxctlSegmentRomStart,
+        romdataRaw16Walk(romdataCartPtr(&_sfxctlSegmentRomStart),
                          (u32)&_sfxtblSegmentRomStart -
                              (u32)&_sfxctlSegmentRomStart,
-                         (u8 *)&_sfxtblSegmentRomStart,
+                         (u8 *)romdataCartPtr(&_sfxtblSegmentRomStart),
                          CART_BASE + romSize -
                              (u32)&_sfxtblSegmentRomStart,
                          done, &ndone);
-        romdataRaw16Walk((const u8 *)&_instrumentsctlSegmentRomStart,
+        romdataRaw16Walk(romdataCartPtr(&_instrumentsctlSegmentRomStart),
                          (u32)&_instrumentstblSegmentRomStart -
                              (u32)&_instrumentsctlSegmentRomStart,
-                         (u8 *)&_instrumentstblSegmentRomStart,
+                         (u8 *)romdataCartPtr(&_instrumentstblSegmentRomStart),
                          CART_BASE + romSize -
                              (u32)&_instrumentstblSegmentRomStart,
                          done, &ndone);
@@ -531,8 +546,14 @@ int portAddrIsMapped(const void *p)
         return 1;
     if (v - (uintptr_t)PORT_DRAM_K0_BASE < (uintptr_t)PORT_DRAM_SIZE)
         return 1;
+#if defined(PLATFORM_SWITCH)
+    /* project-dam: the cart sits at g_portAddrBase + CART_BASE. */
+    if (mappedAtCartBase && v - (uintptr_t)CART_HOST <
+            (uintptr_t)romSize + pcmodelsTotalSize() + pccgTotalSize())
+#else
     if (mappedAtCartBase && v - (uintptr_t)CART_BASE <
             (uintptr_t)romSize + pcmodelsTotalSize() + pccgTotalSize())
+#endif
         return 1;
     return 0;
 }
@@ -765,6 +786,7 @@ u32 romdataFontPcSize(const u8 *src, u32 n64Size)
     enum { N64_COFF = 169 * 4, N64_CSTRIDE = 24, NCHARS = 94 };
     u32 i, n, pixStart = 0;
 
+    src = romdataCartPtr(src);
     if (n64Size <= N64_COFF)
         return n64Size;
     n = (n64Size - N64_COFF) / N64_CSTRIDE;
@@ -1278,6 +1300,7 @@ u32 romdataAudioBankPcSize(const u8 *src, u32 srcSize)
 {
     if (!src || srcSize < 4)
         return 0;
+    src = romdataCartPtr(src);
 
     struct afCtx c = { .src = src, .srcSize = srcSize, .dst = NULL,
                        .allocSize = 0, .write = 0, .pos = 0,

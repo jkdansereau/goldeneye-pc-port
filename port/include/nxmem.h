@@ -20,6 +20,12 @@
 extern "C" {
 #endif
 
+/* Pick the host base of the N64 address window: a 4 GiB-aligned address
+ * whose cart, DRAM (V1 + KSEG0) and game-stack windows are all unmapped, and
+ * which does not hold the executable image. Sets g_portAddrBase (portaddr.h).
+ * Must run before the first nxMapFixed(). Aborts the boot if no slot is free. */
+void nxChooseAddrBase(void);
+
 /* Map `size` bytes (rounded up to a page) of fresh zeroed memory at exactly
  * `addr`. Returns (void *)addr, or NULL (and logs why). */
 void *nxMapFixed(uintptr_t addr, size_t size);
@@ -31,6 +37,9 @@ void *nxMapAlias(uintptr_t view, uintptr_t primary, size_t size);
 
 /* Undo nxMapFixed()/nxMapAlias() for the block that starts at `addr`. */
 void nxUnmapFixed(uintptr_t addr);
+
+/* Undo every mapping (aliases first). Only once no thread runs on them. */
+void nxReleaseAll(void);
 
 /* Give the calling thread an ideal core (0..2) while allowing the kernel to
  * migrate it across the three application cores. libnx starts every pthread

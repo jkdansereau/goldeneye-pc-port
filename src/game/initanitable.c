@@ -21,7 +21,13 @@
  * 0x707FFD30) because loadAnimationFrame() addresses it through s32 fields
  * and a (u32) cast — PC BSS (0x140xxxxxx) would truncate to a wild pointer.
  * N64 build keeps the original BSS array. */
+#if defined(__SWITCH__)
+/* project-dam: the N64 window base is chosen at run time, so this is not a
+ * link-time absolute symbol any more: an lvalue at DRAM V1 + 0x7FFD30. */
+#define animations_frame_buffer PORT_DRAM_SYM(char (*)[0x2D0], 0x7FFD30)
+#else
 extern char animations_frame_buffer[0x2D0];
+#endif
 #else
 char animations_frame_buffer[0x2D0];
 #endif
@@ -35,11 +41,21 @@ OSMesg animMesg[8];
 struct animation_table_data * ptr_animation_table;
 
 //data
+#if defined(__SWITCH__)
+/* Filled in alloc_load_expand_ani_table(): the buffer address is only known
+ * once the window base has been chosen. */
+struct bondstruct_unk_animation_related D_80029D60 = {
+    NULL,
+    NULL,
+    NULL
+};
+#else
 struct bondstruct_unk_animation_related D_80029D60 = {
     NULL,
     &animations_frame_buffer, // Two pointers. One always points to the start of the buffer, the other can be modified.
     &animations_frame_buffer
 };
+#endif
 
 s32 animation_table_ptrs1[] = {
     PTR_ANIM_idle,
@@ -280,6 +296,10 @@ void alloc_load_expand_ani_table(void)
     s32 animsDataSegmentSize;
     
     osCreateMesgQueue(&animMsgQ, animMesg, 8);
+#if defined(__SWITCH__)
+    D_80029D60.animBufferPtr1 = (char *)&animations_frame_buffer;
+    D_80029D60.animBufferPtr2 = (char *)&animations_frame_buffer;
+#endif
     initAnimationsBuffer(&D_80029D60, &animMsgQ, &dword_CODE_bss_80069458);
     
     animsDataSegmentSize = (s32)&_animation_dataSegmentEnd - (s32)&_animation_dataSegmentStart;

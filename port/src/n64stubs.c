@@ -116,6 +116,9 @@ u8 (*tlbmanageGetTlbAllocatedBlock(void))[TLB_BLOCK_SIZE]
      * 21/21-level arm64 gate was measured). Re-applying #95 must not replace
      * this with an unconditional portN64ToHost(0x707F0000).
      */
+    /* project-dam: on the Switch PORT_ADDR_BASE is a run-time variable, which
+     * the preprocessor reads as 0 here: the Switch deliberately keeps the
+     * shipped base-0 value below. */
 #if PORT_ADDR_BASE != 0
     return (u8 (*)[TLB_BLOCK_SIZE])(PORT_DRAM_V1_BASE + 0x7FF000UL);
 #else

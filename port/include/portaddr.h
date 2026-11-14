@@ -49,7 +49,21 @@
  * platform.h include): it is included from every TU, asm and C++ alike.
  */
 #ifndef PORT_ADDR_BASE
-#if defined(__APPLE__) && defined(__aarch64__)
+#if defined(__SWITCH__) && !defined(__ASSEMBLER__)
+/* project-dam: the Switch picks the base at boot (nxChooseAddrBase, called
+ * from portAddrInit): the main thread's stack lands at a random place in the
+ * stack region and can sit on the fixed 0x10000000 / 0x70000000 windows, so
+ * the window moves to a free 4 GiB-aligned slot instead. Every use is a
+ * runtime expression; the few absolute symbols that used to bake the base in
+ * (dram_syms.S) are macros on this build (see PORT_DRAM_SYM below). */
+#include <stdint.h>
+#ifdef __cplusplus
+extern "C" uintptr_t g_portAddrBase;
+#else
+extern uintptr_t g_portAddrBase;
+#endif
+#define PORT_ADDR_BASE g_portAddrBase
+#elif defined(__APPLE__) && defined(__aarch64__)
 #define PORT_ADDR_BASE 0x100000000000ULL
 #else
 #define PORT_ADDR_BASE 0
@@ -95,6 +109,13 @@
 #ifndef __ASSEMBLER__
 #include <stdint.h>
 
+#if defined(__SWITCH__)
+/* project-dam: the DRAM-resident symbols (cfb_16, _bssSegmentEnd,
+ * animations_frame_buffer) cannot be link-time absolutes when the base is
+ * chosen at run time; they are lvalues at a fixed offset in the V1 view. */
+#define PORT_DRAM_SYM(PTR_T, off) (*(PTR_T)(uintptr_t)(PORT_DRAM_V1_BASE + (off)))
+#endif
+
 /* D573 (#108, italoarruda): the ONE plausibility check for a host pointer
  * read out of game data (sndPlaySfx's ALSound*, langGet's text bank). True
  * only inside the DRAM arena views above or the mapped cart image (ROM +
@@ -120,6 +141,10 @@ extern "C" {
 #endif
 
 extern uintptr_t g_portImageBase;
+/* End of the executable image's mapping (Switch only; 0 elsewhere). The loader
+ * can place the NRO below 4 GiB; fast3d needs the extent to recognise a tagged
+ * pointer into the image (see GBI_W1 in include/PR/gbi.h). */
+extern uintptr_t g_portImageEnd;
 extern int g_portUseImageRel;
 #if defined(__SWITCH__)
 /* project-dam: set by port/src/dram.c when KSEG0 is folded onto V1 (nxmem.h). */

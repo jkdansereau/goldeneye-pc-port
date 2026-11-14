@@ -855,6 +855,23 @@ void gfx_texture_cache_delete_range(const uint8_t* start, const uint8_t* end) {
     }
 }
 
+// How a display-list address word is to be read. `v` is updated in place: the
+// pointer tag (GBI_PTR_TAG, include/PR/gbi.h) is stripped. Returns true when
+// the result is a host pointer, false when it is a 32-bit N64-space value.
+//   - untagged: an N64-space value (segment address, OS_K0_TO_PHYSICAL()
+//     offset, ...); an untagged value >= 4 GiB is a host pointer, as before;
+//   - tagged: the argument was pointer-typed. Host pointers into the N64
+//     window are >= 4 GiB; on the Switch hbloader can place the executable
+//     below 4 GiB, so a tagged value inside the image is one too. Anything else
+//     is an N64 address the game cast to a pointer type (`(Gfx *)u32`).
+static inline bool gfx_w1_is_host(uintptr_t &v) {
+    if (v & GBI_PTR_TAG) {
+        v &= ~(uintptr_t)GBI_PTR_TAG;
+        return v >= 0x100000000ULL || (v >= g_portImageBase && v < g_portImageEnd);
+    }
+    return v >= 0x100000000ULL;
+}
+
 // D71 (docs/internals.md): texture sources arrive in two byte conventions.
 // Raw N64 big-endian byte streams: ROM cart map (0x10xxxxxx), model-sidecar
 // blobs (cart extension 0x10Cxxxxx), KSEG0 mirror (0x80xxxxxx) and V1
@@ -4944,7 +4961,7 @@ static void gfx_sp_moveword(uint8_t index, uint16_t offset, uintptr_t data) {
             // offset, or a V1 address); full 64-bit values are already host
             // pointers. Identity at PORT_ADDR_BASE==0.
             uintptr_t v = (uintptr_t)data;
-            if (v < 0x100000000ULL) {
+            if (!gfx_w1_is_host(v)) {
                 if (v < 0x800000) v += 0x80000000u;
                 v = (uintptr_t)portN64ToHost((u32)v);
             }
@@ -4955,7 +4972,7 @@ static void gfx_sp_moveword(uint8_t index, uint16_t offset, uintptr_t data) {
             if (((offset >> 2) & 0xff) == 14) {
                 s_interp_seg14 = (uint32_t)data;
                 if (s_interp_mode != INTERP_OFF) {
-                    s_interp_rooms_pass.push_back((uintptr_t)data);   /* D578: room id (bg.c SPSEGMENT_BG_VTX) */
+                    s_interp_rooms_pass.push_back((uintptr_t)data & ~(uintptr_t)GBI_PTR_TAG);   /* D578: room id (bg.c SPSEGMENT_BG_VTX) */
                 }
             }
             break;
@@ -5753,10 +5770,9 @@ static void gfx_sp_vertex_float(size_t n_vertices, size_t dest_index, const Port
 }
 
 static inline void *seg_addr(uintptr_t w1) {
-    // A full 64-bit host pointer (the gSP* macros pack full pointers into w1;
-    // the window base makes every real host pointer >= 4 GiB) passes through
-    // untouched. Only values that fit in 32 bits are N64-space addresses.
-    if (w1 >= 0x100000000ULL) {
+    // A full 64-bit host pointer (the gSP* macros pack full pointers into w1)
+    // passes through untouched. Only 32-bit values are N64-space addresses.
+    if (gfx_w1_is_host(w1)) {
         return (void *)w1;
     }
     // GE model files reference GDLs (gSPDisplayList) and vertex arrays by raw

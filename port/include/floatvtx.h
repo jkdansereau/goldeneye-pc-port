@@ -27,7 +27,7 @@ typedef struct PortFloatVtx {
         Gfx *_g = (Gfx *)(pkt);                                                   \
         _g->words.w0 = ((uintptr_t)G_FLOATVTX_EXT << 24) |                        \
                        (((uintptr_t)(v0) & 0xff) << 16) | ((uintptr_t)(n) & 0xffff); \
-        _g->words.w1 = (uintptr_t)(ptr);                                          \
+        _g->words.w1 = GBI_W1(ptr);                                               \
     } while (0)
 
 #endif

@@ -182,6 +182,62 @@ typedef struct PortThread {
 
 static PortThread g_pt[PORT_MAX_THREADS];
 
+/* project-dam: orderly shutdown (portThreadsStop, end of file). Every thread
+ * the port starts (the game's threads, the pacemaker, the render worker)
+ * counts itself in s_liveThreads and leaves through portThreadLeave() once
+ * g_portQuit is set. The game's own loops wait in osRecvMesg / osSendMesg /
+ * osYieldThread, which are ours: that is where a thread notices the flag, so
+ * no game code is involved. Switch only: every other build compiles the
+ * stubs below, i.e. exactly the previous behaviour (nothing ever quits). */
+#if defined(PLATFORM_SWITCH)
+volatile int g_portQuit = 0;
+static pthread_t s_tickThread;   /* the pacemaker, joinable on the Switch */
+static int s_tickJoinable = 0;
+static volatile int s_liveThreads = 0;
+static __thread int s_isPortThread = 0;
+
+static inline int portQuitting(void)
+{
+    return __atomic_load_n(&g_portQuit, __ATOMIC_ACQUIRE);
+}
+
+static void portThreadEnter(void)
+{
+    s_isPortThread = 1;
+    __atomic_fetch_add(&s_liveThreads, 1, __ATOMIC_ACQ_REL);
+}
+
+/* Leave the calling thread for good (it never returns when it is a port
+ * thread; any other thread, e.g. the host thread, is left alone). */
+static void portThreadLeave(void)
+{
+    if (!s_isPortThread) {
+        return;
+    }
+    s_isPortThread = 0;
+    __atomic_fetch_sub(&s_liveThreads, 1, __ATOMIC_ACQ_REL);
+    pthread_exit(NULL);
+}
+#else
+enum { s_isPortThread = 0 };
+static inline int portQuitting(void) { return 0; }
+static inline void portThreadEnter(void) {}
+static inline void portThreadLeave(void) {}
+#endif
+
+/* For a thread that used to park for good (the render thread after its GL
+ * context is unbound): on the Switch it waits for the quit flag, then leaves. */
+void portThreadsParkUntilQuit(void)
+{
+    while (!portQuitting()) {
+        sysSleep(10000);
+    }
+    portThreadLeave();
+    for (;;) {
+        sysSleep(100000);   /* not a port thread: keep the old behaviour */
+    }
+}
+
 /* Side table: OSMesgQueue* -> lock/cond. The game's OSMesgQueue struct has a
  * fixed N64 layout, so the synchronization state lives here instead. */
 typedef struct PortQueue {
@@ -309,7 +365,8 @@ static void portHeartbeatCheck(void)
 static void *portTickThread(void *arg)
 {
     (void)arg;
-    for (;;) {
+    portThreadEnter();
+    while (!portQuitting()) {
         /* GE_DETERM (§D117, M-52 2nd attempt): retrace generation lives in
          * osRecvMesg() now (see there) -- synchronous with the sole
          * consumer asking for the next message, not paced by this thread.
@@ -353,6 +410,7 @@ static void *portTickThread(void *arg)
         portServiceTimers();
         portHeartbeatCheck();
     }
+    portThreadLeave();
     return NULL;
 }
 
@@ -393,7 +451,12 @@ void portKernelInit(void)
     if (pthread_create(&th, NULL, portTickThread, NULL) != 0) {
         sysFatalError("portKernelInit: pthread_create(tick) failed");
     }
+#if defined(PLATFORM_SWITCH)
+    s_tickThread = th;   /* joined by the orderly exit (portThreadsStop): libnx keeps its stack mapped until then */
+    s_tickJoinable = 1;
+#else
     pthread_detach(th);
+#endif
 }
 
 /* ------------------------------------------------------------------------ */
@@ -410,6 +473,7 @@ void imThreadExitRelease(void);   /* D152: defined in the interrupt-mask section
 static void *portThreadWrapper(void *arg)
 {
     PortThread *pt = (PortThread *)arg;
+    portThreadEnter();
 #if defined(PLATFORM_SWITCH)
     /* project-dam: spread the game threads over the application cores. Core 0
      * keeps the game logic (MAIN_THREAD_ID 3) next to the process main thread,
@@ -429,6 +493,8 @@ static void *portThreadWrapper(void *arg)
      * park it instead. */
     if (pt->id == 1 /* IDLE_THREAD_ID */) {
         pt->exited = 1;
+        while (!portQuitting()) sysSleep(20000);   /* parked; leaves at the orderly exit */
+        portThreadLeave();
         for (;;) sysSleep(1000000);
         return NULL;
     }
@@ -437,6 +503,7 @@ static void *portThreadWrapper(void *arg)
     imThreadExitRelease();   /* D152: don't leak an OS_IM_NONE section on exit */
     pt->exited = 1;
     if (pt->os) pt->os->state = OS_STATE_STOPPED;
+    portThreadLeave();
     return NULL;
 }
 
@@ -593,6 +660,7 @@ void osYieldThread(void)
     /* GE rarely yields explicitly; a 1 ms sleep is a fine host equivalent
      * (sched_yield() would need MinGW's <sched.h>, which the game's own
      * src/sched.h shadows on the include path). */
+    if (portQuitting()) portThreadLeave();
     sysSleep(1);
 }
 
@@ -699,6 +767,10 @@ s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
             pthread_mutex_unlock(&pq->lock);
             return -1;
         }
+        if (portQuitting() && s_isPortThread) {   /* orderly exit: leave instead of waiting */
+            pthread_mutex_unlock(&pq->lock);
+            portThreadLeave();
+        }
         pthread_cond_wait(&pq->cond, &pq->lock);
     }
     mq->msg[(mq->first + mq->validCount) % mq->msgCount] = msg;
@@ -764,6 +836,10 @@ s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
             sysLogPrintf(LOG_NOTE, "first block on mq=%p from %p (rel %p)",
                          (void *)mq, ra,
                          (void *)((uintptr_t)ra - sysImageBase()));
+        }
+        if (portQuitting() && s_isPortThread) {   /* orderly exit: leave instead of waiting */
+            pthread_mutex_unlock(&pq->lock);
+            portThreadLeave();
         }
         pthread_cond_wait(&pq->cond, &pq->lock);
     }
@@ -964,7 +1040,7 @@ void osAiSetConvert(u32 convert) { (void)convert; }
  * else is unmapped host memory on PC. */
 static int dramHostAddrValid(uintptr_t addr, u32 size)
 {
-    static const uintptr_t bases[2] = { PORT_DRAM_V1_BASE, PORT_DRAM_K0_BASE };   /* portaddr.h */
+    const uintptr_t bases[2] = { PORT_DRAM_V1_BASE, PORT_DRAM_K0_BASE };   /* portaddr.h; not static: the base is a variable on the Switch */
     for (int i = 0; i < 2; i++) {
         if (addr >= bases[i] && addr + size <= bases[i] + 0x00800000UL)
             return 1;
@@ -1422,6 +1498,10 @@ static void portRenderGfxTask(Gfx *dl)
  * GE_RENDERINLINE=1 restores it as a falsifier. */
 static pthread_mutex_t s_rwLock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t s_rwCond = PTHREAD_COND_INITIALIZER;
+#if defined(PLATFORM_SWITCH)
+static pthread_t s_rwThread;   /* the render worker, joinable on the Switch (see portThreadsStop) */
+static int s_rwJoinable = 0;
+#endif
 static Gfx *s_rwTask = NULL;   /* submitted display list; NULL = worker idle */
 static uint64_t s_rwTaskViUs;  /* D578: g_lastViUs when it was submitted */
 /* D583: when the game submitted the task, and when the worker last posted
@@ -1964,6 +2044,7 @@ static void portInterpPresentBeforeDraw(uint64_t viUs)
 static void *portRenderWorker(void *arg)
 {
     (void)arg;
+    portThreadEnter();
 #if defined(PLATFORM_SWITCH)
     nxSetThreadCore(1);   /* project-dam: the render worker owns core 1 */
 #endif
@@ -1978,6 +2059,7 @@ static void *portRenderWorker(void *arg)
              * boundary as before (D344). */
             if (videoQuitRequested()) {
                 pthread_mutex_unlock(&s_rwLock);
+                portThreadsParkUntilQuit();   /* parks until the orderly exit, then leaves */
                 for (;;) sysSleep(100000);
             }
             /* D578: sleep until the next stored present is due, or a frame. */
@@ -2093,7 +2175,12 @@ static int portRenderWorkerOn(void)
             pthread_attr_setstacksize(&attr, PORT_THREAD_STACK);
 #endif
             if (pthread_create(&th, &attr, portRenderWorker, NULL) == 0) {
+#if defined(PLATFORM_SWITCH)
+                s_rwThread = th;      /* joined by the orderly exit (portThreadsStop) */
+                s_rwJoinable = 1;
+#else
                 pthread_detach(th);
+#endif
                 s_rwMode = 1;
                 sysLogPrintf(LOG_NOTE, "D481: render worker started");
             } else {
@@ -2511,3 +2598,58 @@ void geTracePrintf(const char *path, const char *fmt, ...)
 
     __sync_lock_release(&geTraceLock);
 }
+
+#if defined(PLATFORM_SWITCH)
+/* project-dam: the Switch's orderly exit. Asks every thread the port started
+ * (game threads, pacemaker, render worker) to leave, wakes the ones blocked on
+ * a message queue, and waits until all are gone. Returns 1 when none is left
+ * (their stacks may then be unmapped), 0 on timeout. Called from the host
+ * thread (the atexit handler), after the render thread has parked. */
+int portThreadsStop(int timeoutMs)
+{
+    __atomic_store_n(&g_portQuit, 1, __ATOMIC_RELEASE);
+    uint64_t t0 = sysGetMicroseconds();
+    for (;;) {
+        pthread_mutex_lock(&s_pqLock);
+        int n = g_pqCount;
+        pthread_mutex_unlock(&s_pqLock);
+        for (int i = 0; i < n; ++i) {
+            pthread_mutex_lock(&g_pq[i].lock);
+            pthread_cond_broadcast(&g_pq[i].cond);
+            pthread_mutex_unlock(&g_pq[i].lock);
+        }
+        pthread_mutex_lock(&s_rwLock);
+        pthread_cond_broadcast(&s_rwCond);
+        pthread_mutex_unlock(&s_rwLock);
+
+        const int live = __atomic_load_n(&s_liveThreads, __ATOMIC_ACQUIRE);
+        if (live == 0) {
+            sysSleep(50000);   /* let the last one finish pthread_exit() on its stack */
+            /* Join them: libnx keeps a thread's stack mapped (a mirror of the
+             * memory we gave it) until the thread is joined, and the block
+             * cannot be unmapped before. */
+            for (int i = 0; i < PORT_MAX_THREADS; ++i) {
+                if (g_pt[i].started) {
+                    pthread_join(g_pt[i].th, NULL);
+                    g_pt[i].started = 0;
+                }
+            }
+            if (s_rwJoinable) {
+                pthread_join(s_rwThread, NULL);
+                s_rwJoinable = 0;
+            }
+            if (s_tickJoinable) {
+                pthread_join(s_tickThread, NULL);
+                s_tickJoinable = 0;
+            }
+            sysLogPrintf(LOG_NOTE, "libultra: all port threads left and joined");
+            return 1;
+        }
+        if ((int)((sysGetMicroseconds() - t0) / 1000) >= timeoutMs) {
+            sysLogPrintf(LOG_WARNING, "libultra: %d port thread(s) still running after %d ms", live, timeoutMs);
+            return 0;
+        }
+        sysSleep(5000);
+    }
+}
+#endif /* PLATFORM_SWITCH */

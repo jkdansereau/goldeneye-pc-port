@@ -22,10 +22,12 @@
 - The options no longer show the Mouse and Key Bindings pages, which need a mouse or a keyboard; Aim sensitivity replaces the aim-mode sensitivity and precision curve options
 - Aim style moves to the Controller page; the Centered styles turn the camera with the right stick, and the view stays where it is when the stick is released (Original keeps the N64 crosshair)
 - Faster rendering of busy scenes: vertex data goes to the GPU through one streaming buffer instead of a new buffer per draw, about three times cheaper per draw on the console
+- Quitting the game on the Switch now returns to the launcher it was started from (sphaira or the homebrew menu) instead of closing the whole application and dropping to Home; if the game's threads do not stop in time it falls back to the old exit
 
 ### Fixed
 - Docking or undocking the console while the game runs no longer crashes it: the picture is resized at the start of a frame on the render thread, not behind its back
 - Restart Game no longer shows at the bottom of the options menu on the Switch, where it could only quit the game
+- About one launch in fifty no longer stops at boot on the Switch: the game's memory windows used to sit at fixed addresses that the system's own stack could land on, and they now move to a free spot chosen at each launch
 
 ## [0.1.0] - 2026-11-11
 

@@ -175,7 +175,14 @@ extern u32 g_viOriginalVstart1;
 extern Mtx *g_viProjectionMatrix;
 
 /* SCREEN_HEIGHT #define changes based on version (PAL or NTSC) */
+#if defined(PORT) && defined(__SWITCH__)
+/* project-dam: the N64 window base is chosen at run time, so cfb_16 (the
+ * start of DRAM V1) cannot be a link-time absolute symbol. */
+#include <portaddr.h>
+#define cfb_16 PORT_DRAM_SYM(u8 (*)[NUM_VIDEO_FRAME_BUFFERS][SCREEN_WIDTH * SCREEN_HEIGHT * 2], 0)
+#else
 extern u8 cfb_16[NUM_VIDEO_FRAME_BUFFERS][SCREEN_WIDTH * SCREEN_HEIGHT * 2];
+#endif
 
 void viShake(f32 param_1);
 

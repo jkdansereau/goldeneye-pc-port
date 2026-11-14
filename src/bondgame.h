@@ -5,7 +5,13 @@
 #include <bondconstants.h>  // game constants
 #include <bondtypes.h>      // game structs and types
 
+#if defined(PORT) && defined(__SWITCH__)
+/* project-dam: DRAM V1 + 0x50000 (mempool start); see port/include/portaddr.h. */
+#include <portaddr.h>
+#define _bssSegmentEnd PORT_DRAM_SYM(u32 **, 0x50000)
+#else
 extern u32 *_bssSegmentEnd;
+#endif
 
 extern u32 *_codeSegmentStart;
 extern u32 *_codeSegmentEnd;

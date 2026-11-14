@@ -269,7 +269,13 @@ void *g_StackPtrs1[STACK_POINTER_COUNT] = {&sp_rmon, &sp_idle, &sp_shed, &sp_mai
 void *g_StackPtrs2[STACK_POINTER_COUNT] = {&sp_idle, &sp_shed, &sp_main, &sp_audi, &sp_debug};
 #else
 // no sp_debug
+#if defined(PORT) && defined(__SWITCH__)
+/* project-dam: cfb_16 is a run-time address on the Switch (variable window
+ * base), not a constant initializer. Crash-dump stack lookup only. */
+void *g_StackPtrs2[STACK_POINTER_COUNT] = {&sp_idle, &sp_shed, &sp_main, &sp_audi, NULL};
+#else
 void *g_StackPtrs2[STACK_POINTER_COUNT] = {&sp_idle, &sp_shed, &sp_main, &sp_audi, &cfb_16};
+#endif
 #endif
 
 void *g_StackPtrs3[STACK_POINTER_COUNT] = {&sp_rmon, &sp_idle, &sp_shed, &sp_main, &sp_audi};

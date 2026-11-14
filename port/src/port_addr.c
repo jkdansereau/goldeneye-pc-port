@@ -35,10 +35,20 @@
 #endif
 
 uintptr_t g_portImageBase = 0;
+uintptr_t g_portImageEnd = 0;
 int g_portUseImageRel = 0;
 
+#if defined(PLATFORM_SWITCH)
+#include <switch.h>
+#include "nxmem.h"
+/* project-dam: no link-time absolute symbols here (the base is chosen at run
+ * time); cfb_16 is a macro at base + 0x70000000 (fr.h). */
+#define PORT_CFB16_ADDR ((uintptr_t)PORT_DRAM_V1_BASE)
+#else
 /* Defined by port/src/dram_syms*.s; must equal PORT_ADDR_BASE + 0x70000000. */
 extern unsigned char cfb_16[];
+#define PORT_CFB16_ADDR ((uintptr_t)cfb_16)
+#endif
 
 /* ROM-free verification of the address model: window round-trips for each
  * region, the absolute-symbol base, and the image-relative encoding. Logs
@@ -65,7 +75,7 @@ static void portAddrSelfTest(void)
     ok &= portAddrCheck("n64->host cart",
                         portN64ToHost(0x10456789u) == (void *)(B + 0x10456789u));
     ok &= portAddrCheck("cfb_16 at base+DRAM_V1",
-                        (uintptr_t)cfb_16 == B + 0x70000000u);
+                        PORT_CFB16_ADDR == B + 0x70000000u);
     ok &= portAddrCheck("in-window: NULL rejected",
                         !portAddrIsMapped(0));
     ok &= portAddrCheck("in-window: low guard",
@@ -167,12 +177,38 @@ void portAddrStrictCheck(uint32_t a)
 
 void portAddrInit(void)
 {
+#if defined(PLATFORM_SWITCH)
+    nxChooseAddrBase();   /* sets g_portAddrBase; everything below uses it */
+#endif
     g_portImageBase = sysImageBase();
+#if defined(PLATFORM_SWITCH)
+    /* The image's extent: its mapping runs on from the load address until the
+     * first hole (capped). */
+    {
+        uintptr_t a = g_portImageBase;
+        while (a - g_portImageBase < PORT_IMAGE_MAX) {
+            MemoryInfo mi;
+            u32 pi;
+            if (R_FAILED(svcQueryMemory(&mi, &pi, a)) || mi.type == MemType_Unmapped) {
+                break;
+            }
+            a = (uintptr_t)(mi.addr + mi.size);
+        }
+        g_portImageEnd = a;
+    }
+#endif
     /* The image needs the 0x40000000 encoding iff it lies outside the window,
      * i.e. its address does not survive a u32 truncation. False on Linux
      * (image at 0x20000000, inside the window), true on Windows (0x140000000)
-     * and macOS (0x1_00xxxxxx + slide). */
+     * and macOS (0x1_00xxxxxx + slide). Relative to the window base, so on
+     * the Switch (variable base) it is true unless the image happens to sit
+     * inside the chosen 4 GiB slot. */
+#if defined(PLATFORM_SWITCH)
+    g_portUseImageRel =
+        (g_portImageBase - (uintptr_t)PORT_ADDR_BASE >= (uintptr_t)PORT_ADDR_WINDOW) ? 1 : 0;
+#else
     g_portUseImageRel = (g_portImageBase >= (uintptr_t)PORT_ADDR_WINDOW) ? 1 : 0;
+#endif
 
 #if PORT_ADDR_BASE != 0
     {
@@ -194,18 +230,19 @@ void portAddrInit(void)
 
     /* The committed .darwin.s absolute symbols must have been generated with
      * the same --base; cfb_16 is a region-independent sentinel for that. */
-    if ((uintptr_t)cfb_16 != (uintptr_t)PORT_ADDR_BASE + 0x70000000ULL) {
+    if (PORT_CFB16_ADDR != (uintptr_t)PORT_ADDR_BASE + 0x70000000ULL) {
         sysFatalError("portAddr: dram_syms base mismatch (cfb_16=%p, expected 0x%llx). "
                       "Regenerate with: scripts/gen_romassets.py <region> --darwin "
                       "--base 0x%llx --rom-size <size> --out ... --dram-out ...",
-                      (void *)cfb_16,
+                      (void *)PORT_CFB16_ADDR,
                       (unsigned long long)((uintptr_t)PORT_ADDR_BASE + 0x70000000ULL),
                       (unsigned long long)PORT_ADDR_BASE);
     }
 
-    sysLogPrintf(LOG_INFO, "portAddr: window base=0x%llx image=0x%llx image_rel=%d",
+    sysLogPrintf(LOG_INFO, "portAddr: window base=0x%llx image=0x%llx-0x%llx image_rel=%d",
                  (unsigned long long)PORT_ADDR_BASE,
-                 (unsigned long long)g_portImageBase, g_portUseImageRel);
+                 (unsigned long long)g_portImageBase,
+                 (unsigned long long)g_portImageEnd, g_portUseImageRel);
 
     portAddrSelfTest();
 

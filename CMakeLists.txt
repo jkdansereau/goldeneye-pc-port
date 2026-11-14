@@ -99,6 +99,7 @@ include(SwitchPort)
 option(PORT_ADDR_STRICT "Validate N64->host address conversions at runtime" OFF)
 # Switch debug builds: read extra command-line arguments from data/ge007.args (-DNX_ARGS=ON).
 option(NX_ARGS "Switch: read data/ge007.args as command-line arguments" OFF)
+option(NX_LINKSTDIO "Switch: send stdout/stderr (log, crash dump) to the PC over nxlink (test builds only)" OFF)
 
 include(TargetArch)
 include(FindPkgConfig)
@@ -311,11 +312,16 @@ add_definitions(
   -D_LANGUAGE_C=1
   -DAVOID_UB=1
   -DPAL=${VERSION_IS_PAL}
-  -DPORT_ADDR_BASE=${PORT_ADDR_BASE}
   ${REGION_DEFS}
 )
+if(NOT GE_SWITCH)   # the Switch base is a run-time variable (portaddr.h)
+  add_definitions(-DPORT_ADDR_BASE=${PORT_ADDR_BASE})
+endif()
 if(NX_ARGS)
   add_definitions(-DNX_ARGS=1)
+endif()
+if(NX_LINKSTDIO)
+  add_definitions(-DNX_LINKSTDIO=1)
 endif()
 if(PORT_ADDR_STRICT)
   add_definitions(-DPORT_ADDR_STRICT=1)
@@ -818,6 +824,12 @@ set(SRC_ENGINE
   src/ramrom.c
 )
 list(PREPEND SRC_ENGINE "${CMAKE_SOURCE_DIR}")
+
+# project-dam: the Switch picks the N64 window base at run time, so there are
+# no link-time DRAM symbols (they are macros, port/include/portaddr.h).
+if(GE_SWITCH)
+  set(SRC_DRAM_SYMS "")
+endif()
 
 set(SRC
   ${SRC_GAME}
