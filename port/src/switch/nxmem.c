@@ -200,6 +200,28 @@ int nxIsHandheld(void)
     return appletGetOperationMode() == AppletOperationMode_Handheld;
 }
 
+/* D959: host-thread applet service. Keeps the applet message queue serviced
+ * (HOME, sleep, dock/undock) without touching SDL's event queue: on Switch
+ * every SDL_PollEvent runs SDL's SWITCH_PumpEvents, which on an operation
+ * mode change destroys and recreates the EGL surface on the CALLING thread,
+ * and that must be the render thread (see video.c videoPumpEvents). Logs the
+ * mode change. Returns 0 once the system asked the application to exit. */
+int nxAppletAlive(void)
+{
+    static int lastMode = -1;
+    int alive = appletMainLoop() ? 1 : 0;
+    int mode = (int)appletGetOperationMode();
+    if (mode != lastMode) {
+        if (lastMode >= 0) {
+            sysLogPrintf(LOG_INFO, "nxmem: operation mode %s -> %s",
+                         lastMode == AppletOperationMode_Handheld ? "handheld" : "docked",
+                         mode == AppletOperationMode_Handheld ? "handheld" : "docked");
+        }
+        lastMode = mode;
+    }
+    return alive;
+}
+
 void nxExitProcess(void)
 {
     sysLogPrintf(LOG_INFO, "nxmem: exiting process");

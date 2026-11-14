@@ -46,6 +46,10 @@ extern int g_nxDramK0Folded;
  * (Game.BloodOnHit) to the game's data; at boot and on every change. */
 void nxGameApply(void);
 
+/* D959: host-thread applet service (appletMainLoop + operation-mode log);
+ * 0 once the system asked the application to exit. Never touches SDL. */
+int nxAppletAlive(void);
+
 /* End the process at once, every thread included, after flushing stdio.
  * exit() would close the system services (applet, audio, nv) while the
  * game's other threads still run, and the first of them to call one

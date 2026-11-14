@@ -1549,7 +1549,23 @@ void videoPumpEvents(void)
     videoHostExitIfRequested();  /* D344: quit posted last pump or by another thread */
 
     SDL_Event ev;
-    while (SDL_PollEvent(&ev)) {
+#if defined(PLATFORM_SWITCH)
+    /* D959: SDL's Switch backend resizes the window (destroys and recreates
+     * the EGL surface) inside SDL_PollEvent when the console is docked or
+     * undocked, on whichever thread polls. This host thread does not own the
+     * GL context; doing it here pulled the surface out from under the render
+     * thread and Mesa's swap/dequeue called fatalThrow. Only the render
+     * thread (fast3d, at the start of a frame) polls SDL on Switch; the host
+     * just services the applet. */
+    {
+        extern int nxAppletAlive(void);
+        if (!nxAppletAlive()) videoRequestQuit("applet exit");
+    }
+#define VIDEO_HOST_POLL(e) 0
+#else
+#define VIDEO_HOST_POLL(e) SDL_PollEvent(e)
+#endif
+    while (VIDEO_HOST_POLL(&ev)) {
         switch (ev.type) {
         case SDL_AUDIODEVICEREMOVED:
             /* D470: an open output device vanished; audio.c falls back to default. */

@@ -8,6 +8,9 @@
 #include "gfx_window_manager_api.h"
 #include "gfx_screen_config.h"
 #include "input.h"
+#ifdef __SWITCH__
+#include "audio.h"   /* D959: audioNotifyDeviceRemoved */
+#endif
 #include "ge007_icon.h"
 #if defined(__APPLE__)
 #include <OpenGL/OpenGL.h>   /* D952: CGL swap interval */
@@ -506,9 +509,19 @@ static void gfx_sdl_handle_events(void) {
             case SDL_CONTROLLERDEVICEREMOVED:   // SDL queue; request a rescan, never rescan here
                 inputRequestRescan();
                 break;
+#ifdef __SWITCH__
+            case SDL_AUDIODEVICEREMOVED:   // D959: the host thread no longer polls SDL here
+                if (!event.adevice.iscapture) audioNotifyDeviceRemoved(event.adevice.which);
+                break;
+#endif
             case SDL_WINDOWEVENT:
                 if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                     SDL_GL_GetDrawableSize(wnd, &window_width, &window_height);
+#ifdef __SWITCH__
+                    sysLogPrintf(LOG_INFO, "SDL: window size changed -> %dx%d (drawable %dx%d, handheld=%d)",
+                                 event.window.data1, event.window.data2, window_width, window_height,
+                                 nxIsHandheld());
+#endif
                     if (!fullscreen_state) {
                         maximized_state = SDL_GetWindowFlags(wnd) & SDL_WINDOW_MAXIMIZED ? true : false;
                     }

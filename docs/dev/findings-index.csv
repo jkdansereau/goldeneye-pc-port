@@ -469,6 +469,7 @@ D954,FIXED,"Doors and guards flicker at 90 fps, not at 60:","FIXED 2026-10-13 (p
 D955,FIXED,"Objects (props, doors, guards) moved at the 60 Hz tick inside a 90 Hz picture:","FIXED 2026-10-13 (port-only, gfx_pc.cpp + interpportal.c; sky pass; maintainer Deck-confirmed)"
 D956,OPEN,"Switch aim options (zoom, assist, entry, stop on aim):","IMPLEMENTED 2026-11-13 (Switch only, nxgame.c + one lv.c hook; tuned in Ryujinx and on the console; final console check owed)"
 D957,OPEN,Look ahead never fires with the Extended controls on the Switch:,"IMPLEMENTED 2026-11-13 (Switch only, nxgame.c + one input.c call; tuned in Ryujinx; console check owed)"
+D959,OPEN,Switch crash when docking or undocking while the game runs:,"FIX BUILT 2026-11-14 (Switch only, video.c + nxmem.c + gfx_sdl2.cpp; no crash toggling docked mode in Ryujinx; console check owed)"
 D607,OPEN,Address model unified into one header:,DONE 2026-10-07 (macos branch; Windows identity gate:
 D608,FIXED,D34 ANIM_DATA_x re-basing guard in assets/animationtable_data.h was __x86_64__-only:,"FIXED 2026-10-07 (macos branch; mechanical guard widening, arm64 link clean)"
 D609,FIXED,macOS arm64 SIGKILL at exec:,"FIXED 2026-10-07 (macos branch; probe-confirmed; arm64 keeps the 4 GiB pagezero, floor 11.0)"

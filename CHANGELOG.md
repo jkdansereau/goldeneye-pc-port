@@ -24,6 +24,7 @@
 - Faster rendering of busy scenes: vertex data goes to the GPU through one streaming buffer instead of a new buffer per draw, about three times cheaper per draw on the console
 
 ### Fixed
+- Docking or undocking the console while the game runs no longer crashes it: the picture is resized at the start of a frame on the render thread, not behind its back
 - Restart Game no longer shows at the bottom of the options menu on the Switch, where it could only quit the game
 
 ## [0.1.0] - 2026-11-11
