@@ -1,5 +1,5 @@
 /*
- * memprobe — project-dam feasibility probe (docs/switch/PLAN.md §2).
+ * memprobe — project-dam feasibility probe (docs/switch/address-model.md).
  *
  * Question: can the Switch host the port's N64 address window, i.e. place
  * three blocks at host addresses whose LOW 32 BITS equal their N64 address

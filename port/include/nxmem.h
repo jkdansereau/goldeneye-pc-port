@@ -5,8 +5,8 @@
  *
  * Horizon has no mmap(MAP_FIXED). This places page-aligned heap memory at an
  * exact virtual address, the way the PC port's fixed mmaps do, using the two
- * methods verified on hardware by tools/switch/memprobe (docs/switch/PLAN.md
- * §2):
+ * methods verified on hardware by tools/switch/memprobe
+ * (docs/switch/address-model.md):
  *   - inside the process's stack region: svcMapMemory (heap -> stack region);
  *   - elsewhere in the ASLR region: svcMapProcessCodeMemory on the own process
  *     handle, then svcSetProcessMemoryPermission(RW).

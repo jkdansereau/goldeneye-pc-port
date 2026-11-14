@@ -4,7 +4,7 @@
 # ("project-dam hook"). devkitPro's toolchain file
 # (/opt/devkitpro/cmake/Switch.cmake) sets CMAKE_SYSTEM_NAME=NintendoSwitch.
 #
-# Address model (docs/switch/PLAN.md §2): the N64 window base is chosen at run
+# Address model (docs/switch/address-model.md): the N64 window base is chosen at run
 # time (g_portAddrBase, a free 4 GiB-aligned slot; nxChooseAddrBase), because the
 # main thread's stack can land on the fixed 0x10000000 / 0x70000000 windows.
 # port/src/switch/ places the cart, DRAM and stack blocks at base + their N64

@@ -21,8 +21,8 @@ content: you need your own US ROM.
 - **Changes:** [CHANGELOG.md](CHANGELOG.md) for this fork; the game's own
   changes are in [upstream's releases](https://github.com/jkdansereau/goldeneye-pc-port/releases).
 - **Build:** `docker compose build`, then `docker compose run --rm switch`;
-  the NRO lands in `build-switch/`. Porting notes:
-  [docs/switch/PLAN.md](docs/switch/PLAN.md).
+  the NRO lands in `build-switch/`. Address model notes:
+  [docs/switch/address-model.md](docs/switch/address-model.md).
 - **Bugs:** a problem on the Switch belongs here; a problem you also see on
   the PC version belongs [upstream](https://github.com/jkdansereau/goldeneye-pc-port/issues).
 
