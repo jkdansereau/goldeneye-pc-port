@@ -39,6 +39,11 @@ extern void exit(int status);
 #include "../fast3d/gfx_api.h"
 #include "../fast3d/gfx_sdl.h"
 #include "../fast3d/gfx_opengl.h"
+#ifdef __SWITCH__
+#include "../fast3d/gfx_deko3d.h"   /* D973: deko3d on the Switch unless GE_RENDERER=gl */
+extern void gfx_sdl_set_external_present(void (*present)(void), void (*dims)(uint32_t *, uint32_t *), void (*park)(void));
+extern void gfx_sdl_set_external_swap_interval(void (*set_interval)(int));
+#endif
 #include "../fast3d/gfx_frame.h"   /* D969: replay thread */
 
 /* GE's internal resolution before the game's first osViSetMode (which then
@@ -787,6 +792,9 @@ static void videoMigrateDefaults(void)
 static void videoApplyLowEndDefaults(void)
 {
     const char *r = gfx_opengl_renderer_string();
+#ifdef __SWITCH__
+    if (gfx_deko3d_wanted()) r = gfx_deko3d_renderer_string();   /* D973 */
+#endif
     const char *why = "";
     const char *fake = getenv("GE_FAKE_LOWEND");
     int low;
@@ -1246,6 +1254,15 @@ int videoInit(void)
 
     wmAPI = &gfx_sdl;
     renderingAPI = &gfx_opengl_api;
+#ifdef __SWITCH__
+    /* D973: deko3d backend (the Switch default); SDL then keeps input/audio/events only */
+    if (gfx_deko3d_wanted()) {
+        renderingAPI = &gfx_deko3d_api;
+        gfx_sdl_set_external_present(gfx_deko3d_present, gfx_deko3d_get_dimensions, gfx_deko3d_park);
+        gfx_sdl_set_external_swap_interval(gfx_deko3d_set_swap_interval);
+        sysLogPrintf(LOG_NOTE, "video: renderer deko3d (default; GE_RENDERER=gl selects GL)");
+    }
+#endif
 
     gfx_current_native_viewport.width = GE_NATIVE_W;
     gfx_current_native_viewport.height = GE_NATIVE_H;
@@ -1323,6 +1340,11 @@ int videoInit(void)
     gfx_sdl_release_context();
 
     gfx_pre_swap_hook = videoPreSwapCapture;
+#ifdef __SWITCH__
+    if (gfx_deko3d_wanted()) {
+        gfx_pre_swap_hook = NULL;   /* D973: GE_PCDUMP / screenshots read GL's back buffer */
+    }
+#endif
 
     initDone = 1;
     sysLogPrintf(LOG_INFO, "video: %dx%d window (native %dx%d)",

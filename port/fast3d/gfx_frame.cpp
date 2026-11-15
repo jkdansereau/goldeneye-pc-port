@@ -277,6 +277,17 @@ struct ShaderProgram* r_create_and_load_new_shader(uint64_t id0, uint32_t id1) {
         r->used_textures[0] = cc.used_textures[0];
         r->used_textures[1] = cc.used_textures[1];
         r->real = nullptr;
+        /* D973 (GE_CCLOG=1): combiner census for the deko3d shader pack
+         * (port/switch/shaders/combiners.txt, tools_pc/cc_census_merge.py);
+         * once per distinct pair per run. Cached getenv (D250). */
+        static int s_cclog = -1;
+        if (s_cclog < 0) {
+            const char* e = getenv("GE_CCLOG");
+            s_cclog = (e != NULL && e[0] == '1') ? 1 : 0;
+        }
+        if (s_cclog) {
+            sysLogPrintf(LOG_NOTE, "CCID %016llx %08x", (unsigned long long)id0, (unsigned)id1);
+        }
     }
     r->known = true;
     if (s_rec) {

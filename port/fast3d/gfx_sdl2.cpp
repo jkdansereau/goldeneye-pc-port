@@ -150,6 +150,25 @@ static int primary_display_index() {
 
 #ifdef __SWITCH__
 extern "C" int nxIsHandheld(void);   /* project-dam: port/src/switch/nxmem.c */
+
+/* D973: deko3d mode (the Switch default; GE_RENDERER=gl selects GL). The rendering backend owns the
+ * swapchain on the default nwindow; SDL keeps input, audio and the event pump
+ * but creates no window and no GL context. */
+static void (*s_ext_present)(void) = NULL;
+static void (*s_ext_dims)(uint32_t*, uint32_t*) = NULL;
+static void (*s_ext_park)(void) = NULL;
+static void (*s_ext_interval)(int) = NULL;
+static int s_ext_swap_interval = 1;
+
+extern "C" void gfx_sdl_set_external_present(void (*present)(void), void (*dims)(uint32_t*, uint32_t*), void (*park)(void)) {
+    s_ext_present = present;
+    s_ext_dims = dims;
+    s_ext_park = park;
+}
+
+extern "C" void gfx_sdl_set_external_swap_interval(void (*set_interval)(int)) {
+    s_ext_interval = set_interval;
+}
 #endif
 
 static void gfx_sdl_init(const struct GfxWindowInitSettings *set) {
@@ -179,6 +198,22 @@ static void gfx_sdl_init(const struct GfxWindowInitSettings *set) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         sysFatalError("Could not init SDL:\n%s", SDL_GetError());
     }
+#ifdef __SWITCH__
+    if (s_ext_present) {
+        /* D973: no window, no GL context: the deko3d backend presents */
+        if (s_ext_dims) {
+            uint32_t w = 0, h = 0;
+            s_ext_dims(&w, &h);
+            window_width = (int)w;
+            window_height = (int)h;
+        }
+        maximized_state = false;
+        fullscreen_state = true;
+        qpc_freq = SDL_GetPerformanceFrequency();
+        sysLogPrintf(LOG_NOTE, "SDL(switch): external present (deko3d), no SDL window");
+        return;
+    }
+#endif
 
     // Auto window size: a width/height <= 0 means "pick a sensible default from
     // the desktop" rather than the 640x480 native res. Fit a 4:3 window into
@@ -468,6 +503,14 @@ static void gfx_sdl_set_dimensions(uint32_t width, uint32_t height, int32_t posX
 }
 
 static void gfx_sdl_get_dimensions(uint32_t* width, uint32_t* height, int32_t* posX, int32_t* posY) {
+#ifdef __SWITCH__
+    if (s_ext_dims) {   /* D973 */
+        s_ext_dims(width, height);
+        *posX = 0;
+        *posY = 0;
+        return;
+    }
+#endif
     SDL_GL_GetDrawableSize(wnd, static_cast<int*>((void*)width), static_cast<int*>((void*)height));
     SDL_GetWindowPosition(wnd, static_cast<int*>(posX), static_cast<int*>(posY));
 }
@@ -569,6 +612,12 @@ extern "C" void gfx_sdl_make_context_current(void) {
  * boundary: wait for the GPU to drain everything this process queued, then
  * unbind the context, so process teardown never lands inside the driver. */
 extern "C" void gfx_sdl_park_for_exit(void) {
+#ifdef __SWITCH__
+    if (s_ext_present) {   /* D973: queue idle, swapchain destroyed (replay thread) */
+        if (s_ext_park) s_ext_park();
+        return;
+    }
+#endif
     if (ctx && SDL_GL_GetCurrentContext() == ctx) {
         typedef void (SDLCALL *FinishFn)(void);   // = APIENTRY on Windows
         FinishFn finish = (FinishFn)SDL_GL_GetProcAddress("glFinish");
@@ -687,6 +736,12 @@ static void gfx_sdl_swap_buffers_begin(void) {
     if (gfx_pre_swap_hook) {
         gfx_pre_swap_hook();
     }
+#ifdef __SWITCH__
+    if (s_ext_present) {   /* D973 */
+        s_ext_present();
+        return;
+    }
+#endif
     SDL_GL_SwapWindow(wnd);
 }
 
@@ -728,6 +783,9 @@ static void gfx_sdl_set_window_title(const char *title) {
 }
 
 static int gfx_sdl_get_swap_interval(void) {
+#ifdef __SWITCH__
+    if (s_ext_present) return s_ext_swap_interval;   /* D973 */
+#endif
 #if defined(__APPLE__)
     return s_cglSwapInterval;   /* D952 */
 #else
@@ -736,6 +794,14 @@ static int gfx_sdl_get_swap_interval(void) {
 }
 
 static bool gfx_sdl_set_swap_interval(int interval) {
+#ifdef __SWITCH__
+    if (s_ext_present) {   /* D973: the deko3d swapchain's interval */
+        s_ext_swap_interval = interval;
+        if (s_ext_interval) s_ext_interval(interval);
+        vsync_enabled = interval != 0;
+        return true;
+    }
+#endif
 #if defined(__APPLE__)
     const bool success = gfx_sdl_apply_swap_interval(interval);   /* D952 */
 #else

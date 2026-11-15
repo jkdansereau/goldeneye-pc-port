@@ -62,6 +62,15 @@ travels on the nxlink command line, with nothing to copy to the SD card:
   `GE_CFG=Video.DrawDistance=150;Video.FpsCap=30`). While it is set the ini is never written back, so a
   test never changes the user's settings.
 
+Renderer and shader switches useful in test runs (D973):
+
+- The Switch renders through deko3d by default; `GE_RENDERER=gl` selects the GL backend instead. Under
+  deko3d SDL creates no window; `GE_PCDUMP` and screenshots are GL-only. `GE_DKSUBMIT=<n>` submits
+  the frame's commands every n draws (default 64, 0 = once per frame).
+- `GE_CCLOG=1` logs each combiner id once (`CCID <id0> <id1>`); the deko3d backend logs the ids missing
+  from its shader pack as `DKSH miss <id0> <id1>`. Merge both into the pack's list with
+  `python -I tools_pc/cc_census_merge.py port/switch/shaders/combiners.txt run.log ...` and rebuild.
+
 Example, a 40 s performance run of the Jungle in co-op with a 150% draw distance:
 
 ```sh

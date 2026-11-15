@@ -411,7 +411,45 @@ struct TickTexTimer {   /* D583 SLOW line: time inside import_texture (all exits
 static uint64_t s_wm_now = 0, s_wm_notex = 0, s_wm_same = 0, s_wm_nosh = 0;
 extern "C" {
 void gfx_opengl_perf_report(double frames);
+void gfx_opengl_interp_sync(void);
+void gfx_opengl_frame_count_rewind(void);
 }
+
+/* D973: the passes outside the rendering API (FXAA, GE+ sky, D578 present
+ * slots, frame-counter rewind, PERFSTAT) belong to the backend: on the Switch
+ * the table is pointed at the deko3d ones in gfx_init when that backend is in
+ * use (the Switch default; GE_RENDERER=gl keeps GL); elsewhere they are the GL ones. */
+#ifdef __SWITCH__
+#include "gfx_deko3d.h"
+static struct {
+    void (*fxaa)(int);
+    int (*sky_stage)(const PortSkyPlus*, const int[4], float, float);
+    void (*sky_pass)(int);
+    void (*istore)(int, uint32_t, uint32_t);
+    void (*ishow)(int);
+    void (*isync)(void);
+    void (*rewind)(void);
+    void (*perf)(double);
+} s_extra = { gfx_opengl_fxaa_pass, gfx_opengl_skyplus_stage, gfx_opengl_skyplus_pass, gfx_opengl_interp_store,
+              gfx_opengl_interp_show, gfx_opengl_interp_sync, gfx_opengl_frame_count_rewind, gfx_opengl_perf_report };
+#define GFX_X_FXAA s_extra.fxaa
+#define GFX_X_SKY_STAGE s_extra.sky_stage
+#define GFX_X_SKY_PASS s_extra.sky_pass
+#define GFX_X_ISTORE s_extra.istore
+#define GFX_X_ISHOW s_extra.ishow
+#define GFX_X_ISYNC s_extra.isync
+#define GFX_X_REWIND s_extra.rewind
+#define GFX_X_PERF s_extra.perf
+#else
+#define GFX_X_FXAA gfx_opengl_fxaa_pass
+#define GFX_X_SKY_STAGE gfx_opengl_skyplus_stage
+#define GFX_X_SKY_PASS gfx_opengl_skyplus_pass
+#define GFX_X_ISTORE gfx_opengl_interp_store
+#define GFX_X_ISHOW gfx_opengl_interp_show
+#define GFX_X_ISYNC gfx_opengl_interp_sync
+#define GFX_X_REWIND gfx_opengl_frame_count_rewind
+#define GFX_X_PERF gfx_opengl_perf_report
+#endif
 
 static int gfx_perfstat_on(void);
 
@@ -6073,7 +6111,7 @@ static void gfx_run_dl(Gfx* cmd) {
                 /* clip x as the sky's own float vertices get it (gfx_adjust_x_for_aspect_ratio) */
                 const float aspA = gfx_adjust_x_for_aspect_ratio(1.0f, 0.0f);
                 const float aspB = gfx_adjust_x_for_aspect_ratio(0.0f, 1.0f);
-                gfx_frame_call(gfx_opengl_skyplus_pass, gfx_opengl_skyplus_stage(sp, vp, aspA, aspB));
+                gfx_frame_call(GFX_X_SKY_PASS, GFX_X_SKY_STAGE(sp, vp, aspA, aspB));
                 break;
             }
             case 0x46: /* G_HUDSCALE_EXT (D226): w0 low16 = scale*256 (0/256 = off), w1 = ax4<<16 | ay4 */
@@ -6346,6 +6384,18 @@ extern "C" void gfx_get_dimensions(uint32_t* width, uint32_t* height, int32_t* p
 
 extern "C" void gfx_init(const GfxInitSettings *settings) {
     gfx_wapi = settings->wapi;
+#ifdef __SWITCH__
+    if (settings->rapi == &gfx_deko3d_api) {   /* D973 */
+        s_extra.fxaa = gfx_deko3d_fxaa_pass;
+        s_extra.sky_stage = gfx_deko3d_skyplus_stage;
+        s_extra.sky_pass = gfx_deko3d_skyplus_pass;
+        s_extra.istore = gfx_deko3d_interp_store;
+        s_extra.ishow = gfx_deko3d_interp_show;
+        s_extra.isync = gfx_deko3d_interp_sync;
+        s_extra.rewind = gfx_deko3d_frame_count_rewind;
+        s_extra.perf = gfx_deko3d_perf_report;
+    }
+#endif
     gfx_rapi = gfx_frame_install(settings->rapi);   /* D968: the decoder talks to the frame recorder */
     gfx_frame_set_wapi(gfx_wapi);                   /* D969: the replay thread pumps events and swaps */
     gfx_wapi->init(&settings->window_settings);
@@ -6653,7 +6703,7 @@ static void gfx_frame_body(Gfx* commands, bool emit_overlay, Gfx** overlay_io, u
                     /* project-dam: FXAA reads a single-sample texture, so resolve
                      * into one first, then draw it to the window anti-aliased. */
                     gfx_rapi->resolve_msaa_color_buffer(game_framebuffer_msaa_resolved, game_framebuffer);
-                    gfx_frame_call(gfx_opengl_fxaa_pass, game_framebuffer_msaa_resolved);   /* D968: recorded */
+                    gfx_frame_call(GFX_X_FXAA, game_framebuffer_msaa_resolved);   /* D968: recorded */
                 } else {
                     gfx_rapi->resolve_msaa_color_buffer(0, game_framebuffer);
                 }
@@ -6664,7 +6714,7 @@ static void gfx_frame_body(Gfx* commands, bool emit_overlay, Gfx** overlay_io, u
         } else {
 #ifdef __SWITCH__
             if (gfx_fxaa_on) {
-                gfx_frame_call(gfx_opengl_fxaa_pass, game_framebuffer);   /* project-dam: FXAA without MSAA */
+                gfx_frame_call(GFX_X_FXAA, game_framebuffer);   /* project-dam: FXAA without MSAA */
             } else
 #endif
             gfxFramebuffer = (uintptr_t)gfx_rapi->get_framebuffer_texture_id(game_framebuffer);
@@ -6760,7 +6810,7 @@ extern "C" void gfx_end_frame(void) {
                     (s_perf_dl - (double)(s_perf_drawns + s_perf_texns) / 1.0e6) / n);
             fprintf(stderr, "PERFSTAT wouldmerge: now=%.1f notex=%.1f samesize=%.1f noshader=%.1f (draws/frame)\n",
                     (double)s_wm_now / n, (double)s_wm_notex / n, (double)s_wm_same / n, (double)s_wm_nosh / n);
-            gfx_opengl_perf_report(n);
+            GFX_X_PERF(n);
             gfx_frame_perf_report(n);   /* D968 */
             mc_perf_report(n);          /* mesh cache (issue #10) */
             s_perf_drawns = s_perf_texns = 0;
@@ -6896,7 +6946,7 @@ extern "C" int gfx_interp_tick(Gfx* commands, const float* alphas, int n, int ba
             g_gpSafeTop = s_interp_safe_snap[0];
             g_gpSafeHeight = s_interp_safe_snap[1];
             s_hud_scale = 1.0f;
-            gfx_opengl_frame_count_rewind();   /* start_frame below advances it again */
+            GFX_X_REWIND();   /* start_frame below advances it again */
             gfx_frame_frame_count_rewind();    /* D968: the recorder mirrors the counter */
         }
         s_interp_mode = s_interp_have_prev ? INTERP_BLEND : INTERP_RECORD;
@@ -7101,13 +7151,13 @@ extern "C" int gfx_interp_tick(Gfx* commands, const float* alphas, int n, int ba
         }
         if (exact_all) {
             for (int k = 0; k < n; k++) {
-                gfx_opengl_interp_store((base + k) % GFX_INTERP_SLOTS, gfx_current_window_dimensions.width,
+                GFX_X_ISTORE((base + k) % GFX_INTERP_SLOTS, gfx_current_window_dimensions.width,
                                         gfx_current_window_dimensions.height);
             }
             break;
         }
         const int slot = (base + i) % GFX_INTERP_SLOTS;
-        gfx_opengl_interp_store(slot, gfx_current_window_dimensions.width, gfx_current_window_dimensions.height);
+        GFX_X_ISTORE(slot, gfx_current_window_dimensions.width, gfx_current_window_dimensions.height);
     }
     {
         /* D578 diag: one summary line per ~10 s (own clock: the shared stats
@@ -7200,7 +7250,7 @@ extern "C" int gfx_interp_tick(Gfx* commands, const float* alphas, int n, int ba
  * (a 120.000 Hz timer against a panel that is never exactly 120 Hz drops and
  * repeats a frame every few seconds: a hitch). */
 extern "C" void gfx_interp_present(int slot, int vsync) {
-    gfx_opengl_interp_show(slot);
+    GFX_X_ISHOW(slot);
     gfx_wapi->swap_buffers_begin();
     gfx_rapi->finish_render();
     gfx_wapi->swap_buffers_end();
@@ -7215,7 +7265,7 @@ extern "C" void gfx_interp_present(int slot, int vsync) {
         s_gamescope = getenv("GAMESCOPE_WAYLAND_DISPLAY") != NULL || getenv("SteamDeck") != NULL;
     }
     if (vsync && !s_gamescope) {
-        gfx_opengl_interp_sync();
+        GFX_X_ISYNC();
     }
 }
 

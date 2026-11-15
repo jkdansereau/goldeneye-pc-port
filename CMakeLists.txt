@@ -856,6 +856,7 @@ add_executable(ge007 ${SRC})
 target_link_libraries(ge007 ${LIBS})
 set_target_properties(ge007 PROPERTIES OUTPUT_NAME "${BIN_NAME}")
 switch_package(ge007)   # goldeneye-nx hook: .nro (no-op off Switch)
+switch_deko3d_shaders(ge007)   # project-dam hook (D973): deko3d shader pack (no-op off Switch)
 if(WIN32)
   set_target_properties(ge007 PROPERTIES WIN32_EXECUTABLE TRUE)
   # Explorer/taskbar icon: the original crosshair mark (cmake/icon/ge007.rc,
