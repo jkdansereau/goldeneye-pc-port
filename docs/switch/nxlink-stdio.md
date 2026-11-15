@@ -56,6 +56,8 @@ travels on the nxlink command line, with nothing to copy to the SD card:
   work: `GE_PERFSTAT=1`, `GE_COOP=1`, `GE_D176=1`, ... (`data/ge007.args` still works and is read too).
 - `NX_TEST_SECS=<n>` sets how long the run lasts before the automatic quit (10 s by default). The watchdog
   reads it 2 s after start, once `main()` has set the environment.
+- `GE_PADS=<1..4>` seats the first N controllers whatever is attached (D974; by default only connected
+  controllers are seated). Co-op / split-screen test runs pass `GE_PADS=2`.
 - `GE_CFG="Key=value;Key2=value2"` overrides `ge007.ini` values for this run only (for example
   `GE_CFG=Video.DrawDistance=150;Video.FpsCap=30`). While it is set the ini is never written back, so a
   test never changes the user's settings.

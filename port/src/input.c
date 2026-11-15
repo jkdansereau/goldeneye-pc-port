@@ -343,6 +343,11 @@ static int mpRoute(void)
         n = 0;
         for (int s = 0; s < MAX_PADS; ++s) n += (s_matchSeatMask >> s) & 1;
     }
+#ifdef __SWITCH__
+    /* D974: no keyboard/mouse on the console, so it is never player 1 (with
+     * one pad it made the game count two controllers). */
+    return n >= 2 ? MPR_PADSP1 : 0;
+#endif
     if ((mpInputMode == 2 && n >= 1) || (mpInputMode == 0 && n == 1))
         return MPR_KBMP1;
     return n >= 2 ? MPR_PADSP1 : 0;
@@ -1326,16 +1331,46 @@ static int padSeatOf(SDL_JoystickID inst)
     return -1;
 }
 
+#ifdef __SWITCH__
+/* D974: SDL's switch driver lists one joystick per npad (No1..No8),
+ * connected or not. Only open the ones with a controller behind them
+ * (nxPadConnectedMask, port/src/switch/nxmem.c). GE_PADS=<1..4> forces the
+ * first N instead, for tests (Ryujinx, nxlink) whatever is attached. */
+extern int nxPadConnectedMask(void);
+static int s_nxPadMask = -1;   /* last mask the seats were built from */
+
+static int nxPadAllowedMask(void)
+{
+    static int forced = -2;
+    if (forced == -2) {
+        const char *e = getenv("GE_PADS");
+        forced = (e && e[0] >= '1' && e[0] <= '4') ? (1 << (e[0] - '0')) - 1 : -1;
+        if (forced > 0) sysLogPrintf(LOG_NOTE, "input: GE_PADS forces %d controller(s)", e[0] - '0');
+    }
+    return forced > 0 ? forced : nxPadConnectedMask();
+}
+#endif
+
 /* Seat table maintenance (DNEW-mp-1, see padInst above). Called at boot and on
  * every rescan: drops detached pads, compacts outside a match, opens any new
  * controller into the first free seat, then rebuilds the controller mask. */
 static void inputOpenPads(void)
 {
     const int inMatch = inputMpSplit();
+#ifdef __SWITCH__
+    static int padDev[MAX_PADS] = { -1, -1, -1, -1 };   /* D974: SDL device index of each seat */
+    const int allowed = nxPadAllowedMask();
+    s_nxPadMask = allowed;
+#endif
 
     /* 1. drop pads that are gone (the handle of a detached pad is dead) */
     for (int s = 0; s < MAX_PADS; ++s) {
-        if (pads[s] && !SDL_GameControllerGetAttached(pads[s])) {
+#ifdef __SWITCH__
+        const int npadGone = pads[s] && padDev[s] >= 0 && !(allowed & (1 << padDev[s]));
+#else
+        const int npadGone = 0;
+#endif
+        if (pads[s] && (npadGone || !SDL_GameControllerGetAttached(pads[s]))) {
             sysLogPrintf(LOG_NOTE, "input: seat %d pad detached%s", s,
                          inMatch ? " (seat kept for the match)" : "");
 #if SDL_VERSION_ATLEAST(2, 0, 12)
@@ -1346,6 +1381,9 @@ static void inputOpenPads(void)
             padInst[s] = -1;
             padRumbleOn[s] = 0;
             padFamily[s] = PADFAM_XBOX;
+#ifdef __SWITCH__
+            padDev[s] = -1;
+#endif
             if (inMatch) s_seatCompactOwed = 1;
         }
     }
@@ -1360,6 +1398,9 @@ static void inputOpenPads(void)
                 padInst[d] = padInst[s];     padInst[s] = -1;
                 padRumbleOn[d] = padRumbleOn[s]; padRumbleOn[s] = 0;
                 padFamily[d] = padFamily[s]; padFamily[s] = PADFAM_XBOX;   /* D471 */
+#ifdef __SWITCH__
+                padDev[d] = padDev[s];       padDev[s] = -1;
+#endif
                 sysLogPrintf(LOG_NOTE, "input: pad '%s' moved seat %d -> %d",
                              SDL_GameControllerName(pads[d]), s, d);
             }
@@ -1374,6 +1415,11 @@ static void inputOpenPads(void)
         if (!SDL_IsGameController(i)) {
             continue;
         }
+#ifdef __SWITCH__
+        if (i < 8 && !(allowed & (1 << i))) {
+            continue;   /* D974: no controller behind this npad */
+        }
+#endif
         if (padSeatOf(SDL_JoystickGetDeviceInstanceID(i)) >= 0) {
             continue;   /* already seated */
         }
@@ -1387,6 +1433,9 @@ static void inputOpenPads(void)
         pads[seat] = SDL_GameControllerOpen(i);
         if (pads[seat]) {
             padInst[seat] = SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[seat]));
+#ifdef __SWITCH__
+            padDev[seat] = i;
+#endif
             padDetectRumble(seat);
             padDetectFamily(seat);   /* D471 */
             sysLogPrintf(LOG_NOTE, "input: opened gamepad %d '%s' as seat %d (rumble %s)",
@@ -1965,6 +2014,15 @@ void inputRequestRescan(void)
 void inputUpdate(void)
 {
     if (SDL_AtomicSet(&s_rescanReq, 0)) inputRescanPads();   /* D450 */
+#ifdef __SWITCH__
+    {   /* D974: SDL sends no add/remove events for npads; watch the mask */
+        static int tick = 0;
+        if (++tick >= 30) {
+            tick = 0;
+            if (s_nxPadMask >= 0 && nxPadAllowedMask() != s_nxPadMask) inputRescanPads();
+        }
+    }
+#endif
     SDL_GameControllerUpdate();
     if (s_seatCompactOwed && !inputMpSplit()) {
         inputOpenPads();   /* DNEW-mp-1: match over -> compact the seats */

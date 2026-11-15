@@ -416,6 +416,25 @@ int nxIsHandheld(void)
     return appletGetOperationMode() == AppletOperationMode_Handheld;
 }
 
+/* D974: which of SDL's four Switch joysticks have a controller behind them.
+ * SDL's switch driver lists one joystick per npad No1..No8 (index 0 also
+ * reads the handheld Joy-Cons), whether or not a controller is attached, so
+ * the game seated four players and asked all four for START.
+ * Bit i = SDL device index i has a connected npad (a non-empty style set). */
+int nxPadConnectedMask(void)
+{
+    int mask = 0;
+    for (int i = 0; i < 8; i++) {
+        if (hidGetNpadStyleSet((HidNpadIdType)(HidNpadIdType_No1 + i)) != 0) {
+            mask |= 1 << i;
+        }
+    }
+    if (hidGetNpadStyleSet(HidNpadIdType_Handheld) != 0) {
+        mask |= 1;
+    }
+    return mask;
+}
+
 /* D959: host-thread applet service. Keeps the applet message queue serviced
  * (HOME, sleep, dock/undock) without touching SDL's event queue: on Switch
  * every SDL_PollEvent runs SDL's SWITCH_PumpEvents, which on an operation
