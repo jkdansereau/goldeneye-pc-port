@@ -481,7 +481,9 @@ D966,OPEN,Renderer modernisation Stage 2 (Switch):,"BUILT 2026-11-15 (port/fast3
 D967,OPEN,Renderer modernisation Stage 4 (Switch):,"OPEN: BUILT + MEASURED 2026-11-15 (port/fast3d only; default OFF; target not met, kept as opt-in); code REMOVED 2026-11-15 by D968 (never committed; backup patch only)"
 D968,?,Fast3D split (Switch renderer plan step 1):,BUILT + MEASURED 2026-11-15 (port/fast3d only; console:
 D969,?,Fast3D decode and GL replay pipelined (Switch renderer plan step 3):,"BUILT + MEASURED 2026-11-15 (port/fast3d, libultra.c, video.c; console:"
+D970,?,"Display-list mesh cache, step A (issue #10, GE_MESHCACHE, default on on the Switch):",BUILT + MEASURED 2026-11-15 (port/fast3d only; console Jungle solo:
 D971,?,"GE+ sky (Switch, Video.SkyPlus, default on; Original restores GE's sky):","BUILT + TUNED 2026-11-15 (new port/src/skyplus.c + port/include/skyplus.h, one #ifdef PORT hook at the top of skyRender, G_SKYPLUS_EXT in gfx_pc.cpp, GL pass in gfx_opengl.cpp; tuned by the maintaine…"
+D972,?,"Mesh cache step B tried and parked (issue #10, GE_MESHGPU):",PARKED 2026-11-15 (console Jungle co-op:
 D607,OPEN,Address model unified into one header:,DONE 2026-10-07 (macos branch; Windows identity gate:
 D608,FIXED,D34 ANIM_DATA_x re-basing guard in assets/animationtable_data.h was __x86_64__-only:,"FIXED 2026-10-07 (macos branch; mechanical guard widening, arm64 link clean)"
 D609,FIXED,macOS arm64 SIGKILL at exec:,"FIXED 2026-10-07 (macos branch; probe-confirmed; arm64 keeps the 4 GiB pagezero, floor 11.0)"

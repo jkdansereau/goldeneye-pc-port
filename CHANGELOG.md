@@ -24,6 +24,7 @@
 - The options no longer show the Mouse and Key Bindings pages, which need a mouse or a keyboard; Aim sensitivity replaces the aim-mode sensitivity and precision curve options
 - Aim style moves to the Controller page; the Centered styles turn the camera with the right stick, and the view stays where it is when the stick is released (Original keeps the N64 crosshair)
 - Faster rendering of busy scenes: vertex data goes to the GPU through one streaming buffer instead of a new buffer per draw, about three times cheaper per draw on the console
+- Faster rendering on the Switch: models and rooms that do not change are prepared once and reused on the next frames instead of being worked out again every frame, which frees about a third of the renderer's time in busy scenes (Jungle in co-op); same picture
 - Quitting the game on the Switch now returns to the launcher it was started from (sphaira or the homebrew menu) instead of closing the whole application and dropping to Home; if the game's threads do not stop in time it falls back to the old exit
 
 ### Fixed
