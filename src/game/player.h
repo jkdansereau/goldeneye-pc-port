@@ -136,6 +136,7 @@ void coopPropFreed(struct PropRecord *prop);
 s32 coopAnyHasPropInInv(struct PropRecord *prop);
 s32 coopAnyCopiedGoldenEye(void);
 s32 coopChrIsPlayer(struct ChrRecord *chr);
+s32 coopAutoAimAtPlayer(void);
 void coopNpcHurt(struct ChrRecord *chr, f32 damage, f32 subroty, s32 item);
 s32 coopAiStep(void *list, s32 offset, s32 isPlayerTest);
 s32 coopBondBody(void);
@@ -148,6 +149,7 @@ void coopFrozenCamera(u16 buttons, u16 oldbuttons, struct coord3d *pos, struct c
 #define GE_RULE_MULTI()          coopRuleMulti()
 #define GE_DEATH_SOLO()          (getPlayerCount() == 1 || coopDeathFinal())
 #define GE_PVP_ALLOWED()         coopPvpAllowed()
+#define GE_AUTOAIM_AT_PLAYER()   coopAutoAimAtPlayer()
 #define GE_VERSUS_DEATH_STATE()  coopVersusDeathState()
 #define GE_DOWN_FADE(f)          coopDownFade(f)
 #define GE_DOWN_CHRFADE(f)       coopDownChrFade(f)
@@ -191,6 +193,7 @@ void coopFrozenCamera(u16 buttons, u16 oldbuttons, struct coord3d *pos, struct c
 #define GE_RULE_MULTI()          (getPlayerCount() >= 2)
 #define GE_DEATH_SOLO()          (getPlayerCount() == 1)
 #define GE_PVP_ALLOWED()         1
+#define GE_AUTOAIM_AT_PLAYER()   1
 #define GE_VERSUS_DEATH_STATE()  set_missionstate(6)
 #define GE_DOWN_FADE(f)          (f)
 #define GE_DOWN_CHRFADE(f)       (f)

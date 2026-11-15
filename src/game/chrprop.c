@@ -2486,7 +2486,8 @@ void chrpropUpdateAutoaimTarget(void)
             if ((candidate_prop->type != PROP_TYPE_CHR)
                     && ((candidate_prop->type != PROP_TYPE_VIEWER)
                         || (candidate_prop->obj == NULL)
-                        || (getPlayerPointerIndex(candidate_prop) == get_cur_playernum())))
+                        || (getPlayerPointerIndex(candidate_prop) == get_cur_playernum())
+                        || !GE_AUTOAIM_AT_PLAYER()))
             {
                 continue;
             }

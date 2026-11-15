@@ -165,7 +165,17 @@ s32 coopRuleMulti(void)
     return getPlayerCount() >= 2 && !s_active;
 }
 
+/* Friendly fire: in co-op a player's bullets hit the partner (chrprop.c, GE_PVP_ALLOWED), and the hit goes through the
+ * versus damage path (chraction.c: record_damage_kills on the partner); a partner shot down is revived as after any
+ * death. Explosions already hurt both players. Auto-aim never picks the partner: coopAutoAimAtPlayer. */
 s32 coopPvpAllowed(void)
+{
+    return 1;
+}
+
+/* chrprop.c chrpropUpdateAutoaimTarget: the auto-aim takes another player's body as a target in versus; in co-op the
+ * crosshair locked onto the partner (a body holding a weapon). Hook GE_AUTOAIM_AT_PLAYER. */
+s32 coopAutoAimAtPlayer(void)
 {
     return !s_active;
 }
