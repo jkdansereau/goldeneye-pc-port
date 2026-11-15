@@ -21,6 +21,10 @@
 #include <memory>
 #include <chrono>
 #include <limits>
+#include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#endif
 
 #ifndef _LANGUAGE_C
 #define _LANGUAGE_C
@@ -38,6 +42,7 @@
 #include "gfx_window_manager_api.h"
 #include "gfx_rendering_api.h"
 #include "gfx_screen_config.h"
+#include "gfx_frame.h"   /* D968: decoder -> frame -> replay */
 #ifdef __SWITCH__
 #include "gfx_opengl.h"   /* gfx_opengl_fxaa_pass */
 #endif
@@ -347,6 +352,9 @@ static bool dropped_frame;
 static float buf_vbo[MAX_BUFFERED * (32 * 3)]; // 3 vertices in a triangle and 32 floats per vtx
 static size_t buf_vbo_len;
 static size_t buf_vbo_num_tris;
+/* D965: where gfx_sp_tri1 writes the open batch: buf_vbo, or the mapped vertex
+ * ring when GE_GLSTREAM hands one out (gfx_rapi->stream_begin). */
+static float* buf_vbo_w = buf_vbo;
 
 static struct GfxWindowManagerAPI* gfx_wapi;
 static struct GfxRenderingAPI* gfx_rapi;
@@ -380,12 +388,96 @@ extern "C" void gfx_tick_counts(unsigned* batches, unsigned* tris, unsigned* tex
     s_tick_batches = s_tick_tris = s_tick_texloads = s_tick_texmiss = s_tick_dynbytes = 0;
     s_tick_texns = 0;
 }
+static uint64_t s_perf_drawns = 0, s_perf_texns = 0;   /* D965 split line */
 struct TickTexTimer {   /* D583 SLOW line: time inside import_texture (all exits) */
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
     ~TickTexTimer() {
-        s_tick_texns += (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
+        const uint64_t ns = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
+        s_tick_texns += ns;
+        s_perf_texns += ns;   /* D965 split line */
     }
 };
+
+/* D965 probes (GE_PERFSTAT): time in draw_triangles and in import_texture, and
+ * "would-merge" counters. At every real draw, compare its state with the previous
+ * draw's: how many draws would remain if (notex) a texture change did not end a
+ * batch, (samesize) only a change to a texture of the same size, format and
+ * sampler did not, (noshader) a shader change did not end one either. State that
+ * always ends a batch (depth/blend/viewport/scissor/target) is compared in all. */
+static uint64_t s_wm_now = 0, s_wm_notex = 0, s_wm_same = 0, s_wm_nosh = 0;
+extern "C" {
+void gfx_opengl_perf_report(double frames);
+}
+
+static int gfx_perfstat_on(void);
+
+struct WmTex {
+    uint32_t id, size_bytes;
+    uint8_t fmt, siz, lin, cms, cmt;
+};
+struct WmOther {
+    uint8_t depth, alpha, modulate;
+    int fb;
+    struct XYWidthHeight vp, sc;
+};
+struct WmState {
+    struct ShaderProgram* shader;
+    WmTex tex[2];
+    WmOther other;
+};
+
+static void gfx_wm_note(void) {
+    static bool have_prev = false;
+    static WmState prev;
+    WmState cur;
+    memset(&cur, 0, sizeof(cur));
+    cur.shader = rendering_state.shader_program;
+    uint8_t num_inputs = 0;
+    bool used[2] = { false, false };
+    if (cur.shader != nullptr) {
+        gfx_rapi->shader_get_info(cur.shader, &num_inputs, used);
+    }
+    for (int i = 0; i < 2; i++) {
+        const TextureCacheNode* n = rendering_state.textures[i];
+        if (used[i] && n != nullptr) {
+            cur.tex[i].id = n->second.texture_id;
+            cur.tex[i].size_bytes = n->first.size_bytes;
+            cur.tex[i].fmt = n->first.fmt;
+            cur.tex[i].siz = n->first.siz;
+            cur.tex[i].lin = n->second.linear_filter;
+            cur.tex[i].cms = n->second.cms;
+            cur.tex[i].cmt = n->second.cmt;
+        }
+    }
+    cur.other.depth = rendering_state.depth_mode;
+    cur.other.alpha = rendering_state.alpha_blend;
+    cur.other.modulate = rendering_state.modulate;
+    cur.other.fb = fbActive ? active_fb->first : -1;
+    cur.other.vp = rendering_state.viewport;
+    cur.other.sc = rendering_state.scissor;
+    s_wm_now++;
+    if (!have_prev || memcmp(&cur.other, &prev.other, sizeof(WmOther)) != 0) {
+        s_wm_notex++; s_wm_same++; s_wm_nosh++;
+    } else {
+        const bool shader_diff = cur.shader != prev.shader;
+        bool tex_strict_diff = false;   /* a texture change that is not same size + format + sampler */
+        for (int i = 0; i < 2; i++) {
+            WmTex a = cur.tex[i], b = prev.tex[i];
+            a.id = b.id = 0;
+            if (memcmp(&a, &b, sizeof(WmTex)) != 0) {
+                tex_strict_diff = true;
+            }
+        }
+        if (shader_diff) {
+            s_wm_notex++;
+            s_wm_same++;
+        } else if (tex_strict_diff) {
+            s_wm_same++;
+        }
+    }
+    prev = cur;
+    have_prev = true;
+}
 
 static void gfx_flush(void) {
     if (buf_vbo_len > 0) {
@@ -393,7 +485,14 @@ static void gfx_flush(void) {
         s_perf_tris += buf_vbo_num_tris;
         s_tick_batches++;
         s_tick_tris += buf_vbo_num_tris;
-        gfx_rapi->draw_triangles(buf_vbo, buf_vbo_len, buf_vbo_num_tris);
+        if (gfx_perfstat_on()) {
+            gfx_wm_note();
+            const auto t0 = std::chrono::steady_clock::now();
+            gfx_rapi->draw_triangles(buf_vbo_w, buf_vbo_len, buf_vbo_num_tris);
+            s_perf_drawns += (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
+        } else {
+            gfx_rapi->draw_triangles(buf_vbo_w, buf_vbo_len, buf_vbo_num_tris);
+        }
         buf_vbo_len = 0;
         buf_vbo_num_tris = 0;
     }
@@ -3807,6 +3906,25 @@ static inline int gfx_lod_tile_offset(const int i) {
 static void gfx_interp_scissor(XYWidthHeight* sc);   /* D578, defined after gfx_adjust_viewport_or_scissor */
 static XYWidthHeight gfx_scissor_raw(uint32_t ulx, uint32_t uly, uint32_t lrx, uint32_t lry);   /* D578 */
 
+/* The SP viewport + RDP scissor -> GL, when changed (gfx_sp_tri1). */
+static inline void gfx_apply_viewport_scissor(void) {
+    if (rdp.viewport_or_scissor_changed) {
+        if (memcmp(&rdp.viewport, &rendering_state.viewport, sizeof(rdp.viewport)) != 0) {
+            gfx_flush();
+            gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
+            rendering_state.viewport = rdp.viewport;
+        }
+        XYWidthHeight sc = rdp.scissor;
+        gfx_interp_scissor(&sc);   /* D578: in-between passes move portal scissors */
+        if (memcmp(&sc, &rendering_state.scissor, sizeof(sc)) != 0) {
+            gfx_flush();
+            gfx_rapi->set_scissor(sc.x, sc.y, sc.width, sc.height);
+            rendering_state.scissor = sc;
+        }
+        rdp.viewport_or_scissor_changed = false;
+    }
+}
+
 static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bool is_rect) {
     /* D75D: only real model triangles (all indices < MAX_VERTICES); the
      * fullscreen-quad helpers use indices MAX_VERTICES+0..3 and would skew maxtri. */
@@ -3935,21 +4053,7 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         rendering_state.depth_mode = depth_mode;
     }
 
-    if (rdp.viewport_or_scissor_changed) {
-        if (memcmp(&rdp.viewport, &rendering_state.viewport, sizeof(rdp.viewport)) != 0) {
-            gfx_flush();
-            gfx_rapi->set_viewport(rdp.viewport.x, rdp.viewport.y, rdp.viewport.width, rdp.viewport.height);
-            rendering_state.viewport = rdp.viewport;
-        }
-        XYWidthHeight sc = rdp.scissor;
-        gfx_interp_scissor(&sc);   /* D578: in-between passes move portal scissors */
-        if (memcmp(&sc, &rendering_state.scissor, sizeof(sc)) != 0) {
-            gfx_flush();
-            gfx_rapi->set_scissor(sc.x, sc.y, sc.width, sc.height);
-            rendering_state.scissor = sc;
-        }
-        rdp.viewport_or_scissor_changed = false;
-    }
+    gfx_apply_viewport_scissor();
 
     uint64_t cc_options = 0;
     bool use_alpha =
@@ -4405,16 +4509,21 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
     if (buf_vbo_num_tris + n_out_tris > MAX_BUFFERED) {
         gfx_flush(); // buf_vbo holds MAX_BUFFERED triangles; make room for 1-2
     }
+    if (buf_vbo_len == 0) {
+        /* D965 (GE_GLSTREAM): write this batch straight into the mapped vertex ring. */
+        float* ring = n_emit_verts > 0 ? gfx_rapi->stream_begin(MAX_BUFFERED * 3 * 32) : nullptr;
+        buf_vbo_w = ring != nullptr ? ring : buf_vbo;
+    }
     for (int i = 0; i < n_emit_verts; i++) {
         struct LoadedVertex* vi = emit_v[i];
         float z = vi->z, w = vi->w;
         if (clip_parameters.z_is_from_0_to_1) {
             z = (z + w) / 2.0f;
         }
-        buf_vbo[buf_vbo_len++] = vi->x;
-        buf_vbo[buf_vbo_len++] = clip_parameters.invert_y ? -vi->y : vi->y;
-        buf_vbo[buf_vbo_len++] = z;
-        buf_vbo[buf_vbo_len++] = w;
+        buf_vbo_w[buf_vbo_len++] = vi->x;
+        buf_vbo_w[buf_vbo_len++] = clip_parameters.invert_y ? -vi->y : vi->y;
+        buf_vbo_w[buf_vbo_len++] = z;
+        buf_vbo_w[buf_vbo_len++] = w;
 
         for (int t = 0; t < 2; t++) {
             if (!used_textures[t]) {
@@ -4484,32 +4593,32 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
                 }
             }
 
-            buf_vbo[buf_vbo_len++] = u / tex_width[t];
-            buf_vbo[buf_vbo_len++] = v / tex_height[t];
+            buf_vbo_w[buf_vbo_len++] = u / tex_width[t];
+            buf_vbo_w[buf_vbo_len++] = v / tex_height[t];
 
             bool clampS = tm & (1 << 2 * t);
             bool clampT = tm & (1 << (2 * t + 1));
 
             if (clampS) {
-                buf_vbo[buf_vbo_len++] = (tex_width2[t] - 0.5f) / tex_width[t];
+                buf_vbo_w[buf_vbo_len++] = (tex_width2[t] - 0.5f) / tex_width[t];
             }
             if (clampT) {
-                buf_vbo[buf_vbo_len++] = (tex_height2[t] - 0.5f) / tex_height[t];
+                buf_vbo_w[buf_vbo_len++] = (tex_height2[t] - 0.5f) / tex_height[t];
             }
         }
 
         if (use_fog) {
-            buf_vbo[buf_vbo_len++] = rdp.fog_color.r / 255.0f;
-            buf_vbo[buf_vbo_len++] = rdp.fog_color.g / 255.0f;
-            buf_vbo[buf_vbo_len++] = rdp.fog_color.b / 255.0f;
-            buf_vbo[buf_vbo_len++] = vi->fog_n / 255.0f; // D540: see LoadedVertex.fog_n
+            buf_vbo_w[buf_vbo_len++] = rdp.fog_color.r / 255.0f;
+            buf_vbo_w[buf_vbo_len++] = rdp.fog_color.g / 255.0f;
+            buf_vbo_w[buf_vbo_len++] = rdp.fog_color.b / 255.0f;
+            buf_vbo_w[buf_vbo_len++] = vi->fog_n / 255.0f; // D540: see LoadedVertex.fog_n
         }
 
         if (use_grayscale) {
-            buf_vbo[buf_vbo_len++] = rdp.grayscale_color.r / 255.0f;
-            buf_vbo[buf_vbo_len++] = rdp.grayscale_color.g / 255.0f;
-            buf_vbo[buf_vbo_len++] = rdp.grayscale_color.b / 255.0f;
-            buf_vbo[buf_vbo_len++] = rdp.grayscale_color.a / 255.0f; // lerp interpolation factor (not alpha)
+            buf_vbo_w[buf_vbo_len++] = rdp.grayscale_color.r / 255.0f;
+            buf_vbo_w[buf_vbo_len++] = rdp.grayscale_color.g / 255.0f;
+            buf_vbo_w[buf_vbo_len++] = rdp.grayscale_color.b / 255.0f;
+            buf_vbo_w[buf_vbo_len++] = rdp.grayscale_color.a / 255.0f; // lerp interpolation factor (not alpha)
         }
 
         for (int j = 0; j < num_inputs; j++) {
@@ -4569,11 +4678,11 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
                         break;
                 }
                 if (k == 0) {
-                    buf_vbo[buf_vbo_len++] = color->r / 255.0f;
-                    buf_vbo[buf_vbo_len++] = color->g / 255.0f;
-                    buf_vbo[buf_vbo_len++] = color->b / 255.0f;
+                    buf_vbo_w[buf_vbo_len++] = color->r / 255.0f;
+                    buf_vbo_w[buf_vbo_len++] = color->g / 255.0f;
+                    buf_vbo_w[buf_vbo_len++] = color->b / 255.0f;
                 } else {
-                    buf_vbo[buf_vbo_len++] = color->a / 255.0f;
+                    buf_vbo_w[buf_vbo_len++] = color->a / 255.0f;
                 }
             }
         }
@@ -6174,7 +6283,8 @@ extern "C" void gfx_get_dimensions(uint32_t* width, uint32_t* height, int32_t* p
 
 extern "C" void gfx_init(const GfxInitSettings *settings) {
     gfx_wapi = settings->wapi;
-    gfx_rapi = settings->rapi;
+    gfx_rapi = gfx_frame_install(settings->rapi);   /* D968: the decoder talks to the frame recorder */
+    gfx_frame_set_wapi(gfx_wapi);                   /* D969: the replay thread pumps events and swaps */
     gfx_wapi->init(&settings->window_settings);
     gfx_rapi->init();
     gfx_rapi->update_framebuffer_parameters(0, settings->window_settings.width, settings->window_settings.height, 1, false, true, true, true);
@@ -6222,7 +6332,9 @@ extern "C" struct GfxRenderingAPI* gfx_get_current_rendering_api(void) {
 }
 
 extern "C" void gfx_start_frame(void) {
-    gfx_wapi->handle_events();
+    if (!gfx_frame_thread_active()) {
+        gfx_wapi->handle_events();   /* D969: pipelined, the GL thread pumps (at the start of each present) */
+    }
     gfx_wapi->get_dimensions(&gfx_current_window_dimensions.width, &gfx_current_window_dimensions.height,
                              &gfx_current_window_position_x, &gfx_current_window_position_y);
 
@@ -6362,6 +6474,10 @@ static uint64_t s_perf_maxiv_frame = 0, s_perf_over20 = 0, s_perf_over33 = 0;
  * its usual point (after the game DL) and returned through overlay_io; later
  * passes of the same game frame replay it. Perf timestamps: 0 = off. */
 static void gfx_frame_body(Gfx* commands, bool emit_overlay, Gfx** overlay_io, uint64_t perf_t0, uint64_t* perf_tpre, uint64_t* perf_t1) {
+    /* D968: everything the body sends to the rendering API is recorded into a
+     * GfxFrame (no GL during the display-list walk) and replayed on the backend
+     * by gfx_frame_submit at the end. */
+    gfx_frame_begin();
     gfx_rapi->update_framebuffer_parameters(0, gfx_current_window_dimensions.width,
                                             gfx_current_window_dimensions.height, 1, false, true, true,
                                             !game_renders_to_framebuffer);
@@ -6473,7 +6589,7 @@ static void gfx_frame_body(Gfx* commands, bool emit_overlay, Gfx** overlay_io, u
                     /* project-dam: FXAA reads a single-sample texture, so resolve
                      * into one first, then draw it to the window anti-aliased. */
                     gfx_rapi->resolve_msaa_color_buffer(game_framebuffer_msaa_resolved, game_framebuffer);
-                    gfx_opengl_fxaa_pass(game_framebuffer_msaa_resolved);
+                    gfx_frame_call(gfx_opengl_fxaa_pass, game_framebuffer_msaa_resolved);   /* D968: recorded */
                 } else {
                     gfx_rapi->resolve_msaa_color_buffer(0, game_framebuffer);
                 }
@@ -6484,7 +6600,7 @@ static void gfx_frame_body(Gfx* commands, bool emit_overlay, Gfx** overlay_io, u
         } else {
 #ifdef __SWITCH__
             if (gfx_fxaa_on) {
-                gfx_opengl_fxaa_pass(game_framebuffer);   /* project-dam: FXAA without MSAA */
+                gfx_frame_call(gfx_opengl_fxaa_pass, game_framebuffer);   /* project-dam: FXAA without MSAA */
             } else
 #endif
             gfxFramebuffer = (uintptr_t)gfx_rapi->get_framebuffer_texture_id(game_framebuffer);
@@ -6492,6 +6608,7 @@ static void gfx_frame_body(Gfx* commands, bool emit_overlay, Gfx** overlay_io, u
     }
 
     gfx_rapi->end_frame();
+    gfx_frame_submit();   /* D968: replay the recorded frame on the GL backend */
 }
 
 extern "C" void gfx_run(Gfx* commands) {
@@ -6521,7 +6638,9 @@ extern "C" void gfx_run(Gfx* commands) {
     Gfx* overlay = nullptr;
     gfx_frame_body(commands, true, &overlay, perf_t0, &perf_tpre, &perf_t1);
     const uint64_t perf_tpost = perf_t0 ? gfx_perf_now_ns() : 0;
-    gfx_wapi->swap_buffers_begin();
+    if (!gfx_frame_thread_active()) {
+        gfx_wapi->swap_buffers_begin();   /* D969: pipelined, the GL thread swaps after its replay */
+    }
     if (perf_t0) {
         s_perf_pre += (double)(perf_tpre - perf_t0) / 1.0e6;
         s_perf_post += (double)(perf_tpost - perf_t1) / 1.0e6;
@@ -6551,8 +6670,12 @@ extern "C" void gfx_run(Gfx* commands) {
 extern "C" void gfx_end_frame(void) {
     const uint64_t perf_t0 = gfx_perfstat_on() ? gfx_perf_now_ns() : 0;
     if (!dropped_frame) {
-        gfx_rapi->finish_render();
-        gfx_wapi->swap_buffers_end();
+        if (gfx_frame_thread_active()) {
+            gfx_frame_thread_present();   /* D969: hand the frame to the GL thread (replay + swap there) */
+        } else {
+            gfx_rapi->finish_render();
+            gfx_wapi->swap_buffers_end();
+        }
     }
     if (perf_t0) {
         const double f = 1.0e6;
@@ -6568,6 +6691,15 @@ extern "C" void gfx_end_frame(void) {
             fprintf(stderr, "PERFSTAT spikes: max=%.2fms at frame %llu (dl=%.2f run=%.2f) >20ms=%llu >33ms=%llu\n",
                     s_perf_maxiv, (unsigned long long)s_perf_maxiv_frame, s_perf_maxiv_dl, s_perf_maxiv_run,
                     (unsigned long long)s_perf_over20, (unsigned long long)s_perf_over33);
+            fprintf(stderr, "PERFSTAT split: dl=%.2f = draw calls %.2f + texture import %.2f + rest %.2f\n",
+                    s_perf_dl / n, (double)s_perf_drawns / 1.0e6 / n, (double)s_perf_texns / 1.0e6 / n,
+                    (s_perf_dl - (double)(s_perf_drawns + s_perf_texns) / 1.0e6) / n);
+            fprintf(stderr, "PERFSTAT wouldmerge: now=%.1f notex=%.1f samesize=%.1f noshader=%.1f (draws/frame)\n",
+                    (double)s_wm_now / n, (double)s_wm_notex / n, (double)s_wm_same / n, (double)s_wm_nosh / n);
+            gfx_opengl_perf_report(n);
+            gfx_frame_perf_report(n);   /* D968 */
+            s_perf_drawns = s_perf_texns = 0;
+            s_wm_now = s_wm_notex = s_wm_same = s_wm_nosh = 0;
             s_perf_maxiv = s_perf_maxiv_dl = s_perf_maxiv_run = 0;
             s_perf_maxiv_frame = s_perf_over20 = s_perf_over33 = 0;
             s_perf_dl = s_perf_run = s_perf_present = s_perf_interval = 0;
@@ -6700,6 +6832,7 @@ extern "C" int gfx_interp_tick(Gfx* commands, const float* alphas, int n, int ba
             g_gpSafeHeight = s_interp_safe_snap[1];
             s_hud_scale = 1.0f;
             gfx_opengl_frame_count_rewind();   /* start_frame below advances it again */
+            gfx_frame_frame_count_rewind();    /* D968: the recorder mirrors the counter */
         }
         s_interp_mode = s_interp_have_prev ? INTERP_BLEND : INTERP_RECORD;
         s_interp_alpha = a[i];

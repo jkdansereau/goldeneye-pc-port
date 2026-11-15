@@ -18,6 +18,8 @@
 
 extern "C" void videoRequestQuit(const char *why);   // port/src/video.c (D344)
 extern "C" void inputRequestRescan(void);   // port/src/input.c (D450)
+extern "C" void inputNoteButtonDown(SDL_JoystickID which, int button, Uint32 ts);   // port/src/input.c (D961)
+extern "C" void inputNoteAxis(SDL_JoystickID which, int axis, int value, Uint32 ts);   // port/src/input.c (D961)
 
 static SDL_Window* wnd;
 static SDL_GLContext ctx;
@@ -504,6 +506,12 @@ static void gfx_sdl_handle_events(void) {
                 break;
             case SDL_MOUSEWHEEL:
                 inputPostWheel(event.wheel.y);   // weapon cycle
+                break;
+            case SDL_CONTROLLERBUTTONDOWN:      // D961: GE_PRESSLATCH, a tap between two pad samples
+                inputNoteButtonDown(event.cbutton.which, event.cbutton.button, event.cbutton.timestamp);
+                break;
+            case SDL_CONTROLLERAXISMOTION:
+                inputNoteAxis(event.caxis.which, event.caxis.axis, event.caxis.value, event.caxis.timestamp);
                 break;
             case SDL_CONTROLLERDEVICEADDED:     // D450: this pump and video.c's drain the same
             case SDL_CONTROLLERDEVICEREMOVED:   // SDL queue; request a rescan, never rescan here

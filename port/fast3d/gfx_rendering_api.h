@@ -65,6 +65,18 @@ struct GfxRenderingAPI {
     void (*set_mipmap_filter)(enum MipmapFilteringMode mode);
 	void (*set_anisotropy_level)(int);
 	int (*get_max_anisotropy_level)(void);
+    /* D965 (GE_GLSTREAM): persistent vertex ring. Returns where the next
+     * batch's vertices (up to max_floats floats, laid out at the bound
+     * shader's stride) are to be written in place, or NULL when streaming is
+     * off (the caller then fills its own buffer). The pointer is passed back
+     * to draw_triangles as buf_vbo, which then draws from the ring without a
+     * copy. At most one stream batch is open at a time. */
+    float* (*stream_begin)(size_t max_floats);
+    /* D968: load_shader with explicit uniform values (frame counter, noise scale
+     * as the backend stores it = 1 / start_draw_to_framebuffer's argument, and
+     * the two three-point flags), as latched when the decoder loaded it: the
+     * frame replay loads programs later than the decoder did. */
+    void (*load_shader_with)(struct ShaderProgram* prg, uint32_t frame_count, float noise_scale, bool tpf0, bool tpf1);
 };
 
 #endif

@@ -39,6 +39,7 @@ extern void exit(int status);
 #include "../fast3d/gfx_api.h"
 #include "../fast3d/gfx_sdl.h"
 #include "../fast3d/gfx_opengl.h"
+#include "../fast3d/gfx_frame.h"   /* D969: replay thread */
 
 /* GE's internal resolution before the game's first osViSetMode (which then
  * sets the real CFB size): NTSC 640x480; PAL is taller, not shorter -- the EU
@@ -1376,6 +1377,7 @@ int videoQuitRequested(void)
 /* Render thread only. Never returns. */
 static void videoRenderPark(void)
 {
+    gfx_frame_thread_park();   /* D969: the replay thread finishes, glFinish()es, unbinds and is joined */
     gfx_sdl_park_for_exit();
     SDL_AtomicSet(&s_inFrame, 0);
     SDL_AtomicSet(&s_parked, 1);
@@ -1389,6 +1391,16 @@ static void videoRenderPark(void)
     for (;;) {
         sysSleep(100000);
     }
+}
+
+/* D961: the render worker found itself idle at a quit. It used to leave
+ * without unbinding the GL context (and without s_parked), so the host timed
+ * out after QUIT_WAIT_MS, skipped the GL teardown, and SDL_Quit() later
+ * destroyed the window while the context was still current on a thread that
+ * had exited: a hard console hang. Park exactly as at a frame boundary. */
+void videoRenderParkIdle(void)
+{
+    videoRenderPark();
 }
 
 /* D632: host thread, from the atexit handler (after the window state and
@@ -1480,6 +1492,11 @@ void videoInterpPresent(int slot)
     ++fpsNumFrames;
 }
 
+static void videoSetSwapIntervalCall(int interval)
+{
+    wmAPI->set_swap_interval(interval);
+}
+
 void videoStartFrame(void)
 {
     if (!initDone) {
@@ -1499,11 +1516,14 @@ void videoStartFrame(void)
     /* Rendering runs on the D481 render worker (or the scheduler thread with
      * GE_RENDERINLINE/GE_DETERM); the GL context was created on the host
      * main thread. */
-    gfx_sdl_make_context_current();
+    if (!gfx_frame_thread_active()) {
+        gfx_sdl_make_context_current();   /* D969: pipelined, the replay thread owns the context */
+    }
 
     int dirty = SDL_AtomicSet(&liveCfgDirty, 0);
     if (dirty) {
-        if (dirty & VCFG_VSYNC) wmAPI->set_swap_interval(cfgVSync ? 1 : 0);
+        /* D969: recorded into the frame when pipelined (an EGL call: GL thread) */
+        if (dirty & VCFG_VSYNC) gfx_frame_call(videoSetSwapIntervalCall, cfgVSync ? 1 : 0);
         if (dirty & VCFG_FILTER) videoApplyTexFilter();
         if (dirty & VCFG_FOV) portFovScale = cfgFovScale / 100.0f;
         if (dirty & VCFG_ANISO) gfx_set_anisotropy_level(cfgAniso);

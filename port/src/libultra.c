@@ -61,6 +61,10 @@
 
 /* fast3d (C++): the software RSP entry point. */
 extern void gfx_run(Gfx *commands);
+#include "../fast3d/gfx_frame.h"   /* D969: replay thread */
+static void portCoreLoadRegisterCore(const char *name, int core);   /* D969: GE_PERFSTAT core load (Switch) */
+static void portReplayThreadEnter(void);              /* D969: replay thread hooks */
+static void portReplayAfterPresent(int64_t tok);
 /* D578: frame interpolation (port/fast3d/gfx_pc.cpp). */
 extern void gfx_interp_reset(void);
 extern int gfx_interp_last_exact(void);
@@ -290,6 +294,100 @@ static int      g_tickLockMode = 0;       /* 0 undecided, 1 on, -1 off (env / ru
 static int      g_tickLockSame = 0;       /* consecutive saturated nudges, runaway guard */
 static int      g_tickLockLogN = 0;
 
+/* D961: input-to-photon latency. GE_PERFSTAT=1 logs INPUTLAT every 300 frames;
+ * GE_LOWLAT (scheduler kick + fresh pad sample + build gate) is on by default
+ * on the Switch (GE_LOWLAT=0 turns it off) and opt-in elsewhere (GE_LOWLAT=1);
+ * GE_PRESSLATCH=1[n] (min-hold, see portPressHold; the event latch is in
+ * input.c) is opt-in. Read once. Both off: nothing below changes behaviour
+ * (the counters are plain bookkeeping). */
+#include "sched.h"
+extern OSSched os_scheduler;                   /* src/sched.c */
+extern OSMesgQueue *sched_cmdQ;                /* src/init.c */
+extern void *g_gfxTaskSettingsList;            /* src/game/rsp.c: the OSScTask is its first member */
+s32 __scSchedule(OSSched *sc, OSScTask **sp, OSScTask **dp, s32 availRCP);   /* src/sched.c (not in sched.h) */
+extern unsigned inputTapsLatched(void);        /* input.c: D961 event latch counter */
+
+static int s_llMode = 0;      /* GE_LOWLAT */
+static int s_plHold = 0;      /* GE_PRESSLATCH: min polls a physical press stays visible (0 = off) */
+static int s_ilOn = 0;        /* GE_PERFSTAT */
+static int s_latInit = 0;
+static void portLatInit(void)
+{
+    if (s_latInit) return;
+    const char *l = getenv("GE_LOWLAT");
+    const char *p = getenv("GE_PRESSLATCH");
+#if defined(PLATFORM_SWITCH)
+    s_llMode = (l && l[0]) ? (atoi(l) != 0) : 1;   /* D961: default on (Switch) */
+#else
+    s_llMode = (l && atoi(l) != 0) ? 1 : 0;
+#endif
+    if (p && atoi(p) != 0) {
+        int n = atoi(p);
+        s_plHold = n < 2 ? 2 : (n > 4 ? 4 : n);   /* 1 = default hold of 2 polls (about one 30 fps frame) */
+    }
+    s_ilOn = getenv("GE_PERFSTAT") != NULL;
+    if (s_llMode || s_plHold)
+        sysLogPrintf(LOG_NOTE, "D961: GE_LOWLAT=%d GE_PRESSLATCH hold=%d polls", s_llMode, s_plHold);
+    __atomic_store_n(&s_latInit, 1, __ATOMIC_RELEASE);
+}
+
+typedef struct { int64_t stampUs, submitUs, pickUs; } IlRec;
+static IlRec s_ilRec[8];                 /* per submitted frame, FIFO (render order == submit order) */
+static uint32_t s_ilSub, s_ilDone, s_ilPick;   /* frames submitted / finished / picked up by the renderer */
+static int64_t s_ilPadStampUs;           /* when the newest pad snapshot was taken */
+static int64_t s_ilPadDelivUs;           /* stamp of the snapshot osContGetReadData last handed to joyPoll */
+static int64_t s_ilPickUs;               /* when the renderer picked up the frame now in flight */
+static int64_t s_ilRenderEmaUs;          /* pickup -> done (pass + limiter + swap) */
+/* D969: with the replay thread, the worker is free again once it has DECODED a
+ * frame (handed it to the replay thread); the GE_LOWLAT build gate looks at that. */
+static uint32_t s_ilDec;                 /* frames decoded (pipelined) */
+static int64_t s_ilDecEmaUs;             /* pickup -> hand-off, without the wait for the GL thread */
+static int64_t s_glStartUs;              /* when the GL thread got the last frame (hand-off) */
+static int64_t s_glEmaUs;                /* hand-off -> swap returned (replay + present) */
+static int s_ilPipe;                     /* the last frame went through the replay thread */
+static int64_t s_ilBuildEmaUs;           /* game thread: retrace accepted -> frame submitted */
+static int64_t s_ilRecvUs;               /* game thread: when the last accepted retrace arrived */
+static uint64_t s_ilQSum; static uint32_t s_ilQN;     /* game thread: frames in flight at submit */
+static uint32_t s_ilKicks, s_ilGateSkips, s_ilTaps, s_ilSkipRun;
+static uint32_t s_kickPending;
+/* renderer-thread only: */
+static double s_ilAgeSum, s_ilS2sSum, s_ilRenSum; static int64_t s_ilAgeMax; static uint32_t s_ilN;
+
+/* Min-hold: a physical press is shown to the game for at least s_plHold
+ * polls' worth of time (n x 16.7 ms, measured from the first sample that saw
+ * it). The game reads a pad's held state from the newest sample at its build,
+ * and its builds are 25-33 ms apart when the renderer is slow, so a 17-33 ms
+ * tap can fall entirely between two builds' samples. One continuous run per
+ * press (no second edge; a second press inside the hold merges); only presses
+ * shorter than the hold are lengthened. Time based, not poll counted.
+ * Scheduler thread only. */
+static u16 portPressHold(int slot, u16 now)
+{
+    if (s_plHold < 2) return now;
+    static int64_t tStart[MAXCONTROLLERS][16], extUntil[MAXCONTROLLERS][16];
+    const int64_t t = (int64_t)sysGetMicroseconds();
+    const int64_t holdUs = (int64_t)s_plHold * 16667;
+    u16 out = now;
+    for (int b = 0; b < 16; ++b) {
+        const u16 m = (u16)(1u << b);
+        if (now & m) {
+            if (!tStart[slot][b]) tStart[slot][b] = t;
+            extUntil[slot][b] = 0;
+        } else {
+            if (tStart[slot][b]) {
+                if (t - tStart[slot][b] < holdUs) {
+                    extUntil[slot][b] = tStart[slot][b] + holdUs;
+                    __atomic_fetch_add(&s_ilTaps, 1, __ATOMIC_RELAXED);
+                }
+                tStart[slot][b] = 0;
+            }
+            if (extUntil[slot][b] > t) out |= m;
+            else extUntil[slot][b] = 0;
+        }
+    }
+    return out;
+}
+
 static PortThread *portFind(OSThread *t)
 {
     for (int i = 0; i < PORT_MAX_THREADS; ++i) {
@@ -366,6 +464,7 @@ static void *portTickThread(void *arg)
 {
     (void)arg;
     portThreadEnter();
+    portCoreLoadRegisterCore("tick", 0);   /* unpinned: libnx starts it on the process default core (0) */
     while (!portQuitting()) {
         /* GE_DETERM (§D117, M-52 2nd attempt): retrace generation lives in
          * osRecvMesg() now (see there) -- synchronous with the sole
@@ -418,6 +517,9 @@ static void *portTickThread(void *arg)
 void portKernelInit(void)
 {
     memset(g_pt, 0, sizeof(g_pt));
+    portLatInit();   /* D961: read GE_LOWLAT / GE_PRESSLATCH / GE_PERFSTAT once, before any thread runs */
+    portCoreLoadRegisterCore("host", 0);   /* D969: the process main thread (event pump, applet), default core 0 */
+    gfx_frame_thread_set_hooks(portReplayThreadEnter, portReplayAfterPresent);   /* D969 */
     g_pqCount = 0;
     /* Anchor the heartbeat clock so the first check doesn't compare against
      * epoch 0 (the host QPC has a large absolute offset). */
@@ -480,6 +582,10 @@ static void *portThreadWrapper(void *arg)
      * core 1 is the render worker's, core 2 takes audio (AUDI_THREAD_ID 4) and
      * the light, latency-sensitive scheduler (SCHED_THREAD_ID 2). */
     nxSetThreadCore((pt->id == 4 || pt->id == 2) ? 2 : 0);
+    {
+        static const char *const names[] = { "t0", "idle", "sched", "game", "audio", "t5", "t6", "t7", "t8", "t9" };
+        portCoreLoadRegisterCore(pt->id >= 0 && pt->id < 10 ? names[pt->id] : "t?", (pt->id == 4 || pt->id == 2) ? 2 : 0);
+    }
 #endif
 
 #if defined(PLATFORM_WINDOWS)
@@ -757,9 +863,15 @@ void osEnqueueMesg(OSMesgQueue *mq, OSMesg msg)
 
 extern void interpPortalOnSend(void *mq, void *msg);   /* D578: port/src/interpportal.c */
 
+static void portSchedKick(void);
+static void portSchedKickRequest(void);
+static void portLatNoteSubmit(void);
+
 s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
 {
     interpPortalOnSend(mq, msg);   /* D578: game-thread snapshot for the portal-scissor replay */
+    const int isGfxSubmit = (mq == sched_cmdQ && msg != NULL && msg == g_gfxTaskSettingsList);   /* D961 */
+    if (isGfxSubmit) portLatNoteSubmit();
     PortQueue *pq = portQueueGet(mq);
     pthread_mutex_lock(&pq->lock);
     while (mq->validCount >= mq->msgCount) {
@@ -777,16 +889,27 @@ s32 osSendMesg(OSMesgQueue *mq, OSMesg msg, s32 flag)
     ++mq->validCount;
     pthread_cond_signal(&pq->cond);
     pthread_mutex_unlock(&pq->lock);
+    if (isGfxSubmit) portSchedKickRequest();   /* D961 GE_LOWLAT */
     return 0;
 }
 
 extern OSMesgQueue gfxFrameMsgQ; /* src/init.c */
+static int portLowLatSkipTick(void);
 
 s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
 {
     PortQueue *pq = portQueueGet(mq);
     pthread_mutex_lock(&pq->lock);
     while (mq->validCount == 0) {
+        /* D961 GE_LOWLAT: the scheduler thread is the only blocking consumer of
+         * the retrace/interrupt queue. A kick (the game just queued a frame)
+         * is served here, on that thread, between two of its handlers. */
+        if (mq == g_viRetraceMQ && __atomic_exchange_n(&s_kickPending, 0, __ATOMIC_ACQ_REL) != 0) {
+            pthread_mutex_unlock(&pq->lock);
+            portSchedKick();
+            pthread_mutex_lock(&pq->lock);
+            continue;
+        }
         if (flag != OS_MESG_BLOCK) {
             pthread_mutex_unlock(&pq->lock);
             return -1;
@@ -852,7 +975,15 @@ s32 osRecvMesg(OSMesgQueue *mq, OSMesg *msg, s32 flag)
     /* gfxFrameMsgQ is consumed only by boss.c's game thread. Apply queued
      * F10 watch edits there, after releasing the OS queue lock; the SDL
      * input/scheduler and render threads never touch GE watch/save state. */
-    if (mq == &gfxFrameMsgQ) watchSettingsGameTick();
+    if (mq == &gfxFrameMsgQ) {
+        watchSettingsGameTick();
+        /* D961 GE_LOWLAT: drop a retrace the game would only turn into a frame
+         * that then waits behind the one still rendering. */
+        if (s_llMode && flag == OS_MESG_BLOCK && m != NULL && ((OSScMsg *)m)->type == OS_SC_RETRACE_MSG) {
+            if (portLowLatSkipTick()) return osRecvMesg(mq, msg, flag);
+            s_ilRecvUs = (int64_t)sysGetMicroseconds();
+        }
+    }
     return 0;
 }
 
@@ -1203,7 +1334,9 @@ static u8 g_contConnected = 0x1; /* controller 0 connected */
  * OSContPad / OSContStatus arrays joy.c reads via osContGetReadData(). */
 static void contSnapshotFromKeyboard(void)
 {
+    portLatInit();
     inputUpdate();
+    __atomic_store_n(&s_ilPadStampUs, (int64_t)sysGetMicroseconds(), __ATOMIC_RELEASE);   /* D961 */
 
     const s32 mask = inputConnectedMask();
     g_contConnected = (u8)mask;
@@ -1212,6 +1345,7 @@ static void contSnapshotFromKeyboard(void)
         const int connected = (mask & (1 << i)) != 0;
         s8 sx = 0, sy = 0;
         u16 button = connected ? (u16)inputComputePad(i, &sx, &sy) : 0;
+        if (connected) button = portPressHold(i, button);   /* D961 (GE_PRESSLATCH) */
 
         g_contStatus[i].type   = connected ? CONT_TYPE_NORMAL : 0;
         /* D401: present a Rumble Pak (CONT_CARD_ON) whenever the connected
@@ -1238,7 +1372,12 @@ s32 osContInit(OSMesgQueue *mesgq, u8 *bitpattern, OSContStatus *data)
 
 s32 osContStartReadData(OSMesgQueue *mesgq)
 {
-    contSnapshotFromKeyboard();
+    /* D961 GE_LOWLAT: joyPoll takes the pad one poll AFTER this call (N64 SI
+     * semantics: start a read, collect it at the next retrace), so the sample a
+     * frame gets is one 16.7 ms tick old before it is even queued. With the
+     * switch on, the sample is taken in osContGetReadData instead. */
+    portLatInit();
+    if (!s_llMode) contSnapshotFromKeyboard();
     /* Complete immediately: post the SI "done" message so a blocking
      * osRecvMesg() right after (joy.c) returns at once. */
     if (mesgq) osSendMesg(mesgq, NULL, OS_MESG_NOBLOCK);
@@ -1261,6 +1400,8 @@ void osContGetReadData(OSContPad *pad)
 {
     /* N64 semantics: fill one OSContPad per controller channel. joy.c passes
      * g_ContData[0].samples[i].pads (a MAXCONTROLLERS-long array). */
+    if (s_llMode) contSnapshotFromKeyboard();   /* D961: fresh sample, see osContStartReadData */
+    __atomic_store_n(&s_ilPadDelivUs, __atomic_load_n(&s_ilPadStampUs, __ATOMIC_ACQUIRE), __ATOMIC_RELEASE);
     memcpy(pad, g_contPad, sizeof(g_contPad));
 }
 
@@ -1468,6 +1609,113 @@ static void portNoteSwapReturn(void)
         sysLogPrintf(LOG_NOTE, "D600: tick lock phase=%lld us err=%lld us nudge=%lld us", (long long)phase, (long long)err, (long long)nudge);
 }
 
+/* D969: GE_PERFSTAT core load (Switch). Each registered thread's CPU time
+ * (svcGetInfo ThreadTickCount, all cores: the per-core subtype returned
+ * nothing usable for another thread's handle on the console) over ~5 s
+ * windows, summed per IDEAL core (threads are pinned with nxSetThreadCore, mask
+ * 0x7, so the kernel may still move them), so the replay thread's core can be
+ * chosen from numbers. Threads the port did not start (SDL's audio callback
+ * thread, the libnx/Mesa ones) are not in it. */
+#if defined(PLATFORM_SWITCH)
+/* libnx, declared by hand: <switch.h> clashes with the N64 integer typedefs */
+extern uint32_t svcGetInfo(uint64_t *out, uint32_t id0, uint32_t handle, uint64_t id1);
+extern uint32_t threadGetCurHandle(void);
+#define NX_INFO_THREAD_TICKS     25u           /* InfoType_ThreadTickCount [13.0.0+] */
+#define NX_INFO_THREAD_TICKS_OLD 0xF0000002u   /* InfoType_ThreadTickCountDeprecated */
+#define NX_TICK_HZ 19200000.0
+#define CL_MAX 24
+static struct { const char *name; uint32_t h; int core; uint64_t last; } s_cl[CL_MAX];
+static int s_clN;
+static pthread_mutex_t s_clLock = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t s_clT0;
+
+static uint64_t portThreadTicks(uint32_t h)
+{
+    uint64_t t = 0;
+    if (svcGetInfo(&t, NX_INFO_THREAD_TICKS, h, ~0ULL) != 0 &&
+        svcGetInfo(&t, NX_INFO_THREAD_TICKS_OLD, h, ~0ULL) != 0)
+        return 0;
+    return t;
+}
+
+static void portCoreLoadRegisterCore(const char *name, int core)
+{
+    if (!getenv("GE_PERFSTAT")) return;
+    pthread_mutex_lock(&s_clLock);
+    if (s_clN < CL_MAX) {
+        s_cl[s_clN].name = name;
+        s_cl[s_clN].h = threadGetCurHandle();
+        s_cl[s_clN].core = core;
+        s_cl[s_clN].last = portThreadTicks(s_cl[s_clN].h);
+        s_clN++;
+    }
+    pthread_mutex_unlock(&s_clLock);
+}
+
+
+static void portCoreLoadTick(void)   /* render worker, after each frame */
+{
+    if (!s_ilOn) return;
+    const uint64_t now = sysGetMicroseconds();
+    if (s_clT0 == 0) { s_clT0 = now; return; }
+    if (now - s_clT0 < 5000000ULL) return;
+    const double dt = (double)(now - s_clT0) * (NX_TICK_HZ / 1e6);   /* in kernel ticks */
+    s_clT0 = now;
+    char line[1024];
+    int o = 0;
+    double core[3] = { 0, 0, 0 };
+    pthread_mutex_lock(&s_clLock);
+    for (int i = 0; i < s_clN; ++i) {
+        const uint64_t t = portThreadTicks(s_cl[i].h);
+        const double pc = t >= s_cl[i].last ? 100.0 * (double)(t - s_cl[i].last) / dt : 0.0;
+        s_cl[i].last = t;
+        if (s_cl[i].core >= 0 && s_cl[i].core < 3) core[s_cl[i].core] += pc;
+        if (pc >= 0.5 && o < (int)sizeof(line) - 64)
+            o += snprintf(line + o, sizeof(line) - o, " %s@%d=%.1f", s_cl[i].name, s_cl[i].core, pc);
+    }
+    pthread_mutex_unlock(&s_clLock);
+    sysLogPrintf(LOG_NOTE, "PERFSTAT cores (%% busy over 5 s, port threads only, by ideal core): core0=%.0f core1=%.0f core2=%.0f |%s",
+                 core[0], core[1], core[2], line);
+}
+#else
+static void portCoreLoadRegisterCore(const char *name, int core) { (void)name; (void)core; }
+static void portCoreLoadTick(void) {}
+#endif
+
+/* D969: decode + replay pipelined over two threads (port/fast3d/gfx_frame.cpp).
+ * The render worker stays the decoder; the replay thread owns the GL context,
+ * replays and swaps. Entry hook (replay thread) and after-present hook (swap
+ * returned) below. GE_REPLAYCORE=n picks its core on the Switch. */
+static void portReplayThreadEnter(void)
+{
+#if defined(PLATFORM_SWITCH)
+    static int core = -2;
+    if (core == -2) {
+        const char *e = getenv("GE_REPLAYCORE");
+        core = (e && e[0] >= '0' && e[0] <= '2') ? e[0] - '0' : 2;
+    }
+    nxSetThreadCore(core);
+    sysLogPrintf(LOG_NOTE, "D969: replay thread on core %d", core);
+#endif
+#if defined(PLATFORM_SWITCH)
+    portCoreLoadRegisterCore("replay", core);
+#endif
+}
+
+static void portLatEnd(int64_t tok);
+static void portNoteSwapReturn(void);
+static void portReplayAfterPresent(int64_t tok)   /* replay thread: the swap returned */
+{
+    {
+        const int64_t g = (int64_t)sysGetMicroseconds() - __atomic_load_n(&s_glStartUs, __ATOMIC_RELAXED);
+        const int64_t ema = __atomic_load_n(&s_glEmaUs, __ATOMIC_RELAXED);
+        if (g > 0 && g < 200000) __atomic_store_n(&s_glEmaUs, ema ? (ema * 7 + g) / 8 : g, __ATOMIC_RELAXED);
+    }
+    portNoteSwapReturn();   /* D600 */
+    portLatEnd(tok);        /* D961 */
+    g_lastFrameUs = sysGetMicroseconds();
+}
+
 static void portRenderGfxTask(Gfx *dl)
 {
     uint64_t t0 = sysGetMicroseconds();
@@ -1475,11 +1723,13 @@ static void portRenderGfxTask(Gfx *dl)
     videoSyncSplitScreen();
     gfx_run(dl);
     videoEndFrame();
-    portNoteSwapReturn();   /* D600 */
-    g_lastFrameUs = sysGetMicroseconds();
+    if (!gfx_frame_thread_active()) {
+        portNoteSwapReturn();   /* D600 (D969: pipelined, on the replay thread at its swap) */
+        g_lastFrameUs = sysGetMicroseconds();
+    }
     if (++g_framesRendered <= 5 || (g_framesRendered % 300) == 0)
-        sysLogPrintf(LOG_NOTE, "frame %d rendered in %llu us",
-                     g_framesRendered,
+        sysLogPrintf(LOG_NOTE, "frame %d %s in %llu us",
+                     g_framesRendered, gfx_frame_thread_active() ? "decoded" : "rendered",
                      (unsigned long long)(sysGetMicroseconds() - t0));
 }
 
@@ -1509,6 +1759,187 @@ static uint64_t s_rwTaskViUs;  /* D578: g_lastViUs when it was submitted */
  * still waiting for our previous frame, and the worker's pickup delay. */
 static int64_t s_rwTaskSubmitUs, s_rwLastDoneUs;
 static int s_rwMode = 0;       /* 0 = undecided, 1 = worker, -1 = inline */
+
+/* ---- D961: input latency measurement + GE_LOWLAT ---------------------------
+ * Frame life: pad sample (joyPoll, scheduler thread, each retrace) -> game
+ * build (boss.c, on the retrace message) -> osSendMesg(cmdQ) [submit] ->
+ * __scHandleRetrace drains cmdQ at the NEXT retrace and starts the RSP task
+ * (the render worker) when it is idle -> render pass + limiter + swap [done].
+ * INPUTLAT age = done - pad sample stamp. */
+static void portLatNoteSubmit(void)   /* game thread, from osSendMesg(cmdQ) */
+{
+    portLatInit();
+    const int64_t now = (int64_t)sysGetMicroseconds();
+    const uint32_t sub = __atomic_load_n(&s_ilSub, __ATOMIC_RELAXED);
+    const uint32_t done = __atomic_load_n(&s_ilDone, __ATOMIC_ACQUIRE);
+    const uint32_t ahead = sub - done;   /* frames in flight (rendering or waiting) before this one */
+    s_ilRec[sub & 7].stampUs = __atomic_load_n(&s_ilPadDelivUs, __ATOMIC_ACQUIRE);
+    s_ilRec[sub & 7].submitUs = now;
+    __atomic_store_n(&s_ilSub, sub + 1, __ATOMIC_RELEASE);
+    __atomic_fetch_add(&s_ilQSum, ahead, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&s_ilQN, 1, __ATOMIC_RELAXED);
+    if (s_ilRecvUs && now > s_ilRecvUs && now - s_ilRecvUs < 100000) {
+        const int64_t b = now - s_ilRecvUs;
+        s_ilBuildEmaUs = s_ilBuildEmaUs ? (s_ilBuildEmaUs * 7 + b) / 8 : b;
+    }
+}
+
+/* GE_LOWLAT build gate (game thread). With one frame already rendering, a
+ * retrace turns into a frame that waits for it. Skip the retrace while the
+ * NEXT one would still get its frame to the renderer in time, so the frame is
+ * built (and its input sampled) one tick later. At most 3 skips in a row. */
+static int portLowLatSkipTick(void)
+{
+    /* D969: pipelined, "rendering" = still being decoded (the worker is what a new frame would wait for) */
+    const int pipe = __atomic_load_n(&s_ilPipe, __ATOMIC_RELAXED);
+    const uint32_t done = pipe ? __atomic_load_n(&s_ilDec, __ATOMIC_ACQUIRE) : __atomic_load_n(&s_ilDone, __ATOMIC_ACQUIRE);
+    const uint32_t sub = __atomic_load_n(&s_ilSub, __ATOMIC_ACQUIRE);
+    if (pipe && sub == done && __atomic_load_n(&s_ilDone, __ATOMIC_ACQUIRE) != done && s_ilSkipRun < 3) {
+        /* D969: decoder idle, GL thread busy with the last frame. A frame
+         * built now would be decoded long before the GL thread is free and
+         * wait there (shown no earlier than one built a tick later): the
+         * pipeline then stays one frame deep for good (measured: Dam, the
+         * hand-off waiting 10 ms a frame). Build it one tick later. */
+        const int64_t T = (int64_t)g_tickIntervalUs;
+        const int64_t glFree = __atomic_load_n(&s_glStartUs, __ATOMIC_RELAXED) + __atomic_load_n(&s_glEmaUs, __ATOMIC_RELAXED);
+        const int64_t ready = (int64_t)sysGetMicroseconds() + s_ilBuildEmaUs + __atomic_load_n(&s_ilDecEmaUs, __ATOMIC_RELAXED);
+        if (__atomic_load_n(&s_glEmaUs, __ATOMIC_RELAXED) > 0 && glFree - ready > T / 2) {
+            ++s_ilSkipRun;
+            __atomic_fetch_add(&s_ilGateSkips, 1, __ATOMIC_RELAXED);
+            return 1;
+        }
+    }
+    if (sub - done != 1 || __atomic_load_n(&s_ilPick, __ATOMIC_ACQUIRE) == done || s_ilSkipRun >= 3) {
+        s_ilSkipRun = 0;   /* idle, a frame already waiting (the game ignores this retrace), or not yet started */
+        return 0;
+    }
+    const int64_t T = (int64_t)g_tickIntervalUs;
+    const int64_t render = pipe ? __atomic_load_n(&s_ilDecEmaUs, __ATOMIC_RELAXED) : __atomic_load_n(&s_ilRenderEmaUs, __ATOMIC_RELAXED);
+    const int64_t remaining = __atomic_load_n(&s_ilPickUs, __ATOMIC_RELAXED) + render - (int64_t)sysGetMicroseconds();
+    if (render > 0 && remaining > T + s_ilBuildEmaUs + 1500) {
+        ++s_ilSkipRun;
+        __atomic_fetch_add(&s_ilGateSkips, 1, __ATOMIC_RELAXED);
+        return 1;
+    }
+    s_ilSkipRun = 0;
+    return 0;
+}
+
+/* GE_LOWLAT scheduler kick. src/sched.c only moves a queued task from cmdQ to
+ * the RCP inside __scHandleRetrace (every 16.7 ms), so a frame the game
+ * submits 1-2 ms after a tick waits ~15 ms for the next one before the render
+ * thread even sees it (and a render that ends between ticks idles until the
+ * next tick: the 39-49 presents/s). The submit hook wakes the scheduler thread
+ * and osRecvMesg runs the drain/schedule/exec part of that handler right
+ * away; none of its tick side effects (joyPoll, music fade, frame count, the
+ * clients' retrace messages) run, so tick-driven timing is unchanged. */
+static void portSchedKickRequest(void)   /* game thread */
+{
+    if (!s_llMode || g_determEnabled || !g_viRetraceMQ) return;
+    __atomic_store_n(&s_kickPending, 1, __ATOMIC_RELEASE);
+    PortQueue *pq = portQueueGet(g_viRetraceMQ);
+    pthread_mutex_lock(&pq->lock);
+    pthread_cond_broadcast(&pq->cond);
+    pthread_mutex_unlock(&pq->lock);
+}
+
+static void portSchedKick(void)   /* scheduler thread only */
+{
+    if (!s_llMode || g_determEnabled || s_rwMode != 1 || videoInterpHz() > 0) return;   /* D578 frames are paced by the retrace grid */
+    OSSched *sc = &os_scheduler;
+    OSScTask *t = NULL, *sp = NULL, *dp = NULL;
+    while (osRecvMesg(&sc->cmdQ, (OSMesg *)&t, OS_MESG_NOBLOCK) != -1)
+        __scAppendList(sc, t);
+    if (sc->doAudio && sc->curRSPTask) return;   /* the retrace handler's yield owns that case */
+    const s32 state = ((sc->curRSPTask == NULL) << 1) | (sc->curRDPTask == NULL);
+    if (__scSchedule(sc, &sp, &dp, state) != state) {
+        __atomic_fetch_add(&s_ilKicks, 1, __ATOMIC_RELAXED);
+        __scExec(sc, sp, dp);
+    }
+}
+
+static void portLatStallDiag(const char *where, int64_t us);
+
+/* Returns the frame's token (its index in s_ilRec, for portLatEnd), or -1 when
+ * no submitted frame is waiting (boot / audio-only). D969: with the replay
+ * thread the next frame is picked up before the previous one is done, so the
+ * index is the pick count, not the done count (identical when not pipelined). */
+static int64_t portLatBegin(void)   /* renderer thread (or the scheduler when inline): a frame starts */
+{
+    const int64_t now = (int64_t)sysGetMicroseconds();
+    const uint32_t pick = __atomic_load_n(&s_ilPick, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_ilPickUs, now, __ATOMIC_RELAXED);
+    if (__atomic_load_n(&s_ilSub, __ATOMIC_ACQUIRE) == pick) {
+        return -1;
+    }
+    s_ilS2sSum += (double)(now - s_ilRec[pick & 7].submitUs);
+    if (s_ilOn && now - s_ilRec[pick & 7].submitUs > 500000) portLatStallDiag("submit->pickup", now - s_ilRec[pick & 7].submitUs);
+    s_ilRec[pick & 7].pickUs = now;
+    __atomic_store_n(&s_ilPick, pick + 1, __ATOMIC_RELEASE);
+    return (int64_t)pick;
+}
+
+/* D969: the worker handed the frame to the replay thread (pipelined only). */
+static void portLatDecoded(int64_t tok)
+{
+    const int64_t now = (int64_t)sysGetMicroseconds();
+    __atomic_store_n(&s_glStartUs, now, __ATOMIC_RELAXED);
+    if (tok < 0) return;
+    int64_t d = now - s_ilRec[tok & 7].pickUs - gfx_frame_thread_last_wait_us();
+    if (d < 0) d = 0;
+    const int64_t ema = __atomic_load_n(&s_ilDecEmaUs, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_ilDecEmaUs, ema ? (ema * 7 + d) / 8 : d, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_ilDec, (uint32_t)tok + 1, __ATOMIC_RELEASE);
+}
+
+static void portLatStallDiag(const char *where, int64_t us)
+{
+    OSSched *sc = &os_scheduler;
+    sysLogPrintf(LOG_WARNING,
+        "D961 STALL %s %.0f ms: sub=%u pick=%u done=%u kickPending=%u rwTask=%d curRSP=%d curRDP=%d doAudio=%d gfxList=%d cmdQ=%d intQ=%d skipRun=%u",
+        where, us / 1000.0, s_ilSub, s_ilPick, s_ilDone, s_kickPending, s_rwTask != NULL,
+        sc->curRSPTask != NULL, sc->curRDPTask != NULL, (int)sc->doAudio, sc->gfxListHead != NULL,
+        (int)sc->cmdQ.validCount, (int)sc->interruptQ.validCount, s_ilSkipRun);
+}
+
+static void portLatEnd(int64_t tok)   /* renderer / replay thread: the frame's swap returned */
+{
+    const int64_t now = (int64_t)sysGetMicroseconds();
+    {
+        static int64_t lastEnd;
+        if (s_ilOn && lastEnd && now - lastEnd > 500000) portLatStallDiag("gap between frames", now - lastEnd);
+        lastEnd = now;
+    }
+    if (tok < 0) return;   /* no submit seen (audio-only/boot) */
+    const IlRec rec = s_ilRec[tok & 7];
+    const int64_t render = now - rec.pickUs;
+    const int64_t ema = __atomic_load_n(&s_ilRenderEmaUs, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_ilRenderEmaUs, ema ? (ema * 7 + render) / 8 : render, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_ilDone, (uint32_t)tok + 1, __ATOMIC_RELEASE);
+    if (!s_ilOn) return;
+    if (rec.stampUs > 0) {
+        const int64_t age = now - rec.stampUs;
+        s_ilAgeSum += (double)age;
+        if (age > s_ilAgeMax) s_ilAgeMax = age;
+        s_ilRenSum += (double)render;
+        ++s_ilN;
+    }
+    if (s_ilN >= 300) {
+        const uint64_t qs = __atomic_exchange_n(&s_ilQSum, 0, __ATOMIC_RELAXED);
+        const uint32_t qn = __atomic_exchange_n(&s_ilQN, 0, __ATOMIC_RELAXED);
+        sysLogPrintf(LOG_NOTE,
+            "INPUTLAT samples=%u age_avg=%.1fms age_max=%.1fms queue_avg=%.2f taps_saved=%u"
+            " sub2start_avg=%.1fms render_avg=%.1fms kicks=%u gate_skips=%u lowlat=%d latch=%d framethread=%d",
+            s_ilN, s_ilAgeSum / s_ilN / 1000.0, (double)s_ilAgeMax / 1000.0,
+            qn ? (double)qs / qn : 0.0,
+            __atomic_load_n(&s_ilTaps, __ATOMIC_RELAXED) + inputTapsLatched(),
+            s_ilS2sSum / s_ilN / 1000.0, s_ilRenSum / s_ilN / 1000.0,
+            __atomic_load_n(&s_ilKicks, __ATOMIC_RELAXED), __atomic_load_n(&s_ilGateSkips, __ATOMIC_RELAXED),
+            s_llMode, s_plHold,
+            __atomic_load_n(&s_ilPipe, __ATOMIC_RELAXED));
+        s_ilAgeSum = s_ilS2sSum = s_ilRenSum = 0.0; s_ilAgeMax = 0; s_ilN = 0;
+    }
+}
 
 /* D578: frame interpolation pacing (worker thread only; fast3d does the
  * drawing, see gfx_pc.cpp). A game frame is stamped with the scheduled time
@@ -2048,6 +2479,7 @@ static void *portRenderWorker(void *arg)
 #if defined(PLATFORM_SWITCH)
     nxSetThreadCore(1);   /* project-dam: the render worker owns core 1 */
 #endif
+    portCoreLoadRegisterCore("decode", 1);   /* D969: the render worker (decoder when pipelined) */
     for (;;) {
         int presentDue = 0;
         pthread_mutex_lock(&s_rwLock);
@@ -2059,6 +2491,12 @@ static void *portRenderWorker(void *arg)
              * boundary as before (D344). */
             if (videoQuitRequested()) {
                 pthread_mutex_unlock(&s_rwLock);
+#if defined(PLATFORM_SWITCH)
+                {
+                    extern void videoRenderParkIdle(void);   /* D961: unbind GL, set parked, then wait for the exit */
+                    videoRenderParkIdle();
+                }
+#endif
                 portThreadsParkUntilQuit();   /* parks until the orderly exit, then leaves */
                 for (;;) sysSleep(100000);
             }
@@ -2111,6 +2549,8 @@ static void *portRenderWorker(void *arg)
         Gfx *dl = s_rwTask;
         const uint64_t viUs = s_rwTaskViUs;
         pthread_mutex_unlock(&s_rwLock);
+        const int64_t tok = portLatBegin();   /* D961 */
+        int64_t tokLeft = tok;
 
         /* D578: with VSync nothing is presented here: a swap blocks for a
          * refresh, and the game waits for SP/DP done (posted below, after the
@@ -2122,6 +2562,8 @@ static void *portRenderWorker(void *arg)
          * dropped: the new frame's slots come after them on the grid. */
         const int hz = videoInterpHz();
         if (hz > 0 && viUs != 0) {
+            gfx_frame_thread_activate(false);   /* D969: interpolation draws and presents here, inline */
+            __atomic_store_n(&s_ilPipe, 0, __ATOMIC_RELAXED);
             portInterpPresentBeforeDraw(viUs);
             const int64_t d0 = (int64_t)sysGetMicroseconds();
             const int q0 = s_qLen;
@@ -2138,8 +2580,26 @@ static void *portRenderWorker(void *arg)
                 s_qLen = 0; s_gNext = 0.0;
                 gfx_interp_reset();
             }
+            /* D969: decode here, replay + swap on the replay thread, which
+             * closes the frame (portReplayAfterPresent). SP/DP done below go
+             * out as soon as the frame is decoded: the display list is no
+             * longer needed (the GfxFrame owns everything it draws). */
+            const int pipe = gfx_frame_thread_wanted();
+            gfx_frame_thread_activate(pipe);
+            if (pipe) gfx_frame_thread_set_token(tok);
             portRenderGfxTask(dl);
+            if (gfx_frame_thread_active()) {
+                __atomic_store_n(&s_ilPipe, 1, __ATOMIC_RELAXED);
+                if (!gfx_frame_thread_token_left(&tokLeft)) {
+                    portLatDecoded(tok);
+                    tokLeft = -2;   /* closed by the replay thread */
+                }
+            } else {
+                __atomic_store_n(&s_ilPipe, 0, __ATOMIC_RELAXED);
+            }
         }
+        if (tokLeft != -2) portLatEnd(tokLeft);   /* D961 */
+        portCoreLoadTick();   /* D969: GE_PERFSTAT core load, every ~5 s */
 
         pthread_mutex_lock(&s_rwLock);
         s_rwTask = NULL;
@@ -2222,7 +2682,9 @@ void osSpTaskStartGo(OSTask *t)
         return;
     } else {
         /* Graphics task: run the software RSP on the display list inline. */
+        const int64_t tok = portLatBegin();   /* D961 */
         portRenderGfxTask((Gfx *)t->t.data_ptr);
+        portLatEnd(tok);
     }
 
     portPostEventForce(OS_EVENT_SP);   /* D134: must not be dropped */

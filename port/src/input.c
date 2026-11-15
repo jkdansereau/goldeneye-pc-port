@@ -689,6 +689,82 @@ static u32 padReadRaw(SDL_GameController *pad)
     return raw;
 }
 
+/* D961 GE_PRESSLATCH: event latch. The pad is sampled by value (once per
+ * retrace on the scheduler thread), so a tap that goes down and up between two
+ * samples is invisible. The render thread's SDL event pump (gfx_sdl2.cpp)
+ * also runs SDL_JoystickUpdate, at its own instants, and sees the DOWN event:
+ * it is latched here and OR-ed into the next sample for exactly one sample.
+ * Double-edge guard: a DOWN whose time is not after the previous sample, when
+ * that sample already showed the source held, is dropped (the game saw it). */
+static int s_latchOn = -1;
+/* Lock-free (a spin lock between the render and scheduler threads can starve on
+ * the Switch's strict-priority scheduler): bits and times are plain atomics,
+ * the writer stores the time before it sets the bit. */
+static u32 s_latchBits[MAX_PADS];
+static Uint32 s_latchTs[MAX_PADS][PS_COUNT];
+static u32 s_latchPrevRaw[MAX_PADS];     /* what the game was shown at the previous sample */
+static Uint32 s_latchPrevMs[MAX_PADS];
+static SDL_atomic_t s_latchSaved;
+static int padSeatOf(SDL_JoystickID inst);
+
+static int padLatchEnabled(void)
+{
+    if (s_latchOn < 0) {
+        const char *e = getenv("GE_PRESSLATCH");
+        s_latchOn = (e && atoi(e) != 0) ? 1 : 0;
+    }
+    return s_latchOn;
+}
+
+static void padLatchNote(SDL_JoystickID which, int src, Uint32 ts, int axis)
+{
+    const int seat = padSeatOf(which);
+    if (seat < 0 || seat >= MAX_PADS) return;
+    if (!(axis && (__atomic_load_n(&s_latchPrevRaw[seat], __ATOMIC_ACQUIRE) & PSM(src)))) {   /* an analog trigger already shown held is not a new press */
+        __atomic_store_n(&s_latchTs[seat][src], ts, __ATOMIC_RELAXED);
+        __atomic_fetch_or(&s_latchBits[seat], PSM(src), __ATOMIC_RELEASE);
+    }
+}
+
+/* From the render thread's SDL event loop. */
+void inputNoteButtonDown(SDL_JoystickID which, int button, Uint32 ts)
+{
+    if (!padLatchEnabled()) return;
+    for (int i = 0; i < PS_LT; i++)
+        if (kPadSrc[i].btn == button) { padLatchNote(which, i, ts, 0); return; }
+}
+
+void inputNoteAxis(SDL_JoystickID which, int axis, int value, Uint32 ts)
+{
+    if (!padLatchEnabled() || value <= padTriggerPct * 327) return;
+    if (axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT) padLatchNote(which, PS_LT, ts, 1);
+    else if (axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT) padLatchNote(which, PS_RT, ts, 1);
+}
+
+unsigned inputTapsLatched(void)
+{
+    return (unsigned)SDL_AtomicGet(&s_latchSaved);
+}
+
+/* Gameplay sample of a seat: the held sources plus latched taps (once). */
+static u32 padLatchApply(int seat, u32 raw)
+{
+    if (!padLatchEnabled() || seat < 0 || seat >= MAX_PADS) return raw;
+    const Uint32 nowMs = SDL_GetTicks();
+    u32 add = 0;
+    const u32 pend = __atomic_exchange_n(&s_latchBits[seat], 0, __ATOMIC_ACQ_REL);   /* single consumer: the pad poll */
+    for (int b = 0; pend && b < PS_COUNT; b++) {
+        if (!(pend & PSM(b)) || (raw & PSM(b))) continue;
+        const Uint32 ts = __atomic_load_n(&s_latchTs[seat][b], __ATOMIC_RELAXED);
+        const int seenBefore = (s_latchPrevRaw[seat] & PSM(b)) && (Sint32)(s_latchPrevMs[seat] - ts) >= 0;
+        if (!seenBefore) add |= PSM(b);
+    }
+    s_latchPrevMs[seat] = nowMs;
+    __atomic_store_n(&s_latchPrevRaw[seat], raw | add, __ATOMIC_RELEASE);
+    if (add) SDL_AtomicAdd(&s_latchSaved, 1);
+    return raw | add;
+}
+
 static u32 padActHeld(const PadBinds *b, u32 raw)
 {
     u32 h = 0;
@@ -3162,7 +3238,7 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
             pc.tank = !pc.facePlayable && idx == 0 && !padMenuMode && g_PlayerIsInTank == 1 &&
                       slotPlayer() && slotPlayer()->outside_watch_menu && !slotPlayer()->pause_state;
             const PadBinds *pb = &padTabGet()->seat[padSeatForSlot(idx)];
-            padMapPure(pb, padReadRaw(pad), padActPrev[idx], button, &pc, &po);
+            padMapPure(pb, padLatchApply(padSeatForSlot(idx), padReadRaw(pad)), padActPrev[idx], button, &pc, &po);   /* D961 */
             button = po.button;
             if (po.crouch) crouchNow = 1;
             if (po.gadgetEdge) inputCycleGadget();

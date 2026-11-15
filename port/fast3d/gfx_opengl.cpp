@@ -3,7 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <chrono>
 #include <map>
+#include <string>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -38,6 +41,7 @@ struct ShaderProgram {
     GLint frame_count_location;
     GLint noise_scale_location;
     GLint three_point_filter_locations[2];
+    GLuint ring_vao;   /* D965: VAO of this shader's vertex layout (GE_GLSTREAM), 0 = not resolved */
 };
 
 struct Framebuffer {
@@ -100,22 +104,33 @@ static void gfx_opengl_vertex_array_set_attribs(struct ShaderProgram* prg) {
     }
 }
 
-static void gfx_opengl_set_uniforms(struct ShaderProgram* prg) {
+static void gfx_opengl_set_uniform_values(struct ShaderProgram* prg, uint32_t fc, float noise, bool tpf0, bool tpf1) {
     if (prg->frame_count_location >= 0) {
-        glUniform1i(prg->frame_count_location, frame_count);
+        glUniform1i(prg->frame_count_location, fc);
     }
     if (prg->noise_scale_location >= 0) {
-        glUniform1f(prg->noise_scale_location, current_noise_scale);
+        glUniform1f(prg->noise_scale_location, noise);
     }
     if (prg->three_point_filter_locations[0] >= 0) {
-        glUniform1i(prg->three_point_filter_locations[0], current_textures_linear_filter[0]);
+        glUniform1i(prg->three_point_filter_locations[0], tpf0);
     }
     if (prg->three_point_filter_locations[1] >= 0) {
-        glUniform1i(prg->three_point_filter_locations[1], current_textures_linear_filter[1]);
+        glUniform1i(prg->three_point_filter_locations[1], tpf1);
     }
 }
 
+static void gfx_opengl_set_uniforms(struct ShaderProgram* prg) {
+    gfx_opengl_set_uniform_values(prg, frame_count, current_noise_scale, current_textures_linear_filter[0],
+                                  current_textures_linear_filter[1]);
+}
+
+static bool s_stream_active = false;   /* D965: vertices come from the persistent ring (defined below) */
+
+
 static void gfx_opengl_unload_shader(struct ShaderProgram* old_prg) {
+    if (s_stream_active) {
+        return;   /* D965: the layout VAOs keep their own enable state */
+    }
     if (old_prg != NULL) {
         for (int i = 0; i < old_prg->num_attribs; i++) {
             if (old_prg->attrib_locations[i] >= 0) {
@@ -140,14 +155,62 @@ static size_t s_vbo_ring_off = 0;
 static size_t s_vbo_stride = 0;   /* bytes per vertex of the bound shader */
 #endif
 
+/* D965 probes (GE_PERFSTAT): where the CPU time of a draw goes, accumulated
+ * per frame and printed by gfx_opengl_perf_report(). */
+static int s_gl_perf = -1;
+static inline bool gl_perf_on(void) {
+    if (s_gl_perf < 0) s_gl_perf = getenv("GE_PERFSTAT") != NULL;
+    return s_gl_perf != 0;
+}
+static inline uint64_t gl_now_ns(void) {
+    return (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+static uint64_t s_gld_map_ns, s_gld_copy_ns, s_gld_unmap_ns, s_gld_draw_ns, s_gld_attrib_ns;
+static uint64_t s_gld_draws, s_gld_shader_changes, s_gld_bytes;
+
+static GLuint gfx_opengl_ring_vao_for(struct ShaderProgram* prg);   /* D965, below */
+static size_t s_cur_stride = 0;   /* bytes per vertex of the bound shader */
+
+
 static void gfx_opengl_load_shader(struct ShaderProgram* new_prg) {
     // if (!new_prg) return;
+    s_cur_stride = new_prg->num_floats * sizeof(float);
 #ifdef __SWITCH__
-    s_vbo_stride = new_prg->num_floats * sizeof(float);
+    s_vbo_stride = s_cur_stride;
 #endif
     glUseProgram(new_prg->opengl_program_id);
-    gfx_opengl_vertex_array_set_attribs(new_prg);
+    const uint64_t t0 = gl_perf_on() ? gl_now_ns() : 0;
+    if (s_stream_active) {
+        glBindVertexArray(gfx_opengl_ring_vao_for(new_prg));   /* D965: no per-attribute setup */
+    } else {
+        gfx_opengl_vertex_array_set_attribs(new_prg);
+    }
+    if (t0) {
+        s_gld_attrib_ns += gl_now_ns() - t0;
+        s_gld_shader_changes++;
+    }
     gfx_opengl_set_uniforms(new_prg);
+}
+
+/* D968: load + the uniform values the decoder latched (see GfxRenderingAPI::load_shader_with). */
+static void gfx_opengl_load_shader_with(struct ShaderProgram* new_prg, uint32_t fc, float noise, bool tpf0, bool tpf1) {
+    s_cur_stride = new_prg->num_floats * sizeof(float);
+#ifdef __SWITCH__
+    s_vbo_stride = s_cur_stride;
+#endif
+    glUseProgram(new_prg->opengl_program_id);
+    const uint64_t t0 = gl_perf_on() ? gl_now_ns() : 0;
+    if (s_stream_active) {
+        glBindVertexArray(gfx_opengl_ring_vao_for(new_prg));   /* D965: no per-attribute setup */
+    } else {
+        gfx_opengl_vertex_array_set_attribs(new_prg);
+    }
+    if (t0) {
+        s_gld_attrib_ns += gl_now_ns() - t0;
+        s_gld_shader_changes++;
+    }
+    gfx_opengl_set_uniform_values(new_prg, fc, noise, tpf0, tpf1);
 }
 
 static void append_str(char* buf, size_t* len, const char* str) {
@@ -260,12 +323,12 @@ static void append_formula(char* buf, size_t* len, uint8_t c[2][4], bool do_sing
     }
 }
 
-static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shader_id0, uint32_t shader_id1) {
-    struct CCFeatures cc_features = { 0 };
-    gfx_cc_get_features(shader_id0, shader_id1, &cc_features);
+#define SHADER_VS_MAX 2560
+#define SHADER_FS_MAX 12288
 
-    char vs_buf[2048];
-    char fs_buf[8192];
+/* Generates the vertex + fragment shader text of a combiner program. */
+static void gfx_opengl_gen_shader_src(struct CCFeatures& cc_features, char* vs_buf, size_t* vs_len_out,
+                                      char* fs_buf, size_t* fs_len_out, size_t* num_floats_out) {
     size_t vs_len = 0;
     size_t fs_len = 0;
     size_t num_floats = 4;
@@ -612,6 +675,22 @@ static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shad
 
     vs_buf[vs_len] = '\0';
     fs_buf[fs_len] = '\0';
+    *vs_len_out = vs_len;
+    *fs_len_out = fs_len;
+    *num_floats_out = num_floats;
+}
+
+static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shader_id0, uint32_t shader_id1) {
+    struct CCFeatures cc_features = { 0 };
+    gfx_cc_get_features(shader_id0, shader_id1, &cc_features);
+
+
+    char vs_buf[SHADER_VS_MAX];
+    char fs_buf[SHADER_FS_MAX];
+    size_t vs_len = 0;
+    size_t fs_len = 0;
+    size_t num_floats = 4;
+    gfx_opengl_gen_shader_src(cc_features, vs_buf, &vs_len, fs_buf, &fs_len, &num_floats);
 
     const GLchar* sources[2] = { vs_buf, fs_buf };
     const GLint lengths[2] = { (GLint)vs_len, (GLint)fs_len };
@@ -722,6 +801,7 @@ static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shad
     prg->three_point_filter_locations[0] = glGetUniformLocation(shader_program, "three_point_filter0");
     prg->three_point_filter_locations[1] = glGetUniformLocation(shader_program, "three_point_filter1");
 
+
     gfx_opengl_load_shader(prg);
 
     return prg;
@@ -746,6 +826,12 @@ static void gfx_opengl_clear_shaders(void) {
     shader_program_pool.clear();
 }
 
+struct SamplerKey {
+    GLint min, mag;
+    GLfloat aniso;
+    GLenum ws, wt;
+};
+
 static GLuint gfx_opengl_new_texture(void) {
     GLuint ret;
     glGenTextures(1, &ret);
@@ -759,7 +845,6 @@ static void gfx_opengl_delete_texture(uint32_t texID) {
 static void gfx_opengl_select_texture(int tile, GLuint texture_id, bool linear_filter) {
     glActiveTexture(GL_TEXTURE0 + tile);
     glBindTexture(GL_TEXTURE_2D, texture_id);
-
     current_textures_linear_filter[tile] = linear_filter;
 }
 
@@ -863,7 +948,7 @@ static uint32_t gfx_cm_to_opengl(uint32_t val) {
     return 0;
 }
 
-static void gfx_opengl_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt, bool mipmaps) {
+static SamplerKey gfx_opengl_sampler_key(bool linear_filter, uint32_t cms, uint32_t cmt, bool mipmaps) {
     const GLint min_filters[4][3] = {
         // MIPMAP_DISABLED   MIPMAP_NEAREST               MIPMAP_LINEAR
         {  GL_NEAREST,       GL_NEAREST_MIPMAP_NEAREST,   GL_NEAREST_MIPMAP_LINEAR  }, // FILTER_NONE
@@ -887,9 +972,20 @@ static void gfx_opengl_set_sampler_parameters(int tile, bool linear_filter, uint
     /* Trilinear option (playtest 2026-10-03): TRILINEAR magnifies LINEAR too. */
     const GLint max_filter = linear_filter && (current_filter_mode == FILTER_LINEAR || current_filter_mode == FILTER_TRILINEAR) ? GL_LINEAR : GL_NEAREST;
 
+    SamplerKey key;
+    key.min = min_filter;
+    key.mag = max_filter;
+    key.aniso = mipmaps ? (float)current_anisotropy_level : 1.0f;
+    key.ws = gfx_cm_to_opengl(cms);
+    key.wt = gfx_cm_to_opengl(cmt);
+    return key;
+}
+
+static void gfx_opengl_set_sampler_parameters(int tile, bool linear_filter, uint32_t cms, uint32_t cmt, bool mipmaps) {
+    const SamplerKey k = gfx_opengl_sampler_key(linear_filter, cms, cmt, mipmaps);
     glActiveTexture(GL_TEXTURE0 + tile);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, max_filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, k.min);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, k.mag);
 
 #ifdef PORT
     /* D446: anisotropy is per-texture-object state. It was only ever SET
@@ -900,10 +996,10 @@ static void gfx_opengl_set_sampler_parameters(int tile, bool linear_filter, uint
      * inherits follows the unordered_map iteration order, i.e. the texture
      * ADDRESSES, so the frame changed with the binary's data layout. Always
      * write it: the level when mipmapped, 1 (off) otherwise. */
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, mipmaps ? (float)current_anisotropy_level : 1.0f);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, k.aniso);
 #else
-    if (mipmaps) {
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, current_anisotropy_level);
+    if (k.aniso > 1.0f) {
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, k.aniso);
     }
 #endif
 
@@ -981,22 +1077,181 @@ static void gfx_opengl_set_use_alpha(bool use_alpha, bool modulate) {
     }
 }
 
+/* ---------------------------------------------------------------------------
+ * D965 (GE_GLSTREAM=1): persistent coherent vertex ring.
+ *
+ * One glBufferStorage buffer (MAP_WRITE | MAP_PERSISTENT | MAP_COHERENT) is
+ * mapped once and split into STREAM_SECTIONS sections. gfx_sp_tri1 writes a
+ * batch's vertices straight into the mapped memory (stream_begin hands out
+ * the pointer), and a draw is glDrawArrays(first, count) on the ring: no
+ * glMapBufferRange / memcpy / glUnmapBuffer per draw. Sections are used front
+ * to back; when the current one cannot hold another full batch, a fence is
+ * inserted after its last draw and the next section is entered, waiting on
+ * that section's own fence first, and only if the GPU is still reading it
+ * (counted). Vertex formats live in VAOs, one per layout (stride + attribute
+ * locations/sizes), so a shader change binds a VAO instead of re-issuing a
+ * glVertexAttribPointer per attribute. GE_GLSTREAM_MB sets the section size
+ * (default 4 MiB, 3 sections). Without ARB_buffer_storage (or GL 4.4) the
+ * switch logs once and the old path stays in use.
+ * ------------------------------------------------------------------------- */
+#ifndef GL_MAP_PERSISTENT_BIT
+#define GL_MAP_PERSISTENT_BIT 0x0040
+#endif
+#ifndef GL_MAP_COHERENT_BIT
+#define GL_MAP_COHERENT_BIT 0x0080
+#endif
+typedef void (APIENTRY *ge_glBufferStorage_t)(GLenum target, GLsizeiptr size, const void* data, GLbitfield flags);
+
+#define STREAM_SECTIONS 3
+static bool s_stream_wanted = false;       /* GE_GLSTREAM=1 */
+static bool s_stream_avail = false;        /* ring created and mapped */
+static GLuint s_stream_buf = 0;
+static uint8_t* s_stream_map = NULL;
+static size_t s_stream_sec_size = 4u << 20;
+static unsigned s_stream_sec = 0;          /* current section */
+static size_t s_stream_off = 0;            /* bytes used in the current section */
+static GLsync s_stream_fence[STREAM_SECTIONS];
+static float* s_stream_batch_ptr = NULL;   /* the open batch (stream_begin -> draw_triangles) */
+static size_t s_stream_batch_abs = 0;      /* its byte offset in the buffer */
+static uint64_t s_stream_waits, s_stream_wait_ns, s_stream_advances, s_stream_fallbacks;
+static size_t s_stream_peak = 0;           /* most bytes used in one section */
+static std::map<std::string, GLuint> s_layout_vao;
+
+static GLuint gfx_opengl_ring_vao_for(struct ShaderProgram* prg) {
+    if (prg->ring_vao != 0) {
+        return prg->ring_vao;
+    }
+    std::string key;
+    key.push_back((char)prg->num_floats);
+    for (int i = 0; i < prg->num_attribs; i++) {
+        key.push_back((char)prg->attrib_locations[i]);
+        key.push_back((char)prg->attrib_sizes[i]);
+    }
+    auto it = s_layout_vao.find(key);
+    if (it == s_layout_vao.end()) {
+        GLuint vao = 0;
+        glGenVertexArrays(1, &vao);
+        GLint prev_vao = 0;
+        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prev_vao);
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ARRAY_BUFFER, s_stream_buf);   /* attribute pointers capture this binding */
+        gfx_opengl_vertex_array_set_attribs(prg);
+        glBindBuffer(GL_ARRAY_BUFFER, opengl_vbo);
+        glBindVertexArray((GLuint)prev_vao);
+        it = s_layout_vao.insert(std::make_pair(key, vao)).first;
+    }
+    prg->ring_vao = it->second;
+    return prg->ring_vao;
+}
+
+static void gfx_opengl_stream_wait(unsigned sec) {
+    GLsync f = s_stream_fence[sec];
+    if (f == NULL) {
+        return;
+    }
+    GLenum r = glClientWaitSync(f, 0, 0);
+    if (r == GL_TIMEOUT_EXPIRED) {
+        /* the GPU is still reading this section */
+        const uint64_t t0 = gl_now_ns();
+        int tries = 0;
+        do {
+            r = glClientWaitSync(f, GL_SYNC_FLUSH_COMMANDS_BIT, 50ull * 1000 * 1000);
+        } while (r == GL_TIMEOUT_EXPIRED && ++tries < 100);
+        s_stream_waits++;
+        s_stream_wait_ns += gl_now_ns() - t0;
+        if (r == GL_TIMEOUT_EXPIRED || r == GL_WAIT_FAILED) {
+            sysLogPrintf(LOG_WARNING, "GL: vertex ring fence wait gave up (0x%x); continuing", (unsigned)r);
+        }
+    }
+    glDeleteSync(f);
+    s_stream_fence[sec] = NULL;
+}
+
+/* Close the current section behind a fence and enter the next one. */
+static void gfx_opengl_stream_advance(void) {
+    if (s_stream_off > s_stream_peak) {
+        s_stream_peak = s_stream_off;
+    }
+    s_stream_fence[s_stream_sec] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    s_stream_sec = (s_stream_sec + 1) % STREAM_SECTIONS;
+    s_stream_off = 0;
+    s_stream_advances++;
+    gfx_opengl_stream_wait(s_stream_sec);
+}
+
+static float* gfx_opengl_stream_begin(size_t max_floats) {
+    if (!s_stream_active || s_stream_map == NULL || s_cur_stride == 0) {
+        return NULL;
+    }
+    const size_t need = max_floats * sizeof(float);
+    if (need + s_cur_stride > s_stream_sec_size) {
+        return NULL;
+    }
+    const size_t base = (size_t)s_stream_sec * s_stream_sec_size;
+    /* glDrawArrays' `first` counts vertices from the buffer start, so a batch
+     * starts on a multiple of the stride in buffer coordinates. */
+    size_t abs = (base + s_stream_off + s_cur_stride - 1) / s_cur_stride * s_cur_stride;
+    if (abs - base + need > s_stream_sec_size) {
+        gfx_opengl_stream_advance();
+        const size_t nbase = (size_t)s_stream_sec * s_stream_sec_size;
+        abs = (nbase + s_cur_stride - 1) / s_cur_stride * s_cur_stride;
+        s_stream_off = abs - nbase;
+    } else {
+        s_stream_off = abs - base;
+    }
+    s_stream_batch_abs = abs;
+    s_stream_batch_ptr = (float*)(s_stream_map + abs);
+    return s_stream_batch_ptr;
+}
+
+
 static void gfx_opengl_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris) {
     // printf("flushing %d tris\n", buf_vbo_num_tris);
+    const bool perf = gl_perf_on();
+    const size_t bytes = sizeof(float) * buf_vbo_len;
+    uint64_t t0 = 0, t1 = 0;
+    if (perf) {
+        s_gld_draws++;
+        s_gld_bytes += bytes;
+    }
+    if (s_stream_active) {
+        if (s_stream_batch_ptr == NULL || buf_vbo != s_stream_batch_ptr) {
+            /* The caller filled its own buffer (stream_begin said no): copy it in. */
+            s_stream_fallbacks++;
+            if (perf) t0 = gl_now_ns();
+            float* dst = gfx_opengl_stream_begin(buf_vbo_len);
+            if (dst == NULL) {
+                sysLogPrintf(LOG_WARNING, "GL: vertex ring cannot hold a %u byte batch; dropped", (unsigned)bytes);
+                return;
+            }
+            memcpy(dst, buf_vbo, bytes);
+            if (perf) s_gld_copy_ns += gl_now_ns() - t0;
+        }
+        if (perf) t0 = gl_now_ns();
+        glDrawArrays(GL_TRIANGLES, (GLint)(s_stream_batch_abs / s_cur_stride), 3 * buf_vbo_num_tris);
+        if (perf) s_gld_draw_ns += gl_now_ns() - t0;
+        s_stream_off += bytes;
+        s_stream_batch_ptr = NULL;
+        return;
+    }
 #ifdef __SWITCH__
     if (s_vbo_ring && s_vbo_stride > 0) {
-        const size_t bytes = sizeof(float) * buf_vbo_len;
         size_t off = (s_vbo_ring_off + s_vbo_stride - 1) / s_vbo_stride * s_vbo_stride;
         GLbitfield access = GL_MAP_WRITE_BIT | GL_MAP_UNSYNCHRONIZED_BIT | GL_MAP_INVALIDATE_RANGE_BIT;
         if (off + bytes > VBO_RING_SIZE) {
             off = 0;
             access = GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT;   /* orphan: fresh storage */
         }
+        if (perf) t0 = gl_now_ns();
         void* dst = glMapBufferRange(GL_ARRAY_BUFFER, off, bytes, access);
+        if (perf) { t1 = gl_now_ns(); s_gld_map_ns += t1 - t0; }
         if (dst != NULL) {
             memcpy(dst, buf_vbo, bytes);
+            if (perf) { t0 = gl_now_ns(); s_gld_copy_ns += t0 - t1; }
             glUnmapBuffer(GL_ARRAY_BUFFER);
+            if (perf) { t1 = gl_now_ns(); s_gld_unmap_ns += t1 - t0; }
             glDrawArrays(GL_TRIANGLES, (GLint)(off / s_vbo_stride), 3 * buf_vbo_num_tris);
+            if (perf) s_gld_draw_ns += gl_now_ns() - t1;
             s_vbo_ring_off = off + bytes;
             return;
         }
@@ -1005,9 +1260,148 @@ static void gfx_opengl_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_
         s_vbo_ring = 0;
     }
 #endif
+    if (perf) t0 = gl_now_ns();
     glBufferData(GL_ARRAY_BUFFER, sizeof(float) * buf_vbo_len, buf_vbo, GL_STREAM_DRAW);
+    if (perf) { t1 = gl_now_ns(); s_gld_copy_ns += t1 - t0; }   /* glBufferData = upload, counted as copy */
     glDrawArrays(GL_TRIANGLES, 0, 3 * buf_vbo_num_tris);
+    if (perf) s_gld_draw_ns += gl_now_ns() - t1;
 }
+
+/* D965 probe lines, called by gfx_pc every 300 frames with the frame count. */
+extern "C" void gfx_opengl_perf_report(double frames) {
+    if (!gl_perf_on() || frames <= 0) {
+        return;
+    }
+    const double n = frames, ms = 1.0e6;
+    fprintf(stderr,
+            "PERFSTAT gldraw: draws=%.0f/f map=%.2fms copy=%.2fms unmap=%.2fms draw=%.2fms attrib=%.2fms (%.0f shader changes/f) bytes=%.0f/f\n",
+            s_gld_draws / n, s_gld_map_ns / ms / n, s_gld_copy_ns / ms / n, s_gld_unmap_ns / ms / n, s_gld_draw_ns / ms / n,
+            s_gld_attrib_ns / ms / n, s_gld_shader_changes / n, s_gld_bytes / n);
+    if (s_stream_avail) {
+        fprintf(stderr,
+                "PERFSTAT glstream: active=%d waits=%llu (%.2fms total) section-advances=%llu copy-fallbacks=%llu peak-section-use=%uKiB of %uKiB\n",
+                s_stream_active ? 1 : 0, (unsigned long long)s_stream_waits, s_stream_wait_ns / ms,
+                (unsigned long long)s_stream_advances, (unsigned long long)s_stream_fallbacks,
+                (unsigned)(s_stream_peak >> 10), (unsigned)(s_stream_sec_size >> 10));
+    }
+    s_gld_map_ns = s_gld_copy_ns = s_gld_unmap_ns = s_gld_draw_ns = s_gld_attrib_ns = 0;
+    s_gld_draws = s_gld_shader_changes = s_gld_bytes = 0;
+    s_stream_waits = s_stream_wait_ns = s_stream_advances = s_stream_fallbacks = 0;
+    s_stream_peak = 0;
+}
+
+/* D965 0a: one block at init with what the driver offers the renderer. */
+static bool gl_has_ext(const char* name) {
+    if (glGetStringi != NULL && GLVersion.major >= 3) {
+        GLint n = 0;
+        glGetIntegerv(GL_NUM_EXTENSIONS, &n);
+        for (GLint i = 0; i < n; i++) {
+            const char* e = (const char*)glGetStringi(GL_EXTENSIONS, (GLuint)i);
+            if (e != NULL && strcmp(e, name) == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+    const char* all = (const char*)glGetString(GL_EXTENSIONS);
+    if (all == NULL) {
+        return false;
+    }
+    const size_t len = strlen(name);
+    for (const char* p = all; (p = strstr(p, name)) != NULL; p += len) {
+        if ((p == all || p[-1] == ' ') && (p[len] == ' ' || p[len] == '\0')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static const char* gl_cap_str(const char* ext, int core_major, int core_minor) {
+    if (gl_has_ext(ext)) {
+        return "yes (extension)";
+    }
+    if (!gl_es && (GLVersion.major > core_major || (GLVersion.major == core_major && GLVersion.minor >= core_minor))) {
+        return "yes (core)";
+    }
+    return "no";
+}
+
+static void gfx_opengl_log_caps(void) {
+    const char* version = (const char*)glGetString(GL_VERSION);
+    const char* renderer = (const char*)glGetString(GL_RENDERER);
+    GLint layers = 0, units = 0;
+    glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &layers);
+    glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &units);
+    while (glGetError() != GL_NO_ERROR) {}
+    const char* bs = gl_cap_str("GL_ARB_buffer_storage", 4, 4);
+    const char* bl = gl_cap_str("GL_ARB_bindless_texture", 99, 0);   /* never core */
+    const char* md = gl_cap_str("GL_ARB_multi_draw_indirect", 4, 3);
+    const char* sd = gl_cap_str("GL_ARB_shader_draw_parameters", 4, 6);
+    const char* bi = gl_cap_str("GL_ARB_base_instance", 4, 2);
+    const char* vb = gl_cap_str("GL_ARB_vertex_attrib_binding", 4, 3);
+    sysLogPrintf(LOG_NOTE, "GL caps: %s | %s", version ? version : "?", renderer ? renderer : "?");
+    sysLogPrintf(LOG_NOTE,
+                 "GL caps: buffer_storage=%s bindless_texture=%s multi_draw_indirect=%s shader_draw_parameters=%s base_instance=%s vertex_attrib_binding=%s",
+                 bs, bl, md, sd, bi, vb);
+    sysLogPrintf(LOG_NOTE, "GL caps: MAX_ARRAY_TEXTURE_LAYERS=%d MAX_TEXTURE_IMAGE_UNITS=%d", (int)layers, (int)units);
+    if (getenv("GE_PERFSTAT") != NULL) {
+        fprintf(stderr, "PERFSTAT glcaps: %s | %s | buffer_storage=%s bindless=%s multi_draw_indirect=%s shader_draw_parameters=%s base_instance=%s vertex_attrib_binding=%s | array layers=%d texture units=%d\n",
+                version ? version : "?", renderer ? renderer : "?", bs, bl, md, sd, bi, vb, (int)layers, (int)units);
+    }
+}
+
+/* D965 1a/1c: create and map the ring when GE_GLSTREAM asks for it (default on
+ * on the Switch); fall back to the old path, logging once, if the driver cannot. */
+
+static void gfx_opengl_stream_init(void) {
+    const char* e = getenv("GE_GLSTREAM");
+#ifdef __SWITCH__
+    s_stream_wanted = e == NULL || e[0] != '0';   /* D966: on by default on the console (GE_GLSTREAM=0 turns it off) */
+#else
+    s_stream_wanted = e != NULL && e[0] != '0';
+#endif
+    if (!s_stream_wanted) {
+        return;
+    }
+    const char* mb = getenv("GE_GLSTREAM_MB");
+    if (mb != NULL && atoi(mb) > 0) {
+        s_stream_sec_size = (size_t)atoi(mb) << 20;
+    }
+    if (s_stream_sec_size < (1u << 20)) {
+        s_stream_sec_size = 1u << 20;
+    }
+    ge_glBufferStorage_t bufferStorage = NULL;
+    if (gl_has_ext("GL_ARB_buffer_storage") || (!gl_es && (GLVersion.major > 4 || (GLVersion.major == 4 && GLVersion.minor >= 4)))) {
+        bufferStorage = (ge_glBufferStorage_t)SDL_GL_GetProcAddress("glBufferStorage");
+    }
+    if (bufferStorage == NULL || glMapBufferRange == NULL || glFenceSync == NULL || glClientWaitSync == NULL) {
+        sysLogPrintf(LOG_NOTE, "GL: GE_GLSTREAM: ARB_buffer_storage unavailable, using the per-batch vertex upload");
+        s_stream_wanted = false;
+        return;
+    }
+    const size_t total = s_stream_sec_size * STREAM_SECTIONS;
+    const GLbitfield flags = GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT;
+    glGenBuffers(1, &s_stream_buf);
+    glBindBuffer(GL_ARRAY_BUFFER, s_stream_buf);
+    while (glGetError() != GL_NO_ERROR) {}
+    bufferStorage(GL_ARRAY_BUFFER, (GLsizeiptr)total, NULL, flags);
+    void* map = glGetError() == GL_NO_ERROR ? glMapBufferRange(GL_ARRAY_BUFFER, 0, (GLsizeiptr)total, flags) : NULL;
+    glBindBuffer(GL_ARRAY_BUFFER, opengl_vbo);
+    if (map == NULL || glGetError() != GL_NO_ERROR) {
+        sysLogPrintf(LOG_WARNING, "GL: GE_GLSTREAM: persistent map of %u MiB failed, using the per-batch vertex upload",
+                     (unsigned)(total >> 20));
+        glDeleteBuffers(1, &s_stream_buf);
+        s_stream_buf = 0;
+        s_stream_wanted = false;
+        return;
+    }
+    s_stream_map = (uint8_t*)map;
+    s_stream_avail = true;
+    s_stream_active = true;
+    sysLogPrintf(LOG_NOTE, "GL: vertex stream: persistent coherent ring, %d x %u KiB, ACTIVE; layout VAOs", STREAM_SECTIONS,
+                 (unsigned)(s_stream_sec_size >> 10));
+}
+
 
 typedef void (APIENTRY *DEBUGPROC)(GLenum source,
     GLenum type,
@@ -1261,6 +1655,9 @@ static void gfx_opengl_init(void) {
         glGenVertexArrays(1, &opengl_vao);
         glBindVertexArray(opengl_vao);
     }
+
+    gfx_opengl_log_caps();      /* D965 0a */
+    gfx_opengl_stream_init();   /* D965 1a/1c (GE_GLSTREAM) */
 
     if (GLAD_GL_ARB_depth_clamp) {
         glEnable(GL_DEPTH_CLAMP);
@@ -1863,5 +2260,7 @@ struct GfxRenderingAPI gfx_opengl_api = {
     gfx_opengl_get_texture_filter,
     gfx_opengl_set_mipmap_filter,
     gfx_opengl_set_anisotropy_level,
-    gfx_opengl_get_max_anisotropy_level
+    gfx_opengl_get_max_anisotropy_level,
+    gfx_opengl_stream_begin,
+    gfx_opengl_load_shader_with
 };
