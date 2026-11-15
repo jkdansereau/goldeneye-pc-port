@@ -402,6 +402,26 @@ void configLoad(void)
     }
     fclose(f);
     sysLogPrintf(LOG_INFO, "config: loaded %s", path);
+#if defined(NX_ARGS)
+    /* Test builds only: GE_CFG="Key=value;Key2=value2" overrides ini values for
+     * this run (e.g. Video.DrawDistance=100) and the ini is then not written
+     * back (configSave below), so a perf test never changes the user's file. */
+    {
+        const char *ov = getenv("GE_CFG");
+        if (ov) {
+            char buf[512];
+            snprintf(buf, sizeof(buf), "%s", ov);
+            for (char *t = strtok(buf, ";"); t; t = strtok(NULL, ";")) {
+                char *e = strchr(t, '=');
+                if (e) {
+                    *e = 0;
+                    applyKV(t, e + 1);
+                    sysLogPrintf(LOG_NOTE, "config: test override %s=%s", t, e + 1);
+                }
+            }
+        }
+    }
+#endif
 
     /* Migration: if the running build registers options the on-disk file
      * never mentioned (a new [Video] knob, say), rewrite the file once so the
@@ -437,6 +457,9 @@ static void splitKey(const char *dotted, char *sec, int secSize, const char **le
 
 void configSave(void)
 {
+#if defined(NX_ARGS)
+    if (getenv("GE_CFG")) return;   /* test override active: leave the user's ini alone */
+#endif
     const char *path = sysResolvePath(INI_PATH);
     FILE *f = fopen(path, "w");
     if (!f) {

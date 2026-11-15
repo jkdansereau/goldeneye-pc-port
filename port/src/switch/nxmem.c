@@ -8,6 +8,7 @@
 #include <malloc.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <switch.h>
 
 #include "nxmem.h"
@@ -299,14 +300,20 @@ extern volatile int g_portQuit;                   /* port/src/libultra.c: orderl
 static void nxWatchdog(void *arg)
 {
     (void)arg;
-    for (int i = 0; i < 100 && !g_portQuit; i++) {
+    int lim = 80;   /* tenths of a second after a 2 s head start; NX_TEST_SECS=<n> lengthens the run (perf tests) */
+    svcSleepThread(2000000000LL);   /* main() sets the NAME=value arguments right after this thread starts */
+    {
+        const char *e = getenv("NX_TEST_SECS");
+        if (e && atoi(e) > 0) lim = atoi(e) * 10;
+    }
+    for (int i = 0; i < lim && !g_portQuit; i++) {
         svcSleepThread(100000000LL);
     }
     if (g_portQuit) {
         return;   /* the player quit first */
     }
-    sysLogPrintf(LOG_NOTE, "nxlink test build: 10 s elapsed, quitting like \"Quit to desktop\"");
-    videoRequestQuit("nxlink test build: 10 s");   /* the host thread then takes the orderly exit */
+    sysLogPrintf(LOG_NOTE, "nxlink test build: %d s elapsed, quitting like \"Quit to desktop\"", lim / 10 + 2);
+    videoRequestQuit("nxlink test build: time elapsed");   /* the host thread then takes the orderly exit */
     for (int i = 0; i < 100 && !g_portQuit; i++) {
         svcSleepThread(100000000LL);
     }

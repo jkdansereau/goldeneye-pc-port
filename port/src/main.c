@@ -204,6 +204,16 @@ int main(int argc, char **argv)
     {
         static char argbuf[512];
         static char *nargv[32];
+        /* NAME=value arguments from the nxlink command line set environment
+         * variables too, so a test run needs no file on the SD card. */
+        for (int i = 1; i < argc; i++) {
+            char *eq = strchr(argv[i], '=');
+            if (eq && eq > argv[i] && argv[i][0] != '-') {
+                char key[64];
+                size_t kl = (size_t)(eq - argv[i]);
+                if (kl < sizeof(key)) { memcpy(key, argv[i], kl); key[kl] = 0; setenv(key, eq + 1, 1); }
+            }
+        }
         FILE *af = fopen("data/ge007.args", "r");
         if (af) {
             size_t n = fread(argbuf, 1, sizeof(argbuf) - 1, af);

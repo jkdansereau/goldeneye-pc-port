@@ -46,6 +46,30 @@ never shipped**). With `NX_LINKSTDIO`:
 Resolving an offset from the crash dump: `aarch64-none-elf-addr2line -f -C -i -e build-switch-link/ge007.aarch64.elf 0x<nro+offset>`
 (in the `compose.yaml` container, `--entrypoint sh`).
 
+## Arguments, settings and run length for a test run
+
+Configure the test build with `-DNX_ARGS=ON` as well as `-DNX_LINKSTDIO=ON`; then everything a run needs
+travels on the nxlink command line, with nothing to copy to the SD card:
+
+- `-level_XX`, `-hardN` and the other switches are passed as program arguments, as on the PC.
+- `NAME=value` arguments set environment variables before the game starts, so probes and test switches
+  work: `GE_PERFSTAT=1`, `GE_COOP=1`, `GE_D176=1`, ... (`data/ge007.args` still works and is read too).
+- `NX_TEST_SECS=<n>` sets how long the run lasts before the automatic quit (10 s by default). The watchdog
+  reads it 2 s after start, once `main()` has set the environment.
+- `GE_CFG="Key=value;Key2=value2"` overrides `ge007.ini` values for this run only (for example
+  `GE_CFG=Video.DrawDistance=150;Video.FpsCap=30`). While it is set the ini is never written back, so a
+  test never changes the user's settings.
+
+Example, a 40 s performance run of the Jungle in co-op with a 150% draw distance:
+
+```sh
+NXLINK_RETRIES=40 python tools/switch/nxlink.py <ip> build-switch-link/ge007.aarch64.nro \
+    switch/project-dam/project-dam-test.nro run.log \
+    -level_37 -hard0 GE_COOP=1 GE_PERFSTAT=1 NX_TEST_SECS=40 "GE_CFG=Video.DrawDistance=150;Video.LodDistance=150"
+```
+
+If the console is asleep the upload gets no answer: the client gives up after `NXLINK_RETRIES` attempts.
+
 ## The PC client
 
 `python tools/switch/nxlink.py <console ip> <file.nro> <path on the SD> <log out> [args...]`
