@@ -132,6 +132,7 @@ s32 coopPickupOp(struct PropRecord *prop, s32 op);
 s32 coopHasKeyFlags(u32 flags);
 void coopPropFreed(struct PropRecord *prop);
 s32 coopAnyHasPropInInv(struct PropRecord *prop);
+s32 coopAnyCopiedGoldenEye(void);
 s32 coopChrIsPlayer(struct ChrRecord *chr);
 void coopNpcHurt(struct ChrRecord *chr, f32 damage, f32 subroty, s32 item);
 s32 coopAiStep(void *list, s32 offset, s32 isPlayerTest);
@@ -166,6 +167,7 @@ void coopFrozenCamera(u16 buttons, u16 oldbuttons, struct coord3d *pos, struct c
 /* AI hide_all_chrs (before the exit camera): a co-op player's body is a chr too, and hiding it hid Bond in the outro */
 #define GE_CHR_HIDEABLE(chr)     ((chr)->model != NULL && !coopChrIsPlayer(chr))
 #define GE_HAS_PROP_IN_INV(prop) coopAnyHasPropInInv(prop)
+#define GE_KEY_COPIED()          coopAnyCopiedGoldenEye()
 #define GE_PROP_FREED(prop)      coopPropFreed(prop)
 /* stage scripts ask "fewer than N players?" to tell a mission from a versus match: a co-op mission is a mission */
 #define GE_AI_PLAYERS()          (coopIsMission() ? 1 : getPlayerCount())
@@ -207,6 +209,7 @@ void coopFrozenCamera(u16 buttons, u16 oldbuttons, struct coord3d *pos, struct c
 #define GE_CHR_PICKABLE(chr)     ((chr)->model)
 #define GE_CHR_HIDEABLE(chr)     ((chr)->model != NULL)
 #define GE_HAS_PROP_IN_INV(prop) bondinvHasPropInInv(prop)
+#define GE_KEY_COPIED()          get_keyanalyzer_flag()
 #define GE_PROP_FREED(prop)
 #define GE_AI_PLAYERS()          getPlayerCount()
 #define GE_BOND_BODY()           (getPlayerCount() == 1)

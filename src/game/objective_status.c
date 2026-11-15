@@ -8,7 +8,7 @@
 #include "str.h"
 #include "bondview.h"
 #ifdef PORT
-#include "player.h"   /* GE_HAS_PROP_IN_INV (co-op) */
+#include "player.h"   /* GE_HAS_PROP_IN_INV, GE_KEY_COPIED (co-op) */
 #endif
 #ifdef PORT
 #include <stdlib.h>
@@ -272,7 +272,7 @@ OBJECTIVESTATUS get_status_of_objective(s32 objectiveNum) //#MATCH
                         }
                         case PROPDEF_OBJECTIVE_COPY_ITEM:
                         {
-                            if (!get_keyanalyzer_flag())
+                            if (!GE_KEY_COPIED())
                             {
                                 currentstatus = OBJECTIVESTATUS_INCOMPLETE;
                             }

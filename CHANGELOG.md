@@ -29,6 +29,7 @@
 - Quitting the game on the Switch now returns to the launcher it was started from (sphaira or the homebrew menu) instead of closing the whole application and dropping to Home; if the game's threads do not stop in time it falls back to the old exit
 
 ### Fixed
+- Co-op: the "copy the GoldenEye key" objective (Bunker 1) no longer flips between completed and not completed every frame once one player has copied the key (#17)
 - Multiplayer and Co-op on the Switch count only the controllers actually connected: four were always counted, so leaving a match asked for Start on four controllers; with one controller Co-op and Multiplayer are greyed out, and plugging or unplugging a controller is picked up at once
 - Docking or undocking the console while the game runs no longer crashes it: the picture is resized at the start of a frame on the render thread, not behind its back
 - Restart Game no longer shows at the bottom of the options menu on the Switch, where it could only quit the game

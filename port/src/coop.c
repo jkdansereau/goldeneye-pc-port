@@ -47,6 +47,7 @@ extern s32 g_MainStageNum;
 extern int objectiveIsAllComplete(void);
 extern int get_mission_state(void);   /* MISSION_STATE_ID (mp_music.c) */
 extern int gameScriptedCameraActive(void);
+extern s32 get_keyanalyzer_flag(void);
 void bondviewFrozenCameraTick(u16 buttons, u16 oldbuttons, struct coord3d *pos, struct coord3d *pos2, struct coord3d *offset, struct StandTile **stan, struct coord3d *arg6);
 
 #define COOP_REVIVE_TICKS   600     /* 10 s at 60 ticks per second */
@@ -837,6 +838,27 @@ s32 coopAnyHasPropInInv(struct PropRecord *prop)
     }
     g_CurrentPlayer = saved;
     return has;
+}
+
+/*
+ * Objective "copy item" (objective_status.c, PROPDEF_OBJECTIVE_COPY_ITEM) asks get_keyanalyzer_flag(), i.e.
+ * g_CurrentPlayer->copiedgoldeneye, set on the player who used the key analyzer (gunfire.c analyzeGEKey). Polled from
+ * both players' ticks it flipped every frame once the key was copied (Bunker 1 on the console, issue #17), as the
+ * collect / deposit objectives did (above). In co-op the key is copied when either player copied it. Hook
+ * GE_KEY_COPIED.
+ */
+s32 coopAnyCopiedGoldenEye(void)
+{
+    int i;
+    if (!s_active) {
+        return get_keyanalyzer_flag();
+    }
+    for (i = 0; i < 2; i++) {
+        if (g_playerPointers[i] != NULL && g_playerPointers[i]->copiedgoldeneye) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /*
