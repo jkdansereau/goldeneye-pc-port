@@ -121,6 +121,8 @@ void coopVersusDeathState(void);
 f32 coopDownFade(f32 frac);
 f32 coopDownChrFade(f32 frac);
 s32 coopRespawnButton(s32 pressed);
+void coopSetBondKia(void);
+s32 coopMissionEndOk(void);
 void coopAiTick(struct ChrRecord *chr, s32 perView);
 void coopFrameTick(void);
 s32 coopStageNumPlayers(s32 stage, s32 selected);
@@ -150,6 +152,9 @@ void coopFrozenCamera(u16 buttons, u16 oldbuttons, struct coord3d *pos, struct c
 #define GE_DOWN_FADE(f)          coopDownFade(f)
 #define GE_DOWN_CHRFADE(f)       coopDownChrFade(f)
 #define GE_RESPAWN_BUTTON(x)     coopRespawnButton(x)
+/* co-op: a death is KIA only when final; a player still down at the exit fails the mission (revive first) */
+#define GE_SET_BOND_KIA()        coopSetBondKia()
+#define GE_MISSION_END_OK()      coopMissionEndOk()
 #define GE_SIM_TICKS(x)          (coopSimOwner() ? (x) : 0)
 #define GE_AI_TICK_VIEW(chr)     coopAiTick((chr), 1)
 #define GE_AI_TICK_FRAME(chr)    coopAiTick((chr), 0)
@@ -190,6 +195,8 @@ void coopFrozenCamera(u16 buttons, u16 oldbuttons, struct coord3d *pos, struct c
 #define GE_DOWN_FADE(f)          (f)
 #define GE_DOWN_CHRFADE(f)       (f)
 #define GE_RESPAWN_BUTTON(x)     (x)
+#define GE_SET_BOND_KIA()        (g_isBondKIA = 1)
+#define GE_MISSION_END_OK()      1
 #define GE_SIM_TICKS(x)          (x)
 #define GE_AI_TICK_VIEW(chr)     chrlvActionTick(chr)
 #define GE_AI_TICK_FRAME(chr)    chrlvActionTick(chr)

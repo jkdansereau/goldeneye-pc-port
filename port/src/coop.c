@@ -182,6 +182,43 @@ s32 coopDeathFinal(void)
     return s_active && coopPartnerDown();
 }
 
+/*
+ * bondviewKillCurrentPlayer (bondview2.c) sets g_isBondKIA on every player death, and the debrief
+ * (front.c frontCompleteAllObjectivesAliveSuccess / constructor_menu0C_missionfailed) reads it as "the mission was
+ * lost". In co-op a down player can be revived, so a death counts only when it is final (the partner is already
+ * down); before this a revived run ended on "KILLED IN ACTION" while bossReturnTitleStage still unlocked the stage.
+ * Hook GE_SET_BOND_KIA. Solo and versus set the flag as the original does.
+ */
+void coopSetBondKia(void)
+{
+    if (!s_active || coopPartnerDown()) {
+        g_isBondKIA = TRUE;
+    }
+}
+
+/*
+ * End of a mission (boss.c bossReturnTitleStage: the exit, before the unlock). In co-op a player still down at that
+ * moment fails the mission: the partner has to be revived before the exit. Sets g_isBondKIA (debrief "KILLED IN
+ * ACTION", no next-stage) and returns 0 so the stage is not unlocked. Hook GE_MISSION_END_OK; solo and versus: 1.
+ */
+s32 coopMissionEndOk(void)
+{
+    int i, down = 0;
+    if (!s_active) {
+        return 1;
+    }
+    for (i = 0; i < 2; i++) {
+        if (g_playerPointers[i] != NULL && g_playerPointers[i]->bonddead != 0) {
+            down = 1;
+        }
+    }
+    sysLogPrintf(LOG_NOTE, "coop: mission end, player down=%d -> %s", down, down ? "killed in action" : "ok");
+    if (down) {
+        g_isBondKIA = TRUE;
+    }
+    return !down;
+}
+
 void coopVersusDeathState(void)
 {
     /* Versus sets the "dead" music state here; co-op keeps the level music while the partner plays on. */

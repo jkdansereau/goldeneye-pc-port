@@ -34,6 +34,7 @@
 - Docking or undocking the console while the game runs no longer crashes it: the picture is resized at the start of a frame on the render thread, not behind its back
 - Restart Game no longer shows at the bottom of the options menu on the Switch, where it could only quit the game
 - About one launch in fifty no longer stops at boot on the Switch: the game's memory windows used to sit at fixed addresses that the system's own stack could land on, and they now move to a free spot chosen at each launch
+- Co-op: a player who went down and was revived no longer ends the mission "killed in action"; a mission that ends while a player is still down now fails (killed in action, the next mission is not unlocked), so revive your partner before the exit (#20)
 
 ## [0.1.0] - 2026-11-11
 

@@ -934,6 +934,11 @@ void bossReturnTitleStage(void) {
                      (int)bossGetStageNum(), (int)objectiveIsAllComplete());
         g_savelogObjOnce = 0;
     }
+    /* co-op: a player still down at the exit fails the mission (KIA, no unlock); solo/versus: always 1 */
+    if (!GE_MISSION_END_OK()) {
+        bossRunTitleStage();
+        return;
+    }
 #endif
     if ((bossGetStageNum() != LEVELID_CUBA) && (objectiveIsAllComplete() != 0x0)) {
         end_of_mission_briefing();

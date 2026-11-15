@@ -9619,7 +9619,7 @@ void bondviewKillCurrentPlayer(void)
             trigger_solo_watch_menu(1);
         }
 
-        g_isBondKIA = 1;
+        GE_SET_BOND_KIA();
         g_CurrentPlayer->bonddead = 1;
 
         g_CurrentPlayer->previous_collision_info = g_CurrentPlayer->field_488;
