@@ -8,6 +8,9 @@
 #include "str.h"
 #include "bondview.h"
 #ifdef PORT
+#include "player.h"   /* GE_HAS_PROP_IN_INV (co-op) */
+#endif
+#ifdef PORT
 #include <stdlib.h>
 /* set by bossReturnTitleStage so the (per-frame-polled) objective logs only
  * fire on the one call that actually gates the level-complete save. */
@@ -220,7 +223,7 @@ OBJECTIVESTATUS get_status_of_objective(s32 objectiveNum) //#MATCH
                             {
                                 currentstatus = OBJECTIVESTATUS_FAILED;
                             }
-                            else if (!bondinvHasPropInInv(obj->prop))
+                            else if (!GE_HAS_PROP_IN_INV(obj->prop))
                             {
                                 currentstatus = OBJECTIVESTATUS_INCOMPLETE;
                             }
@@ -229,7 +232,7 @@ OBJECTIVESTATUS get_status_of_objective(s32 objectiveNum) //#MATCH
                         case PROPDEF_OBJECTIVE_DEPOSIT_OBJECT:
                         {
                             ObjectRecord *obj = objFindByTagId(objective->ObjRefID);
-                            if (obj && obj->prop && bondinvHasPropInInv(obj->prop))
+                            if (obj && obj->prop && GE_HAS_PROP_IN_INV(obj->prop))
                             {
                                 currentstatus = OBJECTIVESTATUS_INCOMPLETE;
                             }

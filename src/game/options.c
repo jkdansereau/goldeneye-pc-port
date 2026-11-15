@@ -16,6 +16,9 @@
 #include "textrelated.h"
 #include "glass.h"
 #include "frametiming.h"
+#ifdef PORT
+#define PLAYER_1 GE_WATCH_PAD()   /* D960 co-op: the watch reads the pad of the player whose watch it is */
+#endif
 #include "assets/obseg/text/LoptionE.h"
 #if defined(PORT)
 #include "portaddr.h"

@@ -564,6 +564,9 @@ void bossMainloop(void)
             }
         }
 
+#ifdef PORT
+        localSelectedNumPlayers = coopStageNumPlayers(g_StageNum, localSelectedNumPlayers);
+#endif
         init_player_data_ptrs_construct_viewports(localSelectedNumPlayers);
         dynInitMemory();
         joyCheckStatusThreadSafe();
@@ -699,6 +702,7 @@ void bossMainloop(void)
 
                             lvlManageMpGame();
                             shuffle_player_ids();
+                            GE_COOP_VIEW_ORDER();
 
                             if (g_StageNum != LEVELID_TITLE)
                             {

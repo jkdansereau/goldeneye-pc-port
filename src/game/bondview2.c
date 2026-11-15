@@ -406,7 +406,7 @@ void solo_char_load(void)
 
         bondviewDeregisterPlayerRoom(g_CurrentPlayer);
 
-        if (getPlayerCount() == 1)
+        if (GE_BOND_BODY())
         {
             helddst = fileGetBondForCurrentFolder();
             switch (g_CurrentPlayer->bondtype)
@@ -1744,7 +1744,7 @@ void currentPlayerSetYAutoAimEnabled(bool enabled)
  */
 bool currentPlayerGetYAutoAimEnabled(void)
 {
-    if (getPlayerCount() == 1)
+    if (GE_RULE_SOLO())
     {
         return g_CurrentPlayer->autoyaimenabled;
     }
@@ -1808,7 +1808,7 @@ void currentPlayerSetXAutoAimEnabled(bool enabled)
  */
 bool currentPlayerGetXAutoAimEnabled(void)
 {
-    if (getPlayerCount() == 1)
+    if (GE_RULE_SOLO())
     {
         return g_CurrentPlayer->autoxaimenabled;
     }
@@ -3839,7 +3839,7 @@ void bondviewWatchAnimationTick(void)
     }
     else
     {
-        lvlSetControlsLockedFlag(FALSE);
+        lvlSetControlsLockedFlag(GE_WATCH_LOCK(FALSE));
     }
 
 #undef WATCH_VAR_LOWER
@@ -4988,7 +4988,7 @@ void bondviewProcessInput(s8 stick_x, s8 stick_y, u16 buttons, u16 oldbuttons)
             (g_CurrentPlayer->watch_animation_state == WATCH_ANIMATION_0x5
                 && g_CurrentPlayer->open_close_solo_watch_menu)
         )
-        && (getPlayerCount() == 1))
+        && (GE_WATCH_START()))
     {
         trigger_solo_watch_menu(0);
     }
@@ -4996,7 +4996,7 @@ void bondviewProcessInput(s8 stick_x, s8 stick_y, u16 buttons, u16 oldbuttons)
     if (g_CurrentPlayer->watch_animation_state == WATCH_ANIMATION_0x0
         && g_CurrentPlayer->bonddead == FALSE
         && (
-            getPlayerCount() == 1
+            GE_RULE_SOLO()
             || (
                 g_stopPlayFlag == 0
                 && g_gameOverFlag == 0)))
@@ -5608,7 +5608,7 @@ void bondviewProcessInput(s8 stick_x, s8 stick_y, u16 buttons, u16 oldbuttons)
         moveData.speedVertaUp = ftemp_nostack_spE8;
     }
 
-    if (bondviewGetIfCurrentPlayerDamageShowTime() && getPlayerCount() == 1)
+    if (bondviewGetIfCurrentPlayerDamageShowTime() && GE_RULE_SOLO())
     {
         moveData.triggerOn = 0;
     }
@@ -6180,7 +6180,7 @@ void bondviewProcessInput(s8 stick_x, s8 stick_y, u16 buttons, u16 oldbuttons)
 
     canCycleWeapons = 1;
 
-    if ((getPlayerCount() >= 2) && (get_scenario() == 2) && (bondinvIsAliveWithFlag()))
+    if ((GE_RULE_MULTI()) && (get_scenario() == 2) && (bondinvIsAliveWithFlag()))
     {
         canCycleWeapons = 0;
     }
@@ -7879,7 +7879,7 @@ void bondviewFrozenMoveBond(s8 stick_x, s8 stick_y, u16 buttons, u16 oldbuttons)
     }
 
     room_pointer_tile = (struct StandTile *)0;
-    bondviewFrozenCameraTick(buttons, oldbuttons, &property_pos, &property_pos2, &property_offset, &room_pointer_tile, &stan_walk_start);
+    GE_FROZEN_CAMERA(buttons, oldbuttons, &property_pos, &property_pos2, &property_offset, &room_pointer_tile, &stan_walk_start);
     currentPlayerSetCameraMode(1);
     bondviewSetCurrentPlayerPosition(&property_pos, &property_pos2, &property_offset, room_pointer_tile, &stan_walk_start);
 }
@@ -7954,7 +7954,7 @@ s16 bondviewGetCurrentPlayerViewportHeight(void)
 {
     f32 t;
 
-    if (getPlayerCount() >= 2)
+    if (GE_SPLIT_GE2())
     {
         return VIEWPORT_HEIGHT_4P;
     }
@@ -8000,7 +8000,7 @@ s16 bondviewGetCurrentPlayerViewportUly(void)
 {
     f32 t;
 
-    if (getPlayerCount() == 2)
+    if (GE_SPLIT_EQ2())
     {
         if (get_cur_playernum() == 0)
         {
@@ -8190,8 +8190,8 @@ void bondviewMovePlayerUpdateViewport(s8 stick_x, s8 stick_y, u16 buttons)
 
     gunSetSightVisible(
         GUNSIGHTREASON_1,
-        (getPlayerCount() == 1 && cur_player_get_sight_onscreen_control())
-            || (getPlayerCount() >= 2 && g_playerPerm->sight)
+        (GE_RULE_SOLO() && cur_player_get_sight_onscreen_control())
+            || (GE_RULE_MULTI() && g_playerPerm->sight)
     );
 
 #if defined(VERSION_EU)
@@ -8899,7 +8899,7 @@ void mp_respawn_handler(void)
     bondviewClearUpperTextDisplayFlag(-1);
 
 
-    if ((getPlayerCount() >= 2) && (startpadcount > 0))
+    if ((GE_RULE_MULTI()) && (startpadcount > 0))
     {
         var_v1 = bondviewGetRandomSpawnPadIndex();
     }
@@ -9401,7 +9401,7 @@ Gfx *maybe_mp_interface(Gfx *gdl)
         }
     }
 
-    if (getPlayerCount() == 1)
+    if (GE_RULE_SOLO())
     {
         display_objective_status_text_on_status_change();
     }
@@ -9419,7 +9419,7 @@ Gfx *maybe_mp_interface(Gfx *gdl)
             if (doblood)
             {
                 die_blood_image_routine(0);
-                if (getPlayerCount() == 1)
+                if (GE_DEATH_SOLO())
                 {
                     // This unusual comma-expression syntax is required for a byte match.
                     set_missionstate((musicStopSlot(-1), 0));
@@ -9431,7 +9431,7 @@ Gfx *maybe_mp_interface(Gfx *gdl)
                 }
                 else
                 {
-                    set_missionstate(6);
+                    GE_VERSUS_DEATH_STATE();
                 }
             }
             else
@@ -9466,12 +9466,12 @@ Gfx *maybe_mp_interface(Gfx *gdl)
                 if (!g_CurrentPlayer->deathanimfinished)
                 {
                     g_CurrentPlayer->deathanimfinished = TRUE;
-                    currentPlayerAdjustFade(60.0f, 0, 0, 0, 1.0f);
-                    currentPlayerStartChrFade(120.0f, 0.0f);
+                    currentPlayerAdjustFade(60.0f, 0, 0, 0, GE_DOWN_FADE(1.0f));
+                    currentPlayerStartChrFade(120.0f, GE_DOWN_CHRFADE(0.0f));
                 }
                 if (currentPlayerIsFadeComplete())
                 {
-                    if (getPlayerCount() == 1)
+                    if (GE_DEATH_SOLO())
                     {
                         bondviewSetCameraMode(CAMERAMODE_DEATH_CAM_SP);
                     }
@@ -9487,7 +9487,7 @@ Gfx *maybe_mp_interface(Gfx *gdl)
                         }
                         if ((scenario != SCENARIO_YOLT) || (total < 2))
                         {
-                            if (joyGetButtons(get_cur_playernum(), 0xB000))
+                            if (GE_RESPAWN_BUTTON(joyGetButtons(get_cur_playernum(), 0xB000)))
                             {
                                 mp_respawn_handler();
                             }
@@ -9681,7 +9681,7 @@ void record_damage_kills(f32 damage_amount, f32 vectorx, f32 vectorz, s32 player
         hudMakeDamageSegments(g_CurrentPlayer->health_display_values, 0x2E, -1, currentPlayerGetHealth());
     }
 
-    if (getPlayerCount() < 2 || (g_stopPlayFlag == 0 && g_gameOverFlag == 0))
+    if (!GE_RULE_MULTI() || (g_stopPlayFlag == 0 && g_gameOverFlag == 0))
     {
         if (g_PlayerIsInTank == 1)
         {
@@ -9698,7 +9698,7 @@ void record_damage_kills(f32 damage_amount, f32 vectorx, f32 vectorz, s32 player
             }
         }
 
-        if (getPlayerCount() >= 2 && get_scenario() == SCENARIO_LTK)
+        if (GE_RULE_MULTI() && get_scenario() == SCENARIO_LTK)
         {
             // the damage dealt is always equivalent to how much health and armor the player has
             // the result of this is to always kill the player regardless of how much damage he can sustain
@@ -9706,14 +9706,14 @@ void record_damage_kills(f32 damage_amount, f32 vectorx, f32 vectorz, s32 player
         }
 
         if (g_CurrentPlayer->cheatBondInvincible == FALSE && g_CurrentPlayer->bonddead == FALSE && g_PlayerInvincible == FALSE &&
-            (g_CurrentPlayer->damageshowtime < 0 || (getPlayerCount() >= 2 && g_CurrentPlayer->damageshowtime == 0)))
+            (g_CurrentPlayer->damageshowtime < 0 || (GE_RULE_MULTI() && g_CurrentPlayer->damageshowtime == 0)))
         {
             if (g_CurrentPlayer->watch_animation_state != WATCH_ANIMATION_0x5 && g_CurrentPlayer->watch_animation_state != WATCH_ANIMATION_0xc)
             {
                 g_CurrentPlayer->oldhealth = g_CurrentPlayer->bondhealth;
                 g_CurrentPlayer->oldarmour = g_CurrentPlayer->bondarmour;
 
-                if (getPlayerCount() >= 2)
+                if (GE_RULE_MULTI())
                 {
                     cur_player_num = get_cur_playernum();
                     angle = g_playerPointers[cur_player_num]->vv_theta - (360.0f - ((atan2f(vectorx, vectorz) * 180.0f) / 3.1415927f));
@@ -9748,7 +9748,7 @@ void record_damage_kills(f32 damage_amount, f32 vectorx, f32 vectorz, s32 player
 
                     if (g_CurrentPlayer->bondhealth <= 0.0f)
                     {
-                        if (getPlayerCount() >= 2)
+                        if (GE_RULE_MULTI())
                         {
                             sp2C = get_cur_playernum();
                             sp28 = 0;

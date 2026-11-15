@@ -6,6 +6,9 @@
 #include "bg.h"
 #include "bondview.h"
 #include "bgfog.h"
+#ifdef PORT
+#include "player.h"   /* GE_AI_PLAYERS (co-op) */
+#endif
 #include <limits.h>
 #ifdef PORT
 #include <stdio.h>
@@ -538,7 +541,7 @@ void fogLoadLevelEnvironment(s32 level_id, s32 arg1)
 
     sp1C = NULL;
 
-    num_players = getPlayerCount();
+    num_players = GE_AI_PLAYERS();   /* co-op: the solo fog tables (a level id + 200 matches no table: fogless, far more geometry) */
 
     if (num_players == 1)
     {

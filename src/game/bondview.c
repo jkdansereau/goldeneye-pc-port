@@ -1385,7 +1385,7 @@ s32 bondviewGetRandomSpawnPadIndex(void)
  */
 void init_player_BONDdata(void)
 {
-    if (getPlayerCount() >= 2)
+    if (GE_RULE_MULTI())
     {
         g_CurrentPlayer->controldef = get_player_control_style(get_cur_playernum());
         cur_player_set_control_type(get_player_control_style(get_cur_playernum()));

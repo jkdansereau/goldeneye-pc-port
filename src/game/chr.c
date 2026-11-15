@@ -2486,7 +2486,7 @@ s32 chrTick(PropRecord *prop)
     chr = prop->chr;
     model = chr->model;
     headVisible = 1;
-    tickamount = g_ClockTimer;
+    tickamount = GE_SIM_TICKS(g_ClockTimer);
 
 #ifdef PORT
     d193aSample(chr, model);
@@ -2506,7 +2506,7 @@ s32 chrTick(PropRecord *prop)
         }
         else
         {
-            chrlvActionTick(chr);
+            GE_AI_TICK_VIEW(chr);
 
             if (chr->model == NULL)
             {

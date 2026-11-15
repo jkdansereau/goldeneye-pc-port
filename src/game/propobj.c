@@ -4490,7 +4490,7 @@ s32 objTick(struct PropRecord *prop)
 #endif
 			)
 			
-            isSimOwner = projectile->ownerprop == g_CurrentPlayer->prop;
+            isSimOwner = GE_PROJ_SIM_OWNER(projectile->ownerprop == g_CurrentPlayer->prop, projectile->ownerprop, isSimOwner);
 			
 		}
 	}
@@ -5905,7 +5905,7 @@ s32 objTick(struct PropRecord *prop)
 		var_v1_5 = ((!(obj->runtime_bitflags & RUNTIMEBITFLAG_00000800)) && (!(obj->flags2 & PROPFLAG2_00080000))) ? (posIsOnScreen(prop, &obj->runtime_pos, getinstsize(model), applyFogCull)) : (0);
 	}
 
-	if (var_v1_5 != 0)
+	if (var_v1_5 != 0 && GE_PICKUP_VISIBLE(prop))
 	{
 		if (isSimOwner)
 		{
@@ -10393,7 +10393,7 @@ s32 get_ammo_in_magazine(AmmoCrateRecord *crate)
         case AMMO_DARTS:   qty =  4; break;
     }
 
-    if (qty > 1 && getPlayerCount() == 1)
+    if (qty > 1 && GE_RULE_SOLO())
     {
         qty *= g_SoloAmmoMultiplier;
     }
@@ -10426,7 +10426,7 @@ s32 ammo_collected_from_weapon(WeaponObjRecord *weapon)
         case AMMO_GRENADEROUND: qty =  3; break;
     }
 
-    if (qty > 1 && getPlayerCount() == 1)
+    if (qty > 1 && GE_RULE_SOLO())
     {
         qty *= g_SoloAmmoMultiplier;
     }
@@ -10638,6 +10638,8 @@ TICKOP propPickupByPlayer(PropRecord *prop, bool showstring)
         return TICKOP_NONE;
     }
 
+    if (GE_PICKUP_TAKEN(prop)) return TICKOP_NONE;
+
     switch (obj->type)
     {
         case PROPDEF_KEY:
@@ -10700,7 +10702,7 @@ TICKOP propPickupByPlayer(PropRecord *prop, bool showstring)
 
                 ammoquantity = multicrate->slots[i].quantity;
 
-                if (getPlayerCount() == 1)
+                if (GE_RULE_SOLO())
                 {
                     ammoquantity *= g_SoloAmmoMultiplier;
                 }
@@ -10918,6 +10920,8 @@ TICKOP propPickupByPlayer(PropRecord *prop, bool showstring)
         }
     }
 
+    op = GE_PICKUP_OP(prop, op);
+
     if ((op == TICKOP_FREE) && ((obj->runtime_bitflags & RUNTIMEBITFLAG_TAGGED) == 0))
     {
         objFree(obj, 0, (obj->state & RUNTIMEBITFLAG_REMOVE));
@@ -10953,6 +10957,8 @@ TICKOP objTickPlayer(struct PropRecord* prop)
     struct ObjectRecord* obj;
 
     obj = prop->obj;
+
+    if (GE_PICKUP_TAKEN(prop)) return TICKOP_NONE;
 
     if ((objIsCollectable(obj) != 0) && (obj->type != PROPDEF_HAT))
     {
@@ -11145,7 +11151,7 @@ TICKOP objTickPlayer(struct PropRecord* prop)
         {
             ignore = 1;
         } 
-        else if (getPlayerCount() >= 2) 
+        else if (GE_RULE_MULTI()) 
         {
             sp58 = get_scenario();
 
@@ -14341,7 +14347,7 @@ TICKOP propdoorInteract(PropRecord* doorprop)
     {
         sp28 = 1;
     }
-    else if (bondinvCheckHasKeyFlags(door->keyflags) != 0)
+    else if (GE_HAS_KEY_FLAGS(door->keyflags) != 0)
     {
         sp28 = 1;
     }

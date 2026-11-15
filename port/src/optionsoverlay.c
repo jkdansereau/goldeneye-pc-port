@@ -120,6 +120,7 @@ static const char *const kAimMode[]   = { "Original", "Centered", NULL };   /* D
 static const char *const kTurnAccel[] = { "Off", "Low", "High", NULL };   /* project-dam */
 static const char *const kAimZoom[]   = { "Off", "1.5x", "2x", NULL };    /* project-dam */
 static const char *const kAimAssist[] = { "Off", "Low", "High", NULL };   /* project-dam */
+static const char *const kCoopHealth[] = { "100%", "150%", "200%", NULL };   /* project-dam: coop.c */
 static const char *const kAimEntry[]  = { "Off", "Move view", "Centre crosshair", NULL };   /* project-dam */
 static const char *const kLookAhead[] = { "Off", "Low", "Medium", "High", NULL };   /* project-dam */
 #else
@@ -373,15 +374,15 @@ static struct Row rows[] = {
     { .key="Input.Pad.Start", .label="Pause/start", .kind=ROW_PADBIND, .shownWhen="Input.PadPreset", .shownValue=3, .schemeOnly=1 },
 #if defined(__SWITCH__)
     /* project-dam: the aim rows live here on the console (no Mouse page), grouped between two separators. */
-    SEP(C1),
-    { .key="Input.AimMode", .label="Aim style", .kind=ROW_ENUM, .step=1, .names=kAimMode },
-    { .key="Input.AimRange", .label="Aim range", .kind=ROW_ENUM, .step=1, .names=kAimRange, .hiddenIfOn="Input.AimMode" },
-    { .key="Input.PadAimLookSens", .label="Aim sensitivity", .kind=ROW_SLIDER, .step=5 },   /* project-dam */
+    { .key="__SepC1", .label="", .kind=ROW_ACTION, .schemeOnly=1 },
+    { .key="Input.AimMode", .label="Aim style", .kind=ROW_ENUM, .step=1, .names=kAimMode, .schemeOnly=1 },
+    { .key="Input.AimRange", .label="Aim range", .kind=ROW_ENUM, .step=1, .names=kAimRange, .hiddenIfOn="Input.AimMode", .schemeOnly=1 },
+    { .key="Input.PadAimLookSens", .label="Aim sensitivity", .kind=ROW_SLIDER, .step=5, .schemeOnly=1 },   /* project-dam */
     { .key="Game.AimZoom", .label="Aim zoom (handheld)", .kind=ROW_ENUM, .step=1, .names=kAimZoom, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },   /* project-dam: nxgame.c */
     { .key="Game.AimAssist", .label="Aim assist", .kind=ROW_ENUM, .step=1, .names=kAimAssist, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },       /* project-dam: nxgame.c */
     { .key="Game.AimEntry", .label="Aim entry", .kind=ROW_ENUM, .step=1, .names=kAimEntry, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },           /* project-dam: nxgame.c */
     { .key="Game.AimStop", .label="Stop on aim", .kind=ROW_TOGGLE, .step=1, .names=kOnOff, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },           /* project-dam: nxgame.c */
-    SEP(C2),
+    { .key="__SepC2", .label="", .kind=ROW_ACTION, .schemeOnly=1 },
 #endif
     { .key="Input.PadLookInvertY", .label="Invert look", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     /* Wave A: per-stick deadzone + right-stick (natural-pitch) feel options. */
@@ -490,6 +491,8 @@ static struct Row rows[] = {
 #if defined(__SWITCH__)
     /* project-dam: red puff on a guard hit instead of the wall puff (nxgame.c). */
     { .key="Game.BloodOnHit", .label="Blood on hit", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
+    /* project-dam: 2-player split-screen co-op campaign (coop.c). */
+    { .key="Game.CoopEnemyHealth", .label="Co-op enemy health", .kind=ROW_ENUM, .step=1, .names=kCoopHealth },
 #endif
     SEP(G4),
     /* D551: opt-in update check; the action row appears only once a newer release is known. */
@@ -2297,6 +2300,7 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Game.MissionTimer", 0 },  /* = 0 (off, D606) */
 #if defined(__SWITCH__)
     { "Game.BloodOnHit", 1 },    /* project-dam: = on */
+    { "Game.CoopEnemyHealth", 1 },/* project-dam: = 150% */
 #endif
     { "Game.NoHitFlash",  0 },   /* = 0 */
     { "Game.AllUnlocked", 0 },   /* = 0 -- D257's "default ON" note was stale */
@@ -4049,6 +4053,7 @@ static const struct { const char *key, *help; } kRowHelp[] = {
     { "Input.PadLookCurve", "Steeper = finer small stick moves, same top speed. 2.0 is the original." },
     { "Input.PadTurnAccel", "Speeds up the turn when the stick is held at the edge." },
     { "Game.BloodOnHit", "A hit on a guard shows a dark-red puff, not the yellow wall puff." },
+    { "Game.CoopEnemyHealth", "How tough guards are in co-op. Higher takes more shots to kill." },
     { "Video.MSAA", "Smooths jagged edges while docked. Higher is cleaner but slower." },
     { "Video.MSAAHandheld", "Smooths jagged edges in handheld mode. Higher is cleaner but slower." },
     { "Video.FXAA", "A final pass that smooths edges without blurring flat textures." },

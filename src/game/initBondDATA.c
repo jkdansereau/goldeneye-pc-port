@@ -237,7 +237,7 @@ void init_player_BONDdata_stats(void)
 
     g_CurrentPlayer->ptr_hand_weapon_buffer[GUNRIGHT] = mempAllocBytesInBank(size_item_buffer[0], MEMPOOL_STAGE);
 
-    if (getPlayerCount() == 1)
+    if (GE_RULE_SOLO())
     {
         g_CurrentPlayer->ptr_hand_weapon_buffer[GUNLEFT] = mempAllocBytesInBank(size_item_buffer[1], MEMPOOL_STAGE);
     }

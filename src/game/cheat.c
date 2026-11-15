@@ -817,7 +817,7 @@ void cheatTryActivateFromInputBuffer(void)
     }
     else
     {
-        applicableMask = (getPlayerCount() == 1) ? CHEAT_MASK_SPGAME : CHEAT_MASK_MPGAME;
+        applicableMask = (GE_RULE_SOLO()) ? CHEAT_MASK_SPGAME : CHEAT_MASK_MPGAME;
     }
 
     // Iterate through all cheats until one is activated or all are checked

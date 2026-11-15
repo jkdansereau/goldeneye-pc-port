@@ -277,7 +277,7 @@ s32 bondinvItemAvailableForHand(ITEM_IDS right, ITEM_IDS left)
     if (g_CurrentPlayer->equipallguns &&
         right < ITEM_BOMBCASE &&
         right == left &&
-        getPlayerCount() == 1 &&
+        GE_RULE_SOLO() &&
         bondwalkItemCheckBitflags(right, WEAPONSTATBITFLAG_CAN_DUAL_WIELD))
     {
         return TRUE;
@@ -292,7 +292,7 @@ s32 bondinvItemAvailableForHand(ITEM_IDS right, ITEM_IDS left)
         if (g_CurrentPlayer->equipallguns &&
             right < ITEM_BOMBCASE &&
             right == left &&
-            getPlayerCount() == 1 &&
+            GE_RULE_SOLO() &&
             bondwalkItemCheckBitflags(right, WEAPONSTATBITFLAG_CAN_DUAL_WIELD) &&
             (j_text_trigger == FALSE || (right != ITEM_KNIFE)))
         {
@@ -565,7 +565,7 @@ void bondinvCycleForward(s32 *nextright, s32 *nextleft, s32 requireammo)
     {
         s32 candidate = *nextright;
 
-        if (getPlayerCount() == 1 && bondwalkItemCheckBitflags(*nextright, WEAPONSTATBITFLAG_CAN_DUAL_WIELD) && (*nextleft < *nextright) && (requireammo == FALSE || bondwalkItemHasAmmo(*nextright)) && (weapon1 != *nextright || *nextright < weapon2)
+        if (GE_RULE_SOLO() && bondwalkItemCheckBitflags(*nextright, WEAPONSTATBITFLAG_CAN_DUAL_WIELD) && (*nextleft < *nextright) && (requireammo == FALSE || bondwalkItemHasAmmo(*nextright)) && (weapon1 != *nextright || *nextright < weapon2)
 #ifdef BUGFIX_R1
             && (!j_text_trigger || *nextright != ITEM_KNIFE)
 #endif
@@ -675,7 +675,7 @@ void bondinvCycleBackward(s32 *nextright, s32 *nextleft, s32 requireammo)
         {
             if (candidate == weapon1)
             {
-                if (getPlayerCount() == 1 && bondwalkItemCheckBitflags(candidate, WEAPONSTATBITFLAG_CAN_DUAL_WIELD) && (requireammo == FALSE || bondwalkItemHasAmmo(candidate)) && (candidate != *nextright || candidate < *nextleft) && (weapon2 < candidate)
+                if (GE_RULE_SOLO() && bondwalkItemCheckBitflags(candidate, WEAPONSTATBITFLAG_CAN_DUAL_WIELD) && (requireammo == FALSE || bondwalkItemHasAmmo(candidate)) && (candidate != *nextright || candidate < *nextleft) && (weapon2 < candidate)
 #ifdef BUGFIX_R1
                     && (!j_text_trigger || candidate != ITEM_KNIFE)
 #endif
@@ -694,7 +694,7 @@ void bondinvCycleBackward(s32 *nextright, s32 *nextleft, s32 requireammo)
 #endif
             )
             {
-                if (getPlayerCount() == 1 && bondwalkItemCheckBitflags(candidate, WEAPONSTATBITFLAG_CAN_DUAL_WIELD) && (candidate != *nextright || candidate < *nextleft))
+                if (GE_RULE_SOLO() && bondwalkItemCheckBitflags(candidate, WEAPONSTATBITFLAG_CAN_DUAL_WIELD) && (candidate != *nextright || candidate < *nextleft))
                 {
                     weapon1 = candidate;
                     weapon2 = candidate;

@@ -311,6 +311,7 @@ PropRecord* chrpropAllocate(void)
 
 void chrpropFree(PropRecord *prop)
 {
+    GE_PROP_FREED(prop);
     prop->prev = g_FreeProps;
     prop->next = 0x0;
     prop->stan = 0x0;
@@ -1068,7 +1069,7 @@ void chraiDefaultWeaponFireHandler(s32 hand)
 
         if (prop != 0)
         {
-            if ((prop->type == PROP_TYPE_CHR) || (((prop->type == PROP_TYPE_VIEWER) && (prop->chr != 0)) && (getPlayerPointerIndex(prop) != get_cur_playernum())))
+            if ((prop->type == PROP_TYPE_CHR) || (((prop->type == PROP_TYPE_VIEWER) && (prop->chr != 0)) && (getPlayerPointerIndex(prop) != get_cur_playernum() && GE_PVP_ALLOWED())))
             {
                 chrTestHit(prop, &shotdata);
             }
@@ -2361,7 +2362,7 @@ f32 chrpropScoreAutoAimTarget(PropRecord *targetprop, coord3d *aimpos, f32 *worl
             {
                 horizontal_tolerance = (screen_right_edge[0] - screen_left_edge[0]) * 1.5f;
 
-                if (getPlayerCount() == 1)
+                if (GE_RULE_SOLO())
                 {
                     horizontal_tolerance = horizontal_tolerance * difficulty;
                 }

@@ -308,9 +308,12 @@ static int mpInputMode = 0;
 static int nRealPads   = 0;
 extern s32 getPlayerCount(void);
 
+extern s32 coopActive(void);
 static int inputMpSplit(void)
 {
-    return current_menu == GE_MENU_RUN_STAGE && getPlayerCount() >= 2;
+    /* D960: a direct -level_XX co-op boot never visits RUN_STAGE (menu stays INVALID). */
+    return (current_menu == GE_MENU_RUN_STAGE || (current_menu == GE_MENU_INVALID && coopActive())) &&
+           getPlayerCount() >= 2;
 }
 
 /* DNEW-mp-1 (issue #99): pad SEATS. pads[] is indexed by seat, not by SDL
@@ -3152,9 +3155,9 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
              * sensitivity: camera turn speed in Centered, crosshair speed in
              * Original. */
             if (slotPlayer() != NULL && slotPlayer()->insightaimmode) {
-                extern int nxAimStick(int v, int sens);   /* nxgame.c: sens, Game.AimZoom, Game.AimAssist */
-                rxs = nxAimStick(rxs, padAimLookSens);
-                rys = nxAimStick(rys, padAimLookSens);
+                extern int nxAimStickP(int v, int sens, int slot);   /* nxgame.c: sens, Game.AimZoom, Game.AimAssist (D960: per slot) */
+                rxs = nxAimStickP(rxs, padAimLookSens, idx);
+                rys = nxAimStickP(rys, padAimLookSens, idx);
             }
 #endif
             if (rxs >  STICK_MAX) rxs =  STICK_MAX; else if (rxs < -STICK_MAX) rxs = -STICK_MAX;
@@ -3170,7 +3173,7 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
             if (padLookInvertY) rys = -rys;
             if (idx == 0) { s_recPadDX = rxs; s_recPadDY = rys; s_recPadDirect = 0; }
 #if defined(PLATFORM_SWITCH)
-            if (idx == 0) {   /* Game.AimEntry (nxgame.c): the view follows the crosshair into the aim */
+            if (idx >= 0) {   /* Game.AimEntry (nxgame.c): the view follows the crosshair into the aim (D960: every slot, state per player) */
                 extern void nxAimEntryStep(struct player *p);
                 nxAimEntryStep(slotPlayer());
                 extern void nxAimStopStep(struct player *p, int moving);   /* Game.AimStop */

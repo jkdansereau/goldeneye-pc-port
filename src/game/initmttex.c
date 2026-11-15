@@ -15,6 +15,12 @@ void set_mt_tex_alloc(void)
         bytes = strtol(tokenFind(1, "-mt"), 0x0, 0) * 1024; //get KB
     }
 
+#ifdef PORT
+    {   /* D960: a co-op player 2 with a chosen character loads that character's body and head textures into this pool */
+        extern s32 coopTexExtra(s32 bytes);
+        bytes = coopTexExtra(bytes);
+    }
+#endif
     texInitPool(&ptr_texture_alloc_start, mempAllocBytesInBank(bytes, MEMPOOL_STAGE), bytes);
 #ifdef PORT
     /* D336 probe: the stage texture pool size actually in effect. When it

@@ -586,7 +586,7 @@ void mpwatchMenuTick(void)
     s32 i;
 
     player_num = get_cur_playernum();
-    player_count = getPlayerCount();
+    player_count = GE_RULE_SOLO() ? 1 : getPlayerCount();
     x_centered = joyGetStickXInRange(player_num, -2, 1);
 
     // The player in shuffled position 0 drives down g_gameOverFlag which is both a flag and a timer.
@@ -1705,7 +1705,7 @@ Gfx *mp_watch_menu_display(Gfx *gdl)
         }
         gdl = combiner_bayer_lod_perspective(gdl);
     }
-    else if (((((g_CurrentPlayer->bonddead) && (g_CurrentPlayer->deathanimfinished)) && (g_CurrentPlayer->redbloodfinished)) && (!g_stopPlayFlag)) && (!g_gameOverFlag))
+    else if (((((g_CurrentPlayer->bonddead) && (g_CurrentPlayer->deathanimfinished)) && (g_CurrentPlayer->redbloodfinished)) && (!g_stopPlayFlag)) && GE_RESPAWN_BUTTON(!g_gameOverFlag))
     {
         total_kills_against_current = 0;
  

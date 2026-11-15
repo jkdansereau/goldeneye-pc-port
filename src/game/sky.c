@@ -358,7 +358,7 @@ Gfx *skyRender(Gfx *gdl)
 
     if (!fogGetCurrentEnvironmentp()->Clouds)
     {
-        if (getPlayerCount() == 1)
+        if (GE_AI_PLAYERS() == 1)   /* co-op: the solo path fills the sky colour; the multiplayer branch fills with whatever fill colour was last set (black here) */
         {
             gDPSetCycleType(gdl++, G_CYC_FILL);
 

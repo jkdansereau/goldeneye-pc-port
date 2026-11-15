@@ -962,6 +962,9 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
         // loop forever (or until broken)
         for (;;)
         {
+#ifdef PORT
+            Offset = coopAiStep(AiListp, Offset, GE_AI_IS_PLAYER_TEST((AiListp + Offset)->cmd));
+#endif
             /*
              * GE uses long Switch/case while PD uses Bool functions and tests
              * for TRUE/FALSE if(funcpointer[ai]) break;
@@ -4240,7 +4243,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                     s32 num;
                     for (num = get_numguards() - 1; num >= 0; num--)
                     {
-                        if (g_ChrSlots[num].model != NULL)
+                        if (GE_CHR_HIDEABLE(&g_ChrSlots[num]))
                         {
                             g_ChrSlots[num].chrflags |= CHRFLAG_HIDDEN;
                         }
@@ -4291,7 +4294,7 @@ void                   ai(PropDefHeaderRecord *Entityp, PROP_TYPE EntityType)
                 case AI_IfNumberOfActivePlayersLessThan:
                 {
                     AiIfNumberOfActivePlayersLessThanRecord *ai = AiListp + Offset;
-                    if (getPlayerCount() < ai->NUMBER)
+                    if (GE_AI_PLAYERS() < ai->NUMBER)
                     {
                         Offset = chraiGoToLabel(AiListp, Offset, ai->GOTOLABEL);
                     }

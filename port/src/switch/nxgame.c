@@ -73,8 +73,31 @@ extern bool currentPlayerGetIsAiming(void);
 #define AIMZOOM_EASE_SEC 0.07   /* time constant of the zoom in / out */
 
 static int   s_aimZoom = 2;      /* 0 off, 1 x1.5, 2 x2 */
-static float s_aimZoomCur = 1.0f;
-static double s_aimZoomT = 0.0;
+/* D960 (co-op): every aim feature keeps its state per player (index = the player's number), and the "one player"
+ * tests ask coopIsMission(), true in solo and in a co-op campaign. Game thread: the current player; input thread:
+ * the slot passed in (nxAimStickP). */
+extern s32 get_cur_playernum(void);
+extern int coopIsMission(void);
+extern struct player *g_playerPointers[4];
+static int nxCp(void)
+{
+    const s32 i = get_cur_playernum();
+    return (i >= 0 && i < 4) ? (int)i : 0;
+}
+static int nxPidx(const struct player *p)
+{
+    int i;
+    for (i = 0; i < 4; i++) {
+        if (g_playerPointers[i] == p) {
+            return i;
+        }
+    }
+    return 0;
+}
+static float s_aimZoomCurA[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+static double s_aimZoomTA[4];
+#define s_aimZoomCur (s_aimZoomCurA[nxCp()])
+#define s_aimZoomT   (s_aimZoomTA[nxCp()])
 
 /*
  * Game.AimAssist: the aim stick slows down while the crosshair is on a guard.
@@ -92,9 +115,12 @@ static double s_aimZoomT = 0.0;
  * See docs/dev/findings.md D956.
  */
 static int   s_aimAssist = 2;    /* 0 off, 1 low, 2 high */
-static float s_assistT = 0.0f;   /* eased 0..1, read by the input thread */
-static double s_assistClock = 0.0;
-static int   s_losFail = 0;      /* frames in a row the only guard in range was refused by the line of sight */
+static float s_assistTA[4];      /* eased 0..1, read by the input thread */
+static double s_assistClockA[4];
+static int   s_losFailA[4];      /* frames in a row the only guard in range was refused by the line of sight */
+#define s_assistT     (s_assistTA[nxCp()])
+#define s_assistClock (s_assistClockA[nxCp()])
+#define s_losFail     (s_losFailA[nxCp()])
 
 extern PropRecord **g_LastOnScreenProp;
 extern PropRecord *g_OnScreenPropList[];
@@ -261,7 +287,7 @@ static int aimAssistActive(void)
     double aimMode = 0.0;   /* Input.AimMode: 0 = Original, 1 / 2 = centred */
 
     configGetValue("Input.AimMode", &aimMode);
-    return s_aimAssist > 0 && aimMode != 0.0 && getPlayerCount() == 1 && currentPlayerGetIsAiming();
+    return s_aimAssist > 0 && aimMode != 0.0 && coopIsMission() && currentPlayerGetIsAiming();
 }
 
 /* Called from lvlRender (src/game/lv.c, one PORT line) right before
@@ -286,7 +312,7 @@ float nxAimZoomFactor(void)
     double aimMode = 0.0;   /* Input.AimMode: 0 = Original, 1 / 2 = centred */
 
     configGetValue("Input.AimMode", &aimMode);
-    if (s_aimZoom > 0 && nxIsHandheld() && getPlayerCount() == 1 &&
+    if (s_aimZoom > 0 && nxIsHandheld() && coopIsMission() &&
         aimMode != 0.0 && currentPlayerGetIsAiming()) {
         target = (s_aimZoom == 1) ? 1.5f : 2.0f;
     }
@@ -310,16 +336,17 @@ float nxAimZoomFactor(void)
  * is not applied there. */
 extern f32 viGetFovY(void);
 
-int nxAimStick(int v, int sens)
+int nxAimStickP(int v, int sens, int slot)
 {
     static const float slow[3] = { 1.0f, 0.70f, 0.50f };   /* speed on the guard */
     const f32 fov = viGetFovY();
-    const float assist = 1.0f - (1.0f - slow[s_aimAssist]) * s_assistT;
+    const int sl = (slot >= 0 && slot < 4) ? slot : 0;
+    const float assist = 1.0f - (1.0f - slow[s_aimAssist]) * s_assistTA[sl];
 
     if (fov > 0.0f && fov < 30.0f) {
         sens = 100;
     }
-    return (int)((float)v * (float)sens * assist / (100.0f * s_aimZoomCur));
+    return (int)((float)v * (float)sens * assist / (100.0f * s_aimZoomCurA[sl]));
 }
 
 /*
@@ -348,11 +375,14 @@ static int s_aimEntry = 1;   /* 0 off, 1 move view, 2 centre crosshair */
 
 void nxAimEntryStep(struct player *p)
 {
-    static int wasAiming = 0, settling = 0;
-    static float hipX = 0.0f, hipY = 0.0f, hipPX = 0.0f, hipPY = 0.0f;   /* the crosshair as last seen off the aim */
-    static float kx = 0.0f, ky = 0.0f;                                   /* screen units per unit of crosshair_*_pos */
-    static double aYaw = 0.0, aUp = 0.0;                                 /* the angles from the centre to the crosshair, radians */
-    static double t0 = 0.0, sPrev = 0.0;
+    static struct {
+        int wasAiming, settling;
+        float hipX, hipY, hipPX, hipPY;   /* the crosshair as last seen off the aim */
+        float kx, ky;                     /* screen units per unit of crosshair_*_pos */
+        double aYaw, aUp;                 /* the angles from the centre to the crosshair, radians */
+        double t0, sPrev;
+    } st[4];
+    typeof(st[0]) *S = &st[nxPidx(p)];
     double aimMode = 0.0;
     struct timespec ts;
     double now, t, s, f, rsx, rsy;
@@ -361,8 +391,8 @@ void nxAimEntryStep(struct player *p)
 
     configGetValue("Input.AimMode", &aimMode);
     if (p == NULL || s_aimEntry == 0 || aimMode == 0.0) {
-        wasAiming = 0;
-        settling = 0;
+        S->wasAiming = 0;
+        S->settling = 0;
         return;
     }
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -372,16 +402,16 @@ void nxAimEntryStep(struct player *p)
     offY = p->crosshair_angle.f[1] - (p->c_screentop + p->c_halfheight);
 
     if (!aiming) {
-        settling = 0;
-        wasAiming = 0;
-        hipX = offX;
-        hipY = offY;
-        hipPX = p->crosshair_x_pos;
-        hipPY = p->crosshair_y_pos;
+        S->settling = 0;
+        S->wasAiming = 0;
+        S->hipX = offX;
+        S->hipY = offY;
+        S->hipPX = p->crosshair_x_pos;
+        S->hipPY = p->crosshair_y_pos;
         return;
     }
-    if (!wasAiming) {   /* the aim starts */
-        wasAiming = 1;
+    if (!S->wasAiming) {   /* the aim starts */
+        S->wasAiming = 1;
         if (s_aimEntry == 2) {
             p->crosshair_x_pos = 0.0f;
             p->crosshair_y_pos = 0.0f;
@@ -392,43 +422,43 @@ void nxAimEntryStep(struct player *p)
         if (rsx <= 0.0 || rsy <= 0.0) {
             return;
         }
-        aYaw = atan((double)hipX / rsx);
-        aUp  = atan((double)(-hipY) / rsy);
-        kx = (hipPX > 0.01f || hipPX < -0.01f) ? hipX / hipPX : 0.0f;
-        ky = (hipPY > 0.01f || hipPY < -0.01f) ? hipY / hipPY : 0.0f;
-        settling = 1;
-        t0 = now;
-        sPrev = 0.0;
+        S->aYaw = atan((double)S->hipX / rsx);
+        S->aUp  = atan((double)(-S->hipY) / rsy);
+        S->kx = (S->hipPX > 0.01f || S->hipPX < -0.01f) ? S->hipX / S->hipPX : 0.0f;
+        S->ky = (S->hipPY > 0.01f || S->hipPY < -0.01f) ? S->hipY / S->hipPY : 0.0f;
+        S->settling = 1;
+        S->t0 = now;
+        S->sPrev = 0.0;
     }
-    if (!settling) {
+    if (!S->settling) {
         return;
     }
     rsx = (double)p->c_recipscalex;
     rsy = (double)p->c_recipscaley;
     if (rsx <= 0.0 || rsy <= 0.0) {
-        settling = 0;
+        S->settling = 0;
         return;
     }
-    t = (now - t0) / AIMENTRY_SEC;
+    t = (now - S->t0) / AIMENTRY_SEC;
     if (t > 1.0) { t = 1.0; }
     s = 1.0 - (1.0 - t) * (1.0 - t);   /* fast at first, soft landing */
-    p->vv_theta += (f32)(aYaw * (s - sPrev) * RAD_TO_DEG);
-    p->vv_verta += (f32)(aUp * (s - sPrev) * RAD_TO_DEG);
-    sPrev = s;
+    p->vv_theta += (f32)(S->aYaw * (s - S->sPrev) * RAD_TO_DEG);
+    p->vv_verta += (f32)(S->aUp * (s - S->sPrev) * RAD_TO_DEG);
+    S->sPrev = s;
     if (p->vv_verta >  90.0f) { p->vv_verta =  90.0f; }
     if (p->vv_verta < -90.0f) { p->vv_verta = -90.0f; }
     /* The crosshair walks to the centre in step: what is left of each angle,
      * back to screen units (offset = tan(angle) x c_recipscale), back to the
      * game's crosshair position. */
     f = 1.0 - s;
-    if (kx != 0.0f) {
-        p->crosshair_x_pos = (f32)(tan(aYaw * f) * rsx / (double)kx);
+    if (S->kx != 0.0f) {
+        p->crosshair_x_pos = (f32)(tan(S->aYaw * f) * rsx / (double)S->kx);
     }
-    if (ky != 0.0f) {
-        p->crosshair_y_pos = (f32)(-tan(aUp * f) * rsy / (double)ky);
+    if (S->ky != 0.0f) {
+        p->crosshair_y_pos = (f32)(-tan(S->aUp * f) * rsy / (double)S->ky);
     }
     if (t >= 1.0) {
-        settling = 0;
+        S->settling = 0;
         p->crosshair_x_pos = 0.0f;
         p->crosshair_y_pos = 0.0f;
     }
@@ -501,8 +531,12 @@ static const double kLookAheadDps[4] = { 0.0, 45.0, 60.0, 90.0 };   /* degrees p
 
 void nxLookAheadStep(struct player *p, int walkingForward, int lookIdle)
 {
-    static double idleSince = 0.0, last = 0.0;
-    static int active = 0;
+    static double idleSinceA[4], lastA[4];
+    static int activeA[4];
+    const int pi = nxPidx(p);
+#define idleSince idleSinceA[pi]
+#define last lastA[pi]
+#define active activeA[pi]
     double aimMode = 0.0, now, dt, diff, speed, step;
     struct timespec ts;
 
@@ -547,6 +581,9 @@ void nxLookAheadStep(struct player *p, int walkingForward, int lookIdle)
         active = 0;
     }
 }
+#undef idleSince
+#undef last
+#undef active
 
 PD_CONSTRUCTOR static void nxGameRegisterConfig(void)
 {

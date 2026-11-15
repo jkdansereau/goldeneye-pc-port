@@ -479,7 +479,7 @@ void bondviewLoadSetupIntroSection(void)
 
     if (startpadcount > 0)
     {
-        if ((getPlayerCount() >= 2) && (startpadcount > 0))
+        if ((GE_RULE_MULTI()) && (startpadcount > 0))
         {
             rand_pad_index = bondviewGetRandomSpawnPadIndex();
         }
@@ -497,6 +497,7 @@ void bondviewLoadSetupIntroSection(void)
 
 
         start_stan = g_Startpad[rand_pad_index]->stan;
+        GE_COOP_SPAWN_OFFSET(&start_pos.f[0], &start_pos.f[2], &start_stan, g_Startpad[rand_pad_index]->look.f[0], g_Startpad[rand_pad_index]->look.f[2]);
 
         stan_height = bondviewYPositionRelated(start_stan, start_pos.f[0], start_pos.f[2]);
         start_pos.f[1] = g_CurrentPlayer->eyeheight + stan_height;

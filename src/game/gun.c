@@ -1026,13 +1026,13 @@ void gunRequestHandWeaponChange(enum GUNHAND hand, s32 nextWeapon, s32 cycleDire
         g_CurrentPlayer->hands[hand].field_8B0 = g_CurrentPlayer->hands[hand].field_890;
 
 #ifdef VERSION_EU
-        if (getPlayerCount() == 1) {
+        if (GE_RULE_SOLO()) {
             g_CurrentPlayer->hands[hand].field_8B0 += 0xE;
         } else {
             g_CurrentPlayer->hands[hand].field_8B0 += 0xA;
         }
 #else
-        if (getPlayerCount() == 1) {
+        if (GE_RULE_SOLO()) {
             g_CurrentPlayer->hands[hand].field_8B0 += 0x11;
         } else {
             g_CurrentPlayer->hands[hand].field_8B0 += 0xD;
@@ -2118,7 +2118,7 @@ void generate_player_thrown_object(s32 hand)
         switch (current_weapon)
         {
             case ITEM_REMOTEMINE:
-            if (getPlayerCount() == 1)
+            if (GE_RULE_SOLO())
             {
                 wor->timer = THROWN_ITEM_TIMER_SOLO;
             }
@@ -2129,7 +2129,7 @@ void generate_player_thrown_object(s32 hand)
             break;
 
             case ITEM_PROXIMITYMINE:
-            if (getPlayerCount() == 1)
+            if (GE_RULE_SOLO())
             {
                 wor->timer = THROWN_ITEM_TIMER_SOLO;
             }
@@ -2140,7 +2140,7 @@ void generate_player_thrown_object(s32 hand)
             break;
 
             case ITEM_TIMEDMINE:
-            if (getPlayerCount() == 1)
+            if (GE_RULE_SOLO())
             {
                 wor->timer = THROWN_ITEM_TIMER_SOLO;
             }
@@ -2151,7 +2151,7 @@ void generate_player_thrown_object(s32 hand)
             break;
 
             case ITEM_BOMBCASE:
-            if (getPlayerCount() == 1)
+            if (GE_RULE_SOLO())
             {
                 wor->timer = THROWN_ITEM_TIMER_SOLO;
             }

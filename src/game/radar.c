@@ -53,7 +53,7 @@ Gfx *display_red_blue_on_radar(Gfx *DL)
     cur_playernum = get_cur_playernum();
     player_count = getPlayerCount();
     
-    if (player_count == 1)
+    if (GE_RULE_SOLO())
     {
         return DL;
     }

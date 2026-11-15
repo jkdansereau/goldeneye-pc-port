@@ -10787,7 +10787,7 @@ _AI_CMD(
             s8 val;
             u8 label;
         } *ai = AiListp + Offset;
-        if (getPlayerCount() < ai->val)
+        if (GE_AI_PLAYERS() < ai->val)
         {
             Offset = chraiGoToLabel(AiListp, Offset, ai->label);
         }

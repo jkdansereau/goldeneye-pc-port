@@ -525,7 +525,7 @@ void lvlStageLoad(s32 stage)
             s32 s3;
             player_data = (struct player_data *)&g_playerPlayerData[i];
 
-            if (getPlayerCount() == 1)
+            if (GE_RULE_SOLO())
             {
                 // s4 variable
                 player_data->autoaim = 0;
@@ -1122,7 +1122,7 @@ void lvlManageMpGame(void)
         }
     }
 
-    if ((getPlayerCount() >= 2) && (g_CurrentStageToLoad != LEVELID_TITLE))
+    if ((GE_RULE_MULTI()) && (g_CurrentStageToLoad != LEVELID_TITLE))
     {
         if (get_mission_state() == MISSION_STATE_6)
         {
@@ -1372,6 +1372,7 @@ void lvlManageMpGame(void)
     {
         sub_GAME_7F09BBBC();
         lvlSetMultipliersForDifficulty();
+        GE_COOP_FRAME_TICK();
         updateRoomStatusFlags();
         sub_GAME_7F092E50();
         skyTick();

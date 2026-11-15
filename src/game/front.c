@@ -2852,8 +2852,49 @@ Gfx *constructor_menu05_fileselect(Gfx *DL)
 //********************************************************************************************************
 //MODE SELECT
 //********************************************************************************************************
+#if defined(PORT) && defined(__SWITCH__)
+/* D960: a "Co-op" row between Select Mission and Multiplayer (port/src/coop.c). The other rows move down, at 24
+ * instead of 32 units, so four of them fit. Other builds keep the original numbers. */
+#define COOP_MODEMENU 1
+void coopMenuClear(void);
+void coopMenuSelect(void);
+int  coopMenuTake(void);
+int  coopCharSelectPre(void);
+int  coopCharSelectDone(void);
+int  coopMenuIntent(void);
+#define MODE_V_COOP      239.0f
+#define MODE_V_MULTI     263.0f
+#define MODE_V_CHEAT     287.0f
+#define MODE_HL_MULTI    2
+#define MODE_HL_CHEAT    3
+#define MODE_Y_MULTI     0x10C
+#define MODE_Y_MULTI_TOP 0x10A
+#define MODE_Y_MULTI_BOT 0x11A
+#define MODE_Y_CHEAT     0x124
+#define MODE_Y_CHEAT_TOP 0x122
+#define MODE_Y_CHEAT_BOT 0x132
+#define MODE_LBL_MULTI   "3.\n"
+#define MODE_LBL_CHEAT   "4.\n"
+#else
+#define MODE_V_MULTI     243.0f
+#define MODE_V_CHEAT     275.0f
+#define MODE_HL_MULTI    DIFFICULTY_SECRET
+#define MODE_HL_CHEAT    DIFFICULTY_00
+#define MODE_Y_MULTI     0xFC
+#define MODE_Y_MULTI_TOP 0xFA
+#define MODE_Y_MULTI_BOT 0x10A
+#define MODE_Y_CHEAT     0x11C
+#define MODE_Y_CHEAT_TOP 0x11A
+#define MODE_Y_CHEAT_BOT 0x12A
+#define MODE_LBL_MULTI   "2.\n"
+#define MODE_LBL_CHEAT   "3.\n"
+#endif
+
 void init_menu06_modeselect(void)
 {
+#ifdef COOP_MODEMENU
+    coopMenuClear();
+#endif
     gamemode = GAMEMODE_INTRO;
     tab_next_selected = FALSE;
     tab_prev_selected = FALSE;
@@ -2908,24 +2949,35 @@ void interface_menu06_modesel(void)
             sndPlaySfx(g_musicSfxBufferPtr, DOOR_METAL_CLOSE2_SFX, 0);
         }
     }
-    else if ((is_cheat_menu_available) && (275.0f <= cursor_v_pos))
+    else if ((is_cheat_menu_available) && (MODE_V_CHEAT <= cursor_v_pos))
     {
-        mission_difficulty_highlighted = DIFFICULTY_00;
+        mission_difficulty_highlighted = MODE_HL_CHEAT;
         if (joyGetButtonsPressedThisFrame(PLAYER_1, START_BUTTON|Z_TRIG|A_BUTTON))
         {
             gamemode = GAMEMODE_CHEATS;
             sndPlaySfx(g_musicSfxBufferPtr, DOOR_METAL_CLOSE_SFX, 0);
         }
     }
-    else if ((243.0f <= cursor_v_pos) && (joyGetControllerCount() >= 2))
+    else if ((MODE_V_MULTI <= cursor_v_pos) && (joyGetControllerCount() >= 2))
     {
-        mission_difficulty_highlighted = DIFFICULTY_SECRET;
+        mission_difficulty_highlighted = MODE_HL_MULTI;
         if (joyGetButtonsPressedThisFrame(PLAYER_1, START_BUTTON|Z_TRIG|A_BUTTON))
         {
             gamemode = GAMEMODE_MULTI;
             sndPlaySfx(g_musicSfxBufferPtr, DOOR_METAL_CLOSE_SFX, 0);
         }
     }
+#ifdef COOP_MODEMENU
+    else if ((MODE_V_COOP <= cursor_v_pos) && (joyGetControllerCount() >= 2))
+    {
+        mission_difficulty_highlighted = 1;
+        if (joyGetButtonsPressedThisFrame(PLAYER_1, START_BUTTON|Z_TRIG|A_BUTTON))
+        {
+            coopMenuSelect();
+            sndPlaySfx(g_musicSfxBufferPtr, DOOR_METAL_CLOSE_SFX, 0);
+        }
+    }
+#endif
     else
     {
         mission_difficulty_highlighted = DIFFICULTY_AGENT;
@@ -2942,6 +2994,13 @@ void interface_menu06_modesel(void)
         sndPlaySfx(g_musicSfxBufferPtr, DOOR_METAL_CLOSE2_SFX, 0);
     }
     frontUpdateControlStickPosition();
+#ifdef COOP_MODEMENU
+    if (coopMenuTake())
+    {
+        frontChangeMenu(MENU_MP_CHAR_SELECT, FALSE);
+        return;
+    }
+#endif
     if (gamemode == GAMEMODE_SOLO)
     {
         frontChangeMenu(MENU_MISSION_SELECT, FALSE);
@@ -3022,7 +3081,11 @@ Gfx *frontSetupMenuBackground(Gfx *DL)
 void setCursorPOSforMode(int mode)
 {
     cursor_h_pos = 126.0f;
+#ifdef COOP_MODEMENU
+    cursor_v_pos = ((mode > 0 ? mode + 1 : mode) + ((mode == 0 && coopMenuIntent()) ? 1 : 0)) * 24 + 0xe2;
+#else
     cursor_v_pos = mode * 0x20 + 0xe2;
+#endif
 }
 
 
@@ -3063,8 +3126,23 @@ Gfx* constructor_menu06_modesel(Gfx* DL)
 
     DL = frontPrintText(DL, &x, &y, textstring, ptrFontZurichBoldChars, ptrFontZurichBold, 0xFF, viGetX(), viGetY(), 0, 0);
 
+#ifdef COOP_MODEMENU
     x = 0x96;
-    y = 0xFC;
+    y = 0xF4;
+    text_color = (joyGetControllerCount() >= 2) ? 0xFF : 0x70;
+    DL = frontPrintText(DL, &x, &y, "2.\n", ptrFontZurichBoldChars, ptrFontZurichBold, text_color, viGetX(), viGetY(), 0, 0);
+    textstring = "CO-OP";
+    textMeasure(&x2, &y2, textstring, ptrFontZurichBoldChars, ptrFontZurichBold, 0);
+    x = 0xAA;
+    y = 0xF4;
+    if (mission_difficulty_highlighted == 1)
+    {
+        DL = microcode_constructor_related_to_menus(DL, 0x94, 0xF2, y2 + 0xAF, 0x102, 0x32);
+    }
+    DL = frontPrintText(DL, &x, &y, textstring, ptrFontZurichBoldChars, ptrFontZurichBold, text_color, viGetX(), viGetY(), 0, 0);
+#endif
+    x = 0x96;
+    y = MODE_Y_MULTI;
     if (joyGetControllerCount() >= 2)
     {
         text_color = 0xFF;
@@ -3073,34 +3151,34 @@ Gfx* constructor_menu06_modesel(Gfx* DL)
     {
         text_color = 0x70;
     }
-    DL = frontPrintText(DL, &x, &y, "2.\n", ptrFontZurichBoldChars, ptrFontZurichBold, text_color, viGetX(), viGetY(), 0, 0);
+    DL = frontPrintText(DL, &x, &y, MODE_LBL_MULTI, ptrFontZurichBoldChars, ptrFontZurichBold, text_color, viGetX(), viGetY(), 0, 0);
 
     textstring = langGet((g_AppendCheatMultiPlayer != 0) ? getStringID(LTITLE, TITLE_STR_276_CHEATMULTIPLAYER) : getStringID(LTITLE, TITLE_STR_30_MULTIPLAYER));
 
     textMeasure(&x2, &y2, textstring, ptrFontZurichBoldChars, ptrFontZurichBold, 0);
 
     x = 0xAA;
-    y = 0xFC;
-    if (mission_difficulty_highlighted == 1)
+    y = MODE_Y_MULTI;
+    if (mission_difficulty_highlighted == MODE_HL_MULTI)
     {
-        DL = microcode_constructor_related_to_menus(DL, 0x94, 0xFA, y2 + 0xAF, 0x10A, 0x32);
+        DL = microcode_constructor_related_to_menus(DL, 0x94, MODE_Y_MULTI_TOP, y2 + 0xAF, MODE_Y_MULTI_BOT, 0x32);
     }
     DL = frontPrintText(DL, &x, &y, textstring, ptrFontZurichBoldChars, ptrFontZurichBold, text_color, viGetX(), viGetY(), 0, 0);
 
     if (is_cheat_menu_available != 0)
     {
         x = 0x96;
-        y = 0x11C;
-        DL = frontPrintText(DL, &x, &y, "3.\n", ptrFontZurichBoldChars, ptrFontZurichBold, 0xFF, viGetX(), viGetY(), 0, 0);
+        y = MODE_Y_CHEAT;
+        DL = frontPrintText(DL, &x, &y, MODE_LBL_CHEAT, ptrFontZurichBoldChars, ptrFontZurichBold, 0xFF, viGetX(), viGetY(), 0, 0);
         textstring = langGet(getStringID(LTITLE, TITLE_STR_31_CHEATOPTIONS));
 
         textMeasure(&x2, &y2, textstring, ptrFontZurichBoldChars, ptrFontZurichBold, 0);
 
         x = 0xAA;
-        y = 0x11C;
-        if (mission_difficulty_highlighted == 2)
+        y = MODE_Y_CHEAT;
+        if (mission_difficulty_highlighted == MODE_HL_CHEAT)
         {
-            DL = microcode_constructor_related_to_menus(DL, 0x94, 0x11A, y2 + 0xAF, 0x12A, 0x32);
+            DL = microcode_constructor_related_to_menus(DL, 0x94, MODE_Y_CHEAT_TOP, y2 + 0xAF, MODE_Y_CHEAT_BOT, 0x32);
         }
         DL = frontPrintText(DL, &x, &y, textstring, ptrFontZurichBoldChars, ptrFontZurichBold, 0xFF, viGetX(), viGetY(), 0, 0);
     }
@@ -5050,6 +5128,12 @@ void interface_menu0F_mpcharsel(void)
     s32 i;
     s32 temp_v1_3;
 
+#ifdef COOP_MODEMENU
+    if (coopCharSelectPre())
+    {
+        return;
+    }
+#endif
     numplayers = get_selected_num_players();
     ready_players = 0;
     viSetFovY(FOV_Y_F);
@@ -5157,6 +5241,12 @@ void interface_menu0F_mpcharsel(void)
 
     if (ready_players == numplayers)
     {
+#ifdef COOP_MODEMENU
+        if (coopCharSelectDone())
+        {
+            return;
+        }
+#endif
         frontChangeMenu(MENU_MP_OPTIONS, 0);
     }
 }

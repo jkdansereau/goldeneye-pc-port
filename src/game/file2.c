@@ -1345,7 +1345,7 @@ void fileLoadSettingsForFolder(u32 folder)
 
         options = save->options;
 
-        if (getPlayerCount() == 1)
+        if (GE_RULE_SOLO())
         {
             cur_player_set_control_type(((s32) (options & OPTION_CONTROLTYPE) >> 8) & 0xFFFF);
         }
