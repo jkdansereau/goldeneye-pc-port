@@ -7,6 +7,9 @@
 #include "sky.h"
 #ifdef PORT
 #include "floatvtx.h" /* D245: G_FLOATVTX_EXT */
+#ifdef PORT
+#include "skyplus.h"  /* GE+ sky */
+#endif
 #include "envflag.h"
 #endif
 #include "player.h"
@@ -340,6 +343,13 @@ Gfx *skyRender(Gfx *gdl)
     env = fogGetCurrentEnvironmentp();
 
 #ifdef PORT
+    {
+        /* GE+ sky (Video.SkyPlus, port/src/skyplus.c): NULL = draw GE's sky */
+        Gfx *plus = skyPlusRender(gdl);
+        if (plus != NULL) {
+            return plus;
+        }
+    }
     if (GE_ENVFLAG("GE_D176")) {
         static int n = 0;
         if (n++ < 4)

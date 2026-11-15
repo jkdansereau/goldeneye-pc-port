@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include <chrono>
 #include <map>
@@ -22,6 +23,7 @@
 #include "gfx_cc.h"
 #include "gfx_rendering_api.h"
 #include "gfx_pc.h"
+#include "skyplus.h"   /* GE+ sky pass */
 
 /* D578 L3: the glad (GL 1.0 base) header lacks this token. */
 #ifndef GL_CLEAR_COLOR
@@ -2114,6 +2116,279 @@ void main() {
     glBindFramebuffer(GL_FRAMEBUFFER, current_framebuffer == 0 ? 0 : framebuffers[current_framebuffer].fbo);
 }
 #endif
+
+/* GE+ sky (Video.SkyPlus): see port/include/skyplus.h. The decoder stages a
+ * copy of the game's parameter block with the viewport; the replay calls the
+ * pass at the same point of the frame, which draws the player's viewport in
+ * one fullscreen triangle (no depth test or write, as GE's sky). */
+struct SkyPlusDraw {
+    PortSkyPlus p;
+    int vp[4];
+    float aspA, aspB;
+};
+#define SKYPLUS_RING 64   /* > skies per frame (4 players) x frames in flight */
+static SkyPlusDraw s_skyplus_ring[SKYPLUS_RING];
+static unsigned s_skyplus_next;
+static GLuint s_skyplus_prog, s_skyplus_vao, s_skyplus_tex;
+static int s_skyplus_tex_gen = -1;
+extern "C" { volatile int gfx_skyplus_failed = 0; }
+enum { SPL_VP, SPL_ASP, SPL_C0, SPL_C1, SPL_C2, SPL_C3, SPL_EYE, SPL_CLOUDY, SPL_SKY, SPL_CLOUD, SPL_OFS,
+       SPL_GAIN, SPL_TEXSCALE, SPL_SUNDIR, SPL_SUNCOL, SPL_SUNGLOW, SPL_MOONDIR, SPL_NIGHT, SPL_TEX, SPL_COUNT };
+static GLint s_sp_loc[SPL_COUNT];
+
+extern "C" int gfx_opengl_skyplus_stage(const PortSkyPlus* p, const int vp[4], float aspA, float aspB) {
+    const int slot = (int)(s_skyplus_next++ % SKYPLUS_RING);
+    SkyPlusDraw& d = s_skyplus_ring[slot];
+    d.p = *p;
+    for (int i = 0; i < 4; i++) {
+        d.vp[i] = vp[i];
+    }
+    d.aspA = aspA;
+    d.aspB = aspB;
+    return slot;
+}
+
+static bool skyplus_build(void) {
+    static const char* vs_body = R"GLSL(
+void main() {
+    vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}
+)GLSL";
+    static const char* fs_body = R"GLSL(
+uniform vec4 uVP;        /* GL viewport */
+uniform vec2 uAsp;       /* x_out = uAsp.x * x_game + uAsp.y (clip x) */
+uniform vec3 uC0, uC1, uC2, uC3;   /* image-plane rays TL TR BL BR, world */
+uniform vec3 uEye;
+uniform float uCloudY;
+uniform vec3 uSky, uCloud;
+uniform vec2 uOfs[3];
+uniform float uGain;
+uniform float uTexScale;
+#define PLANET_R 300000.0
+uniform vec3 uSunDir, uSunCol;
+uniform float uSunGlow;
+uniform vec3 uMoonDir;
+uniform float uNight;
+uniform sampler2D uTex;
+out vec4 o;
+
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+
+void main() {
+    vec2 f = (gl_FragCoord.xy - uVP.xy) / uVP.zw;          /* 0..1, y up */
+    float xg = ((f.x * 2.0 - 1.0) - uAsp.y) / uAsp.x;       /* back to the game's screen x */
+    float u = xg * 0.5 + 0.5, v = 1.0 - f.y;                /* v = 0 at the top of the screen */
+    vec3 d = mix(mix(uC0, uC1, u), mix(uC2, uC3, u), v);
+    float hz = length(d.xz) + 1e-4;
+    float e = max(d.y / length(d), 0.0);
+    vec3 F = uSky;
+    if (d.y <= 0.0) { o = vec4(F, 1.0); return; }           /* GE's clear colour */
+
+    /* 1. sky behind everything: horizon = GE's colour, zenith a little deeper */
+    vec3 c = mix(F, F * 0.82, smoothstep(0.0, 0.8, e));
+    vec3 nd = normalize(d);
+    if (uSunGlow > 0.0) {
+        float cs = dot(nd, uSunDir);
+        float sunAmt = max(cs, 0.0);
+        c += uSunCol * (pow(sunAmt, 5.0) * 0.5 + pow(sunAmt, 48.0) * 0.7) * uSunGlow;
+        if (cs > 0.9995) c = max(c, vec3(1.3));
+    }
+    float star = 0.0;
+    if (uNight > 0.5 && e > 0.03) {
+        vec2 cell = floor(vec2(atan(nd.x, nd.z), asin(e)) * 400.0);
+        float h = hash(cell);
+        if (h > 0.997) star = (h - 0.997) / 0.003 * smoothstep(0.03, 0.3, e) * 0.8;
+    }
+
+    /* 2. cloud layers, highest first, over the sky; layer 1 = GE's */
+    vec3 ld = uSunGlow > 0.0 ? uSunDir : (uNight > 0.5 ? uMoonDir : vec3(0.0, 1.0, 0.0));
+    float fr = 1.0 - min(1.0, 2.0 * d.y / hz) * uGain;
+    vec3 shade = F + uCloud * (1.0 - F) * (1.0 - fr);
+    float H = uCloudY - uEye.y;
+    float cover = 0.0;
+    if (H > 0.0) {
+        for (int i = 0; i < 3; i++) {
+            float kH  = i == 0 ? 1.8  : (i == 1 ? 1.0 : 0.55);
+            float kSc = i == 0 ? 1.7  : (i == 1 ? 1.0 : 0.45);
+            float kRo = i == 0 ? 0.9  : (i == 1 ? 0.0 : -0.6);
+            float kOp = i == 0 ? 0.35 : (i == 1 ? 1.0 : 0.25);
+            float kK  = i == 0 ? 0.15 : (i == 1 ? 0.0 : 0.25);
+            /* a curved shell (a planet's cloud layer seen from the ground), not a
+             * flat plane: overhead it is the plane, toward the horizon it bends
+             * down, so the distance stays finite and the texture never shrinks
+             * to a moire band */
+            float Hl = H * kH;
+            float b = PLANET_R * nd.y;
+            float dl = -b + sqrt(b * b + 2.0 * PLANET_R * Hl + Hl * Hl);   /* distance to the shell */
+            /* GE: S = x * 0.1, T = z * 0.1 + offset, in S10.5 (32 per texel) */
+            vec2 w = (uEye.xz + nd.xz * dl) * (0.1 / 32.0) * uTexScale;
+            float cr = cos(kRo), sr = sin(kRo);
+            vec2 t = vec2(w.x * cr - w.y * sr, w.x * sr + w.y * cr) / kSc + uOfs[i];
+            float I = texture(uTex, t / 64.0).r;
+            if (kK > 0.0) I = clamp((I - kK) / (1.0 - kK), 0.0, 1.0);
+            float I2 = texture(uTex, (t + ld.xz * 1.5) / 64.0).r;
+            float lit = 1.0 + clamp((I2 - I) * 2.5, -0.35, 0.35) * (i == 1 ? 0.6 : 1.0);
+            /* haze: clouds dissolve into the horizon colour just above it (GE's own
+             * fade only reaches the shade, not the opacity) */
+            float haze = smoothstep(0.0, 0.08, e);
+            float a = I * kOp * haze;
+            cover = 1.0 - (1.0 - cover) * (1.0 - min(1.0, a * 3.0));
+            /* light on the cloud's own colour only, never on the sky part of the shade */
+            vec3 cc = min(vec3(1.1), F + (shade - F) * lit);
+            if (uSunGlow > 0.0) cc += uSunCol * pow(max(dot(nd, uSunDir), 0.0), 12.0) * (1.0 - I) * 0.6 * haze;   /* backlit edges */
+            c = mix(c, cc, a);
+        }
+    }
+    /* 3. the sun's halo shines through: a tight core and a wide bloom, dimmed by the clouds */
+    if (uSunGlow > 0.0) {
+        float sa = max(dot(nd, uSunDir), 0.0);
+        c += uSunCol * (pow(sa, 400.0) * 1.2 + pow(sa, 60.0) * 0.45 + pow(sa, 8.0) * 0.12) * (1.0 - 0.6 * cover);   /* the halo pierces the fog */
+    }
+    /* 4. stars and moon only where the clouds let them through */
+    c += star * (1.0 - cover);
+    if (uNight > 0.5) {
+        float cs = dot(nd, uMoonDir);
+        float gl = pow(max(cs, 0.0), 40.0) * 0.08 * (1.0 - cover * 0.5);
+        c = cs > 0.9997 ? mix(c + gl, vec3(0.85), 1.0 - cover) : c + gl;
+    }
+    /* 5. horizon band: everything fades to the fog colour before the horizon,
+     * fully below ~2.3 deg, gone above ~12.7 deg, so whatever the level draws
+     * far away (trees popping in at the draw distance) meets a flat fog colour,
+     * as with GE's plane, and never cuts into the sun */
+    c = mix(F, c, smoothstep(0.04, 0.22, e));
+    o = vec4(clamp(c, 0.0, 1.0), 1.0);
+}
+)GLSL";
+    char head[64];
+    snprintf(head, sizeof head, "#version %s\n%s", gl_glsl_version_str, gl_es ? "precision highp float;\n" : "");
+    const char* vsrc[2] = { head, vs_body };
+    const char* fsrc[2] = { head, fs_body };
+    GLuint v = glCreateShader(GL_VERTEX_SHADER), f = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(v, 2, vsrc, NULL);
+    glCompileShader(v);
+    glShaderSource(f, 2, fsrc, NULL);
+    glCompileShader(f);
+    GLint okf = 0;
+    char log[1024] = "";
+    glGetShaderiv(f, GL_COMPILE_STATUS, &okf);
+    if (!okf) {
+        glGetShaderInfoLog(f, sizeof log, NULL, log);
+        sysLogPrintf(LOG_ERROR, "GL: SkyPlus fragment shader: %s", log);
+    }
+    s_skyplus_prog = glCreateProgram();
+    glAttachShader(s_skyplus_prog, v);
+    glAttachShader(s_skyplus_prog, f);
+    glLinkProgram(s_skyplus_prog);
+    GLint ok = 0;
+    glGetProgramiv(s_skyplus_prog, GL_LINK_STATUS, &ok);
+    glGetProgramInfoLog(s_skyplus_prog, sizeof log, NULL, log);
+    sysLogPrintf(ok ? LOG_NOTE : LOG_ERROR, "GL: SkyPlus program link=%d %s", ok, log);
+    glDeleteShader(v);
+    glDeleteShader(f);
+    if (!ok) {
+        glDeleteProgram(s_skyplus_prog);
+        s_skyplus_prog = 0;
+        return false;
+    }
+    static const char* const names[SPL_COUNT] = { "uVP", "uAsp", "uC0", "uC1", "uC2", "uC3", "uEye", "uCloudY", "uSky",
+        "uCloud", "uOfs", "uGain", "uTexScale", "uSunDir", "uSunCol", "uSunGlow", "uMoonDir", "uNight", "uTex" };
+    for (int i = 0; i < SPL_COUNT; i++) {
+        s_sp_loc[i] = glGetUniformLocation(s_skyplus_prog, names[i]);
+    }
+    glGenVertexArrays(1, &s_skyplus_vao);
+    glGenTextures(1, &s_skyplus_tex);
+    return true;
+}
+
+extern "C" void gfx_opengl_skyplus_pass(int slot) {
+    static bool failed = false;
+    if (failed || slot < 0 || slot >= SKYPLUS_RING) {
+        return;
+    }
+    if (!s_skyplus_prog && !skyplus_build()) {
+        failed = true;
+        gfx_skyplus_failed = 1;   /* skyplus.c draws GE's sky from the next frame on */
+        return;
+    }
+    const SkyPlusDraw& d = s_skyplus_ring[slot];
+    const PortSkyPlus& p = d.p;
+    if (d.vp[2] <= 0 || d.vp[3] <= 0 || (d.aspA < 0.0f ? -d.aspA : d.aspA) < 1e-6f || !p.tex) {
+        return;
+    }
+
+    GLint prev_prog = 0, prev_vao = 0, prev_unit = 0, prev_tex7 = 0, prev_vp[4], prev_sc[4], prev_align = 4;
+    const GLboolean prev_depth = glIsEnabled(GL_DEPTH_TEST), prev_blend = glIsEnabled(GL_BLEND),
+                    prev_cull = glIsEnabled(GL_CULL_FACE), prev_scissor = glIsEnabled(GL_SCISSOR_TEST);
+    GLboolean prev_cm[4], prev_dm = GL_TRUE;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_prog);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prev_vao);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &prev_unit);
+    glGetIntegerv(GL_VIEWPORT, prev_vp);
+    glGetIntegerv(GL_SCISSOR_BOX, prev_sc);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &prev_align);
+    glGetBooleanv(GL_COLOR_WRITEMASK, prev_cm);
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &prev_dm);
+    glActiveTexture(GL_TEXTURE0 + 7);   /* a unit the game's tile sampling never uses */
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prev_tex7);
+
+    glBindTexture(GL_TEXTURE_2D, s_skyplus_tex);
+    if (p.texGen != s_skyplus_tex_gen) {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, SKYPLUS_TEX_W, SKYPLUS_TEX_H, 0, GL_RED, GL_UNSIGNED_BYTE, p.tex);
+        glGenerateMipmap(GL_TEXTURE_2D);   /* the plane is seen at grazing angles near the horizon */
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, prev_align);
+        s_skyplus_tex_gen = p.texGen;
+    }
+
+    glViewport(d.vp[0], d.vp[1], d.vp[2], d.vp[3]);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(d.vp[0], d.vp[1], d.vp[2], d.vp[3]);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glUseProgram(s_skyplus_prog);
+    glUniform4f(s_sp_loc[SPL_VP], (float)d.vp[0], (float)d.vp[1], (float)d.vp[2], (float)d.vp[3]);
+    glUniform2f(s_sp_loc[SPL_ASP], d.aspA, d.aspB);
+    glUniform3fv(s_sp_loc[SPL_C0], 1, p.corner[0]);
+    glUniform3fv(s_sp_loc[SPL_C1], 1, p.corner[1]);
+    glUniform3fv(s_sp_loc[SPL_C2], 1, p.corner[2]);
+    glUniform3fv(s_sp_loc[SPL_C3], 1, p.corner[3]);
+    glUniform3fv(s_sp_loc[SPL_EYE], 1, p.eye);
+    glUniform1f(s_sp_loc[SPL_CLOUDY], p.cloudY);
+    glUniform3fv(s_sp_loc[SPL_SKY], 1, p.sky);
+    glUniform3fv(s_sp_loc[SPL_CLOUD], 1, p.cloud);
+    glUniform2fv(s_sp_loc[SPL_OFS], 3, &p.layerOfs[0][0]);
+    glUniform1f(s_sp_loc[SPL_GAIN], p.gain);
+    glUniform1f(s_sp_loc[SPL_TEXSCALE], p.texScale);
+    glUniform3fv(s_sp_loc[SPL_SUNDIR], 1, p.sunDir);
+    glUniform3fv(s_sp_loc[SPL_SUNCOL], 1, p.sunCol);
+    glUniform1f(s_sp_loc[SPL_SUNGLOW], p.sunGlow);
+    glUniform3fv(s_sp_loc[SPL_MOONDIR], 1, p.moonDir);
+    glUniform1f(s_sp_loc[SPL_NIGHT], p.night ? 1.0f : 0.0f);
+    glUniform1i(s_sp_loc[SPL_TEX], 7);
+    glBindVertexArray(s_skyplus_vao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    glBindTexture(GL_TEXTURE_2D, (GLuint)prev_tex7);
+    glBindVertexArray((GLuint)prev_vao);
+    glUseProgram((GLuint)prev_prog);
+    glActiveTexture((GLenum)prev_unit);
+    glViewport(prev_vp[0], prev_vp[1], prev_vp[2], prev_vp[3]);
+    glScissor(prev_sc[0], prev_sc[1], prev_sc[2], prev_sc[3]);
+    glColorMask(prev_cm[0], prev_cm[1], prev_cm[2], prev_cm[3]);
+    glDepthMask(prev_dm);
+    if (prev_depth) glEnable(GL_DEPTH_TEST);
+    if (prev_blend) glEnable(GL_BLEND);
+    if (prev_cull) glEnable(GL_CULL_FACE);
+    if (!prev_scissor) glDisable(GL_SCISSOR_TEST);
+}
 
 void gfx_opengl_resolve_msaa_color_buffer(int fb_id_target, int fb_id_source) {
     if (!gfx_framebuffers_enabled) {

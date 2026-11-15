@@ -1,6 +1,7 @@
 #define NOMINMAX
 
 #include "floatvtx.h" /* D245 */
+#include "skyplus.h"  /* GE+ sky: G_SKYPLUS_EXT */
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -6013,6 +6014,20 @@ static void gfx_run_dl(Gfx* cmd) {
             case G_FLOATVTX_EXT: /* D245 */
                 gfx_sp_vertex_float(C0(0, 16), C0(16, 8), (const PortFloatVtx*)seg_addr(cmd->words.w1));
                 break;
+            case G_SKYPLUS_EXT: /* GE+ sky (port/include/skyplus.h) */
+            {
+                const PortSkyPlus* sp = (const PortSkyPlus*)seg_addr(cmd->words.w1);
+                if (!fast3d_ptr_ok(sp)) {
+                    break;
+                }
+                gfx_flush();   /* everything before the sky is drawn first */
+                const int vp[4] = { rdp.viewport.x, rdp.viewport.y, (int)rdp.viewport.width, (int)rdp.viewport.height };
+                /* clip x as the sky's own float vertices get it (gfx_adjust_x_for_aspect_ratio) */
+                const float aspA = gfx_adjust_x_for_aspect_ratio(1.0f, 0.0f);
+                const float aspB = gfx_adjust_x_for_aspect_ratio(0.0f, 1.0f);
+                gfx_frame_call(gfx_opengl_skyplus_pass, gfx_opengl_skyplus_stage(sp, vp, aspA, aspB));
+                break;
+            }
             case 0x46: /* G_HUDSCALE_EXT (D226): w0 low16 = scale*256 (0/256 = off), w1 = ax4<<16 | ay4 */
             {
                 const uint32_t sc = C0(0, 16);
