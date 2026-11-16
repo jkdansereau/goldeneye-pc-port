@@ -18,6 +18,7 @@
 
 ### Changed
 - 2-player split screen (Switch, versus and co-op): each half no longer sees about 130 degrees across with stretched edges; it uses two thirds of the FOV setting and its own width, about 70 degrees across at 16:9 at the default FOV; the FOV setting still shows 60, solo and 3-4 players are unchanged, and the N64 display mode keeps the original view
+- GE+ sky: Bunker 1 shows Surface 1's sky at its exit and through its windows instead of a flat dark-blue fill (the original game has no sky record for that mission); Original keeps the fill
 - The options entry on the file select screen and the title of the options menu read "Options" instead of "PC Options"
 - The Switch controller defaults are tuned values: both stick deadzones 10%, look sensitivity 0.85x, vertical look inverted, look smoothing 2, trigger threshold 10%, Aim sensitivity 0.75x, Turn acceleration High, Aim zoom 2x, Aim assist High, Look ahead High
 - The Controller page hides the aim rows that need the Centered aim style (Aim zoom, Aim assist, Aim entry, Stop on aim, Look ahead, Look precision, Turn acceleration) while Aim style is Original, and the aim group and these rows with the Original control style: they only work with the Extended controls

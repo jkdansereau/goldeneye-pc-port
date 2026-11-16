@@ -59,6 +59,7 @@ static int skyPlusMood(const struct CurrentEnvironmentRecord *env)
         return lum < 0.02f ? MOOD_NIGHT : MOOD_DAY;   /* the alt record is black */
     case LEVELID_STREETS:
     case LEVELID_SURFACE:
+    case LEVELID_BUNKER1:   /* Surface 1's sky, see skyPlusEnv */
     case LEVELID_TEMPLE:
     case LEVELID_CRADLE:
         return MOOD_DUSK;
@@ -144,9 +145,35 @@ static float wrapf(float v, float m)
     return v < 0.0f ? v + m : v;
 }
 
+/* Bunker 1 has no sky record for one player (bgfog.c: only the 2-4 player
+ * ones), so it falls back to fog_tables2's LEVELID_NONE: a flat navy fill, no
+ * clouds, seen at its exit and through its windows. The bunker sits under
+ * Surface 1 (the mission before it), so GE+ gives it Surface 1's sky: the
+ * LEVELID_SURFACE record's sky and cloud colours and height (bgfog.c). Only
+ * GE+ sees this copy; fog, draw distance and the game's own sky are unchanged. */
+static const struct CurrentEnvironmentRecord *skyPlusEnv(const struct CurrentEnvironmentRecord *env)
+{
+    static struct CurrentEnvironmentRecord s_bunker1;
+
+    if (g_SkyStageNum != LEVELID_BUNKER1 || env->Clouds || env->IsWater) {
+        return env;
+    }
+    s_bunker1 = *env;
+    s_bunker1.Red = 0x60;
+    s_bunker1.Green = 0x60;
+    s_bunker1.Blue = 0x80;
+    s_bunker1.Clouds = 1;
+    s_bunker1.CloudRepeat = 10000.0f;
+    s_bunker1.SkyImageId = 0;
+    s_bunker1.CloudRed = 240.0f;
+    s_bunker1.CloudGreen = 120.0f;
+    s_bunker1.CloudBlue = 30.0f;
+    return &s_bunker1;
+}
+
 Gfx *skyPlusRender(Gfx *gdl)
 {
-    const struct CurrentEnvironmentRecord *env = fogGetCurrentEnvironmentp();
+    const struct CurrentEnvironmentRecord *env = skyPlusEnv(fogGetCurrentEnvironmentp());
     PortSkyPlus *p;
     coord3d r[5];
     coord3d *eye;
