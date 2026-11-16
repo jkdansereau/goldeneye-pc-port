@@ -30,6 +30,7 @@
 - Quitting the game on the Switch now returns to the launcher it was started from (sphaira or the homebrew menu) instead of closing the whole application and dropping to Home; if the game's threads do not stop in time it falls back to the old exit
 
 ### Fixed
+- GE+ sky: looking down from a height (Cradle), the view under the horizon showed blue clouds or streaks of earlier frames instead of the sky colour
 - Split-screen uses the whole screen like solo: no black bars at the top and bottom, and no thin band of fog or sky colour on the left and right edges of each view (#25)
 - Co-op: the "copy the GoldenEye key" objective (Bunker 1) no longer flips between completed and not completed every frame once one player has copied the key (#17)
 - Multiplayer and Co-op on the Switch count only the controllers actually connected: four were always counted, so leaving a match asked for Start on four controllers; with one controller Co-op and Multiplayer are greyed out, and plugging or unplugging a controller is picked up at once

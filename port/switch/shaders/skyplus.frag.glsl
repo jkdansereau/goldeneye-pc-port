@@ -49,7 +49,11 @@ void main() {
     float hz = length(d.xz) + 1e-4;
     float e = max(d.y / length(d), 0.0);
     vec3 F = uSky;
-    if (d.y <= 0.0) { o = vec4(F, 1.0); return; }           /* GE's clear colour */
+    /* under the horizon: GE's clear colour, chosen at the single write below.
+     * No early return: Ryujinx ran the cloud code under the horizon anyway, so
+     * the pixels there got clouds with a negative shade (saturated blue) or
+     * the previous frame (Cradle, looking down from the cradle). */
+    bool below = !(d.y > 0.0);
 
     /* 1. sky behind everything: horizon = GE's colour, zenith a little deeper */
     vec3 c = mix(F, F * 0.82, smoothstep(0.0, 0.8, e));
@@ -123,5 +127,5 @@ void main() {
      * far away (trees popping in at the draw distance) meets a flat fog colour,
      * as with GE's plane, and never cuts into the sun */
     c = mix(F, c, smoothstep(0.04, 0.22, e));
-    o = vec4(clamp(c, 0.0, 1.0), 1.0);
+    o = below ? vec4(F, 1.0) : vec4(clamp(c, 0.0, 1.0), 1.0);
 }
