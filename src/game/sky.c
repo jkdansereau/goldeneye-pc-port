@@ -344,7 +344,7 @@ Gfx *skyRender(Gfx *gdl)
 
 #ifdef PORT
     {
-        /* GE+ sky (Video.SkyPlus, port/src/skyplus.c): NULL = draw GE's sky */
+        /* GE+ sky (Video.Visuals = Enhanced, port/src/skyplus.c): NULL = draw GE's sky */
         Gfx *plus = skyPlusRender(gdl);
         if (plus != NULL) {
             return plus;

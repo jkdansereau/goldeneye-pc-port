@@ -88,7 +88,7 @@ struct DkDrawUniforms {
     int32_t three_point1;
     int32_t flip_v0;   /* unit samples a rendered image (stored top-down): t' = 1 - t */
     int32_t flip_v1;
-    int32_t fog_pixel; /* Video.FogPixel: fragment fog from vFogW (fog * w), else the per-vertex vFog.a */
+    int32_t fog_pixel; /* Video.Visuals >= Fixed (D982): fragment fog from vFogW (fog * w), else the per-vertex vFog.a */
     int32_t pad;
 };
 

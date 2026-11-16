@@ -82,7 +82,8 @@ static GLenum gl_mirror_clamp = GL_MIRROR_CLAMP_TO_EDGE;
 static bool gl_es = false;
 extern int gfx_rdp_affine;   /* D540: defined in gfx_pc.cpp */
 extern int gfx_fog_vertex;   /* D540: defined in gfx_pc.cpp */
-extern "C" int portFogPixel; /* port/src/video.c: Video.FogPixel */
+extern int gfx_fog_force;    /* D982: GE_FOGPIXEL, -1 = follow Video.Visuals >= Fixed */
+extern "C" int portDisplayFixes; /* port/src/video.c: Video.Visuals >= Fixed (D982) */
 static bool gl_core_profile = false;
 
 static int gfx_opengl_get_max_texture_size() {
@@ -1799,9 +1800,10 @@ static void gfx_opengl_init(void) {
     {
         const char *sp = getenv("GE_SHADEPERSP"), *fp = getenv("GE_FOGPIXEL");
         gfx_rdp_affine = (!gl_es && gl_glsl_version >= 130 && !(sp && sp[0] == '1')) ? 1 : 0;
-        /* D543: per-vertex RSP fog unless Video.FogPixel (Switch default);
-         * GE_FOGPIXEL=0/1 overrides the setting. */
-        gfx_fog_vertex = (fp && fp[0]) ? (fp[0] != '1') : !portFogPixel;
+        /* D543: per-vertex RSP fog unless Video.Visuals >= Fixed (D982);
+         * GE_FOGPIXEL=0/1 overrides the setting for the whole run. */
+        gfx_fog_force = (fp && fp[0]) ? (fp[0] == '1') : -1;
+        gfx_fog_vertex = gfx_fog_force >= 0 ? !gfx_fog_force : !portDisplayFixes;
     }
     sysLogPrintf(LOG_NOTE, "GL: shade %s, fog %s", gfx_rdp_affine ? "affine (RDP)" : "perspective",
                  gfx_fog_vertex ? "per-vertex" : "per-pixel");
@@ -2287,7 +2289,7 @@ void main() {
 }
 #endif
 
-/* GE+ sky (Video.SkyPlus): see port/include/skyplus.h. The decoder stages a
+/* GE+ sky (Video.Visuals = Enhanced): see port/include/skyplus.h. The decoder stages a
  * copy of the game's parameter block with the viewport; the replay calls the
  * pass at the same point of the frame, which draws the player's viewport in
  * one fullscreen triangle (no depth test or write, as GE's sky). */

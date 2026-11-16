@@ -90,6 +90,8 @@ float videoGetFPS(void);
 /* Apply only the GL/SDL setting named by a changed options row at the next
  * frame start. Sprite/HUD and direct-read settings need no reconfiguration. */
 void videoRequestLiveConfigForKey(const char *key);
+extern int portVisuals;        /* Video.Visuals: 0 Original, 1 Fixed, 2 Enhanced (D982) */
+extern int portDisplayFixes;   /* = portVisuals >= 1 */
 
 /* F10 options overlay -> window/fullscreen changes. The overlay input handler
  * runs on the scheduler thread; SDL window ops must run on the thread that

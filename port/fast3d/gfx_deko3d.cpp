@@ -67,7 +67,8 @@ extern "C" void* nwindowGetDefault(void);
 extern bool gfx_framebuffers_enabled;   /* gfx_pc.cpp */
 extern int gfx_rdp_affine;              /* gfx_pc.cpp (D540) */
 extern int gfx_fog_vertex;              /* gfx_pc.cpp (D543) */
-extern "C" int portFogPixel;           /* port/src/video.c: Video.FogPixel */
+extern "C" int portDisplayFixes;       /* port/src/video.c: Video.Visuals >= Fixed (D982) */
+extern int gfx_fog_force;               /* gfx_pc.cpp (D982): GE_FOGPIXEL, -1 = follow the setting */
 extern "C" volatile int gfx_skyplus_failed;   /* gfx_opengl.cpp */
 extern "C" int nxIsHandheld(void);      /* port/src/switch/nxmem.c */
 extern "C" const uint8_t ge007_dksh_pack[], ge007_dksh_pack_end[];
@@ -804,6 +805,7 @@ void dk_load_shader_with(struct ShaderProgram* p, uint32_t fc, float noise, bool
     s_prg = p;
     s_uni.frame_count = (int32_t)fc;
     s_uni.noise_scale = noise;
+    s_uni.fog_pixel = gfx_fog_vertex ? 0 : 1;   /* D982: follows a live change */
     /* GL compiles the three-point code only while that mode is on */
     s_uni.three_point0 = (tpf0 && s_filter == FILTER_THREE_POINT) ? 1 : 0;
     s_uni.three_point1 = (tpf1 && s_filter == FILTER_THREE_POINT) ? 1 : 0;
@@ -1229,9 +1231,9 @@ bool dk_mesh_supported(uint64_t id0, uint32_t id1) {
 
 void dk_init(void) {
     {
-        const char *sp = getenv("GE_SHADEPERSP"), *fp = getenv("GE_FOGPIXEL");
-        if ((sp && sp[0] == '1') || (fp && fp[0] == '1')) {
-            sysLogPrintf(LOG_WARNING, "DK: GE_SHADEPERSP/GE_FOGPIXEL ignored under deko3d");
+        const char *sp = getenv("GE_SHADEPERSP");
+        if (sp && sp[0] == '1') {
+            sysLogPrintf(LOG_WARNING, "DK: GE_SHADEPERSP ignored under deko3d");
         }
         if (getenv("GE_FOGSNAP")) sysLogPrintf(LOG_WARNING, "DK: GE_FOGSNAP ignored under deko3d");
     }
@@ -1242,10 +1244,12 @@ void dk_init(void) {
     }
     gfx_rdp_affine = 1;   /* the pack is built with noperspective shade */
     /* Fog: the pack carries both forms (vFog.a per vertex, vFogW = fog * w);
-     * Draw.fog_pixel picks one. Video.FogPixel, GE_FOGPIXEL=0/1 overrides. */
+     * Draw.fog_pixel picks one (set at each shader bind, so a live change of
+     * Video.Visuals >= Fixed lands at once, D982). GE_FOGPIXEL=0/1 overrides. */
     {
         const char* fp = getenv("GE_FOGPIXEL");
-        gfx_fog_vertex = (fp && fp[0]) ? (fp[0] != '1') : !portFogPixel;
+        gfx_fog_force = (fp && fp[0]) ? (fp[0] == '1') : -1;
+        gfx_fog_vertex = gfx_fog_force >= 0 ? !gfx_fog_force : !portDisplayFixes;
         s_uni.fog_pixel = gfx_fog_vertex ? 0 : 1;
         sysLogPrintf(LOG_NOTE, "DK: fog %s", gfx_fog_vertex ? "per-vertex (N64)" : "per-pixel");
     }

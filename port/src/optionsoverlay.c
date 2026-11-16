@@ -108,7 +108,7 @@ enum { ROW_TOGGLE, ROW_SLIDER, ROW_ENUM, ROW_MSAA, ROW_RES, ROW_ACTION, ROW_FPSC
 static const char *const kOnOff[]     = { "Off", "On", NULL };
 static const char *const kHold[]      = { "Hold", "Toggle", NULL };
 static const char *const kAspectMode[] = { "Fill window", "Original", "16:9", "21:9", NULL };   /* D447: Original = 4:3 (16:9 with the game Ratio) bars; D508: 2..3 force a ratio */
-static const char *const kSkyPlus[]   = { "Original", "GE+", NULL };   /* Video.SkyPlus */
+static const char *const kVisuals[]   = { "Original", "Fixed", "Enhanced", NULL };   /* Video.Visuals (D982) */
 static const char *const kTexFilter[] = { "Nearest", "Bilinear", "3-point", "Trilinear", NULL };   /* Trilinear option (playtest 2026-10-03) */
 static const char *const kPadPreset[] = { "1.1 Jinx", "1.2 Christmas", "1.3 Frost", "Custom", "1.4 Elektra", NULL };   /* D498: index = stored value; inputPadPresetStep gives the display order */
 /* D516: the game's own control styles, shown in Original (index = style value). */
@@ -282,8 +282,7 @@ static struct Row rows[] = {
 #else
     { .key="Video.MSAA", .label="Anti-aliasing", .kind=ROW_MSAA, .restart=1 },
 #endif
-    { .key="Video.SkyPlus", .label="Sky", .kind=ROW_ENUM, .step=1, .names=kSkyPlus },   /* GE+ sky */
-    { .key="Video.FogPixel", .label="Per-pixel fog", .kind=ROW_TOGGLE, .step=1, .names=kOnOff, .restart=1 },
+    { .key="Video.Visuals", .label="Visuals", .kind=ROW_ENUM, .step=1, .names=kVisuals },   /* D982 */
     SEP(V2),
     { .key="Video.VSync", .label="VSync", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     { .key="Video.FpsCap", .label="Frame rate cap", .kind=ROW_FPSCAP },
@@ -300,8 +299,6 @@ static struct Row rows[] = {
      * capped at the draw distance. 0.5x..8.0x, 1.0x default. */
     { .key="Video.FogDistance", .label="Fog distance", .kind=ROW_SLIDER, .step=25, .uiMin=100, .uiMax=800 }   /* D565: no < 100 */,
     { .key="Video.LodDistance", .label="LOD distance", .kind=ROW_SLIDER, .step=25, .uiMin=100, .uiMax=800 },
-    { .key="Video.Landmarks", .label="Landmarks always drawn", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },   /* D979 */
-    { .key="Video.FoliageDepth", .label="Foliage depth fix", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },   /* D980 */
     SEP(V5),
     /* D181 re-exposed (PD "Explosion shake"): named for what it scales (explosions only). */
     { .key="Game.ScreenShakeIntensity", .label="Explosion shake", .kind=ROW_SLIDER, .step=0.1, .uiMin=0, .uiMax=3 },
@@ -1153,25 +1150,33 @@ static int rowPlatformOk(const struct Row *r)
     /* Display mode Switch / N64 only shows Show FPS; Custom shows the rest. */
     static const char *const kCustomOnly[] = {
         "Video.AspectMode", "Video.NativeWidescreen", "Video.WidescreenAuto",
-        "Video.MSAAHandheld", "Video.MSAA", "Video.FXAA", "Video.SkyPlus", "Video.FogPixel",
+        "Video.MSAAHandheld", "Video.MSAA", "Video.FXAA", "Video.Visuals",
         "__SepV2", "Video.VSync", "Video.FpsCap",
         "__SepV3", "Video.TextureFilter", "Video.Anisotropy",
         "__SepV4", "Video.SafeAreaCrop",
-        "Video.DrawDistance", "Video.FogDistance", "Video.LodDistance", "Video.Landmarks", "Video.FoliageDepth",
+        "Video.DrawDistance", "Video.FogDistance", "Video.LodDistance",
         "__SepV5", "Game.ScreenShakeIntensity", "__ResetVideo",
         NULL,
     };
     for (int k = 0; kDesktopOnly[k]; k++) {
         if (!strcmp(r->key, kDesktopOnly[k])) return 0;
     }
+#else
+    /* PC: Enhanced / Original keep the hardware rows (the presets do not
+     * set them there); Custom shows the rest too. */
+    static const char *const kCustomOnly[] = {
+        "Video.AspectMode", "Video.NativeWidescreen", "Video.WidescreenAuto", "Video.Visuals",
+        "Video.TextureFilter", "__SepV4", "Video.SafeAreaCrop",
+        "Video.DrawDistance", "Video.FogDistance", "Video.LodDistance",
+        "__SepV5", "Game.ScreenShakeIntensity", "__ResetVideo",
+        NULL,
+    };
+#endif
     if (videoGetDisplayMode() != 2) {
         for (int k = 0; kCustomOnly[k]; k++) {
             if (!strcmp(r->key, kCustomOnly[k])) return 0;
         }
     }
-#else
-    (void)r;
-#endif
     return 1;
 }
 
@@ -1874,14 +1879,10 @@ static void rowAdjust(struct Row *r, int dir)
         break;
     }
     case ROW_ACTION:
-        if (!strcmp(r->key, "__DisplayMode")) {   /* left/right steps Modern <-> Original N64; Custom -> Modern (right) / N64 (left) */
+        if (!strcmp(r->key, "__DisplayMode")) {   /* Enhanced -> Original -> Custom, both ways */
             int cur = displayModeNow();
-#if defined(__SWITCH__)
-            videoSetDisplayMode((cur + (dir > 0 ? 1 : 2)) % 3);   /* Switch -> N64 -> Custom, both ways */
+            videoSetDisplayMode((cur + (dir > 0 ? 1 : 2)) % 3);
             overlayUpdateVisible();
-#else
-            videoApplyPreset((cur == 0 || (cur == 2 && dir < 0)) ? VIDEO_PRESET_N64 : VIDEO_PRESET_PORT);
-#endif
             break;
         }
         if (optionsRowChildHeader((int)(r - rows)) >= 0) break; /* link, not a Quit or value */
@@ -2074,13 +2075,8 @@ static void ddConfirm(int k)
         audioDeviceRequest(val == 0 ? "" : audioDeviceName(val - 1));
         break;
     case ROW_ACTION:   /* Display mode */
-#if defined(__SWITCH__)
         videoSetDisplayMode(val);
         overlayUpdateVisible();
-#else
-        if (val == 0) videoApplyPreset(VIDEO_PRESET_PORT);
-        else if (val == 1) videoApplyPreset(VIDEO_PRESET_N64);
-#endif
         break;
     default:
         rowSet(r, (double)val);
@@ -2169,20 +2165,10 @@ static int isPresetRow(const struct Row *r)
  * targets "the other one": Modern -> Original N64, anything else -> Modern. */
 static int displayModeNow(void)
 {
-#if defined(__SWITCH__)
     return videoGetDisplayMode();
-#else
-    if (videoPresetIsActive(VIDEO_PRESET_PORT)) return 0;
-    if (videoPresetIsActive(VIDEO_PRESET_N64))  return 1;
-    return 2;
-#endif
 }
-#if defined(__SWITCH__)
-/* project-dam: Switch, N64, Custom (Custom shows every graphics row). */
-static const char *const kDisplayModeName[3] = { "Switch", "N64", "Custom" };
-#else
-static const char *const kDisplayModeName[3] = { "Modern", "Original N64", "Custom" };
-#endif
+/* D982: Enhanced, Original, Custom (Custom shows every graphics row), on every platform. */
+static const char *const kDisplayModeName[3] = { "Enhanced", "Original", "Custom" };
 
 
 static int isArmRow(const struct Row *r)
@@ -2280,14 +2266,9 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Video.FXAA",                 1 },   /* project-dam: on */
 #endif
 #if defined(__SWITCH__)
-    { "Video.FogPixel",             1 },   /* = 1 (per-pixel) */
+    { "Video.Visuals",              2 },   /* D982: Enhanced */
 #else
-    { "Video.FogPixel",             0 },   /* = 0 (N64 per-vertex) */
-#endif
-#if defined(__SWITCH__)
-    { "Video.SkyPlus",              1 },   /* = 1 (GE+) */
-#else
-    { "Video.SkyPlus",              0 },   /* = 0 (GE sky) */
+    { "Video.Visuals",              1 },   /* D982: Fixed */
 #endif
     { "Video.TextureFilter",        1 },   /* = 1 (bilinear) */
     { "Video.Anisotropy",           4 },   /* = 4 */
@@ -2299,8 +2280,6 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Video.DrawDistance",        200 },  /* 2.0x (D546) */
     { "Video.FogDistance",         100 },  /* 1.0x = N64 fog (D540) */
     { "Video.LodDistance",         200 },  /* 2.0x (D546) */
-    { "Video.Landmarks",             1 },  /* D979: on */
-    { "Video.FoliageDepth",          1 },  /* D980: on */
     { "Video.CrosshairHide",      0 },   /* = 0 (on, N64) */
     { "Video.CrosshairPersistent", 0 },   /* D436: off = N64 (aim mode only) */
     { "Video.CrosshairColor",   0 },   /* = 0 (authored red sprite) */
@@ -2457,30 +2436,23 @@ void optionsResetClear(void)
 static void valueText(int i, char *out, int n);
 static void presetProbe(void)
 {
-#if defined(__SWITCH__)
-    sysLogPrintf(LOG_INFO, "GE_PRESETPROBE: skipped on Switch (two presets, no Custom)");
-    return;
-#endif
     int bad = 0;
     int i = rowIndexByKey("__DisplayMode");
     char val[32] = "";
+    static const char *const want[3] = { "Enhanced", "Original", "Custom" };
     if (i < 0) { bad++; } else {
-        if (displayModeNow() != 0) rowAdjust(&rows[i], +1);   /* start from Modern whatever the ini held */
-        valueText(i, val, sizeof(val));
-        if (strcmp(val, "Modern") != 0) bad++;
-        rowAdjust(&rows[i], +1);                              /* Modern -> Original N64 */
-        valueText(i, val, sizeof(val));
-        if (strcmp(val, "Original N64") != 0 || !videoPresetIsActive(VIDEO_PRESET_N64)) bad++;
-        int tf = rowIndexByKey("Video.TextureFilter");        /* edit one bundled key */
-        if (tf >= 0) rowAdjust(&rows[tf], +1);
-        valueText(i, val, sizeof(val));
-        if (strcmp(val, "Custom") != 0) bad++;
-        ddOpen(i);                                            /* dropdown path: pick Modern */
-        if (s_ddRow != i || s_ddN != 3 || s_ddCur != 2) bad++;
+        for (int m = 0; m < 3; m++) {
+            ddOpen(i);
+            if (s_ddRow != i || s_ddN != 3) bad++;
+            ddConfirm(m);
+            valueText(i, val, sizeof(val));
+            if (strcmp(val, want[m]) != 0) bad++;
+            if (m == 0 && !videoPresetIsActive(VIDEO_PRESET_PORT)) bad++;
+            if (m == 1 && !videoPresetIsActive(VIDEO_PRESET_N64)) bad++;
+        }
+        ddOpen(i);
         ddConfirm(0);
-        valueText(i, val, sizeof(val));
-        if (strcmp(val, "Modern") != 0 || !videoPresetIsActive(VIDEO_PRESET_PORT)) bad++;
-        sysLogPrintf(LOG_INFO, "GE_PRESETPROBE: Modern -> N64 -> edit -> Custom -> (dropdown) Modern, last '%s', bad=%d", val, bad);
+        sysLogPrintf(LOG_INFO, "GE_PRESETPROBE: Enhanced -> Original -> Custom -> Enhanced, bad=%d", bad);
     }
     sysLogPrintf(bad ? LOG_ERROR : LOG_INFO, "GE_PRESETPROBE: %s", bad ? "FAIL" : "PASS");
 }
@@ -4047,11 +4019,7 @@ int optionsRowIsShown(int i)
  * Rows with self-explanatory labels have no entry (D556: standard PC settings such as
  * resolution, VSync, anti-aliasing, volumes and sensitivities carry no tip). */
 static const struct { const char *key, *help; } kRowHelp[] = {
-    #if defined(__SWITCH__)
-    { "__DisplayMode", "Switch, the original N64 look, or Custom to show every graphics option." },
-#else
-    { "__DisplayMode", "Modern, original or custom graphics presets." },
-#endif
+    { "__DisplayMode", "Enhanced: the port's picture. Original: the N64 look. Custom shows every graphics option." },
     { "Video.FpsCap", "Auto matches your display. Above 60 adds blended in-between frames. The game still runs at 60." },   /* D578 */
     { "Video.AspectMode", "Fill window fits the picture to the whole window." },   /* D560: shown only while Fill window is selected (optionsRowHelp) */
     { "Video.CrosshairHide", "When off, the crosshair stays hidden, even with Sight on screen." },
@@ -4074,10 +4042,7 @@ static const struct { const char *key, *help; } kRowHelp[] = {
     { "Video.MSAA", "Smooths jagged edges while docked. Higher is cleaner but slower." },
     { "Video.MSAAHandheld", "Smooths jagged edges in handheld mode. Higher is cleaner but slower." },
     { "Video.FXAA", "A final pass that smooths edges without blurring flat textures." },
-    { "Video.FoliageDepth", "Jungle leaves hide the leaves behind them. Off: drawn in the model's order, as the N64 does." },
-    { "Video.Landmarks", "Huge landmarks (Surface's satellite dish) stay drawn when the room system would hide them." },
-    { "Video.FogPixel", "Exact fog for every pixel. Off: per-vertex fog as the N64 draws it." },
-    { "Video.SkyPlus", "GE+ adds cloud layers, sun, stars and moon to the original sky." },
+    { "Video.Visuals", "Fixed: the original game's display flaws corrected. Enhanced: also a richer sky, scenery and effects." },
     { "Input.CrosshairCursor", "Uses the crosshair as the mouse pointer in this menu." },
     { "Input.ControlScheme", "Choose the port's modern controls or the original game's." },
     { "Bond.Control", "The original game's control presets." },

@@ -74,24 +74,30 @@ static int cfgFpsCap        = -1;  /* frame cap in fps; -1 = Auto (match display
 static int cfgFXAA          = 1;
 static int cfgMSAA          = 4;   /* docked */
 static int cfgMSAAHandheld  = 2;
-static int cfgDisplayMode   = 0;
 static int cfgSwitchPresetRev = 0;
 #define NX_MSAA_LVL(v) ((v) >= 8 ? 8 : (v) >= 4 ? 4 : (v) >= 2 ? 2 : 1)
 #else
 static int cfgFXAA          = 0;
 static int cfgMSAA          = 2;   /* 1/2/4/8/16 samples; 2x default is lighter on low-end GPUs */
 #endif
-extern int portSkyPlus;   /* port/src/skyplus.c: Video.SkyPlus */
-extern int portLandmarks; /* port/src/drawdistgameplay.c: Video.Landmarks (D979) */
-extern int portFoliageDepth; /* port/src/drawdistgameplay.c: Video.FoliageDepth (D980) */
-/* Video.FogPixel: exact per-pixel fog instead of the N64's per-vertex fog
- * (D543). Read when the renderer starts (restart). On by default on the
- * Switch; GE_FOGPIXEL=0/1 overrides it. */
-#ifdef __SWITCH__
-int portFogPixel = 1;
-#else
-int portFogPixel = 0;
-#endif
+/* Display mode (D982 harmonisation): 0 Enhanced, 1 Original, 2 Custom, the
+ * same on the Switch and on PC. Enhanced and Original apply their preset
+ * (kVideoPresets); Custom shows every graphics row. */
+static int cfgDisplayMode   = 0;
+extern int portSkyPlus;   /* port/src/skyplus.c */
+/* Video.Visuals (D982): 0 Original, 1 Fixed, 2 Enhanced. Fixed turns on
+ * every fix of a display flaw of the original game (D979 landmarks, D980
+ * foliage depth, per-pixel fog D543, ...); Enhanced adds what the game
+ * never had (the GE+ sky, ...). A new fix or addition tests the level; it
+ * gets no key of its own. The N64 display preset = Original. Live: the
+ * derived flags below change at the next frame (VCFG_VISUALS). */
+int portVisuals = 2;
+int portDisplayFixes = 1;   /* = portVisuals >= 1 */
+static void videoApplyVisuals(void)
+{
+    portDisplayFixes = portVisuals >= 1;
+    portSkyPlus = portVisuals >= 2;
+}
 static int cfgTexFilter     = 1;   /* 0 = nearest, 1 = bilinear (default), 2 = N64 3-point + trilinear, 3 = trilinear (Trilinear option, playtest 2026-10-03) */
 static int cfgFixMipTex     = 1;   /* RC2: clip mip-contaminated texture uploads to base height */
 static int cfgDetailBaseTile = 1;  /* D236: TEXTURETYPE_DETAIL -> sample the base image, not the detail tile */
@@ -664,14 +670,11 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,    -1, 1000);
     configRegisterInt("Video.FXAA",          &cfgFXAA,       0, 1);
-    configRegisterInt("Video.SkyPlus",       &portSkyPlus,   0, 1);   /* GE+ sky (skyplus.c) */
-    configRegisterInt("Video.Landmarks",     &portLandmarks, 0, 1);   /* D979 (drawdistgameplay.c) */
-    configRegisterInt("Video.FoliageDepth",  &portFoliageDepth, 0, 1); /* D980 (drawdistgameplay.c) */
-    configRegisterInt("Video.FogPixel",      &portFogPixel,  0, 1);   /* per-pixel fog (restart) */
+    configRegisterInt("Video.Visuals",       &portVisuals,   0, 2);   /* D982: Original / Fixed / Enhanced */
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 16);   /* D443: 16x added */
+    configRegisterInt("Video.DisplayMode",   &cfgDisplayMode, 0, 2);
 #ifdef __SWITCH__
     configRegisterInt("Video.MSAAHandheld",  &cfgMSAAHandheld, 1, 16);
-    configRegisterInt("Video.DisplayMode",   &cfgDisplayMode, 0, 2);
     configRegisterInt("Video.SwitchPresetRev", &cfgSwitchPresetRev, 0, 100);
 #endif
     configRegisterInt("Video.TextureFilter", &cfgTexFilter,  0, 3);   /* Trilinear option (playtest 2026-10-03) */
@@ -903,11 +906,7 @@ static void videoApplyLowEndDefaults(void)
  * are at the N64 values below. */
 static const struct { const char *key; double n64, port; } kVideoPresets[] = {
     { "Video.TextureFilter",         2,   1 },   /* N64 3-point vs bilinear */
-#ifdef __SWITCH__
-    { "Video.SkyPlus",               0,   1 },   /* GE sky vs GE+ (skyplus.c); off by default elsewhere */
-    { "Video.FogPixel",              0,   1 },   /* N64 per-vertex fog vs per-pixel */
-#endif
-    { "Video.Anisotropy",            1,   4 },   /* the RDP has no anisotropic filtering */
+    { "Video.Visuals",               0,   2 },   /* D982: Original vs Enhanced */
     { "Video.NativeWidescreen",      0,   1 },   /* 4:3 projection (D334) */
     { "Video.WidescreenAuto",        0,   1 },   /* stock vertical FOV at any window aspect */
     { "Video.SafeAreaCrop",          0,   1 },   /* show the VI frame as output, borders included */
@@ -915,8 +914,6 @@ static const struct { const char *key; double n64, port; } kVideoPresets[] = {
     { "Video.DrawDistance",        100, 200 },   /* authored far clip (D218); D546 2.0x */
     { "Video.FogDistance",         100, 100 },   /* D540: N64 fog in both presets */
     { "Video.LodDistance",         100, 200 },   /* authored LOD switch distances (D249); D546 2.0x */
-    { "Video.Landmarks",             0,   1 },   /* D979: landmarks hidden by the room system, as the N64 */
-    { "Video.FoliageDepth",          0,   1 },   /* D980: N64 translucent leaves (no depth write) */
     { "Video.DrawDistanceAutoFov",   0,   0 },   /* legacy coupling: off = identity */
     { "Video.LodDistanceAutoFov",    0,   0 },
     { "Video.FovScale",            100, 100 },   /* stock FOV (D211) */
@@ -925,14 +922,11 @@ static const struct { const char *key; double n64, port; } kVideoPresets[] = {
     { "Game.NoHitFlash",             0,   0 },   /* D232 */
     { "Video.CrosshairHide",         0,   0 },   /* D373 */
     { "Video.CrosshairPersistent",   0,   0 },   /* D436: aim mode only, as the N64 */
-#ifdef __SWITCH__
+#ifdef __SWITCH__   /* hardware-dependent: part of the presets only where the hardware is known */
+    { "Video.Anisotropy",            1,   4 },   /* the RDP has no anisotropic filtering */
     { "Video.MSAA",                  1,   4 },   /* project-dam: docked */
     { "Video.MSAAHandheld",          1,   2 },
     { "Video.FXAA",                  0,   1 },
-#endif
-#ifndef __SWITCH__   /* project-dam: aim is its own setting on the console, not part of the look */
-    { "Input.AimMode",               0,   0 },   /* N64 aim (D337) */
-    { "Input.AimRange",              1,   0 },   /* N64 aim limits (D338) */
 #endif
 };
 #define NUM_VIDEO_PRESETS ((int)(sizeof(kVideoPresets) / sizeof(kVideoPresets[0])))
@@ -976,7 +970,6 @@ int videoPresetIsActive(int which)
     return 1;
 }
 
-#ifdef __SWITCH__
 int videoGetDisplayMode(void)
 {
     return cfgDisplayMode < 0 ? 0 : cfgDisplayMode > 2 ? 2 : cfgDisplayMode;
@@ -989,14 +982,14 @@ void videoSetDisplayMode(int mode)
     if (mode == 0) videoApplyPreset(VIDEO_PRESET_PORT);
     else if (mode == 1) videoApplyPreset(VIDEO_PRESET_N64);
 }
-#endif
 
 /* D382: record precisely which live video setting changed. Reticle/FOV/
  * frame cap changes must not reset texture state (a shader/cache clear).
  * Option writes may arrive on the menu or scheduler thread; apply on the
  * render thread with the GL context bound, coalesced per frame. */
 enum { VCFG_VSYNC = 1, VCFG_FPS = 2, VCFG_FILTER = 4,
-       VCFG_FOV = 8, VCFG_ANISO = 16, VCFG_CROP = 32, VCFG_MSAA = 64, VCFG_FXAA = 128 };
+       VCFG_FOV = 8, VCFG_ANISO = 16, VCFG_CROP = 32, VCFG_MSAA = 64, VCFG_FXAA = 128,
+       VCFG_VISUALS = 256 };
 static SDL_atomic_t liveCfgDirty;
 
 /* D211/D212: push the port-only image knobs where they apply. FovScale is a
@@ -1037,6 +1030,7 @@ void videoRequestLiveConfigForKey(const char *key)
     else if (!strcmp(key, "Video.FovScale"))        mask = VCFG_FOV;
     else if (!strcmp(key, "Video.Anisotropy"))      mask = VCFG_ANISO;
     else if (!strcmp(key, "Video.SafeAreaCrop"))    mask = VCFG_CROP;
+    else if (!strcmp(key, "Video.Visuals"))         mask = VCFG_VISUALS;   /* D982 */
 #ifdef __SWITCH__
     else if (!strcmp(key, "Video.MSAA"))            mask = VCFG_MSAA;   /* project-dam: live there */
     else if (!strcmp(key, "Video.FXAA"))            mask = VCFG_FXAA;
@@ -1275,6 +1269,7 @@ void videoInterpInfo(int *refreshHz, int *swapInterval)
 
 int videoInit(void)
 {
+    videoApplyVisuals();   /* D982: before anything reads the derived flags */
     /* D578: fresh install (no Video.VSync in the ini) under gamescope / Steam
      * Deck Game Mode: gamescope already syncs to the panel, and our own VSync
      * path tops out ~75 fps there, so default VSync off. An ini that has the
@@ -1307,6 +1302,13 @@ int videoInit(void)
         cfgSwitchPresetRev = 1;
         if (cfgDisplayMode == 0) videoApplyPreset(VIDEO_PRESET_PORT);
         else if (cfgDisplayMode == 1) videoApplyPreset(VIDEO_PRESET_N64);
+    }
+#else
+    /* D982: a PC ini from before Display mode was stored: take the mode its
+     * values match (as the menu used to derive it), else Custom. Nothing
+     * is changed. */
+    if (!configIntKeyWasLoaded("Video.DisplayMode")) {
+        cfgDisplayMode = videoPresetIsActive(VIDEO_PRESET_PORT) ? 0 : videoPresetIsActive(VIDEO_PRESET_N64) ? 1 : 2;
     }
 #endif
     /* D440 CLI route: -n64preset / -portpreset apply the preset
@@ -1621,6 +1623,10 @@ void videoStartFrame(void)
         if (dirty & VCFG_FOV) portFovScale = cfgFovScale / 100.0f;
         if (dirty & VCFG_ANISO) gfx_set_anisotropy_level(cfgAniso);
         if (dirty & VCFG_CROP) gfx_set_safe_area_crop(cfgSafeAreaCrop);
+        if (dirty & VCFG_VISUALS) {   /* D982 */
+            videoApplyVisuals();
+            gfx_set_fog_pixel(portDisplayFixes);
+        }
 #ifdef __SWITCH__
         if (dirty & VCFG_FXAA) gfx_fxaa_on = cfgFXAA != 0;   /* project-dam */
         if (dirty & VCFG_MSAA) {   /* project-dam: picked up by gfx_start_frame */

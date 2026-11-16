@@ -2,9 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+- Display mode is Enhanced, Original or Custom on the Switch and on PC (it was Switch / N64 / Custom on the Switch and Modern / Original N64 / Custom on PC); on the Switch only the names change; on PC the mode is now remembered, Enhanced gives the same picture as the Switch (Visuals Enhanced, GE+ sky included) and leaves the hardware settings (anti-aliasing, FXAA, anisotropic filtering, VSync, frame cap, resolution) to the player, who sees them in every mode; Original no longer changes the aim settings
+- Visuals on the Video page replaces the Sky option (Custom display mode): Original is the game's own picture, Fixed corrects the original game's display flaws listed under Fixed and draws exact per-pixel fog, Enhanced also adds the GE+ sky (Enhanced in the Switch mode, Original in the N64 mode); it takes effect at once, no restart
+
 ### Fixed
 - Jungle: the crashed plane at the start no longer loses a wing, and nothing else in the level is cut off at a room boundary any more; the port never applied the level's rule that every room is drawn in full
-- Jungle: far fern and palm leaves no longer show through the leaves in front of them; the plants' leaves now hide what is behind them (Video > Foliage depth fix, on by default; the N64 display mode keeps the original look, where the leaves stack in the model's drawing order) (#35)
+- Jungle: far fern and palm leaves no longer show through the leaves in front of them; the plants' leaves now hide what is behind them (Visuals: Fixed) (#35)
+- Surface 1 and 2: the satellite dish no longer disappears when the room system or the fog would hide it (Visuals: Fixed)
 
 ## [0.2.0] - 2026-11-16
 

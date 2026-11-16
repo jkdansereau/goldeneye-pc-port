@@ -41,10 +41,10 @@ void portD468ShrinkBox(float *minmax);            /* {min.x,min.y,max.x,max.y} *
  * room system or the fog. Their room joins the drawn room set whenever it
  * is on screen (bgDetermineVisibleRooms, render pass only); posIsOnScreen
  * ignores the room and fog tests for the prop; chrobjRenderProp draws it in
- * full fog colour past full fog and skips the room scissor. Video.Landmarks=0
+ * full fog colour past full fog and skips the room scissor. Video.Visuals=Original
  * (and the Original N64 preset) restores the N64 behaviour. Render only: the
  * gameplay verdict and the authored room set stay the faithful ones. */
-extern int portLandmarks;
+extern int portDisplayFixes;   /* Video.Visuals >= Fixed (port/src/video.c, D982) */
 int  portPropIsLandmark(struct PropRecord *prop);
 void portLandmarkNoteRooms(const s32 *rooms);   /* posIsOnScreen, per landmark */
 int  portLandmarkRoom(int i);                    /* i-th landmark room of this stage, -1 = end */
@@ -53,9 +53,8 @@ int  portLandmarkRoom(int i);                    /* i-th landmark room of this s
  * alpha cut-outs that write depth (G_RM_AA_ZB_TEX_EDGE2, the mode the same
  * function uses for fading objects) instead of G_RM_AA_ZB_XLU_SURF2, which
  * does not write depth: there the leaves sort in the model's authored order
- * and far leaves cover near ones. Video.FoliageDepth=0 (and the Original N64
+ * and far leaves cover near ones. Video.Visuals=Original (and the Original N64
  * preset) keeps the N64 mode. */
-extern int portFoliageDepth;
 extern int portFoliageDraw;
 int  portPropIsFoliage(struct PropRecord *prop);
 

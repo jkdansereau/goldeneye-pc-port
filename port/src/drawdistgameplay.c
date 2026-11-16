@@ -213,8 +213,6 @@ void portD466FrameLog(void)
 
 /* ---------------------------------------------------------------- D979 */
 
-int portLandmarks = 1;   /* Video.Landmarks (registered in video.c) */
-
 /* Props the room system must not hide. Kept to models that are landmarks by
  * design (seen from far, standing above the surrounding geometry). */
 static const u16 s_landmarkModels[] = {
@@ -223,7 +221,7 @@ static const u16 s_landmarkModels[] = {
 
 int portPropIsLandmark(struct PropRecord *prop)
 {
-    if (!portLandmarks || prop == NULL || prop->type != PROP_TYPE_OBJ || prop->obj == NULL) {
+    if (!portDisplayFixes || prop == NULL || prop->type != PROP_TYPE_OBJ || prop->obj == NULL) {
         return 0;
     }
     for (size_t i = 0; i < sizeof(s_landmarkModels) / sizeof(s_landmarkModels[0]); i++) {
@@ -236,7 +234,6 @@ int portPropIsLandmark(struct PropRecord *prop)
 
 /* ---------------------------------------------------------------- D980 */
 
-int portFoliageDepth = 1;   /* Video.FoliageDepth (registered in video.c) */
 int portFoliageDraw = 0;    /* set by chrobjRenderProp while it builds a foliage prop */
 
 /* Jungle foliage: leaves on the model's secondary (translucent) surfaces. */
@@ -247,7 +244,7 @@ static const u16 s_foliageModels[] = {
 
 int portPropIsFoliage(struct PropRecord *prop)
 {
-    if (!portFoliageDepth || prop == NULL || prop->type != PROP_TYPE_OBJ || prop->obj == NULL) {
+    if (!portDisplayFixes || prop == NULL || prop->type != PROP_TYPE_OBJ || prop->obj == NULL) {
         return 0;
     }
     for (size_t i = 0; i < sizeof(s_foliageModels) / sizeof(s_foliageModels[0]); i++) {
@@ -290,7 +287,8 @@ void portLandmarkNoteRooms(const s32 *rooms)
 
 int portLandmarkRoom(int i)
 {
-    if (!portLandmarks) { return -1; }
+    if (!portDisplayFixes) { return -1; }
     landmarkCheckStage();
     return i < s_landmarkRoomCount ? s_landmarkRooms[i] : -1;
 }
+

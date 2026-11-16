@@ -96,6 +96,7 @@ struct NormalColor {
  * (default, D543), 0 = the D540 exact per-pixel fog (GE_FOGPIXEL=1). */
 int gfx_rdp_affine = 0;
 int gfx_fog_vertex = 0;
+int gfx_fog_force = -1;   /* D982: GE_FOGPIXEL=0/1 pins the form for the run; -1 = Video.Visuals >= Fixed */
 
 struct LoadedVertex {
     float x, y, z, w;
@@ -7313,6 +7314,18 @@ extern "C" void reset_texture_state() {
     color_combiner_pool.clear();
     mc_clear_all();   /* mesh cache: entries point at combiners and shaders */
     prev_combiner = color_combiner_pool.end();
+}
+
+/* D982: Video.Visuals >= Fixed switches the fog form live. The CPU vertex fog
+ * (fog_n), the GL shader source and the mesh cache key all depend on
+ * gfx_fog_vertex, so drop the shaders and baked meshes like a texture
+ * filter change does (render thread, between frames). deko3d reads it at
+ * the next shader bind. */
+extern "C" void gfx_set_fog_pixel(int on) {
+    const int vtx = gfx_fog_force >= 0 ? !gfx_fog_force : !on;
+    if (vtx == gfx_fog_vertex) return;
+    gfx_fog_vertex = vtx;
+    reset_texture_state();
 }
 
 extern "C" void gfx_set_texture_filter(enum FilteringMode mode) {

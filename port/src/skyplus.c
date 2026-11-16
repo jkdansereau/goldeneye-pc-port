@@ -1,5 +1,5 @@
 /*
- * skyplus.c -- GE+ sky (Video.SkyPlus), game side. See port/include/skyplus.h.
+ * skyplus.c -- GE+ sky (Video.Visuals = Enhanced), game side. See port/include/skyplus.h.
  *
  * The look is GE's own, with depth added: the middle cloud layer is the
  * original one (same texture, height, scale, scroll and shade formula), two
@@ -27,11 +27,7 @@
 
 #include "skyplus.h"
 
-#ifdef __SWITCH__
-int portSkyPlus = 1;   /* on by default on the Switch */
-#else
-int portSkyPlus = 0;   /* PC: opt-in (the GL 1.30 path is untested) */
-#endif
+int portSkyPlus = 0;   /* = Video.Visuals >= Enhanced (set by video.c, D982) */
 
 extern s32 g_SkyStageNum;
 

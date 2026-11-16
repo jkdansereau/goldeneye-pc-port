@@ -60,6 +60,7 @@ int gfx_interp_body_runs(void);
 void gfx_interp_trigger_counts(unsigned* turn, unsigned* clamp, unsigned* set, unsigned* room);
 void gfx_interp_present(int slot, int vsync);
 void gfx_set_texture_filter(enum FilteringMode mode);
+void gfx_set_fog_pixel(int on);   /* D982: per-pixel (1) or per-vertex N64 (0) fog, live */
 void gfx_set_mipmap_filter(enum MipmapFilteringMode mode);
 void gfx_set_fix_mip_textures(int on);
 void gfx_set_detail_base_tile(int on);  /* D236: sample the base image of a DETAIL binding */

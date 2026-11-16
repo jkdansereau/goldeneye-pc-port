@@ -1,7 +1,7 @@
 #ifndef PORT_SKYPLUS_H
 #define PORT_SKYPLUS_H
 
-/* GE+ sky (Video.SkyPlus): a per-pixel replacement for sky.c's cloud plane.
+/* GE+ sky (Video.Visuals = Enhanced): a per-pixel replacement for sky.c's cloud plane.
  *
  * The game side (port/src/skyplus.c, called from the top of skyRender) fills a
  * PortSkyPlus with the level's sky record, the camera (the world rays through
@@ -54,7 +54,7 @@ typedef struct PortSkyPlus {
 extern "C" {
 #endif
 
-/* Video.SkyPlus (0 = GE's sky, 1 = GE+). */
+/* Video.Visuals = Enhanced (0 = GE's sky, 1 = GE+). */
 extern int portSkyPlus;
 
 #ifndef __cplusplus
