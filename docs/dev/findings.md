@@ -22811,14 +22811,28 @@ Reading: the replay thread's cost drops 3.3x (Surface 1) to 3.7x (Jungle co-op: 
 
 **Confidence.** High (direct console log of each step).
 
-## D977: GE+ sky under the horizon showed clouds or the previous frame (Cradle) -- the shader's early return was not honoured in Ryujinx; one final write now -- FIXED + MAINTAINER-VERIFIED 2026-11-16 (Ryujinx, Cradle, GL and deko3d)
+## D977: GE+ sky under the horizon showed clouds or the previous frame (Cradle) -- the shader's early return was not honoured in Ryujinx; one final write now -- FIXED + MAINTAINER-VERIFIED 2026-11-16 (Ryujinx, Cradle, GL and deko3d; console unaffected)
 
 **Symptom.** On Cradle, looking down from the cradle, the view under the horizon showed a layer of saturated blue clouds, streaked when the camera moved; with Sky = Original it is the flat sky colour (as on the N64: a maintainer's N64 capture shows a flat light blue under the cradle). Dam and Surface hide it behind their ground.
 
-**Cause.** Not the level and not GE's sky: with the GE+ command dropped (GE's sky still skipped) nothing is drawn there and the screen keeps old frames. A log of the GL pass (`SKYPASS`) showed one pass per frame, the right viewport and corner rays (top y 0.96, bottom y -0.08). The shader returned early under the horizon (`if (d.y <= 0.0) { o = F; return; }`), yet the pixels there showed exactly the cloud code run on a downward ray: `fr = 1 - min(1, 2 dy / hz) * gain` goes above 1, the cloud shade `(1 - fr)` goes negative and removes the red and green of Cradle's yellow cloud tint, leaving blue. Test colours written before the return (magenta, solid red) never showed. So Ryujinx did not honour the early return in this fragment shader (GL and deko3d, which both run through its shader translation). Not checked on the console.
+**Cause.** Not the level and not GE's sky: with the GE+ command dropped (GE's sky still skipped) nothing is drawn there and the screen keeps old frames. A log of the GL pass (`SKYPASS`) showed one pass per frame, the right viewport and corner rays (top y 0.96, bottom y -0.08). The shader returned early under the horizon (`if (d.y <= 0.0) { o = F; return; }`), yet the pixels there showed exactly the cloud code run on a downward ray: `fr = 1 - min(1, 2 dy / hz) * gain` goes above 1, the cloud shade `(1 - fr)` goes negative and removes the red and green of Cradle's yellow cloud tint, leaving blue. Test colours written before the return (magenta, solid red) never showed. So Ryujinx did not honour the early return in this fragment shader (GL and deko3d, which both run through its shader translation). Console check (2026-11-16, nxlink, `main` before this fix, deko3d, Cradle): no clouds under the horizon on the hardware, so the bug is Ryujinx's only; the fix changes nothing on the console.
 
 **Fix (port layer only).** Both sky shaders (`gfx_opengl.cpp` and `port/switch/shaders/skyplus.frag.glsl`) keep a `below` flag and choose the colour at the single write at the end: the record's sky colour under the horizon, the GE+ sky above. A NaN ray counts as under the horizon.
 
 **Verification.** Maintainer, Ryujinx, Cradle: flat sky colour under the horizon, GE+ sky above, with GL (`GE_RENDERER=gl`) and with deko3d. Switch NRO builds (Docker).
 
-**Confidence.** High on the fix (direct A/B); medium on the root cause (an emulator shader-translation quirk inferred from the test colours, not read in Ryujinx's source).
+**Confidence.** High on the fix (direct A/B) and on the cause being Ryujinx-only (console run without the fix is clean); the exact translation fault is not read in Ryujinx's source.
+
+## D975: 2-player split-screen FOV -- each strip saw ~131 deg across at 16:9; it now takes 2/3 of the vertical FOV and cuts the strip out of that view -- BUILT + MAINTAINER-CONFIRMED 2026-11-16 (Ryujinx, Complex 2P; Switch only; port layer only)
+
+**Symptom.** In 2-player split screen (versus, co-op) the view looked stretched and zoomed out: on a turn, a door at the edge of the strip looked much closer than when looked at straight on.
+
+**Cause.** GE keeps the vertical FOV (60 deg) in a split view and takes the projection aspect from the viewport (`bondview2.c`, `viSetAspect((vw/vh)*0.75*...)`). A 2-player strip is 320 x 109 against the solo view's 320 x 220, about twice as wide for its height, so it sees about 119 deg across on a 4:3 TV and about 131 deg at 16:9 (Hor+, D334). On a flat screen the stretch at the edge is 1/cos^2(h/2): x4 at 119 deg, x5.5 at 131 deg (solo 16:9: ~96 deg, x2.2). The 3-4 player quarters (159 x 109) have the solo proportions and are not affected.
+
+**Fix (port layer only, `port/src/video.c`, Switch).** `portScaleFovY`, after FovScale and the aim zoom, converts the vertical FOV of a 2-player view: `splitFovY` takes 2/3 of it, then cuts the strip out of that view, `v' = 2 atan(tan(v/2) / r)` with `r` = strip aspect / solo view aspect (320/220 NTSC, 320/272 PAL), so about 2.0. At the default FOV: 60 -> 40 -> ~21 deg vertical, ~70 deg across at 16:9. The cut alone (same objects at the same size as solo, ~96 deg across) still read stretched on the flat strip; 40 instead of 60 is the maintainer's pick from tuning FovScale by hand on Complex 2P. The Video.FovScale setting is unchanged (60 shown) and still scales the result; the 20-deg floor goes through the same conversion so a low FovScale or the scope is not clamped. Not applied with 1, 3 or 4 players, nor in the N64 display mode (the original look). Culling uses the same function (`frCullFovY`).
+
+**AI.** `portFovYScaleFactor` (D468/D565, gameplay recovery of the game's own FOV) does not include this conversion: in 2-player the AI's on-screen tests use the narrower rendered view. Known, not a concern in play so far.
+
+**Verification.** Switch NRO builds (Docker). Maintainer, Ryujinx: on Complex 2P, FovScale 40 set by hand on a strip-cut-only build looked natural (45 about right too); the automatic conversion at FovScale 100 renders the 2-player view that build gave at 40. Maintainer, 2026-11-16, after the test build with the conversion (plus a solo Bunker 1 comparison): the FOV is better.
+
+**Confidence.** High for the geometry; the 2/3 factor is a taste choice.

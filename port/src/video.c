@@ -307,6 +307,49 @@ f32 portNativeAspect(void)
     return a;
 }
 
+#if defined(PLATFORM_SWITCH)
+/* project-dam: 2-player split-screen FOV. GE keeps the vertical FOV in a split
+ * view, so each 2-player strip (320 x 109, about twice as wide for its height
+ * as the solo view) sees ~119 deg across at 4:3 and ~131 deg at 16:9, with
+ * the edges stretched about 5x. splitFovY first takes 2/3 of the vertical FOV
+ * (60 -> 40, the maintainer's pick on Complex in Ryujinx), then cuts the strip
+ * out of that view: tan(v/2) / r, r = strip aspect / solo view aspect. The
+ * strip then sees ~70 deg across at 16:9 (solo: ~96). Only 2 players: the
+ * 3-4 player quarters have the solo proportions. Off in the N64 display mode
+ * (the original look). Returns r, or 0 when the correction does not apply. */
+extern s32 getPlayerCount(void);
+extern s16 bondviewGetCurrentPlayerViewportWidth(void);
+extern s16 bondviewGetCurrentPlayerViewportHeight(void);
+extern float atanf(float);   /* not declared by this include path's math.h */
+extern float tanf(float);
+
+static f32 splitStripRatio(void)
+{
+    s16 vw, vh;
+    f32 r;
+    if (cfgDisplayMode == 1 || getPlayerCount() != 2) {
+        return 0.0f;
+    }
+    vw = bondviewGetCurrentPlayerViewportWidth();
+    vh = bondviewGetCurrentPlayerViewportHeight();
+    if (vw <= 0 || vh <= 0) {
+        return 0.0f;
+    }
+#ifdef VERSION_EU
+    r = ((f32)vw / (f32)vh) / (320.0f / 272.0f);   /* solo view: 320 x 272 */
+#else
+    r = ((f32)vw / (f32)vh) / (320.0f / 220.0f);   /* solo view: 320 x 220 */
+#endif
+    return r > 1.05f ? r : 0.0f;
+}
+
+static f32 splitFovY(f32 fovy, f32 r)
+{
+    const f32 h = 3.14159265f / 360.0f;   /* degrees -> half-angle radians */
+    return 2.0f * atanf(tanf(fovy * (2.0f / 3.0f) * h) / r) / h;
+}
+#endif
+
 f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
 {
     /* D484 (#136): the 20-degree floor below guards the port's own widening,
@@ -332,6 +375,13 @@ f32 portScaleFovY(f32 fovy, s32 isTitleScreen)
             const f32 z = nxAimZoomFactor();
             fovy /= z;
             floorFovY /= z;   /* the scope zooms past the game's own minimum too */
+        }
+        {   /* project-dam: 2-player split-screen FOV (splitFovY above) */
+            const f32 r = splitStripRatio();
+            if (r > 0.0f) {
+                fovy = splitFovY(fovy, r);
+                floorFovY = splitFovY(floorFovY, r);
+            }
         }
 #endif
     }
