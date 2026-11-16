@@ -299,12 +299,24 @@ extern "C" void gfx_set_safe_area_crop(int on) {
  * winner alternate frame to frame). While a 2+ player stage is running the
  * N64's own split layout is used unmodified. */
 static bool g_split_screen = false;
+/* #25: in split-screen the crop uses the bounding rectangle of every viewport
+ * the game set during the previous frame (N64 units: left, right, top = the
+ * smallest y - height, bottom = the largest y as gfx_calc_and_set_viewport
+ * computes it), so all players' views and the bars between them are stretched
+ * together to the window instead of one view (D418). */
+static float s_split_acc_l = 1e9f, s_split_acc_r = -1e9f, s_split_acc_t = 1e9f, s_split_acc_b = -1e9f;
+static float s_split_l = 0.0f, s_split_w = 0.0f, s_split_bottom = 0.0f, s_split_h = 0.0f;
 /* D510: set while the port-layer overlay DL (F10 panel / FPS counter) runs.
  * That is PC chrome, not game content: it maps the logical canvas onto the
  * whole window, bypassing the safe-area crop (which follows the game's last
  * viewport and so differed between the front end and a level). */
 static bool g_overlay_window_space = false;
 extern "C" void gfx_set_split_screen(int on) {
+    if (g_split_screen != !!on) {
+        s_split_w = s_split_h = 0.0f;   /* no crop until a whole frame of viewports is known */
+        s_split_acc_l = s_split_acc_t = 1e9f;
+        s_split_acc_r = s_split_acc_b = -1e9f;
+    }
     g_split_screen = !!on;
 }
 
@@ -4854,9 +4866,10 @@ static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_as
     // g_gpSafeTop already plays the exact role SCREEN_HEIGHT plays below
     // (both are the bottom-up Y value of the mapped region's TOP edge) --
     // this reduces to the untouched original formula when crop is off.
+    const bool split_crop = g_safe_area_crop_enabled && g_split_screen && !window_space && s_split_w > 0.0f && s_split_h > 0.0f;
     const bool crop = g_safe_area_crop_enabled && !g_split_screen && !window_space && g_gpSafeHeight > 0.0f;
-    const float safeTop = crop ? g_gpSafeTop : (float)SCREEN_HEIGHT;
-    const float safeHeight = crop ? g_gpSafeHeight : (float)SCREEN_HEIGHT;
+    const float safeTop = split_crop ? s_split_bottom : crop ? g_gpSafeTop : (float)SCREEN_HEIGHT;
+    const float safeHeight = split_crop ? s_split_h : crop ? g_gpSafeHeight : (float)SCREEN_HEIGHT;
     const float ratioY = gfx_current_dimensions.height / safeHeight;
 
     // D246 (findings.md): a consistent, exactly-1-logical-unit gap at the
@@ -4872,8 +4885,9 @@ static void gfx_adjust_viewport_or_scissor(XYWidthHeight* area, bool preserve_as
     // TV-overscan margin) and fold it into the same toggle: trim the same
     // fixed 1-unit margin from both edges rather than trying to force
     // content to reach a boundary it may never actually be drawn to.
-    const float safeLeft = (g_safe_area_crop_enabled && !g_split_screen && !window_space) ? 1.0f : 0.0f;
-    const float safeWidth = (g_safe_area_crop_enabled && !g_split_screen && !window_space) ? (float)SCREEN_WIDTH - 2.0f : (float)SCREEN_WIDTH;
+    /* split: the same 1-unit trim on each side as solo (the game draws rooms from 1 to 319, D246) */
+    const float safeLeft = split_crop ? s_split_l + 1.0f : (g_safe_area_crop_enabled && !g_split_screen && !window_space) ? 1.0f : 0.0f;
+    const float safeWidth = split_crop ? s_split_w - 2.0f : (g_safe_area_crop_enabled && !g_split_screen && !window_space) ? (float)SCREEN_WIDTH - 2.0f : (float)SCREEN_WIDTH;
     const float ratioX = gfx_current_dimensions.width / safeWidth;
 
     float x1 = (area->x - safeLeft) * ratioX;
@@ -5097,6 +5111,13 @@ static void gfx_calc_and_set_viewport(const Vp_t* viewport) {
         const float bandH = 220.0f * (float)SCREEN_HEIGHT / 240.0f;
         g_gpSafeTop = centre + bandH * 0.5f;
         g_gpSafeHeight = bandH;
+    }
+
+    if (g_split_screen && width > 1.0f && height > 1.0f) {   /* #25: bounding rectangle of this frame's viewports */
+        s_split_acc_l = fminf(s_split_acc_l, x);
+        s_split_acc_r = fmaxf(s_split_acc_r, x + width);
+        s_split_acc_t = fminf(s_split_acc_t, y - height);
+        s_split_acc_b = fmaxf(s_split_acc_b, y);
     }
 
     gfx_adjust_viewport_or_scissor(&rdp.viewport);
@@ -6445,6 +6466,14 @@ extern "C" struct GfxRenderingAPI* gfx_get_current_rendering_api(void) {
 }
 
 extern "C" void gfx_start_frame(void) {
+    if (g_split_screen && s_split_acc_r > s_split_acc_l && s_split_acc_b > s_split_acc_t) {   /* #25 */
+        s_split_l = s_split_acc_l;
+        s_split_w = s_split_acc_r - s_split_acc_l;
+        s_split_bottom = s_split_acc_b;
+        s_split_h = s_split_acc_b - s_split_acc_t;
+    }
+    s_split_acc_l = s_split_acc_t = 1e9f;
+    s_split_acc_r = s_split_acc_b = -1e9f;
     if (!gfx_frame_thread_active()) {
         gfx_wapi->handle_events();   /* D969: pipelined, the GL thread pumps (at the start of each present) */
     }
