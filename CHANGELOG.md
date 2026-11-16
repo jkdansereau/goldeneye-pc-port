@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- Jungle: the crashed plane at the start no longer loses a wing, and nothing else in the level is cut off at a room boundary any more; the port never applied the level's rule that every room is drawn in full
 - Jungle: far fern and palm leaves no longer show through the leaves in front of them; the plants' leaves now hide what is behind them (Video > Foliage depth fix, on by default; the N64 display mode keeps the original look, where the leaves stack in the model's drawing order) (#35)
 
 ## [0.2.0] - 2026-11-16

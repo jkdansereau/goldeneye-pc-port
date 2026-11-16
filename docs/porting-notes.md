@@ -1152,6 +1152,15 @@ past it (walk off the end).
   so the read picks up a different neighbour. `-Warray-bounds` flags these
   ("partly outside array bounds of 's32[1]'"); confirm with `nm -n` on the
   exe. Fix: `#ifdef PORT` reads each named global.
+- Instance: **D983**; `sub_GAME_7F0B37EC` (`bg.c`) walks `specialportalarray`
+  until `&g_BgCurrentRoom`, comparing `(u32)` pointers. On PC the walk stopped
+  after the first entry (Control), so Jungle's portals never got
+  `PORTALFLAG_SPECIAL` and every Jungle room was scissored to its portal box
+  instead of drawn full screen (the start's crashed plane lost a wing). It
+  survived since the original port because nothing crashes: the symptom is
+  only a wrong scissor. Found by reading the N64 room list
+  (`dword_CODE_bss_8007FFA0`, US address 0x8007FFA0) out of an ares RDRAM
+  dump: its `next` field showed the flag the PC never set.
 - Grep for `= &` / `(TYPE *)&` on the RHS of a loop-terminator compare, and
   any `for`/`while`/`do` whose end pointer is the address of a *different*
   symbol than the one being iterated.

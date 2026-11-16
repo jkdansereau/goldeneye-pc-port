@@ -349,7 +349,20 @@ void sub_GAME_7F0B37EC(void) {
     u32 masked;
 
     ptr = (u8 *)specialportalarray;
+#ifdef PORT
+    /* D983: the N64 build ends the scan at &g_BgCurrentRoom, the variable the
+     * linker placed right after this table (0x80044838), and compares the
+     * pointers as u32. On PC the compiler places variables freely (and u32
+     * truncates 64-bit pointers), so the scan stopped after the first entry
+     * (level 0x03): Jungle's entry (level 0x11, portals 0x00-0x3A) was never
+     * read and its portals never got PORTALFLAG_SPECIAL. Without it every
+     * Jungle room was cut to its portal's screen box instead of drawn full
+     * screen, cutting the crashed plane's wing at the start. End at the
+     * table's own size; the comparison below then sees host pointers. */
+    end = (u8 *)specialportalarray + sizeof(specialportalarray);
+#else
     end = (u8 *)&g_BgCurrentRoom;
+#endif
 
     do {
         if (levelentry_index == *ptr++) {
@@ -382,7 +395,11 @@ void sub_GAME_7F0B37EC(void) {
         }
 
         ptr++;
+#ifdef PORT
+    } while (ptr < end);   /* D983: full-width pointers */
+#else
     } while ((u32)ptr < (u32)end);
+#endif
 }
 
 
