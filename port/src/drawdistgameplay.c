@@ -234,6 +234,30 @@ int portPropIsLandmark(struct PropRecord *prop)
     return 0;
 }
 
+/* ---------------------------------------------------------------- D980 */
+
+int portFoliageDepth = 1;   /* Video.FoliageDepth (registered in video.c) */
+int portFoliageDraw = 0;    /* set by chrobjRenderProp while it builds a foliage prop */
+
+/* Jungle foliage: leaves on the model's secondary (translucent) surfaces. */
+static const u16 s_foliageModels[] = {
+    PROP_JUNGLE3_TREE, PROP_JUNGLE5_TREE, PROP_PALM, PROP_PALMTREE,
+    PROP_PLANT1, PROP_PLANT11, PROP_PLANT2, PROP_PLANT2B, PROP_PLANT3,
+};
+
+int portPropIsFoliage(struct PropRecord *prop)
+{
+    if (!portFoliageDepth || prop == NULL || prop->type != PROP_TYPE_OBJ || prop->obj == NULL) {
+        return 0;
+    }
+    for (size_t i = 0; i < sizeof(s_foliageModels) / sizeof(s_foliageModels[0]); i++) {
+        if (((ObjectRecord *)prop->obj)->obj == s_foliageModels[i]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* Rooms holding a landmark on the current stage, noted as posIsOnScreen sees
  * the props (it runs for them whatever their room's visibility). */
 #define LANDMARK_ROOMS_MAX 8

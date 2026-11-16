@@ -49,6 +49,16 @@ int  portPropIsLandmark(struct PropRecord *prop);
 void portLandmarkNoteRooms(const s32 *rooms);   /* posIsOnScreen, per landmark */
 int  portLandmarkRoom(int i);                    /* i-th landmark room of this stage, -1 = end */
 
+/* D980: jungle foliage props draw their secondary (translucent) surfaces as
+ * alpha cut-outs that write depth (G_RM_AA_ZB_TEX_EDGE2, the mode the same
+ * function uses for fading objects) instead of G_RM_AA_ZB_XLU_SURF2, which
+ * does not write depth: there the leaves sort in the model's authored order
+ * and far leaves cover near ones. Video.FoliageDepth=0 (and the Original N64
+ * preset) keeps the N64 mode. */
+extern int portFoliageDepth;
+extern int portFoliageDraw;
+int  portPropIsFoliage(struct PropRecord *prop);
+
 /* authored-distance fog (bgfog.c) */
 float portD466AuthoredFar(void);
 int   portFogPositionVisibleGameplay(float *pos3, float range);

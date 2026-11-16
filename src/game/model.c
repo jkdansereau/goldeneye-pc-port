@@ -30,6 +30,7 @@
 #include "random.h"
 #ifdef PORT
 #include "envflag.h"   /* cached getenv for hot-path probes */
+#include "drawdistgameplay.h"   /* D980: portFoliageDraw */
 #endif
 
 
@@ -3962,6 +3963,13 @@ void modelApplyRenderModeType3(ModelRenderData *renderdata, bool isPrimary)
             {
                 if (renderdata->zbufferenabled)
                 {
+#ifdef PORT
+                    if (portFoliageDraw)   /* D980: leaves as depth-writing cut-outs */
+                    {
+                        gDPSetRenderMode(renderdata->gdl++, G_RM_FOG_PRIM_A, G_RM_AA_ZB_TEX_EDGE2);
+                    }
+                    else
+#endif
                     gDPSetRenderMode(renderdata->gdl++, G_RM_FOG_PRIM_A, G_RM_AA_ZB_XLU_SURF2);
                 }
                 else
@@ -4249,6 +4257,13 @@ void modelApplyRenderModeType4(ModelRenderData *renderdata, bool isPrimary)
 
                 if (renderdata->zbufferenabled)
                 {
+#ifdef PORT
+                    if (portFoliageDraw)   /* D980: leaves as depth-writing cut-outs */
+                    {
+                        gDPSetRenderMode(renderdata->gdl++, G_RM_FOG_PRIM_A, G_RM_AA_ZB_TEX_EDGE2);
+                    }
+                    else
+#endif
                     gDPSetRenderMode(renderdata->gdl++, G_RM_FOG_PRIM_A, G_RM_AA_ZB_XLU_SURF2);
                 }
                 else

@@ -7588,7 +7588,13 @@ Gfx *chrobjRenderProp(PropRecord *prop, Gfx *gdl, s32 arg2)
 
     mrData.fogcolour.word = (sp48.rgba[0] << 0x18) | (sp48.rgba[1] << 0x10) | (sp48.rgba[2] << 0x08) | (sp48.rgba[3] << 0x00);
 
+#ifdef PORT
+    portFoliageDraw = objAlpha >= 0xFF && portPropIsFoliage(prop);   /* D980 */
+#endif
     sub_GAME_7F04AC20(prop, &mrData, arg2);
+#ifdef PORT
+    portFoliageDraw = 0;
+#endif
 
     return mrData.gdl;
 }

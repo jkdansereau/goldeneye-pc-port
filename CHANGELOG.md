@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- Jungle: far fern and palm leaves no longer show through the leaves in front of them; the plants' leaves now hide what is behind them (Video > Foliage depth fix, on by default; the N64 display mode keeps the original look, where the leaves stack in the model's drawing order) (#35)
+
 ## [0.2.0] - 2026-11-16
 
 ### Added
