@@ -1188,12 +1188,12 @@ void dk_mesh_draw(uint32_t name, const struct GfxMeshDraw* d) {
     memcpy(u.env_mask, d->env_mask, sizeof u.env_mask);
     DkBufExtents ub = { s_ubo.gpu + 512, (uint32_t)sizeof u };
     dkCmdBufBindUniformBuffers(s_cmd, DkStage_Vertex, 2, &ub, 1);
-    /* Two pushes: the tail (fog, LOD and env), then only the nmtx matrices the
+    /* Two pushes: the head (fog, LOD and env), then only the nmtx matrices the
      * mesh indexes. One 2208-byte push crashed Ryujinx (its inline constant
      * buffer cache holds 512 words), and most lists use a few matrices. */
-    const uint32_t tail = (uint32_t)offsetof(DkMeshUniforms, fog_color);
-    dkCmdBufPushConstants(s_cmd, ub.addr, ub.size, tail, (uint32_t)sizeof u - tail, &u.fog_color);
-    dkCmdBufPushConstants(s_cmd, ub.addr, ub.size, 0, nmtx * (uint32_t)sizeof u.mtx[0], u.mtx);
+    const uint32_t moff = (uint32_t)offsetof(DkMeshUniforms, mtx);
+    dkCmdBufPushConstants(s_cmd, ub.addr, ub.size, 0, moff, &u);
+    dkCmdBufPushConstants(s_cmd, ub.addr, ub.size, moff, nmtx * (uint32_t)sizeof u.mtx[0], u.mtx);
 
     const DkShader* sh[2] = { &s_prg->mesh_vert, &s_prg->frag };
     dkCmdBufBindShaders(s_cmd, DkStageFlag_GraphicsMask, sh, 2);

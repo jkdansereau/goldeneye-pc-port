@@ -157,12 +157,12 @@ static bool gen_combiner(CCFeatures& f, std::string& vs, std::string& fs, bool m
     }
     if (mesh) {
         vs += "layout(std140, binding = 2) uniform Mesh {\n"
-              "    mat4 mtx[32];\n"
               "    vec4 fog_color;\n"
               "    float fog_mul; float fog_off; int fog_from_z;\n"
               "    vec4 lod_mask[8];\n"
               "    vec4 env_in[8];\n"
               "    vec4 env_mask[8];\n"
+              "    mat4 mtx[32];\n"   /* last: see DkMeshUniforms */
               "};\n";
     }
     vs += "void main() {\n";

@@ -96,7 +96,9 @@ struct DkDrawUniforms {
  * plus the index of the entry's live matrix.  This is deliberately a separate
  * UBO from Draw: Draw is fragment-only and changes for every classic batch. */
 struct DkMeshUniforms {
-    float mtx[32][16];
+    /* the per-draw tail first, the matrices last: a draw pushes the tail and
+     * only the matrices it indexes, all inside the first 512 words (the size
+     * of Ryujinx's inline constant-buffer cache) for up to 25 matrices */
     float fog_color[4];
     float fog_mul, fog_off;
     int32_t fog_from_z;
@@ -104,6 +106,7 @@ struct DkMeshUniforms {
     float lod_mask[8][4];
     float env_in[8][4];     /* live env colour per input (GE_MESHGPU) */
     float env_mask[8][4];
+    float mtx[32][16];
 };
 
 /* Uniform block `Comb` (std140, binding 1, fragment stage) of the uber-shader.
