@@ -26,6 +26,7 @@ layout(location = 4) out float vTexClampT0;
 layout(location = 5) out float vTexClampS1;
 layout(location = 6) out float vTexClampT1;
 layout(location = 7) noperspective out vec4 vFog;
+layout(location = 16) out float vFogW;   // fog * w (per-pixel fog, Draw.fog_pixel)
 layout(location = 8) out vec4 vGrayscaleColor;
 layout(location = 9) noperspective out vec4 vInput1;
 layout(location = 10) noperspective out vec4 vInput2;
@@ -43,6 +44,7 @@ void main() {
     vTexClampS1 = aTexClampS1;
     vTexClampT1 = aTexClampT1;
     vFog = aFog;
+    vFogW = aFog.a;
     vGrayscaleColor = aGrayscaleColor;
     vInput1 = aInput1;
     vInput2 = aInput2;

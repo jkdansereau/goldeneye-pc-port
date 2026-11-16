@@ -21,6 +21,29 @@ enum MipmapFilteringMode { MIPMAP_DISABLED, MIPMAP_NEAREST, MIPMAP_LINEAR };
  * (D583). 8 = two game frames of 4 presents (240 Hz); allocated on first use. */
 #define GFX_INTERP_SLOTS 8
 
+/* Issue #10 step B (GE_MESHGPU): a static vertex buffer drawn with the vertex
+ * transform on the GPU. Vertices use the bound program's layout, except that
+ * the position attribute holds (model x, y, z, matrix index). */
+#define GFX_MESH_MAX_MTX 32
+#define GFX_MESH_MAX_INPUTS 8
+struct GfxMeshDraw {
+    uint32_t byte_offset;      /* first vertex of the run in the mesh buffer */
+    uint32_t nverts;
+    uint32_t nmtx;
+    uint8_t cull;              /* 0 none, 1 back, 2 front (N64 sense, y up) */
+    bool invert_y;             /* the target is drawn y-flipped: front faces are clockwise */
+    bool fog_from_z;           /* fog alpha from clip z/w (RSP G_FOG) instead of the attribute */
+    float fog_color[4];        /* live RDP fog RGB (kept out of the baked vertices) */
+    float fog_mul, fog_off;
+    float lod_mask[GFX_MESH_MAX_INPUTS][4];   /* 1: that input component is the LOD fraction (from w) */
+    float env_in[GFX_MESH_MAX_INPUTS][4];     /* live RDP env colour as each input reads it ... */
+    float env_mask[GFX_MESH_MAX_INPUTS][4];   /* ... and 1 where that component comes from it */
+    uint32_t frame_count;      /* uniform values latched with the program (as load_shader_with) */
+    float noise_scale;
+    bool tpf0, tpf1;
+    float mtx[GFX_MESH_MAX_MTX][16];          /* row-vector clip matrices: clip = (x y z 1) * m */
+};
+
 struct GfxRenderingAPI {
     const char* (*get_name)(void);
     int (*get_max_texture_size)(void);
@@ -77,6 +100,17 @@ struct GfxRenderingAPI {
      * the two three-point flags), as latched when the decoder loaded it: the
      * frame replay loads programs later than the decoder did. */
     void (*load_shader_with)(struct ShaderProgram* prg, uint32_t frame_count, float noise_scale, bool tpf0, bool tpf1);
+    /* Issue #10 step B: static meshes. mesh_create returns a backend buffer
+     * name; mesh_draw draws one run with the GPU-transform twin of the bound
+     * program and leaves the bound program, vertex array and culling as they
+     * were. */
+    uint32_t (*mesh_create)(const float* data, size_t nfloats);
+    void (*mesh_delete)(uint32_t name);
+    void (*mesh_draw)(uint32_t name, const struct GfxMeshDraw* d);
+    /* Whether the program (id0, id1) has a GPU-transform twin. Pure and safe
+     * from the decoder thread (the frame recorder passes it through). Null:
+     * every program does (GL compiles the twin on demand). */
+    bool (*mesh_supported)(uint64_t id0, uint32_t id1);
 };
 
 #endif

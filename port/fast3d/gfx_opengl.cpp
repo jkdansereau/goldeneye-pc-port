@@ -44,6 +44,12 @@ struct ShaderProgram {
     GLint noise_scale_location;
     GLint three_point_filter_locations[2];
     GLuint ring_vao;   /* D965: VAO of this shader's vertex layout (GE_GLSTREAM), 0 = not resolved */
+    /* issue #10 step B: GPU-transform twin (same fragment shader) */
+    struct ShaderProgram* twin;
+    GLint mesh_mtx_location, mesh_fog_location, mesh_fog_color_location, mesh_lod_location;
+    GLint mesh_env_location, mesh_env_mask_location;
+    uint64_t id0;
+    uint32_t id1;
 };
 
 struct Framebuffer {
@@ -76,6 +82,7 @@ static GLenum gl_mirror_clamp = GL_MIRROR_CLAMP_TO_EDGE;
 static bool gl_es = false;
 extern int gfx_rdp_affine;   /* D540: defined in gfx_pc.cpp */
 extern int gfx_fog_vertex;   /* D540: defined in gfx_pc.cpp */
+extern "C" int portFogPixel; /* port/src/video.c: Video.FogPixel */
 static bool gl_core_profile = false;
 
 static int gfx_opengl_get_max_texture_size() {
@@ -175,8 +182,11 @@ static GLuint gfx_opengl_ring_vao_for(struct ShaderProgram* prg);   /* D965, bel
 static size_t s_cur_stride = 0;   /* bytes per vertex of the bound shader */
 
 
+static struct ShaderProgram* s_cur_classic = nullptr;   /* issue #10: the program the last load bound */
+
 static void gfx_opengl_load_shader(struct ShaderProgram* new_prg) {
     // if (!new_prg) return;
+    s_cur_classic = new_prg;
     s_cur_stride = new_prg->num_floats * sizeof(float);
 #ifdef __SWITCH__
     s_vbo_stride = s_cur_stride;
@@ -197,6 +207,7 @@ static void gfx_opengl_load_shader(struct ShaderProgram* new_prg) {
 
 /* D968: load + the uniform values the decoder latched (see GfxRenderingAPI::load_shader_with). */
 static void gfx_opengl_load_shader_with(struct ShaderProgram* new_prg, uint32_t fc, float noise, bool tpf0, bool tpf1) {
+    s_cur_classic = new_prg;
     s_cur_stride = new_prg->num_floats * sizeof(float);
 #ifdef __SWITCH__
     s_vbo_stride = s_cur_stride;
@@ -325,12 +336,12 @@ static void append_formula(char* buf, size_t* len, uint8_t c[2][4], bool do_sing
     }
 }
 
-#define SHADER_VS_MAX 2560
+#define SHADER_VS_MAX 4096   /* issue #10: the GPU-transform twin is longer */
 #define SHADER_FS_MAX 12288
 
 /* Generates the vertex + fragment shader text of a combiner program. */
 static void gfx_opengl_gen_shader_src(struct CCFeatures& cc_features, char* vs_buf, size_t* vs_len_out,
-                                      char* fs_buf, size_t* fs_len_out, size_t* num_floats_out) {
+                                      char* fs_buf, size_t* fs_len_out, size_t* num_floats_out, bool mesh = false) {
     size_t vs_len = 0;
     size_t fs_len = 0;
     size_t num_floats = 4;
@@ -392,7 +403,22 @@ static void gfx_opengl_gen_shader_src(struct CCFeatures& cc_features, char* vs_b
         num_floats += cc_features.opt_alpha ? 4 : 3;
     }
 
+    if (mesh) {
+        /* issue #10 step B: aVtxPos = (model x, y, z, matrix index); fog and the
+         * LOD fraction come from the transformed position, as gfx_sp_vertex /
+         * gfx_tri_emit compute them on the CPU. */
+        vs_len += sprintf(vs_buf + vs_len, "uniform mat4 uMeshMtx[%d];\n", GFX_MESH_MAX_MTX);
+        append_line(vs_buf, &vs_len, "uniform vec4 uMeshFog;");
+        append_line(vs_buf, &vs_len, "uniform vec4 uMeshFogColor;");
+        vs_len += sprintf(vs_buf + vs_len, "uniform vec4 uMeshLod[%d];\n", GFX_MESH_MAX_INPUTS);
+        vs_len += sprintf(vs_buf + vs_len, "uniform vec4 uMeshEnv[%d];\n", GFX_MESH_MAX_INPUTS);
+        vs_len += sprintf(vs_buf + vs_len, "uniform vec4 uMeshEnvMask[%d];\n", GFX_MESH_MAX_INPUTS);
+    }
     append_line(vs_buf, &vs_len, "void main() {");
+    if (mesh) {
+        append_line(vs_buf, &vs_len, "    vec4 mp = uMeshMtx[int(aVtxPos.w + 0.5)] * vec4(aVtxPos.xyz, 1.0);");
+        append_line(vs_buf, &vs_len, "    float lodv = floor((0.7 + clamp(mp.w / 1024.0, 0.0, 1.0) * 0.3) * 255.0) / 255.0;");
+    }
     for (int i = 0; i < 2; i++) {
         if (cc_features.used_textures[i]) {
             vs_len += sprintf(vs_buf + vs_len, "    vTexCoord%d = aTexCoord%d;\n", i, i);
@@ -405,16 +431,35 @@ static void gfx_opengl_gen_shader_src(struct CCFeatures& cc_features, char* vs_b
         }
     }
     if (cc_features.opt_fog) {
-        append_line(vs_buf, &vs_len, "    vFog = aFog;");
+        if (mesh) {
+            append_line(vs_buf, &vs_len, "    float fw = abs(mp.w) < 0.001 ? 0.001 : mp.w;");
+            append_line(vs_buf, &vs_len, gfx_fog_vertex
+                ? "    vFog = vec4(uMeshFogColor.rgb, uMeshFog.z > 0.5 ? floor(clamp(mp.z / fw * uMeshFog.x + uMeshFog.y, 0.0, 255.0)) / 255.0 : uMeshFogColor.a);"
+                : "    vFog = vec4(uMeshFogColor.rgb, uMeshFog.z > 0.5 ? (mp.z * uMeshFog.x + mp.w * uMeshFog.y) / 255.0 : uMeshFogColor.a * mp.w);");   /* fog * w */
+        } else {
+            append_line(vs_buf, &vs_len, "    vFog = aFog;");
+        }
     }
     if (cc_features.opt_grayscale) {
         append_line(vs_buf, &vs_len, "    vGrayscaleColor = aGrayscaleColor;");
     }
     for (int i = 0; i < cc_features.num_inputs; i++) {
-        vs_len += sprintf(vs_buf + vs_len, "    vInput%d = aInput%d;\n", i + 1, i + 1);
+        if (mesh && i < GFX_MESH_MAX_INPUTS) {
+            if (cc_features.opt_alpha) {
+                vs_len += sprintf(vs_buf + vs_len,
+                                  "    vInput%d = mix(mix(aInput%d, vec4(lodv), uMeshLod[%d]), uMeshEnv[%d], uMeshEnvMask[%d]);\n",
+                                  i + 1, i + 1, i, i, i);
+            } else {
+                vs_len += sprintf(vs_buf + vs_len,
+                                  "    vInput%d = mix(mix(aInput%d, vec3(lodv), uMeshLod[%d].xyz), uMeshEnv[%d].xyz, uMeshEnvMask[%d].xyz);\n",
+                                  i + 1, i + 1, i, i, i);
+            }
+        } else {
+            vs_len += sprintf(vs_buf + vs_len, "    vInput%d = aInput%d;\n", i + 1, i + 1);
+        }
     }
 
-    append_line(vs_buf, &vs_len, "    gl_Position = aVtxPos;");
+    append_line(vs_buf, &vs_len, mesh ? "    gl_Position = mp;" : "    gl_Position = aVtxPos;");
     if (!GLAD_GL_ARB_depth_clamp) {
         // HACK: workaround for no GL_DEPTH_CLAMP
         append_line(vs_buf, &vs_len, "    gl_Position.z *= 0.3f;");
@@ -682,7 +727,9 @@ static void gfx_opengl_gen_shader_src(struct CCFeatures& cc_features, char* vs_b
     *num_floats_out = num_floats;
 }
 
-static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shader_id0, uint32_t shader_id1) {
+/* Compile + link the program of a combiner into prg (classic, or the issue #10
+ * GPU-transform twin); leaves it bound. */
+static void gfx_opengl_compile_program(uint64_t shader_id0, uint32_t shader_id1, bool mesh, struct ShaderProgram* prg) {
     struct CCFeatures cc_features = { 0 };
     gfx_cc_get_features(shader_id0, shader_id1, &cc_features);
 
@@ -692,7 +739,7 @@ static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shad
     size_t vs_len = 0;
     size_t fs_len = 0;
     size_t num_floats = 4;
-    gfx_opengl_gen_shader_src(cc_features, vs_buf, &vs_len, fs_buf, &fs_len, &num_floats);
+    gfx_opengl_gen_shader_src(cc_features, vs_buf, &vs_len, fs_buf, &fs_len, &num_floats, mesh);
 
     const GLchar* sources[2] = { vs_buf, fs_buf };
     const GLint lengths[2] = { (GLint)vs_len, (GLint)fs_len };
@@ -736,7 +783,6 @@ static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shad
 
     size_t cnt = 0;
 
-    struct ShaderProgram* prg = &shader_program_pool[make_pair(shader_id0, shader_id1)];
     prg->attrib_locations[cnt] = glGetAttribLocation(shader_program, "aVtxPos");
     prg->attrib_sizes[cnt] = 4;
     ++cnt;
@@ -802,10 +848,22 @@ static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shad
     prg->noise_scale_location = glGetUniformLocation(shader_program, "noise_scale");
     prg->three_point_filter_locations[0] = glGetUniformLocation(shader_program, "three_point_filter0");
     prg->three_point_filter_locations[1] = glGetUniformLocation(shader_program, "three_point_filter1");
+    prg->mesh_mtx_location = mesh ? glGetUniformLocation(shader_program, "uMeshMtx") : -1;
+    prg->mesh_fog_location = mesh ? glGetUniformLocation(shader_program, "uMeshFog") : -1;
+    prg->mesh_fog_color_location = mesh ? glGetUniformLocation(shader_program, "uMeshFogColor") : -1;
+    prg->mesh_lod_location = mesh ? glGetUniformLocation(shader_program, "uMeshLod") : -1;
+    prg->mesh_env_location = mesh ? glGetUniformLocation(shader_program, "uMeshEnv") : -1;
+    prg->mesh_env_mask_location = mesh ? glGetUniformLocation(shader_program, "uMeshEnvMask") : -1;
+    prg->ring_vao = 0;
+}
 
-
+static struct ShaderProgram* gfx_opengl_create_and_load_new_shader(uint64_t shader_id0, uint32_t shader_id1) {
+    struct ShaderProgram* prg = &shader_program_pool[make_pair(shader_id0, shader_id1)];
+    gfx_opengl_compile_program(shader_id0, shader_id1, false, prg);
+    prg->twin = nullptr;
+    prg->id0 = shader_id0;
+    prg->id1 = shader_id1;
     gfx_opengl_load_shader(prg);
-
     return prg;
 }
 
@@ -820,12 +878,19 @@ static void gfx_opengl_shader_get_info(struct ShaderProgram* prg, uint8_t* num_i
     used_textures[1] = prg->used_textures[1];
 }
 
+static std::map<pair<uint64_t, uint32_t>, struct ShaderProgram> s_twin_pool;   /* issue #10 */
+
 static void gfx_opengl_clear_shaders(void) {
     glUseProgram(0);
     for (auto& pair : shader_program_pool) {
         glDeleteProgram(pair.second.opengl_program_id);
     }
     shader_program_pool.clear();
+    for (auto& pair : s_twin_pool) {
+        glDeleteProgram(pair.second.opengl_program_id);
+    }
+    s_twin_pool.clear();
+    s_cur_classic = nullptr;
 }
 
 struct SamplerKey {
@@ -1269,6 +1334,102 @@ static void gfx_opengl_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_
     if (perf) s_gld_draw_ns += gl_now_ns() - t1;
 }
 
+/* ---- issue #10 step B: static meshes drawn with the GPU-transform twin ---- */
+static GLuint s_mesh_vao = 0;
+static uint32_t s_mesh_attr_mask = 0;   /* attribute arrays enabled on s_mesh_vao */
+static uint64_t s_mesh_draws = 0, s_mesh_draw_ns = 0, s_mesh_verts = 0;
+
+static uint32_t gfx_opengl_mesh_create(const float* data, size_t nfloats) {
+    GLuint b = 0;
+    glGenBuffers(1, &b);
+    glBindBuffer(GL_ARRAY_BUFFER, b);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(nfloats * sizeof(float)), data, GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, opengl_vbo);
+    return b;
+}
+
+static void gfx_opengl_mesh_delete(uint32_t name) {
+    GLuint b = name;
+    glDeleteBuffers(1, &b);
+}
+
+static struct ShaderProgram* gfx_opengl_twin_of(struct ShaderProgram* cls) {
+    if (cls->twin == nullptr) {
+        struct ShaderProgram* tw = &s_twin_pool[make_pair(cls->id0, cls->id1)];
+        gfx_opengl_compile_program(cls->id0, cls->id1, true, tw);
+        tw->twin = nullptr;
+        tw->id0 = cls->id0;
+        tw->id1 = cls->id1;
+        cls->twin = tw;
+    }
+    return cls->twin;
+}
+
+static void gfx_opengl_mesh_draw(uint32_t name, const struct GfxMeshDraw* d) {
+    struct ShaderProgram* cls = s_cur_classic;
+    if (cls == nullptr || d->nverts == 0 || d->nmtx == 0) {
+        return;
+    }
+    const uint64_t t0 = gl_perf_on() ? gl_now_ns() : 0;
+    struct ShaderProgram* tw = gfx_opengl_twin_of(cls);
+    if (s_mesh_vao == 0) {
+        glGenVertexArrays(1, &s_mesh_vao);
+    }
+    glUseProgram(tw->opengl_program_id);
+    gfx_opengl_set_uniform_values(tw, d->frame_count, d->noise_scale, d->tpf0, d->tpf1);
+    glUniformMatrix4fv(tw->mesh_mtx_location, (GLsizei)d->nmtx, GL_FALSE, &d->mtx[0][0]);
+    glUniform4f(tw->mesh_fog_location, d->fog_mul, d->fog_off, d->fog_from_z ? 1.0f : 0.0f, 0.0f);
+    glUniform4fv(tw->mesh_fog_color_location, 1, d->fog_color);
+    if (tw->mesh_lod_location >= 0) {
+        glUniform4fv(tw->mesh_lod_location, GFX_MESH_MAX_INPUTS, &d->lod_mask[0][0]);
+    }
+    if (tw->mesh_env_location >= 0) {
+        glUniform4fv(tw->mesh_env_location, GFX_MESH_MAX_INPUTS, &d->env_in[0][0]);
+    }
+    if (tw->mesh_env_mask_location >= 0) {
+        glUniform4fv(tw->mesh_env_mask_location, GFX_MESH_MAX_INPUTS, &d->env_mask[0][0]);
+    }
+    glBindVertexArray(s_mesh_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, name);
+    for (int i = 0; i < 16; i++) {
+        if (s_mesh_attr_mask & (1u << i)) glDisableVertexAttribArray((GLuint)i);
+    }
+    s_mesh_attr_mask = 0;
+    {
+        const size_t stride = tw->num_floats * sizeof(float);
+        size_t pos = 0;
+        for (int i = 0; i < tw->num_attribs; i++) {
+            const GLint loc = tw->attrib_locations[i];
+            if (loc >= 0 && loc < 16) {
+                glEnableVertexAttribArray((GLuint)loc);
+                glVertexAttribPointer((GLuint)loc, tw->attrib_sizes[i], GL_FLOAT, GL_FALSE, (GLsizei)stride,
+                                      (void*)(uintptr_t)(d->byte_offset + pos * sizeof(float)));
+                s_mesh_attr_mask |= 1u << loc;
+            }
+            pos += tw->attrib_sizes[i];
+        }
+    }
+    if (d->cull != 0) {
+        glEnable(GL_CULL_FACE);
+        /* N64 back faces have a negative NDC cross (y up): counter-clockwise is front */
+        glFrontFace(d->invert_y ? GL_CW : GL_CCW);
+        glCullFace(d->cull == 1 ? GL_BACK : GL_FRONT);
+    }
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)d->nverts);
+    if (d->cull != 0) {
+        glDisable(GL_CULL_FACE);
+    }
+    /* back to the classic path's bindings */
+    glBindVertexArray(s_stream_active ? gfx_opengl_ring_vao_for(cls) : opengl_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, opengl_vbo);
+    glUseProgram(cls->opengl_program_id);
+    if (t0) {
+        s_mesh_draws++;
+        s_mesh_verts += d->nverts;
+        s_mesh_draw_ns += gl_now_ns() - t0;
+    }
+}
+
 /* D965 probe lines, called by gfx_pc every 300 frames with the frame count. */
 extern "C" void gfx_opengl_perf_report(double frames) {
     if (!gl_perf_on() || frames <= 0) {
@@ -1286,6 +1447,13 @@ extern "C" void gfx_opengl_perf_report(double frames) {
                 (unsigned long long)s_stream_advances, (unsigned long long)s_stream_fallbacks,
                 (unsigned)(s_stream_peak >> 10), (unsigned)(s_stream_sec_size >> 10));
     }
+    if (s_mesh_draws) {
+        fprintf(stderr, "PERFSTAT glmesh: draws=%.1f/f verts=%.0f/f time=%.2fms/f\n", s_mesh_draws / frames,
+                s_mesh_verts / frames, s_mesh_draw_ns / 1.0e6 / frames);
+        sysLogPrintf(LOG_NOTE, "PERFSTAT glmesh: draws=%.1f/f verts=%.0f/f time=%.2fms/f", s_mesh_draws / frames,
+                     s_mesh_verts / frames, s_mesh_draw_ns / 1.0e6 / frames);
+    }
+    s_mesh_draws = s_mesh_verts = s_mesh_draw_ns = 0;
     s_gld_map_ns = s_gld_copy_ns = s_gld_unmap_ns = s_gld_draw_ns = s_gld_attrib_ns = 0;
     s_gld_draws = s_gld_shader_changes = s_gld_bytes = 0;
     s_stream_waits = s_stream_wait_ns = s_stream_advances = s_stream_fallbacks = 0;
@@ -1631,7 +1799,9 @@ static void gfx_opengl_init(void) {
     {
         const char *sp = getenv("GE_SHADEPERSP"), *fp = getenv("GE_FOGPIXEL");
         gfx_rdp_affine = (!gl_es && gl_glsl_version >= 130 && !(sp && sp[0] == '1')) ? 1 : 0;
-        gfx_fog_vertex = (fp && fp[0] == '1') ? 0 : 1;   /* D543: per-vertex RSP fog by default */
+        /* D543: per-vertex RSP fog unless Video.FogPixel (Switch default);
+         * GE_FOGPIXEL=0/1 overrides the setting. */
+        gfx_fog_vertex = (fp && fp[0]) ? (fp[0] != '1') : !portFogPixel;
     }
     sysLogPrintf(LOG_NOTE, "GL: shade %s, fog %s", gfx_rdp_affine ? "affine (RDP)" : "perspective",
                  gfx_fog_vertex ? "per-vertex" : "per-pixel");
@@ -2541,5 +2711,9 @@ struct GfxRenderingAPI gfx_opengl_api = {
     gfx_opengl_set_anisotropy_level,
     gfx_opengl_get_max_anisotropy_level,
     gfx_opengl_stream_begin,
-    gfx_opengl_load_shader_with
+    gfx_opengl_load_shader_with,
+    gfx_opengl_mesh_create,
+    gfx_opengl_mesh_delete,
+    gfx_opengl_mesh_draw,
+    nullptr,   /* mesh_supported: every program */
 };

@@ -14,6 +14,7 @@ layout(location = 4) in float vTexClampT0;
 layout(location = 5) in float vTexClampS1;
 layout(location = 6) in float vTexClampT1;
 layout(location = 7) noperspective in vec4 vFog;
+layout(location = 16) in float vFogW;
 layout(location = 8) in vec4 vGrayscaleColor;
 layout(location = 9) noperspective in vec4 vInput1;
 layout(location = 10) noperspective in vec4 vInput2;
@@ -33,6 +34,7 @@ layout(std140, binding = 0) uniform Draw {
     int three_point_filter1;
     int flip_v0;
     int flip_v1;
+    int fog_pixel;
 };
 
 layout(std140, binding = 1) uniform Comb {
@@ -187,7 +189,7 @@ void main() {
     texel = WRAP(texel, -0.51, 1.51);
     texel = clamp(texel, 0.0, 1.0);
     if ((flags & CF_FOG) != 0u) {
-        float fogA = clamp(vFog.a, 0.0, 1.0);
+        float fogA = fog_pixel != 0 ? clamp(vFogW * gl_FragCoord.w, 0.0, 1.0) : clamp(vFog.a, 0.0, 1.0);
         texel.rgb = mix(texel.rgb, vFog.rgb, fogA);
     }
     if (A && (flags & CF_TEXEDGE) != 0u) {

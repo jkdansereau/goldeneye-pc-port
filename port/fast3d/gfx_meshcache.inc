@@ -88,7 +88,9 @@ struct McSeg {
     float clamp_s[2], clamp_t[2];     /* (tex_width2 - 0.5f) / tex_width ... */
     bool persp, linear_filt, tl_lod;
     /* colours are not here: read live from rdp at emission (MCO_COLOR) */
+    uint8_t colour_use;   /* step B: which live colours the emission reads (MC_CU_*) */
 };
+enum { MC_CU_PRIM = 1, MC_CU_ENV = 2, MC_CU_FOG = 4, MC_CU_GRAY = 8, MC_CU_LODF = 16 };
 
 /* Fingerprint of the inherited state (fields read before written). */
 enum {
@@ -156,6 +158,11 @@ struct McEntry {
     /* replay cache of texture nodes */
     std::vector<TextureCacheNode*> nodes;   /* 2 per segment */
     uint32_t nodes_gen;
+    /* step B (GE_MESHGPU): static GPU meshes of this program, one per vertex
+     * source (per-instance vertex arrays differ) */
+    std::vector<struct McGpu*> gpu;
+    const char* gpu_bad;          /* non-null: never drawn on the GPU (reason) */
+    uint32_t hits;                /* CPU replays so far (a bake waits for a few) */
     uint32_t last_used;
 };
 
@@ -166,6 +173,34 @@ struct McSlot {
     uint16_t stales;
     uint32_t last_used;
 };
+
+/* ---- step B: GPU meshes (GE_MESHGPU) ---- */
+struct McRun {                /* consecutive triangles drawn with one segment's state */
+    uint16_t seg;
+    uint8_t cull;             /* 0 none, 1 back, 2 front, 3 both (not drawn) */
+    bool fog_from_z;
+    uint32_t byte_offset;     /* in the mesh buffer */
+    uint32_t nverts;
+    float lod_mask[GFX_MESH_MAX_INPUTS][4];
+    /* per input, which components read the env colour live at the list's entry
+     * (MC_ENV_*); 0 once the list sets its own env colour (then it is baked) */
+    uint8_t env_sel[GFX_MESH_MAX_INPUTS];
+};
+enum { MC_ENV_RGB = 1, MC_ENV_AAA = 2, MC_ENV_A = 4 };
+
+struct McGpu {
+    uint64_t key;             /* vertex source pointers + bytes */
+    uint64_t ptrkey;          /* pointers only (PERFSTAT: tells moved from rewritten vertices) */
+    uint64_t groups[8];       /* signature per group (PERFSTAT: which state changed) */
+    uint64_t colour_sig;      /* colours baked into the vertices */
+    uint32_t mesh_id;         /* rendering API mesh */
+    uint8_t nslots;           /* matrix slots */
+    std::vector<McRun> runs;
+    std::vector<float> box;   /* per slot: min xyz, max xyz (model space); empty slot: min > max */
+    uint32_t last_used;
+};
+
+static std::vector<uint32_t> s_mc_gpu_dead;   /* mesh ids to delete at the next frame start */
 
 /* capture state */
 struct McCap {
@@ -203,8 +238,16 @@ static const char* const s_mc_reason_name[MCR_COUNT] = {
 static uint64_t s_mc_cnt_try = 0, s_mc_cnt_hit = 0, s_mc_cnt_hit_tris = 0, s_mc_cnt_cap = 0, s_mc_cnt_cap_ok = 0;
 static uint64_t s_mc_cnt_reason[MCR_COUNT];
 static uint64_t s_mc_ns_replay = 0, s_mc_ns_verify = 0, s_mc_ns_cap = 0;
+/* PERFSTAT replay split, measured on one replay in 8 (clock reads per step) */
+enum { MCT_MTX, MCT_VTX, MCT_OTHER, MCT_REJECT, MCT_SEG, MCT_CLIP, MCT_EMIT, MCT_EXIT, MCT_COUNT };
+static const char* const s_mc_t_name[MCT_COUNT] = { "mtx", "vtx", "other-ops", "reject+cull", "seg-apply", "nearclip", "emit", "exit" };
+static uint64_t s_mc_t_ns[MCT_COUNT];
+static uint64_t s_mc_t_tris = 0, s_mc_t_rej = 0, s_mc_t_emitted = 0, s_mc_t_replays = 0, s_mc_split_n = 0;
 static std::map<std::string, uint64_t> s_mc_refusals;   /* reason -> count, per report */
 static std::map<std::string, uint64_t> s_mc_stale_ops;  /* "op 0xNN" -> count */
+static uint64_t s_mc_g_replays = 0, s_mc_g_runs = 0, s_mc_g_tris = 0, s_mc_g_bakes = 0, s_mc_g_bake_bytes = 0;
+static uint64_t s_mc_g_ns = 0;
+static std::map<std::string, uint64_t> s_mc_g_why;     /* why a hit was not drawn on the GPU */
 static int s_mc_log_budget = 40;
 
 static int mc_on(void) {
@@ -504,6 +547,21 @@ static void mc_fill_seg(McSeg& s, const TriState& ts) {
     s.linear_filt = (rdp.other_mode_h & (3U << G_MDSFT_TEXTFILT)) != G_TF_POINT;
     s.tl_lod = (rdp.other_mode_h & G_TL_LOD) != 0;
     s.s_lod = rdp.tex_lod;
+    {
+        uint8_t cu = 0;
+        for (int j = 0; j < ts.num_inputs; j++) {
+            for (int k = 0; k < 1 + (ts.use_alpha ? 1 : 0); k++) {
+                switch (ts.comb->shader_input_mapping[k][j]) {
+                    case G_CCMUX_PRIMITIVE: case G_CCMUX_PRIMITIVE_ALPHA: cu |= MC_CU_PRIM; break;
+                    case G_CCMUX_ENVIRONMENT: case G_CCMUX_ENV_ALPHA: cu |= MC_CU_ENV; break;
+                    case G_CCMUX_PRIM_LOD_FRAC: case G_ACMUX_PRIM_LOD_FRAC: cu |= MC_CU_LODF; break;
+                }
+            }
+        }
+        if (ts.use_fog) cu |= MC_CU_FOG;
+        if (ts.use_grayscale) cu |= MC_CU_GRAY;
+        s.colour_use = cu;
+    }
     for (int i = 0; i < 2; i++) {
         s.unit_on[i] = ts.comb->used_textures[i];
         const TextureCacheNode* n = rendering_state.textures[i];
@@ -636,6 +694,124 @@ static void mc_cap_tri(uint8_t i1, uint8_t i2, uint8_t i3) {
 
 /* ----------------------------------------------------------------- replay */
 
+/* One vertex of gfx_tri_emit with the segment constants; returns the end of
+ * what it wrote (the program stride). */
+static inline float* mc_emit_vertex(const McSeg& s, const struct LoadedVertex* vi, float* out) {
+    const TriState& ts = s.ts;
+    const float* L = s_mc_lut255;
+    float z = vi->z, w = vi->w;
+    if (ts.clip_parameters.z_is_from_0_to_1) {
+        z = (z + w) / 2.0f;
+    }
+    *out++ = vi->x;
+    *out++ = ts.clip_parameters.invert_y ? -vi->y : vi->y;
+    *out++ = z;
+    *out++ = w;
+    for (int t = 0; t < 2; t++) {
+        if (!ts.used_textures[t]) continue;
+        float u = vi->u / 32.0f;
+        float v = vi->v / 32.0f;
+        u *= s.sh_mul_s[t];
+        v *= s.sh_mul_t[t];
+        u -= s.uls4[t];
+        v -= s.ult4[t];
+        if (ts.wrap_s[t]) {
+            u = fmodf(u, ts.wrap_tw[t]);
+            if (u < 0.0f) u += ts.wrap_tw[t];
+            u += ts.wrap_uls[t];
+            if (ts.tex_width[t] > 0 && u > (float)ts.tex_width[t]) u = (float)ts.tex_width[t] - 0.5f;
+        }
+        if (ts.wrap_t[t]) {
+            v = fmodf(v, ts.wrap_th[t]);
+            if (v < 0.0f) v += ts.wrap_th[t];
+            v += ts.wrap_ult[t];
+            if (ts.tex_height[t] > 0 && v > (float)ts.tex_height[t]) v = (float)ts.tex_height[t] - 0.5f;
+        }
+        if (!s.persp) {
+            u *= 0.5f;
+            v *= 0.5f;
+        }
+        if (s.linear_filt) {
+            u += 0.5f;
+            v += 0.5f;
+        }
+        *out++ = s.inv_w[t] != 0.0f ? u * s.inv_w[t] : u / ts.tex_width[t];
+        *out++ = s.inv_h[t] != 0.0f ? v * s.inv_h[t] : v / ts.tex_height[t];
+        if (ts.tm & (1 << 2 * t)) *out++ = s.clamp_s[t];
+        if (ts.tm & (1 << (2 * t + 1))) *out++ = s.clamp_t[t];
+    }
+    if (ts.use_fog) {
+        *out++ = L[rdp.fog_color.r];
+        *out++ = L[rdp.fog_color.g];
+        *out++ = L[rdp.fog_color.b];
+        *out++ = gfx_fog_vertex ? L[(uint8_t)vi->fog_n] : vi->fog_n / 255.0f;
+    }
+    if (ts.use_grayscale) {
+        *out++ = L[rdp.grayscale_color.r];
+        *out++ = L[rdp.grayscale_color.g];
+        *out++ = L[rdp.grayscale_color.b];
+        *out++ = L[rdp.grayscale_color.a];
+    }
+    for (int j = 0; j < ts.num_inputs; j++) {
+        const struct RGBA* color = 0;
+        struct RGBA tmp = { 0 };
+        for (int k = 0; k < 1 + (ts.use_alpha ? 1 : 0); k++) {
+            switch (ts.comb->shader_input_mapping[k][j]) {
+                case G_CCMUX_PRIMITIVE:
+                    color = &rdp.prim_color;
+                    break;
+                case G_CCMUX_SHADE:
+                    color = &vi->color;
+                    break;
+                case G_CCMUX_SHADE_ALPHA:
+                    tmp.r = tmp.g = tmp.b = vi->color.a;
+                    color = &tmp;
+                    break;
+                case G_CCMUX_ENVIRONMENT:
+                    color = &rdp.env_color;
+                    break;
+                case G_CCMUX_PRIMITIVE_ALPHA:
+                    tmp.r = tmp.g = tmp.b = rdp.prim_color.a;
+                    color = &tmp;
+                    break;
+                case G_CCMUX_ENV_ALPHA:
+                    tmp.r = tmp.g = tmp.b = rdp.env_color.a;
+                    color = &tmp;
+                    break;
+                case G_CCMUX_PRIM_LOD_FRAC:
+                    tmp.r = tmp.g = tmp.b = rdp.prim_lod_fraction;
+                    color = &tmp;
+                    break;
+                case G_CCMUX_LOD_FRACTION:
+                    if (s.tl_lod) {
+                        const float distance_frac = std::max(0.f, std::min(w / 1024.f, 1.f));
+                        tmp.r = tmp.g = tmp.b = tmp.a = (0.7f + distance_frac * 0.3f) * 255.f;
+                    } else {
+                        tmp.r = tmp.g = tmp.b = tmp.a = 255;
+                    }
+                    color = &tmp;
+                    break;
+                case G_ACMUX_PRIM_LOD_FRAC:
+                    tmp.a = rdp.prim_lod_fraction;
+                    color = &tmp;
+                    break;
+                default:
+                    memset(&tmp, 0, sizeof(tmp));
+                    color = &tmp;
+                    break;
+            }
+            if (k == 0) {
+                *out++ = L[color->r];
+                *out++ = L[color->g];
+                *out++ = L[color->b];
+            } else {
+                *out++ = L[color->a];
+            }
+        }
+    }
+    return out;
+}
+
 /* gfx_tri_emit with the segment's constants instead of the live rdp state
  * (non-rect triangles only). Same arithmetic, same order. */
 static void mc_emit(const McSeg& s, struct LoadedVertex* const* emit_v, int n_out_tris) {
@@ -648,120 +824,9 @@ static void mc_emit(const McSeg& s, struct LoadedVertex* const* emit_v, int n_ou
         float* ring = n_emit_verts > 0 ? gfx_rapi->stream_begin(MAX_BUFFERED * 3 * 32) : nullptr;
         buf_vbo_w = ring != nullptr ? ring : buf_vbo;
     }
-    const float* L = s_mc_lut255;
     float* out = buf_vbo_w + buf_vbo_len;
     for (int i = 0; i < n_emit_verts; i++) {
-        struct LoadedVertex* vi = emit_v[i];
-        float z = vi->z, w = vi->w;
-        if (ts.clip_parameters.z_is_from_0_to_1) {
-            z = (z + w) / 2.0f;
-        }
-        *out++ = vi->x;
-        *out++ = ts.clip_parameters.invert_y ? -vi->y : vi->y;
-        *out++ = z;
-        *out++ = w;
-        for (int t = 0; t < 2; t++) {
-            if (!ts.used_textures[t]) continue;
-            float u = vi->u / 32.0f;
-            float v = vi->v / 32.0f;
-            u *= s.sh_mul_s[t];
-            v *= s.sh_mul_t[t];
-            u -= s.uls4[t];
-            v -= s.ult4[t];
-            if (ts.wrap_s[t]) {
-                u = fmodf(u, ts.wrap_tw[t]);
-                if (u < 0.0f) u += ts.wrap_tw[t];
-                u += ts.wrap_uls[t];
-                if (ts.tex_width[t] > 0 && u > (float)ts.tex_width[t]) u = (float)ts.tex_width[t] - 0.5f;
-            }
-            if (ts.wrap_t[t]) {
-                v = fmodf(v, ts.wrap_th[t]);
-                if (v < 0.0f) v += ts.wrap_th[t];
-                v += ts.wrap_ult[t];
-                if (ts.tex_height[t] > 0 && v > (float)ts.tex_height[t]) v = (float)ts.tex_height[t] - 0.5f;
-            }
-            if (!s.persp) {
-                u *= 0.5f;
-                v *= 0.5f;
-            }
-            if (s.linear_filt) {
-                u += 0.5f;
-                v += 0.5f;
-            }
-            *out++ = s.inv_w[t] != 0.0f ? u * s.inv_w[t] : u / ts.tex_width[t];
-            *out++ = s.inv_h[t] != 0.0f ? v * s.inv_h[t] : v / ts.tex_height[t];
-            if (ts.tm & (1 << 2 * t)) *out++ = s.clamp_s[t];
-            if (ts.tm & (1 << (2 * t + 1))) *out++ = s.clamp_t[t];
-        }
-        if (ts.use_fog) {
-            *out++ = L[rdp.fog_color.r];
-            *out++ = L[rdp.fog_color.g];
-            *out++ = L[rdp.fog_color.b];
-            *out++ = gfx_fog_vertex ? L[(uint8_t)vi->fog_n] : vi->fog_n / 255.0f;
-        }
-        if (ts.use_grayscale) {
-            *out++ = L[rdp.grayscale_color.r];
-            *out++ = L[rdp.grayscale_color.g];
-            *out++ = L[rdp.grayscale_color.b];
-            *out++ = L[rdp.grayscale_color.a];
-        }
-        for (int j = 0; j < ts.num_inputs; j++) {
-            const struct RGBA* color = 0;
-            struct RGBA tmp = { 0 };
-            for (int k = 0; k < 1 + (ts.use_alpha ? 1 : 0); k++) {
-                switch (ts.comb->shader_input_mapping[k][j]) {
-                    case G_CCMUX_PRIMITIVE:
-                        color = &rdp.prim_color;
-                        break;
-                    case G_CCMUX_SHADE:
-                        color = &vi->color;
-                        break;
-                    case G_CCMUX_SHADE_ALPHA:
-                        tmp.r = tmp.g = tmp.b = vi->color.a;
-                        color = &tmp;
-                        break;
-                    case G_CCMUX_ENVIRONMENT:
-                        color = &rdp.env_color;
-                        break;
-                    case G_CCMUX_PRIMITIVE_ALPHA:
-                        tmp.r = tmp.g = tmp.b = rdp.prim_color.a;
-                        color = &tmp;
-                        break;
-                    case G_CCMUX_ENV_ALPHA:
-                        tmp.r = tmp.g = tmp.b = rdp.env_color.a;
-                        color = &tmp;
-                        break;
-                    case G_CCMUX_PRIM_LOD_FRAC:
-                        tmp.r = tmp.g = tmp.b = rdp.prim_lod_fraction;
-                        color = &tmp;
-                        break;
-                    case G_CCMUX_LOD_FRACTION:
-                        if (s.tl_lod) {
-                            const float distance_frac = std::max(0.f, std::min(w / 1024.f, 1.f));
-                            tmp.r = tmp.g = tmp.b = tmp.a = (0.7f + distance_frac * 0.3f) * 255.f;
-                        } else {
-                            tmp.r = tmp.g = tmp.b = tmp.a = 255;
-                        }
-                        color = &tmp;
-                        break;
-                    case G_ACMUX_PRIM_LOD_FRAC:
-                        tmp.a = rdp.prim_lod_fraction;
-                        color = &tmp;
-                        break;
-                    default:
-                        memset(&tmp, 0, sizeof(tmp));
-                        color = &tmp;
-                        break;
-                }
-                if (k == 0) {
-                    *out++ = L[color->r];
-                    *out++ = L[color->g];
-                    *out++ = L[color->b];
-                } else {
-                    *out++ = L[color->a];
-                }
-            }
-        }
+        out = mc_emit_vertex(s, emit_v[i], out);
     }
     buf_vbo_len = (size_t)(out - buf_vbo_w);
     buf_vbo_num_tris += n_out_tris;
@@ -928,18 +993,382 @@ static void mc_apply_exit(const McEntry* e) {
     }
 }
 
-static void mc_replay(McEntry* e) {
-    int pending = -1, applied = -1;
+/* ------------------------------------------------- step B: GPU meshes (GE_MESHGPU) */
+
+static int mc_gpu_on(void) {
+    static int on = -1;
+    if (on < 0) {
+        /* default: on where the backend vets mesh programs (deko3d); GL keeps
+         * it opt-in (D972: a mesh draw costs ~25 us on the Switch GL driver) */
+        const char* e = getenv("GE_MESHGPU");
+        on = (e && e[0]) ? (e[0] != '0') : (gfx_rapi->mesh_supported != nullptr);
+        if (on) sysLogPrintf(LOG_NOTE, "GE_MESHGPU: cached lists drawn with the vertex transform on the GPU (issue #10, step B)");
+    }
+    return on;   /* both fog forms: the twins also write fog * w (Video.FogPixel) */
+}
+
+/* GE_MESHGPU_FULL (default on, =0 to disable): skip the near/far-plane box
+ * test and let the GPU clip those meshes too (not the N64's CPU clip/reject
+ * rules). */
+static int mc_gpu_full(void) {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = getenv("GE_MESHGPU_FULL");
+        on = (e && e[0]) ? (e[0] != '0') : 1;
+        if (on) sysLogPrintf(LOG_NOTE, "GE_MESHGPU_FULL: near/far-plane meshes also drawn on the GPU (GE_MESHGPU_FULL=0: CPU clip as on the N64)");
+    }
+    return on;
+}
+
+static void mc_gpu_why(const char* why) {
+    if (gfx_perfstat_on()) s_mc_g_why[why]++;
+}
+
+struct McBakeSrc {
+    const Vtx* v;
+    uint8_t slot;
+    bool fogz;
+};
+
+struct McBake {
+    McBakeSrc src[MAX_VERTICES];
+    int slot;
+    const char* bad;
+    bool env_in_list;   /* a G_SETENVCOLOR of the list has run: env is baked from here on */
+    bool new_run;       /* start a run at the next triangle */
+    std::vector<float> data;
+    std::vector<McRun> runs;
+    float box[GFX_MESH_MAX_MTX][6];
+};
+
+static inline uint64_t mc_mix(uint64_t h, uint64_t v) {
+    return (h ^ v) * 1099511628211ULL;
+}
+
+static inline uint64_t mc_rgba(const struct RGBA& c) {
+    return (uint64_t)c.r | ((uint64_t)c.g << 8) | ((uint64_t)c.b << 16) | ((uint64_t)c.a << 24);
+}
+
+/* Key of the vertex sources (pointers + bytes) and signature of every colour
+ * state the list goes through, without executing anything. */
+enum { MCS_VTX, MCS_SEG, MCS_PRIM, MCS_ENV, MCS_FOG, MCS_GRAY, MCS_LODF, MCS_N };
+static const char* const s_mcs_name[MCS_N] = { "vtx-state", "segments", "prim", "env", "fog", "gray", "primlod" };
+
+static void mc_gpu_prepass(const McEntry* e, uint64_t* key, uint64_t* sig, uint64_t* ptrkey = nullptr, uint64_t* groups = nullptr) {
+    uint64_t k = 1469598103934665603ULL, pk = k;
+    uint64_t sg[MCS_N];
+    for (int i = 0; i < MCS_N; i++) sg[i] = 1469598103934665603ULL;
+    struct RGBA env = rdp.env_color, prim = rdp.prim_color, gray = rdp.grayscale_color;
+    uint8_t lodf = rdp.prim_lod_fraction;
+    uint64_t g = 1469598103934665603ULL;
+    /* the vertex-pipeline state a G_VTX bakes in (lighting / fog / texgen
+     * bits, texture scale), as each G_VTX of the list sees it */
+    uint32_t sgeom = rsp.geometry_mode;
+    uint32_t sscale = ((uint32_t)rsp.texture_scaling_factor.s << 16) | rsp.texture_scaling_factor.t;
+    uint64_t lastv = ~0ULL;
+    /* only the colours a triangle actually reads (its segment's combiner), in order */
+    bool dirty = true;
+    bool env_list = false;   /* env colour set by the list itself (baked); before that it is a draw uniform */
+    int seg = -1;
+    for (const McOp& op : e->ops) {
+        if (op.k == MCO_GEOM) {
+            sgeom = (sgeom & ~op.x) | (uint32_t)op.p;
+        } else if (op.k == MCO_TEXTURE) {
+            sscale = (uint32_t)op.p;
+        } else if (op.k == MCO_VTX) {
+            const uint64_t vs = ((uint64_t)(sgeom & (G_LIGHTING | G_FOG | G_TEXTURE_GEN)) << 32) | sscale;
+            if (vs != lastv) {
+                sg[MCS_VTX] = mc_mix(sg[MCS_VTX], vs);
+                lastv = vs;
+            }
+            const uint8_t* p = (const uint8_t*)seg_addr(op.p);
+            pk = mc_mix(pk, (uint64_t)(uintptr_t)p);
+            if (!fast3d_ptr_ok(p)) continue;
+            const size_t nw = (size_t)op.a * sizeof(Vtx) / 8;
+            for (size_t i = 0; i < nw; i++) {
+                uint64_t w;
+                memcpy(&w, p + i * 8, 8);
+                k = mc_mix(k, w);
+            }
+        } else if (op.k == MCO_SEG) {
+            if ((int)op.x != seg) dirty = true;
+            seg = (int)op.x;
+        } else if (op.k == MCO_TRI) {
+            if (dirty && seg >= 0) {
+                const uint8_t cu = e->segs[seg].colour_use;
+                sg[MCS_SEG] = mc_mix(sg[MCS_SEG], (uint64_t)seg);
+                if (cu & MC_CU_PRIM) sg[MCS_PRIM] = mc_mix(sg[MCS_PRIM], mc_rgba(prim));
+                /* the entry env colour is a draw uniform (GE_MESHGPU): objects
+                 * set it per instance (fades, tints) before calling the list */
+                if ((cu & MC_CU_ENV) && env_list) sg[MCS_ENV] = mc_mix(sg[MCS_ENV], mc_rgba(env));
+                /* Fog RGB is a draw uniform (GE_MESHGPU): it changes every
+                 * Jungle frame and must not invalidate the static mesh. */
+                if (cu & MC_CU_GRAY) sg[MCS_GRAY] = mc_mix(sg[MCS_GRAY], mc_rgba(gray));
+                if (cu & MC_CU_LODF) sg[MCS_LODF] = mc_mix(sg[MCS_LODF], lodf);
+                dirty = false;
+            }
+        } else if (op.k == MCO_COLOR) {
+            const Gfx* cmd = (const Gfx*)op.p;
+            switch (op.a) {
+                case G_SETENVCOLOR:
+                    env = { (uint8_t)C1(24, 8), (uint8_t)C1(16, 8), (uint8_t)C1(8, 8), (uint8_t)C1(0, 8) };
+                    env_list = true;
+                    break;
+                case G_SETPRIMCOLOR:
+                    lodf = (uint8_t)C0(0, 8);
+                    prim = { (uint8_t)C1(24, 8), (uint8_t)C1(16, 8), (uint8_t)C1(8, 8), (uint8_t)C1(0, 8) };
+                    break;
+                case G_SETFOGCOLOR:
+                    break;  /* live mesh draw uniform, intentionally not in its bake key */
+                case G_SETINTENSITY_EXT:
+                    gray = { (uint8_t)C1(24, 8), (uint8_t)C1(16, 8), (uint8_t)C1(8, 8), (uint8_t)C1(0, 8) };
+                    break;
+            }
+            dirty = true;
+        }
+    }
+    *key = mc_mix(k, pk);
+    for (int i = 0; i < MCS_N; i++) g = mc_mix(g, sg[i]);
+    *sig = g;
+    if (groups != nullptr) memcpy(groups, sg, sizeof(sg));
+    if (ptrkey != nullptr) *ptrkey = pk;
+}
+
+/* The float index range of the combiner inputs in a vertex of this segment. */
+static int mc_input_base(const McSeg& s) {
+    const TriState& ts = s.ts;
+    int base = 4;
+    for (int t = 0; t < 2; t++) {
+        if (!ts.used_textures[t]) continue;
+        base += 2;
+        if (ts.tm & (1 << 2 * t)) base++;
+        if (ts.tm & (1 << (2 * t + 1))) base++;
+    }
+    if (ts.use_fog) base += 4;
+    if (ts.use_grayscale) base += 4;
+    return base;
+}
+
+/* Bake one triangle (all three corners, before any reject) into the mesh. */
+static void mc_bake_tri(const McEntry* e, McBake* bk, int seg, uint8_t i1, uint8_t i2, uint8_t i3) {
+    if (seg < 0) { bk->bad = "no-segment"; return; }
+    const McSeg& sg = e->segs[seg];
+    const uint8_t idx[3] = { i1, i2, i3 };
+    for (int c = 0; c < 3; c++) {
+        if (idx[c] >= MAX_VERTICES || bk->src[idx[c]].v == nullptr) { bk->bad = "outside-vertex"; return; }
+    }
+    const bool fogz = sg.ts.use_fog && bk->src[i1].fogz;
+    if (sg.ts.use_fog && (bk->src[i2].fogz != bk->src[i1].fogz || bk->src[i3].fogz != bk->src[i1].fogz)) {
+        bk->bad = "fog-mode-mix";
+        return;
+    }
+    const uint32_t gm = rsp.geometry_mode & G_CULL_BOTH;
+    const uint8_t cull = gm == G_CULL_BOTH ? 3 : gm == G_CULL_BACK ? 1 : gm == G_CULL_FRONT ? 2 : 0;
+    if (bk->runs.empty() || bk->new_run || bk->runs.back().seg != seg || bk->runs.back().cull != cull ||
+        bk->runs.back().fog_from_z != fogz) {
+        /* deko3d: a combiner outside the shader pack is drawn by the uber-shader,
+         * which has no GPU-transform twin; its runs stay on the CPU path. */
+        if (gfx_rapi->mesh_supported != nullptr &&
+            (sg.ts.comb == nullptr ||
+             !gfx_rapi->mesh_supported(sg.ts.comb->shader_id0,
+                                       sg.ts.comb->shader_id1 | (sg.ts.tm * SHADER_OPT_TEXEL0_CLAMP_S)))) {
+            bk->bad = "no-mesh-shader";
+            return;
+        }
+        McRun r;
+        memset(&r, 0, sizeof(r));
+        r.seg = (uint16_t)seg;
+        r.cull = cull;
+        r.fog_from_z = fogz;
+        r.byte_offset = (uint32_t)(bk->data.size() * sizeof(float));
+        /* inputs that read the entry env colour (as mc_emit_vertex does):
+         * k = 0 writes rgb, k = 1 (use_alpha) writes a */
+        if (!bk->env_in_list && sg.ts.comb != nullptr) {
+            for (int j = 0; j < sg.ts.num_inputs && j < GFX_MESH_MAX_INPUTS; j++) {
+                const uint8_t m0 = sg.ts.comb->shader_input_mapping[0][j];
+                if (m0 == G_CCMUX_ENVIRONMENT) r.env_sel[j] |= MC_ENV_RGB;
+                else if (m0 == G_CCMUX_ENV_ALPHA) r.env_sel[j] |= MC_ENV_AAA;
+                if (sg.ts.use_alpha && sg.ts.comb->shader_input_mapping[1][j] == G_CCMUX_ENVIRONMENT)
+                    r.env_sel[j] |= MC_ENV_A;
+            }
+        }
+        bk->new_run = false;
+        bk->runs.push_back(r);
+    }
+    McRun& run = bk->runs.back();
+    const int base = mc_input_base(sg);
+    const int ncomp = sg.ts.use_alpha ? 4 : 3;
+    for (int c = 0; c < 3; c++) {
+        const McBakeSrc& src = bk->src[idx[c]];
+        float a[64], b[64], v[64];
+        struct LoadedVertex lv = rsp.loaded_vertices[idx[c]];
+        const int n = (int)(mc_emit_vertex(sg, &lv, v) - v);
+        if (n > 64) { bk->bad = "stride"; return; }
+        /* which floats follow w (the LOD fraction): emit at two depths and compare */
+        struct LoadedVertex lw = lv;
+        lw.w = 1.0f;
+        mc_emit_vertex(sg, &lw, a);
+        lw.w = 3000.0f;
+        mc_emit_vertex(sg, &lw, b);
+        for (int i = 4; i < n; i++) {
+            if (a[i] != b[i]) {
+                if (i < base || (i - base) / ncomp >= GFX_MESH_MAX_INPUTS) { bk->bad = "w-dependent"; return; }
+                run.lod_mask[(i - base) / ncomp][(i - base) % ncomp] = 1.0f;
+            }
+        }
+        v[0] = src.v->v.ob[0];
+        v[1] = src.v->v.ob[1];
+        v[2] = src.v->v.ob[2];
+        v[3] = (float)src.slot;
+        bk->data.insert(bk->data.end(), v, v + n);
+        float* bx = bk->box[src.slot];
+        for (int k = 0; k < 3; k++) {
+            if (v[k] < bx[k]) bx[k] = v[k];
+            if (v[k] > bx[3 + k]) bx[3 + k] = v[k];
+        }
+        run.nverts++;
+    }
+}
+
+static void mc_gpu_free(McGpu* g) {
+    s_mc_gpu_dead.push_back(g->mesh_id);
+    delete g;
+}
+
+/* As gfx_sp_matrix, without its D578/D955 hooks (never active when this runs). */
+static void mc_sim_matrix(uint8_t parameters, const int32_t* addr, float (*mv)[4][4], int* mvsize, float P[4][4], float MP[4][4]) {
+    float matrix[4][4];
+    const bool addr_bad = ((uintptr_t)addr < 0x10000 || (uintptr_t)addr >= 0x0000800000000000ULL);
+    if (addr_bad) {
+        memset(matrix, 0, sizeof(matrix));
+        matrix[0][0] = matrix[1][1] = matrix[2][2] = matrix[3][3] = 1.0f;
+    } else {
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j += 2) {
+                int32_t int_part = addr[i * 2 + j / 2];
+                uint32_t frac_part = addr[8 + i * 2 + j / 2];
+                matrix[i][j] = (int32_t)((int_part & 0xffff0000) | (frac_part >> 16)) / 65536.0f;
+                matrix[i][j + 1] = (int32_t)((int_part << 16) | (frac_part & 0xffff)) / 65536.0f;
+            }
+        }
+    }
+    if (parameters & G_MTX_PROJECTION) {
+        if (parameters & G_MTX_LOAD) {
+            memcpy(P, matrix, sizeof(matrix));
+        } else {
+            gfx_matrix_mul(P, matrix, P);
+        }
+    } else {
+        if ((parameters & G_MTX_PUSH) && *mvsize < 11) {
+            ++*mvsize;
+            memcpy(mv[*mvsize - 1], mv[*mvsize - 2], sizeof(matrix));
+        }
+        if (parameters & G_MTX_LOAD) {
+            memcpy(mv[*mvsize - 1], matrix, sizeof(matrix));
+        } else {
+            gfx_matrix_mul(mv[*mvsize - 1], matrix, mv[*mvsize - 1]);
+        }
+    }
+    gfx_matrix_mul(MP, mv[*mvsize - 1], P);
+}
+
+/* true: every corner of every slot's box is in front of the camera plane and
+ * not beyond the far plane under its matrix (no CPU near clip or far reject
+ * would apply to any of its triangles). */
+static bool mc_box_ok(const float* box, const float m[4][4], const char** why) {
+    if (box[0] > box[3]) return true;   /* slot without vertices */
+    for (int c = 0; c < 8; c++) {
+        const float x = (c & 1) ? box[3] : box[0];
+        const float y = (c & 2) ? box[4] : box[1];
+        const float z = (c & 4) ? box[5] : box[2];
+        const float cz = x * m[0][2] + y * m[1][2] + z * m[2][2] + m[3][2];
+        const float cw = x * m[0][3] + y * m[1][3] + z * m[2][3] + m[3][3];
+        if (cw <= 0.02f) { *why = "near-plane"; return false; }
+        if (cz > cw) { *why = "far-plane"; return false; }
+    }
+    return true;
+}
+
+static int s_mc_g_last = 0;   /* 0 drawn, 1 no variant (bake), 2 colours changed (re-bake), 3 other */
+
+/* Draw a validated entry from its GPU mesh. false = not possible this frame
+ * (nothing executed; the caller replays on the CPU). */
+static bool mc_replay_gpu(McEntry* e) {
+    s_mc_g_last = 3;
+    if (e->gpu_bad != nullptr) { mc_gpu_why(e->gpu_bad); return false; }
+    if (s_obj_frame || s_pcam_armed) { mc_gpu_why("interp-hooks"); return false; }
+    const struct GfxClipParameters clip = gfx_rapi->get_clip_parameters();
+    if (clip.z_is_from_0_to_1) { mc_gpu_why("z01"); return false; }
+    uint64_t key, sig, pk, grp[8];
+    mc_gpu_prepass(e, &key, &sig, &pk, grp);
+    McGpu* g = nullptr;
+    bool same_ptrs = false;
+    for (McGpu* v : e->gpu) {
+        if (v->key == key) { g = v; break; }
+        if (v->ptrkey == pk) same_ptrs = true;
+    }
+    if (g == nullptr) {
+        s_mc_g_last = 1;
+        mc_gpu_why(e->gpu.empty() ? "not-baked" : same_ptrs ? "vertex-bytes-changed" : "vertex-pointers-new");
+        return false;
+    }
+    if (g->colour_sig != sig) {
+        s_mc_g_last = 2;
+        if (gfx_perfstat_on()) {
+            for (int i = 0; i < MCS_N; i++) {
+                if (grp[i] != g->groups[i]) {
+                    char k[48];
+                    snprintf(k, sizeof(k), "changed:%s", s_mcs_name[i]);
+                    s_mc_g_why[k]++;
+                    break;
+                }
+            }
+        }
+        return false;
+    }
+    /* the matrices this replay will load, simulated: is any part near the camera? */
+    if (!mc_gpu_full()) {
+        static float mv[11][4][4];
+        int mvsize = rsp.modelview_matrix_stack_size;
+        if (mvsize < 1) { mc_gpu_why("matrix-stack"); return false; }
+        memcpy(mv, rsp.modelview_matrix_stack, sizeof(mv));
+        float P[4][4], MP[4][4];
+        memcpy(P, rsp.P_matrix, sizeof(P));
+        memcpy(MP, rsp.MP_matrix, sizeof(MP));
+        int slot = 0;
+        const char* why = nullptr;
+        if (!mc_box_ok(&g->box[0], MP, &why)) { mc_gpu_why(why); return false; }
+        for (const McOp& op : e->ops) {
+            if (op.k == MCO_MTX) {
+                mc_sim_matrix(op.a, (const int32_t*)seg_addr(op.p), mv, &mvsize, P, MP);
+            } else if (op.k == MCO_POPMTX) {
+                if (mvsize > 0) {
+                    --mvsize;
+                    if (mvsize > 0) gfx_matrix_mul(MP, mv[mvsize - 1], P);
+                }
+            } else {
+                continue;
+            }
+            if (++slot >= g->nslots) break;
+            if (!mc_box_ok(&g->box[slot * 6], MP, &why)) { mc_gpu_why(why); return false; }
+        }
+    }
+    /* execute the list's state commands for real (the classic matrices go
+     * through gfx_sp_matrix), collecting the matrix of each slot */
+    static struct GfxMeshDraw d;
+    float pal[GFX_MESH_MAX_MTX][4][4];
+    int slot = 0;
+    const struct RGBA env0 = rdp.env_color;   /* entry value: runs with env_sel read it, the walk below may change it */
+    memcpy(pal[0], rsp.MP_matrix, sizeof(pal[0]));
     for (const McOp& op : e->ops) {
         switch (op.k) {
             case MCO_MTX:
                 gfx_sp_matrix(op.a, (const int32_t*)seg_addr(op.p));
+                if (++slot < GFX_MESH_MAX_MTX) memcpy(pal[slot], rsp.MP_matrix, sizeof(pal[0]));
                 break;
             case MCO_POPMTX:
                 gfx_sp_pop_matrix(1);
-                break;
-            case MCO_VTX:
-                gfx_sp_vertex(op.a, op.b, (const Vtx*)seg_addr(op.p));
+                if (++slot < GFX_MESH_MAX_MTX) memcpy(pal[slot], rsp.MP_matrix, sizeof(pal[0]));
                 break;
             case MCO_GEOM:
                 gfx_sp_geometry_mode(op.x, (uint32_t)op.p);
@@ -959,6 +1388,181 @@ static void mc_replay(McEntry* e) {
             case MCO_MOVEMEM:
                 gfx_sp_movemem(op.a, 0, seg_addr(op.p));
                 break;
+            case MCO_COLOR: {
+                const Gfx* cmd = (const Gfx*)op.p;
+                switch (op.a) {
+                    case G_SETENVCOLOR:
+                        gfx_dp_set_env_color(C1(24, 8), C1(16, 8), C1(8, 8), C1(0, 8));
+                        break;
+                    case G_SETPRIMCOLOR:
+                        gfx_dp_set_prim_color(C0(8, 8), C0(0, 8), C1(24, 8), C1(16, 8), C1(8, 8), C1(0, 8));
+                        break;
+                    case G_SETFOGCOLOR:
+                        gfx_dp_set_fog_color(C1(24, 8), C1(16, 8), C1(8, 8), C1(0, 8));
+                        break;
+                    case G_SETINTENSITY_EXT:
+                        gfx_dp_set_grayscale_color(C1(24, 8), C1(16, 8), C1(8, 8), C1(0, 8));
+                        break;
+                }
+                break;
+            }
+            default:   /* VTX (vertices are in the mesh), SEG, TRI */
+                break;
+        }
+    }
+    /* clip matrices as the CPU path applies them: aspect fix on x (unless a
+     * framebuffer is the target), y flip of the target */
+    const int nmtx = g->nslots;
+    for (int k = 0; k < nmtx; k++) {
+        float* m = d.mtx[k];
+        for (int i = 0; i < 4; i++) {
+            const float* p = pal[k][i];
+            m[i * 4 + 0] = fbActive ? p[0]
+                                    : (rsp.aspect_ofs * p[3] + p[0]) * rsp.aspect_scale / gfx_current_dimensions.aspect_ratio;
+            m[i * 4 + 1] = clip.invert_y ? -p[1] : p[1];
+            m[i * 4 + 2] = p[2];
+            m[i * 4 + 3] = p[3];
+        }
+    }
+    d.nmtx = (uint32_t)nmtx;
+    d.invert_y = clip.invert_y;
+    d.fog_mul = rsp.fog_mul;
+    d.fog_off = rsp.fog_offset;
+    for (const McRun& r : g->runs) {
+        if (r.cull == 3 || r.nverts == 0) continue;
+        mc_apply_seg(e, r.seg);
+        gfx_flush();   /* classic triangles batched before this run draw first */
+        d.byte_offset = r.byte_offset;
+        d.nverts = r.nverts;
+        d.cull = r.cull;
+        d.fog_from_z = r.fog_from_z;
+        d.fog_color[0] = rdp.fog_color.r / 255.0f;
+        d.fog_color[1] = rdp.fog_color.g / 255.0f;
+        d.fog_color[2] = rdp.fog_color.b / 255.0f;
+        d.fog_color[3] = rdp.fog_color.a / 255.0f;
+        memcpy(d.lod_mask, r.lod_mask, sizeof(d.lod_mask));
+        {
+            const float* L = s_mc_lut255;   /* the values mc_emit_vertex would have baked */
+            for (int j = 0; j < GFX_MESH_MAX_INPUTS; j++) {
+                const uint8_t es = r.env_sel[j];
+                const float rgb = (es & (MC_ENV_RGB | MC_ENV_AAA)) ? 1.0f : 0.0f;
+                d.env_mask[j][0] = d.env_mask[j][1] = d.env_mask[j][2] = rgb;
+                d.env_mask[j][3] = es & MC_ENV_A ? 1.0f : 0.0f;
+                if (es & MC_ENV_AAA) {
+                    d.env_in[j][0] = d.env_in[j][1] = d.env_in[j][2] = L[env0.a];
+                } else {
+                    d.env_in[j][0] = L[env0.r];
+                    d.env_in[j][1] = L[env0.g];
+                    d.env_in[j][2] = L[env0.b];
+                }
+                d.env_in[j][3] = L[env0.a];
+            }
+        }
+        gfx_rapi->mesh_draw(g->mesh_id, &d);
+        s_mc_g_runs++;
+        s_mc_g_tris += r.nverts / 3;
+    }
+    mc_apply_exit(e);
+    g->last_used = s_mc_frame;
+    s_mc_g_replays++;
+    s_mc_g_last = 0;
+    return true;
+}
+
+static int s_mc_g_bakes_frame = 0;
+#define MC_GPU_BAKES_PER_FRAME 6
+#define MC_GPU_MAX_VARIANTS 8
+
+/* After a CPU replay that baked: keep the mesh. */
+static void mc_gpu_commit(McEntry* e, McBake* bk, uint64_t key, uint64_t sig, uint64_t pk, const uint64_t* grp) {
+    if (bk->bad != nullptr) {
+        e->gpu_bad = bk->bad;
+        return;
+    }
+    if (bk->runs.empty() || bk->data.empty()) return;
+    for (size_t i = 0; i < e->gpu.size(); i++) {
+        if (e->gpu[i]->key == key) {   /* colours changed: replace */
+            mc_gpu_free(e->gpu[i]);
+            e->gpu.erase(e->gpu.begin() + i);
+            break;
+        }
+    }
+    if (e->gpu.size() >= MC_GPU_MAX_VARIANTS) {
+        size_t lru = 0;
+        for (size_t i = 1; i < e->gpu.size(); i++) {
+            if (e->gpu[i]->last_used < e->gpu[lru]->last_used) lru = i;
+        }
+        mc_gpu_free(e->gpu[lru]);
+        e->gpu.erase(e->gpu.begin() + lru);
+    }
+    McGpu* g = new McGpu();
+    g->key = key;
+    g->ptrkey = pk;
+    g->colour_sig = sig;
+    memcpy(g->groups, grp, sizeof(uint64_t) * MCS_N);
+    g->nslots = (uint8_t)(bk->slot + 1);
+    g->runs = bk->runs;
+    g->box.assign(&bk->box[0][0], &bk->box[0][0] + 6 * g->nslots);
+    g->last_used = s_mc_frame;
+    g->mesh_id = gfx_rapi->mesh_create(bk->data.data(), bk->data.size());
+    e->gpu.push_back(g);
+    s_mc_g_bakes++;
+    s_mc_g_bake_bytes += bk->data.size() * sizeof(float);
+}
+
+static void mc_replay(McEntry* e, McBake* bk = nullptr) {
+    int pending = -1, applied = -1;
+    const bool ts = gfx_perfstat_on() && ((++s_mc_split_n & 7) == 0);
+    uint64_t t = ts ? gfx_perf_now_ns() : 0;
+#define MC_T(cat) do { if (ts) { const uint64_t t2_ = gfx_perf_now_ns(); s_mc_t_ns[cat] += t2_ - t; t = t2_; } } while (0)
+    if (ts) s_mc_t_replays++;
+    for (const McOp& op : e->ops) {
+        switch (op.k) {
+            case MCO_MTX:
+                gfx_sp_matrix(op.a, (const int32_t*)seg_addr(op.p));
+                if (bk != nullptr && ++bk->slot >= GFX_MESH_MAX_MTX && bk->bad == nullptr) bk->bad = "matrix-slots";
+                MC_T(MCT_MTX);
+                break;
+            case MCO_POPMTX:
+                gfx_sp_pop_matrix(1);
+                if (bk != nullptr && ++bk->slot >= GFX_MESH_MAX_MTX && bk->bad == nullptr) bk->bad = "matrix-slots";
+                MC_T(MCT_MTX);
+                break;
+            case MCO_VTX:
+                gfx_sp_vertex(op.a, op.b, (const Vtx*)seg_addr(op.p));
+                if (bk != nullptr && bk->bad == nullptr) {
+                    if (rsp.geometry_mode & G_LIGHTING) {
+                        bk->bad = "lit";   /* colours (and maybe UVs) depend on the matrices */
+                    } else {
+                        const Vtx* vp = (const Vtx*)seg_addr(op.p);
+                        for (int i = 0; i < op.a && op.b + i < MAX_VERTICES; i++) {
+                            bk->src[op.b + i].v = vp + i;
+                            bk->src[op.b + i].slot = (uint8_t)bk->slot;
+                            bk->src[op.b + i].fogz = (rsp.geometry_mode & G_FOG) != 0;
+                        }
+                    }
+                }
+                MC_T(MCT_VTX);
+                break;
+            case MCO_GEOM:
+                gfx_sp_geometry_mode(op.x, (uint32_t)op.p);
+                break;
+            case MCO_XGEOM:
+                gfx_sp_extra_geometry_mode(op.x, (uint32_t)op.p);
+                break;
+            case MCO_TEXTURE: {
+                const uint32_t w0 = op.x, w1 = (uint32_t)op.p;
+                gfx_sp_texture((uint16_t)(w1 >> 16), (uint16_t)w1, (uint8_t)((w0 >> 11) & 7), (uint8_t)((w0 >> 8) & 7),
+                               (uint8_t)w0);
+                break;
+            }
+            case MCO_MOVEWORD:
+                gfx_sp_moveword(op.a, (uint16_t)op.x, op.p);
+                if (bk != nullptr && op.a == G_MW_FOG && bk->bad == nullptr) bk->bad = "fog-in-list";
+                break;
+            case MCO_MOVEMEM:
+                gfx_sp_movemem(op.a, 0, seg_addr(op.p));
+                break;
             case MCO_SEG:
                 pending = (int)op.x;
                 break;
@@ -967,6 +1571,10 @@ static void mc_replay(McEntry* e) {
                 switch (op.a) {
                     case G_SETENVCOLOR:
                         gfx_dp_set_env_color(C1(24, 8), C1(16, 8), C1(8, 8), C1(0, 8));
+                        if (bk != nullptr) {   /* the list's own env colour: baked from here on */
+                            bk->env_in_list = true;
+                            bk->new_run = true;
+                        }
                         break;
                     case G_SETPRIMCOLOR:
                         gfx_dp_set_prim_color(C0(8, 8), C0(0, 8), C1(24, 8), C1(16, 8), C1(8, 8), C1(0, 8));
@@ -984,30 +1592,47 @@ static void mc_replay(McEntry* e) {
                 struct LoadedVertex* v1 = &rsp.loaded_vertices[op.a];
                 struct LoadedVertex* v2 = &rsp.loaded_vertices[op.b];
                 struct LoadedVertex* v3 = &rsp.loaded_vertices[op.c];
-                if (gfx_tri_reject(v1, v2, v3)) break;
+                if (bk != nullptr && bk->bad == nullptr) mc_bake_tri(e, bk, pending, op.a, op.b, op.c);
+                if (ts) s_mc_t_tris++;
+                if (gfx_tri_reject(v1, v2, v3)) {
+                    if (ts) s_mc_t_rej++;
+                    MC_T(MCT_REJECT);
+                    break;
+                }
+                MC_T(MCT_REJECT);
                 if (pending != applied) {
                     mc_apply_seg(e, pending);
                     applied = pending;
+                    MC_T(MCT_SEG);
                 }
                 struct LoadedVertex* v_arr[3] = { v1, v2, v3 };
                 struct LoadedVertex* emit_v[6];
                 struct LoadedVertex nc_vtx[2];
                 const int n = gfx_tri_nearclip(v_arr, false, emit_v, nc_vtx);
+                MC_T(MCT_CLIP);
                 if (n == 0) break;
                 mc_emit(e->segs[applied], emit_v, n);
+                if (ts) s_mc_t_emitted += n;
+                MC_T(MCT_EMIT);
                 break;
             }
+            default:
+                MC_T(MCT_OTHER);
+                break;
         }
     }
     /* leave the GL-side state where the capture (which resolved every
      * triangle's state) left it */
     if (pending >= 0 && pending != applied) mc_apply_seg(e, pending);
     mc_apply_exit(e);
+    MC_T(MCT_EXIT);
+#undef MC_T
 }
 
 /* ---------------------------------------------------------------- capture */
 
 static void mc_free_entry(McEntry* e) {
+    for (McGpu* g : e->gpu) mc_gpu_free(g);
     delete e;
 }
 
@@ -1040,6 +1665,8 @@ static McEntry* mc_capture(Gfx* dl) {
     e->ntris = 0;
     e->tc_touched[0] = e->tc_touched[1] = false;
     e->nodes_gen = 0;
+    e->gpu_bad = nullptr;
+    e->hits = 0;
     e->last_used = s_mc_frame;
     cap.refused = nullptr;
     cap.refused_op = 0;
@@ -1174,7 +1801,36 @@ static bool mc_try(Gfx* dl) {
         /* hit */
         e->last_used = s_mc_frame;
         if (vi != 0) std::swap(slot.v[0], slot.v[vi]);
-        mc_replay(e);
+        e->hits++;
+        bool drawn = false;
+        if (mc_gpu_on()) {
+            const uint64_t tg = perf ? gfx_perf_now_ns() : 0;
+            drawn = mc_replay_gpu(e);
+            if (perf && drawn) s_mc_g_ns += gfx_perf_now_ns() - tg;
+            if (!drawn && (s_mc_g_last == 1 || s_mc_g_last == 2) && e->gpu_bad == nullptr && e->hits >= 3 &&
+                s_mc_g_bakes_frame < MC_GPU_BAKES_PER_FRAME) {
+                /* bake the GPU mesh during this CPU replay */
+                static McBake bk;
+                uint64_t key, sig, pk, grp[8];
+                mc_gpu_prepass(e, &key, &sig, &pk, grp);
+                memset(bk.src, 0, sizeof(bk.src));
+                bk.slot = 0;
+                bk.bad = nullptr;
+                bk.env_in_list = false;
+                bk.new_run = false;
+                bk.data.clear();
+                bk.runs.clear();
+                for (int k = 0; k < GFX_MESH_MAX_MTX; k++) {
+                    bk.box[k][0] = bk.box[k][1] = bk.box[k][2] = 1e30f;
+                    bk.box[k][3] = bk.box[k][4] = bk.box[k][5] = -1e30f;
+                }
+                mc_replay(e, &bk);
+                mc_gpu_commit(e, &bk, key, sig, pk, grp);
+                s_mc_g_bakes_frame++;
+                drawn = true;
+            }
+        }
+        if (!drawn) mc_replay(e);
         s_mc_cnt_hit++;
         s_mc_cnt_hit_tris += e->ntris;
         if (perf) s_mc_ns_replay += gfx_perf_now_ns() - t0;
@@ -1202,6 +1858,9 @@ static bool mc_try(Gfx* dl) {
 static void mc_frame_begin(void) {
     if (!mc_on()) return;
     s_mc_frame++;
+    s_mc_g_bakes_frame = 0;
+    for (uint32_t id : s_mc_gpu_dead) gfx_rapi->mesh_delete(id);
+    s_mc_gpu_dead.clear();
     if ((s_mc_frame % 300) == 0) {
         /* lists not drawn for a while (unloaded rooms, models out of view) */
         for (auto it = s_mc_map.begin(); it != s_mc_map.end();) {
@@ -1272,6 +1931,40 @@ static void mc_perf_report(double n) {
         fprintf(stderr, "%s\n", line.c_str());
         sysLogPrintf(LOG_NOTE, "%s", line.c_str());
     }
+    if (s_mc_t_replays) {
+        /* clock overhead per read, to discount the split (about 2 reads per triangle) */
+        const uint64_t c0 = gfx_perf_now_ns();
+        for (int i = 0; i < 1000; i++) (void)gfx_perf_now_ns();
+        const double clk = (double)(gfx_perf_now_ns() - c0) / 1000.0;
+        line = "PERFSTAT meshcache split (1 replay in 8, x8 per frame):";
+        for (int k = 0; k < MCT_COUNT; k++) {
+            snprintf(buf, sizeof(buf), " %s=%.2fms", s_mc_t_name[k], 8.0 * s_mc_t_ns[k] / 1.0e6 / n);
+            line += buf;
+        }
+        snprintf(buf, sizeof(buf), " | tris=%.0f rejected=%.0f emitted=%.0f per frame | clock read %.0fns",
+                 8.0 * s_mc_t_tris / n, 8.0 * s_mc_t_rej / n, 8.0 * s_mc_t_emitted / n, clk);
+        line += buf;
+        fprintf(stderr, "%s\n", line.c_str());
+        sysLogPrintf(LOG_NOTE, "%s", line.c_str());
+    }
+    if (mc_gpu_on()) {
+        snprintf(buf, sizeof(buf),
+                 "PERFSTAT meshgpu: replays=%.1f/f runs=%.1f/f tris=%.0f/f time=%.2fms | bakes=%llu (%llu KiB) |",
+                 s_mc_g_replays / n, s_mc_g_runs / n, s_mc_g_tris / n, s_mc_g_ns / 1.0e6 / n,
+                 (unsigned long long)s_mc_g_bakes, (unsigned long long)(s_mc_g_bake_bytes / 1024));
+        line = buf;
+        for (const auto& kv : s_mc_g_why) {
+            snprintf(buf, sizeof(buf), " %s=%.1f", kv.first.c_str(), kv.second / n);
+            line += buf;
+        }
+        line += " (CPU replays per frame, by reason)";
+        fprintf(stderr, "%s\n", line.c_str());
+        sysLogPrintf(LOG_NOTE, "%s", line.c_str());
+    }
+    s_mc_g_replays = s_mc_g_runs = s_mc_g_tris = s_mc_g_ns = s_mc_g_bakes = s_mc_g_bake_bytes = 0;
+    s_mc_g_why.clear();
+    memset(s_mc_t_ns, 0, sizeof(s_mc_t_ns));
+    s_mc_t_tris = s_mc_t_rej = s_mc_t_emitted = s_mc_t_replays = 0;
     s_mc_cnt_try = s_mc_cnt_hit = s_mc_cnt_hit_tris = s_mc_cnt_cap = s_mc_cnt_cap_ok = 0;
     memset(s_mc_cnt_reason, 0, sizeof(s_mc_cnt_reason));
     s_mc_ns_replay = s_mc_ns_verify = s_mc_ns_cap = 0;

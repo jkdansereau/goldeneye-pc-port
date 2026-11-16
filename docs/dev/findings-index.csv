@@ -486,6 +486,7 @@ D971,?,"GE+ sky (Switch, Video.SkyPlus, default on; Original restores GE's sky):
 D972,?,"Mesh cache step B tried and parked (issue #10, GE_MESHGPU):",PARKED 2026-11-15 (console Jungle co-op:
 D973,?,"deko3d backend, step 1 of issue #12 (Switch default; GE_RENDERER=gl selects GL):",BUILT + MEASURED 2026-11-15 (console:
 D974,FIXED,"Switch controllers: SDL lists one joystick per npad (No1..No8) whatever is attached, so the game seated four players (START on four pads to leave a match):",FIXED + CONSOLE-VERIFIED 2026-11-15
+D978,?,"Mesh cache step B on deko3d (issue #10 after #12, GE_MESHGPU, default on deko3d with GE_MESHGPU_FULL):",BUILT + MEASURED 2026-11-16 (console Jungle co-op:
 D607,OPEN,Address model unified into one header:,DONE 2026-10-07 (macos branch; Windows identity gate:
 D608,FIXED,D34 ANIM_DATA_x re-basing guard in assets/animationtable_data.h was __x86_64__-only:,"FIXED 2026-10-07 (macos branch; mechanical guard widening, arm64 link clean)"
 D609,FIXED,macOS arm64 SIGKILL at exec:,"FIXED 2026-10-07 (macos branch; probe-confirmed; arm64 keeps the 4 GiB pagezero, floor 11.0)"

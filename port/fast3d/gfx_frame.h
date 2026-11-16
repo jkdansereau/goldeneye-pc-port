@@ -115,6 +115,9 @@ enum GfxFrameCmdType {
     GFC_CREATE_SHADER,   /* D969: compile the program p (a recorder shader handle) on the GL thread */
     GFC_CLEAR_SHADERS,   /* D969: delete every program (settings change) */
     GFC_SETTING,         /* D969: a = 0 texture filter / 1 mipmap filter / 2 anisotropy, b = value */
+    GFC_MESH_CREATE,     /* issue #10: a = mesh id, b = float count, data at bytes[off] */
+    GFC_MESH_DELETE,     /* issue #10: a = mesh id */
+    GFC_DRAW_MESH,       /* issue #10: a = state index, b = mesh id, draw parameters at bytes[off] (c = matrix count) */
 };
 
 struct GfxFrameCmd {

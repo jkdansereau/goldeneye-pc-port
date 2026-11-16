@@ -16,8 +16,9 @@
  * framebuffer sampled as a texture gets t' = 1 - t in the shader (Draw block
  * flip_v0/1). The FXAA and GE+ sky passes take their viewport position from a
  * varying of the fullscreen triangle (GL's y-up convention) and FXAA samples
- * its source with t mirrored. Face culling is never enabled (Fast3D culls on
- * the CPU), so the mirrored winding does not matter.
+ * its source with t mirrored. Face culling is enabled only for GE_MESHGPU
+ * mesh draws (Fast3D otherwise culls on the CPU); there GL's front-face rule
+ * applies as is (measured on the console, see dk_mesh_draw).
  *
  * Frames: one command buffer fed with slices of a command-memory ring; one
  * data ring (vertices, upload staging); images in a first-fit heap. Each
@@ -66,12 +67,13 @@ extern "C" void* nwindowGetDefault(void);
 extern bool gfx_framebuffers_enabled;   /* gfx_pc.cpp */
 extern int gfx_rdp_affine;              /* gfx_pc.cpp (D540) */
 extern int gfx_fog_vertex;              /* gfx_pc.cpp (D543) */
+extern "C" int portFogPixel;           /* port/src/video.c: Video.FogPixel */
 extern "C" volatile int gfx_skyplus_failed;   /* gfx_opengl.cpp */
 extern "C" int nxIsHandheld(void);      /* port/src/switch/nxmem.c */
 extern "C" const uint8_t ge007_dksh_pack[], ge007_dksh_pack_end[];
 
 struct ShaderProgram {
-    DkShader vert, frag;
+    DkShader vert, frag, mesh_vert;
     bool uber;
     struct DkCombinerParams params;
     struct DkLayout layout;
@@ -113,6 +115,12 @@ DkSlots s_imgSlots(NUM_IMG_DESC);
 Block s_desc, s_ubo, s_query, s_code;
 uint64_t s_serial = 1, s_completed = 0;
 bool s_cmd_pending = false;   /* something recorded since the last submission */
+
+/* GE_MESHGPU buffers are immutable and therefore cannot live in s_dataRing.
+ * Deletion is deferred to the submission serial which last could reference it. */
+struct Mesh { Block block; uint32_t bytes = 0; };
+std::vector<Mesh> s_meshes(1);
+std::vector<std::pair<Block, uint64_t>> s_dead_meshes;
 
 struct InFlight { bool used; uint64_t serial; DkFence fence; };
 InFlight s_fl[NUM_FENCES];
@@ -207,6 +215,12 @@ void retire(void) {
     s_cmdRing.retire(s_completed);
     s_imgHeap.retire(s_completed);
     s_imgSlots.retire(s_completed);
+    size_t w = 0;
+    for (size_t i = 0; i < s_dead_meshes.size(); i++) {
+        if (s_dead_meshes[i].second <= s_completed) free_block(s_dead_meshes[i].first);
+        else s_dead_meshes[w++] = s_dead_meshes[i];
+    }
+    s_dead_meshes.resize(w);
 }
 
 void wait_serial(uint64_t serial) {
@@ -408,7 +422,7 @@ struct PackShader {
 };
 const DkPackEntry* s_pack = nullptr;
 uint32_t s_pack_count = 0;
-std::vector<PackShader> s_pack_shaders;   /* 2 per entry (vert, frag) */
+std::vector<PackShader> s_pack_shaders;   /* 3 per entry (classic vert, frag, mesh vert) */
 std::map<std::pair<uint64_t, uint32_t>, ShaderProgram*> s_progs;
 std::map<std::pair<uint64_t, uint32_t>, bool> s_missed;
 DkShader s_uber_vert, s_uber_frag, s_fs_vert, s_fxaa_frag, s_sky_frag;
@@ -430,7 +444,7 @@ int pack_find(uint64_t id0, uint32_t id1) {
 
 bool pack_shader(int entry, int stage, DkShader* out) {
     if (entry < 0) return false;
-    const PackShader& ps = s_pack_shaders[entry * 2 + stage];
+    const PackShader& ps = s_pack_shaders[entry * 3 + stage];
     if (ps.blob == nullptr) return false;
     DkShaderMaker m;
     dkShaderMakerDefaults(&m, s_code.mb, ps.code_off);
@@ -447,11 +461,12 @@ void load_pack(void) {
     }
     memcpy(&s_pack_count, p + 8, 4);
     s_pack = (const DkPackEntry*)(p + 16);
-    s_pack_shaders.assign(s_pack_count * 2, PackShader{ nullptr, 0 });
+    s_pack_shaders.assign(s_pack_count * 3, PackShader{ nullptr, 0 });
     uint32_t total = 0;
     for (uint32_t i = 0; i < s_pack_count; i++) {
-        const uint32_t offs[2] = { s_pack[i].vert_off, s_pack[i].frag_off }, lens[2] = { s_pack[i].vert_len, s_pack[i].frag_len };
-        for (int s = 0; s < 2; s++) {
+        const uint32_t offs[3] = { s_pack[i].vert_off, s_pack[i].frag_off, s_pack[i].mesh_vert_off };
+        const uint32_t lens[3] = { s_pack[i].vert_len, s_pack[i].frag_len, s_pack[i].mesh_vert_len };
+        for (int s = 0; s < 3; s++) {
             if (lens[s] == 0) continue;
             const DkshHeader* h = (const DkshHeader*)(p + offs[s]);
             total += (h->code_sz + DK_SHADER_CODE_ALIGNMENT - 1) & ~(DK_SHADER_CODE_ALIGNMENT - 1);
@@ -461,13 +476,14 @@ void load_pack(void) {
                         DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached | DkMemBlockFlags_Code);
     uint32_t off = 0;
     for (uint32_t i = 0; i < s_pack_count; i++) {
-        const uint32_t offs[2] = { s_pack[i].vert_off, s_pack[i].frag_off }, lens[2] = { s_pack[i].vert_len, s_pack[i].frag_len };
-        for (int s = 0; s < 2; s++) {
+        const uint32_t offs[3] = { s_pack[i].vert_off, s_pack[i].frag_off, s_pack[i].mesh_vert_off };
+        const uint32_t lens[3] = { s_pack[i].vert_len, s_pack[i].frag_len, s_pack[i].mesh_vert_len };
+        for (int s = 0; s < 3; s++) {
             if (lens[s] == 0) continue;
             const uint8_t* blob = p + offs[s];
             const DkshHeader* h = (const DkshHeader*)blob;
             memcpy(s_code.cpu + off, blob + h->control_sz, h->code_sz);
-            s_pack_shaders[i * 2 + s] = PackShader{ blob, off };
+            s_pack_shaders[i * 3 + s] = PackShader{ blob, off };
             off += (h->code_sz + DK_SHADER_CODE_ALIGNMENT - 1) & ~(DK_SHADER_CODE_ALIGNMENT - 1);
         }
     }
@@ -809,6 +825,7 @@ struct ShaderProgram* dk_create_and_load_new_shader(uint64_t id0, uint32_t id1) 
     p->num_inputs = (uint8_t)f.num_inputs;
     p->used_textures[0] = f.used_textures[0];
     p->used_textures[1] = f.used_textures[1];
+    memset(&p->mesh_vert, 0, sizeof p->mesh_vert);
     p->stride = p->layout.num_floats * 4;
     for (int i = 0; i < DK_ATTR_COUNT; i++) {
         memset(&p->attribs[i], 0, sizeof(p->attribs[i]));
@@ -829,6 +846,9 @@ struct ShaderProgram* dk_create_and_load_new_shader(uint64_t id0, uint32_t id1) 
     const int e = pack_find(id0, id1);
     if (e >= 0 && pack_shader(e, 0, &p->vert) && pack_shader(e, 1, &p->frag)) {
         p->uber = false;
+        /* A missing mesh twin never affects the classic path.  The cache only
+         * submits mesh draws for combiners observed in the pack census. */
+        (void)pack_shader(e, 2, &p->mesh_vert);
     } else {
         p->uber = true;
         p->vert = s_uber_vert;
@@ -1130,6 +1150,83 @@ void dk_draw_triangles(float buf[], size_t len, size_t ntris) {
     if (s_prg->uber) s_st_uber_draws++;
 }
 
+uint32_t dk_mesh_create(const float* data, size_t nfloats) {
+    const uint64_t n64 = nfloats * sizeof(float);
+    if (!s_up || n64 == 0 || n64 > UINT32_MAX) return 0;
+    Mesh m;
+    m.block = make_block((uint32_t)n64, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached);
+    m.bytes = (uint32_t)n64;
+    memcpy(m.block.cpu, data, m.bytes);
+    s_meshes.push_back(m);
+    return (uint32_t)s_meshes.size() - 1;
+}
+
+void dk_mesh_delete(uint32_t name) {
+    if (name == 0 || name >= s_meshes.size() || !s_meshes[name].block.mb) return;
+    s_dead_meshes.push_back(std::make_pair(s_meshes[name].block, s_serial));
+    s_meshes[name] = Mesh();
+}
+
+void dk_mesh_draw(uint32_t name, const struct GfxMeshDraw* d) {
+    if (!s_up || d == nullptr || s_prg == nullptr || name == 0 || name >= s_meshes.size()) return;
+    const Mesh& m = s_meshes[name];
+    if (!m.block.mb || d->nverts == 0 || d->nmtx == 0 || !dkShaderIsValid(&s_prg->mesh_vert)) return;
+    const uint64_t end = (uint64_t)d->byte_offset + (uint64_t)d->nverts * s_prg->stride;
+    if (end > m.bytes) return;
+    prepare_draw();
+
+    struct DkMeshUniforms u;
+    memset(&u, 0, sizeof u);
+    const uint32_t nmtx = d->nmtx < GFX_MESH_MAX_MTX ? d->nmtx : GFX_MESH_MAX_MTX;
+    memcpy(u.mtx, d->mtx, (size_t)nmtx * sizeof u.mtx[0]);
+    memcpy(u.fog_color, d->fog_color, sizeof u.fog_color);
+    u.fog_mul = d->fog_mul;
+    u.fog_off = d->fog_off;
+    u.fog_from_z = d->fog_from_z;
+    memcpy(u.lod_mask, d->lod_mask, sizeof u.lod_mask);
+    memcpy(u.env_in, d->env_in, sizeof u.env_in);
+    memcpy(u.env_mask, d->env_mask, sizeof u.env_mask);
+    DkBufExtents ub = { s_ubo.gpu + 512, (uint32_t)sizeof u };
+    dkCmdBufBindUniformBuffers(s_cmd, DkStage_Vertex, 2, &ub, 1);
+    /* Two pushes: the tail (fog, LOD and env), then only the nmtx matrices the
+     * mesh indexes. One 2208-byte push crashed Ryujinx (its inline constant
+     * buffer cache holds 512 words), and most lists use a few matrices. */
+    const uint32_t tail = (uint32_t)offsetof(DkMeshUniforms, fog_color);
+    dkCmdBufPushConstants(s_cmd, ub.addr, ub.size, tail, (uint32_t)sizeof u - tail, &u.fog_color);
+    dkCmdBufPushConstants(s_cmd, ub.addr, ub.size, 0, nmtx * (uint32_t)sizeof u.mtx[0], u.mtx);
+
+    const DkShader* sh[2] = { &s_prg->mesh_vert, &s_prg->frag };
+    dkCmdBufBindShaders(s_cmd, DkStageFlag_GraphicsMask, sh, 2);
+    dkCmdBufBindVtxAttribState(s_cmd, s_prg->attribs, DK_ATTR_COUNT);
+    DkVtxBufferState vb = { s_prg->stride, 0 };
+    dkCmdBufBindVtxBufferState(s_cmd, &vb, 1);
+    dkCmdBufBindVtxBuffer(s_cmd, 0, m.block.gpu + d->byte_offset, m.bytes - d->byte_offset);
+
+    if (d->cull != 0) {
+        DkRasterizerState r;
+        dkRasterizerStateDefaults(&r);
+        r.depthClampEnable = 1;
+        r.depthBiasEnableMask = s_decal ? DkPolygonFlag_All : 0;
+        r.cullMode = d->cull == 1 ? DkFace_Back : DkFace_Front;
+        /* GL's rule unchanged (gfx_opengl_mesh_draw). Measured on the console
+         * 2026-11-16: the mirrored rule culled the front faces (object insides
+         * shown), so the upper-left device judges facing as GL does here. */
+        r.frontFace = d->invert_y ? DkFrontFace_CW : DkFrontFace_CCW;
+        dkCmdBufBindRasterizerState(s_cmd, &r);
+    }
+    dkCmdBufDraw(s_cmd, DkPrimitive_Triangles, d->nverts, 1, 0, 0);
+    s_st_draws++;
+    if (d->cull != 0) bind_rasterizer();
+    bind_program(s_prg);       /* later same-state classic batches need their original vertex shader */
+    s_cmd_pending = true;
+}
+
+/* s_pack is the NRO-embedded pack, set once in dk_init: safe from the decoder. */
+bool dk_mesh_supported(uint64_t id0, uint32_t id1) {
+    const int e = pack_find(id0, id1);
+    return e >= 0 && s_pack[e].vert_len != 0 && s_pack[e].frag_len != 0 && s_pack[e].mesh_vert_len != 0;
+}
+
 void dk_init(void) {
     {
         const char *sp = getenv("GE_SHADEPERSP"), *fp = getenv("GE_FOGPIXEL");
@@ -1143,8 +1240,15 @@ void dk_init(void) {
         s_submit_every = e ? (uint32_t)atoi(e) : 64;
         sysLogPrintf(LOG_NOTE, "DK: submit every %u draws (GE_DKSUBMIT; 0 = once per frame)", s_submit_every);
     }
-    gfx_rdp_affine = 1;   /* the pack is built with noperspective shade and per-vertex fog */
-    gfx_fog_vertex = 1;
+    gfx_rdp_affine = 1;   /* the pack is built with noperspective shade */
+    /* Fog: the pack carries both forms (vFog.a per vertex, vFogW = fog * w);
+     * Draw.fog_pixel picks one. Video.FogPixel, GE_FOGPIXEL=0/1 overrides. */
+    {
+        const char* fp = getenv("GE_FOGPIXEL");
+        gfx_fog_vertex = (fp && fp[0]) ? (fp[0] != '1') : !portFogPixel;
+        s_uni.fog_pixel = gfx_fog_vertex ? 0 : 1;
+        sysLogPrintf(LOG_NOTE, "DK: fog %s", gfx_fog_vertex ? "per-vertex (N64)" : "per-pixel");
+    }
 
     DkDeviceMaker dm;
     dkDeviceMakerDefaults(&dm);
@@ -1561,6 +1665,10 @@ struct GfxRenderingAPI gfx_deko3d_api = {
     dk_get_max_anisotropy_level,
     dk_stream_begin,
     dk_load_shader_with,
+    dk_mesh_create,
+    dk_mesh_delete,
+    dk_mesh_draw,
+    dk_mesh_supported,
 };
 
 extern "C" {
@@ -1620,6 +1728,10 @@ void gfx_deko3d_park(void) {
     dkQueueWaitIdle(s_queue);
     s_parked = true;
     destroy_window();   /* before nwindow goes away with the process */
+    for (Mesh& m : s_meshes) free_block(m.block);
+    s_meshes.clear();
+    for (auto& m : s_dead_meshes) free_block(m.first);
+    s_dead_meshes.clear();
     for (auto& b : s_dataBlocks) free_block(b);
     for (auto& b : s_cmdBlocks) free_block(b);
     for (auto& b : s_imgBlocks) free_block(b);

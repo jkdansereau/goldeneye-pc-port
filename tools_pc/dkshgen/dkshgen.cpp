@@ -124,7 +124,7 @@ static void append_formula(std::string& s, uint8_t c[2][4], bool do_single, bool
 static const char* ST(int j) { return j == 0 ? "S" : "T"; }
 
 /* Combiner GLSL (deko3d): see gfx_opengl_gen_shader_src. */
-static bool gen_combiner(CCFeatures& f, std::string& vs, std::string& fs) {
+static bool gen_combiner(CCFeatures& f, std::string& vs, std::string& fs, bool mesh = false) {
     s_bad = false;
     const char* shadeq = "noperspective ";   /* gfx_rdp_affine = 1 on the Switch (D540) */
     const char* fogq = shadeq;               /* gfx_fog_vertex = 1 (D543) */
@@ -145,6 +145,7 @@ static bool gen_combiner(CCFeatures& f, std::string& vs, std::string& fs) {
     if (f.opt_fog) {
         vs += fmt("layout(location = %d) in vec4 aFog;\n", DK_ATTR_FOG);
         vs += fmt("layout(location = %d) %sout vec4 vFog;\n", DK_ATTR_FOG, fogq);
+        vs += fmt("layout(location = %d) out float vFogW;\n", DK_VAR_FOGW);   /* per-pixel fog (fog * w) */
     }
     if (f.opt_grayscale) {
         vs += fmt("layout(location = %d) in vec4 aGrayscaleColor;\n", DK_ATTR_GRAY);
@@ -154,7 +155,21 @@ static bool gen_combiner(CCFeatures& f, std::string& vs, std::string& fs) {
         vs += fmt("layout(location = %d) in vec%d aInput%d;\n", DK_ATTR_IN1 + i, nin, i + 1);
         vs += fmt("layout(location = %d) %sout vec%d vInput%d;\n", DK_ATTR_IN1 + i, shadeq, nin, i + 1);
     }
+    if (mesh) {
+        vs += "layout(std140, binding = 2) uniform Mesh {\n"
+              "    mat4 mtx[32];\n"
+              "    vec4 fog_color;\n"
+              "    float fog_mul; float fog_off; int fog_from_z;\n"
+              "    vec4 lod_mask[8];\n"
+              "    vec4 env_in[8];\n"
+              "    vec4 env_mask[8];\n"
+              "};\n";
+    }
     vs += "void main() {\n";
+    if (mesh) {
+        vs += "    vec4 mp = mtx[int(aVtxPos.w + 0.5)] * vec4(aVtxPos.xyz, 1.0);\n"
+              "    float lodv = floor((0.7 + clamp(mp.w / 1024.0, 0.0, 1.0) * 0.3) * 255.0) / 255.0;\n";
+    }
     for (int i = 0; i < 2; i++) {
         if (!f.used_textures[i]) continue;
         vs += fmt("    vTexCoord%d = aTexCoord%d;\n", i, i);
@@ -162,10 +177,26 @@ static bool gen_combiner(CCFeatures& f, std::string& vs, std::string& fs) {
             if (f.clamp[i][j]) vs += fmt("    vTexClamp%s%d = aTexClamp%s%d;\n", ST(j), i, ST(j), i);
         }
     }
-    if (f.opt_fog) vs += "    vFog = aFog;\n";
+    if (f.opt_fog) {
+        if (mesh) {
+            vs += "    float fw = abs(mp.w) < 0.001 ? 0.001 : mp.w;\n"
+                  "    vFog = vec4(fog_color.rgb, fog_from_z != 0 ? floor(clamp(mp.z / fw * fog_mul + fog_off, 0.0, 255.0)) / 255.0 : fog_color.a);\n"
+                  "    vFogW = fog_from_z != 0 ? (mp.z * fog_mul + mp.w * fog_off) / 255.0 : fog_color.a * mp.w;\n";
+        } else {
+            vs += "    vFog = aFog;\n"
+                  "    vFogW = aFog.a;\n";   /* the CPU sends fog * w when fog_pixel is set */
+        }
+    }
     if (f.opt_grayscale) vs += "    vGrayscaleColor = aGrayscaleColor;\n";
-    for (int i = 0; i < f.num_inputs; i++) vs += fmt("    vInput%d = aInput%d;\n", i + 1, i + 1);
-    vs += "    gl_Position = aVtxPos;\n";
+    for (int i = 0; i < f.num_inputs; i++) {
+        if (mesh) {
+            const char* sw = nin == 3 ? ".xyz" : "";
+            vs += fmt("    vInput%d = mix(mix(aInput%d, vec%d(lodv), lod_mask[%d]%s), env_in[%d]%s, env_mask[%d]%s);\n",
+                      i + 1, i + 1, nin, i, sw, i, sw, i, sw);
+        }
+        else vs += fmt("    vInput%d = aInput%d;\n", i + 1, i + 1);
+    }
+    vs += mesh ? "    gl_Position = mp;\n" : "    gl_Position = aVtxPos;\n";
     vs += "}\n";
 
     fs = "#version 460\n";
@@ -180,6 +211,7 @@ static bool gen_combiner(CCFeatures& f, std::string& vs, std::string& fs) {
         }
     }
     if (f.opt_fog) fs += fmt("layout(location = %d) %sin vec4 vFog;\n", DK_ATTR_FOG, fogq);
+    if (f.opt_fog) fs += fmt("layout(location = %d) in float vFogW;\n", DK_VAR_FOGW);
     if (f.opt_grayscale) fs += fmt("layout(location = %d) in vec4 vGrayscaleColor;\n", DK_ATTR_GRAY);
     for (int i = 0; i < f.num_inputs; i++) {
         fs += fmt("layout(location = %d) %sin vec%d vInput%d;\n", DK_ATTR_IN1 + i, shadeq, nin, i + 1);
@@ -193,6 +225,7 @@ static bool gen_combiner(CCFeatures& f, std::string& vs, std::string& fs) {
           "    int three_point_filter1;\n"
           "    int flip_v0;\n"
           "    int flip_v1;\n"
+          "    int fog_pixel;\n"
           "};\n";
     fs += "float random(in vec3 value) {\n"
           "    float random = dot(sin(value), vec3(12.9898, 78.233, 37.719));\n"
@@ -265,7 +298,7 @@ static bool gen_combiner(CCFeatures& f, std::string& vs, std::string& fs) {
     fs += "    texel = WRAP(texel, -0.51, 1.51);\n";
     fs += "    texel = clamp(texel, 0.0, 1.0);\n";
     if (f.opt_fog) {
-        fs += "    float fogA = clamp(vFog.a, 0.0, 1.0);\n";
+        fs += "    float fogA = fog_pixel != 0 ? clamp(vFogW * gl_FragCoord.w, 0.0, 1.0) : clamp(vFog.a, 0.0, 1.0);\n";
         fs += f.opt_alpha ? "    texel = vec4(mix(texel.rgb, vFog.rgb, fogA), texel.a);\n"
                           : "    texel = mix(texel, vFog.rgb, fogA);\n";
     }
@@ -348,8 +381,8 @@ static int cmd_glsl(const char* list, const char* outdir) {
         CCFeatures f;
         memset(&f, 0, sizeof f);
         gfx_cc_get_features(id.first, id.second, &f);
-        std::string vs, fs;
-        if (!gen_combiner(f, vs, fs)) {
+        std::string vs, fs, mesh_vs;
+        if (!gen_combiner(f, vs, fs) || !gen_combiner(f, mesh_vs, fs, true)) {
             fprintf(stderr, "dkshgen: 0x%016llx 0x%08x uses a source GL has no GLSL for; left to the uber-shader\n",
                     (unsigned long long)id.first, id.second);
             skipped++;
@@ -357,6 +390,7 @@ static int cmd_glsl(const char* list, const char* outdir) {
         }
         const std::string base = fmt("cc_%016llx_%08x", (unsigned long long)id.first, id.second);
         if (!write_file(std::string(outdir) + "/" + base + ".vert.glsl", vs)) return 1;
+        if (!write_file(std::string(outdir) + "/" + base + ".mesh.vert.glsl", mesh_vs)) return 1;
         if (!write_file(std::string(outdir) + "/" + base + ".frag.glsl", fs)) return 1;
         names += fmt("%016llx %08x %s\n", (unsigned long long)id.first, id.second, base.c_str());
     }
@@ -391,15 +425,15 @@ static int cmd_pack(const char* outfile, const char* listfile) {
         fprintf(stderr, "dkshgen: cannot open %s\n", listfile);
         return 1;
     }
-    struct Item { uint64_t id0; uint32_t id1; std::vector<uint8_t> v, f; };
+    struct Item { uint64_t id0; uint32_t id1; std::vector<uint8_t> v, f, mv; };
     std::vector<Item> items;
     char line[2048];
     while (fgets(line, sizeof line, lf)) {
         unsigned long long a;
         unsigned b;
-        char vp[900], fp[900];
+        char vp[900], fp[900], mp[900];
         if (line[0] == '#' || line[0] == '\n') continue;
-        if (sscanf(line, "%llx %x %899s %899s", &a, &b, vp, fp) != 4) {
+        if (sscanf(line, "%llx %x %899s %899s %899s", &a, &b, vp, fp, mp) != 5) {
             fprintf(stderr, "dkshgen: bad pack line: %s", line);
             fclose(lf);
             return 1;
@@ -407,7 +441,7 @@ static int cmd_pack(const char* outfile, const char* listfile) {
         Item it;
         it.id0 = a;
         it.id1 = b;
-        if (!read_blob(vp, it.v) || !read_blob(fp, it.f)) {
+        if (!read_blob(vp, it.v) || !read_blob(fp, it.f) || !read_blob(mp, it.mv)) {
             fclose(lf);
             return 1;
         }
@@ -440,6 +474,7 @@ static int cmd_pack(const char* outfile, const char* listfile) {
         e.id1 = items[i].id1;
         if (!items[i].v.empty()) put(items[i].v, e.vert_off, e.vert_len);
         if (!items[i].f.empty()) put(items[i].f, e.frag_off, e.frag_len);
+        if (!items[i].mv.empty()) put(items[i].mv, e.mesh_vert_off, e.mesh_vert_len);
         memcpy(out.data() + 16 + i * sizeof(DkPackEntry), &e, sizeof e);
     }
     FILE* of = fopen(outfile, "wb");

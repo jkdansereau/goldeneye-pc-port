@@ -29,13 +29,13 @@ ${_uo}${_ue}")
   _dk_uam(vert "${DK_SRC}/port/switch/shaders/fullscreen.vert.glsl" "${DK_OUT}/glsl/fullscreen.vert.dksh")
   _dk_uam(frag "${DK_SRC}/port/switch/shaders/fxaa.frag.glsl" "${DK_OUT}/glsl/fxaa.frag.dksh")
   _dk_uam(frag "${DK_SRC}/port/switch/shaders/skyplus.frag.glsl" "${DK_OUT}/glsl/skyplus.frag.dksh")
-  string(APPEND _pack "0 1 ${DK_OUT}/glsl/uber.vert.dksh ${DK_OUT}/glsl/uber.frag.dksh
+  string(APPEND _pack "0 1 ${DK_OUT}/glsl/uber.vert.dksh ${DK_OUT}/glsl/uber.frag.dksh -
 ")
-  string(APPEND _pack "0 2 ${DK_OUT}/glsl/fullscreen.vert.dksh -
+  string(APPEND _pack "0 2 ${DK_OUT}/glsl/fullscreen.vert.dksh - -
 ")
-  string(APPEND _pack "0 3 - ${DK_OUT}/glsl/fxaa.frag.dksh
+  string(APPEND _pack "0 3 - ${DK_OUT}/glsl/fxaa.frag.dksh -
 ")
-  string(APPEND _pack "0 4 - ${DK_OUT}/glsl/skyplus.frag.dksh
+  string(APPEND _pack "0 4 - ${DK_OUT}/glsl/skyplus.frag.dksh -
 ")
   file(STRINGS "${DK_OUT}/glsl/list.txt" _lines)
   set(_n 0)
@@ -45,8 +45,9 @@ ${_uo}${_ue}")
     list(GET _f 1 _id1)
     list(GET _f 2 _base)
     _dk_uam(vert "${DK_OUT}/glsl/${_base}.vert.glsl" "${DK_OUT}/glsl/${_base}.vert.dksh")
+    _dk_uam(vert "${DK_OUT}/glsl/${_base}.mesh.vert.glsl" "${DK_OUT}/glsl/${_base}.mesh.vert.dksh")
     _dk_uam(frag "${DK_OUT}/glsl/${_base}.frag.glsl" "${DK_OUT}/glsl/${_base}.frag.dksh")
-    string(APPEND _pack "${_id0} ${_id1} ${DK_OUT}/glsl/${_base}.vert.dksh ${DK_OUT}/glsl/${_base}.frag.dksh
+    string(APPEND _pack "${_id0} ${_id1} ${DK_OUT}/glsl/${_base}.vert.dksh ${DK_OUT}/glsl/${_base}.frag.dksh ${DK_OUT}/glsl/${_base}.mesh.vert.dksh
 ")
     math(EXPR _n "${_n} + 1")
   endforeach()

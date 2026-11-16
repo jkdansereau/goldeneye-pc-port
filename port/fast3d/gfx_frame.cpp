@@ -47,6 +47,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <cstddef>
 #include <cstdio>
 #include <chrono>
 #include <unordered_map>
@@ -524,6 +525,111 @@ void r_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tr
     s_fr->tris += (uint32_t)buf_vbo_num_tris;
 }
 
+/* ---- issue #10 step B: static meshes ----
+ * The decoder names meshes with its own ids; the GL side maps them to buffer
+ * names (s_mesh_names, GL thread). Creation and deletion are ordered commands. */
+std::vector<uint32_t> s_mesh_names;   /* GL thread: id -> backend name (0 = none) */
+uint32_t s_mesh_next_id = 1;          /* decoder */
+uint64_t s_st_mesh_draws, s_st_mesh_bytes;
+
+void push_state_if_dirty(void) {
+    if (s_cur_dirty) {
+        for (int u = 0; u < 2; u++) {
+            s_cur.sampler[u] = GfxFrameSampler();
+            if (s_cur.unit[u].kind == GFX_UNIT_TEXTURE) {
+                auto it = s_tex_sampler.find(s_cur.unit[u].id);
+                if (it != s_tex_sampler.end()) s_cur.sampler[u] = it->second;
+            }
+        }
+        grow(s_fr->states, s_fr->cap_states, s_fr->nstates + 1);
+        s_fr->states[s_fr->nstates++] = s_cur;
+        s_cur_dirty = false;
+    }
+}
+
+void mesh_create_on_gl(uint32_t id, const float* data, size_t nfloats) {
+    if (s_mesh_names.size() <= id) s_mesh_names.resize(id + 1, 0);
+    s_mesh_names[id] = B->mesh_create(data, nfloats);
+}
+
+void mesh_delete_on_gl(uint32_t id) {
+    if (id < s_mesh_names.size() && s_mesh_names[id] != 0) {
+        B->mesh_delete(s_mesh_names[id]);
+        s_mesh_names[id] = 0;
+    }
+}
+
+/* the header of a GfxMeshDraw (everything before mtx) + nmtx matrices */
+const size_t MESH_DRAW_HDR = offsetof(struct GfxMeshDraw, mtx);
+
+void mesh_draw_on_gl(uint32_t id, const uint8_t* payload, uint32_t nmtx) {
+    static struct GfxMeshDraw d;
+    memcpy(&d, payload, MESH_DRAW_HDR);
+    memcpy(d.mtx, payload + MESH_DRAW_HDR, (size_t)nmtx * 16 * sizeof(float));
+    if (id < s_mesh_names.size() && s_mesh_names[id] != 0) {
+        B->mesh_draw(s_mesh_names[id], &d);
+    }
+}
+
+uint32_t r_mesh_create(const float* data, size_t nfloats) {
+    const uint32_t id = s_mesh_next_id++;
+    if (!s_rec) {
+        mesh_create_on_gl(id, data, nfloats);
+        return id;
+    }
+    const size_t nb = nfloats * sizeof(float);
+    s_fr->nbytes = (s_fr->nbytes + 15) & ~(size_t)15;   /* aligned for the GL thread's float reads */
+    grow(s_fr->bytes, s_fr->cap_bytes, s_fr->nbytes + nb);
+    memcpy(s_fr->bytes + s_fr->nbytes, data, nb);
+    GfxFrameCmd& c = push_cmd(GFC_MESH_CREATE);
+    c.a = (int32_t)id;
+    c.b = (int32_t)nfloats;
+    c.off = s_fr->nbytes;
+    s_fr->nbytes += nb;
+    s_st_mesh_bytes += nb;
+    return id;
+}
+
+void r_mesh_delete(uint32_t id) {
+    if (!s_rec) {
+        mesh_delete_on_gl(id);
+        return;
+    }
+    GfxFrameCmd& c = push_cmd(GFC_MESH_DELETE);
+    c.a = (int32_t)id;
+}
+
+void r_mesh_draw(uint32_t id, const struct GfxMeshDraw* d) {
+    const uint32_t nmtx = d->nmtx < GFX_MESH_MAX_MTX ? d->nmtx : GFX_MESH_MAX_MTX;
+    if (!s_rec) {
+        B->mesh_draw(id < s_mesh_names.size() ? s_mesh_names[id] : 0, d);
+        return;
+    }
+    push_state_if_dirty();
+    const size_t nb = MESH_DRAW_HDR + (size_t)nmtx * 16 * sizeof(float);
+    s_fr->nbytes = (s_fr->nbytes + 15) & ~(size_t)15;   /* the header is read as a struct */
+    grow(s_fr->bytes, s_fr->cap_bytes, s_fr->nbytes + nb);
+    memcpy(s_fr->bytes + s_fr->nbytes, d, MESH_DRAW_HDR);
+    {
+        /* the program's uniform values as latched for this state (load_shader_with) */
+        struct GfxMeshDraw* h = (struct GfxMeshDraw*)(s_fr->bytes + s_fr->nbytes);
+        const GfxFrameState& st = s_fr->states[s_fr->nstates - 1];
+        h->frame_count = st.uniforms.frame_count;
+        h->noise_scale = st.uniforms.noise_scale;
+        h->tpf0 = st.uniforms.three_point[0];
+        h->tpf1 = st.uniforms.three_point[1];
+    }
+    memcpy(s_fr->bytes + s_fr->nbytes + MESH_DRAW_HDR, d->mtx, (size_t)nmtx * 16 * sizeof(float));
+    GfxFrameCmd& c = push_cmd(GFC_DRAW_MESH);
+    c.a = (int32_t)(s_fr->nstates - 1);
+    c.b = (int32_t)id;
+    c.c = (int32_t)nmtx;
+    c.off = s_fr->nbytes;
+    s_fr->nbytes += nb;
+    s_fr->tris += d->nverts / 3;
+    s_st_mesh_draws++;
+}
+
 void r_init(void) {
     B->init();
     s_fb_count = 1;   /* gfx_opengl_init: framebuffers.resize(1) */
@@ -853,6 +959,16 @@ void replay(const GfxFrame& f) {
             case GFC_SETTING:
                 apply_setting(c.a, c.b);
                 break;
+            case GFC_MESH_CREATE:
+                mesh_create_on_gl((uint32_t)c.a, (const float*)(f.bytes + c.off), (size_t)c.b);
+                break;
+            case GFC_MESH_DELETE:
+                mesh_delete_on_gl((uint32_t)c.a);
+                break;
+            case GFC_DRAW_MESH:
+                apply_state(f.states[c.a]);   /* binds the classic program: mesh_draw uses its twin */
+                mesh_draw_on_gl((uint32_t)c.b, f.bytes + c.off, (uint32_t)c.c);
+                break;
         }
     }
 }
@@ -1110,6 +1226,9 @@ struct GfxRenderingAPI* gfx_frame_install(struct GfxRenderingAPI* backend) {
     s_api.get_max_anisotropy_level = r_get_max_anisotropy_level;
     s_api.stream_begin = r_stream_begin;
     s_api.load_shader_with = r_load_shader_with;
+    s_api.mesh_create = r_mesh_create;
+    s_api.mesh_delete = r_mesh_delete;
+    s_api.mesh_draw = r_mesh_draw;
     return &s_api;
 }
 
