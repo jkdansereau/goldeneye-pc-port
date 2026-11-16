@@ -22891,3 +22891,29 @@ Console (same command, 40 s, 8 reports): 218-290 GPU replays per frame (5300-690
 **Not a port bug (checked while testing).** Jungle fern leaves drawn over leaves in front of them: same picture in v0.1.0, v0.2.0 and in ares v148 on the original ROM (an N64 accuracy reference). N64 behaviour, kept.
 
 **Confidence.** High that it renders correctly (Ryujinx image, console run without errors). Medium on the gain (two runs, scenes diverge).
+
+## D979: Surface's satellite dish popped in against the GE+ sky -- landmarks are never hidden by the room system or the fog (`Video.Landmarks`, default on; Original N64 restores the N64 behaviour) -- BUILT + MAINTAINER-CHECKED 2026-11-16 (Ryujinx, Surface 1, GE_MESHGPU=0; Switch and Linux build; render only)
+
+**Report.** Maintainer, Surface 1: the dish appears at once against the sky while walking towards it. Trees popping in are hardly visible because the original sky is the fog colour; the GE+ sky (D971, Switch default) is not, so anything tall enough to stand above the fogged horizon cuts out on it.
+
+**Measured (temporary probe on `PROP_SEVDISH`, Ryujinx, removed).** Three gates hid it, none of them the draw distance:
+- *Room system.* The dish is in room 12; `posIsOnScreen` requires a rendered room, and room 12 enters/leaves the portal set at ~17000-23000 units as you walk (`room=0/1` flips with `fog=1` throughout).
+- *Room screen box.* With room 12 rendered, the dish is cut to the portal rectangle (`camIsPosInScreenBox`, and the matching scissor in `chrobjRenderProp`): the straight edges of D503.
+- *Prop fog.* `fogGetPropDistColor` returns 0 ("completely obscured") while the fog at the dish's centre exceeds 1, then the dish is drawn whole at just under full fog: the actual pop.
+
+**Fix (port only, `#ifdef PORT`, render only).**
+- `port/src/drawdistgameplay.c`: `Video.Landmarks` (`portLandmarks`, default 1), a model list (`PROP_SEVDISH` only), `portPropIsLandmark`, and the landmark rooms of the stage, noted by `posIsOnScreen`.
+- `bg.c bgDetermineVisibleRooms`: in the render pass (not D466's authored pass), a landmark room that is on screen and not reached by the portals is added with `sub_GAME_7F0B39BC` (the path Cradle uses for every room), full-view box, ordered after the portal rooms. The building under the dish is room geometry, so forcing the prop alone drew a floating dish; drawing it from a separate pass before or after the rooms broke the order the game relies on (distant terrain painted over it, or it showed through nearer props).
+- `propobj.c posIsOnScreen`: a landmark skips the room, room-box and fog tests (full-view frustum and the 32000 limit stay). The gameplay verdict keeps the faithful result; D466's split now runs whenever the stage has a landmark room, so AI and gameplay readers keep the authored room set.
+- `propobj.c chrobjRenderProp`: past full fog a landmark is drawn whole in the fog colour (fog factor 1) instead of being skipped, no distance alpha fade, and no room scissor.
+- Options: `Video.Landmarks` row ("Landmarks always drawn") on Video, in the Custom set, reset default 1; the Original N64 preset sets 0.
+
+**Tried and dropped.** A fade-in by alpha (the dish showed the sky through it), and fog-colour forcing in a separate pass (drawn after `fogRenderClearFogMode`, so not fogged at all).
+
+**Found on the way.** With the mesh cache GPU path on, the dish kept its fog tint up close: the mesh twins read the prop fog factor (fog-register alpha) from the bake. Fixed in the mesh-cache PR (#33, D978), not here.
+
+**Verification.** Maintainer, Ryujinx, Surface 1 (`GE_MESHGPU=0`): the dish stays drawn with its building from far, in fog colour, no pop, colours right up close. With the GPU mesh path on, up-close colours need D978's fix (built, not yet re-checked by eye). Switch NRO and Linux build.
+
+**Open.** Only `PROP_SEVDISH` is listed; other tall props can be added to `s_landmarkModels`. Level geometry that pops (not a prop) is not covered. The forced room is drawn after the portal rooms; a landmark room hidden behind nearer geometry relies on the z-buffer.
+
+**Confidence.** Medium-high: checked by eye on Surface 1 only.

@@ -4909,6 +4909,33 @@ void bgDetermineVisibleRooms(void)
 #endif
     }
 
+#ifdef PORT
+    /* D979: a landmark's room joins the drawn set whenever it is on screen,
+     * whatever the portals say (the Cradle path above, for those rooms only),
+     * drawn after every portal-reached room. Render pass only: the authored
+     * pass that feeds gameplay (D466) keeps the portal result. */
+    if (!portD466InAuthoredPass())
+    {
+        s32 k, room, order = 0;
+
+        for (k = 0; k < g_BgNumberOfRoomsDrawn; k++)
+        {
+            if (dword_CODE_bss_8007FFA0[k].unk1 >= order)
+            {
+                order = dword_CODE_bss_8007FFA0[k].unk1 + 1;
+            }
+        }
+        for (k = 0; (room = portLandmarkRoom(k)) >= 0; k++)
+        {
+            if (room > 0 && room < g_MaxNumRooms && !g_BgRoomInfo[room].room_rendered
+                && bgIsRoomOnScreen(room, &g_CurrentPlayer->screensize))
+            {
+                sub_GAME_7F0B39BC(room, order, &g_CurrentPlayer->screensize, 1);
+            }
+        }
+    }
+#endif
+
     for (var_s0 = 0; g_BgPortals[var_s0].offset_portal != NULL; var_s0++) 
     {
         temp_v1 = g_BgPortals[var_s0].connectedRoom1;

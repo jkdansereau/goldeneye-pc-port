@@ -300,6 +300,7 @@ static struct Row rows[] = {
      * capped at the draw distance. 0.5x..8.0x, 1.0x default. */
     { .key="Video.FogDistance", .label="Fog distance", .kind=ROW_SLIDER, .step=25, .uiMin=100, .uiMax=800 }   /* D565: no < 100 */,
     { .key="Video.LodDistance", .label="LOD distance", .kind=ROW_SLIDER, .step=25, .uiMin=100, .uiMax=800 },
+    { .key="Video.Landmarks", .label="Landmarks always drawn", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },   /* D979 */
     SEP(V5),
     /* D181 re-exposed (PD "Explosion shake"): named for what it scales (explosions only). */
     { .key="Game.ScreenShakeIntensity", .label="Explosion shake", .kind=ROW_SLIDER, .step=0.1, .uiMin=0, .uiMax=3 },
@@ -1155,7 +1156,7 @@ static int rowPlatformOk(const struct Row *r)
         "__SepV2", "Video.VSync", "Video.FpsCap",
         "__SepV3", "Video.TextureFilter", "Video.Anisotropy",
         "__SepV4", "Video.SafeAreaCrop",
-        "Video.DrawDistance", "Video.FogDistance", "Video.LodDistance",
+        "Video.DrawDistance", "Video.FogDistance", "Video.LodDistance", "Video.Landmarks",
         "__SepV5", "Game.ScreenShakeIntensity", "__ResetVideo",
         NULL,
     };
@@ -2297,6 +2298,7 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Video.DrawDistance",        200 },  /* 2.0x (D546) */
     { "Video.FogDistance",         100 },  /* 1.0x = N64 fog (D540) */
     { "Video.LodDistance",         200 },  /* 2.0x (D546) */
+    { "Video.Landmarks",             1 },  /* D979: on */
     { "Video.CrosshairHide",      0 },   /* = 0 (on, N64) */
     { "Video.CrosshairPersistent", 0 },   /* D436: off = N64 (aim mode only) */
     { "Video.CrosshairColor",   0 },   /* = 0 (authored red sprite) */
@@ -4070,6 +4072,7 @@ static const struct { const char *key, *help; } kRowHelp[] = {
     { "Video.MSAA", "Smooths jagged edges while docked. Higher is cleaner but slower." },
     { "Video.MSAAHandheld", "Smooths jagged edges in handheld mode. Higher is cleaner but slower." },
     { "Video.FXAA", "A final pass that smooths edges without blurring flat textures." },
+    { "Video.Landmarks", "Huge landmarks (Surface's satellite dish) stay drawn when the room system would hide them." },
     { "Video.FogPixel", "Exact fog for every pixel. Off: per-vertex fog as the N64 draws it." },
     { "Video.SkyPlus", "GE+ adds cloud layers, sun, stars and moon to the original sky." },
     { "Input.CrosshairCursor", "Uses the crosshair as the mouse pointer in this menu." },

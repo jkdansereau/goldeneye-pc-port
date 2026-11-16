@@ -106,6 +106,7 @@ int portD466Active(void)
     static int force = -1, off = -1;
     if (d466Env("GE_D466_OFF", &off)) { return 0; }
     if (portDrawDistanceMultiplier() > 1.0f || s_clampOn) { return 1; }
+    if (portLandmarkRoom(0) >= 0) { return 1; }   /* D979: forced rooms are render only */
     return d466Env("GE_D466_FORCE", &force);
 }
 
@@ -208,4 +209,64 @@ void portD466FrameLog(void)
         fprintf(stderr, "D466 f=%u active=%d ext=%d auth=%d subset=%d hext=%08x hauth=%08x chrOn=%d chrGp=%d seen=%d hgame=%08x\n",
                 frame - 1, portD466Active(), ext, auth, sub, he, ha, nOn, nGp, nSeen, hg);
     }
+}
+
+/* ---------------------------------------------------------------- D979 */
+
+int portLandmarks = 1;   /* Video.Landmarks (registered in video.c) */
+
+/* Props the room system must not hide. Kept to models that are landmarks by
+ * design (seen from far, standing above the surrounding geometry). */
+static const u16 s_landmarkModels[] = {
+    PROP_SEVDISH,   /* Surface 1/2: the satellite dish */
+};
+
+int portPropIsLandmark(struct PropRecord *prop)
+{
+    if (!portLandmarks || prop == NULL || prop->type != PROP_TYPE_OBJ || prop->obj == NULL) {
+        return 0;
+    }
+    for (size_t i = 0; i < sizeof(s_landmarkModels) / sizeof(s_landmarkModels[0]); i++) {
+        if (((ObjectRecord *)prop->obj)->obj == s_landmarkModels[i]) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Rooms holding a landmark on the current stage, noted as posIsOnScreen sees
+ * the props (it runs for them whatever their room's visibility). */
+#define LANDMARK_ROOMS_MAX 8
+static s32 s_landmarkRooms[LANDMARK_ROOMS_MAX];
+static int s_landmarkRoomCount;
+static s32 s_landmarkStage = -1;
+
+#include "boss.h"
+
+static void landmarkCheckStage(void)
+{
+    s32 stage = (s32)bossGetStageNum();
+    if (stage != s_landmarkStage) {
+        s_landmarkStage = stage;
+        s_landmarkRoomCount = 0;
+    }
+}
+
+void portLandmarkNoteRooms(const s32 *rooms)
+{
+    landmarkCheckStage();
+    for (; *rooms >= 0; rooms++) {
+        int i;
+        for (i = 0; i < s_landmarkRoomCount && s_landmarkRooms[i] != *rooms; i++) { }
+        if (i == s_landmarkRoomCount && s_landmarkRoomCount < LANDMARK_ROOMS_MAX) {
+            s_landmarkRooms[s_landmarkRoomCount++] = *rooms;
+        }
+    }
+}
+
+int portLandmarkRoom(int i)
+{
+    if (!portLandmarks) { return -1; }
+    landmarkCheckStage();
+    return i < s_landmarkRoomCount ? s_landmarkRooms[i] : -1;
 }

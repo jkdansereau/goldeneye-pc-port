@@ -7470,6 +7470,17 @@ Gfx *chrobjRenderProp(PropRecord *prop, Gfx *gdl, s32 arg2)
 
     objAlpha = 0xFF;
     spAC = fogGetPropDistColor(prop, &spB0);
+#ifdef PORT
+    /* D979: a landmark is never hidden by the fog: past full fog it is drawn
+     * whole in the fog colour (fogGetPropDistColor returned 0 = don't
+     * render). Its vertices are as fogged, so the shape stays solid fog
+     * colour rather than popping in at just under full fog. */
+    if (spAC == 0 && portPropIsLandmark(prop))
+    {
+        spB0.rgba[3] = 1.0f;
+        spAC = 1;
+    }
+#endif
 
     if (spAC == 0)
     {
@@ -7493,6 +7504,12 @@ Gfx *chrobjRenderProp(PropRecord *prop, Gfx *gdl, s32 arg2)
         }
     }
 
+#ifdef PORT
+    if (portPropIsLandmark(prop) && !(((s32) prop->timetoregen > 0) && ((s32) prop->timetoregen < CHROBJ_TIMETOREGEN)))
+    {
+        objAlpha = 0xFF;   /* D979: no distance fade either, the landmark stays opaque */
+    }
+#endif
     if ((objAlpha < 0xFF) || (obj->flags2 & 0x10000))
     {
         if (arg2 == 0)
@@ -7508,7 +7525,11 @@ Gfx *chrobjRenderProp(PropRecord *prop, Gfx *gdl, s32 arg2)
         sp44 = (arg2 == 0) ? 1 : 2;
     }
 
-    if ((getPropCombinedRoomsBBox2D(prop, &sp58) > 0) && (((s32)obj->flags2 << 5) >= 0))
+    if ((getPropCombinedRoomsBBox2D(prop, &sp58) > 0) && (((s32)obj->flags2 << 5) >= 0)
+#ifdef PORT
+        && !portPropIsLandmark(prop)   /* D979: not cut to its room's screen box */
+#endif
+        )
     {
         gdl = bgScissorCurrentPlayerViewF(gdl, sp58.left, sp58.top, sp58.width, sp58.height);
     }
@@ -13764,6 +13785,27 @@ bool posIsOnScreen(PropRecord *prop, coord3d *pos, f32 arg2, bool arg3)
     }
 
 #ifdef PORT
+    /* D979: a landmark ignores the room system (room visibility and the
+     * room's screen box) and the fog distance: only the full-view frustum
+     * and the 32000 limit apply. Render only: the gameplay verdict below keeps the
+     * faithful result. */
+    s32 faithfulResult = result;
+    if (portPropIsLandmark(prop))
+    {
+        portLandmarkNoteRooms(room_ids);
+        result = FALSE;
+        if (camIsPosInScreen(pos, arg2))   /* no fog test: never hidden by the fog */
+        {
+            coord3d *lcam = bondviewGetCurrentPlayersPosition();
+            f32 lx = pos->x - lcam->x;
+            f32 ly = pos->y - lcam->y;
+            f32 lz = pos->z - lcam->z;
+            result = (lx * lx + ly * ly + lz * lz) <= 32000.0f * 32000.0f;
+        }
+    }
+#endif
+
+#ifdef PORT
     /* D466 (#125): record whether this position would ALSO be "on screen" at
      * the level's authored draw distance (authored room set + authored fog,
      * multiplier treated as 1). `result` (extended) keeps deciding what is
@@ -13792,6 +13834,7 @@ bool posIsOnScreen(PropRecord *prop, coord3d *pos, f32 arg2, bool arg3)
                 }
             }
         }
+        gameplayVisible = gameplayVisible && faithfulResult;   /* D979: landmark override is render only */
         portD466SetLastPosVerdict(gameplayVisible);
     }
 #endif

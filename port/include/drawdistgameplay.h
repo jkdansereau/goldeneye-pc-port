@@ -9,6 +9,8 @@
  * multiplier is 1, unless GE_D466_FORCE=1; GE_D466_OFF=1 disables the split
  * (reproduces the leak, for A/B). */
 
+#include <ultra64.h>
+
 struct PropRecord;
 
 /* prop->flags is a u8 and bit 0x80 is unused by the game. Set (together with
@@ -34,6 +36,18 @@ int  portD466LastPosVerdict(void);
 void portD468UpdateClamp(void);                   /* per player view, bgDetermineVisibleRooms */
 int  portD468ClampActive(void);
 void portD468ShrinkBox(float *minmax);            /* {min.x,min.y,max.x,max.y} */
+
+/* D979: landmark props (Surface's satellite dish) are never hidden by the
+ * room system or the fog. Their room joins the drawn room set whenever it
+ * is on screen (bgDetermineVisibleRooms, render pass only); posIsOnScreen
+ * ignores the room and fog tests for the prop; chrobjRenderProp draws it in
+ * full fog colour past full fog and skips the room scissor. Video.Landmarks=0
+ * (and the Original N64 preset) restores the N64 behaviour. Render only: the
+ * gameplay verdict and the authored room set stay the faithful ones. */
+extern int portLandmarks;
+int  portPropIsLandmark(struct PropRecord *prop);
+void portLandmarkNoteRooms(const s32 *rooms);   /* posIsOnScreen, per landmark */
+int  portLandmarkRoom(int i);                    /* i-th landmark room of this stage, -1 = end */
 
 /* authored-distance fog (bgfog.c) */
 float portD466AuthoredFar(void);
