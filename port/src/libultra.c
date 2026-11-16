@@ -23,6 +23,7 @@
  * src/sched.h (it is on the include path), not MinGW's. osYieldThread uses a
  * short sleep instead of sched_yield(). */
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>

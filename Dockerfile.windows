@@ -1,0 +1,49 @@
+# project-dam: Windows (x86_64, MinGW-w64) cross-compilation of the PC port
+# from Linux, without MSYS2.
+#
+#   docker compose build windows        # once
+#   docker compose run --rm windows     # -> build-win/ge007.x86_64.exe + DLLs
+#
+# Toolchain: Fedora's MinGW-w64 packages (GCC 15, mingw-w64 13 headers/CRT,
+# zlib) plus its CMake toolchain file (/usr/share/mingw/toolchain-mingw64.cmake)
+# the build script uses. Fedora 43 is the minimum: mingw-w64 12 (Fedora <= 42)
+# defines sprintf/snprintf `static inline` in <stdio.h>, which collides with the
+# decomp's extern prototypes (include/PR/os.h, port/include/pc_protos.h);
+# mingw-w64 13 declares them like MSYS2's headers do.
+#
+# SDL2: libsdl.org's prebuilt MinGW development package, unpacked into the
+# MinGW sysroot (Fedora 43 only ships sdl2-compat, the SDL2 API on top of SDL3).
+#
+# The native MSYS2 build (build-pc.sh, docs/building.md) stays the reference
+# Windows build and the one CI ships; this image is a convenience for building
+# a Windows binary from Linux/WSL/macOS, or from Windows without MSYS2.
+# Base image and SDL2 archive are pinned (digest / sha256); bump deliberately.
+# No game files are copied into this image.
+FROM docker.io/library/fedora:43@sha256:f01112b9a1f1d0504ad962d9adfa401425033f8ab067e0a821904ebdde5b8ca5
+
+RUN dnf -y install --setopt=install_weak_deps=False \
+        cmake \
+        git \
+        ninja-build \
+        python3 \
+        mingw64-gcc \
+        mingw64-gcc-c++ \
+        mingw64-zlib \
+    && dnf clean all
+
+ARG SDL2_VERSION=2.32.10
+ARG SDL2_SHA256=83a5d74012311edc3c0d40ea6faecbe57ad692aa033fa5dc273cc937e3938ff2
+RUN cd /tmp \
+    && curl -fsSLo sdl2.tar.gz "https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VERSION}/SDL2-devel-${SDL2_VERSION}-mingw.tar.gz" \
+    && echo "${SDL2_SHA256}  sdl2.tar.gz" | sha256sum -c - \
+    && tar xzf sdl2.tar.gz \
+    && cp -r "SDL2-${SDL2_VERSION}/x86_64-w64-mingw32/bin" \
+             "SDL2-${SDL2_VERSION}/x86_64-w64-mingw32/include" \
+             "SDL2-${SDL2_VERSION}/x86_64-w64-mingw32/lib" \
+             /usr/x86_64-w64-mingw32/sys-root/mingw/ \
+    && rm -rf /tmp/sdl2.tar.gz "/tmp/SDL2-${SDL2_VERSION}"
+
+# The repository is bind-mounted at /src at runtime, so source changes need no
+# image rebuild.
+RUN git config --system --add safe.directory '*'
+WORKDIR /src

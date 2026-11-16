@@ -5,6 +5,8 @@
 #   docker compose build                 # once
 #   docker compose run --rm linux        # Linux reference build -> build-linux/
 #   docker compose run --rm switch       # Switch build -> build-switch/
+#   docker compose run --rm windows      # Windows cross-build -> build-win/
+#                                        # (own image: Dockerfile.windows)
 #   docker compose run --rm shell        # interactive shell in the toolchain
 services:
   linux:
@@ -31,6 +33,19 @@ services:
         cmake -S . -B build-switch -G Ninja -DROMID=ntsc-final
         -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake
         && cmake --build build-switch
+  # Windows x86_64 cross-compilation (MinGW-w64 on Fedora, Dockerfile.windows)
+  # -> build-win/ge007.x86_64.exe + runtime DLLs. Other regions:
+  # `docker compose run --rm -e ROMID=pal-final windows`.
+  windows:
+    build:
+      context: .
+      dockerfile: Dockerfile.windows
+    image: local/project-dam-build-windows:latest
+    network_mode: none   # offline build; also avoids allocating a network
+    working_dir: /src
+    volumes:
+      - .:/src
+    command: ["sh", "tools_pc/docker-build-win.sh"]
   shell:
     image: local/project-dam-build:latest
     working_dir: /src

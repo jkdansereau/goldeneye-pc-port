@@ -128,6 +128,45 @@ python3 scripts/gen_romassets.py j     # JP    -> port/src/romassets_j.s
 The executable lands at `build-pc/ge007.x86_64` (`.exe` on Windows). PAL/JP
 builds are named `ge007.pal-final.x86_64` / `ge007.jpn-final.x86_64`.
 
+### Windows build from Docker (cross-compilation)
+
+A Windows x86_64 executable can also be built without MSYS2, from any
+machine with Docker (Linux, WSL, macOS, or Windows itself):
+
+```sh
+docker compose build windows                      # once: the toolchain image
+docker compose run --rm windows                   # ntsc-final
+docker compose run --rm -e ROMID=pal-final windows
+```
+
+The output lands in `build-win/`: `ge007.x86_64.exe` plus the DLLs it needs
+(`SDL2.dll`, `zlib1.dll`, `libgcc_s_seh-1.dll`, `libwinpthread-1.dll`), so
+the folder runs as-is. Run it from the repo root like any other build
+(`build-win\ge007.x86_64.exe`), with the ROM and the step-4 sidecars in
+`data/`.
+
+The image (`Dockerfile.windows`) is Fedora 43 with its MinGW-w64 packages
+(GCC 15, mingw-w64 13, zlib) and libsdl.org's prebuilt SDL2 MinGW package;
+the base image and the SDL2 archive are pinned. Fedora 43 is the minimum:
+older mingw-w64 headers define `sprintf`/`snprintf` as `static inline`,
+which clashes with the decomp's own prototypes. The MSYS2 build above stays
+the reference and the one CI ships. CMake handles three differences of the
+cross toolchain, only when cross-compiling with MinGW (the MSYS2 build is
+unchanged):
+
+- the host `string.h`/`sched.h`/`stdlib.h` are taken from the compiler's
+  include dirs (the compiler sits in `/usr/bin`, so `bin/../include` would
+  be the Linux glibc headers);
+- `_WIN32_WINNT=0x0601`, the API level of MSYS2's headers (Fedora defaults to
+  Windows 10, which declares `GetCurrentThreadStackLimits` with a signature
+  that conflicts with `port/src/crash.c`);
+- `--defsym=objectiveGetStatus_WEAK=get_status_of_objective`: upstream
+  binutils does not resolve a cross-object reference to a `#pragma weak`
+  alias on PE (MSYS2's patched binutils does).
+
+In a git worktree the version line says `build : unknown`: the container
+cannot follow the worktree's `.git` file. A normal clone shows the hash.
+
 ---
 
 ## 4. Generate the PC asset sidecars (required to run)

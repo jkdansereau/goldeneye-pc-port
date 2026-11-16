@@ -290,6 +290,34 @@ if(_PORT_GCC_STDDEF AND EXISTS "${_PORT_GCC_STDDEF}")
 else()
   get_filename_component(PORT_HOST_STDDDEF_H "${_PORT_GCC_DIR}/../include/stddef.h" ABSOLUTE)
 endif()
+# Cross-compiling for Windows from Linux (Dockerfile.windows: Fedora's
+# x86_64-w64-mingw32-gcc lives in /usr/bin): bin/../include is then the Linux
+# host's glibc headers, not the MinGW CRT's. Take the three headers from the
+# compiler's own implicit include dirs instead. Those are already absolute
+# sysroot paths, so the toolchain's CMAKE_FIND_ROOT_PATH must not re-root them.
+if(MINGW AND CMAKE_CROSSCOMPILING)
+  foreach(_h string sched stdlib)
+    string(TOUPPER "${_h}" _H)
+    find_file(PORT_XMINGW_${_H}_H "${_h}.h"
+      PATHS ${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES}
+      NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+    if(NOT PORT_XMINGW_${_H}_H)
+      message(FATAL_ERROR "MinGW cross build: ${_h}.h not found in the compiler's include dirs (${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES})")
+    endif()
+    set(PORT_HOST_${_H}_H "${PORT_XMINGW_${_H}_H}")
+  endforeach()
+  # Target the same Windows API level as MSYS2's headers (Windows 7). Fedora's
+  # mingw-w64 defaults to 0x0A00, which declares GetCurrentThreadStackLimits
+  # with a signature that conflicts with the port's own (port/src/crash.c, D38).
+  add_compile_definitions(_WIN32_WINNT=0x0601)
+  # Upstream binutils (Fedora's 2.42-2.45 at least) does not resolve a
+  # reference from another object to a `#pragma weak alias = target` PE weak
+  # external ("undefined reference to objectiveGetStatus_WEAK", chrai.c ->
+  # objective_status.c); MSYS2's patched binutils does. Define the one
+  # cross-TU alias at link time instead (same idea as macho_weak_aliases.s).
+  set(CMAKE_EXE_LINKER_FLAGS
+      "${CMAKE_EXE_LINKER_FLAGS} -Wl,--defsym=objectiveGetStatus_WEAK=get_status_of_objective")
+endif()
 switch_host_headers()   # goldeneye-nx hook: newlib header paths
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststring.h.in"
