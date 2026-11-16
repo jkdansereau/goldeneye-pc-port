@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - minor
+## [0.2.0] - 2026-11-16
 
 ### Added
 - Co-op friendly fire: your shots now hurt your partner (a partner shot down is revived like after any death), and auto-aim no longer locks onto your partner (#21)
