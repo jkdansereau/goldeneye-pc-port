@@ -18,6 +18,7 @@ FROM docker.io/devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f8
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential \
+        ccache \
         cmake \
         git \
         libgl1-mesa-dev \
@@ -31,6 +32,16 @@ RUN apt-get update \
 ENV DEVKITPRO=/opt/devkitpro \
     DEVKITA64=/opt/devkitpro/devkitA64 \
     PATH=/opt/devkitpro/tools/bin:/opt/devkitpro/devkitA64/bin:${PATH}
+
+# ccache (picked up by CMakeLists.txt when present). Every checkout is mounted
+# at /src, so one cache shared through the project-dam-ccache volume
+# (compose.yaml) serves all branches and worktrees. BASEDIR makes the
+# build-dir include paths relative and NOHASHDIR keeps the build dir out of the
+# key, so a fresh build-xxx dir hits the cache too.
+ENV CCACHE_DIR=/ccache \
+    CCACHE_MAXSIZE=5G \
+    CCACHE_BASEDIR=/src \
+    CCACHE_NOHASHDIR=1
 
 # The repository is bind-mounted at /src at runtime, so source changes need no
 # image rebuild.

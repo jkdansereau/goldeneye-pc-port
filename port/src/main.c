@@ -23,6 +23,7 @@
 
 #include "platform.h"
 #include "system.h"
+#include "versionhash.h"
 #include "portaddr.h"
 #include "config.h"
 #include "updatecheck.h"

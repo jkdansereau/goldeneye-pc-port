@@ -8,6 +8,10 @@
 #   docker compose run --rm windows      # Windows cross-build -> build-win/
 #                                        # (own image: Dockerfile.windows)
 #   docker compose run --rm shell        # interactive shell in the toolchain
+#
+# All services share the project-dam-ccache volume (fixed name, so every
+# worktree uses the same cache). A plain `docker run` gets it with
+# `-v project-dam-ccache:/ccache`.
 services:
   linux:
     build:
@@ -17,6 +21,7 @@ services:
     working_dir: /src
     volumes:
       - .:/src
+      - ccache:/ccache
     command:
       - sh
       - -c
@@ -26,6 +31,7 @@ services:
     working_dir: /src
     volumes:
       - .:/src
+      - ccache:/ccache
     command:
       - sh
       - -c
@@ -51,4 +57,9 @@ services:
     working_dir: /src
     volumes:
       - .:/src
+      - ccache:/ccache
     entrypoint: ["bash"]
+
+volumes:
+  ccache:
+    name: project-dam-ccache

@@ -225,6 +225,9 @@ set(ORIGIN_URL "https://github.com/jkdansereau/goldeneye-pc-port")
 configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/versioninfo.h.in"
   "${CMAKE_BINARY_DIR}/port/include/versioninfo.h" @ONLY)
+configure_file(
+  "${CMAKE_SOURCE_DIR}/port/include/versionhash.h.in"
+  "${CMAKE_BINARY_DIR}/port/include/versionhash.h" @ONLY)
 
 # Host <string.h> path for port/shim/string.h. The N64 include/string.h
 # declares strlen/strchr with `const unsigned char *`, which conflicts with
