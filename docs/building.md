@@ -27,8 +27,11 @@ for accepted versions and hashes.
 
 ### Port build
 
-> **The Windows (MSYS2 MINGW64) path is the primary one.** Linux is compiled
-> by CI and ships in the release bundle. **macOS on Apple Silicon is
+> **This fork (Project Dam) builds in Docker**: the Nintendo Switch NRO is
+> what it ships, and the Linux and Windows builds come from the same compose
+> file (§3, "Docker builds"). The dependency tables below are for native
+> builds. **Upstream's primary path is Windows (MSYS2 MINGW64)**; upstream CI
+> also compiles Linux and ships it in its release bundle. **macOS on Apple Silicon is
 > experimental as of v0.6.0**: the release has a `macos-arm64` download
 > (`scripts/package-macos.sh` makes it on a Mac; CI runs it) that is not
 > notarized, so clear the quarantine flag once before the first launch with
@@ -128,10 +131,56 @@ python3 scripts/gen_romassets.py j     # JP    -> port/src/romassets_j.s
 The executable lands at `build-pc/ge007.x86_64` (`.exe` on Windows). PAL/JP
 builds are named `ge007.pal-final.x86_64` / `ge007.jpn-final.x86_64`.
 
-### Windows build from Docker (cross-compilation)
+### Docker builds
 
-A Windows x86_64 executable can also be built without MSYS2, from any
-machine with Docker (Linux, WSL, macOS, or Windows itself):
+`compose.yaml` builds every target this fork cares about, from any
+machine with Docker (Linux, WSL, macOS or Windows). The repository is
+bind-mounted at `/src`, so a source change needs no image rebuild. No ROM is
+needed to build. The PAL/JP symbol files of §3 are still needed for those
+regions.
+
+| Service | Image | Output |
+|---|---|---|
+| `switch` | `Dockerfile.build` (pinned devkitA64, libnx, Switch portlibs) | `build-switch/ge007.aarch64.nro` |
+| `linux` | `Dockerfile.build` (same image, host SDL2/GL/zlib) | `build-linux/ge007.x86_64` |
+| `windows` | `Dockerfile.windows` (Fedora 43, MinGW-w64) | `build-win/ge007.x86_64.exe` + DLLs |
+| `shell` | `Dockerfile.build` | interactive bash in the toolchain |
+
+```sh
+docker compose build             # once: Dockerfile.build (switch, linux, shell)
+docker compose run --rm switch
+docker compose run --rm linux
+```
+
+(The repository's `Dockerfile` and `docker-compose.yml` (service `ge007`) are
+upstream's N64 matching-build environment, unrelated to these. When both
+files are present, `docker compose` reads `compose.yaml`.)
+
+#### Nintendo Switch
+
+`.github/workflows/switch.yml` runs the same build in the same pinned image on
+every push and pull request, and it is the only workflow that runs on this
+fork. A `project-dam-vX.Y.Z` tag also publishes a release.
+
+- **SD card for a test install:** after the build, from the `shell` service,
+  `tools/switch/make_sd.sh <rom.z64> [out_dir]` (default `build-switch/sd`)
+  assembles `switch/project-dam/` with the NRO, a copy of the ROM and the
+  converted sidecars (§4). Copy its `switch/` folder to the root of the SD
+  card.
+- **Release archive:** `tools/switch/package_release.sh <version> [out_dir]`
+  (default `dist`) zips the NRO, the `prepare-assets` converter, `README.txt`,
+  `LICENSE` and `NOTICE`. It ships no game content. CI passes
+  `-DPROJECT_DAM_VERSION=<version>` to the build; a local build shows
+  `dev-<hash>` in the homebrew menu.
+- **Test builds over nxlink:** a separate build directory (`build-switch-link`)
+  configured with `-DNX_LINKSTDIO=ON -DNX_ARGS=ON` sends the log and crash dump
+  back to the PC and reads `data/ge007.args`. These NROs are never shipped.
+  Procedure and client: `docs/switch/nxlink-stdio.md`. Address model:
+  `docs/switch/address-model.md`.
+
+#### Windows (cross-compilation)
+
+A Windows x86_64 executable builds without MSYS2:
 
 ```sh
 docker compose build windows                      # once: the toolchain image
@@ -149,8 +198,9 @@ The image (`Dockerfile.windows`) is Fedora 43 with its MinGW-w64 packages
 (GCC 15, mingw-w64 13, zlib) and libsdl.org's prebuilt SDL2 MinGW package;
 the base image and the SDL2 archive are pinned. Fedora 43 is the minimum:
 older mingw-w64 headers define `sprintf`/`snprintf` as `static inline`,
-which clashes with the decomp's own prototypes. The MSYS2 build above stays
-the reference and the one CI ships. CMake handles three differences of the
+which clashes with the decomp's own prototypes. The MSYS2 build above is
+upstream's reference and the one upstream CI ships; this fork uses the
+Docker build to check that the PC port still compiles. CMake handles three differences of the
 cross toolchain, only when cross-compiling with MinGW (the MSYS2 build is
 unchanged):
 
@@ -237,3 +287,85 @@ runtime. `ge007.ini` is written under `data/` on first launch.
 
 More diagnostic switches are cataloged in
 [`dev/GE-ENV-PROBES.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/docs/dev/GE-ENV-PROBES.md).
+
+## Windows build environment troubleshooting
+
+Moved from `AGENTS.md`, which keeps a one-line summary of each.
+Three recurring failure modes; diagnose in this order.
+
+1. **`Cannot create temporary file in C:\Windows\: Permission denied`** at the
+   link step. The PE toolchain (ninja → cmd → gcc/ld) needs a writable
+   TMP/TEMP; the msys→native env conversion drops it in non-login shells
+   (agent harnesses; the `C:/msys64` tree here was built for a relocated MSYS2
+   root — `<msys>` in the placeholder legend — so its path conversion is
+   unreliable). `build-pc.sh` now **self-heals**: it
+   probes a native child's TMP (via a file — piped `cmd.exe` stdout is
+   unreliable under msys console emulation) and, if broken, re-runs
+   cmake+build under PowerShell with `TMP`/`TEMP` set natively (the
+   native→native boundary passes env through intact; only msys→native is
+   broken). If you run cmake/ninja *by hand* from a broken shell: run them
+   from cmd/PowerShell with `C:\msys64\mingw64\bin` on PATH.
+   **Guard revision (2026-09-28):** the re-exec writes a self-contained
+   `.ps1` to a temp file and runs `powershell -File` with plain path/word
+   args only (the msys→native argv conversion mangles `$`-bearing
+   `-Command` strings; a file write is conversion-free). Inside: PATH is
+   built explicitly (never trust the inherited value); TMP is chosen from
+   writable candidates (`%LocalAppData%\Temp` first —
+   `[System.IO.Path]::GetTempPath()` honours the inherited *broken* TMP,
+   observed as `C:\Windows\`); every native step self-logs to
+   `build-pc/ge007-native-reexec-{diag,cmake,build}.log`; a null
+   `$LASTEXITCODE` ("did not execute") is a distinct failure (exit 2/3) —
+   in PS 5.1 a piped native command errors out non-terminating and never
+   sets it, so an unguarded `if ($LASTEXITCODE -ne 0)` passes vacuously.
+   In `.ps1`, `-DROMID=$Var` is a literal (bare tokens don't expand) — it
+   must be `"-DROMID=$Var"`. Launch powershell plainly — `env -i` before it
+   breaks the nested cmake launch (verified 2026-09-28).
+   **FIXED 2026-09-30 (`fix/build-pc-tmp-reexec`):** the heredoc `.ps1`
+   was byte-identical to a hand-extracted copy — not line endings. Three
+   real bugs: (a) the TMP probe's inline `cmd //c "... \"path\" ..."` never
+   ran (msys re-escapes embedded quotes as `\"`, which cmd rejects), so
+   *every* build took the re-exec, and it only tested that TMP existed;
+   (b) the `.ps1`'s toolchain dirs were derived from `command -v cmake`,
+   which in Git Bash/agent shells is a pip cmake (no MSYS2 toolchain) —
+   the hand-run worked because it passed explicit `C:\msys64\...` paths;
+   (c) `/tmp` + `cygpath` disagree when Git Bash and MSYS2 `usr/bin` are
+   both on PATH, so the `.ps1` could be written to one `/tmp` and
+   powershell pointed at the other (it then exits 0 having done nothing).
+   Now: the MSYS2 `mingw64/bin` is located and validated (override:
+   `GE_MSYS2_ROOT`) and prepended to PATH; the probe is a `.cmd` file that
+   tests TMP *writability*; all native-facing files live in the build dir
+   with paths from bash's own `pwd -W`. Verified from an agent Git Bash
+   shell: fresh + incremental builds, both on the direct path and with a
+   forced unwritable TMP (`TMP=C:\Windows\`) through the re-exec.
+   **FIXED 2026-09-30 (`fix/build-pc-reexec-noop`): the re-exec exited rc=2
+   with the diag log ending `cmake ran LASTEXITCODE=[]`.** From a shell with
+   MSYS2 `usr/bin` first on PATH, powershell inherits a stripped ~13-var env
+   with `PATHEXT=.CPL` and no ComSpec/TMP/TEMP, so `& cmake.exe` silently
+   launches nothing. The `.ps1` now restores PATHEXT and ComSpec. In that
+   shell the re-exec itself is legitimately needed (no TMP), so the probe
+   is correct. Verified: MSYS2-PATH shell, forced `TMP=C:\Windows\`, and a
+   no-change incremental run all exit 0 with a fresh exe.
+   **FIXED 2026-10-04 (`fix/build-arch-tag`, D515):** a FRESH build dir
+   configured through the re-exec cached `CMAKE_HOST_SYSTEM_PROCESSOR ""` /
+   `CMAKE_SYSTEM_PROCESSOR ""` (the stripped env also drops
+   `PROCESSOR_ARCHITECTURE`, which CMake reads for the host processor — same
+   class as PATHEXT/ComSpec), so `cmake/TargetArch.cmake` produced an empty
+   arch tag: `Target arch:  (64bit=FALSE)`, binary named `ge007..exe`
+   (a correct 64-bit build; only the name was wrong — found during T7, D513).
+   The `.ps1` now restores `PROCESSOR_ARCHITECTURE` from the machine
+   environment (fallback `AMD64`; `SystemRoot`/`windir` likewise) and logs
+   the four vars to the diag log; `cmake/TargetArch.cmake` falls back to
+   `${CMAKE_C_COMPILER} -dumpmachine` when `CMAKE_SYSTEM_PROCESSOR` is empty
+   and FATAL_ERRORs instead of emitting an untagged binary. Existing build
+   dirs are unaffected (value already cached); a dir configured before the
+   fix picks up x86_64 on its next in-place reconfigure.
+2. **`cannot open output file ge007.x86_64.exe: Permission denied`.** A
+   **running** `ge007.x86_64.exe` locks the output file (Windows rule; you
+   can't relink over a live PE). Check with `Get-Process | Where-Object {
+   $_.ProcessName -like '*ge007*' }` and close the game before rebuilding.
+   An agent must not kill the user's game process to make a link succeed.
+3. **`cc1.exe: ... libmpfr-6.dll: cannot open shared object file`.** The
+   calling PATH lacks `C:\msys64\mingw64\bin` (the gcc driver finds cc1 via
+   its own directory, but the child needs the mingw DLL dir on PATH). In an
+   msys shell: `export PATH="/c/msys64/mingw64/bin:/c/msys64/usr/bin:$PATH"`
+   before building.

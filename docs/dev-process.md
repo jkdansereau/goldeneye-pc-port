@@ -22,6 +22,12 @@ faster than its predecessor. That project bit-matches compiler output;
 this one matches runtime behavior, so the mechanics differ; but the
 project-structure lessons carry over directly.
 
+### Non-negotiable #2 in full
+
+`AGENTS.md` carries the short form; this is the full rule.
+
+**Game logic is unmodified.** The decomp's control flow and behavior are ground truth for 1:1 fidelity — never change them. All N64 *hardware* dependencies are satisfied by the `port/` layer; if a game file seems to need a behavioral change, stop and check the exception below before assuming the fix belongs in `port/`. **Diagnosis is never restricted — only the fix.** Trace a bug as deep into `src/game` state as the evidence leads, and name the exact struct/field/logic responsible, before deciding which of three buckets it falls in (framing in the next section). **Narrow exception (ABI/layout only):** the 32→64-bit pointer-width transition forces a small class of mechanical, semantics-preserving edits that cannot be isolated in `port/` — **any struct-layout or pointer-width-driven misread caused by 32→64-bit widening**, whether in a ROM-serialized record (a struct with a 32-bit-pointer field misaligns when read as 64-bit) or a **live runtime struct/union** (a raw-byte offset alias into a union arm whose true field shifted because an earlier member in the same union widened — the D209/D210/D255 pattern; see `docs/porting-notes.md` §A1 for the full catalogue and its diagnostic tells). These follow the PD ground-truth pattern (store the embedded address as `u32` and cast to a real pointer at the use site; or read the correctly-named/typed field instead of a raw-offset/mistyped alias), change no logic or behavior, and are each documented in `docs/dev/findings.md` §F/D3x, cross-tagged to §A1 where that pattern applies. **A genuine behavioral difference** — the decomp's byte-identical code, given verified-correct inputs, still diverging from real N64 behavior — is not covered by this exception and requires the rule-2 sign-off procedure (§7 below) before any `src/game` edit. No other game-code edits are permitted.
+
 ### Diagnosis is unrestricted; only the fix is constrained
 
 AGENTS.md non-negotiable #2 restricts *changing* `src/game` behavior. It

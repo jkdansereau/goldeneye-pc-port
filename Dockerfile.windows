@@ -14,9 +14,10 @@
 # SDL2: libsdl.org's prebuilt MinGW development package, unpacked into the
 # MinGW sysroot (Fedora 43 only ships sdl2-compat, the SDL2 API on top of SDL3).
 #
-# The native MSYS2 build (build-pc.sh, docs/building.md) stays the reference
-# Windows build and the one CI ships; this image is a convenience for building
-# a Windows binary from Linux/WSL/macOS, or from Windows without MSYS2.
+# The native MSYS2 build (build-pc.sh, docs/building.md) is upstream's reference
+# Windows build and the one upstream CI ships. This fork's CI ships only the
+# Switch NRO; this image builds a Windows binary from Linux/WSL/macOS, or from
+# Windows without MSYS2, to check that the PC port still compiles.
 # Base image and SDL2 archive are pinned (digest / sha256); bump deliberately.
 # No game files are copied into this image.
 FROM docker.io/library/fedora:43@sha256:f01112b9a1f1d0504ad962d9adfa401425033f8ab067e0a821904ebdde5b8ca5

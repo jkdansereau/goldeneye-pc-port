@@ -19,3 +19,26 @@ paths come only from arguments or env (`GE_WIN_DIR`, `GE_DECK_HOST`,
 goldens vs 1280x800 dumps); Mac has no goldens, so it is crash-free only. The
 fire smoke is `GE_INPUTSCRIPT` `MLB1`/`MLB0` (D597, the D595 regression).
 Remote job, result and script files are deleted after the summaries are pulled.
+
+## Release and history rules
+
+Moved from `AGENTS.md` §Tree hygiene & release gate (rules 6 and 7).
+
+6. **Release gate.** Before pushing a release: the PII scrub and legal/copyright
+   review reports (gitignored, `docs/dev/notes/`) must be run and clean, and the
+   README Legal section must name every rights holder the game's trademarks
+   implicate. Rewriting pushed history (squash) needs explicit maintainer
+   consent, and any such report states the remote + branch it applies to.
+7. **Squashes and history rebuilds must not erase contributor PRs.** Release
+   lines may squash *our own* work, but every contributor PR whose content
+   shipped gets a zero-diff record merge at its timeline position (merge
+   commit with the PR head as second parent, tree unchanged) so the PR shows
+   as merged and the contributor's commits stay reachable in public history
+   with their authorship. If the PR's base is a stale internal branch, merge
+   it there via `gh pr merge` so the badge is true; GitHub refuses a base
+   change to a branch that already contains the head. Superseded/reworked
+   PRs are never merged — comment + let the author close. Before force-
+   pushing a rewritten release branch: back up the pushed tip to Forgejo
+   (`backup/<branch>-pre-rebuild-<date>`), pass a byte-identical tree-diff
+   gate against the old tip, re-run CI, and note the rebuild in any open
+   issue that tells people to build the branch.
