@@ -9,7 +9,7 @@
  *
  * The combiner GLSL is a deliberate, separate copy of gfx_opengl.cpp's
  * gfx_opengl_gen_shader_src (the GL backend is not touched: PC goldens depend
- * on it), with the Switch GL defaults baked in: noperspective shade and
+ * on it), with the Switch GL defaults baked in: perspective-correct shade (D986) and
  * per-vertex fog (D540/D543), depth clamp (no z hack), three-point filtering
  * always compiled and selected by the Draw block's flags (GL compiles it only
  * while the three-point mode is on; the backend sends the flags as zero
@@ -126,8 +126,11 @@ static const char* ST(int j) { return j == 0 ? "S" : "T"; }
 /* Combiner GLSL (deko3d): see gfx_opengl_gen_shader_src. */
 static bool gen_combiner(CCFeatures& f, std::string& vs, std::string& fs, bool mesh = false) {
     s_bad = false;
-    const char* shadeq = "noperspective ";   /* gfx_rdp_affine = 1 on the Switch (D540) */
-    const char* fogq = shadeq;               /* gfx_fog_vertex = 1 (D543) */
+    /* D986: perspective-correct shade and fog on the Switch. The D540
+     * screen-affine shade left a dark patch that follows the view on the
+     * big Dam ground triangles (not on the N64; gone with GL + GE_SHADEPERSP=1). */
+    const char* shadeq = "";
+    const char* fogq = shadeq;               /* per-vertex fog rides with the shade (D543) */
     const int nin = f.opt_alpha ? 4 : 3;
 
     vs = "#version 460\n";

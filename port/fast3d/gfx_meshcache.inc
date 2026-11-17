@@ -151,6 +151,7 @@ struct McEntry {
     McTile out_tile[8];
     std::vector<std::pair<uint16_t, LoadedTexture>> out_tmem;
     uint16_t out_palette[256];
+    uint32_t pal_mask[8];         /* D985: palette entries the list's G_LOADTLUTs write */
     const uint8_t* out_palette_addrs[2];
     uint32_t out_palette_hash;
     decltype(rdp.texture_to_load) out_timg;
@@ -527,6 +528,14 @@ static void mc_cap_cmd(Gfx* cmd) {
             r.len = count * 2;
             e->ranges.push_back(r);
             c->range_end = nullptr;   /* next command opens a new DL range */
+            {
+                const uint32_t tm = rdp.texture_tile[t].tmem;
+                if (tm < 256 || tm - 256 + count > 256) {
+                    mc_refuse("tlut-range", (uint8_t)opcode);
+                    break;
+                }
+                for (uint32_t k = tm - 256; k < tm - 256 + count; k++) e->pal_mask[k >> 5] |= 1u << (k & 31);
+            }
             break;
         }
         default:
@@ -619,13 +628,6 @@ static void mc_cap_tri(uint8_t i1, uint8_t i2, uint8_t i3) {
         const int fi = rdp.first_tile_index;
         mc_tile_read(fi, true, true);
         if (fi + 1 < 8) mc_tile_read(fi + 1, true, true);
-        for (int i = 0; i < 2; i++) {
-            if (!c->imported[i] && !rdp.textures_changed[i] && !e->tc_touched[i]) {
-                /* the unit keeps the caller's binding unless this list re-imports */
-                e->in_bind[i] = true;
-                e->in_node[i] = c->entry_node[i];
-            }
-        }
     }
     bool tc_before[2] = { rdp.textures_changed[0], rdp.textures_changed[1] };
 
@@ -634,9 +636,18 @@ static void mc_cap_tri(uint8_t i1, uint8_t i2, uint8_t i3) {
 
     if (c->refused == nullptr) {
         for (int i = 0; i < 2; i++) {
-            if (!ts.comb->used_textures[i]) {
-                if (e->in_bind[i] && !c->imported[i]) e->in_bind[i] = false;   /* not used: binding irrelevant */
-                continue;
+            if (!ts.comb->used_textures[i]) continue;   /* not used by this triangle: binding irrelevant here */
+            if (!tc_before[i] && !c->imported[i]) {
+                /* D985: drawn with the caller's binding (this list has not
+                 * imported on this unit yet). Recorded even after a G_TEXTURE
+                 * or tile command: a G_TEXTURE on the tile already current
+                 * leaves the binding as it is (the weapon models draw their
+                 * first G_TRI4 with the previous part's texture), so the replay
+                 * must check the binding, and the entry tile index that kept
+                 * that G_TEXTURE from asking for a re-import. */
+                e->in_bind[i] = true;
+                e->in_node[i] = c->entry_node[i];
+                if (e->tc_touched[i]) e->in_flags |= MCW_FTILE;
             }
             if (tc_before[i]) {
                 c->imported[i] = true;
@@ -982,10 +993,23 @@ static void mc_apply_exit(const McEntry* e) {
     }
     for (const auto& pt : e->out_tmem) rdp.loaded_texture[pt.first] = pt.second;
     if (f & MCW_PAL) {
-        memcpy(rdp.palette, e->out_palette, sizeof(rdp.palette));
+        /* D985: only the entries the list loads; the others stay the caller's,
+         * as after the classic walk (the whole capture-time table handed the
+         * lists drawn next another frame's colours in the unloaded entries). */
+        for (int k = 0; k < 256; k++) {
+            if ((e->pal_mask[k >> 5] >> (k & 31)) & 1) rdp.palette[k] = e->out_palette[k];
+        }
         rdp.palette_addrs[0] = e->out_palette_addrs[0];
         rdp.palette_addrs[1] = e->out_palette_addrs[1];
-        rdp.palette_hash = e->out_palette_hash;
+        {   /* as gfx_dp_load_tlut (D217) */
+            uint32_t h = 2166136261u;
+            const uint8_t* pb = (const uint8_t*)rdp.palette;
+            for (uint32_t k = 0; k < sizeof(rdp.palette); ++k) {
+                h ^= pb[k];
+                h *= 16777619u;
+            }
+            rdp.palette_hash = h;
+        }
     }
     if (f & MCW_TIMG) rdp.texture_to_load = e->out_timg;
     for (int i = 0; i < 2; i++) {
@@ -1007,15 +1031,17 @@ static int mc_gpu_on(void) {
     return on;   /* both fog forms: the twins also write fog * w (per-pixel fog, Video.Visuals >= Fixed) */
 }
 
-/* GE_MESHGPU_FULL (default on, =0 to disable): skip the near/far-plane box
- * test and let the GPU clip those meshes too (not the N64's CPU clip/reject
- * rules). */
+/* GE_MESHGPU_FULL (default off, =1 to enable): skip the near/far-plane box
+ * test and let the GPU clip those meshes too. Off by default (D985): the GPU
+ * clip interpolates shade and fog from the corner behind the eye (fog 255),
+ * so the Dam ground near the wall turned fog-blue (perspective shade) or
+ * black (affine); the CPU near clip re-derives fog at the plane (D543/D553). */
 static int mc_gpu_full(void) {
     static int on = -1;
     if (on < 0) {
         const char* e = getenv("GE_MESHGPU_FULL");
-        on = (e && e[0]) ? (e[0] != '0') : 1;
-        if (on) sysLogPrintf(LOG_NOTE, "GE_MESHGPU_FULL: near/far-plane meshes also drawn on the GPU (GE_MESHGPU_FULL=0: CPU clip as on the N64)");
+        on = (e && e[0]) ? (e[0] != '0') : 0;
+        if (on) sysLogPrintf(LOG_NOTE, "GE_MESHGPU_FULL: near/far-plane meshes also drawn on the GPU (default off: CPU clip as on the N64)");
     }
     return on;
 }
@@ -1406,7 +1432,10 @@ static bool mc_replay_gpu(McEntry* e) {
                 }
                 break;
             }
-            default:   /* VTX (vertices are in the mesh), SEG, TRI */
+            case MCO_VTX:   /* D985: only the loads still live at the end (op.c), for the lists drawn next */
+                if (op.c) gfx_sp_vertex(op.a, op.b, (const Vtx*)seg_addr(op.p));
+                break;
+            default:   /* SEG, TRI */
                 break;
         }
     }
@@ -1662,6 +1691,7 @@ static McEntry* mc_capture(Gfx* dl) {
     e->in_tiles = 0;
     e->in_bind[0] = e->in_bind[1] = false;
     e->in_node[0] = e->in_node[1] = nullptr;
+    memset(e->pal_mask, 0, sizeof(e->pal_mask));
     e->ntris = 0;
     e->tc_touched[0] = e->tc_touched[1] = false;
     e->nodes_gen = 0;
@@ -1728,6 +1758,25 @@ static McEntry* mc_capture(Gfx* dl) {
     e->out_timg = rdp.texture_to_load;
     e->out_tc[0] = rdp.textures_changed[0];
     e->out_tc[1] = rdp.textures_changed[1];
+    /* D985: mark the G_VTX ops whose vertices are still loaded when the list
+     * ends (op.c = 1). The GPU replay skips G_VTX (its vertices are in the
+     * mesh) but must leave rsp.loaded_vertices as the classic walk does: the
+     * next list may draw with them (a replay-vs-classic check found the
+     * vertex buffer differing after every GPU replay). */
+    {
+        bool covered[MAX_VERTICES] = { false };
+        for (size_t i = e->ops.size(); i-- > 0;) {
+            McOp& op = e->ops[i];
+            if (op.k != MCO_VTX) continue;
+            op.c = 0;
+            for (int v = op.b; v < op.b + op.a && v < MAX_VERTICES; v++) {
+                if (!covered[v]) {
+                    op.c = 1;
+                    covered[v] = true;
+                }
+            }
+        }
+    }
     e->ops.shrink_to_fit();
     e->segs.shrink_to_fit();
     return e;

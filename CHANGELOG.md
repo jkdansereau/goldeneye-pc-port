@@ -10,6 +10,8 @@
 - Jungle: the crashed plane at the start no longer loses a wing, and nothing else in the level is cut off at a room boundary any more; the port never applied the level's rule that every room is drawn in full
 - Jungle: far fern and palm leaves no longer show through the leaves in front of them; the plants' leaves now hide what is behind them (Visuals: Fixed) (#35)
 - Surface 1 and 2: the satellite dish no longer disappears when the room system or the fog would hide it (Visuals: Fixed)
+- Switch: the ground no longer shows a dark patch that moves with the view (Dam, by the wall below the hangars); colour gradients now follow the perspective
+- Switch: some models and scenery were drawn with another object's texture or colours when their display lists were reused from a previous frame (dark triangles and yellow patches in Dam while firing)
 
 ## [0.2.0] - 2026-11-16
 

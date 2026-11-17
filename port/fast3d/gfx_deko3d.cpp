@@ -1233,7 +1233,7 @@ void dk_init(void) {
     {
         const char *sp = getenv("GE_SHADEPERSP");
         if (sp && sp[0] == '1') {
-            sysLogPrintf(LOG_WARNING, "DK: GE_SHADEPERSP ignored under deko3d");
+            sysLogPrintf(LOG_WARNING, "DK: GE_SHADEPERSP ignored under deko3d (shade is perspective-correct, D986)");
         }
         if (getenv("GE_FOGSNAP")) sysLogPrintf(LOG_WARNING, "DK: GE_FOGSNAP ignored under deko3d");
     }
@@ -1242,7 +1242,7 @@ void dk_init(void) {
         s_submit_every = e ? (uint32_t)atoi(e) : 64;
         sysLogPrintf(LOG_NOTE, "DK: submit every %u draws (GE_DKSUBMIT; 0 = once per frame)", s_submit_every);
     }
-    gfx_rdp_affine = 1;   /* the pack is built with noperspective shade */
+    gfx_rdp_affine = 0;   /* D986: the pack is built with perspective-correct shade */
     /* Fog: the pack carries both forms (vFog.a per vertex, vFogW = fog * w);
      * Draw.fog_pixel picks one (set at each shader bind, so a live change of
      * Video.Visuals >= Fixed lands at once, D982). GE_FOGPIXEL=0/1 overrides. */

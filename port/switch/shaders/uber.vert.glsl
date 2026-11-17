@@ -25,16 +25,16 @@ layout(location = 3) out float vTexClampS0;
 layout(location = 4) out float vTexClampT0;
 layout(location = 5) out float vTexClampS1;
 layout(location = 6) out float vTexClampT1;
-layout(location = 7) noperspective out vec4 vFog;
+layout(location = 7) out vec4 vFog;
 layout(location = 16) out float vFogW;   // fog * w (per-pixel fog, Draw.fog_pixel)
 layout(location = 8) out vec4 vGrayscaleColor;
-layout(location = 9) noperspective out vec4 vInput1;
-layout(location = 10) noperspective out vec4 vInput2;
-layout(location = 11) noperspective out vec4 vInput3;
-layout(location = 12) noperspective out vec4 vInput4;
-layout(location = 13) noperspective out vec4 vInput5;
-layout(location = 14) noperspective out vec4 vInput6;
-layout(location = 15) noperspective out vec4 vInput7;
+layout(location = 9) out vec4 vInput1;
+layout(location = 10) out vec4 vInput2;
+layout(location = 11) out vec4 vInput3;
+layout(location = 12) out vec4 vInput4;
+layout(location = 13) out vec4 vInput5;
+layout(location = 14) out vec4 vInput6;
+layout(location = 15) out vec4 vInput7;
 
 void main() {
     vTexCoord0 = aTexCoord0;
