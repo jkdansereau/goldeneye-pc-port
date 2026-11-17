@@ -7,6 +7,7 @@
 - Visuals on the Video page replaces the Sky option (Custom display mode): Original is the game's own picture, Fixed corrects the original game's display flaws listed under Fixed and draws exact per-pixel fog, Enhanced also adds the GE+ sky (Enhanced in the Switch mode, Original in the N64 mode); it takes effect at once, no restart
 
 ### Fixed
+- Leaves, fences and other cut-out textures now hide one another in the right order and get smooth edges, with anti-aliasing on (Visuals: Fixed): the Jungle plant walls and trees no longer show the leaves behind them, and the Jungle bridge planks now hide the vines behind them
 - Jungle: the crashed plane at the start no longer loses a wing, and nothing else in the level is cut off at a room boundary any more; the port never applied the level's rule that every room is drawn in full
 - Jungle: far fern and palm leaves no longer show through the leaves in front of them; the plants' leaves now hide what is behind them (Visuals: Fixed) (#35)
 - Surface 1 and 2: the satellite dish no longer disappears when the room system or the fog would hide it (Visuals: Fixed)

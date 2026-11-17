@@ -40,6 +40,14 @@ enum {
 #define SHADER_OPT_TEXEL1_CLAMP_S (1 << 10)
 #define SHADER_OPT_TEXEL1_CLAMP_T (1 << 11)
 #define SHADER_OPT_BLUR (1 << 12)
+/* D984: alpha-to-coverage draw (MSAA): no blending, depth written, the
+ * fragment alpha becomes the sample mask. A cut-out (TEXTURE_EDGE) keeps a
+ * sharpened alpha instead of the 0.5 discard. */
+#define SHADER_OPT_A2C (1 << 13)
+/* D987: a blended draw that writes no depth gets a second, depth-only pass
+ * (colour writes off) that discards every fragment whose final alpha is not
+ * opaque: the opaque part then hides what is drawn behind it later. */
+#define SHADER_OPT_ZCUT (1 << 14)
 
 struct ColorCombinerKey {
     uint64_t combine_mode;
@@ -61,6 +69,8 @@ struct CCFeatures {
     bool opt_invisible;
     bool opt_grayscale;
     bool opt_blur;
+    bool opt_a2c;
+    bool opt_zcut;
     bool used_textures[2];
     bool clamp[2][2];
     int num_inputs;

@@ -386,6 +386,8 @@ int s_cur_fb = 0;
 bool s_target_dirty = true;
 int s_bound_fb = -2;
 DkMsMode s_bound_ms = DkMsMode_1x;
+bool s_bound_a2c = false;   /* D984: alpha-to-coverage in the bound multisample state */
+bool s_want_a2c = false;    /* D984: the bound program is an A2C draw (DK_CF_A2C) */
 float s_noise_scale = 1.0f;
 uint32_t s_frame_count = 0;
 
@@ -636,6 +638,21 @@ DkMsMode ms_mode(uint32_t msaa) {
     return msaa >= 8 ? DkMsMode_8x : msaa >= 4 ? DkMsMode_4x : msaa >= 2 ? DkMsMode_2x : DkMsMode_1x;
 }
 
+/* D984: the multisample state, with alpha-to-coverage for an A2C program
+ * (the fragment alpha becomes the covered-sample mask; dithered across
+ * neighbouring pixels so 2x/4x give more than 2/4 levels). */
+void bind_multisample(DkMsMode ms, bool a2c) {
+    DkMultisampleState m;
+    dkMultisampleStateDefaults(&m);
+    m.mode = ms;
+    m.rasterizerMode = ms;
+    m.alphaToCoverageEnable = a2c ? 1 : 0;
+    m.alphaToCoverageDither = a2c ? 1 : 0;
+    dkCmdBufBindMultisampleState(s_cmd, &m);
+    s_bound_ms = ms;
+    s_bound_a2c = a2c;
+}
+
 void bind_target(void) {
     const int fb = s_cur_fb;
     if (s_bound_fb != -2) {
@@ -662,13 +679,8 @@ void bind_target(void) {
     }
     const DkImageView* cvs[1] = { &cv };
     dkCmdBufBindRenderTargets(s_cmd, cvs, 1, depth ? &dv : nullptr);
-    if (ms != s_bound_ms || s_bound_fb == -2) {
-        DkMultisampleState m;
-        dkMultisampleStateDefaults(&m);
-        m.mode = ms;
-        m.rasterizerMode = ms;
-        dkCmdBufBindMultisampleState(s_cmd, &m);
-        s_bound_ms = ms;
+    if (ms != s_bound_ms || s_want_a2c != s_bound_a2c || s_bound_fb == -2) {
+        bind_multisample(ms, s_want_a2c);
     }
     s_bound_fb = fb;
     s_target_dirty = false;
@@ -714,6 +726,11 @@ void prepare_draw(void) {
 }
 
 void bind_program(ShaderProgram* p) {
+    const bool a2c = (p->params.flags & DK_CF_A2C) != 0;
+    s_want_a2c = a2c;
+    if (a2c != s_bound_a2c && !s_target_dirty) {
+        bind_multisample(s_bound_ms, a2c);   /* else bind_target applies it */
+    }
     const DkShader* sh[2] = { &p->vert, &p->frag };
     dkCmdBufBindShaders(s_cmd, DkStageFlag_GraphicsMask, sh, 2);
     dkCmdBufBindVtxAttribState(s_cmd, p->attribs, DK_ATTR_COUNT);
@@ -1125,6 +1142,34 @@ void dk_set_use_alpha(bool use_alpha, bool modulate) {
     s_cmd_pending = true;
 }
 
+/* D987: after the blended draw of a DK_CF_ZCUT program, the same vertices
+ * again with colour writes off and depth writes on; the shader (Draw.zpass)
+ * discards every fragment whose final alpha is below 0.98, so only the
+ * opaque part writes depth. Same depth test as the blended pass. */
+void zcut_pass(uint32_t nverts) {
+    if ((s_prg->params.flags & DK_CF_ZCUT) == 0 || !s_depth_test) return;
+    DkColorWriteState cw;
+    dkColorWriteStateDefaults(&cw);
+    dkColorWriteStateSetMask(&cw, 0, 0);
+    dkCmdBufBindColorWriteState(s_cmd, &cw);
+    DkDepthStencilState d;
+    dkDepthStencilStateDefaults(&d);
+    d.depthTestEnable = 1;
+    d.depthWriteEnable = 1;
+    d.depthCompareOp = s_depth_func;
+    dkCmdBufBindDepthStencilState(s_cmd, &d);
+    s_uni.zpass = 1;
+    dkCmdBufPushConstants(s_cmd, s_ubo.gpu, 256, 0, sizeof(s_uni), &s_uni);
+    dkCmdBufDraw(s_cmd, DkPrimitive_Triangles, nverts, 1, 0, 0);
+    s_uni.zpass = 0;
+    dkCmdBufPushConstants(s_cmd, s_ubo.gpu, 256, 0, sizeof(s_uni), &s_uni);
+    dkColorWriteStateDefaults(&cw);
+    dkCmdBufBindColorWriteState(s_cmd, &cw);
+    bind_depth();
+    s_st_draws++;
+    s_st_pushes += 2;
+}
+
 float* dk_stream_begin(size_t max_floats) {
     if (!s_up) return nullptr;
     s_stream_ptr = (float*)ring_alloc(s_dataRing, s_dataBlocks, (uint32_t)(max_floats * 4), 64, &s_stream_gpu);
@@ -1146,6 +1191,7 @@ void dk_draw_triangles(float buf[], size_t len, size_t ntris) {
     dkCmdBufBindVtxBuffer(s_cmd, 0, addr, bytes);
     dkCmdBufDraw(s_cmd, DkPrimitive_Triangles, (uint32_t)(3 * ntris), 1, 0, 0);
     s_st_draws++;
+    zcut_pass((uint32_t)(3 * ntris));   /* D987 */
     if (s_submit_every && ++s_draws_since_submit >= s_submit_every) {
         submit();   /* the GPU starts on this part while the rest is recorded */
     }
@@ -1218,6 +1264,7 @@ void dk_mesh_draw(uint32_t name, const struct GfxMeshDraw* d) {
     }
     dkCmdBufDraw(s_cmd, DkPrimitive_Triangles, d->nverts, 1, 0, 0);
     s_st_draws++;
+    zcut_pass(d->nverts);   /* D987 */
     if (d->cull != 0) bind_rasterizer();
     bind_program(s_prg);       /* later same-state classic batches need their original vertex shader */
     s_cmd_pending = true;
@@ -1596,6 +1643,9 @@ int s_sky_gen = -1;
 struct DkSkyUniforms { float v[14][4]; };
 
 void draw_fullscreen(const DkShader* frag, const void* uni, uint32_t uni_size, DkResHandle tex) {
+    if (s_bound_a2c) {
+        bind_multisample(s_bound_ms, false);   /* D984: restore_state re-applies the program's */
+    }
     const DkShader* sh[2] = { &s_fs_vert, frag };
     dkCmdBufBindShaders(s_cmd, DkStageFlag_GraphicsMask, sh, 2);
     dkCmdBufBindVtxAttribState(s_cmd, nullptr, 0);

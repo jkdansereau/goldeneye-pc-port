@@ -27,6 +27,7 @@ investigation artifacts.
 | Script | Role |
 |---|---|
 | `verify.sh` | Speed-ups plan Step 2. One command → one verdict: build-if-stale, headless `GE_PCDUMP`/`GE_INPUTSCRIPT` capture, crash-detect + symbolication (via `crash_brief.py`), `pixcount`, `framediff` vs golden, `--json`. `verify.sh <level>`, `verify.sh sweep [subset]`, `verify.sh parity <level> --against <dir>`. |
+| `a2cdump.py` | D984: converts the `GE_A2CDUMP=1` texture dumps (`$S/a2cdump/*.tga`, the textures the alpha-to-coverage test kept on the N64 blend) to PNG, prints each one's alpha spread (0 / 255 / in-between, levels) with a cut-out / ramp verdict, and `--sheet` draws them all on one checkerboard contact sheet. `a2cdump.py <dir> [--out <dir>] [--only ramp\|cut-out] [--sheet <png>]`. Output is ROM-derived: keep it out of the tree. |
 | `crash_brief.py` | Speed-ups plan Step 9 / R5. `ge007.crash.log` → symbolicated frames + a dev-process.md-shaped dispatch-ready brief: matches porting-notes.md sections / findings-index.csv entries by resolved function/file, flags known parked-crash signatures (Cuba credits, D188 va_list, D189 stack overrun) so agents stop re-investigating them. Called automatically by `verify.sh` on CRASH; also runnable standalone. |
 | `framediff.py` | Visual regression: candidate `GE_PCDUMP` frames vs `tools_pc/golden/`, per-region divergence. Structural/tolerant by default; `--exact` after `GE_DETERM`. |
 | `pixcount.py` | Count non-black pixels in a PPM dump — "did the scene render anything" as a number. |

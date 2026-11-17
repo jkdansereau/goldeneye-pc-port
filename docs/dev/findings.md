@@ -22970,6 +22970,26 @@ Console (same command, 40 s, 8 reports): 218-290 GPU replays per frame (5300-690
 
 **Also affects.** Every Jungle room (all portals are special there): boxes are now full screen as on N64, so props and room geometry that cross a portal are no longer cut anywhere in the level, and slightly more is drawn (each room full screen instead of its portal box). Control's flagged portals were already right.
 
+## D984: Cut-out textured surfaces drawn with alpha-to-coverage (MSAA) -- they write depth and hide each other in any order, with smooth edges; smooth-alpha surfaces keep the N64 blend -- BUILT + MAINTAINER-CHECKED 2026-11-17 (Ryujinx, Jungle docked 4x: plant walls and trees fixed, smoke and explosions unchanged; Switch build; render only; Visuals >= Fixed)
+
+**Problem.** The N64 blends its translucent surfaces (`G_RM_*XLU*`: foliage, fences, glass, smoke) without writing depth, so they stack in the model's authored order: a far leaf drawn after a near one covers it (D980, issue #35). D980 fixed the jungle props by turning their leaves into depth-writing cut-outs (texture edge, discard below 0.5): sorted, but with stair-stepped edges, and only for the listed models.
+
+**Change (port render layer only, no game code).**
+- `gfx_pc.cpp gfx_a2c_draw`: a triangle is an A2C draw when Video.Visuals >= Fixed, MSAA > 1, depth test and compare are on, it is not a decal (`ZMODE_DEC`) or a prim-depth draw, its blender is the alpha blend (`CLR_MEM * (1 - A)`) or it is a texture-edge cut-out (`CVG_X_ALPHA`, not `G_AC_DECAL`), the blend is not modulate or invisible, and the combiner's alpha reads TEXEL0/TEXEL1 (`gfx_comb_alpha_sources`). A blended (XLU) draw must also be a cut-out: every texture it reads stores at most one bit of alpha (`gfx_tex_alpha_1bit`: RGBA16 5551, IA4, CI through an RGBA16 palette) and no prim / env alpha it reads is below 255; texture-edge draws qualify in any format (the N64 cuts them at 0.5 anyway). The draw then writes depth, blending is off and `SHADER_OPT_A2C` (id1 bit 13) is set; `ts.use_alpha` stays on for the vertex layout, `ts.blend` drives `set_use_alpha` (and the mesh cache's segment blend).
+- Shaders (GL generator, `dkshgen`, deko3d uber-shader `CF_A2C` = bit 15): an A2C cut-out replaces the 0.5 discard with an alpha sharpened to about one pixel, `(a - 0.5) / max(fwidth(a), 1/1024) + 0.5` (crisp edges when magnified, about half coverage when minified so far leaves do not vanish); `G_AC_THRESHOLD` cut-outs keep their alpha. Every A2C draw discards alpha below 1/256, so no depth is written where nothing is drawn.
+- Backends: the state follows the bound program. deko3d sets `alphaToCoverageEnable` and `alphaToCoverageDither` in the multisample state (`bind_multisample`, re-applied by `bind_target` and `bind_program`, off for the FXAA and sky passes); GL toggles `GL_SAMPLE_ALPHA_TO_COVERAGE` in `load_shader` / `load_shader_with`, off around FXAA and sky.
+- Mesh cache: baked segments carry the decision, so `gfx_frame_body` drops them when the gate (Visuals, MSAA level) changes.
+- `combiners.txt`: the 29 alpha combiners that read texture alpha again with id1 | 0x2000 (80 -> 109), so the Switch draws them with specialised shaders, not the uber-shader.
+- `GE_A2C=0` turns it off for the run (A/B; GE-ENV-PROBES).
+
+**Why smooth alpha keeps the blend.** A2C turns alpha into covered samples: 2x/4x MSAA give 3/5 levels, dithered across pixels, and two layers at the same alpha cover the same samples (they do not accumulate) and write depth. The first build applied it to every textured XLU surface: the Jungle plant walls were fixed but smoke and explosions turned into a coarse dither (maintainer, Ryujinx). Limiting it by texture format and prim / env fade keeps them on the smooth blend. MSAA 1x and Visuals Original keep the N64 blend everywhere.
+
+**Probe.** `GE_A2CDUMP=1` writes each texture the test turns down to `$S/a2cdump/` (32-bit TGA, named by raw address, reason, format and size) with an `A2CDUMP` log line giving the draw's combine mode and other modes; `tools_pc/a2cdump.py` converts them to PNG, prints each one's alpha spread and draws a contact sheet. Jungle run: 133 turned down. Smoke and explosion frames (IA8 / RGBA32, `G_RM_ZB_CLD_SURF`, `ol=..4b50`), water (I4/I8, already depth-writing), prim / env fades (opaque CI8 sprites) and a few smooth-alpha scenery textures (`G_RM_AA_ZB_XLU_SURF`, `ol=..49d8`: bridge planks, a rope, a cracked window, a rivet plate). Counting in-between alpha texels, or how many of them sit on a 0/255 edge, does not separate the scenery from the smoke (planks 46 % in-between, smoke frames 7 to 56 %), so a content-based "cut-out" flag in the texture cache would not help.
+
+**Known limit.** Jungle rope bridge: the hanging vines drew over the planks. Both are smooth-alpha XLU scenery, so both keep the blend without depth write. Fixed by D987 (a depth-only pass where the final alpha is opaque).
+
+**Confidence.** High for the plant walls (seen fixed) and the blend kept on smoke and explosions (seen); glass not checked; PC runtime not checked.
+
 ## D985: Switch mesh cache drew some lists with stale textures, palettes, vertices and fog (Dam: dark triangles, yellow discs while firing, fog-blue or black ground at the wall) -- FIXED + MAINTAINER-CHECKED 2026-11-17 (Ryujinx, Dam at the wall below the hangars, KF7)
 
 **Symptom.** Dam, from the alarm area onwards and on the dam: a dark triangle, then yellow discs on the ground, while firing the KF7; a dark ground patch at the wall below the hangars. Never with `GE_MESHCACHE=0`; the discs and the triangle only with the GPU replay (`GE_MESHGPU=0` hid them).
@@ -22995,3 +23015,23 @@ Console (same command, 40 s, 8 reports): 218-290 GPU replays per frame (5300-690
 **Fix.** `tools_pc/dkshgen/dkshgen.cpp` (combiner pack) and `port/switch/shaders/uber.{vert,frag}.glsl` (uber-shader) interpolate the shade, the combiner inputs and the per-vertex fog with perspective; `gfx_rdp_affine = 0` on deko3d. Always, not under Video.Visuals: the N64 does not show the patch. The PC GL renderer is unchanged (PC goldens depend on it).
 
 **Also affects.** Every level's shading on the Switch: gradients on large triangles near the camera now follow the perspective. D548's clamp of the combiner inputs stays.
+
+## D987: Blended scenery writes depth where it is opaque (depth-only second pass) -- the Jungle bridge planks hide the vines behind them; smoke and explosions excluded -- BUILT + MAINTAINER-CHECKED 2026-11-17 (Ryujinx, Jungle docked: bridge fixed, explosions unchanged; Switch build; render only; Visuals >= Fixed)
+
+**Problem.** The N64 draws its translucent surfaces (`G_RM_AA_ZB_XLU_SURF`) blended and without writing depth, so they stack in the authored order. On the Jungle rope bridge, the hanging vines drew over the planks. Both textures carry a smooth alpha (planks `7011eef8`, IA8: 52 % opaque, 46 % in-between), so D984's alpha-to-coverage turns them down and they keep the blend.
+
+**Change (port render layer only, no game code).**
+- `gfx_pc.cpp gfx_tri_state`: a blended draw that writes no depth in the N64 modes (no `Z_UPD`; captured before D984's override), with depth test and compare on, no decal (`ZMODE_DEC`), no prim depth, no invisible or modulate blend and Video.Visuals >= Fixed, gets `SHADER_OPT_ZCUT` (id1 bit 14). Smoke and explosions (`G_RM_ZB_CLD_SURF`, `CVG_DST_SAVE`) are excluded.
+- Backends: after the normal blended draw, the same vertices are drawn again with colour writes off, depth writes on and the same depth function. The fragment shader discards final alpha below 0.98 in that pass (a `zpass` uniform / push constant). Opaque texels then write depth and hide what is drawn behind them later; the translucent texels stay blended and write nothing. deko3d: `zcut_pass` after `dkCmdBufDraw` in `dk_draw_triangles` and `dk_mesh_draw`; GL: `gfx_opengl_zcut_pass` after the classic and mesh draws.
+- Shaders: GL generator, `dkshgen` and the deko3d uber-shader (`CF_ZCUT` = bit 19, `DK_CF_ZCUT`); `zpass` replaces the Draw block's padding word.
+- Mesh cache: the gate key is `gfx_a2c_gate() | gfx_zcut_gate() << 1`, so baked segments are dropped when either changes.
+- `combiners.txt`: the ZCUT combiners (id1 | 0x4000) and the A2C ones Dam reported as `DKSH miss` (109 -> 136).
+- `GE_ZCUT=0` turns it off for the run (A/B; GE-ENV-PROBES). Needs no MSAA.
+
+**Why smoke and explosions are excluded.** The first build applied it to every blended draw without depth write. The explosion sprites' opaque cores then wrote depth and cut the sprites drawn after them: hard-edged holes showing the scenery through the fireball (maintainer screenshot, Ryujinx Jungle). With `CVG_DST_SAVE` excluded they are smooth again.
+
+**Probe (temporary, removed).** `GE_ZCUTLOG=1` logged each distinct blended state: the planks and vines share a 2-cycle combiner whose alpha reads TEXEL0, TEXEL1 and ENV (env 255, shade 255), both get ZCUT, and the vines come first in the room list. The fix still held in the maintainer's run (the bridge passes in front of the vines), presumably because vines hidden by the planks are also drawn after them in places; not measured further.
+
+**Known limit.** The planks stay see-through: their in-between alpha keeps the N64 blend (maintainer: kept as is). A vine drawn before a plank in the same list is not hidden by it; a depth pre-pass per mesh-cache entry would remove the order dependency if it shows up.
+
+**Confidence.** High for the bridge and explosions (seen, Ryujinx); glass and other levels not checked; PC runtime not checked.

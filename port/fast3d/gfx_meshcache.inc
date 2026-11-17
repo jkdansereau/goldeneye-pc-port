@@ -549,7 +549,7 @@ static void mc_cap_cmd(Gfx* cmd) {
 static void mc_fill_seg(McSeg& s, const TriState& ts) {
     memset(&s, 0, sizeof(s));
     s.depth_mode = rendering_state.depth_mode;
-    s.use_alpha = ts.use_alpha;
+    s.use_alpha = ts.blend;   /* D984: the blend state (an A2C draw keeps ts.use_alpha for its vertices) */
     s.use_modulate = ts.use_modulate;
     s.ts = ts;
     s.persp = (rdp.other_mode_h & G_TP_PERSP) != 0;

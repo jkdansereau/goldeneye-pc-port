@@ -1082,6 +1082,107 @@ static const uint8_t* gfx_tex_normalize_source(const uint8_t* addr, uint32_t ext
     return s_c_array_tex_norms.emplace(addr, std::move(buf)).first->second.data();
 }
 
+/* D984: GE_A2CDUMP=1 writes every texture the alpha-to-coverage test turns
+ * down (a blended surface left on the N64 blend) to $S/a2cdump/ as a 32-bit
+ * TGA named <raw address>_<reason>_f<fmt>-s<siz>_<w>x<h>.tga, plus one
+ * "A2CDUMP" log line each; tools_pc/a2cdump.py converts them to PNG and
+ * reports their alpha spread. The dumps are ROM-derived: keep them out of
+ * the tree. Off (no copy, no lookup) without the env var. */
+static int gfx_a2cdump_on(void) {
+    static const int on = getenv("GE_A2CDUMP") != NULL;
+    return on;
+}
+struct A2cDumpTex {
+    uint32_t w = 0, h = 0;
+    uint64_t cm = 0;   /* draw state when turned down: combine mode, other mode L / H */
+    uint32_t ol = 0, oh = 0;
+    uint8_t fmt = 0, siz = 0;
+    bool written = false;
+    std::vector<uint8_t> rgba;
+};
+static std::unordered_map<const void*, A2cDumpTex> s_a2cdump_tex;   /* uploads seen, by source address */
+static const uint8_t* s_a2cdump_cur = nullptr;                      /* source of the import in progress */
+static uint8_t s_a2cdump_fmt, s_a2cdump_siz;
+
+static void gfx_a2cdump_write(const void* addr, A2cDumpTex& t, int why) {
+    if (t.written || t.rgba.empty()) {
+        return;
+    }
+    t.written = true;
+    char dir[512], path[640];
+    snprintf(dir, sizeof dir, "%s", sysResolvePath("$S/a2cdump"));
+#ifdef _WIN32
+    _mkdir(dir);
+#else
+    mkdir(dir, 0777);
+#endif
+    const unsigned long long raw = (unsigned long long)((uintptr_t)addr - (uintptr_t)PORT_ADDR_BASE);
+    snprintf(path, sizeof path, "%s/%08llx_%s_f%u-s%u_%ux%u.tga", dir, raw, why == 2 ? "fade" : "fmt",
+             (unsigned)t.fmt, (unsigned)t.siz, (unsigned)t.w, (unsigned)t.h);
+    FILE* f = fopen(path, "wb");
+    if (!f) {
+        sysLogPrintf(LOG_WARNING, "A2CDUMP: cannot write %s", path);
+        return;
+    }
+    const uint8_t hdr[18] = { 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                              (uint8_t)t.w, (uint8_t)(t.w >> 8), (uint8_t)t.h, (uint8_t)(t.h >> 8), 32, 0x28 };
+    fwrite(hdr, 1, sizeof hdr, f);
+    std::vector<uint8_t> bgra(t.rgba.size());
+    for (size_t k = 0; k + 3 < t.rgba.size(); k += 4) {
+        bgra[k] = t.rgba[k + 2];
+        bgra[k + 1] = t.rgba[k + 1];
+        bgra[k + 2] = t.rgba[k];
+        bgra[k + 3] = t.rgba[k + 3];
+    }
+    fwrite(bgra.data(), 1, bgra.size(), f);
+    fclose(f);
+    sysLogPrintf(LOG_NOTE, "A2CDUMP %s cm=%016llx ol=%08x oh=%08x", path, (unsigned long long)t.cm, (unsigned)t.ol,
+                 (unsigned)t.oh);
+}
+
+/* A surface's texture was turned down by the A2C test (why: 1 format, 2 fade). */
+struct A2cDumpPending {
+    int why;
+    uint64_t cm;
+    uint32_t ol, oh;
+};
+static std::unordered_map<const void*, A2cDumpPending> s_a2cdump_wait;
+
+static void gfx_a2cdump_refused(const void* addr, int why) {
+    auto it = s_a2cdump_tex.find(addr);
+    if (it != s_a2cdump_tex.end()) {
+        if (!it->second.written) {
+            it->second.cm = rdp.combine_mode;
+            it->second.ol = rdp.other_mode_l;
+            it->second.oh = rdp.other_mode_h;
+        }
+        gfx_a2cdump_write(addr, it->second, why);
+    } else {
+        s_a2cdump_wait.emplace(addr, A2cDumpPending{ why, rdp.combine_mode, rdp.other_mode_l, rdp.other_mode_h });
+    }
+}
+
+static void gfx_upload_texture(uint32_t width, uint32_t height, bool gen_mipmaps) {
+    gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
+    if (!gfx_a2cdump_on() || s_a2cdump_cur == nullptr) {
+        return;
+    }
+    A2cDumpTex& t = s_a2cdump_tex[s_a2cdump_cur];
+    t.w = width;
+    t.h = height;
+    t.fmt = s_a2cdump_fmt;
+    t.siz = s_a2cdump_siz;
+    t.rgba.assign(tex_upload_buffer, tex_upload_buffer + (size_t)width * height * 4);
+    auto p = s_a2cdump_wait.find(s_a2cdump_cur);
+    if (p != s_a2cdump_wait.end()) {
+        t.cm = p->second.cm;
+        t.ol = p->second.ol;
+        t.oh = p->second.oh;
+        gfx_a2cdump_write(s_a2cdump_cur, t, p->second.why);
+        s_a2cdump_wait.erase(p);
+    }
+}
+
 static void import_texture_rgba16(int tile, const LoadedTexture& loaded_texture, bool gen_mipmaps) {
     const uint8_t* addr = loaded_texture.addr;
     const uint32_t size_bytes = loaded_texture.size_bytes;
@@ -1108,7 +1209,7 @@ static void import_texture_rgba16(int tile, const LoadedTexture& loaded_texture,
     const uint32_t width = rdp.texture_tile[tile].line_size_bytes / 2;
     const uint32_t height = size_bytes / rdp.texture_tile[tile].line_size_bytes;
 
-	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
+	gfx_upload_texture(width, height, gen_mipmaps);
     // DumpTexture(loaded_texture.otr_path, rgba32_buf, width, height);
 }
 
@@ -1129,7 +1230,7 @@ static void import_texture_rgba32(int tile, const LoadedTexture& loaded_texture,
 
     const uint32_t width = rdp.texture_tile[tile].line_size_bytes / 2;
     const uint32_t height = (size_bytes / 2) / rdp.texture_tile[tile].line_size_bytes;
-	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
+	gfx_upload_texture(width, height, gen_mipmaps);
     // DumpTexture(loaded_texture.otr_path, addr, width, height);
 }
 
@@ -1162,7 +1263,7 @@ static void import_texture_ia4(int tile, const LoadedTexture& loaded_texture, bo
     const uint32_t width = rdp.texture_tile[tile].line_size_bytes * 2;
     const uint32_t height = size_bytes / rdp.texture_tile[tile].line_size_bytes;
 
-	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
+	gfx_upload_texture(width, height, gen_mipmaps);
     // DumpTexture(loaded_texture.otr_path, rgba32_buf, width, height);
 }
 
@@ -1188,7 +1289,7 @@ static void import_texture_ia8(int tile, const LoadedTexture& loaded_texture, bo
     const uint32_t width = rdp.texture_tile[tile].line_size_bytes;
     const uint32_t height = size_bytes / rdp.texture_tile[tile].line_size_bytes;
 
-	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
+	gfx_upload_texture(width, height, gen_mipmaps);
     // DumpTexture(loaded_texture.otr_path, rgba32_buf, width, height);
 }
 
@@ -1214,7 +1315,7 @@ static void import_texture_ia16(int tile, const LoadedTexture& loaded_texture, b
     const uint32_t width = rdp.texture_tile[tile].line_size_bytes / 2;
     const uint32_t height = size_bytes / rdp.texture_tile[tile].line_size_bytes;
 
-	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
+	gfx_upload_texture(width, height, gen_mipmaps);
     // DumpTexture(loaded_texture.otr_path, rgba32_buf, width, height);
 }
 
@@ -1241,7 +1342,7 @@ static void import_texture_i4(int tile, const LoadedTexture& loaded_texture, boo
     const uint32_t width = rdp.texture_tile[tile].line_size_bytes * 2;
     const uint32_t height = size_bytes / rdp.texture_tile[tile].line_size_bytes;
 
-	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
+	gfx_upload_texture(width, height, gen_mipmaps);
     // DumpTexture(loaded_texture.otr_path, rgba32_buf, width, height);
 }
 
@@ -1266,7 +1367,7 @@ static void import_texture_i8(int tile, const LoadedTexture& loaded_texture, boo
     const uint32_t width = rdp.texture_tile[tile].line_size_bytes;
     const uint32_t height = size_bytes / rdp.texture_tile[tile].line_size_bytes;
 
-	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
+	gfx_upload_texture(width, height, gen_mipmaps);
     // DumpTexture(loaded_texture.otr_path, rgba32_buf, width, height);
 }
 
@@ -1324,7 +1425,7 @@ static void import_texture_ci4(int tile, const LoadedTexture& loaded_texture, bo
     const uint32_t width = result_line_size * 2;
     const uint32_t height = size_bytes / result_line_size;
 
-	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
+	gfx_upload_texture(width, height, gen_mipmaps);
 }
 
 static void import_texture_ci8(int tile, const LoadedTexture& loaded_texture, bool gen_mipmaps) {
@@ -1350,7 +1451,7 @@ static void import_texture_ci8(int tile, const LoadedTexture& loaded_texture, bo
     const uint32_t width = result_line_size;
     const uint32_t height = size_bytes / result_line_size;
 
-	gfx_rapi->upload_texture(tex_upload_buffer, width, height, gen_mipmaps);
+	gfx_upload_texture(width, height, gen_mipmaps);
 }
 
 /* RC2 mip-contamination clamp (see import_texture). Default on;
@@ -1574,6 +1675,9 @@ static void import_texture(int i, int tile, bool importReplacement) {
         return;
     }
     s_tick_texmiss++;
+    s_a2cdump_cur = orig_addr;   /* GE_A2CDUMP */
+    s_a2cdump_fmt = fmt;
+    s_a2cdump_siz = siz;
 
     // D71: importers read raw N64 byte streams; normalize C-array sources.
     const uint8_t* saved_addr = loaded_texture.addr;
@@ -1893,6 +1997,7 @@ static void import_texture(int i, int tile, bool importReplacement) {
     }
 
     loaded_texture.addr = saved_addr;
+    s_a2cdump_cur = nullptr;
     loaded_texture.full_image_line_size_bytes = saved_full_line;
 }
 
@@ -3989,6 +4094,8 @@ struct TriState {
     struct ColorCombiner* comb;
     struct ShaderProgram* prg;
     bool use_alpha, use_fog, use_grayscale, use_modulate;
+    bool a2c;                       /* D984: alpha-to-coverage draw (no blend, depth written) */
+    bool blend;                     /* use_alpha && !a2c: what set_use_alpha gets */
     uint32_t tm;
     uint32_t tex_width[2], tex_height[2], tex_width2[2], tex_height2[2];
     bool wrap_s[2], wrap_t[2];
@@ -4104,6 +4211,106 @@ static inline bool gfx_tri_reject(struct LoadedVertex* v1, struct LoadedVertex* 
     return false;
 }
 
+/* D984: alpha-to-coverage for the textured surfaces the N64 blends without
+ * writing depth (XLU: foliage, fences, glass, smoke) and for its alpha
+ * cut-outs (CVG_X_ALPHA texture edge). With MSAA the fragment alpha becomes
+ * the share of samples covered and depth is written for those samples, so
+ * such surfaces hide each other correctly in any draw order (the N64 draws
+ * them in the model's authored order, a far leaf drawn later covers a near
+ * one). Blended surfaces qualify only as cut-outs (1-bit texture alpha, no
+ * prim / env fade); smoke, explosions and glass keep the blend. Video.Visuals >= Fixed and MSAA > 1 only; Original and 1x keep the
+ * N64 blend. Not for decals (depth offset), prim-depth draws, modulate or
+ * invisible blends, surfaces without a depth test, or alpha that does not
+ * come from a texture. */
+extern "C" int portDisplayFixes;   /* port/src/video.c: Video.Visuals >= Fixed (D982) */
+
+static int gfx_a2c_gate(void) {
+    /* GE_A2C=0 turns it off for the run (A/B); unset: Video.Visuals decides */
+    static const int off = [] { const char* e = getenv("GE_A2C"); return e && e[0] == '0'; }();
+    return portDisplayFixes && gfx_msaa_level > 1 && !off ? 1 : 0;
+}
+
+/* Bit (1 << G_ACMUX_x) for every alpha source the combiner's alpha formula
+ * actually reads (same a == b / c == 0 normalisation as the combiner
+ * generation: then only d counts). */
+static uint32_t gfx_comb_alpha_sources(uint64_t cm, bool is_2cyc) {
+    uint32_t used = 0;
+    for (int i = 0; i < (is_2cyc ? 2 : 1); i++) {
+        const uint32_t a = (cm >> (i * 28 + 16)) & 7, b = (cm >> (i * 28 + 19)) & 7;
+        const uint32_t c = (cm >> (i * 28 + 22)) & 7, d = (cm >> (i * 28 + 25)) & 7;
+        used |= 1u << d;
+        if (a != b && c != G_ACMUX_0) {
+            used |= (1u << a) | (1u << b) | (1u << c);
+        }
+    }
+    return used;
+}
+
+/* The texture sampled for TEXEL0 / TEXEL1 stores at most one bit of alpha
+ * (RGBA16 5551, IA4 3+1, CI through an RGBA16 palette): a cut-out, whose
+ * only fractional alpha is the filtered edge. IA8/IA16/I/RGBA32 and IA16
+ * palettes carry a smooth alpha ramp (smoke, explosions, glows). */
+static bool gfx_tex_alpha_1bit(int i) {
+    const uint32_t tile = rdp.first_tile_index + gfx_lod_tile_offset(i);
+    const uint8_t fmt = rdp.texture_tile[tile].fmt, siz = rdp.texture_tile[tile].siz;
+    switch (fmt) {
+        case G_IM_FMT_RGBA: return siz == G_IM_SIZ_16b;
+        case G_IM_FMT_IA: return siz == G_IM_SIZ_4b;
+        case G_IM_FMT_CI: return (rdp.other_mode_h & (3U << G_MDSFT_TEXTLUT)) == G_TT_RGBA16;
+        default: return false;
+    }
+}
+
+static bool gfx_a2c_draw(bool depth_test, bool depth_update, bool depth_compare, bool depth_source_prim, uint16_t zmode) {
+    (void)depth_update;
+    if (!gfx_a2c_gate() || !depth_test || !depth_compare || depth_source_prim || zmode == ZMODE_DEC) {
+        return false;
+    }
+    const uint32_t ol = rdp.other_mode_l;
+    const bool blend = (ol & (3 << 20)) == (G_BL_CLR_MEM << 20) && (ol & (3 << 16)) == (G_BL_1MA << 16);
+    const bool invisible = (ol & (3 << 24)) == (G_BL_0 << 24) && (ol & (3 << 20)) == (G_BL_CLR_MEM << 20);
+    const bool ac_decal = (ol & (3U << G_MDSFT_ALPHACOMPARE)) == (2U << G_MDSFT_ALPHACOMPARE);
+    const bool texture_edge = (ol & CVG_X_ALPHA) == CVG_X_ALPHA && !ac_decal;
+    if ((!blend && !texture_edge) || invisible || (rsp.extra_geometry_mode & G_MODULATE_EXT) != 0) {
+        return false;
+    }
+    const bool is_2cyc = (rdp.other_mode_h & (3U << G_MDSFT_CYCLETYPE)) == G_CYC_2CYCLE;
+    const uint32_t src = gfx_comb_alpha_sources(rdp.combine_mode, is_2cyc);
+    const bool t0 = (src & (1u << G_ACMUX_TEXEL0)) != 0, t1 = (src & (1u << G_ACMUX_TEXEL1)) != 0;
+    if (!t0 && !t1) {
+        return false;   /* alpha not from a texture */
+    }
+    if (texture_edge) {
+        return true;    /* the N64 cuts these at alpha 0.5 anyway */
+    }
+    /* A blended (XLU) surface: only a cut-out texture at full opacity. A
+     * smooth alpha ramp (smoke, explosions) or a prim / env alpha fade
+     * (glass, fading effects) keeps the N64 blend: A2C would show it as a
+     * dither pattern. */
+    int why = 0;
+    if ((t0 && !gfx_tex_alpha_1bit(0)) || (t1 && !gfx_tex_alpha_1bit(1))) {
+        why = 1;
+    } else if (((src & (1u << G_ACMUX_PRIMITIVE)) && rdp.prim_color.a != 0xff) ||
+        ((src & (1u << G_ACMUX_ENVIRONMENT)) && rdp.env_color.a != 0xff)) {
+        why = 2;
+    }
+    if (why) {
+        if (gfx_a2cdump_on()) {   /* GE_A2CDUMP: the textures left on the blend, once each */
+            if (t0) gfx_a2cdump_refused(rdp.loaded_texture[rdp.texture_tile[rdp.first_tile_index + gfx_lod_tile_offset(0)].tmem].addr, why);
+            if (t1) gfx_a2cdump_refused(rdp.loaded_texture[rdp.texture_tile[rdp.first_tile_index + gfx_lod_tile_offset(1)].tmem].addr, why);
+        }
+        return false;
+    }
+    return true;
+}
+
+/* D987: Video.Visuals >= Fixed; GE_ZCUT=0 turns the depth-only pass off for
+ * the run (A/B). Needs no MSAA. */
+static int gfx_zcut_gate(void) {
+    static const int off = [] { const char* e = getenv("GE_ZCUT"); return e && e[0] == '0'; }();
+    return portDisplayFixes && !off ? 1 : 0;
+}
+
 static inline void gfx_tri_state(TriState& ts) {
     bool depth_test = ((rsp.geometry_mode & G_ZBUFFER) == G_ZBUFFER || (rdp.other_mode_l & G_ZS_PRIM) == G_ZS_PRIM) &&
                       ((rdp.other_mode_h & G_CYC_1CYCLE) == G_CYC_1CYCLE || (rdp.other_mode_h & G_CYC_2CYCLE) == G_CYC_2CYCLE);
@@ -4111,6 +4318,11 @@ static inline void gfx_tri_state(TriState& ts) {
     bool depth_compare = (rdp.other_mode_l & Z_CMP) == Z_CMP;
     bool depth_source_prim = (rdp.other_mode_l & G_ZS_PRIM) == G_ZS_PRIM /* && gDP.primDepth.z == 1.0f */;
     uint16_t zmode = rdp.other_mode_l & ZMODE_DEC;
+    const bool depth_update_n64 = depth_update;
+    ts.a2c = gfx_a2c_draw(depth_test, depth_update, depth_compare, depth_source_prim, zmode);
+    if (ts.a2c) {
+        depth_update = true;   /* the covered samples hide what is drawn behind them later */
+    }
     uint8_t depth_mode = (depth_test ? 1 : 0) | (depth_update ? 2 : 0) | (depth_compare ? 4 : 0) | (depth_source_prim ? 8 : 0) | (zmode >> 6);
     if (depth_mode != rendering_state.depth_mode) {
         gfx_flush();
@@ -4167,6 +4379,22 @@ static inline void gfx_tri_state(TriState& ts) {
     }
     if (use_blur) {
         cc_options |= (uint64_t)SHADER_OPT_BLUR;
+    }
+    if (ts.a2c) {
+        cc_options |= (uint64_t)SHADER_OPT_A2C;
+    }
+    ts.blend = ts.use_alpha && !ts.a2c;
+    /* D987: a blended surface that writes no depth (XLU) also writes depth
+     * where its final alpha is opaque, in a second depth-only pass: its
+     * opaque part (a plank, a frame) then hides what is drawn behind it later
+     * (vines), while its translucent texels stay blended. Not for decals,
+     * prim-depth draws, modulate or invisible blends. */
+    /* Not for smoke / explosions (G_RM_ZB_CLD_SURF, CVG_DST_SAVE): their
+     * opaque cores would cut the sprites drawn after them. */
+    const bool cld_surf = (rdp.other_mode_l & (3U << 8)) == CVG_DST_SAVE;
+    if (ts.blend && !depth_update_n64 && depth_test && depth_compare && !depth_source_prim && zmode != ZMODE_DEC &&
+        !invisible && !ts.use_modulate && !cld_surf && gfx_zcut_gate()) {
+        cc_options |= (uint64_t)SHADER_OPT_ZCUT;
     }
 
     // If we are not using alpha, clear the alpha components of the combiner as they have no effect
@@ -4449,10 +4677,10 @@ static inline void gfx_tri_state(TriState& ts) {
         gfx_rapi->load_shader(ts.prg);
         rendering_state.shader_program = ts.prg;
     }
-    if (ts.use_alpha != rendering_state.alpha_blend || ts.use_modulate != rendering_state.modulate) {
+    if (ts.blend != rendering_state.alpha_blend || ts.use_modulate != rendering_state.modulate) {
         gfx_flush();
-        gfx_rapi->set_use_alpha(ts.use_alpha, ts.use_modulate);
-        rendering_state.alpha_blend = ts.use_alpha;
+        gfx_rapi->set_use_alpha(ts.blend, ts.use_modulate);
+        rendering_state.alpha_blend = ts.blend;
         rendering_state.modulate = ts.use_modulate;
     }
     gfx_rapi->shader_get_info(ts.prg, &ts.num_inputs, ts.used_textures);
@@ -6690,6 +6918,15 @@ static void gfx_frame_body(Gfx* commands, bool emit_overlay, Gfx** overlay_io, u
     rendering_state.viewport = {};
     rendering_state.scissor = {};
     interpPortalPassBegin(commands);   /* D578: select the frame snapshot, drop the cached replay */
+    {
+        /* D984: baked mesh segments carry the A2C decision; drop them when it changes */
+        static int s_a2c_prev = -1;
+        const int g = gfx_a2c_gate() | gfx_zcut_gate() << 1;   /* D984 / D987 */
+        if (g != s_a2c_prev) {
+            if (s_a2c_prev >= 0) mc_clear_all();
+            s_a2c_prev = g;
+        }
+    }
     mc_frame_begin();   /* mesh cache */
     s_interp_seg14 = 0;
     *perf_tpre = perf_t0 ? gfx_perf_now_ns() : 0;

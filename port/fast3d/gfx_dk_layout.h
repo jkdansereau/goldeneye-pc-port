@@ -89,7 +89,7 @@ struct DkDrawUniforms {
     int32_t flip_v0;   /* unit samples a rendered image (stored top-down): t' = 1 - t */
     int32_t flip_v1;
     int32_t fog_pixel; /* Video.Visuals >= Fixed (D982): fragment fog from vFogW (fog * w), else the per-vertex vFog.a */
-    int32_t pad;
+    int32_t zpass;     /* D987: 1 during the depth-only pass of a DK_CF_ZCUT draw (discard below opaque) */
 };
 
 /* Vertex-stage data for GE_MESHGPU.  The baked position is model-space xyz
@@ -135,7 +135,9 @@ enum {
     DK_CF_CLAMP_T0 = 1u << 12,
     DK_CF_CLAMP_S1 = 1u << 13,
     DK_CF_CLAMP_T1 = 1u << 14,
+    DK_CF_A2C = 1u << 15,        /* D984: alpha-to-coverage draw */
     DK_CF_NUM_INPUTS_SHIFT = 16, /* 3 bits */
+    DK_CF_ZCUT = 1u << 19,       /* D987: blended draw with a depth-only pass */
     DK_CF_DO_SHIFT = 20          /* 12 bits: (c*2+k)*3 + {single, multiply, mix} */
 };
 
@@ -170,6 +172,8 @@ static inline void dk_combiner_params(const struct CCFeatures* f, struct DkCombi
     if (f->clamp[0][1]) out->flags |= DK_CF_CLAMP_T0;
     if (f->clamp[1][0]) out->flags |= DK_CF_CLAMP_S1;
     if (f->clamp[1][1]) out->flags |= DK_CF_CLAMP_T1;
+    if (f->opt_a2c) out->flags |= DK_CF_A2C;
+    if (f->opt_zcut) out->flags |= DK_CF_ZCUT;
     out->flags |= ((uint32_t)f->num_inputs & 7u) << DK_CF_NUM_INPUTS_SHIFT;
 }
 

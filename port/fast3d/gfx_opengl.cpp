@@ -44,6 +44,7 @@ struct ShaderProgram {
     GLint frame_count_location;
     GLint noise_scale_location;
     GLint three_point_filter_locations[2];
+    GLint zpass_location;   /* D987: depth-only pass of a SHADER_OPT_ZCUT program, -1 = none */
     GLuint ring_vao;   /* D965: VAO of this shader's vertex layout (GE_GLSTREAM), 0 = not resolved */
     /* issue #10 step B: GPU-transform twin (same fragment shader) */
     struct ShaderProgram* twin;
@@ -186,6 +187,16 @@ static size_t s_cur_stride = 0;   /* bytes per vertex of the bound shader */
 
 static struct ShaderProgram* s_cur_classic = nullptr;   /* issue #10: the program the last load bound */
 
+/* D984: alpha-to-coverage follows the bound program (SHADER_OPT_A2C); the
+ * FXAA and sky passes turn it off around their draw. */
+static bool s_a2c_on = false;
+static void gfx_opengl_set_a2c(bool on) {
+    if (on == s_a2c_on) return;
+    if (on) glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    else glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    s_a2c_on = on;
+}
+
 static void gfx_opengl_load_shader(struct ShaderProgram* new_prg) {
     // if (!new_prg) return;
     s_cur_classic = new_prg;
@@ -194,6 +205,7 @@ static void gfx_opengl_load_shader(struct ShaderProgram* new_prg) {
     s_vbo_stride = s_cur_stride;
 #endif
     glUseProgram(new_prg->opengl_program_id);
+    gfx_opengl_set_a2c((new_prg->id1 & SHADER_OPT_A2C) != 0);
     const uint64_t t0 = gl_perf_on() ? gl_now_ns() : 0;
     if (s_stream_active) {
         glBindVertexArray(gfx_opengl_ring_vao_for(new_prg));   /* D965: no per-attribute setup */
@@ -215,6 +227,7 @@ static void gfx_opengl_load_shader_with(struct ShaderProgram* new_prg, uint32_t 
     s_vbo_stride = s_cur_stride;
 #endif
     glUseProgram(new_prg->opengl_program_id);
+    gfx_opengl_set_a2c((new_prg->id1 & SHADER_OPT_A2C) != 0);
     const uint64_t t0 = gl_perf_on() ? gl_now_ns() : 0;
     if (s_stream_active) {
         glBindVertexArray(gfx_opengl_ring_vao_for(new_prg));   /* D965: no per-attribute setup */
@@ -526,6 +539,9 @@ static void gfx_opengl_gen_shader_src(struct CCFeatures& cc_features, char* vs_b
 
     append_line(fs_buf, &fs_len, "uniform int frame_count;");
     append_line(fs_buf, &fs_len, "uniform float noise_scale;");
+    if (cc_features.opt_zcut) {
+        append_line(fs_buf, &fs_len, "uniform int zpass;");   /* D987 */
+    }
 
     append_line(fs_buf, &fs_len, "float random(in vec3 value) {");
     append_line(fs_buf, &fs_len, "    float random = dot(sin(value), vec3(12.9898, 78.233, 37.719));");
@@ -685,7 +701,11 @@ static void gfx_opengl_gen_shader_src(struct CCFeatures& cc_features, char* vs_b
      * their alpha for blending. (AC_DECAL never sets SHADER_OPT_TEXTURE_EDGE,
      * see gfx_pc.cpp.) */
     if (cc_features.opt_texture_edge && cc_features.opt_alpha) {
-        if (cc_features.opt_noise) {
+        if (cc_features.opt_a2c && !cc_features.opt_alpha_threshold) {
+            /* D984: alpha-to-coverage cut-out: the edge sharpened to about a pixel */
+            append_line(fs_buf, &fs_len,
+                        "    texel.a = clamp((texel.a - 0.5) / max(fwidth(texel.a), 1.0 / 1024.0) + 0.5, 0.0, 1.0);");
+        } else if (cc_features.opt_noise) {
             append_line(fs_buf, &fs_len,
                         "    if (texel.a < ((random(vec3(floor(gl_FragCoord.xy * noise_scale), float(frame_count))) + 1.0) / 2.0)) discard;");
         } else if (cc_features.opt_alpha_threshold) {
@@ -713,6 +733,14 @@ static void gfx_opengl_gen_shader_src(struct CCFeatures& cc_features, char* vs_b
         }
         if (cc_features.opt_invisible) {
             append_line(fs_buf, &fs_len, "    texel.a = 0.0;");
+        }
+        if (cc_features.opt_a2c) {
+            /* D984: no depth where nothing is drawn */
+            append_line(fs_buf, &fs_len, "    if (texel.a < 1.0 / 256.0) discard;");
+        }
+        if (cc_features.opt_zcut) {
+            /* D987: the depth-only pass writes depth only where opaque */
+            append_line(fs_buf, &fs_len, "    if (zpass != 0 && texel.a < 0.98) discard;");
         }
 
         append_line(fs_buf, &fs_len, "    OUTPUT_COLOR = texel;");
@@ -848,6 +876,7 @@ static void gfx_opengl_compile_program(uint64_t shader_id0, uint32_t shader_id1,
 
     prg->frame_count_location = glGetUniformLocation(shader_program, "frame_count");
     prg->noise_scale_location = glGetUniformLocation(shader_program, "noise_scale");
+    prg->zpass_location = glGetUniformLocation(shader_program, "zpass");
     prg->three_point_filter_locations[0] = glGetUniformLocation(shader_program, "three_point_filter0");
     prg->three_point_filter_locations[1] = glGetUniformLocation(shader_program, "three_point_filter1");
     prg->mesh_mtx_location = mesh ? glGetUniformLocation(shader_program, "uMeshMtx") : -1;
@@ -1274,6 +1303,23 @@ static float* gfx_opengl_stream_begin(size_t max_floats) {
 }
 
 
+/* D987: after the blended draw of a SHADER_OPT_ZCUT program, the same
+ * vertices again with colour writes off and depth writes on; the shader
+ * (zpass) discards every fragment whose final alpha is below 0.98, so only
+ * the opaque part writes depth. Same depth test as the blended pass. */
+static void gfx_opengl_zcut_pass(struct ShaderProgram* prg, GLint first, GLsizei count) {
+    if (prg == nullptr || (prg->id1 & SHADER_OPT_ZCUT) == 0 || prg->zpass_location < 0 || !glIsEnabled(GL_DEPTH_TEST)) {
+        return;
+    }
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    glDepthMask(GL_TRUE);
+    glUniform1i(prg->zpass_location, 1);
+    glDrawArrays(GL_TRIANGLES, first, count);
+    glUniform1i(prg->zpass_location, 0);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(current_depth_mask ? GL_TRUE : GL_FALSE);
+}
+
 static void gfx_opengl_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_t buf_vbo_num_tris) {
     // printf("flushing %d tris\n", buf_vbo_num_tris);
     const bool perf = gl_perf_on();
@@ -1298,6 +1344,7 @@ static void gfx_opengl_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_
         }
         if (perf) t0 = gl_now_ns();
         glDrawArrays(GL_TRIANGLES, (GLint)(s_stream_batch_abs / s_cur_stride), 3 * buf_vbo_num_tris);
+        gfx_opengl_zcut_pass(s_cur_classic, (GLint)(s_stream_batch_abs / s_cur_stride), 3 * buf_vbo_num_tris);
         if (perf) s_gld_draw_ns += gl_now_ns() - t0;
         s_stream_off += bytes;
         s_stream_batch_ptr = NULL;
@@ -1320,6 +1367,7 @@ static void gfx_opengl_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_
             glUnmapBuffer(GL_ARRAY_BUFFER);
             if (perf) { t1 = gl_now_ns(); s_gld_unmap_ns += t1 - t0; }
             glDrawArrays(GL_TRIANGLES, (GLint)(off / s_vbo_stride), 3 * buf_vbo_num_tris);
+            gfx_opengl_zcut_pass(s_cur_classic, (GLint)(off / s_vbo_stride), 3 * buf_vbo_num_tris);
             if (perf) s_gld_draw_ns += gl_now_ns() - t1;
             s_vbo_ring_off = off + bytes;
             return;
@@ -1333,6 +1381,7 @@ static void gfx_opengl_draw_triangles(float buf_vbo[], size_t buf_vbo_len, size_
     glBufferData(GL_ARRAY_BUFFER, sizeof(float) * buf_vbo_len, buf_vbo, GL_STREAM_DRAW);
     if (perf) { t1 = gl_now_ns(); s_gld_copy_ns += t1 - t0; }   /* glBufferData = upload, counted as copy */
     glDrawArrays(GL_TRIANGLES, 0, 3 * buf_vbo_num_tris);
+    gfx_opengl_zcut_pass(s_cur_classic, 0, 3 * buf_vbo_num_tris);
     if (perf) s_gld_draw_ns += gl_now_ns() - t1;
 }
 
@@ -1418,6 +1467,7 @@ static void gfx_opengl_mesh_draw(uint32_t name, const struct GfxMeshDraw* d) {
         glCullFace(d->cull == 1 ? GL_BACK : GL_FRONT);
     }
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)d->nverts);
+    gfx_opengl_zcut_pass(tw, 0, (GLsizei)d->nverts);   /* D987 */
     if (d->cull != 0) {
         glDisable(GL_CULL_FACE);
     }
@@ -2266,6 +2316,8 @@ void main() {
     glDisable(GL_CULL_FACE);
     glDisable(GL_SCISSOR_TEST);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    const bool prev_a2c = s_a2c_on;
+    gfx_opengl_set_a2c(false);
     glUseProgram(s_fxaa_prog);
     glUniform1i(s_fxaa_loc_tex, 7);
     glUniform2f(s_fxaa_loc_inv, 1.0f / (float)src.width, 1.0f / (float)src.height);
@@ -2279,6 +2331,7 @@ void main() {
 
     glBindVertexArray((GLuint)prev_vao);
     glUseProgram((GLuint)prev_prog);
+    gfx_opengl_set_a2c(prev_a2c);
     glActiveTexture((GLenum)prev_unit);
     glViewport(prev_vp[0], prev_vp[1], prev_vp[2], prev_vp[3]);
     glColorMask(prev_cm[0], prev_cm[1], prev_cm[2], prev_cm[3]);
@@ -2530,6 +2583,8 @@ extern "C" void gfx_opengl_skyplus_pass(int slot) {
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    const bool prev_a2c = s_a2c_on;
+    gfx_opengl_set_a2c(false);
     glUseProgram(s_skyplus_prog);
     glUniform4f(s_sp_loc[SPL_VP], (float)d.vp[0], (float)d.vp[1], (float)d.vp[2], (float)d.vp[3]);
     glUniform2f(s_sp_loc[SPL_ASP], d.aspA, d.aspB);
@@ -2556,6 +2611,7 @@ extern "C" void gfx_opengl_skyplus_pass(int slot) {
     glBindTexture(GL_TEXTURE_2D, (GLuint)prev_tex7);
     glBindVertexArray((GLuint)prev_vao);
     glUseProgram((GLuint)prev_prog);
+    gfx_opengl_set_a2c(prev_a2c);
     glActiveTexture((GLenum)prev_unit);
     glViewport(prev_vp[0], prev_vp[1], prev_vp[2], prev_vp[3]);
     glScissor(prev_sc[0], prev_sc[1], prev_sc[2], prev_sc[3]);
