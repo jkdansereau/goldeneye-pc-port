@@ -23,13 +23,16 @@ if(VK_PACK_RUN)
   if(NOT _r EQUAL 0)
     message(FATAL_ERROR "dkshgen glsl failed")
   endif()
-  macro(_vk_spv stage src out)
-    execute_process(COMMAND "${VK_GLSLANG}" -V --target-env vulkan1.3 --sub 4 -S ${stage} -o "${out}" "${src}"
+  macro(_vk_spv_sub sub stage src out)
+    execute_process(COMMAND "${VK_GLSLANG}" -V --target-env vulkan1.3 --sub ${sub} -S ${stage} -o "${out}" "${src}"
       RESULT_VARIABLE _ur OUTPUT_VARIABLE _uo ERROR_VARIABLE _ue)
     if(NOT _ur EQUAL 0)
       message(FATAL_ERROR "glslangValidator failed on ${src}:
 ${_uo}${_ue}")
     endif()
+  endmacro()
+  macro(_vk_spv stage src out)
+    _vk_spv_sub(4 ${stage} "${src}" "${out}")
   endmacro()
   set(_pack "")
   _vk_spv(vert "${VK_SRC}/port/switch/shaders/uber.vert.glsl" "${VK_OUT}/glsl/uber.vert.spv")
@@ -40,7 +43,16 @@ ${_uo}${_ue}")
   file(WRITE "${VK_OUT}/glsl/fullscreen.vk.vert.glsl" "${_fs}")
   _vk_spv(vert "${VK_OUT}/glsl/fullscreen.vk.vert.glsl" "${VK_OUT}/glsl/fullscreen.vert.spv")
   _vk_spv(frag "${VK_SRC}/port/switch/shaders/fxaa.frag.glsl" "${VK_OUT}/glsl/fxaa.frag.spv")
-  _vk_spv(frag "${VK_SRC}/port/switch/shaders/skyplus.frag.glsl" "${VK_OUT}/glsl/skyplus.frag.spv")
+  # GE+ sky and sea (D997): skyplus and skylut share skycommon.glsl, pasted at their `#pragma skycommon` line (as
+  # cmake/SwitchPort.cmake does for uam). They sample five textures (bindings 0..4), so their uniform block moves up by 5
+  # (to binding 5) and they use the sky descriptor set layout of gfx_vulkan.cpp, not the draws' (whose binding 4 is a block).
+  file(READ "${VK_SRC}/port/switch/shaders/skycommon.glsl" _skycommon)
+  foreach(_sc skyplus skylut)
+    file(READ "${VK_SRC}/port/switch/shaders/${_sc}.frag.glsl" _scsrc)
+    string(REPLACE "#pragma skycommon" "${_skycommon}" _scsrc "${_scsrc}")
+    file(WRITE "${VK_OUT}/glsl/${_sc}.vk.frag.glsl" "${_scsrc}")
+    _vk_spv_sub(5 frag "${VK_OUT}/glsl/${_sc}.vk.frag.glsl" "${VK_OUT}/glsl/${_sc}.frag.spv")
+  endforeach()
   string(APPEND _pack "0 1 ${VK_OUT}/glsl/uber.vert.spv ${VK_OUT}/glsl/uber.frag.spv -
 ")
   # the post passes (gfx_dk_layout.h DK_PACK_FULLSCREEN / FXAA / SKYPLUS)
@@ -49,6 +61,8 @@ ${_uo}${_ue}")
   string(APPEND _pack "0 3 - ${VK_OUT}/glsl/fxaa.frag.spv -
 ")
   string(APPEND _pack "0 4 - ${VK_OUT}/glsl/skyplus.frag.spv -
+")
+  string(APPEND _pack "0 6 - ${VK_OUT}/glsl/skylut.frag.spv -
 ")
   file(STRINGS "${VK_OUT}/glsl/list.txt" _lines)
   set(_n 0)

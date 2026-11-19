@@ -381,7 +381,7 @@ int romdataInit(void)
          * the bundled frozen converter (ge007-convert) once to generate them.
          * Without them the game crashes later in
          * modelPromoteNodeOffsetsToPointers (D179), so abort boot cleanly. */
-        if (!romConvertEnsureSidecars(img, romRelPath)) {
+        if (romConvertEnsureSidecars(img, romRelPath) != 1) {   /* -1 = could not be produced (a bare `!` let it through) */
             free(img);
             return -1;
         }

@@ -130,8 +130,8 @@ static int skyPlusTexture(s32 imageId)
     return 1;
 }
 
-#if defined(PLATFORM_SWITCH)
-/* GE+ water (Switch): the sea's wave heights, a tiling fbm (value noise,
+#if defined(PLATFORM_SWITCH) || defined(GE_VULKAN)
+/* GE+ water (Switch, and the Vulkan backend on PC): the sea's wave heights, a tiling fbm (value noise,
  * octaves of 4..32 cells over the tile) made once. GE's own water texture
  * (bg/water1, I4) was tried first: mostly flat with scattered spots, it reads
  * as mud bubbles at any scale (Ryujinx, 2026-11-17). */
@@ -330,7 +330,8 @@ Gfx *skyPlusRender(Gfx *gdl)
         return NULL;
     }
 #else
-    if (!portSkyPlus || gfx_skyplus_failed || !env->Clouds || env->IsWater) {
+    /* PC: only a backend that draws the sea (Vulkan sets gfx_skyplus_sea) gets the water levels */
+    if (!portSkyPlus || gfx_skyplus_failed || !env->Clouds || (env->IsWater && !gfx_skyplus_sea)) {
         return NULL;
     }
 #endif
@@ -456,7 +457,7 @@ Gfx *skyPlusRender(Gfx *gdl)
 
     p->texGen = s_texGen;
     p->tex = s_tex;
-#if defined(PLATFORM_SWITCH)
+#if defined(PLATFORM_SWITCH) || defined(GE_VULKAN)
     p->time = (float)(s_time / 60.0);   /* GE ticks (60 per second) */
     {
         static int s_wsStage = -1;

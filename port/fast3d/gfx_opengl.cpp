@@ -1771,6 +1771,7 @@ static void gfx_opengl_init_extensions(void) {
     }
 }
 
+static void skyplus2_init(void);
 static void gfx_opengl_init(void) {
     if (!gladLoadGLLoader(gl_load_proc) || glGetString == NULL || glEnable == NULL) {
         sysFatalError("Could not load OpenGL.\nReported SDL error: %s", SDL_GetError());
@@ -1890,6 +1891,7 @@ static void gfx_opengl_init(void) {
     glDepthFunc(GL_LEQUAL);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    skyplus2_init();   /* GE+ sky and sea shaders (GL 4.6) */
     framebuffers.resize(1); // for the default screen buffer
 }
 
@@ -2355,7 +2357,7 @@ static SkyPlusDraw s_skyplus_ring[SKYPLUS_RING];
 static unsigned s_skyplus_next;
 static GLuint s_skyplus_prog, s_skyplus_vao, s_skyplus_tex;
 static int s_skyplus_tex_gen = -1;
-extern "C" { volatile int gfx_skyplus_failed = 0; }
+extern "C" { volatile int gfx_skyplus_failed = 0; volatile int gfx_skyplus_sea = 0; }
 enum { SPL_VP, SPL_ASP, SPL_C0, SPL_C1, SPL_C2, SPL_C3, SPL_EYE, SPL_CLOUDY, SPL_SKY, SPL_CLOUD, SPL_OFS,
        SPL_GAIN, SPL_TEXSCALE, SPL_SUNDIR, SPL_SUNCOL, SPL_SUNGLOW, SPL_MOONDIR, SPL_NIGHT, SPL_TEX, SPL_COUNT };
 static GLint s_sp_loc[SPL_COUNT];
@@ -2529,6 +2531,335 @@ void main() {
     return true;
 }
 
+/* GE+ sky and sea on GL (the passes of gfx_deko3d_skyplus_pass / gfx_vulkan_skyplus_pass). The shaders are the Switch's own
+ * (port/switch/shaders/skyplus.frag.glsl, skylut.frag.glsl, skycommon.glsl pasted in; embedded by CMake as gl_sky_src.inc), which
+ * need GLSL 4.60: on an older or ES context this path stays off and the older single-pass shader above draws the sky (no sea).
+ * The Sky block is a uniform buffer at binding 0; the five textures sit on units 3..7 (the game's tile sampling uses 0 and 1).
+ * Off-screen targets are drawn y-flipped (uFlipY) so that they are stored top row first, as the shaders read them. */
+#include "gl_sky_src.inc"
+
+struct Sp2Target {
+    GLuint fbo = 0, tex = 0;
+    int w = 0, h = 0;
+};
+static GLuint s_sp2_prog_sky, s_sp2_prog_lut, s_sp2_vao, s_sp2_ubo, s_sp2_cloud, s_sp2_wave, s_sp2_dummy;
+static GLint s_sp2_flip_loc[2];
+static bool s_sp2_ok = false;
+static int s_sp2_cloud_gen = -1, s_sp2_wave_gen = -1;
+static Sp2Target s_sp2_lut, s_sp2_pano, s_sp2_hsea, s_sp2_skyr;
+static bool s_sp2_pano_valid = false;
+static int s_sp2_pano_bakes = 0;
+static float s_sp2_pano_eyey, s_sp2_pano_ex, s_sp2_pano_ez;
+static float s_sp2_pano_key[8][4];
+static uint32_t s_sp2_pano_frame;
+#define SP2_LUT_W 128   /* the reflection sky's panorama */
+#define SP2_LUT_H 64
+#define SP2_PANO_W 4096   /* the far sea, baked; the shader's PANO_W / PANO_H */
+#define SP2_PANO_H 512
+#define SP2_HALF_SCALE 1   /* 0: the final sky pass at full size */
+
+static GLuint sp2_compile(const char* vs_src, const char* fs_src, const char* what) {
+    GLuint v = glCreateShader(GL_VERTEX_SHADER), f = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(v, 1, &vs_src, NULL);
+    glCompileShader(v);
+    glShaderSource(f, 1, &fs_src, NULL);
+    glCompileShader(f);
+    GLint okv = 0, okf = 0;
+    char log[2048] = "";
+    glGetShaderiv(v, GL_COMPILE_STATUS, &okv);
+    glGetShaderiv(f, GL_COMPILE_STATUS, &okf);
+    if (!okf) {
+        glGetShaderInfoLog(f, sizeof log, NULL, log);
+        sysLogPrintf(LOG_ERROR, "GL: GE+ %s fragment shader: %s", what, log);
+    }
+    GLuint p = glCreateProgram();
+    glAttachShader(p, v);
+    glAttachShader(p, f);
+    glLinkProgram(p);
+    GLint ok = 0;
+    glGetProgramiv(p, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        glGetProgramInfoLog(p, sizeof log, NULL, log);
+        sysLogPrintf(LOG_ERROR, "GL: GE+ %s program link: %s", what, log);
+    }
+    glDeleteShader(v);
+    glDeleteShader(f);
+    if (!ok) {
+        glDeleteProgram(p);
+        return 0;
+    }
+    return p;
+}
+
+static void sp2_samplers(GLuint prog) {
+    glUseProgram(prog);
+    static const char* const names[5] = { "uCloudTex", "uWaveTex", "uSkyLut", "uHalfSea", "uSeaPano" };
+    for (int i = 0; i < 5; i++) {
+        GLint l = glGetUniformLocation(prog, names[i]);
+        if (l >= 0) glUniform1i(l, 3 + i);
+    }
+}
+
+/* GL >= 4.6 desktop: build both programs and the fixed objects once, at init (the sea gate of skyplus.c needs the answer before
+ * the first level frame). */
+static void skyplus2_init(void) {
+    if (gl_es || GLVersion.major < 4 || (GLVersion.major == 4 && GLVersion.minor < 6)) {
+        sysLogPrintf(LOG_NOTE, "GL: GE+ sea needs desktop GL 4.6 (have %d.%d%s): sky without sea", GLVersion.major,
+                     GLVersion.minor, gl_es ? " ES" : "");
+        return;
+    }
+    static const char* vs_src = R"GLSL(#version 460
+layout(location = 0) out vec2 vUV;
+uniform float uFlipY;
+void main() {
+    vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+    vUV = p;
+    gl_Position = vec4(p.x * 2.0 - 1.0, (p.y * 2.0 - 1.0) * uFlipY, 0.0, 1.0);
+}
+)GLSL";
+    s_sp2_prog_sky = sp2_compile(vs_src, gl_skyplus_glsl, "sky");
+    s_sp2_prog_lut = sp2_compile(vs_src, gl_skylut_glsl, "reflection sky");
+    if (!s_sp2_prog_sky || !s_sp2_prog_lut) {
+        return;
+    }
+    GLint prev_prog = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_prog);
+    sp2_samplers(s_sp2_prog_sky);
+    sp2_samplers(s_sp2_prog_lut);
+    s_sp2_flip_loc[0] = glGetUniformLocation(s_sp2_prog_sky, "uFlipY");
+    s_sp2_flip_loc[1] = glGetUniformLocation(s_sp2_prog_lut, "uFlipY");
+    glUseProgram((GLuint)prev_prog);
+    glGenVertexArrays(1, &s_sp2_vao);
+    glGenBuffers(1, &s_sp2_ubo);
+    glGenTextures(1, &s_sp2_cloud);
+    glGenTextures(1, &s_sp2_wave);
+    glGenTextures(1, &s_sp2_dummy);
+    GLint prev_tex = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prev_tex);
+    static const unsigned char black[4] = { 0, 0, 0, 255 };
+    glBindTexture(GL_TEXTURE_2D, s_sp2_dummy);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, black);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)prev_tex);
+    s_sp2_ok = true;
+    gfx_skyplus_sea = 1;
+    sysLogPrintf(LOG_NOTE, "GL: GE+ sky and sea on (GLSL 4.60)");
+}
+
+/* an RGBA8 target of w x h; (re)built when the size changes. wrapS: GL_REPEAT for the panoramas, GL_CLAMP_TO_EDGE for the rest */
+static bool sp2_target(Sp2Target& t, int w, int h, GLint wrapS) {
+    if (t.fbo && t.w == w && t.h == h) return true;
+    if (!t.fbo) {
+        glGenFramebuffers(1, &t.fbo);
+        glGenTextures(1, &t.tex);
+    }
+    GLint prev_tex = 0, prev_fbo = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prev_tex);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prev_fbo);
+    glBindTexture(GL_TEXTURE_2D, t.tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapS);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, t.fbo);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t.tex, 0);
+    const bool ok = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)prev_fbo);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)prev_tex);
+    t.w = w;
+    t.h = h;
+    if (!ok) sysLogPrintf(LOG_ERROR, "GL: GE+ sky target %dx%d incomplete", w, h);
+    return ok;
+}
+
+static void skyplus2_pass(const SkyPlusDraw& d) {
+    const PortSkyPlus& p = d.p;
+    GLint prev_prog = 0, prev_vao = 0, prev_unit = 0, prev_vp[4], prev_sc[4], prev_align = 4, prev_fbo = 0, prev_ubo = 0;
+    GLint prev_tex[8] = {};
+    const GLboolean prev_depth = glIsEnabled(GL_DEPTH_TEST), prev_blend = glIsEnabled(GL_BLEND),
+                    prev_cull = glIsEnabled(GL_CULL_FACE), prev_scissor = glIsEnabled(GL_SCISSOR_TEST);
+    GLboolean prev_cm[4], prev_dm = GL_TRUE;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prev_prog);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prev_vao);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &prev_unit);
+    glGetIntegerv(GL_VIEWPORT, prev_vp);
+    glGetIntegerv(GL_SCISSOR_BOX, prev_sc);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &prev_align);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prev_fbo);
+    glGetIntegeri_v(GL_UNIFORM_BUFFER_BINDING, 0, &prev_ubo);
+    glGetBooleanv(GL_COLOR_WRITEMASK, prev_cm);
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &prev_dm);
+    for (int i = 3; i < 8; i++) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &prev_tex[i]);
+    }
+
+    /* the cloud texture (R8 + mips) and the wave heights (RGBA8 + mips) */
+    glActiveTexture(GL_TEXTURE0 + 3);
+    glBindTexture(GL_TEXTURE_2D, s_sp2_cloud);
+    if (p.texGen != s_sp2_cloud_gen) {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, SKYPLUS_TEX_W, SKYPLUS_TEX_H, 0, GL_RED, GL_UNSIGNED_BYTE, p.tex);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, prev_align);
+        s_sp2_cloud_gen = p.texGen;
+    }
+    const bool sea = p.sea && p.waterTex;
+    if (sea) {
+        glActiveTexture(GL_TEXTURE0 + 4);
+        glBindTexture(GL_TEXTURE_2D, s_sp2_wave);
+        if (p.waterTexGen != s_sp2_wave_gen) {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, SKYPLUS_WTEX_W, SKYPLUS_WTEX_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, p.waterTex);
+            glGenerateMipmap(GL_TEXTURE_2D);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexParameterf(GL_TEXTURE_2D, 0x84FE /* GL_TEXTURE_MAX_ANISOTROPY: seen at grazing angles */, 2.0f);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, prev_align);
+            s_sp2_wave_gen = p.waterTexGen;
+        }
+    }
+
+    float u[16][4];
+    memset(u, 0, sizeof u);
+    auto v3 = [&](int i, const float* a, float w) { u[i][0] = a[0]; u[i][1] = a[1]; u[i][2] = a[2]; u[i][3] = w; };
+    u[0][0] = (float)d.vp[0]; u[0][1] = (float)d.vp[1]; u[0][2] = (float)d.vp[2]; u[0][3] = (float)d.vp[3];
+    u[1][0] = d.aspA; u[1][1] = d.aspB; u[1][3] = p.band;
+    for (int i = 0; i < 4; i++) v3(2 + i, p.corner[i], 0.0f);
+    v3(6, p.eye, p.cloudY);
+    v3(7, p.sky, p.gain);
+    v3(8, p.cloud, p.texScale);
+    u[9][0] = p.layerOfs[0][0]; u[9][1] = p.layerOfs[0][1]; u[9][2] = p.layerOfs[1][0]; u[9][3] = p.layerOfs[1][1];
+    u[10][0] = p.layerOfs[2][0]; u[10][1] = p.layerOfs[2][1]; u[10][2] = p.sunGlow; u[10][3] = p.night ? 1.0f : 0.0f;
+    v3(11, p.sunDir, p.swell);
+    v3(12, p.sunCol, p.chop);
+    v3(13, p.moonDir, p.speed);
+    v3(14, p.water, p.seaY);
+    u[15][0] = p.time;
+    u[15][1] = sea ? 1.0f : 0.0f;
+
+    /* what each unit shows during the next draw: the dummy until a target is ready */
+    GLuint slot[5] = { s_sp2_cloud, sea ? s_sp2_wave : s_sp2_dummy, s_sp2_dummy, s_sp2_dummy, s_sp2_dummy };
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, s_sp2_ubo);
+    glBindVertexArray(s_sp2_vao);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    const bool prev_a2c = s_a2c_on;
+    gfx_opengl_set_a2c(false);
+
+    /* one draw of `prog` over x, y, w, h of the bound framebuffer; flip: stored top row first (off-screen targets) */
+    auto draw = [&](GLuint prog, int flip_idx, bool flip, int x, int y, int w, int h) {
+        for (int i = 0; i < 5; i++) {
+            glActiveTexture(GL_TEXTURE0 + 3 + i);
+            glBindTexture(GL_TEXTURE_2D, slot[i]);
+        }
+        glBufferData(GL_UNIFORM_BUFFER, sizeof u, u, GL_STREAM_DRAW);
+        glUseProgram(prog);
+        glUniform1f(s_sp2_flip_loc[flip_idx], flip ? -1.0f : 1.0f);
+        glViewport(x, y, w, h);
+        glScissor(x, y, w, h);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    };
+    /* into an off-screen target, then it is texture `slot_no` for what follows */
+    auto into = [&](GLuint prog, int flip_idx, Sp2Target& t) {
+        glDisable(GL_SCISSOR_TEST);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, t.fbo);
+        glEnable(GL_SCISSOR_TEST);
+        draw(prog, flip_idx, true, 0, 0, t.w, t.h);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)prev_fbo);
+    };
+
+    glEnable(GL_SCISSOR_TEST);
+    bool lut = false;
+    if (sea && sp2_target(s_sp2_lut, SP2_LUT_W, SP2_LUT_H, GL_REPEAT)) {
+        into(s_sp2_prog_lut, 1, s_sp2_lut);
+        slot[2] = s_sp2_lut.tex;
+        lut = true;
+    }
+    if (sea && lut && sp2_target(s_sp2_pano, SP2_PANO_W, SP2_PANO_H, GL_REPEAT)) {
+        /* the far sea, baked into its panorama when the sun (or the level's sky and water) changes: the rules of the deko3d pass */
+        float key[8][4];
+        memset(key, 0, sizeof key);
+        memcpy(key[0], u[11], 12); memcpy(key[1], u[13], 12); memcpy(key[2], u[7], 12); memcpy(key[3], u[14], 16);
+        auto dir_cos = [&](int i) {
+            const float c = key[i][0] * s_sp2_pano_key[i][0] + key[i][1] * s_sp2_pano_key[i][1] + key[i][2] * s_sp2_pano_key[i][2];
+            const float l = key[i][0] * key[i][0] + key[i][1] * key[i][1] + key[i][2] * key[i][2];
+            return l < 0.25f ? 1.0f : c;
+        };
+        const float cs = dir_cos(0), cm = dir_cos(1);
+        float dl = 0.0f;
+        for (int i = 2; i < 4; i++) for (int j = 0; j < 4; j++) { const float e = key[i][j] - s_sp2_pano_key[i][j]; dl += e < 0 ? -e : e; }
+        const bool changed = cs < 0.9986f || cm < 0.9986f || dl > 0.05f;
+        if (p.bakeReset) { s_sp2_pano_valid = false; s_sp2_pano_bakes = 0; }
+        /* the first bake of a level came out black on the console: made again on the next frame, the sea stays live until then */
+        const bool second = s_sp2_pano_valid && s_sp2_pano_bakes == 1 && frame_count != s_sp2_pano_frame;
+        if ((!s_sp2_pano_valid && p.bakeReady) || second || (s_sp2_pano_valid && changed && frame_count - s_sp2_pano_frame > 60)) {
+            float eyeNow[3];
+            for (int j = 0; j < 3; j++) { eyeNow[j] = u[6][j]; u[6][j] = p.bakeEye[j]; }
+            u[2][3] = 4.0f;
+            into(s_sp2_prog_sky, 0, s_sp2_pano);
+            u[2][3] = 0.0f;
+            for (int j = 0; j < 3; j++) u[6][j] = eyeNow[j];
+            memcpy(s_sp2_pano_key, key, sizeof key);
+            s_sp2_pano_eyey = p.bakeEye[1]; s_sp2_pano_ex = p.bakeEye[0]; s_sp2_pano_ez = p.bakeEye[2];
+            s_sp2_pano_valid = true;
+            s_sp2_pano_bakes++;
+            s_sp2_pano_frame = frame_count;
+        }
+        if (s_sp2_pano_valid && s_sp2_pano_bakes >= 2) {
+            u[3][3] = s_sp2_pano_ex; u[4][3] = s_sp2_pano_ez; u[5][3] = s_sp2_pano_eyey - u[14][3];
+        } else {
+            u[3][3] = 0.0f; u[4][3] = 0.0f; u[5][3] = 0.0f;
+        }
+        slot[4] = s_sp2_pano.tex;
+    }
+    const bool reduce = SP2_HALF_SCALE && d.vp[2] / 2 >= 16 && d.vp[3] / 2 >= 16;
+    if (sea && lut && d.vp[2] / 2 >= 16) {
+        const int sdiv = reduce ? 2 : 1;
+        if (sp2_target(s_sp2_hsea, d.vp[2] / sdiv / 2, d.vp[3] / sdiv, GL_CLAMP_TO_EDGE)) {
+            u[2][3] = 1.0f;
+            into(s_sp2_prog_sky, 0, s_sp2_hsea);
+            u[2][3] = 2.0f;
+            slot[3] = s_sp2_hsea.tex;
+        }
+    }
+    if (reduce && sp2_target(s_sp2_skyr, d.vp[2] / 2, d.vp[3] / 2, GL_CLAMP_TO_EDGE)) {
+        into(s_sp2_prog_sky, 0, s_sp2_skyr);   /* uPass is 2 (or 0): the whole sky and sea */
+        slot[3] = s_sp2_skyr.tex;
+        u[2][3] = 5.0f;   /* the composite */
+    }
+    draw(s_sp2_prog_sky, 0, false, d.vp[0], d.vp[1], d.vp[2], d.vp[3]);
+
+    for (int i = 3; i < 8; i++) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)prev_tex[i]);
+    }
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, (GLuint)prev_ubo);
+    glBindVertexArray((GLuint)prev_vao);
+    glUseProgram((GLuint)prev_prog);
+    gfx_opengl_set_a2c(prev_a2c);
+    glActiveTexture((GLenum)prev_unit);
+    glViewport(prev_vp[0], prev_vp[1], prev_vp[2], prev_vp[3]);
+    glScissor(prev_sc[0], prev_sc[1], prev_sc[2], prev_sc[3]);
+    glColorMask(prev_cm[0], prev_cm[1], prev_cm[2], prev_cm[3]);
+    glDepthMask(prev_dm);
+    if (prev_depth) glEnable(GL_DEPTH_TEST);
+    if (prev_blend) glEnable(GL_BLEND);
+    if (prev_cull) glEnable(GL_CULL_FACE);
+    if (!prev_scissor) glDisable(GL_SCISSOR_TEST);
+}
+
 extern "C" void gfx_opengl_skyplus_pass(int slot) {
     static bool failed = false;
     if (failed || slot < 0 || slot >= SKYPLUS_RING) {
@@ -2542,6 +2873,10 @@ extern "C" void gfx_opengl_skyplus_pass(int slot) {
     const SkyPlusDraw& d = s_skyplus_ring[slot];
     const PortSkyPlus& p = d.p;
     if (d.vp[2] <= 0 || d.vp[3] <= 0 || (d.aspA < 0.0f ? -d.aspA : d.aspA) < 1e-6f || !p.tex) {
+        return;
+    }
+    if (s_sp2_ok) {   /* GL 4.6: the Switch's shaders, with the sea */
+        skyplus2_pass(d);
         return;
     }
 

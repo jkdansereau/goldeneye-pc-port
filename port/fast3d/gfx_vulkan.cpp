@@ -107,6 +107,7 @@ extern int gfx_rdp_affine;                      /* gfx_pc.cpp (D540) */
 extern int gfx_fog_vertex;                      /* gfx_pc.cpp (D543) */
 extern int gfx_fog_force;                       /* gfx_pc.cpp (D982) */
 extern "C" int portDisplayFixes;                /* port/src/video.c (D982) */
+extern "C" volatile int gfx_skyplus_sea;        /* gfx_opengl.cpp: 1 = skyplus.c may give the water levels the sea */
 extern "C" volatile int gfx_skyplus_failed;     /* gfx_opengl.cpp: 1 = skyplus.c draws GE's own sky */
 extern "C" const uint8_t ge007_spv_pack[], ge007_spv_pack_end[];   /* gfx_vk_pack.S */
 
@@ -950,7 +951,8 @@ std::map<std::pair<uint64_t, uint32_t>, ShaderProgram*> s_progs;
 std::map<std::pair<uint64_t, uint32_t>, bool> s_missed;
 std::map<uint32_t, VkShaderModule> s_modules;   /* by blob offset in the pack */
 VkShaderModule s_uber_vert = VK_NULL_HANDLE, s_uber_frag = VK_NULL_HANDLE;
-VkShaderModule s_fs_vert = VK_NULL_HANDLE, s_fxaa_frag = VK_NULL_HANDLE, s_sky_frag = VK_NULL_HANDLE;
+VkShaderModule s_fs_vert = VK_NULL_HANDLE, s_fxaa_frag = VK_NULL_HANDLE, s_sky_frag = VK_NULL_HANDLE,
+                s_lut_frag = VK_NULL_HANDLE;
 
 int pack_find(uint64_t id0, uint32_t id1) {
     int lo = 0, hi = (int)s_pack_count - 1;
@@ -999,6 +1001,7 @@ void load_pack(void) {
     s_fs_vert = pack_module(pack_find(0, DK_PACK_FULLSCREEN), 0);
     s_fxaa_frag = pack_module(pack_find(0, DK_PACK_FXAA), 1);
     s_sky_frag = pack_module(pack_find(0, DK_PACK_SKYPLUS), 1);
+    s_lut_frag = pack_module(pack_find(0, DK_PACK_SKYLUT), 1);
     if (!s_fs_vert || !s_fxaa_frag || !s_sky_frag) {
         sysLogPrintf(LOG_WARNING, "VK: post-pass shaders missing from the pack (FXAA %d, GE+ sky %d)",
                      s_fs_vert && s_fxaa_frag, s_fs_vert && s_sky_frag);
@@ -1012,7 +1015,8 @@ void load_pack(void) {
 /* ---------------- pipelines ---------------- */
 
 VkDescriptorSetLayout s_set_layout = VK_NULL_HANDLE;
-VkPipelineLayout s_pipe_layout = VK_NULL_HANDLE;
+VkDescriptorSetLayout s_sky_set_layout = VK_NULL_HANDLE;   /* the GE+ sky passes: five samplers (0..4), the Sky block at 5 */
+VkPipelineLayout s_pipe_layout = VK_NULL_HANDLE, s_sky_pipe_layout = VK_NULL_HANDLE;
 VkPipelineCache s_pipe_cache = VK_NULL_HANDLE;
 
 /* The driver's pipeline cache lives in $S/ge007.vkcache between runs: the first
@@ -1116,6 +1120,20 @@ void create_layouts(void) {
     pl.setLayoutCount = 1;
     pl.pSetLayouts = &s_set_layout;
     VK_CHECK(vkCreatePipelineLayout(s_dev, &pl, nullptr, &s_pipe_layout));
+    /* the GE+ sky and sea read five textures (cloud, wave, sky LUT, half-size sea, far-sea panorama), so binding 4 is a sampler
+     * there and cannot be the draws' Draw block: a layout of their own, the Sky block (uniform binding 0 in the GLSL) at 5 */
+    VkDescriptorSetLayoutBinding sb[6] = {};
+    for (int i = 0; i < 6; i++) {
+        sb[i].binding = (uint32_t)i;
+        sb[i].descriptorCount = 1;
+        sb[i].descriptorType = i < 5 ? VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        sb[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    }
+    ci.bindingCount = 6;
+    ci.pBindings = sb;
+    VK_CHECK(vkCreateDescriptorSetLayout(s_dev, &ci, nullptr, &s_sky_set_layout));
+    pl.pSetLayouts = &s_sky_set_layout;
+    VK_CHECK(vkCreatePipelineLayout(s_dev, &pl, nullptr, &s_sky_pipe_layout));
     pipeline_cache_load();
 }
 
@@ -1261,11 +1279,12 @@ VkPipeline get_pipeline(const PipeKey& k) {
 /* Post passes (FXAA, GE+ sky): the fullscreen triangle, no vertex input, no
  * blending, every channel written; same layout and dynamic state as the game's
  * pipelines. Not dropped by clear_shaders (they name no program). */
-typedef std::tuple<VkShaderModule, VkFormat, VkFormat, uint8_t> FsKey;
+typedef std::tuple<VkShaderModule, VkFormat, VkFormat, uint8_t, bool> FsKey;
 std::map<FsKey, VkPipeline> s_fs_pipes;
 
-VkPipeline get_fs_pipeline(VkShaderModule frag, VkFormat color, VkFormat depth, uint8_t samples) {
-    const FsKey key(frag, color, depth, samples);
+/* sky: the GE+ sky passes' pipeline layout (five samplers) instead of the draws' */
+VkPipeline get_fs_pipeline(VkShaderModule frag, VkFormat color, VkFormat depth, uint8_t samples, bool sky = false) {
+    const FsKey key(frag, color, depth, samples, sky);
     auto it = s_fs_pipes.find(key);
     if (it != s_fs_pipes.end()) return it->second;
     VkPipelineShaderStageCreateInfo st[2] = {};
@@ -1334,7 +1353,7 @@ VkPipeline get_fs_pipeline(VkShaderModule frag, VkFormat color, VkFormat depth, 
     ci.pDepthStencilState = &ds;
     ci.pColorBlendState = &cb;
     ci.pDynamicState = &dy;
-    ci.layout = s_pipe_layout;
+    ci.layout = sky ? s_sky_pipe_layout : s_pipe_layout;
     VkPipeline pipe = build_pipeline(ci);
     s_fs_pipes[key] = pipe;
     return pipe;
@@ -2129,6 +2148,7 @@ void vk_init(void) {
     create_frames();
     create_layouts();
     load_pack();
+    gfx_skyplus_sea = s_sky_frag && s_lut_frag && s_fs_vert ? 1 : 0;
     s_up = true;
 
     gfx_rdp_affine = 0;   /* D986: the pack is built with perspective-correct shade */
@@ -2507,7 +2527,27 @@ SkyPlusDraw s_sky_ring[SKYPLUS_RING];
 unsigned s_sky_next = 0;
 Img s_sky_img;
 int s_sky_gen = -1;
-struct SkyUniforms { float v[14][4]; };   /* skyplus.frag.glsl's Sky block */
+#define SKYLUT_W 128   /* the reflection sky's panorama (skylut.frag.glsl) */
+#define SKYLUT_H 64
+#define SEAPANO_W 4096   /* the far sea, baked (skyplus.frag.glsl pass 4); the shader's PANO_W / PANO_H */
+#define SEAPANO_H 512
+#define SKY_HALF_SCALE 1   /* 0: the final sky pass at full size */
+Img s_wtex_img;
+int s_wtex_gen = -1;
+int s_lut_fb = -1, s_hsea_fb = -1, s_pano_fb = -1, s_skyr_fb = -1;
+bool s_pano_valid = false;
+int s_pano_bakes = 0;
+float s_pano_eyey = 0.0f, s_pano_ex = 0.0f, s_pano_ez = 0.0f;
+float s_pano_key[8][4];   /* the sky block's members the baked sea depends on, as of the bake */
+uint32_t s_pano_frame = 0;
+
+void sky_reset_targets(void) {   /* the framebuffer list was cleared */
+    s_lut_fb = s_hsea_fb = s_pano_fb = s_skyr_fb = -1;
+    s_pano_valid = false;
+    s_pano_bakes = 0;
+}
+
+struct SkyUniforms { float v[16][4]; };   /* block Sky of skycommon.glsl (256 bytes) */
 
 /* D578 present slots: copies of the window image, in the swapchain's format */
 struct ISlot {
@@ -2773,6 +2813,9 @@ void gfx_vulkan_park(void) {
         destroy_image_now(f.depth);
     }
     s_fbs.clear();
+    sky_reset_targets();
+    destroy_image_now(s_wtex_img);
+    s_wtex_gen = -1;
     for (VkMesh& m : s_meshes) free_host_chunk(m.chunk);
     s_meshes.clear();
     for (auto& d : s_dead_meshes) free_host_chunk(d.first);
@@ -2791,6 +2834,8 @@ void gfx_vulkan_park(void) {
     pipeline_cache_save();
     vkDestroyPipelineCache(s_dev, s_pipe_cache, nullptr);
     vkDestroyPipelineLayout(s_dev, s_pipe_layout, nullptr);
+    vkDestroyPipelineLayout(s_dev, s_sky_pipe_layout, nullptr);
+    vkDestroyDescriptorSetLayout(s_dev, s_sky_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(s_dev, s_set_layout, nullptr);
     destroy_swapchain_views();
     if (s_swapchain) vkDestroySwapchainKHR(s_dev, s_swapchain, nullptr);
@@ -2845,8 +2890,65 @@ int gfx_vulkan_skyplus_stage(const struct PortSkyPlus* p, const int vp[4], float
     return slot;
 }
 
-/* GE+ sky (gfx_opengl_skyplus_pass): the sky shader over GL viewport vp of the
- * current target, no depth test or write, no blending. */
+/* GE+ sky (gfx_opengl_skyplus_pass; the passes of gfx_deko3d_skyplus_pass): the sky shader over GL viewport vp of the
+ * current target, no depth test or write, no blending. On a water level the same shader draws the sea: the reflection
+ * sky (skylut) into a small panorama, the far sea baked into a panorama (pass 4), the near sea at reduced size (pass 1),
+ * then the final pass at half size and its enlargement (pass 5). */
+
+/* five samplers (0..4), the Sky block at 5: the sky passes' descriptor set (s_sky_set_layout) */
+void draw_sky(VkShaderModule frag, const void* uni, uint32_t uni_size, const VkImageView views[5], const VkSampler smps[5],
+              const int vp[4], const int sc[4]) {
+    if (!begin_rendering()) return;
+    VkCommandBuffer c = main_cmd();
+    bind_pipeline(get_fs_pipeline(frag, target_color_format(),
+                                  target_has_depth() ? target_depth_format() : VK_FORMAT_UNDEFINED, target_samples(), true));
+    const int H = (int)fb_height(s_cur_fb);
+    VkViewport v = { (float)vp[0], (float)(H - vp[1]), (float)vp[2], -(float)vp[3], s_znear, s_zfar };
+    vkCmdSetViewport(c, 0, 1, &v);
+    set_scissor_rect(sc[0], sc[1], sc[2], sc[3]);
+    vkCmdSetDepthTestEnable(c, VK_FALSE);
+    vkCmdSetDepthWriteEnable(c, VK_FALSE);
+    vkCmdSetDepthBiasEnable(c, VK_FALSE);
+    VkBuffer ub;
+    VkDeviceSize uo;
+    uint8_t* up = ring_alloc(uni_size, (uint32_t)s_ubo_align, &ub, &uo);
+    memcpy(up, uni, uni_size);
+    VkDescriptorImageInfo ii[5];
+    VkWriteDescriptorSet w[6] = {};
+    for (int i = 0; i < 5; i++) {
+        ii[i] = { smps[i], views[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        w[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w[i].descriptorCount = 1;
+        w[i].dstBinding = (uint32_t)i;
+        w[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        w[i].pImageInfo = &ii[i];
+    }
+    VkDescriptorBufferInfo bi = { ub, uo, uni_size };
+    w[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    w[5].descriptorCount = 1;
+    w[5].dstBinding = 5;
+    w[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    w[5].pBufferInfo = &bi;
+    vkCmdPushDescriptorSetKHR(c, VK_PIPELINE_BIND_POINT_GRAPHICS, s_sky_pipe_layout, 0, 6, w);
+    vkCmdDraw(c, 3, 1, 0, 0);
+    s_st_draws++;
+    s_vp_dirty = s_sc_dirty_rect = s_depth_dirty = s_desc_dirty = true;   /* GL's state again at the next draw */
+}
+
+/* a framebuffer of this size for the sky passes: created on first use, kept; -1 when it cannot be built */
+int sky_target(int* id, int w, int h, SmpKey smp) {
+    if (*id < 0) {
+        *id = vk_create_framebuffer();
+        s_fbs[*id].smp = smp;
+    }
+    const Fb& f = s_fbs[*id];
+    if (f.w != (uint32_t)w || f.h != (uint32_t)h || !f.created) {
+        vk_update_framebuffer_parameters(*id, (uint32_t)w, (uint32_t)h, 1, false, true, false, false);
+    }
+    const Fb& g = s_fbs[*id];
+    return g.created && g.w == (uint32_t)w && g.h == (uint32_t)h ? *id : -1;
+}
+
 void gfx_vulkan_skyplus_pass(int slot) {
     if (!s_up || s_parked || slot < 0 || slot >= SKYPLUS_RING) return;
     if (!s_sky_frag || !s_fs_vert) {
@@ -2873,23 +2975,149 @@ void gfx_vulkan_skyplus_pass(int slot) {
         if (!upload_image(&s_sky_img, mips.data(), offs, SKYPLUS_TEX_W, SKYPLUS_TEX_H, levels, mips.size())) return;
         s_sky_gen = p.texGen;
     }
+    if (p.sea && p.waterTex && (p.waterTexGen != s_wtex_gen || !s_wtex_img.img)) {   /* the wave heights, for the sea */
+        static std::vector<uint8_t> mips;
+        std::vector<uint32_t> offs;
+        uint32_t levels = 1;
+        build_mips(p.waterTex, SKYPLUS_WTEX_W, SKYPLUS_WTEX_H, mips, offs, &levels);
+        if (s_wtex_img.img) destroy_image_later(s_wtex_img);
+        s_wtex_img = Img();
+        if (upload_image(&s_wtex_img, mips.data(), offs, SKYPLUS_WTEX_W, SKYPLUS_WTEX_H, levels, mips.size())) {
+            s_wtex_gen = p.waterTexGen;
+        }
+    }
+    const bool sea = p.sea && s_wtex_img.img;
+
     SkyUniforms u;
     memset(&u, 0, sizeof u);
     auto v3 = [&](int i, const float* a, float w) { u.v[i][0] = a[0]; u.v[i][1] = a[1]; u.v[i][2] = a[2]; u.v[i][3] = w; };
     u.v[0][0] = (float)d.vp[0]; u.v[0][1] = (float)d.vp[1]; u.v[0][2] = (float)d.vp[2]; u.v[0][3] = (float)d.vp[3];
-    u.v[1][0] = d.aspA; u.v[1][1] = d.aspB;
+    u.v[1][0] = d.aspA; u.v[1][1] = d.aspB; u.v[1][3] = p.band;
     for (int i = 0; i < 4; i++) v3(2 + i, p.corner[i], 0.0f);
     v3(6, p.eye, p.cloudY);
     v3(7, p.sky, p.gain);
     v3(8, p.cloud, p.texScale);
     u.v[9][0] = p.layerOfs[0][0]; u.v[9][1] = p.layerOfs[0][1]; u.v[9][2] = p.layerOfs[1][0]; u.v[9][3] = p.layerOfs[1][1];
     u.v[10][0] = p.layerOfs[2][0]; u.v[10][1] = p.layerOfs[2][1]; u.v[10][2] = p.sunGlow; u.v[10][3] = p.night ? 1.0f : 0.0f;
-    v3(11, p.sunDir, 0.0f);
-    v3(12, p.sunCol, 0.0f);
-    v3(13, p.moonDir, 0.0f);
-    const SmpKey k = { VK_FILTER_LINEAR, VK_FILTER_LINEAR, MIP_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT,
-                       VK_SAMPLER_ADDRESS_MODE_REPEAT, 1 };
-    draw_fullscreen(s_sky_frag, &u, sizeof u, s_sky_img.view, get_sampler(k), d.vp, d.vp);
+    v3(11, p.sunDir, p.swell);
+    v3(12, p.sunCol, p.chop);
+    v3(13, p.moonDir, p.speed);
+    v3(14, p.water, p.seaY);
+    u.v[15][0] = p.time;
+    u.v[15][1] = sea ? 1.0f : 0.0f;
+
+    const SmpKey cloud_k = { VK_FILTER_LINEAR, VK_FILTER_LINEAR, MIP_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                             VK_SAMPLER_ADDRESS_MODE_REPEAT, 1 };
+    /* anisotropic: seen at grazing angles, the far waves keep their detail along the horizon instead of blurring into a mirror */
+    const SmpKey wave_k = { VK_FILTER_LINEAR, VK_FILTER_LINEAR, MIP_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                            VK_SAMPLER_ADDRESS_MODE_REPEAT, 2 };
+    const SmpKey fb_clamp = { VK_FILTER_LINEAR, VK_FILTER_LINEAR, MIP_NONE, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                              VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, 1 };
+    const SmpKey fb_wrapx = { VK_FILTER_LINEAR, VK_FILTER_LINEAR, MIP_NONE, VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                              VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, 1 };
+    VkImageView views[5] = { s_sky_img.view, sea ? s_wtex_img.view : s_dummy.view, s_dummy.view, s_dummy.view, s_dummy.view };
+    VkSampler smps[5];
+    for (int i = 0; i < 5; i++) smps[i] = get_sampler(default_tex_sampler());
+    smps[0] = get_sampler(cloud_k);
+    smps[1] = get_sampler(wave_k);
+
+    const int prev = s_cur_fb;
+    /* draw `frag` over the whole of off-screen target fb (w x h) */
+    auto into = [&](VkShaderModule frag, int fb, int w, int h) {
+        s_cur_fb = fb;
+        const int r[4] = { 0, 0, w, h };
+        draw_sky(frag, &u, sizeof u, views, smps, r, r);
+        s_cur_fb = prev;
+    };
+    auto readable = [&](int fb, int slot_no) {   /* the target's picture, as texture `slot_no` of the next draws */
+        end_rendering();
+        Fb& f = s_fbs[fb];
+        layout_to(main_cmd(), f.color.img, VK_IMAGE_ASPECT_COLOR_BIT, f.l_color, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        views[slot_no] = f.color.view_a1;
+        smps[slot_no] = get_sampler(f.smp);
+    };
+
+    /* the reflection sky, once per pass, into its small panorama; the sea reads it */
+    bool lut = false;
+    if (sea && s_lut_frag && gfx_framebuffers_enabled) {
+        const int fb = sky_target(&s_lut_fb, SKYLUT_W, SKYLUT_H, fb_wrapx);
+        if (fb >= 0) {
+            into(s_lut_frag, fb, SKYLUT_W, SKYLUT_H);
+            readable(fb, 2);
+            lut = true;
+        }
+    }
+    /* the far sea, baked into its panorama when the sun (or the level's sky and water) changes */
+    if (sea && lut) {
+        const int fb = sky_target(&s_pano_fb, SEAPANO_W, SEAPANO_H, fb_wrapx);
+        if (fb >= 0) {
+            /* what the bake shows depends on the sun (or the moon) direction, and on the level's sky and water */
+            float key[8][4];
+            memset(key, 0, sizeof key);
+            memcpy(key[0], u.v[11], 12); memcpy(key[1], u.v[13], 12); memcpy(key[2], u.v[7], 12); memcpy(key[3], u.v[14], 16);
+            auto dir_cos = [&](int i) {   /* the angle between the baked and the current direction; a level without that light has none */
+                const float c = key[i][0] * s_pano_key[i][0] + key[i][1] * s_pano_key[i][1] + key[i][2] * s_pano_key[i][2];
+                const float l = key[i][0] * key[i][0] + key[i][1] * key[i][1] + key[i][2] * key[i][2];
+                return l < 0.25f ? 1.0f : c;
+            };
+            const float cs = dir_cos(0), cm = dir_cos(1);
+            float dl = 0.0f;   /* the level's sky colour and water */
+            for (int i = 2; i < 4; i++) for (int j = 0; j < 4; j++) { const float e = key[i][j] - s_pano_key[i][j]; dl += e < 0 ? -e : e; }
+            /* recooked when the sun or the moon has moved by more than ~3 degrees (cos 3 = 0.9986), or the level changed */
+            const bool changed = cs < 0.9986f || cm < 0.9986f || dl > 0.05f;
+            /* baked once, on the level's first frame, before its sky, from the player's start eye (skyplus.c bakeEye); a new level or a
+             * restart (bakeReset) redoes it */
+            if (p.bakeReset) { s_pano_valid = false; s_pano_bakes = 0; }
+            /* the bake of the level's very first frame came out black on the console (cause not found): it is made again on the next
+             * frame, and the sea stays live until that second one is done (an image is never drawn from a bad bake) */
+            const bool second = s_pano_valid && s_pano_bakes == 1 && s_frame_count != s_pano_frame;
+            if ((!s_pano_valid && p.bakeReady) || second || (s_pano_valid && changed && s_frame_count - s_pano_frame > 60)) {
+                float eyeNow[3];
+                for (int j = 0; j < 3; j++) { eyeNow[j] = u.v[6][j]; u.v[6][j] = p.bakeEye[j]; }
+                u.v[2][3] = 4.0f;
+                into(s_sky_frag, fb, SEAPANO_W, SEAPANO_H);
+                u.v[2][3] = 0.0f;
+                for (int j = 0; j < 3; j++) u.v[6][j] = eyeNow[j];
+                memcpy(s_pano_key, key, sizeof key);
+                s_pano_eyey = p.bakeEye[1]; s_pano_ex = p.bakeEye[0]; s_pano_ez = p.bakeEye[2];
+                s_pano_valid = true;
+                s_pano_bakes++;
+                s_pano_frame = s_frame_count;
+            }
+            if (s_pano_valid && s_pano_bakes >= 2) {   /* where the panorama was baked from (uBake*) */
+                u.v[3][3] = s_pano_ex; u.v[4][3] = s_pano_ez; u.v[5][3] = s_pano_eyey - u.v[14][3];
+            } else {   /* not baked yet: the shader draws the whole sea live */
+                u.v[3][3] = 0.0f; u.v[4][3] = 0.0f; u.v[5][3] = 0.0f;
+            }
+            readable(fb, 4);
+        }
+    }
+    /* the sea at half width: its heavy per-pixel work (the waves) runs on half the pixels into a small target, the sky pass then
+     * reads it bilinearly. With the half-scale final pass it is halved on both axes too (it feeds a half-size image). */
+    const bool reduce = SKY_HALF_SCALE && d.vp[2] / 2 >= 16 && d.vp[3] / 2 >= 16;
+    if (sea && lut && d.vp[2] / 2 >= 16) {
+        const int sdiv = reduce ? 2 : 1;
+        const int hw = d.vp[2] / sdiv / 2, hh = d.vp[3] / sdiv;
+        const int fb = sky_target(&s_hsea_fb, hw, hh, fb_clamp);
+        if (fb >= 0) {
+            u.v[2][3] = 1.0f;
+            into(s_sky_frag, fb, hw, hh);
+            u.v[2][3] = 2.0f;
+            readable(fb, 3);
+        }
+    }
+    /* the final pass at half size: the sky and the sea (whose heavy part is already behind us) are smooth, so they are drawn into a
+     * target of a quarter of the pixels, then enlarged onto the screen by the composite (uPass 5) */
+    if (reduce) {
+        const int rw = d.vp[2] / 2, rh = d.vp[3] / 2;
+        const int fb = sky_target(&s_skyr_fb, rw, rh, fb_clamp);
+        if (fb >= 0) {
+            into(s_sky_frag, fb, rw, rh);   /* uPass is 2 (or 0): the whole sky and sea */
+            readable(fb, 3);
+            u.v[2][3] = 5.0f;   /* the composite */
+        }
+    }
+    draw_sky(s_sky_frag, &u, sizeof u, views, smps, d.vp, d.vp);
 }
 
 /* D578: copy the window image (this pass's picture) into present slot `slot` */

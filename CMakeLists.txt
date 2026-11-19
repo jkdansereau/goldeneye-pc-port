@@ -253,6 +253,19 @@ configure_file(
   "${CMAKE_SOURCE_DIR}/port/include/hoststring.h.in"
   "${CMAKE_BINARY_DIR}/port/include/hoststring.h" @ONLY)
 
+# GE+ sky and sea for the GL backend: the Switch's own shaders (skyplus, skylut, with skycommon pasted at their
+# `#pragma skycommon` line, as cmake/SwitchPort.cmake and cmake/VulkanShaders.cmake do), embedded as C++ raw strings.
+file(READ "${CMAKE_SOURCE_DIR}/port/switch/shaders/skycommon.glsl" _gl_skycommon)
+set(_gl_sky_inc "")
+foreach(_sc skyplus skylut)
+  file(READ "${CMAKE_SOURCE_DIR}/port/switch/shaders/${_sc}.frag.glsl" _gl_scsrc)
+  string(REPLACE "#pragma skycommon" "${_gl_skycommon}" _gl_scsrc "${_gl_scsrc}")
+  string(APPEND _gl_sky_inc "static const char gl_${_sc}_glsl[] = R\"GLSLX(${_gl_scsrc})GLSLX\";\n")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/port/switch/shaders/${_sc}.frag.glsl")
+endforeach()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/port/switch/shaders/skycommon.glsl")
+file(WRITE "${CMAKE_BINARY_DIR}/port/include/gl_sky_src.inc" "${_gl_sky_inc}")
+
 # Host <sched.h> path for port/shim/sched.h. The decomp's src/sched.h is on
 # the include path and shadows the system header; libstdc++'s <thread>/gthr
 # headers in the fast3d C++ TUs need the real <sched.h> (cpu_set_t,
