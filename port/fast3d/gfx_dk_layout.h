@@ -202,6 +202,8 @@ enum {
     DK_PACK_FULLSCREEN = 2, /* fullscreen-triangle vert (frag unused) */
     DK_PACK_FXAA = 3,       /* fxaa frag (vert unused) */
     DK_PACK_SKYPLUS = 4,    /* GE+ sky frag (vert unused) */
+    DK_PACK_WATER = 5,      /* GE+ water frag (pairs with the uber vert) */
+    DK_PACK_SKYLUT = 6,     /* GE+ reflection-sky panorama frag (vert unused) */
     DK_PACK_NAMED_MAX = 16
 };
 

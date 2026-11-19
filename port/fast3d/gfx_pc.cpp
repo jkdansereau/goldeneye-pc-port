@@ -693,6 +693,9 @@ static const char* acmux_to_string(uint32_t acmux) {
 /* forward decl for the env-gated D75D probe (defined further down) */
 static bool d75d_env_active(void);
 
+/* GE+ water: set when the backend draws SHADER_OPT_WATER (deko3d, gfx_init) */
+static bool s_water_ext = false;
+
 static void gfx_generate_cc(struct ColorCombiner* comb, const ColorCombinerKey& key) {
     bool is_2cyc = (key.options & (uint64_t)SHADER_OPT_2CYC) != 0;
 
@@ -764,6 +767,14 @@ static void gfx_generate_cc(struct ColorCombiner* comb, const ColorCombinerKey& 
                 c[1][i][k] = i == 0 ? G_CCMUX_0 : G_ACMUX_0;
             }
         }
+    }
+    /* GE+ water: GE's water combiner (unk_092E50.c MipMap2C_Something*_Setup,
+     * only used on water) is drawn by the backend's water shader */
+    if (s_water_ext && is_2cyc &&
+        c[0][0][0] == G_CCMUX_TEXEL1 && c[0][0][1] == G_CCMUX_TEXEL0 && c[0][0][2] == G_CCMUX_PRIM_LOD_FRAC &&
+        c[0][0][3] == G_CCMUX_TEXEL0 && c[1][0][0] == G_CCMUX_COMBINED && c[1][0][1] == G_CCMUX_0 &&
+        c[1][0][2] == G_CCMUX_SHADE && c[1][0][3] == G_CCMUX_0) {
+        shader_id1 |= SHADER_OPT_WATER;
     }
     {
         uint8_t input_number[32] = { 0 };
@@ -6642,6 +6653,7 @@ extern "C" void gfx_init(const GfxInitSettings *settings) {
         s_extra.fxaa = gfx_deko3d_fxaa_pass;
         s_extra.sky_stage = gfx_deko3d_skyplus_stage;
         s_extra.sky_pass = gfx_deko3d_skyplus_pass;
+        s_water_ext = true;   /* GE+ water (water.frag.glsl) */
         s_extra.istore = gfx_deko3d_interp_store;
         s_extra.ishow = gfx_deko3d_interp_show;
         s_extra.isync = gfx_deko3d_interp_sync;

@@ -16,18 +16,22 @@
 #include <ultra64.h>
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "bondconstants.h"
 #include "bondtypes.h"
 #include "game/bgfog.h"
 #include "game/bondview.h"
+#include "game/player.h"
 #include "game/matrixmath.h"
 #include "game/image.h"
 #include "game/unk_092E50.h"
 
 #include "skyplus.h"
+#include "system.h"
 
-int portSkyPlus = 0;   /* = Video.Visuals >= Enhanced (set by video.c, D982) */
+int portSkyPlus = 0;
 
 extern s32 g_SkyStageNum;
 
@@ -126,6 +130,144 @@ static int skyPlusTexture(s32 imageId)
     return 1;
 }
 
+#if defined(PLATFORM_SWITCH)
+/* GE+ water (Switch): the sea's wave heights, a tiling fbm (value noise,
+ * octaves of 4..32 cells over the tile) made once. GE's own water texture
+ * (bg/water1, I4) was tried first: mostly flat with scattered spots, it reads
+ * as mud bubbles at any scale (Ryujinx, 2026-11-17). */
+static unsigned char s_wtex[SKYPLUS_WTEX_W * SKYPLUS_WTEX_H * 4];
+static int s_wtexGen;
+static int s_wtexOk = -1;   /* -1 = not made yet */
+#define WTEX_SLOPE_K 6.0f   /* slope scale in G, B (skycommon.glsl texSlopeAt decodes it) */
+
+static float wnoiseLattice(int x, int y, int n)
+{
+    unsigned h = (unsigned)(((x % n + n) % n) * 374761393u + ((y % n + n) % n) * 668265263u + (unsigned)n * 2246822519u);
+    h = (h ^ (h >> 13)) * 1274126177u;
+    return (float)((h ^ (h >> 16)) & 0xffff) / 65535.0f;
+}
+
+static float wnoise(float x, float y, int n)   /* x, y in 0..n cells, wraps at n */
+{
+    const int ix = (int)x, iy = (int)y;   /* x, y >= 0 */
+    float fx = x - (float)ix, fy = y - (float)iy;
+    float a, b, c, d;
+    fx = fx * fx * (3.0f - 2.0f * fx);
+    fy = fy * fy * (3.0f - 2.0f * fy);
+    a = wnoiseLattice(ix, iy, n);
+    b = wnoiseLattice(ix + 1, iy, n);
+    c = wnoiseLattice(ix, iy + 1, n);
+    d = wnoiseLattice(ix + 1, iy + 1, n);
+    return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fy;
+}
+
+/* The level's water settings: tint (x the water's colour), swell (the big
+ * waves), chop (the small ones, and how much they blur the far reflections),
+ * speed. Defaults below; $S/water/<level>.ini overrides them, read when the
+ * level changes, so they can be tuned on the SD card without a rebuild:
+ *     Tint = 1.0, 1.0, 1.0
+ *     Swell = 1.0
+ *     Chop = 1.0
+ *     Speed = 1.0                                                          */
+struct WaterSettings { float tint[3], swell, chop, speed; };
+
+static const char *waterLevelName(int stage)
+{
+    switch (stage) {
+    case LEVELID_DAM:     return "dam";
+    case LEVELID_FRIGATE: return "frigate";
+    case LEVELID_CAVERNS: return "caverns";
+    case LEVELID_COMPLEX: return "complex";
+    default:              return NULL;
+    }
+}
+
+static void waterSettingsLoad(int stage, struct WaterSettings *w)
+{
+    char path[64], line[128];
+    const char *name = waterLevelName(stage);
+    FILE *f;
+
+    w->tint[0] = w->tint[1] = w->tint[2] = 1.0f;
+    w->swell = w->chop = w->speed = 1.0f;
+    if (stage == LEVELID_FRIGATE) {   /* open sea: a real swell, not an oil-flat sea */
+        w->swell = 2.0f;
+        w->chop = 1.2f;
+    } else if (stage == LEVELID_DAM) {   /* a lake: calm */
+        w->swell = 0.3f;
+        w->chop = 0.6f;
+        w->speed = 0.7f;
+    }
+    if (name == NULL) {
+        return;
+    }
+    snprintf(path, sizeof path, "$S/water/%s.ini", name);
+    f = fopen(sysResolvePath(path), "r");
+    if (f == NULL) {
+        return;
+    }
+    while (fgets(line, sizeof line, f)) {
+        char key[32];
+        float a, b, c;
+        if (sscanf(line, " %31[A-Za-z] = %f , %f , %f", key, &a, &b, &c) == 4 && !strcmp(key, "Tint")) {
+            w->tint[0] = a; w->tint[1] = b; w->tint[2] = c;
+        } else if (sscanf(line, " %31[A-Za-z] = %f", key, &a) == 2) {
+            if (!strcmp(key, "Swell")) w->swell = a;
+            else if (!strcmp(key, "Chop")) w->chop = a;
+            else if (!strcmp(key, "Speed")) w->speed = a;
+        }
+    }
+    fclose(f);
+    sysLogPrintf(LOG_NOTE, "GE+ water: %s (tint %.2f,%.2f,%.2f swell %.2f chop %.2f speed %.2f)", path,
+                 w->tint[0], w->tint[1], w->tint[2], w->swell, w->chop, w->speed);
+}
+
+static int skyPlusWaterTexture(void)
+{
+    float lo = 1e9f, hi = -1e9f;
+    static float v[SKYPLUS_WTEX_W * SKYPLUS_WTEX_H];
+    s32 x, y, o;
+
+    if (s_wtexOk >= 0) {
+        return s_wtexOk;
+    }
+    for (y = 0; y < SKYPLUS_WTEX_H; y++) {
+        for (x = 0; x < SKYPLUS_WTEX_W; x++) {
+            float sum = 0.0f, amp = 1.0f;
+            int n = 4;
+            for (o = 0; o < 4; o++, n *= 2, amp *= 0.5f) {
+                sum += amp * wnoise((float)x * n / SKYPLUS_WTEX_W, (float)y * n / SKYPLUS_WTEX_H, n);
+            }
+            v[y * SKYPLUS_WTEX_W + x] = sum;
+            if (sum < lo) lo = sum;
+            if (sum > hi) hi = sum;
+        }
+    }
+    /* R = height; G, B = its slope to the next texel in x, y (wrapping),
+     * precomputed so the shader reads one texel per sample, not three (GPU
+     * cost on the console: 36 fetches per sea pixel were too many) */
+    for (x = 0; x < SKYPLUS_WTEX_W * SKYPLUS_WTEX_H; x++) {
+        v[x] = (v[x] - lo) / (hi - lo + 1e-6f);
+    }
+    for (y = 0; y < SKYPLUS_WTEX_H; y++) {
+        for (x = 0; x < SKYPLUS_WTEX_W; x++) {
+            const float h = v[y * SKYPLUS_WTEX_W + x];
+            const float dx = v[y * SKYPLUS_WTEX_W + (x + 1) % SKYPLUS_WTEX_W] - h;
+            const float dy = v[((y + 1) % SKYPLUS_WTEX_H) * SKYPLUS_WTEX_W + x] - h;
+            unsigned char *o = &s_wtex[(y * SKYPLUS_WTEX_W + x) * 4];
+            float g = 127.5f + dx * WTEX_SLOPE_K * 255.0f, b = 127.5f + dy * WTEX_SLOPE_K * 255.0f;
+            o[0] = (unsigned char)(h * 255.0f + 0.5f);
+            o[1] = (unsigned char)(g < 0.0f ? 0.0f : g > 255.0f ? 255.0f : g + 0.5f);
+            o[2] = (unsigned char)(b < 0.0f ? 0.0f : b > 255.0f ? 255.0f : b + 0.5f);
+            o[3] = 255;
+        }
+    }
+    s_wtexGen++;
+    s_wtexOk = 1;
+    return 1;
+}
+#endif
+
 /* Per-player parameter blocks, double-buffered over frames: fast3d copies the
  * block when it decodes the command, which may be a frame after this call. */
 #define SKYPLUS_SLOTS 16
@@ -182,9 +324,16 @@ Gfx *skyPlusRender(Gfx *gdl)
 #ifdef SKYPLUS_TEST_ORIGINAL
     return NULL;   /* A/B test build: GE's sky whatever the ini says */
 #endif
+#if defined(PLATFORM_SWITCH)
+    /* water levels: the sea is drawn by the same pass (GE+ water) */
+    if (!portSkyPlus || gfx_skyplus_failed || !env->Clouds) {
+        return NULL;
+    }
+#else
     if (!portSkyPlus || gfx_skyplus_failed || !env->Clouds || env->IsWater) {
         return NULL;
     }
+#endif
     if (!skyPlusTexture(env->SkyImageId)) {
         return NULL;
     }
@@ -229,6 +378,21 @@ Gfx *skyPlusRender(Gfx *gdl)
     p->cloud[1] = env->CloudGreen / 255.0f;
     p->cloud[2] = env->CloudBlue / 255.0f;
     p->gain = GAIN;
+    {
+        /* the horizon band's top: the elevation of the level's sky height
+         * (the record's skyheight, GE's cloud plane) seen at the fog's far
+         * distance (bgfog.c g_ScaledFarFogIntensity, Fog x2 included): nothing
+         * is drawn beyond it, so nothing pops in above it */
+        extern f32 g_ScaledFarFogIntensity;
+        const float D = g_ScaledFarFogIntensity;
+        const float Hs = env->CloudRepeat;
+        /* no fog (D left at FLT_MAX: Frigate): nothing pops in, GE's clouds
+         * reach the horizon, the band stays at its floor */
+        float b = (D > 1.0f && D < 1e20f && Hs > 0.0f) ? Hs / sqrtf(D * D + Hs * Hs) : 0.0f;
+        if (b < 0.02f) b = 0.02f;
+        if (b > 0.22f) b = 0.22f;
+        p->band = b;
+    }
     p->texScale = 1.0f;   /* kept at the size tuned on Dam (a 25..2000 % slider settled on 100) */
 
     /* scroll: GE's layer follows g_SkyCloudOffset exactly; the others run at
@@ -273,6 +437,17 @@ Gfx *skyPlusRender(Gfx *gdl)
         p->sunCol[0] = 1.0f;
         p->sunCol[1] = 0.97f;
         p->sunCol[2] = 0.9f;
+        if ((g_SkyStageNum % 100) == LEVELID_FRIGATE) {
+            /* Frigate's navy sky with pale clouds is the blue hour: the sun has
+             * already set, 4-6 deg under the horizon in photos of such skies, so
+             * no disc and no glints, only a pale glow low over the horizon on
+             * its side. Its light is the level's own lit-cloud colour (GE's
+             * cloud shade at full fade), never a warm tint. */
+            dirFrom(-5.0f, 0.6f, p->sunDir);
+            for (i = 0; i < 3; i++) {
+                p->sunCol[i] = p->sky[i] + p->cloud[i] * (1.0f - p->sky[i]);
+            }
+        }
         p->sunGlow = 0.35f;
     } else if (mood == MOOD_NIGHT) {
         p->night = 1;
@@ -281,7 +456,53 @@ Gfx *skyPlusRender(Gfx *gdl)
 
     p->texGen = s_texGen;
     p->tex = s_tex;
+#if defined(PLATFORM_SWITCH)
+    p->time = (float)(s_time / 60.0);   /* GE ticks (60 per second) */
+    {
+        static int s_wsStage = -1;
+        static struct WaterSettings s_ws;
+        const int stage = g_SkyStageNum % 100;
+        if (stage != s_wsStage) {
+            waterSettingsLoad(stage, &s_ws);
+            s_wsStage = stage;
+        }
+        p->swell = s_ws.swell;
+        p->chop = s_ws.chop;
+        p->speed = s_ws.speed;
+        /* no sea: water[] is the tint of the level's own water draws */
+        for (i = 0; i < 3; i++) {
+            p->water[i] = s_ws.tint[i];
+        }
+        skyPlusWaterTexture();   /* the wave heights, for the sea and the water draws */
+        p->waterTexGen = s_wtexGen;
+        p->waterTex = s_wtex;
+    }
+    if (env->IsWater) {
+        p->sea = 1;
+        p->seaY = env->WaterRepeat;
+        /* the sea's body: the sky's own colour, desaturated and darkened, as
+         * open sea reads under such a sky (the film's harbour shots: slate
+         * navy, darker than the sky, never GE's turquoise); its brightness
+         * toward the horizon comes from the sky reflection (Fresnel) */
+        {
+            const float lum = 0.30f * p->sky[0] + 0.59f * p->sky[1] + 0.11f * p->sky[2];
+            for (i = 0; i < 3; i++) {
+                p->water[i] *= (p->sky[i] + (lum - p->sky[i]) * 0.4f) * 0.9f;
+            }
+        }
+    }
+#endif
 
+    {   /* the far sea is baked on the level's first frame, before its sky, from the player's eye at the start (set when the level is
+         * set up, before the intro): so no image is ever shown without it, and the intro's flying camera is not where it is baked from */
+        extern enum CAMERAMODE g_CameraMode;
+        static enum CAMERAMODE prev = CAMERAMODE_NONE;
+        const coord3d *start = &g_CurrentPlayer->field_488.pos;
+        p->bakeReady = g_CameraMode != CAMERAMODE_NONE && g_CameraMode != CAMERAMODE_FADE_TO_TITLE;
+        p->bakeReset = g_CameraMode == CAMERAMODE_INTRO && prev != CAMERAMODE_INTRO;
+        prev = g_CameraMode;
+        p->bakeEye[0] = start->x; p->bakeEye[1] = start->y; p->bakeEye[2] = start->z;
+    }
     gSPSkyPlusExt(gdl++, p);
     return gdl;
 }

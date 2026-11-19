@@ -76,6 +76,7 @@ extern "C" const uint8_t ge007_dksh_pack[], ge007_dksh_pack_end[];
 struct ShaderProgram {
     DkShader vert, frag, mesh_vert;
     bool uber;
+    bool water;   /* GE+ water: uber vert + water frag (SHADER_OPT_WATER) */
     struct DkCombinerParams params;
     struct DkLayout layout;
     uint8_t num_inputs;
@@ -428,8 +429,29 @@ uint32_t s_pack_count = 0;
 std::vector<PackShader> s_pack_shaders;   /* 3 per entry (classic vert, frag, mesh vert) */
 std::map<std::pair<uint64_t, uint32_t>, ShaderProgram*> s_progs;
 std::map<std::pair<uint64_t, uint32_t>, bool> s_missed;
-DkShader s_uber_vert, s_uber_frag, s_fs_vert, s_fxaa_frag, s_sky_frag;
-bool s_sky_ok = false, s_fxaa_ok = false;
+DkShader s_uber_vert, s_uber_frag, s_fs_vert, s_fxaa_frag, s_sky_frag, s_water_frag, s_lut_frag;
+bool s_sky_ok = false, s_fxaa_ok = false, s_water_ok = false, s_lut_ok = false;
+#define SKYLUT_W 128   /* the reflection sky's panorama (skylut.frag.glsl) */
+#define SKYLUT_H 64
+int s_hsea_fb = -1;
+/* the far sea, baked (skyplus.frag.glsl pass 4): a panorama, redrawn only when what it shows changes */
+#define SEAPANO_W 4096
+#define SEAPANO_H 512
+int s_pano_fb = -1;
+int s_skyr_fb = -1;   /* the final sky pass drawn at half size (each axis), enlarged onto the screen by uPass 5 */
+#define SKY_HALF_SCALE 1   /* 0: the final sky pass at full size */
+bool s_pano_valid = false;
+int s_pano_bakes = 0;   /* how many bakes so far (the log) */
+float s_pano_eyey = 0.0f, s_pano_ex = 0.0f, s_pano_ez = 0.0f;
+float s_pano_key[8][4];   /* the sky block's members the baked sea depends on, as of the bake */
+uint32_t s_pano_frame = 0;
+int s_lut_fb = -1;     /* its render target (an s_fbs entry, made on first use) */
+/* GE+ water: the sky block of the last GE+ sky pass, read by water draws
+ * (fragment binding 2, water.frag.glsl); its uWave4.z = 0 until a sky pass ran
+ * this frame, so the water stays GE's own with Visuals = Original. */
+#define WATER_UBO_OFS 3072
+int s_sky_slot_w = -1;   /* the cloud texture, for the reflections (set by the sky pass) */
+int s_wtex_slot = -1;    /* the wave heights (skyplus.c's fbm), for the sea and the water draws */
 
 struct DkshHeader { uint32_t magic, header_sz, control_sz, code_sz, programs_off, num_programs; };
 
@@ -497,6 +519,8 @@ void load_pack(void) {
     const bool fs = pack_shader(pack_find(0, DK_PACK_FULLSCREEN), 0, &s_fs_vert);
     s_fxaa_ok = fs && pack_shader(pack_find(0, DK_PACK_FXAA), 1, &s_fxaa_frag);
     s_sky_ok = fs && pack_shader(pack_find(0, DK_PACK_SKYPLUS), 1, &s_sky_frag);
+    s_water_ok = pack_shader(pack_find(0, DK_PACK_WATER), 1, &s_water_frag);
+    s_lut_ok = fs && pack_shader(pack_find(0, DK_PACK_SKYLUT), 1, &s_lut_frag);
     int combiners = 0;
     for (uint32_t i = 0; i < s_pack_count; i++) combiners += (s_pack[i].id0 != 0 || s_pack[i].id1 >= DK_PACK_NAMED_MAX);
     sysLogPrintf(LOG_NOTE, "DK: shader pack: %d combiners + uber, %u KiB of code", combiners, (unsigned)(total >> 10));
@@ -737,8 +761,20 @@ void bind_program(ShaderProgram* p) {
     DkVtxBufferState vb = { p->stride, 0 };
     dkCmdBufBindVtxBufferState(s_cmd, &vb, 1);
     dkCmdBufPushConstants(s_cmd, s_ubo.gpu, 256, 0, sizeof(s_uni), &s_uni);
-    if (p->uber) {
+    if (p->uber || p->water) {
         dkCmdBufPushConstants(s_cmd, s_ubo.gpu + 256, 256, 0, sizeof(p->params), &p->params);
+    }
+    if (p->water) {
+        const DkResHandle h = s_sky_slot_w >= 0
+            ? dkMakeTextureHandle(s_sky_slot_w, sampler_slot(SmpKey{ DkFilter_Linear, DkFilter_Linear, DkMipFilter_Linear,
+                                                                     DkWrapMode_Repeat, DkWrapMode_Repeat, 1 }))
+            : dkMakeTextureHandle(s_dummy_slot, 0);
+        dkCmdBufBindTextures(s_cmd, DkStage_Fragment, 2, &h, 1);
+        const DkResHandle wh = s_wtex_slot >= 0
+            ? dkMakeTextureHandle(s_wtex_slot, sampler_slot(SmpKey{ DkFilter_Linear, DkFilter_Linear, DkMipFilter_Linear,
+                                                                    DkWrapMode_Repeat, DkWrapMode_Repeat, 2 }))   /* anisotropic: grazing water (8 cost the console ~7 ms) */
+            : dkMakeTextureHandle(s_dummy_slot, 0);
+        dkCmdBufBindTextures(s_cmd, DkStage_Fragment, 3, &wh, 1);   /* the wave heights */
     }
     s_st_pushes++;
 }
@@ -862,8 +898,14 @@ struct ShaderProgram* dk_create_and_load_new_shader(uint64_t id0, uint32_t id1) 
         a.size = sizes[p->layout.size[i]];
         a.type = DkVtxAttribType_Float;
     }
-    const int e = pack_find(id0, id1);
-    if (e >= 0 && pack_shader(e, 0, &p->vert) && pack_shader(e, 1, &p->frag)) {
+    const int e = (id1 & SHADER_OPT_WATER) ? -1 : pack_find(id0, id1);
+    p->water = false;
+    if ((id1 & SHADER_OPT_WATER) && s_water_ok) {
+        p->uber = false;
+        p->water = true;
+        p->vert = s_uber_vert;
+        p->frag = s_water_frag;
+    } else if (e >= 0 && pack_shader(e, 0, &p->vert) && pack_shader(e, 1, &p->frag)) {
         p->uber = false;
         /* A missing mesh twin never affects the classic path.  The cache only
          * submits mesh draws for combiners observed in the pack census. */
@@ -1346,6 +1388,7 @@ void dk_init(void) {
     dkCmdBufBindSamplerDescriptorSet(s_cmd, s_desc.gpu + NUM_IMG_DESC * sizeof(DkImageDescriptor), NUM_SMP_DESC);
     dkCmdBufBindUniformBuffer(s_cmd, DkStage_Fragment, 0, s_ubo.gpu, 256);
     dkCmdBufBindUniformBuffer(s_cmd, DkStage_Fragment, 1, s_ubo.gpu + 256, 256);
+    dkCmdBufBindUniformBuffer(s_cmd, DkStage_Fragment, 2, s_ubo.gpu + WATER_UBO_OFS, 256);   /* GE+ water */
     DkColorWriteState cw;
     dkColorWriteStateDefaults(&cw);
     dkCmdBufBindColorWriteState(s_cmd, &cw);
@@ -1366,6 +1409,11 @@ void dk_on_resize(void) {}
 void dk_start_frame(void) {
     s_frame_count++;
     check_dock();
+    {
+        /* GE+ water off until this frame's sky pass (uWave4 = vec4 15 of the block) */
+        static const float zero[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        dkCmdBufPushConstants(s_cmd, s_ubo.gpu + WATER_UBO_OFS, 256, 15 * 16, sizeof zero, zero);
+    }
     /* at most FRAMES_IN_FLIGHT frames queued on the GPU */
     wait_serial(s_frame_serial[(s_frame_idx + 1) % (FRAMES_IN_FLIGHT + 1)]);
     if (perf_on()) {
@@ -1640,7 +1688,10 @@ DkHeapBlock s_sky_blk;
 int s_sky_slot = -1;
 int s_sky_gen = -1;
 
-struct DkSkyUniforms { float v[14][4]; };
+struct DkSkyUniforms { float v[16][4]; };   /* = block Sky of skycommon.glsl (256 bytes) */
+DkImage s_wtex_img;
+DkHeapBlock s_wtex_blk;
+int s_wtex_gen = -1;
 
 void draw_fullscreen(const DkShader* frag, const void* uni, uint32_t uni_size, DkResHandle tex) {
     if (s_bound_a2c) {
@@ -1660,6 +1711,7 @@ void draw_fullscreen(const DkShader* frag, const void* uni, uint32_t uni_size, D
     dkDepthStencilStateDefaults(&d);
     d.depthTestEnable = 0;
     d.depthWriteEnable = 0;
+    d.depthCompareOp = DkCompareOp_Lequal;
     dkCmdBufBindDepthStencilState(s_cmd, &d);
     DkColorState c;
     dkColorStateDefaults(&c);
@@ -1857,6 +1909,20 @@ void gfx_deko3d_skyplus_pass(int slot) {
         s_sky_slot = write_img_desc(&s_sky_img, false);
         s_sky_gen = p.texGen;
     }
+    s_sky_slot_w = s_sky_slot;
+    if (p.waterTex && (p.waterTexGen != s_wtex_gen || s_wtex_slot < 0)) {
+        std::vector<uint32_t> offs(1, 0);
+        uint32_t levels = 1;
+        static std::vector<uint8_t> mips;
+        build_mips(p.waterTex, SKYPLUS_WTEX_W, SKYPLUS_WTEX_H, mips, offs, &levels);
+        if (s_wtex_slot >= 0) free_image(s_wtex_blk, s_wtex_slot);
+        s_wtex_slot = -1;
+        if (upload_image(&s_wtex_img, &s_wtex_blk, DkImageFormat_RGBA8_Unorm, 4, mips.data(), offs, SKYPLUS_WTEX_W,
+                         SKYPLUS_WTEX_H, levels, mips.size())) {
+            s_wtex_slot = write_img_desc(&s_wtex_img, false);
+            s_wtex_gen = p.waterTexGen;
+        }
+    }
     if (s_target_dirty) bind_target();
     const bool win = is_window(s_cur_fb);
     if (!win && !s_fbs[s_cur_fb].created) return;
@@ -1868,18 +1934,213 @@ void gfx_deko3d_skyplus_pass(int slot) {
     memset(&u, 0, sizeof u);
     auto v3 = [&](int i, const float* a, float w) { u.v[i][0] = a[0]; u.v[i][1] = a[1]; u.v[i][2] = a[2]; u.v[i][3] = w; };
     u.v[0][0] = (float)d.vp[0]; u.v[0][1] = (float)d.vp[1]; u.v[0][2] = (float)d.vp[2]; u.v[0][3] = (float)d.vp[3];
-    u.v[1][0] = d.aspA; u.v[1][1] = d.aspB; u.v[1][2] = 0.0f;
+    u.v[1][0] = d.aspA; u.v[1][1] = d.aspB; u.v[1][2] = 0.0f; u.v[1][3] = p.band;
     for (int i = 0; i < 4; i++) v3(2 + i, p.corner[i], 0.0f);
     v3(6, p.eye, p.cloudY);
     v3(7, p.sky, p.gain);
     v3(8, p.cloud, p.texScale);
     u.v[9][0] = p.layerOfs[0][0]; u.v[9][1] = p.layerOfs[0][1]; u.v[9][2] = p.layerOfs[1][0]; u.v[9][3] = p.layerOfs[1][1];
     u.v[10][0] = p.layerOfs[2][0]; u.v[10][1] = p.layerOfs[2][1]; u.v[10][2] = p.sunGlow; u.v[10][3] = p.night ? 1.0f : 0.0f;
-    v3(11, p.sunDir, 0.0f);
-    v3(12, p.sunCol, 0.0f);
-    v3(13, p.moonDir, 0.0f);
+    v3(11, p.sunDir, p.swell);
+    v3(12, p.sunCol, p.chop);
+    v3(13, p.moonDir, p.speed);
+    const bool sea = p.sea && s_wtex_slot >= 0;
+    v3(14, p.water, p.seaY);
+    u.v[15][0] = p.time;
+    u.v[15][1] = sea ? 1.0f : 0.0f;
+    u.v[15][2] = 1.0f;   /* the level's water draws: GE+ water on */
+    u.v[15][3] = 0.0f;
+    /* water draws read the pixel's y from its clip position: mirrored on a target drawn y-inverted */
+    u.v[1][2] = (!win && s_fbs[s_cur_fb].invert_y) ? 1.0f : 0.0f;
+    dkCmdBufPushConstants(s_cmd, s_ubo.gpu + WATER_UBO_OFS, 256, 0, sizeof u, &u);
+    if (getenv("GE_SEADUMP") && sea && p.waterTex) {   /* dev: one frame of the sky pass inputs (block Sky, clouds, waves) for tools_pc/seaview */
+        static int dn = 0;
+        if (++dn == 400) {
+            FILE* df = fopen("sdmc:/switch/project-dam/data/sea_dump.bin", "wb");
+            if (df) { fwrite(&u, 1, sizeof u, df); fwrite(p.tex, 1, SKYPLUS_TEX_W * SKYPLUS_TEX_H, df);
+                      fwrite(p.waterTex, 1, SKYPLUS_WTEX_W * SKYPLUS_WTEX_H * 4, df); fclose(df); }
+
+        }
+    }
     const int smp = sampler_slot(SmpKey{ DkFilter_Linear, DkFilter_Linear, DkMipFilter_Linear, DkWrapMode_Repeat, DkWrapMode_Repeat, 1 });
-    draw_fullscreen(&s_sky_frag, &u, sizeof u, dkMakeTextureHandle(s_sky_slot, smp));
+    {
+        /* anisotropic: seen at grazing angles, the far waves keep their detail
+         * along the horizon instead of blurring into a mirror */
+        const int wsmp = sampler_slot(SmpKey{ DkFilter_Linear, DkFilter_Linear, DkMipFilter_Linear,
+                                              DkWrapMode_Repeat, DkWrapMode_Repeat, 2 });   /* 8 cost the console ~7 ms */
+        const DkResHandle wh = dkMakeTextureHandle(sea ? s_wtex_slot : s_dummy_slot, wsmp);
+        dkCmdBufBindTextures(s_cmd, DkStage_Fragment, 1, &wh, 1);   /* restore_state rebinds the game's */
+    }
+    /* the reflection sky, once per pass, into its small panorama; the sea reads it */
+    bool lut = false;
+    if (sea && s_lut_ok && gfx_framebuffers_enabled) {
+        if (s_lut_fb < 0) {
+            s_lut_fb = dk_create_framebuffer();
+            dk_update_framebuffer_parameters(s_lut_fb, SKYLUT_W, SKYLUT_H, 1, false, true, false, false);
+            s_fbs[s_lut_fb].smp = SmpKey{ DkFilter_Linear, DkFilter_Linear, DkMipFilter_None, DkWrapMode_Repeat, DkWrapMode_ClampToEdge, 1 };
+        }
+        if (s_fbs[s_lut_fb].created && s_fbs[s_lut_fb].w == SKYLUT_W) {
+            const int prev = s_cur_fb;
+            s_cur_fb = s_lut_fb;
+            bind_target();
+            DkViewport lv = { 0.0f, 0.0f, (float)SKYLUT_W, (float)SKYLUT_H, s_znear, s_zfar };
+            dkCmdBufSetViewports(s_cmd, 0, &lv, 1);
+            set_scissor_rect(0, 0, SKYLUT_W, SKYLUT_H);
+            draw_fullscreen(&s_lut_frag, &u, sizeof u, dkMakeTextureHandle(s_sky_slot, smp));
+            s_cur_fb = prev;
+            bind_target();   /* the barrier makes the panorama readable; back to the game's target */
+            dkCmdBufSetViewports(s_cmd, 0, &v, 1);
+            set_scissor_rect(d.vp[0], d.vp[1], d.vp[2], d.vp[3]);
+            const DkResHandle lh = dkMakeTextureHandle(
+                s_fbs[s_lut_fb].color_slot, sampler_slot(s_fbs[s_lut_fb].smp));
+            dkCmdBufBindTextures(s_cmd, DkStage_Fragment, 2, &lh, 1);
+            lut = true;
+        }
+    }
+    if (sea && !lut) {
+        /* no panorama (framebuffers off, or the pack lacks it): the sea would read an unbound texture */
+        const DkResHandle dh = dkMakeTextureHandle(s_dummy_slot, 0);
+        dkCmdBufBindTextures(s_cmd, DkStage_Fragment, 2, &dh, 1);
+    }
+    /* the far sea, baked into its panorama when the sun (or the level's sky and water) changes */
+    bool pano = false;
+    if (sea && lut) {
+        if (s_pano_fb < 0) {
+            s_pano_fb = dk_create_framebuffer();
+            s_fbs[s_pano_fb].smp = SmpKey{ DkFilter_Linear, DkFilter_Linear, DkMipFilter_None, DkWrapMode_Repeat, DkWrapMode_ClampToEdge, 1 };
+        }
+        if (s_fbs[s_pano_fb].w != (uint32_t)SEAPANO_W || !s_fbs[s_pano_fb].created) {
+            dk_update_framebuffer_parameters(s_pano_fb, SEAPANO_W, SEAPANO_H, 1, false, true, false, false);
+            s_pano_valid = false;
+        }
+        if (s_fbs[s_pano_fb].created) {
+            /* what the bake shows depends on the sun (or the moon) direction, and on the level's sky and water */
+            float key[8][4];
+            memset(key, 0, sizeof key);
+            memcpy(key[0], u.v[11], 12); memcpy(key[1], u.v[13], 12); memcpy(key[2], u.v[7], 12); memcpy(key[3], u.v[14], 16);
+            auto dir_cos = [&](int i) {   /* the angle between the baked and the current direction; a level without that light has none */
+                const float c = key[i][0] * s_pano_key[i][0] + key[i][1] * s_pano_key[i][1] + key[i][2] * s_pano_key[i][2];
+                const float l = key[i][0] * key[i][0] + key[i][1] * key[i][1] + key[i][2] * key[i][2];
+                return l < 0.25f ? 1.0f : c;
+            };
+            const float cs = dir_cos(0), cm = dir_cos(1);
+            float dl = 0.0f;   /* the level's sky colour and water */
+            for (int i = 2; i < 4; i++) for (int j = 0; j < 4; j++) { const float e = key[i][j] - s_pano_key[i][j]; dl += e < 0 ? -e : e; }
+            /* recooked when the sun or the moon has moved by more than ~3 degrees (cos 3 = 0.9986), or the level changed */
+            /* where the eye is does not matter: the lookup reprojects the sea point to the baked eye (uBake*), exact on a plane, and the
+             * far sea is far */
+            const bool changed = cs < 0.9986f || cm < 0.9986f || dl > 0.05f;
+            /* baked once, on the level's first frame, before its sky, from the player's start eye (skyplus.c bakeEye); a new level or a
+             * restart (bakeReset) redoes it */
+            if (p.bakeReset) { s_pano_valid = false; s_pano_bakes = 0; }
+            /* the bake of the level's very first frame comes out black (cause not found): it is made again on the next frame, and the
+             * sea stays live until that second one is done (an image is never drawn from a bad bake) */
+            const bool second = s_pano_valid && s_pano_bakes == 1 && s_frame_count != s_pano_frame;
+            if ((!s_pano_valid && p.bakeReady) || second || (s_pano_valid && changed && s_frame_count - s_pano_frame > 60)) {
+                const int prevb = s_cur_fb;
+                s_cur_fb = s_pano_fb;
+                bind_target();
+                DkViewport pv = { 0.0f, 0.0f, (float)SEAPANO_W, (float)SEAPANO_H, s_znear, s_zfar };
+                dkCmdBufSetViewports(s_cmd, 0, &pv, 1);
+                set_scissor_rect(0, 0, SEAPANO_W, SEAPANO_H);
+                float eyeNow[3];
+                for (int j = 0; j < 3; j++) { eyeNow[j] = u.v[6][j]; u.v[6][j] = p.bakeEye[j]; }
+                u.v[2][3] = 4.0f;
+                draw_fullscreen(&s_sky_frag, &u, sizeof u, dkMakeTextureHandle(s_sky_slot, smp));
+                u.v[2][3] = 0.0f;
+                for (int j = 0; j < 3; j++) u.v[6][j] = eyeNow[j];
+                s_cur_fb = prevb;
+                bind_target();
+                dkCmdBufSetViewports(s_cmd, 0, &v, 1);
+                set_scissor_rect(d.vp[0], d.vp[1], d.vp[2], d.vp[3]);
+                memcpy(s_pano_key, key, sizeof key);
+                s_pano_eyey = p.bakeEye[1]; s_pano_ex = p.bakeEye[0]; s_pano_ez = p.bakeEye[2];
+                s_pano_valid = true;
+                s_pano_bakes++;
+                s_pano_frame = s_frame_count;
+            }
+            if (s_pano_valid && s_pano_bakes >= 2) { u.v[3][3] = s_pano_ex; u.v[4][3] = s_pano_ez; u.v[5][3] = s_pano_eyey - u.v[14][3]; }   /* where the panorama was baked from (uBake*) */
+            else { u.v[3][3] = 0.0f; u.v[4][3] = 0.0f; u.v[5][3] = 0.0f; }   /* not baked yet: the shader draws the whole sea live */
+            const DkResHandle ph = dkMakeTextureHandle(s_fbs[s_pano_fb].color_slot, sampler_slot(s_fbs[s_pano_fb].smp));
+            dkCmdBufBindTextures(s_cmd, DkStage_Fragment, 4, &ph, 1);
+            pano = true;
+        }
+    }
+    if (!pano) {
+        const DkResHandle dh = dkMakeTextureHandle(s_dummy_slot, 0);
+        dkCmdBufBindTextures(s_cmd, DkStage_Fragment, 4, &dh, 1);
+    }
+    /* the sea at half width: its heavy per-pixel work (the waves) runs on half
+     * the pixels into a small target, the sky pass then reads it bilinearly */
+    bool half = false;
+    const int hdiv = 2;   /* the width divisor */
+    if (sea && lut && hdiv >= 2 && d.vp[2] / hdiv >= 16) {
+        /* a target of exactly the sea's size: it is written and read whole, so no texel is ever read unwritten
+         * (a larger target with a sub-rectangle read black bands on the console) */
+        /* with the half-scale final pass the sea target is halved on both axes too (it feeds a half-size image): the waves are the
+         * heavy part, so this is where most of the saving is (seaview's Scale menu does the same) */
+        const int sdiv = (SKY_HALF_SCALE && d.vp[2] / 2 >= 16 && d.vp[3] / 2 >= 16) ? 2 : 1;
+        const int hw = d.vp[2] / sdiv / hdiv, hh = d.vp[3] / sdiv;
+        if (s_hsea_fb < 0) {
+            s_hsea_fb = dk_create_framebuffer();
+            s_fbs[s_hsea_fb].smp = SmpKey{ DkFilter_Linear, DkFilter_Linear, DkMipFilter_None, DkWrapMode_ClampToEdge, DkWrapMode_ClampToEdge, 1 };
+        }
+        if (s_fbs[s_hsea_fb].w != (uint32_t)hw || s_fbs[s_hsea_fb].h != (uint32_t)hh || !s_fbs[s_hsea_fb].created)
+            dk_update_framebuffer_parameters(s_hsea_fb, hw, hh, 1, false, true, false, false);
+        if (s_fbs[s_hsea_fb].created && s_fbs[s_hsea_fb].w == (uint32_t)hw) {
+            const int prev = s_cur_fb;
+            s_cur_fb = s_hsea_fb;
+            bind_target();
+            DkViewport hv = { 0.0f, 0.0f, (float)hw, (float)hh, s_znear, s_zfar };
+            dkCmdBufSetViewports(s_cmd, 0, &hv, 1);
+            set_scissor_rect(0, 0, hw, hh);
+            u.v[2][3] = 1.0f;
+            draw_fullscreen(&s_sky_frag, &u, sizeof u, dkMakeTextureHandle(s_sky_slot, smp));
+            u.v[2][3] = 2.0f;
+            s_cur_fb = prev;
+            bind_target();
+            dkCmdBufSetViewports(s_cmd, 0, &v, 1);
+            set_scissor_rect(d.vp[0], d.vp[1], d.vp[2], d.vp[3]);
+            const DkResHandle hhd = dkMakeTextureHandle(
+                s_fbs[s_hsea_fb].color_slot, sampler_slot(s_fbs[s_hsea_fb].smp));
+            dkCmdBufBindTextures(s_cmd, DkStage_Fragment, 3, &hhd, 1);
+            half = true;
+        }
+    }
+    if (!half) {
+        const DkResHandle dh = dkMakeTextureHandle(s_dummy_slot, 0);
+        dkCmdBufBindTextures(s_cmd, DkStage_Fragment, 3, &dh, 1);
+    }
+    {   /* the final pass at half size: the sky and the sea (whose heavy part is already behind us) are smooth, so they are drawn into
+         * a target of a quarter of the pixels, then enlarged onto the screen by the composite (uPass 5) */
+        const bool reduce = SKY_HALF_SCALE && d.vp[2] / 2 >= 16 && d.vp[3] / 2 >= 16;
+        if (reduce) {
+            const int rw = d.vp[2] / 2, rh = d.vp[3] / 2;
+            if (s_skyr_fb < 0) {
+                s_skyr_fb = dk_create_framebuffer();
+                s_fbs[s_skyr_fb].smp = SmpKey{ DkFilter_Linear, DkFilter_Linear, DkMipFilter_None, DkWrapMode_ClampToEdge, DkWrapMode_ClampToEdge, 1 };
+            }
+            if (s_fbs[s_skyr_fb].w != (uint32_t)rw || s_fbs[s_skyr_fb].h != (uint32_t)rh || !s_fbs[s_skyr_fb].created)
+                dk_update_framebuffer_parameters(s_skyr_fb, rw, rh, 1, false, true, false, false);
+            if (s_fbs[s_skyr_fb].created) {
+                const int prevr = s_cur_fb;
+                s_cur_fb = s_skyr_fb;
+                bind_target();
+                DkViewport rv = { 0.0f, 0.0f, (float)rw, (float)rh, s_znear, s_zfar };
+                dkCmdBufSetViewports(s_cmd, 0, &rv, 1);
+                set_scissor_rect(0, 0, rw, rh);
+                draw_fullscreen(&s_sky_frag, &u, sizeof u, dkMakeTextureHandle(s_sky_slot, smp));   /* uPass is 2 (or 0): the whole sky and sea */
+                s_cur_fb = prevr;
+                bind_target();
+                dkCmdBufSetViewports(s_cmd, 0, &v, 1);
+                set_scissor_rect(d.vp[0], d.vp[1], d.vp[2], d.vp[3]);
+                const DkResHandle rh3 = dkMakeTextureHandle(s_fbs[s_skyr_fb].color_slot, sampler_slot(s_fbs[s_skyr_fb].smp));
+                dkCmdBufBindTextures(s_cmd, DkStage_Fragment, 3, &rh3, 1);
+                u.v[2][3] = 5.0f;   /* the composite */
+            }
+        }
+        draw_fullscreen(&s_sky_frag, &u, sizeof u, dkMakeTextureHandle(s_sky_slot, smp));
+    }
     restore_state();
 }
 

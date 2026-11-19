@@ -28,7 +28,14 @@ ${_uo}${_ue}")
   _dk_uam(frag "${DK_SRC}/port/switch/shaders/uber.frag.glsl" "${DK_OUT}/glsl/uber.frag.dksh")
   _dk_uam(vert "${DK_SRC}/port/switch/shaders/fullscreen.vert.glsl" "${DK_OUT}/glsl/fullscreen.vert.dksh")
   _dk_uam(frag "${DK_SRC}/port/switch/shaders/fxaa.frag.glsl" "${DK_OUT}/glsl/fxaa.frag.dksh")
-  _dk_uam(frag "${DK_SRC}/port/switch/shaders/skyplus.frag.glsl" "${DK_OUT}/glsl/skyplus.frag.dksh")
+  # GE+ sky and water share skycommon.glsl, pasted at their `#pragma skycommon` line
+  file(READ "${DK_SRC}/port/switch/shaders/skycommon.glsl" _skycommon)
+  foreach(_sc skyplus water skylut)
+    file(READ "${DK_SRC}/port/switch/shaders/${_sc}.frag.glsl" _scsrc)
+    string(REPLACE "#pragma skycommon" "${_skycommon}" _scsrc "${_scsrc}")
+    file(WRITE "${DK_OUT}/glsl/${_sc}.frag.glsl" "${_scsrc}")
+    _dk_uam(frag "${DK_OUT}/glsl/${_sc}.frag.glsl" "${DK_OUT}/glsl/${_sc}.frag.dksh")
+  endforeach()
   string(APPEND _pack "0 1 ${DK_OUT}/glsl/uber.vert.dksh ${DK_OUT}/glsl/uber.frag.dksh -
 ")
   string(APPEND _pack "0 2 ${DK_OUT}/glsl/fullscreen.vert.dksh - -
@@ -36,6 +43,10 @@ ${_uo}${_ue}")
   string(APPEND _pack "0 3 - ${DK_OUT}/glsl/fxaa.frag.dksh -
 ")
   string(APPEND _pack "0 4 - ${DK_OUT}/glsl/skyplus.frag.dksh -
+")
+  string(APPEND _pack "0 5 - ${DK_OUT}/glsl/water.frag.dksh -
+")
+  string(APPEND _pack "0 6 - ${DK_OUT}/glsl/skylut.frag.dksh -
 ")
   file(STRINGS "${DK_OUT}/glsl/list.txt" _lines)
   set(_n 0)

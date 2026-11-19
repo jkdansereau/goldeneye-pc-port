@@ -213,3 +213,14 @@ docs/media/*.mp4
 demos/
 demobatch/
 levelbench/
+
+# local machine settings (console IP, tool paths): never committed, see .env.example
+.env
+# seaview: the local frame capture (holds ROM-derived textures) and builds
+tools_pc/seaview/data/
+tools_pc/seaview/build/
+tools_pc/seaview/nx/build/
+tools_pc/seaview/nx/romfs/
+tools_pc/seaview/nx/*.nro
+tools_pc/seaview/nx/*.elf
+tools_pc/seaview/nx/*.nacp

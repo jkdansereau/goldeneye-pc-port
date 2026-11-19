@@ -48,6 +48,9 @@ enum {
  * (colour writes off) that discards every fragment whose final alpha is not
  * opaque: the opaque part then hides what is drawn behind it later. */
 #define SHADER_OPT_ZCUT (1 << 14)
+/* GE+ water (Switch, deko3d): GE's water combiner (unk_092E50.c), drawn by
+ * water.frag.glsl instead of the combiner's own shader. */
+#define SHADER_OPT_WATER (1 << 15)
 
 struct ColorCombinerKey {
     uint64_t combine_mode;

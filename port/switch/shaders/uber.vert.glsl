@@ -35,6 +35,7 @@ layout(location = 12) out vec4 vInput4;
 layout(location = 13) out vec4 vInput5;
 layout(location = 14) out vec4 vInput6;
 layout(location = 15) out vec4 vInput7;
+layout(location = 17) out vec3 vClip;   // clip x, y, w (water.frag.glsl: the pixel's screen position)
 
 void main() {
     vTexCoord0 = aTexCoord0;
@@ -53,5 +54,6 @@ void main() {
     vInput5 = aInput5;
     vInput6 = aInput6;
     vInput7 = aInput7;
+    vClip = aVtxPos.xyw;
     gl_Position = aVtxPos;
 }
