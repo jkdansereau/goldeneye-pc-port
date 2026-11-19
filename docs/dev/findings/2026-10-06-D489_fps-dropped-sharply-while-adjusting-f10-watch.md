@@ -1,0 +1,11 @@
+# D489
+
+<!-- from the old section-F/H table row -->
+| D489 | **FPS dropped sharply while adjusting F10 watch sliders (music/FX) with a pad or arrow keys: every step was a full EEPROM persist on the game thread** — full `## D489` entry at file tail | FIXED 2026-10-02 (port-only UI layer, `fix/d489-pad-slider-commit`, merged into `release/v0.4.1` 2026-10-03); maintainer pad check passed 2026-10-03 |
+
+## D489 — FPS drops sharply while adjusting the F10 music volume with a controller (maintainer, 2026-10-02)
+
+Seen during the 2026-10-02 PAL play session: holding/stepping the F10 overlay's music volume row with a pad made the frame rate "tank extremely". Possibly a general regression (not PAL-specific); not yet reproduced or investigated. Suspects to check first: per-step work on the music path while the value repeats (volume applied every repeat tick, a config save or audio re-init per step), the D470 master/music gain path, or the pad repeat rate in the overlay.
+**Root cause (static, 2026-10-02):** every D-pad/stick/arrow step on a watch-setting slider (music, FX) went through `rowSet` -> `rowSetCommit(..., commit=1)` (`port/src/optionsoverlay.c`), so each held-repeat detent (every 4 frames after an 18-frame delay) was a full persist on the game thread: `fileGamePakProbe` + `fileWriteSave` -> three `joyDisablePoll`/`joyEnablePoll` handshakes (each blocks until `joyPoll` services it, `src/joy.c:745-817`) plus a 2 KB `ge007.eep` rewrite (`geEepromStore`) and a log line. A mouse drag stages with commit=0 and saves once on release, so only pad/keyboard stepping stalled. Not PAL-specific; the same path is on `main` (v0.4.0) and in the front PC Options screen (`frontoptions.c`, game thread).
+**Fix (port-only, UI layer):** watch-slider steps in `rowAdjust` stage (commit=0) and record the field in `s_adjWatchField`; `optionsAdjustCommitPending()` saves once when left/right is released (F10 input loop, front options screen), when another watch slider is stepped, and when F10 closes. Toggle rows and non-watch sliders are unchanged.
+**Status:** FIXED; merged into `release/v0.4.1` 2026-10-03. Maintainer pad check passed 2026-10-03 (held left/right on F10 music volume; FPS held).

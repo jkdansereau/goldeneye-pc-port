@@ -1,0 +1,10 @@
+# D244
+
+<!-- from the old section-F/H table row -->
+| D244 | **Self-hosted CI runner link failure: `undefined reference to 'objectiveGetStatus_WEAK'` (2026-09-12, first-ever build attempt on the…** — full `## D244` entry at file tail | **OPEN, not yet fixed.** Next… |
+
+## D244 — Self-hosted CI runner link failure: `undefined reference to 'objectiveGetStatus_WEAK'` (2026-09-12, first-ever build attempt on the…
+
+**Self-hosted CI runner link failure: `undefined reference to 'objectiveGetStatus_WEAK'` (2026-09-12, first-ever build attempt on the reinstalled box, run `34707798707`).** `src/game/objective_status.c:162` uses `#pragma weak objectiveGetStatus_WEAK = get_status_of_objective` (a decomp ground-truth alias, referenced 2-arg from `chrai.c:2538` — comment calls it "horrible hack to get ai matching"). The box's `g++`/`ld` reported as `x86_64-w64-mingw32/16.1.0`; a minimal local repro of the identical `#pragma weak` cross-TU function alias **links cleanly** on this session's own machine (`mingw-w64-x86_64-gcc 16.2.0-3`, `binutils 2.47-3`). Not a game-logic bug (the alias is unmodified decomp code, ground truth) and not a CMakeLists/link-flag issue (no `--gc-sections`/LTO in play) — the leading, unverified explanation is the self-hosted box's MSYS2 packages predate a PE/COFF weak-external fix or behavior change versus current MSYS2, consistent with rollout step 2's earlier finding that the box's mingw64 package set was stale/incomplete at initial setup.
+
+**Status (from §F table):** **OPEN, not yet fixed.** Next: on the box, `pacman -Syu` (or at minimum `pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils`) to bring the toolchain current, then re-dispatch `selfhosted.yml`. If updating doesn't clear it, the fallback is a narrow `#ifdef PORT` replacement of the alias with an explicit thin wrapper function in `objective_status.c` (ABI-preserving, no logic change) — but try the toolchain update first since the local repro suggests this is a version/environment gap, not a fundamental PE/COFF limitation.

@@ -3,9 +3,9 @@
 **This is the single tracker for high-level work on the port.** If an item
 is not here, it is either done or not planned. The README's *Known issues*
 and *Roadmap* sections are short summaries of this file. Root-cause detail
-for each `Dxx` lives in [`dev/findings.md`](dev/findings.md) (find it via
-[`dev/findings-index.csv`](dev/findings-index.csv); that index is generated,
-first-line-only, and can lag the entry tail, so read the entry).
+for each trap lives in [`dev/findings/`](dev/findings/README.md), one file per
+finding (find it via the untracked index that `tools_pc/gen_findings_index.py`
+builds, then read that one file).
 
 Last full triage: 2026-09-29. Sources: the findings log, all GitHub issues,
 PRs and releases, every local backlog/plan/roadmap note, `HANDOFF.md`, all
@@ -322,7 +322,7 @@ and a stage loader.
 | Self-hosted CI runner link failure | open (v0.7.0, maintainer 2026-10-10) | D244 | Needs a `pacman -Syu` on the runner (maintainer-only access). Release tag builds use GitHub runners, so it doesn't block a release. |
 | Remove temporary scaffolding before a release | partial | [`dev/GE-ENV-PROBES.md`](dev/GE-ENV-PROBES.md), D302 | Passes 2026-09-30 to 2026-10-03 removed the closed-finding probe suites (registry in `GE-ENV-PROBES.md`, `gen_env_probes.py --check` passing); TEMP probes `GE_TESTSTYLE` / `GE_D516` removed 2026-10-04. **Left:** D104 (kept while D294 is in verify); the M-183/M-185 clamps were **deleted 2026-10-04** (`879f879a`, `model.c` pure decomp again; the M-189 root fix stays) and the cutscene re-check was covered by the 2026-10-05 Deck campaign playthrough on rc1 (level intros, endings incl. Facility and Dam, credits). |
 | P12 U5 review of `tools_pc/**` (release-diff, B10) | partial | D531/D532/D533 | Reviewed 2026-10-05 (the unit that owed the P7 merge). **Blocker found + fixed (D531):** `capture_p7.sh`'s per-level re-pin restored the local save (see Golden baselines). **Should-fixes applied as D532 (tooling-only):** `verify.sh`'s `pin_ini_640x480` fails closed like `pin_eep`; `GOLDEN_SEED` hard-pinned with a warning for a stray `GE_RSEED`; `audiodebug.ps1`'s dead `-AB`/`-Old` switches removed. Box pixel verify done 2026-10-06 (see Golden baselines). |
-| Findings log and doc size | partial | `tools_pc/docs_budget.py` | Budget checker (per-file and tier-1 token budgets; `--toc FILE`). `findings.md` is still about 2 MB (~500k tokens), so agents must keep using the index. Nothing blocks; trim only when a budget check fails. |
+| Findings log and doc size | partial | `tools_pc/docs_budget.py` | Budget checker (per-file and tier-1 token budgets; `--toc FILE`). The finding log is one file per finding under `docs/dev/findings/` (about 4 MB in all), so agents grep the generated index and read one file. Nothing blocks. |
 | Branch and PR housekeeping | open | — | 30 landed local branches pruned 2026-09-30 (tips in `prune-branches-2026-09-30.txt`, notes archive). **On hold by the maintainer (do not prune yet):** probe-only `d243-verify-local`, `investigate/d243-cutscene-race`, `park/d236-probes-m139`. Local `main` and `release/v0.4.1` are deliberately not pushed. PR #62 (mouse dt-decouple) stays held until mouse feel is fundamentally better. |
 | Docs site: Web 1.0 phase 2 | decision | — | Phase 1 shipped. Phase 2 (centred serif page) is plan-only. |
 | Docs site: press/SEO pass (2026-10-05) | partial | `docs/` site pages | Landed on the pure site pages + layout: real `<h1>` masthead, `color-scheme`/`theme-color`/`max-image-preview`/`rel=me`, ink-mute >=4.5:1, focus-visible + selection, 15px body, mobile padding; `date`/`modified_time` front matter on the pure pages. Home-page additions (pull-quote, Overview fact table, press section) **removed on review 2026-10-05** as duplicates. The five short topic notes (the-software-rsp, the-asset-pipeline, framerate-and-pacing, input-and-aim, saves) were dropped from the published set (files stay as working material). **Open:** the same front matter on the *shared* docs is deliberately untouched (authoritative working docs, not edited for site polish). |

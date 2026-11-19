@@ -1,0 +1,16 @@
+# D463
+
+<!-- from the old section-F/H table row -->
+| D463 | **fast3d divided by zero (0xc0000094) importing a texture for a zero-area TextureRectangle on a tile with `line = 0`: the outlined-text path drew a zeroed font glyph (`w=h=0`, `pixeldata=NULL`), found by the scripted 3P/4P stability sweep (crash rate roughly 2 in 14 on the Library stage; section D).** Full `## D463` entry at file tail | FIXED (port-layer guard in `import_texture`; 8 repeats of the crashing config + the 18-run sweep + solo `-level_09` + menu boot all rc=0 with no crash; the guard fired in 3 of 8 repeats). |
+
+## D463 — zero-line tile texrect divided by zero in the texture importers (fast3d, 2026-10-01)
+
+**Symptom.** The scripted split-screen sweep (`GE_STARTMP`, `GE_MPVIRT`, per-slot `GE_INPUTSCRIPT_P1..P3`) crashed once in 18 runs (3P, stage_id 48, Library) with `EXCEPTION 0xc0000094` = integer divide by zero (the sweep report's 'stack-buffer-overrun/fastfail' label was wrong; fastfail is 0xc0000409). A repro with `GE_D116=1` gave 2 crashes in 14 runs (3P and 4P, stage index 4), so it is not player-count specific.
+
+**Cause.** Crash PC = `import_texture_i8` (`gfx_pc.cpp`, `height = size_bytes / rdp.texture_tile[tile].line_size_bytes`) with `line_size_bytes == 0`, reached via `gfx_dp_texture_rectangle` -> `gfx_draw_rectangle` -> `gfx_sp_tri1` -> `import_texture`. In both crashes the log shows, immediately before the fault, `[D116] O-glyph ... idx=0 w=0 loadw=0 h=0 pd=0000000000000000` (a zeroed font record drawn by `textRenderGlyphOutlined`, `src/game/textrelated.c`) followed by a zero-area `[D116/f3d]` texrect on a tile with `line_bytes=0`. `gDPLoadTextureBlock` with width 0 expands to `gsDPTile(line=0)` plus a zero-area `gSPTextureRectangle`; the N64 RDP rasterises nothing for it, so the decomp's output is faithful and fast3d must tolerate it. All the importers share the unguarded division (rgba16, ia8, i8, ci8, ...). **Not established:** which text produces the zeroed glyph (the outlined-text path reads `chars[*text - 0x21]`, so a character below 0x21 or an unpopulated font slot is the suspect). Rare because it depends on the string being drawn.
+
+**Fix (port-layer, `port/fast3d/gfx_pc.cpp`, commit `81b57504`).** At the top of `import_texture`, if the tile's `line_size_bytes == 0`: log one capped line (`D463: texrect on zero-line tile -- import skipped`, at most 8 per run) and return without importing (no cache entry, no upload). The downstream triangle path already treats a zero line size as 1, and the degenerate draw rasterises no fragments. Nonzero line sizes take the original path unchanged. No game-logic change.
+
+**Verified (local Qwen driver, lead re-read the logs).** After the fix: 8 repeats of the crashing 3P/stage-4 configuration, the full 18-run 2P/3P/4P matrix, solo `-level_09` and a menu boot all exit rc=0 with no crash log; the guard fired in 3 of the 8 repeats (so the condition recurs and is now harmless). 3P renders three viewports with an empty fourth quadrant (as on the N64) and 4P a clean 2x2. **Confidence: [H]** for the crash and the guard; [M] on the upstream glyph cause.
+
+**Generalisable.** Any importer that divides by a tile field must tolerate 0; the game emits zero-sized loads legitimately. `0xc0000094` is a divide by zero, `0xc0000005` an access violation, `0xc0000409` a fastfail.

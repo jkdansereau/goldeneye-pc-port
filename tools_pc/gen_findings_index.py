@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Generate docs/dev/findings-index.csv from the §F/§H tables in findings.md.
+"""Generate docs/dev/findings-index.csv from the files in docs/dev/findings/.
 
-Agentic speed-ups plan Step 4 / R8: findings.md is ~200 KB. Agents should grep
-this CSV (label, status, one-liner) to decide *which* Dxx entries to actually
-read, instead of linear-reading the log.
+The index is a local, untracked grep aid (it is in .gitignore): agents grep it
+to pick which finding file to read. It is not authoritative.
 
-Heuristic parser: every markdown table row whose first cell matches a Dxx
-label (`D12`, `D88.4`, `D75 · D77`, `D24-D30`, ...). The topic cell is
-truncated to a one-liner; the status cell is normalised to a short bucket
-(RESOLVED / OPEN / FIXED / PARTIAL / PROPOSED / ?) with the raw text kept.
+Each finding is one file, `YYYY-MM-DD-<slug>.md`. Legacy findings (the old
+`Dxx` log) are `YYYY-MM-DD-Dxx_<slug>.md`, so the label is the `Dxx` part and
+`ls docs/dev/findings/*D961_*` finds it. New findings have no `Dxx`; their
+label is the slug.
 
-Usage:
-    python tools_pc/gen_findings_index.py            # write the CSV
-    python tools_pc/gen_findings_index.py --check     # exit 1 if stale
-    python tools_pc/gen_findings_index.py --stdout     # print, don't write
+  python tools_pc/gen_findings_index.py           # write the CSV
+  python tools_pc/gen_findings_index.py --stdout  # print it instead
+  python tools_pc/gen_findings_index.py --check   # CI: validate file names
+
+`--check` does not compare against a stored CSV (there is none). It fails if
+a finding file is misnamed or two files share a label.
 """
 from __future__ import annotations
 
@@ -24,146 +25,87 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "docs" / "dev" / "findings.md"
+SRC = ROOT / "docs" / "dev" / "findings"
 OUT = ROOT / "docs" / "dev" / "findings-index.csv"
 
-LABEL_RE = re.compile(r"^D\d+(?:\.\d+)?(?:[-–]D\d+)?(?:\s*[·,]\s*D\d+(?:\.\d+)?)*\+?$")
-
-STATUS_BUCKETS = [
-    ("FIXED", re.compile(r"\bfixed\b", re.I)),
-    ("RESOLVED", re.compile(r"\bresolved\b", re.I)),
-    ("PARTIAL", re.compile(r"\bpartial|clamp landed|landed\b|safety-net", re.I)),
-    ("PROPOSED", re.compile(r"\bproposed|not applied|design\b", re.I)),
-    ("OPEN", re.compile(r"\bopen\b|not started|awaiting|owed|pending", re.I)),
-]
+NAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-(?:(D\d+[A-Za-z.\d]*)_)?([a-z0-9][a-z0-9-]*)\.md$")
 
 
-def one_liner(cell: str, limit: int = 160) -> str:
-    """Strip markdown emphasis/code and collapse to a single short line."""
-    txt = cell.replace("**", "").replace("`", "")
-    txt = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", txt)  # [t](u) -> t
-    txt = re.sub(r"\s+", " ", txt).strip()
-    # first sentence-ish
-    m = re.match(r"(.{20,}?[.—:])\s", txt)
-    if m and len(m.group(1)) <= limit:
-        txt = m.group(1)
-    if len(txt) > limit:
-        txt = txt[: limit - 1].rstrip() + "…"
-    return txt
+def one_liner(text: str, n: int = 160) -> str:
+    text = re.sub(r"[`*]", "", text).strip()
+    text = re.sub(r"\s+", " ", text)
+    return text if len(text) <= n else text[: n - 1] + "…"
 
 
-LEAD_RE = re.compile(
-    r"^\**\s*(OPEN|RESOLVED|FIXED|PROPOSED|PARTIAL|LANDED|CLAMP|DISPROVEN"
-    r"|ROOT-CAUSED|GUARDED|ANALYZED|DIAGNOSTIC SHIPPED|NOT A BUG|CLOSED"
-    r"|DEFERRED|SUPERSEDED)",
-    re.I,
-)
+def title_of(path: Path) -> str:
+    """First `## ` heading, else the topic cell of the first table row, else the `# ` line."""
+    h1 = ""
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("## "):
+            return one_liner(re.sub(r"^D\d+\S*\s*[:—-]*\s*", "", line[3:]))
+        if line.startswith("| ") and not h1.startswith("ROW:"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) > 1:
+                h1 = "ROW:" + cells[1]
+        elif line.startswith("# ") and not h1:
+            h1 = line[2:]
+    return one_liner(h1.removeprefix("ROW:"))
 
 
-def bucket(status_cell: str) -> str:
-    # An explicit leading verdict token wins over prose keywords deeper in the
-    # cell (e.g. "OPEN (parked). ... D168 fixed ..." is OPEN, not FIXED).
-    lead = LEAD_RE.match(status_cell.strip())
-    if lead:
-        tok = lead.group(1).upper()
-        return {
-            "LANDED": "PARTIAL",
-            "CLAMP": "PARTIAL",
-            "DISPROVEN": "RESOLVED",
-            "ROOT-CAUSED": "RESOLVED",
-            "GUARDED": "PARTIAL",
-            "ANALYZED": "PARTIAL",
-            "DIAGNOSTIC SHIPPED": "PARTIAL",
-            "NOT A BUG": "RESOLVED",
-            "SUPERSEDED": "CLOSED",
-        }.get(tok, tok)
-    for name, rx in STATUS_BUCKETS:
-        if rx.search(status_cell):
-            return name
-    return "?"
-
-
-def split_row(line: str) -> list[str] | None:
-    line = line.strip()
-    if not line.startswith("|"):
-        return None
-    # split on '|' that is not inside backticks
-    cells, buf, tick = [], [], False
-    for ch in line:
-        if ch == "`":
-            tick = not tick
-            buf.append(ch)
-        elif ch == "|" and not tick:
-            cells.append("".join(buf))
-            buf = []
-        else:
-            buf.append(ch)
-    cells.append("".join(buf))
-    cells = [c.strip() for c in cells]
-    # leading/trailing empty from outer pipes
-    if cells and cells[0] == "":
-        cells = cells[1:]
-    if cells and cells[-1] == "":
-        cells = cells[:-1]
-    return cells or None
-
-
-def rows():
-    section = None
-    for raw in SRC.read_text(encoding="utf-8").splitlines():
-        h = re.match(r"^#+\s+([A-Z])\.\s", raw) or re.match(r"^#+\s.*§?([FH])\b", raw)
-        if raw.startswith("### ") and re.search(r"\b([FH])\.", raw):
-            section = re.search(r"\b([FH])\.", raw).group(1)
-        cells = split_row(raw)
-        if not cells or len(cells) < 2:
+def entries():
+    for p in sorted(SRC.glob("*.md")):
+        if p.name.startswith("_") or p.name == "README.md":
             continue
-        label = cells[0].replace("–", "-")
-        if not LABEL_RE.match(cells[0]):
+        m = NAME_RE.match(p.name)
+        if not m:
+            yield p, None
             continue
-        topic = cells[1]
-        status = cells[2] if len(cells) > 2 else ""
-        yield {
-            "label": label,
-            "bucket": bucket(status),
-            "one_liner": one_liner(topic),
-            "status_raw": one_liner(status, 200) if status else "",
+        date, dlabel, slug = m.groups()
+        yield p, {
+            "label": dlabel or slug,
+            "date": date,
+            "file": p.name,
+            "one_liner": title_of(p),
         }
 
 
 def build_csv() -> str:
     buf = io.StringIO()
-    w = csv.DictWriter(
-        buf, fieldnames=["label", "bucket", "one_liner", "status_raw"], lineterminator="\n"
-    )
+    w = csv.DictWriter(buf, fieldnames=["label", "date", "file", "one_liner"], lineterminator="\n")
     w.writeheader()
-    seen = set()
-    for r in rows():
-        key = r["label"]
-        if key in seen:
-            continue
-        seen.add(key)
-        w.writerow(r)
+    for _, row in entries():
+        if row:
+            w.writerow(row)
     return buf.getvalue()
+
+
+def check() -> int:
+    bad, seen = [], {}
+    for p, row in entries():
+        if row is None:
+            bad.append(f"misnamed (want YYYY-MM-DD-slug.md or YYYY-MM-DD-Dxx_slug.md): {p.name}")
+        elif row["label"] in seen:
+            bad.append(f"duplicate label {row['label']}: {p.name} and {seen[row['label']]}")
+        else:
+            seen[row["label"]] = p.name
+    for b in bad:
+        sys.stderr.write(b + "\n")
+    return 1 if bad else 0
 
 
 def main() -> int:
     args = set(sys.argv[1:])
+    if "--check" in args:
+        return check()
     text = (
-        "# GENERATED by tools_pc/gen_findings_index.py -- do not hand-edit.\n"
-        "# Grep this to pick which findings.md entries to read; it is not authoritative.\n"
+        "# GENERATED by tools_pc/gen_findings_index.py -- untracked, do not hand-edit.\n"
+        "# Grep this to pick which docs/dev/findings/ file to read; it is not authoritative.\n"
         + build_csv()
     )
     if "--stdout" in args:
-        sys.stdout.write(text)
+        sys.stdout.buffer.write(text.encode("utf-8"))
         return 0
-    want = text.encode("utf-8")
-    if "--check" in args:
-        cur = OUT.read_bytes() if OUT.exists() else b""
-        if cur != want:
-            sys.stderr.write("findings-index.csv is stale: re-run gen_findings_index.py\n")
-            return 1
-        return 0
-    OUT.write_bytes(want)
+    OUT.write_bytes(text.encode("utf-8"))
     print(f"wrote {OUT.relative_to(ROOT)} ({text.count(chr(10))} lines)")
     return 0
 

@@ -27,8 +27,6 @@ BUDGETS = {
     "docs/HANDOFF.md": 3000,
     "docs/ROADMAP.md": 12000,
     "docs/porting-notes.md": 60000,
-    "docs/dev/findings.md": 650000,
-    "docs/dev/findings-index.csv": 40000,
 }
 
 # Files whose approx tokens are summed for the tier-1 total.

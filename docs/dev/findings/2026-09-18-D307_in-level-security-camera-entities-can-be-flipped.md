@@ -1,0 +1,33 @@
+# D307
+
+<!-- from the old section-F/H table row -->
+| D307 | **In-level security camera entities can be flipped facing the wrong direction (backwards) on some levels, e.g. Bunker (user QA, 2026-09-18) — NOT the player's view camera.** — full `## D307` entry at file tail | FIXED (M-201, 2026-09-26, user-verified): renamed duplicate member `CCTVRecord.pad`→`lookpad` made setupCctv read the MOUNT pad as the look-at pad; prop.c reads lookpad on PC. Earlier: OPEN — CONFIRMED PORT BUG (2026-09-26, user vs 1964: ALL Bunker 1 security cameras face backwards on PC, correct on N64). Earlier: OPEN (investigated 2026-09-21) — no port-side bug found: orientation path traced, every input verified N64-faithful vs ROM (`PcctvZ` switch data, room-scaled boundpads, config words), all math byte-identical `src/game`. Blocked on user repro detail; `GE_D307=1` diagnostic in-tree. |
+
+## D307 — In-level security camera entities can be flipped facing the wrong direction (backwards) on some levels, e.g. Bunker (user QA, 2026-09-18).
+
+**Reported only, not investigated, explicitly not for v0.3.0.** User playtest: on some levels (Bunker named specifically), the in-level **security camera props/entities** — the gameplay objects that spot the player and alert guards, not the player's own view camera — can end up facing backwards (the wrong direction) "for some reason." No further repro detail given (trigger condition, whether it self-corrects, whether it's tied to a specific spawn/setup path). No code read done. **Correction (same day): initially misread as the player's view camera — clarified by the user to mean the in-level security camera entities specifically.**
+
+**Investigation (v0.4.0 prep, 2026-09-21):** the full orientation path was traced and every input verified N64-faithful; **no port-side divergence found**.
+
+- Orientation is computed once at load in `setupCctv()` (`src/game/prop.c`): watchpoint = `obj->mtx · Switches[0]->Data + prop->pos`; look basis = `set_basis_and_position_target(watch − padpos, up=(0,1,0))` with row 0 scaled by model scale (0.1); yaw `unkC4 = atan2f(tx, tz)`; initial turret angle `unkCC` from record config word (N64 w51). Per-frame render: `mtxs[1] = RotY(unkC8) × unk84` (`propobj.c` ~5964). All matrix/atan2 helpers are byte-identical `src/game` code (`matrixmath.c`, `math_atan2f.c`) — none are port forks.
+- Data verified against the ROM for Bunker1 (`UsetupsevbunkerZ`, level_09, 4 CCTV records): model switch offset `(0, 70.3664, 31.9837)` matches `PcctvZ` (NOT `GcameraZ` — that's the gun; PitemZ idx 24 = `assets/obseg/prop/cctv`) node sw[0] bit-for-bit; boundpad positions match the pccg sidecar exactly once the legitimate load-time room-scale is applied (`pad->pos *= get_room_data_float2()`, 1/level-scale ≈ 1.8542 for Bunker1 — initially looked like a mismatch because raw file values are pre-scale); `unkCC` raw angles match record config words; prop placement derives from pad + bbox via the standard `moveToPad` path.
+- An env-gated diagnostic (`GE_D307=1`, TEMP, load-time only) dumps every input and derived value per CCTV record for offline ROM comparison — kept in-tree like D60/D88.
+
+**Conclusion so far:** given byte-identical code + verified-identical inputs, the PC orientation values are what the N64 computes. If the cameras genuinely differ from N64 hardware, the remaining suspect is fast3d's handling of the non-orthonormal lens matrix (`unk84` row 0 scaled 0.1×) in the per-frame render path — but that is unproven. **Blocked on user repro detail:** which camera/level, a screenshot, and ideally an N64 comparison (the symptom may be faithful N64 level-design behavior).
+
+**Status:** OPEN (investigated — no port-side bug found; awaiting repro detail).
+
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — FIXED (M-201, 2026-09-26, user-verified): renamed duplicate member `CCTVRecord.pad`→`lookpad` made setupCctv read the MOUNT pad as the look-at pad; prop.c reads lookpad on PC. Earlier: OPEN — CONFIRMED PORT BUG (2026-09-26, user vs 1964: ALL Bunker 1 security…
+
+**M-201 (2026-09-26, v0.4.0): ROOT CAUSE FOUND + FIXED — a renamed duplicate struct member re-pointed `setupCctv`'s look-at pad to the mount pad. User-verified.**
+
+- **Confirmed port bug first:** user side-by-side with 1964: every Bunker 1 camera faces backwards on PC, correct on N64.
+- **Measured (TEMP render dump, since removed):** the CCTV model is fine (group `mtx 0` = base, group at the switch origin (0,70.4,32.0) = `mtx 1` = lens). The lens matrix's forward axis pointed back into the mount: camera 48's base maps model +Z to world +X, its lens matrix mapped +Z to about (-0.80,-0.60,0).
+- **Cause:** `CCTVRecord` inherits `ObjectRecord` (s16 `pad` @0x08 = mount pad) and declares its own s32 `pad` @0x80 = the **look-at** pad. IDO accepts the duplicate and `arg1->pad` in `setupCctv` means the CCTV's own look-at pad. GCC rejects duplicate members, so the PC struct renamed it `lookpad`, and a comment asserted game code "never" means this member. So on PC `arg1->pad` silently became the mount pad: the look vector was just the lens's offset from its own mount (`target` ≈ (9.4, 7.0, 0.9)) and `matrix_4x4_set_basis_and_position` (Z = -look) aimed every lens back at its wall. The load dump showed it: `pad=10018 bound=1` (mount) while the record's look-at pad is 0x58 = 88.
+- **Cross-check:** Perfect Dark's same function (`pd_port/src/game/setup.c:795`, `setupCreateCctv`) uses `cctv->lookatpadnum`, the CCTV's own field.
+- **Fix (`src/game/prop.c`, `#ifdef PORT`, A1 class: read the correctly named field):** `CCTV_LOOKPAD` = `arg1->lookpad` on PC, `arg1->pad` on N64, for the 4 look-pad reads in `setupCctv`. `bondtypes.h`'s misleading comment corrected. After the fix the look vectors run from the floor look-at pads (y ≈ 185) to the lenses (~700 units, ~240 up), and the lens forward axis points at the watched spot.
+- **Verified:** user playtest ("that fixed it"); golden gate 3/3. Only `CCTVRecord` had this rename (grep for the duplicate-member note).
+
+**Follow-up (2026-09-27): reaction speed.** User: cameras now point correctly, but may be slow to react. By code this is faithful and tick-based: the alarm fires after `CCTV_ALARM_FRAMES` (NTSC 300) x `F_80030B14` ticks of continuous sighting (Agent 2.0 -> ~10 s, Secret/00 1.0 -> ~5 s), accumulated with `g_ClockTimer`; the sweep integrates `g_GlobalTimerDelta`. No frame-rate dependence. Optional check: time spot-to-alarm on the same camera and difficulty on 1964.
+
+**Status: FIXED (M-201, user-verified 2026-09-26).**

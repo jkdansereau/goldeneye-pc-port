@@ -30,7 +30,7 @@ settings; the reviewable source of truth is this directory, committed.
     parent on a strong model when doing D579 diagnosis.
   - `sweep-watcher` — watches long golden-sweep runs, triages new vs
     regressed frames. `ninfer-windows/qwen3.8-27b-nvfp4full`.
-  - `doc-sync` — ROADMAP rows, findings-index.csv, findings.md §F index
+  - `doc-sync` — ROADMAP rows
     after a verified change. `ninfer-windows/qwen3.8-27b-nvfp4full`.
 
   Note: NInfer serves one model per launcher — `ninfer-coding.bat`

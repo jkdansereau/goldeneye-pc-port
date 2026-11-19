@@ -88,5 +88,6 @@ exclude:
   - dev/WATCH-SETTINGS-PLAN.md
   - dev/findings-index.csv
   - dev/findings.md
+  - dev/findings
   - dev/game-behavior-reference.md
   - dev/release-dropin-rom-plan.md

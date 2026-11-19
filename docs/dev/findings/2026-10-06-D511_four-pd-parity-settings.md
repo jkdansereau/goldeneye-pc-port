@@ -1,0 +1,15 @@
+# D511
+
+<!-- from the old section-F/H table row -->
+| D511 | **Four PD-parity settings: Fullscreen mode, Center window, Crosshair opacity, Crosshair color by health** — Port-only; ROADMAP PD Extended Options parity; full `## D511` entry at file tail | DONE headless (live checks owed) |
+
+## D511: four small PD-parity settings (S3)
+
+All port-only; no `src/game` edit (the crosshair alpha goes through the existing `portCrosshairApplyTintCombine` hook, so `gunfire.c` is untouched). Each new key defaults to today's behaviour, has a shared row (so both UIs show it), a per-dialog reset entry and a one-line description, and is NOT in the Display mode bundles (the preset probe confirms editing them does not flip Display mode).
+
+- **`Video.FullscreenMode`** (0 borderless, default; 1 exclusive): dropdown shown only while Fullscreen is on. Applied on the host thread via a new `videoRequestFullscreenMode` (window request kind 4) that calls the backend's existing `set_fullscreen_exclusive` (re-enters fullscreen if already on); at startup it feeds `fullscreen_is_exclusive`. Survives a restart through the ini.
+- **Center window**: action row `__CenterWindow`, shown only while Fullscreen is off, no ini key. `videoRequestCenterWindow` (kind 3) reads the current window size and moves it with `get_centered_positions` + `set_dimensions`; logs old and new position. Maximized: SDL ignores the move.
+- **`Video.CrosshairAlpha`** 0-100 % (default 100): scales the env-colour alpha byte (0x6E at the call site) after the sprite DL is built. At 100 the command is untouched.
+- **`Video.CrosshairHealthColor`** (default off): PD's `sightGetCrosshairHealthColor` ramp (green variant; MIT), ratio = `bondhealth + bondarmour` of `g_CurrentPlayer` (both 0..1, clamped to 0..2; read in `input.c` `portCrosshairHealthRatio`). Red below 0.2, red to yellow to 0.6, yellow to green at 1.0, green to cyan with armour above. Precedence (as PD): when on it replaces Crosshair color's colour; the alpha-mask combiner is used whenever either is non-default.
+
+**Verified (headless):** build rc=0; `-level_09` with `GE_STARTWEAPON=13` and a scripted aim hold (`400:RHOLD`), frame 700: default red crosshair, opacity 40 visibly faded, health colour on shows green at full health (log: ratio 1.000 -> tint 0,255,0); clean-ini run writes only the new lines (`CrosshairAlpha = 100`, `CrosshairHealthColor = 0`, `FullscreenMode = 0`); tree / preset / reset probes PASS; 60 s `-level_09` smoke rc=0. **Not verified headless:** real window state for fullscreen mode and Center window (a game window would be disruptive here). **Owed (maintainer):** exclusive fullscreen enter/leave and surviving a restart (Windows, Deck if convenient); Center window incl. on a second monitor; crosshair opacity and health colour by eye while taking damage. **Docs:** the ROADMAP "PD Extended Options parity" row was not edited here (it is an uncommitted change in the main checkout); move these four items from "Small, port-only" to done when committing it.

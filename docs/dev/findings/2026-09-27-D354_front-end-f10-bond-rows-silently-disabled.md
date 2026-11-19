@@ -1,0 +1,19 @@
+# D354
+
+<!-- from the old section-F/H table row -->
+| D354 | **Front-end F10 Bond rows silently disabled: `watchSettingsAvailable()` mis-routed F10-on-file-select through the stage path (returned 0), so with the hidden chooser stuck at "none" the volume sliders read "Select file" and did nothing; maintainer-reported (2026-09-27).** — full `## D354` entry at file tail | FIXED (port-only, `port/src/watchsettings.c`): all non-stage contexts route through the front path with a lazily-resolved default folder (explicit pick > `selected_folder_num` > first valid), one-shot game-thread `fileBuildWriteNewSave(FOLDER1)` fallback, GE_WSPROBE/GE_WSPROBE_FRONT env probes headless-verified (stage: live+save changed; front: default file 1 + save changed). |
+
+## D354 — Front-end F10 Bond rows disabled; default Bond-file selection (2026-09-27)
+
+Maintainer report: the F10 volume settings "don't apply", while the watch and the main-menu options work. Diagnosis (port-only):
+
+- **The in-stage F10 path is sound.** A new env-gated probe (`GE_WSPROBE=<tick>`, same pattern as `GE_D314`) queues an F10-style commit of Music+FX on the Nth active stage tick and logs live + saved before/after. Headless `-level_33` run: live music 15163→4096, save.music 118→32, `watchsettings: persisted field 0/1 in Bond file 1` — the queue→apply→persist bridge works end-to-end in a stage.
+- **The real gap was the front end.** `watchSettingsAvailable()` special-cased only `MENU_PC_OPTIONS` (front path) and stages (snapshot path); every other context — notably **F10 over the file-select screen**, the primary F10 surface — fell through to the stage path and returned "unavailable", disabling every Bond row. With the chooser row hidden in F10 and `chosen` starting at -1 ("none"), the rows read "Select file" and could never be enabled: the user's "volume settings in F10 don't apply".
+- **Fix (maintainer-suggested UX):**
+  - All **non-stage** contexts now route through the front path (chooser + `validSave`), so F10-on-file-select behaves like the options screen.
+  - New `frontFolder()`: lazy default target, resolving `chosen` on first use to **explicit pick > `selected_folder_num` (the folder the player is viewing) > first valid folder**, under the existing `uiLock`. A fresh PC eeprom is booted with a BLANKSAVEDATA slot per folder (libultra.c D259/D281 patch), so the default almost always lands on file 1 — the Bond section is usable transparently, no "Edit file" ceremony. The D353 title annotation now shows "(File 1)" by default instead of "(no file)".
+  - **Auto-init fallback:** one-shot, game-thread, in `watchSettingsGameTick`: if *no* folder holds a valid save (wiped/corrupt eeprom), call the game's own `fileBuildWriteNewSave(FOLDER1)` (the routine boot validation uses, `file2.c:509`) and default to it; logs the outcome. Never modifies game code.
+  - `watchSettingsChooseFile` guard flipped to "refuse in stage context" (front-end control only); "none" remains reachable by explicit cycling.
+  - `GE_WSPROBE_FRONT=<tick>` probe verifies the same front commit headlessly: default boot (menu) resolves folder 0 (file 1) with no interaction, commit 4096 → save.music 255→32.
+
+Verification: NTSC build clean; both probes pass headless; in-stage behavior unchanged (probe-identical). The D350 threading gate is unchanged in effect: the front path's `fileWriteSave` (EEPROM) now also runs from the F10 input thread in front contexts, but only one settings surface is ever active at a time and the game thread performs no save writes on menus, so writes stay serialized; reads (`saves[]`/CRC) are stable menu state. Manual by-ear check owed: F10 music/FX on file select, and default-file behavior after erase. (By-ear confirmed by the maintainer in the D355 session: FX applies live; the music follow-on gap became D355.)

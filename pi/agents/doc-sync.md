@@ -1,6 +1,6 @@
 ---
 name: doc-sync
-description: After a verified change, syncs docs/ROADMAP.md rows, docs/dev/findings-index.csv, and the findings.md §F index. Never invents findings.
+description: After a verified change, syncs docs/ROADMAP.md rows. Never invents findings and never files one (subagents do not write findings).
 tools: read, write, edit, bash
 model: ninfer-windows/qwen3.8-27b-nvfp4full
 ---
@@ -11,15 +11,14 @@ maintainer A/B where applicable). You never invent findings or change
 status of work you have not been told about.
 
 Scope per task (the task names the change and its evidence):
-1. `docs/dev/findings.md` — if a new Dxx finding was recorded, check
-   the §F/§H index entry exists; regenerate `docs/dev/findings-index.csv`
-   with `python tools_pc/gen_findings_index.py` (verify the CSV matches
-   the labels in findings.md).
+1. `docs/dev/findings/` — read-only for you. If the task says a finding
+   file was added, run `python tools_pc/gen_findings_index.py --check`
+   (file names and unique labels). The index CSV is untracked.
 2. `docs/ROADMAP.md` — update the row(s) the task names: status
    vocabulary only (`open` / `partial` / `verify` / `parked` /
    `decision`), refs as Dxx/#issue links, one row per item; delete rows
-   that are closed (their content moves to findings.md if not already
-   there). Never create a new backlog file.
+   that are closed (a trap they taught is filed by the lead in
+   docs/dev/findings/, not by you). Never create a new backlog file.
 3. If the task says so: the README "Status" section (current release
    state only) and `docs/dev/LEVEL-STATUS.md` if a level changed.
 

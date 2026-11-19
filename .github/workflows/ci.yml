@@ -135,20 +135,12 @@ jobs:
       # Generated dev-docs stay in sync with the tree (speed-ups plan Step 4).
       - name: Check generated dev indexes are current
         run: |
-          python3 tools_pc/gen_findings_index.py --check
+          python3 tools_pc/gen_findings_index.py --check  # finding file names + unique labels
           python3 tools_pc/gen_env_probes.py --check
 
-      # Docs budget guardrail (ctx-opt P2): warn, don't fail. The §F index
-      # table should stay one-liners; fat cell content belongs in `## Dxx`
-      # sections at the file tail (lookup path: docs/dev/findings-index.csv).
+      # Docs budget guardrail: warn, don't fail.
       - name: Check dev-docs size budgets (warn only)
         run: |
-          # Budget = ~55 KB of table rows + ~110 KB of legacy D24–D33 / M-xxx
-          # narrative that predates the ctx-opt migration. The signal is fat
-          # ROWS re-accumulating, so the threshold sits ~15 KB above today's
-          # 166 KB total.
-          f=$(awk '/^### F\./{f=1;next} /^### G\./{f=0} f' docs/dev/findings.md | wc -c)
-          [ "$f" -le 184320 ] || echo "WARNING: findings.md §F region is $f bytes (> 180 KB) — fat rows accumulating; migrate cell content to ## Dxx sections at the file tail"
           p=$(wc -c < docs/porting-notes.md)
           [ "$p" -le 122880 ] || echo "WARNING: porting-notes.md is $p bytes (> 120 KB) — consider splitting or adding a TOC block"
 

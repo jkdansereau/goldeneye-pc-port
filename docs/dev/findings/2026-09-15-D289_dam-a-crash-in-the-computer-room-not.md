@@ -1,0 +1,10 @@
+# D289
+
+<!-- from the old section-F/H table row -->
+| D289 | **Dam: a crash in the computer room, not reproducible on a second attempt (M-141, Steam Deck user playtest).** — full `## D289` entry at file tail | FIXED (user, 2026-09-26: no recurrence on post-D255 builds). Earlier: OPEN — needs a human re-test specifically on a build with the D255 fix (this session's `release/v0.3.0`, not any earlier build) to see if it still happens.… |
+
+## D289 — Dam: a crash in the computer room, not reproducible on a second attempt (M-141, Steam Deck user playtest).
+
+**Dam: a crash in the computer room, not reproducible on a second attempt (M-141, Steam Deck user playtest).** **User's own read, most likely: the same computer-terminal SIGSEGV as D255** (Facility door-opening terminals — root-caused and FIXED this session, M-141, `vtxstore_fix_refs` reading `Model*` through the wrong union field, a 32-bit pointer truncation). D255's mechanism is generic to computer-terminal props, not Facility-specific, so a Dam terminal hitting the same bug is plausible and would already be fixed by the same patch. **Not yet confirmed** which build the user was on when this happened (pre- or post-D255-fix) — if it was pre-fix, this is very likely just D255 and needs no separate investigation; if it recurs on a build that has the D255 fix, that's a new, real, distinct bug worth its own crash log.
+
+**Status (from §F table):** OPEN — needs a human re-test specifically on a build with the D255 fix (this session's `release/v0.3.0`, not any earlier build) to see if it still happens. If it does, get `ge007.crash.log` (or a gdb `bt full` under `debug.ps1`) and the exact terminal/action — that's the actionable next step, not further static analysis. **A build with both the D255 fix and this session's D293 quit-QoL row has been deployed to the Deck's own `~/Downloads/goldeneye-pc-port-0.3.0-local.20260915c-linux-x86_64/ge007.x86_64`** (rebuilt via WSL `Ubuntu-24.04`, `scp`'d over — SSH itself can't drive the Deck's own X/gamescope display to launch-and-play remotely, so the actual Dam-computer-room retest still needs the user at the hardware).

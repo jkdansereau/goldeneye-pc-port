@@ -1,0 +1,18 @@
+# D299
+
+<!-- from the old section-F/H table row -->
+| D299 | **Game.SkipIntro crashed selecting any save slot except one — reproduced on a fresh save and on a clean Release rebuild, ruling out stale save data (found + fixed 2026-09-17).** — full `## D299` entry at file tail | FIXED — `fileValidateSaves()` (only called from the skipped legal screen) never ran under `SkipIntro`, leaving `saves[]` all-zero; added the missing call to the `SkipIntro` shortcut (`src/game/lv.c`, `#ifdef PORT`, zero game-logic change). Build-verified both `RelWithDebInfo`/`Release`; live user re-test confirms all 4 slots now selectable with `SkipIntro=1`. Not yet run through a full 21-level sweep. |
+
+## D299 — Game.SkipIntro crashed selecting any save slot except one (found + fixed this session, 2026-09-17)
+
+**Symptom (user, live repro):** with `Game.SkipIntro=1` (D216), booting straight to file-select and selecting any of the 4 file slots except one crashed the game (`EXCEPTION: 0xc0000005`, fault addr `0x10`). Reproduced on both a clean `CMAKE_BUILD_TYPE=Release` rebuild and the normal `RelWithDebInfo` dev build, and with a completely fresh (no `data/ge007.eep`) save — ruling out stale/incompatible save data. With `SkipIntro=0` (normal intro/legal-screen boot), all 4 slots worked with no crash.
+
+**Root cause:** `fileValidateSaves()` (`file2.c:499`) — the only place `saves[]` is populated from EEPROM (`joyGamePakLongRead`, CRC-validated/repaired) — is called exclusively from `init_menu00_legalscreen()` (`front.c:1450`), which only runs when the front-end state machine passes through `MENU_LEGAL_SCREEN`. `Game.SkipIntro`'s shortcut (`src/game/lv.c:417-430`, `#ifdef PORT`) jumps straight to `MENU_FILE_SELECT`, skipping the legal screen entirely, so `fileValidateSaves()` never ran — `saves[SAVESLOTMAX]` (`file2.c:29`, a plain zero-initialized global) stayed all-zero instead of loading real save data. `fileGetSaveForFoldernum()` (`file2.c:434`) then legitimately returned `NULL` for every folder except whichever one a zeroed `save_data` happens to decode its folder field as. File-select's `fileGetIsCheatUnlocked()` (`file2.c:397`) dereferences its `save` argument with no `NULL` guard (unlike sibling call sites, e.g. `file2.c:1190`, which do check) — crashing for every other folder.
+
+**Fix (`src/game/lv.c`, `#ifdef PORT` block, D216's own shortcut):** call `fileValidateSaves()` from the `SkipIntro` shortcut, so `saves[]` gets populated exactly as the skipped legal screen would have done. Zero game-logic change — reuses the existing decomp-verbatim function; rule-2-clean (port-layer completeness fix for a port-only feature, not a `src/game` behavior change). Left `fileGetIsCheatUnlocked`'s missing `NULL` guard alone since the actual bug is the port shortcut not fully replicating the skipped screen's side effects, not a missing defensive check in game code.
+
+**Verified:** build-clean (`ninja`, both `RelWithDebInfo` and `Release`); live user re-test with `SkipIntro=1` restored — intro correctly skipped, all 4 file slots selectable with no crash.
+
+**Generalisable lesson (added to `porting-notes.md`):** a port-only "skip to state X" shortcut must replicate every side effect the skipped screens perform, not just the terminal menu-state flags — `SkipIntro`'s original comment claimed to fully reuse "the game's own post-intro route," but missed the legal screen's one-time `fileValidateSaves()` call.
+
+**Status:** **FIXED** — verified live this session. Not yet run through a full 21-level sweep (docs-only + one `#ifdef PORT` line touching front-end boot, not level code) or committed.

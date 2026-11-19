@@ -1,0 +1,10 @@
+# D196
+
+<!-- from the old section-F/H table row -->
+| D196 | **OS mouse cursor stays visible after closing the F10 options overlay in click-to-lock mode (M-49, user playtest).** — full `## D196` entry at file tail | **FIXED (`6e758f1d`, merged to `main`) —… |
+
+## D196 — OS mouse cursor stays visible after closing the F10 options overlay in click-to-lock mode (M-49, user playtest).
+
+**OS mouse cursor stays visible after closing the F10 options overlay in click-to-lock mode (M-49, user playtest).** `Input.MouseCaptureMode=1`. Open F10 overlay → `optionsOverlayToggle()` (`optionsoverlay.c:391`) calls `inputSuspendForOverlay()` which forces `SDL_ShowCursor(SDL_ENABLE)` + drops the grab. While open, `inputComputePad(0)` early-returns at `input.c:512` (overlay owns controller 0) **before** `reconcileGrab()` / any cursor-visibility call. On close: the next poll runs `reconcileGrab(menuMode)` (`input.c:522`) which re-grabs + hides the cursor **only if `captureArmed && !menuMode`** — i.e. only if you had already clicked-to-lock in a stage before opening F10. If you opened the overlay from a menu, or in a stage you hadn't clicked-locked yet, `want` computes 0, `mouseGrabbed` stays 0, and **nothing calls `applyCursorVisibility()`** — so the cursor `inputSuspendForOverlay()` made visible never gets re-hidden (correct free-but-focused state per `applyCursorVisibility()` `input.c:842-846` is *hidden*). **Fix (port-only, ~1 line):** call `applyCursorVisibility()` right after the `reconcileGrab(menuMode)` at `input.c:522` (self-heals every poll once the overlay-open early-return stops firing), or add an `inputResumeFromOverlay()` that runs `reconcileGrab` + `applyCursorVisibility` and call it from `optionsOverlayToggle()` on close. D180/D184/D165 input lineage. Minor.
+
+**Status (from §F table):** **FIXED (`6e758f1d`, merged to `main`) — the first option above was applied:** `applyCursorVisibility()` now runs right after `reconcileGrab(menuMode)` in the controller-0 poll, so once the overlay-open early-return stops firing the cursor visibility self-heals on the next poll. Status cell was left stale at OPEN; corrected M-105.

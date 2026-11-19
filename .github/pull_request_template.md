@@ -16,11 +16,11 @@ rules there are non-negotiable.
 - [ ] No changes under `src/` or `include/` — **or** the only changes are
       the narrow `#ifdef PORT` ABI exception (CONTRIBUTING.md rule 2),
       checked against `docs/porting-notes.md` §A1, and documented in
-      `docs/dev/findings.md` (§F/D3x).
+      `docs/dev/findings/`.
 - [ ] If this PR contains a genuine `src/game` behavior change (not an
       ABI/layout fix): an explicit rule-2 sign-off was granted
       (`docs/dev-process.md` §7) and is recorded in a
-      `RULE-2-SIGNOFF`-tagged `docs/dev/findings.md` entry linked here.
+      `RULE-2-SIGNOFF`-tagged `docs/dev/findings/` file linked here.
 - [ ] `Makefile`, `tools/`, `rsp/`, `ld/` untouched (N64 build).
 - [ ] If `CMakeLists.txt` `REGION_DEFS` changed, it still matches the N64
       `Makefile` per-region macro set exactly.

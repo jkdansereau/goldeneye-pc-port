@@ -1,0 +1,21 @@
+# D408
+
+<!-- from the old section-F/H table row -->
+| D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | FIXED 2026-09-30 (SkipIntro hook gated to first boot; live dossier check owed). |
+
+<!-- from the old section-F/H table row -->
+| D408 | **`Game.SkipIntro` skips the post-mission failure dossier: with it on, entering a level then aborting (watch Z+A) or dying (KIA) returns straight to the menus — no REPORT / "Mission status: KILLED IN ACTION / ABORTED" screen** (user report 2026-09-28; save/AllUnlocked ruled out) — full `## D408` entry at file tail | OPEN (cosmetic, not root-caused past the handoff site). v0.4.0 decision: SkipIntro stays EXPERIMENTAL / not recommended for regular users — F10 row relabelled "Skip intro (EXPERIMENTAL)". |
+
+## D408 — `Game.SkipIntro` skips the post-mission failure dossier: failed/aborted missions return straight to the menus with no REPORT screen (user report 2026-09-28, during v0.4.0 wrap-up playtest)
+
+**Status (2026-09-30): FIXED (boot-only gate).** The SkipIntro block in `src/game/lv.c` (`#ifdef PORT`, port feature code) ran on every title-stage load, including the return from a mission, and its `menu_update = MENU_FILE_SELECT` overwrote the `MENU_MISSION_FAILED` route. It is now gated on `is_first_time_on_main_menu`. Verified: build, plus one boot with `SkipIntro=1` that logs `booting to file-select` exactly once. **Owed (maintainer):** fail or abort a mission with SkipIntro on and check the dossier shows. The hook also re-set `maybe_is_in_menu` on every return, so D216's audio-break half may be fixed too; listen for it.
+
+**Symptom:** with `Game.SkipIntro = 1`, entering a solo mission and then either aborting (watch menu Z+A) or dying (KIA) returns the player straight to the front-end menus — the post-mission failure dossier is never shown. On a normal boot that screen is `MENU_MISSION_FAILED` (`front.c` `constructor_menu0C_missionfailed`: "REPORT / Mission status: KILLED IN ACTION" or "ABORTED", with the objective list and next/prev tabs to the mission-complete report). Initial suspicion was the user's save or `Game.AllUnlocked` (D257/D387); **user confirmed 2026-09-28 that it is a SkipIntro quirk** — save state and AllUnlocked are not involved.
+
+**Traced so far (handoff site, mechanism not fully pinned):** the stage-end handoff lives in `menu_init()`'s `MENU_RUN_STAGE` case (`front.c:~8909`, called from `lv.c:1322` only once `g_CurrentStageToLoad == LEVELID_TITLE`): non-replay solo stages fall through to `frontChangeMenu(MENU_MISSION_FAILED, 1)` (Cuba → cast display, multi → MP options, ramrom replay → legal screen). Under SkipIntro that handoff evidently never runs on the fail/abort return path — the exact point where the boot shortcut's state diverges (which flag/menu value the skipped intro stages would normally have left behind) is not yet identified. The abort path itself (`options.c:798`: `set_missionstate(MISSION_STATE_0); bossRunTitleStage(); mission_failed_or_aborted = TRUE; deleteCurrentSelectedFolder()`) and the KIA path (`bondview2.c bondviewKillCurrentPlayer`, `g_isBondKIA = 1`) are game logic and behave per the decomp; nothing in `port/` intercepts `MENU_MISSION_FAILED`.
+
+**v0.4.0 decision (user, 09-28):** `Game.SkipIntro` stays **EXPERIMENTAL — not recommended for regular users yet**, alongside its older unrooted audio-break report (D216 status note). The F10 row is relabelled "Skip intro (EXPERIMENTAL)" (`port/src/optionsoverlay.c`, mirroring the D387 AllUnlocked labelling precedent); the config var, default (off), and `lv.c` hook are unchanged.
+
+**Status:** OPEN — cosmetic (no crash, no data loss; the mission still records as failed/aborted and the menus are fully functional). Root-causing needs a side-by-side of front-end state (`current_menu`, `g_CurrentStageToLoad`, `mission_failed_or_aborted`, `g_isBondKIA`) on the fail return with SkipIntro off vs on — candidate for v0.5.0 alongside the D216 audio half.
+
+**Maintainer check 2026-10-02:** SkipIntro on, aborted mission shows the failure screen; no menu music glitch on return. VERIFIED, closed.

@@ -42,7 +42,7 @@ investigation artifacts.
 | `dump_objectives.py` | Dump per-level objectives + win/fail criteria from the ROM (playtest validation; Step 10 / N8 acceptance oracle). |
 | `disasm.py` | Minimal MIPS disassembler for the BE ROM (RAM-addr → file offset). |
 | `ppm2bmp.py` | PPM → 24-bit BMP, no deps — eyeball `GE_PCDUMP` frames without PIL. |
-| `gen_findings_index.py` | Regenerate `docs/dev/findings-index.csv` (grep-before-you-read aid for the 200 KB finding log). `--check` in CI-style use. |
+| `gen_findings_index.py` | Build the untracked `docs/dev/findings-index.csv` (grep-before-you-read aid over the one-file-per-finding log in `docs/dev/findings/`). `--check` validates finding file names and unique labels (CI). |
 | `docs_budget.py` | Context cost (approx tokens) of the docs every agent session loads, against per-file and tier-1 budgets; exits 1 when over. `--toc FILE` prints a heading TOC, `--json` for scripting. |
 | `gen_env_probes.py` | Drift check for `docs/dev/GE-ENV-PROBES.md` — re-greps live `getenv("GE_*")` sites, reports NEW/GONE. |
 

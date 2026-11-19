@@ -1,0 +1,4 @@
+# D231
+
+<!-- from the old section-F/H table row -->
+| D231 | **QoL batch: mute-on-focus-loss + screenshot-hotkey productization (M-105, roadmap Tier 3, port-only).** `Audio.MuteOnFocusLoss` (drop mixed blocks while the window is unfocused; pause-on-focus-loss deferred because of the D204-family AI feedback loop) plus `Video.ScreenshotKey`/`Video.ScreenshotDir` (scancode-based key, timestamped `screenshots/` PPMs). Implemented M-105 as PR #56 (`port/src/audio.c`, `port/src/video.c`, `port/include/audio.h`), never merged. | **CLOSED — PARKED/DEPRIORITIZED (user, 2026-09-25).** PR #56 closed and the `feat/qol-mute-screenshot` branch was deleted from GitHub. The code is in no release branch; it's kept locally only (local branch `feat/qol-mute-screenshot`, commit `3f6e8d98`, plus a patch in the gitignored `docs/dev/notes/parked/`). If it's revived: rebase onto the current release branch and playtest alt-tab mid-level plus the custom screenshot key/dir. |

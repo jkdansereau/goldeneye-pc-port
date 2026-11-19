@@ -214,7 +214,7 @@ def render_brief(args, frames, known_hits, porting_hits, finding_hits):
     if porting_hits:
         read_first.append("§" + ", §".join(dict.fromkeys(porting_hits)))
     if finding_hits:
-        read_first.append("docs/dev/findings.md: " +
+        read_first.append("docs/dev/findings/ (grep findings-index.csv): " +
                            "; ".join(dict.fromkeys(finding_hits)))
     lines.append("READ FIRST: " + "; ".join(read_first) + ".")
     lines.append("FILES YOU MAY TOUCH: <fill in -- likely %s; disjoint from "

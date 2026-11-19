@@ -1,0 +1,24 @@
+# D323
+
+<!-- from the old section-F/H table row -->
+| D323 | **G_TL_LOD bindings of explicit-LOD textures: PC samples driver mips from LOD0, N64 samples the authored mip chain (static census, 2026-09-21).** — full `## D323` entry at file tail | CLOSED — parked as a fidelity enhancement, not a bug (2026-09-26, user-approved: no reported artifact). Earlier: OPEN / parked — mechanism confirmed in code; census (`tools_pc/bg_lod_audit.py`) shows 15 levels with explicit-LOD textures bound under TEXTLOD-on classes (stat 378, azt 806 binds heaviest); overwhelmingly CI8/IA8 (subtle), the only RGBA5551 cut-outs are the D236 set (already fixed). No reported artifact; fix path documented (upload GL mip chains for TEXTLOD-on bindings) but not worth doing speculatively. Also documents GE's OMH field-write encoding (op 0xBA, value at absolute bit position in w1). |
+
+## D323 — G_TL_LOD bindings of explicit-LOD textures: PC samples driver mips from LOD0; N64 samples the authored mip chain (static census, 2026-09-21)
+
+**Context.** D107 established that GE's room DLs emit `G_TL_LOD` and that the port folds every LOD draw to tile 0 (driver-generated GL mips from the finest level). D236 then found + fixed the one case where that folding was *visibly* wrong for a type-1 (DETAIL) binding of an RGBA5551 cut-out. This entry closes the loop on the rest of the surface: how often do LOD-on draw classes bind textures that actually carry **authored** mip levels, and does the N64 hardware behavior differ from the port's?
+
+**N64 mechanism (confirmed in code).** For a texture whose imagelist header declares `hasExplicitLods` with N images (`tex->maxlod = N`, image.c:343), every binding type emits `gDPSetTextureLOD(G_TL_LOD)` + `G_TD_DETAIL` and sets up **N tiles**: tile 0 at the image-table TMEM slot, tiles 1..N-1 at successive TMEM addresses with halved dims/masks (`texWriteTileLods`, tex.c:355; one LOADBLOCK covering the whole chain via `texGetDepthAndSize`). With TEXTLOD on, the RDP ORs the minification level into the tile index, so distant geometry samples the **authored** coarser images.
+
+**Port behavior.** fast3d folds all of tiles 0..N-1 to GL texture unit 0 (D107; D236's type-1 carve-out excepted), with `glGenerateMipmap` mips from LOD0. So on PC, minified geometry samples **driver-filtered** versions of the finest image instead of Rare's hand-authored mips.
+
+**Census (`tools_pc/bg_lod_audit.py`, ntsc-final, bg room DLs only).** GE's modified-fast3d `G_SETOTHERMODE_H` is a partial field write (op 0xBA; w0 bits 8-15 = shift, bits 0-7 = width; the value sits at its *absolute* bit position in w1 — fast3d calls `gfx_sp_set_other_mode(shift+32, nbits, w1<<32)`, an identity map). TEXTLOD = bit 16. The tool walks every room DL tracking OML/OMH state and cross-references each bind's texnum against the imagelist explicit-LOD flag:
+
+- **423** textures carry explicit LODs; **15 levels** bind at least one of them under a TEXTLOD-on class (azt 806, stat 378, arec 88, sevx 84, crad 17, pete 15, jun 25, depo 28, dest 8, run 8, arch 4, ark 4, sev 4, sevb 4, silo 2 LOD-on binds).
+- Formats: overwhelmingly **RGBA16_CI8 / IA8** (7-8 authored levels each) — driver mips of these are usually close to the authored ones; this is a subtle fidelity gap, not an artifact.
+- The only **RGBA5551** (1-bit alpha cut-out) explicit-LOD textures bound under G_TL_LOD anywhere are tex1198-1201 in sevx/sev/sevb — the D236 set, already handled by the type-1 carve-out; user reports Surface 2's treeline reads fine.
+
+**Assessment.** Real N64-vs-PC divergence, pervasive but low-visibility: no reported artifact, and the one high-visibility subset (cut-outs) is already covered by D236. A full fix means uploading GL mip chains from the explicit LOD images for TEXTLOD-on bindings (tex.c + fast3d texture-cache plumbing), which would invalidate golden baselines across all 15 levels for a change nobody has seen to be wrong — not worth doing speculatively.
+
+**Status:** OPEN / parked (GRAPHICS-BACKLOG). If a playtest ever flags mushy distant detail in one of the 15 levels above (Statue and Aztec are the heaviest), the fix path is: in fast3d's texture upload, when the binding class has TEXTLOD on and `tex->maxlod > 1`, feed `glTexImage2D` levels 0..N-1 from the decoded explicit images instead of `glGenerateMipmap`. Audit tool: `tools_pc/bg_lod_audit.py` (also documents the GE OMH field-write encoding, which no other tool captures).
+
+**Current status (2026-09-29 bookkeeping):** the Status line above is historical; the authoritative verdict is the §F row — CLOSED — parked as a fidelity enhancement, not a bug (2026-09-26, user-approved: no reported artifact). Earlier: OPEN / parked — mechanism confirmed in code; census (`tools_pc/bg_lod_audit.py`) shows 15 levels with explicit-LOD textures bound under TEXTLOD-on…

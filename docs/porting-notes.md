@@ -1578,7 +1578,7 @@ Frame interpolation (D578) draws each game DL several times. Everything a fresh 
   where near-miss identifier prefixes (`PROP` / `PROPFLAG` / `PROPDEF_TYPE`) are
   the norm.
 
-- **`docs/dev/findings-index.csv` is generator-derived** (`tools_pc/gen_findings_index.py`): the status cell is normalised from the `## Dxx` entry's §F summary-table row in `findings.md`, so hand-editing the CSV is silently reverted on the next regen (hit live in the D219/D252 M-158 session). Update the table row, then run the generator.
+- **`docs/dev/findings-index.csv` is generated and untracked** (`tools_pc/gen_findings_index.py`): it is rebuilt from the file names and first headings in `docs/dev/findings/`, so never hand-edit it; fix the finding file and regenerate.
 - **Every game launch rewrites `data/ge007.eep`** (the eeprom shim stores on
   every write; validation resets, cheat patches and normal saves all write).
   When restoring a specific save artifact for a controlled test (e.g. an issue

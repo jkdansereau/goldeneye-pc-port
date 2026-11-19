@@ -6,7 +6,7 @@
 - Active work: **PC port** modelled on the Perfect Dark PC port (same Rare "Indy" engine family).
 - **Reference docs** (reading order: `CLAUDE.md`):
   - `docs/internals.md`: architecture, GE-specific RSP deltas, phased plan (§1–§10).
-  - `docs/dev/findings.md`: the `Dxx` finding log. **Look findings up in `docs/dev/findings-index.csv` (regenerate with `tools_pc/gen_findings_index.py`), then read only that `## Dxx` entry, using grep or offset/limit for large ones. Never linear-read.**
+  - `docs/dev/findings/`: the finding log, one file per finding (`YYYY-MM-DD-slug.md`; older ones `YYYY-MM-DD-Dxx_slug.md`). A finding is a trap, not a feature log: `docs/dev/findings/README.md` says what qualifies. **Look findings up in the untracked `docs/dev/findings-index.csv` (build it with `tools_pc/gen_findings_index.py`), then read only that one file. Never read the directory.**
   - `docs/porting-notes.md`: the recurring N64→PC bug classes. Skim the headers and read what is relevant.
 - **Open work / known issues:** `docs/ROADMAP.md`, the single tracker. Add new items there; never start another backlog file.
 - **Current status:** the README "Status" section. Current task and environment: `docs/HANDOFF.md` (rolling and local; may be absent).
@@ -67,7 +67,7 @@ Details and the history of the re-run fixes (D515 and earlier): `docs/building.m
 
 ## Verification ritual (after any build-affecting change)
 
-Run `/linkcheck`. Every symbol the compiled set references (`CMakeLists.txt` `SRC_*` lists) is defined exactly once, in the compiled set or in `port/`. Symbols from excluded files (`libultra/io|os`, `libultrare/io|os` except `vitbl.c`, `sched.c`, `rmon.c`, `vi.c`, `src/*.s`) come from `port/src/libultra.c`, `n64stubs.c`, `random.c` or `ucode.c`. No duplicates (watch `sp_*` stacks, `rmon*`, `os*` shims, segment markers). Every touched file parses; `docker compose run --rm switch` (plus `linux` / `windows` when shared PC code changed) is the final word. Record new findings in `docs/dev/findings.md` under the next free `Dxx` label and add it to the §F index.
+Run `/linkcheck`. Every symbol the compiled set references (`CMakeLists.txt` `SRC_*` lists) is defined exactly once, in the compiled set or in `port/`. Symbols from excluded files (`libultra/io|os`, `libultrare/io|os` except `vitbl.c`, `sched.c`, `rmon.c`, `vi.c`, `src/*.s`) come from `port/src/libultra.c`, `n64stubs.c`, `random.c` or `ucode.c`. No duplicates (watch `sp_*` stacks, `rmon*`, `os*` shims, segment markers). Every touched file parses; `docker compose run --rm switch` (plus `linux` / `windows` when shared PC code changed) is the final word. If the work taught a trap (what qualifies: `docs/dev/findings/README.md`), record it as one new file `docs/dev/findings/YYYY-MM-DD-slug.md`. Feature status and build or measurement logs go in the PR, not in a finding.
 
 ## Phase status
 

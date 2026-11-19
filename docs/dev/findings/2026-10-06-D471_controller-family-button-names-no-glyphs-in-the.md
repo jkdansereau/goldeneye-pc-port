@@ -1,0 +1,14 @@
+# D471
+
+<!-- from the old section-F/H table row -->
+| D471 | **Controller-family button names (no glyphs) in the PC menus + player-index LEDs: PlayStation/Nintendo pads see their own button names in the F10/front-end help lines and the pad-binding column; Xbox/Steam Deck/unknown keep the old text exactly** — full `## D471` entry at file tail | FIXED 2026-10-01 (local); headless captures for Xbox/PS/Nintendo; live PS/Nintendo pad check owed |
+
+## D471 — Controller-family button names (no glyphs) + player-index LEDs
+
+**Why.** The pad-menu audit (local note `docs/dev/notes/PAD-MENU-AUDIT.md`) found the PC menus fully pad-operable, but every prompt named buttons in Xbox terms. The maintainer wanted names only, no glyph art (GoldenEye has no glyph UI). For reference, the Perfect Dark PC port does not rename buttons at all (fixed `JOY1_A`… names, `pd_port/port/src/input.c:151`) and queries the controller type only for rumble. It does set the pad's player-index LED, which we adopt.
+
+**Design (port-only).** `port/src/input.c`: `padFamily[seat]` (0 Xbox default incl. Steam Deck/unknown/virtual, 1 PlayStation PS3/PS4/PS5, 2 Nintendo Switch Pro/Joy-Cons), from `SDL_GameControllerGetType` once when a pad is seated (guarded `SDL_VERSION_ATLEAST(2,0,12)`, PS5 at 2.0.14, Joy-Con enums at 2.24), moved with the pad on seat compaction, cleared on detach. Helpers: `inputPadFamily(seat)` (`GE_PADFAMILY=xbox|ps|nintendo` dev override, cached), `inputPadHelpFmt` / `inputPadHelpFmtFam` (expand `{A}{B}{X}{Y}{BACK}{START}` templates with the menu pad's (seat 0) names), `inputPadSourceFamilyName(seat, src)` (binding-column names, NULL = keep the existing Xbox text). Nintendo face letters stay A/B/X/Y (SDL's default `GAMECONTROLLER_USE_BUTTON_LABELS=1` reports buttons by printed label); only L/R/ZL/ZR/−/+ differ. Help templates: F10 overlay footer (`optionsoverlay.c`) and the front-end PC Options capture/help lines (`frontoptions.c`); a footer line that would overflow the card first compacts `LEFT/RIGHT` → `L/R`, then falls back to the Xbox letters. Player LEDs: `SDL_GameControllerSetPlayerIndex(pad, seat + (KbmP1 ? 1 : 0))` re-applied on every pad scan, `-1` before close.
+
+**Verification (headless, `GE_OPTIONSOVERLAY=1` on the Controller page, Custom preset, frame 200).** Default: help and binding column identical to before. `GE_PADFAMILY=ps`: R2/L2/Cross/Square/L3/Triangle/Circle/Options in the column; footer "CROSS BIND  L/R SLOT  TRIANGLE CLEAR" / "CIRCLE/ESC BACK   F10 CLOSE", inside the card. `GE_PADFAMILY=nintendo`: ZR/ZL/Plus, A/B/X/Y unchanged. All rc=0, no crash. Not verified: a real PlayStation or Nintendo pad, and the LEDs (maintainer, if hardware is available). Front-end page text not captured (the same helper as the overlay).
+
+**Also from the audit, not done here:** F10 overlay ownership under 2+ pads (G1–G3: navigation reads pad 0 only).

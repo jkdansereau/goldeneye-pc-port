@@ -23,10 +23,11 @@ Context is scarce. Load by tier; do not blind-read whole files.
 - **Tier 2 — on demand only, do NOT read start-to-finish:**
   - `docs/internals.md` — architecture / RSP deltas / phased plan (§1–§10).
     Read the section you need.
-  - Findings: look up via `docs/dev/findings-index.csv` (label, one-liner,
-    status), then read only the specific `## Dxx` entry in
-    `docs/dev/findings.md` (multi-pass labels like D202/D176(a) have large
-    sections — grep within or offset/limit). Never linear-read.
+  - Findings: one file per finding in `docs/dev/findings/`. Run
+    `tools_pc/gen_findings_index.py` (untracked CSV: label, date, file,
+    one-liner), grep it, then read only that file. Legacy labels:
+    `ls docs/dev/findings/*D202_*`. Rules (a finding is a trap, not a feature
+    log): `docs/dev/findings/README.md`. Never read the directory.
   - `docs/dev/HANDOFF-ARCHIVE.md` — prior-session narrative (M-2…). Only
     when tracing the history of one fix.
   - `docs/dev-process.md` — before dispatching a subagent (also Tier 1
@@ -59,7 +60,8 @@ A subagent brief is INVALID and must not be sent unless it contains all of:
   cheap-class bugs (truncations, off-by-ones); more room for structural ones
   (matrix handedness, format specs). Escalate the default as the project hardens.
 - **ON EXPIRY** — stop, revert temp probes, write up what you have in
-  `docs/dev/findings.md` §F with an explicit confidence rating. A good
+  your report with an explicit confidence rating (subagents do not write
+  findings; the lead files it in `docs/dev/findings/` if it is a trap). A good
   write-up of a half-solved bug is a deliverable, not a failure.
 - **KNOWN-GOOD / RULED OUT**, **CONSTRAINTS** (no game-logic changes;
   ABI/layout/format only; `#ifdef PORT`; documented in §F), **REPORT** shape.

@@ -1,0 +1,12 @@
+# D509
+
+<!-- from the old section-F/H table row -->
+| D509 | **Held frames after an aspect-ratio change: one mis-projected frame (gun/hand glitch) removed** — Port-only; D508 follow-up; full `## D509` entry at file tail | FIXED (by-eye pass owed) |
+
+## D509: one wrong frame on every aspect-ratio change (Bond's gun/hand glitched)
+
+Port-only (`port/fast3d/gfx_pc.cpp`). Maintainer saw the first-person gun/hand glitch ("reset") for a moment when changing Aspect ratio with F10 open in Surface 1. Measured with a temporary cycling probe on `-level_36` (since removed): every output-aspect change gave one extra frame that differed across the whole scene from the next one. Cause: `gfx_set_output_aspect` takes effect at the render worker's next frame start (D481), but the game thread has already built the next one or two display lists with the previous projection (`portNativeAspect()` reads the render side's last aspect), so those frames were drawn mis-projected into the new rect; the viewmodel is the most visible part. Fix: after a change `gfx_run` drops the next 2 frames (the same path a minimised window uses), so the previous image is held and the first frame shown is already correct. Only changes of `Video.AspectMode` trigger it; steady state and every other setting are unchanged. Not covered: window resize, fullscreen toggle and Native widescreen toggles have the same one-frame mismatch in principle (not reported).
+
+**Verified (headless):** on the cycling probe, per-change frame diffs went from a big jump plus a second smaller one (frames N, N+2) to one jump; tree / preset / reset probes pass; 60 s `-level_09` smoke rc=0. A gun-pose reset not caused by the projection mismatch could not be reproduced headless. **Owed (maintainer):** switch Original / 16:9 / 21:9 repeatedly in Surface 1 holding a gun with F10 open; confirm no gun flash. Also: `Input.PadTriggerPct` default 23 -> 25 (maintainer: rounder), in the same commit; an ini that already stores 23 keeps it until reset.
+
+**Residual (maintainer, after the fix):** the glitch still happens rarely, mostly Fill window to Original or a forced ratio, best reproduced on Surface 1 holding a gun with F10 open for a while. Logged as a ROADMAP known issue; deliberately not investigated further (cosmetic, one-off). If revisited: capture many frames across repeated changes and compare the viewmodel only; the viewmodel (D215) may cache a per-aspect value on the game thread that the 2-frame hold does not cover.
