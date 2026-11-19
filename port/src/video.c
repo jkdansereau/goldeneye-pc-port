@@ -44,7 +44,9 @@ extern void exit(int status);
 extern void gfx_sdl_set_external_present(void (*present)(void), void (*dims)(uint32_t *, uint32_t *), void (*park)(void));
 extern void gfx_sdl_set_external_swap_interval(void (*set_interval)(int));
 #endif
+#include "../fast3d/gfx_vulkan.h"   /* issue #44: Vulkan on PC with GE_RENDERER=vk */
 #include "../fast3d/gfx_frame.h"   /* D969: replay thread */
+static int s_vulkanActive = 0;   /* issue #44: the Vulkan backend was selected (0 without GE_VULKAN) */
 
 /* GE's internal resolution before the game's first osViSetMode (which then
  * sets the real CFB size): NTSC 640x480; PAL is taller, not shorter -- the EU
@@ -67,6 +69,11 @@ static int initDone = 0;
  */
 static int cfgVSync         = 1;   /* swap interval: 0 = off, 1 = on            */
 static int cfgFpsCap        = -1;  /* frame cap in fps; -1 = Auto (match display refresh, up to 4x the VI rate), 0 = uncapped (vsync); menu: Auto/30/60, and 90/120/144/165/240 = D578 interpolation */
+#ifdef GE_VULKAN
+static int cfgRenderer      = 1;   /* Video.Renderer (PC): 0 OpenGL, 1 Vulkan (default); GE_RENDERER overrides */
+#else
+static int cfgRenderer      = 0;
+#endif
 #ifdef __SWITCH__
 /* project-dam: the Switch display mode (see video.h): MSAA per docked/handheld
  * state, FXAA on. SwitchPresetRev makes the preset values land once on an ini
@@ -670,6 +677,7 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.VSync",         &cfgVSync,      0, 1);
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,    -1, 1000);
     configRegisterInt("Video.FXAA",          &cfgFXAA,       0, 1);
+    configRegisterInt("Video.Renderer",      &cfgRenderer,   0, 1);   /* issue #44: 0 OpenGL, 1 Vulkan; read at launch */
     configRegisterInt("Video.Visuals",       &portVisuals,   0, 2);   /* D982: Original / Fixed / Enhanced */
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 16);   /* D443: 16x added */
     configRegisterInt("Video.DisplayMode",   &cfgDisplayMode, 0, 2);
@@ -860,6 +868,9 @@ static void videoApplyLowEndDefaults(void)
     const char *r = gfx_opengl_renderer_string();
 #ifdef __SWITCH__
     if (gfx_deko3d_wanted()) r = gfx_deko3d_renderer_string();   /* D973 */
+#endif
+#ifdef GE_VULKAN
+    if (s_vulkanActive) r = gfx_vulkan_renderer_string();   /* issue #44 */
 #endif
     const char *why = "";
     const char *fake = getenv("GE_FAKE_LOWEND");
@@ -1331,6 +1342,22 @@ int videoInit(void)
         sysLogPrintf(LOG_NOTE, "video: renderer deko3d (default; GE_RENDERER=gl selects GL)");
     }
 #endif
+#ifdef GE_VULKAN
+    /* issue #44: Vulkan backend, the PC default (Video.Renderer; GE_RENDERER=vk / gl overrides it);
+     * no usable driver -> GL. */
+    if (getenv("GE_RENDERER") != NULL ? gfx_vulkan_wanted() : cfgRenderer == 1) {
+        if (gfx_vulkan_probe()) {
+            renderingAPI = &gfx_vulkan_api;
+            gfx_sdl_set_vulkan_window(true);
+            gfx_sdl_set_external_present(gfx_vulkan_present, gfx_vulkan_get_dimensions, gfx_vulkan_park);
+            gfx_sdl_set_external_swap_interval(gfx_vulkan_set_swap_interval);
+            s_vulkanActive = 1;
+            sysLogPrintf(LOG_NOTE, "video: renderer Vulkan");
+        } else {
+            sysLogPrintf(LOG_WARNING, "video: Vulkan selected but no usable Vulkan 1.3 driver; using OpenGL");
+        }
+    }
+#endif
 
     gfx_current_native_viewport.width = GE_NATIVE_W;
     gfx_current_native_viewport.height = GE_NATIVE_H;
@@ -1345,9 +1372,9 @@ int videoInit(void)
      * one that matches the current mode and applies menu edits live. */
     gfx_msaa_docked = NX_MSAA_LVL(cfgMSAA);
     gfx_msaa_handheld = NX_MSAA_LVL(cfgMSAAHandheld);
-    gfx_fxaa_on = cfgFXAA != 0;
     gfx_msaa_level = 1;
 #endif
+    gfx_fxaa_on = cfgFXAA != 0;
 
     int winW = cfgWinW > 0 ? cfgWinW : 0;   /* 0 -> gfx_sdl2 auto-fits to the desktop */
     int winH = cfgWinH > 0 ? cfgWinH : 0;
@@ -1513,7 +1540,7 @@ void videoTeardownForExit(void)
         return;
     }
     gfx_sdl_teardown_for_exit();
-    sysLogPrintf(LOG_INFO, "video: GL context and window destroyed");
+    sysLogPrintf(LOG_INFO, s_vulkanActive ? "video: window destroyed" : "video: GL context and window destroyed");
 }
 
 /* Host thread: exit once the render thread is out of the GL driver. */
@@ -1627,8 +1654,8 @@ void videoStartFrame(void)
             videoApplyVisuals();
             gfx_set_fog_pixel(portDisplayFixes);
         }
-#ifdef __SWITCH__
         if (dirty & VCFG_FXAA) gfx_fxaa_on = cfgFXAA != 0;   /* project-dam */
+#ifdef __SWITCH__
         if (dirty & VCFG_MSAA) {   /* project-dam: picked up by gfx_start_frame */
             gfx_msaa_docked = NX_MSAA_LVL(cfgMSAA);
             gfx_msaa_handheld = NX_MSAA_LVL(cfgMSAAHandheld);
@@ -1798,6 +1825,18 @@ void videoSubmitCommands(Gfx *cmds)
 /* Runs from gfx_sdl_swap_buffers_begin with the composited frame still in the
  * back buffer, just before SDL_GL_SwapWindow. Reading the back buffer after
  * the swap is undefined on buffer-exchange drivers (Mesa/WSLg) -> black. */
+/* The window as a PPM: GL reads its back buffer now; Vulkan writes it in the present that follows (issue #44). */
+static int videoDumpWindow(const char *path)
+{
+#ifdef GE_VULKAN
+    if (s_vulkanActive) {
+        return gfx_vulkan_dump_window(path);
+    }
+#endif
+    return gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_window_dimensions.width,
+                                     (uint32_t)gfx_current_window_dimensions.height, path);
+}
+
 static void videoPreSwapCapture(void)
 {
     /* GE_PCDUMP="first-last" / "first-last:step" -> ./ppm/frame_NNNNNN.ppm.
@@ -1822,8 +1861,7 @@ static void videoPreSwapCapture(void)
                 snprintf(path, sizeof(path), "ppm/frame_%06d_p%d.ppm", fr, s_dumpSlot);
             else
                 snprintf(path, sizeof(path), "ppm/frame_%06d.ppm", fr);
-            gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_window_dimensions.width,
-                                      (uint32_t)gfx_current_window_dimensions.height, path);   /* D447: whole window, bars included */
+            videoDumpWindow(path);   /* D447: whole window, bars included */
         }
     }
 
@@ -1833,8 +1871,7 @@ static void videoPreSwapCapture(void)
         char path[128];
         GE_MKDIR("ppm");
         snprintf(path, sizeof(path), "ppm/shot_%03d.ppm", shotNum++);
-        if (gfx_opengl_dump_bound_fbo((uint32_t)gfx_current_window_dimensions.width,
-                                      (uint32_t)gfx_current_window_dimensions.height, path)) {
+        if (videoDumpWindow(path)) {
             sysLogPrintf(LOG_INFO, "video: screenshot -> %s "
                          "(view with tools_pc/ppm2bmp.py)", path);
         } else {

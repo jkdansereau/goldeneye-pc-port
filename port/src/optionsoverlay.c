@@ -108,6 +108,7 @@ enum { ROW_TOGGLE, ROW_SLIDER, ROW_ENUM, ROW_MSAA, ROW_RES, ROW_ACTION, ROW_FPSC
 static const char *const kOnOff[]     = { "Off", "On", NULL };
 static const char *const kHold[]      = { "Hold", "Toggle", NULL };
 static const char *const kAspectMode[] = { "Fill window", "Original", "16:9", "21:9", NULL };   /* D447: Original = 4:3 (16:9 with the game Ratio) bars; D508: 2..3 force a ratio */
+static const char *const kRenderer[]  = { "OpenGL", "Vulkan", NULL };   /* Video.Renderer (issue #44) */
 static const char *const kVisuals[]   = { "Original", "Fixed", "Enhanced", NULL };   /* Video.Visuals (D982) */
 static const char *const kTexFilter[] = { "Nearest", "Bilinear", "3-point", "Trilinear", NULL };   /* Trilinear option (playtest 2026-10-03) */
 static const char *const kPadPreset[] = { "1.1 Jinx", "1.2 Christmas", "1.3 Frost", "Custom", "1.4 Elektra", NULL };   /* D498: index = stored value; inputPadPresetStep gives the display order */
@@ -281,8 +282,12 @@ static struct Row rows[] = {
     { .key="Video.FXAA", .label="FXAA", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
 #else
     { .key="Video.MSAA", .label="Anti-aliasing", .kind=ROW_MSAA, .restart=1 },
+    { .key="Video.FXAA", .label="FXAA", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },   /* project-dam: now on PC too */
 #endif
     { .key="Video.Visuals", .label="Visuals", .kind=ROW_ENUM, .step=1, .names=kVisuals },   /* D982 */
+#if defined(GE_VULKAN) && !defined(__SWITCH__)
+    { .key="Video.Renderer", .label="Renderer", .kind=ROW_ENUM, .step=1, .names=kRenderer, .restart=1 },   /* issue #44 */
+#endif
     SEP(V2),
     { .key="Video.VSync", .label="VSync", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     { .key="Video.FpsCap", .label="Frame rate cap", .kind=ROW_FPSCAP },
@@ -2264,6 +2269,13 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
 #if defined(__SWITCH__)
     { "Video.MSAAHandheld",         2 },   /* project-dam */
     { "Video.FXAA",                 1 },   /* project-dam: on */
+#else
+    { "Video.FXAA",                 0 },   /* off: the picture as rendered */
+    #if defined(GE_VULKAN)
+    { "Video.Renderer",             1 },   /* issue #44: Vulkan */
+#else
+    { "Video.Renderer",             0 },
+#endif
 #endif
 #if defined(__SWITCH__)
     { "Video.Visuals",              2 },   /* D982: Enhanced */
@@ -4039,6 +4051,7 @@ static const struct { const char *key, *help; } kRowHelp[] = {
     { "Input.PadTurnAccel", "Speeds up the turn when the stick is held at the edge." },
     { "Game.BloodOnHit", "A hit on a guard shows a dark-red puff, not the yellow wall puff." },
     { "Game.CoopEnemyHealth", "How tough guards are in co-op. Higher takes more shots to kill." },
+    { "Video.Renderer", "Vulkan is the default; OpenGL is the fallback if it misbehaves on your GPU." },
     { "Video.MSAA", "Smooths jagged edges while docked. Higher is cleaner but slower." },
     { "Video.MSAAHandheld", "Smooths jagged edges in handheld mode. Higher is cleaner but slower." },
     { "Video.FXAA", "A final pass that smooths edges without blurring flat textures." },

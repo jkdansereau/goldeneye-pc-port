@@ -30,7 +30,15 @@ RUN dnf -y install --setopt=install_weak_deps=False \
         mingw64-gcc \
         mingw64-gcc-c++ \
         mingw64-zlib \
+        glslang \
+        vulkan-headers \
+        gcc-c++ \
     && dnf clean all
+
+# Issue #44: the Vulkan backend needs the headers only (volk loads
+# vulkan-1.dll at run time). They are platform-neutral; copy them into the
+# MinGW sysroot, where the toolchain file's find_path looks.
+RUN cp -r /usr/include/vulkan /usr/include/vk_video /usr/x86_64-w64-mingw32/sys-root/mingw/include/
 
 ARG SDL2_VERSION=2.32.10
 ARG SDL2_SHA256=83a5d74012311edc3c0d40ea6faecbe57ad692aa033fa5dc273cc937e3938ff2

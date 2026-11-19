@@ -21,7 +21,9 @@ RUN apt-get update \
         ccache \
         cmake \
         git \
+        glslang-tools \
         libgl1-mesa-dev \
+        libvulkan-dev \
         libsdl2-dev \
         ninja-build \
         python3 \

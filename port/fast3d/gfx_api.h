@@ -32,9 +32,9 @@ extern struct GfxDimensions
 extern struct XYWidthHeight
     gfx_current_game_window_viewport; // The area of the window the game is drawn to, (0, 0) is top-left corner
 extern uint32_t gfx_msaa_level;
-#ifdef __SWITCH__
 /* project-dam: FXAA post pass (Video.FXAA), live from the menu. */
 extern bool gfx_fxaa_on;
+#ifdef __SWITCH__
 /* project-dam: the user's MSAA level; gfx_start_frame copies it into
  * gfx_msaa_level each frame so menu edits apply live. */
 extern uint32_t gfx_msaa_docked;     /* level used while docked */

@@ -545,6 +545,30 @@ endif()
 list(APPEND LIBS "${ZLIB_LIBRARY}")
 endif()
 
+# Issue #44: Vulkan backend (port/fast3d/gfx_vulkan.cpp, selected at run time
+# with GE_RENDERER=vk). Headers only: volk (port/fast3d/volk/) loads the
+# Vulkan loader at run time, so the binary does not link it and still starts
+# with GL where no Vulkan driver exists. Off on the Switch (deko3d) and when
+# the Vulkan headers are missing.
+set(GE_VULKAN_DEFAULT OFF)
+if(NOT GE_SWITCH)
+  find_path(VULKAN_HEADERS_DIR vulkan/vulkan_core.h)
+  if(VULKAN_HEADERS_DIR)
+    set(GE_VULKAN_DEFAULT ON)
+  endif()
+endif()
+option(GE_VULKAN "Build the Vulkan rendering backend (GE_RENDERER=vk)" ${GE_VULKAN_DEFAULT})
+if(GE_VULKAN)
+  if(NOT VULKAN_HEADERS_DIR)
+    message(FATAL_ERROR "GE_VULKAN=ON but vulkan/vulkan_core.h was not found (install the Vulkan headers)")
+  endif()
+  message(STATUS "Vulkan backend: on (headers in ${VULKAN_HEADERS_DIR})")
+  include_directories(SYSTEM "${VULKAN_HEADERS_DIR}")
+  add_compile_definitions(GE_VULKAN=1 VK_NO_PROTOTYPES)
+else()
+  message(STATUS "Vulkan backend: off")
+endif()
+
 # Real <zlib.h> for port/src/rzdecomp.c (which backs decompressdata() with real
 # zlib). The game's own src/game/zlib.h sits on the -I path and shadows a plain
 # `#include <zlib.h>` in a port TU, so generate an absolute-path include (same
@@ -885,6 +909,16 @@ set(SRC
 set(BIN_NAME "ge007${BIN_REGION}.${TARGET_ARCH}")
 add_executable(ge007 ${SRC})
 target_link_libraries(ge007 ${LIBS})
+if(GE_VULKAN)
+  # volk is plain host C: its own target, without the decomp's shadow headers
+  # (port/shim, include/) or the forced versioninfo.h.
+  add_library(ge_volk STATIC "${CMAKE_SOURCE_DIR}/port/fast3d/volk/volk.c")
+  set_property(TARGET ge_volk PROPERTY INCLUDE_DIRECTORIES "${VULKAN_HEADERS_DIR}")
+  set_property(TARGET ge_volk PROPERTY COMPILE_OPTIONS "")
+  target_link_libraries(ge007 ge_volk ${CMAKE_DL_LIBS})
+  include("${CMAKE_SOURCE_DIR}/cmake/VulkanShaders.cmake")
+  vulkan_shaders(ge007)   # SPIR-V shader pack (dkshgen + glslangValidator)
+endif()
 set_target_properties(ge007 PROPERTIES OUTPUT_NAME "${BIN_NAME}")
 switch_package(ge007)   # goldeneye-nx hook: .nro (no-op off Switch)
 switch_deko3d_shaders(ge007)   # project-dam hook (D973): deko3d shader pack (no-op off Switch)

@@ -20,6 +20,8 @@ Third-party code vendored into the port layer keeps its own license:
   * port/fast3d/  - software RSP adapted from the Perfect Dark port /
     libultraship / sm64-port lineage; see port/fast3d/LICENSE.txt.
   * port/fast3d/glad/ - generated OpenGL loader (glad), public domain / MIT.
+  * port/fast3d/volk/ - Vulkan meta-loader (volk 1.4.304), MIT,
+    Copyright (c) 2018-2024 Arseny Kapoulkine; see port/fast3d/volk/LICENSE.md.
 
 Runtime libraries bundled in the downloads (not in this repository) keep
 their own licenses; each license text ships in the download's licenses/ folder:

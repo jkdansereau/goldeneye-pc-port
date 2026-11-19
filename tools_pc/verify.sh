@@ -310,6 +310,7 @@ run_one() {
     [ -n "$quitframe" ] && export GE_QUITFRAME="$quitframe"
     [ -n "$script" ] && export GE_INPUTSCRIPT="$script"
     export GE_RSEED="$GOLDEN_SEED"
+    export GE_RENDERER=gl   # the goldens are GL captures; Vulkan has its own readback but is not diffed against them yet (#44)
     export GE_FAKE_DECK=0   # the D283 Deck preset forces 1280x800 fullscreen over the pinned ini
     exec "$EXE" "-level_$num" ) >"$capdir/run.log" 2>&1 &
   local gamepid=$!

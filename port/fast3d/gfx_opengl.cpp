@@ -2226,7 +2226,6 @@ void gfx_opengl_clear_region(bool clear_color, bool clear_depth, int x, int y, i
     }
 }
 
-#ifdef __SWITCH__
 /* project-dam: FXAA as a final pass. Draws the single-sample colour texture of
  * framebuffer src_fb_id to the default framebuffer through an edge-directed
  * blur (Timothy Lottes' FXAA idea, written from the published algorithm: find
@@ -2341,7 +2340,6 @@ void main() {
     if (prev_scissor) glEnable(GL_SCISSOR_TEST);
     glBindFramebuffer(GL_FRAMEBUFFER, current_framebuffer == 0 ? 0 : framebuffers[current_framebuffer].fbo);
 }
-#endif
 
 /* GE+ sky (Video.Visuals = Enhanced): see port/include/skyplus.h. The decoder stages a
  * copy of the game's parameter block with the viewport; the replay calls the
