@@ -7,13 +7,13 @@
  *     $S/pcmodels-<region>/   (pcmodels.bin + manifest.csv)  — port/src/pcmodels.c
  *     $S/pccg-<region>/       (pccg.bin    + manifest.csv)  — port/src/pccg.c
  *
- * The release bundle ships a frozen copy of the asset-prep tool
- * (prepare-assets.py, PyInstaller --onefile) as
- * <exedir>/prepare-assets/ge007-convert[.exe]. When the sidecars are missing
- * at boot, romdataInit() calls romConvertEnsureSidecars(), which spawns that
- * binary with `--rom <this ROM> --out <exedir>`, waits for it to finish, and
- * re-checks. The conversion is deterministic and takes a few seconds; after
- * the first run the sidecars exist and this path is a no-op (two fsExists).
+ * The conversion is the in-process C converter (port/convert/, a port of the
+ * old tools_pc/d43/d69/d88_emit.py scripts): when the sidecars are missing at
+ * boot, romdataInit() calls romConvertEnsureSidecars(), which converts the ROM
+ * into <exedir>/data/ and re-checks. The conversion is deterministic and takes
+ * a few seconds; after the first run the sidecars exist and this path is a
+ * no-op (two fsExists). On Switch the output lands next to the NRO
+ * (sdmc:/switch/<app>/data/), since libnx starts with that as the CWD.
  *
  * Returns 1 when both sidecars are present (already or after converting),
  * -1 when they could not be produced (caller should abort boot with a
@@ -29,16 +29,6 @@ extern void *malloc(unsigned long long size);
 extern int snprintf(char *str, size_t maxsize, const char *format, ...);
 
 #include "platform.h"
-
-#if defined(PLATFORM_WINDOWS)
-  #ifndef WIN32_LEAN_AND_MEAN
-    #define WIN32_LEAN_AND_MEAN
-  #endif
-  #include <windows.h>
-#else
-  #include <unistd.h>
-  #include <sys/wait.h>
-#endif
 
 #include "system.h"
 #include "fs.h"
@@ -71,120 +61,10 @@ static int rcSidecarsPresent(const char *region)
     return rcExistsResolved(rel);
 }
 
-#if defined(PLATFORM_WINDOWS)
-/* Append raw text to cmd; returns 0 if it does not fit. */
-static int rcAppendRaw(char *cmd, size_t cap, size_t *n, const char *s)
-{
-    size_t l = strlen(s);
-    if (*n + l + 1 > cap)
-        return 0;
-    memcpy(cmd + *n, s, l + 1);
-    *n += l;
-    return 1;
-}
-
-/* Append arg quoted per the CommandLineToArgvW rules: backslashes directly
- * before a quote are doubled, embedded quotes are escaped, and trailing
- * backslashes are doubled before the closing quote. */
-static int rcQuoteArg(char *cmd, size_t cap, size_t *n, const char *arg)
-{
-    size_t i = *n, bs = 0;
-    if (i + 1 >= cap)
-        return 0;
-    cmd[i++] = '"';
-    for (; *arg; arg++) {
-        if (*arg == '\\') {
-            bs++;
-            if (i + 1 >= cap) return 0;
-            cmd[i++] = '\\';
-            continue;
-        }
-        if (*arg == '"') {
-            if (i + bs + 2 >= cap) return 0;
-            while (bs--) cmd[i++] = '\\';   /* double the run */
-            cmd[i++] = '\\';
-            cmd[i++] = '"';
-        } else {
-            if (i + 1 >= cap) return 0;
-            cmd[i++] = *arg;
-        }
-        bs = 0;
-    }
-    if (i + bs + 2 > cap) return 0;
-    while (bs--) cmd[i++] = '\\';
-    cmd[i++] = '"';
-    cmd[i] = 0;
-    *n = i;
-    return 1;
-}
-
-/* Spawn `exePath --rom "<rom>" --out "<exedir>"` and wait for it.
- * Returns the exit code, or -1 if it could not be started. */
-static int rcRunConverter(const char *exePath, const char *rom, const char *out)
-{
-    char cmd[4096];
-    size_t n = 0;
-    if (!rcQuoteArg(cmd, sizeof(cmd), &n, exePath) ||
-        !rcAppendRaw(cmd, sizeof(cmd), &n, " --rom ") ||
-        !rcQuoteArg(cmd, sizeof(cmd), &n, rom) ||
-        !rcAppendRaw(cmd, sizeof(cmd), &n, " --out ") ||
-        !rcQuoteArg(cmd, sizeof(cmd), &n, out))
-        return -1;   /* paths too long to build a command line */
-
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, cmd, -1, NULL, 0);
-    if (wlen <= 0)
-        return -1;
-    WCHAR *wcmd = (WCHAR *)malloc((size_t)wlen * sizeof(WCHAR));
-    if (!wcmd)
-        return -1;
-    MultiByteToWideChar(CP_UTF8, 0, cmd, -1, wcmd, wlen);
-
-    STARTUPINFOW si;
-    PROCESS_INFORMATION pi;
-    int rc = -1;
-    memset(&si, 0, sizeof(si));
-    si.cb = sizeof(si);
-    memset(&pi, 0, sizeof(pi));
-    if (CreateProcessW(NULL, wcmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        DWORD code = 0;
-        GetExitCodeProcess(pi.hProcess, &code);
-        rc = (int)code;
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-    }
-    free(wcmd);
-    return rc;
-}
-#elif defined(__SWITCH__)
-/* project-dam: Horizon cannot spawn the external converter. The sidecars
- * are generated on a PC (prepare-assets) and copied next to the NRO. */
-static int rcRunConverter(const char *exePath, const char *rom, const char *out)
-{
-    (void)exePath; (void)rom; (void)out;
-    return -1;
-}
-#else
-static int rcRunConverter(const char *exePath, const char *rom, const char *out)
-{
-    pid_t pid = fork();
-    if (pid < 0)
-        return -1;
-    if (pid == 0) {
-        /* Child: stdio is inherited (console apps see the converter's
-         * progress lines; GUI builds simply discard them). */
-        execv(exePath, (char *const[]){ exePath, "--rom", (char *)rom,
-                                        "--out", (char *)out, NULL });
-        _exit(127);   /* execv failed */
-    }
-    int status = 0;
-    while (waitpid(pid, &status, 0) < 0)
-        ;   /* EINTR */
-    if (WIFEXITED(status))
-        return WEXITSTATUS(status);
-    return -1;
-}
-#endif
+/* port/convert/conv_main.c (CV_STEP_ALL == 7). Declared here, not via
+ * convert.h: this TU sees the decomp include path. */
+extern int cv_convert_rom(const char *rom_path, const char *region, const char *out_root, int steps);
+static int rcConvert(const char *rom, const char *out) { return cv_convert_rom(rom, NULL, out, 7); }
 
 int romConvertEnsureSidecars(const unsigned char *romImg, const char *romRelPath)
 {
@@ -202,72 +82,15 @@ int romConvertEnsureSidecars(const unsigned char *romImg, const char *romRelPath
 
     const char *exedir = sysGetExeDir();
     char outDir[1024];
-    snprintf(outDir, sizeof(outDir), "%s", exedir);
-
-    /* Converter candidates: bundled under <exedir>/prepare-assets/ (the
-     * release layout), then the CWD-relative form (running from a source
-     * tree or an unpacked bundle in the CWD). */
-#if defined(PLATFORM_WINDOWS)
-    static const char *candRel[4] = {
-        "$E/prepare-assets/ge007-convert.exe",
-        "./prepare-assets/ge007-convert.exe",
-        "$E/ge007-convert.exe",
-        "./ge007-convert.exe",
-    };
-#else
-    static const char *candRel[4] = {
-        "$E/prepare-assets/ge007-convert",
-        "./prepare-assets/ge007-convert",
-        "$E/ge007-convert",
-        "./ge007-convert",
-    };
-#endif
-    char convPath[1024] = "";
-    for (int i = 0; i < 4; i++) {
-        if (rcExistsResolved(candRel[i])) {
-            /* sysResolvePath() returns a static buffer — snapshot it. */
-            snprintf(convPath, sizeof(convPath), "%s", sysResolvePath(candRel[i]));
-            break;
-        }
-    }
-    if (!convPath[0] && exedir[0]) {
-        /* Two layouts the "$E/" forms above miss. (1) On POSIX "$E/" resolves
-         * CWD-relative, not to the real exe dir, so a launch from another CWD
-         * needs the absolute form. (2) A macOS .app keeps prepare-assets/ in
-         * Contents/Resources/ — it cannot live in Contents/MacOS/, where
-         * codesign treats the directory as nested code and refuses to sign. */
-        static const char *candExe[3] = {
-            "prepare-assets/ge007-convert",
-            "../Resources/prepare-assets/ge007-convert",
-            "ge007-convert",
-        };
-        for (size_t i = 0; i < sizeof(candExe) / sizeof(candExe[0]); i++) {
-            char full[1024];
-            snprintf(full, sizeof(full), "%s/%s", exedir, candExe[i]);
-            if (fsExists(full)) {
-                snprintf(convPath, sizeof(convPath), "%s", full);
-                break;
-            }
-        }
-    }
-
-    if (!convPath[0]) {
-        sysLogPrintf(LOG_ERROR,
-            "romconvert: sidecars for '%s' are missing and no ge007-convert "
-            "binary was found (looked in <exedir>/prepare-assets/). Put your "
-            "ROM at data/ge007.%s.z64 and re-run from the bundle folder, or "
-            "run prepare-assets manually.", region, region);
-        return -1;
-    }
+    snprintf(outDir, sizeof(outDir), "%s", exedir[0] ? exedir : ".");
 
     sysLogPrintf(LOG_INFO,
-        "romconvert: sidecars missing — running %s (one-time, a few seconds)…",
-        convPath);
-    int code = rcRunConverter(convPath, romPath, outDir);
+        "romconvert: sidecars missing � converting the ROM (one-time, a few seconds)�");
+    int code = rcConvert(romPath, outDir);
     if (code != 0)
         sysLogPrintf(LOG_ERROR,
-            "romconvert: ge007-convert exited with code %d — see its output "
-            "above (a non-retail or byte-swapped ROM will fail here)", code);
+            "romconvert: conversion failed (code %d) � a non-retail or "
+            "byte-swapped ROM will fail here", code);
 
     if (!rcSidecarsPresent(region)) {
         sysLogPrintf(LOG_ERROR,

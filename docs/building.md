@@ -13,7 +13,7 @@ Stages:
    a plain `git clone` already has what the PC build compiles.)*
 2. **Build the port** (§3): a CMake build compiling the game sources plus the
    `port/` layer into a native executable. Needs no ROM.
-3. **Generate the PC asset sidecars** (§4): two pure-Python converters turn
+3. **Generate the PC asset sidecars** (§4): the C converter (`port/convert/`) turns
    ROM model / stage data into the PC-layout `data/pcmodels-*` / `data/pccg-*`
    files the port loads at runtime. **Required to run.**
 
@@ -168,7 +168,7 @@ fork. A `project-dam-vX.Y.Z` tag also publishes a release.
   converted sidecars (§4). Copy its `switch/` folder to the root of the SD
   card.
 - **Release archive:** `tools/switch/package_release.sh <version> [out_dir]`
-  (default `dist`) zips the NRO, the `prepare-assets` converter, `README.txt`,
+  (default `dist`) zips the NRO, `README.txt`,
   `LICENSE` and `NOTICE`. It ships no game content. CI passes
   `-DPROJECT_DAM_VERSION=<version>` to the build; a local build shows
   `dev-<hash>` in the homebrew menu.
@@ -235,34 +235,40 @@ mkdir -p data
 cp /path/to/your/rom.z64 data/ge007.ntsc-final.z64     # or pal-final / jpn-final
 ```
 
-Then run all three emit passes for that region, **in this order** (d88 appends
-to d69's output):
+The game converts the ROM itself on first launch, when the sidecars are
+missing, so normally you do nothing. To generate them by hand (or for another
+region), use the `ge007-convert` command-line tool built next to the engine
+(`build-pc/port/convert/ge007-convert`, or `build-linux/port/convert/` /
+`build-win/port/convert/` from the Docker builds):
 
 ```sh
-python3 tools_pc/d43_emit.py ntsc-final          # -> data/pcmodels-ntsc-final/{pcmodels.bin,manifest.csv}  (~1.3 MB)
-python3 tools_pc/d69_emit.py ntsc-final          # -> data/pccg-ntsc-final/{pccg.bin,manifest.csv}          (bg + stan)
-python3 tools_pc/d88_emit.py ntsc-final --regen  #    appends the 21 solo Usetup*Z + 13 multiplayer Ump_setup*Z stage-setup files -> ~3.6 MB
+ge007-convert --rom data/ge007.ntsc-final.z64 --out .    # writes ./data/pcmodels-*/ and ./data/pccg-*/
 ```
+
+The region comes from the ROM header; `--region pal-final|jpn-final` overrides
+it, and `--only d43|d69|d88` runs a single pass (d43 = models, d69 = stage bg +
+stan, d88 = stage setups; d88 appends to d69's output, so run it after d69).
+Output is a deterministic function of the ROM (~1.3 MB models + ~3.6 MB
+stage data).
 
 **PAL / JP note:** both regions convert, build and boot from source (finding
 D258, fixed 2026-10-02; D487/D488 fixed the PAL frame height and TV type).
-Run the three emit passes with `pal-final` or `jpn-final`, and build into a
-separate directory, for example `BUILD_DIR=build-pal ./build-pc.sh pal-final`.
-Release packages are still NTSC-U only until per-region packaging lands
-(issue #85).
+Build into a separate directory, for example
+`BUILD_DIR=build-pal ./build-pc.sh pal-final`. Release packages are still
+NTSC-U only until per-region packaging lands (issue #85).
 
-These are **pure-stdlib Python 3** (no MIPS toolchain, independent of the
-step-2 asset extraction) and read only the ROM plus files already committed to
-the repo (`scripts/filelist.u.csv`, `assets/obseg/file_resource_table.inc.c`,
-`assets/**/ModelFileHeader.inc.c`, the bg/stan `.inc.c`). Output is a
-deterministic function of the ROM. Re-run after any change to `d43_emit.py` /
-`d69_emit.py` / `d88_emit.py` or the model/bg converters (`d43_*`, `d69_*`,
-`d88_propdefs.py`).
+The converter is plain C (libc + zlib) and carries the decomp metadata it needs
+(`scripts/filelist.*.csv`, `assets/obseg/file_resource_table.inc.c`,
+`assets/**/ModelFileHeader.inc.c`) as constants in
+`port/convert/convert_data.c`. Regenerate that file with
+`python tools_pc/gen_convert_data.py` (repo root) only when those decomp inputs
+change; this is the one remaining dev-time Python step. The format rationale
+for each pass is in the header comments of `port/convert/conv_d43.c`,
+`conv_d69.c` and `conv_d88.c` and in findings D43..D132.
 
-> The release bundle ships the same converter frozen as
-> `prepare-assets/ge007-convert`; the game spawns it on first launch when the
-> sidecars are missing, so end users never run it by hand. See the bundled
-> `README.md`.
+> Release bundles ship no converter binary; the engine does this conversion
+> in-process on first launch (also on Switch, where the files land in
+> `switch/project-dam/data/`).
 
 > `data/pcmodels-*/` and `data/pccg-*/` are gitignored ROM-derived game data;
 > never commit or redistribute them.

@@ -106,45 +106,17 @@ fi
 mkdir -p "$OUT/tools"
 cp tools_pc/eep_convert.py "$OUT/tools/"
 
-# --- asset-prep tool -------------------------------------------------
-# The port needs two ROM-derived directories (data/pcmodels-<region>/ and
-# data/pccg-<region>/) that we cannot ship. prepare-assets.py regenerates
-# them from the user's own ROM using only the Python standard library. It is
-# assembled fresh from the tree here so it can never drift from the emit
-# scripts. The vendored inputs are decomp layout/symbol metadata (.inc.c /
-# .csv), NOT game assets (no textures, audio, models, levels, or text).
-PREP="$OUT/prepare-assets"
-mkdir -p "$PREP/vendor/scripts" "$PREP/vendor/assets/obseg"
-cp tools_pc/dist/prepare-assets/prepare-assets.py "$PREP/"
-cp tools_pc/d43_emit.py tools_pc/d69_emit.py       "$PREP/"
-cp tools_pc/d88_emit.py tools_pc/d88_propdefs.py   "$PREP/"   # d88 = per-level stage setup (+ its only local import)
-cp scripts/filelist.u.csv                          "$PREP/vendor/scripts/"
-cp assets/obseg/file_resource_table.inc.c          "$PREP/vendor/assets/obseg/"
-# d43_emit.py os.walk()s assets/ for every *modelFileHeader.inc.c — preserve paths.
-( cd . && find assets -iname 'modelfileheader.inc.c' -print0 \
-    | xargs -0 -I{} cp --parents {} "$PREP/vendor/" )
-nmh="$(find "$PREP/vendor/assets" -iname 'modelfileheader.inc.c' | wc -l)"
-echo "    + prepare-assets/ (emit scripts + $nmh model headers)"
-[ "$nmh" -gt 400 ] || { echo "error: prepare-assets vendored only $nmh model headers — expected ~512" >&2; exit 1; }
-
-# Frozen first-run converter (drop-in ROM support): the engine spawns this
-# when data/pcmodels-* / data/pccg-* are missing (port/src/romconvert.c).
-# CI builds it with PyInstaller before bundling; a local bundle needs the
-# same step:  python -m PyInstaller --onefile --name ge007-convert \
-#                --distpath tools_pc/dist/prepare-assets \
-#                tools_pc/dist/prepare-assets/prepare-assets.py
-CV="$REPO_ROOT/tools_pc/dist/prepare-assets/ge007-convert.exe"
-[ -f "$CV" ] || { echo "error: $CV not found — freeze it with PyInstaller first (see above)" >&2; exit 1; }
-cp "$CV" "$PREP/"
-echo "    + prepare-assets/ge007-convert.exe ($(du -h "$CV" | cut -f1))"
+# --- first-run conversion ---------------------------------------------
+# No converter ships in the bundle: the engine converts the user's ROM into
+# data/pcmodels-<region>/ and data/pccg-<region>/ on first launch, in-process
+# (port/src/romconvert.c, C code from port/convert/).
 
 # --- guard: no ROM / game data snuck in --------------------------------
 if find "$OUT" -type f \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' \) | grep -q .; then
   echo "error: bundle contains a ROM image — aborting" >&2
   exit 1
 fi
-# 120 MB: engine + DLLs are a few MB; the frozen ge007-convert (PyInstaller
-# --onefile CPython) adds ~15 MB. Anything far beyond that is game data.
+# 120 MB: engine + DLLs are a few MB; anything far beyond that is game data.
 BYTES="$(du -sb "$OUT" | cut -f1)"
 LIMIT=$((120 * 1024 * 1024))
 if [ "$BYTES" -gt "$LIMIT" ]; then

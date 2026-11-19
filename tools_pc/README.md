@@ -15,12 +15,7 @@ investigation artifacts.
 
 | Script | Role |
 |---|---|
-| `d43_emit.py` | Offline N64→PC model-file converter → RZ sidecar + `manifest.csv` (D50 / Plan B). Regen after any model-format change. |
 | `d43_convert.py` | Reference single-file model converter + full-512 layout/pointer validator (D43). |
-| `d69_emit.py` | Offline converter for stage `bg/*.seg` + `Tbg_*_stanZ` → concatenated sidecar (D69/D78–D82). |
-| `d88_emit.py` | Offline converter for per-level `Usetup*Z` (solo, 21) and `Ump_setup*Z` (multiplayer, 13; D416) stage-setup files → appended to the `pccg.bin` sidecar (D88). |
-| `d88_propdefs.py` | The `propDefs` polymorphic-record stream N64→PC converter used by `d88_emit.py` (D88.4). |
-| `d69_emit.py` / `d88_emit.py` / `d43_emit.py` | Run all three (+ `d88_propdefs`) to rebuild `data/` sidecars from the ROM. |
 
 ## Living — verification & release
 
@@ -37,9 +32,8 @@ investigation artifacts.
 | `playtest.sh` | Launch a level for `docs/dev/LEVEL-PLAYTEST.md` human validation (WS6). |
 | `audiodebug.ps1` | Audio counterpart to `debug.ps1` (that one is for crashes; this one is for audio behaviour). Drives the `GE_D204` health monitor + `GE_AUDIOTRACE`/`GE_AUDIODUMP` and prints a pass/fail verdict: real-time ratio, queue starvation, dropped blocks, oversized blocks, plus a soundIndex histogram. `-Play` for an instrumented interactive playtest (the D202 workflow), `-Soak` for a 5-min stability run, `-SyncData` to mirror `./data` first. |
 | `debug.ps1` / `repro_gdb.sh` / `attach_animgen.sh` | Launch (or attach to) the game under gdb so a crash always leaves a backtrace. |
-| `bundle-win.sh` / `bundle-linux.sh` | Package a built tree as a distributable archive (exe + licenses + `prepare-assets/`). |
+| `bundle-win.sh` / `bundle-linux.sh` | Package a built tree as a distributable archive (exe + licenses). |
 | `romverify.c` | One-shot `.z64` integrity check against the repo's ground truths. |
-| `dump_objectives.py` | Dump per-level objectives + win/fail criteria from the ROM (playtest validation; Step 10 / N8 acceptance oracle). |
 | `disasm.py` | Minimal MIPS disassembler for the BE ROM (RAM-addr → file offset). |
 | `ppm2bmp.py` | PPM → 24-bit BMP, no deps — eyeball `GE_PCDUMP` frames without PIL. |
 | `gen_findings_index.py` | Build the untracked `docs/dev/findings-index.csv` (grep-before-you-read aid over the one-file-per-finding log in `docs/dev/findings/`). `--check` validates finding file names and unique labels (CI). |
@@ -50,8 +44,9 @@ investigation artifacts.
 
 | Script | Role |
 |---|---|
-| `d43_layoutprobe.c` | Prints `sizeof`/`offsetof` for every struct `d43_emit.py` must reproduce, built with the port toolchain. |
-| `d88_layoutprobe.c` | Same, for the `PROPDEF_*` record structs `d88_emit.py` converts. |
+| `gen_convert_data.py` | Regenerates `port/convert/convert_data.c` (filelist CSVs, resource-table names, model NS/NT) for the C ROM converter. |
+| `d43_layoutprobe.c` | Prints `sizeof`/`offsetof` for every struct `port/convert/conv_d43.c` must reproduce, built with the port toolchain. |
+| `d88_layoutprobe.c` | Same, for the `PROPDEF_*` record structs `port/convert/conv_d88.c` converts. |
 | `mtxtest.c` | Standalone numerical test of the fast3d matrix pipeline conventions (GE swapped-perspective, packing, MUL order). |
 
 ## Investigation artifacts — D43 model-file format (finding closed; archive candidates)
@@ -69,7 +64,6 @@ of the others.
 
 | Script | Finding |
 |---|---|
-| `d125_check.py` | D125 — is the emitted `propDefs` blob byte-identical to `d88_propdefs.convert_stream()`? |
 | `d88_propdef_scan.py` | D88.4 — histogram of `PROPDEF_*` record types across shipped levels. |
 | `d51_gdb.py` / `dump_animgen.cmd` | D51 texture-tile crash capture / Facility-outro-hang anim-state dump (gdb scripts). |
 

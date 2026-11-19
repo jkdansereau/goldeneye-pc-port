@@ -12,18 +12,15 @@ Requirements
 - Launch through title takeover (hold R while starting a game), not from the
   album applet: the game needs the full application memory.
 - Your own GoldenEye 007 ROM, US (NTSC-U) version, big-endian .z64.
-- Python 3 on a PC, once, to convert the ROM's assets.
 
 Install
 -------
 1. Copy the switch/ folder of this archive to the root of the SD card.
 2. Copy your ROM to the SD card as
        switch/project-dam/data/ge007.ntsc-final.z64
-3. On a PC, with the SD card mounted (replace SD with its path):
-       python3 prepare-assets/prepare-assets.py --rom SD/switch/project-dam/data/ge007.ntsc-final.z64 --out SD/switch/project-dam
-   It writes the converted model and level files into
-   switch/project-dam/data/.
-4. Start "Project Dam" from the homebrew menu.
+3. Start "Project Dam" from the homebrew menu. The first launch converts
+   the ROM (a few seconds, black screen) and writes the converted model and
+   level files into switch/project-dam/data/; later launches skip this.
 
 Settings, saves and logs live in switch/project-dam/data/ (ge007.ini,
 ge007.eep, ge007.log; ge007-crash.log after a crash).

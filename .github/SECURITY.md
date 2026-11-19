@@ -28,17 +28,10 @@ run into as a result:
 
 - **Windows SmartScreen** may show "Windows protected your PC" on first
   run. Click "More info" → "Run anyway."
-- Some antivirus engines flag `ge007-convert.exe` (the one-time ROM-asset
-  converter bundled in the release) specifically, because it's packaged
-  with PyInstaller's `--onefile` mode — a well-known trigger for heuristic
-  AV engines industry-wide, unrelated to what this project's code actually
-  does. The game launches this converter itself on the first run, when the
-  derived asset folders are missing, so an AV prompt can appear at that
-  moment rather than when you unpack the release. If you want to verify what
-  it does, its full source is `prepare-assets.py`, shipped right next to it in
-  the same bundle folder. The build pins the PyInstaller version and the CI
-  actions it uses (by commit SHA), so what ships is reproducible from this
-  repository.
+- The first run converts your ROM inside the game itself (no helper
+  executable): the derived asset folders are written next to the game when
+  they are missing. The conversion code is `port/convert/` in this
+  repository, compiled into the engine.
 
 ### Verifying a release build (build provenance)
 

@@ -32,7 +32,7 @@ concurrency:
 #
 #   linux-build   — ubuntu, system GCC. Actually compiles + links (unlike
 #                   validate), then packages the Linux bundle (exe + README +
-#                   licenses + prepare-assets, NO ROM / assets / bundled libs)
+#                   licenses, NO ROM / assets / bundled libs)
 #                   via tools_pc/bundle-linux.sh and uploads it. Surfaces
 #                   GCC-on-Linux strictness gaps MinGW misses. Not a runtime
 #                   claim; not a required check yet.
@@ -137,6 +137,7 @@ jobs:
         run: |
           python3 tools_pc/gen_findings_index.py --check  # finding file names + unique labels
           python3 tools_pc/gen_env_probes.py --check
+          python3 tools_pc/gen_convert_data.py --check
 
       # Docs budget guardrail: warn, don't fail.
       - name: Check dev-docs size budgets (warn only)
@@ -232,22 +233,6 @@ jobs:
       - name: Regenerate ROM-asset symbol file (US)
         run: python3 scripts/gen_romassets.py u
 
-      # Drop-in ROM support: freeze the asset-prep tool into a single
-      # ge007-convert binary the engine spawns on first run when the
-      # pcmodels/pccg sidecars are missing (port/src/romconvert.c). Pure-
-      # stdlib scripts, so PyInstaller --onefile is clean; lands in
-      # tools_pc/dist/prepare-assets/ where bundle-linux.sh picks it up.
-      - name: Freeze asset converter (PyInstaller)
-        run: |
-          python3 -c "import PyInstaller, sys; sys.exit(PyInstaller.__version__ != '6.22.3')" 2>/dev/null \
-            || python3 -m pip install --quiet pyinstaller==6.22.3
-          python3 -m PyInstaller --onefile --noconfirm --clean \
-            --name ge007-convert \
-            --distpath tools_pc/dist/prepare-assets \
-            --workpath build-pyinst --specpath build-pyinst \
-            tools_pc/dist/prepare-assets/prepare-assets.py
-          ls -la tools_pc/dist/prepare-assets/ge007-convert
-
       - name: Configure (ntsc-final)
         run: cmake -S . -B build-linux -DROMID=ntsc-final
              -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14
@@ -325,15 +310,6 @@ jobs:
 
       - name: Regenerate ROM-asset symbol file (US)
         run: python3 scripts/gen_romassets.py u
-
-      # Same frozen first-run converter as linux-build. The runner's python3
-      # is Homebrew's (PEP 668, no system pip installs), so use a venv.
-      - name: Freeze asset converter (PyInstaller)
-        run: |
-          python3 -m venv "$RUNNER_TEMP/venv"
-          "$RUNNER_TEMP/venv/bin/pip" install --quiet pyinstaller==6.22.3
-          "$RUNNER_TEMP/venv/bin/python" -m PyInstaller --onefile --noconfirm --clean             --name ge007-convert             --distpath tools_pc/dist/prepare-assets             --workpath build-pyinst --specpath build-pyinst             tools_pc/dist/prepare-assets/prepare-assets.py
-          ls -la tools_pc/dist/prepare-assets/ge007-convert
 
       - name: Configure (ntsc-final)
         run: |
@@ -436,25 +412,6 @@ jobs:
 
       - name: Regenerate ROM-asset symbol file (US)
         run: python scripts/gen_romassets.py u
-
-      # Drop-in ROM support: freeze the asset-prep tool into a single
-      # ge007-convert.exe the engine spawns on first run when the pcmodels/
-      # pccg sidecars are missing (port/src/romconvert.c). Lands in
-      # tools_pc/dist/prepare-assets/ where bundle-win.sh picks it up.
-      - name: Freeze asset converter (PyInstaller)
-        run: |
-          # MSYS2's mingw python ships without pip and has ensurepip
-          # disabled — install pip from pacman, then PyInstaller.
-          python -c "import PyInstaller, sys; sys.exit(PyInstaller.__version__ != '6.22.3')" 2>/dev/null || {
-            pacman -S --noconfirm --needed mingw-w64-x86_64-python-pip
-            python -m pip install --quiet --break-system-packages pyinstaller==6.22.3
-          }
-          python -m PyInstaller --onefile --noconfirm --clean \
-            --name ge007-convert \
-            --distpath tools_pc/dist/prepare-assets \
-            --workpath build-pyinst --specpath build-pyinst \
-            tools_pc/dist/prepare-assets/prepare-assets.py
-          ls -la tools_pc/dist/prepare-assets/ge007-convert.exe
 
       - name: Build (ntsc-final)
         run: ./build-pc.sh ntsc-final

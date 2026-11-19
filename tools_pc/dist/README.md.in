@@ -49,10 +49,9 @@ Run `@EXE@` **from this folder**. On Windows, SmartScreen may say "Windows
 protected your PC" because the exe is not code-signed: click **More info**,
 then **Run anyway**.
 
-> If the game exits right away reporting missing data, run the generator
-> yourself from this folder (`prepare-assets/ge007-convert`; on Windows,
-> `prepare-assets\ge007-convert.exe`). On success it prints one line per pass
-> and ends with `prepare-assets: done.`
+> If the game exits right away reporting missing data, check that the ROM
+> is named exactly `data/ge007.ntsc-final.z64` and is a big-endian `.z64`;
+> `data/ge007.log` says why the conversion failed.
 
 ## 4. Controls (defaults)
 

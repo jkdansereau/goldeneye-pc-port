@@ -22,9 +22,8 @@ the current tree — no socket/network includes, no network symbols and no
 HTTP string literals in the compiled `src/` and `port/` sets; no registry
 or library-loading calls in either (since D551 the one exception is the
 opt-in update check: a System32 `winhttp.dll` load on Windows or a `curl`
-process on Linux, only when `Game.CheckUpdates` is on); the converter's Python sources
-(`prepare-assets.py` and its emit-script imports) import no network
-module. The bundle contents were re-checked against the packaging
+process on Linux, only when `Game.CheckUpdates` is on); the ROM converter (`port/convert/`, C, compiled into the engine) uses
+no network or process-spawning calls. The bundle contents were re-checked against the packaging
 manifests (`tools_pc/bundle-win.sh` / `bundle-linux.sh` — the scripts CI
 runs): an explicit allowlist of engine, runtime DLLs, SDL2, licenses and
 converter tools, with a hard-fail guard against a ROM image or oversized
@@ -61,34 +60,26 @@ At runtime, the engine:
 - writes save data, config, and derived ROM assets only inside its own
   folder — never to `%APPDATA%`, `Program Files`, or any system location.
 
-The one-time asset converter (`ge007-convert` / `prepare-assets.py`) — the
-part of the bundle most likely to draw suspicion, since it's the thing that
-reads your ROM and writes new files — has no network access at all,
-verifies your ROM against a fixed table of known retail GoldenEye 007
-hashes before touching it (an unrecognized file is rejected outright), and
-writes only inside the bundle folder. Its full source ships right next to
-the compiled version in every release if you'd like to read it yourself.
-The engine starts it automatically on the first run, when the two derived
-asset folders (`data/pcmodels-*`, `data/pccg-*`) are missing, passing it
-the ROM it found and the output folder; after that first run it is not
-launched again.
+The one-time ROM conversion runs inside the game (`port/convert/`, called by
+`port/src/romconvert.c`); a standalone `ge007-convert` command-line build of the
+same code exists for development. It has no network access, reads only your
+ROM (already rejected earlier by the engine's header check unless it is a
+retail GoldenEye 007 image; the region is taken from the header's country
+byte) and writes only inside the game folder (`data/pcmodels-*`,
+`data/pccg-*`). It runs when those two folders are missing and is not run again
+after that.
 
 See [`SECURITY.md`](https://github.com/jkdansereau/goldeneye-pc-port/blob/main/.github/SECURITY.md) for why the binaries are
 unsigned and what that means in practice (a SmartScreen prompt on first
-run, and why some antivirus engines flag the converter specifically).
+run).
 
 ## Building from source
 
 Cloning and building pulls in only standard, well-known packages: MSYS2
 `pacman` packages on Windows, `apt` packages on Linux — no `npm`, no
 `cargo`, nothing downloaded at CMake configure time, no git submodules, and
-no prebuilt binaries checked into the repository. The CI build freezes the
-release's asset-converter tool with `pyinstaller`, which is pinned to an
-exact version, and every third-party GitHub Action the workflows use is
-pinned to a full commit SHA (both from the release after v0.4.0; earlier
-releases installed an unpinned `pyinstaller`). What PyInstaller packages
-is in-repo, stdlib-only Python — a release is reproducible from this
-repository alone.
+no prebuilt binaries checked into the repository. Every third-party GitHub Action the workflows use is pinned to a full
+commit SHA. A release is reproducible from this repository alone.
 
 One development-only backdoor exists in source builds: the `GE_DEBUG_UNLOCKALL`
 environment variable (`src/game/file2.c`) pre-unlocks all cheat options at boot.

@@ -16,13 +16,11 @@
 # Same shape as tools_pc/bundle-linux.sh: engine exe, the non-system dylibs it
 # needs (copied next to the exe, install names rewritten to @executable_path /
 # @loader_path so nothing resolves into Homebrew), README, license texts, the
-# prepare-assets tool and tools/eep_convert.py. NO ROM and NO game data.
+# tools/eep_convert.py. NO ROM and NO game data.
 # Every touched Mach-O is re-signed ad-hoc (mandatory on arm64 after
 # install_name_tool). The bundle is NOT notarized; see the README it writes.
 #
 # Env: GE_REPO_ROOT overrides the repo root (default: parent of this script).
-#      GE_ALLOW_NO_CONVERTER=1 permits packaging without the PyInstaller-frozen
-#      ge007-convert (local testing only; CI always freezes it).
 set -euo pipefail
 
 [ "$(uname -s)" = "Darwin" ] || { echo "error: this script runs on macOS only" >&2; exit 1; }
@@ -183,31 +181,10 @@ cp tools_pc/dist/GPL-3.0.txt "$OUT/licenses/gcc-COPYING3.txt"
 cp tools_pc/dist/GCC-RUNTIME-EXCEPTION.txt "$OUT/licenses/gcc-COPYING.RUNTIME.txt"
 ls "$OUT/licenses"
 
-# --- save converter + asset-prep tool (same assembly as bundle-linux.sh) ---
+# --- save converter (same assembly as bundle-linux.sh); the ROM converter is
+# built into the engine (port/convert/), nothing else to ship ---
 mkdir -p "$OUT/tools"
 cp tools_pc/eep_convert.py "$OUT/tools/"
-PREP="$OUT/prepare-assets"
-mkdir -p "$PREP/vendor/scripts" "$PREP/vendor/assets/obseg"
-cp tools_pc/dist/prepare-assets/prepare-assets.py "$PREP/"
-cp tools_pc/d43_emit.py tools_pc/d69_emit.py tools_pc/d88_emit.py tools_pc/d88_propdefs.py "$PREP/"
-cp scripts/filelist.u.csv "$PREP/vendor/scripts/"
-cp assets/obseg/file_resource_table.inc.c "$PREP/vendor/assets/obseg/"
-# BSD cp has no --parents; cpio -pdm recreates the relative paths.
-find assets -iname 'modelfileheader.inc.c' -print | cpio -pdm "$PREP/vendor" 2>/dev/null
-nmh="$(find "$PREP/vendor/assets" -iname 'modelfileheader.inc.c' | wc -l | tr -d ' ')"
-echo "    + prepare-assets/ (emit scripts + $nmh model headers)"
-[ "$nmh" -gt 400 ] || { echo "error: prepare-assets vendored only $nmh model headers - expected ~512" >&2; exit 1; }
-
-CV="$REPO_ROOT/tools_pc/dist/prepare-assets/ge007-convert"
-if [ -f "$CV" ]; then
-  cp "$CV" "$PREP/"; chmod 755 "$PREP/ge007-convert"
-  codesign --force -s - "$PREP/ge007-convert" 2>&1 | sed 's/^/    /' || true
-  echo "    + prepare-assets/ge007-convert ($(du -h "$CV" | cut -f1))"
-elif [ "${GE_ALLOW_NO_CONVERTER:-0}" = "1" ]; then
-  echo "    ! ge007-convert missing (allowed by GE_ALLOW_NO_CONVERTER=1)"
-else
-  echo "error: $CV not found - freeze it with PyInstaller first (see ci.yml macos-build)" >&2; exit 1
-fi
 
 # --- guards ------------------------------------------------------------
 if find "$OUT" -type f \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' \) | grep -q .; then

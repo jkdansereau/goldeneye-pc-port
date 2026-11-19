@@ -919,6 +919,12 @@ set(SRC
 # ----------------------------------------------------------------------------
 # Target
 # ----------------------------------------------------------------------------
+# ROM -> PC sidecar converter (port/convert/): the game links it for first-run
+# conversion (port/src/romconvert.c, all platforms incl. Switch) and the
+# standalone `ge007-convert` CLI is built from it off Switch.
+add_subdirectory(port/convert)
+list(INSERT LIBS 0 ge007_convert)
+
 set(BIN_NAME "ge007${BIN_REGION}.${TARGET_ARCH}")
 add_executable(ge007 ${SRC})
 target_link_libraries(ge007 ${LIBS})
