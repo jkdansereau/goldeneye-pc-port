@@ -195,6 +195,12 @@ void main() {
         float fogA = fog_pixel != 0 ? clamp(vFogW * gl_FragCoord.w, 0.0, 1.0) : clamp(vFog.a, 0.0, 1.0);
         texel.rgb = mix(texel.rgb, vFog.rgb, fogA);
     }
+    if (A && (flags & CF_A2C) != 0u && (flags & CF_TEXEDGE) == 0u) {
+        /* A2C on a blended 1-bit cut-out: the magnified bilinear alpha ramp would
+         * become a wide dithered band; sharpen it to ~a pixel, leave flat alpha. */
+        float w = fwidth(texel.a);
+        if (w > 1.0 / 256.0) texel.a = clamp((texel.a - 0.5) / w + 0.5, 0.0, 1.0);
+    }
     if (A && (flags & CF_TEXEDGE) != 0u) {
         if ((flags & CF_A2C) != 0u && (flags & CF_ATHRESH) == 0u) {
             texel.a = clamp((texel.a - 0.5) / max(fwidth(texel.a), 1.0 / 1024.0) + 0.5, 0.0, 1.0);

@@ -715,6 +715,11 @@ static void gfx_opengl_gen_shader_src(struct CCFeatures& cc_features, char* vs_b
         }
     }
 
+    if (cc_features.opt_alpha && cc_features.opt_a2c && !cc_features.opt_texture_edge) {
+        /* blended 1-bit cut-out under A2C: sharpen the magnified alpha ramp (flat alpha untouched) */
+        append_line(fs_buf, &fs_len, "    { float w = fwidth(texel.a); if (w > 1.0 / 256.0) texel.a = clamp((texel.a - 0.5) / w + 0.5, 0.0, 1.0); }");
+    }
+
     if (cc_features.opt_alpha && cc_features.opt_noise && !cc_features.opt_texture_edge) {
         append_line(fs_buf, &fs_len,
                     "    texel.a *= floor(clamp(random(vec3(floor(gl_FragCoord.xy * noise_scale), float(frame_count))) + "
