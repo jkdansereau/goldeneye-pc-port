@@ -2357,7 +2357,7 @@ static SkyPlusDraw s_skyplus_ring[SKYPLUS_RING];
 static unsigned s_skyplus_next;
 static GLuint s_skyplus_prog, s_skyplus_vao, s_skyplus_tex;
 static int s_skyplus_tex_gen = -1;
-extern "C" { volatile int gfx_skyplus_failed = 0; volatile int gfx_skyplus_sea = 0; }
+extern "C" { volatile int gfx_skyplus_failed = 0; volatile int gfx_skyplus_sea = 0; int gfx_skyplus_half = 0; }
 enum { SPL_VP, SPL_ASP, SPL_C0, SPL_C1, SPL_C2, SPL_C3, SPL_EYE, SPL_CLOUDY, SPL_SKY, SPL_CLOUD, SPL_OFS,
        SPL_GAIN, SPL_TEXSCALE, SPL_SUNDIR, SPL_SUNCOL, SPL_SUNGLOW, SPL_MOONDIR, SPL_NIGHT, SPL_TEX, SPL_COUNT };
 static GLint s_sp_loc[SPL_COUNT];
@@ -2556,7 +2556,6 @@ static uint32_t s_sp2_pano_frame;
 #define SP2_LUT_H 64
 #define SP2_PANO_W 4096   /* the far sea, baked; the shader's PANO_W / PANO_H */
 #define SP2_PANO_H 512
-#define SP2_HALF_SCALE 1   /* 0: the final sky pass at full size */
 
 static GLuint sp2_compile(const char* vs_src, const char* fs_src, const char* what) {
     GLuint v = glCreateShader(GL_VERTEX_SHADER), f = glCreateShader(GL_FRAGMENT_SHADER);
@@ -2824,7 +2823,7 @@ static void skyplus2_pass(const SkyPlusDraw& d) {
         }
         slot[4] = s_sp2_pano.tex;
     }
-    const bool reduce = SP2_HALF_SCALE && d.vp[2] / 2 >= 16 && d.vp[3] / 2 >= 16;
+    const bool reduce = gfx_skyplus_half && d.vp[2] / 2 >= 16 && d.vp[3] / 2 >= 16;
     if (sea && lut && d.vp[2] / 2 >= 16) {
         const int sdiv = reduce ? 2 : 1;
         if (sp2_target(s_sp2_hsea, d.vp[2] / sdiv / 2, d.vp[3] / sdiv, GL_CLAMP_TO_EDGE)) {

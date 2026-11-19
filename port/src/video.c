@@ -92,6 +92,7 @@ static int cfgMSAA          = 2;   /* 1/2/4/8/16 samples; 2x default is lighter 
  * (kVideoPresets); Custom shows every graphics row. */
 static int cfgDisplayMode   = 0;
 extern int portSkyPlus;   /* port/src/skyplus.c */
+extern int gfx_skyplus_half;   /* gfx_opengl.cpp: Video.SkyScale */
 /* Video.Visuals (D982): 0 Original, 1 Fixed, 2 Enhanced. Fixed turns on
  * every fix of a display flaw of the original game (D979 landmarks, D980
  * foliage depth, per-pixel fog D543, ...); Enhanced adds what the game
@@ -678,6 +679,9 @@ PD_CONSTRUCTOR static void videoConfigInit(void)
     configRegisterInt("Video.FpsCap",        &cfgFpsCap,    -1, 1000);
     configRegisterInt("Video.FXAA",          &cfgFXAA,       0, 1);
     configRegisterInt("Video.Renderer",      &cfgRenderer,   0, 1);   /* issue #44: 0 OpenGL, 1 Vulkan; read at launch */
+#ifndef __SWITCH__
+    configRegisterInt("Video.SkyScale",      &gfx_skyplus_half, 0, 1);   /* GE+ sky and sea: 0 full size, 1 half size (faster); read each frame */
+#endif
     configRegisterInt("Video.Visuals",       &portVisuals,   0, 2);   /* D982: Original / Fixed / Enhanced */
     configRegisterInt("Video.MSAA",          &cfgMSAA,       1, 16);   /* D443: 16x added */
     configRegisterInt("Video.DisplayMode",   &cfgDisplayMode, 0, 2);

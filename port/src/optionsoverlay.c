@@ -111,6 +111,7 @@ static const char *const kP1Type[]    = { "Keyboard + mouse", "Gamepad", "Auto",
 static const char *const kHold[]      = { "Hold", "Toggle", NULL };
 static const char *const kAspectMode[] = { "Fill window", "Original", "16:9", "21:9", NULL };   /* D447: Original = 4:3 (16:9 with the game Ratio) bars; D508: 2..3 force a ratio */
 static const char *const kRenderer[]  = { "OpenGL", "Vulkan", NULL };   /* Video.Renderer (issue #44) */
+static const char *const kSkyScale[]   = { "Full", "Half (faster)", NULL };   /* Video.SkyScale */
 static const char *const kVisuals[]   = { "Original", "Fixed", "Enhanced", NULL };   /* Video.Visuals (D982) */
 static const char *const kTexFilter[] = { "Nearest", "Bilinear", "3-point", "Trilinear", NULL };   /* Trilinear option (playtest 2026-10-03) */
 static const char *const kPadPreset[] = { "1.1 Jinx", "1.2 Christmas", "1.3 Frost", "Custom", "1.4 Elektra", NULL };   /* D498: index = stored value; inputPadPresetStep gives the display order */
@@ -296,6 +297,9 @@ static struct Row rows[] = {
     { .key="Video.FXAA", .label="FXAA", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },   /* project-dam: now on PC too */
 #endif
     { .key="Video.Visuals", .label="Visuals", .kind=ROW_ENUM, .step=1, .names=kVisuals },   /* D982 */
+#if !defined(__SWITCH__)
+    { .key="Video.SkyScale", .label="Sky and sea detail", .kind=ROW_ENUM, .step=1, .names=kSkyScale, .shownWhen="Video.Visuals", .shownValue=2 },
+#endif
 #if defined(GE_VULKAN) && !defined(__SWITCH__)
     { .key="Video.Renderer", .label="Renderer", .kind=ROW_ENUM, .step=1, .names=kRenderer, .restart=1 },   /* issue #44 */
 #endif
@@ -1247,7 +1251,7 @@ static int rowPlatformOk(const struct Row *r)
     /* PC: Enhanced / Original keep the hardware rows (the presets do not
      * set them there); Custom shows the rest too. */
     static const char *const kCustomOnly[] = {
-        "Video.AspectMode", "Video.NativeWidescreen", "Video.WidescreenAuto", "Video.Visuals",
+        "Video.AspectMode", "Video.NativeWidescreen", "Video.WidescreenAuto", "Video.Visuals", "Video.SkyScale",
         "Video.TextureFilter", "__SepV4", "Video.SafeAreaCrop",
         "Video.DrawDistance", "Video.FogDistance", "Video.LodDistance",
         "__SepV5", "Game.ScreenShakeIntensity", "__ResetVideo",
@@ -2401,6 +2405,7 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Video.FXAA",                 1 },   /* project-dam: on */
 #else
     { "Video.FXAA",                 0 },   /* off: the picture as rendered */
+    { "Video.SkyScale",             0 },   /* GE+ sky and sea at full size */
     #if defined(GE_VULKAN)
     { "Video.Renderer",             1 },   /* issue #44: Vulkan */
 #else
@@ -4197,6 +4202,7 @@ static const struct { const char *key, *help; } kRowHelp[] = {
     { "Video.MSAA", "Smooths jagged edges while docked. Higher is cleaner but slower." },
     { "Video.MSAAHandheld", "Smooths jagged edges in handheld mode. Higher is cleaner but slower." },
     { "Video.FXAA", "A final pass that smooths edges without blurring flat textures." },
+    { "Video.SkyScale", "How sharp the Enhanced sky and sea are. Half draws them at a quarter of the pixels: faster, softer." },
     { "Video.Visuals", "Fixed: the original game's display flaws corrected. Enhanced: also a richer sky, scenery and effects." },
     { "Input.CrosshairCursor", "Uses the crosshair as the mouse pointer in this menu." },
     { "Input.ControlScheme", "Choose the port's modern controls or the original game's." },

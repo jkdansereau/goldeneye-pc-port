@@ -107,6 +107,7 @@ extern int gfx_rdp_affine;                      /* gfx_pc.cpp (D540) */
 extern int gfx_fog_vertex;                      /* gfx_pc.cpp (D543) */
 extern int gfx_fog_force;                       /* gfx_pc.cpp (D982) */
 extern "C" int portDisplayFixes;                /* port/src/video.c (D982) */
+extern "C" int gfx_skyplus_half;                /* gfx_opengl.cpp: Video.SkyScale, 1 = half-size final pass */
 extern "C" volatile int gfx_skyplus_sea;        /* gfx_opengl.cpp: 1 = skyplus.c may give the water levels the sea */
 extern "C" volatile int gfx_skyplus_failed;     /* gfx_opengl.cpp: 1 = skyplus.c draws GE's own sky */
 extern "C" const uint8_t ge007_spv_pack[], ge007_spv_pack_end[];   /* gfx_vk_pack.S */
@@ -2531,7 +2532,6 @@ int s_sky_gen = -1;
 #define SKYLUT_H 64
 #define SEAPANO_W 4096   /* the far sea, baked (skyplus.frag.glsl pass 4); the shader's PANO_W / PANO_H */
 #define SEAPANO_H 512
-#define SKY_HALF_SCALE 1   /* 0: the final sky pass at full size */
 Img s_wtex_img;
 int s_wtex_gen = -1;
 int s_lut_fb = -1, s_hsea_fb = -1, s_pano_fb = -1, s_skyr_fb = -1;
@@ -3094,7 +3094,7 @@ void gfx_vulkan_skyplus_pass(int slot) {
     }
     /* the sea at half width: its heavy per-pixel work (the waves) runs on half the pixels into a small target, the sky pass then
      * reads it bilinearly. With the half-scale final pass it is halved on both axes too (it feeds a half-size image). */
-    const bool reduce = SKY_HALF_SCALE && d.vp[2] / 2 >= 16 && d.vp[3] / 2 >= 16;
+    const bool reduce = gfx_skyplus_half && d.vp[2] / 2 >= 16 && d.vp[3] / 2 >= 16;
     if (sea && lut && d.vp[2] / 2 >= 16) {
         const int sdiv = reduce ? 2 : 1;
         const int hw = d.vp[2] / sdiv / 2, hh = d.vp[3] / sdiv;

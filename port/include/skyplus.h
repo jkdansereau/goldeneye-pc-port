@@ -86,6 +86,7 @@ int gfx_opengl_skyplus_stage(const PortSkyPlus *p, const int vp[4], float aspA, 
 void gfx_opengl_skyplus_pass(int slot);
 /* Set by the GL thread when the GE+ program fails to build: GE's sky is drawn instead. */
 extern volatile int gfx_skyplus_failed;
+extern int gfx_skyplus_half;   /* PC, Video.SkyScale: 1 = the sky and sea passes drawn at half size (the Switch always does) */
 extern volatile int gfx_skyplus_sea;   /* PC: 1 = the active backend draws the GE+ sea (Vulkan); the Switch always does */
 
 #ifdef __cplusplus
