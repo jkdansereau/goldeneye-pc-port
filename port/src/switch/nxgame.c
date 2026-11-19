@@ -1,5 +1,8 @@
 /*
- * nxgame.c -- Switch-only gameplay feedback options (project-dam).
+ * nxgame.c -- gameplay feedback options (project-dam). Game.BloodOnHit is
+ * built everywhere (off by default off the Switch); the aim options below it
+ * (Aim assist, Aim entry, Stop on aim) work on every platform, Game.AimZoom and
+ * Look ahead only show in the Switch menu.
  *
  * Game.BloodOnHit: the puff a bullet makes on a guard's body is, in the
  * original game, the same pale-yellow puff as on a wall: g_HitReactionTable
@@ -12,8 +15,6 @@
  * table as the game ships it. Port-side data only: no game code changes.
  */
 #include "platform.h"
-
-#if defined(PLATFORM_SWITCH)
 
 #include "game/chr.h"
 #include "game/bondview.h"   /* struct player (Game.AimAssist) */
@@ -35,7 +36,11 @@
 
 extern struct rgba_u8 g_BulletSparkColors[8];   /* src/game/glass2.c */
 
+#if defined(PLATFORM_SWITCH)
 static int s_bloodOnHit = 1;
+#else
+static int s_bloodOnHit = 0;   /* the game's own puff unless the player opts in */
+#endif
 
 void nxGameApply(void)
 {
@@ -52,6 +57,11 @@ void nxGameApply(void)
     }
 }
 
+PD_CONSTRUCTOR static void nxBloodRegisterConfig(void)
+{
+    configRegisterInt("Game.BloodOnHit", &s_bloodOnHit, 0, 1);
+}
+
 /*
  * Game.AimZoom: extra zoom while aiming, handheld only. On the 6.2" panel a
  * guard's head is a few pixels wide, so the weapon's own aim zoom (none for
@@ -66,7 +76,11 @@ void nxGameApply(void)
  */
 #include <time.h>
 
+#if defined(PLATFORM_SWITCH)
 extern int nxIsHandheld(void);
+#else
+static int nxIsHandheld(void) { return 0; }   /* Game.AimZoom is a handheld option (nxmem.c) */
+#endif
 extern s32 getPlayerCount(void);
 extern bool currentPlayerGetIsAiming(void);
 
@@ -587,12 +601,9 @@ void nxLookAheadStep(struct player *p, int walkingForward, int lookIdle)
 
 PD_CONSTRUCTOR static void nxGameRegisterConfig(void)
 {
-    configRegisterInt("Game.BloodOnHit", &s_bloodOnHit, 0, 1);
     configRegisterInt("Game.AimZoom", &s_aimZoom, 0, 2);
     configRegisterInt("Game.AimAssist", &s_aimAssist, 0, 2);
     configRegisterInt("Game.AimEntry", &s_aimEntry, 0, 2);
     configRegisterInt("Game.AimStop", &s_aimStop, 0, 1);
     configRegisterInt("Game.LookAhead", &s_lookAhead, 0, 3);
 }
-
-#endif /* PLATFORM_SWITCH */

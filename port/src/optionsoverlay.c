@@ -101,11 +101,13 @@ enum { ROW_TOGGLE, ROW_SLIDER, ROW_ENUM, ROW_MSAA, ROW_RES, ROW_ACTION, ROW_FPSC
        ROW_HEADER, ROW_BOND_FILE, ROW_BIND /* key / mouse-button capture */,
        ROW_PADBIND /* D469: gamepad button capture (per seat) */,
        ROW_PADSEAT /* D469: which controller seat the pad rows edit */,
-       ROW_AUDIODEV /* D470: audio output device (string, cycles Default + enumerated) */ };
+       ROW_AUDIODEV /* D470: audio output device (string, cycles Default + enumerated) */,
+       ROW_PADDEV /* the gamepad this player uses (Auto + the connected controllers) */ };
 
 /* D346: wording pass -- Nightdive/Turok + PD-port conventions: title-case
  * On/Off, no all-caps value strings. Display-only; config stores 0/1 either way. */
 static const char *const kOnOff[]     = { "Off", "On", NULL };
+static const char *const kP1Type[]    = { "Keyboard + mouse", "Gamepad", "Auto", NULL };   /* Input.P1Type */
 static const char *const kHold[]      = { "Hold", "Toggle", NULL };
 static const char *const kAspectMode[] = { "Fill window", "Original", "16:9", "21:9", NULL };   /* D447: Original = 4:3 (16:9 with the game Ratio) bars; D508: 2..3 force a ratio */
 static const char *const kRenderer[]  = { "OpenGL", "Vulkan", NULL };   /* Video.Renderer (issue #44) */
@@ -116,14 +118,23 @@ static const char *const kPadPreset[] = { "1.1 Jinx", "1.2 Christmas", "1.3 Fros
 static const char *const kOrigStyle[] = { "1.1 Honey", "1.2 Solitaire", "1.3 Kissy", "1.4 Goodnight",
                                           "2.1 Plenty", "2.2 Galore", "2.3 Domino", "2.4 Goodhead", NULL };
 static int s_padSeat = 0;   /* D469: seat edited by the Controller page rows */
+static const char *const kCoopHealth[] = { "100%", "150%", "200%", NULL };   /* project-dam: coop.c */
+static const char *const kAimAssist[] = { "Off", "Low", "High", NULL };   /* project-dam: nxgame.c */
+static const char *const kAimEntry[]  = { "Off", "Move view", "Centre crosshair", NULL };   /* project-dam: nxgame.c */
+#if defined(__SWITCH__)
+#define PAD_PAGE_ALWAYS 1   /* the console's Controller page is always the gamepad one */
+#else
+#define PAD_PAGE_ALWAYS 0
+#endif
+#if defined(__SWITCH__)
 static const char *const kControlScheme[] = { "Extended", "Original", NULL };   /* D513/D554: display text only (index = stored value) */
+#else
+static const char *const kControlScheme[] = { "Enhanced", "Original", NULL };   /* PC: the Mode row, same two values */
+#endif
 #if defined(__SWITCH__)
 static const char *const kAimMode[]   = { "Original", "Centered", NULL };   /* D337; project-dam: the weapon sway is part of Centered */
 static const char *const kTurnAccel[] = { "Off", "Low", "High", NULL };   /* project-dam */
 static const char *const kAimZoom[]   = { "Off", "1.5x", "2x", NULL };    /* project-dam */
-static const char *const kAimAssist[] = { "Off", "Low", "High", NULL };   /* project-dam */
-static const char *const kCoopHealth[] = { "100%", "150%", "200%", NULL };   /* project-dam: coop.c */
-static const char *const kAimEntry[]  = { "Off", "Move view", "Centre crosshair", NULL };   /* project-dam */
 static const char *const kLookAhead[] = { "Off", "Low", "Medium", "High", NULL };   /* project-dam */
 #else
 static const char *const kAimMode[]   = { "Original", "Centered", NULL };   /* D337 */
@@ -323,7 +334,61 @@ static struct Row rows[] = {
     { .key="__ResetAudio", .label="Reset to defaults", .kind=ROW_ACTION },
     SEP_BACK(Audio),
 
+#if defined(__SWITCH__)
+    /* The console has no Mouse page (unreachable: not in kRootOrder). On PC these rows sit
+     * on the player's Input page, between __KbmBegin and __KbmEnd. */
     { .key="__HdrMouse", .label="MOUSE", .kind=ROW_HEADER },
+    /* PD parity (maintainer list 2026-10-04): the long-standing ini key finally gets a row; default on. */
+    { .key="Input.MouseEnabled", .label="Mouse enabled", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
+    { .key="Input.MouseSensitivity", .label="Horizontal sensitivity", .kind=ROW_SLIDER, .step=10,
+      .uiMin=10, .uiMax=400 }, /* D443/D357: shown as a multiplier, raw 100 = 1.0x; storage unchanged */
+    { .key="Input.MouseYScale", .label="Vertical sensitivity", .kind=ROW_SLIDER, .step=10,
+      .uiMin=10, .uiMax=400 }, /* D506: shown as a multiplier like the horizontal row, raw 100 = 1.0x */
+    { .key="Input.MouseInvertY", .label="Invert look", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
+    { .key="Input.MouseSmoothing", .label="Smoothing", .kind=ROW_SLIDER, .step=5, .unit="%" },
+    { .key="Input.MouseRawInput", .label="Raw input", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
+    { .key="Input.CrosshairCursor", .label="Crosshair pointer", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
+    { .key="__ResetMouse", .label="Reset to defaults", .kind=ROW_ACTION },
+    SEP_BACK(Mouse),
+#endif
+
+    /* Controller: top-level hub entry; its page is the one-step Select player
+     * list (PD pattern, option A ratified) that sets the pad seat (s_padSeat)
+     * and opens that seat's Controller page. Hub label CONTROLLER, page title
+     * SELECT PLAYER (optionsRowTitle). */
+#if defined(__SWITCH__)
+    { .key="__HdrSelPlayerC", .label="CONTROLLER", .kind=ROW_HEADER },
+#else
+    { .key="__HdrSelPlayerC", .label="INPUT", .kind=ROW_HEADER },
+#endif
+    { .key="__SelPlayerC1", .label="Player 1", .kind=ROW_ACTION },
+    { .key="__SelPlayerC2", .label="Player 2", .kind=ROW_ACTION },
+    { .key="__SelPlayerC3", .label="Player 3", .kind=ROW_ACTION },
+    { .key="__SelPlayerC4", .label="Player 4", .kind=ROW_ACTION },
+    SEP_BACK(SelPlayerC),
+
+    /* D469: preset selector; Custom unlocks per-seat, per-action pad rebinding
+     * (two slots per action, pad-driven capture). */
+#if defined(__SWITCH__)
+    { .key="__HdrController", .label="CONTROLLER", .kind=ROW_HEADER },
+    { .key="Input.ControlScheme", .label="Control style", .kind=ROW_ENUM, .step=1, .names=kControlScheme },   /* D513 */
+#else
+    { .key="__HdrController", .label="INPUT", .kind=ROW_HEADER },
+    /* What this player plays with. Player 1 chooses keyboard + mouse or a gamepad
+     * (players 2-4 are always gamepads); a gamepad player picks which controller. */
+    { .key="Input.P1Type", .label="Input type", .kind=ROW_ENUM, .step=1, .names=kP1Type },
+    { .key="Input.PlayerPad", .label="Controller", .kind=ROW_PADDEV },
+    { .key="Input.ControlScheme", .label="Mode", .kind=ROW_ENUM, .step=1, .names=kControlScheme },   /* D513: Enhanced | Original */
+    /* D337: N64 = the N64 aim model (crosshair travels, camera edge-scrolls)
+     * with the mouse fed through the game's integrator at PD's mouse damp --
+     * the default. CENTRED (PC) = opt-in FPS-style aim (#104), not N64.
+     * Device-neutral (D404): applies to every aim input. */
+    { .key="Input.AimMode", .label="Aim style", .kind=ROW_ENUM, .step=1, .names=kAimMode },
+    /* D338: how far the N64-style crosshair travels. Hidden while the aim
+     * style is CENTRED (PC), where the crosshair doesn't travel. */
+    { .key="Input.AimRange", .label="Aim range", .kind=ROW_ENUM, .step=1, .names=kAimRange, .hiddenIfOn="Input.AimMode" },
+    /* Keyboard + mouse rows (player 1 on the keyboard + mouse only), flat on this page. */
+    { .key="__KbmBegin", .label="", .kind=ROW_ACTION },
     /* PD parity (maintainer list 2026-10-04): the long-standing ini key finally gets a row; default on. */
     { .key="Input.MouseEnabled", .label="Mouse enabled", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     { .key="Input.MouseSensitivity", .label="Horizontal sensitivity", .kind=ROW_SLIDER, .step=10,
@@ -335,37 +400,10 @@ static struct Row rows[] = {
     { .key="Input.MouseInvertY", .label="Invert look", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     { .key="Input.MouseSmoothing", .label="Smoothing", .kind=ROW_SLIDER, .step=5, .unit="%" },
     { .key="Input.MouseRawInput", .label="Raw input", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
-#if !defined(__SWITCH__)   /* project-dam: on the Controller page there (no Mouse page) */
-    /* D337: N64 = the N64 aim model (crosshair travels, camera edge-scrolls)
-     * with the mouse fed through the game's integrator at PD's mouse damp --
-     * the default. CENTRED (PC) = opt-in FPS-style aim (#104), not N64.
-     * Device-neutral (D404): applies to every aim input. */
-    { .key="Input.AimMode", .label="Aim style", .kind=ROW_ENUM, .step=1, .names=kAimMode },
-    /* D338: how far the N64-style crosshair travels. Hidden while the aim
-     * style is CENTRED (PC), where the crosshair doesn't travel. */
-    { .key="Input.AimRange", .label="Aim range", .kind=ROW_ENUM, .step=1, .names=kAimRange, .hiddenIfOn="Input.AimMode" },
-#endif
-    /* Existing ini-only keys exposed by the PD-parity regroup (rows only; input.c
-     * already reads them). */
     { .key="Input.CrosshairCursor", .label="Crosshair pointer", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
-    { .key="__ResetMouse", .label="Reset to defaults", .kind=ROW_ACTION },
-    SEP_BACK(Mouse),
-
-    /* Controller: top-level hub entry; its page is the one-step Select player
-     * list (PD pattern, option A ratified) that sets the pad seat (s_padSeat)
-     * and opens that seat's Controller page. Hub label CONTROLLER, page title
-     * SELECT PLAYER (optionsRowTitle). */
-    { .key="__HdrSelPlayerC", .label="CONTROLLER", .kind=ROW_HEADER },
-    { .key="__SelPlayerC1", .label="Player 1", .kind=ROW_ACTION },
-    { .key="__SelPlayerC2", .label="Player 2", .kind=ROW_ACTION },
-    { .key="__SelPlayerC3", .label="Player 3", .kind=ROW_ACTION },
-    { .key="__SelPlayerC4", .label="Player 4", .kind=ROW_ACTION },
-    SEP_BACK(SelPlayerC),
-
-    /* D469: preset selector; Custom unlocks per-seat, per-action pad rebinding
-     * (two slots per action, pad-driven capture). */
-    { .key="__HdrController", .label="CONTROLLER", .kind=ROW_HEADER },
-    { .key="Input.ControlScheme", .label="Control style", .kind=ROW_ENUM, .step=1, .names=kControlScheme },   /* D513 */
+    { .key="__OpenBindings", .label="Key bindings", .kind=ROW_ACTION },   /* a sub-menu */
+    { .key="__KbmEnd", .label="", .kind=ROW_ACTION },
+#endif
     { .key="Input.PadPreset", .label="Layout presets", .kind=ROW_ENUM, .step=1, .names=kPadPreset, .schemeOnly=1 },
     /* D516: Original shows the game's own styles (the save's, per seat), not the port presets. */
     { .key="Bond.Control", .label="Layout presets", .kind=ROW_ENUM, .step=1, .names=kOrigStyle,
@@ -390,6 +428,12 @@ static struct Row rows[] = {
     { .key="Game.AimEntry", .label="Aim entry", .kind=ROW_ENUM, .step=1, .names=kAimEntry, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },           /* project-dam: nxgame.c */
     { .key="Game.AimStop", .label="Stop on aim", .kind=ROW_TOGGLE, .step=1, .names=kOnOff, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },           /* project-dam: nxgame.c */
     { .key="__SepC2", .label="", .kind=ROW_ACTION, .schemeOnly=1 },
+#else
+    /* The pad's Centered aim helpers (nxgame.c), shown while the aim style is Centered. */
+    { .key="Input.PadAimLookSens", .label="Aim sensitivity", .kind=ROW_SLIDER, .step=5, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },
+    { .key="Game.AimAssist", .label="Aim assist", .kind=ROW_ENUM, .step=1, .names=kAimAssist, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },
+    { .key="Game.AimEntry", .label="Aim entry", .kind=ROW_ENUM, .step=1, .names=kAimEntry, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },
+    { .key="Game.AimStop", .label="Stop on aim", .kind=ROW_TOGGLE, .step=1, .names=kOnOff, .hiddenIfOff="Input.AimMode", .schemeOnly=1 },
 #endif
     { .key="Input.PadLookInvertY", .label="Invert look", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     /* Wave A: per-stick deadzone + right-stick (natural-pitch) feel options. */
@@ -495,12 +539,10 @@ static struct Row rows[] = {
     /* D606 (#144): PD-style always-visible mission timer; drawn top-right
      * (under the FPS readout when both are on) while a stage is active. */
     { .key="Game.MissionTimer", .label="Mission timer", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
-#if defined(__SWITCH__)
     /* project-dam: red puff on a guard hit instead of the wall puff (nxgame.c). */
     { .key="Game.BloodOnHit", .label="Blood on hit", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
     /* project-dam: 2-player split-screen co-op campaign (coop.c). */
     { .key="Game.CoopEnemyHealth", .label="Co-op enemy health", .kind=ROW_ENUM, .step=1, .names=kCoopHealth },
-#endif
     SEP(G4),
     /* D551: opt-in update check; the action row appears only once a newer release is known. */
     { .key="Game.CheckUpdates", .label="Check for updates", .kind=ROW_TOGGLE, .step=1, .names=kOnOff },
@@ -531,7 +573,7 @@ static const char *const kRootOrder[] = {
     /* project-dam: no mouse or keyboard on the console. */
     "__HdrVideo", "__HdrAudio", "__HdrSelPlayerC", "__HdrGame",
 #else
-    "__HdrVideo", "__HdrAudio", "__HdrMouse", "__HdrSelPlayerC", "__HdrGame", "__HdrBindings",
+    "__HdrVideo", "__HdrAudio", "__HdrSelPlayerC", "__HdrGame",   /* Mouse and Key bindings open from a player's Input page */
 #endif
 };
 #define NUM_ROOTS ((int)(sizeof(kRootOrder) / sizeof(kRootOrder[0])))
@@ -552,6 +594,10 @@ int optionsRowHeaderParent(int i)
     if (i < 0 || i >= NUM_ROWS || rows[i].kind != ROW_HEADER) return -1;
     /* Select player is the Controller hub entry; its Controller page nests under it. */
     if (!strcmp(rows[i].key, "__HdrController")) return rowIndexByKey("__HdrSelPlayerC");
+#if !defined(__SWITCH__)
+    /* PC: Key bindings open from player 1's Input page (a sub-menu). */
+    if (!strcmp(rows[i].key, "__HdrBindings")) return rowIndexByKey("__HdrController");
+#endif
     return -1;
 }
 
@@ -592,6 +638,9 @@ int optionsRowChildHeader(int i)
     if (i < 0 || i >= NUM_ROWS) return -1;
     const char *key = rows[i].key;
     if (!strncmp(key, "__SelPlayerC", 12)) return rowIndexByKey("__HdrController");
+#if !defined(__SWITCH__)
+    if (!strcmp(key, "__OpenBindings")) return rowIndexByKey("__HdrBindings");
+#endif
     return -1;
 }
 
@@ -1142,9 +1191,37 @@ static int overlayStepSel(int pos, int dir)
     }
 }
 
+#if !defined(__SWITCH__)
+/* A player's Input page shows what fits what that player plays with: player 1
+ * on the keyboard + mouse gets a link to its settings, a gamepad player gets
+ * the Controller choice and the pad rows. Players 2-4 are always gamepads. */
+static int rowInputOk(const struct Row *r)
+{
+    const int idx = (int)(r - rows);
+    int hdr = idx;
+    while (hdr >= 0 && rows[hdr].kind != ROW_HEADER) hdr--;
+    if (hdr < 0 || strcmp(rows[hdr].key, "__HdrController")) return 1;
+    /* player 1: keyboard + mouse rows unless it plays on a gamepad, pad rows unless it plays
+     * on the keyboard + mouse (Auto shows both: either device drives the player). */
+    const int t = s_padSeat == 0 ? inputP1Type() : 1;
+    const int kbm = t == 0;
+    if (!strncmp(r->key, "__Kbm", 5)) return 0;   /* range markers */
+    if (idx > rowIndexByKey("__KbmBegin") && idx < rowIndexByKey("__KbmEnd")) return t != 1;
+    if (!strcmp(r->key, "Input.P1Type")) return s_padSeat == 0;
+    if (!strcmp(r->key, "Input.PlayerPad")) return !kbm;
+    /* device-neutral: Mode, aim style, aim range; page furniture */
+    if (isSepRow(r) || isBackRow(r) || !strcmp(r->key, "Input.ControlScheme") ||
+        !strcmp(r->key, "Input.AimMode") || !strcmp(r->key, "Input.AimRange")) return 1;
+    return !kbm;   /* the gamepad rows */
+}
+#else
+static int rowInputOk(const struct Row *r) { (void)r; return 1; }
+#endif
+
 /* project-dam: rows that only make sense for a desktop window. */
 static int rowPlatformOk(const struct Row *r)
 {
+    if (!rowInputOk(r)) return 0;
 #if defined(__SWITCH__)
     static const char *const kDesktopOnly[] = {
         "Video.Fullscreen", "Video.FullscreenMode", "__CenterWindow", "__Resolution",
@@ -1312,6 +1389,27 @@ static void padSetSeat(int seat)
     }
 }
 
+/* The Controller row: Auto + the connected controllers; the choice is stored per player. */
+static const char *padDevText(int player)
+{
+    const char *id = inputPadPref(player);
+    if (!id[0]) return "Auto";
+    for (int k = 0, n = inputPadListRefresh(); k < n; k++)
+        if (!strcmp(inputPadListId(k), id)) return inputPadListName(k);
+    return "Not connected";
+}
+static void padDevSet(int player, int idx)   /* 0 = Auto, k + 1 = connected controller k */
+{
+    inputPadPrefSet(player, idx <= 0 ? "" : inputPadListId(idx - 1));
+}
+static int padDevIndex(int player)
+{
+    const char *id = inputPadPref(player);
+    for (int k = 0, n = inputPadListRefresh(); k < n; k++)
+        if (id[0] && !strcmp(inputPadListId(k), id)) return k + 1;
+    return 0;
+}
+
 /* A "Player N" row on a Select player page picks the seat before it opens the
  * Controller / Key bindings page; every other link just opens its header. */
 static void overlayOpenLink(int row)
@@ -1427,7 +1525,7 @@ static void overlayInit(void)
     for (int i = 0; i < NUM_ROWS; i++) {
         if (rows[i].kind == ROW_RES || rows[i].kind == ROW_ACTION ||
             rows[i].kind == ROW_HEADER || rows[i].kind == ROW_BOND_FILE ||
-            rows[i].kind == ROW_PADSEAT || rows[i].kind == ROW_PADBIND || rows[i].kind == ROW_AUDIODEV ||
+            rows[i].kind == ROW_PADSEAT || rows[i].kind == ROW_PADBIND || rows[i].kind == ROW_AUDIODEV || rows[i].kind == ROW_PADDEV ||
             watchSettingsFieldForKey(rows[i].key) >= 0) {
             rows[i].found = 1;   /* not config-backed */
             continue;
@@ -1476,22 +1574,24 @@ static void overlayInit(void)
         int oldSection = s_section, oldSel = s_sel, oldScroll = s_scroll;
         int bad = 0;
         static const char *const roots[] = {
-            "__HdrVideo", "__HdrAudio", "__HdrMouse", "__HdrSelPlayerC", "__HdrGame", "__HdrBindings"
+            "__HdrVideo", "__HdrAudio", "__HdrSelPlayerC", "__HdrGame"
         };
         s_section = -1; s_sel = 0; s_scroll = 0;
         overlayUpdateVisible();
         bad += overlayHitCheck();
-        if (s_visN != 9) bad++;   /* 6 pages + separator + Restart + Quit */
-        for (int p = 0; p < 6 && p < s_visN; p++)
+        if (s_visN != NUM_ROOTS + 3) bad++;   /* the roots + separator + Restart + Quit */
+        for (int p = 0; p < NUM_ROOTS && p < s_visN; p++)
             if (strcmp(rows[s_visIdx[p]].key, roots[p])) bad++;
         /* Pages may scroll (PD dialogs do); overlayHitCheck walks the first and
          * last scroll windows instead of a no-scroll row cap. */
         static const struct { const char *page, *childA, *childB; } pages[] = {
             { "__HdrVideo", "__DisplayMode", "Game.ScreenShakeIntensity" },
             { "__HdrAudio", "Audio.MasterVolume", "Bond.FX" },
+#if defined(__SWITCH__)
             { "__HdrMouse", "Input.MouseSensitivity", "Input.MouseRawInput" },
+#endif
             { "__HdrSelPlayerC", "__SelPlayerC1", "__SelPlayerC4" },
-            { "__HdrController", "Input.ControlScheme", "__ResetController" },
+            { "__HdrController", "Input.ControlScheme", NULL },
             { "__HdrBindings", "Input.Bind.Forward", "__ResetBindings" },
             { "__HdrGame", "Bond.AimControl", "__ResetGame" },
         };
@@ -1724,18 +1824,22 @@ static void rowSetCommit(struct Row *r, double v, int commit)
      * same rebuild hook. */
     if (strcmp(r->key, "Input.CrouchMode") == 0) inputBindingsApply();
 
+    /* Input type: the page shows the rows of the new device; the pads re-seat. */
+    if (strcmp(r->key, "Input.P1Type") == 0) {
+        inputRequestRescan();
+        overlayUpdateVisible();
+    }
+
     /* D257/D442: All unlocked applies live (port/src/main.c); open screens
      * such as mission select refresh on re-entry. */
     if (strcmp(r->key, "Game.AllUnlocked") == 0) {
         extern void portAllUnlockedApply(void);
         portAllUnlockedApply();
     }
-#if defined(__SWITCH__)
     if (strcmp(r->key, "Game.BloodOnHit") == 0) {   /* project-dam */
         extern void nxGameApply(void);
         nxGameApply();
     }
-#endif
 
     /* Linked aim/turn sensitivity (Input.SensLink, default on): moving either
      * knob scales the other to hold the stock default ratio -- AimModeSens 38
@@ -1872,6 +1976,11 @@ static void rowAdjust(struct Row *r, int dir)
     case ROW_PADSEAT:
         padSetSeat((s_padSeat + (dir >= 0 ? 1 : 3)) % 4);   /* D518 */
         break;
+    case ROW_PADDEV: {
+        const int n = inputPadListRefresh();
+        padDevSet(s_padSeat, (padDevIndex(s_padSeat) + (dir >= 0 ? 1 : n)) % (n + 1));
+        break;
+    }
     case ROW_AUDIODEV: {
         /* D470: cycle Default + enumerated outputs; applied live on the audio thread. */
         int n = audioDeviceRefresh();
@@ -1965,7 +2074,7 @@ static int rowIsDropdown(const struct Row *r)
     if (r->kind == ROW_ENUM && !strcmp(r->key, "Video.CrosshairColor")) return 0;   /* D569: Original/Custom stepper (PD) */
     if (r->kind == ROW_ENUM || r->kind == ROW_MSAA || r->kind == ROW_FPSCAP) return 1;
     if (r->kind == ROW_RES) return !videoIsFullscreen() && s_resFitN > 0;
-    if (r->kind == ROW_AUDIODEV) return 1;
+    if (r->kind == ROW_AUDIODEV || r->kind == ROW_PADDEV) return 1;
     if (r->kind == ROW_ACTION && !strcmp(r->key, "__DisplayMode")) return 1;
     return 0;
 }
@@ -2023,6 +2132,17 @@ static void ddBuild(const struct Row *r)
         }
         s_ddN = s_resFitN < DD_MAX ? s_resFitN : DD_MAX;
         s_ddCur = s_resSel < s_ddN ? s_resSel : 0;
+    } else if (r->kind == ROW_PADDEV) {
+        int n = inputPadListRefresh();
+        if (n > DD_MAX - 1) n = DD_MAX - 1;
+        s_ddVals[0] = 0;
+        snprintf(s_ddLab[0], sizeof(s_ddLab[0]), "Auto");
+        for (int k = 0; k < n; k++) {
+            s_ddVals[k + 1] = k + 1;
+            snprintf(s_ddLab[k + 1], sizeof(s_ddLab[k + 1]), "%.34s", inputPadListName(k));
+        }
+        s_ddCur = padDevIndex(s_padSeat);
+        s_ddN = n + 1;
     } else if (r->kind == ROW_AUDIODEV) {
         int n = audioDeviceRefresh();
         if (n > DD_MAX - 1) n = DD_MAX - 1;
@@ -2076,6 +2196,10 @@ static void ddConfirm(int k)
         videoRequestWindowSize(kResList[i][0], kResList[i][1]);
         break;
     }
+    case ROW_PADDEV:
+        inputPadListRefresh();
+        padDevSet(s_padSeat, val);
+        break;
     case ROW_AUDIODEV:
         audioDeviceRequest(val == 0 ? "" : audioDeviceName(val - 1));
         break;
@@ -2242,6 +2366,11 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Game.LookAhead",           3 },  /* project-dam: = High */
     { "Input.PadLookCurve",     200 },  /* project-dam: = 2.0 (the game's own) */
     { "Input.PadTurnAccel",       2 },  /* project-dam: = High */
+#else
+    { "Input.PadAimLookSens",   100 },  /* = native */
+    { "Game.AimAssist",           2 },  /* project-dam: = High */
+    { "Game.AimEntry",            1 },  /* project-dam: = Move view */
+    { "Game.AimStop",             1 },  /* project-dam: = on */
 #endif
 #if defined(__SWITCH__)
     { "Input.PadLookSmooth",      2 },  /* project-dam: = NX_LOOK_SMOOTH */
@@ -2259,6 +2388,7 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Input.MouseSmoothing",    0 },   /* = 0 (raw) */
     { "Input.MouseRawInput",     0 },   /* = 0 (off) */
     { "Input.ControlScheme",     0 },   /* = 0 (Modern), D513 */
+    { "Input.P1Type",            2 },   /* = auto (D993) */
     { "Input.PadPreset",         0 },   /* = 0 (Jinx 1.1), D469 */
     /* GRAPHICS (port/src/video.c initializers) */
 #if defined(__SWITCH__)
@@ -2308,8 +2438,10 @@ static const struct { const char *key; double def; } kResetDefaults[] = {
     { "Game.MissionTimer", 0 },  /* = 0 (off, D606) */
 #if defined(__SWITCH__)
     { "Game.BloodOnHit", 1 },    /* project-dam: = on */
-    { "Game.CoopEnemyHealth", 1 },/* project-dam: = 150% */
+#else
+    { "Game.BloodOnHit", 0 },    /* off: the game's own puff */
 #endif
+    { "Game.CoopEnemyHealth", 1 },/* project-dam: = 150% (coop.c) */
     { "Game.NoHitFlash",  0 },   /* = 0 */
     { "Game.AllUnlocked", 0 },   /* = 0 -- D257's "default ON" note was stale */
     { "Game.HudScale",   100 },  /* = 100 (D226) */
@@ -2363,6 +2495,7 @@ static void rowResetSection(int iReset)
             continue;
         }
         if (r->kind == ROW_AUDIODEV) { audioDeviceRequest(""); continue; }   /* D470 */
+        if (r->kind == ROW_PADDEV) { inputPadPrefSet(s_padSeat, ""); continue; }
         if (r->kind == ROW_PADBIND) {   /* D469: reset the action on every seat */
             inputPadBindingReset(inputPadActionForKey(r->key));
             r->bindSlot = 0;
@@ -3109,6 +3242,12 @@ static void valueText(int i, char *out, int n)
         }
         return;
     }
+    if (r->kind == ROW_PADDEV) {
+        const char *nm = padDevText(s_padSeat);
+        if (strlen(nm) > 24) snprintf(out, n, "%.22s..", nm);
+        else snprintf(out, n, "%s", nm);
+        return;
+    }
     if (r->kind == ROW_AUDIODEV) {
         const char *cur = audioDeviceCurrentName();
         if (!cur[0]) snprintf(out, n, "Default");
@@ -3742,7 +3881,8 @@ static Gfx *overlayEmitLocked(void)
         if (s_section < 0) {
             help1 = &kHint[H_HUB1];
             help2 = &kHint[H_HUB2];
-        } else if (!strcmp(rows[s_section].key, "__HdrController")) {
+        } else if (!strcmp(rows[s_section].key, "__HdrController") &&
+                   (PAD_PAGE_ALWAYS || (s_sel >= 0 && s_sel < s_visN && rows[s_visIdx[s_sel]].kind == ROW_PADBIND))) {
             help1 = &kHint[H_CTRL1];
             help2 = &kHint[H_BACK];
         } else if (!strcmp(rows[s_section].key, "__HdrBindings")) {
@@ -4020,7 +4160,7 @@ int optionsRowIsShown(int i)
     struct Row *r = rowAt(i);
     return r && r->found && !(r->hidePtr && *r->hidePtr) && !(r->hideOffPtr && *r->hideOffPtr == 0) &&
            !isSepRow(r) && !isBackRow(r) &&   /* F10-only furniture */
-           (!r->showPtr || *r->showPtr == r->shownValue) && rowSchemeOk(r) &&
+           (!r->showPtr || *r->showPtr == r->shownValue) && rowSchemeOk(r) && rowInputOk(r) &&
            (r->kind != ROW_BOND_FILE || current_menu == MENU_FILE_SELECT);   /* front-end profile chooser */
 }
 
@@ -4050,6 +4190,8 @@ static const struct { const char *key, *help; } kRowHelp[] = {
     { "Input.PadLookCurve", "Steeper = finer small stick moves, same top speed. 2.0 is the original." },
     { "Input.PadTurnAccel", "Speeds up the turn when the stick is held at the edge." },
     { "Game.BloodOnHit", "A hit on a guard shows a dark-red puff, not the yellow wall puff." },
+    { "Input.P1Type", "Auto: keyboard, mouse and pad all work. Else only that device." },
+    { "Input.PlayerPad", "Which connected gamepad this player uses. Auto: the first free one." },
     { "Game.CoopEnemyHealth", "How tough guards are in co-op. Higher takes more shots to kill." },
     { "Video.Renderer", "Vulkan is the default; OpenGL is the fallback if it misbehaves on your GPU." },
     { "Video.MSAA", "Smooths jagged edges while docked. Higher is cleaner but slower." },

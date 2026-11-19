@@ -294,17 +294,24 @@ static int connectedMask   = 0x1;   /* controller 0 always present */
 
 static SDL_GameController *pads[MAX_PADS];
 
-/* Local multiplayer controller assignment (issue #99 / D416).
- * Input.MPMode: 0 Auto, 1 PadsOnly, 2 KbmP1.
- *  - Auto: 2+ pads -> pads are P1..PN and keyboard/mouse is ignored in a
- *    match; exactly 1 pad -> keyboard/mouse is P1 and the pad is P2.
- *  - PadsOnly: pads are P1..PN always (1 pad = MP stays locked, as stock).
- *  - KbmP1: keyboard/mouse is P1, pads are P2.. even with 2+ pads.
+/* Local controller assignment (issue #99 / D416, reworked: input type per player).
+ * Input.P1Type: what player 1 plays with, 0 = keyboard + mouse, 1 = gamepad,
+ * 2 = auto (the default). Players 2-4 are always gamepads.
+ *  - auto: as before the setting existed. Solo: the keyboard + mouse and the
+ *    pad both drive player 1, whichever is used. Split-screen: one pad ->
+ *    keyboard + mouse is P1 and the pad P2; two or more pads -> the pads are P1..PN.
+ *  - keyboard + mouse / gamepad: only that device drives player 1 in a stage (the
+ *    other is ignored there; menus accept both, and with no gamepad connected
+ *    player 1 falls back to the keyboard + mouse). Split-screen: keyboard + mouse
+ *    is P1 and the pads P2.., or the pads are P1..PN (one pad alone leaves MP
+ *    locked, as stock).
+ * Input.Player<N>Pad names the gamepad player N wants (SDL GUID + "#k" for
+ * identical models, "" = first free); it only orders the seats.
  * The shift applies only while a 2+ player stage is running; front-end menus
- * keep the pad on controller 0, so nothing changes for solo play or menus.
- * The reported controller mask still counts the shifted slots so the game's
- * own "needs 2 controllers" gates open. */
-static int mpInputMode = 0;
+ * keep the pad on controller 0. The reported controller mask still counts the
+ * shifted slots so the game's own "needs 2 controllers" gates open. */
+static int p1Type = 2;
+static char padPref[4][48];   /* Input.Player1Pad .. Input.Player4Pad */
 static int nRealPads   = 0;
 extern s32 getPlayerCount(void);
 
@@ -348,7 +355,7 @@ static int mpRoute(void)
      * one pad it made the game count two controllers). */
     return n >= 2 ? MPR_PADSP1 : 0;
 #endif
-    if ((mpInputMode == 2 && n >= 1) || (mpInputMode == 0 && n == 1))
+    if ((p1Type == 0 && n >= 1) || (p1Type == 2 && n == 1))
         return MPR_KBMP1;
     return n >= 2 ? MPR_PADSP1 : 0;
 }
@@ -361,10 +368,26 @@ static int inputMpPadsOwnP1(void)
 {
     return inputMpSplit() && (mpRoute() & MPR_PADSP1) != 0;
 }
+/* In a stage (not a front-end menu); menus take every device. */
+static int inStage(void)
+{
+    return current_menu == GE_MENU_RUN_STAGE || current_menu == GE_MENU_INVALID;
+}
+#ifndef __SWITCH__
+/* Player 1 plays with the keyboard + mouse only: the pad is ignored in a stage. */
+static int padBlockedForP1(void) { return p1Type == 0 && inStage(); }
+/* Player 1 plays with a gamepad only: the keyboard + mouse is ignored in a stage
+ * (unless no gamepad is connected, so the game stays playable). */
+static int kbmBlockedForP1(void) { return p1Type == 1 && nRealPads > 0 && inStage(); }
+#else
+static int padBlockedForP1(void) { return 0; }
+static int kbmBlockedForP1(void) { return 0; }
+#endif
 static SDL_GameController *slotPad(int idx)
 {
     if (idx < 0 || idx >= MAX_PADS) return NULL;
     if (inputMpSplit() && inputMpKbmP1()) return idx == 0 ? NULL : pads[idx - 1];
+    if (idx == 0 && !inputMpSplit() && padBlockedForP1()) return NULL;
     return pads[idx];
 }
 
@@ -1239,6 +1262,10 @@ static int padLookSensX    = NX_LOOK_SENS;             /* right-stick look: hori
 static int padLookSensY    = NX_LOOK_SENS;             /* right-stick look: vertical (pitch) sensitivity, % */
 #if defined(PLATFORM_SWITCH)
 static int padAimLookSens  = 75;
+#else
+static int padAimLookSens  = 100;   /* right stick while aiming (Centered), % */
+#endif
+#if defined(PLATFORM_SWITCH)
 static int padLookCurve    = 200;            /* project-dam: Centred stick curve exponent x100 (game: 200) */
 static int padTurnAccel    = 2;              /* project-dam: 0 off, 1 low (1.5x), 2 high (2x) */             /* project-dam: right stick while aiming (game aim mode), % */
 #endif
@@ -1351,6 +1378,99 @@ static int nxPadAllowedMask(void)
 }
 #endif
 
+/* ---- the gamepad each player asked for (Input.Player<N>Pad) ----
+ * An id is the SDL GUID plus "#k", k = how many controllers of the same model
+ * come before it in SDL's device order, so two identical pads stay apart. */
+static void padIdOfDevice(int dev, char *out, int n)
+{
+    SDL_JoystickGUID g = SDL_JoystickGetDeviceGUID(dev);
+    char s[40];
+    SDL_JoystickGetGUIDString(g, s, sizeof s);
+    int k = 0;
+    for (int j = 0; j < dev; ++j) {
+        if (!SDL_IsGameController(j)) continue;
+        SDL_JoystickGUID h = SDL_JoystickGetDeviceGUID(j);
+        if (!memcmp(&g, &h, sizeof g)) k++;
+    }
+    snprintf(out, (size_t)n, "%s#%d", s, k);
+}
+
+#define PADLIST_MAX 16
+static char s_listId[PADLIST_MAX][48];
+static char s_listName[PADLIST_MAX][48];
+static int  s_listN = 0;
+
+/* Connected game controllers in SDL order, for the menu's Controller row. */
+int inputPadListRefresh(void)
+{
+    s_listN = 0;
+    const int n = SDL_NumJoysticks();
+    for (int i = 0; i < n && s_listN < PADLIST_MAX; ++i) {
+        if (!SDL_IsGameController(i)) continue;
+        padIdOfDevice(i, s_listId[s_listN], sizeof s_listId[0]);
+        const char *nm = SDL_GameControllerNameForIndex(i);
+        snprintf(s_listName[s_listN], sizeof s_listName[0], "%s", nm ? nm : "Controller");
+        s_listN++;
+    }
+    return s_listN;
+}
+const char *inputPadListName(int k) { return k >= 0 && k < s_listN ? s_listName[k] : ""; }
+const char *inputPadListId(int k)   { return k >= 0 && k < s_listN ? s_listId[k] : ""; }
+const char *inputPadPref(int player) { return player >= 0 && player < 4 ? padPref[player] : ""; }
+void inputPadPrefSet(int player, const char *id)
+{
+    if (player < 0 || player > 3) return;
+    snprintf(padPref[player], sizeof padPref[player], "%s", id ? id : "");
+    inputRequestRescan();   /* re-seat the pads now */
+}
+int inputP1Type(void) { return p1Type; }
+
+#ifndef __SWITCH__
+/* Outside a match, order the seats by what the players asked for: a pad that
+ * is player N's choice goes before every pad nobody asked for (which keep their
+ * connection order). Seats stay dense. */
+static void padApplyOrder(void)
+{
+    int rank[MAX_PADS], order[MAX_PADS], cnt = 0;
+    for (int s = 0; s < MAX_PADS; ++s) {
+        rank[s] = 100 + s;
+        if (!pads[s]) continue;
+        char id[48] = "";
+        for (int d = 0, n = SDL_NumJoysticks(); d < n; ++d) {
+            if (SDL_IsGameController(d) && SDL_JoystickGetDeviceInstanceID(d) == padInst[s]) {
+                padIdOfDevice(d, id, sizeof id);
+                break;
+            }
+        }
+        for (int p = 0; p < 4; ++p) {
+            if (padPref[p][0] && !strcmp(padPref[p], id)) { rank[s] = p; break; }
+        }
+        order[cnt++] = s;
+    }
+    for (int a = 1; a < cnt; ++a) {   /* stable insertion sort by rank */
+        int v = order[a], b = a - 1;
+        while (b >= 0 && rank[order[b]] > rank[v]) { order[b + 1] = order[b]; b--; }
+        order[b + 1] = v;
+    }
+    int changed = 0;
+    for (int a = 0; a < cnt; ++a) changed |= order[a] != a;
+    if (!changed) return;
+    SDL_GameController *np[MAX_PADS] = {0};
+    SDL_JoystickID ni[MAX_PADS] = { -1, -1, -1, -1 };
+    int nr[MAX_PADS] = {0};
+    u8 nf[MAX_PADS] = {0};
+    for (int a = 0; a < cnt; ++a) {
+        np[a] = pads[order[a]]; ni[a] = padInst[order[a]];
+        nr[a] = padRumbleOn[order[a]]; nf[a] = padFamily[order[a]];
+    }
+    for (int s = 0; s < MAX_PADS; ++s) {
+        pads[s] = np[s]; padInst[s] = ni[s];
+        padRumbleOn[s] = nr[s]; padFamily[s] = s < cnt ? nf[s] : PADFAM_XBOX;
+    }
+    sysLogPrintf(LOG_NOTE, "input: gamepads re-seated to the players' choices");
+}
+#endif
+
 /* Seat table maintenance (DNEW-mp-1, see padInst above). Called at boot and on
  * every rescan: drops detached pads, compacts outside a match, opens any new
  * controller into the first free seat, then rebuilds the controller mask. */
@@ -1442,6 +1562,10 @@ static void inputOpenPads(void)
                          i, SDL_GameControllerName(pads[seat]), seat, padRumbleOn[seat] ? "yes" : "no");
         }
     }
+
+#ifndef __SWITCH__
+    if (!inMatch) padApplyOrder();
+#endif
 
     /* 4. controller mask: seat bits, shifted up one when keyboard/mouse is P1 */
     int seatMask = 0;
@@ -2623,7 +2747,7 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
     }
 
     /* ---- keyboard + mouse: controller 0 only (not when pads own P1, D416) ---- */
-    if (idx == 0 && !inputMpPadsOwnP1()) {
+    if (idx == 0 && !inputMpPadsOwnP1() && !kbmBlockedForP1()) {
         const Uint8 *ks = SDL_GetKeyboardState(NULL);
         Uint32 mb = mouseEnabled ? SDL_GetMouseState(NULL, NULL) : 0;
         int menuMode = (current_menu != GE_MENU_RUN_STAGE &&
@@ -3207,7 +3331,6 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
             int rys = -scaleAxis(ry, padDeadzoneR);   /* SDL up = negative -> N64 up = positive */
             if (padLookSensX != 100 && rxs) rxs = rxs * padLookSensX / 100;
             if (padLookSensY != 100 && rys) rys = rys * padLookSensY / 100;
-#if defined(PLATFORM_SWITCH)
             /* project-dam: aim sensitivity, a multiplier on the stick while the
              * game is in aim mode (ZL held, or Toggle), like a shooter's ADS
              * sensitivity: camera turn speed in Centered, crosshair speed in
@@ -3217,7 +3340,6 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                 rxs = nxAimStickP(rxs, padAimLookSens, idx);
                 rys = nxAimStickP(rys, padAimLookSens, idx);
             }
-#endif
             if (rxs >  STICK_MAX) rxs =  STICK_MAX; else if (rxs < -STICK_MAX) rxs = -STICK_MAX;
             if (rys >  STICK_MAX) rys =  STICK_MAX; else if (rys < -STICK_MAX) rys = -STICK_MAX;
             if (idx == 0 && (rxs || rys)) s_aimDevMouse = 0;   /* D337: pad aim active */
@@ -3230,7 +3352,6 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
             }
             if (padLookInvertY) rys = -rys;
             if (idx == 0) { s_recPadDX = rxs; s_recPadDY = rys; s_recPadDirect = 0; }
-#if defined(PLATFORM_SWITCH)
             if (idx >= 0) {   /* Game.AimEntry (nxgame.c): the view follows the crosshair into the aim (D960: every slot, state per player) */
                 extern void nxAimEntryStep(struct player *p);
                 nxAimEntryStep(slotPlayer());
@@ -3238,10 +3359,11 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
                 nxAimStopStep(slotPlayer(), ly < -RSTICK_THRESHOLD || ly > RSTICK_THRESHOLD ||
                                             lx < -RSTICK_THRESHOLD || lx > RSTICK_THRESHOLD ||
                                             gameScriptedCameraActive() || g_PlayerIsInTank == 1);
+#if defined(PLATFORM_SWITCH)
                 extern void nxLookAheadStep(struct player *p, int walkingForward, int lookIdle);   /* Look ahead, Extended controls */
                 nxLookAheadStep(slotPlayer(), ly < -RSTICK_THRESHOLD, rxs == 0 && rys == 0);
-            }
 #endif
+            }
             if (aimModeGet() == AIMMODE_CENTRED && !(idx == 0 && s_replayActive) &&
                 padDirectCompute(rxs, rys)) {
                 if (idx == 0) s_recPadDirect = 1;
@@ -3318,6 +3440,18 @@ static unsigned inputComputePadSlot(int idx, signed char *stick_x, signed char *
             }
             padSelectPrev[idx] = selNow;
         }
+    }
+
+    /* Every device can reach the menus: a pad that does not play player 1 (Input.P1Type =
+     * keyboard + mouse, in a stage) still opens the F10 overlay with Select, so the input
+     * type can be changed from the pad alone. */
+    if (!pad && idx == 0 && !inputMpSplit() && pads[0] != NULL && !optionsOverlayIsOpen()) {
+        const int selNow = SDL_GameControllerGetButton(pads[0], SDL_CONTROLLER_BUTTON_BACK);
+        if (selNow && !padSelectPrev[0]) {
+            s_ovOwner = 0;
+            optionsOverlayToggle();
+        }
+        padSelectPrev[0] = selNow;
     }
 
     if (idx == 0 && scriptIsActive(0)) crouchNow = scriptSlots[0].crouch;
@@ -4079,7 +4213,6 @@ static int hipDirectCompute(double dxPx, double dyLook)
  * stick). With the verbatim curve, full-stick Centred turns at exactly
  * the N64 path's top rate -- switching modes changes the crosshair
  * behaviour, not the feel. */
-#if defined(PLATFORM_SWITCH)
 /* project-dam: weapon sway for "Centered + sway". Off aim, the game itself
  * swings the weapon with the turn: bondview2.c feeds speedtheta * 0.3 and
  * -speedverta * 0.1 into the crosshair and weapon integrators every tick
@@ -4099,7 +4232,6 @@ static void padAimSway(struct player *p, double speedTheta, double speedVerta)
     p->gun_azimuth_angle   -= (f32)(speedTheta * 0.3);    /* trails the turn */
     p->gun_azimuth_turning -= (f32)(-speedVerta * 0.1);
 }
-#endif
 
 #if defined(PLATFORM_SWITCH)
 /* project-dam: the Centred stick response. padLookCurveRadial(): |m|^(Input.
@@ -4199,9 +4331,7 @@ static int padDirectCompute(int dx, int dy)
     p->vv_verta -= (f32) (v * k * 3.5);   /* game: speedverta = -v\u00b7(fov/60) */
     if (p->vv_verta >  90.0f) p->vv_verta =  90.0f;
     if (p->vv_verta < -90.0f) p->vv_verta = -90.0f;
-#if defined(PLATFORM_SWITCH)
     padAimSway(p, speedTheta, speedVerta);
-#endif
 
     if (configGetInputLog()) {
         sysLogPrintf(LOG_NOTE,
@@ -4524,7 +4654,11 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
             configRegisterString(n64StrKey[seat][n], n64Str[seat][n], sizeof(n64Str[seat][n]));
         }
     configRegisterInt("Input.N64StickFeel", &n64StickFeel, 0, 1);
-    configRegisterInt("Input.MPMode", &mpInputMode, 0, 2);   /* D416: 0 Auto, 1 PadsOnly, 2 KbmP1 */
+    configRegisterInt("Input.P1Type", &p1Type, 0, 2);   /* player 1: 0 keyboard + mouse, 1 gamepad, 2 auto */
+    configRegisterString("Input.Player1Pad", padPref[0], sizeof(padPref[0]));
+    configRegisterString("Input.Player2Pad", padPref[1], sizeof(padPref[1]));
+    configRegisterString("Input.Player3Pad", padPref[2], sizeof(padPref[2]));
+    configRegisterString("Input.Player4Pad", padPref[3], sizeof(padPref[3]));
     configRegisterInt("Input.MouseEnabled", &mouseEnabled, 0, 1);
     configRegisterInt("Input.CrosshairCursor", &cfgCrosshairCursor, 0, 1);   /* D555 */
     configRegisterInt("Input.MouseAimSpeed", &mouseAimSpeed, 1, 500);
@@ -4573,8 +4707,8 @@ PD_CONSTRUCTOR static void inputConfigInit(void)
     configRegisterInt("Input.DefaultsRev", &inputDefaultsRev, 0, 1);   /* D546 */
     configRegisterInt("Input.PadLookSensX", &padLookSensX, 25, 200);   /* Wave A: look horizontal sensitivity (%) */
     configRegisterInt("Input.PadLookSensY", &padLookSensY, 25, 200);
-#if defined(PLATFORM_SWITCH)
     configRegisterInt("Input.PadAimLookSens", &padAimLookSens, 25, 200);   /* project-dam */
+#if defined(PLATFORM_SWITCH)
     configRegisterInt("Input.PadLookCurve", &padLookCurve, 100, 400);      /* project-dam */
     configRegisterInt("Input.PadTurnAccel", &padTurnAccel, 0, 2);          /* project-dam */
 #endif   /* Wave A: look vertical (pitch) sensitivity (%) */

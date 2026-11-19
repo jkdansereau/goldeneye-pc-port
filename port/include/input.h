@@ -97,6 +97,13 @@ int  inputPadActionForKey(const char *key);        /* "Input.Pad.Fire" -> action
 int  inputPadSourceCount(void);
 const char *inputPadSourceName(int src);
 int  inputPadSeatPresent(int seat);
+/* Input type and gamepad choice per player (Input.P1Type, Input.Player<N>Pad). */
+int  inputP1Type(void);                            /* Input.P1Type: 0 keyboard + mouse, 1 gamepad, 2 auto */
+int  inputPadListRefresh(void);                    /* connected game controllers; returns the count */
+const char *inputPadListName(int k);
+const char *inputPadListId(int k);
+const char *inputPadPref(int player);              /* "" = first free */
+void inputPadPrefSet(int player, const char *id);
 unsigned inputPadHeldSources(int seat);            /* bit i = source i held */
 int  inputPadPresetStep(int cur, int dir);
 int *inputPadPresetPtr(int seat);                 /* D518: per-seat preset value */

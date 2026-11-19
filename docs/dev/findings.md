@@ -23166,3 +23166,40 @@ Issue #38 (fork): Scenery (Enhanced) was not applied on water levels; Frigate ke
 **Half scale.** The final pass is drawn into a half-size target and enlarged by a composite (`uPass 5`, `SKY_HALF_SCALE`); the sea target follows (a quarter of the width, half the height). Halving the final pass alone gained ~1 ms on the console (12.4 -> 11.4 ms): the waves are the heavy part. Both: **6.2 ms** median GPU per frame (5.5-6.9 in play, console, Frigate, handheld; maintainer-checked look). Ryubing shows the half-size image wrong (an enlarged sea) where the console is right: not explained.
 
 **Open.** The first-frame black bake's cause. The panorama covers down to sin(elevation) 0.64 from the bake eye: sea closer than ~800 units under the bake point reads its last row (not seen in play). Dam (`water.frag`, the legacy blend), Caverns, Complex, co-op and docked looks are not checked.
+
+## D993: Blood on hit and Co-op enemy health in the PC menu; co-op enabled on PC -- BUILT + RUN 2026-11-18 (Windows cross-build: ini keys written, co-op split screen; maintainer request)
+
+**Change (port layer only, no game code).**
+- **Blood on hit** (`nxgame.c`): the blood part of the file is built everywhere (the aim options below it stay `PLATFORM_SWITCH`); PC default 0 = the game's own puff, Switch default 1; `nxGameApply` runs at boot and on change on every platform. PC menu row on the Game page.
+- **Co-op enemy health** + **co-op itself**: `coop.c` activated only under `PLATFORM_SWITCH` (`coopStageNumPlayers`), so the row would have done nothing. Both guards are gone: with `GE_COOP=1` the Surface level starts as a two-player split screen on PC. Entering it from the mode menu needs two connected pads and was not exercised.
+
+**Not done.** The rest of the Switch gamepad work stays Switch-only: Centred-aim defaults and weapon sway, Aim zoom (handheld), Aim assist, Aim entry, Stop on aim, Look ahead, Look precision, Turn acceleration, Aim sensitivity (`nxgame.c`, `input.c`, `video.c`). The Switch branch in `input.c` replaces the original per-axis stick curve, so it changes the feel of existing PC pad users and cannot be checked without a pad. The 2-player split-screen FOV (`video.c` `splitFovY`) is also Switch-only and has no menu row.
+
+**Verified.** Windows cross-build: `Game.BloodOnHit` is written to the ini; with `GE_COOP=1` and two connected pads the Surface level starts as a two-player split screen (log `coop: co-op stage 36, 2 players`). Linux and Switch build. The menu rows were not opened (no scripted key input).
+
+## D994: PC input menu -- one Input page per player, input type, mode and controller choice -- BUILT + RUN 2026-11-18 (Windows cross-build: option tree probe, menu pages, co-op routing with the three input types; DRAFT, maintainer unsure of the design)
+
+**Problem.** The PC hub listed Mouse, Controller (Select player) and Key Bindings side by side, and the engine let the keyboard + mouse and pad 0 drive player 1 at the same time (`Input.MPMode`, default Auto: the routing changed with the number of pads).
+
+**Change (port layer only).**
+- **Menu** (`optionsoverlay.c`, PC only; the Switch tree is unchanged): hub entries are Video, Audio, **Input**, Game. Input lists Player 1-4 (the existing Select player page); a player's page is "Player N Input" and is flat, its rows following the input type and the mode: *Input type* (player 1 only: *Keyboard + mouse* | *Gamepad* | *Auto*, `Input.P1Type`, default Auto), *Controller* (`ROW_PADDEV`: Auto + the connected controllers, modelled on the audio device row), *Mode* (the old Control style, shown as Enhanced | Original on PC), Aim style / range, then for player 1 the mouse rows (between the `__KbmBegin` / `__KbmEnd` markers; the Mouse page is gone on PC) and a *Key bindings* link that stays a sub-menu, and the pad rows for a gamepad player. Auto shows both sets of rows. `rowInputOk` decides the visible rows, shared by the F10 overlay and the front-end options screen (`optionsRowIsShown`).
+- **Engine** (`input.c`): `Input.MPMode` is replaced by `Input.P1Type`. Auto is the behaviour before the setting: solo, both devices drive player 1; split-screen, one pad -> keyboard + mouse P1 / pad P2, two or more pads -> pads P1..PN. With *Keyboard + mouse* or *Gamepad* only that device drives player 1 in a stage (`padBlockedForP1` in `slotPad`, `kbmBlockedForP1` on the keyboard + mouse block), menus accept both, and with no gamepad connected player 1 stays on the keyboard + mouse; split-screen: keyboard + mouse is P1 and the pads P2.., or the pads are P1..PN. The keyboard + mouse can only be player 1 (the engine's controller channel 0). A pad that does not play player 1 still opens the F10 overlay with Select (blocked-pad branch), so the type can be changed from the pad alone.
+- **Controller choice**: `Input.Player1Pad`..`Player4Pad` hold an id (SDL GUID + "#k" for identical models) or "" = Auto; `padApplyOrder` seats the chosen pads first (outside a match), the rest in connection order, seats dense. Changing the choice or the type requests a rescan.
+
+**Verified.** `GE_OPTIONTREEPROBE` PASS; hub and "Player 1 Input" captured (keyboard + mouse, gamepad and Auto variants); with `GE_COOP=1` and two connected pads the controller mask is 0x3 in Auto, 0x7 with the keyboard + mouse and 0x3 with a gamepad, and the co-op stage starts in all three. Linux and Switch build.
+
+**Not exercised.** Playing with each device (no key or pad input here); choosing a specific controller from the dropdown; the Select-opens-the-overlay path with a real pad; a pad unplugged mid-level; the front-end options screen's rendering of the new page. Existing inis keep working but `Input.MPMode` is ignored.
+
+## D998: Centered aim helpers on PC -- weapon sway, Aim assist, Aim entry, Stop on aim -- BUILT 2026-11-19 (Windows, Linux and Switch builds; not played with a pad here)
+
+**Problem.** On a gamepad in Centered aim style the PC had neither the weapon sway nor the helpers the Switch has: the weapon stayed fixed while turning, and no aim assist, aim entry or stop-on-aim. All of it was compiled for the Switch only (`PLATFORM_SWITCH` in `input.c`, the whole aim part of `nxgame.c`, the hook in `lv.c`).
+
+**Change (port layer only).**
+- `input.c`: the weapon sway (`padAimSway`, called from `padDirectCompute`), the aim-sensitivity multiplier and the Aim entry / Stop on aim steps are built for every platform. `Input.PadAimLookSens` is registered everywhere (default 100 on PC, 75 on the Switch). The Centered stick curve, turn acceleration and Look ahead stay Switch-only.
+- `nxgame.c`: Aim assist, Aim entry and Stop on aim are built everywhere. `Game.AimZoom` is built too but `nxIsHandheld()` is 0 off the Switch, so it does nothing there (a later change can give it Steam Deck detection); its row and `Look ahead` stay in the Switch menu.
+- `src/game/lv.c`: the existing port hook `nxAimAssistFrame` (before the player's own shot tests) is now `#if defined(PORT)` instead of `PORT && __SWITCH__`. No game-logic change; the call is a no-op unless Aim assist is on and the aim style is Centered.
+- `optionsoverlay.c`: Aim sensitivity, Aim assist, Aim entry and Stop on aim rows on the gamepad part of each player's Input page, shown while the aim style is Centered and the mode is Enhanced. Defaults as on the Switch (assist High, entry Move view, stop on).
+
+**Verified.** Windows, Linux and Switch builds; the option tree probe is unchanged. **Not exercised.** Playing with a pad (no controller here): the sway, the slow-down on a guard, the aim entry and stop on aim on PC. Keyboard + mouse Centered aim has no sway or helpers (they are pad paths).
+
+**Confidence.** High that the shared code is the Switch's; the PC feel is untested.

@@ -108,7 +108,6 @@ s32 coopStageNumPlayers(s32 stage, s32 selected)
     s_fpDone = 0;
     s_spawnLogged = 0;
     for (i = 0; i < 2; i++) { s_rv[i].active = 0; s_rv[i].lastShown = -1; }
-#if defined(PLATFORM_SWITCH)
     if (selected >= 2 || gamemode != GAMEMODE_SOLO || !coopIsMissionStage(stage)) {
         return selected;
     }
@@ -117,9 +116,6 @@ s32 coopStageNumPlayers(s32 stage, s32 selected)
         sysLogPrintf(LOG_NOTE, "coop: co-op stage %d, 2 players", (int)stage);
         return 2;
     }
-#else
-    (void)stage;
-#endif
     return selected;
 }
 
@@ -1425,9 +1421,7 @@ int coopCharSelectDone(void)
     return 1;
 }
 
-#if defined(PLATFORM_SWITCH)
 PD_CONSTRUCTOR static void coopRegisterConfig(void)
 {
     configRegisterInt("Game.CoopEnemyHealth", &s_health, 0, 2);
 }
-#endif

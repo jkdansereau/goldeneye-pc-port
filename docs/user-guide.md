@@ -85,11 +85,23 @@ actions share a button, and the Xbox release's "left stick aims the
 crosshair" and "D-pad copies the left stick" behaviors are not reproduced
 (here the right stick aims and the D-pad strafes, as on the N64).
 
-**Split-screen:** pick Multiplayer from the main menu. With one controller,
-keyboard/mouse is player 1 and the controller is player 2; with two or more
-controllers, the controllers take players 1–4 (`Input.MPMode` in `ge007.ini`
-changes this). A controller unplugged mid-match keeps its player when
-plugged back in.
+**Input (per player):** in the options overlay, *Input* lists the four
+players. Player 1 chooses *Input type*: *Auto* (the default: keyboard, mouse
+and pad all work, whichever you use), *Keyboard + mouse* or *Gamepad*; players
+2–4 are always gamepads. With one of the last two, only that device plays in a
+level (with no gamepad connected, player 1 stays on the keyboard + mouse).
+Every device can use the menus, and a pad's Select opens the options overlay
+even when the pad is not the one playing, so the type can be changed from the
+pad alone. A gamepad player can also pick *Controller*: *Auto* (the
+first free one) or a specific connected pad. *Mode* (Enhanced or Original) and the rows that follow depend on the
+chosen type; the key bindings are a sub-menu of player 1's page.
+
+**Split-screen:** pick Multiplayer from the main menu. With *Auto*: one
+controller makes the keyboard/mouse player 1 and the controller player 2; two
+or more controllers take players 1–4. With *Keyboard + mouse* the controllers
+are always players 2–4; with *Gamepad* they take players 1–4 (one controller
+alone leaves multiplayer locked, as on the console). A controller unplugged
+mid-match keeps its player when plugged back in.
 
 **Options overlay with a controller** (also how it works on the Deck):
 **Select** opens it, the D-pad or left stick moves between rows and
