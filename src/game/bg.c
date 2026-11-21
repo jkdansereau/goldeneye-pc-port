@@ -343,7 +343,12 @@ void sub_GAME_7F0B37EC(void) {
     u32 masked;
 
     ptr = (u8 *)specialportalarray;
+#ifdef PORT
+    /* the N64 stops at &g_BgCurrentRoom, which is not after the list on PC */
+    end = (u8 *)specialportalarray + sizeof(specialportalarray);
+#else
     end = (u8 *)&g_BgCurrentRoom;
+#endif
 
     do {
         if (levelentry_index == *ptr++) {
@@ -376,7 +381,11 @@ void sub_GAME_7F0B37EC(void) {
         }
 
         ptr++;
+#ifdef PORT
+    } while (ptr < end);
+#else
     } while ((u32)ptr < (u32)end);
+#endif
 }
 
 
