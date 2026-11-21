@@ -2853,10 +2853,20 @@ static void gfx_sp_tri1(uint8_t vtx1_idx, uint8_t vtx2_idx, uint8_t vtx3_idx, bo
         gfx_rapi->load_shader(prg);
         rendering_state.shader_program = prg;
     }
-    if (use_alpha != rendering_state.alpha_blend || use_modulate != rendering_state.modulate) {
+    /* CVG_X_ALPHA without FORCE_BL is coverage, not blending: the RDP folds
+     * the alpha into the pixel coverage and writes the inside of the triangle
+     * opaque; only FORCE_BL blends interior pixels. Blending it made objects
+     * drawn in G_RM_AA_ZB_TEX_EDGE2 translucent wherever their alpha is
+     * partial: an exploded crate (propobj.c zeroes some vertex alphas, env
+     * alpha 100..255) showed the background (Dam's blue clear colour)
+     * through its lower half; the N64 draws it solid. The texedge discard
+     * still cuts the transparent texels (use_alpha stays set for the shader). */
+    const bool blend = use_alpha &&
+        !((rdp.other_mode_l & CVG_X_ALPHA) == CVG_X_ALPHA && (rdp.other_mode_l & FORCE_BL) == 0);
+    if (blend != rendering_state.alpha_blend || use_modulate != rendering_state.modulate) {
         gfx_flush();
-        gfx_rapi->set_use_alpha(use_alpha, use_modulate);
-        rendering_state.alpha_blend = use_alpha;
+        gfx_rapi->set_use_alpha(blend, use_modulate);
+        rendering_state.alpha_blend = blend;
         rendering_state.modulate = use_modulate;
     }
     uint8_t num_inputs;
